@@ -8,6 +8,11 @@
  * developer opens next; the whole in-memory thread remains available to the
  * developer in the panel until they clear it or quit.
  *
+ * Every panel window draws the same thread. The window that appends a line
+ * reports the whole thread to its own main process, which holds the launch's
+ * copy for a panel that opens late and mirrors each report to every other
+ * display's panel — the relay never leaves the machine.
+ *
  * Every line already traveled to the voice service once, on the call that
  * said it: the developer's own asks — typed, or spoken and handed back as
  * text by the service that heard them — the words Luke spoke or announced,
@@ -17,6 +22,7 @@
  */
 
 import type { Session, SessionIdentity } from "@sidecar/session";
+import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { SESSION_NO_LONGER_OBSERVED_NOTE } from "./realtime-protocol.js";
 import { actNarration, type CarriedSessionAction } from "./realtime-tools.js";
 
@@ -36,6 +42,14 @@ export const CONVERSATION_ENTRY_KIND = {
 
 export type ConversationEntryKind =
   (typeof CONVERSATION_ENTRY_KIND)[keyof typeof CONVERSATION_ENTRY_KIND];
+
+const CONVERSATION_ENTRY_KIND_LIST = Object.values(CONVERSATION_ENTRY_KIND);
+
+export function isConversationEntryKind(value: UnparsedWireValue): value is ConversationEntryKind {
+  if (!isWireString(value)) return false;
+  // SAFETY: value is a string; list membership is the history vocabulary contract check.
+  return CONVERSATION_ENTRY_KIND_LIST.includes(value as ConversationEntryKind);
+}
 
 /**
  * How many recent lines the model receives, and how long every stored line may
@@ -83,6 +97,36 @@ export function appendConversationThreadEntry(
   const appended: ConversationEntry = { kind: entry.kind, words, recordedAt: Date.now() };
   if (entry.identity) appended.identity = entry.identity;
   return [...entries, appended];
+}
+
+/**
+ * Takes another window's copy of the thread as this window's own, reusing the
+ * local entry objects whose lines it repeats. The spoken-turn marks locate a
+ * turn by entry identity — `indexOf` in {@link insertSpokenAskThreadEntry} —
+ * so a relay that recreated every object would strand a transcript still on
+ * its way back; matching by value keeps those marks standing across it.
+ */
+export function adoptConversationThread(
+  current: readonly ConversationEntry[],
+  incoming: readonly ConversationEntry[],
+): readonly ConversationEntry[] {
+  const held = [...current];
+  return incoming.map((entry) => {
+    const at = held.findIndex((candidate) => sameConversationEntry(candidate, entry));
+    if (at === -1) return entry;
+    const [kept] = held.splice(at, 1);
+    return kept ?? entry;
+  });
+}
+
+function sameConversationEntry(a: ConversationEntry, b: ConversationEntry): boolean {
+  return (
+    a.kind === b.kind &&
+    a.words === b.words &&
+    a.recordedAt === b.recordedAt &&
+    a.identity?.providerId === b.identity?.providerId &&
+    a.identity?.providerSessionId === b.identity?.providerSessionId
+  );
 }
 
 /** The recent slice safe to place back into the model's context window. */

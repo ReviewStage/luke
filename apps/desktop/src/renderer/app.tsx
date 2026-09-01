@@ -2053,6 +2053,7 @@ export function App(): React.JSX.Element {
     conversationHistory,
     clearConversationHistory,
     liveConversationEntries,
+    seedConversationHistory,
     voiceTurn,
     lukeCaptions,
     mentionedSessions,
@@ -2504,6 +2505,10 @@ export function App(): React.JSX.Element {
       acceptIssuesBootstrap(value.issues);
       acceptCalendarsBootstrap(value.calendars);
       acceptMeetingQuietBootstrap(value.meetingQuiet);
+      // The shared thread's seed guards itself: the conversation hook already
+      // holds the live pushes, and a thread this window has touched is always
+      // the newer word than the snapshot.
+      seedConversationHistory(value.conversationHistory);
       acceptSessionReplayBootstrap(value.sessionReplay);
       acceptSettingsBootstrap(value.settings);
       // The stored filter chips and search words come back with the panel:
@@ -2609,6 +2614,7 @@ export function App(): React.JSX.Element {
     beginFeedback,
     cancelHover,
     changeTab,
+    seedConversationHistory,
     setMicrophoneStatus,
     setSettingsView,
     startMicrophone,

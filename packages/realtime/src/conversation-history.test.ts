@@ -8,6 +8,7 @@ import {
   type SessionControl,
 } from "@sidecar/session";
 import {
+  adoptConversationThread,
   appendConversationEntry,
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
@@ -15,6 +16,7 @@ import {
   conversationHistoryText,
   insertSpokenAskEntry,
   insertSpokenAskThreadEntry,
+  isConversationEntryKind,
   maximumConversationEntries,
   maximumConversationEntryLength,
   recentConversationEntries,
@@ -356,4 +358,58 @@ test("a line whose session left the roster keeps its words and says the session 
 
 test("an empty history says nothing at all", () => {
   assert.equal(conversationHistoryText([], []), undefined);
+});
+
+test("the kind guard admits every history line kind and nothing else", () => {
+  for (const kind of Object.values(CONVERSATION_ENTRY_KIND)) {
+    assert.equal(isConversationEntryKind(kind), true);
+  }
+  assert.equal(isConversationEntryKind("transcript"), false);
+  assert.equal(isConversationEntryKind(""), false);
+  assert.equal(isConversationEntryKind(3), false);
+  assert.equal(isConversationEntryKind(undefined), false);
+});
+
+test("adopting another window's thread reuses the entry objects already held", () => {
+  const identity = { providerId: "claude-code", providerSessionId: "session-a" };
+  const ask: ConversationEntry = {
+    kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
+    words: "how is it going?",
+    recordedAt: 1,
+  };
+  const reply: ConversationEntry = {
+    kind: CONVERSATION_ENTRY_KIND.REPLY,
+    words: "Two chats are working.",
+    recordedAt: 2,
+  };
+  // The relay recreates every object on the way over; the adoption must hand
+  // back the local ones, because the spoken-turn marks locate a turn by
+  // entry identity.
+  const adopted = adoptConversationThread(
+    [ask, reply],
+    [
+      { ...ask },
+      { ...reply },
+      { kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT, words: "A chat finished.", identity },
+    ],
+  );
+  assert.equal(adopted.length, 3);
+  assert.equal(adopted[0], ask);
+  assert.equal(adopted[1], reply);
+  assert.deepEqual(adopted[2]?.identity, identity);
+
+  // Two same-worded lines are told apart by when they were recorded, and a
+  // local object is adopted at most once even when its line repeats.
+  const twin: ConversationEntry = {
+    kind: CONVERSATION_ENTRY_KIND.REPLY,
+    words: "ok",
+    recordedAt: 5,
+  };
+  const doubled = adoptConversationThread([twin], [{ ...twin }, { ...twin }]);
+  assert.equal(doubled[0], twin);
+  assert.notEqual(doubled[1], twin);
+
+  // A cleared or diverged thread is taken as reported: entries the report no
+  // longer carries do not survive the adoption.
+  assert.deepEqual(adoptConversationThread([ask, reply], []), []);
 });

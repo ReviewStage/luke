@@ -2,7 +2,7 @@ import type { AccountSnapshot } from "@sidecar/account/snapshot";
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { FixtureSnapshot } from "@sidecar/fixtures";
 import type { TrackedIssue } from "@sidecar/issues";
-import type { IssueToolAction } from "@sidecar/realtime";
+import type { ConversationEntry, IssueToolAction } from "@sidecar/realtime";
 import type { ObservedWorkspaceProject, Session, SessionAttentionEntry } from "@sidecar/session";
 import type { Rectangle, ResolvedNotchGeometry, WindowMode } from "@sidecar/surface";
 import type { ACT_RESULT_STATUS, ActResult } from "@sidecar/wire";
@@ -104,6 +104,21 @@ export interface SessionReplayBootstrap {
   accountId?: string;
 }
 
+/**
+ * The conversation history as every panel window shares it. A voice exchange
+ * lands on one window — the primary display hosts the talk key and the
+ * announcements, a typed ask lands on the panel it was typed into — so the
+ * thread is relayed through the main process for every other display's
+ * History to draw the same. `cleared` marks the relay of a Clear pressed on
+ * another display, which retires the receiving window's in-flight turns the
+ * way its own press would; an ordinary report replaces the thread and
+ * retires nothing.
+ */
+export interface ConversationHistoryPayload {
+  entries: readonly ConversationEntry[];
+  cleared: boolean;
+}
+
 export interface AppBootstrap {
   mode: WindowMode;
   /** Capture-only: start drawn as the peek, which normally needs a pointer. */
@@ -185,6 +200,12 @@ export interface AppBootstrap {
   calendars: readonly ObservedAccountCalendars[];
   /** Whether the calendar's quiet is holding announcements right now. */
   meetingQuiet: boolean;
+  /**
+   * The launch's conversation history so far, so a panel that opens late — a
+   * display plugged in mid-conversation — draws the History every other
+   * window already holds.
+   */
+  conversationHistory: readonly ConversationEntry[];
   /** Whether, where, and for whom this run may record its own surface. */
   sessionReplay: SessionReplayBootstrap;
   settings: AppSettings;

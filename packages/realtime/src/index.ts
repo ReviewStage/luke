@@ -5,6 +5,7 @@ export {
   realtimeCredentialIsUsable,
 } from "@sidecar/hosted";
 export {
+  adoptConversationThread,
   appendConversationEntry,
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
@@ -13,6 +14,7 @@ export {
   conversationHistoryText,
   insertSpokenAskEntry,
   insertSpokenAskThreadEntry,
+  isConversationEntryKind,
   maximumConversationEntries,
   maximumConversationEntryLength,
   recentConversationEntries,

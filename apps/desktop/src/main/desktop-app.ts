@@ -50,7 +50,7 @@ import {
   type WorkspaceHostRegistration,
   workspaceHostRegistrations,
 } from "@sidecar/providers";
-import type { SessionAnnouncement } from "@sidecar/realtime";
+import type { ConversationEntry, SessionAnnouncement } from "@sidecar/realtime";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   CreatedWorkspaceOpenTracker,
@@ -114,6 +114,7 @@ import {
   ACCOUNT_STATUS,
   type AccountSnapshot,
   type AppBootstrap,
+  type ConversationHistoryPayload,
   type MicrophoneRoute,
   type MicrophoneStatus,
   type ObservedAccountCalendars,
@@ -158,7 +159,7 @@ import { MediaDuckController } from "./native/media-duck";
 import { MicrophoneRouteWatcher } from "./native/microphone-route";
 import { OutputVolumeWatcher } from "./native/output-volume";
 import { ProviderKeyVaultSync, type VaultSyncAccount } from "./provider-key-vault-sync";
-import { type BridgeContext, registerBridgeEntry } from "./register-bridge";
+import { type BridgeContext, registerBridge, registerBridgeEntry } from "./register-bridge";
 import { runModeFor } from "./run-mode";
 import { createSettingsHandler } from "./settings-handler";
 import { SettingsStore } from "./settings-store";
@@ -446,6 +447,16 @@ const heldEvaluatorSpeech = new SessionNoticeHold<SessionAnnouncement>();
  * so.
  */
 let meetingQuietActive = false;
+/**
+ * The launch's conversation history, one thread shared by every panel window.
+ * Held in memory alone like the renderer copies it mirrors: written to no
+ * disk, dying with the app, never read by anything here — the main process
+ * only relays it between windows and seeds a panel that opens late. Each
+ * window reports the whole thread after a line it appended, and the last
+ * report wins, which is the conversation's own shape: one developer holds
+ * one exchange at a time.
+ */
+let conversationHistory: readonly ConversationEntry[] = [];
 // Notices come from status edges the registry observed, never from anything a
 // model decided, so they work — and matter most — with no evaluator configured.
 const sessionNoticeTracker = new SessionNoticeTracker();
@@ -1395,10 +1406,31 @@ function registerIpc(): void {
         // shown, or held quiet, before the account gate opens.
         calendars: accountCapabilitiesActive() ? observedCalendars : [],
         meetingQuiet: accountCapabilitiesActive() && meetingQuietActive,
+        conversationHistory,
         sessionReplay: await sessionReplayBootstrap(),
         settings: await settingsStore.snapshot(),
       };
     },
+  );
+  // The conversation history's relay between windows. The main process holds
+  // the thread and passes it along; it never reads a line, and the sender is
+  // excluded because it already drew what it reported — an echo could regress
+  // a window that appended again while its report was in flight.
+  registerBridge(
+    BRIDGE,
+    {
+      reportConversationHistory(context, entries) {
+        conversationHistory = entries;
+        const payload: ConversationHistoryPayload = { entries, cleared: false };
+        panels.broadcast(channels.onConversationHistoryChanged, payload, context.sender);
+      },
+      reportConversationHistoryCleared(context) {
+        conversationHistory = [];
+        const payload: ConversationHistoryPayload = { entries: [], cleared: true };
+        panels.broadcast(channels.onConversationHistoryChanged, payload, context.sender);
+      },
+    },
+    { ipcMain, trustedSender },
   );
   registerHandler(BRIDGE.completeArrivalBeat, () => {
     // A report that raced a settle already on file overwrites nothing.

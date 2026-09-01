@@ -29,11 +29,13 @@ import {
   type TrackedIssue,
   type TrackerActionResult,
 } from "@sidecar/issues";
-import type {
-  IssueToolAction,
-  RealtimeConnection,
-  RealtimeDiagnostics,
-  SessionAnnouncement,
+import {
+  type ConversationEntry,
+  type IssueToolAction,
+  isConversationEntryKind,
+  type RealtimeConnection,
+  type RealtimeDiagnostics,
+  type SessionAnnouncement,
 } from "@sidecar/realtime";
 import {
   isProviderId,
@@ -83,6 +85,7 @@ import type {
 } from "./wire/audio";
 import {
   type AppBootstrap,
+  type ConversationHistoryPayload,
   type DisplayDiagnostic,
   type SessionOpenResult,
   type SessionReplayBootstrap,
@@ -177,6 +180,18 @@ function isSessionIdentity(value: unknown): value is SessionIdentity {
     isProviderId(wire.providerId) &&
     isWireString(wire.providerSessionId) &&
     wire.providerSessionId.length > 0
+  );
+}
+
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This function parses an IPC field into a domain history line.
+function isConversationEntry(value: unknown): value is ConversationEntry {
+  const wire = wireValue(value);
+  if (!isRecord(wire)) return false;
+  if (!isConversationEntryKind(wire.kind) || !isWireString(wire.words)) return false;
+  if (wire.identity !== undefined && !isSessionIdentity(wire.identity)) return false;
+  return (
+    wire.recordedAt === undefined ||
+    (isWireNumber(wire.recordedAt) && Number.isFinite(wire.recordedAt))
   );
 }
 
@@ -623,6 +638,27 @@ export const BRIDGE = {
     result: result<void>(),
   }),
   /**
+   * One window's copy of the conversation history, reported whole after each
+   * line it appends. The main process holds the launch's thread and mirrors
+   * the report to every other panel window, so the History tab reads the same
+   * on every display; a window's own report is not echoed back to it. The
+   * relay never leaves the machine, and every line in it is one the reporting
+   * window already held on the terms the history's own module states.
+   */
+  reportConversationHistory: entry({
+    kind: "send",
+    channel: "app:report-conversation-history",
+    args: args<[readonly ConversationEntry[]]>(
+      (v) => v.length === 1 && Array.isArray(v[0]) && v[0].every(isConversationEntry),
+    ),
+  }),
+  /** The History Clear press, relayed so every display lets the same thread go. */
+  reportConversationHistoryCleared: entry({
+    kind: "send",
+    channel: "app:report-conversation-history-cleared",
+    args: noArgs,
+  }),
+  /**
    * Words the renderer already draws, placed on this machine's clipboard and
    * nowhere else. Routed through the main process because the panel's
    * permission handlers deny the sandboxed renderer every Chromium
@@ -853,6 +889,12 @@ export const BRIDGE = {
     channel: "app:session-announcements",
     args: noArgs,
     result: result<readonly SessionAnnouncement[]>(),
+  }),
+  onConversationHistoryChanged: entry({
+    kind: "subscribe",
+    channel: "app:conversation-history-changed",
+    args: noArgs,
+    result: result<ConversationHistoryPayload>(),
   }),
 } as const;
 
