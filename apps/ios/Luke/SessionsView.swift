@@ -89,8 +89,6 @@ struct SessionsView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Color.ground.ignoresSafeArea())
-        .toolbarBackground(Color.ground, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
         .searchable(text: $searchQuery, prompt: "Search sessions")
         .toolbar {
             // The filter rides with the search the way Notion docks one in
