@@ -52,6 +52,71 @@ public struct RosterProject: Identifiable, Equatable, Sendable {
     }
 }
 
+/// One model a provider's creation endpoint takes: the id the endpoint takes
+/// beside the name a person reads.
+public struct WorkspaceAgentModelChoice: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let label: String
+
+    public init(id: String, label: String) {
+        self.id = id
+        self.label = label
+    }
+}
+
+/// One agent kind a provider's creation endpoint takes, with the models and
+/// effort levels the build's table lists for it. Mirrors the
+/// `HostedWorkspaceAgentModels` wire shape from `@sidecar/hosted` — the same
+/// table the desktop offers from, so the two surfaces can never disagree
+/// about what exists.
+public struct WorkspaceAgentOption: Identifiable, Equatable, Sendable {
+    public let providerId: String
+    public let agent: String
+    public let models: [WorkspaceAgentModelChoice]
+    public let efforts: [String]
+
+    public var id: String { "\(providerId):\(agent)" }
+
+    public init(providerId: String, agent: String, models: [WorkspaceAgentModelChoice], efforts: [String]) {
+        self.providerId = providerId
+        self.agent = agent
+        self.models = models
+        self.efforts = efforts
+    }
+
+    init?(json: [String: Any]) {
+        guard
+            let providerId = json["providerId"] as? String,
+            let agent = json["agent"] as? String,
+            let modelsJSON = json["models"] as? [[String: Any]]
+        else { return nil }
+        let models = modelsJSON.compactMap { model -> WorkspaceAgentModelChoice? in
+            guard
+                let id = model["id"] as? String, !id.isEmpty,
+                let label = model["label"] as? String, !label.isEmpty
+            else { return nil }
+            return WorkspaceAgentModelChoice(id: id, label: label)
+        }
+        guard !models.isEmpty else { return nil }
+        self.providerId = providerId
+        self.agent = agent
+        self.models = models
+        self.efforts = (json["efforts"] as? [String] ?? []).filter { !$0.isEmpty }
+    }
+}
+
+/// The projects endpoint answer: where a workspace can be created, and the
+/// agent choices each of those providers' creation endpoints take.
+public struct ProjectsAnswer: Equatable, Sendable {
+    public let projects: [RosterProject]
+    public let agentModels: [WorkspaceAgentOption]
+
+    public init(projects: [RosterProject], agentModels: [WorkspaceAgentOption]) {
+        self.projects = projects
+        self.agentModels = agentModels
+    }
+}
+
 public enum ProjectsClientError: LocalizedError {
     case serverError(status: Int)
 
@@ -73,8 +138,8 @@ public final class ProjectsClient: Sendable {
         self.http = http
     }
 
-    /// Returns the caller's reported projects, or an empty array when none.
-    public func projects(bearerToken: String) async throws -> [RosterProject] {
+    /// Returns the caller's reported projects and agent choices.
+    public func projects(bearerToken: String) async throws -> ProjectsAnswer {
         var request = URLRequest(url: serviceURL.appendingPathComponent("api/projects"))
         request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
         let (data, response) = try await http.data(for: request)
@@ -82,10 +147,14 @@ public final class ProjectsClient: Sendable {
         guard (200 ..< 300).contains(status) else {
             throw ProjectsClientError.serverError(status: status)
         }
-        guard
-            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let projectsJSON = json["projects"] as? [[String: Any]]
-        else { return [] }
-        return projectsJSON.compactMap { RosterProject(json: $0) }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return ProjectsAnswer(projects: [], agentModels: [])
+        }
+        let projectsJSON = json["projects"] as? [[String: Any]] ?? []
+        let agentsJSON = json["agentModels"] as? [[String: Any]] ?? []
+        return ProjectsAnswer(
+            projects: projectsJSON.compactMap { RosterProject(json: $0) },
+            agentModels: agentsJSON.compactMap { WorkspaceAgentOption(json: $0) }
+        )
     }
 }

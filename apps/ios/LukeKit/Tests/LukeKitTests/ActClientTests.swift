@@ -374,3 +374,50 @@ final class ActClientRowActTests: XCTestCase {
         }
     }
 }
+
+// MARK: - Agent selection on creation
+
+final class ActClientCreateWorkspaceSelectionTests: XCTestCase {
+    private let base = URL(string: "https://example.com")!
+
+    func testCarriesAgentModelAndEffort() async throws {
+        let stub = StubHTTPClient { request in
+            let body =
+                (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data()))
+                as? [String: Any] ?? [:]
+            XCTAssertEqual(body["agent"] as? String, "claude")
+            XCTAssertEqual(body["model"] as? String, "fable-5")
+            XCTAssertEqual(body["effort"] as? String, "high")
+            return (jsonData(["result": "accepted"]), makeResponse(url: request.url!, status: 200))
+        }
+        let client = ActClient(baseURL: base, http: stub)
+        _ = try await client.createWorkspace(
+            accessToken: "tok",
+            providerId: "conductor",
+            providerProjectId: "proj-1",
+            task: "build it",
+            agent: "claude",
+            model: "fable-5",
+            effort: "high"
+        )
+    }
+
+    func testOmitsSelectionFieldsWhenNoneChosen() async throws {
+        let stub = StubHTTPClient { request in
+            let body =
+                (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data()))
+                as? [String: Any] ?? [:]
+            XCTAssertNil(body["agent"])
+            XCTAssertNil(body["model"])
+            XCTAssertNil(body["effort"])
+            return (jsonData(["result": "accepted"]), makeResponse(url: request.url!, status: 200))
+        }
+        let client = ActClient(baseURL: base, http: stub)
+        _ = try await client.createWorkspace(
+            accessToken: "tok",
+            providerId: "replicas",
+            providerProjectId: "env-1",
+            task: "build it"
+        )
+    }
+}
