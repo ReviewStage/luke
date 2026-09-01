@@ -89,11 +89,6 @@ struct SessionsView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        // No toolbarBackground override: pinning the bar opaque cut rows off
-        // at its edge instead of letting them pass behind it. The system's
-        // own scroll-edge treatment — transparent at rest over the ground,
-        // its own material once rows scroll under — is the native passage
-        // the profile sheet's list already gets by default.
         .background(Color.ground.ignoresSafeArea())
         .searchable(text: $searchQuery, prompt: "Search sessions")
         .toolbar {
