@@ -137,6 +137,7 @@ export async function handleObserve(options: ObserveOptions): Promise<Response> 
         new CursorSessionAdapter({
           ...baseOptions,
           readApiKey: readApiKeyFor(VAULT_PROVIDER_ID.CURSOR),
+          skipBackgroundFetches: true,
         }).observe(),
     },
     {
