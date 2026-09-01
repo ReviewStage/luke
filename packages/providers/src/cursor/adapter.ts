@@ -324,7 +324,11 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
     // pass-scoped request, because passes keep coming while it runs and each
     // would discard exactly the slow answer this exists for; only a
     // credential change may do that.
-    void this.#refreshRepositories(now);
+    // The repository refresh exists solely to populate instance state for
+    // future workspace-project queries. In stateless/on-demand mode the adapter
+    // is discarded after one pass, so the fetch can never be used; firing it
+    // anyway leaks a serverless invocation and spends the caller's Cursor quota.
+    if (this.minimumRefreshIntervalMs > 0) void this.#refreshRepositories(now);
 
     const body = await request(CURSOR_ROUTE.AGENTS, {
       [CURSOR_QUERY.LIMIT]: String(CURSOR_ADAPTER_DEFAULTS.AGENT_PAGE_SIZE),

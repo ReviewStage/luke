@@ -827,6 +827,11 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
   }
 
   /** Runs one authenticated pass. Duplicate session ids are dropped by the base. */
+  /** Zero means stateless/on-demand — subclasses may use this to skip instance-state population. */
+  protected get minimumRefreshIntervalMs(): number {
+    return this.#minimumRefreshIntervalMs;
+  }
+
   protected abstract collect(
     request: CloudRequest,
     now: number,
