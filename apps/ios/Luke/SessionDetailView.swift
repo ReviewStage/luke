@@ -131,37 +131,44 @@ struct SessionDetailView: View {
         }
     }
 
-    /// The input takes iMessage's shape where a message is advertised, and
-    /// where none is, the honest absence is said quietly instead of drawing
-    /// a field that could only refuse.
+    /// The input takes iMessage's own anatomy where a message is advertised —
+    /// body-size text in a stroked capsule, the send button inside the
+    /// capsule's trailing edge, popping in only once there is something to
+    /// send — and where none is, the honest absence is said quietly instead
+    /// of drawing a field that could only refuse.
     @ViewBuilder
     private var inputBar: some View {
         if session.canReceiveMessage {
-            HStack(alignment: .bottom, spacing: 8) {
-                TextField("Message", text: $text, axis: .vertical)
-                    .lineLimit(1 ... 5)
-                    .font(.system(size: 15))
-                    .foregroundStyle(Color.ink)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(
-                        RoundedRectangle(cornerRadius: 18)
-                            .fill(Color.cardFill)
-                            .strokeBorder(Color.controlStroke, lineWidth: 1)
-                    )
-                Button(action: send) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 30))
-                        .foregroundStyle(canSend ? Color.accentColor : Color.inkTertiary)
+            TextField("Message", text: $text, axis: .vertical)
+                .lineLimit(1 ... 5)
+                .font(.body)
+                .foregroundStyle(Color.ink)
+                .padding(.leading, 12)
+                .padding(.trailing, 36)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(Color.cardFill)
+                        .strokeBorder(Color.controlStroke, lineWidth: 1)
+                )
+                .overlay(alignment: .bottomTrailing) {
+                    if canSend {
+                        Button(action: send) {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.system(size: 28))
+                                .foregroundStyle(Color.accentColor)
+                        }
+                        .padding(3)
+                        .transition(.scale.combined(with: .opacity))
+                    }
                 }
-                .disabled(!canSend)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            // The chat's own ground, not the system bar material: the screen
-            // and its bars all stand on Color.ground, and a material would
-            // resolve near-white over it in light mode.
-            .background(Color.ground)
+                .animation(.spring(duration: 0.25), value: canSend)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                // The chat's own ground, not the system bar material: the
+                // screen and its bars all stand on Color.ground, and a
+                // material would resolve near-white over it in light mode.
+                .background(Color.ground)
         } else {
             Text("This session isn't accepting messages right now.")
                 .font(.footnote)
