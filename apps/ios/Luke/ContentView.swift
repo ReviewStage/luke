@@ -185,16 +185,34 @@ private struct SignedInView: View {
                         // item as a capsule: the avatar's own circle is the
                         // whole control.
                         .sharedBackgroundVisibility(.hidden)
+                        ToolbarItem(placement: .topBarTrailing) {
+                            voiceButton
+                        }
+                        .sharedBackgroundVisibility(.hidden)
                     } else {
                         ToolbarItem(placement: .topBarLeading) {
                             profileButton
                         }
+                        ToolbarItem(placement: .topBarTrailing) {
+                            voiceButton
+                        }
                     }
                 }
+            .navigationDestination(for: String.self) { destination in
+                if destination == "voice" { VoiceView() }
+            }
         }
         .sheet(isPresented: $profileShown) {
             ProfileSheet(identity: identity)
         }
+    }
+
+    private var voiceButton: some View {
+        NavigationLink(value: "voice") {
+            Image(systemName: "waveform.and.mic")
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Talk to Luke")
     }
 
     private var profileButton: some View {
