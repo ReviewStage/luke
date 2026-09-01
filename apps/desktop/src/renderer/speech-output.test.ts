@@ -1,16 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ELEVENLABS_KEEP_ALIVE_MS, TOKEN_MINT_OUTCOME } from "@sidecar/speech";
+import { TOKEN_MINT_OUTCOME } from "@sidecar/speech";
 import type { SpeechTokenAnswer } from "#shared/contracts";
 import { ElevenLabsSpeech, type SpeechAudioSink, type SpeechSocket } from "./speech-output";
 
 const VOICE_ID = "voice-1";
 
 /** One server frame, as the fixtures spell the fields the driver reads. */
-interface DialogueFrameFixture {
+interface SpeechFrameFixture {
   audio?: string;
-  is_final?: boolean;
-  is_final_audio_for_turn?: boolean;
+  isFinal?: boolean;
   error?: string;
   message?: string;
 }
@@ -74,7 +73,7 @@ function fakeSocket() {
       socket.readyState = 1;
       socket.onopen?.(new Event("open"));
     },
-    deliver(frame: DialogueFrameFixture) {
+    deliver(frame: SpeechFrameFixture) {
       // SAFETY: The driver reads only `data`; the rest of a MessageEvent is unused.
       socket.onmessage?.({ data: JSON.stringify(frame) } as MessageEvent<string>);
     },
@@ -160,19 +159,15 @@ test("opens one socket per reply and sends the documented frames in order", asyn
   h.socket.open();
   assert.deepEqual(
     h.socket.sent.map((frame) => JSON.parse(frame)),
-    [
-      { voices: [VOICE_ID] },
-      { inputs: [{ text: "Hello", voice_id: VOICE_ID, new_turn: false }] },
-      { inputs: [{ text: " there", voice_id: VOICE_ID, new_turn: false }] },
-    ],
+    [{ text: " " }, { text: "Hello" }, { text: " there" }],
   );
 
   h.speech.append("!");
-  assert.deepEqual(JSON.parse(h.socket.sent.at(-1) ?? ""), {
-    inputs: [{ text: "!", voice_id: VOICE_ID, new_turn: false }],
-  });
+  assert.deepEqual(JSON.parse(h.socket.sent.at(-1) ?? ""), { text: "!" });
   assert.equal(h.speech.finish(), true);
-  assert.deepEqual(JSON.parse(h.socket.sent.at(-1) ?? ""), { close_socket: true });
+  // An empty text is both the flush and the close on this socket, which is why
+  // the reply's last words never need a flush of their own.
+  assert.deepEqual(JSON.parse(h.socket.sent.at(-1) ?? ""), { text: "" });
 });
 
 test("closes the turn behind the deltas when generation beat the socket open", async () => {
@@ -184,11 +179,7 @@ test("closes the turn behind the deltas when generation beat the socket open", a
   h.socket.open();
   assert.deepEqual(
     h.socket.sent.map((frame) => JSON.parse(frame)),
-    [
-      { voices: [VOICE_ID] },
-      { inputs: [{ text: "Hi", voice_id: VOICE_ID, new_turn: false }] },
-      { close_socket: true },
-    ],
+    [{ text: " " }, { text: "Hi" }, { text: "" }],
   );
 });
 
@@ -221,8 +212,8 @@ test("waits for the scheduled audio to run out before saying the reply drained",
   await settle();
   h.socket.open();
   h.sink.setPending(120);
-  h.socket.deliver({ audio: AUDIO_FRAME, is_final_audio_for_turn: true });
-  h.socket.deliver({ is_final: true });
+  h.socket.deliver({ audio: AUDIO_FRAME });
+  h.socket.deliver({ isFinal: true });
   assert.deepEqual(h.events, ["audible"]);
   // The clock runs out; what is left scheduled is nothing, so the reply ends.
   h.sink.setPending(0);
@@ -267,7 +258,7 @@ test("a close after the last word is the ordinary ending, not a failure", async 
   h.speech.append("Hello");
   await settle();
   h.socket.open();
-  h.socket.deliver({ is_final: true });
+  h.socket.deliver({ isFinal: true });
   h.socket.shut();
   assert.deepEqual(h.events, ["drained"]);
 });
@@ -344,7 +335,7 @@ test("an interruption drops the queue, the socket, and the audio at once", async
   assert.equal(h.socket.closed(), true);
   assert.equal(h.sink.stops() > 0, true);
   // Everything the old socket still says lands on a generation that has gone.
-  h.socket.deliver({ audio: AUDIO_FRAME, is_final: true });
+  h.socket.deliver({ audio: AUDIO_FRAME, isFinal: true });
   assert.deepEqual(h.events, ["audible"]);
   assert.deepEqual(h.sink.played, [2]);
 });
@@ -363,29 +354,6 @@ test("a tool follow-up speaks on a socket and a token of its own", async () => {
   assert.equal(h.mints(), 2);
   assert.equal(h.urls.length, 2);
   assert.notEqual(h.urls[0], h.urls[1]);
-});
-
-test("pings a socket left idle, and stops once the turn is closed", async () => {
-  const h = harness();
-  h.speech.start();
-  h.speech.append("Hello");
-  await settle();
-  h.socket.open();
-  h.socket.sent.length = 0;
-  h.fire(ELEVENLABS_KEEP_ALIVE_MS);
-  assert.deepEqual(
-    h.socket.sent.map((frame) => JSON.parse(frame)),
-    [{ keep_alive: true }],
-  );
-
-  h.socket.sent.length = 0;
-  assert.equal(h.speech.finish(), true);
-  h.fire(ELEVENLABS_KEEP_ALIVE_MS);
-  assert.deepEqual(
-    h.socket.sent.map((frame) => JSON.parse(frame)),
-    [{ close_socket: true }],
-    "a closed turn is never pinged",
-  );
 });
 
 test("closing the call releases the audio graph", async () => {

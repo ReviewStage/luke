@@ -2,26 +2,31 @@ import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from 
 import { ELEVENLABS_API_ORIGIN } from "./elevenlabs-voices.js";
 
 /**
- * The Text-to-Dialogue socket, as frames rather than as a connection: what to
+ * The streaming speech socket, as frames rather than as a connection: what to
  * send, and how to read what comes back. The socket itself and the audio graph
  * it feeds belong to the renderer; everything here is the wire vocabulary, so
- * the ordering, the keepalive, and the decoding can be tested without one.
+ * the ordering and the decoding can be tested without one.
  */
 
-const DIALOGUE_PATH = "/v1/text-to-dialogue/stream-input";
+const SPEECH_PATH_PREFIX = "/v1/text-to-speech/";
+const SPEECH_PATH_SUFFIX = "/stream-input";
 
 /**
- * The one model Luke speaks through, fixed by the build. The voice's own
- * server-side defaults do the rest: ElevenLabs documents no rate control that
- * maps onto Luke's speed steps, and inventing one would be a control that
- * changes nothing.
+ * The one model Luke speaks through, fixed by the build. Chosen over the
+ * expressive v3 models for what this use costs and how fast it answers: half
+ * the credits per character, and speech beginning in about a quarter of the
+ * time. Luke speaks unprompted all day, so both compound.
+ *
+ * The voice's own server-side defaults do the rest: ElevenLabs documents no
+ * rate control that maps onto Luke's speed steps, and inventing one would be a
+ * control that changes nothing.
  */
-export const ELEVENLABS_MODEL_ID = "eleven_v3_conversational";
+export const ELEVENLABS_MODEL_ID = "eleven_flash_v2_5";
 
 /**
- * Raw PCM rather than a streaming codec, on ElevenLabs' own advice: a codec
- * may interleave bytes across a turn boundary, and the turn boundary is what
- * says a reply has finished being spoken.
+ * Raw PCM rather than a streaming codec: a codec may interleave bytes across a
+ * frame boundary, and what is scheduled has to be whole samples for the drain
+ * to know when the reply has actually been heard.
  */
 export const ELEVENLABS_OUTPUT_FORMAT = "pcm_24000";
 
@@ -29,15 +34,14 @@ export const ELEVENLABS_OUTPUT_FORMAT = "pcm_24000";
 export const ELEVENLABS_SAMPLE_RATE = 24_000;
 
 /**
- * ElevenLabs closes a socket idle for 20 seconds. Luke pings well inside that,
- * because the gap being covered is a model still thinking between two deltas,
- * and a socket closed underneath one loses the reply rather than delaying it.
+ * Builds the exact address one reply's speech socket opens on. The voice rides
+ * in the path here rather than in a frame, so it is encoded: a voice id is
+ * carried from a provider's answer through the renderer, and a path segment is
+ * the one place a stray separator would address something else entirely.
  */
-export const ELEVENLABS_KEEP_ALIVE_MS = 15_000;
-
-/** Builds the exact address one reply's speech socket opens on. */
-export function elevenlabsDialogueUrl(singleUseToken: string): string {
-  const url = new URL(DIALOGUE_PATH, ELEVENLABS_API_ORIGIN);
+export function elevenlabsSpeechUrl(voiceId: string, singleUseToken: string): string {
+  const path = `${SPEECH_PATH_PREFIX}${encodeURIComponent(voiceId)}${SPEECH_PATH_SUFFIX}`;
+  const url = new URL(path, ELEVENLABS_API_ORIGIN);
   url.protocol = "wss:";
   url.searchParams.set("model_id", ELEVENLABS_MODEL_ID);
   url.searchParams.set("output_format", ELEVENLABS_OUTPUT_FORMAT);
@@ -45,39 +49,39 @@ export function elevenlabsDialogueUrl(singleUseToken: string): string {
   return url.toString();
 }
 
-/** The opening frame, which names the one voice every input of this turn uses. */
-export function dialogueVoicesFrame(voiceId: string): WireRecord {
-  return { voices: [voiceId] };
+/**
+ * The opening frame, which is a single space and nothing else. The socket
+ * requires one before any real text; the voice is already in the address, the
+ * credential is already in the query, and every setting this frame could carry
+ * is one Luke deliberately leaves at the voice's own default.
+ */
+export function speechOpeningFrame(): WireRecord {
+  return { text: " " };
+}
+
+/** One delta of the reply, in the order it was generated. */
+export function speechTextFrame(delta: string): WireRecord {
+  return { text: delta };
 }
 
 /**
- * One delta of the reply. `new_turn` stays false for every delta: the whole
- * reply is one turn spoken by one voice, and a new turn mid-sentence would
- * put a boundary where the model put a comma.
+ * Sent once OpenAI has finished the response. An empty text is how this socket
+ * is closed, and it flushes whatever is still buffered on the way out — which
+ * is why no separate flush is ever sent: the reply's last words and the close
+ * are the same event, so there is nothing left to force.
  */
-export function dialogueInputFrame(voiceId: string, delta: string): WireRecord {
-  return { inputs: [{ text: delta, voice_id: voiceId, new_turn: false }] };
-}
-
-export function dialogueKeepAliveFrame(): WireRecord {
-  return { keep_alive: true };
-}
-
-/** Sent once OpenAI has finished the response, which is what flushes the turn. */
-export function dialogueCloseFrame(): WireRecord {
-  return { close_socket: true };
+export function speechCloseFrame(): WireRecord {
+  return { text: "" };
 }
 
 /**
  * What one server frame says. Only the documented fields are read: audio to
- * play, the two endings, and an error to report. Anything else the server
- * sends alongside them is ignored rather than guessed at.
+ * play, the ending, and an error to report. Anything else the server sends
+ * alongside them is ignored rather than guessed at.
  */
-export interface DialogueServerFrame {
+export interface SpeechServerFrame {
   /** Base64 `pcm_24000` samples, absent on a frame that carries none. */
   audio?: string;
-  /** The turn this voice was speaking has finished. */
-  finalForTurn: boolean;
   /** The socket has said everything it will say. */
   final: boolean;
   /**
@@ -95,17 +99,17 @@ export interface DialogueServerFrame {
  * ElevenLabs actually sends, short enough that a hostile frame cannot become
  * an unbounded diagnostic line.
  */
-export const MAXIMUM_DIALOGUE_ERROR_LENGTH = 300;
+export const MAXIMUM_SPEECH_ERROR_LENGTH = 300;
 
 function boundedError(value: UnparsedWireValue): string | undefined {
   if (!isWireString(value)) return undefined;
   const trimmed = value.trim();
   if (!trimmed) return undefined;
-  return trimmed.slice(0, MAXIMUM_DIALOGUE_ERROR_LENGTH);
+  return trimmed.slice(0, MAXIMUM_SPEECH_ERROR_LENGTH);
 }
 
 /** Reads one server frame, or nothing at all if it is not JSON Luke understands. */
-export function parseDialogueFrame(payload: string): DialogueServerFrame | undefined {
+export function parseSpeechFrame(payload: string): SpeechServerFrame | undefined {
   let parsed: UnparsedWireValue;
   try {
     // SAFETY: A socket frame is unparsed wire until the field reads below narrow it.
@@ -114,10 +118,9 @@ export function parseDialogueFrame(payload: string): DialogueServerFrame | undef
     return undefined;
   }
   if (!isRecord(parsed)) return undefined;
-  const frame: DialogueServerFrame = {
-    finalForTurn: parsed.is_final_audio_for_turn === true,
-    final: parsed.is_final === true,
-  };
+  // This socket answers in camelCase where the account reads answer in snake,
+  // which is the service's own inconsistency and not a choice available here.
+  const frame: SpeechServerFrame = { final: parsed.isFinal === true };
   // An empty audio field is no audio, not a frame of silence to schedule.
   if (isWireString(parsed.audio) && parsed.audio !== "") frame.audio = parsed.audio;
   const error = boundedError(parsed.message) ?? boundedError(parsed.error);
@@ -133,7 +136,7 @@ const PCM16_SCALE = 0x8000;
  * A trailing odd byte is a truncated sample rather than a sample: it is
  * dropped, because half of one is not a quieter sound, it is a click.
  */
-export function decodeDialogueAudio(base64: string): Float32Array {
+export function decodeSpeechAudio(base64: string): Float32Array {
   const binary = atob(base64);
   const sampleCount = Math.floor(binary.length / 2);
   const samples = new Float32Array(sampleCount);

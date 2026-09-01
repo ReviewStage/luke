@@ -1,16 +1,14 @@
 import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabulary";
 import type { ScheduledTimer } from "@sidecar/realtime";
 import {
-  decodeDialogueAudio,
-  dialogueCloseFrame,
-  dialogueInputFrame,
-  dialogueKeepAliveFrame,
-  dialogueVoicesFrame,
-  ELEVENLABS_KEEP_ALIVE_MS,
+  decodeSpeechAudio,
   ELEVENLABS_SAMPLE_RATE,
-  elevenlabsDialogueUrl,
-  MAXIMUM_DIALOGUE_ERROR_LENGTH,
-  parseDialogueFrame,
+  elevenlabsSpeechUrl,
+  MAXIMUM_SPEECH_ERROR_LENGTH,
+  parseSpeechFrame,
+  speechCloseFrame,
+  speechOpeningFrame,
+  speechTextFrame,
   TOKEN_MINT_OUTCOME,
 } from "@sidecar/speech";
 import type { WireRecord } from "@sidecar/wire";
@@ -170,7 +168,7 @@ export interface ElevenLabsSpeechOptions {
   /** Mints the one credential the next socket carries; never cached between replies. */
   mintToken: () => Promise<SpeechTokenAnswer>;
   createSocket?: (url: string) => SpeechSocket;
-  /** The timers the keepalive and the drain run on, injectable for the same reason. */
+  /** The timer the drain runs on, injectable for the same reason. */
   schedule?: (callback: () => void, delayMs: number) => ScheduledTimer;
   cancelScheduled?: (timer: ScheduledTimer) => void;
   /**
@@ -209,7 +207,7 @@ const SOCKET_FAILURE_MESSAGE = "The speech connection closed before Luke finishe
  * stands in for one.
  */
 function socketFailureMessage(event: CloseEvent): string {
-  const reason = event.reason?.trim().slice(0, MAXIMUM_DIALOGUE_ERROR_LENGTH);
+  const reason = event.reason?.trim().slice(0, MAXIMUM_SPEECH_ERROR_LENGTH);
   if (reason) return `${SOCKET_FAILURE_MESSAGE}: ${reason}`;
   return `${SOCKET_FAILURE_MESSAGE} (code ${event.code}).`;
 }
@@ -237,7 +235,6 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
   #failed = false;
   #drained = false;
   #audible = false;
-  #keepAliveTimer: ScheduledTimer | undefined;
   #drainTimer: ScheduledTimer | undefined;
 
   constructor(options: ElevenLabsSpeechOptions) {
@@ -257,7 +254,7 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
     this.#spoke = true;
     const socket = this.#socket;
     if (socket && socket.readyState === SOCKET_OPEN) {
-      this.#send(dialogueInputFrame(this.#options.voiceId, delta));
+      this.#send(speechTextFrame(delta));
       return;
     }
     this.#queued.push(delta);
@@ -268,8 +265,7 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
     this.#finished = true;
     if (!this.#spoke || this.#failed) return false;
     const socket = this.#socket;
-    if (socket && socket.readyState === SOCKET_OPEN) this.#send(dialogueCloseFrame());
-    this.#clearKeepAlive();
+    if (socket && socket.readyState === SOCKET_OPEN) this.#send(speechCloseFrame());
     return true;
   }
 
@@ -292,7 +288,6 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
     this.#failed = false;
     this.#drained = false;
     this.#audible = false;
-    this.#clearKeepAlive();
     this.#clearDrainTimer();
     const socket = this.#socket;
     this.#socket = undefined;
@@ -321,7 +316,7 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
       this.#fail(answer?.explanation ?? "Luke could not reach the speech service.");
       return;
     }
-    const url = elevenlabsDialogueUrl(answer.token);
+    const url = elevenlabsSpeechUrl(this.#options.voiceId, answer.token);
     // A socket the renderer is not allowed to open throws here rather than
     // failing on an event, and this runs detached from any caller: an
     // uncaught throw would leave the reply owing a drain that no close and no
@@ -339,13 +334,13 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
     socket.onopen = () => {
       if (generation !== this.#generation) return;
       this.#trace(TRACE_DIRECTION.SERVER, { type: SPEECH_TRACE.OPEN });
-      this.#send(dialogueVoicesFrame(this.#options.voiceId));
+      this.#send(speechOpeningFrame());
       const queued = this.#queued;
       this.#queued = [];
-      for (const delta of queued) this.#send(dialogueInputFrame(this.#options.voiceId, delta));
+      for (const delta of queued) this.#send(speechTextFrame(delta));
       // The reply finished generating while the socket was still opening, so
       // the flush above was the whole of it and the turn closes behind it.
-      if (this.#finished) this.#send(dialogueCloseFrame());
+      if (this.#finished) this.#send(speechCloseFrame());
     };
     socket.onmessage = (event) => {
       if (generation !== this.#generation) return;
@@ -372,14 +367,14 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
   }
 
   #readFrame(payload: string): void {
-    const frame = parseDialogueFrame(payload);
+    const frame = parseSpeechFrame(payload);
     if (!frame) return;
     if (frame.error) {
       this.#fail(frame.error);
       return;
     }
     if (frame.audio) {
-      const samples = decodeDialogueAudio(frame.audio);
+      const samples = decodeSpeechAudio(frame.audio);
       this.#trace(TRACE_DIRECTION.SERVER, {
         type: SPEECH_TRACE.AUDIO,
         samples: samples.length,
@@ -396,7 +391,7 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
         }
       }
     }
-    if (frame.final || frame.finalForTurn) {
+    if (frame.final) {
       this.#trace(TRACE_DIRECTION.SERVER, {
         type: SPEECH_TRACE.END,
         pendingMs: Math.round(this.#options.sink.pendingMs()),
@@ -435,7 +430,6 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
   #fail(message: string): void {
     if (this.#failed) return;
     this.#failed = true;
-    this.#clearKeepAlive();
     this.#clearDrainTimer();
     this.#options.listener.onError(message);
     if (!this.#drained) {
@@ -449,35 +443,10 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
     if (!socket || socket.readyState !== SOCKET_OPEN) return;
     socket.send(JSON.stringify(frame));
     this.#trace(TRACE_DIRECTION.CLIENT, frame);
-    this.#armKeepAlive();
-  }
-
-  /**
-   * Keeps the socket open across a gap between two deltas. The service closes
-   * one idle for twenty seconds, and the gap being covered is the model still
-   * thinking — a socket closed under one loses the reply rather than delaying
-   * it. Nothing is pinged once the turn has been closed.
-   */
-  #armKeepAlive(): void {
-    this.#clearKeepAlive();
-    if (this.#finished) return;
-    const generation = this.#generation;
-    this.#keepAliveTimer = (this.#options.schedule ?? setTimeout)(() => {
-      this.#keepAliveTimer = undefined;
-      if (generation !== this.#generation || this.#finished) return;
-      this.#send(dialogueKeepAliveFrame());
-    }, ELEVENLABS_KEEP_ALIVE_MS);
   }
 
   #trace(direction: TraceDirection, event: WireRecord): void {
     this.#options.onWireEvent?.(direction, event);
-  }
-
-  #clearKeepAlive(): void {
-    if (this.#keepAliveTimer === undefined) return;
-    // SAFETY: Without an injected scheduler the handle came from setTimeout itself.
-    (this.#options.cancelScheduled ?? clearTimeout)(this.#keepAliveTimer as number);
-    this.#keepAliveTimer = undefined;
   }
 
   #clearDrainTimer(): void {

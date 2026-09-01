@@ -1,18 +1,16 @@
 export {
-  type DialogueServerFrame,
-  decodeDialogueAudio,
-  dialogueCloseFrame,
-  dialogueInputFrame,
-  dialogueKeepAliveFrame,
-  dialogueVoicesFrame,
-  ELEVENLABS_KEEP_ALIVE_MS,
+  decodeSpeechAudio,
   ELEVENLABS_MODEL_ID,
   ELEVENLABS_OUTPUT_FORMAT,
   ELEVENLABS_SAMPLE_RATE,
-  elevenlabsDialogueUrl,
-  MAXIMUM_DIALOGUE_ERROR_LENGTH,
-  parseDialogueFrame,
-} from "./elevenlabs-dialogue.js";
+  elevenlabsSpeechUrl,
+  MAXIMUM_SPEECH_ERROR_LENGTH,
+  parseSpeechFrame,
+  type SpeechServerFrame,
+  speechCloseFrame,
+  speechOpeningFrame,
+  speechTextFrame,
+} from "./elevenlabs-socket.js";
 export {
   ELEVENLABS_TOKEN_URL,
   elevenlabsTokenFromResponse,

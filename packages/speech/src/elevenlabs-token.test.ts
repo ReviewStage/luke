@@ -8,7 +8,7 @@ import {
 } from "./elevenlabs-token.js";
 
 test("mints at the documented path, with the key in its own header alone", async () => {
-  assert.equal(ELEVENLABS_TOKEN_URL, "https://api.elevenlabs.io/v1/single-use-token/ttd_websocket");
+  assert.equal(ELEVENLABS_TOKEN_URL, "https://api.elevenlabs.io/v1/single-use-token/tts_websocket");
   let seen: { url: string; init: RequestInit } | undefined;
   const result = await mintElevenlabsToken({
     apiKey: "secret",
