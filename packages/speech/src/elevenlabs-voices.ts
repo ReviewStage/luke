@@ -16,6 +16,13 @@ import { MAXIMUM_VOICE_FIELD_LENGTH, type SpeechVoice } from "./speech-provider.
 
 export const ELEVENLABS_API_ORIGIN = "https://api.elevenlabs.io";
 
+/**
+ * Where a personal voice is made. Fixed by the build and opened by the main
+ * process at the row's own press: Luke never records or uploads a cloning
+ * sample, so the whole of his part in it is the way there.
+ */
+export const ELEVENLABS_VOICES_URL = "https://elevenlabs.io/app/voices";
+
 /** The header ElevenLabs authenticates every request with. */
 export const ELEVENLABS_KEY_HEADER = "xi-api-key";
 

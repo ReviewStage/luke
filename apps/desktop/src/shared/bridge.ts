@@ -649,6 +649,16 @@ export const BRIDGE = {
    * comes back is bounded metadata the page draws, or the sentence saying why
    * it could not be read.
    */
+  /**
+   * Where a personal voice is made, in the browser. A fixed address in the
+   * main process, like every other page Luke can open: the renderer names the
+   * act, never a URL of its own.
+   */
+  openSpeechVoicesPage: entry({
+    kind: "send",
+    channel: "app:open-speech-voices-page",
+    args: noArgs,
+  }),
   listSpeechVoices: entry({
     kind: "invoke",
     channel: "app:list-speech-voices",

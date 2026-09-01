@@ -911,6 +911,13 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
 /* Devin's published mark leaves roughly a fifth of its box empty on every side,
    so it is scaled up to the height the full-bleed marks reach. */
+/* The two bars stand narrower than the square they are drawn in, so the mark
+   is scaled up to the optical weight the wider glyphs carry. No colour: the
+   published mark is monochrome and takes the text palette. */
+.provider-mark[data-mark="elevenlabs"] {
+  transform: scale(1.14);
+}
+
 .provider-mark[data-mark="devin"] {
   color: var(--mark-devin);
   transform: scale(1.22);

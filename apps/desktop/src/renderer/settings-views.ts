@@ -1,5 +1,6 @@
 import {
   type CredentialProviderId,
+  SPEECH_CREDENTIAL_PROVIDER_ID,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials/vocabulary";
 import {
@@ -45,16 +46,17 @@ export { SETTING_PAGE };
 
 /**
  * Which page draws a provider's credential row. Every key lives under
- * Connections except the one voice runs on: the OpenAI row stands in the
+ * Connections except the two voice runs on: the OpenAI row stands in the
  * What Luke runs on section on the Settings front page, beside the allowance it
- * replaces. This is what brings a credential entry back from the key slot to
- * the page it began on — restoring Connections around an entry begun on the
- * front page would land the answer on a page nobody was looking at.
+ * replaces, and the ElevenLabs row stands on the Voice page, beside the voice
+ * it is what chooses. This is what brings a credential entry back from the key
+ * slot to the page it began on — restoring Connections around an entry begun
+ * on the front page would land the answer on a page nobody was looking at.
  */
 export function credentialSettingsPage(providerId: CredentialProviderId): SettingsView {
-  return providerId === VOICE_CREDENTIAL_PROVIDER_ID
-    ? SETTINGS_VIEW.ROOT
-    : SETTINGS_VIEW.CONNECTIONS;
+  if (providerId === VOICE_CREDENTIAL_PROVIDER_ID) return SETTINGS_VIEW.ROOT;
+  if (providerId === SPEECH_CREDENTIAL_PROVIDER_ID) return SETTINGS_VIEW.VOICE;
+  return SETTINGS_VIEW.CONNECTIONS;
 }
 
 /**

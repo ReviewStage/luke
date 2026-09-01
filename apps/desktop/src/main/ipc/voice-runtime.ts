@@ -6,6 +6,7 @@ import {
 import { CREDENTIAL_CONNECTION, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
 import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import {
+  ELEVENLABS_VOICES_URL,
   listElevenlabsVoices,
   mintElevenlabsToken,
   TOKEN_MINT_OUTCOME,
@@ -124,6 +125,9 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
       requestRealtimeDiagnostics: () =>
         dependencies.chooseRealtimeCredentials()?.minter.diagnostics() ??
         dependencies.unavailableDiagnostics(),
+      openSpeechVoicesPage: () => {
+        void dependencies.openExternal(ELEVENLABS_VOICES_URL);
+      },
       async listSpeechVoices() {
         const apiKey = await speechKey();
         if (!apiKey) return NO_SPEECH_KEY_VOICES;

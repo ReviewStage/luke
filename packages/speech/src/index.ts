@@ -25,6 +25,7 @@ export {
 export {
   ELEVENLABS_API_ORIGIN,
   ELEVENLABS_KEY_HEADER,
+  ELEVENLABS_VOICES_URL,
   elevenlabsVoicesUrl,
   listElevenlabsVoices,
   MAXIMUM_VOICES,
