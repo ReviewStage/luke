@@ -12,21 +12,29 @@ struct SessionsView: View {
     private let client = RosterClient(serviceURL: AccountConstants.serviceURL)
 
     var body: some View {
-        ScrollView {
+        List {
             if isLoading && sessions.isEmpty {
-                loadingState
-            } else if sessions.isEmpty {
-                emptyState
-            } else {
-                LazyVStack(spacing: 8) {
-                    ForEach(sessions) { s in
-                        SessionRow(session: s)
-                    }
+                ForEach(0 ..< 3, id: \.self) { _ in
+                    SkeletonRow()
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(rowInsets)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+            } else if sessions.isEmpty {
+                emptyRow
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            } else {
+                ForEach(sessions) { s in
+                    SessionRow(session: s)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(rowInsets)
+                }
             }
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
         .background(Color(red: 0.07, green: 0.07, blue: 0.08).ignoresSafeArea())
         .toolbarBackground(Color(red: 0.07, green: 0.07, blue: 0.08), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
@@ -35,18 +43,9 @@ struct SessionsView: View {
         .task { await refreshSessions() }
     }
 
-    private var loadingState: some View {
-        VStack(spacing: 12) {
-            ForEach(0 ..< 3, id: \.self) { _ in
-                SkeletonRow()
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
+    private let rowInsets = EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16)
 
-    private var emptyState: some View {
+    private var emptyRow: some View {
         VStack(spacing: 8) {
             if let error = fetchError {
                 Text(error)
@@ -59,7 +58,6 @@ struct SessionsView: View {
                     .foregroundStyle(Color(white: 1, opacity: 0.5))
             }
         }
-        .padding()
         .frame(maxWidth: .infinity)
         .padding(.top, 60)
     }
