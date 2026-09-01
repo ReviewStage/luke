@@ -278,7 +278,8 @@ private struct AxisFilterPage: View {
                         filters.insert(option.filter)
                     }
                 } label: {
-                    HStack {
+                    HStack(spacing: 12) {
+                        optionMark(option.filter)
                         Text(optionTitle(option.filter))
                             .foregroundStyle(Color.ink)
                         Spacer()
@@ -294,6 +295,56 @@ private struct AxisFilterPage: View {
         }
         .navigationTitle(axisTitle(group.axis))
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// A provider row wears the same brand mark its sessions wear; a status
+    /// row a glyph in the same 30pt slot, so the two pages read as one.
+    @ViewBuilder
+    private func optionMark(_ filter: SessionFilter) -> some View {
+        switch filter {
+        case .provider(let providerId):
+            RosterProviderMark(providerId: providerId)
+        case .status(let status):
+            StatusMark(status: status)
+        }
+    }
+}
+
+/// A status's own glyph in the row-mark's slot, colored the way the session
+/// rows already speak that status: waiting's orange, complete's green, an
+/// error's red, and the neutral inks for working and anything unknown.
+private struct StatusMark: View {
+    let status: String
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 7)
+                .fill(Color.pressedFill)
+                .frame(width: 30, height: 30)
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(color)
+        }
+    }
+
+    private var symbol: String {
+        switch status {
+        case "working": "circle.dashed"
+        case "waiting": "exclamationmark.circle"
+        case "complete": "checkmark.circle"
+        case "error": "xmark.circle"
+        default: "questionmark.circle"
+        }
+    }
+
+    private var color: Color {
+        switch status {
+        case "working": Color.inkSecondary
+        case "waiting": Color(red: 1.0, green: 0.627, blue: 0.286)
+        case "complete": Color.stateComplete
+        case "error": Color.errorInk
+        default: Color.inkTertiary
+        }
     }
 }
 
