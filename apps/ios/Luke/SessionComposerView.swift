@@ -1,76 +1,62 @@
 import LukeKit
 import SwiftUI
 
-/// A text composer for sending a message to a cloud session that is accepting input.
-///
-/// Embed this view where the read path's roster surfaces a session with
-/// `canReceiveMessage`. Pass the session's `providerId` and `providerSessionId`
-/// from the observed roster row; the composer is not shown for sessions that
-/// the server reports as unable to receive messages.
-struct SessionComposerView: View {
-    let providerId: String
-    let providerSessionId: String
+/// The Send Message sheet, in the system's own sheet vocabulary like the
+/// vault key editor and the workspace creator: inline title, toolbar Cancel
+/// and Send, grouped form, with the session's recap under the field so the
+/// reply is written against where the turn actually stands. The server
+/// re-observes the session before the write lands, so a refusal comes back
+/// with the provider's own reason and nothing is retried on its behalf.
+struct SessionComposerSheet: View {
+    let session: RosterSession
     let actClient: ActClient
-    /// Called shortly after a successful send so a containing sheet can dismiss.
-    var onDelivered: (() -> Void)? = nil
+    /// Called on Cancel and after a successful send, so the presenter closes.
+    let onDone: () -> Void
 
-    @Environment(AccountSession.self) private var session
+    @Environment(AccountSession.self) private var account
     @State private var text = ""
-    @State private var state: ComposerState = .idle
-
-    private enum ComposerState: Equatable {
-        case idle
-        case sending
-        case result(ActMessageAnswer)
-    }
+    @State private var sending = false
+    @State private var failure: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                TextField("Message", text: $text, axis: .vertical)
-                    .lineLimit(3, reservesSpace: false)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 15))
-                    .foregroundStyle(Color.ink)
-                    .disabled(state == .sending)
-
-                Button(action: send) {
-                    if state == .sending {
-                        ProgressView()
-                            .tint(Color.ink)
-                            .frame(width: 24, height: 24)
-                    } else {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 24))
-                            .foregroundStyle(canSend ? Color.ink : Color.inkTertiary)
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Message", text: $text, axis: .vertical)
+                        .lineLimit(5 ... 12)
+                } footer: {
+                    if let recap = session.recap {
+                        Text(recap)
                     }
                 }
-                .disabled(!canSend || state == .sending)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.cardFill)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.controlStroke, lineWidth: 1)
-                    )
-            )
-
-            if case .result(let answer) = state {
-                resultBanner(answer)
+            .disabled(sending)
+            .navigationTitle(session.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onDone)
+                        .disabled(sending)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if sending {
+                        ProgressView()
+                    } else {
+                        Button("Send") { send() }
+                            .disabled(!canSend)
+                    }
+                }
             }
         }
-        // Bound to the view's lifetime, unlike an unstructured Task: dismissing
-        // the sheet cancels the wait, so a slow send from a closed composer can
-        // never dismiss a sheet opened later for another session.
-        .task(id: state) {
-            guard case .result(let answer) = state, answer.result == .accepted,
-                  let onDelivered else { return }
-            try? await Task.sleep(for: .seconds(0.8))
-            guard !Task.isCancelled else { return }
-            onDelivered()
+        .interactiveDismissDisabled(sending)
+        .alert(
+            "Not Delivered",
+            isPresented: Binding(presence: $failure),
+            presenting: failure
+        ) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { reason in
+            Text(reason)
         }
     }
 
@@ -81,39 +67,29 @@ struct SessionComposerView: View {
     private func send() {
         guard canSend else { return }
         let messageText = text
-        state = .sending
-        text = ""
+        sending = true
+        failure = nil
         Task {
+            defer { sending = false }
             do {
-                let answer = try await session.authorized { token in
+                let answer = try await account.authorized { token in
                     try await actClient.sendMessage(
                         accessToken: token,
-                        providerId: providerId,
-                        providerSessionId: providerSessionId,
+                        providerId: session.providerId,
+                        providerSessionId: session.sessionId,
                         text: messageText
                     )
                 }
-                state = .result(answer)
+                if answer.result == .accepted {
+                    onDone()
+                } else {
+                    failure = answer.reason ?? "The message was not delivered."
+                }
+            } catch is AccountSessionError {
+                ()  // Signed out — the state change redraws automatically.
             } catch {
-                state = .result(ActMessageAnswer(
-                    result: .rejected,
-                    reason: error.localizedDescription
-                ))
+                failure = error.localizedDescription
             }
         }
-    }
-
-    @ViewBuilder
-    private func resultBanner(_ answer: ActMessageAnswer) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: answer.result == .accepted ? "checkmark.circle" : "exclamationmark.circle")
-                .font(.system(size: 13, weight: .semibold))
-            Text(answer.result == .accepted ? "Sent" : (answer.reason ?? "Not delivered"))
-                .font(.system(size: 13))
-                .lineLimit(2)
-        }
-        .foregroundStyle(answer.result == .accepted ? Color.stateComplete : Color.errorInk)
-        .padding(.horizontal, 10)
-        .onTapGesture { state = .idle }
     }
 }

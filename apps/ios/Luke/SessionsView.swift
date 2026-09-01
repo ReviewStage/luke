@@ -64,9 +64,10 @@ struct SessionsView: View {
             }
         }
         .sheet(item: $composingSession) { s in
-            ComposerSheet(session: s, actClient: actClient) {
+            SessionComposerSheet(session: s, actClient: actClient) {
                 composingSession = nil
             }
+            .presentationDetents([.medium, .large])
         }
         .sheet(item: $spawningSession) { s in
             AgentSpawnerSheet(session: s, actClient: actClient) {
@@ -402,21 +403,29 @@ struct SessionsView: View {
         }
     }
 
+    @ViewBuilder
     private var emptyRow: some View {
-        VStack(spacing: 8) {
+        Group {
             if let error = fetchError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(Color.errorInk)
-                    .multilineTextAlignment(.center)
+                ContentUnavailableView {
+                    Label("Couldn't Load Sessions", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(error)
+                } actions: {
+                    Button("Try Again") {
+                        Task { await refreshSessions() }
+                    }
+                    .tint(Color.ink)
+                }
             } else {
-                Text("No active sessions")
-                    .font(.subheadline)
-                    .foregroundStyle(Color.inkSecondary)
+                ContentUnavailableView {
+                    Label("No Active Sessions", systemImage: "tray")
+                } description: {
+                    Text("Sessions from providers with stored keys appear here.")
+                }
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 60)
+        .padding(.top, 40)
     }
 
     private func refreshSessions() async {
@@ -623,39 +632,6 @@ private struct StatusMark: View {
         case "complete": Color.stateComplete
         case "error": Color.errorInk
         default: Color.inkTertiary
-        }
-    }
-}
-
-// MARK: - Composer sheet
-
-/// Wraps SessionComposerView in a standard sheet with a navigation title and
-/// a Cancel button, then dismisses after a successful send.
-private struct ComposerSheet: View {
-    let session: RosterSession
-    let actClient: ActClient
-    let onDismiss: () -> Void
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                SessionComposerView(
-                    providerId: session.providerId,
-                    providerSessionId: session.sessionId,
-                    actClient: actClient,
-                    onDelivered: onDismiss
-                )
-                .padding(.horizontal)
-                .padding(.top, 8)
-            }
-            .background(Color.ground.ignoresSafeArea())
-            .navigationTitle(session.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel", action: onDismiss)
-                }
-            }
         }
     }
 }
