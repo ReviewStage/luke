@@ -1,5 +1,6 @@
 import LukeKit
 import SwiftUI
+import UIKit
 
 /// Shows the signed-in user's active cloud sessions with pull-to-refresh.
 struct SessionsView: View {
@@ -669,6 +670,17 @@ private struct ComposerSheet: View {
 private struct SessionRowPreview: View {
     let session: RosterSession
 
+    /// UIKit sizes a custom preview to the view's own ideal size, and when
+    /// that ideal (plus the menu) outgrows the space beside it, the system
+    /// clips the platter — the title first. So the card takes iMessage's
+    /// posture instead: a fixed envelope proportional to the screen, most of
+    /// its width and a generous share of its height, inside which the words
+    /// truncate. The envelope is always whole; only the text ever gives.
+    private var envelope: CGSize {
+        let screen = UIScreen.main.bounds.size
+        return CGSize(width: min(screen.width - 40, 420), height: screen.height * 0.42)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 10) {
@@ -677,6 +689,7 @@ private struct SessionRowPreview: View {
                     Text(session.title)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Color.ink)
+                        .lineLimit(2)
                     if let workspace = session.workspace {
                         PlaceLine(workspace: workspace, branch: session.branch)
                     }
@@ -687,16 +700,15 @@ private struct SessionRowPreview: View {
                     .font(.system(size: 13))
                     .foregroundStyle(session.error != nil ? Color.errorInk : Color.ink.opacity(0.75))
                     .lineSpacing(3)
-                    .lineLimit(14)
-                    .fixedSize(horizontal: false, vertical: true)
             } else {
                 Text(session.status.capitalized)
                     .font(.system(size: 13))
                     .foregroundStyle(Color.inkTertiary)
             }
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: 340, alignment: .leading)
-        .padding(18)
+        .padding(20)
+        .frame(width: envelope.width, height: envelope.height, alignment: .topLeading)
         .background(
             ZStack {
                 Color.ground
