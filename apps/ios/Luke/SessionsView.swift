@@ -8,10 +8,30 @@ struct SessionsView: View {
     @State private var sessions: [RosterSession] = []
     @State private var isLoading = false
     @State private var fetchError: String?
+    @State private var searchQuery = ""
 
     private let client = RosterClient(serviceURL: AccountConstants.serviceURL)
 
     var body: some View {
+        if #available(iOS 26.0, *) {
+            // Minimized, the search is the magnifier button in the navigation
+            // bar until pressed; earlier systems keep the field the bar draws
+            // for a searchable list.
+            searchableList.searchToolbarBehavior(.minimize)
+        } else {
+            searchableList
+        }
+    }
+
+    /// The rows the query leaves: matched with the desktop's own search
+    /// semantics, and everything when the query is blank.
+    private var visibleSessions: [RosterSession] {
+        let tokens = SessionSearch.tokens(from: searchQuery)
+        if tokens.isEmpty { return sessions }
+        return sessions.filter { SessionSearch.matches($0, tokens: tokens) }
+    }
+
+    private var searchableList: some View {
         List {
             if isLoading && sessions.isEmpty {
                 ForEach(0 ..< 3, id: \.self) { _ in
@@ -24,8 +44,12 @@ struct SessionsView: View {
                 emptyRow
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
+            } else if visibleSessions.isEmpty {
+                ContentUnavailableView.search(text: searchQuery)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             } else {
-                ForEach(sessions) { s in
+                ForEach(visibleSessions) { s in
                     SessionRow(session: s)
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
@@ -38,6 +62,7 @@ struct SessionsView: View {
         .background(Color.ground.ignoresSafeArea())
         .toolbarBackground(Color.ground, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
+        .searchable(text: $searchQuery, prompt: "Search sessions")
         .refreshable { await refreshSessions() }
         .task { await refreshSessions() }
     }
