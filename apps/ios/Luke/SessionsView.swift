@@ -9,14 +9,17 @@ struct SessionsView: View {
     @State private var isLoading = false
     @State private var fetchError: String?
     @State private var searchQuery = ""
+    @State private var filters: Set<SessionFilter> = []
+    @State private var sort: SessionSort = .urgency
+    @State private var optionsShown = false
 
     private let client = RosterClient(serviceURL: AccountConstants.serviceURL)
 
     var body: some View {
         if #available(iOS 26.0, *) {
-            // Minimized, the search is the magnifier button in the navigation
-            // bar until pressed; earlier systems keep the field the bar draws
-            // for a searchable list.
+            // Minimized, the search is the magnifier button in the bar until
+            // pressed; earlier systems keep the field the bar draws for a
+            // searchable list.
             searchableList.searchToolbarBehavior(.minimize)
         } else {
             searchableList
@@ -25,10 +28,19 @@ struct SessionsView: View {
 
     /// The rows the query leaves: matched with the desktop's own search
     /// semantics, and everything when the query is blank.
-    private var visibleSessions: [RosterSession] {
+    private var searchMatchedSessions: [RosterSession] {
         let tokens = SessionSearch.tokens(from: searchQuery)
         if tokens.isEmpty { return sessions }
         return sessions.filter { SessionSearch.matches($0, tokens: tokens) }
+    }
+
+    /// What the list draws: the query's rows, narrowed by the filter
+    /// selection, in the order the chosen sort names.
+    private var visibleSessions: [RosterSession] {
+        sortedSessions(
+            searchMatchedSessions.filter { matchesFilterSelection(filters, session: $0) },
+            by: sort
+        )
     }
 
     private var searchableList: some View {
@@ -44,8 +56,12 @@ struct SessionsView: View {
                 emptyRow
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
-            } else if visibleSessions.isEmpty {
+            } else if searchMatchedSessions.isEmpty {
                 ContentUnavailableView.search(text: searchQuery)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            } else if visibleSessions.isEmpty {
+                filteredOutRow
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
             } else {
@@ -63,8 +79,50 @@ struct SessionsView: View {
         .toolbarBackground(Color.ground, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .searchable(text: $searchQuery, prompt: "Search sessions")
+        .toolbar {
+            // The filter rides with the search the way Notion docks one in
+            // its search pill: on iOS 26 the system search moves into the
+            // bottom bar and the button stands beside it; earlier systems
+            // keep the bar's own search presentation, so the button keeps
+            // the trailing slot above it.
+            if #available(iOS 26.0, *) {
+                DefaultToolbarItem(kind: .search, placement: .bottomBar)
+                ToolbarSpacer(.flexible, placement: .bottomBar)
+                ToolbarItem(placement: .bottomBar) {
+                    optionsButton
+                }
+            } else {
+                ToolbarItem(placement: .topBarTrailing) {
+                    optionsButton
+                }
+            }
+        }
+        .sheet(isPresented: $optionsShown) {
+            SessionOptionsSheet(sessions: sessions, filters: $filters, sort: $sort)
+                .presentationDetents([.medium, .large])
+        }
         .refreshable { await refreshSessions() }
         .task { await refreshSessions() }
+    }
+
+    private var optionsButton: some View {
+        Button {
+            optionsShown = true
+        } label: {
+            Label("Filter & Sort", systemImage: "line.3.horizontal.decrease")
+                .symbolVariant(filters.isEmpty ? .none : .circle.fill)
+        }
+    }
+
+    private var filteredOutRow: some View {
+        ContentUnavailableView {
+            Label("No matching sessions", systemImage: "line.3.horizontal.decrease")
+        } description: {
+            Text("Filters hide ^[\(searchMatchedSessions.count) sessions](inflect: true).")
+        } actions: {
+            Button("Clear Filters") { filters.removeAll() }
+        }
+        .padding(.top, 40)
     }
 
     private let rowInsets = EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16)
@@ -102,6 +160,140 @@ struct SessionsView: View {
         } catch {
             fetchError = error.localizedDescription
         }
+    }
+}
+
+// MARK: - Options sheet
+
+private func axisTitle(_ axis: SessionFilterAxis) -> String {
+    switch axis {
+    case .provider: "Provider"
+    case .status: "Status"
+    }
+}
+
+private func optionTitle(_ filter: SessionFilter) -> String {
+    switch filter {
+    case .provider(let providerId):
+        VaultProviderID(rawValue: providerId)?.displayName ?? providerId.capitalized
+    case .status(let status):
+        status.capitalized
+    }
+}
+
+/// The half sheet the search bar's filter button opens, in the system's own
+/// grouped-sheet vocabulary (the profile sheet's): the sort as a checkmark
+/// list, one drill-in page per filter axis with the selection named on its
+/// row, and a clear action only while something is selected. The list behind
+/// stays visible above the medium detent, so every choice shows its effect
+/// as it is made.
+private struct SessionOptionsSheet: View {
+    let sessions: [RosterSession]
+    @Binding var filters: Set<SessionFilter>
+    @Binding var sort: SessionSort
+    @Environment(\.dismiss) private var dismiss
+
+    private var groups: [SessionFilterAxisOptions] {
+        sessionFilterOptions(sessions: sessions, selection: filters)
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Sort by") {
+                    sortRow(.urgency, label: "Urgent", detail: "Most urgent first")
+                    sortRow(.recency, label: "Recent", detail: "Most recently observed first")
+                }
+                if !groups.isEmpty {
+                    Section("Filter by") {
+                        ForEach(groups) { group in
+                            NavigationLink {
+                                AxisFilterPage(group: group, filters: $filters)
+                            } label: {
+                                LabeledContent(axisTitle(group.axis), value: selectionSummary(for: group))
+                            }
+                        }
+                    }
+                }
+                if !filters.isEmpty {
+                    Section {
+                        Button("Clear Filters") { filters.removeAll() }
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+            .navigationTitle("Filter & Sort")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func sortRow(_ value: SessionSort, label: String, detail: String) -> some View {
+        Button {
+            sort = value
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(label)
+                        .foregroundStyle(Color.ink)
+                    Text(detail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "checkmark")
+                    .fontWeight(.semibold)
+                    .opacity(sort == value ? 1 : 0)
+            }
+        }
+        .accessibilityAddTraits(sort == value ? .isSelected : [])
+    }
+
+    private func selectionSummary(for group: SessionFilterAxisOptions) -> String {
+        let chosen = group.options
+            .filter { filters.contains($0.filter) }
+            .map { optionTitle($0.filter) }
+        return chosen.isEmpty ? "All" : chosen.joined(separator: ", ")
+    }
+}
+
+/// One axis's checklist page: every observed value with its session count,
+/// toggled by row press. The checkmark keeps its slot when unchosen so rows
+/// do not shift underfoot.
+private struct AxisFilterPage: View {
+    let group: SessionFilterAxisOptions
+    @Binding var filters: Set<SessionFilter>
+
+    var body: some View {
+        List {
+            ForEach(group.options) { option in
+                Button {
+                    if filters.contains(option.filter) {
+                        filters.remove(option.filter)
+                    } else {
+                        filters.insert(option.filter)
+                    }
+                } label: {
+                    HStack {
+                        Text(optionTitle(option.filter))
+                            .foregroundStyle(Color.ink)
+                        Spacer()
+                        Text(option.count, format: .number)
+                            .foregroundStyle(.secondary)
+                        Image(systemName: "checkmark")
+                            .fontWeight(.semibold)
+                            .opacity(filters.contains(option.filter) ? 1 : 0)
+                    }
+                }
+                .accessibilityAddTraits(filters.contains(option.filter) ? .isSelected : [])
+            }
+        }
+        .navigationTitle(axisTitle(group.axis))
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
