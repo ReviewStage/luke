@@ -1,7 +1,14 @@
 import Foundation
 
-public enum RosterClientError: Error {
+public enum RosterClientError: LocalizedError {
     case serverError(status: Int)
+
+    public var errorDescription: String? {
+        switch self {
+        case .serverError(let status):
+            return "Observe endpoint returned HTTP \(status)"
+        }
+    }
 }
 
 /// Fetches the signed-in user's cloud sessions from the observe endpoint.
