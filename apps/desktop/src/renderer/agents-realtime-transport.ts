@@ -9,6 +9,7 @@ import { isRecord, type UnparsedWireValue, type WireRecord } from "@sidecar/wire
 
 export interface AgentsRealtimeTransportOptions {
   send(event: WireRecord): void;
+  onFunctionCallOutput?(): void;
   interrupt(): void;
   mute(muted: boolean): void;
   muted(): boolean | null;
@@ -44,7 +45,11 @@ export class AgentsRealtimeTransport extends OpenAIRealtimeBase {
 
   sendEvent(event: RealtimeClientMessage): void {
     const parsed: UnparsedWireValue = JSON.parse(JSON.stringify(event));
-    if (isRecord(parsed)) this.#options.send(parsed);
+    if (!isRecord(parsed)) return;
+    this.#options.send(parsed);
+    if (isRecord(parsed.item) && parsed.item.type === "function_call_output") {
+      this.#options.onFunctionCallOutput?.();
+    }
   }
 
   mute(muted: boolean): void {

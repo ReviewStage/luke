@@ -3991,7 +3991,7 @@ test("a drained tool reply holds the turn for the follow-up it owes", async () =
       ],
     },
   });
-  await Promise.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
 
   // The turn holds through the write: the READY an ending here would offer is
   // the edge the announcer rides, and a reply taken there would abandon the
@@ -4041,7 +4041,7 @@ test("the write's hold gets a clock of its own, not the drain's leftovers", asyn
       ],
     },
   });
-  await Promise.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
 
   // The drain's leftover second must not cut the hold mid-write...
   t.mock.timers.tick(1);
@@ -4083,7 +4083,7 @@ test("audio draining mid-write holds the turn the same way", async () => {
       ],
     },
   });
-  await Promise.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
   context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
 
   // The same hold, in the mirror order: no READY edge mid-write for the

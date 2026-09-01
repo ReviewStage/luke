@@ -698,7 +698,7 @@ export class RealtimeVoiceSession {
   #toolTurnArmed = false;
   #agentsTransport: AgentsRealtimeTransport | undefined;
   #agentsSession: RealtimeSession | undefined;
-  #agentsTypedTurn = false;
+  #agentsDeveloperTurn = false;
   #agentsToolsRunning = 0;
   #agentsToolResponseDone = false;
   /**
@@ -945,6 +945,10 @@ export class RealtimeVoiceSession {
   async #connectAgents(connection: RealtimeConnection): Promise<void> {
     const transport = new AgentsRealtimeTransport({
       send: (event) => this.#send([event]),
+      onFunctionCallOutput: () => {
+        this.#agentsToolsRunning = Math.max(0, this.#agentsToolsRunning - 1);
+        this.#continueAfterAgentsTools();
+      },
       interrupt: () => {
         if (this.#status === REALTIME_STATUS.RESPONDING) this.#interruptReply();
       },
@@ -961,10 +965,8 @@ export class RealtimeVoiceSession {
       model: connection.model,
       tracingDisabled: true,
     });
-    session.on("error", (error) => {
-      this.#options.onError(
-        error.error instanceof Error ? error.error.message : String(error.error),
-      );
+    session.on("error", () => {
+      // The existing protocol parser reports service errors with Luke's correlation rules.
     });
     this.#agentsTransport = transport;
     this.#agentsSession = session;
@@ -979,14 +981,13 @@ export class RealtimeVoiceSession {
     this.#agentsToolsRunning += 1;
     try {
       const armed =
-        this.#agentsTypedTurn &&
+        this.#agentsDeveloperTurn &&
         this.#toolTurnArmed &&
         (call.responseId === this.#activeResponseId ||
           (this.#activeResponseId === undefined &&
             call.responseId === `developer_turn_${this.#turnEpoch}`));
       return await this.#toolCallOutput(call, armed);
     } finally {
-      this.#agentsToolsRunning = Math.max(0, this.#agentsToolsRunning - 1);
       this.#continueAfterAgentsTools();
     }
   }
@@ -995,13 +996,13 @@ export class RealtimeVoiceSession {
     if (
       !this.#agentsToolResponseDone ||
       this.#agentsToolsRunning > 0 ||
-      !this.#agentsTypedTurn ||
+      !this.#agentsDeveloperTurn ||
       !this.isConnected
     ) {
       return;
     }
     this.#agentsToolResponseDone = false;
-    this.#agentsTypedTurn = false;
+    this.#agentsDeveloperTurn = false;
     this.#startResponse(functionCallFollowUpEvents(), { keepCaption: true });
   }
 
@@ -1575,9 +1576,6 @@ export class RealtimeVoiceSession {
     const ask = text.trim().slice(0, maximumTypedAskLength);
     if (!ask || !this.#agentsSession) return false;
     if (this.#status === REALTIME_STATUS.RESPONDING) this.#interruptReply();
-    this.#agentsTypedTurn = true;
-    this.#agentsToolResponseDone = false;
-    this.#agentsToolsRunning = 0;
     this.#startResponse([], { toolsArmed: true });
     this.#agentsSession.sendMessage(ask);
     return true;
@@ -1635,6 +1633,7 @@ export class RealtimeVoiceSession {
     // that opens a new developer turn arms it afresh in #startResponse; left
     // true here, the cancelled reply's late calls would find it still standing.
     this.#toolTurnArmed = false;
+    this.#agentsDeveloperTurn = false;
     // The cancel concludes the reply at the server before anything sent after
     // it is read — the channel is ordered — so nothing is outstanding from
     // here, and whatever `done` the cancelled reply still sends matches no
@@ -1740,7 +1739,7 @@ export class RealtimeVoiceSession {
     this.#agentsSession?.close();
     this.#agentsSession = undefined;
     this.#agentsTransport = undefined;
-    this.#agentsTypedTurn = false;
+    this.#agentsDeveloperTurn = false;
     this.#agentsToolsRunning = 0;
     this.#agentsToolResponseDone = false;
     const channel = this.#channel;
@@ -1837,6 +1836,11 @@ export class RealtimeVoiceSession {
     // and a tool follow-up is answering from what this same flush already sent.
     if (toolsArmed) {
       this.#flushContext();
+      if (this.#agentsSession) {
+        this.#agentsDeveloperTurn = true;
+        this.#agentsToolResponseDone = false;
+        this.#agentsToolsRunning = 0;
+      }
     }
     // The track is deliberately left as it is. A reply that was cut off left it
     // disabled, and re-opening it here would let the tail of that reply — still
@@ -2076,6 +2080,7 @@ export class RealtimeVoiceSession {
     // developer was already told had ended.
     this.#activeResponseId = undefined;
     this.#toolTurnArmed = false;
+    this.#agentsDeveloperTurn = false;
     // The caption is of speech, and the speech is over. Whatever ended the
     // reply — the audio draining, an error, the settle timer — the words leave
     // with the meter and the face rather than lingering under a quiet capsule.
@@ -2414,7 +2419,7 @@ export class RealtimeVoiceSession {
     if (record) this.#options.onWireEvent?.(TRACE_DIRECTION.SERVER, record);
     if (
       record &&
-      this.#agentsTypedTurn &&
+      this.#agentsDeveloperTurn &&
       record.type !== REALTIME_SERVER_EVENT.RESPONSE_DONE &&
       record.type !== REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_DONE
     ) {
@@ -2521,7 +2526,7 @@ export class RealtimeVoiceSession {
         return;
       case REALTIME_SERVER_EVENT.RESPONSE_DONE: {
         const fresh = event.responseId === this.#activeResponseId;
-        if (this.#agentsTypedTurn && fresh && record) {
+        if (this.#agentsDeveloperTurn && fresh && record) {
           const agentsResponseId = event.responseId ?? `developer_turn_${this.#turnEpoch}`;
           if (event.responseId === undefined) {
             this.#agentsTransport?.receive({
@@ -2562,12 +2567,11 @@ export class RealtimeVoiceSession {
         // answered and the reply resumes over their outcomes, so the turn stays
         // open rather than ending on a reply that was only half made.
         if (event.calls.length > 0) {
-          if (this.#agentsTypedTurn && fresh) {
+          if (this.#agentsDeveloperTurn && fresh) {
             this.#agentsToolResponseDone = true;
             this.#followUpPending = true;
             this.#clearSettleTimer();
             this.#armSettleTimer();
-            setTimeout(() => this.#continueAfterAgentsTools(), 0);
             return;
           }
           void this.#answerToolCalls(event.calls, fresh && this.#toolTurnArmed);
@@ -2593,7 +2597,7 @@ export class RealtimeVoiceSession {
           if (fresh && this.#currentReplyDrained()) this.#finishResponse();
           return;
         }
-        this.#agentsTypedTurn = false;
+        this.#agentsDeveloperTurn = false;
         if (!fresh) return;
         // A reply the server says made no sound has nothing to play out — a
         // success is said with silence, so the follow-up after a tool call is
