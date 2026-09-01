@@ -112,6 +112,7 @@ struct SessionsView: View {
             Label("Filter & Sort", systemImage: "line.3.horizontal.decrease")
                 .symbolVariant(filters.isEmpty ? .none : .circle.fill)
         }
+        .tint(Color.ink)
     }
 
     private var filteredOutRow: some View {
@@ -121,6 +122,7 @@ struct SessionsView: View {
             Text("Filters hide ^[\(searchMatchedSessions.count) sessions](inflect: true).")
         } actions: {
             Button("Clear Filters") { filters.removeAll() }
+                .tint(Color.ink)
         }
         .padding(.top, 40)
     }
@@ -186,7 +188,8 @@ private func optionTitle(_ filter: SessionFilter) -> String {
 /// list, one drill-in page per filter axis with the selection named on its
 /// row, and a clear action only while something is selected. The list behind
 /// stays visible above the medium detent, so every choice shows its effect
-/// as it is made.
+/// as it is made. The accent stays the checkmarks' alone — every other
+/// control here wears the panel's own ink.
 private struct SessionOptionsSheet: View {
     let sessions: [RosterSession]
     @Binding var filters: Set<SessionFilter>
@@ -219,6 +222,7 @@ private struct SessionOptionsSheet: View {
                     Section {
                         Button("Clear Filters") { filters.removeAll() }
                             .frame(maxWidth: .infinity)
+                            .tint(Color.ink)
                     }
                 }
             }
@@ -227,6 +231,7 @@ private struct SessionOptionsSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
+                        .tint(Color.ink)
                 }
             }
         }
