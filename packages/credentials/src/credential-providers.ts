@@ -223,10 +223,10 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
     // to choose, and without Text to speech the first reply is the failure.
     hint: {
       lead: "Create a key in ElevenLabs under",
-      destination: "My Account > API Keys",
+      destination: "Developers > API Keys",
       trail: "Give it Text to speech and Voices read access.",
     },
-    apiKeysUrl: "https://elevenlabs.io/app/settings/api-keys",
+    apiKeysUrl: "https://elevenlabs.io/app/developers/api-keys",
     // Deliberately no environment fallback, for the same reason OpenAI has
     // none: an `ELEVENLABS_API_KEY` exported for some other tool would start
     // spending itself the moment Luke spoke.
