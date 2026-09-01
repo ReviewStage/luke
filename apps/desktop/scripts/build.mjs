@@ -26,7 +26,7 @@ await Promise.all([
     platform: "node",
     format: "cjs",
     target: "node22",
-    external: ["electron"],
+    external: ["better-sqlite3", "electron"],
     define: {
       // The Google Calendar client secret rides into the bundle from the
       // packaging environment rather than sitting in source, where secret
@@ -92,6 +92,9 @@ await fs.copyFile(
   path.join(appRoot, "src/renderer/index.html"),
   path.join(outputRoot, "renderer/index.html"),
 );
+await fs.cp(path.join(appRoot, "drizzle/session-index"), path.join(outputRoot, "session-index"), {
+  recursive: true,
+});
 
 await Promise.all([
   ...Object.entries(DOCK_ICON_IMAGES).map(([name, source]) =>

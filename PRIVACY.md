@@ -10,14 +10,18 @@ explains what we collect, who we send it to, and how to turn it off.
 **On your Mac.** Luke reads the session files your coding agents already write,
 using the session title, status, repository, branch, model, current tool,
 errors, and the summary the agent wrote. It does not read message history, file
-contents, or command output, and it writes none of this to disk. If you run
-agents inside the Herdr terminal manager, Luke also asks Herdr's own
-command-line tool which of those sessions it holds, so their rows can say so;
-that read never starts Herdr, reads no terminal output, and sends nothing
-anywhere. It stays on your Mac unless a feature below sends it. Luke also keeps
-your conversation with him in memory for the current app launch so you can
-review it; it is never written to disk, and only the 20 most recent entries are
-carried into a call.
+contents, or command output. Luke keeps a local search index of the bounded
+session details its rows already show: identity, title, status, repository,
+branch, summary, provider, location, workspace, and whether the session is
+standing or waiting for you. The index is rebuilt from provider observation,
+never replaces it, and is deleted row by row when sessions disappear from that
+observation. If you run agents inside the Herdr terminal manager, Luke also
+asks Herdr's own command-line tool which of those sessions it holds, so their
+rows can say so; that read never starts Herdr, reads no terminal output, and
+sends nothing anywhere. It stays on your Mac unless a feature below sends it.
+Luke also keeps your conversation with him in memory for the current app launch
+so you can review it; it is never written to disk, and only the 20 most recent
+entries are carried into a call.
 
 **Your account.** Signing in with Google or GitHub gives us your name, email
 address, and which of the two you used. We also keep the records that keep you
@@ -107,11 +111,13 @@ your network address, as it does for the app's recordings.
 
 ## Storage
 
-Your settings, local provider API keys, and calendar access stay on your Mac.
-Local keys and calendar access are encrypted in the macOS Keychain. Provider
-API keys you sync to the hosted service are stored encrypted in our own
-database, as described above. Your account information is held by our own
-service, and usage counts and recordings by PostHog.
+Your settings, local session search index, local provider API keys, and calendar
+access stay on your Mac. The search index is an owner-only file in Luke's
+application data and contains only the bounded session details described above.
+Local keys and calendar access are encrypted in the macOS Keychain. Provider API
+keys you sync to the hosted service are stored encrypted in our own database,
+as described above. Your account information is held by our own service, and
+usage counts and recordings by PostHog.
 
 ## Your choices
 

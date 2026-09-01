@@ -30,6 +30,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:native": "node scripts/build-native.mjs",
+    "db:index:generate": "drizzle-kit generate --config drizzle.session-index.config.ts",
     "package": "pnpm build:native && pnpm build && node scripts/prepare-builder-assets.mjs && electron-builder --config electron-builder.ts --mac --arm64 --publish never",
     "release": "LUKE_ELECTRON_BUILDER_NOTARIZE=1 pnpm package",
     "start": "pnpm build:native && pnpm build && electron .",
@@ -37,8 +38,8 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "devDependencies": {
-    "@sidecar/acts": "workspace:*",
     "@sidecar/account": "workspace:*",
+    "@sidecar/acts": "workspace:*",
     "@sidecar/analytics": "workspace:*",
     "@sidecar/attention": "workspace:*",
     "@sidecar/calendar": "workspace:*",
@@ -59,9 +60,11 @@
     "@sidecar/trackers": "workspace:*",
     "@sidecar/voice": "workspace:*",
     "@sidecar/wire": "workspace:*",
+    "@types/better-sqlite3": "9.6.0",
     "@types/node": "26.2.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
+    "drizzle-kit": "0.31.10",
     "electron": "43.3.0",
     "electron-builder": "26.8.1",
     "esbuild": "0.28.2",
@@ -72,6 +75,8 @@
     "typescript": "7.0.2"
   },
   "dependencies": {
+    "better-sqlite3": "13.0.3",
+    "drizzle-orm": "0.45.2",
     "electron-updater": "6.8.9"
   }
 }

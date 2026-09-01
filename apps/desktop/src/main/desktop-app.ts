@@ -160,6 +160,7 @@ import { OutputVolumeWatcher } from "./native/output-volume";
 import { ProviderKeyVaultSync, type VaultSyncAccount } from "./provider-key-vault-sync";
 import { type BridgeContext, registerBridgeEntry } from "./register-bridge";
 import { runModeFor } from "./run-mode";
+import { SessionIndex } from "./session-index/session-index";
 import { createSettingsHandler } from "./settings-handler";
 import { SettingsStore } from "./settings-store";
 import { createElectronUpdaterEngine } from "./update-installer";
@@ -200,6 +201,12 @@ const captureMode = captureOutput !== undefined;
 // the fixture snapshot and no provider is observed. Capture runs always imply it.
 const fixtureMode = captureMode || fixtureName !== undefined;
 const runMode = runModeFor({ capture: captureMode, fixture: fixtureName !== undefined });
+const sessionIndex = new SessionIndex({
+  directory: () => app.getPath("userData"),
+  migrationsDirectory: path.join(__dirname, "session-index"),
+  enabled: runMode.observesProviders,
+  onDiagnostic: (message) => process.stderr.write(`${message}\n`),
+});
 // A development build may be pointed at a local account service; a packaged one
 // may not. The override redirects the whole sign-in — including the identity
 // request that carries the access token — so it stops at the packaging boundary
@@ -2197,6 +2204,7 @@ const sessionObservationLoop = new ObservationLoop({
   // settings save stands behind that to announce it.
   afterRun: () => {
     broadcastRelevantSessions();
+    void sessionIndex.reconcile(sessionRegistry.snapshot());
     void broadcastCodexCloudConnection();
   },
 });
@@ -2399,6 +2407,7 @@ function stopSessionObservation(): void {
     sessionRegistry.replaceProvider(adapter.provider, []);
   }
   panels.broadcast(channels.onSessionsChanged, { sessions: [], attention: [] });
+  void sessionIndex.clear();
   panels.broadcast(channels.onWorkspaceProjectsChanged, []);
   lastWorkspaceProjects = undefined;
 }

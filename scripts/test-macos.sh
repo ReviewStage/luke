@@ -26,6 +26,19 @@ if [[ ! -f "$PACKAGED_APP/Contents/Resources/mac-stationary-window.node" ]]; the
     printf 'error: packaged app is missing the mac-stationary-window.node addon\n' >&2
     exit 1
 fi
+PACKAGED_RESOURCES="$PACKAGED_APP/Contents/Resources"
+PACKAGED_SQLITE="$PACKAGED_RESOURCES/app.asar.unpacked/node_modules/better-sqlite3"
+if [[ ! -f "$PACKAGED_SQLITE/build/Release/better_sqlite3.node" ]]; then
+    printf 'error: packaged app is missing the unpacked better-sqlite3 addon\n' >&2
+    exit 1
+fi
+ELECTRON_RUN_AS_NODE=1 "$PACKAGED_APP/Contents/MacOS/Luke" -e '
+const path = require("node:path");
+const Database = require(path.join(process.argv[1], "app.asar", "node_modules", "better-sqlite3"));
+const database = new Database(":memory:");
+database.exec("CREATE VIRTUAL TABLE sessions_fts USING fts5(title)");
+database.close();
+' "$PACKAGED_RESOURCES"
 INFO_PLIST="$PACKAGED_APP/Contents/Info.plist"
 BUNDLE_ICON_FILE=$(plutil -extract CFBundleIconFile raw -o - "$INFO_PLIST")
 PACKAGED_ICON="$PACKAGED_APP/Contents/Resources/$BUNDLE_ICON_FILE"

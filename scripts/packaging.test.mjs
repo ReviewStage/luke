@@ -150,6 +150,24 @@ test("packaging is pinned to Apple Silicon and the builder output directory", ()
   );
 });
 
+test("the session index driver is rebuilt for Electron and unpacked from the asar", () => {
+  const config = builderConfig();
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(repoRoot, "apps", "desktop", "package.json"), "utf8"),
+  );
+  const build = fs.readFileSync(
+    path.join(repoRoot, "apps", "desktop", "scripts", "build.mjs"),
+    "utf8",
+  );
+
+  assert.ok(manifest.dependencies["better-sqlite3"]);
+  assert.ok(manifest.dependencies["drizzle-orm"]);
+  assert.equal(config.npmRebuild, true);
+  assert.deepEqual(config.asarUnpack, ["node_modules/better-sqlite3/**/*"]);
+  assert.match(build, /external: \["better-sqlite3", "electron"\]/);
+  assert.match(build, /drizzle\/session-index/);
+});
+
 test("packaging declares the macOS deployment target", () => {
   const config = builderConfig();
   const compilerArguments = swiftCompilerArguments("source.swift", "helper");

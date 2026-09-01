@@ -75,7 +75,8 @@ export function createElectronBuilderConfig(env = process.env) {
       output: builderReleaseArtifactDirectory(repoRoot),
     },
     asar: true,
-    npmRebuild: false,
+    asarUnpack: ["node_modules/better-sqlite3/**/*"],
+    npmRebuild: true,
     files: ["dist/**/*", "package.json", "!dist/**/*.map"],
     extraResources: [
       ...packageAssets.helperPaths.map((helperPath) => ({

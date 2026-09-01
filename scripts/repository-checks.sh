@@ -234,6 +234,17 @@ if [[ -n "$renderer_escapes" ]]; then
     exit 1
 fi
 
+native_session_index_escapes=$(grep -rEn \
+    'better-sqlite3|drizzle-orm/better-sqlite3|#main/session-index' \
+    "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer" \
+    "$SIDECAR_REPO_ROOT/apps/desktop/src/preload" \
+    "$SIDECAR_REPO_ROOT"/packages/*/src/index.ts || true)
+if [[ -n "$native_session_index_escapes" ]]; then
+    printf 'error: the native session index belongs to the Electron main process and must not enter renderer, preload, or package barrels:\n%s\n' \
+        "$native_session_index_escapes" >&2
+    exit 1
+fi
+
 # BRIDGE is the one renderer-to-main declaration, and registerBridge is the
 # one place that may attach it to Electron. A handler registered beside its
 # domain logic would bypass the manifest's sender and wire guards.
