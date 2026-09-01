@@ -53,6 +53,7 @@ import {
   type SessionActionCarrier,
   VOICE_IDLE_TIMEOUT_MS,
 } from "./realtime-session";
+import type { SpeechListener } from "./speech-output";
 import { SpokenNoticeAnnouncer } from "./spoken-notices";
 
 function sessionField(event: ParsedJsonObject | undefined): ParsedJsonObject | undefined {
@@ -145,6 +146,16 @@ interface Harness {
   /** Holds device opens in flight until `ungateMicrophone` lets them land. */
   gateMicrophone: () => void;
   ungateMicrophone: () => void;
+  /** What the attached synthesizer was asked to do, in order. */
+  speechCalls: string[];
+  /** Whether the reply now under way still owes words to be heard. */
+  setSpeechOwing: (owing: boolean) => void;
+  /** The synthesizer reporting its socket drained, as ElevenLabs' last word does. */
+  drainSpeech: () => void;
+  /** The synthesizer reporting audio flowing again after a pause. */
+  resumeSpeech: () => void;
+  /** The synthesizer reporting it cannot finish the reply. */
+  failSpeech: (message: string) => void;
 }
 
 interface HeldTimer {
@@ -199,6 +210,8 @@ function harness(
      * what the tests using this are about.
      */
     writeBackOnReplyEnded?: boolean;
+    /** Attaches a recording synthesizer, the way a chosen speech provider does. */
+    speech?: boolean;
   } = {},
 ): Harness {
   const timers: HeldTimer[] = [];
@@ -388,6 +401,25 @@ function harness(
       return options.carryAction?.(act) ?? Promise.resolve({ status: "rejected" });
     };
   }
+  const speechCalls: string[] = [];
+  let speechOwing = true;
+  let speechListener: SpeechListener | undefined;
+  if (options.speech) {
+    sessionOptions.createSpeech = (listener) => {
+      speechListener = listener;
+      return {
+        stream: asMediaStream({ getAudioTracks: () => [], getTracks: () => [] }),
+        start: () => speechCalls.push("start"),
+        append: (delta) => speechCalls.push(`append:${delta}`),
+        finish: () => {
+          speechCalls.push("finish");
+          return speechOwing;
+        },
+        cancel: () => speechCalls.push("cancel"),
+        close: () => speechCalls.push("close"),
+      };
+    };
+  }
   const session = new RealtimeVoiceSession(sessionOptions);
 
   return {
@@ -400,6 +432,13 @@ function harness(
     spokenAsks,
     spokenAskItems,
     spokenAskClosures: () => spokenAskClosures,
+    speechCalls,
+    setSpeechOwing: (owing) => {
+      speechOwing = owing;
+    },
+    drainSpeech: () => speechListener?.onDrained(),
+    resumeSpeech: () => speechListener?.onAudible(),
+    failSpeech: (message) => speechListener?.onError(message),
     microphoneEnabled: () => enabled,
     microphoneStopped: () => stopped,
     lukeAudible: () => remoteTrack.enabled,
@@ -5546,4 +5585,189 @@ test("a spoken tool call is still validated in both processes", () => {
   assert.match(renderer, /carryAct\(\{ id: call\.name, act: action, armed \}\)/);
   assert.match(main, /if \(!envelope\.armed\)/);
   assert.match(main, /actValidationTarget\(envelope\.id\)/);
+});
+
+test("a call spoken elsewhere asks the model for text alone", async () => {
+  const context = harness({ speech: true, captureSessionSync: true });
+  await context.session.connect();
+
+  const update = context.sent.find(
+    (event) => event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE && sessionHasTools(event),
+  );
+  assert.deepEqual(sessionField(update)?.output_modalities, ["text"]);
+
+  // The ordinary call asserts the other direction rather than leaving it to
+  // whatever the last session happened to be.
+  const ordinary = harness({ captureSessionSync: true });
+  await ordinary.session.connect();
+  const ordinaryUpdate = ordinary.sent.find(
+    (event) => event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE && sessionHasTools(event),
+  );
+  assert.deepEqual(sessionField(ordinaryUpdate)?.output_modalities, ["audio"]);
+});
+
+test("a call spoken elsewhere plays the synthesizer's own stream", async () => {
+  const streams: (MediaStream | undefined)[] = [];
+  const context = harness({ speech: true, onRemoteStream: (stream) => streams.push(stream) });
+  await context.session.connect();
+  assert.equal(streams.length, 1);
+  assert.notEqual(streams[0], undefined);
+
+  // The receiving line is still negotiated, but nothing arrives on it, and the
+  // silent track must not replace the stream Luke is audible on.
+  context.deliverRemoteTrack();
+  assert.equal(streams.length, 1);
+});
+
+test("the reply's text deltas caption it and are what is spoken", async () => {
+  const context = harness({ speech: true });
+  await context.session.connect();
+  await armDeveloperTurn(context);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED, item: { id: "item-1" } });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_TEXT_DELTA,
+    item_id: "item-1",
+    delta: "All quiet",
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_TEXT_DELTA,
+    item_id: "item-1",
+    delta: " for now.",
+  });
+
+  assert.deepEqual(context.speechCalls, ["start", "append:All quiet", "append: for now."]);
+  assert.deepEqual(context.captions.at(-1), ["All quiet for now."]);
+
+  // The whole rendering corrects the caption and is never spoken again.
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_TEXT_DONE,
+    item_id: "item-1",
+    text: "All quiet for now, truly.",
+  });
+  assert.deepEqual(context.captions.at(-1), ["All quiet for now, truly."]);
+  assert.deepEqual(context.speechCalls.slice(-1), ["append: for now."]);
+});
+
+test("a reply spoken elsewhere ends when its socket drains, not when generation does", async () => {
+  const context = harness({ speech: true });
+  await context.session.connect();
+  await armDeveloperTurn(context);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED, item: { id: "item-1" } });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_TEXT_DELTA,
+    item_id: "item-1",
+    delta: "Still going.",
+  });
+  // The model produced no audio of its own, which says nothing about whether
+  // Luke has stopped talking.
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: { id: "resp-1", output: [{ type: "message", content: [{ type: "text" }] }] },
+  });
+  assert.deepEqual(context.speechCalls.slice(-1), ["finish"]);
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+
+  context.drainSpeech();
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
+test("a reply with nothing left to be heard ends at once", async () => {
+  const context = harness({ speech: true });
+  context.setSpeechOwing(false);
+  await context.session.connect();
+  await armDeveloperTurn(context);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: { id: "resp-1", output: [] },
+  });
+
+  // The ending drops anything the socket might still owe, which for a reply
+  // that never spoke is nothing at all.
+  assert.deepEqual(context.speechCalls, ["start", "finish", "cancel"]);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
+test("audio flowing again after a pause does not let the reply end under it", async () => {
+  const context = harness({ speech: true });
+  await context.session.connect();
+  await armDeveloperTurn(context);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED, item: { id: "item-1" } });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_TEXT_DELTA,
+    item_id: "item-1",
+    delta: "One.",
+  });
+  // The socket drains between two sentences, before generation is over.
+  context.drainSpeech();
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  context.resumeSpeech();
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: { id: "resp-1", output: [{ type: "message", content: [{ type: "text" }] }] },
+  });
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING, "the second half is still owed");
+
+  context.drainSpeech();
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
+test("a failing socket reports itself and settles the turn on the words already drawn", async () => {
+  const context = harness({ speech: true });
+  await context.session.connect();
+  await armDeveloperTurn(context);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED, item: { id: "item-1" } });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_TEXT_DELTA,
+    item_id: "item-1",
+    delta: "All quiet.",
+  });
+  context.failSpeech("ElevenLabs refused the key.");
+  context.drainSpeech();
+  assert.deepEqual(context.errors.slice(-1), ["ElevenLabs refused the key."]);
+  // The words keep arriving and keep captioning; the turn ends when the model
+  // stops writing, because nothing is owed to be heard any more.
+  context.setSpeechOwing(false);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: { id: "resp-1", output: [{ type: "message", content: [{ type: "text" }] }] },
+  });
+
+  assert.deepEqual(context.replyEndings.at(-1)?.texts, ["All quiet."]);
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+});
+
+test("talking over a reply drops the socket with the audio", async () => {
+  const context = harness({ speech: true });
+  await context.session.connect();
+  await armDeveloperTurn(context);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED, item: { id: "item-1" } });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_TEXT_DELTA,
+    item_id: "item-1",
+    delta: "Talking on",
+  });
+
+  assert.equal(context.session.stopSpeaking(), true);
+  assert.deepEqual(context.speechCalls.slice(-1), ["cancel"]);
+
+  // Whatever the cancelled reply still sends is spoken by nobody.
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_TEXT_DELTA,
+    item_id: "item-1",
+    delta: " and on",
+  });
+  assert.deepEqual(context.speechCalls.slice(-1), ["cancel"]);
+});
+
+test("the socket goes with the call it belonged to", async () => {
+  const context = harness({ speech: true });
+  await context.session.connect();
+  await context.session.close();
+  assert.deepEqual(context.speechCalls.slice(-1), ["close"]);
 });

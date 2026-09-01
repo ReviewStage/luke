@@ -9,6 +9,7 @@ import {
   type CredentialProvider,
   type CredentialProviderId,
 } from "@sidecar/credentials";
+import { isVaultProviderId } from "@sidecar/hosted";
 import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import {
   PROVIDER_ID,
@@ -23,6 +24,7 @@ import {
   settingEntryGuard,
   VOICE_HOTKEY_NONE,
 } from "@sidecar/settings";
+import { SPEECH_PROVIDER } from "@sidecar/speech";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { type UnparsedWireValue, unparsedWire, type WireRecord } from "@sidecar/wire";
 import {
@@ -2334,4 +2336,37 @@ test("a key left by a build that asked for one is dropped, never carried", async
   const file = JSON.parse(await readSettingsFile(directory));
   assert.equal(file.apiKeys[CONSENT_SERVICE], undefined);
   assert.ok(file.apiKeys[FIRST_CLOUD]);
+});
+
+test("deleting the speech key takes the voice it was speaking with down with it", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  await store.setApiKey(CREDENTIAL_PROVIDER_ID.ELEVENLABS, TEST_API_KEY);
+  await store.set("speechVoice", "voice-1");
+  await store.set("speechProvider", SPEECH_PROVIDER.ELEVENLABS);
+
+  // Connecting chooses nothing on its own: no voice has been picked yet, and
+  // picking one is what moves speech over.
+  const connected = await store.snapshot();
+  assert.equal(connected.stored.speechProvider, SPEECH_PROVIDER.ELEVENLABS);
+  assert.equal(connected.stored.speechVoice, "voice-1");
+
+  const { settings } = await store.setApiKey(CREDENTIAL_PROVIDER_ID.ELEVENLABS, undefined);
+  assert.equal(settings.stored.speechProvider, SPEECH_PROVIDER.OPENAI);
+  assert.equal(settings.stored.speechVoice, undefined);
+
+  // And it survives the relaunch: a stored voice with no key behind it names a
+  // voice Luke cannot reach.
+  const reopened = await storeIn(directory).snapshot();
+  assert.equal(reopened.stored.speechProvider, SPEECH_PROVIDER.OPENAI);
+  assert.equal(reopened.stored.speechVoice, undefined);
+});
+
+test("the speech key is never mirrored to the account's vault", () => {
+  // The vault takes only the cloud agents' keys, and the parity between that
+  // set and the Providers section is checked with it. Both voice keys stand
+  // outside it, so neither can travel with a signed-in account.
+  assert.equal(isVaultProviderId(CREDENTIAL_PROVIDER_ID.ELEVENLABS), false);
+  assert.equal(isVaultProviderId(CREDENTIAL_PROVIDER_ID.OPENAI), false);
 });
