@@ -17,6 +17,7 @@
 		AABBCC000000000000000086 /* SVGPath.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000017 /* SVGPath.swift */; };
 		AABBCC000000000000000087 /* VaultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000018 /* VaultView.swift */; };
 		AABBCC000000000000000088 /* Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000019 /* Palette.swift */; };
+		AABBCC000000000000000089 /* CanvasInkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001A /* CanvasInkTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +31,7 @@
 		AABBCC000000000000000017 /* SVGPath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SVGPath.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000018 /* VaultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultView.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000019 /* Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Palette.swift; sourceTree = "<group>"; };
+		AABBCC00000000000000001A /* CanvasInkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasInkTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -87,6 +89,7 @@
 		AABBCC000000000000000005 /* LukeTests */ = {
 			isa = PBXGroup;
 			children = (
+				AABBCC00000000000000001A /* CanvasInkTests.swift */,
 				AABBCC000000000000000015 /* LukeTests.swift */,
 			);
 			path = LukeTests;
@@ -212,6 +215,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AABBCC000000000000000089 /* CanvasInkTests.swift in Sources */,
 				AABBCC000000000000000023 /* LukeTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
