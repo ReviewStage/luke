@@ -1510,7 +1510,7 @@ export interface CalendarControl {
 
 /**
  * Which of a connection's calendars count, one checkbox each — checked
- * meaning its meetings hold announcements — drawn in the calendar's own
+ * meaning its meetings hold notifications — drawn in the calendar's own
  * colour where the list carried one, the panel's working accent where it did
  * not, and sectioned by source where the list reported sources, the way
  * Calendar.app sections its sidebar. A calendar the selection names but the
@@ -1919,7 +1919,7 @@ function CalendarIntegrations({
       ) : null}
       <p className="settings-note">
         Luke reads when your meetings start and end — never their titles — and can hold
-        announcements until they finish.
+        notifications until they finish.
       </p>
       {/* The quiet is a fact about the calendars above it, so it appears with
           the first connection and leaves with the last — a switch gating what

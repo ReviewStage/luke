@@ -158,7 +158,7 @@ export function voiceSourceLabel(source: VoiceSource): string {
  * are the meters' own names; nobody spending them would recognise either.
  */
 export const HOSTED_METER_LABEL = {
-  VOICE: "Talking and announcements",
+  VOICE: "Talking and notifications",
   REVIEWS: "Checks on your sessions",
 } as const;
 

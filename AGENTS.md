@@ -420,11 +420,11 @@ Trust constraints:
   cannot even travel, and no event scope is ever held. Only start and end
   instants are kept beyond the pass, and the intervals never leave the
   machine. What the intervals decide is bounded and deterministic: while a
-  meeting covers now and the setting is on, spoken announcements are held and
+  meeting covers now and the setting is on, spoken notifications are held and
   released once it ends, and the face beside the housing sleeps for as long
   as the hold stands, a clock read against observed intervals, never
   anything a model wrote, and holding is the whole power: a calendar entry
-  can delay an announcement and put a drawn face to sleep, never create,
+  can delay a notification and put a drawn face to sleep, never create,
   reword, or act on one. This Mac's own Calendar is read under the same rule
   with no credential at all, through a native helper behind macOS's own
   consent dialog. The dialog is the connection, and nothing is stored but
@@ -537,7 +537,7 @@ Trust constraints:
   routed to the takeover for the introduction's duration, and the spoken
   sign-off is where the introduction ends: the takeover closes, the ordinary
   signed-out panel stands up with its own gate, and observation,
-  announcements, and every other capability still release only through the
+  notifications, and every other capability still release only through the
   ordinary account gate when the sign-in itself lands. An introduction
   that cannot speak stands down to the ordinary signed-out launch and writes
   nothing. Widening what the introduction reads, sends, or can do is a
@@ -573,20 +573,20 @@ What Luke may show:
   even when it is the agent's own parting words, the one bounded line saying
   where the turn ended, the same standing as a recap a provider designated,
   but the transcript it was read from never travels. A
-  spoken announcement (a session that started waiting, stopped on an error,
+  spoken notification (a session that started waiting, stopped on an error,
   or finished, or an evaluator sentence approved for speech) reaches the
   voice service so it can be said aloud. The arrival beat is the
   one member of that set about no session: spoken once per install at the
   deterministic edge of the account's first sign-in, remembered in Luke's own
   state file, worded from a script fixed by the build on the same speak-only,
-  tool-free terms as an edge announcement, and carrying as observed values
+  tool-free terms as an edge notification, and carrying as observed values
   only one working session's title, read from the same roster the rows draw
   and sent as data behind a marker, and the talk key's own name. A moment
   that cannot speak it — no credential, a meeting's quiet, a beat dropped
   before its reply began — leaves it owed for the next signed-in launch
   rather than improvising a substitute; only the voice window reporting the
   reply actually begun settles it, and being about no session it draws no
-  notice band and claims none. An edge announcement
+  notice band and claims none. An edge notification
   sends that update's *about* fields, the same ones the evaluator may see
   with a bounded excerpt of the recap included, and the voice words the
   sentence said aloud, so it can say what the session is waiting on rather
@@ -600,7 +600,7 @@ What Luke may show:
   exchange itself (the developer's own asks, typed or spoken and handed back
   as text by the same service that heard them, the words Luke already spoke
   or announced, and the acts he carried at the developer's ask) so the one
-  conversation survives the calls that transport it: an announcement read out
+  conversation survives the calls that transport it: a notification read out
   on Luke's own call, or a call retired idle, is still remembered by the next
   one. Every history line already traveled to the same service once, on the
   call that said it; a transcript reading enters the history only as the fact
@@ -611,9 +611,9 @@ What Luke may show:
   sent on Luke's speak-only call. Its
   trigger is a deterministic status edge, the arrival beat's one recorded
   sign-in edge, or the evaluator finding an update worth speaking. The edge
-  announcements and approved evaluator sentences speak whenever voice can.
+  notifications and approved evaluator sentences speak whenever voice can.
   Widening either set is a product decision, not an implementation detail;
-  make it deliberately. While an announcement is being spoken, a notice on
+  make it deliberately. While a notification is being spoken, a notice on
   Luke's own surface under the housing names the session it is about,
   drawn on this machine from the roster and the same roster-validated
   identity the voice was handed, leaving it never, and living exactly as
@@ -628,7 +628,7 @@ What Luke may show:
   issue the tracker does not track, and each named issue draws a chip
   beside the session chips, its identifier and title read on this machine
   from that roster, living exactly as long as the words, with an
-  announcement's one session subject still the whole answer. An issue chip's
+  notification's one session subject still the whole answer. An issue chip's
   press hands the issue's tracker-reported address to the operating system
   exactly as a session's would, validated against the observed roster again
   in the main process; it reaches none of the tracker's write paths, and an

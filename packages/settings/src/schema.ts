@@ -584,7 +584,7 @@ export const APP_SETTING_SCHEMA = {
         id: APP_SETTING_ID.QUIET_DURING_MEETINGS,
         label: "Quiet during meetings",
         description:
-          "Whether spoken announcements wait while a connected calendar shows a meeting on, then read out together once it ends. Switched on mid-meeting it takes hold at once. It changes nothing until a calendar — a Google Calendar account, or this Mac's Apple Calendar — is connected.",
+          "Whether spoken notifications wait while a connected calendar shows a meeting on, then read out together once it ends. Switched on mid-meeting it takes hold at once. It changes nothing until a calendar — a Google Calendar account, or this Mac's Apple Calendar — is connected.",
         kind: APP_SETTING_KIND.TOGGLE,
         value: appToggleText(guideValue<boolean>(settings, "quietDuringMeetings")),
         defaultValue: appToggleText(defaultValue),

@@ -724,12 +724,12 @@ test("the facts describe stopping a reply, exactly where a reply can exist", () 
   assert.doesNotMatch(voiceless, /Stopping a reply/);
 });
 
-test("the announcement fact exists exactly while a voice can speak one", () => {
+test("the notification fact exists exactly while a voice can speak one", () => {
   const rendered = JSON.stringify(buildLukeGuide(guideInput()).facts);
-  assert.match(rendered, /"label":"Announcements"/);
+  assert.match(rendered, /"label":"Notifications"/);
 
   const voiceless = JSON.stringify(buildLukeGuide(guideInput({ voiceAvailable: false })).facts);
-  assert.doesNotMatch(voiceless, /"label":"Announcements"/);
+  assert.doesNotMatch(voiceless, /"label":"Notifications"/);
 });
 
 test("the facts follow the talk key, the microphone, and the storage the system offers", () => {
