@@ -569,8 +569,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               "conversation needs to be open, the microphone stays off, and it is " +
               (input.settings.developerMode
                 ? "silenced right now by developer mode: the released app is the one " +
-                  "announcing, and turning developer mode off, on the Settings tab's " +
-                  "Appearance page, speaks them here again."
+                  "announcing, and turning developer mode off, at the bottom of the " +
+                  "Settings tab's front page, speaks them here again."
                 : "always on while voice is available.") +
               " A session in a live voice conversation with its " +
               "own provider announces nothing until that conversation closes.",

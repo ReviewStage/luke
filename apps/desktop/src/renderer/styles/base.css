@@ -634,6 +634,35 @@ button:disabled {
   transition-delay: 0s, 0s, 0s, 0s, var(--duration-shape), 0s;
 }
 
+/* Developer mode wearing its name on the shape's own top-left corner, in the
+   peek and the open panel — the two shapes wide enough to carry a word — so
+   the detached instance is never mistaken for the released one it stands
+   beside. It rides `--wing-bound`, the same edge the wings hang off, so it
+   tracks whichever width the shape is drawn at, and it fades on the exit
+   curve rather than moving: a badge is a label, not a participant in the
+   motion. */
+.channel-badge {
+  position: absolute;
+  z-index: 6;
+  top: calc(var(--shape-top, 0px) + 8px);
+  left: calc(50% - var(--wing-bound) / 2 + 12px);
+  padding: 2px 5px;
+  border: 1px solid color-mix(in srgb, var(--state-attention) 40%, transparent);
+  border-radius: 5px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--state-attention);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-exit) var(--motion-exit);
+}
+
+.app-stage[data-presentation="peek"] .channel-badge,
+.app-stage[data-presentation="panel"] .channel-badge {
+  opacity: 1;
+}
+
 /* Tracks the drawn shape rather than the window, which is always larger than
    the capsule: everything the shape does not cover has to stay click-through.
    It snaps rather than animating, so the wider peek is live from the first

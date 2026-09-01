@@ -57,7 +57,8 @@ export {
 export {
   CAPSULE_SIDE_WIDTH,
   DEFAULT_PANEL_FORM_FACTOR,
-  DETACHED_PANEL_DROP,
+  DETACHED_PANEL_GAP,
+  detachedPanelDrop,
   isPanelFormFactor,
   type NativeNotchGeometry,
   PANEL_FORM_FACTOR,

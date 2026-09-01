@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   CAPSULE_SIDE_WIDTH,
-  DETACHED_PANEL_DROP,
+  detachedPanelDrop,
   PANEL_FORM_FACTOR,
   PANEL_MAX_HEIGHT,
   PANEL_WIDTH,
@@ -305,8 +305,10 @@ test("a detached window drops below the housing and takes the bubble", () => {
   );
 
   // The drop is the whole point: two instances share the screen only because
-  // the detached one stands clear of the housing the attached one meets.
-  assert.equal(detached.y, attached.y + DETACHED_PANEL_DROP);
+  // the detached one stands clear of the compact strip the attached one
+  // draws — the strip's own height and a gap, no further.
+  assert.equal(detached.y, attached.y + detachedPanelDrop(38));
+  assert.equal(detachedPanelDrop(38), 46);
   // Detachment takes the bubble whatever the display has and whatever the
   // form factor asks: a housing shape below the real housing would read as
   // the production surface having slipped.

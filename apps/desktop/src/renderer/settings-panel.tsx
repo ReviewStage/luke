@@ -3887,10 +3887,26 @@ export function SettingsPanel({
             />
           ) : null}
 
+          {/* Developer mode stands at the foot of the page, beside the way
+              out: it is about this instance as a whole, read rarely, and
+              never part of any page's own concerns. */}
+          {settings ? (
+            <section
+              className="settings-section settings-plain"
+              style={cssCustomProperties({ "--row-index": 6 })}
+            >
+              <SchemaSettingRows
+                page={SCHEMA_SETTINGS_PAGE.ROOT}
+                settings={settings}
+                writes={writes}
+              />
+            </section>
+          ) : null}
+
           <button
             type="button"
             className="quit-button"
-            style={cssCustomProperties({ "--row-index": 6 })}
+            style={cssCustomProperties({ "--row-index": 7 })}
             {...searchAnchorProps(SETTINGS_SEARCH_ROW.QUIT)}
             onClick={onQuit}
           >

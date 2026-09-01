@@ -23,6 +23,7 @@ export interface SqliteStatement {
 export interface SqliteDatabase {
   close(): void;
   enableDefensive?(enabled: boolean): void;
+  exec?(source: string): void;
   prepare(source: string): SqliteStatement;
 }
 
@@ -44,11 +45,15 @@ function isNodeError(error: Error): error is NodeJS.ErrnoException {
 /**
  * A runtime without `node:sqlite`, a database another process holds, or a
  * schema this build does not know all mean the same thing an absent provider
- * directory means: nothing to observe, not a failed pass.
+ * directory means: nothing to observe, not a failed pass. A locked database
+ * is the same answer with a clock on it — the provider is mid-write, and the
+ * next pass reads what it was writing — so the busy wait below rides out the
+ * common case and this reads the residue as a quiet pass rather than a
+ * failure.
  */
 export function canIgnoreSqliteError(error: Error): boolean {
   if (isNodeError(error) && error.code === "ERR_UNKNOWN_BUILTIN_MODULE") return true;
-  return /no such table|no such column|unable to open database file|readonly database/i.test(
+  return /no such table|no such column|unable to open database file|readonly database|database is locked/i.test(
     error.message,
   );
 }
@@ -64,6 +69,15 @@ export async function openReadOnlyDatabase(
     const module = await sqlite();
     const database = new module.DatabaseSync(filePath, { readOnly: true });
     database.enableDefensive?.(true);
+    // Another process owns this database and may be mid-write, and a second
+    // Luke instance observing beside the released one doubles how often a
+    // read lands inside a writer's lock. A short busy wait rides those
+    // moments out; a lock that outlives it is read as nothing to observe.
+    try {
+      database.exec?.("PRAGMA busy_timeout = 250");
+    } catch {
+      // A connection that refuses the pragma reads without the wait.
+    }
     return database;
   } catch (error) {
     if (

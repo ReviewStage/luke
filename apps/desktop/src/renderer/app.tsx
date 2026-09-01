@@ -3282,6 +3282,15 @@ export function App(): React.JSX.Element {
           sizes, so the surface is never cross-faded — it is only ever resized. */}
       <span className="panel-surface" data-hit-region={HIT_REGION.SURFACE} aria-hidden="true" />
 
+      {/* Developer mode's own name in the shape's top-left corner, drawn in
+          the peek and the open panel so this instance is never mistaken for
+          the released one it stands beside. */}
+      {(settings ?? bootstrapSettings ?? appSettingsView(bootstrap.settings)).developerMode ? (
+        <span className="channel-badge" aria-hidden="true">
+          DEV
+        </span>
+      ) : null}
+
       {/* Inert while hidden: the panel keeps its full layout box behind
           `opacity: 0`, so its buttons stay focusable and the browser will scroll
           them into view, pushing the compact capsule off screen. */}

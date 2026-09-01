@@ -138,6 +138,7 @@ const SETTINGS_TAB = "the panel's Settings tab";
 const VOICE_PAGE = `${SETTINGS_TAB}, on its Voice page`;
 const VOICE_SOURCE_SECTION = `${SETTINGS_TAB}, on its front page, in the What Luke runs on section at the top`;
 const APPEARANCE_PAGE = `${SETTINGS_TAB}, on its Appearance page`;
+const DEVELOPER_MODE_ROW_PATH = `${SETTINGS_TAB}, on its front page, at the bottom beside Quit`;
 const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
 const CONDUCTOR_ROW_PATH = `the Conductor row under Providers, in ${CONNECTIONS_PAGE} — drawn once Conductor is connected`;
 const CONDUCTOR_DEFAULT_CHOICE = "Conductor's default";
@@ -675,9 +676,9 @@ export const APP_SETTING_SCHEMA = {
     spokenValue: (value: string) => (isPanelFormFactor(value) ? value : undefined),
     analytics: { id: APP_SETTING_ID.FORM_FACTOR, value: choiceAnalytics },
   },
-  // Carries no reset scope on purpose: an Appearance reset flipping this off
-  // would stand a development instance back onto the released app's surface,
-  // keys, and voice mid-run, which is not what resetting appearance means.
+  // Carries no reset scope on purpose: a reset flipping this off would stand
+  // a development instance back onto the released app's surface, keys, and
+  // voice mid-run, which is not what resetting a settings group means.
   // The schema default is the release channel's; a development-channel run
   // resolves an unset value to on in the settings snapshot instead, because a
   // schema in a reusable package cannot know which build is reading it.
@@ -692,7 +693,7 @@ export const APP_SETTING_SCHEMA = {
         value,
         (candidate): candidate is boolean => candidate === true || candidate === false,
       ),
-    settingsPage: SETTINGS_PAGE.APPEARANCE,
+    settingsPage: SETTINGS_PAGE.ROOT,
     guideEntry: settingGuideEntry(
       "developerMode",
       [APP_SETTING_ID.DEVELOPER_MODE],
@@ -705,7 +706,7 @@ export const APP_SETTING_SCHEMA = {
         value: appToggleText(guideValue<boolean>(settings, "developerMode")),
         defaultValue: appToggleText(defaultValue),
         adjustable: true,
-        manual: APPEARANCE_PAGE,
+        manual: DEVELOPER_MODE_ROW_PATH,
       }),
     ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.DEVELOPER_MODE,

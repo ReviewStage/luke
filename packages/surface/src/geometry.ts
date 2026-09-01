@@ -73,13 +73,27 @@ export const SIMULATED_HOUSING_WIDTH = 210;
 export type WindowMode = "compact" | "expanded";
 
 /**
- * How far a detached panel stands below the display's top edge. Detachment
- * exists so two instances can share a screen — a development run standing
- * clear of the released app's surface — so the drop clears the housing strip
- * and the menu bar with room to read as its own object, rather than as the
- * production surface having slipped.
+ * The room between a detached panel and the compact strip above it.
+ * Detachment exists so two instances can share a screen — a development run
+ * standing clear of the released app's surface — and the strip is exactly
+ * what the released instance draws while idle, so the drop is that strip's
+ * own height plus this gap: snug under the housing rather than adrift
+ * mid-screen, but never on top of it.
  */
-export const DETACHED_PANEL_DROP = 64;
+export const DETACHED_PANEL_GAP = 8;
+
+/**
+ * How far a detached window stands below the display's top edge: past the
+ * compact strip an attached instance draws there — the same
+ * `max(32, topInset)` floor the strip itself is measured with — plus the gap.
+ * Only the released instance's idle strip is cleared by construction; its
+ * expanded panel is a transient sheet that may cover a detached surface while
+ * it stands open, and dropping past that too would strand the detached panel
+ * mid-screen for the sake of a moment.
+ */
+export function detachedPanelDrop(topInset: number): number {
+  return Math.ceil(Math.max(32, topInset)) + DETACHED_PANEL_GAP;
+}
 
 export interface NotchWindowLayout extends Rectangle {
   notch: ResolvedNotchGeometry;
@@ -193,7 +207,7 @@ export function positionNotchWindow(
   detached = false,
 ): NotchWindowLayout {
   const notch = resolveNotchGeometry(display, native, formFactor, detached);
-  const drop = detached ? DETACHED_PANEL_DROP : 0;
+  const drop = detached ? detachedPanelDrop(notch.topInset) : 0;
   const housingWidth = notch.hasNotch ? notch.housingWidth : 0;
   // One width for both modes, so a mode change is a height-only resize and the
   // window never moves. macOS lands a window's move and its content's relayout
