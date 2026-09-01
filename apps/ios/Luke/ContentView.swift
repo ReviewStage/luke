@@ -205,8 +205,6 @@ private struct SignedInView: View {
     private var signedInContent: some View {
         NavigationStack {
             SessionsView(firstLoadDone: $firstLoadDone)
-                .navigationTitle("Sessions")
-                .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     if #available(iOS 26.0, *) {
                         ToolbarItem(placement: .topBarLeading) {
