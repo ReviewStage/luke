@@ -93,7 +93,7 @@ private struct SessionRow: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            ProviderMark(providerId: session.providerId)
+            RosterProviderMark(providerId: session.providerId)
             VStack(alignment: .leading, spacing: 3) {
                 Text(session.title)
                     .font(.system(size: 13, weight: .semibold))
@@ -124,33 +124,25 @@ private struct SessionRow: View {
 
 // MARK: - Provider mark
 
-private struct ProviderMark: View {
+/// Wraps the app's real ProviderMark (SVG brand art) inside the fixed 30pt slot
+/// the desktop's row-mark uses. Falls back to a colored initial for provider IDs
+/// not covered by VaultProviderID.
+private struct RosterProviderMark: View {
     let providerId: String
-
-    private var color: Color {
-        switch providerId {
-        case "conductor": Color(red: 0.4, green: 0.6, blue: 1.0)
-        case "cursor": Color(red: 0.5, green: 0.85, blue: 0.6)
-        case "copilot": Color(red: 0.45, green: 0.65, blue: 1.0)
-        case "devin": Color(red: 0.9, green: 0.6, blue: 0.3)
-        case "jules": Color(red: 0.7, green: 0.5, blue: 1.0)
-        case "replicas": Color(red: 1.0, green: 0.5, blue: 0.55)
-        default: Color(white: 1, opacity: 0.35)
-        }
-    }
-
-    private var initial: String {
-        String(providerId.prefix(1).uppercased())
-    }
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 7)
-                .fill(color.opacity(0.15))
+                .fill(Color(white: 1, opacity: 0.06))
                 .frame(width: 30, height: 30)
-            Text(initial)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(color)
+            if let provider = VaultProviderID(rawValue: providerId) {
+                ProviderMark(provider: provider)
+                    .frame(width: 20, height: 20)
+            } else {
+                Text(String(providerId.prefix(1).uppercased()))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color(white: 1, opacity: 0.5))
+            }
         }
     }
 }
