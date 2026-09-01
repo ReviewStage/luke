@@ -303,8 +303,9 @@ private struct SessionOptionsSheet: View {
     }
 }
 
-/// One axis's checklist page: every observed value, toggled by row press. The
-/// checkmark keeps its slot when unchosen so rows do not shift underfoot.
+/// One axis's checklist page: every observed value with its session count,
+/// toggled by row press. The checkmark keeps its slot when unchosen so rows
+/// do not shift underfoot.
 private struct AxisFilterPage: View {
     let group: SessionFilterAxisOptions
     @Binding var filters: Set<SessionFilter>
@@ -324,6 +325,11 @@ private struct AxisFilterPage: View {
                         Text(optionTitle(option.filter))
                             .foregroundStyle(Color.ink)
                         Spacer()
+                        // .secondary here would resolve against the button's
+                        // tint and read blue; the count wears the panel's own
+                        // secondary ink instead.
+                        Text(option.count, format: .number)
+                            .foregroundStyle(Color.inkSecondary)
                         Image(systemName: "checkmark")
                             .fontWeight(.semibold)
                             .opacity(filters.contains(option.filter) ? 1 : 0)
