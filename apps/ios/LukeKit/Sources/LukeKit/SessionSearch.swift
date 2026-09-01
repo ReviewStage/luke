@@ -21,14 +21,16 @@ public enum SessionSearch {
     }
 
     /// The lines a query is read against: everything the row itself can say —
-    /// title, recap, workspace, branch — plus the status word, because the
-    /// recap only stands in for it, and the provider under both the wire id
-    /// and the product name, since either is a name the user knows it by.
+    /// title, error, recap, workspace, branch — plus the status word, because
+    /// the sentence under the title only stands in for it, and the provider
+    /// under both the wire id and the product name, since either is a name
+    /// the user knows it by.
     static func searchableLines(of session: RosterSession) -> [String] {
         var lines = [session.title, session.status, session.providerId]
         if let provider = VaultProviderID(rawValue: session.providerId) {
             lines.append(provider.displayName)
         }
+        if let error = session.error { lines.append(error) }
         if let recap = session.recap { lines.append(recap) }
         if let workspace = session.workspace { lines.append(workspace) }
         if let branch = session.branch { lines.append(branch) }
