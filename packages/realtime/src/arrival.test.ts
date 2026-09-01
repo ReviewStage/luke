@@ -92,13 +92,15 @@ test("values are bounded and a blank value is an absent one", () => {
 test("only an arrival item reads as one", () => {
   assert.equal(isArrivalSpeech({ kind: ARRIVAL_SPEECH_KIND, decidedAt: AT }), true);
   assert.equal(
-    isArrivalSpeech({
-      providerId: "codex",
-      providerSessionId: "s1",
-      work: "checkout",
-      change: "finished",
-      decidedAt: AT,
-    }),
+    isArrivalSpeech([
+      {
+        providerId: "codex",
+        providerSessionId: "s1",
+        work: "checkout",
+        change: "finished",
+        decidedAt: AT,
+      },
+    ]),
     false,
   );
 });

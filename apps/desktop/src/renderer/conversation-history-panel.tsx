@@ -3,6 +3,7 @@ import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   type ConversationEntryKind,
+  conversationEntryKey,
 } from "@sidecar/realtime";
 import type { SessionIdentity } from "@sidecar/session";
 import { useEffect, useRef, useState } from "react";
@@ -153,8 +154,7 @@ function HistoryEntryRow({
 function keyedHistoryEntries(entries: readonly ConversationEntry[]) {
   const occurrences = new Map<string, number>();
   return entries.map((entry) => {
-    const identity = entry.identity;
-    const base = `${entry.kind}:${entry.words}:${identity?.providerId ?? ""}:${identity?.providerSessionId ?? ""}`;
+    const base = conversationEntryKey(entry);
     const occurrence = (occurrences.get(base) ?? 0) + 1;
     occurrences.set(base, occurrence);
     return { entry, key: `${base}:${occurrence}` };

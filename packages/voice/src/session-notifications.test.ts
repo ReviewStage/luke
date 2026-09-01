@@ -14,7 +14,7 @@ import {
   type SessionNotice,
 } from "@sidecar/session";
 import {
-  sessionAnnouncementsFromReviews,
+  sessionAnnouncementFromReview,
   sessionNoticeAnnouncement,
 } from "./session-notifications.js";
 
@@ -132,41 +132,41 @@ test("an error announces the error before recap or activity", () => {
 });
 
 test("a new error remains a failure when the session is still working", () => {
-  const [speech] = sessionAnnouncementsFromReviews([
+  const speech = sessionAnnouncementFromReview(
     review({
       trigger: ATTENTION_TRIGGER.ERROR_REPORTED,
       status: SESSION_STATUS.WORKING,
       holdingForDeveloper: false,
       context: { activity: "running tests", error: "Typecheck failed." },
     }),
-  ]);
+  );
 
   assert.equal(speech?.change, SESSION_ANNOUNCEMENT_CHANGE.FAILED);
   assert.equal(speech?.detail, "Typecheck failed.");
 });
 
 test("an automation wait is an update, not a request for developer input", () => {
-  const [speech] = sessionAnnouncementsFromReviews([
+  const speech = sessionAnnouncementFromReview(
     review({
       holdingForDeveloper: false,
       recap: "Waiting for the merge queue.",
       context: { activity: "watching CI" },
     }),
-  ]);
+  );
 
   assert.equal(speech?.change, SESSION_ANNOUNCEMENT_CHANGE.UPDATED);
   assert.equal(speech?.detail, "Waiting for the merge queue.");
 });
 
 test("only a developer hold with concrete input becomes needs-input", () => {
-  const [speech] = sessionAnnouncementsFromReviews([
+  const speech = sessionAnnouncementFromReview(
     review({ recap: "Should I run the migration?", context: undefined }),
-  ]);
-  const urlOnlyQuestion = sessionAnnouncementsFromReviews([
+  );
+  const urlOnlyQuestion = sessionAnnouncementFromReview(
     review({ recap: "See https://example.com/run?mode=test", context: undefined }),
-  ]);
+  );
 
   assert.equal(speech?.change, SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT);
   assert.equal(speech?.detail, "Should I run the migration?");
-  assert.deepEqual(urlOnlyQuestion, []);
+  assert.equal(urlOnlyQuestion, undefined);
 });
