@@ -1271,6 +1271,35 @@ for (const [mode, tile] of Object.entries(TILES)) {
   emit(`icon/luke-icon-${mode}.svg`, icon.replaceAll("currentColor", tile.ink), "Luke app icon");
 }
 
+// iOS app icon, one per appearance, full-bleed: iOS masks every icon to its
+// own rounded rectangle, so the macOS tile — corners and margin baked in —
+// would draw a second border inside the system's. The tile gradients run to
+// the edges instead, and the glyph keeps the same 58% share of the visible
+// tile, which full-bleed is the whole canvas. The third appearance is the
+// system tint: iOS maps the icon's luminance onto the user's accent color,
+// so it is cut grayscale, pure white on true black.
+const iosGlyphScale = (240 * 0.58) / bbox.w;
+const iosGx = 120 - bbox.cx * iosGlyphScale;
+const iosGy = 120 - bbox.cy * iosGlyphScale;
+const iosIcon = (ground, ink) =>
+  `${svgOpen(240, 240)}${ground}` +
+  `<g color="${ink}" transform="translate(${fmt(iosGx)} ${fmt(iosGy)}) scale(${fmt(iosGlyphScale)})">${face()}</g></svg>`.replaceAll(
+    "currentColor",
+    ink,
+  );
+for (const [mode, tile] of Object.entries(TILES)) {
+  const ground =
+    `<defs><linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">` +
+    `<stop offset="0" stop-color="${tile.gradient[0]}"/><stop offset="1" stop-color="${tile.gradient[1]}"/></linearGradient></defs>` +
+    `<rect width="240" height="240" fill="url(#tile)"/>`;
+  emit(`icon/luke-icon-ios-${mode}.svg`, iosIcon(ground, tile.ink), "Luke app icon");
+}
+emit(
+  "icon/luke-icon-ios-tinted.svg",
+  iosIcon(`<rect width="240" height="240" fill="#000000"/>`, "#ffffff"),
+  "Luke app icon",
+);
+
 // Square mark: the static mark's own tight fill — the face's bounding box
 // padded by the same 6 units, squared by its larger side — with the corners
 // left square, one per mode, tiled and transparent. The tiled pair carries
