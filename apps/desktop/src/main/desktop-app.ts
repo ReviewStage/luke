@@ -160,10 +160,13 @@ import { OutputVolumeWatcher } from "./native/output-volume";
 import { ProviderKeyVaultSync, type VaultSyncAccount } from "./provider-key-vault-sync";
 import { type BridgeContext, registerBridgeEntry } from "./register-bridge";
 import { runModeFor } from "./run-mode";
+import { createDesktopRuntime } from "./runtime";
 import { createSettingsHandler } from "./settings-handler";
 import { SettingsStore } from "./settings-store";
+import { requestDesktopShutdown, shutdownInProgress } from "./shutdown";
 import { createElectronUpdaterEngine } from "./update-installer";
-import { UPDATE_ENDPOINT, UpdateService } from "./update-service";
+import { UPDATE_ENDPOINT } from "./update-service";
+import { type UpdateServiceHandle, updateServiceFromRuntime } from "./update-service-handle";
 import { DockPresence } from "./window/dock-presence";
 import { HOTKEY_RANK, HotkeyRegistrar } from "./window/hotkey-registrar";
 import { IntroductionWindow } from "./window/introduction-window";
@@ -498,24 +501,18 @@ const feedbackDelivery = feedbackDeliveryFromEnvironment();
 // row offers the browser instead. The last-run version lives in its own file
 // so the first launch after an install can say what just happened.
 const lastRunVersionPath = () => path.join(app.getPath("userData"), "last-run-version.json");
-const updateService = new UpdateService({
-  currentVersion: app.getVersion(),
-  onChange: (update) => panels.broadcast(channels.onUpdateChanged, update),
-  engine:
-    app.isPackaged && runMode.sendsNetwork && process.platform === "darwin"
-      ? createElectronUpdaterEngine()
-      : undefined,
-  lastRunVersion: {
+
+function lastRunVersionStore() {
+  return {
     read: () => {
       try {
         const stored: UnparsedWireValue = JSON.parse(fs.readFileSync(lastRunVersionPath(), "utf8"));
         return isRecord(stored) ? text(stored.version) : undefined;
       } catch {
-        // A missing or unreadable file is the first launch: nothing to confirm.
         return undefined;
       }
     },
-    write: (version) => {
+    write: (version: string) => {
       try {
         fs.writeFileSync(lastRunVersionPath(), `${JSON.stringify({ version })}\n`);
       } catch (error) {
@@ -524,8 +521,10 @@ const updateService = new UpdateService({
         );
       }
     },
-  },
-});
+  };
+}
+
+let updateService: UpdateServiceHandle;
 // Counts how Luke's own features are used. It lives here rather than in a
 // renderer because every emit site is already in this process and the timer
 // must survive every window; what it may say is fixed by the vocabulary in
@@ -718,6 +717,37 @@ const panels = new PanelManager({
   rendererHtmlPath: path.join(__dirname, "renderer", "index.html"),
   rendererUrl: rendererUrl(),
 });
+
+function initializeDesktopRuntime(): void {
+  const runtime = createDesktopRuntime({
+    platform: {
+      runMode,
+      appVersion: app.getVersion(),
+      isPackaged: app.isPackaged,
+      platform: process.platform,
+      accountBaseUrl: ACCOUNT_BASE_URL,
+      hostedServiceBaseUrl: HOSTED_SERVICE_BASE_URL,
+      accountClientId: ACCOUNT_CLIENT_ID,
+    },
+    storage: {
+      userDataPath: app.getPath("userData"),
+      lastRunVersionPath: lastRunVersionPath(),
+    },
+    analytics: {
+      sender: productEvents,
+    },
+    updates: {
+      currentVersion: app.getVersion(),
+      onChange: (update) => panels.broadcast(channels.onUpdateChanged, update),
+      engine:
+        app.isPackaged && runMode.sendsNetwork && process.platform === "darwin"
+          ? createElectronUpdaterEngine()
+          : undefined,
+      lastRunVersion: lastRunVersionStore(),
+    },
+  });
+  updateService = updateServiceFromRuntime(runtime);
+}
 // The one-time spoken introduction: a fullscreen takeover on the first
 // interactive launch, before any account exists. Its voice runs on the hosted
 // service's bounded, accountless introduction mint; its session detection is
@@ -2530,6 +2560,7 @@ export function startDesktopApp(): void {
         writeArrivalState({ settledAt: new Date().toISOString() });
       }
       await panels.refreshGeometry();
+      initializeDesktopRuntime();
       registerIpc();
       // Resolving settings touches the filesystem, and the OS keychain only for a
       // provider that already has a stored key to decrypt. Starting it here keeps
@@ -2703,31 +2734,28 @@ export function startDesktopApp(): void {
     });
   }
 
-  app.on("will-quit", () => {
-    // The helper is a process of Luke's own, so it does not outlive the app that
-    // spawned it and leave a key registered against nothing. Nothing succeeds it
-    // during quit, so its exit is not waited on.
-    hotkeys.release();
-    // The same rule: a process of Luke's own does not outlive the app.
-    outputVolumeWatcher?.stop();
-    outputVolumeWatcher = undefined;
-    microphoneRouteWatcher?.stop();
-    microphoneRouteWatcher = undefined;
-    // The duck helper outlives this by one fade: closing its stdin is what asks
-    // it to bring the players back up, so quitting mid-sentence costs the user
-    // nothing.
-    mediaDuck.stop();
-    supersetSignIn.shutdown();
-  });
-
-  app.on("before-quit", () => {
-    observationSupervisor.setEnabled(false);
-    stopCalendarObservation();
-    // Deliberately not a flush: a request here either delays the quit or is
-    // killed mid-flight, and an instant quit is worth the last minute of
-    // counts.
-    productEvents.stop();
-    panels.clearCollapseTimers();
+  app.on("before-quit", (event) => {
+    if (shutdownInProgress()) return;
+    event.preventDefault();
+    void requestDesktopShutdown({
+      beforeQuit: () => {
+        observationSupervisor.setEnabled(false);
+        stopCalendarObservation();
+        productEvents.stop();
+        panels.clearCollapseTimers();
+      },
+      willQuit: () => {
+        hotkeys.release();
+        outputVolumeWatcher?.stop();
+        outputVolumeWatcher = undefined;
+        microphoneRouteWatcher?.stop();
+        microphoneRouteWatcher = undefined;
+        mediaDuck.stop();
+        supersetSignIn.shutdown();
+      },
+    }).then(() => {
+      app.exit(0);
+    });
   });
 
   app.on("window-all-closed", () => app.quit());

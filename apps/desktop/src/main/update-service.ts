@@ -83,6 +83,8 @@ export function isPublishingWindowErrorMessage(message: string): boolean {
  */
 const PUBLISHING_RETRY_DELAYS_MS = [2 * 60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000] as const;
 
+export { PUBLISHING_RETRY_DELAYS_MS, UPDATE_CHECK_DEFAULTS };
+
 /** The updater lifecycle, as electron-updater announces it. */
 export interface UpdaterEngineEvents {
   onChecking: () => void;
