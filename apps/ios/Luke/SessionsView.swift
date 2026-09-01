@@ -35,10 +35,9 @@ struct SessionsView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(Color(red: 0.07, green: 0.07, blue: 0.08).ignoresSafeArea())
-        .toolbarBackground(Color(red: 0.07, green: 0.07, blue: 0.08), for: .navigationBar)
+        .background(Color.ground.ignoresSafeArea())
+        .toolbarBackground(Color.ground, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
         .refreshable { await refreshSessions() }
         .task { await refreshSessions() }
     }
@@ -50,12 +49,12 @@ struct SessionsView: View {
             if let error = fetchError {
                 Text(error)
                     .font(.caption)
-                    .foregroundStyle(Color(red: 0.95, green: 0.4, blue: 0.4))
+                    .foregroundStyle(Color.errorInk)
                     .multilineTextAlignment(.center)
             } else {
                 Text("No active sessions")
                     .font(.subheadline)
-                    .foregroundStyle(Color(white: 1, opacity: 0.5))
+                    .foregroundStyle(Color.inkSecondary)
             }
         }
         .frame(maxWidth: .infinity)
@@ -92,7 +91,7 @@ private struct SessionRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(session.title)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.ink)
                     .lineLimit(1)
                 DoingLine(session: session)
                 if let workspace = session.workspace {
@@ -103,7 +102,7 @@ private struct SessionRow: View {
             if let date = session.observedAt {
                 Text(date, format: .relative(presentation: .numeric, unitsStyle: .abbreviated))
                     .font(.system(size: 10))
-                    .foregroundStyle(Color(white: 1, opacity: 0.3))
+                    .foregroundStyle(Color.inkTertiary)
                     .padding(.top, 2)
             }
         }
@@ -115,7 +114,7 @@ private struct SessionRow: View {
                 .strokeBorder(
                     session.status == "waiting"
                         ? Color(red: 1.0, green: 0.627, blue: 0.286, opacity: 0.3)
-                        : Color(white: 1, opacity: 0.08),
+                        : Color.cardStroke,
                     lineWidth: 1
                 )
         )
@@ -134,7 +133,7 @@ private struct RosterProviderMark: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 7)
-                .fill(Color(white: 1, opacity: 0.06))
+                .fill(Color.pressedFill)
                 .frame(width: 30, height: 30)
             if let provider = VaultProviderID(rawValue: providerId) {
                 ProviderMark(provider: provider)
@@ -142,7 +141,7 @@ private struct RosterProviderMark: View {
             } else {
                 Text(String(providerId.prefix(1).uppercased()))
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color(white: 1, opacity: 0.5))
+                    .foregroundStyle(Color.inkSecondary)
             }
         }
     }
@@ -169,7 +168,7 @@ private struct DoingLine: View {
         case "working":
             Circle()
                 .trim(from: 0.15, to: 0.9)
-                .stroke(Color(white: 1, opacity: 0.6), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                .stroke(Color.inkSecondary, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
                 .frame(width: 10, height: 10)
                 .rotationEffect(.degrees(spinnerRotation))
                 .onAppear {
@@ -180,7 +179,7 @@ private struct DoingLine: View {
         case "complete":
             Image(systemName: "checkmark")
                 .font(.system(size: 8, weight: .semibold))
-                .foregroundStyle(Color(red: 0.35, green: 0.85, blue: 0.55).opacity(0.85))
+                .foregroundStyle(Color.stateComplete.opacity(0.85))
                 .frame(width: 10, height: 10)
         default:
             EmptyView()
@@ -192,7 +191,7 @@ private struct DoingLine: View {
         if let error = session.error {
             Text(error)
                 .font(.system(size: 11))
-                .foregroundStyle(Color(red: 0.95, green: 0.4, blue: 0.4))
+                .foregroundStyle(Color.errorInk)
                 .lineLimit(2)
         } else if let recap = session.recap {
             Text(recap)
@@ -200,13 +199,13 @@ private struct DoingLine: View {
                 .foregroundStyle(
                     session.status == "waiting"
                         ? Color(red: 1.0, green: 0.627, blue: 0.286)
-                        : Color(white: 1, opacity: 0.55)
+                        : Color.ink.opacity(0.55)
                 )
                 .lineLimit(2)
         } else {
             Text(session.status)
                 .font(.system(size: 11))
-                .foregroundStyle(Color(white: 1, opacity: 0.35))
+                .foregroundStyle(Color.inkTertiary)
                 .lineLimit(1)
         }
     }
@@ -225,13 +224,13 @@ private struct PlaceLine: View {
                 .lineLimit(1)
             if let branch {
                 Text("·")
-                    .foregroundStyle(Color(white: 1, opacity: 0.25))
+                    .foregroundStyle(Color.inkTertiary.opacity(0.7))
                 Text(branch)
                     .lineLimit(1)
             }
         }
         .font(.system(size: 10, design: .monospaced))
-        .foregroundStyle(Color(white: 1, opacity: 0.35))
+        .foregroundStyle(Color.inkTertiary)
     }
 }
 
@@ -244,15 +243,15 @@ private struct SkeletonRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             RoundedRectangle(cornerRadius: 7)
-                .fill(Color(white: 1, opacity: 0.1))
+                .fill(Color.ink.opacity(0.1))
                 .frame(width: 30, height: 30)
             VStack(alignment: .leading, spacing: 6) {
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(Color(white: 1, opacity: 0.1))
+                    .fill(Color.ink.opacity(0.1))
                     .frame(height: 12)
                     .frame(maxWidth: 160)
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(Color(white: 1, opacity: 0.07))
+                    .fill(Color.ink.opacity(0.07))
                     .frame(height: 10)
                     .frame(maxWidth: 220)
             }
