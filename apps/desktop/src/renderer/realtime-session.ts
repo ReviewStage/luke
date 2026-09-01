@@ -49,7 +49,6 @@ import {
   realtimeToolFamily,
   recentConversationEntries,
   rememberedFactsContextEvents,
-  type ScheduledTimer,
   SESSION_TOOL_KIND,
   sessionContextEvents,
   sessionContextText,
@@ -86,23 +85,6 @@ const CONNECT_TIMEOUT_MS = 15_000;
  * normal path: a spoken reply ends when it goes quiet.
  */
 export const REALTIME_SETTLE_TIMEOUT_MS = 20_000;
-
-/**
- * How long the developer's call stays open with nothing being said on it.
- *
- * The capture device never rides this clock — it opens with a press and
- * closes with the turn — and neither does the conversation: the history holds
- * the thread on this side of the wire and re-feeds whichever call opens
- * next, so retiring a call forgets nothing. What the hold buys is only the
- * reconnect handshake, which makes this a cost knob rather than Luke's
- * memory: an open call is a held connection and a session the service is
- * keeping warm, paid for by the minute.
- *
- * Three minutes is longer than any pause inside a conversation — the gap
- * that means the developer walked away, not the gap between two questions —
- * and coming back costs one handshake.
- */
-export const VOICE_IDLE_TIMEOUT_MS = 3 * 60_000;
 
 /**
  * The order context is flushed in, so a turn's items land the same way every
@@ -349,14 +331,6 @@ export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbac
    */
   sessionSyncEvents?: () => readonly WireRecord[];
   connectTimeoutMs?: number;
-  /**
-   * How long a call may sit idle before it is put away. Injectable so the
-   * retirement can be exercised without waiting ten real minutes.
-   */
-  idleTimeoutMs?: number;
-  /** The timer the idle retirement runs on, injectable for the same reason. */
-  schedule?: (callback: () => void, delayMs: number) => ScheduledTimer;
-  cancel?: (timer: ScheduledTimer) => void;
   /** Injectable so a test can hold the clock a truncate measures against. */
   now?: () => number;
   /**
@@ -726,12 +700,6 @@ export class RealtimeVoiceSession {
    * speaking is held here and sent ahead of whatever the call does next.
    */
   #pendingSpeed: number | undefined;
-  /**
-   * The timer that puts an idle call away, armed whenever the call settles and
-   * cancelled the moment anything is being said on it.
-   */
-  #idleTimer: unknown;
-
   constructor(options: RealtimeVoiceSessionOptions) {
     this.#options = options;
   }
@@ -1730,7 +1698,6 @@ export class RealtimeVoiceSession {
     this.#guideTextLive = undefined;
     this.#pendingSupersedes.clear();
     this.#pendingInterruptions.clear();
-    this.#clearIdleTimer();
     this.#responseOutstanding = false;
     this.#audioDrained = false;
     this.#followUpPending = false;
@@ -2734,7 +2701,6 @@ export class RealtimeVoiceSession {
   #setStatus(status: RealtimeStatus): void {
     if (this.#status === status) return;
     this.#status = status;
-    this.#restIdleTimer(status);
     // The exchange settling is what closes the device the press opened — not
     // the commit itself, because closing a capture device is audible on
     // shared hardware (a Bluetooth headset renegotiates its codec), and at
@@ -2743,39 +2709,5 @@ export class RealtimeVoiceSession {
     // its turn is about to reuse it.
     if (status === REALTIME_STATUS.READY && !this.#pendingTurn) this.#releaseMicrophone();
     this.#options.onStatus(status);
-  }
-
-  /**
-   * Starts the clock on an idle call, or stops it because the call is in use.
-   *
-   * Only the developer's own call is retired this way. The call Luke opens to
-   * read a notice out already puts itself away once the queue is quiet, and it
-   * holds no conversation worth a clock of its own.
-   *
-   * A settled call restarts the clock however it settled, so a notice read out
-   * counts as the call being used. It reached the developer, and a call that
-   * just spoke to someone is not one nobody is having.
-   */
-  #restIdleTimer(status: RealtimeStatus): void {
-    this.#clearIdleTimer();
-    if (status !== REALTIME_STATUS.READY || !this.#withMicrophone) return;
-    const timeoutMs = positiveInteger(this.#options.idleTimeoutMs, VOICE_IDLE_TIMEOUT_MS);
-    this.#idleTimer = (this.#options.schedule ?? setTimeout)(() => {
-      this.#idleTimer = undefined;
-      // Re-checked at the moment of closing, because ten minutes is long: a
-      // turn may have opened, or the call may already be gone.
-      if (this.#status !== REALTIME_STATUS.READY || !this.#withMicrophone) return;
-      void this.close();
-    }, timeoutMs);
-  }
-
-  #clearIdleTimer(): void {
-    if (this.#idleTimer === undefined) return;
-    // SAFETY: The handle is whatever `schedule ?? setTimeout` returned, and the
-    // fallbacks are paired — a handle from `setTimeout` can only reach
-    // `clearTimeout`. The cast satisfies that signature; nothing reads it as a
-    // number.
-    (this.#options.cancel ?? clearTimeout)(this.#idleTimer as number);
-    this.#idleTimer = undefined;
   }
 }

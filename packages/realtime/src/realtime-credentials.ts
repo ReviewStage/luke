@@ -65,6 +65,7 @@ export function realtimeSessionConfig(options: RealtimeSessionOptions = {}) {
   return {
     type: REALTIME_SESSION_TYPE,
     model: trimmedText(options.model) ?? REALTIME_DEFAULTS.MODEL,
+    reasoning: { effort: "low" },
     instructions: trimmedText(options.instructions) ?? realtimeInstructions(),
     tools: realtimeToolDefinitions(),
     // Auto for the conversation; each proactive readout narrows itself to none.
@@ -112,6 +113,7 @@ export function realtimeSessionSyncEvents(): readonly WireRecord[] {
       type: REALTIME_CLIENT_EVENT.SESSION_UPDATE,
       session: {
         type: REALTIME_SESSION_TYPE,
+        reasoning: { effort: "low" },
         instructions: realtimeInstructions(),
         tools: realtimeToolDefinitions(),
         tool_choice: "auto",

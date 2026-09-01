@@ -16,8 +16,11 @@ test("the minted introduction session declares no tools and no way to choose one
   // voice and pace, and the push-to-talk posture.
   const ordinary = realtimeSessionConfig({ voice: "marin", speed: 1.2 });
   assert.equal(config.model, ordinary.model);
+  assert.deepEqual(config.reasoning, ordinary.reasoning);
   assert.deepEqual(config.audio, ordinary.audio);
   assert.equal(config.audio.input.turn_detection, null);
+  assert.match(config.instructions, /audio is noisy, ambiguous, or cut off/i);
+  assert.match(config.instructions, /never infer[\s\S]*or call a tool from unclear audio/i);
 });
 
 test("the sync events re-assert the same tool-free session after connect", () => {
@@ -29,6 +32,7 @@ test("the sync events re-assert the same tool-free session after connect", () =>
   assert.ok(isRecord(session));
   assert.deepEqual(session.tools, []);
   assert.equal(session.tool_choice, "none");
+  assert.deepEqual(session.reasoning, { effort: "low" });
 });
 
 test("a scripted beat travels as data behind a marker and opens a tool-free turn", () => {

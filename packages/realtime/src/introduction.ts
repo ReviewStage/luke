@@ -37,6 +37,8 @@ const INTRODUCTION_INSTRUCTION_HEAD: string = [
   "- When the developer speaks to you during the practice moment, answer",
   "  their ask directly first, like a colleague they just met: specific,",
   "  warm, no ceremony, and never remark that it was practice or a test.",
+  "- If audio is noisy, ambiguous, or cut off, ask briefly for it to be repeated. Never infer",
+  "  missing words or call a tool from unclear audio.",
   "- You cannot act on anything yet: no messages, no opens, no settings. If",
   "  an ask needs one of those, say what you will do for them once they sign",
   "  in — an invitation, never a cold refusal.",
@@ -78,6 +80,7 @@ export function introductionSessionSyncEvents(): readonly WireRecord[] {
       type: REALTIME_CLIENT_EVENT.SESSION_UPDATE,
       session: {
         type: REALTIME_SESSION_TYPE,
+        reasoning: { effort: "low" },
         instructions: introductionInstructions(),
         tools: [],
         tool_choice: "none",
