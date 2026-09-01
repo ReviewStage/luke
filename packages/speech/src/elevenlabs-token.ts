@@ -17,7 +17,13 @@ import { ELEVENLABS_API_ORIGIN, ELEVENLABS_KEY_HEADER } from "./elevenlabs-voice
  * token held for later is a credential outliving the act it was minted for.
  */
 
-const SINGLE_USE_TOKEN_PATH = "/v1/single-use-token/tts_websocket";
+/**
+ * The token type is the socket it is spent on, and the two are not
+ * interchangeable: a dialogue socket refuses a token minted for the
+ * text-to-speech one by name, so this tracks `elevenlabsDialogueUrl` rather
+ * than the family of endpoints it looks like it belongs to.
+ */
+const SINGLE_USE_TOKEN_PATH = "/v1/single-use-token/ttd_websocket";
 
 /** The exact address a client credential is minted at. */
 export const ELEVENLABS_TOKEN_URL = new URL(
