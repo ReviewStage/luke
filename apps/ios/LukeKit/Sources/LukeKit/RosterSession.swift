@@ -11,6 +11,8 @@ public struct RosterSession: Identifiable, Sendable {
     public let branch: String?
     public let recap: String?
     public let error: String?
+    /// Unix milliseconds of the last observed activity, when the endpoint reported one.
+    public let observedAt: Date?
 
     public var id: String { "\(providerId):\(sessionId)" }
 
@@ -29,5 +31,10 @@ public struct RosterSession: Identifiable, Sendable {
         self.branch = json["branch"] as? String
         self.recap = json["recap"] as? String
         self.error = json["error"] as? String
+        if let ms = json["observedAt"] as? Double {
+            self.observedAt = Date(timeIntervalSince1970: ms / 1000)
+        } else {
+            self.observedAt = nil
+        }
     }
 }

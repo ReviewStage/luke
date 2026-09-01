@@ -92,7 +92,7 @@ private struct SessionRow: View {
     let session: RosterSession
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
             RosterProviderMark(providerId: session.providerId)
             VStack(alignment: .leading, spacing: 3) {
                 Text(session.title)
@@ -105,6 +105,12 @@ private struct SessionRow: View {
                 }
             }
             Spacer(minLength: 0)
+            if let date = session.observedAt {
+                Text(date, format: .relative(presentation: .numeric, unitsStyle: .abbreviated))
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color(white: 1, opacity: 0.3))
+                    .padding(.top, 2)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)

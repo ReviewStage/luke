@@ -194,5 +194,6 @@ function toWireSession(providerId: string, obs: ProviderSessionObservation): Obs
   if (obs.recap) session.recap = obs.recap;
   const error = obs.detail?.error;
   if (error) session.error = error;
+  session.observedAt = obs.observedAt;
   return session;
 }
