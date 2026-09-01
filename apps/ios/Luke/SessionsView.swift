@@ -14,22 +14,40 @@ struct SessionsView: View {
     var body: some View {
         Group {
             if isLoading && sessions.isEmpty {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                loadingState
             } else if sessions.isEmpty {
                 emptyState
             } else {
-                List(sessions) { s in
-                    SessionRow(session: s)
-                        .listRowBackground(Color(red: 0.12, green: 0.12, blue: 0.13))
+                ScrollView {
+                    LazyVStack(spacing: 8) {
+                        ForEach(sessions) { s in
+                            SessionRow(session: s)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
             }
         }
-        .background(Color(red: 0.09, green: 0.09, blue: 0.10).ignoresSafeArea())
+        .background(Color(red: 0.07, green: 0.07, blue: 0.08).ignoresSafeArea())
+        .navigationTitle("Sessions")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Color(red: 0.07, green: 0.07, blue: 0.08), for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .refreshable { await refreshSessions() }
         .task { await refreshSessions() }
+    }
+
+    private var loadingState: some View {
+        VStack(spacing: 12) {
+            ForEach(0 ..< 3, id: \.self) { _ in
+                SkeletonRow()
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var emptyState: some View {
@@ -74,59 +92,197 @@ private struct SessionRow: View {
     let session: RosterSession
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(alignment: .center, spacing: 12) {
+            ProviderMark(providerId: session.providerId)
+            VStack(alignment: .leading, spacing: 3) {
                 Text(session.title)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(Color.white)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
                     .lineLimit(1)
-                Spacer()
-                StatusBadge(status: session.status)
+                DoingLine(session: session)
+                if let workspace = session.workspace {
+                    PlaceLine(workspace: workspace, branch: session.branch)
+                }
             }
-            if let workspace = session.workspace {
-                Text(workspace)
-                    .font(.caption)
-                    .foregroundStyle(Color(white: 1, opacity: 0.45))
-            }
-            if let recap = session.recap {
-                Text(recap)
-                    .font(.caption)
-                    .foregroundStyle(Color(white: 1, opacity: 0.55))
-                    .lineLimit(2)
-            }
-            if let error = session.error {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(Color(red: 0.95, green: 0.4, blue: 0.4))
-                    .lineLimit(2)
-            }
+            Spacer(minLength: 0)
         }
-        .padding(.vertical, 6)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(Color(white: 1, opacity: 0.028))
+        .overlay(
+            RoundedRectangle(cornerRadius: 15)
+                .strokeBorder(
+                    session.status == "waiting"
+                        ? Color(red: 0.9, green: 0.65, blue: 0.2, opacity: 0.35)
+                        : Color(white: 1, opacity: 0.08),
+                    lineWidth: 1
+                )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 15))
     }
 }
 
-// MARK: - Status badge
+// MARK: - Provider mark
 
-private struct StatusBadge: View {
-    let status: String
+private struct ProviderMark: View {
+    let providerId: String
 
     private var color: Color {
-        switch status {
-        case "working": Color(red: 0.35, green: 0.65, blue: 1.0)
-        case "waiting": Color(red: 1.0, green: 0.75, blue: 0.2)
-        case "error": Color(red: 0.95, green: 0.4, blue: 0.4)
-        case "complete": Color(red: 0.35, green: 0.85, blue: 0.55)
-        default: Color(white: 1, opacity: 0.4)
+        switch providerId {
+        case "conductor": Color(red: 0.4, green: 0.6, blue: 1.0)
+        case "cursor": Color(red: 0.5, green: 0.85, blue: 0.6)
+        case "copilot": Color(red: 0.45, green: 0.65, blue: 1.0)
+        case "devin": Color(red: 0.9, green: 0.6, blue: 0.3)
+        case "jules": Color(red: 0.7, green: 0.5, blue: 1.0)
+        case "replicas": Color(red: 1.0, green: 0.5, blue: 0.55)
+        default: Color(white: 1, opacity: 0.35)
         }
     }
 
+    private var initial: String {
+        String(providerId.prefix(1).uppercased())
+    }
+
     var body: some View {
-        Text(status)
-            .font(.system(size: 10, weight: .medium))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(color.opacity(0.15))
-            .foregroundStyle(color)
-            .clipShape(Capsule())
+        ZStack {
+            RoundedRectangle(cornerRadius: 7)
+                .fill(color.opacity(0.15))
+                .frame(width: 30, height: 30)
+            Text(initial)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(color)
+        }
+    }
+}
+
+// MARK: - Doing line
+
+/// The status sentence: spinner or check prefix, then the recap or error text.
+private struct DoingLine: View {
+    let session: RosterSession
+
+    @State private var spinnerRotation: Double = 0
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 6) {
+            statusGlyph
+            doingText
+        }
+    }
+
+    @ViewBuilder
+    private var statusGlyph: some View {
+        switch session.status {
+        case "working":
+            Circle()
+                .trim(from: 0.15, to: 0.9)
+                .stroke(Color(white: 1, opacity: 0.6), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                .frame(width: 10, height: 10)
+                .rotationEffect(.degrees(spinnerRotation))
+                .onAppear {
+                    withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
+                        spinnerRotation = 360
+                    }
+                }
+        case "complete":
+            Image(systemName: "checkmark")
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(Color(red: 0.35, green: 0.85, blue: 0.55).opacity(0.85))
+                .frame(width: 10, height: 10)
+        case "waiting":
+            Image(systemName: "checkmark")
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(Color(red: 1.0, green: 0.75, blue: 0.2).opacity(0.85))
+                .frame(width: 10, height: 10)
+        default:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var doingText: some View {
+        if let error = session.error {
+            Text(error)
+                .font(.system(size: 11))
+                .foregroundStyle(Color(red: 0.95, green: 0.4, blue: 0.4))
+                .lineLimit(2)
+        } else if let recap = session.recap {
+            Text(recap)
+                .font(.system(size: 11))
+                .foregroundStyle(
+                    session.status == "waiting"
+                        ? Color(red: 0.9, green: 0.65, blue: 0.2)
+                        : Color(white: 1, opacity: 0.55)
+                )
+                .lineLimit(2)
+        } else {
+            Text(session.status)
+                .font(.system(size: 11))
+                .foregroundStyle(Color(white: 1, opacity: 0.35))
+                .lineLimit(1)
+        }
+    }
+}
+
+// MARK: - Place line
+
+/// Workspace and branch in monospaced tertiary text — matches the desktop's row-place.
+private struct PlaceLine: View {
+    let workspace: String
+    let branch: String?
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(workspace)
+                .lineLimit(1)
+            if let branch {
+                Text("·")
+                    .foregroundStyle(Color(white: 1, opacity: 0.25))
+                Text(branch)
+                    .lineLimit(1)
+            }
+        }
+        .font(.system(size: 10, design: .monospaced))
+        .foregroundStyle(Color(white: 1, opacity: 0.35))
+    }
+}
+
+// MARK: - Skeleton row
+
+/// Three pulsing placeholder cards while the first fetch is in flight.
+private struct SkeletonRow: View {
+    @State private var opacity: Double = 0.55
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            RoundedRectangle(cornerRadius: 7)
+                .fill(Color(white: 1, opacity: 0.1))
+                .frame(width: 30, height: 30)
+            VStack(alignment: .leading, spacing: 6) {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color(white: 1, opacity: 0.1))
+                    .frame(height: 12)
+                    .frame(maxWidth: 160)
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color(white: 1, opacity: 0.07))
+                    .frame(height: 10)
+                    .frame(maxWidth: 220)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(Color(white: 1, opacity: 0.028))
+        .overlay(
+            RoundedRectangle(cornerRadius: 15)
+                .strokeBorder(Color(white: 1, opacity: 0.08), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 15))
+        .opacity(opacity)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                opacity = 1.0
+            }
+        }
     }
 }
