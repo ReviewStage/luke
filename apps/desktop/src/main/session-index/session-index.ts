@@ -80,21 +80,12 @@ function ftsQuery(query: string): string | undefined {
   return tokens.map((token) => `"${token}"`).join(" AND ");
 }
 
-function isCorruptDatabase(error: unknown): boolean {
-  for (
-    let current: unknown = error;
-    current;
-    current = current instanceof Error ? current.cause : undefined
-  ) {
-    if (!(current instanceof Error)) continue;
-    const code = "code" in current && typeof current.code === "string" ? current.code : "";
-    if (
-      code === "SQLITE_CORRUPT" ||
-      code === "SQLITE_NOTADB" ||
-      /database disk image is malformed|file is not a database/i.test(current.message)
-    ) {
+function isCorruptDatabase(error: Error): boolean {
+  for (let current: Error | undefined = error; current; ) {
+    if (/database disk image is malformed|file is not a database/i.test(current.message)) {
       return true;
     }
+    current = current.cause instanceof Error ? current.cause : undefined;
   }
   return false;
 }
@@ -164,7 +155,7 @@ export class SessionIndex {
           rank,
         }));
     } catch (error) {
-      this.#diagnose(error);
+      this.#diagnose(error instanceof Error ? error : new Error(String(error)));
       return [];
     }
   }
@@ -179,18 +170,21 @@ export class SessionIndex {
       this.#reconcile(snapshot);
       this.#lastDiagnostic = undefined;
     } catch (error) {
-      if (isCorruptDatabase(error)) {
+      const failure = error instanceof Error ? error : new Error(String(error));
+      if (isCorruptDatabase(failure)) {
         try {
           this.#rebuild();
           this.#reconcile(snapshot);
           this.#lastDiagnostic = undefined;
           return;
         } catch (rebuildError) {
-          this.#diagnose(rebuildError);
+          this.#diagnose(
+            rebuildError instanceof Error ? rebuildError : new Error(String(rebuildError)),
+          );
           return;
         }
       }
-      this.#diagnose(error);
+      this.#diagnose(failure);
     }
   }
 
@@ -260,8 +254,8 @@ export class SessionIndex {
     }
   }
 
-  #diagnose(error: unknown): void {
-    const message = error instanceof Error ? error.message : String(error);
+  #diagnose(error: Error): void {
+    const message = error.message;
     if (message === this.#lastDiagnostic) return;
     this.#lastDiagnostic = message;
     this.#options.onDiagnostic?.(`Session index unavailable: ${message}`);

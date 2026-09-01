@@ -88,7 +88,7 @@ test("reconciles added, updated, and disappeared sessions into FTS", async (t) =
   assert.equal(initialHits.length, 1);
   assert.equal(initialHits[0]?.providerId, "cursor");
   assert.equal(initialHits[0]?.providerSessionId, "one");
-  assert.equal(typeof initialHits[0]?.rank, "number");
+  assert.equal(Number.isFinite(initialHits[0]?.rank), true);
 
   await index.reconcile(
     snapshot(
