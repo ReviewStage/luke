@@ -4,13 +4,14 @@ import SwiftUI
 /// Shows the signed-in user's active cloud sessions with pull-to-refresh.
 struct SessionsView: View {
     @Environment(AccountSession.self) private var session
-    @Environment(ProductEventSender.self) private var events
+
+    /// True once the first fetch has answered, success or failure alike. The
+    /// signed-in screen holds its loading screen over everything until then,
+    /// and never again: later refreshes redraw in place.
+    @Binding var firstLoadDone: Bool
 
     @State private var sessions: [RosterSession] = []
-    /// Starts true because the list's first frame can paint before its
-    /// `.task` begins the fetch, and that frame must show the skeletons
-    /// rather than claim "No active sessions" nothing has checked yet.
-    @State private var isLoading = true
+    @State private var isLoading = false
     @State private var fetchError: String?
     @State private var searchQuery = ""
     @State private var filters: Set<SessionFilter> = []
@@ -168,6 +169,8 @@ struct SessionsView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Color.ground.ignoresSafeArea())
+        .toolbarBackground(Color.ground, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .searchable(text: $searchQuery, prompt: "Search sessions")
         .toolbar {
             // The filter rides with the search the way Notion docks one in
@@ -195,7 +198,10 @@ struct SessionsView: View {
                 .presentationDetents([.medium, .large])
         }
         .refreshable { await refreshSessions() }
-        .task { await refreshSessions() }
+        .task {
+            await refreshSessions()
+            firstLoadDone = true
+        }
     }
 
     private var optionsButton: some View {
@@ -241,10 +247,28 @@ struct SessionsView: View {
 
     @ViewBuilder
     private func sessionItem(_ s: RosterSession) -> some View {
-        if hasRowActs(s) {
-            rowCore(s).contextMenu { rowMenu(s) }
-        } else {
-            rowCore(s)
+        // The preview the long-press lifts must be the card's own rounded
+        // shape, or the system snapshots the row's full rectangle and the
+        // lift reads as a foreign overlay instead of the card rising.
+        let core = rowCore(s)
+            .contentShape(
+                [.interaction, .contextMenuPreview], RoundedRectangle(cornerRadius: 15))
+        Group {
+            if hasRowActs(s) {
+                core.contextMenu { rowMenu(s) }
+            } else {
+                core
+            }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            if let archive = archiveControl(s) {
+                Button {
+                    runControl(s, archive)
+                } label: {
+                    Label(archive.label, systemImage: "archivebox")
+                }
+                .tint(.indigo)
+            }
         }
     }
 
@@ -260,52 +284,96 @@ struct SessionsView: View {
         }
     }
 
+    /// The menu reads in the system's own order: what the session takes now,
+    /// then the edits that open further UI, then the acts that end something
+    /// — a stop wearing the destructive role, the archive closing the menu
+    /// the way Mail's does. Every entry is still only an advertised act.
     @ViewBuilder
     private func rowMenu(_ s: RosterSession) -> some View {
-        if s.canReceiveMessage {
-            Button {
-                composingSession = s
-            } label: {
-                Label("Send Message", systemImage: "arrow.up.message")
-            }
-        }
-        ForEach(s.controls) { control in
-            Button {
-                Task {
-                    await performAct { token in
-                        try await actClient.executeControl(
-                            accessToken: token,
-                            providerId: s.providerId,
-                            providerSessionId: s.sessionId,
-                            controlId: control.id
-                        )
-                    }
+        Section {
+            if s.canReceiveMessage {
+                Button {
+                    composingSession = s
+                } label: {
+                    Label("Send Message…", systemImage: "arrow.up.message")
                 }
-            } label: {
-                Label(control.label, systemImage: controlSymbol(control))
+            }
+            ForEach(s.controls.filter { !isStop($0) && !isArchive($0) }) { control in
+                Button {
+                    runControl(s, control)
+                } label: {
+                    Label(control.label, systemImage: controlSymbol(control))
+                }
+            }
+            if !s.spawnableAgents.isEmpty {
+                Button {
+                    spawningSession = s
+                } label: {
+                    Label("Add Agent…", systemImage: "plus.bubble")
+                }
             }
         }
-        if !s.spawnableAgents.isEmpty {
-            Button {
-                spawningSession = s
-            } label: {
-                Label("Add Agent…", systemImage: "plus.bubble")
+        Section {
+            if s.canRename {
+                Button {
+                    renameText = s.title
+                    renamingSession = s
+                } label: {
+                    Label("Rename Session…", systemImage: "pencil")
+                }
+            }
+            if s.canRenameWorkspace {
+                Button {
+                    renameText = s.workspace ?? ""
+                    renamingWorkspace = s
+                } label: {
+                    Label("Rename Workspace…", systemImage: "pencil.line")
+                }
             }
         }
-        if s.canRename {
-            Button {
-                renameText = s.title
-                renamingSession = s
-            } label: {
-                Label("Rename Session…", systemImage: "pencil")
+        Section {
+            ForEach(s.controls.filter { isStop($0) }) { control in
+                Button(role: .destructive) {
+                    runControl(s, control)
+                } label: {
+                    Label(control.label, systemImage: controlSymbol(control))
+                }
+            }
+            ForEach(s.controls.filter { isArchive($0) }) { control in
+                Button {
+                    runControl(s, control)
+                } label: {
+                    Label(control.label, systemImage: "archivebox")
+                }
             }
         }
-        if s.canRenameWorkspace {
-            Button {
-                renameText = s.workspace ?? ""
-                renamingWorkspace = s
-            } label: {
-                Label("Rename Workspace…", systemImage: "pencil.line")
+    }
+
+    private func isStop(_ control: RosterSessionControl) -> Bool {
+        control.kind == "stop"
+    }
+
+    /// Every provider names its archive control `archive-…` (workspace,
+    /// agent, session). The family picks presentation only — the swipe slot
+    /// and the menu's closing section — and execution still names the
+    /// advertised id against the server's own fresh observation.
+    private func isArchive(_ control: RosterSessionControl) -> Bool {
+        control.id.hasPrefix("archive")
+    }
+
+    private func archiveControl(_ s: RosterSession) -> RosterSessionControl? {
+        s.controls.first(where: isArchive)
+    }
+
+    private func runControl(_ s: RosterSession, _ control: RosterSessionControl) {
+        Task {
+            await performAct { token in
+                try await actClient.executeControl(
+                    accessToken: token,
+                    providerId: s.providerId,
+                    providerSessionId: s.sessionId,
+                    controlId: control.id
+                )
             }
         }
     }
@@ -314,8 +382,8 @@ struct SessionsView: View {
     /// beyond that the id's family is display-only — execution always names
     /// the id against the server's own fresh observation.
     private func controlSymbol(_ control: RosterSessionControl) -> String {
-        if control.kind == "stop" { return "stop.circle" }
-        if control.id.contains("archive") { return "archivebox" }
+        if isStop(control) { return "stop.circle" }
+        if isArchive(control) { return "archivebox" }
         if control.id.contains("approve") { return "checkmark.circle" }
         return "circle"
     }
@@ -371,33 +439,22 @@ struct SessionsView: View {
         guard case .signedIn = session.state else { return }
         do {
             let token = try await session.validAccessToken()
+            let fetched: [RosterSession]
             do {
-                sessions = try await rosterClient.observe(bearerToken: token)
+                fetched = try await rosterClient.observe(bearerToken: token)
             } catch RosterClientError.serverError(let status) where status == 401 {
                 // validAccessToken() refreshes near-expiry tokens; a 401 here
                 // means the server rejected the token — refresh and retry once.
                 let fresh = try await session.refreshAccessToken()
-                sessions = try await rosterClient.observe(bearerToken: fresh)
+                fetched = try await rosterClient.observe(bearerToken: fresh)
             }
-            recordObservation(sessions)
+            // Animated so a row an act just removed — an archive above all —
+            // slides out the way a deleted Mail row does, instead of blinking.
+            withAnimation { sessions = fetched }
         } catch is AccountSessionError {
             ()  // Signed out — the state change redraws automatically.
         } catch {
             fetchError = error.localizedDescription
-        }
-    }
-
-    /// One count per provider per day, in buckets — refreshing is not using.
-    /// A provider id the shared vocabulary has not answered for is left
-    /// uncounted rather than sent to be refused.
-    private func recordObservation(_ sessions: [RosterSession]) {
-        let rowsByProvider = Dictionary(grouping: sessions, by: \.providerId)
-        for (providerId, rows) in rowsByProvider {
-            guard let provider = ProductProviderID(rawValue: providerId) else { continue }
-            events.recordOncePerDay(
-                .sessionObserve(provider: provider, sessions: .bucket(for: rows.count)),
-                discriminator: providerId
-            )
         }
     }
 }
@@ -441,8 +498,8 @@ private struct SessionOptionsSheet: View {
         NavigationStack {
             List {
                 Section("Sort by") {
-                    sortRow(.urgency, label: "Urgent")
-                    sortRow(.recency, label: "Recent")
+                    sortRow(.urgency, label: "Urgent", detail: "Most urgent first")
+                    sortRow(.recency, label: "Recent", detail: "Most recently observed first")
                 }
                 if !groups.isEmpty {
                     Section("Filter by") {
@@ -474,13 +531,18 @@ private struct SessionOptionsSheet: View {
         }
     }
 
-    private func sortRow(_ value: SessionSort, label: String) -> some View {
+    private func sortRow(_ value: SessionSort, label: String, detail: String) -> some View {
         Button {
             sort = value
         } label: {
             HStack {
-                Text(label)
-                    .foregroundStyle(Color.ink)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(label)
+                        .foregroundStyle(Color.ink)
+                    Text(detail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
                 Image(systemName: "checkmark")
                     .fontWeight(.semibold)
@@ -520,11 +582,8 @@ private struct AxisFilterPage: View {
                         Text(optionTitle(option.filter))
                             .foregroundStyle(Color.ink)
                         Spacer()
-                        // .secondary here would resolve against the button's
-                        // tint and read blue; the count wears the panel's own
-                        // secondary ink instead.
                         Text(option.count, format: .number)
-                            .foregroundStyle(Color.inkSecondary)
+                            .foregroundStyle(.secondary)
                         Image(systemName: "checkmark")
                             .fontWeight(.semibold)
                             .opacity(filters.contains(option.filter) ? 1 : 0)
