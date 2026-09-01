@@ -143,6 +143,10 @@ public final class RealtimeSession {
     // that follow-up's response.done arrives, so output_audio_buffer.stopped
     // does not return the session to .ready while the follow-up is in flight.
     private var followUpPending = false
+    // Counts how many player drains are in progress. output_audio_buffer.stopped
+    // creates one drain per event; the session may not return to .ready until the
+    // last drain completes (pendingDrains == 0) and no follow-up is in flight.
+    private var pendingDrains = 0
     // Set when the developer releases while still connecting, so we commit
     // and request a response the moment the channel opens.
     private var pendingCommit = false
@@ -220,6 +224,7 @@ public final class RealtimeSession {
         channel?.close(); channel = nil
         isArmed = false
         followUpPending = false
+        pendingDrains = 0
         pendingCommit = false
         pendingCalls.removeAll()
         captionBuffer = ""
@@ -327,15 +332,20 @@ public final class RealtimeSession {
         case "output_audio_buffer.stopped":
             // The server has finished sending audio, but locally-buffered samples
             // may not have played yet. Drain them before stopping and clearing.
-            // Do not move to .ready if a tool follow-up response is in flight —
-            // the follow-up's response.done will clear followUpPending and, if
-            // there is no audio on the follow-up, transition to .ready itself.
+            // A primary response and its tool follow-up can each produce one
+            // output_audio_buffer.stopped; pendingDrains tracks both so the
+            // session stays in .speaking until the last drain completes.
             if let p = player {
                 player = nil
+                pendingDrains += 1
                 p.drain { [weak self] in
                     p.stop()
+                    self?.pendingDrains -= 1
                     self?.options.onCaption(nil)
-                    if self?.status == .speaking, !(self?.followUpPending ?? false) {
+                    if self?.status == .speaking,
+                       !(self?.followUpPending ?? false),
+                       self?.pendingDrains == 0
+                    {
                         self?.status = .ready
                         self?.resetIdleTimer()
                     }
@@ -416,7 +426,12 @@ public final class RealtimeSession {
             followUpPending = false
             if status == .thinking {
                 // Audio-only response whose audio finished before response.done
-                // arrived, or an unexpected silent response — transition to ready.
+                // arrived, or a silent response — transition to ready now.
+                status = .ready
+                resetIdleTimer()
+            } else if status == .speaking, pendingDrains == 0 {
+                // Silent follow-up: the primary drain already completed but could not
+                // transition because followUpPending was true. Transition now.
                 status = .ready
                 resetIdleTimer()
             }

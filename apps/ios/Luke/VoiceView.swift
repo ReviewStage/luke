@@ -45,6 +45,9 @@ private final class VoiceSessionModel {
             },
             onCaption: { [weak self] text in self?.caption = text },
             onError: { [weak self] message in
+                // Stop auto-reconnect on errors — a quota failure or auth error
+                // would loop forever if we let onStatus(.idle) trigger a retry.
+                self?.reconnectCallback = nil
                 self?.errorMessage = message ?? "Connection error"
             },
             dispatchToolCall: { [weak accountSession] name, arguments, callId in
