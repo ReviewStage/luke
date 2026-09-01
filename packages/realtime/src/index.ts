@@ -45,10 +45,12 @@ export {
 export {
   REALTIME_CLIENT_SECRETS_PATH,
   REALTIME_MINT_OUTCOME,
+  REALTIME_OUTPUT_MODALITY,
   REALTIME_TRUNCATION,
   type RealtimeDiagnostics,
   type RealtimeMintOutcome,
   type RealtimeSessionOptions,
+  type RealtimeSyncOptions,
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
   realtimeMintExplanation,

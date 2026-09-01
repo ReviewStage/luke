@@ -101,12 +101,37 @@ export function realtimeSessionConfig(options: RealtimeSessionOptions = {}) {
 }
 
 /**
+ * What a call asks the model to produce. Audio is the ordinary shape — the
+ * model speaks and the words ride along as its transcript. Text alone is what
+ * a call whose voice comes from another service asks for: OpenAI writes the
+ * reply, and something else says it.
+ */
+export const REALTIME_OUTPUT_MODALITY = {
+  AUDIO: "audio",
+  TEXT: "text",
+} as const;
+
+export interface RealtimeSyncOptions {
+  /**
+   * Whether another service says Luke's words. Set here rather than at the
+   * mint because the hosted mint composes its session on the service: the
+   * call itself is the one place every credential source can be asked, the
+   * same reason the transcription model is reasserted here. Asserted in both
+   * directions rather than only when it is on, so a call can never inherit
+   * the last one's shape.
+   */
+  spokenElsewhere?: boolean;
+}
+
+/**
  * Reasserts the local build's instructions and tools after any credential
  * source opens a call. The transcription rides along for the same reason: the
  * hosted mint composes its session on the service, so the one place every
  * call can be asked to hand the developer's words back is the call itself.
  */
-export function realtimeSessionSyncEvents(): readonly WireRecord[] {
+export function realtimeSessionSyncEvents(
+  options: RealtimeSyncOptions = {},
+): readonly WireRecord[] {
   const built = [
     {
       type: REALTIME_CLIENT_EVENT.SESSION_UPDATE,
@@ -115,6 +140,9 @@ export function realtimeSessionSyncEvents(): readonly WireRecord[] {
         instructions: realtimeInstructions(),
         tools: realtimeToolDefinitions(),
         tool_choice: "auto",
+        output_modalities: [
+          options.spokenElsewhere ? REALTIME_OUTPUT_MODALITY.TEXT : REALTIME_OUTPUT_MODALITY.AUDIO,
+        ],
         audio: { input: { transcription: { model: REALTIME_DEFAULTS.TRANSCRIPTION_MODEL } } },
       },
     },

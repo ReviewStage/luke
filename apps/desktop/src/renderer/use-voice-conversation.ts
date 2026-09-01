@@ -37,6 +37,7 @@ import {
   type SessionMention,
 } from "@sidecar/session";
 import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyLabel } from "@sidecar/settings";
+import { SPEECH_PROVIDER, type SpeechProvider } from "@sidecar/speech";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MicrophoneStatus, VoiceHotkeyState } from "#shared/wire/audio";
@@ -45,6 +46,7 @@ import { askRefusal } from "./ask-luke";
 import { voiceQuotaSpentNote } from "./microphone-access";
 import { openPreferredMicrophone } from "./microphone-choice";
 import { type AppActionCarrier, RealtimeVoiceSession } from "./realtime-session";
+import { ElevenLabsSpeech, WebAudioSpeechSink } from "./speech-output";
 import { SpokenNoticeAnnouncer } from "./spoken-notices";
 import { useStateWithRef } from "./use-state-with-ref";
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
@@ -245,13 +247,36 @@ export function liveSpeedApplies(
 }
 
 /**
+ * Everything about a call that decides how Luke sounds, as one value, so one
+ * comparison covers all of it: which service speaks, and which of that
+ * service's voices. Both are fixed for a call's lifetime — the Realtime API
+ * locks its voice at the first word, and the speech socket is opened against
+ * the chosen voice — so a change to either is the same act, reopening the
+ * call. Undefined until settings have arrived, which is not a change.
+ *
+ * A speech provider chosen with no voice picked yet sounds like the ordinary
+ * one, because it is: nothing has been chosen for the other to say.
+ */
+export function spokenVoiceShape(input: {
+  voice: RealtimeVoice | undefined;
+  speechProvider: SpeechProvider;
+  speechVoice: string | undefined;
+}): string | undefined {
+  if (input.voice === undefined) return undefined;
+  if (input.speechProvider === SPEECH_PROVIDER.ELEVENLABS && input.speechVoice) {
+    return `${SPEECH_PROVIDER.ELEVENLABS} ${input.speechVoice}`;
+  }
+  return `${SPEECH_PROVIDER.OPENAI} ${input.voice}`;
+}
+
+/**
  * What a changed voice should do to a call already up. A call being opened
  * counts as one to reopen: its credential may already have been minted in the
  * old voice. A call that ended on its own owes nothing.
  */
 export function voiceRestartAction(input: {
-  previous: RealtimeVoice | undefined;
-  next: RealtimeVoice | undefined;
+  previous: string | undefined;
+  next: string | undefined;
   live: boolean;
   due: boolean;
   status: RealtimeStatus;
@@ -414,6 +439,10 @@ export interface VoiceConversationOptions {
   workspaceProjectDefaults: Readonly<Partial<Record<WorkspaceProviderId, string>>> | undefined;
   voice: RealtimeVoice | undefined;
   voiceSpeed: RealtimeVoiceSpeed | undefined;
+  /** Which service says Luke's words; OpenAI unless the developer moved it. */
+  speechProvider: SpeechProvider;
+  /** The chosen ElevenLabs voice, absent until one is picked. */
+  speechVoice: string | undefined;
   voiceCaptions: boolean;
   /**
    * The talk key the launch registered, standing in until a change is pushed.
@@ -705,6 +734,21 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const ensureVoiceSession = useCallback((): RealtimeVoiceSession => {
     voiceSession.current ??= new RealtimeVoiceSession({
       requestConnection: () => window.sidecar.requestRealtimeCredential(),
+      // Read afresh at every connect, so a provider changed between calls
+      // takes effect on the call that follows rather than on the object.
+      // Nothing is built where speech stays with the service writing it, and
+      // nothing is built for a provider with no voice chosen: a socket opened
+      // against no voice could only fail at the first word.
+      createSpeech: (listener) => {
+        const { speechProvider, speechVoice } = optionsRef.current;
+        if (speechProvider !== SPEECH_PROVIDER.ELEVENLABS || !speechVoice) return undefined;
+        return new ElevenLabsSpeech({
+          voiceId: speechVoice,
+          listener,
+          sink: new WebAudioSpeechSink(),
+          mintToken: () => window.sidecar.mintSpeechToken(),
+        });
+      },
       // The press's device, chosen by facts read natively: the Mac's own
       // microphone where a Bluetooth headset would otherwise pay for the
       // capture with its music codec, the browser's default everywhere else.
@@ -1246,18 +1290,23 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     voiceSession.current?.applySpeed(speed);
   }, [options.voiceSpeed]);
 
-  const heardVoice = useRef<RealtimeVoice | undefined>(undefined);
+  const heardVoice = useRef<string | undefined>(undefined);
   const voiceRestartDue = useRef(false);
+  const voiceShape = spokenVoiceShape({
+    voice: options.voice,
+    speechProvider: options.speechProvider,
+    speechVoice: options.speechVoice,
+  });
   useEffect(() => {
     const decided = voiceRestartAction({
       previous: heardVoice.current,
-      next: options.voice,
+      next: voiceShape,
       live:
         voiceSession.current?.isConnected === true || voiceSession.current?.isConnecting === true,
       due: voiceRestartDue.current,
       status: voiceStatus,
     });
-    if (options.voice !== undefined) heardVoice.current = options.voice;
+    if (voiceShape !== undefined) heardVoice.current = voiceShape;
     voiceRestartDue.current = decided.due;
     if (decided.action !== VOICE_RESTART.RESTART) return;
     // Reconnecting is the call's act, not a press: the device the old call
@@ -1266,7 +1315,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       await voiceSession.current?.close();
       await startConversation();
     })();
-  }, [options.voice, startConversation, voiceStatus]);
+  }, [voiceShape, startConversation, voiceStatus]);
 
   const activeStream = activeVoiceStream({
     status: voiceStatus,
