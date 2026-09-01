@@ -112,6 +112,7 @@ export {
   type SessionFilterAxis,
   sessionFilterAxis,
 } from "./session-filter.js";
+export { ReportedSessionLinks } from "./session-links.js";
 export {
   firstWholeNameIndex,
   MAXIMUM_MENTIONED_SESSIONS,

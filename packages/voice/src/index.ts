@@ -34,6 +34,6 @@ export {
   type HostedUsageReaderOptions,
 } from "./quota.js";
 export {
-  sessionAnnouncementsFromReviews,
+  sessionAnnouncementFromReview,
   sessionNoticeAnnouncement,
 } from "./session-notifications.js";

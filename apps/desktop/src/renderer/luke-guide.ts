@@ -413,10 +413,14 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "Conversation history",
       detail:
         "The panel's History tab shows every typed ask, transcribed spoken ask, reply, " +
-        "announcement, and session act from this app launch. Luke carries only the 20 most recent " +
-        "entries into a call. The full view stays only in this app's memory, is blocked from " +
-        "panel recordings, disappears when Luke quits, and can be cleared by hand " +
-        "from that tab. It is not saved or exportable.",
+        "announcement, and session act, kept across launches in Luke's own file on this Mac — " +
+        "up to 200 lines and 14 days, whichever cuts first. Luke carries only the 20 most " +
+        "recent entries into a call. The view is blocked from panel recordings, is not " +
+        "exportable, and can be cleared by hand from that tab. A line draws a pressable chip " +
+        "for each chat it named, going to that chat by hand; a chip keeps working for a chat " +
+        "archived since — opened at the last address its provider reported this launch — and " +
+        "a chat with no address draws none. A spoken open still reaches only sessions " +
+        "currently observed.",
     },
     {
       label: "Account",
@@ -542,8 +546,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               "an error, or finishes — a hold is a question, a permission, or an approval, " +
               "not a turn that merely ended — naming the session and what it needs. No " +
               "conversation needs to be open, the microphone stays off, and it is always on " +
-              "while voice is available. A session in a live voice conversation with its " +
-              "own provider announces nothing until that conversation closes.",
+              "while voice is available. Luke waits five seconds for nearby updates and says " +
+              "them together in one announcement. A session in a live voice conversation " +
+              "with its own provider announces nothing until that conversation closes.",
           },
           {
             // A behavior rather than a setting, for the announcements' own

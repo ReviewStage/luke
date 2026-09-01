@@ -85,7 +85,7 @@ test("an announcement's live line carries its validated subject", () => {
   const lines = liveConversationEntries({
     spokenAskPreviews: new Map(),
     captions: ["Claude Code finished checkout-service."],
-    about,
+    about: [about],
     transcriptSpoken: false,
   });
 
@@ -94,6 +94,27 @@ test("an announcement's live line carries its validated subject", () => {
       kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
       words: "Claude Code finished checkout-service.",
       identity: about,
+    },
+  ]);
+});
+
+test("a batched announcement's live line carries every validated subject", () => {
+  const about = [
+    { providerId: "claude-code", providerSessionId: "session-a" },
+    { providerId: "codex", providerSessionId: "session-b" },
+  ];
+  const lines = liveConversationEntries({
+    spokenAskPreviews: new Map(),
+    captions: ["Checkout finished and billing needs approval."],
+    about,
+    transcriptSpoken: false,
+  });
+
+  assert.deepEqual(lines, [
+    {
+      kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+      words: "Checkout finished and billing needs approval.",
+      identities: about,
     },
   ]);
 });
@@ -474,14 +495,15 @@ function rosterSession(
   return normalizeSession({ id: "conductor", displayName: "Conductor" }, session);
 }
 
-test("an announcement's one validated subject is the whole answer", () => {
+test("an announcement's validated subjects are the whole answer", () => {
   const roster = [rosterSession("a", "Checkout service"), rosterSession("b", "Payments schema")];
   assert.deepEqual(
     replyMentions({
       fixtureSpeaking: false,
-      about: { providerId: "conductor", providerSessionId: "b" },
-      // The sentence brushes past another roster title; the update was still
-      // about one session, and the chip must say so.
+      about: [
+        { providerId: "conductor", providerSessionId: "b" },
+        { providerId: "conductor", providerSessionId: "a" },
+      ],
       captions: ["Payments schema finished, right after Checkout service did."],
       sessions: roster,
     }),
@@ -490,6 +512,11 @@ test("an announcement's one validated subject is the whole answer", () => {
         kind: SESSION_MENTION_KIND.SESSION,
         providerId: "conductor",
         providerSessionId: "b",
+      },
+      {
+        kind: SESSION_MENTION_KIND.SESSION,
+        providerId: "conductor",
+        providerSessionId: "a",
       },
     ],
   );
@@ -600,7 +627,7 @@ test("an announcement's session subject leaves issue identifiers unclaimed", () 
   assert.deepEqual(
     replyIssueMentions({
       fixtureSpeaking: false,
-      about: { providerId: "conductor", providerSessionId: "b" },
+      about: [{ providerId: "conductor", providerSessionId: "b" }],
       captions: ["Checkout service finished LUKE-1."],
       issues: board,
     }),

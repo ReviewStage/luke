@@ -1,8 +1,11 @@
+import { ProviderMark } from "@sidecar/panel";
 import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   type ConversationEntryKind,
+  conversationEntryKey,
 } from "@sidecar/realtime";
+import type { SessionIdentity } from "@sidecar/session";
 import { useEffect, useRef, useState } from "react";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CheckIcon, CopyIcon } from "./settings-icons";
@@ -41,9 +44,13 @@ const ENTRY_TIME = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute:
 function HistoryEntryRow({
   entry,
   streaming,
+  openable,
+  onOpenSession,
 }: {
   entry: ConversationEntry;
   streaming?: boolean;
+  openable: (identity: SessionIdentity) => boolean;
+  onOpenSession: (identity: SessionIdentity) => void;
 }): React.JSX.Element {
   const presentation = historyEntryPresentation(entry.kind);
   const words = entry.words;
@@ -56,6 +63,12 @@ function HistoryEntryRow({
   }, [copied]);
 
   const recordedAt = entry.recordedAt === undefined ? undefined : new Date(entry.recordedAt);
+  // A chip per chat the line named, each the roster-validated identity and
+  // title the words were recorded beside, offered only while a press has
+  // somewhere to land: the session's current address, or — for a chat whose
+  // row has departed — the last one its provider reported, which the main
+  // process keeps and the press only ever names.
+  const mentions = (entry.mentions ?? []).filter((mention) => openable(mention));
 
   return (
     <li
@@ -64,32 +77,75 @@ function HistoryEntryRow({
       data-streaming={streaming ? "true" : undefined}
     >
       <small className="visually-hidden">{presentation.label}</small>
-      <p>
-        {words}
-        {recordedAt ? (
-          <time className="history-time" dateTime={recordedAt.toISOString()}>
-            {ENTRY_TIME.format(recordedAt)}
-          </time>
-        ) : null}
-      </p>
-      {/* Copying words still arriving would copy half a sentence; the control
-          appears with the settled line the same words become. */}
-      {presentation.speaker === HISTORY_ENTRY_SPEAKER.EVENT || streaming ? null : (
-        <button
-          type="button"
-          className="history-copy"
-          data-copied={copied ? "true" : undefined}
-          aria-label={copied ? "Copied" : "Copy message"}
-          onClick={() => {
-            // The visible words, never the structured model context behind an
-            // announcement: copy takes exactly what the bubble shows.
-            window.sidecar.copyText(words);
-            setCopied(true);
-          }}
-        >
-          {copied ? <CheckIcon /> : <CopyIcon />}
-        </button>
-      )}
+      {/* The bubble anchors the copy control, so a chip row wrapping wider
+          below cannot pull the glyph away from the words it copies. */}
+      <span className="history-bubble">
+        <p>
+          {words}
+          {recordedAt ? (
+            <time className="history-time" dateTime={recordedAt.toISOString()}>
+              {ENTRY_TIME.format(recordedAt)}
+            </time>
+          ) : null}
+        </p>
+        {/* Copying words still arriving would copy half a sentence; the control
+            appears with the settled line the same words become. */}
+        {presentation.speaker === HISTORY_ENTRY_SPEAKER.EVENT || streaming ? null : (
+          <button
+            type="button"
+            className="history-copy"
+            data-copied={copied ? "true" : undefined}
+            aria-label={copied ? "Copied" : "Copy message"}
+            onClick={() => {
+              // The visible words, never the structured model context behind an
+              // announcement: copy takes exactly what the bubble shows.
+              window.sidecar.copyText(words);
+              setCopied(true);
+            }}
+          >
+            {copied ? <CheckIcon /> : <CopyIcon />}
+          </button>
+        )}
+      </span>
+      {mentions.length > 0 ? (
+        <span className="history-mentions">
+          {mentions.map((mention) => (
+            <button
+              key={`${mention.providerId}:${mention.providerSessionId}`}
+              type="button"
+              className="history-chip"
+              aria-label={`Open ${mention.title}`}
+              onClick={() =>
+                onOpenSession({
+                  providerId: mention.providerId,
+                  providerSessionId: mention.providerSessionId,
+                })
+              }
+            >
+              <ProviderMark providerId={mention.markId} />
+              <span className="history-chip-name">{mention.title}</span>
+              {/* The app marks the chat's row wore when the line was recorded,
+                  saying where it is also held. Bare marks, never presses of
+                  their own: the chip is one press, like the notice band's. */}
+              {mention.applications.length > 0 ? (
+                <span className="history-chip-applications">
+                  {mention.applications.map((application) => (
+                    <span
+                      key={application.id}
+                      className="history-chip-application"
+                      role="img"
+                      aria-label={`Also in ${application.name}`}
+                      title={application.name}
+                    >
+                      <ProviderMark providerId={application.id} />
+                    </span>
+                  ))}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </span>
+      ) : null}
     </li>
   );
 }
@@ -98,8 +154,7 @@ function HistoryEntryRow({
 function keyedHistoryEntries(entries: readonly ConversationEntry[]) {
   const occurrences = new Map<string, number>();
   return entries.map((entry) => {
-    const identity = entry.identity;
-    const base = `${entry.kind}:${entry.words}:${identity?.providerId ?? ""}:${identity?.providerSessionId ?? ""}`;
+    const base = conversationEntryKey(entry);
     const occurrence = (occurrences.get(base) ?? 0) + 1;
     occurrences.set(base, occurrence);
     return { entry, key: `${base}:${occurrence}` };
@@ -118,6 +173,8 @@ export function ConversationHistoryPanel({
   entries,
   live = [],
   onClear,
+  openable,
+  onOpenSession,
 }: {
   entries: readonly ConversationEntry[];
   /**
@@ -126,6 +183,10 @@ export function ConversationHistoryPanel({
    */
   live?: readonly ConversationEntry[];
   onClear: () => void;
+  /** Whether a named chat still has an address a press could reach. */
+  openable: (identity: SessionIdentity) => boolean;
+  /** Hands a chip's roster-validated identity to the same open a row press takes. */
+  onOpenSession: (identity: SessionIdentity) => void;
 }): React.JSX.Element {
   const [confirmingClear, setConfirmingClear] = useState(false);
   const list = useRef<HTMLOListElement | null>(null);
@@ -198,11 +259,22 @@ export function ConversationHistoryPanel({
       ) : (
         <ol className="history-list" ref={list}>
           {keyedHistoryEntries(entries).map(({ entry, key }) => (
-            <HistoryEntryRow key={key} entry={entry} />
+            <HistoryEntryRow
+              key={key}
+              entry={entry}
+              openable={openable}
+              onOpenSession={onOpenSession}
+            />
           ))}
           {live.map((entry, index) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: A line still being said has no durable id, and its words change on every delta — a key made of either would remount the bubble mid-sentence, while its position holds still for exactly as long as the line does.
-            <HistoryEntryRow key={`live:${entry.kind}:${index}`} entry={entry} streaming />
+            <HistoryEntryRow
+              // biome-ignore lint/suspicious/noArrayIndexKey: A line still being said has no durable id, and its words change on every delta — a key made of either would remount the bubble mid-sentence, while its position holds still for exactly as long as the line does.
+              key={`live:${entry.kind}:${index}`}
+              entry={entry}
+              streaming
+              openable={openable}
+              onOpenSession={onOpenSession}
+            />
           ))}
         </ol>
       )}

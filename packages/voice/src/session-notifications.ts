@@ -113,7 +113,12 @@ export function sessionNoticeAnnouncement(
   return announcement(notice, change, decidedAt);
 }
 
-function reviewAnnouncement(review: AttentionReview): SessionAnnouncement | undefined {
+/** Turns one decided, non-silent review into the announcement it earned. */
+export function sessionAnnouncementFromReview(
+  review: AttentionReview,
+): SessionAnnouncement | undefined {
+  if (review.outcome !== ATTENTION_REVIEW_OUTCOME.DECIDED) return undefined;
+  if (review.decision.disposition === ATTENTION_DISPOSITION.SILENT) return undefined;
   const { update } = review;
   const change =
     update.trigger === ATTENTION_TRIGGER.ERROR_REPORTED || update.status === SESSION_STATUS.ERROR
@@ -135,18 +140,4 @@ function reviewAnnouncement(review: AttentionReview): SessionAnnouncement | unde
     change,
     review.decision.decidedAt,
   );
-}
-
-/** Selects decided, non-silent reviews and turns them into voice-owned announcements. */
-export function sessionAnnouncementsFromReviews(
-  reviews: readonly AttentionReview[],
-): readonly SessionAnnouncement[] {
-  const announcements: SessionAnnouncement[] = [];
-  for (const review of reviews) {
-    if (review.outcome !== ATTENTION_REVIEW_OUTCOME.DECIDED) continue;
-    if (review.decision.disposition === ATTENTION_DISPOSITION.SILENT) continue;
-    const spoken = reviewAnnouncement(review);
-    if (spoken) announcements.push(spoken);
-  }
-  return announcements;
 }

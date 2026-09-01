@@ -32,7 +32,7 @@ import {
   issueToolAction,
   outputSpeedUpdateEvents,
   PressAudioBuffer,
-  type ProactiveSpeech,
+  type ProactiveSpeechTurn,
   parseRealtimeServerEvent,
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
@@ -221,7 +221,10 @@ export interface RealtimeVoiceSessionCallbacks {
    * `speak()` was handed and living exactly as long as that reply; a
    * conversation reply carries none.
    */
-  onCaption(texts: readonly string[] | undefined, about: SessionIdentity | undefined): void;
+  onCaption(
+    texts: readonly string[] | undefined,
+    about: readonly SessionIdentity[] | undefined,
+  ): void;
   /**
    * The words a reply leaves behind at the moment it ends — finished, talked
    * over, or the call closing under it, whichever came. `about` is the
@@ -230,7 +233,7 @@ export interface RealtimeVoiceSessionCallbacks {
    * ahead of the audio, so a cut reply hands over slightly more than was
    * heard); the caller records them so the thread survives the call.
    */
-  onReplyEnded?(texts: readonly string[], about: SessionIdentity | undefined): void;
+  onReplyEnded?(texts: readonly string[], about: readonly SessionIdentity[] | undefined): void;
   /**
    * The developer's own spoken turn, as the voice service transcribed it. It
    * arrives on the transcription's clock — often after the reply to it has
@@ -662,7 +665,7 @@ export class RealtimeVoiceSession {
    * face the surface draws for it can never outlive the announcement, and
    * nothing a model said can choose what it points at.
    */
-  #captionAbout: SessionIdentity | undefined;
+  #captionAbout: readonly SessionIdentity[] | undefined;
   /**
    * Whether this call has ever reported a reply's audio running out. Once it
    * has, silence stops being evidence of anything: the server says when Luke is
@@ -1582,7 +1585,7 @@ export class RealtimeVoiceSession {
    * is better than holding it — the attention layer supersedes its own
    * decisions, so a sentence saved for later is a sentence likely to be stale.
    */
-  speak(speech: ProactiveSpeech): boolean {
+  speak(speech: ProactiveSpeechTurn): boolean {
     if (isArrivalSpeech(speech)) {
       const arrivalEvents = arrivalSpeechEvents(speech);
       if (arrivalEvents.length === 0 || !this.isConnected || this.#turnBusy) return false;
@@ -1598,10 +1601,10 @@ export class RealtimeVoiceSession {
     // After the start, which clears the last reply's caption and subject: the
     // announcement's reply is the one now under way, and everything it
     // captions is about this session until the reply ends.
-    this.#captionAbout = {
-      providerId: speech.providerId,
-      providerSessionId: speech.providerSessionId,
-    };
+    this.#captionAbout = speech.map(({ providerId, providerSessionId }) => ({
+      providerId,
+      providerSessionId,
+    }));
     this.#emitCaption();
     return true;
   }
