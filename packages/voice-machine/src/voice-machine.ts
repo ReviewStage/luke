@@ -195,6 +195,8 @@ function resourceInput(resource: VoiceResource) {
 }
 
 export const voiceMachine = setup({
+  // SAFETY: These assertions are XState's compile-time declarations; every runtime
+  // context, event, and input is constructed by the typed machine below.
   types: {
     context: {} as VoiceMachineContext,
     events: {} as VoiceMachineEvent,

@@ -214,6 +214,7 @@ test("meeting quiet preserves queued notice order and releases the same notices"
 
   const queue = actor.getSnapshot().children[VOICE_RESOURCE.NOTICE_HOLD_QUEUE];
   assert.ok(queue);
+  // SAFETY: The child under this fixed id is the typed noticeHoldQueueActor.
   const queueSnapshot = () => (queue.getSnapshot() as { context: NoticeQueueSnapshot }).context;
   assert.deepEqual(queueSnapshot().held, ["session-a", "session-b"]);
 

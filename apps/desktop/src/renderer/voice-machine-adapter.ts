@@ -34,11 +34,11 @@ export interface VoiceMachineAdapterOptions {
   onMismatch?: (legacy: LegacyVoiceView, chart: VoiceMachineParity) => void;
 }
 
-const PRODUCT_KIND_BY_VOICE_KIND: Readonly<Record<VoiceExchangeKind, ProductExchangeKind>> = {
+const PRODUCT_KIND_BY_VOICE_KIND = {
   [VOICE_EXCHANGE_KIND.ANNOUNCEMENT]: PRODUCT_EXCHANGE_KIND.ANNOUNCEMENT,
   [VOICE_EXCHANGE_KIND.SPOKEN]: PRODUCT_EXCHANGE_KIND.SPOKEN,
   [VOICE_EXCHANGE_KIND.TYPED]: PRODUCT_EXCHANGE_KIND.TYPED,
-};
+} satisfies Readonly<Record<VoiceExchangeKind, ProductExchangeKind>>;
 
 export function productExchangeKind(
   kind: VoiceExchangeKind | undefined,

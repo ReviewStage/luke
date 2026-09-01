@@ -23,9 +23,7 @@ export async function createVoiceMachineInspector(
   const { createBrowserInspector } = await import("@statelyai/inspect");
   const inspector = createBrowserInspector({
     sanitizeEvent: (event) => ({ type: event.type }),
-    sanitizeContext: (context) => ({
-      turnOrigin: typeof context.turnOrigin === "string" ? context.turnOrigin : undefined,
-    }),
+    sanitizeContext: () => ({}),
   });
   return {
     inspect: inspector.inspect,
