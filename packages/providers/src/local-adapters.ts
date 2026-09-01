@@ -7,6 +7,7 @@ import { DevinLocalSessionAdapter } from "./devin/local-adapter.js";
 import { GeminiCliSessionAdapter } from "./gemini-cli/adapter.js";
 import { GrokBuildSessionAdapter } from "./grok-build/adapter.js";
 import type { ObservationHookProviderId } from "./hook-registry.js";
+import { OmpSessionAdapter } from "./omp/adapter.js";
 import { OpenCodeSessionAdapter } from "./opencode/adapter.js";
 import { RadiusSessionAdapter } from "./radius/adapter.js";
 
@@ -26,6 +27,7 @@ export interface LocalSessionAdapterHomes {
   devinCliDirectory?: string;
   geminiHome?: string;
   grokHome?: string;
+  ompHome?: string;
   openCodeDataDirectory?: string;
   radiusHome?: string;
 }
@@ -76,6 +78,7 @@ export function localSessionAdapters(options: LocalSessionAdapterOptions = {}) {
       ...spool(PROVIDER_ID.GEMINI_CLI),
     }),
     grokBuild: new GrokBuildSessionAdapter({ grokHome: options.grokHome }),
+    omp: new OmpSessionAdapter({ ompHome: options.ompHome }),
     openCode: new OpenCodeSessionAdapter({
       dataDirectory: options.openCodeDataDirectory,
       ...spool(PROVIDER_ID.OPENCODE),

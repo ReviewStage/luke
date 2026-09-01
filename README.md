@@ -73,6 +73,7 @@ Connect your calendar and Luke stays quiet until your meeting is over.
 | Gemini CLI | ✅ |  |
 | Grok Build | ✅ |  |
 | Jules |  | ✅ |
+| OMP | ✅ |  |
 | OpenCode | ✅ |  |
 | Radius | ✅ |  |
 | Replicas |  | ✅ |

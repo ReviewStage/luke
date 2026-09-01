@@ -440,7 +440,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       detail:
         "Asked what a local session did, said, or is stuck on, Luke can read that session's " +
         "own recent transcript — Antigravity, Claude Code, Codex, Gemini CLI, Grok Build, " +
-        "OpenCode, Radius, and the Devin and Cursor agents on this machine today — and answer " +
+        "OMP, OpenCode, Radius, and the Devin and Cursor agents on this machine today — and " +
+        "answer " +
         "from it; the reading is kept nowhere. Some of those transcripts store no tool " +
         "results, so a reading may carry words and calls alone. A cloud session's " +
         "conversation stays with its provider, answered from roster fields alone.",

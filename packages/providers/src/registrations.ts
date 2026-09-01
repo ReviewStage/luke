@@ -216,6 +216,9 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
       }),
       credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.JULES],
     },
+    // OMP's JSONL recordings already say whose move it is: message roles,
+    // unmatched tool_execution_start, and session_exit. No observation hook.
+    [PROVIDER_ID.OMP]: { adapter: locals.omp },
     [PROVIDER_ID.OPENCODE]: {
       adapter: locals.openCode,
       // The registration is a managed plugin file in OpenCode's own plugin
