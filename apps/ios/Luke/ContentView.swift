@@ -165,10 +165,46 @@ private struct SignedInView: View {
     @Environment(AccountSession.self) private var session
     let identity: AccountIdentity
     @State private var profileShown = false
+    /// Flipped by the sessions list once its first fetch has answered,
+    /// success or failure alike, so the loading screen can never outlive the
+    /// load it stands for.
+    @State private var firstLoadDone = false
 
     var body: some View {
+        ZStack {
+            // Hidden from assistive tech and inert while the loading screen
+            // stands: the overlay covers only the visual surface, and
+            // VoiceOver or Full Keyboard Access would otherwise still reach
+            // the controls behind it and could open the profile sheet
+            // under the loader.
+            signedInContent
+                .accessibilityHidden(!firstLoadDone)
+                .disabled(!firstLoadDone)
+            // The app's own loading screen: Luke humming over the ground
+            // until the first roster answer, standing over the whole surface
+            // rather than inside any one component. It marks only time the
+            // fetch is already spending, and stands down the moment the
+            // answer lands. The whole screen leaves the safe area, not just
+            // its ground, so the face centres between the device's physical
+            // edges rather than sitting low in the asymmetric safe-area
+            // window the notch and home indicator leave.
+            if !firstLoadDone {
+                ZStack {
+                    Color.ground
+                    LukeLoadingFace()
+                        .foregroundStyle(Color.ink)
+                        .frame(width: 120)
+                }
+                .ignoresSafeArea()
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.25), value: firstLoadDone)
+    }
+
+    private var signedInContent: some View {
         NavigationStack {
-            SessionsView()
+            SessionsView(firstLoadDone: $firstLoadDone)
                 .navigationTitle("Sessions")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {

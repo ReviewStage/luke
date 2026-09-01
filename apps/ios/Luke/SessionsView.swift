@@ -5,6 +5,11 @@ import SwiftUI
 struct SessionsView: View {
     @Environment(AccountSession.self) private var session
 
+    /// True once the first fetch has answered, success or failure alike. The
+    /// signed-in screen holds its loading screen over everything until then,
+    /// and never again: later refreshes redraw in place.
+    @Binding var firstLoadDone: Bool
+
     @State private var sessions: [RosterSession] = []
     @State private var isLoading = false
     @State private var fetchError: String?
@@ -102,7 +107,10 @@ struct SessionsView: View {
                 .presentationDetents([.medium, .large])
         }
         .refreshable { await refreshSessions() }
-        .task { await refreshSessions() }
+        .task {
+            await refreshSessions()
+            firstLoadDone = true
+        }
     }
 
     private var optionsButton: some View {
