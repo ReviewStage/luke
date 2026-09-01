@@ -322,7 +322,19 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
       return;
     }
     const url = elevenlabsDialogueUrl(answer.token);
-    const socket = (this.#options.createSocket ?? defaultSocket)(url);
+    // A socket the renderer is not allowed to open throws here rather than
+    // failing on an event, and this runs detached from any caller: an
+    // uncaught throw would leave the reply owing a drain that no close and no
+    // error would ever arrive to settle, which is a reply that simply stops.
+    let socket: SpeechSocket;
+    try {
+      socket = (this.#options.createSocket ?? defaultSocket)(url);
+    } catch (error) {
+      this.#fail(
+        `Luke could not open the speech connection: ${error instanceof Error ? error.message : "the connection was refused"}`,
+      );
+      return;
+    }
     this.#socket = socket;
     socket.onopen = () => {
       if (generation !== this.#generation) return;

@@ -61,6 +61,9 @@ test("the connect policy names both recorder hosts, and only what else is reache
   const connectSrc = html.match(/connect-src ([^;"]+)/)?.[1];
   assert.deepEqual(connectSrc?.split(" "), [
     "https://api.openai.com",
+    // The speech socket alone: the ElevenLabs key stays in the main process,
+    // so the renderer opens a websocket there and never an https request.
+    "wss://api.elevenlabs.io",
     POSTHOG_HOST,
     POSTHOG_ASSETS_HOST,
   ]);

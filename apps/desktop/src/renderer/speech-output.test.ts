@@ -86,7 +86,9 @@ function fakeSocket() {
 }
 
 /** A synthesizer wired to fakes, with the timers held so a test owns the clock. */
-function harness(options: { token?: SpeechTokenAnswer; failMint?: boolean } = {}) {
+function harness(
+  options: { token?: SpeechTokenAnswer; failMint?: boolean; refuseSocket?: boolean } = {},
+) {
   const sink = fakeSink();
   const socket = fakeSocket();
   const events: string[] = [];
@@ -109,6 +111,7 @@ function harness(options: { token?: SpeechTokenAnswer; failMint?: boolean } = {}
     },
     createSocket: (url) => {
       urls.push(url);
+      if (options.refuseSocket) throw new Error("refused by the connect policy");
       return socket.socket;
     },
     schedule: (callback, delayMs) => {
@@ -314,6 +317,20 @@ test("a mint that threw is a failure like any other", async () => {
   assert.equal(h.events.length, 2);
   assert.match(h.events[0] ?? "", /^error:/);
   assert.equal(h.events[1], "drained");
+});
+
+test("a socket the renderer may not open is a failure, not a reply that stops", async () => {
+  const h = harness({ refuseSocket: true });
+  h.speech.start();
+  h.speech.append("Hello");
+  await settle();
+  // The throw happens detached from any caller, so swallowing it would leave
+  // the turn owing a drain that no close and no error would ever settle.
+  assert.deepEqual(h.events, [
+    "error:Luke could not open the speech connection: refused by the connect policy",
+    "drained",
+  ]);
+  assert.equal(h.speech.finish(), false);
 });
 
 test("an interruption drops the queue, the socket, and the audio at once", async () => {
