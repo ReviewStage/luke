@@ -5,12 +5,11 @@ import { decodeUnknown } from "@sidecar/wire/schema";
 import type * as Schema from "effect/Schema";
 import { APP_SETTING_FIELDS, APP_SETTING_SCHEMA, type AppSettingField } from "./schema.js";
 
-function decodeSettingSchema<Value>(
-  schema: Schema.Schema<Value, UnparsedWireValue>,
+function decodeSettingSchema(
+  schema: Schema.Schema<unknown, UnparsedWireValue>,
   value: UnparsedWireValue,
-): Value {
-  // SAFETY: setting schemas decode every guard outcome to its declared value type.
-  return decodeUnknown(schema, value) as Value;
+): unknown {
+  return decodeUnknown(schema, value);
 }
 
 const SAMPLE_WIRE = {
@@ -47,7 +46,10 @@ test("setting schemas agree with guards on representative wire values", () => {
     const definition = APP_SETTING_SCHEMA[field];
     const wire = SAMPLE_WIRE[field];
     const guarded = definition.guard(wire);
-    const decoded = decodeSettingSchema(definition.schema, wire);
+    const decoded = decodeSettingSchema(
+      definition.schema as Schema.Schema<unknown, UnparsedWireValue>,
+      wire,
+    );
     assert.deepEqual(decoded, guarded.value, field);
   }
 });
@@ -56,7 +58,10 @@ test("setting schemas fall back like guards on corrupt wire values", () => {
   for (const field of APP_SETTING_FIELDS) {
     const definition = APP_SETTING_SCHEMA[field];
     const guarded = definition.guard("not-a-valid-value");
-    const decoded = decodeSettingSchema(definition.schema, "not-a-valid-value");
+    const decoded = decodeSettingSchema(
+      definition.schema as Schema.Schema<unknown, UnparsedWireValue>,
+      "not-a-valid-value",
+    );
     assert.deepEqual(decoded, guarded.value, field);
   }
 });
