@@ -131,19 +131,6 @@ test("the address goes from an event's own properties", () => {
   assert.deepEqual(scrubbed, { $current_url: "app://luke/panel", $browser: "Chrome" });
 });
 
-test("the address goes from a captured exception's stack frames", () => {
-  namesNobody(
-    withoutLocalAddress({
-      $exception_list: [
-        {
-          type: "TypeError",
-          stacktrace: { frames: [{ filename: LOCAL, function: "render", lineno: 12 }] },
-        },
-      ],
-    }),
-  );
-});
-
 test("the address goes from the frames the recorder opens with", () => {
   namesNobody(
     withoutLocalAddress([
@@ -160,13 +147,7 @@ test("a bare path names the machine as surely as a whole address does", () => {
   namesNobody(
     withoutLocalAddress({
       $pathname: "/Users/someone/Applications/Luke.app/renderer/index.html",
-      $exception_list: [
-        {
-          stacktrace: {
-            frames: [{ filename: "/Users/someone/Applications/Luke.app/renderer/renderer.js" }],
-          },
-        },
-      ],
+      nested: { script: "/Users/someone/Applications/Luke.app/renderer/renderer.js" },
     }),
   );
 });

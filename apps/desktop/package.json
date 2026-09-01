@@ -37,8 +37,9 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "devDependencies": {
-    "@sidecar/acts": "workspace:*",
+    "@sentry/esbuild-plugin": "5.4.0",
     "@sidecar/account": "workspace:*",
+    "@sidecar/acts": "workspace:*",
     "@sidecar/analytics": "workspace:*",
     "@sidecar/attention": "workspace:*",
     "@sidecar/calendar": "workspace:*",
@@ -72,6 +73,7 @@
     "typescript": "7.0.2"
   },
   "dependencies": {
+    "@sentry/electron": "7.18.0",
     "electron-updater": "6.8.9"
   }
 }

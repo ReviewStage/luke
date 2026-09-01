@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import * as Sentry from "@sentry/electron/main";
 import {
   AccountClient,
   AccountSessionManager,
@@ -171,7 +172,7 @@ import { MicrophoneRouteWatcher } from "./native/microphone-route";
 import { OutputVolumeWatcher } from "./native/output-volume";
 import { ProviderKeyVaultSync, type VaultSyncAccount } from "./provider-key-vault-sync";
 import { type BridgeContext, registerBridge, registerBridgeEntry } from "./register-bridge";
-import { runModeFor } from "./run-mode";
+import { runModeFor, sentryReportingEnabled } from "./run-mode";
 import {
   currentSessionAnnouncements,
   heldSessionAnnouncements,
@@ -218,6 +219,11 @@ const captureMode = captureOutput !== undefined;
 // the fixture snapshot and no provider is observed. Capture runs always imply it.
 const fixtureMode = captureMode || fixtureName !== undefined;
 const runMode = runModeFor({ capture: captureMode, fixture: fixtureName !== undefined });
+declare const PACKAGED_SENTRY_DSN: string;
+Sentry.init({
+  dsn: PACKAGED_SENTRY_DSN,
+  enabled: sentryReportingEnabled(runMode.sendsNetwork, PACKAGED_SENTRY_DSN),
+});
 // A development build may be pointed at a local account service; a packaged one
 // may not. The override redirects the whole sign-in — including the identity
 // request that carries the access token — so it stops at the packaging boundary

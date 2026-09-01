@@ -1,7 +1,10 @@
+import * as Sentry from "@sentry/electron/renderer";
 import { createRoot } from "react-dom/client";
 import { WINDOW_ROLE } from "#shared/wire/session";
 import { App } from "./app";
 import { IntroductionTakeover } from "./introduction/introduction-takeover";
+
+Sentry.init();
 
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Renderer root element is missing");

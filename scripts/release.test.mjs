@@ -42,6 +42,14 @@ test("manual releases install the locked dependencies before checking the worksp
   assert.notEqual(bootstrapCall, -1);
   assert.ok(bootstrapCall < checkCall);
   assert.ok(checkCall < desktopReleaseCall);
+  for (const credential of [
+    "GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET",
+    "POSTHOG_PROJECT_API_KEY",
+    "SENTRY_AUTH_TOKEN",
+    "SENTRY_DSN",
+  ]) {
+    assert.match(releaseScript, new RegExp(`\\$\\{${credential}:-}`));
+  }
 });
 
 test("release DMG names include the desktop version and packaged architecture", () => {
@@ -130,7 +138,12 @@ test("hosted releases require and package every desktop integration credential",
     workflow.indexOf("- name: Verify signed application"),
   );
 
-  for (const credential of ["GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET", "POSTHOG_PROJECT_API_KEY"]) {
+  for (const credential of [
+    "GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET",
+    "POSTHOG_PROJECT_API_KEY",
+    "SENTRY_AUTH_TOKEN",
+    "SENTRY_DSN",
+  ]) {
     const secretMapping = new RegExp(`${credential}: \\\${{ secrets\\.${credential} }}`);
     assert.match(credentialCheck, secretMapping);
     assert.match(releaseBuild, secretMapping);
