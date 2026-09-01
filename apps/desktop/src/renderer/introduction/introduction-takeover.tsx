@@ -1,10 +1,6 @@
 import { FIXTURE_EPOCH_MS } from "@sidecar/fixtures";
 import { WingFace as LukeFace } from "@sidecar/panel";
-import {
-  introductionSessionSyncEvents,
-  REALTIME_STATUS,
-  type RealtimeStatus,
-} from "@sidecar/realtime";
+import { introductionSessionSyncEvents, REALTIME_STATUS } from "@sidecar/realtime";
 import { DEFAULT_VOICE_HOTKEYS, TALK_KEY_RELEASE, talkKeyRelease } from "@sidecar/settings";
 import {
   FACE_MOTION,
@@ -16,7 +12,14 @@ import {
 } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
-import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { AppBootstrap } from "#shared/wire/session";
 import { Keycaps } from "../keycaps";
 import { usePrefersReducedMotion } from "../luke-face-mood";
@@ -31,6 +34,7 @@ import { MicrophoneIcon } from "../settings-icons";
 import { useSignInFaceCycle } from "../sign-in-gate";
 import { useMeasuredHeight } from "../use-measured-height";
 import { activeVoiceStream } from "../use-voice-conversation";
+import { VOICE_MACHINE_RELEASE, VoiceMachineController } from "../voice-machine-adapter";
 import { outputSilent } from "../volume-hint";
 import { WAVEFORM_VOICE, Waveform, type WaveformVoice } from "../waveform";
 import { IntroductionAudio } from "./introduction-audio";
@@ -193,7 +197,29 @@ export function IntroductionTakeover({
 }): React.JSX.Element {
   const [beat, setBeat] = useState<IntroductionBeat>(INTRODUCTION_BEAT.DARK);
   const beatRef = useRef<IntroductionBeat>(beat);
-  const [voiceStatus, setVoiceStatus] = useState<RealtimeStatus>(REALTIME_STATUS.IDLE);
+  const voiceMachineRef = useRef<VoiceMachineController | undefined>(undefined);
+  if (!voiceMachineRef.current) {
+    voiceMachineRef.current = new VoiceMachineController();
+    voiceMachineRef.current.introductionStarted();
+  }
+  const voiceMachine = voiceMachineRef.current;
+  const subscribeVoiceMachine = useCallback(
+    (notify: () => void) => {
+      const subscription = voiceMachine.subscribe(notify);
+      return () => subscription.unsubscribe();
+    },
+    [voiceMachine],
+  );
+  useSyncExternalStore(
+    subscribeVoiceMachine,
+    () => voiceMachine.snapshot,
+    () => voiceMachine.snapshot,
+  );
+  const voiceStatus = voiceMachine.status;
+  useEffect(() => {
+    voiceMachine.setMicrophoneStatus(bootstrap.microphoneStatus);
+    voiceMachine.setOutputSilent(outputSilent(bootstrap.outputAudio));
+  }, [bootstrap.microphoneStatus, bootstrap.outputAudio, voiceMachine]);
   const [localStream, setLocalStream] = useState<MediaStream | undefined>(undefined);
   const [remoteStream, setRemoteStream] = useState<MediaStream | undefined>(undefined);
   const [meterAnalyser, setMeterAnalyser] = useState<AnalyserNode | undefined>(undefined);
@@ -251,8 +277,6 @@ export function IntroductionTakeover({
    * marks nothing, so the introduction still plays for real on a later launch.
    */
   const givenRef = useRef(false);
-  /** The talk key's latch, the same tap-to-latch the app's own key keeps. */
-  const latchedRef = useRef(false);
   const heldSinceRef = useRef(0);
   /** Whether the connect loop has delivered its verdict, ready or failed. */
   const connectSettledRef = useRef(false);
@@ -290,7 +314,10 @@ export function IntroductionTakeover({
         speakRetryTimerRef.current = undefined;
       }
       const session = sessionRef.current;
-      if (session?.speakIntroduction(line)) return;
+      if (session?.speakIntroduction(line)) {
+        voiceMachine.introductionSpeak();
+        return;
+      }
       if (attempts > 0) {
         const beatAtSchedule = beatRef.current;
         speakRetryTimerRef.current = setTimeout(() => {
@@ -302,7 +329,7 @@ export function IntroductionTakeover({
       }
       dispatch(INTRODUCTION_EVENT.VOICE_FAILED);
     },
-    [dispatch],
+    [dispatch, voiceMachine],
   );
 
   const speakLines = useCallback(
@@ -322,6 +349,8 @@ export function IntroductionTakeover({
   const ensureSession = useCallback((): RealtimeVoiceSession => {
     sessionRef.current ??= new RealtimeVoiceSession({
       requestConnection: () => window.sidecar.requestRealtimeCredential(),
+      toolsAllowed: () => voiceMachine.toolsAllowed,
+      createPressAudioBuffer: () => voiceMachine.createPressAudioBuffer(),
       sessionSyncEvents: introductionSessionSyncEvents,
       requestMicrophoneStream: () =>
         openPreferredMicrophone({
@@ -331,7 +360,7 @@ export function IntroductionTakeover({
             navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false }),
         }),
       onStatus: (status) => {
-        setVoiceStatus(status);
+        voiceMachine.observeSessionStatus(status);
         // While the connect loop runs it owns the verdict — it retries a
         // failed mint before giving up, and a failure dispatched here would
         // abandon the introduction on the first attempt.
@@ -371,7 +400,7 @@ export function IntroductionTakeover({
       },
     });
     return sessionRef.current;
-  }, [dispatch, trySpeak]);
+  }, [dispatch, trySpeak, voiceMachine]);
 
   // The whole flow's standing wiring: the call opening in the background under
   // the dark, the account landing that completes it from anywhere, and the
@@ -410,26 +439,27 @@ export function IntroductionTakeover({
     const unsubscribePress = window.sidecar.onVoiceHotkeyPress(() => {
       if (beatRef.current !== INTRODUCTION_BEAT.PRACTICE) return;
       // A latched turn is already open; this press says done — the release owns it.
-      if (latchedRef.current) return;
+      if (voiceMachine.talkLatched) return;
       heldSinceRef.current = Date.now();
       setTalkHeld(true);
+      voiceMachine.pressDown();
       ensureSession().beginTurn();
     });
     const unsubscribeRelease = window.sidecar.onVoiceHotkeyRelease(() => {
       if (beatRef.current !== INTRODUCTION_BEAT.PRACTICE) return;
       // A release with no press behind it — the key was already down when the
       // beat began — holds no turn to send.
-      if (heldSinceRef.current === 0 && !latchedRef.current) return;
+      if (heldSinceRef.current === 0 && !voiceMachine.talkLatched) return;
       const release = talkKeyRelease({
         heldMs: Date.now() - heldSinceRef.current,
-        latched: latchedRef.current,
+        latched: voiceMachine.talkLatched,
       });
       // A latched turn keeps the caps pressed: the floor is still theirs.
       if (release === TALK_KEY_RELEASE.LATCH) {
-        latchedRef.current = true;
+        voiceMachine.pressReleased(VOICE_MACHINE_RELEASE.LATCH);
         return;
       }
-      latchedRef.current = false;
+      voiceMachine.pressReleased(VOICE_MACHINE_RELEASE.SEND);
       heldSinceRef.current = 0;
       practiceAskedRef.current = true;
       setTalkHeld(false);
@@ -442,11 +472,12 @@ export function IntroductionTakeover({
       unsubscribeRelease();
       if (speakRetryTimerRef.current !== undefined) clearTimeout(speakRetryTimerRef.current);
       void session.close();
+      voiceMachine.stopActor();
       audioRef.current?.dispose();
       void meterContextRef.current?.close().catch(() => undefined);
       meterContextRef.current = undefined;
     };
-  }, [dispatch, ensureSession]);
+  }, [dispatch, ensureSession, voiceMachine]);
 
   // The meter reads whoever holds the floor, exactly as the app's own does:
   // Luke's stream while he replies, the developer's while a practice turn is
@@ -601,6 +632,7 @@ export function IntroductionTakeover({
         // stands down to — and the answer is what brings it back.
         void window.sidecar.requestMicrophone().then((status) => {
           if (beatRef.current !== INTRODUCTION_BEAT.MICROPHONE_DIALOG) return;
+          voiceMachine.setMicrophoneStatus(status);
           dispatch(
             status === "granted"
               ? INTRODUCTION_EVENT.MICROPHONE_GRANTED
@@ -665,7 +697,7 @@ export function IntroductionTakeover({
       default:
         return;
     }
-  }, [audio, beat, bootstrap, dispatch, reducedMotion, speakLines]);
+  }, [audio, beat, bootstrap, dispatch, reducedMotion, speakLines, voiceMachine]);
 
   // Once the flight lands, the desktop is the developer's again: the window
   // stops intercepting the pointer, and the landed panel and its strip are

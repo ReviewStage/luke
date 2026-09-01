@@ -184,7 +184,9 @@ function harness(
     carryAction?: SessionActionCarrier;
     carryAppAction?: AppActionCarrier;
     carryIssueAction?: IssueActionCarrier;
+    toolsAllowed?: () => boolean;
     idleTimeoutMs?: number;
+    externalIdleTimer?: boolean;
     captureSessionSync?: boolean;
     /** Lets a test ride the status edges, the way the announcer does. */
     onStatus?: (status: RealtimeStatus) => void;
@@ -375,6 +377,9 @@ function harness(
   if (options.idleTimeoutMs !== undefined) {
     sessionOptions.idleTimeoutMs = options.idleTimeoutMs;
   }
+  if (options.externalIdleTimer !== undefined) {
+    sessionOptions.externalIdleTimer = options.externalIdleTimer;
+  }
   if (options.carryAct) {
     sessionOptions.carryAct = options.carryAct;
   } else if (options.carryAction || options.carryAppAction || options.carryIssueAction) {
@@ -387,6 +392,9 @@ function harness(
       }
       return options.carryAction?.(act) ?? Promise.resolve({ status: "rejected" });
     };
+  }
+  if (options.toolsAllowed) {
+    sessionOptions.toolsAllowed = options.toolsAllowed;
   }
   const session = new RealtimeVoiceSession(sessionOptions);
 
@@ -3154,6 +3162,36 @@ test("a typed ask can carry a tool call, because the developer opened the turn",
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 });
 
+test("the statechart guard can disarm a developer-shaped tool turn", async () => {
+  let carried = false;
+  const context = harness({
+    toolsAllowed: () => false,
+    carryAction: async () => {
+      carried = true;
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  context.session.sendText("ask claude code to add tests");
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-1",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(carried, false);
+});
+
 test("a typed ask interrupts the reply it arrives over", async () => {
   let now = 10_000;
   const context = harness({ now: () => now });
@@ -5380,6 +5418,12 @@ test("an idle call is put away, and a call being used is not", async () => {
 
   // What the retirement puts away is the conversation; the device is long gone.
   assert.equal(context.session.status, REALTIME_STATUS.IDLE);
+});
+
+test("the session leaves idle retirement to the statechart when configured", async () => {
+  const context = harness({ externalIdleTimer: true });
+  await context.session.connect();
+  assert.equal(context.idleArmed(), false);
 });
 
 test("an idle call that was taken up in the meantime is left alone", async () => {

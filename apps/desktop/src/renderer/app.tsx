@@ -2064,6 +2064,12 @@ export function App(): React.JSX.Element {
   } = useVoiceConversation({
     preferBuiltInMicrophone: (settings ?? bootstrapSettings)?.preferBuiltInMicrophone ?? true,
     agentTraceEnabled: bootstrap?.agentTraceEnabled === true,
+    voiceMachineInspection: {
+      captureMode: bootstrap?.captureMode === true,
+      fixtureMode: bootstrap?.fixtureMode === true,
+      packaged: bootstrap?.packaged !== false,
+      requested: bootstrap?.voiceMachineInspectionEnabled === true,
+    },
     sessions,
     workspaceProjects,
     defaultWorkspaceProvider,

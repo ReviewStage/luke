@@ -121,6 +121,11 @@ export interface AppBootstrap {
    * every packaged run by construction.
    */
   agentTraceEnabled: boolean;
+  /**
+   * Whether this unpackaged live run explicitly requested Stately inspection.
+   * False for packaged, fixture, and capture runs by construction.
+   */
+  voiceMachineInspectionEnabled: boolean;
   /** Whether Superset's bundled CLI exists on this Mac. */
   supersetInstalled: boolean;
   /** Whether that CLI also has its own login configuration. */
