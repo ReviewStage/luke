@@ -15,6 +15,9 @@ public protocol AudioCapturer: Sendable {
 public protocol AudioPlayer: Sendable {
     /// Queues raw PCM16 samples for playback.
     func enqueue(_ samples: [Int16])
+    /// Lets already-queued buffers finish playing, then calls `completion` on
+    /// the main actor. The player must not accept new buffers after this call.
+    func drain(then completion: @MainActor @Sendable @escaping () -> Void)
     func stop()
 }
 
@@ -158,6 +161,8 @@ public final class RealtimeSession {
         status = .connecting
         do {
             let connection = try await options.requestConnection()
+            // close() may have been called while the mint was in flight.
+            guard status == .connecting else { return }
             let ws: any WebSocketTask
             if let factory = options.makeWebSocket {
                 ws = factory(connection.wsURL, connection.ephemeralKey)
@@ -181,7 +186,8 @@ public final class RealtimeSession {
     public func beginTurn() {
         guard status == .connecting || status == .ready else { return }
         isArmed = true
-        resetIdleTimer()
+        // Idle timer only runs between turns; cancel it rather than restart.
+        idleTask?.cancel(); idleTask = nil
         startCapturing()
         if status == .ready { status = .listening }
     }
@@ -223,19 +229,25 @@ public final class RealtimeSession {
         let c = options.makeAudioCapturer()
         capturer = c
         captureTask = Task { [weak self] in
-            guard let stream = try? c.start() else { return }
-            for await chunk in stream {
-                guard let self else { return }
-                switch self.status {
-                case .connecting:
-                    self.pressBuffer.push(chunk)
-                case .listening:
-                    guard let ch = self.channel else { break }
-                    let msg = self.audioAppendJSON(chunk)
-                    try? await ch.sendText(msg)
-                default:
-                    break
+            do {
+                let stream = try c.start()
+                for await chunk in stream {
+                    guard let self else { return }
+                    switch self.status {
+                    case .connecting:
+                        self.pressBuffer.push(chunk)
+                    case .listening:
+                        guard let ch = self.channel else { break }
+                        let msg = self.audioAppendJSON(chunk)
+                        try? await ch.sendText(msg)
+                    default:
+                        break
+                    }
                 }
+            } catch {
+                guard let self, !Task.isCancelled else { return }
+                self.options.onError(error.localizedDescription)
+                self.close()
             }
         }
     }
@@ -308,10 +320,21 @@ public final class RealtimeSession {
             }
 
         case "output_audio_buffer.stopped":
-            player?.stop(); player = nil
-            if status == .speaking {
-                status = .ready
-                resetIdleTimer()
+            // The server has finished sending audio, but locally-buffered samples
+            // may not have played yet. Drain them before stopping and clearing.
+            // Only move to .ready if no tool follow-up is pending — if it is,
+            // handleResponseDone will keep the session in .thinking.
+            let hasPendingCalls = !pendingCalls.isEmpty
+            if let p = player {
+                player = nil
+                p.drain { [weak self] in
+                    p.stop()
+                    self?.options.onCaption(nil)
+                    if self?.status == .speaking, !hasPendingCalls {
+                        self?.status = .ready
+                        self?.resetIdleTimer()
+                    }
+                }
             }
 
         case "response.audio_transcript.delta":
@@ -321,8 +344,9 @@ public final class RealtimeSession {
             }
 
         case "response.audio_transcript.done":
+            // Reset the accumulation buffer so the next response's transcript
+            // starts fresh. The displayed caption stays until audio drains.
             captionBuffer = ""
-            options.onCaption(nil)
 
         case "response.output_item.added":
             if let item = json["item"] as? [String: Any],
@@ -396,6 +420,9 @@ public final class RealtimeSession {
         idleTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
             guard !Task.isCancelled else { return }
+            // Signal the UI before closing so it can clear the session reference
+            // and allow reconnection.
+            self?.options.onError(nil)
             self?.close()
         }
     }

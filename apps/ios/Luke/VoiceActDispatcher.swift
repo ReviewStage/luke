@@ -49,7 +49,6 @@ private func actPath(for toolName: String) -> String? {
     case "send_session_message": return "api/acts/message"
     case "run_session_control": return "api/acts/control"
     case "add_workspace_agent": return "api/acts/agent"
-    case "create_workspace": return "api/acts/workspace"
     case "rename_workspace": return "api/acts/rename-workspace"
     case "rename_session": return "api/acts/rename-session"
     default: return nil
@@ -62,13 +61,6 @@ private func actBody(toolName: String, arguments: [String: Any]) -> [String: Any
     var body: [String: Any] = [:]
 
     switch toolName {
-    case "create_workspace":
-        if let v = str("provider_id") { body["providerId"] = v }
-        if let v = str("project_id") { body["providerProjectId"] = v }
-        if let v = str("name") { body["name"] = v }
-        if let v = str("task") { body["task"] = v }
-        if let v = str("model") { body["model"] = v }
-        if let v = str("effort") { body["effort"] = v }
     default:
         if let v = str("provider_id") { body["providerId"] = v }
         if let v = str("provider_session_id") { body["providerSessionId"] = v }

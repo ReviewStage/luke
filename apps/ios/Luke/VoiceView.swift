@@ -28,7 +28,12 @@ private final class VoiceSessionModel {
                     .mint(accessToken: token)
                 return connection
             },
-            onStatus: { [weak self] newStatus in self?.status = newStatus },
+            onStatus: { [weak self] newStatus in
+                self?.status = newStatus
+                // Clear the session reference when it goes idle so start() can
+                // reconnect on the next press.
+                if newStatus == .idle { self?.session = nil }
+            },
             onCaption: { [weak self] text in self?.caption = text },
             onError: { [weak self] message in
                 self?.errorMessage = message ?? "Connection error"
@@ -130,7 +135,10 @@ struct VoiceView: View {
     }
 
     private var talkButton: some View {
-        let canTalk = model.status == .ready || model.status == .connecting
+        // Keep the view enabled while the user is actively pressing — disabling
+        // during .listening would cancel the in-flight DragGesture and fire
+        // onEnded immediately, collapsing every hold into an instant tap.
+        let canTalk = model.status == .ready || model.status == .connecting || isPressing
         return Circle()
             .fill(talkButtonColor)
             .overlay(

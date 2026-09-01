@@ -43,6 +43,9 @@ private final class SilentCapturer: AudioCapturer, Sendable {
 
 private final class NullPlayer: AudioPlayer, Sendable {
     func enqueue(_ samples: [Int16]) {}
+    func drain(then completion: @MainActor @Sendable @escaping () -> Void) {
+        Task { @MainActor in completion() }
+    }
     func stop() {}
 }
 

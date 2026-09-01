@@ -2,35 +2,47 @@ import AVFoundation
 import LukeKit
 
 /// Captures 24 kHz PCM16 mono audio from the microphone using AVAudioEngine.
-/// Taps the input node at Float32 (the native tap format AVAudioEngine requires)
-/// and converts each frame to Int16 before yielding it to the stream.
+/// Taps the input node at its hardware format, converts each frame to 24 kHz
+/// Float32 via AVAudioConverter, then yields Int16 samples to the stream.
 final class VoiceAudioCapturer: AudioCapturer, @unchecked Sendable {
     private let engine = AVAudioEngine()
 
     func start() throws -> AsyncStream<[Int16]> {
+        let audioSession = AVAudioSession.sharedInstance()
+        try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
+        try audioSession.setActive(true)
+
         let inputNode = engine.inputNode
-        // Float32 mono at 24 kHz: AVAudioEngine requires Float32 for installTap,
-        // so we convert to Int16 in the tap callback.
-        guard let format = AVAudioFormat(
+        let hwFormat = inputNode.outputFormat(forBus: 0)
+        guard let targetFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: Double(PressAudioBuffer.sampleRate),
             channels: 1,
             interleaved: false
-        ) else {
+        ), let converter = AVAudioConverter(from: hwFormat, to: targetFormat) else {
             throw CocoaError(.fileReadUnknown)
         }
+
+        let hwRate = hwFormat.sampleRate
+        let targetRate = targetFormat.sampleRate
         let (stream, continuation) = AsyncStream<[Int16]>.makeStream()
 
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, _ in
-            guard
-                let channelData = buffer.floatChannelData,
-                buffer.frameLength > 0
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: hwFormat) { buffer, _ in
+            let capacity = AVAudioFrameCount(Double(buffer.frameLength) * targetRate / hwRate)
+            guard capacity > 0,
+                  let converted = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: max(capacity, 1))
             else { return }
-            let count = Int(buffer.frameLength)
+            var error: NSError?
+            converter.convert(to: converted, error: &error) { _, status in
+                status.pointee = .haveData
+                return buffer
+            }
+            guard error == nil, converted.frameLength > 0,
+                  let channelData = converted.floatChannelData else { return }
+            let count = Int(converted.frameLength)
             let ptr = channelData[0]
             var samples = [Int16](repeating: 0, count: count)
             for i in 0 ..< count {
-                // Clamp and convert float [-1, 1] → Int16
                 let clamped = max(-1.0, min(1.0, ptr[i]))
                 samples[i] = Int16(clamped * 32767.0)
             }

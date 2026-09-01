@@ -39,6 +39,21 @@ final class VoiceAudioPlayer: AudioPlayer, @unchecked Sendable {
         playerNode.scheduleBuffer(buffer, completionHandler: nil)
     }
 
+    func drain(then completion: @MainActor @Sendable @escaping () -> Void) {
+        // Schedule a 1-sample silent sentinel. The .dataConsumed callback fires
+        // only after the hardware has played all previously-scheduled buffers,
+        // so the tail of the response is not cut off.
+        guard let sentinel = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 1) else {
+            Task { @MainActor in completion() }
+            return
+        }
+        sentinel.frameLength = 1
+        sentinel.floatChannelData?[0][0] = 0
+        playerNode.scheduleBuffer(sentinel, completionCallbackType: .dataConsumed) { _ in
+            Task { @MainActor in completion() }
+        }
+    }
+
     func stop() {
         playerNode.stop()
         engine.stop()

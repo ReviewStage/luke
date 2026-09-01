@@ -72,7 +72,8 @@ public final class VoiceMintClient: Sendable {
             let model = conn["model"] as? String, !model.isEmpty,
             let wsUrlStr = conn["wsUrl"] as? String,
             let wsURL = URL(string: wsUrlStr),
-            wsURL.scheme == "wss"
+            wsURL.scheme == "wss",
+            wsURL.host == "api.openai.com"
         else { throw VoiceMintClientError.invalidResponse }
 
         guard
