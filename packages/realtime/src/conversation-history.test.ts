@@ -19,6 +19,7 @@ import {
   maximumConversationEntryLength,
   recentConversationEntries,
   sessionActConversationEntry,
+  streamingConversationEntry,
 } from "./conversation-history.js";
 import { SESSION_NO_LONGER_OBSERVED_NOTE } from "./realtime-protocol.js";
 import { SESSION_TOOL_KIND } from "./realtime-tools.js";
@@ -62,6 +63,24 @@ test("appending flattens, bounds, and retires the oldest lines", () => {
   }
   assert.equal(entries.length, maximumConversationEntries);
   assert.equal(entries[0]?.words, "line 3");
+});
+
+test("a streaming line is bounded like the settled line it previews", () => {
+  const identity = { providerId: "claude-code", providerSessionId: "session-a" };
+  const line = streamingConversationEntry(
+    CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+    `  Checkout\n\nfinished ${"x".repeat(2 * maximumConversationEntryLength)}  `,
+    identity,
+  );
+  assert.match(line?.words ?? "", /^Checkout finished x/);
+  assert.ok((line?.words.length ?? 0) <= maximumConversationEntryLength);
+  assert.deepEqual(line?.identity, identity);
+  // A line still growing has not happened yet: the record stamps at settle.
+  assert.equal(line?.recordedAt, undefined);
+
+  // Words that flatten to nothing preview nothing, exactly as they would
+  // append nothing.
+  assert.equal(streamingConversationEntry(CONVERSATION_ENTRY_KIND.REPLY, "   "), undefined);
 });
 
 test("every way into the thread stamps when the line was recorded", () => {

@@ -1219,6 +1219,25 @@ test("inbound events the conversation acts on are parsed, and nothing else is", 
   );
   assert.deepEqual(
     parseRealtimeServerEvent({
+      type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_DELTA,
+      item_id: "item-2",
+      delta: "how is the",
+    }),
+    {
+      type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_DELTA,
+      itemId: "item-2",
+      delta: "how is the",
+    },
+  );
+  assert.deepEqual(
+    parseRealtimeServerEvent({
+      type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_FAILED,
+      item_id: "item-2",
+    }),
+    { type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_FAILED, itemId: "item-2" },
+  );
+  assert.deepEqual(
+    parseRealtimeServerEvent({
       type: REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED,
       item_id: "item-2",
     }),
@@ -1265,6 +1284,10 @@ test("inbound events the conversation acts on are parsed, and nothing else is", 
     // A transcription that came back empty said nothing worth acting on.
     { type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED, transcript: "  " },
     { type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED, transcript: "hello" },
+    // A preview without its turn, or without words, previews nothing.
+    { type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_DELTA, delta: "hello" },
+    { type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_DELTA, item_id: "item-2", delta: "" },
+    { type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_FAILED },
     { type: REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED },
     { type: "session.updated" },
   ];

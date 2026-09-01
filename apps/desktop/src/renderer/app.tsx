@@ -2052,6 +2052,7 @@ export function App(): React.JSX.Element {
     askLuke,
     conversationHistory,
     clearConversationHistory,
+    liveConversationEntries,
     voiceTurn,
     lukeCaptions,
     mentionedSessions,
@@ -3198,6 +3199,7 @@ export function App(): React.JSX.Element {
             onOpenSessionApplication={openSessionApplication}
             writes={sessionWrites}
             conversationHistory={conversationHistory}
+            liveConversationEntries={liveConversationEntries}
             onClearConversationHistory={clearConversationHistory}
             ask={askLuke}
             // Reaching for the composer during a spent day is answered before

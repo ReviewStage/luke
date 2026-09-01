@@ -106,6 +106,27 @@ function boundedEntryWords(words: string): string {
 }
 
 /**
+ * One line still being said, for the panel to draw under the settled thread
+ * while its words grow. It is bounded exactly as its settled form will be, so
+ * the streaming bubble and the recorded line can never disagree, and it
+ * carries no timestamp: the record stamps a line only when it settles, and a
+ * line still growing has not happened yet. Presentation only — nothing built
+ * here may enter the thread; each line settles through its own recording
+ * path, or leaves without one exactly as the words it previews do.
+ */
+export function streamingConversationEntry(
+  kind: ConversationEntryKind,
+  words: string,
+  identity?: SessionIdentity,
+): ConversationEntry | undefined {
+  const bounded = boundedEntryWords(words);
+  if (!bounded) return undefined;
+  const entry: ConversationEntry = { kind, words: bounded };
+  if (identity) entry.identity = identity;
+  return entry;
+}
+
+/**
  * Places a spoken ask where its turn actually happened. The transcription
  * arrives on the service's own clock — usually while the reply is still being
  * spoken, sometimes after it has ended — and a plain append would then store

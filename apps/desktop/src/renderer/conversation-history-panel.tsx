@@ -38,7 +38,13 @@ const COPY_CONFIRMATION_MS = 1500;
 
 const ENTRY_TIME = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
 
-function HistoryEntryRow({ entry }: { entry: ConversationEntry }): React.JSX.Element {
+function HistoryEntryRow({
+  entry,
+  streaming,
+}: {
+  entry: ConversationEntry;
+  streaming?: boolean;
+}): React.JSX.Element {
   const presentation = historyEntryPresentation(entry.kind);
   const words = entry.words;
   const [copied, setCopied] = useState(false);
@@ -52,7 +58,11 @@ function HistoryEntryRow({ entry }: { entry: ConversationEntry }): React.JSX.Ele
   const recordedAt = entry.recordedAt === undefined ? undefined : new Date(entry.recordedAt);
 
   return (
-    <li className="history-entry" data-speaker={presentation.speaker}>
+    <li
+      className="history-entry"
+      data-speaker={presentation.speaker}
+      data-streaming={streaming ? "true" : undefined}
+    >
       <small className="visually-hidden">{presentation.label}</small>
       <p>
         {words}
@@ -62,7 +72,9 @@ function HistoryEntryRow({ entry }: { entry: ConversationEntry }): React.JSX.Ele
           </time>
         ) : null}
       </p>
-      {presentation.speaker === HISTORY_ENTRY_SPEAKER.EVENT ? null : (
+      {/* Copying words still arriving would copy half a sentence; the control
+          appears with the settled line the same words become. */}
+      {presentation.speaker === HISTORY_ENTRY_SPEAKER.EVENT || streaming ? null : (
         <button
           type="button"
           className="history-copy"
@@ -94,16 +106,31 @@ function keyedHistoryEntries(entries: readonly ConversationEntry[]) {
   });
 }
 
+/**
+ * How close to the tail a reader still counts as following it. Words arriving
+ * grow the list under the reader a little at a time, so the tail they were
+ * pinned to is at most a delta away; a reader who scrolled up to reread is
+ * further than that, and the stream must not drag them back down.
+ */
+const STREAM_FOLLOW_SLACK_PX = 48;
+
 export function ConversationHistoryPanel({
   entries,
+  live = [],
   onClear,
 }: {
   entries: readonly ConversationEntry[];
+  /**
+   * The lines still being said, drawn under the settled thread as the same
+   * bubbles they will settle into — words growing, no timestamp, no copy.
+   */
+  live?: readonly ConversationEntry[];
   onClear: () => void;
 }): React.JSX.Element {
   const [confirmingClear, setConfirmingClear] = useState(false);
   const list = useRef<HTMLOListElement | null>(null);
   const entryCount = entries.length;
+  const liveLength = live.reduce((total, entry) => total + entry.words.length, 0);
 
   useEffect(() => {
     // Reading the count binds the scroll to an append or clear, not to an
@@ -112,6 +139,16 @@ export function ConversationHistoryPanel({
     const element = list.current;
     if (element) element.scrollTop = element.scrollHeight;
   }, [entryCount]);
+
+  useEffect(() => {
+    // A streaming line only carries the reader along; unlike an append, it
+    // never pulls one back who has scrolled up while Luke talks.
+    if (liveLength === 0) return;
+    const element = list.current;
+    if (!element) return;
+    const fromTail = element.scrollHeight - element.scrollTop - element.clientHeight;
+    if (fromTail <= STREAM_FOLLOW_SLACK_PX) element.scrollTop = element.scrollHeight;
+  }, [liveLength]);
 
   useEffect(() => {
     if (entries.length === 0) setConfirmingClear(false);
@@ -154,7 +191,7 @@ export function ConversationHistoryPanel({
           </span>
         </header>
       ) : null}
-      {entries.length === 0 ? (
+      {entries.length === 0 && live.length === 0 ? (
         <div className="history-empty">
           <strong>No messages yet</strong>
         </div>
@@ -162,6 +199,10 @@ export function ConversationHistoryPanel({
         <ol className="history-list" ref={list}>
           {keyedHistoryEntries(entries).map(({ entry, key }) => (
             <HistoryEntryRow key={key} entry={entry} />
+          ))}
+          {live.map((entry, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: A line still being said has no durable id, and its words change on every delta — a key made of either would remount the bubble mid-sentence, while its position holds still for exactly as long as the line does.
+            <HistoryEntryRow key={`live:${entry.kind}:${index}`} entry={entry} streaming />
           ))}
         </ol>
       )}

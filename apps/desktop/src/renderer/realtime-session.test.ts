@@ -104,6 +104,10 @@ interface Harness {
   replyEndings: { texts: readonly string[]; about: string | undefined }[];
   /** The developer's spoken turns, as the service handed them back. */
   spokenAsks: string[];
+  /** The growing pieces of those turns' words, in arrival order. */
+  spokenAskDeltas: { itemId: string; delta: string }[];
+  /** The turns whose transcription the service gave up on. */
+  spokenAskFailures: string[];
   /** Conversation items fixed for those turns before their transcripts returned. */
   spokenAskItems: string[];
   /** Number of local audio turns closed before the server acknowledged them. */
@@ -216,6 +220,8 @@ function harness(
   const captionSubjects: (string | undefined)[] = [];
   const replyEndings: { texts: readonly string[]; about: string | undefined }[] = [];
   const spokenAsks: string[] = [];
+  const spokenAskDeltas: { itemId: string; delta: string }[] = [];
+  const spokenAskFailures: string[] = [];
   const spokenAskItems: string[] = [];
   let spokenAskClosures = 0;
   const requests: { url: string; init: RequestInit }[] = [];
@@ -358,6 +364,12 @@ function harness(
     onSpokenAsk: (transcript) => {
       spokenAsks.push(transcript);
     },
+    onSpokenAskDelta: (itemId, delta) => {
+      spokenAskDeltas.push({ itemId, delta });
+    },
+    onSpokenAskFailed: (itemId) => {
+      spokenAskFailures.push(itemId);
+    },
     onSpokenAskClosed: () => {
       spokenAskClosures += 1;
     },
@@ -398,6 +410,8 @@ function harness(
     captionSubjects,
     replyEndings,
     spokenAsks,
+    spokenAskDeltas,
+    spokenAskFailures,
     spokenAskItems,
     spokenAskClosures: () => spokenAskClosures,
     microphoneEnabled: () => enabled,
@@ -2201,6 +2215,56 @@ test("a speak-only call has no spoken turns to hand back", async () => {
   });
 
   assert.deepEqual(context.spokenAsks, []);
+});
+
+test("the developer's spoken words preview as they are transcribed", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  // Each piece is handed over as it arrives, keyed by its own turn, so the
+  // caller can grow the right preview while the completed transcript is
+  // still on the service's clock — and a failure hands the turn back so the
+  // preview can leave instead of streaming forever.
+  context.emit({
+    type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_DELTA,
+    item_id: "item-1",
+    delta: "how is the",
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_DELTA,
+    item_id: "item-1",
+    delta: " checkout agent doing?",
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_FAILED,
+    item_id: "item-2",
+  });
+
+  assert.deepEqual(context.spokenAskDeltas, [
+    { itemId: "item-1", delta: "how is the" },
+    { itemId: "item-1", delta: " checkout agent doing?" },
+  ]);
+  assert.deepEqual(context.spokenAskFailures, ["item-2"]);
+});
+
+test("a speak-only call has no spoken words taking shape either", async () => {
+  const context = harness();
+  await context.session.connect({ microphone: false });
+
+  // The completed transcript's microphone guard, applied to its preview and
+  // its failure alike.
+  context.emit({
+    type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_DELTA,
+    item_id: "item-1",
+    delta: "how is the",
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_FAILED,
+    item_id: "item-1",
+  });
+
+  assert.deepEqual(context.spokenAskDeltas, []);
+  assert.deepEqual(context.spokenAskFailures, []);
 });
 
 test("a reply hands its words back as it ends, whole and once", async () => {

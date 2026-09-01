@@ -113,12 +113,25 @@ export const REALTIME_SERVER_EVENT = {
   /** The server has made one developer audio turn into a conversation item. */
   INPUT_AUDIO_BUFFER_COMMITTED: "input_audio_buffer.committed",
   /**
+   * The developer's own spoken words, arriving as the service transcribes
+   * them. They only preview the completed transcript below — the settled
+   * words supersede whatever the deltas built — so a surface may show the
+   * ask taking shape while the history still records only what completed.
+   */
+  INPUT_AUDIO_TRANSCRIPTION_DELTA: "conversation.item.input_audio_transcription.delta",
+  /**
    * The developer's own spoken turn, as the service transcribed it. It
    * arrives on its own clock — transcription runs beside the reply, not ahead
-   * of it — and it is the one way their spoken words come back as text at
-   * all, so the conversation history can hold both halves of the exchange.
+   * of it — and it is the one way their spoken words settle as text at all,
+   * so the conversation history can hold both halves of the exchange.
    */
   INPUT_AUDIO_TRANSCRIPTION_COMPLETED: "conversation.item.input_audio_transcription.completed",
+  /**
+   * A spoken turn whose transcription the service gave up on. No words ever
+   * arrive for it, so whatever preview its deltas built must leave rather
+   * than stand forever for a completion that is not coming.
+   */
+  INPUT_AUDIO_TRANSCRIPTION_FAILED: "conversation.item.input_audio_transcription.failed",
   RESPONSE_DONE: "response.done",
   ERROR: "error",
 } as const;
@@ -698,10 +711,16 @@ export type ParsedRealtimeServerEvent =
       transcript: string;
     }
   | {
+      type: typeof REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_DELTA;
+      itemId: string;
+      delta: string;
+    }
+  | {
       type: typeof REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED;
       itemId: string;
       transcript: string;
     }
+  | { type: typeof REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_FAILED; itemId: string }
   | { type: typeof REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED; itemId: string }
   | { type: typeof REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED; responseId?: string }
   | { type: typeof REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STARTED; responseId?: string }
@@ -844,9 +863,22 @@ export function parseRealtimeServerEvent(
       if (itemId) parsed.itemId = itemId;
       return parsed;
     }
+    case REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_DELTA: {
+      // A delta needs its item: the preview it grows is keyed by the turn it
+      // belongs to, and words no turn claims could only be drawn wrong.
+      if (!isWireString(event.delta) || event.delta.length === 0) return undefined;
+      const itemId = text(event.item_id);
+      if (!itemId) return undefined;
+      return {
+        type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_DELTA,
+        itemId,
+        delta: event.delta,
+      };
+    }
     case REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED: {
       // A transcription that came back empty said nothing worth a history
-      // line, and a failed one arrives as its own event this parser ignores.
+      // line; a failed one arrives as its own event, parsed below, so the
+      // preview its deltas built can be let go.
       const transcript = text(event.transcript);
       const itemId = text(event.item_id);
       if (!transcript || !itemId) return undefined;
@@ -855,6 +887,11 @@ export function parseRealtimeServerEvent(
         itemId,
         transcript,
       };
+    }
+    case REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_FAILED: {
+      const itemId = text(event.item_id);
+      if (!itemId) return undefined;
+      return { type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_FAILED, itemId };
     }
     case REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED: {
       const itemId = text(event.item_id);

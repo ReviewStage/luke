@@ -17,6 +17,7 @@ export {
   maximumConversationEntryLength,
   recentConversationEntries,
   sessionActConversationEntry,
+  streamingConversationEntry,
 } from "./conversation-history.js";
 export {
   type IntroductionLine,
