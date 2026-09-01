@@ -2185,6 +2185,21 @@ test("the developer's spoken words come back only from their own call", async ()
   assert.deepEqual(context.spokenAsks, ["how is the checkout agent doing?"]);
 });
 
+test("a transcription that came back empty still hands its turn back", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  // The empty words record nothing — the caller's own paths refuse them —
+  // but the turn ending is what lets a preview built from deltas leave.
+  context.emit({
+    type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED,
+    item_id: "item-1",
+    transcript: "  ",
+  });
+
+  assert.deepEqual(context.spokenAsks, [""]);
+});
+
 test("a developer turn is identified before its transcript returns", async () => {
   const context = harness();
   await context.session.connect();

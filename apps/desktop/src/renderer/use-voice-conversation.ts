@@ -761,12 +761,17 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       ) {
         return;
       }
-      conversationRef.current = insertSpokenAskThreadEntry(
+      const placed = insertSpokenAskThreadEntry(
         conversationRef.current,
         transcript,
         mark.after,
         mark.recordedAt,
       );
+      // A transcription that came back empty ended its turn — the preview
+      // and the mark are already spent — but placed no line, and a thread
+      // that did not change owes the open call no update.
+      if (placed === conversationRef.current) return;
+      conversationRef.current = placed;
       setConversationHistory(conversationRef.current);
       voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current));
     },

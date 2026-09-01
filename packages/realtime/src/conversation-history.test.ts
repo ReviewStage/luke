@@ -308,7 +308,10 @@ test("a spoken ask lands at its turn's own mark, not where its transcription did
   });
   assert.equal(retired[0]?.words, "an ancient ask");
 
-  // The same flattening and bounds as an append: nothing left, nothing placed.
+  // The same flattening and bounds as an append: nothing left, nothing
+  // placed — and the very thread handed in, so a caller can tell an unchanged
+  // history from one that owes the open call an update.
+  assert.equal(insertSpokenAskThreadEntry(exchange, "   ", priorReply, OBSERVED_AT), exchange);
   assert.deepEqual(insertSpokenAskEntry(exchange, "   ", priorReply), exchange);
   let full: readonly ConversationEntry[] = [];
   for (let index = 0; index < maximumConversationEntries; index += 1) {

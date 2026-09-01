@@ -876,16 +876,17 @@ export function parseRealtimeServerEvent(
       };
     }
     case REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED: {
-      // A transcription that came back empty said nothing worth a history
-      // line; a failed one arrives as its own event, parsed below, so the
-      // preview its deltas built can be let go.
-      const transcript = text(event.transcript);
+      // A transcription that came back empty still ends its turn — whatever
+      // preview its deltas built must leave with it — it just carries
+      // nothing worth a history line, which the recording path refuses on
+      // its own. A failed transcription arrives as its own event, parsed
+      // below, and ends its turn the same way.
       const itemId = text(event.item_id);
-      if (!transcript || !itemId) return undefined;
+      if (!itemId) return undefined;
       return {
         type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED,
         itemId,
-        transcript,
+        transcript: text(event.transcript) ?? "",
       };
     }
     case REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_FAILED: {
