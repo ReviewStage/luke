@@ -3063,18 +3063,11 @@ test("a stop that races the reply's confirmation still holds", async () => {
 
   assert.deepEqual(carried, []);
   const events = context.sent.slice(before);
-  const output = events.find(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-  );
-  assert.equal(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (
-      JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
-        status?: string;
-      }
-    ).status,
-    "rejected",
+  assert.ok(
+    !events.some(
+      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+    ),
   );
   assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
 
@@ -3228,6 +3221,13 @@ test("a typed ask can carry a tool call, because the developer opened the turn",
       text: "add tests",
     },
   ]);
+  const followUp = context.sent.find(
+    (event) =>
+      event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE &&
+      isRecord(event.response) &&
+      event.response.tool_choice === "none",
+  );
+  assert.ok(followUp, "the SDK tool outcome is voiced only by a tool-free follow-up");
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The outcome is voiced, exactly as a spoken ask's would be.
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
@@ -3313,18 +3313,11 @@ test("a cancelled reply's late finish cannot act in the turn that replaced it", 
   // and it holds, however armed the turn that superseded it is.
   assert.deepEqual(carried, []);
   const events = context.sent.slice(sentBefore);
-  const output = events.find(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-  );
-  assert.equal(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (
-      JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
-        status?: string;
-      }
-    ).status,
-    "rejected",
+  assert.ok(
+    !events.some(
+      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+    ),
   );
   // No reply was opened to voice the refusal, and the new turn is still under way.
   assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
@@ -3966,21 +3959,14 @@ test("a tool call outside a turn the developer opened cannot act", async () => {
   // stands between the call and the write — and it holds.
   assert.deepEqual(carried, []);
   const events = context.sent.slice(sentBefore);
-  const output = events.find(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  assert.ok(
+    !events.some(
+      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+    ),
   );
-  assert.equal(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (
-      JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
-        status?: string;
-      }
-    ).status,
-    "rejected",
-  );
-  // The call is answered so the model is not left waiting, but the turn opens
-  // no reply: a turn Luke was not asked to act in must not talk on either.
+  // The runtime drops the call, and a turn Luke was not asked to act in does
+  // not talk on either.
   assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
 });
 
@@ -4063,7 +4049,7 @@ test("a drained tool reply holds the turn for the follow-up it owes", async () =
       ],
     },
   });
-  await Promise.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
 
   // The turn holds through the write: the READY an ending here would offer is
   // the edge the announcer rides, and a reply taken there would abandon the
@@ -4113,7 +4099,7 @@ test("the write's hold gets a clock of its own, not the drain's leftovers", asyn
       ],
     },
   });
-  await Promise.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
 
   // The drain's leftover second must not cut the hold mid-write...
   t.mock.timers.tick(1);
@@ -4155,7 +4141,7 @@ test("audio draining mid-write holds the turn the same way", async () => {
       ],
     },
   });
-  await Promise.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
   context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
 
   // The same hold, in the mirror order: no READY edge mid-write for the
@@ -4269,22 +4255,15 @@ test("a done that outlives the settle backstop cannot act with the spent turn's 
 
   // The turn ended with the backstop and its arming went with it: the late
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // calls are answered refused rather than run as writes out of a turn the
-  // developer was already told had ended, and no reply opens over the quiet.
+  // calls are dropped rather than run as writes out of a turn the developer
+  // was already told had ended, and no reply opens over the quiet.
   assert.deepEqual(carried, []);
   const events = context.sent.slice(sentBefore);
-  const output = events.find(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-  );
-  assert.equal(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (
-      JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
-        status?: string;
-      }
-    ).status,
-    "rejected",
+  assert.ok(
+    !events.some(
+      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+    ),
   );
   assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
   assert.equal(context.session.status, REALTIME_STATUS.READY);
@@ -5335,14 +5314,12 @@ test("an issue call outside a turn the developer opened cannot act", async () =>
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   assert.deepEqual(carried, []);
-  const output = context.sent.find(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  assert.ok(
+    !context.sent.some(
+      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+    ),
   );
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const raw = (output?.item as { output?: string } | undefined)?.output ?? "{}";
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  assert.equal((JSON.parse(raw) as { status?: string }).status, "rejected");
 });
 
 test("a speak-only connect never asks for the microphone", async () => {
@@ -5679,8 +5656,14 @@ test("the developer's call replaces Luke's own and keeps the waiting press", asy
 
 test("a spoken tool call is still validated in both processes", () => {
   const renderer = readFileSync(new URL("./realtime-session.ts", import.meta.url), "utf8");
+  const agents = readFileSync(new URL("./agents-developer-agent.ts", import.meta.url), "utf8");
   const main = readFileSync(new URL("../main/ipc/session-acts.ts", import.meta.url), "utf8");
 
+  assert.match(renderer, /\bRealtimeSession\b/);
+  assert.match(agents, /\brealtimeToolDefinitions\b/);
+  assert.match(agents, /\bbackgroundResult\b/);
+  assert.doesNotMatch(renderer, /\bfunctionCallOutputEvents\b/);
+  assert.doesNotMatch(renderer, /#answerToolCalls\b/);
   // The renderer validates against the roster and the guide before a carrier runs.
   assert.match(renderer, /\bsessionToolAction\b/);
   assert.match(renderer, /\bissueToolAction\b/);

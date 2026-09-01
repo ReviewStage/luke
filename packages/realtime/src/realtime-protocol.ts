@@ -81,6 +81,7 @@ export const REALTIME_CLIENT_EVENT = {
 
 export const REALTIME_SERVER_EVENT = {
   RESPONSE_CREATED: "response.created",
+  RESPONSE_OUTPUT_ITEM_DONE: "response.output_item.done",
   /** The server confirming a superseded context item is gone. */
   CONVERSATION_ITEM_DELETED: "conversation.item.deleted",
   /** The server confirming it dropped the audio it had queued for us. */
@@ -355,32 +356,6 @@ export const maximumTypedAskLength = maximumSessionMessageLength;
  * composer by the hand that sends it.
  */
 export const maximumFeedbackDraftLength = maximumTypedAskLength;
-
-/**
- * Builds the events that carry a typed ask and request the reply to it.
- *
- * The text travels without a label, unlike every other `input_text` this
- * module builds: labels mark what the developer did not say, and a typed ask
- * is the developer's own words as surely as a spoken one. The reply is
- * requested with the session's own `tool_choice`, because typing opens a
- * developer turn exactly as a push-to-talk commit does — the caller arms the
- * turn on the same terms, and the roster gauntlet stands behind it unchanged.
- */
-export function typedAskEvents(text: string): readonly WireRecord[] {
-  const ask = trimmedText(text)?.slice(0, maximumTypedAskLength);
-  if (!ask) return [];
-  return [
-    {
-      type: REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
-      item: {
-        type: "message",
-        role: "user",
-        content: [{ type: "input_text", text: ask }],
-      },
-    },
-    { type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE },
-  ];
-}
 
 const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
@@ -680,6 +655,7 @@ export function arrivalSpeechEvents(speech: ArrivalSpeech): readonly WireRecord[
             ...(talkKeyLabel !== undefined ? { talkKeyLabel } : undefined),
           }),
         ].join("\n"),
+        tools: [],
         tool_choice: "none",
       },
     },
@@ -960,29 +936,6 @@ export function parseRealtimeServerEvent(
 }
 
 /**
- * Builds the events that answer a tool call and ask Luke to say what happened.
- * The outcome travels as the call's own output, so the model's next sentence
- * is grounded in what the provider actually answered rather than in what it
- * hoped.
- */
-export function functionCallOutputEvents(
-  callId: string,
-  output: Readonly<WireRecord>,
-): readonly WireRecord[] {
-  if (!trimmedText(callId)) return [];
-  return [
-    {
-      type: REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
-      item: {
-        type: "function_call_output",
-        call_id: callId,
-        output: JSON.stringify(output),
-      },
-    },
-  ];
-}
-
-/**
  * Builds the event that asks for the reply voicing the tool outcomes. Its tools
  * are withheld: this turn was opened to say what happened, not to act again, so
  * a tool output that reads like an instruction cannot make it call anything —
@@ -994,6 +947,7 @@ export function functionCallFollowUpEvents(): readonly WireRecord[] {
     {
       type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
       response: {
+        tools: [],
         tool_choice: "none",
       },
     },

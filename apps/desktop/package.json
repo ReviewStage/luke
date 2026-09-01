@@ -37,8 +37,8 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "devDependencies": {
-    "@sidecar/acts": "workspace:*",
     "@sidecar/account": "workspace:*",
+    "@sidecar/acts": "workspace:*",
     "@sidecar/analytics": "workspace:*",
     "@sidecar/attention": "workspace:*",
     "@sidecar/calendar": "workspace:*",
@@ -72,6 +72,8 @@
     "typescript": "7.0.2"
   },
   "dependencies": {
-    "electron-updater": "6.8.9"
+    "@openai/agents-realtime": "0.17.0",
+    "electron-updater": "6.8.9",
+    "zod": "4.4.3"
   }
 }

@@ -17,6 +17,7 @@ function eventTexts(speech: ArrivalSpeech) {
   assert.ok(item && response);
   const responseBody = response.response;
   assert.ok(isRecord(responseBody));
+  assert.deepEqual(responseBody.tools, []);
   assert.equal(responseBody.tool_choice, "none");
   const instructions = responseBody.instructions;
   assert.ok(isWireString(instructions));
