@@ -169,7 +169,7 @@ private struct SignedInView: View {
     var body: some View {
         NavigationStack {
             SessionsView()
-                .navigationTitle(identity.name ?? identity.email)
+                .navigationTitle("Sessions")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     if #available(iOS 26.0, *) {
