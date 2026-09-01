@@ -31,18 +31,18 @@ struct SessionComposerView: View {
                     .lineLimit(3, reservesSpace: false)
                     .textFieldStyle(.plain)
                     .font(.system(size: 15))
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(Color.ink)
                     .disabled(state == .sending)
 
                 Button(action: send) {
                     if state == .sending {
                         ProgressView()
-                            .tint(.white)
+                            .tint(Color.ink)
                             .frame(width: 24, height: 24)
                     } else {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.system(size: 24))
-                            .foregroundStyle(canSend ? Color.white : Color(white: 1, opacity: 0.3))
+                            .foregroundStyle(canSend ? Color.ink : Color.inkTertiary)
                     }
                 }
                 .disabled(!canSend || state == .sending)
@@ -51,16 +51,26 @@ struct SessionComposerView: View {
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(white: 1, opacity: 0.06))
+                    .fill(Color.cardFill)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(white: 1, opacity: 0.10), lineWidth: 1)
+                            .stroke(Color.controlStroke, lineWidth: 1)
                     )
             )
 
             if case .result(let answer) = state {
                 resultBanner(answer)
             }
+        }
+        // Bound to the view's lifetime, unlike an unstructured Task: dismissing
+        // the sheet cancels the wait, so a slow send from a closed composer can
+        // never dismiss a sheet opened later for another session.
+        .task(id: state) {
+            guard case .result(let answer) = state, answer.result == .accepted,
+                  let onDelivered else { return }
+            try? await Task.sleep(for: .seconds(0.8))
+            guard !Task.isCancelled else { return }
+            onDelivered()
         }
     }
 
@@ -83,7 +93,7 @@ struct SessionComposerView: View {
                         providerSessionId: providerSessionId,
                         text: messageText
                     )
-                    await delivered(answer)
+                    state = .result(answer)
                 } catch ActClientError.unauthorized {
                     // validAccessToken() refreshes near-expiry tokens; a 401
                     // here means the server rejected the token outright — refresh and retry once.
@@ -94,7 +104,7 @@ struct SessionComposerView: View {
                         providerSessionId: providerSessionId,
                         text: messageText
                     )
-                    await delivered(answer)
+                    state = .result(answer)
                 }
             } catch {
                 state = .result(ActMessageAnswer(
@@ -102,16 +112,6 @@ struct SessionComposerView: View {
                     reason: error.localizedDescription
                 ))
             }
-        }
-    }
-
-    @MainActor
-    private func delivered(_ answer: ActMessageAnswer) {
-        state = .result(answer)
-        guard answer.result == .accepted, let onDelivered else { return }
-        Task {
-            try? await Task.sleep(for: .seconds(0.8))
-            onDelivered()
         }
     }
 
@@ -124,9 +124,7 @@ struct SessionComposerView: View {
                 .font(.system(size: 13))
                 .lineLimit(2)
         }
-        .foregroundStyle(answer.result == .accepted
-            ? Color(red: 0.25, green: 0.80, blue: 0.45)
-            : Color(red: 0.95, green: 0.40, blue: 0.40))
+        .foregroundStyle(answer.result == .accepted ? Color.stateComplete : Color.errorInk)
         .padding(.horizontal, 10)
         .onTapGesture { state = .idle }
     }

@@ -37,10 +37,10 @@ struct WorkspaceCreatorView: View {
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(white: 1, opacity: 0.06))
+                    .fill(Color.cardFill)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(white: 1, opacity: 0.10), lineWidth: 1)
+                            .stroke(Color.controlStroke, lineWidth: 1)
                     )
             )
 
@@ -48,12 +48,12 @@ struct WorkspaceCreatorView: View {
                 HStack(spacing: 8) {
                     if state == .creating {
                         ProgressView()
-                            .tint(.white)
+                            .tint(Color.ink)
                             .scaleEffect(0.8)
                     }
                     Text(state == .creating ? "Creating…" : "Create workspace")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(Color.ink)
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 42)
@@ -124,9 +124,7 @@ struct WorkspaceCreatorView: View {
                 }
             }
         }
-        .foregroundStyle(answer.result == .accepted
-            ? Color(red: 0.25, green: 0.80, blue: 0.45)
-            : Color(red: 0.95, green: 0.40, blue: 0.40))
+        .foregroundStyle(answer.result == .accepted ? Color.stateComplete : Color.errorInk)
         .padding(.horizontal, 10)
         .onTapGesture { state = .idle }
     }
@@ -142,12 +140,12 @@ private struct LabeledTextField: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Color(white: 1, opacity: 0.4))
+                .foregroundStyle(Color.inkSecondary)
             TextField("", text: $text, axis: axis)
                 .lineLimit(axis == .vertical ? 3 : 1, reservesSpace: false)
                 .textFieldStyle(.plain)
                 .font(.system(size: 15))
-                .foregroundStyle(Color.white)
+                .foregroundStyle(Color.ink)
                 .disabled(disabled)
         }
     }
@@ -159,12 +157,10 @@ struct ActButtonStyle: ButtonStyle {
             .padding(.horizontal, 16)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(configuration.isPressed
-                          ? Color(white: 1, opacity: 0.06)
-                          : Color(red: 0.12, green: 0.12, blue: 0.13))
+                    .fill(configuration.isPressed ? Color.pressedFill : Color.cardFill)
                     .overlay(
                         RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color(white: 1, opacity: 0.10), lineWidth: 1)
+                            .stroke(Color.controlStroke, lineWidth: 1)
                     )
             )
             .opacity(configuration.isPressed ? 0.85 : 1)
