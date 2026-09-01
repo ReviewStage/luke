@@ -102,7 +102,14 @@ export function mobileSessionContextText(
   if (sessions.length === 0) return "No coding-agent sessions are currently observed.";
 
   const mostRecent = mostRecentByProvider(sessions);
-  const included = sessions.slice(0, MAXIMUM_MOBILE_VOICE_CONTEXT_SESSIONS);
+  // Prioritise the most-recent session per provider so the recency label
+  // always lands on a listed row, then fill remaining slots with the rest.
+  const mostRecentIds = new Set(mostRecent.values());
+  const prioritised = [
+    ...sessions.filter((s) => mostRecentIds.has(s.sessionId)),
+    ...sessions.filter((s) => !mostRecentIds.has(s.sessionId)),
+  ];
+  const included = prioritised.slice(0, MAXIMUM_MOBILE_VOICE_CONTEXT_SESSIONS);
   const overflow = sessions.length - included.length;
 
   return [
