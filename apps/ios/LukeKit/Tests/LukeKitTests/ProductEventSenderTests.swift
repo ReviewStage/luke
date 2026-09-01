@@ -13,7 +13,7 @@ private final class StubTokens: AccountTokenProviding {
     var refreshed: String?
     private(set) var refreshCalls = 0
 
-    init(valid: String? = "at-1", refreshed: String? = nil) {
+    nonisolated init(valid: String? = "at-1", refreshed: String? = nil) {
         self.valid = valid
         self.refreshed = refreshed
     }
