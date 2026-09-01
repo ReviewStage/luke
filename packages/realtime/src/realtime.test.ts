@@ -1217,6 +1217,39 @@ test("inbound events the conversation acts on are parsed, and nothing else is", 
       transcript: "how is the checkout agent doing?",
     },
   );
+  // A transcription that came back empty still ends its turn, so the preview
+  // its deltas built can leave; the empty words record nothing downstream.
+  assert.deepEqual(
+    parseRealtimeServerEvent({
+      type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED,
+      item_id: "item-2",
+      transcript: "  ",
+    }),
+    {
+      type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED,
+      itemId: "item-2",
+      transcript: "",
+    },
+  );
+  assert.deepEqual(
+    parseRealtimeServerEvent({
+      type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_DELTA,
+      item_id: "item-2",
+      delta: "how is the",
+    }),
+    {
+      type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_DELTA,
+      itemId: "item-2",
+      delta: "how is the",
+    },
+  );
+  assert.deepEqual(
+    parseRealtimeServerEvent({
+      type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_FAILED,
+      item_id: "item-2",
+    }),
+    { type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_FAILED, itemId: "item-2" },
+  );
   assert.deepEqual(
     parseRealtimeServerEvent({
       type: REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED,
@@ -1262,9 +1295,13 @@ test("inbound events the conversation acts on are parsed, and nothing else is", 
     {},
     { type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_CLEARED },
     { type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA, item_id: "item-1" },
-    // A transcription that came back empty said nothing worth acting on.
+    // A transcription without its turn's item names nothing to act on.
     { type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED, transcript: "  " },
     { type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED, transcript: "hello" },
+    // A preview without its turn, or without words, previews nothing.
+    { type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_DELTA, delta: "hello" },
+    { type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_DELTA, item_id: "item-2", delta: "" },
+    { type: REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_FAILED },
     { type: REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED },
     { type: "session.updated" },
   ];

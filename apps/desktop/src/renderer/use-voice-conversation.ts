@@ -22,6 +22,7 @@ import {
   recentConversationEntries,
   SESSION_TOOL_KIND,
   sessionActConversationEntry,
+  streamingConversationEntry,
 } from "@sidecar/realtime";
 import {
   mentionedSessions,
@@ -305,6 +306,53 @@ export function conversationEntryBelongsToConversation(
   return entryGeneration !== undefined && entryGeneration === conversationGeneration;
 }
 
+/**
+ * Whether a status still has a call behind it. A gone call takes its
+ * half-transcribed spoken turns with it: their completed transcripts can no
+ * longer arrive, so a preview left standing would stream forever.
+ */
+export function spokenAskPreviewSurvives(status: RealtimeStatus): boolean {
+  return (
+    status !== REALTIME_STATUS.IDLE &&
+    status !== REALTIME_STATUS.FAILED &&
+    status !== REALTIME_STATUS.UNAVAILABLE
+  );
+}
+
+/** One empty map, so clearing previews repeatedly re-renders nothing. */
+const NO_SPOKEN_ASK_PREVIEWS: ReadonlyMap<string, string> = new Map();
+
+/**
+ * The lines still being said, for History to draw under the settled thread:
+ * the developer's spoken turns as the service transcribes them, then the
+ * reply or announcement as its words are generated — the ask precedes its
+ * answer. Presentation only, so each line mirrors exactly what its own
+ * recording path will keep: an announcement carries its validated subject,
+ * and the reply that is voicing a transcript reading draws nothing, because
+ * the record keeps the act and never a word of the rendering.
+ */
+export function liveConversationEntries(input: {
+  spokenAskPreviews: ReadonlyMap<string, string>;
+  captions: readonly string[] | undefined;
+  about: SessionIdentity | undefined;
+  transcriptSpoken: boolean;
+}): readonly ConversationEntry[] {
+  const lines: ConversationEntry[] = [];
+  for (const words of input.spokenAskPreviews.values()) {
+    const ask = streamingConversationEntry(CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words);
+    if (ask) lines.push(ask);
+  }
+  if (input.captions && (input.about || !input.transcriptSpoken)) {
+    const speech = streamingConversationEntry(
+      input.about ? CONVERSATION_ENTRY_KIND.ANNOUNCEMENT : CONVERSATION_ENTRY_KIND.REPLY,
+      input.captions.join(" "),
+      input.about,
+    );
+    if (speech) lines.push(speech);
+  }
+  return lines;
+}
+
 /** Captures the reply that owns an act before main-process authorization can pause it. */
 export async function authorizeConversationAct<T>(
   activeReplyGeneration: { readonly current: number | undefined },
@@ -468,6 +516,14 @@ export interface VoiceConversation {
   conversationHistory: readonly ConversationEntry[];
   /** Clears the visible history and the context handed to the next call. */
   clearConversationHistory: () => void;
+  /**
+   * The lines still being said, for History to draw under the settled thread:
+   * a spoken ask as the service transcribes it, a reply or announcement as
+   * its words are generated. Never part of {@link conversationHistory} — each
+   * settles into it through its own recording path, or leaves without one
+   * exactly as the words it previews do.
+   */
+  liveConversationEntries: readonly ConversationEntry[];
   voiceTurn: WaveformVoice | undefined;
   /**
    * The words being spoken, one entry per response: a turn that speaks twice
@@ -617,6 +673,30 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * and not a word of what it rendered.
    */
   const transcriptSpokenRef = useRef(false);
+  // State beside the ref, because the session's callbacks read the flag
+  // synchronously while History's live line derives from what React can see.
+  const [transcriptSpoken, setTranscriptSpoken] = useState(false);
+  const markTranscriptSpoken = useCallback((value: boolean) => {
+    transcriptSpokenRef.current = value;
+    setTranscriptSpoken(value);
+  }, []);
+  /**
+   * The developer's spoken turns still being transcribed, keyed by the server
+   * item that names each turn: the preview History draws while the completed
+   * transcript is still on the service's own clock. Kept apart from the
+   * thread — a preview settles by leaving when `rememberSpokenAsk` records
+   * the completed words, or by leaving alone when nothing ever will.
+   */
+  const [spokenAskPreviews, setSpokenAskPreviews] =
+    useState<ReadonlyMap<string, string>>(NO_SPOKEN_ASK_PREVIEWS);
+  const dropSpokenAskPreview = useCallback((itemId: string) => {
+    setSpokenAskPreviews((previews) => {
+      if (!previews.has(itemId)) return previews;
+      const next = new Map(previews);
+      next.delete(itemId);
+      return next;
+    });
+  }, []);
 
   /**
    * Appends one bounded line to this launch's history and tells the call now
@@ -650,6 +730,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     spokenTurnMarksRef.current.clear();
     pendingSpokenTurnMarksRef.current = [];
     setConversationHistory([]);
+    // The previews go with the marks: a transcription still arriving belongs
+    // to a turn the press just retired, and could never be recorded anyway.
+    setSpokenAskPreviews(NO_SPOKEN_ASK_PREVIEWS);
     talkLatched.current = false;
     talkPressedAt.current = undefined;
     voiceSession.current?.clearConversation();
@@ -665,24 +748,35 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * server item binds it to the mark made for that exact turn, so a transcript
    * delayed past Clear cannot borrow a newer turn's place.
    */
-  const rememberSpokenAsk = useCallback((transcript: string, itemId: string) => {
-    const mark = spokenTurnMarksRef.current.get(itemId);
-    spokenTurnMarksRef.current.delete(itemId);
-    if (
-      !mark ||
-      !spokenAskBelongsToConversation(mark.generation, conversationGenerationRef.current)
-    ) {
-      return;
-    }
-    conversationRef.current = insertSpokenAskThreadEntry(
-      conversationRef.current,
-      transcript,
-      mark.after,
-      mark.recordedAt,
-    );
-    setConversationHistory(conversationRef.current);
-    voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current));
-  }, []);
+  const rememberSpokenAsk = useCallback(
+    (transcript: string, itemId: string) => {
+      // The completed words supersede the turn's preview whether or not they
+      // may be recorded: either way, nothing about this turn is still arriving.
+      dropSpokenAskPreview(itemId);
+      const mark = spokenTurnMarksRef.current.get(itemId);
+      spokenTurnMarksRef.current.delete(itemId);
+      if (
+        !mark ||
+        !spokenAskBelongsToConversation(mark.generation, conversationGenerationRef.current)
+      ) {
+        return;
+      }
+      const placed = insertSpokenAskThreadEntry(
+        conversationRef.current,
+        transcript,
+        mark.after,
+        mark.recordedAt,
+      );
+      // A transcription that came back empty ended its turn — the preview
+      // and the mark are already spent — but placed no line, and a thread
+      // that did not change owes the open call no update.
+      if (placed === conversationRef.current) return;
+      conversationRef.current = placed;
+      setConversationHistory(conversationRef.current);
+      voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current));
+    },
+    [dropSpokenAskPreview],
+  );
 
   const ensureVoiceSession = useCallback((): RealtimeVoiceSession => {
     voiceSession.current ??= new RealtimeVoiceSession({
@@ -739,7 +833,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
         // The reply that voices a transcript reading must stay out of the
         // history: the rendering travels only in the turn that asked for it.
         if (action.kind === SESSION_TOOL_KIND.READ_TRANSCRIPT) {
-          transcriptSpokenRef.current = true;
+          markTranscriptSpoken(true);
         }
         return dispatchByKind(action, {
           [SESSION_TOOL_KIND.MESSAGE]: (act) =>
@@ -799,7 +893,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
         const generation = activeReplyGenerationRef.current;
         activeReplyGenerationRef.current = undefined;
         const spokeTranscript = transcriptSpokenRef.current;
-        transcriptSpokenRef.current = false;
+        markTranscriptSpoken(false);
         // A transcript reading enters the record only as the act it was.
         if (spokeTranscript) return;
         rememberConversationEntry(
@@ -820,6 +914,27 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       // placed where their turn happened: the thread holds both halves of
       // the exchange, in the order they were said.
       onSpokenAsk: rememberSpokenAsk,
+      // The same words while they are still arriving, previewed on the
+      // completed transcript's own terms: only a turn whose committed item
+      // holds a mark in the history generation still showing may draw, so a
+      // straggler after Clear previews nothing it could never record.
+      onSpokenAskDelta: (itemId, delta) => {
+        const mark = spokenTurnMarksRef.current.get(itemId);
+        if (
+          !mark ||
+          !spokenAskBelongsToConversation(mark.generation, conversationGenerationRef.current)
+        ) {
+          return;
+        }
+        setSpokenAskPreviews((previews) => {
+          const next = new Map(previews);
+          next.set(itemId, (next.get(itemId) ?? "") + delta);
+          return next;
+        });
+      },
+      // No completed transcript is coming for this turn, so its preview
+      // leaves the way its recorded line never arrives.
+      onSpokenAskFailed: dropSpokenAskPreview,
       // The development trace's tap, checked at each event rather than at
       // construction because the session outlives the bootstrap that says
       // whether a writer stands behind the bridge. The audio is stripped
@@ -830,7 +945,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       },
     });
     return voiceSession.current;
-  }, [rememberConversationEntry, rememberSpokenAsk, setVoiceStatus]);
+  }, [
+    dropSpokenAskPreview,
+    markTranscriptSpoken,
+    rememberConversationEntry,
+    rememberSpokenAsk,
+    setVoiceStatus,
+  ]);
 
   /**
    * Words the arrival beat from what is true at the moment it is spoken, not
@@ -1186,7 +1307,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
         // A new typed turn lets a leftover transcript skip go, exactly as a
         // spoken one does — after the send, whose interrupt hands over the
         // cut reply's words and is the flag's last rightful consumer.
-        transcriptSpokenRef.current = false;
+        markTranscriptSpoken(false);
         // The developer's own words enter the history as they were typed, so
         // the thread holds both halves of the exchange the reply answers.
         rememberConversationEntry(
@@ -1210,7 +1331,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       setVoiceNotice(refusal);
       return refusal;
     },
-    [rememberConversationEntry, ensureVoiceSession, spentAllowanceNote, startConversation],
+    [
+      markTranscriptSpoken,
+      rememberConversationEntry,
+      ensureVoiceSession,
+      spentAllowanceNote,
+      startConversation,
+    ],
   );
 
   const discardListening = useCallback(() => {
@@ -1307,7 +1434,12 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     // a new spoken turn opening lets it go, or the flag would swallow the
     // next reply from the history.
     if (voiceStatus === REALTIME_STATUS.LISTENING) {
-      transcriptSpokenRef.current = false;
+      markTranscriptSpoken(false);
+    }
+    // The call gone takes its half-transcribed turns with it: no completed
+    // transcript can arrive to settle a preview, so none may keep streaming.
+    if (!spokenAskPreviewSurvives(voiceStatus)) {
+      setSpokenAskPreviews(NO_SPOKEN_ASK_PREVIEWS);
     }
     // Any settled status ends the wait the press started, however it ended:
     // listening takes the meter live, ready means the turn was dropped
@@ -1322,7 +1454,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     ) {
       setTalkOpening(false);
     }
-  }, [voiceStatus]);
+  }, [markTranscriptSpoken, voiceStatus]);
 
   // The strip the error is drawn on takes no pointer, so nothing but time can
   // dismiss it: a fault left up would sit on the desktop all afternoon. A new
@@ -1513,6 +1645,20 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     [options.fixtureSpeaking, trackedIssues, voiceCaption],
   );
 
+  // Derived like the mentions: the live lines arrive with the captions and
+  // the previews, and die with them, so History can never show words still
+  // arriving for a reply or a turn that has already settled or left.
+  const live = useMemo(
+    () =>
+      liveConversationEntries({
+        spokenAskPreviews,
+        captions: voiceCaption.texts,
+        about: voiceCaption.about,
+        transcriptSpoken,
+      }),
+    [spokenAskPreviews, transcriptSpoken, voiceCaption],
+  );
+
   const voiceTurn = waveformVoice(voiceStatus);
   const lukeCaptions = lukeCaptionsToShow({
     fixtureSpeaking: options.fixtureSpeaking,
@@ -1541,6 +1687,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     askLuke,
     conversationHistory,
     clearConversationHistory,
+    liveConversationEntries: live,
     voiceTurn,
     lukeCaptions,
     mentionedSessions: mentioned,

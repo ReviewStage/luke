@@ -106,6 +106,44 @@ test("messages offer a copy control while quiet events offer none", () => {
   assert.match(markup, /icon-button-glyph/);
 });
 
+test("a line still being said draws as the bubble it will settle into", () => {
+  const markup = renderToStaticMarkup(
+    createElement(ConversationHistoryPanel, {
+      entries: [
+        {
+          kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
+          words: "ship it",
+          recordedAt: Date.parse("2026-01-02T03:04:00.000Z"),
+        },
+      ],
+      live: [{ kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT, words: "Checkout is" }],
+      onClear: () => undefined,
+    }),
+  );
+
+  assert.match(markup, /data-streaming="true"/);
+  assert.match(markup, />Checkout is</);
+  // Copying half a sentence serves nobody: the settled ask keeps the one
+  // copy control, and a line not yet recorded wears no timestamp.
+  assert.equal(markup.match(/class="history-copy"/g)?.length, 1);
+  assert.equal(markup.match(/class="history-time"/g)?.length, 1);
+});
+
+test("words still arriving stand the thread up without a settled line", () => {
+  const markup = renderToStaticMarkup(
+    createElement(ConversationHistoryPanel, {
+      entries: [],
+      live: [{ kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Looking now." }],
+      onClear: () => undefined,
+    }),
+  );
+
+  assert.match(markup, />Looking now\.</);
+  assert.doesNotMatch(markup, />No messages yet</);
+  // Clear retires recorded lines, and nothing here is recorded yet.
+  assert.doesNotMatch(markup, /history-header/);
+});
+
 test("the empty history reports only its state", () => {
   const markup = renderToStaticMarkup(
     createElement(ConversationHistoryPanel, {

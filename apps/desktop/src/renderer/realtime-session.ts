@@ -254,6 +254,20 @@ export interface RealtimeVoiceSessionCallbacks {
    * records the words so the thread holds both halves of the exchange.
    */
   onSpokenAsk?(transcript: string, itemId: string): void;
+  /**
+   * The developer's spoken words taking shape, one growing piece at a time,
+   * from the same call and under the same microphone guard as the completed
+   * transcript. Preview only: the caller may draw the ask as it is
+   * transcribed, but records nothing until `onSpokenAsk` hands the settled
+   * words over — a turn whose transcription fails previews and then leaves.
+   */
+  onSpokenAskDelta?(itemId: string, delta: string): void;
+  /**
+   * A spoken turn whose transcription the service gave up on. No completed
+   * transcript is coming, so whatever preview the turn's deltas built must
+   * leave rather than stand forever as words still arriving.
+   */
+  onSpokenAskFailed?(itemId: string): void;
   /** The local audio turn closed, before its commit can be acknowledged. */
   onSpokenAskClosed?(): void;
   /** The server item that fixes which current-launch history a spoken turn belongs to. */
@@ -2388,11 +2402,20 @@ export class RealtimeVoiceSession {
           this.#armSettleTimer();
         }
         return;
+      case REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_DELTA:
+        // The completed transcript's own microphone guard, applied to its
+        // preview: a speak-only call has no developer words to be taking
+        // shape either.
+        if (this.#withMicrophone) this.#options.onSpokenAskDelta?.(event.itemId, event.delta);
+        return;
       case REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED:
         // Only the developer's own call has spoken turns to hand back; the
         // guard is belt to the speak-only shape's suspenders, so a stray
         // event on Luke's own call can never write a developer line.
         if (this.#withMicrophone) this.#options.onSpokenAsk?.(event.transcript, event.itemId);
+        return;
+      case REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_FAILED:
+        if (this.#withMicrophone) this.#options.onSpokenAskFailed?.(event.itemId);
         return;
       case REALTIME_SERVER_EVENT.INPUT_AUDIO_BUFFER_COMMITTED:
         if (this.#withMicrophone) this.#options.onSpokenAskCommitted?.(event.itemId);

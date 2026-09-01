@@ -790,6 +790,8 @@ export interface PanelBodyProps {
   writes: SessionWriteHandlers;
   /** The current-launch, renderer-memory conversation between the developer and Luke. */
   conversationHistory: readonly ConversationEntry[];
+  /** The lines still being said, drawn under that thread while their words grow. */
+  liveConversationEntries: readonly ConversationEntry[];
   /** Clears that same thread from the view and Luke's next conversational context. */
   onClearConversationHistory: () => void;
   /** Carries a typed ask to Luke's own conversation, answering why it could not go. */
@@ -841,6 +843,7 @@ export function PanelBody({
   onOpenSessionApplication,
   writes,
   conversationHistory,
+  liveConversationEntries,
   onClearConversationHistory,
   ask,
   onAskEngaged,
@@ -928,6 +931,7 @@ export function PanelBody({
       ) : tab === PANEL_TAB.HISTORY ? (
         <ConversationHistoryPanel
           entries={conversationHistory}
+          live={liveConversationEntries}
           onClear={onClearConversationHistory}
         />
       ) : (

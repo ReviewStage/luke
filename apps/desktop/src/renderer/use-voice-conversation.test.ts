@@ -3,7 +3,12 @@ import test from "node:test";
 import { PRODUCT_EXCHANGE_KIND } from "@sidecar/analytics";
 import { FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
-import { REALTIME_STATUS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
+import {
+  CONVERSATION_ENTRY_KIND,
+  REALTIME_STATUS,
+  REALTIME_VOICE,
+  REALTIME_VOICE_SPEED,
+} from "@sidecar/realtime";
 import {
   normalizeSession,
   type ProviderSessionObservation,
@@ -15,11 +20,13 @@ import {
   activeVoiceStream,
   authorizeConversationAct,
   conversationEntryBelongsToConversation,
+  liveConversationEntries,
   liveSpeedApplies,
   lukeCaptionsToShow,
   replyIssueMentions,
   replyMentions,
   spokenAskBelongsToConversation,
+  spokenAskPreviewSurvives,
   talkKeyPress,
   talkOpeningHolds,
   typedAskHolds,
@@ -43,6 +50,73 @@ test("work that began before Clear cannot repopulate conversation history", () =
   assert.equal(conversationEntryBelongsToConversation(3, 4), false);
   assert.equal(conversationEntryBelongsToConversation(4, 4), true);
   assert.equal(conversationEntryBelongsToConversation(undefined, 4), false);
+});
+
+test("the live lines mirror exactly what their recording paths will keep", () => {
+  const lines = liveConversationEntries({
+    spokenAskPreviews: new Map([
+      ["item-1", "how is the checkout agent"],
+      ["item-2", "and the deploy?"],
+    ]),
+    captions: ["Checkout is", "nearly done."],
+    about: undefined,
+    transcriptSpoken: false,
+  });
+
+  // The asks precede the answer, and the reply's segments join into the one
+  // line onReplyEnded will record.
+  assert.deepEqual(
+    lines.map((line) => ({ kind: line.kind, words: line.words })),
+    [
+      { kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words: "how is the checkout agent" },
+      { kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words: "and the deploy?" },
+      { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Checkout is nearly done." },
+    ],
+  );
+  // A line still growing has not happened yet, so none is stamped.
+  assert.ok(lines.every((line) => line.recordedAt === undefined));
+});
+
+test("an announcement's live line carries its validated subject", () => {
+  const about = { providerId: "claude-code", providerSessionId: "session-a" };
+  const lines = liveConversationEntries({
+    spokenAskPreviews: new Map(),
+    captions: ["Claude Code finished checkout-service."],
+    about,
+    transcriptSpoken: false,
+  });
+
+  assert.deepEqual(lines, [
+    {
+      kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+      words: "Claude Code finished checkout-service.",
+      identity: about,
+    },
+  ]);
+});
+
+test("a transcript reading's reply previews nothing it may never record", () => {
+  // The record keeps the act and not a word of the rendering, so the live
+  // line keeps the same silence the settled thread will.
+  assert.deepEqual(
+    liveConversationEntries({
+      spokenAskPreviews: new Map(),
+      captions: ["The session said the tests pass."],
+      about: undefined,
+      transcriptSpoken: true,
+    }),
+    [],
+  );
+});
+
+test("a gone call takes its half-transcribed previews with it", () => {
+  assert.equal(spokenAskPreviewSurvives(REALTIME_STATUS.IDLE), false);
+  assert.equal(spokenAskPreviewSurvives(REALTIME_STATUS.FAILED), false);
+  assert.equal(spokenAskPreviewSurvives(REALTIME_STATUS.UNAVAILABLE), false);
+  assert.equal(spokenAskPreviewSurvives(REALTIME_STATUS.CONNECTING), true);
+  assert.equal(spokenAskPreviewSurvives(REALTIME_STATUS.READY), true);
+  assert.equal(spokenAskPreviewSurvives(REALTIME_STATUS.LISTENING), true);
+  assert.equal(spokenAskPreviewSurvives(REALTIME_STATUS.RESPONDING), true);
 });
 
 test("an authorization that outlives Clear cannot record its act", async () => {
