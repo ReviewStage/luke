@@ -186,6 +186,7 @@ function harness(
     carryIssueAction?: IssueActionCarrier;
     toolsAllowed?: () => boolean;
     idleTimeoutMs?: number;
+    externalIdleTimer?: boolean;
     captureSessionSync?: boolean;
     /** Lets a test ride the status edges, the way the announcer does. */
     onStatus?: (status: RealtimeStatus) => void;
@@ -375,6 +376,9 @@ function harness(
   }
   if (options.idleTimeoutMs !== undefined) {
     sessionOptions.idleTimeoutMs = options.idleTimeoutMs;
+  }
+  if (options.externalIdleTimer !== undefined) {
+    sessionOptions.externalIdleTimer = options.externalIdleTimer;
   }
   if (options.carryAct) {
     sessionOptions.carryAct = options.carryAct;
@@ -5414,6 +5418,12 @@ test("an idle call is put away, and a call being used is not", async () => {
 
   // What the retirement puts away is the conversation; the device is long gone.
   assert.equal(context.session.status, REALTIME_STATUS.IDLE);
+});
+
+test("the session leaves idle retirement to the statechart when configured", async () => {
+  const context = harness({ externalIdleTimer: true });
+  await context.session.connect();
+  assert.equal(context.idleArmed(), false);
 });
 
 test("an idle call that was taken up in the meantime is left alone", async () => {

@@ -236,15 +236,17 @@ test("a talk key tears down speak-only speech before opening the developer excha
 
 test("meeting quiet preserves queued notice order and releases the same notices", () => {
   const { actor } = resourceHarness();
+  const first = { providerId: "provider-a", providerSessionId: "session-a" };
+  const second = { providerId: "provider-a", providerSessionId: "session-b" };
   actor.send({ type: VOICE_MACHINE_EVENT.MEETING_QUIET_CHANGED, active: true });
-  actor.send({ type: VOICE_MACHINE_EVENT.NOTICE_ENQUEUED, noticeId: "session-a" });
-  actor.send({ type: VOICE_MACHINE_EVENT.NOTICE_ENQUEUED, noticeId: "session-b" });
+  actor.send({ type: VOICE_MACHINE_EVENT.NOTICE_ENQUEUED, notice: first });
+  actor.send({ type: VOICE_MACHINE_EVENT.NOTICE_ENQUEUED, notice: second });
 
   const queue = actor.getSnapshot().children[VOICE_RESOURCE.NOTICE_HOLD_QUEUE];
   assert.ok(queue);
   // SAFETY: The child under this fixed id is the typed noticeHoldQueueActor.
   const queueSnapshot = () => (queue.getSnapshot() as { context: NoticeQueueSnapshot }).context;
-  assert.deepEqual(queueSnapshot().held, ["session-a", "session-b"]);
+  assert.deepEqual(queueSnapshot().held, [first, second]);
 
   actor.send({
     type: VOICE_MACHINE_EVENT.SPEAK_LUKE,
@@ -253,7 +255,7 @@ test("meeting quiet preserves queued notice order and releases the same notices"
   assert.equal(selectRealtimeStatus(actor.getSnapshot()), REALTIME_STATUS.IDLE);
 
   actor.send({ type: VOICE_MACHINE_EVENT.MEETING_QUIET_CHANGED, active: false });
-  assert.deepEqual(queueSnapshot().ready, ["session-a", "session-b"]);
+  assert.deepEqual(queueSnapshot().ready, [first, second]);
   actor.send({
     type: VOICE_MACHINE_EVENT.SPEAK_LUKE,
     origin: VOICE_TURN_ORIGIN.PROACTIVE,

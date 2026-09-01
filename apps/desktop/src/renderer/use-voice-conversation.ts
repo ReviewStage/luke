@@ -33,7 +33,7 @@ import {
   type SessionMention,
 } from "@sidecar/session";
 import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyLabel } from "@sidecar/settings";
-import { VOICE_RESTART, type VoiceRestart } from "@sidecar/voice-machine";
+import { VOICE_RESOURCE, VOICE_RESTART, type VoiceRestart } from "@sidecar/voice-machine";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import {
   type RefObject,
@@ -49,7 +49,11 @@ import type { SessionOpenResult, WorkspaceProviderId } from "#shared/wire/sessio
 import { askRefusal } from "./ask-luke";
 import { voiceQuotaSpentNote } from "./microphone-access";
 import { openPreferredMicrophone } from "./microphone-choice";
-import { type AppActionCarrier, RealtimeVoiceSession } from "./realtime-session";
+import {
+  type AppActionCarrier,
+  RealtimeVoiceSession,
+  VOICE_IDLE_TIMEOUT_MS,
+} from "./realtime-session";
 import { SpokenNoticeAnnouncer } from "./spoken-notices";
 import { useStateWithRef } from "./use-state-with-ref";
 import {
@@ -440,6 +444,14 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       next: (event) => voiceMachineInspector.current?.inspect.next?.(event),
     },
     onRestart: (restart) => restartVoice.current(restart),
+    onResourceStart: (resource) => {
+      if (resource !== VOICE_RESOURCE.IDLE_TIMER) return;
+      const timer = setTimeout(() => {
+        voiceMachine.current?.stop();
+        void voiceSession.current?.close();
+      }, VOICE_IDLE_TIMEOUT_MS);
+      return () => clearTimeout(timer);
+    },
   });
   const machine = voiceMachine.current;
   const subscribeVoiceMachine = useCallback(
@@ -630,6 +642,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       requestConnection: () => window.sidecar.requestRealtimeCredential(),
       toolsAllowed: () => machine.toolsAllowed,
       createPressAudioBuffer: () => machine.createPressAudioBuffer(),
+      externalIdleTimer: true,
       // The press's device, chosen by facts read natively: the Mac's own
       // microphone where a Bluetooth headset would otherwise pay for the
       // capture with its music codec, the browser's default everywhere else.
@@ -1336,9 +1349,16 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
 
   useEffect(() => {
     return window.sidecar.onSessionAnnouncements((announcements) => {
-      if (announcements.length > 0) ensureAnnouncer().enqueue(announcements);
+      if (announcements.length === 0) return;
+      for (const announcement of announcements) {
+        machine.enqueueNotice({
+          providerId: announcement.providerId,
+          providerSessionId: announcement.providerSessionId,
+        });
+      }
+      ensureAnnouncer().enqueue(announcements);
     });
-  }, [ensureAnnouncer]);
+  }, [ensureAnnouncer, machine]);
 
   // The one-time arrival beat, decided in the main process at the sign-in
   // edge. What is queued is only the fact of it: the beat's observed values —

@@ -71,6 +71,27 @@ test("the controller exposes the press buffer owned by the active connect state"
   subject.stopActor();
 });
 
+test("resource actors own their cleanup when the chart leaves a state", () => {
+  const resources: string[] = [];
+  const subject = new VoiceMachineController({
+    onResourceStart: (resource) => {
+      resources.push(`start:${resource}`);
+      return () => resources.push(`cleanup:${resource}`);
+    },
+    onResourceStop: (resource) => resources.push(`stop:${resource}`),
+  });
+  subject.typedAsk();
+  subject.observeSessionStatus(REALTIME_STATUS.READY);
+  subject.observeSessionStatus(REALTIME_STATUS.READY);
+  assert.ok(resources.includes("start:idle-timer"));
+
+  subject.setMicrophoneStatus("granted");
+  subject.pressDown();
+  assert.ok(resources.includes("cleanup:idle-timer"));
+  assert.ok(resources.includes("stop:idle-timer"));
+  subject.stopActor();
+});
+
 test("Stately inspection is opt-in and impossible in packaged, fixture, or capture runs", () => {
   const development = {
     captureMode: false,

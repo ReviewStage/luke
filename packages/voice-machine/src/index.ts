@@ -28,6 +28,7 @@ export {
   type VoiceMachineInput,
   type VoiceMachineSnapshot,
   type VoiceMicrophonePermission,
+  type VoiceNoticeIdentity,
   type VoicePressRelease,
   type VoiceResource,
   type VoiceRestart,

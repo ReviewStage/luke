@@ -18,7 +18,9 @@ import {
   VOICE_TURN_ORIGIN,
   type VoiceExchangeKind,
   type VoiceMachineSnapshot,
+  type VoiceNoticeIdentity,
   type VoicePressRelease,
+  type VoiceResource,
   type VoiceRestart,
   type VoiceTurnOrigin,
   voiceMachine,
@@ -29,6 +31,8 @@ import type { MicrophoneStatus } from "#shared/wire/audio";
 export interface VoiceMachineControllerOptions {
   inspect?: Observer<InspectionEvent>;
   onRestart?: (restart: VoiceRestart) => void;
+  onResourceStart?: (resource: VoiceResource) => (() => void) | void;
+  onResourceStop?: (resource: VoiceResource) => void;
 }
 
 export interface VoiceMachinePressAudioBuffer {
@@ -70,6 +74,8 @@ export class VoiceMachineController {
     this.#actor = createActor(voiceMachine, {
       input: {
         onRestart: options.onRestart,
+        onResourceStart: options.onResourceStart,
+        onResourceStop: options.onResourceStop,
       },
       ...(options.inspect ? { inspect: options.inspect } : undefined),
     }).start();
@@ -136,6 +142,10 @@ export class VoiceMachineController {
 
   setOutputSilent(silent: boolean): void {
     this.#actor.send({ type: VOICE_MACHINE_EVENT.OUTPUT_SILENCE_CHANGED, silent });
+  }
+
+  enqueueNotice(notice: VoiceNoticeIdentity): void {
+    this.#actor.send({ type: VOICE_MACHINE_EVENT.NOTICE_ENQUEUED, notice });
   }
 
   pressDown(): void {

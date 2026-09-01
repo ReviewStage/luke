@@ -348,6 +348,8 @@ export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbac
    * retirement can be exercised without waiting ten real minutes.
    */
   idleTimeoutMs?: number;
+  /** The statechart owns idle retirement in renderer integrations that provide it. */
+  externalIdleTimer?: boolean;
   /** The timer the idle retirement runs on, injectable for the same reason. */
   schedule?: (callback: () => void, delayMs: number) => ScheduledTimer;
   cancel?: (timer: ScheduledTimer) => void;
@@ -2727,6 +2729,7 @@ export class RealtimeVoiceSession {
    */
   #restIdleTimer(status: RealtimeStatus): void {
     this.#clearIdleTimer();
+    if (this.#options.externalIdleTimer) return;
     if (status !== REALTIME_STATUS.READY || !this.#withMicrophone) return;
     const timeoutMs = positiveInteger(this.#options.idleTimeoutMs, VOICE_IDLE_TIMEOUT_MS);
     this.#idleTimer = (this.#options.schedule ?? setTimeout)(() => {

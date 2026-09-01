@@ -118,14 +118,19 @@ export type VoiceExchangeKind = (typeof VOICE_EXCHANGE_KIND)[keyof typeof VOICE_
 
 export interface VoiceResourceInput {
   resource: VoiceResource;
-  onStart?: (resource: VoiceResource) => void;
+  onStart?: (resource: VoiceResource) => (() => void) | void;
   onStop?: (resource: VoiceResource) => void;
 }
 
 export interface NoticeQueueSnapshot {
   holding: boolean;
-  held: readonly string[];
-  ready: readonly string[];
+  held: readonly VoiceNoticeIdentity[];
+  ready: readonly VoiceNoticeIdentity[];
+}
+
+export interface VoiceNoticeIdentity {
+  providerId: string;
+  providerSessionId: string;
 }
 
 export type NoticeQueueEvent =
@@ -135,7 +140,7 @@ export type NoticeQueueEvent =
     }
   | {
       type: typeof VOICE_MACHINE_EVENT.NOTICE_ENQUEUED;
-      noticeId: string;
+      notice: VoiceNoticeIdentity;
     };
 
 const EMPTY_NOTICE_QUEUE: NoticeQueueSnapshot = {
@@ -151,10 +156,14 @@ export const noticeHoldQueueActor = fromTransition(
       return { holding: false, held: [], ready: snapshot.held };
     }
     if (!snapshot.holding) {
-      return { ...snapshot, ready: [...snapshot.ready, event.noticeId] };
+      return { ...snapshot, ready: [...snapshot.ready, event.notice] };
     }
-    const withoutOlder = snapshot.held.filter((noticeId) => noticeId !== event.noticeId);
-    return { ...snapshot, held: [...withoutOlder, event.noticeId] };
+    const withoutOlder = snapshot.held.filter(
+      (notice) =>
+        notice.providerId !== event.notice.providerId ||
+        notice.providerSessionId !== event.notice.providerSessionId,
+    );
+    return { ...snapshot, held: [...withoutOlder, event.notice] };
   },
   EMPTY_NOTICE_QUEUE,
 );
@@ -174,7 +183,7 @@ export type VoiceMachineEvent =
       type: typeof VOICE_MACHINE_EVENT.MICROPHONE_PERMISSION_CHANGED;
       permission: VoiceMicrophonePermission;
     }
-  | { type: typeof VOICE_MACHINE_EVENT.NOTICE_ENQUEUED; noticeId: string }
+  | { type: typeof VOICE_MACHINE_EVENT.NOTICE_ENQUEUED; notice: VoiceNoticeIdentity }
   | { type: typeof VOICE_MACHINE_EVENT.OUTPUT_SILENCE_CHANGED; silent: boolean }
   | { type: typeof VOICE_MACHINE_EVENT.PRESS_DISCARDED }
   | { type: typeof VOICE_MACHINE_EVENT.PRESS_DOWN }
@@ -199,27 +208,30 @@ export type VoiceMachineEvent =
   | { type: typeof VOICE_MACHINE_EVENT.VOICE_CHANGED; live: boolean };
 
 interface VoiceMachineContext {
-  onResourceStart: ((resource: VoiceResource) => void) | undefined;
+  onResourceStart: ((resource: VoiceResource) => (() => void) | void) | undefined;
   onResourceStop: ((resource: VoiceResource) => void) | undefined;
   onRestart: ((restart: VoiceRestart) => void) | undefined;
   turnOrigin: VoiceTurnOrigin | undefined;
 }
 
 export interface VoiceMachineInput {
-  onResourceStart?: (resource: VoiceResource) => void;
+  onResourceStart?: (resource: VoiceResource) => (() => void) | void;
   onResourceStop?: (resource: VoiceResource) => void;
   onRestart?: (restart: VoiceRestart) => void;
 }
 
 const resourceActor = fromCallback<EventObject, VoiceResourceInput>(({ input }) => {
-  input.onStart?.(input.resource);
-  return () => input.onStop?.(input.resource);
+  const cleanup = input.onStart?.(input.resource);
+  return () => {
+    cleanup?.();
+    input.onStop?.(input.resource);
+  };
 });
 
 export const pressAudioBufferActor = fromCallback<PressAudioActorEvent, VoiceResourceInput>(
   ({ input, receive }) => {
     const buffer = new PressAudioBuffer();
-    input.onStart?.(input.resource);
+    const cleanup = input.onStart?.(input.resource);
     receive((event) => {
       if (event.type === PRESS_AUDIO_ACTOR_EVENT.PUSH) {
         buffer.push(event.chunk);
@@ -235,7 +247,10 @@ export const pressAudioBufferActor = fromCallback<PressAudioActorEvent, VoiceRes
         isEmpty: buffer.isEmpty,
       });
     });
-    return () => input.onStop?.(input.resource);
+    return () => {
+      cleanup?.();
+      input.onStop?.(input.resource);
+    };
   },
 );
 
