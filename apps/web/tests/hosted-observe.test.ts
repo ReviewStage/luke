@@ -3,7 +3,7 @@ import test from "node:test";
 import { observeAnswerFromWire } from "@sidecar/hosted";
 import { encryptProviderKey } from "../server/hosted/encryption";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
-import { handleObserve, type VaultKeyRow } from "../server/hosted/observe";
+import { handleObserve, type VaultKeyRow } from "./hosted-runner";
 
 const SECRET = "a".repeat(64);
 

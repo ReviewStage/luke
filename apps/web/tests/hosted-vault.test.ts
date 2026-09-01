@@ -4,12 +4,8 @@ import { CLOUD_AGENT_PROVIDER_LIST } from "@sidecar/credentials";
 import { VAULT_PROVIDER_ID } from "@sidecar/hosted";
 import { decryptProviderKey, encryptProviderKey } from "../server/hosted/encryption";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
-import type { VaultKeyEntry } from "../server/hosted/vault";
-import {
-  handleVaultKeyDelete,
-  handleVaultKeyStore,
-  handleVaultKeysList,
-} from "../server/hosted/vault";
+import type { VaultKeyEntry } from "./hosted-runner";
+import { handleVaultKeyDelete, handleVaultKeyStore, handleVaultKeysList } from "./hosted-runner";
 
 // A valid 32-byte secret as 64 hex chars.
 const SECRET = "a".repeat(64);

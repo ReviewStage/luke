@@ -4,11 +4,11 @@ import { HOSTED_WS_BASE_URL } from "@sidecar/hosted";
 import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import {
-  handleIntroductionMint,
   INTRODUCTION_SECRET_EXPIRY,
   introductionCallerKey,
 } from "../server/hosted/introduction-mint";
 import type { IntroductionSpend } from "../server/hosted/quota";
+import { handleIntroductionMint } from "./hosted-runner";
 
 const NOW = Date.parse("2026-08-17T12:00:00.000Z");
 const API_KEY = "sk-hosted-secret";

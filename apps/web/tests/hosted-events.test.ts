@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PRODUCT_EVENT, PRODUCT_EVENT_BATCH_LIMIT, type WireValue } from "../server/core";
-import { type EventsOptions, handleEvents } from "../server/hosted/events";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import type { PosthogBatch, PosthogBatchItem } from "../server/hosted/posthog";
+import { type EventsOptions, handleEvents } from "./hosted-runner";
 
 const NOW = Date.parse("2026-08-19T12:00:00.000Z");
 const PROJECT_KEY = "phc_project";

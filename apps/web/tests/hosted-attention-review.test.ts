@@ -10,12 +10,10 @@ import {
   HOSTED_ATTENTION_CONTRACT_VERSION,
 } from "@sidecar/hosted";
 import { SESSION_STATUS } from "@sidecar/session";
-import {
-  HOSTED_ATTENTION_DEFAULTS,
-  handleAttentionReview,
-} from "../server/hosted/attention-review";
+import { HOSTED_ATTENTION_DEFAULTS } from "../server/hosted/attention-review";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import type { HostedSpend } from "../server/hosted/quota";
+import { handleAttentionReview } from "./hosted-runner";
 
 const NOW = Date.parse("2026-08-17T12:00:00.000Z");
 const API_KEY = "sk-hosted-secret";

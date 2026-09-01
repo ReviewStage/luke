@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { handleAccountDelete } from "../server/hosted/account-delete";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
+import { handleAccountDelete } from "./hosted-runner";
 
 function deleteRequest(headers: Record<string, string> = {}): Request {
   return new Request("https://luke.test/api/account/delete", {

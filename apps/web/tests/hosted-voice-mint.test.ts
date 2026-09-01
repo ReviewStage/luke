@@ -5,7 +5,7 @@ import type { RealtimeVoice, RealtimeVoiceSpeed } from "@sidecar/realtime";
 import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import type { HostedSpend } from "../server/hosted/quota";
-import { handleVoiceMint } from "../server/hosted/voice-mint";
+import { handleVoiceMint } from "./hosted-runner";
 
 const NOW = Date.parse("2026-08-17T12:00:00.000Z");
 const API_KEY = "sk-hosted-secret";

@@ -7,7 +7,7 @@ import {
   readHostedUsage,
   utcDayEnd,
 } from "../server/hosted/quota";
-import { handleUsage } from "../server/hosted/usage";
+import { handleUsage } from "./hosted-runner";
 
 const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
 
