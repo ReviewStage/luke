@@ -32,6 +32,13 @@ import {
 /** The hosted endpoints, rooted at the service origin. */
 export const HOSTED_SERVICE_PATH = {
   VOICE_MINT: "/api/voice/mint",
+  /**
+   * Mints one ephemeral Realtime credential for the signed-in iPhone and
+   * answers with the user's cloud session roster pre-serialized as a context
+   * item (POST). Same quota meter as VOICE_MINT; narrowed to the tool set the
+   * mobile act endpoints serve.
+   */
+  MOBILE_VOICE_MINT: "/api/voice/mobile-mint",
   /** Send a message to a cloud session (POST). */
   ACT_MESSAGE: "/api/acts/message",
   /** Create a workspace in a cloud project (POST). */
@@ -228,6 +235,53 @@ export function hostedMintAnswerFromWire(
   const answer: HostedMintAnswer = { connection: credential };
   if (quota !== undefined) answer.quota = quota;
   return answer;
+}
+
+/**
+ * One pre-serialized context item returned by the mobile mint endpoint. The
+ * phone wraps `text` verbatim in a `conversation.item.create` event keyed by
+ * `itemId` — it does not re-serialize, re-label, or re-validate the content.
+ */
+export interface MobileVoiceContextItem {
+  /** The item id the phone names the `conversation.item.create` event with. */
+  itemId: string;
+  /** The labeled context text, ready to drop into `content[0].text`. */
+  text: string;
+}
+
+/** The pre-serialized context the mobile mint endpoint answers with. */
+export interface MobileVoiceContext {
+  sessions: MobileVoiceContextItem;
+}
+
+/** What the mobile mint endpoint returns on success. */
+export interface MobileMintAnswer extends HostedMintAnswer {
+  context: MobileVoiceContext;
+}
+
+/**
+ * Validates a mobile mint answer. Inherits the credential checks from
+ * `hostedMintAnswerFromWire` and additionally requires a non-empty context
+ * with a sessions item. A malformed context is not repaired — the phone has
+ * no fallback for context it cannot forward.
+ */
+export function mobileMintAnswerFromWire(
+  value: UnparsedWireValue,
+  now: number,
+): MobileMintAnswer | undefined {
+  const base = hostedMintAnswerFromWire(value, now);
+  if (!base || !isRecord(value)) return undefined;
+  if (!isRecord(value.context)) return undefined;
+  const ctx = value.context;
+  if (!isRecord(ctx.sessions)) return undefined;
+  const sessions = ctx.sessions;
+  const itemId = text(sessions.itemId);
+  const itemText = text(sessions.text);
+  if (!itemId || !itemText) return undefined;
+  return {
+    ...base,
+    context: { sessions: { itemId, text: itemText } },
+  };
 }
 
 export interface HostedReviewAnswer {

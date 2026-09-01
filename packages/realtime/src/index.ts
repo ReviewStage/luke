@@ -54,6 +54,7 @@ export {
   workspaceProjectContextText,
 } from "./realtime-context.js";
 export {
+  mobileRealtimeClientSecretRequest,
   REALTIME_CLIENT_SECRETS_PATH,
   REALTIME_MINT_OUTCOME,
   REALTIME_TRUNCATION,
@@ -115,6 +116,7 @@ export {
   isIssueToolName,
   isSessionToolName,
   issueToolAction,
+  mobileRealtimeToolDefinitions,
   REALTIME_TOOL,
   REALTIME_TOOL_FAMILY,
   type RealtimeToolFamily,

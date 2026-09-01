@@ -1891,6 +1891,35 @@ export function realtimeToolDefinitions(): readonly RealtimeToolWireDefinition[]
 }
 
 /**
+ * The SESSION acts the mobile act endpoints already serve — MESSAGE, CONTROL,
+ * ADD_AGENT, CREATE_WORKSPACE, RENAME_WORKSPACE, RENAME_SESSION — as tool
+ * schemas for a mobile Realtime session. OPEN and READ_TRANSCRIPT are excluded
+ * because no mobile endpoint takes them; ISSUE and APP tools are excluded
+ * because mobile has no equivalent endpoints for those.
+ */
+const MOBILE_SESSION_ACTION_KINDS: ReadonlySet<string> = new Set([
+  SESSION_TOOL_KIND.MESSAGE,
+  SESSION_TOOL_KIND.CONTROL,
+  SESSION_TOOL_KIND.ADD_AGENT,
+  SESSION_TOOL_KIND.CREATE_WORKSPACE,
+  SESSION_TOOL_KIND.RENAME_WORKSPACE,
+  SESSION_TOOL_KIND.RENAME_SESSION,
+]);
+
+export function mobileRealtimeToolDefinitions(): readonly RealtimeToolWireDefinition[] {
+  return REALTIME_TOOL_LIST.filter(
+    (tool) =>
+      tool.family === REALTIME_TOOL_FAMILY.SESSION &&
+      MOBILE_SESSION_ACTION_KINDS.has(tool.actionKind),
+  ).map((tool) => ({
+    type: "function",
+    name: tool.name,
+    description: tool.schema.description,
+    parameters: tool.schema.parameters,
+  }));
+}
+
+/**
  * Validates one tool call against the sessions actually being observed. This
  * is the renderer's half of the gauntlet — the main process re-validates
  * against its registry — and it exists so a call the model composed can only
