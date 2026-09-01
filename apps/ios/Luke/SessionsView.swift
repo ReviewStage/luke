@@ -114,7 +114,7 @@ private struct SessionRow: View {
             RoundedRectangle(cornerRadius: 15)
                 .strokeBorder(
                     session.status == "waiting"
-                        ? Color(red: 0.9, green: 0.65, blue: 0.2, opacity: 0.35)
+                        ? Color(red: 1.0, green: 0.627, blue: 0.286, opacity: 0.3)
                         : Color(white: 1, opacity: 0.08),
                     lineWidth: 1
                 )
@@ -182,11 +182,6 @@ private struct DoingLine: View {
                 .font(.system(size: 8, weight: .semibold))
                 .foregroundStyle(Color(red: 0.35, green: 0.85, blue: 0.55).opacity(0.85))
                 .frame(width: 10, height: 10)
-        case "waiting":
-            Image(systemName: "checkmark")
-                .font(.system(size: 8, weight: .semibold))
-                .foregroundStyle(Color(red: 1.0, green: 0.75, blue: 0.2).opacity(0.85))
-                .frame(width: 10, height: 10)
         default:
             EmptyView()
         }
@@ -204,7 +199,7 @@ private struct DoingLine: View {
                 .font(.system(size: 11))
                 .foregroundStyle(
                     session.status == "waiting"
-                        ? Color(red: 0.9, green: 0.65, blue: 0.2)
+                        ? Color(red: 1.0, green: 0.627, blue: 0.286)
                         : Color(white: 1, opacity: 0.55)
                 )
                 .lineLimit(2)
