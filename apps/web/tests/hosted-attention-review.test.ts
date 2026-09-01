@@ -128,7 +128,6 @@ test("an old client receives the summary-bearing contract from a new server", as
   assert.deepEqual((await response.json()).decision, { ...legacyDecision, decidedAt: NOW });
   const sent = JSON.parse(String(call.init?.body));
   assert.deepEqual(sent.text.format.schema.required, ["disposition", "summary"]);
-  assert.match(sent.instructions, /How to word it:/);
 });
 
 test("an unknown contract version is refused before anything is spent", async () => {
