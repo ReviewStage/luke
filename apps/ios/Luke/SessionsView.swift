@@ -17,9 +17,16 @@ struct SessionsView: View {
     @State private var sort: SessionSort = .urgency
     @State private var optionsShown = false
     @State private var composingSession: RosterSession?
+    @State private var spawningSession: RosterSession?
+    @State private var renamingSession: RosterSession?
+    @State private var renamingWorkspace: RosterSession?
+    @State private var renameText = ""
+    @State private var creatorShown = false
+    @State private var actFailure: String?
 
     private let rosterClient = RosterClient(serviceURL: AccountConstants.serviceURL)
     private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
+    private let projectsClient = ProjectsClient(serviceURL: AccountConstants.serviceURL)
 
     var body: some View {
         Group {
@@ -36,6 +43,78 @@ struct SessionsView: View {
             ComposerSheet(session: s, actClient: actClient) {
                 composingSession = nil
             }
+        }
+        .sheet(item: $spawningSession) { s in
+            AgentSpawnerSheet(session: s, actClient: actClient) {
+                spawningSession = nil
+                Task { await refreshSessions() }
+            }
+        }
+        .sheet(isPresented: $creatorShown) {
+            WorkspaceCreatorSheet(actClient: actClient, projectsClient: projectsClient) {
+                creatorShown = false
+                Task { await refreshSessions() }
+            }
+        }
+        .alert(
+            "Rename Session",
+            isPresented: Binding(
+                get: { renamingSession != nil },
+                set: { if !$0 { renamingSession = nil } }
+            ),
+            presenting: renamingSession
+        ) { s in
+            TextField("Name", text: $renameText)
+            Button("Rename") {
+                let name = renameText
+                Task {
+                    await performAct { token in
+                        try await actClient.renameSession(
+                            accessToken: token,
+                            providerId: s.providerId,
+                            providerSessionId: s.sessionId,
+                            name: name
+                        )
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .alert(
+            "Rename Workspace",
+            isPresented: Binding(
+                get: { renamingWorkspace != nil },
+                set: { if !$0 { renamingWorkspace = nil } }
+            ),
+            presenting: renamingWorkspace
+        ) { s in
+            TextField("Name", text: $renameText)
+            Button("Rename") {
+                let name = renameText
+                Task {
+                    await performAct { token in
+                        try await actClient.renameWorkspace(
+                            accessToken: token,
+                            providerId: s.providerId,
+                            providerSessionId: s.sessionId,
+                            name: name
+                        )
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .alert(
+            "Not Delivered",
+            isPresented: Binding(
+                get: { actFailure != nil },
+                set: { if !$0 { actFailure = nil } }
+            ),
+            presenting: actFailure
+        ) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { reason in
+            Text(reason)
         }
     }
 
@@ -107,6 +186,9 @@ struct SessionsView: View {
                     optionsButton
                 }
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                newWorkspaceButton
+            }
         }
         .sheet(isPresented: $optionsShown) {
             SessionOptionsSheet(sessions: sessions, filters: $filters, sort: $sort)
@@ -126,6 +208,15 @@ struct SessionsView: View {
         .tint(Color.ink)
     }
 
+    private var newWorkspaceButton: some View {
+        Button {
+            creatorShown = true
+        } label: {
+            Label("New Workspace", systemImage: "plus")
+        }
+        .tint(Color.ink)
+    }
+
     private var filteredOutRow: some View {
         ContentUnavailableView {
             Label("No matching sessions", systemImage: "line.3.horizontal.decrease")
@@ -140,15 +231,119 @@ struct SessionsView: View {
 
     private let rowInsets = EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16)
 
+    /// Whether the row offers anything beyond what it draws. Every offer here
+    /// is one the session's latest observation advertised — the row invents
+    /// no fallback for a provider that advertised nothing.
+    private func hasRowActs(_ s: RosterSession) -> Bool {
+        s.canReceiveMessage || !s.controls.isEmpty || !s.spawnableAgents.isEmpty || s.canRename
+            || s.canRenameWorkspace
+    }
+
     @ViewBuilder
     private func sessionItem(_ s: RosterSession) -> some View {
-        if s.status == "waiting" {
+        if hasRowActs(s) {
+            rowCore(s).contextMenu { rowMenu(s) }
+        } else {
+            rowCore(s)
+        }
+    }
+
+    @ViewBuilder
+    private func rowCore(_ s: RosterSession) -> some View {
+        if s.canReceiveMessage {
             Button { composingSession = s } label: {
                 SessionRow(session: s)
             }
             .buttonStyle(.plain)
         } else {
             SessionRow(session: s)
+        }
+    }
+
+    @ViewBuilder
+    private func rowMenu(_ s: RosterSession) -> some View {
+        if s.canReceiveMessage {
+            Button {
+                composingSession = s
+            } label: {
+                Label("Send Message", systemImage: "arrow.up.message")
+            }
+        }
+        ForEach(s.controls) { control in
+            Button {
+                Task {
+                    await performAct { token in
+                        try await actClient.executeControl(
+                            accessToken: token,
+                            providerId: s.providerId,
+                            providerSessionId: s.sessionId,
+                            controlId: control.id
+                        )
+                    }
+                }
+            } label: {
+                Label(control.label, systemImage: controlSymbol(control))
+            }
+        }
+        if !s.spawnableAgents.isEmpty {
+            Button {
+                spawningSession = s
+            } label: {
+                Label("Add Agent…", systemImage: "plus.bubble")
+            }
+        }
+        if s.canRename {
+            Button {
+                renameText = s.title
+                renamingSession = s
+            } label: {
+                Label("Rename Session…", systemImage: "pencil")
+            }
+        }
+        if s.canRenameWorkspace {
+            Button {
+                renameText = s.workspace ?? ""
+                renamingWorkspace = s
+            } label: {
+                Label("Rename Workspace…", systemImage: "pencil.line")
+            }
+        }
+    }
+
+    /// A glyph for a control the provider advertised. The kind names a stop;
+    /// beyond that the id's family is display-only — execution always names
+    /// the id against the server's own fresh observation.
+    private func controlSymbol(_ control: RosterSessionControl) -> String {
+        if control.kind == "stop" { return "stop.circle" }
+        if control.id.contains("archive") { return "archivebox" }
+        if control.id.contains("approve") { return "checkmark.circle" }
+        return "circle"
+    }
+
+    /// Runs one row act with the established token discipline, then refreshes
+    /// so the roster reflects what the act changed; a refusal is surfaced in
+    /// the failure alert with the server's own reason.
+    private func performAct(_ act: @escaping (String) async throws -> ActMessageAnswer) async {
+        do {
+            let token = try await session.validAccessToken()
+            var answer: ActMessageAnswer
+            do {
+                answer = try await act(token)
+            } catch ActClientError.unauthorized {
+                // validAccessToken() refreshes near-expiry tokens; a 401 here
+                // means the server rejected the token — refresh and retry once.
+                let fresh = try await session.refreshAccessToken()
+                answer = try await act(fresh)
+            }
+            if answer.result == .accepted {
+                await refreshSessions()
+            } else {
+                actFailure = answer.reason ?? "The act was not delivered."
+            }
+        } catch is AccountSessionError {
+            ()  // Signed out — the state change redraws automatically.
+        } catch {
+            actFailure = error.localizedDescription
         }
     }
 

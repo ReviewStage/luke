@@ -48,7 +48,9 @@ public enum ActClientError: Error, Equatable {
 /// HTTP client for Luke's hosted act endpoints.
 ///
 /// Acts are the write path for cloud sessions: message a session that is
-/// accepting messages, or create a workspace in a provider project.
+/// accepting messages, run a control its provider advertised, start another
+/// agent in its workspace, rename it or its workspace, or create a workspace
+/// in a provider project.
 ///
 /// Text bounds (`sessionMessageText` / `workspaceNameText`) are enforced on
 /// the server. The client trims text before sending as a courtesy.
@@ -77,6 +79,86 @@ public final class ActClient: Sendable {
             "providerId": providerId,
             "providerSessionId": providerSessionId,
             "text": text.trimmingCharacters(in: .whitespacesAndNewlines),
+        ]
+        return try await post(url: url, body: body, accessToken: accessToken)
+    }
+
+    /// Runs a control the session's latest observation advertised (stop a
+    /// turn, archive a settled workspace, approve a plan).
+    ///
+    /// The server re-observes before writing: a control the fresh pass no
+    /// longer advertises answers `rejected` rather than landing on a session
+    /// that moved on.
+    public func executeControl(
+        accessToken: String,
+        providerId: String,
+        providerSessionId: String,
+        controlId: String
+    ) async throws -> ActMessageAnswer {
+        let url = baseURL.appendingPathComponent("api/acts/control")
+        let body: [String: String] = [
+            "providerId": providerId,
+            "providerSessionId": providerSessionId,
+            "controlId": controlId,
+        ]
+        return try await post(url: url, body: body, accessToken: accessToken)
+    }
+
+    /// Starts another agent in the workspace an observed session runs in.
+    ///
+    /// `agent` must be one of the kinds the session's latest observation
+    /// listed as spawnable; the server re-observes and validates it again.
+    public func spawnAgent(
+        accessToken: String,
+        providerId: String,
+        providerSessionId: String,
+        agent: String,
+        name: String? = nil,
+        task: String? = nil
+    ) async throws -> ActWorkspaceAnswer {
+        let url = baseURL.appendingPathComponent("api/acts/agent")
+        var body: [String: String] = [
+            "providerId": providerId,
+            "providerSessionId": providerSessionId,
+            "agent": agent,
+        ]
+        if let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+            body["name"] = name
+        }
+        if let task = task?.trimmingCharacters(in: .whitespacesAndNewlines), !task.isEmpty {
+            body["task"] = task
+        }
+        return try await post(url: url, body: body, accessToken: accessToken)
+    }
+
+    /// Renames an observed session itself — the chat.
+    public func renameSession(
+        accessToken: String,
+        providerId: String,
+        providerSessionId: String,
+        name: String
+    ) async throws -> ActMessageAnswer {
+        let url = baseURL.appendingPathComponent("api/acts/rename-session")
+        let body: [String: String] = [
+            "providerId": providerId,
+            "providerSessionId": providerSessionId,
+            "name": name.trimmingCharacters(in: .whitespacesAndNewlines),
+        ]
+        return try await post(url: url, body: body, accessToken: accessToken)
+    }
+
+    /// Renames the workspace an observed session runs in.
+    public func renameWorkspace(
+        accessToken: String,
+        providerId: String,
+        providerSessionId: String,
+        name: String
+    ) async throws -> ActMessageAnswer {
+        let url = baseURL.appendingPathComponent("api/acts/rename-workspace")
+        let body: [String: String] = [
+            "providerId": providerId,
+            "providerSessionId": providerSessionId,
+            "name": name.trimmingCharacters(in: .whitespacesAndNewlines),
         ]
         return try await post(url: url, body: body, accessToken: accessToken)
     }

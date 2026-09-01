@@ -248,3 +248,129 @@ final class ActClientCreateWorkspaceTests: XCTestCase {
         XCTAssertNil(answer.providerSessionId)
     }
 }
+
+// MARK: - Row acts
+
+final class ActClientRowActTests: XCTestCase {
+    private let base = URL(string: "https://example.com")!
+
+    private func bodyJSON(_ request: URLRequest) -> [String: Any] {
+        guard
+            let body = request.httpBody,
+            let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any]
+        else { return [:] }
+        return json
+    }
+
+    func testExecuteControlHitsPathWithControlId() async throws {
+        let stub = StubHTTPClient { request in
+            XCTAssertTrue(request.url?.path.hasSuffix("api/acts/control") == true)
+            let body = self.bodyJSON(request)
+            XCTAssertEqual(body["providerId"] as? String, "jules")
+            XCTAssertEqual(body["providerSessionId"] as? String, "sess-1")
+            XCTAssertEqual(body["controlId"] as? String, "approve-plan")
+            return (jsonData(["result": "accepted"]), makeResponse(url: request.url!, status: 200))
+        }
+        let client = ActClient(baseURL: base, http: stub)
+        let answer = try await client.executeControl(
+            accessToken: "tok",
+            providerId: "jules",
+            providerSessionId: "sess-1",
+            controlId: "approve-plan"
+        )
+        XCTAssertEqual(answer.result, .accepted)
+    }
+
+    func testSpawnAgentOmitsEmptyNameAndTask() async throws {
+        let stub = StubHTTPClient { request in
+            XCTAssertTrue(request.url?.path.hasSuffix("api/acts/agent") == true)
+            let body = self.bodyJSON(request)
+            XCTAssertEqual(body["agent"] as? String, "claude")
+            XCTAssertNil(body["name"])
+            XCTAssertNil(body["task"])
+            return (
+                jsonData(["result": "accepted", "providerSessionId": "chat-2"]),
+                makeResponse(url: request.url!, status: 200)
+            )
+        }
+        let client = ActClient(baseURL: base, http: stub)
+        let answer = try await client.spawnAgent(
+            accessToken: "tok",
+            providerId: "replicas",
+            providerSessionId: "chat-1",
+            agent: "claude",
+            name: "   ",
+            task: ""
+        )
+        XCTAssertEqual(answer.result, .accepted)
+        XCTAssertEqual(answer.providerSessionId, "chat-2")
+    }
+
+    func testSpawnAgentCarriesTrimmedNameAndTask() async throws {
+        let stub = StubHTTPClient { request in
+            let body = self.bodyJSON(request)
+            XCTAssertEqual(body["name"] as? String, "Second opinion")
+            XCTAssertEqual(body["task"] as? String, "Review the diff")
+            return (jsonData(["result": "accepted"]), makeResponse(url: request.url!, status: 200))
+        }
+        let client = ActClient(baseURL: base, http: stub)
+        _ = try await client.spawnAgent(
+            accessToken: "tok",
+            providerId: "conductor",
+            providerSessionId: "sess-1",
+            agent: "claude",
+            name: " Second opinion ",
+            task: " Review the diff "
+        )
+    }
+
+    func testRenameSessionHitsPathWithTrimmedName() async throws {
+        let stub = StubHTTPClient { request in
+            XCTAssertTrue(request.url?.path.hasSuffix("api/acts/rename-session") == true)
+            let body = self.bodyJSON(request)
+            XCTAssertEqual(body["name"] as? String, "Better title")
+            return (jsonData(["result": "accepted"]), makeResponse(url: request.url!, status: 200))
+        }
+        let client = ActClient(baseURL: base, http: stub)
+        _ = try await client.renameSession(
+            accessToken: "tok",
+            providerId: "conductor",
+            providerSessionId: "sess-1",
+            name: " Better title "
+        )
+    }
+
+    func testRenameWorkspaceHitsPath() async throws {
+        let stub = StubHTTPClient { request in
+            XCTAssertTrue(request.url?.path.hasSuffix("api/acts/rename-workspace") == true)
+            return (jsonData(["result": "accepted"]), makeResponse(url: request.url!, status: 200))
+        }
+        let client = ActClient(baseURL: base, http: stub)
+        _ = try await client.renameWorkspace(
+            accessToken: "tok",
+            providerId: "conductor",
+            providerSessionId: "sess-1",
+            name: "Renamed"
+        )
+    }
+
+    func testControlUnauthorizedThrows() async {
+        let stub = StubHTTPClient { request in
+            (Data(), makeResponse(url: request.url!, status: 401))
+        }
+        let client = ActClient(baseURL: base, http: stub)
+        do {
+            _ = try await client.executeControl(
+                accessToken: "tok",
+                providerId: "cursor",
+                providerSessionId: "agent-1",
+                controlId: "cancel-run"
+            )
+            XCTFail("expected a thrown error")
+        } catch let error as ActClientError {
+            XCTAssertEqual(error, .unauthorized)
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+    }
+}
