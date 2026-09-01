@@ -6,7 +6,10 @@ struct SessionsView: View {
     @Environment(AccountSession.self) private var session
 
     @State private var sessions: [RosterSession] = []
-    @State private var isLoading = false
+    /// Starts true because the list's first frame can paint before its
+    /// `.task` begins the fetch, and that frame must show the skeletons
+    /// rather than claim "No active sessions" nothing has checked yet.
+    @State private var isLoading = true
     @State private var fetchError: String?
     @State private var searchQuery = ""
     @State private var filters: Set<SessionFilter> = []
