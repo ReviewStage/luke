@@ -16,6 +16,28 @@ public struct RosterSession: Identifiable, Sendable {
 
     public var id: String { "\(providerId):\(sessionId)" }
 
+    public init(
+        providerId: String,
+        sessionId: String,
+        title: String,
+        status: String,
+        workspace: String? = nil,
+        branch: String? = nil,
+        recap: String? = nil,
+        error: String? = nil,
+        observedAt: Date? = nil
+    ) {
+        self.providerId = providerId
+        self.sessionId = sessionId
+        self.title = title
+        self.status = status
+        self.workspace = workspace
+        self.branch = branch
+        self.recap = recap
+        self.error = error
+        self.observedAt = observedAt
+    }
+
     init?(json: [String: Any]) {
         guard
             let providerId = json["providerId"] as? String,
