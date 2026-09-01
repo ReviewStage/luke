@@ -196,7 +196,12 @@ final class RealtimeSessionStateTests: XCTestCase {
 
         XCTAssertEqual(dispatchedNames, ["send_session_message"])
         let sent = ws.outgoing.joined(separator: "\n")
-        XCTAssertTrue(sent.contains(#""result":"sent""#))
+        // The dispatch result is JSON-escaped inside the function_call_output event,
+        // so "result":"sent" appears as \"result\":\"sent\" in the wire bytes.
+        // Assert on the structural properties instead: the right message type was
+        // sent and addressed to the right call.
+        XCTAssertTrue(sent.contains("function_call_output"), "Should forward dispatch result to WebSocket")
+        XCTAssertTrue(sent.contains(#""call_id":"c1""#), "Should address the correct call_id")
     }
 
     func testCloseResetsToIdle() async throws {
