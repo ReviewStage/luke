@@ -1,3 +1,4 @@
+import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabulary";
 import type { ScheduledTimer } from "@sidecar/realtime";
 import {
   decodeDialogueAudio,
@@ -172,9 +173,30 @@ export interface ElevenLabsSpeechOptions {
   /** The timers the keepalive and the drain run on, injectable for the same reason. */
   schedule?: (callback: () => void, delayMs: number) => ScheduledTimer;
   cancelScheduled?: (timer: ScheduledTimer) => void;
+  /**
+   * The development trace's tap, the same one the realtime call is watched
+   * through. A speech socket that says nothing is otherwise unreadable from
+   * outside: the words are drawn, no failure is reported, and whether the
+   * frames never came or came and were never heard cannot be told apart. The
+   * samples are counted rather than carried, for the reason a microphone
+   * append is.
+   */
+  onWireEvent?: (direction: TraceDirection, event: WireRecord) => void;
 }
 
 const SOCKET_OPEN = 1;
+
+/**
+ * What the trace calls each step of one reply's speech, so the frames a socket
+ * exchanged read in order beside the realtime events that drove them.
+ */
+const SPEECH_TRACE = {
+  MINT: "speech.mint",
+  OPEN: "speech.open",
+  AUDIO: "speech.audio",
+  END: "speech.end",
+  CLOSE: "speech.close",
+} as const;
 
 const SOCKET_FAILURE_MESSAGE = "The speech connection closed before Luke finished speaking";
 
@@ -291,16 +313,20 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
     // token held from the last reply would be one already spent.
     const answer = await this.#options.mintToken().catch(() => undefined);
     if (generation !== this.#generation) return;
+    this.#trace(TRACE_DIRECTION.SERVER, {
+      type: SPEECH_TRACE.MINT,
+      outcome: answer?.outcome ?? "threw",
+    });
     if (!answer || answer.outcome !== TOKEN_MINT_OUTCOME.OK || !answer.token) {
       this.#fail(answer?.explanation ?? "Luke could not reach the speech service.");
       return;
     }
-    const socket = (this.#options.createSocket ?? defaultSocket)(
-      elevenlabsDialogueUrl(answer.token),
-    );
+    const url = elevenlabsDialogueUrl(answer.token);
+    const socket = (this.#options.createSocket ?? defaultSocket)(url);
     this.#socket = socket;
     socket.onopen = () => {
       if (generation !== this.#generation) return;
+      this.#trace(TRACE_DIRECTION.SERVER, { type: SPEECH_TRACE.OPEN });
       this.#send(dialogueVoicesFrame(this.#options.voiceId));
       const queued = this.#queued;
       this.#queued = [];
@@ -322,6 +348,12 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
       // A close after the service's last word is the ordinary ending, and the
       // drain already armed decides when the reply is over. A close before it
       // is the reply lost, and the turn must still settle.
+      this.#trace(TRACE_DIRECTION.SERVER, {
+        type: SPEECH_TRACE.CLOSE,
+        code: event.code ?? 0,
+        reason: event.reason ?? "",
+        ended: this.#ended,
+      });
       if (this.#ended) return;
       this.#fail(socketFailureMessage(event));
     };
@@ -336,6 +368,14 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
     }
     if (frame.audio) {
       const samples = decodeDialogueAudio(frame.audio);
+      this.#trace(TRACE_DIRECTION.SERVER, {
+        type: SPEECH_TRACE.AUDIO,
+        samples: samples.length,
+        // Rising across frames is scheduling that is working; frozen is a
+        // clock that never started, which is silence with nothing wrong on
+        // the wire at all.
+        pendingMs: Math.round(this.#options.sink.pendingMs()),
+      });
       if (samples.length > 0) {
         this.#options.sink.play(samples);
         if (!this.#audible) {
@@ -345,6 +385,10 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
       }
     }
     if (frame.final || frame.finalForTurn) {
+      this.#trace(TRACE_DIRECTION.SERVER, {
+        type: SPEECH_TRACE.END,
+        pendingMs: Math.round(this.#options.sink.pendingMs()),
+      });
       this.#ended = true;
       this.#armDrain();
     }
@@ -392,6 +436,7 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
     const socket = this.#socket;
     if (!socket || socket.readyState !== SOCKET_OPEN) return;
     socket.send(JSON.stringify(frame));
+    this.#trace(TRACE_DIRECTION.CLIENT, frame);
     this.#armKeepAlive();
   }
 
@@ -410,6 +455,10 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
       if (generation !== this.#generation || this.#finished) return;
       this.#send(dialogueKeepAliveFrame());
     }, ELEVENLABS_KEEP_ALIVE_MS);
+  }
+
+  #trace(direction: TraceDirection, event: WireRecord): void {
+    this.#options.onWireEvent?.(direction, event);
   }
 
   #clearKeepAlive(): void {

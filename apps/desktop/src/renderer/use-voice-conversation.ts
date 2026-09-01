@@ -747,6 +747,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
           listener,
           sink: new WebAudioSpeechSink(),
           mintToken: () => window.sidecar.mintSpeechToken(),
+          onWireEvent: (direction, event) => {
+            if (!optionsRef.current.agentTraceEnabled) return;
+            window.sidecar.recordAgentTrace({ direction, event });
+          },
         });
       },
       // The press's device, chosen by facts read natively: the Mac's own
