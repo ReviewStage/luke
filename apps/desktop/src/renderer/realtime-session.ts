@@ -470,6 +470,16 @@ export class RealtimeVoiceSession {
    */
   #conversationEntries: readonly ConversationEntry[] = [];
   /**
+   * Whether the history has grown an announcement its live context item does
+   * not hold. An announcement is spoken out-of-band and writes nothing into
+   * the conversation, so it is the one history line a call cannot already
+   * hold as its own items — and the reason the seeded item may be superseded
+   * mid-call: without the re-seed, the turn after a mid-call announcement
+   * says "archive that chat" to a model that never saw which chat was
+   * announced. Cleared whenever the history item is brought current.
+   */
+  #conversationGrewAnnouncement = false;
+  /**
    * The app guide as last provided, kept whole for the same reason the roster
    * is: it is what a spoken ask about Luke himself is validated against, and a
    * call may only name a setting Luke was actually described as having.
@@ -2038,10 +2048,11 @@ export class RealtimeVoiceSession {
       sessionContextEvents(sessions, itemId, now),
     );
     // The history is rendered against the roster, so a fresh roster re-renders
-    // it: a line whose session left the roster keeps its words and lets go of
-    // the identity no tool call may name any more. The render reaches the wire
-    // only until this call seeds its one history item; after that it keeps the
-    // staged copy current for nothing but teardown to clear.
+    // it: a line whose session left the roster keeps its words and trades the
+    // identity no tool call may name any more for the note saying so. The
+    // render reaches the wire only until this call seeds its one history item;
+    // after that the staged copy is kept current for an announcement's
+    // re-seed, and otherwise waits for teardown to clear it.
     this.#rememberConversation();
   }
 
@@ -2054,12 +2065,20 @@ export class RealtimeVoiceSession {
    * and an idle call retires with everything said on it. Context on the
    * roster's own terms, flushed with it at the first turn of each call and
    * left standing after that: what is said from then on lives in the call's
-   * own conversation items.
+   * own conversation items — except an announcement, which the caller marks
+   * with `announced` so the item is re-seeded at the next turn. An
+   * announcement is voiced out-of-band and enters the conversation nowhere
+   * else, so the item standing pat would leave "that chat" pointing at a
+   * line this call's model has never seen.
    */
-  updateConversation(entries: readonly ConversationEntry[]): void {
+  updateConversation(
+    entries: readonly ConversationEntry[],
+    { announced = false }: { announced?: boolean } = {},
+  ): void {
     // The caller may retain the whole current-launch thread for its own UI;
     // this transport accepts only the recent slice that may reach the model.
     this.#conversationEntries = recentConversationEntries(entries);
+    if (announced) this.#conversationGrewAnnouncement = true;
     this.#rememberConversation();
   }
 
@@ -2175,14 +2194,20 @@ export class RealtimeVoiceSession {
         this.#contextLive.delete(kind);
         continue;
       }
-      // The history is seeded once per call. It exists to bridge the calls
-      // that came before this one, and every turn taken since it went in is
+      // The history is seeded once per call and re-seeded only for a grown
+      // announcement. Every turn the developer takes since the seed is
       // already held by this call as real conversation items — so superseding
-      // it mid-call would delete an item out of the conversation's cached
-      // prefix to restate turns the model already has. The entries keep
-      // accumulating either way, and teardown clears the live map, so the
-      // next call seeds everything said by then.
-      if (kind === CONTEXT_ITEM_KIND.CONVERSATION && live) continue;
+      // the item for those would delete part of the conversation's cached
+      // prefix to restate turns the model already has. An announcement is the
+      // one line the call's items never hold: it is voiced out-of-band, so a
+      // history that grew one re-seeds at this turn, or a bare "that chat"
+      // would be resolved against a model that never saw the announcement.
+      // Teardown clears the live map either way, so the next call seeds
+      // everything said by then.
+      if (kind === CONTEXT_ITEM_KIND.CONVERSATION) {
+        if (live && !this.#conversationGrewAnnouncement) continue;
+        this.#conversationGrewAnnouncement = false;
+      }
       if (live?.text === pending.text) continue;
       this.#contextSequence += 1;
       const itemId = contextItemId(kind, this.#contextSequence);

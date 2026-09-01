@@ -21,6 +21,7 @@ import {
   REALTIME_STATUS,
   type RealtimeConnection,
   type RealtimeStatus,
+  SESSION_NO_LONGER_OBSERVED_NOTE,
 } from "@sidecar/realtime";
 import {
   ATTENTION_DISPOSITION,
@@ -1967,8 +1968,9 @@ test("the history is rendered from the roster as it now stands", async () => {
 
   // The words are history and keep their line; the identity is an offer to a
   // tool call, and a session the roster no longer shows is one no call may
-  // name — so the line lets go of it rather than steering "that chat" toward
-  // a certain refusal.
+  // name — so the line trades it for the note saying the session is gone,
+  // rather than steering "that chat" toward a certain refusal or leaving it
+  // to be guessed among the sessions still observed.
   context.session.updateSessions([]);
   await armDeveloperTurn(context);
 
@@ -1976,6 +1978,7 @@ test("the history is rendered from the roster as it now stands", async () => {
   assert.equal(items.length, 1);
   assert.match(itemText(items[0]), /finished checkout-service/);
   assert.doesNotMatch(itemText(items[0]), /provider_session_id=session-a/);
+  assert.ok(itemText(items[0]).includes(`[${SESSION_NO_LONGER_OBSERVED_NOTE}]`));
 });
 
 test("the history is seeded once per call and later lines are not re-sent", async () => {
@@ -1991,14 +1994,14 @@ test("the history is seeded once per call and later lines are not re-sent", asyn
   const seeded = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION);
   assert.ok(seeded);
 
-  // Every line said from here on rides this call as its own conversation
+  // Every turn taken from here on rides this call as its own conversation
   // items, so re-sending the digest would delete an item out of the cached
   // prefix to restate turns the model already holds. The seed stands, and the
   // new line waits for the next call.
   context.session.stopSpeaking();
   context.session.updateConversation(
     appendConversationEntry(first, {
-      kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+      kind: CONVERSATION_ENTRY_KIND.REPLY,
       words: "Codex failed in payments.",
     }),
   );
@@ -2011,6 +2014,61 @@ test("the history is seeded once per call and later lines are not re-sent", asyn
     false,
   );
   assert.equal(context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION), seeded);
+});
+
+test("a history that grew an announcement re-seeds at the next developer turn", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  const first = conversationEntries({
+    kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
+    words: "how is checkout going?",
+  });
+  context.session.updateSessions([observedSession("session-b", { title: "payments" })]);
+  context.session.updateConversation(first);
+  await armDeveloperTurn(context);
+  const seeded = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION);
+  assert.ok(seeded);
+
+  // An announcement is voiced out-of-band and enters this call's conversation
+  // nowhere else, so unlike every other line it is one the model has not
+  // seen: the item is re-seeded at the next turn, or "archive that chat"
+  // would be resolved against a history missing the chat it means.
+  context.session.stopSpeaking();
+  context.session.updateConversation(
+    appendConversationEntry(first, {
+      kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+      words: "Codex finished payments.",
+      identity: { providerId: "claude-code", providerSessionId: "session-b" },
+    }),
+    { announced: true },
+  );
+  const sentBefore = context.sent.length;
+  await armDeveloperTurn(context);
+
+  const events = context.sent.slice(sentBefore);
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+  const deletes = events.filter((event) => event.type === CONVERSATION_ITEM_DELETE) as {
+    item_id?: string;
+  }[];
+  assert.deepEqual(
+    deletes.map((event) => event.item_id),
+    [seeded],
+  );
+  const items = contextItems(context, "[recent conversation", sentBefore);
+  assert.equal(items.length, 1);
+  assert.match(itemText(items[0]), /Luke announced: "Codex finished payments\."/);
+  assert.match(itemText(items[0]), /provider_id=claude-code provider_session_id=session-b/);
+  const reseeded = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION);
+  assert.ok(reseeded);
+  assert.notEqual(reseeded, seeded);
+
+  // The re-seed spends the announcement: the next turn stands pat again.
+  context.session.stopSpeaking();
+  const sentAfter = context.sent.length;
+  await armDeveloperTurn(context);
+  assert.deepEqual(contextItems(context, "[recent conversation", sentAfter), []);
+  assert.equal(context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION), reseeded);
 });
 
 test("a new call after teardown re-seeds the accumulated history", async () => {

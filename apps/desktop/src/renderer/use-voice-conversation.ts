@@ -647,7 +647,11 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   /**
    * Appends one bounded line to this launch's history and tells the call now
    * open about only the recent context slice. A session leaving the roster
-   * costs a line its identity at model render, never its visible words.
+   * costs a line its identity at model render, never its visible words. An
+   * announcement line is marked as such: it is the one line an open call's
+   * own conversation items never hold — voiced out-of-band, or only shown —
+   * so the call re-seeds its history item for it, and the next turn's bare
+   * "that chat" can find the announced session.
    */
   const rememberConversationEntry = useCallback(
     (entry: ConversationEntry | undefined, generation = conversationGenerationRef.current) => {
@@ -659,7 +663,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       }
       conversationRef.current = appendConversationThreadEntry(conversationRef.current, entry);
       setConversationHistory(conversationRef.current);
-      voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current));
+      voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current), {
+        announced: entry.kind === CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+      });
     },
     [],
   );

@@ -143,6 +143,16 @@ export type AttentionSpeechSource =
   (typeof ATTENTION_SPEECH_SOURCE)[keyof typeof ATTENTION_SPEECH_SOURCE];
 
 /**
+ * The note a history line carries in place of an identity the roster no
+ * longer reports. Defined beside the standing instructions that teach what it
+ * means, and rendered by the history module from this one constant, so the
+ * words the model is taught are always the words it reads: a line wearing it
+ * names work that is gone — perhaps already archived — never an invitation to
+ * act on a lookalike still observed.
+ */
+export const SESSION_NO_LONGER_OBSERVED_NOTE = "this session is no longer observed";
+
+/**
  * A proactive update the attention layer decided is worth voicing. What
  * `summary` is either a finished sentence or observed status fields.
  */
@@ -185,9 +195,13 @@ const REALTIME_INSTRUCTION_HEAD: readonly string[] = [
     "own new turn asks for anything.",
   '- Resolve "that chat" or "that agent" from the conversation: this call\'s own turns first, ' +
     "then the [recent conversation] message.",
-  "- When neither settles which agent is meant, ask instead of guessing. Do not pick an agent " +
-    "just because it is listed first or updated most recently unless the user explicitly asks " +
-    "for the latest or most recent one.",
+  '- Right after an announcement, a bare "that chat", "that agent", or "it" means the newest ' +
+    '"Luke announced" line\'s bracketed identity, unless a turn since named a different agent.',
+  `- A line marked "${SESSION_NO_LONGER_OBSERVED_NOTE}" names work the roster has let go — ` +
+    "perhaps already archived. Say that plainly; never act on a different session in its place.",
+  "- When neither settles which agent is meant, ask which one, naming each candidate in a few " +
+    "words from its work — never guess. Do not pick an agent just because it is listed first " +
+    "or updated most recently unless the user explicitly asks for the latest or most recent one.",
   "- An explicit latest or most-recent ask resolves by the recency labels in the observed roster; " +
     "do not ask for a chat name when recency is the selection the user gave.",
   "- To open the most recent chat from each provider, call open_session once for every distinct " +
