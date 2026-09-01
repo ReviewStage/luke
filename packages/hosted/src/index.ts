@@ -15,6 +15,7 @@ export {
   type HostedQuota,
   type HostedReviewAnswer,
   type HostedUsageAnswer,
+  type HostedWorkspaceAgentModels,
   type HostedWorkspaceProject,
   hostedActAnswerFromWire,
   hostedActWorkspaceAnswerFromWire,

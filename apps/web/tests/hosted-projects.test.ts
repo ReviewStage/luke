@@ -151,3 +151,68 @@ test("hostedProjectsAnswerFromWire skips malformed entries rather than failing",
   assert.equal(answer.projects[0]?.providerProjectId, "proj-1");
   assert.equal(answer.projects[0]?.targetName, "Main host");
 });
+
+// --- The build's agent table rides beside the projects it applies to ---
+
+test("a provider that offered a project carries its agent table on the answer", async () => {
+  const ciphertext = encryptProviderKey("conductor-key", SECRET);
+  const response = await handleProjects(
+    projectsOptions({
+      readVaultKeys: async (): Promise<VaultKeyRow[]> => [{ providerId: "conductor", ciphertext }],
+      fetch: async (url) => {
+        if (url.endsWith("/me")) {
+          return new Response(JSON.stringify({ userId: "u1" }), { status: 200 });
+        }
+        if (url.includes("/v0/projects")) {
+          return new Response(
+            JSON.stringify({
+              data: [{ id: "proj-1", gitRemote: "https://github.com/owner/repo", name: "Repo" }],
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      },
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.projects.length, 1);
+  assert.equal(body.projects[0].providerId, "conductor");
+  assert.equal(body.projects[0].taskSupport, "optional");
+  const agents = body.agentModels.map((entry: { agent: string }) => entry.agent);
+  assert.deepEqual(agents, ["claude", "codex", "cursor"]);
+  assert.ok(
+    body.agentModels[0].models.some(
+      (model: { id: string; label: string }) => model.id === "fable-5" && model.label === "Fable 5",
+    ),
+  );
+
+  const answer = hostedProjectsAnswerFromWire(body);
+  assert.ok(answer);
+  assert.equal(answer.agentModels.length, 3);
+});
+
+test("a provider with no table offers projects and no agent choices", async () => {
+  const ciphertext = encryptProviderKey("cursor-key", SECRET);
+  const response = await handleProjects(
+    projectsOptions({
+      readVaultKeys: async (): Promise<VaultKeyRow[]> => [{ providerId: "cursor", ciphertext }],
+      fetch: async (url) => {
+        if (url.includes("/v1/repositories")) {
+          return new Response(
+            JSON.stringify({ items: [{ url: "https://github.com/owner/repo" }] }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      },
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.projects.length, 1);
+  assert.deepEqual(body.agentModels, []);
+});
