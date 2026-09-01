@@ -91,7 +91,7 @@ import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { LinearCredentials, LinearIssueTracker, LinearSignIn } from "@sidecar/trackers";
 import {
   IntroductionRealtimeCredentialMinter,
-  sessionAnnouncementsFromReviews,
+  sessionAnnouncementFromReview,
   sessionNoticeAnnouncement,
   VoiceCapabilityAssembler,
 } from "@sidecar/voice";
@@ -173,6 +173,12 @@ import { OutputVolumeWatcher } from "./native/output-volume";
 import { ProviderKeyVaultSync, type VaultSyncAccount } from "./provider-key-vault-sync";
 import { type BridgeContext, registerBridge, registerBridgeEntry } from "./register-bridge";
 import { runModeFor, sentryReportingEnabled } from "./run-mode";
+import {
+  currentSessionAnnouncements,
+  heldSessionAnnouncements,
+  type PendingSessionAnnouncement,
+  SessionAnnouncementBatch,
+} from "./session-announcement-batch";
 import { createSettingsHandler } from "./settings-handler";
 import { SettingsStore } from "./settings-store";
 import { createElectronUpdaterEngine } from "./update-installer";
@@ -477,6 +483,9 @@ let conversationClearedAt: number | undefined;
 // Notices come from status edges the registry observed, never from anything a
 // model decided, so they work — and matter most — with no evaluator configured.
 const sessionNoticeTracker = new SessionNoticeTracker();
+const sessionAnnouncementBatch = new SessionAnnouncementBatch((announcements) => {
+  void deliverSessionAnnouncementBatch(announcements);
+});
 // The workspaces Luke just created and has yet to open on screen. Entries come
 // only from the validated creation act — nothing a model decided can add one —
 // and each resolves against what observation itself reports.
@@ -1285,6 +1294,7 @@ async function stopAccountCapabilities(): Promise<void> {
 
 async function applyVoiceCredential(): Promise<void> {
   await voiceCapabilities.apply();
+  if (!voiceCapabilities.realtimeCredentials) sessionAnnouncementBatch.clear();
 }
 
 function adapterFor(providerId: string) {
@@ -2009,6 +2019,47 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   void attentionObservationLoop.refresh();
 }
 
+async function deliverSessionAnnouncementBatch(
+  pending: readonly PendingSessionAnnouncement[],
+): Promise<void> {
+  if (!voiceCapabilities.realtimeCredentials) return;
+  const current = currentSessionAnnouncements(pending, (identity) => sessionRegistry.get(identity));
+  if (current.length === 0) return;
+  if (await announcementsQuietNow(Date.now())) {
+    const held = heldSessionAnnouncements(current);
+    heldNotices.hold(held.notices);
+    heldEvaluatorSpeech.hold(held.reviews);
+    return;
+  }
+  const host = panels.voiceHost();
+  if (!host) return;
+  const notices = current.flatMap((item) => (item.source === "notice" ? [item.notice] : []));
+  countSpokenAnnouncements(notices);
+  host.webContents.send(
+    channels.onSessionAnnouncements,
+    current.map((item) => item.announcement),
+  );
+  markFirstAnnouncementSpoken();
+}
+
+function pendingSessionNotices(
+  notices: readonly SessionNotice[],
+  decidedAt: number,
+): readonly PendingSessionAnnouncement[] {
+  return notices.flatMap((notice) => {
+    const announcement = sessionNoticeAnnouncement(notice, decidedAt);
+    return announcement
+      ? [
+          {
+            source: "notice",
+            announcement,
+            notice,
+          } satisfies PendingSessionAnnouncement,
+        ]
+      : [];
+  });
+}
+
 async function reviewSessionAttention(generation: number): Promise<void> {
   const attentionReviewer = voiceCapabilities.attentionReviewer;
   if (!attentionReviewer) return;
@@ -2033,28 +2084,20 @@ async function reviewSessionAttention(generation: number): Promise<void> {
     }
     // `decision` says the session needs attention, which the panel shows;
     // `outcome` says whether to voice it now, which only these reviews do.
-    const speech = sessionAnnouncementsFromReviews(reviews);
-    if (speech.length > 0) {
-      // The quiet holds everything Luke would say unbidden. An evaluator
-      // summary keeps only its identity: once the meeting ends it is reviewed
-      // against the current roster instead of replaying words that may have
-      // gone stale.
-      let sendable: readonly SessionAnnouncement[] = speech;
-      if (await announcementsQuietNow(Date.now())) {
-        heldEvaluatorSpeech.hold(speech);
-        sendable = [];
-      }
-      if (sendable.length > 0) {
-        // Spoken once, by the one window that holds the voice: every display
-        // already shows the same session as needing attention, and the surface
-        // that speaks is the one that draws the announcement's pressable notice.
-        const host = panels.voiceHost();
-        if (host) {
-          host.webContents.send(channels.onSessionAnnouncements, sendable);
-          markFirstAnnouncementSpoken();
-        }
-      }
-    }
+    sessionAnnouncementBatch.enqueue(
+      reviews.flatMap((review) => {
+        const announcement = sessionAnnouncementFromReview(review);
+        if (!announcement) return [];
+        return [
+          {
+            source: "review",
+            announcement,
+            observedStatus: review.update.status,
+            observedAt: review.update.observedAt,
+          } satisfies PendingSessionAnnouncement,
+        ];
+      }),
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`Attention review failed: ${message}\n`);
@@ -2071,43 +2114,17 @@ async function reviewSessionAttention(generation: number): Promise<void> {
  * speak-only call when no conversation is up, so being heard needs no
  * talk-key press first.
  */
-async function announceSessionNotices(sessions: readonly Session[]): Promise<void> {
+function announceSessionNotices(sessions: readonly Session[]): void {
   const now = Date.now();
   // The deterministic path is reserved for an error or a concrete hold for
   // the developer. Routine finishes still reach the attention evaluator,
   // which can speak when the outcome is useful.
-  // Fed before anything is awaited, so passes reach the tracker in order.
+  // Fed synchronously, so passes reach the tracker in order.
   const notices = sessionNoticeTracker.notices(
     sessions.filter((session) => session.realtimeVoice !== true),
     now,
   );
-  if (notices.length === 0) return;
-  const immediateNotices = notices.filter(
-    (notice) => sessionNoticeAnnouncement(notice, now) !== undefined,
-  );
-  if (immediateNotices.length === 0) return;
-  // No voice, nothing to say it with: without a Realtime credential the
-  // renderer cannot open a call, and the panel still shows every state. The
-  // pressable notice is the spoken announcement's face, so it goes with the
-  // speech rather than standing for news nobody is telling.
-  if (!voiceCapabilities.realtimeCredentials) return;
-  // A meeting on the connected calendar holds the sentence rather than
-  // dropping it; the release tick reads the backlog out once the meeting
-  // ends. The panel has shown every state the whole time either way.
-  if (await announcementsQuietNow(now)) {
-    heldNotices.hold(immediateNotices);
-    return;
-  }
-  const speech = immediateNotices.flatMap((notice) => {
-    const item = sessionNoticeAnnouncement(notice, now);
-    return item ? [item] : [];
-  });
-  countSpokenAnnouncements(immediateNotices);
-  const host = panels.voiceHost();
-  if (host) {
-    host.webContents.send(channels.onSessionAnnouncements, speech);
-    markFirstAnnouncementSpoken();
-  }
+  sessionAnnouncementBatch.enqueue(pendingSessionNotices(notices, now));
 }
 
 /**
@@ -2255,17 +2272,7 @@ async function releaseHeldNotices(): Promise<void> {
     voiceCapabilities.attentionReviewer?.reconsider(deferredEvaluatorSpeech);
     void attentionObservationLoop.refresh();
   }
-  const speech = released.flatMap((notice) => {
-    const item = sessionNoticeAnnouncement(notice, now);
-    return item ? [item] : [];
-  });
-  if (speech.length === 0) return;
-  countSpokenAnnouncements(released);
-  const host = panels.voiceHost();
-  if (host) {
-    host.webContents.send(channels.onSessionAnnouncements, speech);
-    markFirstAnnouncementSpoken();
-  }
+  sessionAnnouncementBatch.enqueue(pendingSessionNotices(released, now));
 }
 
 /**
@@ -2493,7 +2500,7 @@ function startSessionObservation(): void {
     // The registry only speaks on an effective change, which is exactly when
     // a status edge can exist to announce. The notices read the unfiltered
     // snapshot: an edge is an edge wherever the session ends up on the roster.
-    void announceSessionNotices(snapshot.sessions);
+    announceSessionNotices(snapshot.sessions);
     // A commit is also the earliest a created workspace can have arrived with
     // the address to open it by — whether on the refresh the creation itself
     // fired or on an ordinary pass catching up.
@@ -2528,6 +2535,7 @@ function countObservedSessions(sessions: readonly Session[]): void {
 
 function stopSessionObservation(): void {
   workspaceProjectsBroadcastGeneration += 1;
+  sessionAnnouncementBatch.clear();
   unsubscribeSessions?.();
   unsubscribeSessions = undefined;
   for (const { adapter } of orderedRegistrations) {

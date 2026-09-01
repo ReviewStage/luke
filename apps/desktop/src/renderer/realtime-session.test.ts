@@ -98,10 +98,10 @@ interface Harness {
   errors: (string | undefined)[];
   /** Each caption emission: one text per stacked response, or a clear. */
   captions: (readonly string[] | undefined)[];
-  /** The announced session each caption emission carried, by session id. */
-  captionSubjects: (string | undefined)[];
+  /** The announced sessions each caption emission carried, by session id. */
+  captionSubjects: (readonly string[] | undefined)[];
   /** The words each ended reply left behind, with its announced subject. */
-  replyEndings: { texts: readonly string[]; about: string | undefined }[];
+  replyEndings: { texts: readonly string[]; about: readonly string[] | undefined }[];
   /** The developer's spoken turns, as the service handed them back. */
   spokenAsks: string[];
   /** The growing pieces of those turns' words, in arrival order. */
@@ -217,8 +217,8 @@ function harness(
   const sent: ParsedJsonObject[] = [];
   const errors: (string | undefined)[] = [];
   const captions: (readonly string[] | undefined)[] = [];
-  const captionSubjects: (string | undefined)[] = [];
-  const replyEndings: { texts: readonly string[]; about: string | undefined }[] = [];
+  const captionSubjects: (readonly string[] | undefined)[] = [];
+  const replyEndings: { texts: readonly string[]; about: readonly string[] | undefined }[] = [];
   const spokenAsks: string[] = [];
   const spokenAskDeltas: { itemId: string; delta: string }[] = [];
   const spokenAskFailures: string[] = [];
@@ -348,10 +348,10 @@ function harness(
     onError: (message) => errors.push(message),
     onCaption: (texts, about) => {
       captions.push(texts);
-      captionSubjects.push(about?.providerSessionId);
+      captionSubjects.push(about?.map(({ providerSessionId }) => providerSessionId));
     },
     onReplyEnded: (texts, about) => {
-      replyEndings.push({ texts, about: about?.providerSessionId });
+      replyEndings.push({ texts, about: about?.map(({ providerSessionId }) => providerSessionId) });
       if (options.writeBackOnReplyEnded) {
         session.updateConversation(
           appendConversationEntry([], {
@@ -679,14 +679,16 @@ test("push-to-talk does nothing before the call is open", () => {
 
 test("a proactive update is spoken once the call is open", async () => {
   const context = harness();
-  const speech = {
-    providerId: "claude-code",
-    providerSessionId: "session-a",
-    work: "checkout-service",
-    change: SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT,
-    detail: "The checkout service needs a decision.",
-    decidedAt: 1_800_000_000_000,
-  };
+  const speech = [
+    {
+      providerId: "claude-code",
+      providerSessionId: "session-a",
+      work: "checkout-service",
+      change: SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT,
+      detail: "The checkout service needs a decision.",
+      decidedAt: 1_800_000_000_000,
+    },
+  ];
 
   // Nothing is spoken before there is a call to speak over.
   assert.equal(context.session.speak(speech), false);
@@ -1183,14 +1185,16 @@ test("the reply ends when the server says the audio ran out", async () => {
 });
 
 /** A proactive update on the announcer's terms, decided a moment ago. */
-function announcedFinish(id: string): SessionAnnouncement {
-  return {
-    providerId: "claude-code",
-    providerSessionId: id,
-    work: id,
-    change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
-    decidedAt: Date.now(),
-  };
+function announcedFinish(id: string): readonly SessionAnnouncement[] {
+  return [
+    {
+      providerId: "claude-code",
+      providerSessionId: id,
+      work: id,
+      change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
+      decidedAt: Date.now(),
+    },
+  ];
 }
 
 test("audio draining before response.done does not free the turn early", async () => {
@@ -1292,7 +1296,7 @@ test("an announcement queued mid-reply waits out the server's own ending", async
     cancel: () => undefined,
   });
 
-  announcer.enqueue([announcedFinish("session-a")]);
+  announcer.enqueue(announcedFinish("session-a"));
   // The call the announcer opens for itself is a handshake away.
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
@@ -1300,7 +1304,7 @@ test("an announcement queued mid-reply waits out the server's own ending", async
 
   // The second agent finishes mid-reply, and then the first reply's audio
   // drains before its done arrives.
-  announcer.enqueue([announcedFinish("session-b")]);
+  announcer.enqueue(announcedFinish("session-b"));
   context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
 
   // One reply asked for so far: the drain freed nothing, so the READY edge
@@ -2312,13 +2316,15 @@ test("an announcement's reply hands its subject back with the words", async () =
   const context = harness();
   await context.session.connect({ microphone: false });
 
-  context.session.speak({
-    providerId: "claude-code",
-    providerSessionId: "session-a",
-    work: "checkout-service",
-    change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
-    decidedAt: 1_800_000_000_000,
-  });
+  context.session.speak([
+    {
+      providerId: "claude-code",
+      providerSessionId: "session-a",
+      work: "checkout-service",
+      change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
+      decidedAt: 1_800_000_000_000,
+    },
+  ]);
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
     item: { id: "item-1" },
@@ -2333,20 +2339,22 @@ test("an announcement's reply hands its subject back with the words", async () =
   // The subject rides along so the caller can store the spoken transcript
   // with the identity the approved announcement carried.
   assert.deepEqual(context.replyEndings, [
-    { texts: ["Claude Code finished checkout-service."], about: "session-a" },
+    { texts: ["Claude Code finished checkout-service."], about: ["session-a"] },
   ]);
 });
 
 test("a failed announcement delivery leaves no transcript for History", async () => {
   const context = harness();
   await context.session.connect({ microphone: false });
-  context.session.speak({
-    providerId: "claude-code",
-    providerSessionId: "session-a",
-    work: "checkout-service",
-    change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
-    decidedAt: 1_800_000_000_000,
-  });
+  context.session.speak([
+    {
+      providerId: "claude-code",
+      providerSessionId: "session-a",
+      work: "checkout-service",
+      change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
+      decidedAt: 1_800_000_000_000,
+    },
+  ]);
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
     delta: "Checkout finished.",
@@ -2448,14 +2456,16 @@ test("a stop that beats the device still releases it", async () => {
 test("a turn is refused while another is already under way", async () => {
   const context = harness();
   await context.session.connect();
-  const speech = {
-    providerId: "claude-code",
-    providerSessionId: "session-a",
-    work: "checkout-service",
-    change: SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT,
-    detail: "The checkout service needs a decision.",
-    decidedAt: 1_800_000_000_000,
-  };
+  const speech = [
+    {
+      providerId: "claude-code",
+      providerSessionId: "session-a",
+      work: "checkout-service",
+      change: SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT,
+      detail: "The checkout service needs a decision.",
+      decidedAt: 1_800_000_000_000,
+    },
+  ];
 
   // While the developer holds the microphone open.
   await holdTurn(context);
@@ -4447,26 +4457,39 @@ test("the caption leaves when the reply does", async () => {
   assert.deepEqual(context.captions, [["All quiet."], undefined]);
 });
 
-test("an announcement's caption names its session; a conversation's names none", async () => {
+test("an announcement's caption names its sessions; a conversation's names none", async () => {
   const context = harness();
   await context.session.connect();
 
   // The subject stands from the moment the announcement's reply is asked for
   // — the pressable notice may precede the first word — and every caption of
   // that reply carries it.
-  context.session.speak({
-    providerId: "claude-code",
-    providerSessionId: "session-a",
-    work: "checkout",
-    change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
-    decidedAt: 1_800_000_000_000,
-  });
+  context.session.speak([
+    {
+      providerId: "claude-code",
+      providerSessionId: "session-a",
+      work: "checkout",
+      change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
+      decidedAt: 1_800_000_000_000,
+    },
+    {
+      providerId: "codex",
+      providerSessionId: "session-b",
+      work: "billing",
+      change: SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT,
+      detail: "Approve the migration?",
+      decidedAt: 1_800_000_000_001,
+    },
+  ]);
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
     delta: "Checkout just finished.",
   });
   assert.deepEqual(context.captions, [undefined, ["Checkout just finished."]]);
-  assert.deepEqual(context.captionSubjects, ["session-a", "session-a"]);
+  assert.deepEqual(context.captionSubjects, [
+    ["session-a", "session-b"],
+    ["session-a", "session-b"],
+  ]);
 
   // The reply ending takes the subject with the words: the notice can never
   // outlive the announcement it stands for.
@@ -5365,13 +5388,15 @@ test("a speak-only call reads a notice out but refuses a typed ask", async () =>
   const sentAfterConnect = context.sent.length;
 
   assert.equal(
-    context.session.speak({
-      providerId: "claude-code",
-      providerSessionId: "session-a",
-      work: "checkout-service",
-      change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
-      decidedAt: 1_800_000_000_000,
-    }),
+    context.session.speak([
+      {
+        providerId: "claude-code",
+        providerSessionId: "session-a",
+        work: "checkout-service",
+        change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
+        decidedAt: 1_800_000_000_000,
+      },
+    ]),
     true,
   );
   assert.deepEqual(
@@ -5422,13 +5447,15 @@ test("the rosters and the guide never travel on Luke's own call", async () => {
   // update's own fields inside its isolated response, with no instructions
   // refresh riding ahead of it.
   assert.equal(
-    context.session.speak({
-      providerId: "claude-code",
-      providerSessionId: "session-a",
-      work: "checkout-service",
-      change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
-      decidedAt: 1_800_000_000_000,
-    }),
+    context.session.speak([
+      {
+        providerId: "claude-code",
+        providerSessionId: "session-a",
+        work: "checkout-service",
+        change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
+        decidedAt: 1_800_000_000_000,
+      },
+    ]),
     true,
   );
   assert.deepEqual(guideInstructionUpdates(context, before), []);

@@ -33,6 +33,7 @@ private enum SocialProvider: String {
 
 struct ContentView: View {
     @Environment(AccountSession.self) private var session
+    @Environment(ProductEventSender.self) private var events
     @State private var pendingProvider: SocialProvider?
     @State private var signInError: String?
     @State private var contextProvider = WindowAnchorProvider()
@@ -106,6 +107,9 @@ struct ContentView: View {
     private func startSignIn(provider: SocialProvider) {
         pendingProvider = provider
         signInError = nil
+        // Begun-versus-landed is the funnel; which provider is deliberately
+        // not counted, the same omission the desktop makes.
+        events.record(.accountAct(.signInStart))
 
         let pkce = PKCE()
         // Prefix state with provider so tryluke.dev/sign-in can skip the
@@ -124,11 +128,14 @@ struct ContentView: View {
         let webSession = ASWebAuthenticationSession(
             url: authorizeURL,
             callbackURLScheme: "dev.tryluke.ios"
-        ) { [session] callbackURL, error in
+        ) { [session, events] callbackURL, error in
             Task { @MainActor in
                 defer { pendingProvider = nil }
                 if let asError = error as? ASWebAuthenticationSessionError,
-                   asError.code == .canceledLogin { return }
+                   asError.code == .canceledLogin {
+                    events.record(.accountAct(.signInCancel))
+                    return
+                }
                 if let error {
                     signInError = error.localizedDescription
                     return
@@ -234,6 +241,7 @@ private struct SignedInView: View {
 private struct ProfileSheet: View {
     @Environment(AccountSession.self) private var session
     @Environment(VaultStore.self) private var vault
+    @Environment(ProductEventSender.self) private var events
     @Environment(\.dismiss) private var dismiss
     let identity: AccountIdentity
     @State private var editingProvider: VaultProviderID?
@@ -270,7 +278,13 @@ private struct ProfileSheet: View {
 
                 Section {
                     Button("Sign out", role: .destructive) {
-                        Task { await session.signOut() }
+                        Task {
+                            // Flushed before the sign-out clears the token,
+                            // or the act would wait for a sign-in to report.
+                            events.record(.accountAct(.signOut))
+                            await events.flush().value
+                            await session.signOut()
+                        }
                     }
                     .frame(maxWidth: .infinity)
                 } footer: {

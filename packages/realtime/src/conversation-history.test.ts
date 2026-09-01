@@ -236,6 +236,31 @@ test("the rendering reads oldest first and says who each line speaks for", () =>
   assert.match(lines[4] ?? "", /\[provider_id=claude-code provider_session_id=session-a\]$/);
 });
 
+test("a batched announcement carries every validated session through history", () => {
+  const identities = [
+    { providerId: "claude-code", providerSessionId: "session-a" },
+    { providerId: "claude-code", providerSessionId: "session-b" },
+  ];
+  const entries = appendConversationEntry(
+    [],
+    {
+      kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+      words: "Checkout finished and billing needs approval.",
+      identities,
+    },
+    OBSERVED_AT,
+  );
+
+  const text = conversationHistoryText(entries, [
+    rosterSession("session-a", "checkout"),
+    rosterSession("session-b", "billing"),
+  ]);
+
+  assert.ok(text);
+  assert.match(text, /provider_session_id=session-a.*provider_session_id=session-b/);
+  assert.deepEqual(storedConversationEntry(JSON.parse(JSON.stringify(entries[0]))), entries[0]);
+});
+
 test("a spoken ask reads as the developer's own words, said rather than typed", () => {
   const entries = insertSpokenAskEntry([], "how is the checkout agent doing?", undefined);
 
@@ -409,6 +434,14 @@ test("a stored line reads back, and retention cuts by age and by count", () => {
     storedConversationEntry({ ...line, identity: { providerId: "claude-code" } }),
     undefined,
   );
+  assert.equal(
+    storedConversationEntry({
+      ...line,
+      identity: { providerId: "claude-code", providerSessionId: "a" },
+      identities: [{ providerId: "claude-code", providerSessionId: "b" }],
+    }),
+    undefined,
+  );
 
   const stale = { ...line, recordedAt: now - storedConversationMaximumAgeMs - 1 };
   assert.deepEqual(retainedConversationEntries([stale, line], now), [line]);
@@ -579,18 +612,36 @@ test("a reply's subject is single when the identities are, not when the names we
   assert.equal(entry.mentions?.length, 1);
 });
 
-test("an announcement's line carries its one subject and that subject's chip", () => {
-  const sessions = [rosterSession("session-a", "checkout-service")];
+test("an announcement's line carries every subject and subject chip", () => {
+  const sessions = [
+    rosterSession("session-a", "checkout-service"),
+    rosterSession("session-b", "billing"),
+  ];
   const about = { providerId: "claude-code", providerSessionId: "session-a" };
 
-  const entry = announcementConversationEntry("checkout-service finished.", about, sessions);
+  const entry = announcementConversationEntry("checkout-service finished.", [about], sessions);
   assert.equal(entry.kind, CONVERSATION_ENTRY_KIND.ANNOUNCEMENT);
   assert.deepEqual(entry.identity, about);
   assert.equal(entry.mentions?.length, 1);
   assert.equal(entry.mentions?.[0]?.title, "checkout-service");
 
+  const batched = announcementConversationEntry(
+    "Checkout finished and billing needs approval.",
+    [about, { providerId: "claude-code", providerSessionId: "session-b" }],
+    sessions,
+  );
+  assert.equal(batched.identity, undefined);
+  assert.deepEqual(
+    batched.identities?.map(({ providerSessionId }) => providerSessionId),
+    ["session-a", "session-b"],
+  );
+  assert.deepEqual(
+    batched.mentions?.map(({ providerSessionId }) => providerSessionId),
+    ["session-a", "session-b"],
+  );
+
   // A subject the roster cannot word keeps its identity and draws no chip.
-  const unworded = announcementConversationEntry("It finished.", about, []);
+  const unworded = announcementConversationEntry("It finished.", [about], []);
   assert.deepEqual(unworded.identity, about);
   assert.equal(unworded.mentions, undefined);
 });

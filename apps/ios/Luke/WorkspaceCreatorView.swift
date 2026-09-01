@@ -12,6 +12,7 @@ struct WorkspaceCreatorView: View {
     let actClient: ActClient
 
     @Environment(AccountSession.self) private var session
+    @Environment(ProductEventSender.self) private var events
     @State private var name = ""
     @State private var task = ""
     @State private var state: CreatorState = .idle
@@ -74,28 +75,33 @@ struct WorkspaceCreatorView: View {
         Task {
             do {
                 let token = try await session.validAccessToken()
+                let answer: ActWorkspaceAnswer
                 do {
-                    let answer = try await actClient.createWorkspace(
+                    answer = try await actClient.createWorkspace(
                         accessToken: token,
                         providerId: providerId,
                         providerProjectId: providerProjectId,
                         name: nameValue.isEmpty ? nil : nameValue,
                         task: taskValue.isEmpty ? nil : taskValue
                     )
-                    state = .result(answer)
                 } catch ActClientError.unauthorized {
                     // validAccessToken() refreshes near-expiry tokens; a 401
                     // here means the server rejected the token outright — refresh and retry once.
                     let fresh = try await session.refreshAccessToken()
-                    let answer = try await actClient.createWorkspace(
+                    answer = try await actClient.createWorkspace(
                         accessToken: fresh,
                         providerId: providerId,
                         providerProjectId: providerProjectId,
                         name: nameValue.isEmpty ? nil : nameValue,
                         task: taskValue.isEmpty ? nil : taskValue
                     )
-                    state = .result(answer)
                 }
+                if answer.result == .accepted,
+                   let provider = ProductProviderID(rawValue: providerId)
+                {
+                    events.record(.sessionActSend(provider: provider, act: .workspaceCreate))
+                }
+                state = .result(answer)
             } catch {
                 state = .result(ActWorkspaceAnswer(
                     result: .rejected,

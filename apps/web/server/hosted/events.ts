@@ -1,6 +1,9 @@
 import {
+  PRODUCT_EVENT_CLIENT_HEADER,
+  PRODUCT_EVENT_CLIENT_LIB,
   type ProductEventBatch,
   productEventBatchFromWire,
+  productEventClientFromWire,
   text as trimmedText,
   type UnparsedWireValue,
 } from "../core.js";
@@ -105,6 +108,7 @@ function batchDocument(
   userId: string,
   now: number,
   person: PosthogPerson | undefined,
+  lib: string,
 ): PosthogBatch {
   return {
     api_key: projectApiKey,
@@ -114,7 +118,7 @@ function batchDocument(
         ...event.properties,
         distinct_id: userId,
         $geoip_disable: true,
-        $lib: "luke-desktop",
+        $lib: lib,
       };
       return {
         event: event.name,
@@ -179,8 +183,13 @@ export async function handleEvents(options: EventsOptions): Promise<Response> {
   if (options.timeoutMs !== undefined) upstream.timeoutMs = options.timeoutMs;
   // A failed read costs the person's name, never the counts.
   const person = await options.readPerson?.(userId).catch(() => undefined);
+  // The header only selects between the fixed tags; anything else, including
+  // no header at all, is a desktop build.
+  const client = productEventClientFromWire(
+    request.headers.get(PRODUCT_EVENT_CLIENT_HEADER) ?? undefined,
+  );
   const response = await postPosthogBatch(
-    batchDocument(events, projectApiKey, userId, now, person),
+    batchDocument(events, projectApiKey, userId, now, person, PRODUCT_EVENT_CLIENT_LIB[client]),
     upstream,
   );
   if (!response) {

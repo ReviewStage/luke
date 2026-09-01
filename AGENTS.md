@@ -281,7 +281,12 @@ Trust constraints:
   That guarantee is structural: there is no shape such a value could travel in.
   The desktop posts events to Luke's own service and never to an analytics
   provider, and the account is the bearer token's, so nothing identifying
-  travels with them. The service attaches the account's own name and address to
+  travels with them. The iOS app counts through the same endpoint on the same
+  terms: it emits from a hand-kept Swift transcription of the vocabulary whose
+  enums make free text unrepresentable, the service reads its batches against
+  the TypeScript allowlist exactly as it reads the desktop's, and the one
+  thing naming which app posted is a header whose value only selects between
+  fixed `$lib` tags — absent or unrecognized means the desktop. The service attaches the account's own name and address to
   the analytics person record, read from its own user row, never from the
   request, and never onto an event, because an event property is what the
   allowlist governs and a person property is not. The renderer has one narrow
@@ -292,9 +297,14 @@ Trust constraints:
   reach the project without passing it, so a claim about the allowlist is a
   claim about Luke's own service alone.
 - The other two leave from the renderer, straight to the analytics provider,
-  and both come from the one client in
-  `apps/desktop/src/renderer/session-replay.ts`, configured as the library
-  ships rather than hardened. The first of them is what that client captures
+  and both come from one client per app —
+  `apps/desktop/src/renderer/session-replay.ts` on the desktop,
+  `apps/ios/Luke/SessionReplay.swift` on iOS — each configured as its library
+  ships rather than hardened. On iOS only the recording and the crash
+  reports leave: the SDK's element-interaction autocapture is not the
+  desktop's click stream — it copies a text control's live contents on
+  end-of-edit, typed text no disclosure covers — so it stays at its off
+  default. The first of them is what that client captures
   beside a recording: an autocaptured event names the text of whatever was
   clicked, so pressing a session row sends that row's title, recap, and
   branch. Nothing validates it — no allowlist stands between the panel and the
@@ -336,9 +346,17 @@ Trust constraints:
   sign-in was: nothing erased is re-created either way, but a recorder starting
   up again on the panel that just erased everything reads as though something
   were, and deletion is the one act treated here as unrecoverable.
+  The iOS app records on the same terms at its own scale: its own screens and
+  never the device's, captured as screenshots because that is how the SDK
+  sees SwiftUI at all, begun at first paint before any account, joined to the
+  person by the same account id at sign-in, and reset to anonymous at
+  sign-out; it has no account deletion surface, so the desktop's deletion is
+  what erases its recordings too.
   None of the three sends anything in a fixture or evidence run, and nothing
   else stands in front of any of them: there is no switch, and the run mode is
-  the whole of the gate. That is the deliberate posture of an early product
+  the whole of the gate. On iOS, which has no fixture runs, the same gate is
+  the XCTest host check and the build-injected project key, whose absence
+  leaves the recording client unconfigured rather than pointed anywhere else. That is the deliberate posture of an early product
   and it puts the entire weight of disclosure on `PRIVACY.md`, which is where
   a user learns any of this happens — so that file says all three in kind, in
   as many words, and moves whenever one of them changes character. Widening

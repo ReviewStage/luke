@@ -660,7 +660,8 @@ export const BRIDGE = {
           const stored = storedConversationEntry(entry);
           return (
             stored !== undefined &&
-            (stored.identity === undefined || isSessionIdentity(stored.identity))
+            (stored.identity === undefined || isSessionIdentity(stored.identity)) &&
+            (stored.identities === undefined || stored.identities.every(isSessionIdentity))
           );
         }),
     ),

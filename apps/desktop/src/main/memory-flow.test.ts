@@ -74,6 +74,23 @@ test("window snapshots merge once and cannot restore a cleared thread", () => {
   assert.deepEqual(mergeConversationHistory([], merged, NOW, NOW), []);
 });
 
+test("window snapshots keep matching words about different sessions", () => {
+  const first = {
+    kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+    words: "Two chats changed.",
+    identities: [{ providerId: "claude-code", providerSessionId: "session-a" }],
+    recordedAt: NOW,
+  };
+  const second = {
+    ...first,
+    identities: [{ providerId: "codex", providerSessionId: "session-b" }],
+  };
+  const merged = mergeConversationHistory([first], [second], undefined, NOW);
+
+  assert.deepEqual(merged, [first, second]);
+  assert.deepEqual(mergeConversationHistory(merged, [second], undefined, NOW), merged);
+});
+
 test("remembered entries read back and are never retired by a clock", () => {
   const facts = [
     {

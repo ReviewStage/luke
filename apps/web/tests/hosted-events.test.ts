@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PRODUCT_EVENT, PRODUCT_EVENT_BATCH_LIMIT, type WireValue } from "../server/core";
+import {
+  PRODUCT_EVENT,
+  PRODUCT_EVENT_BATCH_LIMIT,
+  PRODUCT_EVENT_CLIENT,
+  PRODUCT_EVENT_CLIENT_HEADER,
+  PRODUCT_EVENT_CLIENT_LIB,
+  type WireValue,
+} from "../server/core";
 import { type EventsOptions, handleEvents } from "../server/hosted/events";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import type { PosthogBatch, PosthogBatchItem } from "../server/hosted/posthog";
@@ -232,6 +239,49 @@ test("the forwarded document matches the processor's documented batch shape", as
   assert.equal(item.properties.$geoip_disable, true);
   assert.equal(item.timestamp, new Date(LAUNCH.at).toISOString());
   assert.match(item.timestamp, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+});
+
+test("the client header selects the $lib tag, and anything else is the desktop", async () => {
+  const mobile = upstream();
+  await handleEvents(
+    options({
+      request: new Request("https://luke.test/api/events", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer token-1",
+          [PRODUCT_EVENT_CLIENT_HEADER]: PRODUCT_EVENT_CLIENT.IOS,
+        },
+        body: JSON.stringify({ events: [LAUNCH] }),
+      }),
+      fetch: mobile.fetch,
+      resolveUserId: freshUser(),
+    }),
+  );
+  assert.equal(
+    itemAt(onlyBatch(mobile.forwarded).items, 0).properties.$lib,
+    PRODUCT_EVENT_CLIENT_LIB[PRODUCT_EVENT_CLIENT.IOS],
+  );
+
+  // A header outside the set cannot put its own words in the tag.
+  const forged = upstream();
+  await handleEvents(
+    options({
+      request: new Request("https://luke.test/api/events", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer token-1",
+          [PRODUCT_EVENT_CLIENT_HEADER]: "my-own-fork /Users/me",
+        },
+        body: JSON.stringify({ events: [LAUNCH] }),
+      }),
+      fetch: forged.fetch,
+      resolveUserId: freshUser(),
+    }),
+  );
+  assert.equal(
+    itemAt(onlyBatch(forged.forwarded).items, 0).properties.$lib,
+    PRODUCT_EVENT_CLIENT_LIB[PRODUCT_EVENT_CLIENT.DESKTOP],
+  );
 });
 
 test("the account's name and address ride as person properties, once per batch", async () => {

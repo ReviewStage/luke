@@ -15,6 +15,18 @@ second time there; everything in the section below reaches the project without
 passing it. So the guarantee is "nothing observed can travel in a counted
 event", never "nothing observed reaches the project".
 
+The endpoint has two clients, and the second is a transcription. The iOS app
+emits through its own Swift sender (`apps/ios/LukeKit/Sources/LukeKit/
+ProductEvents.swift` and `ProductEventSender.swift`), a hand-kept subset of
+this vocabulary whose enums make free text unrepresentable the way the `as
+const` sets do here. This file stays the source of truth: the service reads
+every batch against this allowlist regardless of who posted it, so a
+transcription that drifts shows up as a refused batch, never as a value that
+traveled. Which app posted travels as `PRODUCT_EVENT_CLIENT_HEADER`, a header
+whose value only selects between the fixed `$lib` tags in
+`PRODUCT_EVENT_CLIENT_LIB` — absent or unrecognized means the desktop, because
+desktop builds from before the header already post without one.
+
 That construction is the guard, not a document that lists the events. Widening
 the event list or a property's value set is still a product decision rather
 than an implementation detail, because it changes what a user consented to when
@@ -34,20 +46,27 @@ compromised renderer reaches none of the acts.
 ## Everything outside this package has no such guarantee
 
 `apps/desktop/src/renderer/session-replay.ts` holds the one analytics client
-the app runs, on the library's own configuration, and nothing in this package
-governs a byte of it. Do not let this file's promise be read as covering it.
-Two things leave that way and neither is validated here:
+the desktop runs, and `apps/ios/Luke/SessionReplay.swift` its iOS
+counterpart — each on its library's own configuration, and nothing in this
+package governs a byte of either. Do not let this file's promise be read as
+covering them. Three things leave that way and none is validated here:
 
 - The recording itself, which is the rendered panel except for the History
   tab's explicitly blocked `ph-no-capture` subtree — a session's title, branch,
   recap, and error line, the account's name and address, and a screenshot
   attached to the feedback composer all travel because they are drawn. Only
   what is typed into a field is masked, and that is the library's default
-  rather than a posture the app keeps.
+  rather than a posture the app keeps. The iOS recording is the app's own
+  screens on the same terms, captured as screenshots because that is how the
+  SDK records SwiftUI at all.
 - Autocaptured events, which name the text of whatever was clicked. Pressing a
-  session row sends that row's words.
+  session row sends that row's words. Desktop only: the iOS SDK's equivalent
+  copies a text control's live contents on end-of-edit, which is typed text
+  and not a click, so it stays at its off default there.
+- Unhandled exceptions, with their message and stack — on iOS, a crash sent
+  as an exception event on the next launch.
 
-`productEventFromWire` never sees either, so a change here cannot make
+`productEventFromWire` never sees any of them, so a change here cannot make
 them safer and a change there cannot make them unsafe — they were never
 governed.
 

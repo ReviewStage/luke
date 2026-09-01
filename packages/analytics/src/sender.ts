@@ -1,6 +1,8 @@
 import {
   PRODUCT_EVENT,
   PRODUCT_EVENT_BATCH_LIMIT,
+  PRODUCT_EVENT_CLIENT,
+  PRODUCT_EVENT_CLIENT_HEADER,
   type ProductEvent,
   type ProductEventName,
   type ProductEventPropertiesFor,
@@ -243,6 +245,9 @@ export class ProductEventSender {
         headers: {
           authorization: `Bearer ${token}`,
           "content-type": "application/json",
+          // This sender is the desktop's; the iOS app runs its own Swift
+          // sender and names itself the same way.
+          [PRODUCT_EVENT_CLIENT_HEADER]: PRODUCT_EVENT_CLIENT.DESKTOP,
         },
         body: JSON.stringify({ events }),
         signal: AbortSignal.timeout(this.#requestTimeoutMs),

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { RealtimeStatus, ScheduledTimer } from "@sidecar/realtime";
+import type { ProactiveSpeechTurn, RealtimeStatus, ScheduledTimer } from "@sidecar/realtime";
 import {
+  isArrivalSpeech,
   REALTIME_STATUS,
   SESSION_ANNOUNCEMENT_CHANGE,
   type SessionAnnouncement,
@@ -12,6 +13,7 @@ import {
   ANNOUNCER_RETRY_DELAY_MS,
   type AnnouncerSession,
   MAXIMUM_CONNECT_ATTEMPTS,
+  MAXIMUM_QUEUED_NOTICES,
   SPOKEN_NOTICE_MAX_AGE_MS,
   SpokenNoticeAnnouncer,
 } from "./spoken-notices";
@@ -28,6 +30,7 @@ function speech(id: string, decidedAt = 1_000): SessionAnnouncement {
 
 interface FakeSession extends AnnouncerSession {
   spoken: SessionAnnouncement[];
+  turns: SessionAnnouncement[][];
   connects: number;
   closes: number;
   stops: number;
@@ -40,6 +43,7 @@ interface FakeSession extends AnnouncerSession {
 function fakeSession(): FakeSession {
   const session: FakeSession = {
     spoken: [],
+    turns: [],
     connects: 0,
     closes: 0,
     stops: 0,
@@ -64,9 +68,12 @@ function fakeSession(): FakeSession {
       this.setStatus(this.connectOpens ? REALTIME_STATUS.READY : REALTIME_STATUS.UNAVAILABLE);
       return this.connectOpens;
     },
-    speak(item: SessionAnnouncement) {
+    speak(item: ProactiveSpeechTurn) {
       if (!this.isConnected || this.status === REALTIME_STATUS.RESPONDING) return false;
-      this.spoken.push(item);
+      if (!isArrivalSpeech(item)) {
+        this.turns.push([...item]);
+        this.spoken.push(...item);
+      }
       this.setStatus(REALTIME_STATUS.RESPONDING);
       return true;
     },
@@ -142,18 +149,18 @@ test("a notice arriving into silence opens Luke's own call and is spoken", async
   );
 });
 
-test("queued notices speak one reply at a time, paced by READY", async () => {
+test("queued notices speak together in one reply", async () => {
   const session = fakeSession();
   const timers = fakeTimers();
   const subject = announcer(session, timers);
 
   subject.enqueue([speech("a"), speech("b")]);
   await Promise.resolve();
-  // The first took the turn; the second waits for the reply to end.
   assert.deepEqual(
     session.spoken.map((item) => item.providerSessionId),
-    ["a"],
+    ["a", "b"],
   );
+  assert.equal(session.turns.length, 1);
 
   session.setStatus(REALTIME_STATUS.READY);
   subject.onStatus(REALTIME_STATUS.READY);
@@ -163,6 +170,30 @@ test("queued notices speak one reply at a time, paced by READY", async () => {
   );
   // One call served the whole queue.
   assert.equal(session.connects, 1);
+});
+
+test("separate batches stay separate while the bounded queue sheds oldest news", () => {
+  const session = fakeSession();
+  session.setStatus(REALTIME_STATUS.RESPONDING);
+  const subject = announcer(session, fakeTimers());
+
+  subject.enqueue(
+    Array.from({ length: MAXIMUM_QUEUED_NOTICES }, (_, index) => speech(`a-${index}`)),
+  );
+  subject.enqueue([speech("b")]);
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.deepEqual(
+    session.turns.map((turn) => turn.map(({ providerSessionId }) => providerSessionId)),
+    [Array.from({ length: MAXIMUM_QUEUED_NOTICES - 1 }, (_, index) => `a-${index + 1}`)],
+  );
+
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+  assert.deepEqual(
+    session.turns.map((turn) => turn.map(({ providerSessionId }) => providerSessionId)),
+    [Array.from({ length: MAXIMUM_QUEUED_NOTICES - 1 }, (_, index) => `a-${index + 1}`), ["b"]],
+  );
 });
 
 test("the call Luke opened lingers for stragglers, then closes itself", async () => {
@@ -353,7 +384,7 @@ test("quiet beginning cuts the announcement mid-sentence and closes Luke's own c
   const timers = fakeTimers();
   const subject = announcer(session, timers);
 
-  // Mid-announcement on Luke's own call, with another sentence waiting.
+  // Mid-announcement on Luke's own call, with two updates in the reply.
   subject.enqueue([speech("a"), speech("b")]);
   await Promise.resolve();
   assert.equal(session.status, REALTIME_STATUS.RESPONDING);
@@ -370,7 +401,7 @@ test("quiet beginning cuts the announcement mid-sentence and closes Luke's own c
   assert.equal(session.connects, 1);
   assert.deepEqual(
     session.spoken.map((item) => item.providerSessionId),
-    ["a"],
+    ["a", "b"],
   );
 
   // Quiet over, fresh news speaks again — the release arrives exactly here.
@@ -378,7 +409,7 @@ test("quiet beginning cuts the announcement mid-sentence and closes Luke's own c
   await Promise.resolve();
   assert.deepEqual(
     session.spoken.map((item) => item.providerSessionId),
-    ["a", "c"],
+    ["a", "b", "c"],
   );
 });
 
@@ -464,7 +495,7 @@ test("an announcement waits out the developer's floor after Luke answers them", 
   subject.enqueue([speech("b")]);
   assert.deepEqual<SessionAnnouncement[]>(session.spoken, []);
 
-  // The developer left the pause empty; the backlog takes it.
+  // The developer left the pause empty; the first waiting batch takes it.
   now = 1_000 + ANNOUNCER_GRACE_MS;
   timers.fire();
   assert.deepEqual(
@@ -472,7 +503,7 @@ test("an announcement waits out the developer's floor after Luke answers them", 
     ["a"],
   );
 
-  // And chains without a second window: the readout is already Luke's turn.
+  // The later batch keeps its own readout after the first one ends.
   session.setStatus(REALTIME_STATUS.READY);
   subject.onStatus(REALTIME_STATUS.READY);
   assert.deepEqual(

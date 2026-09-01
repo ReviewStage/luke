@@ -546,8 +546,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               "an error, or finishes — a hold is a question, a permission, or an approval, " +
               "not a turn that merely ended — naming the session and what it needs. No " +
               "conversation needs to be open, the microphone stays off, and it is always on " +
-              "while voice is available. A session in a live voice conversation with its " +
-              "own provider announces nothing until that conversation closes.",
+              "while voice is available. Luke waits five seconds for nearby updates and says " +
+              "them together in one announcement. A session in a live voice conversation " +
+              "with its own provider announces nothing until that conversation closes.",
           },
           {
             // A behavior rather than a setting, for the announcements' own

@@ -2,8 +2,9 @@
 
 Last updated: 1 September 2026
 
-Luke is a macOS app that watches your coding agent sessions. This policy
-explains what we collect, who we send it to, and how to turn it off.
+Luke is a macOS app that watches your coding agent sessions, with a companion
+iOS app for the cloud sessions your account can see. This policy explains what
+we collect, who we send it to, and how to turn it off.
 
 ## What we collect
 
@@ -40,10 +41,11 @@ our own service, and they are never used to decide anything on your behalf.
 address, and which of the two you used. We also keep the records that keep you
 signed in, and a daily count of how much voice and review you have used.
 
-**Usage data.** We count how Luke's features are used, and attach your name and
-email to that record. The counts are event names and values from a fixed list.
-Nothing you type or say and nothing from a session can appear in one: no titles,
-branches, file paths, summaries, prompts, or error text.
+**Usage data.** We count how Luke's features are used, on the Mac and in the
+iOS app, and attach your name and email to that record. The counts are event
+names and values from a fixed list, and each one says which of the two apps it
+came from. Nothing you type or say and nothing from a session can appear in
+one: no titles, branches, file paths, summaries, prompts, or error text.
 
 **Screen recordings.** Luke records what his own panel draws, and never your
 screen, your editor, your terminal, or any other app. A recording shows whatever
@@ -71,6 +73,15 @@ runtime, and device context. Luke does not attach your Luke account or user
 identity, and does not enable PII collection, tracing, Sentry Replay,
 screenshots, profiling, or manual reports of handled errors. Fixture and
 evidence runs send no crash reports.
+
+The iOS app records on the same terms: its own screens as screenshots, never
+anything else on your device, from the moment it opens, and shows the same
+things its screens show — session titles, branches, summaries, error text, and
+your name and email. Text you type into a field is masked, and a crash is
+reported on the next launch with its message and code path. Unlike the Mac
+app, taps are not separately reported with their text — only the recording
+itself shows what was pressed. Signing in attaches the running recording to
+your account, and signing out starts a fresh anonymous one.
 
 **Provider API keys (server-side vault).** While the "Sync provider keys"
 switch in Settings > Connections is on — it starts on — the provider API keys
@@ -116,9 +127,9 @@ and email you signed it with, and any screenshots you attached.
 - Google, if you connect Google Calendar. We request your calendar list and your
   availability. Google returns busy times only, so event titles and attendees
   are never available to Luke.
-- PostHog, for usage data and screen recordings. The counts go through our own
-  service; the recordings and clicks that ride with them go from Luke to
-  PostHog directly.
+- PostHog, for usage data and screen recordings, from the Mac and iOS apps
+  both. The counts go through our own service; the recordings, desktop clicks,
+  and iOS errors that ride with them go from Luke to PostHog directly.
 - Sentry, for the anonymous exception, process-session, and native crash reports
   described above.
 - GitHub, to check for updates. These requests are unauthenticated and carry
@@ -156,7 +167,7 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 - Delete your account from the Account section in Settings. This erases your
   account, your sign-in records, your usage counts, and any provider API keys
   you synced to the hosted service, and asks PostHog to erase your usage data
-  and recordings. It does not reach a recording that was
+  and recordings, including the iOS app's. It does not reach a recording that was
   never attached to your account, as described above. Luke stops recording for
   the rest of the session, and starts again the next time you open it or sign
   in. Sentry reporting continues after deletion, and prior anonymous crash
