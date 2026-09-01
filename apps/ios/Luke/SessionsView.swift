@@ -100,10 +100,15 @@ private struct SessionRow: View {
             }
             Spacer(minLength: 0)
             if let date = session.observedAt {
-                Text(date, format: .relative(presentation: .numeric, unitsStyle: .abbreviated))
-                    .font(.system(size: 10))
-                    .foregroundStyle(Color.inkTertiary)
-                    .padding(.top, 2)
+                // The 30-second cadence is the desktop rows' own freshness tick:
+                // without it a minute-granularity label stales until something
+                // else happens to re-render the list.
+                TimelineView(.periodic(from: .distantPast, by: 30)) { context in
+                    Text(observedAgoLabel(observedAt: date, now: context.date))
+                }
+                .font(.system(size: 10))
+                .foregroundStyle(Color.inkTertiary)
+                .padding(.top, 2)
             }
         }
         .padding(.horizontal, 14)
