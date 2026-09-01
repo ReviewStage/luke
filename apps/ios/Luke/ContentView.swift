@@ -50,23 +50,23 @@ struct ContentView: View {
 
     private var signedOutCard: some View {
         ZStack {
-            Color(red: 0.09, green: 0.09, blue: 0.10).ignoresSafeArea()
+            Color.ground.ignoresSafeArea()
             VStack(spacing: 0) {
                 // Luke face mark
                 LukeMark()
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(Color.ink)
                     .frame(width: 52)
                     .padding(.bottom, 16)
 
                 Text("Sign in to Luke")
                     .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(Color.ink)
                     .padding(.bottom, 8)
 
                 if let error = signInError {
                     Text(error)
                         .font(.caption)
-                        .foregroundStyle(Color(red: 0.95, green: 0.4, blue: 0.4))
+                        .foregroundStyle(Color.errorInk)
                         .multilineTextAlignment(.center)
                         .padding(.bottom, 8)
                 }
@@ -90,37 +90,36 @@ struct ContentView: View {
             .padding(.vertical, 40)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(red: 0.12, green: 0.12, blue: 0.13))
+                    .fill(Color.cardFill)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(white: 1, opacity: 0.08), lineWidth: 1)
+                            .stroke(Color.cardStroke, lineWidth: 1)
                     )
-                    .shadow(color: Color.black.opacity(0.42), radius: 40, y: 16)
+                    .shadow(color: Color.cardShadow, radius: 40, y: 16)
             )
             .padding(24)
         }
-        .preferredColorScheme(.dark)
     }
 
     // MARK: - Signed-in card
 
     private func signedInCard(identity: AccountIdentity) -> some View {
         ZStack {
-            Color(red: 0.09, green: 0.09, blue: 0.10).ignoresSafeArea()
+            Color.ground.ignoresSafeArea()
             ScrollView {
                 VStack(spacing: 16) {
                     VStack(spacing: 12) {
                         Text(identity.name ?? identity.email)
                             .font(.system(size: 22, weight: .semibold))
-                            .foregroundStyle(Color.white)
+                            .foregroundStyle(Color.ink)
                         Text(identity.email)
                             .font(.subheadline)
-                            .foregroundStyle(Color(white: 1, opacity: 0.5))
+                            .foregroundStyle(Color.inkSecondary)
                         if !session.credentialsPersisted {
                             Text("This device is not saving the sign-in, so the next launch will ask again.")
                                 .font(.caption)
                                 .multilineTextAlignment(.center)
-                                .foregroundStyle(Color(red: 0.95, green: 0.75, blue: 0.4))
+                                .foregroundStyle(Color.warningInk)
                         }
                         Button("Sign out") {
                             Task { await session.signOut() }
@@ -132,10 +131,10 @@ struct ContentView: View {
                     .padding(40)
                     .background(
                         RoundedRectangle(cornerRadius: 10)
-                            .fill(Color(red: 0.12, green: 0.12, blue: 0.13))
+                            .fill(Color.cardFill)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Color(white: 1, opacity: 0.08), lineWidth: 1)
+                                    .stroke(Color.cardStroke, lineWidth: 1)
                             )
                     )
 
@@ -147,7 +146,6 @@ struct ContentView: View {
                 .padding(24)
             }
         }
-        .preferredColorScheme(.dark)
     }
 
     // MARK: - Sign-in flow
@@ -219,7 +217,7 @@ private struct ProviderButton: View {
                     .frame(width: 16, height: 16)
                 Text(pending ? "Opening…" : provider.label)
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(Color.ink)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 46)
@@ -231,7 +229,7 @@ private struct ProviderButton: View {
     private var mark: some View {
         switch provider {
         case .google: GoogleMark()
-        case .github: GitHubMark().foregroundStyle(Color.white)
+        case .github: GitHubMark().foregroundStyle(Color.ink)
         }
     }
 }
@@ -244,12 +242,10 @@ private struct CardButtonStyle: ButtonStyle {
             .padding(.horizontal, 16)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(configuration.isPressed
-                          ? Color(white: 1, opacity: 0.06)
-                          : Color(red: 0.12, green: 0.12, blue: 0.13))
+                    .fill(configuration.isPressed ? Color.pressedFill : Color.cardFill)
                     .overlay(
                         RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color(white: 1, opacity: 0.10), lineWidth: 1)
+                            .stroke(Color.controlStroke, lineWidth: 1)
                     )
             )
             .opacity(configuration.isPressed ? 0.85 : 1)
