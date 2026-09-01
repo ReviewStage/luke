@@ -19,11 +19,33 @@ struct SessionsView: View {
     @State private var optionsShown = false
     @State private var composingSession: RosterSession?
     @State private var spawningSession: RosterSession?
-    @State private var renamingSession: RosterSession?
-    @State private var renamingWorkspace: RosterSession?
+    @State private var renaming: RenameTarget?
     @State private var renameText = ""
     @State private var creatorShown = false
     @State private var actFailure: String?
+
+    /// Which advertised rename a menu press opened: the session itself, or
+    /// the workspace it runs in. One alert serves both; the case picks the
+    /// words and the endpoint.
+    private enum RenameTarget: Identifiable {
+        case session(RosterSession)
+        case workspace(RosterSession)
+
+        var session: RosterSession {
+            switch self {
+            case .session(let s), .workspace(let s): s
+            }
+        }
+
+        var id: String { session.id }
+
+        var title: String {
+            switch self {
+            case .session: "Rename Session"
+            case .workspace: "Rename Workspace"
+            }
+        }
+    }
 
     private let rosterClient = RosterClient(serviceURL: AccountConstants.serviceURL)
     private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
@@ -58,48 +80,31 @@ struct SessionsView: View {
             }
         }
         .alert(
-            "Rename Session",
-            isPresented: Binding(
-                get: { renamingSession != nil },
-                set: { if !$0 { renamingSession = nil } }
-            ),
-            presenting: renamingSession
-        ) { s in
+            renaming?.title ?? "",
+            isPresented: Binding(presence: $renaming),
+            presenting: renaming
+        ) { target in
             TextField("Name", text: $renameText)
             Button("Rename") {
                 let name = renameText
                 Task {
                     await performAct { token in
-                        try await actClient.renameSession(
-                            accessToken: token,
-                            providerId: s.providerId,
-                            providerSessionId: s.sessionId,
-                            name: name
-                        )
-                    }
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        }
-        .alert(
-            "Rename Workspace",
-            isPresented: Binding(
-                get: { renamingWorkspace != nil },
-                set: { if !$0 { renamingWorkspace = nil } }
-            ),
-            presenting: renamingWorkspace
-        ) { s in
-            TextField("Name", text: $renameText)
-            Button("Rename") {
-                let name = renameText
-                Task {
-                    await performAct { token in
-                        try await actClient.renameWorkspace(
-                            accessToken: token,
-                            providerId: s.providerId,
-                            providerSessionId: s.sessionId,
-                            name: name
-                        )
+                        switch target {
+                        case .session(let s):
+                            try await actClient.renameSession(
+                                accessToken: token,
+                                providerId: s.providerId,
+                                providerSessionId: s.sessionId,
+                                name: name
+                            )
+                        case .workspace(let s):
+                            try await actClient.renameWorkspace(
+                                accessToken: token,
+                                providerId: s.providerId,
+                                providerSessionId: s.sessionId,
+                                name: name
+                            )
+                        }
                     }
                 }
             }
@@ -107,10 +112,7 @@ struct SessionsView: View {
         }
         .alert(
             "Not Delivered",
-            isPresented: Binding(
-                get: { actFailure != nil },
-                set: { if !$0 { actFailure = nil } }
-            ),
+            isPresented: Binding(presence: $actFailure),
             presenting: actFailure
         ) { _ in
             Button("OK", role: .cancel) {}
@@ -255,7 +257,11 @@ struct SessionsView: View {
                 [.interaction, .contextMenuPreview], RoundedRectangle(cornerRadius: 15))
         Group {
             if hasRowActs(s) {
-                core.contextMenu { rowMenu(s) }
+                core.contextMenu {
+                    rowMenu(s)
+                } preview: {
+                    SessionRowPreview(session: s)
+                }
             } else {
                 core
             }
@@ -287,7 +293,8 @@ struct SessionsView: View {
     /// The menu reads in the system's own order: what the session takes now,
     /// then the edits that open further UI, then the acts that end something
     /// — a stop wearing the destructive role, the archive closing the menu
-    /// the way Mail's does. Every entry is still only an advertised act.
+    /// the way Mail's does. Every entry is still only an advertised act, and
+    /// each section holds only the kinds the adapters themselves declared.
     @ViewBuilder
     private func rowMenu(_ s: RosterSession) -> some View {
         Section {
@@ -298,7 +305,7 @@ struct SessionsView: View {
                     Label("Send Message…", systemImage: "arrow.up.message")
                 }
             }
-            ForEach(s.controls.filter { !isStop($0) && !isArchive($0) }) { control in
+            ForEach(s.controls.filter { $0.kind != .stop && $0.kind != .archive }) { control in
                 Button {
                     runControl(s, control)
                 } label: {
@@ -317,7 +324,7 @@ struct SessionsView: View {
             if s.canRename {
                 Button {
                     renameText = s.title
-                    renamingSession = s
+                    renaming = .session(s)
                 } label: {
                     Label("Rename Session…", systemImage: "pencil")
                 }
@@ -325,44 +332,32 @@ struct SessionsView: View {
             if s.canRenameWorkspace {
                 Button {
                     renameText = s.workspace ?? ""
-                    renamingWorkspace = s
+                    renaming = .workspace(s)
                 } label: {
                     Label("Rename Workspace…", systemImage: "pencil.line")
                 }
             }
         }
         Section {
-            ForEach(s.controls.filter { isStop($0) }) { control in
+            ForEach(s.controls.filter { $0.kind == .stop }) { control in
                 Button(role: .destructive) {
                     runControl(s, control)
                 } label: {
                     Label(control.label, systemImage: controlSymbol(control))
                 }
             }
-            ForEach(s.controls.filter { isArchive($0) }) { control in
+            ForEach(s.controls.filter { $0.kind == .archive }) { control in
                 Button {
                     runControl(s, control)
                 } label: {
-                    Label(control.label, systemImage: "archivebox")
+                    Label(control.label, systemImage: controlSymbol(control))
                 }
             }
         }
     }
 
-    private func isStop(_ control: RosterSessionControl) -> Bool {
-        control.kind == "stop"
-    }
-
-    /// Every provider names its archive control `archive-…` (workspace,
-    /// agent, session). The family picks presentation only — the swipe slot
-    /// and the menu's closing section — and execution still names the
-    /// advertised id against the server's own fresh observation.
-    private func isArchive(_ control: RosterSessionControl) -> Bool {
-        control.id.hasPrefix("archive")
-    }
-
     private func archiveControl(_ s: RosterSession) -> RosterSessionControl? {
-        s.controls.first(where: isArchive)
+        s.controls.first { $0.kind == .archive }
     }
 
     private func runControl(_ s: RosterSession, _ control: RosterSessionControl) {
@@ -378,31 +373,22 @@ struct SessionsView: View {
         }
     }
 
-    /// A glyph for a control the provider advertised. The kind names a stop;
-    /// beyond that the id's family is display-only — execution always names
-    /// the id against the server's own fresh observation.
+    /// A glyph for a control by its declared kind alone. An id or a label is
+    /// the provider's own words, and words are not a contract to draw from.
     private func controlSymbol(_ control: RosterSessionControl) -> String {
-        if isStop(control) { return "stop.circle" }
-        if isArchive(control) { return "archivebox" }
-        if control.id.contains("approve") { return "checkmark.circle" }
-        return "circle"
+        switch control.kind {
+        case .stop: "stop.circle"
+        case .archive: "archivebox"
+        case .action, nil: "circle"
+        }
     }
 
-    /// Runs one row act with the established token discipline, then refreshes
+    /// Runs one row act with the account's token discipline, then refreshes
     /// so the roster reflects what the act changed; a refusal is surfaced in
     /// the failure alert with the server's own reason.
-    private func performAct(_ act: @escaping (String) async throws -> ActMessageAnswer) async {
+    private func performAct(_ act: (String) async throws -> ActMessageAnswer) async {
         do {
-            let token = try await session.validAccessToken()
-            var answer: ActMessageAnswer
-            do {
-                answer = try await act(token)
-            } catch ActClientError.unauthorized {
-                // validAccessToken() refreshes near-expiry tokens; a 401 here
-                // means the server rejected the token — refresh and retry once.
-                let fresh = try await session.refreshAccessToken()
-                answer = try await act(fresh)
-            }
+            let answer = try await session.authorized(act)
             if answer.result == .accepted {
                 await refreshSessions()
             } else {
@@ -438,15 +424,8 @@ struct SessionsView: View {
         defer { isLoading = false }
         guard case .signedIn = session.state else { return }
         do {
-            let token = try await session.validAccessToken()
-            let fetched: [RosterSession]
-            do {
-                fetched = try await rosterClient.observe(bearerToken: token)
-            } catch RosterClientError.serverError(let status) where status == 401 {
-                // validAccessToken() refreshes near-expiry tokens; a 401 here
-                // means the server rejected the token — refresh and retry once.
-                let fresh = try await session.refreshAccessToken()
-                fetched = try await rosterClient.observe(bearerToken: fresh)
+            let fetched = try await session.authorized { token in
+                try await rosterClient.observe(bearerToken: token)
             }
             // Animated so a row an act just removed — an archive above all —
             // slides out the way a deleted Mail row does, instead of blinking.
@@ -471,7 +450,7 @@ private func axisTitle(_ axis: SessionFilterAxis) -> String {
 private func optionTitle(_ filter: SessionFilter) -> String {
     switch filter {
     case .provider(let providerId):
-        VaultProviderID(rawValue: providerId)?.displayName ?? providerId.capitalized
+        VaultProviderID.displayLabel(forWireId: providerId)
     case .status(let status):
         status.capitalized
     }
@@ -677,6 +656,53 @@ private struct ComposerSheet: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Row preview
+
+/// The card the long-press lifts in place of the row's own snapshot: the same
+/// mark and title, the place line, and the session's words given the room the
+/// row cannot spare — the full recap or error instead of two truncated lines.
+/// Everything here is already drawn on the row itself; the preview only lets
+/// it breathe, the way Cursor's mobile app previews a chat's last message.
+private struct SessionRowPreview: View {
+    let session: RosterSession
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 10) {
+                RosterProviderMark(providerId: session.providerId)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(session.title)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.ink)
+                    if let workspace = session.workspace {
+                        PlaceLine(workspace: workspace, branch: session.branch)
+                    }
+                }
+            }
+            if let words = session.error ?? session.recap {
+                Text(words)
+                    .font(.system(size: 13))
+                    .foregroundStyle(session.error != nil ? Color.errorInk : Color.ink.opacity(0.75))
+                    .lineSpacing(3)
+                    .lineLimit(14)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(session.status.capitalized)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.inkTertiary)
+            }
+        }
+        .frame(maxWidth: 340, alignment: .leading)
+        .padding(18)
+        .background(
+            ZStack {
+                Color.ground
+                Color(white: 1, opacity: 0.028)
+            }
+        )
     }
 }
 
