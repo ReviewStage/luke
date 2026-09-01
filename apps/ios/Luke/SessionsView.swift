@@ -710,17 +710,21 @@ private struct SessionRow: View {
                     .font(.system(size: 10))
                     .foregroundStyle(Color.inkTertiary)
                 }
-                if session.status == "waiting" {
-                    Image(systemName: "arrow.up.message")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color(red: 1.0, green: 0.627, blue: 0.286, opacity: 0.8))
-                }
             }
             .padding(.top, 2)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
-        .background(Color(white: 1, opacity: 0.028))
+        // Opaque on purpose: the context-menu lift snapshots the card alone,
+        // and a translucent fill reads as a ghost over the system's blur
+        // instead of a cell rising. Compositing the overlay onto the ground
+        // it always sits on looks identical in the list and solid in the lift.
+        .background(
+            ZStack {
+                Color.ground
+                Color(white: 1, opacity: 0.028)
+            }
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 15)
                 .strokeBorder(
