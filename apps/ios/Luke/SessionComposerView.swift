@@ -15,7 +15,6 @@ struct SessionComposerView: View {
     var onDelivered: (() -> Void)? = nil
 
     @Environment(AccountSession.self) private var session
-    @Environment(ProductEventSender.self) private var events
     @State private var text = ""
     @State private var state: ComposerState = .idle
 
@@ -86,30 +85,13 @@ struct SessionComposerView: View {
         text = ""
         Task {
             do {
-                let token = try await session.validAccessToken()
-                let answer: ActMessageAnswer
-                do {
-                    answer = try await actClient.sendMessage(
+                let answer = try await session.authorized { token in
+                    try await actClient.sendMessage(
                         accessToken: token,
                         providerId: providerId,
                         providerSessionId: providerSessionId,
                         text: messageText
                     )
-                } catch ActClientError.unauthorized {
-                    // validAccessToken() refreshes near-expiry tokens; a 401
-                    // here means the server rejected the token outright — refresh and retry once.
-                    let fresh = try await session.refreshAccessToken()
-                    answer = try await actClient.sendMessage(
-                        accessToken: fresh,
-                        providerId: providerId,
-                        providerSessionId: providerSessionId,
-                        text: messageText
-                    )
-                }
-                if answer.result == .accepted,
-                   let provider = ProductProviderID(rawValue: providerId)
-                {
-                    events.record(.sessionActSend(provider: provider, act: .messageSend))
                 }
                 state = .result(answer)
             } catch {
