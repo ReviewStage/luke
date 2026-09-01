@@ -139,6 +139,10 @@ public final class RealtimeSession {
     // True during a turn the developer explicitly opened; cleared after
     // response.done so only that one response may dispatch tool calls.
     private var isArmed = false
+    // Set when a tool follow-up response.create has been sent and cleared when
+    // that follow-up's response.done arrives, so output_audio_buffer.stopped
+    // does not return the session to .ready while the follow-up is in flight.
+    private var followUpPending = false
     // Set when the developer releases while still connecting, so we commit
     // and request a response the moment the channel opens.
     private var pendingCommit = false
@@ -215,6 +219,7 @@ public final class RealtimeSession {
         player?.stop(); player = nil
         channel?.close(); channel = nil
         isArmed = false
+        followUpPending = false
         pendingCommit = false
         pendingCalls.removeAll()
         captionBuffer = ""
@@ -322,15 +327,15 @@ public final class RealtimeSession {
         case "output_audio_buffer.stopped":
             // The server has finished sending audio, but locally-buffered samples
             // may not have played yet. Drain them before stopping and clearing.
-            // Only move to .ready if no tool follow-up is pending — if it is,
-            // handleResponseDone will keep the session in .thinking.
-            let hasPendingCalls = !pendingCalls.isEmpty
+            // Do not move to .ready if a tool follow-up response is in flight —
+            // the follow-up's response.done will clear followUpPending and, if
+            // there is no audio on the follow-up, transition to .ready itself.
             if let p = player {
                 player = nil
                 p.drain { [weak self] in
                     p.stop()
                     self?.options.onCaption(nil)
-                    if self?.status == .speaking, !hasPendingCalls {
+                    if self?.status == .speaking, !(self?.followUpPending ?? false) {
                         self?.status = .ready
                         self?.resetIdleTimer()
                     }
@@ -402,12 +407,19 @@ public final class RealtimeSession {
 
         if !functionCalls.isEmpty {
             // Follow-up response requested; stay in .thinking until the model speaks.
+            // Mark the follow-up in flight so output_audio_buffer.stopped from the
+            // current audio does not return the session to .ready prematurely.
+            followUpPending = true
             try? await ws.sendText(#"{"type":"response.create"}"#)
-        } else if status == .thinking {
-            // Audio-only response whose audio finished before response.done arrived,
-            // or an unexpected silent response — transition to ready.
-            status = .ready
-            resetIdleTimer()
+        } else {
+            // This is the follow-up response itself (or an audio-only primary response).
+            followUpPending = false
+            if status == .thinking {
+                // Audio-only response whose audio finished before response.done
+                // arrived, or an unexpected silent response — transition to ready.
+                status = .ready
+                resetIdleTimer()
+            }
         }
 
         isArmed = false
@@ -420,9 +432,6 @@ public final class RealtimeSession {
         idleTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
             guard !Task.isCancelled else { return }
-            // Signal the UI before closing so it can clear the session reference
-            // and allow reconnection.
-            self?.options.onError(nil)
             self?.close()
         }
     }

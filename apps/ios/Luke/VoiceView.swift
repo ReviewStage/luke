@@ -13,6 +13,9 @@ private final class VoiceSessionModel {
     var caption: String?
     var errorMessage: String?
     private var session: RealtimeSession?
+    // Cleared by stop() before close() so an explicit stop does not trigger
+    // an auto-reconnect through the onStatus(.idle) path.
+    private var reconnectCallback: (@MainActor () async -> Void)?
 
     func start(accountSession: AccountSession) async {
         guard session == nil else { return }
@@ -31,8 +34,14 @@ private final class VoiceSessionModel {
             onStatus: { [weak self] newStatus in
                 self?.status = newStatus
                 // Clear the session reference when it goes idle so start() can
-                // reconnect on the next press.
-                if newStatus == .idle { self?.session = nil }
+                // reconnect. If reconnectCallback is set (not a stop() path),
+                // automatically restart so the button becomes live again.
+                if newStatus == .idle {
+                    self?.session = nil
+                    if let reconnect = self?.reconnectCallback {
+                        Task { await reconnect() }
+                    }
+                }
             },
             onCaption: { [weak self] text in self?.caption = text },
             onError: { [weak self] message in
@@ -51,12 +60,19 @@ private final class VoiceSessionModel {
             makeAudioCapturer: { VoiceAudioCapturer() },
             makeAudioPlayer: { VoiceAudioPlayer() }
         )
+        reconnectCallback = { [weak self, weak accountSession] in
+            guard let accountSession else { return }
+            await self?.start(accountSession: accountSession)
+        }
         let s = RealtimeSession(options: opts)
         session = s
         await s.connect()
     }
 
     func stop() {
+        // Nil the callback before close() so the .idle status change triggered
+        // by close() does not schedule a reconnect on an explicit stop.
+        reconnectCallback = nil
         session?.close()
         session = nil
     }

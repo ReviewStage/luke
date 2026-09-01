@@ -33,7 +33,17 @@ final class VoiceAudioCapturer: AudioCapturer, @unchecked Sendable {
                   let converted = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: max(capacity, 1))
             else { return }
             var error: NSError?
+            // The converter may call this block more than once per convert(to:)
+            // on non-integer rate ratios. Feed the tap buffer only on the first
+            // call; subsequent calls signal .noDataNow so the same frames are
+            // not duplicated.
+            var consumed = false
             converter.convert(to: converted, error: &error) { _, status in
+                if consumed {
+                    status.pointee = .noDataNow
+                    return nil
+                }
+                consumed = true
                 status.pointee = .haveData
                 return buffer
             }
