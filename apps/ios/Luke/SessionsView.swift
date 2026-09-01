@@ -17,17 +17,26 @@ struct SessionsView: View {
     @State private var filters: Set<SessionFilter> = []
     @State private var sort: SessionSort = .urgency
     @State private var optionsShown = false
+    @State private var composingSession: RosterSession?
 
-    private let client = RosterClient(serviceURL: AccountConstants.serviceURL)
+    private let rosterClient = RosterClient(serviceURL: AccountConstants.serviceURL)
+    private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
 
     var body: some View {
-        if #available(iOS 26.0, *) {
-            // Minimized, the search is the magnifier button in the bar until
-            // pressed; earlier systems keep the field the bar draws for a
-            // searchable list.
-            searchableList.searchToolbarBehavior(.minimize)
-        } else {
-            searchableList
+        Group {
+            if #available(iOS 26.0, *) {
+                // Minimized, the search is the magnifier button in the bar until
+                // pressed; earlier systems keep the field the bar draws for a
+                // searchable list.
+                searchableList.searchToolbarBehavior(.minimize)
+            } else {
+                searchableList
+            }
+        }
+        .sheet(item: $composingSession) { s in
+            ComposerSheet(session: s, actClient: actClient) {
+                composingSession = nil
+            }
         }
     }
 
@@ -71,7 +80,7 @@ struct SessionsView: View {
                     .listRowSeparator(.hidden)
             } else {
                 ForEach(visibleSessions) { s in
-                    SessionRow(session: s)
+                    sessionItem(s)
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                         .listRowInsets(rowInsets)
@@ -137,6 +146,18 @@ struct SessionsView: View {
 
     private let rowInsets = EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16)
 
+    @ViewBuilder
+    private func sessionItem(_ s: RosterSession) -> some View {
+        if s.status == "waiting" {
+            Button { composingSession = s } label: {
+                SessionRow(session: s)
+            }
+            .buttonStyle(.plain)
+        } else {
+            SessionRow(session: s)
+        }
+    }
+
     private var emptyRow: some View {
         VStack(spacing: 8) {
             if let error = fetchError {
@@ -155,18 +176,22 @@ struct SessionsView: View {
     }
 
     private func refreshSessions() async {
-        guard let token = session.currentAccessToken() else { return }
         isLoading = true
         fetchError = nil
         defer { isLoading = false }
+        guard case .signedIn = session.state else { return }
         do {
-            sessions = try await client.observe(bearerToken: token)
-        } catch RosterClientError.serverError(let status) where status == 401 {
-            // The stored token has expired or been revoked. Sign out so the user
-            // is prompted to sign in again rather than stuck seeing a silent error.
-            // On rebase with #570, this will become a refresh-and-retry via
-            // validAccessToken() instead.
-            await session.signOut()
+            let token = try await session.validAccessToken()
+            do {
+                sessions = try await rosterClient.observe(bearerToken: token)
+            } catch RosterClientError.serverError(let status) where status == 401 {
+                // validAccessToken() refreshes near-expiry tokens; a 401 here
+                // means the server rejected the token — refresh and retry once.
+                let fresh = try await session.refreshAccessToken()
+                sessions = try await rosterClient.observe(bearerToken: fresh)
+            }
+        } catch is AccountSessionError {
+            ()  // Signed out — the state change redraws automatically.
         } catch {
             fetchError = error.localizedDescription
         }
@@ -361,6 +386,39 @@ private struct StatusMark: View {
     }
 }
 
+// MARK: - Composer sheet
+
+/// Wraps SessionComposerView in a standard sheet with a navigation title and
+/// a Cancel button, then dismisses after a successful send.
+private struct ComposerSheet: View {
+    let session: RosterSession
+    let actClient: ActClient
+    let onDismiss: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                SessionComposerView(
+                    providerId: session.providerId,
+                    providerSessionId: session.sessionId,
+                    actClient: actClient,
+                    onDelivered: onDismiss
+                )
+                .padding(.horizontal)
+                .padding(.top, 8)
+            }
+            .background(Color.ground.ignoresSafeArea())
+            .navigationTitle(session.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel", action: onDismiss)
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Session row
 
 private struct SessionRow: View {
@@ -380,17 +438,24 @@ private struct SessionRow: View {
                 }
             }
             Spacer(minLength: 0)
-            if let date = session.observedAt {
-                // The 30-second cadence is the desktop rows' own freshness tick:
-                // without it a minute-granularity label stales until something
-                // else happens to re-render the list.
-                TimelineView(.periodic(from: .distantPast, by: 30)) { context in
-                    Text(observedAgoLabel(observedAt: date, now: context.date))
+            VStack(alignment: .trailing, spacing: 4) {
+                if let date = session.observedAt {
+                    // The 30-second cadence is the desktop rows' own freshness tick:
+                    // without it a minute-granularity label stales until something
+                    // else happens to re-render the list.
+                    TimelineView(.periodic(from: .distantPast, by: 30)) { context in
+                        Text(observedAgoLabel(observedAt: date, now: context.date))
+                    }
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.inkTertiary)
                 }
-                .font(.system(size: 10))
-                .foregroundStyle(Color.inkTertiary)
-                .padding(.top, 2)
+                if session.status == "waiting" {
+                    Image(systemName: "arrow.up.message")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(red: 1.0, green: 0.627, blue: 0.286, opacity: 0.8))
+                }
             }
+            .padding(.top, 2)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
