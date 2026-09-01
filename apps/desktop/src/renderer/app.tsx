@@ -2111,6 +2111,7 @@ export function App(): React.JSX.Element {
     openSession: openSessionAloud,
     openSessionApplication: openSessionApplicationAloud,
     carryAppAction,
+    conversationContextReady: bootstrap !== undefined,
     rememberedFacts,
   });
 

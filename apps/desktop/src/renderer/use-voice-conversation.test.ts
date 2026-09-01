@@ -38,6 +38,7 @@ import {
   voiceExchangeKind,
   voiceNoticeToShow,
   voiceRestartAction,
+  waitForConversationContext,
   waveformVoice,
 } from "./use-voice-conversation";
 import { WAVEFORM_VOICE } from "./waveform";
@@ -133,6 +134,23 @@ test("restore anchors pending speech and is the first point history may persist"
   assert.equal(conversationHistoryMayPersist(false, false), false);
   assert.equal(conversationHistoryMayPersist(true, true), false);
   assert.equal(conversationHistoryMayPersist(true, false), true);
+});
+
+test("the first call waits for durable conversation context", async () => {
+  const waiters = new Set<() => void>();
+  let settled = false;
+  const waiting = waitForConversationContext(false, waiters).then(() => {
+    settled = true;
+  });
+  await Promise.resolve();
+  assert.equal(settled, false);
+  for (const resolve of waiters) resolve();
+  await waiting;
+  assert.equal(settled, true);
+
+  const readyWaiters = new Set<() => void>();
+  await waitForConversationContext(true, readyWaiters);
+  assert.equal(readyWaiters.size, 0);
 });
 
 test("an authorization that outlives Clear cannot record its act", async () => {

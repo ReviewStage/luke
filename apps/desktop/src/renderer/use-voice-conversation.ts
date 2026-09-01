@@ -374,6 +374,15 @@ export function conversationHistoryMayPersist(seeded: boolean, clearing: boolean
   return seeded && !clearing;
 }
 
+/** Holds the first call until bootstrap has supplied its durable reply context. */
+export function waitForConversationContext(
+  ready: boolean,
+  waiters: Set<() => void>,
+): Promise<void> {
+  if (ready) return Promise.resolve();
+  return new Promise((resolve) => waiters.add(resolve));
+}
+
 /** Captures the reply that owns an act before main-process authorization can pause it. */
 export async function authorizeConversationAct<T>(
   activeReplyGeneration: { readonly current: number | undefined },
@@ -499,6 +508,8 @@ export interface VoiceConversationOptions {
    * {@link openSession}.
    */
   carryAppAction: AppActionCarrier;
+  /** Whether restored history and personal memory are ready for the first turn. */
+  conversationContextReady: boolean;
   /** Durable personal memory supplied at bootstrap and kept current by pushes. */
   rememberedFacts: readonly RememberedFact[];
 }
@@ -676,6 +687,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * goes with its teardown.
    */
   const conversationRef = useRef<readonly ConversationEntry[]>([]);
+  const conversationContextWaitersRef = useRef(new Set<() => void>());
   /**
    * Whether the stored thread has been placed. Once, at the first bootstrap
    * that carries one: a second seeding would re-add lines the developer had
@@ -690,6 +702,11 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   // State is the ref's identical drawn copy, so History retains the whole
   // current launch even though a call receives only the recent context slice.
   const [conversationHistory, setConversationHistory] = useState<readonly ConversationEntry[]>([]);
+  useEffect(() => {
+    if (!options.conversationContextReady) return;
+    for (const resolve of conversationContextWaitersRef.current) resolve();
+    conversationContextWaitersRef.current.clear();
+  }, [options.conversationContextReady]);
   /** Where each server-identified spoken turn belongs when its transcript returns. */
   const spokenTurnMarksRef = useRef(
     new Map<
@@ -1237,11 +1254,16 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * has no part in it — the device stays the press's own act.
    */
   const startConversation = useCallback(async (): Promise<boolean> => {
+    await waitForConversationContext(
+      optionsRef.current.conversationContextReady,
+      conversationContextWaitersRef.current,
+    );
     setVoiceError(undefined);
     setVoiceNotice(undefined);
     const session = ensureVoiceSession();
     if (!(await session.connect())) return false;
-    session.updateSessions(sessionsRef.current);
+    const current = optionsRef.current;
+    session.updateSessions(current.sessions);
     // After the roster, which it is rendered against. The history outlives
     // the calls themselves on purpose: it is the conversation, and this call
     // is only the newest transport to carry it — the announcement a "what did
@@ -1249,13 +1271,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     // this one just replaced.
     session.updateConversation(recentConversationEntries(conversationRef.current));
     session.updateWorkspaceProjects(
-      workspaceProjectsRef.current,
-      defaultWorkspaceProviderRef.current,
-      workspaceProjectDefaultsRef.current,
+      current.workspaceProjects,
+      current.defaultWorkspaceProvider,
+      current.workspaceProjectDefaults,
     );
     session.updateGuide(guideRef.current);
     session.updateIssues(issuesRef.current);
-    session.updateRememberedFacts(rememberedFactsRef.current);
+    session.updateRememberedFacts(current.rememberedFacts);
     return true;
   }, [ensureVoiceSession]);
 
