@@ -634,18 +634,24 @@ button:disabled {
   transition-delay: 0s, 0s, 0s, 0s, var(--duration-shape), 0s;
 }
 
-/* Developer mode wearing its name on the shape's own top-left corner, in the
+/* Developer mode wearing its name in the strip's far-left corner, in the
    peek and the open panel — the two shapes wide enough to carry a word — so
    the detached instance is never mistaken for the released one it stands
-   beside. It rides `--wing-bound`, the same edge the wings hang off, so it
-   tracks whichever width the shape is drawn at, and it fades on the exit
-   curve rather than moving: a badge is a label, not a participant in the
-   motion. */
+   beside. The far edge is the one a morph moves, so the badge never hangs
+   its layout off it: it is laid out once at the panel's own edge, the widest
+   seat it ever takes, and carried to the peek's narrower seat by
+   `--badge-rest` the way the marks ride `--mark-rest`. The static `left`
+   never changes, and the travel runs on the same spring, over the same
+   duration, as the surface's own width — so the badge and the edge move as
+   one instead of the badge jumping to a seat the shape has not reached. It
+   stands at the strip's vertical centre like the wings, which also keeps it
+   inside the bubble's rounded cap. */
 .channel-badge {
+  --badge-rest: calc((var(--panel-width) - var(--peek-width)) / 2);
   position: absolute;
-  z-index: 6;
-  top: calc(var(--shape-top, 0px) + 8px);
-  left: calc(50% - var(--wing-bound) / 2 + 12px);
+  z-index: 5;
+  top: calc(var(--capsule-height) / 2);
+  left: calc(50% - var(--panel-width) / 2 + 14px);
   padding: 2px 5px;
   border: 1px solid color-mix(in srgb, var(--state-attention) 40%, transparent);
   border-radius: 5px;
@@ -655,12 +661,28 @@ button:disabled {
   color: var(--state-attention);
   opacity: 0;
   pointer-events: none;
-  transition: opacity var(--duration-exit) var(--motion-exit);
+  transform: translateY(-50%) translateX(var(--badge-rest));
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-shape) var(--spring);
 }
 
+/* The fade lands inside the black on the panel marks' own late beat — the
+   badge's seat is at the far edge, most of the shape's travel away — while
+   the transform is never delayed: a badge that waited to travel would be
+   left standing outside a shape already shrinking past it. */
 .app-stage[data-presentation="peek"] .channel-badge,
 .app-stage[data-presentation="panel"] .channel-badge {
   opacity: 1;
+  transition-duration: var(--duration-quick), var(--duration-shape);
+  transition-timing-function: var(--motion-exit), var(--spring);
+  transition-delay: calc(var(--duration-shape) - var(--duration-quick)), 0s;
+}
+
+/* The peek's seat is the badge's resting one, so arriving from the capsule
+   is a fade in place; only the panel sends it out to the wider edge. */
+.app-stage[data-presentation="panel"] .channel-badge {
+  --badge-rest: 0px;
 }
 
 /* Tracks the drawn shape rather than the window, which is always larger than
