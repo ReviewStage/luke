@@ -495,6 +495,33 @@ test("a proactive update is voiced from its semantic brief", () => {
   });
 });
 
+test("a sparse failure is constrained to one fact-closed sentence", () => {
+  const [request] = proactiveSpeechEvents([
+    {
+      providerId: "conductor",
+      providerSessionId: "session-a",
+      work: "generated surface transcription drift",
+      change: SESSION_ANNOUNCEMENT_CHANGE.FAILED,
+      decidedAt: DECIDED_AT,
+    },
+  ]);
+
+  assert.deepEqual(JSON.parse(announcementInputText(request)), {
+    updates: [
+      {
+        work: "generated surface transcription drift",
+        change: "failed",
+      },
+    ],
+  });
+  const instructions = responseField(request)?.instructions;
+  assert.ok(isWireString(instructions));
+  assert.match(instructions, /without detail.*exactly one sentence/);
+  assert.match(instructions, /Never infer what happened before or after/);
+  assert.match(instructions, /claim that nothing else changed/);
+  assert.doesNotMatch(instructions, /Nothing's moved/);
+});
+
 test("nearby announcements share one isolated response", () => {
   const events = proactiveSpeechEvents([
     {
