@@ -21,6 +21,8 @@
  * compilation alone cannot silently collide with a name a door above it
  * already exports.
  */
+import "../../../packages/process/src/index.js";
+import "../../../packages/providers/src/index.js";
 import "../../../packages/acts/src/index.js";
 import "../../../packages/credentials/src/credential-providers.js";
 import "../../../packages/guide/src/index.js";

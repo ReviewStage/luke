@@ -1,56 +1,31 @@
-import { and, eq } from "drizzle-orm";
-import { auth } from "../../server/auth.js";
-import { getDatabase } from "../../server/db/index.js";
-import { providerKey } from "../../server/db/schema.js";
-import { hostedUserId, oauthUserInfoFromAuthAnswer } from "../../server/hosted/bearer.js";
-import { VAULT_ENCRYPTION_ENVIRONMENT } from "../../server/hosted/encryption.js";
-import {
-  handleVaultKeyDelete,
-  handleVaultKeyStore,
-  type VaultKeyDeleteOptions,
-  type VaultKeyStoreOptions,
-} from "../../server/hosted/vault.js";
+import { Effect } from "effect";
+import { handleVaultKeyDelete, handleVaultKeyStore } from "../../server/hosted/vault.js";
+import { VaultRouteLive } from "../../server/layers/route-live.js";
+import { getHostedRuntime } from "../../server/runtime.js";
+import type { HostedServices } from "../../server/services/tags.js";
 
-function resolveUserId(request: Request) {
-  return hostedUserId(request, async (input) =>
-    oauthUserInfoFromAuthAnswer(await auth.api.oauth2UserInfo(input)),
-  );
-}
-
-const encryptionSecret = process.env[VAULT_ENCRYPTION_ENVIRONMENT.SECRET];
-
+/**
+ * Stores or deletes one provider key in the signed-in user's vault. The logic
+ * lives in `server/hosted/vault.ts`; this file only enters through the
+ * warm-isolate runtime and supplies the database seams.
+ */
 export default {
-  async fetch(request: Request): Promise<Response> {
+  fetch(request: Request): Promise<Response> {
     if (request.method === "DELETE") {
-      const options: VaultKeyDeleteOptions = {
-        request,
-        resolveUserId,
-        encryptionSecret,
-        deleteKey: async (userId, providerId) => {
-          const result = await getDatabase()
-            .delete(providerKey)
-            .where(and(eq(providerKey.userId, userId), eq(providerKey.providerId, providerId)))
-            .returning({ userId: providerKey.userId });
-          return result.length > 0;
-        },
-      };
-      return handleVaultKeyDelete(options);
+      return getHostedRuntime().runPromise(
+        Effect.provide(handleVaultKeyDelete(request), VaultRouteLive) as Effect.Effect<
+          Response,
+          never,
+          HostedServices
+        >,
+      );
     }
-
-    const options: VaultKeyStoreOptions = {
-      request,
-      resolveUserId,
-      encryptionSecret,
-      storeKey: async (userId, providerId, ciphertext) => {
-        await getDatabase()
-          .insert(providerKey)
-          .values({ userId, providerId, ciphertext, updatedAt: new Date() })
-          .onConflictDoUpdate({
-            target: [providerKey.userId, providerKey.providerId],
-            set: { ciphertext, updatedAt: new Date() },
-          });
-      },
-    };
-    return handleVaultKeyStore(options);
+    return getHostedRuntime().runPromise(
+      Effect.provide(handleVaultKeyStore(request), VaultRouteLive) as Effect.Effect<
+        Response,
+        never,
+        HostedServices
+      >,
+    );
   },
 };

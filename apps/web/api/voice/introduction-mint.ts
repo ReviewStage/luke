@@ -1,21 +1,17 @@
-import { getDatabase } from "../../server/db/index.js";
+import { Effect } from "effect";
 import { handleIntroductionMint } from "../../server/hosted/introduction-mint.js";
-import { HOSTED_OPENAI_ENVIRONMENT } from "../../server/hosted/openai.js";
-import { spendIntroductionMeter } from "../../server/hosted/quota.js";
+import { VoiceMintUpstreamLive } from "../../server/hosted/voice-mint.js";
+import { getHostedRuntime } from "../../server/runtime.js";
 
 /**
- * Mints the onboarding introduction's one short-lived Realtime credential for
- * a desktop with no account yet, on the key this deployment holds. The logic
- * lives in `server/hosted/introduction-mint.ts`; this file only hands it the
- * deployment's real seams.
+ * Mints the one credential a fresh install may ask for before any account
+ * exists. The logic lives in `server/hosted/introduction-mint.ts`; this file
+ * only enters through the warm-isolate runtime.
  */
 export default {
   fetch(request: Request): Promise<Response> {
-    return handleIntroductionMint({
-      request,
-      apiKey: process.env[HOSTED_OPENAI_ENVIRONMENT.API_KEY],
-      model: process.env[HOSTED_OPENAI_ENVIRONMENT.REALTIME_MODEL],
-      spend: (callerKey) => spendIntroductionMeter(getDatabase(), { callerKey, now: Date.now() }),
-    });
+    return getHostedRuntime().runPromise(
+      Effect.provide(handleIntroductionMint(request), VoiceMintUpstreamLive),
+    );
   },
 };

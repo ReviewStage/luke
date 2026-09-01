@@ -1,8 +1,8 @@
+import { Effect } from "effect";
 import {
   ATTENTION_RESPONSES_PATH,
   type AttentionDecision,
   attentionDecisionFromModel,
-  attentionPromptUpdateFromWire,
   attentionResponsesOutputText,
   attentionResponsesRequest,
   HOSTED_ATTENTION_CONTRACT_HEADER,
@@ -13,15 +13,22 @@ import {
   text as trimmedText,
   type UnparsedWireValue,
 } from "../core.js";
+import { HostedAuth, HostedClock, HostedMeterService, HostedOpenAi } from "../services/tags.js";
+import type { HostedErrorFields } from "./http.js";
 import {
-  errorResponse,
-  HOSTED_API_ERROR,
+  decodeJsonBody,
   HOSTED_HTTP_STATUS,
-  type HostedErrorFields,
-  jsonResponse,
-} from "./http.js";
-import { type FetchLike, postOpenAi } from "./openai.js";
-import type { HostedSpend } from "./quota.js";
+  invalidRequest,
+  jsonResponseEffect,
+  methodNotAllowed,
+  quotaExhausted,
+  readJsonBody,
+  unauthorized,
+  unavailable,
+  upstreamError,
+} from "./http-effect.js";
+import { HOSTED_METER } from "./quota.js";
+import { AttentionPromptUpdateSchema } from "./schema.js";
 
 /**
  * Reviews one bounded session update on Luke's own key for a signed-in user.
@@ -34,114 +41,99 @@ import type { HostedSpend } from "./quota.js";
  */
 
 export const HOSTED_ATTENTION_DEFAULTS = {
-  // The desktop evaluator's own default: a three-way classification with a
-  // fixed prompt fits the cost-optimized tier, and its lower latency means
-  // fewer decisions are discarded as superseded before they can be used.
   MODEL: "gpt-5.6-luna",
   MAXIMUM_OUTPUT_TOKENS: 4096,
 } as const;
 
-export interface AttentionReviewOptions {
-  request: Request;
-  /** Luke's own OpenAI key, from the deployment environment; absent means the tier is off. */
-  apiKey: string | undefined;
-  /** A deployment-configured model override; the shared default otherwise. */
-  model?: string;
-  resolveUserId: (request: Request) => Promise<string | undefined>;
-  spend: (userId: string) => Promise<HostedSpend>;
-  fetch?: FetchLike;
-  now?: () => number;
-  timeoutMs?: number;
-}
-
 export interface AttentionReviewAnswer {
   decision: AttentionDecision | LegacyAttentionDecision;
-  quota: HostedSpend["quota"];
+  quota: import("./quota.js").HostedSpend["quota"];
 }
 
-export async function handleAttentionReview(options: AttentionReviewOptions): Promise<Response> {
-  const { request } = options;
+export const handleAttentionReview = Effect.fn("handleAttentionReview")(function* (
+  request: Request,
+) {
   if (request.method !== "POST") {
-    return errorResponse(
-      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-    );
-  }
-  // Trimmed like the desktop's own key reads: a whitespace credential is the
-  // kill switch, not a key, and a blank model override is no override at all.
-  const apiKey = trimmedText(options.apiKey);
-  if (!apiKey) {
-    return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
+    return methodNotAllowed();
   }
 
-  const userId = await options.resolveUserId(request);
+  const openAi = yield* HostedOpenAi;
+  const apiKey = trimmedText(openAi.apiKey);
+  if (!apiKey) {
+    return unavailable();
+  }
+
+  const auth = yield* HostedAuth;
+  const userId = yield* auth.resolveUserId(request);
   if (!userId) {
-    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
+    return unauthorized();
   }
 
   const contractVersion = request.headers.get(HOSTED_ATTENTION_CONTRACT_HEADER);
   const legacyContract = contractVersion === null;
   if (!legacyContract && contractVersion !== HOSTED_ATTENTION_CONTRACT_VERSION) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+    return invalidRequest();
   }
 
-  const payload: unknown = await request.json().catch(() => undefined);
+  const payload = yield* readJsonBody(request);
   const update =
-    payload === undefined
-      ? undefined
-      : attentionPromptUpdateFromWire(
-          // SAFETY: request.json returns a runtime value; attentionPromptUpdateFromWire validates the wire contract.
-          payload as UnparsedWireValue,
-        );
+    payload === undefined ? undefined : decodeJsonBody(AttentionPromptUpdateSchema, payload);
   if (!update) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+    return invalidRequest();
   }
 
-  const spend = await options.spend(userId);
+  const meter = yield* HostedMeterService;
+  const spend = yield* meter.spend(userId, HOSTED_METER.ATTENTION_REVIEW);
   if (!spend.allowed) {
-    return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED, {
-      quota: spend.quota,
-    });
+    return quotaExhausted(spend.quota);
   }
 
-  const response = await postOpenAi(
+  const model = trimmedText(openAi.attentionModel) ?? HOSTED_ATTENTION_DEFAULTS.MODEL;
+  const response = yield* openAi.post(
     ATTENTION_RESPONSES_PATH,
     (legacyContract ? legacyAttentionResponsesRequest : attentionResponsesRequest)(update, {
-      model: trimmedText(options.model) ?? HOSTED_ATTENTION_DEFAULTS.MODEL,
+      model,
       maximumOutputTokens: HOSTED_ATTENTION_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
     }),
-    { apiKey, fetch: options.fetch, timeoutMs: options.timeoutMs },
   );
-  if (!response || !response.ok) {
+  if (!response?.ok) {
     const extra: HostedErrorFields = {};
     if (response) extra.upstreamStatus = response.status;
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR, extra);
+    return upstreamError(extra.upstreamStatus);
   }
 
-  const body: unknown = await response.json().catch(() => undefined);
+  const body: unknown = yield* Effect.promise(() => response.json().catch(() => undefined));
   const text =
-    body === undefined
-      ? undefined
-      : attentionResponsesOutputText(
-          // SAFETY: response.json returns a runtime value; attentionResponsesOutputText validates the wire contract.
-          body as UnparsedWireValue,
-        );
-  const now = options.now ?? Date.now;
+    body === undefined ? undefined : attentionResponsesOutputText(body as UnparsedWireValue);
+  const clock = yield* HostedClock;
+  const now = clock.now();
   let decision: AttentionDecision | LegacyAttentionDecision | undefined;
   if (text) {
     try {
       decision = (legacyContract ? legacyAttentionDecisionFromModel : attentionDecisionFromModel)(
         JSON.parse(text),
-        now(),
+        now,
       );
     } catch {
       decision = undefined;
     }
   }
   if (!decision) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR);
+    return upstreamError();
   }
 
   const answer: AttentionReviewAnswer = { decision, quota: spend.quota };
-  return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+  return yield* jsonResponseEffect(HOSTED_HTTP_STATUS.OK, answer);
+});
+
+/** @deprecated Tests use hosted-runner shims. */
+export interface AttentionReviewOptions {
+  request: Request;
+  apiKey: string | undefined;
+  model?: string;
+  resolveUserId: (request: Request) => Promise<string | undefined>;
+  spend: (userId: string) => Promise<import("./quota.js").HostedSpend>;
+  fetch?: (input: string, init: RequestInit) => Promise<Response>;
+  now?: () => number;
+  timeoutMs?: number;
 }

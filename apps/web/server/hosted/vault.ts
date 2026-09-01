@@ -1,89 +1,50 @@
+import { Context, Effect } from "effect";
+import { HostedAuth, HostedEncryption } from "../services/tags.js";
 import {
-  isRecord,
-  isVaultProviderId,
-  isWireString,
-  text,
-  type UnparsedWireValue,
-  vaultKeyIsStorable,
-} from "../core.js";
-import { encryptProviderKey } from "./encryption.js";
-import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
+  decodeJsonBody,
+  HOSTED_HTTP_STATUS,
+  invalidRequest,
+  jsonResponseEffect,
+  methodNotAllowed,
+  readJsonBody,
+  unauthorized,
+  unavailable,
+} from "./http-effect.js";
+import { VaultKeyDeleteBodySchema, VaultKeyStoreBodySchema } from "./schema.js";
 
-/**
- * A valid provider key, by the shape rule the wire contract fixes for both
- * sides. Loose by design — never provider-specific format.
- */
-function parseProviderKey(value: UnparsedWireValue): string | undefined {
-  if (!isWireString(value) || !vaultKeyIsStorable(value)) return undefined;
-  return value;
-}
+export class VaultKeyStore extends Context.Tag("@luke/web/VaultKeyStore")<
+  VaultKeyStore,
+  {
+    readonly storeKey: (
+      userId: string,
+      providerId: string,
+      ciphertext: string,
+    ) => Effect.Effect<void>;
+  }
+>() {}
 
-/**
- * Returns the trimmed secret if present, or a 503 Response if it is absent or
- * blank. All vault endpoints require it; its absence is a kill switch.
- */
+export class VaultKeyList extends Context.Tag("@luke/web/VaultKeyList")<
+  VaultKeyList,
+  {
+    readonly listKeys: (
+      userId: string,
+    ) => Effect.Effect<readonly { providerId: string; updatedAt: Date }[]>;
+  }
+>() {}
+
+export class VaultKeyDelete extends Context.Tag("@luke/web/VaultKeyDelete")<
+  VaultKeyDelete,
+  {
+    readonly deleteKey: (userId: string, providerId: string) => Effect.Effect<boolean>;
+  }
+>() {}
+
 function trimmedSecretOrUnavailable(secret: string | undefined): { secret: string } | Response {
   const trimmed = secret?.trim();
   if (!trimmed) {
-    return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
+    return unavailable();
   }
   return { secret: trimmed };
-}
-
-export interface VaultKeyStoreOptions {
-  request: Request;
-  resolveUserId: (request: Request) => Promise<string | undefined>;
-  /** The value of PROVIDER_KEY_ENCRYPTION_SECRET; undefined means the env var is absent. */
-  encryptionSecret: string | undefined;
-  storeKey: (userId: string, providerId: string, ciphertext: string) => Promise<void>;
-}
-
-/** Stores or replaces the provider API key for the signed-in user. */
-export async function handleVaultKeyStore(options: VaultKeyStoreOptions): Promise<Response> {
-  const { request, resolveUserId, encryptionSecret, storeKey } = options;
-
-  if (request.method !== "POST") {
-    return errorResponse(
-      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-    );
-  }
-
-  const secretResult = trimmedSecretOrUnavailable(encryptionSecret);
-  if (secretResult instanceof Response) return secretResult;
-
-  const userId = await resolveUserId(request);
-  if (!userId) {
-    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-  }
-
-  let body: UnparsedWireValue;
-  try {
-    // SAFETY: request.json() returns unknown; isRecord below validates the shape.
-    body = (await request.json()) as UnparsedWireValue;
-  } catch {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
-
-  if (!isRecord(body)) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
-
-  const providerId = text(body.providerId);
-  if (!isVaultProviderId(providerId)) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
-
-  const key = parseProviderKey(body.key);
-  if (!key) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
-
-  const ciphertext = encryptProviderKey(key, secretResult.secret);
-
-  await storeKey(userId, providerId, ciphertext);
-
-  return jsonResponse(HOSTED_HTTP_STATUS.OK, { stored: true });
 }
 
 export interface VaultKeyEntry {
@@ -91,6 +52,97 @@ export interface VaultKeyEntry {
   updatedAt: Date;
 }
 
+export const handleVaultKeyStore = Effect.fn("handleVaultKeyStore")(function* (request: Request) {
+  if (request.method !== "POST") {
+    return methodNotAllowed();
+  }
+
+  const encryption = yield* HostedEncryption;
+  const secretResult = trimmedSecretOrUnavailable(encryption.secret);
+  if (secretResult instanceof Response) return secretResult;
+
+  const auth = yield* HostedAuth;
+  const userId = yield* auth.resolveUserId(request);
+  if (!userId) {
+    return unauthorized();
+  }
+
+  const payload = yield* readJsonBody(request);
+  const body = payload === undefined ? undefined : decodeJsonBody(VaultKeyStoreBodySchema, payload);
+  if (!body) {
+    return invalidRequest();
+  }
+
+  const ciphertext = yield* encryption.encrypt(body.key);
+  const store = yield* VaultKeyStore;
+  yield* store.storeKey(userId, body.providerId, ciphertext);
+
+  return yield* jsonResponseEffect(HOSTED_HTTP_STATUS.OK, { stored: true as const });
+});
+
+export const handleVaultKeysList = Effect.fn("handleVaultKeysList")(function* (request: Request) {
+  if (request.method !== "GET") {
+    return methodNotAllowed();
+  }
+
+  const encryption = yield* HostedEncryption;
+  const secretResult = trimmedSecretOrUnavailable(encryption.secret);
+  if (secretResult instanceof Response) return secretResult;
+
+  const auth = yield* HostedAuth;
+  const userId = yield* auth.resolveUserId(request);
+  if (!userId) {
+    return unauthorized();
+  }
+
+  const list = yield* VaultKeyList;
+  const rows = yield* list.listKeys(userId);
+
+  return yield* jsonResponseEffect(HOSTED_HTTP_STATUS.OK, {
+    keys: rows.map((row) => ({
+      providerId: row.providerId,
+      updatedAt: row.updatedAt.getTime(),
+    })),
+  });
+});
+
+export const handleVaultKeyDelete = Effect.fn("handleVaultKeyDelete")(function* (request: Request) {
+  if (request.method !== "DELETE") {
+    return methodNotAllowed();
+  }
+
+  const encryption = yield* HostedEncryption;
+  const secretResult = trimmedSecretOrUnavailable(encryption.secret);
+  if (secretResult instanceof Response) return secretResult;
+
+  const auth = yield* HostedAuth;
+  const userId = yield* auth.resolveUserId(request);
+  if (!userId) {
+    return unauthorized();
+  }
+
+  const payload = yield* readJsonBody(request);
+  const body =
+    payload === undefined ? undefined : decodeJsonBody(VaultKeyDeleteBodySchema, payload);
+  if (!body) {
+    return invalidRequest();
+  }
+
+  const deleter = yield* VaultKeyDelete;
+  const deleted = yield* deleter.deleteKey(userId, body.providerId);
+
+  return yield* jsonResponseEffect(HOSTED_HTTP_STATUS.OK, { deleted });
+});
+
+/** @deprecated Tests use hosted-runner shims. */
+export interface VaultKeyStoreOptions {
+  request: Request;
+  resolveUserId: (request: Request) => Promise<string | undefined>;
+  encryptionSecret: string | undefined;
+  storeKey: (userId: string, providerId: string, ciphertext: string) => Promise<void>;
+}
+
+/** @deprecated Tests use hosted-runner shims. */
 export interface VaultKeysListOptions {
   request: Request;
   resolveUserId: (request: Request) => Promise<string | undefined>;
@@ -98,79 +150,10 @@ export interface VaultKeysListOptions {
   listKeys: (userId: string) => Promise<VaultKeyEntry[]>;
 }
 
-/** Lists stored provider keys for the signed-in user. Never returns ciphertext or plaintext. */
-export async function handleVaultKeysList(options: VaultKeysListOptions): Promise<Response> {
-  const { request, resolveUserId, encryptionSecret, listKeys } = options;
-
-  if (request.method !== "GET") {
-    return errorResponse(
-      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-    );
-  }
-
-  const secretResult = trimmedSecretOrUnavailable(encryptionSecret);
-  if (secretResult instanceof Response) return secretResult;
-
-  const userId = await resolveUserId(request);
-  if (!userId) {
-    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-  }
-
-  const rows = await listKeys(userId);
-
-  return jsonResponse(HOSTED_HTTP_STATUS.OK, {
-    keys: rows.map((row) => ({
-      providerId: row.providerId,
-      updatedAt: row.updatedAt.getTime(),
-    })),
-  });
-}
-
+/** @deprecated Tests use hosted-runner shims. */
 export interface VaultKeyDeleteOptions {
   request: Request;
   resolveUserId: (request: Request) => Promise<string | undefined>;
   encryptionSecret: string | undefined;
   deleteKey: (userId: string, providerId: string) => Promise<boolean>;
-}
-
-/** Deletes the stored provider key for the signed-in user. */
-export async function handleVaultKeyDelete(options: VaultKeyDeleteOptions): Promise<Response> {
-  const { request, resolveUserId, encryptionSecret, deleteKey } = options;
-
-  if (request.method !== "DELETE") {
-    return errorResponse(
-      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-    );
-  }
-
-  const secretResult = trimmedSecretOrUnavailable(encryptionSecret);
-  if (secretResult instanceof Response) return secretResult;
-
-  const userId = await resolveUserId(request);
-  if (!userId) {
-    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-  }
-
-  let body: UnparsedWireValue;
-  try {
-    // SAFETY: request.json() returns unknown; isRecord below validates the shape.
-    body = (await request.json()) as UnparsedWireValue;
-  } catch {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
-
-  if (!isRecord(body)) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
-
-  const providerId = text(body.providerId);
-  if (!isVaultProviderId(providerId)) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
-
-  const deleted = await deleteKey(userId, providerId);
-
-  return jsonResponse(HOSTED_HTTP_STATUS.OK, { deleted });
 }

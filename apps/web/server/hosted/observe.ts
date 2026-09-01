@@ -1,3 +1,4 @@
+import { Context, Effect } from "effect";
 import { ConductorSessionAdapter } from "../../../../packages/providers/src/conductor/adapter.js";
 import { CopilotSessionAdapter } from "../../../../packages/providers/src/copilot/adapter.js";
 import { CursorSessionAdapter } from "../../../../packages/providers/src/cursor/adapter.js";
@@ -7,8 +8,16 @@ import { ReplicasSessionAdapter } from "../../../../packages/providers/src/repli
 import type { CloudFetch } from "../../../../packages/providers/src/shared/cloud-session-adapter.js";
 import type { ProviderSessionObservation } from "../core.js";
 import { type ObservedSession, VAULT_PROVIDER_ID, type VaultProviderId } from "../core.js";
+import { HostedAuth, HostedClock, HostedEncryption } from "../services/tags.js";
 import { decryptProviderKey } from "./encryption.js";
-import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
+import {
+  HOSTED_HTTP_STATUS,
+  jsonResponseEffect,
+  methodNotAllowed,
+  quotaExhausted,
+  unauthorized,
+  unavailable,
+} from "./http-effect.js";
 
 /**
  * Per-user in-memory brake, keyed on the resolved account rather than the
@@ -46,49 +55,43 @@ export interface VaultKeyRow {
   ciphertext: string;
 }
 
-export interface ObserveOptions {
-  request: Request;
-  resolveUserId: (request: Request) => Promise<string | undefined>;
-  /** The value of PROVIDER_KEY_ENCRYPTION_SECRET; undefined means the env var is absent. */
-  encryptionSecret: string | undefined;
-  /** Reads every vault key row the user has stored, for decryption here. */
-  readVaultKeys: (userId: string) => Promise<VaultKeyRow[]>;
-  /** Injected in tests; production uses the global fetch. */
-  fetch?: CloudFetch;
-  now?: () => number;
-}
+export class ObserveVaultKeys extends Context.Tag("@luke/web/ObserveVaultKeys")<
+  ObserveVaultKeys,
+  {
+    readonly readVaultKeys: (userId: string) => Effect.Effect<readonly VaultKeyRow[]>;
+  }
+>() {}
 
-/**
- * Observe-on-demand: decrypts the caller's vault keys, runs each cloud
- * adapter once (minimumRefreshIntervalMs: 0 bypasses the refresh debounce),
- * and returns a bounded roster. Nothing is stored between requests.
- */
-export async function handleObserve(options: ObserveOptions): Promise<Response> {
-  const { request, resolveUserId, encryptionSecret, readVaultKeys } = options;
+export class ObserveCloudFetch extends Context.Tag("@luke/web/ObserveCloudFetch")<
+  ObserveCloudFetch,
+  { readonly fetch?: CloudFetch }
+>() {}
 
+export const handleObserve = Effect.fn("handleObserve")(function* (request: Request) {
   if (request.method !== "GET") {
-    return errorResponse(
-      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-    );
+    return methodNotAllowed();
   }
 
-  const userId = await resolveUserId(request);
+  const auth = yield* HostedAuth;
+  const userId = yield* auth.resolveUserId(request);
   if (!userId) {
-    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
+    return unauthorized();
   }
 
-  const secret = (encryptionSecret ?? "").trim();
+  const encryption = yield* HostedEncryption;
+  const secret = (encryption.secret ?? "").trim();
   if (!secret) {
-    return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
+    return unavailable();
   }
 
-  const now = (options.now ?? Date.now)();
+  const clock = yield* HostedClock;
+  const now = clock.now();
   if (observeRateLimited(userId, now)) {
-    return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
+    return quotaExhausted();
   }
 
-  const rows = await readVaultKeys(userId);
+  const vault = yield* ObserveVaultKeys;
+  const rows = yield* vault.readVaultKeys(userId);
   const ciphertextByProviderId = new Map<string, string>(
     rows.map((row) => [row.providerId, row.ciphertext]),
   );
@@ -105,10 +108,11 @@ export async function handleObserve(options: ObserveOptions): Promise<Response> 
     };
   }
 
+  const cloudFetch = yield* ObserveCloudFetch;
   const baseOptions = {
     minimumRefreshIntervalMs: 0,
-    ...(options.fetch ? { fetch: options.fetch } : undefined),
-    ...(options.now ? { now: options.now } : undefined),
+    ...(cloudFetch.fetch ? { fetch: cloudFetch.fetch } : undefined),
+    now: () => clock.now(),
   };
 
   const providers: Array<{
@@ -166,7 +170,9 @@ export async function handleObserve(options: ObserveOptions): Promise<Response> 
     },
   ];
 
-  const results = await Promise.allSettled(providers.map(({ observe }) => observe()));
+  const results = yield* Effect.promise(() =>
+    Promise.allSettled(providers.map(({ observe }) => observe())),
+  );
 
   const sessions: ObservedSession[] = [];
   for (const [i, { providerId }] of providers.entries()) {
@@ -177,8 +183,8 @@ export async function handleObserve(options: ObserveOptions): Promise<Response> 
     }
   }
 
-  return jsonResponse(HOSTED_HTTP_STATUS.OK, { sessions });
-}
+  return yield* jsonResponseEffect(HOSTED_HTTP_STATUS.OK, { sessions });
+});
 
 function toWireSession(providerId: string, obs: ProviderSessionObservation): ObservedSession {
   const session: ObservedSession = {
@@ -196,4 +202,14 @@ function toWireSession(providerId: string, obs: ProviderSessionObservation): Obs
   if (error) session.error = error;
   session.observedAt = obs.observedAt;
   return session;
+}
+
+/** @deprecated Tests use hosted-runner shims. */
+export interface ObserveOptions {
+  request: Request;
+  resolveUserId: (request: Request) => Promise<string | undefined>;
+  encryptionSecret: string | undefined;
+  readVaultKeys: (userId: string) => Promise<VaultKeyRow[]>;
+  fetch?: CloudFetch;
+  now?: () => number;
 }

@@ -1,3 +1,4 @@
+import { Context, Effect, Layer } from "effect";
 import {
   HOSTED_WS_BASE_URL,
   isRealtimeVoice,
@@ -15,14 +16,27 @@ import {
   text as trimmedText,
   type UnparsedWireValue,
 } from "../core.js";
-import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
+import { HostedAuth, HostedClock, HostedMeterService, HostedOpenAi } from "../services/tags.js";
+import {
+  decodeJsonBody,
+  HOSTED_HTTP_STATUS,
+  invalidRequest,
+  jsonResponseEffect,
+  methodNotAllowed,
+  quotaExhausted,
+  readBoundedBody,
+  unauthorized,
+  unavailable,
+  upstreamError,
+} from "./http-effect.js";
 import {
   type FetchLike,
   HOSTED_OPENAI_DEFAULTS,
   type OpenAiPostBody,
   postOpenAi,
 } from "./openai.js";
-import type { HostedSpend } from "./quota.js";
+import { HOSTED_METER } from "./quota.js";
+import { voiceMintPreferencesSchema } from "./schema.js";
 
 /**
  * Mints one ephemeral Realtime credential on Luke's own key for a signed-in
@@ -38,14 +52,27 @@ export interface VoiceMintPreferences {
   speed?: RealtimeVoiceSpeed;
 }
 
-/**
- * Reads the caller's voice and pace, tolerating an empty body — the defaults
- * are a complete request. A value outside the build's own sets refuses the
- * request rather than being repaired: the desktop only sends values it
- * validated, so anything else is a bug or an impostor, and both should hear
- * no. A strict-fields allowlist additionally refuses any field beyond it, for
- * an endpoint whose callers earn no tolerance for extras.
- */
+export interface RealtimeConnectionMintOptions {
+  apiKey: string;
+  model: string | undefined;
+  preferences: VoiceMintPreferences;
+  clientSecretRequest: (options: RealtimeSessionOptions) => OpenAiPostBody;
+  fetch?: FetchLike;
+  now?: () => number;
+  timeoutMs?: number;
+}
+
+export type RealtimeConnectionMint = { failure: Response } | { connection: RealtimeConnection };
+
+export class VoiceMintUpstream extends Context.Tag("@luke/web/VoiceMintUpstream")<
+  VoiceMintUpstream,
+  {
+    readonly mint: (
+      options: RealtimeConnectionMintOptions,
+    ) => Effect.Effect<RealtimeConnectionMint>;
+  }
+>() {}
+
 export async function voiceMintPreferences(
   request: Request,
   strictFields?: readonly string[],
@@ -60,7 +87,6 @@ export async function voiceMintPreferences(
   } catch {
     return undefined;
   }
-  // SAFETY: JSON.parse returns a runtime value; isRecord validates the object contract.
   const wire = payload as UnparsedWireValue;
   if (!isRecord(wire)) return undefined;
   if (strictFields && Object.keys(wire).some((key) => !strictFields.includes(key))) {
@@ -76,26 +102,6 @@ export async function voiceMintPreferences(
   return preferences;
 }
 
-export interface RealtimeConnectionMintOptions {
-  apiKey: string;
-  /** The resolved model override; the shared default labels the credential otherwise. */
-  model: string | undefined;
-  preferences: VoiceMintPreferences;
-  /** Builds the session document this endpoint mints with. */
-  clientSecretRequest: (options: RealtimeSessionOptions) => OpenAiPostBody;
-  fetch?: FetchLike;
-  now?: () => number;
-  timeoutMs?: number;
-}
-
-export type RealtimeConnectionMint = { failure: Response } | { connection: RealtimeConnection };
-
-/**
- * The upstream tail both mint handlers share: builds the session document
- * from the caller's validated preferences, posts it on Luke's own key, and
- * hands back either a usable connection aimed at OpenAI's canonical calls
- * endpoint or the refusal the handler answers with.
- */
 export async function mintRealtimeConnection(
   options: RealtimeConnectionMintOptions,
 ): Promise<RealtimeConnectionMint> {
@@ -110,36 +116,20 @@ export async function mintRealtimeConnection(
     { apiKey: options.apiKey, fetch: options.fetch, timeoutMs: options.timeoutMs },
   );
   if (!response) {
-    return {
-      failure: errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR),
-    };
+    return { failure: upstreamError() };
   }
   if (!response.ok) {
-    // Status alone diagnoses the upstream without carrying its body onward.
-    return {
-      failure: errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR, {
-        upstreamStatus: response.status,
-      }),
-    };
+    return { failure: upstreamError(response.status) };
   }
 
   const payload: unknown = await response.json().catch(() => undefined);
-  // The resolved model rides along as the fallback, like the desktop's own
-  // minter: a payload that omits its model still labels the credential with
-  // the model it was actually minted for.
   const credential =
     payload === undefined
       ? undefined
-      : realtimeCredentialFromResponse(
-          // SAFETY: response.json returns a runtime value; realtimeCredentialFromResponse validates the wire contract.
-          payload as UnparsedWireValue,
-          options.model,
-        );
+      : realtimeCredentialFromResponse(payload as UnparsedWireValue, options.model);
   const now = options.now ?? Date.now;
   if (!credential || !realtimeCredentialIsUsable(credential, now())) {
-    return {
-      failure: errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR),
-    };
+    return { failure: upstreamError() };
   }
 
   return {
@@ -151,65 +141,83 @@ export async function mintRealtimeConnection(
   };
 }
 
-export interface VoiceMintOptions {
-  request: Request;
-  /** Luke's own OpenAI key, from the deployment environment; absent means the tier is off. */
-  apiKey: string | undefined;
-  /** A deployment-configured model override; the shared default otherwise. */
-  model?: string;
-  resolveUserId: (request: Request) => Promise<string | undefined>;
-  spend: (userId: string) => Promise<HostedSpend>;
-  fetch?: FetchLike;
-  now?: () => number;
-  timeoutMs?: number;
+export const VoiceMintUpstreamLive = Layer.succeed(VoiceMintUpstream, {
+  mint: (options) => Effect.promise(() => mintRealtimeConnection(options)),
+});
+
+function decodeVoiceMintBody(
+  request: Request,
+  strictFields?: readonly string[],
+): Effect.Effect<VoiceMintPreferences | undefined> {
+  return readBoundedBody(request, 65_536).pipe(
+    Effect.flatMap((raw) => {
+      if (raw === undefined) return Effect.succeed(undefined);
+      if (!raw.trim()) return Effect.succeed({});
+      let payload: unknown;
+      try {
+        payload = JSON.parse(raw);
+      } catch {
+        return Effect.succeed(undefined);
+      }
+      return Effect.succeed(decodeJsonBody(voiceMintPreferencesSchema(strictFields), payload));
+    }),
+  );
 }
 
-export async function handleVoiceMint(options: VoiceMintOptions): Promise<Response> {
-  const { request } = options;
+export const handleVoiceMint = Effect.fn("handleVoiceMint")(function* (request: Request) {
   if (request.method !== "POST") {
-    return errorResponse(
-      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-    );
+    return methodNotAllowed();
   }
-  // Trimmed like the desktop's own key reads: a whitespace credential is the
-  // kill switch, not a key, and a blank model override is no override at all.
-  const apiKey = trimmedText(options.apiKey);
-  const model = trimmedText(options.model);
+
+  const openAi = yield* HostedOpenAi;
+  const apiKey = trimmedText(openAi.apiKey);
+  const model = trimmedText(openAi.realtimeModel);
   if (!apiKey) {
-    return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
+    return unavailable();
   }
 
-  const userId = await options.resolveUserId(request);
+  const auth = yield* HostedAuth;
+  const userId = yield* auth.resolveUserId(request);
   if (!userId) {
-    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
+    return unauthorized();
   }
 
-  const preferences = await voiceMintPreferences(request);
-  if (!preferences) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+  const preferences = yield* decodeVoiceMintBody(request);
+  if (preferences === undefined) {
+    return invalidRequest();
   }
 
-  const spend = await options.spend(userId);
+  const meter = yield* HostedMeterService;
+  const spend = yield* meter.spend(userId, HOSTED_METER.VOICE_CALL);
   if (!spend.allowed) {
-    return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED, {
-      quota: spend.quota,
-    });
+    return quotaExhausted(spend.quota);
   }
 
-  const minted = await mintRealtimeConnection({
+  const upstream = yield* VoiceMintUpstream;
+  const clock = yield* HostedClock;
+  const minted = yield* upstream.mint({
     apiKey,
     model,
     preferences,
     clientSecretRequest: realtimeClientSecretRequest,
-    fetch: options.fetch,
-    now: options.now,
-    timeoutMs: options.timeoutMs,
+    now: () => clock.now(),
   });
   if ("failure" in minted) return minted.failure;
 
-  return jsonResponse(HOSTED_HTTP_STATUS.OK, {
+  return yield* jsonResponseEffect(HOSTED_HTTP_STATUS.OK, {
     connection: minted.connection,
     quota: spend.quota,
   });
+});
+
+/** @deprecated Tests use hosted-runner shims. */
+export interface VoiceMintOptions {
+  request: Request;
+  apiKey: string | undefined;
+  model?: string;
+  resolveUserId: (request: Request) => Promise<string | undefined>;
+  spend: (userId: string) => Promise<import("./quota.js").HostedSpend>;
+  fetch?: FetchLike;
+  now?: () => number;
+  timeoutMs?: number;
 }

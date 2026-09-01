@@ -1,15 +1,25 @@
 import { createHash } from "node:crypto";
+import { Effect } from "effect";
 import {
   introductionSessionConfig,
   type RealtimeSessionOptions,
   text as trimmedText,
 } from "../core.js";
-import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
-import type { FetchLike } from "./openai.js";
-import type { IntroductionSpend } from "./quota.js";
+import { HostedClock, HostedMeterService, HostedOpenAi } from "../services/tags.js";
 import {
-  mintRealtimeConnection,
+  decodeJsonBody,
+  HOSTED_HTTP_STATUS,
+  invalidRequest,
+  jsonResponseEffect,
+  methodNotAllowed,
+  quotaExhausted,
+  readBoundedBody,
+  unavailable,
+} from "./http-effect.js";
+import { voiceMintPreferencesSchema } from "./schema.js";
+import {
   type VoiceMintPreferences,
+  VoiceMintUpstream,
   voiceMintPreferences,
 } from "./voice-mint.js";
 
@@ -71,10 +81,6 @@ const SHARED_CALLER_BUCKET = "no-address";
  * rather than minting unmetered.
  */
 export function introductionCallerKey(request: Request): string {
-  // The platform's own single-valued header first: a forwarded chain's first
-  // hop is whatever the client told the first proxy, so on a deployment that
-  // writes both, the spoofable one must only ever be the fallback. A caller
-  // rotating addresses past the per-caller cap still lands on the global one.
   const forwarded = request.headers.get(CALLER_ADDRESS_HEADER.FORWARDED_FOR) ?? undefined;
   const address =
     trimmedText(request.headers.get(CALLER_ADDRESS_HEADER.REAL_IP) ?? undefined) ??
@@ -98,57 +104,67 @@ export async function introductionMintPreferences(
   return voiceMintPreferences(request, INTRODUCTION_MINT_FIELDS);
 }
 
-export interface IntroductionMintOptions {
-  request: Request;
-  /** Luke's own OpenAI key, from the deployment environment; absent means the tier is off. */
-  apiKey: string | undefined;
-  /** A deployment-configured model override; the shared default otherwise. */
-  model?: string;
-  spend: (callerKey: string) => Promise<IntroductionSpend>;
-  fetch?: FetchLike;
-  now?: () => number;
-  timeoutMs?: number;
-}
-
-export async function handleIntroductionMint(options: IntroductionMintOptions): Promise<Response> {
-  const { request } = options;
+export const handleIntroductionMint = Effect.fn("handleIntroductionMint")(function* (
+  request: Request,
+) {
   if (request.method !== "POST") {
-    return errorResponse(
-      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-    );
+    return methodNotAllowed();
   }
-  // Trimmed like the ordinary mint's reads: a whitespace credential is the
-  // kill switch, not a key, and a blank model override is no override at all.
-  const apiKey = trimmedText(options.apiKey);
-  const model = trimmedText(options.model);
+
+  const openAi = yield* HostedOpenAi;
+  const apiKey = trimmedText(openAi.apiKey);
+  const model = trimmedText(openAi.realtimeModel);
   if (!apiKey) {
-    return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
+    return unavailable();
   }
 
-  // Body before meter, so a malformed request is refused before it spends.
-  const preferences = await introductionMintPreferences(request);
-  if (!preferences) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+  const raw = yield* readBoundedBody(request, 65_536);
+  if (raw === undefined) {
+    return invalidRequest();
+  }
+  let preferences: VoiceMintPreferences | undefined;
+  if (!raw.trim()) {
+    preferences = {};
+  } else {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      return invalidRequest();
+    }
+    preferences = decodeJsonBody(voiceMintPreferencesSchema(INTRODUCTION_MINT_FIELDS), payload);
+  }
+  if (preferences === undefined) {
+    return invalidRequest();
   }
 
-  // The refusal carries no quota: the introduction is not an allowance the
-  // desktop tracks, only a cap it may run into.
-  const spend = await options.spend(introductionCallerKey(request));
+  const meter = yield* HostedMeterService;
+  const spend = yield* meter.spendIntroduction(introductionCallerKey(request));
   if (!spend.allowed) {
-    return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
+    return quotaExhausted();
   }
 
-  const minted = await mintRealtimeConnection({
+  const upstream = yield* VoiceMintUpstream;
+  const clock = yield* HostedClock;
+  const minted = yield* upstream.mint({
     apiKey,
     model,
     preferences,
     clientSecretRequest: introductionClientSecretRequest,
-    fetch: options.fetch,
-    now: options.now,
-    timeoutMs: options.timeoutMs,
+    now: () => clock.now(),
   });
   if ("failure" in minted) return minted.failure;
 
-  return jsonResponse(HOSTED_HTTP_STATUS.OK, { connection: minted.connection });
+  return yield* jsonResponseEffect(HOSTED_HTTP_STATUS.OK, { connection: minted.connection });
+});
+
+/** @deprecated Tests use hosted-runner shims. */
+export interface IntroductionMintOptions {
+  request: Request;
+  apiKey: string | undefined;
+  model?: string;
+  spend: (callerKey: string) => Promise<import("./quota.js").IntroductionSpend>;
+  fetch?: (input: string, init: RequestInit) => Promise<Response>;
+  now?: () => number;
+  timeoutMs?: number;
 }
