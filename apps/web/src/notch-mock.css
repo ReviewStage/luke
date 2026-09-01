@@ -73,6 +73,7 @@
   --surface-fill: #000;
   --surface-shadow: 0 10px 26px rgba(0, 0, 0, 0.46), 0 2px 7px rgba(0, 0, 0, 0.3);
 
+  --display-radius: 18px;
   --panel-radius: 30px;
   --panel-inset: 20px;
   --wing-inset: 9px;
@@ -98,6 +99,14 @@
   /* An illustration, not page copy: dragging across a recreated interface
      should not fill someone's clipboard with invented session titles. */
   user-select: none;
+  /* The display's silhouette is the art's hard boundary. The surface's shadow
+     reaches about 26px past the black, which the desktop frame's slack
+     absorbs but the phone frame's 20px does not, so unclipped it paints two
+     grey wings on the page just outside the gradient. Clipping here — the
+     frame's own rounded rect — bounds everything the mock draws, the shadow's
+     tail and the spring's overshoot alike. */
+  border-radius: var(--display-radius);
+  overflow: clip;
 }
 
 /* A flare belongs to the corner it turns into: beside the housing it
@@ -131,7 +140,7 @@
   position: absolute;
   z-index: 0;
   inset: 0;
-  border-radius: 18px;
+  border-radius: var(--display-radius);
   background: linear-gradient(180deg, var(--frame-top) 0%, var(--frame-bottom) 100%);
 }
 
@@ -144,7 +153,7 @@
   position: absolute;
   z-index: 0;
   inset: 0;
-  border-radius: 18px;
+  border-radius: var(--display-radius);
 }
 
 /* The black surface is the whole animation: one leaf element with no children

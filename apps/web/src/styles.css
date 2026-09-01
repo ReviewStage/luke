@@ -397,24 +397,34 @@
   }
 }
 
-/* Each step is the largest scale whose 660px art still clears the screen at
-   the step's floor, so the mock fills a phone instead of floating in it and
-   the stage's clip never eats the frame's edges. */
+/* Each step is the largest twentieth whose 660px art still keeps ten or so
+   pixels of page beside it at the step's floor. The gutter is the point: a
+   step chosen to merely clear its floor puts the frame's corners flush
+   against the screen edge — and past it, once the arithmetic slips by half a
+   pixel — where the stage's clip squares them off and the display reads as
+   overflowing the phone. Twentieths, because they land the 660×560 box on
+   whole pixels. */
 @media (width < 520px) {
   :root {
-    --mock-scale: 0.58;
+    --mock-scale: 0.6;
+  }
+}
+
+@media (width < 416px) {
+  :root {
+    --mock-scale: 0.55;
   }
 }
 
 @media (width < 384px) {
   :root {
-    --mock-scale: 0.54;
+    --mock-scale: 0.5;
   }
 }
 
 @media (width < 356px) {
   :root {
-    --mock-scale: 0.5;
+    --mock-scale: 0.45;
   }
 }
 
