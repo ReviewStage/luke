@@ -15,11 +15,13 @@ export const VOICE_MACHINE_EVENT = {
   CALL_CLOSED: "call.closed",
   CALL_CONNECTED: "call.connected",
   CALL_FAILED: "call.failed",
+  CALL_RESTARTED: "call.restarted",
   INTRODUCTION_STARTED: "introduction.started",
   MEETING_QUIET_CHANGED: "meetingQuiet.changed",
   MICROPHONE_PERMISSION_CHANGED: "microphonePermission.changed",
   NOTICE_ENQUEUED: "notice.enqueued",
   OUTPUT_SILENCE_CHANGED: "outputSilence.changed",
+  PRESS_DISCARDED: "press.discarded",
   PRESS_DOWN: "press.down",
   PRESS_RELEASED: "press.released",
   QUOTA_SPENT: "quota.spent",
@@ -83,7 +85,14 @@ export type VoiceResource = (typeof VOICE_RESOURCE)[keyof typeof VOICE_RESOURCE]
 export const PRESS_AUDIO_ACTOR_EVENT = {
   DRAIN: "pressAudio.drain",
   PUSH: "pressAudio.push",
+  READ: "pressAudio.read",
 } as const;
+
+export interface PressAudioActorSnapshot {
+  bufferedMs: number;
+  droppedMs: number;
+  isEmpty: boolean;
+}
 
 export type PressAudioActorEvent =
   | {
@@ -93,6 +102,10 @@ export type PressAudioActorEvent =
   | {
       type: typeof PRESS_AUDIO_ACTOR_EVENT.PUSH;
       chunk: Int16Array;
+    }
+  | {
+      type: typeof PRESS_AUDIO_ACTOR_EVENT.READ;
+      consume: (snapshot: PressAudioActorSnapshot) => void;
     };
 
 export const VOICE_EXCHANGE_KIND = {
@@ -151,6 +164,7 @@ export type VoiceMachineEvent =
   | { type: typeof VOICE_MACHINE_EVENT.CALL_CLOSED }
   | { type: typeof VOICE_MACHINE_EVENT.CALL_CONNECTED }
   | { type: typeof VOICE_MACHINE_EVENT.CALL_FAILED }
+  | { type: typeof VOICE_MACHINE_EVENT.CALL_RESTARTED }
   | { type: typeof VOICE_MACHINE_EVENT.INTRODUCTION_STARTED }
   | {
       type: typeof VOICE_MACHINE_EVENT.MEETING_QUIET_CHANGED;
@@ -162,6 +176,7 @@ export type VoiceMachineEvent =
     }
   | { type: typeof VOICE_MACHINE_EVENT.NOTICE_ENQUEUED; noticeId: string }
   | { type: typeof VOICE_MACHINE_EVENT.OUTPUT_SILENCE_CHANGED; silent: boolean }
+  | { type: typeof VOICE_MACHINE_EVENT.PRESS_DISCARDED }
   | { type: typeof VOICE_MACHINE_EVENT.PRESS_DOWN }
   | {
       type: typeof VOICE_MACHINE_EVENT.PRESS_RELEASED;
@@ -210,7 +225,15 @@ export const pressAudioBufferActor = fromCallback<PressAudioActorEvent, VoiceRes
         buffer.push(event.chunk);
         return;
       }
-      event.consume(buffer.drain());
+      if (event.type === PRESS_AUDIO_ACTOR_EVENT.DRAIN) {
+        event.consume(buffer.drain());
+        return;
+      }
+      event.consume({
+        bufferedMs: buffer.bufferedMs,
+        droppedMs: buffer.droppedMs,
+        isEmpty: buffer.isEmpty,
+      });
     });
     return () => input.onStop?.(input.resource);
   },
@@ -322,6 +345,7 @@ export const voiceMachine = setup({
             },
             idle: {
               on: {
+                [VOICE_MACHINE_EVENT.CALL_RESTARTED]: "developerCall.connectingAbandoned",
                 [VOICE_MACHINE_EVENT.PRESS_DOWN]: [
                   {
                     guard: "microphoneGranted",
@@ -395,6 +419,11 @@ export const voiceMachine = setup({
                     [VOICE_MACHINE_EVENT.CALL_CONNECTED]: "typedResponding",
                   },
                 },
+                connectingAbandoned: {
+                  on: {
+                    [VOICE_MACHINE_EVENT.CALL_CONNECTED]: "ready",
+                  },
+                },
                 typedResponding: {
                   invoke: {
                     id: VOICE_RESOURCE.QUIET_TIMER,
@@ -440,6 +469,7 @@ export const voiceMachine = setup({
                     input: resourceInput(VOICE_RESOURCE.IDLE_TIMER),
                   },
                   on: {
+                    [VOICE_MACHINE_EVENT.CALL_RESTARTED]: "connectingAbandoned",
                     [VOICE_MACHINE_EVENT.PRESS_DOWN]: {
                       target: "spoken.listeningHeld",
                       actions: "setSpokenOrigin",
@@ -472,6 +502,8 @@ export const voiceMachine = setup({
                       },
                       on: {
                         [VOICE_MACHINE_EVENT.CALL_CONNECTED]: "listeningHeld",
+                        [VOICE_MACHINE_EVENT.PRESS_DISCARDED]:
+                          "#voiceLifecycle.developerCall.connectingAbandoned",
                         [VOICE_MACHINE_EVENT.PRESS_RELEASED]: [
                           {
                             guard: "releaseLatches",
@@ -492,6 +524,8 @@ export const voiceMachine = setup({
                       },
                       on: {
                         [VOICE_MACHINE_EVENT.CALL_CONNECTED]: "listeningLatched",
+                        [VOICE_MACHINE_EVENT.PRESS_DISCARDED]:
+                          "#voiceLifecycle.developerCall.connectingAbandoned",
                         [VOICE_MACHINE_EVENT.PRESS_RELEASED]: {
                           guard: "releaseSends",
                           target: "connectingReleased",
@@ -506,10 +540,14 @@ export const voiceMachine = setup({
                       },
                       on: {
                         [VOICE_MACHINE_EVENT.CALL_CONNECTED]: "responding",
+                        [VOICE_MACHINE_EVENT.PRESS_DISCARDED]:
+                          "#voiceLifecycle.developerCall.connectingAbandoned",
                       },
                     },
                     listeningHeld: {
                       on: {
+                        [VOICE_MACHINE_EVENT.PRESS_DISCARDED]:
+                          "#voiceLifecycle.developerCall.ready",
                         [VOICE_MACHINE_EVENT.PRESS_RELEASED]: [
                           {
                             guard: "releaseLatches",
@@ -524,6 +562,8 @@ export const voiceMachine = setup({
                     },
                     listeningLatched: {
                       on: {
+                        [VOICE_MACHINE_EVENT.PRESS_DISCARDED]:
+                          "#voiceLifecycle.developerCall.ready",
                         [VOICE_MACHINE_EVENT.PRESS_RELEASED]: {
                           guard: "releaseSends",
                           target: "responding",
@@ -801,6 +841,7 @@ export function selectRealtimeStatus(snapshot: VoiceMachineSnapshot): RealtimeSt
   if (snapshot.matches({ ordinary: { lifecycle: "failed" } })) return REALTIME_STATUS.FAILED;
   if (
     snapshot.matches({ ordinary: { lifecycle: { developerCall: "typedConnecting" } } }) ||
+    snapshot.matches({ ordinary: { lifecycle: { developerCall: "connectingAbandoned" } } }) ||
     snapshot.matches({
       ordinary: { lifecycle: { developerCall: { spoken: "connectingHeld" } } },
     }) ||
@@ -895,6 +936,25 @@ export function selectTalkOpening(snapshot: VoiceMachineSnapshot): boolean {
       ordinary: { lifecycle: { developerCall: { spoken: "connectingReleased" } } },
     })
   );
+}
+
+export function selectTalkLatched(snapshot: VoiceMachineSnapshot): boolean {
+  return (
+    snapshot.matches({
+      ordinary: { lifecycle: { developerCall: { spoken: "connectingLatched" } } },
+    }) ||
+    snapshot.matches({
+      ordinary: { lifecycle: { developerCall: { spoken: "listeningLatched" } } },
+    })
+  );
+}
+
+export function selectMicrophoneCall(snapshot: VoiceMachineSnapshot): boolean {
+  return snapshot.matches({ ordinary: { lifecycle: "developerCall" } });
+}
+
+export function selectTypedTurn(snapshot: VoiceMachineSnapshot): boolean {
+  return snapshot.context.turnOrigin === VOICE_TURN_ORIGIN.DEVELOPER_TYPED;
 }
 
 export function selectExchangeKind(snapshot: VoiceMachineSnapshot): VoiceExchangeKind | undefined {

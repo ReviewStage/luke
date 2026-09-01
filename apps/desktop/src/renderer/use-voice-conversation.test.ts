@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PRODUCT_EXCHANGE_KIND } from "@sidecar/analytics";
 import { FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
-import { REALTIME_STATUS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
+import { REALTIME_STATUS, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import {
   normalizeSession,
   type ProviderSessionObservation,
@@ -20,15 +19,8 @@ import {
   replyIssueMentions,
   replyMentions,
   spokenAskBelongsToConversation,
-  talkKeyPress,
-  talkOpeningHolds,
-  typedAskHolds,
-  VOICE_RESTART,
   voiceErrorToShow,
-  voiceExchangeActive,
-  voiceExchangeKind,
   voiceNoticeToShow,
-  voiceRestartAction,
   waveformVoice,
 } from "./use-voice-conversation";
 import { WAVEFORM_VOICE } from "./waveform";
@@ -103,29 +95,6 @@ test("the analyser listens to the stream of whoever holds the turn", () => {
   assert.equal(
     activeVoiceStream({ status: REALTIME_STATUS.READY, local: "mic", remote: "luke" }),
     undefined,
-  );
-});
-
-test("the media duck follows the exchange, not a settled call", () => {
-  assert.equal(voiceExchangeActive(REALTIME_STATUS.CONNECTING), true);
-  assert.equal(voiceExchangeActive(REALTIME_STATUS.LISTENING), true);
-  assert.equal(voiceExchangeActive(REALTIME_STATUS.RESPONDING), true);
-  assert.equal(voiceExchangeActive(REALTIME_STATUS.READY), false);
-  assert.equal(voiceExchangeActive(REALTIME_STATUS.IDLE), false);
-});
-
-test("Luke's own speak-only call is never counted as somebody speaking to him", () => {
-  assert.equal(
-    voiceExchangeKind({ microphoneCall: false, typedAsk: false }),
-    PRODUCT_EXCHANGE_KIND.ANNOUNCEMENT,
-  );
-  assert.equal(
-    voiceExchangeKind({ microphoneCall: true, typedAsk: true }),
-    PRODUCT_EXCHANGE_KIND.TYPED,
-  );
-  assert.equal(
-    voiceExchangeKind({ microphoneCall: true, typedAsk: false }),
-    PRODUCT_EXCHANGE_KIND.SPOKEN,
   );
 });
 
@@ -227,125 +196,11 @@ test("a typed ask, or an output that would swallow the reply, captions whatever 
   assert.deepEqual(lukeCaptionsToShow({ ...hidden, outputSilent: true }), ["the words"]);
 });
 
-test("a latched press is the release's to answer, and does not open a second call", () => {
-  assert.deepEqual(talkKeyPress({ latched: true, microphoneCall: false }), {
-    deferToRelease: true,
-    openCall: false,
-  });
-  assert.deepEqual(talkKeyPress({ latched: true, microphoneCall: true }), {
-    deferToRelease: true,
-    openCall: false,
-  });
-});
-
-test("a press against no microphone call has to open one, and the meter answers the press", () => {
-  assert.deepEqual(talkKeyPress({ latched: false, microphoneCall: false }), {
-    deferToRelease: false,
-    openCall: true,
-  });
-  assert.deepEqual(talkKeyPress({ latched: false, microphoneCall: true }), {
-    deferToRelease: false,
-    openCall: false,
-  });
-});
-
-test("the press-wait meter rides a handshake and a pending takeover, nothing else", () => {
-  assert.equal(talkOpeningHolds({ status: REALTIME_STATUS.CONNECTING, turnPending: false }), true);
-  assert.equal(talkOpeningHolds({ status: REALTIME_STATUS.READY, turnPending: true }), true);
-  assert.equal(talkOpeningHolds({ status: REALTIME_STATUS.LISTENING, turnPending: false }), false);
-  assert.equal(talkOpeningHolds({ status: REALTIME_STATUS.READY, turnPending: false }), false);
-  assert.equal(talkOpeningHolds({ status: REALTIME_STATUS.FAILED, turnPending: false }), false);
-});
-
-test("a typed ask's caption holds only for the reply it opened", () => {
-  assert.equal(typedAskHolds(REALTIME_STATUS.RESPONDING), true);
-  assert.equal(typedAskHolds(REALTIME_STATUS.READY), false);
-  assert.equal(typedAskHolds(REALTIME_STATUS.LISTENING), false);
-});
-
 test("the first stored pace is not a change, and a later one is", () => {
   assert.equal(liveSpeedApplies(undefined, REALTIME_VOICE_SPEED.QUICK), false);
   assert.equal(liveSpeedApplies(REALTIME_VOICE_SPEED.NORMAL, REALTIME_VOICE_SPEED.NORMAL), false);
   assert.equal(liveSpeedApplies(REALTIME_VOICE_SPEED.NORMAL, REALTIME_VOICE_SPEED.QUICK), true);
   assert.equal(liveSpeedApplies(REALTIME_VOICE_SPEED.QUICK, undefined), false);
-});
-
-test("a changed voice on a live call waits for the turn to end, then restarts", () => {
-  const change = {
-    previous: REALTIME_VOICE.CEDAR,
-    next: REALTIME_VOICE.MARIN,
-    live: true,
-    due: false,
-    status: REALTIME_STATUS.RESPONDING,
-  };
-  assert.deepEqual(voiceRestartAction(change), { due: true, action: VOICE_RESTART.WAIT });
-  assert.deepEqual(voiceRestartAction({ ...change, status: REALTIME_STATUS.LISTENING }), {
-    due: true,
-    action: VOICE_RESTART.WAIT,
-  });
-  assert.deepEqual(voiceRestartAction({ ...change, status: REALTIME_STATUS.READY }), {
-    due: false,
-    action: VOICE_RESTART.RESTART,
-  });
-});
-
-test("a call that ended on its own owes the new voice nothing", () => {
-  const owed = {
-    previous: REALTIME_VOICE.CEDAR,
-    next: REALTIME_VOICE.MARIN,
-    live: false,
-    due: true,
-    status: REALTIME_STATUS.IDLE,
-  };
-  assert.deepEqual(voiceRestartAction(owed), { due: false, action: VOICE_RESTART.DROP });
-  assert.deepEqual(voiceRestartAction({ ...owed, status: REALTIME_STATUS.FAILED }), {
-    due: false,
-    action: VOICE_RESTART.DROP,
-  });
-  assert.deepEqual(voiceRestartAction({ ...owed, status: REALTIME_STATUS.UNAVAILABLE }), {
-    due: false,
-    action: VOICE_RESTART.DROP,
-  });
-});
-
-test("the first snapshot of the voice is stored, not restarted", () => {
-  assert.deepEqual(
-    voiceRestartAction({
-      previous: undefined,
-      next: REALTIME_VOICE.CEDAR,
-      live: true,
-      due: false,
-      status: REALTIME_STATUS.READY,
-    }),
-    { due: false, action: VOICE_RESTART.NONE },
-  );
-});
-
-test("a voice change with no call up is not owed a restart", () => {
-  assert.deepEqual(
-    voiceRestartAction({
-      previous: REALTIME_VOICE.CEDAR,
-      next: REALTIME_VOICE.MARIN,
-      live: false,
-      due: false,
-      status: REALTIME_STATUS.IDLE,
-    }),
-    { due: false, action: VOICE_RESTART.NONE },
-  );
-});
-
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("a connecting call counts as one to reopen: its credential may already be the old voice", () => {
-  assert.deepEqual(
-    voiceRestartAction({
-      previous: REALTIME_VOICE.CEDAR,
-      next: REALTIME_VOICE.MARIN,
-      live: true,
-      due: false,
-      status: REALTIME_STATUS.CONNECTING,
-    }),
-    { due: true, action: VOICE_RESTART.WAIT },
-  );
 });
 
 function rosterSession(

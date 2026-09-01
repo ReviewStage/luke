@@ -1,4 +1,3 @@
-import { PRODUCT_EXCHANGE_KIND, type ProductExchangeKind } from "@sidecar/analytics";
 import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import { FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
@@ -34,8 +33,17 @@ import {
   type SessionMention,
 } from "@sidecar/session";
 import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyLabel } from "@sidecar/settings";
+import { VOICE_RESTART, type VoiceRestart } from "@sidecar/voice-machine";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
-import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { MicrophoneStatus, VoiceHotkeyState } from "#shared/wire/audio";
 import type { SessionOpenResult, WorkspaceProviderId } from "#shared/wire/session";
 import { askRefusal } from "./ask-luke";
@@ -44,28 +52,13 @@ import { openPreferredMicrophone } from "./microphone-choice";
 import { type AppActionCarrier, RealtimeVoiceSession } from "./realtime-session";
 import { SpokenNoticeAnnouncer } from "./spoken-notices";
 import { useStateWithRef } from "./use-state-with-ref";
-import { type LegacyVoiceView, VoiceMachineShadowAdapter } from "./voice-machine-adapter";
+import {
+  VOICE_MACHINE_ORIGIN,
+  VOICE_MACHINE_RELEASE,
+  VoiceMachineController,
+} from "./voice-machine-adapter";
 import { createVoiceMachineInspector, type VoiceMachineInspector } from "./voice-machine-inspector";
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
-
-/**
- * What a changed voice on a live call should do. The API locks a session's
- * voice the moment the model first speaks, so the one way to change it now is
- * to open a new call — but a spoken "change your voice" is confirmed in the
- * old one, so the restart waits until that turn has ended.
- */
-export const VOICE_RESTART = {
-  /** Nothing to do: no change, or a change that is not owed a live call. */
-  NONE: "none",
-  /** A restart is owed, but the turn under way has to finish first. */
-  WAIT: "wait",
-  /** The call ended on its own; the next one is minted in the new voice. */
-  DROP: "drop",
-  /** The call is idle enough to close and open again in the new voice. */
-  RESTART: "restart",
-} as const;
-
-export type VoiceRestart = (typeof VOICE_RESTART)[keyof typeof VOICE_RESTART];
 
 /**
  * Whose voice the meter is drawing. The waveform follows whoever is actually
@@ -90,32 +83,6 @@ export function activeVoiceStream<T>(input: {
   if (input.status === REALTIME_STATUS.RESPONDING) return input.remote;
   if (input.status === REALTIME_STATUS.LISTENING) return input.local;
   return undefined;
-}
-
-/**
- * The exchange is live from the press to the end of the reply — the call
- * coming up, a turn being held, Luke speaking — and the media duck follows it.
- */
-export function voiceExchangeActive(status: RealtimeStatus): boolean {
-  return (
-    status === REALTIME_STATUS.CONNECTING ||
-    status === REALTIME_STATUS.LISTENING ||
-    status === REALTIME_STATUS.RESPONDING
-  );
-}
-
-/**
- * Who opened the exchange the count is about. Luke's own speak-only call has
- * no microphone to offer, which is the whole of what tells his announcement
- * from a turn the developer took; between the developer's own two ways in,
- * only the composer says so in advance, so the talk key is what is left.
- */
-export function voiceExchangeKind(input: {
-  microphoneCall: boolean;
-  typedAsk: boolean;
-}): ProductExchangeKind {
-  if (!input.microphoneCall) return PRODUCT_EXCHANGE_KIND.ANNOUNCEMENT;
-  return input.typedAsk ? PRODUCT_EXCHANGE_KIND.TYPED : PRODUCT_EXCHANGE_KIND.SPOKEN;
 }
 
 /**
@@ -200,37 +167,6 @@ export function lukeCaptionsToShow(input: {
  * seconds of handshake ahead of it, and the meter has to answer the press,
  * not the handshake.
  */
-export function talkKeyPress(input: { latched: boolean; microphoneCall: boolean }) {
-  if (input.latched) {
-    return { deferToRelease: true, openCall: false } satisfies {
-      deferToRelease: boolean;
-      openCall: boolean;
-    };
-  }
-  return { deferToRelease: false, openCall: !input.microphoneCall } satisfies {
-    deferToRelease: boolean;
-    openCall: boolean;
-  };
-}
-
-/**
- * Whether the press-wait meter should stay up. Connecting is still the
- * handshake; a pending turn is a takeover still owed a call — the meter must
- * ride across Luke's own call settling on its way to the developer's.
- */
-export function talkOpeningHolds(input: { status: RealtimeStatus; turnPending: boolean }): boolean {
-  return input.status === REALTIME_STATUS.CONNECTING || input.turnPending;
-}
-
-/**
- * Whether a typed ask's reply is still the one being spoken. The caption of a
- * typed conversation stays readable whatever the preference says, and clears
- * the moment the turn moves on.
- */
-export function typedAskHolds(status: RealtimeStatus): boolean {
-  return status === REALTIME_STATUS.RESPONDING;
-}
-
 /**
  * Whether a changed pace should be carried onto the call now open. The first
  * snapshot is the stored value rather than a change, and with no next value
@@ -248,49 +184,6 @@ export function liveSpeedApplies(
  * counts as one to reopen: its credential may already have been minted in the
  * old voice. A call that ended on its own owes nothing.
  */
-export function voiceRestartAction(input: {
-  previous: RealtimeVoice | undefined;
-  next: RealtimeVoice | undefined;
-  live: boolean;
-  due: boolean;
-  status: RealtimeStatus;
-}) {
-  if (input.next === undefined) {
-    return { due: input.due, action: VOICE_RESTART.NONE } satisfies {
-      due: boolean;
-      action: VoiceRestart;
-    };
-  }
-  const due =
-    input.due || (input.previous !== undefined && input.previous !== input.next && input.live);
-  if (!due) {
-    return { due: false, action: VOICE_RESTART.NONE } satisfies {
-      due: boolean;
-      action: VoiceRestart;
-    };
-  }
-  if (
-    input.status === REALTIME_STATUS.IDLE ||
-    input.status === REALTIME_STATUS.FAILED ||
-    input.status === REALTIME_STATUS.UNAVAILABLE
-  ) {
-    return { due: false, action: VOICE_RESTART.DROP } satisfies {
-      due: boolean;
-      action: VoiceRestart;
-    };
-  }
-  if (input.status !== REALTIME_STATUS.READY) {
-    return { due: true, action: VOICE_RESTART.WAIT } satisfies {
-      due: boolean;
-      action: VoiceRestart;
-    };
-  }
-  return { due: false, action: VOICE_RESTART.RESTART } satisfies {
-    due: boolean;
-    action: VoiceRestart;
-  };
-}
-
 /** A transcription belongs only to the same visible history generation as its turn. */
 export function spokenAskBelongsToConversation(
   markGeneration: number | undefined,
@@ -461,7 +354,6 @@ export interface VoiceConversation {
   /** Puts a sentence on the notice strip: the run-out announcement's one way in. */
   announceVoiceNotice: (text: string) => void;
   voiceStatus: RealtimeStatus;
-  setVoiceStatus: (status: RealtimeStatus) => void;
   talkOpening: boolean;
   voiceHotkey: VoiceHotkeyState | undefined;
   handleVoiceActivity: (active: boolean) => void;
@@ -522,17 +414,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const [microphoneStatus, setMicrophoneStatus] = useState<MicrophoneStatus>("not-determined");
   const [voiceError, setVoiceError] = useState<string>();
   const [voiceNotice, setVoiceNotice] = useState<string>();
-  const [voiceStatus, setVoiceStatus, voiceStatusNow] = useStateWithRef<RealtimeStatus>(
-    REALTIME_STATUS.IDLE,
-  );
-  /**
-   * A pressed talk key still waiting for the call it asked to open. The meter
-   * is drawn from this rather than from the connection, because the press is
-   * the moment the developer needs answering: the handshake behind it takes
-   * seconds, and a key that visibly does nothing for that long reads as a key
-   * that did nothing.
-   */
-  const [talkOpening, setTalkOpening] = useState(false);
   // With a ref beside it, because the arrival beat is worded at the moment it
   // is spoken — inside the announcer's own closures — not at a render.
   const [voiceHotkey, setVoiceHotkey, voiceHotkeyNow] = useStateWithRef<
@@ -547,34 +428,42 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     texts: readonly string[] | undefined;
     about: SessionIdentity | undefined;
   }>({ texts: undefined, about: undefined });
-  /**
-   * Whether the reply under way answers an ask the developer typed. A typed
-   * ask is read, not only heard, so its reply draws the caption whatever the
-   * captions preference says — the preference is about speech being
-   * duplicated, and here the words are the half of the conversation the
-   * developer chose. Cleared the moment the turn moves on.
-   */
-  const [typedAsk, setTypedAsk] = useState(false);
-
   const audioContext = useRef<AudioContext | undefined>(undefined);
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
   const voiceSession = useRef<RealtimeVoiceSession | undefined>(undefined);
   const announcer = useRef<SpokenNoticeAnnouncer | undefined>(undefined);
-  const voiceMachineAdapter = useRef<VoiceMachineShadowAdapter | undefined>(undefined);
   const voiceMachineInspector = useRef<VoiceMachineInspector | undefined>(undefined);
+  const restartVoice = useRef<(restart: VoiceRestart) => void>(() => undefined);
+  const voiceMachine = useRef<VoiceMachineController | undefined>(undefined);
+  voiceMachine.current ??= new VoiceMachineController({
+    inspect: {
+      next: (event) => voiceMachineInspector.current?.inspect.next?.(event),
+    },
+    onRestart: (restart) => restartVoice.current(restart),
+  });
+  const machine = voiceMachine.current;
+  const subscribeVoiceMachine = useCallback(
+    (notify: () => void) => {
+      const subscription = machine.subscribe(notify);
+      return () => subscription.unsubscribe();
+    },
+    [machine],
+  );
+  useSyncExternalStore(
+    subscribeVoiceMachine,
+    () => machine.snapshot,
+    () => machine.snapshot,
+  );
+  const voiceStatus = machine.status;
+  const voiceStatusRef = useRef(voiceStatus);
+  voiceStatusRef.current = voiceStatus;
+  const voiceStatusNow = useCallback(() => voiceStatusRef.current, []);
+  const talkOpening = machine.talkOpening;
+  const typedAsk = machine.typedTurn;
   /** When the talk key went down, which is what tells a hold from a tap. */
   const talkPressedAt = useRef<number | undefined>(undefined);
-  /** Whether a tap has left a turn open for a later press to end. */
-  const talkLatched = useRef(false);
   /** Whether the exchange the count last saw was still standing. */
   const exchangeCounted = useRef(false);
-  /**
-   * Whether the exchange about to open was opened by the composer. The
-   * {@link typedAsk} state cannot answer for it: that is set once the words
-   * are away, which is after the call the ask opened has already reached the
-   * edge the count is taken on.
-   */
-  const typedExchange = useRef(false);
   const sessionsRef = useRef(options.sessions);
   const workspaceProjectsRef = useRef(options.workspaceProjects);
   const defaultWorkspaceProviderRef = useRef(options.defaultWorkspaceProvider);
@@ -628,16 +517,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    */
   const transcriptSpokenRef = useRef(false);
 
-  const voiceMachineView: LegacyVoiceView = {
-    meetingQuiet: options.meetingQuiet,
-    microphoneCall: voiceSession.current?.microphoneCall === true,
-    microphoneStatus,
-    outputSilent: options.outputSilent,
-    status: voiceStatus,
-    typedExchange: typedExchange.current,
-  };
-  const voiceMachineViewRef = useRef(voiceMachineView);
-  voiceMachineViewRef.current = voiceMachineView;
   const {
     captureMode: voiceMachineCaptureMode,
     fixtureMode: voiceMachineFixtureMode,
@@ -658,16 +537,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
         return;
       }
       voiceMachineInspector.current = inspector;
-      const adapter = new VoiceMachineShadowAdapter({
-        ...(inspector ? { inspect: inspector.inspect } : undefined),
-      });
-      voiceMachineAdapter.current = adapter;
-      adapter.sync(voiceMachineViewRef.current);
     });
     return () => {
       gone = true;
-      voiceMachineAdapter.current?.stop();
-      voiceMachineAdapter.current = undefined;
       voiceMachineInspector.current?.stop();
       voiceMachineInspector.current = undefined;
     };
@@ -679,8 +551,14 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   ]);
 
   useEffect(() => {
-    voiceMachineAdapter.current?.sync(voiceMachineView);
-  });
+    machine.setMeetingQuiet(options.meetingQuiet);
+  }, [machine, options.meetingQuiet]);
+  useEffect(() => {
+    machine.setMicrophoneStatus(microphoneStatus);
+  }, [machine, microphoneStatus]);
+  useEffect(() => {
+    machine.setOutputSilent(options.outputSilent);
+  }, [machine, options.outputSilent]);
 
   /**
    * Appends one bounded line to this launch's history and tells the call now
@@ -714,7 +592,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     spokenTurnMarksRef.current.clear();
     pendingSpokenTurnMarksRef.current = [];
     setConversationHistory([]);
-    talkLatched.current = false;
     talkPressedAt.current = undefined;
     voiceSession.current?.clearConversation();
     activeReplyGenerationRef.current = undefined;
@@ -751,6 +628,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const ensureVoiceSession = useCallback((): RealtimeVoiceSession => {
     voiceSession.current ??= new RealtimeVoiceSession({
       requestConnection: () => window.sidecar.requestRealtimeCredential(),
+      toolsAllowed: () => machine.toolsAllowed,
+      createPressAudioBuffer: () => machine.createPressAudioBuffer(),
       // The press's device, chosen by facts read natively: the Mac's own
       // microphone where a Bluetooth headset would otherwise pay for the
       // capture with its music codec, the browser's default everywhere else.
@@ -841,10 +720,15 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
             window.sidecar.readSessionTranscript(act.identity),
         });
       },
-      onStatus: setVoiceStatus,
+      onStatus: (status) => machine.observeSessionStatus(status),
       onLocalStream: setLocalStream,
       onRemoteStream: setRemoteStream,
-      onError: setVoiceError,
+      onError: (message) => {
+        setVoiceError(message);
+        if (message && machine.talkOpening && voiceSession.current?.turnPending !== true) {
+          machine.pressDiscarded();
+        }
+      },
       onCaption: (texts, about) => setVoiceCaption({ texts, about }),
       onReplyEnded: (texts, about) => {
         if (about) {
@@ -894,7 +778,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       },
     });
     return voiceSession.current;
-  }, [rememberConversationEntry, rememberSpokenAsk, setVoiceStatus]);
+  }, [machine, rememberConversationEntry, rememberSpokenAsk]);
 
   /**
    * Words the arrival beat from what is true at the moment it is spoken, not
@@ -951,11 +835,15 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
           get microphoneCall() {
             return session.microphoneCall;
           },
-          connect: (connectOptions: { microphone: false }) => session.connect(connectOptions),
+          connect: async (connectOptions: { microphone: false }) => {
+            if (!machine.speakLuke(VOICE_MACHINE_ORIGIN.PROACTIVE)) return false;
+            return session.connect(connectOptions);
+          },
           speak: (item) => {
             if (!isArrivalSpeech(item)) {
               const spoke = session.speak(item);
               if (spoke) {
+                machine.speakLuke(VOICE_MACHINE_ORIGIN.PROACTIVE);
                 activeAnnouncementGenerationRef.current = conversationGenerationRef.current;
               }
               return spoke;
@@ -965,7 +853,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
             // record may settle: a beat dropped anywhere earlier — a trigger
             // this renderer never heard, the quiet, an age-out — reports
             // nothing, and the next signed-in launch speaks it instead.
-            if (spoke) void window.sidecar.completeArrivalBeat();
+            if (spoke) {
+              machine.speakLuke(VOICE_MACHINE_ORIGIN.ARRIVAL);
+              void window.sidecar.completeArrivalBeat();
+            }
             return spoke;
           },
           stopSpeaking: () => session.stopSpeaking(),
@@ -974,16 +865,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       },
     });
     return announcer.current;
-  }, [ensureVoiceSession, wordedArrival]);
+  }, [ensureVoiceSession, machine, wordedArrival]);
 
   const stopMicrophone = useCallback(async () => {
-    // The call is gone, so a tap-to-keep-open turn cannot still be open. Leaving
-    // the latch set would make the next press — after a key is connected again —
-    // look like the end of that turn and do nothing.
-    talkLatched.current = false;
     talkPressedAt.current = undefined;
     await voiceSession.current?.close();
-  }, []);
+    machine.stop();
+  }, [machine]);
 
   // Voice arriving and voice going away. It is not read from bootstrap, because
   // it is not only true of a launch: a key entered in the panel turns a
@@ -1002,7 +890,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
         // flight has already rebuilt a minter; forcing unavailable then would
         // leave the talk key looking dead over a live credential.
         if (optionsRef.current.voiceAvailable === false) {
-          setVoiceStatus(REALTIME_STATUS.UNAVAILABLE);
+          machine.setAvailable(false);
         }
       });
       return;
@@ -1010,9 +898,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     // Only the status voice being off put there is lifted. Anything else — a
     // failure, a call already open — is the session's own to report.
     if (voiceStatusNow() === REALTIME_STATUS.UNAVAILABLE) {
-      setVoiceStatus(REALTIME_STATUS.IDLE);
+      machine.setAvailable(true);
     }
-  }, [options.voiceAvailable, setVoiceStatus, stopMicrophone, voiceStatusNow]);
+  }, [machine, options.voiceAvailable, stopMicrophone, voiceStatusNow]);
 
   /**
    * Opens the developer's call and feeds it everything a turn is validated
@@ -1055,17 +943,17 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     const session = ensureVoiceSession();
     const permission = await window.sidecar.requestMicrophone();
     setMicrophoneStatus(permission);
+    machine.setMicrophoneStatus(permission);
     if (permission !== "granted") {
       // The press that asked for this is still waiting for a call that is now
       // not coming. The status never changes on this path, so the meter the
       // press put up is taken down here rather than by a status settling.
       session.dropPendingTurn();
-      setTalkOpening(false);
       return permission;
     }
     await startConversation();
     return permission;
-  }, [ensureVoiceSession, startConversation]);
+  }, [ensureVoiceSession, machine, startConversation]);
 
   /**
    * The spent-allowance sentence when that is what "unavailable" means right
@@ -1110,13 +998,12 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    */
   const beginTalk = useCallback(async () => {
     talkPressedAt.current = performance.now();
-    // An ask whose send never landed leaves its mark behind; the key is the
-    // other way in, so this press is what clears it.
-    typedExchange.current = false;
     // A latched turn is already open. This press is someone saying they are
     // done, which is the release's to answer.
-    if (talkLatched.current) return;
+    if (machine.talkLatched) return;
     const session = ensureVoiceSession();
+    const openCall = !session.microphoneCall;
+    machine.pressDown();
     // The press is what opens a capture device, and the call under it may
     // have been opened by a typed ask, which asked the system for nothing.
     // So a press against anything but a granted microphone asks before the
@@ -1127,6 +1014,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       const pressedAt = talkPressedAt.current;
       const permission = await window.sidecar.requestMicrophone();
       setMicrophoneStatus(permission);
+      machine.setMicrophoneStatus(permission);
       if (permission !== "granted") {
         // Said where the device failure used to land it: the caption strip.
         setVoiceError(
@@ -1153,13 +1041,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     // Only after the interrupted reply's handover does this new turn own the
     // active reply generation.
     activeReplyGenerationRef.current = activeSpokenTurnMarkRef.current.generation;
-    const press = talkKeyPress({ latched: false, microphoneCall: session.microphoneCall });
-    // A press against no call — or against Luke's own speak-only call, which
-    // has no microphone to offer — has seconds of handshake ahead of it, and
-    // the meter has to answer the press, not the handshake.
-    if (press.openCall) setTalkOpening(true);
     // The developer's call is up or already coming; the press waits its turn.
-    if (!press.openCall) return;
+    if (!openCall) return;
     // `connect` inside stands Luke's own call down if one is open: the
     // developer pressing the key always gets the developer's call.
     await startMicrophone();
@@ -1172,7 +1055,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       const spent = await spentAllowanceNote();
       if (spent) setVoiceNotice(spent);
     }
-  }, [ensureVoiceSession, microphoneStatus, spentAllowanceNote, startMicrophone]);
+  }, [ensureVoiceSession, machine, microphoneStatus, spentAllowanceNote, startMicrophone]);
 
   /**
    * The talk key coming up. How long it was held is the whole of the decision:
@@ -1188,7 +1071,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     if (pressedAt === undefined) return;
     const release = talkKeyRelease({
       heldMs: performance.now() - pressedAt,
-      latched: talkLatched.current,
+      latched: machine.talkLatched,
     });
     if (release === TALK_KEY_RELEASE.LATCH) {
       // A latch keeps a turn open past the release, so it needs a turn to
@@ -1196,15 +1079,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       // still on the way — but a press that opened none, because the
       // permission prompt or a failed device swallowed it, must not latch, or
       // the next press would read as the end of a turn nobody is holding.
-      if (
-        voiceSession.current?.turnPending === true ||
-        voiceStatusNow() === REALTIME_STATUS.LISTENING
-      ) {
-        talkLatched.current = true;
-      }
+      machine.pressReleased(VOICE_MACHINE_RELEASE.LATCH);
       return;
     }
-    talkLatched.current = false;
+    machine.pressReleased(VOICE_MACHINE_RELEASE.SEND);
     voiceSession.current?.endTurn(true);
     // A held press let go of before the call opened is no longer always
     // dropped: its words were captured beside the handshake, and a press that
@@ -1217,9 +1095,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       !voiceSession.current.isConnected &&
       !voiceSession.current.turnPending
     ) {
-      setTalkOpening(false);
+      machine.pressDiscarded();
     }
-  }, [voiceStatusNow]);
+  }, [machine]);
 
   /**
    * A typed ask to Luke himself. It rides the same call the talk key opens
@@ -1236,7 +1114,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     async (text: string): Promise<string | undefined> => {
       const generation = conversationGenerationRef.current;
       const session = ensureVoiceSession();
-      typedExchange.current = true;
+      machine.typedAsk();
       // Luke's own speak-only call cannot carry a typed ask — it was sent no
       // roster to validate one against — so it counts as no call here, and
       // `connect` inside stands it down for the developer's own. A microphone
@@ -1246,7 +1124,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       }
       if (session.sendText(text)) {
         activeReplyGenerationRef.current = generation;
-        setTypedAsk(true);
         // A new typed turn lets a leftover transcript skip go, exactly as a
         // spoken one does — after the send, whose interrupt hands over the
         // cut reply's words and is the flag's last rightful consumer.
@@ -1266,6 +1143,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       const spent =
         session.status === REALTIME_STATUS.UNAVAILABLE ? await spentAllowanceNote() : undefined;
       const refusal = askRefusal(session.status, spent);
+      machine.observeSessionStatus(session.status);
       // The refusal lands where the reply would have: on the caption strip,
       // in the notice tone, the same way a talk-key press against a spent
       // allowance is answered. The composer draws no line of its own — one
@@ -1274,14 +1152,14 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       setVoiceNotice(refusal);
       return refusal;
     },
-    [rememberConversationEntry, ensureVoiceSession, spentAllowanceNote, startConversation],
+    [rememberConversationEntry, ensureVoiceSession, machine, spentAllowanceNote, startConversation],
   );
 
   const discardListening = useCallback(() => {
-    talkLatched.current = false;
     talkPressedAt.current = undefined;
+    machine.pressDiscarded();
     voiceSession.current?.stopListening(false);
-  }, []);
+  }, [machine]);
 
   const stopSpeaking = useCallback(() => voiceSession.current?.stopSpeaking() === true, []);
 
@@ -1310,26 +1188,24 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, [options.voiceSpeed]);
 
   const heardVoice = useRef<RealtimeVoice | undefined>(undefined);
-  const voiceRestartDue = useRef(false);
-  useEffect(() => {
-    const decided = voiceRestartAction({
-      previous: heardVoice.current,
-      next: options.voice,
-      live:
-        voiceSession.current?.isConnected === true || voiceSession.current?.isConnecting === true,
-      due: voiceRestartDue.current,
-      status: voiceStatus,
-    });
-    if (options.voice !== undefined) heardVoice.current = options.voice;
-    voiceRestartDue.current = decided.due;
-    if (decided.action !== VOICE_RESTART.RESTART) return;
-    // Reconnecting is the call's act, not a press: the device the old call
-    // held went with its close, and the next press asks for its own.
+  restartVoice.current = (restart) => {
+    if (restart !== VOICE_RESTART.RESTART) return;
     void (async () => {
       await voiceSession.current?.close();
+      machine.restartDeveloperCall();
       await startConversation();
     })();
-  }, [options.voice, startConversation, voiceStatus]);
+  };
+  useEffect(() => {
+    const next = options.voice;
+    if (next === undefined) return;
+    const previous = heardVoice.current;
+    heardVoice.current = next;
+    if (previous === undefined || previous === next) return;
+    machine.voiceChanged(
+      voiceSession.current?.isConnected === true || voiceSession.current?.isConnecting === true,
+    );
+  }, [machine, options.voice]);
 
   const activeStream = activeVoiceStream({
     status: voiceStatus,
@@ -1361,30 +1237,12 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, [activeStream]);
 
   useEffect(() => {
-    // The reply that answered the typed ask is over, so the caption goes
-    // back to being the preference's to grant.
-    if (!typedAskHolds(voiceStatus)) {
-      setTypedAsk(false);
-    }
     // The transcript skip belongs to the turn that read the transcript, and a
     // reply abandoned wordless never fires the handover that consumes it — so
     // a new spoken turn opening lets it go, or the flag would swallow the
     // next reply from the history.
     if (voiceStatus === REALTIME_STATUS.LISTENING) {
       transcriptSpokenRef.current = false;
-    }
-    // Any settled status ends the wait the press started, however it ended:
-    // listening takes the meter live, ready means the turn was dropped
-    // mid-handshake, and a failure has its own message to show. Unless the
-    // press is still owed a turn — a takeover passes through Luke's own call
-    // settling on its way to the developer's, and the meter must ride across.
-    if (
-      !talkOpeningHolds({
-        status: voiceStatus,
-        turnPending: voiceSession.current?.turnPending === true,
-      })
-    ) {
-      setTalkOpening(false);
     }
   }, [voiceStatus]);
 
@@ -1409,15 +1267,17 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   // and a fault the turn hid must not come back once the words finish.
   // `startConversation` clears the calls that have to reconnect; this clears
   // the one that carried a mid-call error and never dropped.
+  const voiceExchangeIsActive = machine.duckActive;
+  const currentExchangeKind = machine.exchangeKind;
   useEffect(() => {
-    if (voiceExchangeActive(voiceStatus)) {
+    if (voiceExchangeIsActive) {
       setVoiceError(undefined);
       setVoiceNotice(undefined);
     }
-  }, [voiceStatus]);
+  }, [voiceExchangeIsActive]);
 
   useEffect(() => {
-    const active = voiceExchangeActive(voiceStatus);
+    const active = voiceExchangeIsActive;
     // The panel takes the level on every change — the duck and the face
     // follow it — while the count takes only the rising edge, or one turn's
     // walk from connecting through responding would be counted three times.
@@ -1427,13 +1287,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       window.sidecar.setVoiceExchangeActive(active, undefined);
       return;
     }
-    const kind = voiceExchangeKind({
-      microphoneCall: voiceSession.current?.microphoneCall === true,
-      typedAsk: typedExchange.current,
-    });
-    typedExchange.current = false;
-    window.sidecar.setVoiceExchangeActive(active, kind);
-  }, [voiceStatus]);
+    window.sidecar.setVoiceExchangeActive(active, currentExchangeKind);
+  }, [currentExchangeKind, voiceExchangeIsActive]);
 
   useEffect(() => {
     const element = remoteAudio.current;
@@ -1547,8 +1402,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   useEffect(
     () => () => {
       void voiceSession.current?.close();
+      machine.stopActor();
     },
-    [],
+    [machine],
   );
 
   // Derived, not queued: the subjects arrive with the captions and die with
@@ -1595,7 +1451,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     voiceNotice,
     announceVoiceNotice: setVoiceNotice,
     voiceStatus,
-    setVoiceStatus,
     talkOpening,
     voiceHotkey,
     handleVoiceActivity,

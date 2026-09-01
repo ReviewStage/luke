@@ -184,6 +184,7 @@ function harness(
     carryAction?: SessionActionCarrier;
     carryAppAction?: AppActionCarrier;
     carryIssueAction?: IssueActionCarrier;
+    toolsAllowed?: () => boolean;
     idleTimeoutMs?: number;
     captureSessionSync?: boolean;
     /** Lets a test ride the status edges, the way the announcer does. */
@@ -387,6 +388,9 @@ function harness(
       }
       return options.carryAction?.(act) ?? Promise.resolve({ status: "rejected" });
     };
+  }
+  if (options.toolsAllowed) {
+    sessionOptions.toolsAllowed = options.toolsAllowed;
   }
   const session = new RealtimeVoiceSession(sessionOptions);
 
@@ -3152,6 +3156,36 @@ test("a typed ask can carry a tool call, because the developer opened the turn",
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The outcome is voiced, exactly as a spoken ask's would be.
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+});
+
+test("the statechart guard can disarm a developer-shaped tool turn", async () => {
+  let carried = false;
+  const context = harness({
+    toolsAllowed: () => false,
+    carryAction: async () => {
+      carried = true;
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  context.session.sendText("ask claude code to add tests");
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "send_session_message",
+          call_id: "call-1",
+          arguments:
+            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(carried, false);
 });
 
 test("a typed ask interrupts the reply it arrives over", async () => {

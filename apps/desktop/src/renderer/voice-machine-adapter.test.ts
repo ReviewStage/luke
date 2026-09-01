@@ -1,77 +1,74 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PRODUCT_EXCHANGE_KIND } from "@sidecar/analytics";
-import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
-import { selectDuckActive } from "@sidecar/voice-machine";
+import { REALTIME_STATUS } from "@sidecar/realtime";
 import {
-  type LegacyVoiceView,
-  shadowExchangeKind,
-  VoiceMachineShadowAdapter,
+  VOICE_MACHINE_ORIGIN,
+  VOICE_MACHINE_RELEASE,
+  VoiceMachineController,
 } from "./voice-machine-adapter";
 import { voiceMachineInspectionAllowed } from "./voice-machine-inspector";
 
-function view(status: RealtimeStatus, overrides: Partial<LegacyVoiceView> = {}): LegacyVoiceView {
-  return {
-    meetingQuiet: false,
-    microphoneCall: true,
-    microphoneStatus: "granted",
-    outputSilent: false,
-    status,
-    typedExchange: false,
-    ...overrides,
-  };
-}
+test("the controller is the public status and exchange-kind authority", () => {
+  const subject = new VoiceMachineController();
+  subject.setMicrophoneStatus("granted");
+  subject.pressDown();
+  assert.equal(subject.status, REALTIME_STATUS.CONNECTING);
+  assert.equal(subject.talkOpening, true);
+  assert.equal(subject.exchangeKind, PRODUCT_EXCHANGE_KIND.SPOKEN);
 
-test("the shadow adapter preserves typed exchange status, duck, and count meaning", () => {
-  const subject = new VoiceMachineShadowAdapter();
-  assert.deepEqual(subject.sync(view(REALTIME_STATUS.IDLE)), {
-    duckActive: false,
-    status: REALTIME_STATUS.IDLE,
-  });
-  assert.deepEqual(subject.sync(view(REALTIME_STATUS.CONNECTING, { typedExchange: true })), {
-    duckActive: true,
-    status: REALTIME_STATUS.CONNECTING,
-  });
-  assert.equal(shadowExchangeKind(subject), PRODUCT_EXCHANGE_KIND.TYPED);
-  assert.deepEqual(subject.sync(view(REALTIME_STATUS.RESPONDING, { typedExchange: true })), {
-    duckActive: true,
-    status: REALTIME_STATUS.RESPONDING,
-  });
-  assert.deepEqual(subject.sync(view(REALTIME_STATUS.READY)), {
-    duckActive: false,
-    status: REALTIME_STATUS.READY,
-  });
-  subject.stop();
+  subject.observeSessionStatus(REALTIME_STATUS.LISTENING);
+  assert.equal(subject.status, REALTIME_STATUS.LISTENING);
+  subject.pressReleased(VOICE_MACHINE_RELEASE.SEND);
+  assert.equal(subject.status, REALTIME_STATUS.RESPONDING);
+  subject.observeSessionStatus(REALTIME_STATUS.READY);
+  assert.equal(subject.status, REALTIME_STATUS.READY);
+  subject.stopActor();
 });
 
-test("spoken and announcement exchanges keep their existing classifications", () => {
-  const spoken = new VoiceMachineShadowAdapter();
-  spoken.sync(view(REALTIME_STATUS.IDLE));
-  spoken.sync(view(REALTIME_STATUS.CONNECTING));
-  assert.equal(shadowExchangeKind(spoken), PRODUCT_EXCHANGE_KIND.SPOKEN);
-  spoken.sync(view(REALTIME_STATUS.LISTENING));
-  spoken.sync(view(REALTIME_STATUS.RESPONDING));
-  assert.equal(selectDuckActive(spoken.snapshot), true);
-  spoken.stop();
+test("typed and Luke-opened turns preserve count and tool meanings", () => {
+  const typed = new VoiceMachineController();
+  typed.typedAsk();
+  assert.equal(typed.exchangeKind, PRODUCT_EXCHANGE_KIND.TYPED);
+  assert.equal(typed.toolsAllowed, true);
+  assert.equal(typed.microphoneCall, true);
+  typed.stopActor();
 
-  const announcement = new VoiceMachineShadowAdapter();
-  announcement.sync(view(REALTIME_STATUS.IDLE, { microphoneCall: false }));
-  announcement.sync(view(REALTIME_STATUS.CONNECTING, { microphoneCall: false }));
-  assert.equal(shadowExchangeKind(announcement), PRODUCT_EXCHANGE_KIND.ANNOUNCEMENT);
-  announcement.sync(view(REALTIME_STATUS.RESPONDING, { microphoneCall: false }));
-  assert.equal(selectDuckActive(announcement.snapshot), true);
-  announcement.stop();
+  const announcement = new VoiceMachineController();
+  assert.equal(announcement.speakLuke(VOICE_MACHINE_ORIGIN.PROACTIVE), true);
+  assert.equal(announcement.exchangeKind, PRODUCT_EXCHANGE_KIND.ANNOUNCEMENT);
+  assert.equal(announcement.toolsAllowed, false);
+  assert.equal(announcement.microphoneCall, false);
+  announcement.stopActor();
 });
 
-test("parity mismatches are observable without changing the legacy source of truth", () => {
-  const mismatches: RealtimeStatus[] = [];
-  const subject = new VoiceMachineShadowAdapter({
-    onMismatch: (legacy) => mismatches.push(legacy.status),
-  });
-  subject.sync(view(REALTIME_STATUS.IDLE));
-  subject.sync(view(REALTIME_STATUS.READY));
-  assert.deepEqual(mismatches, [REALTIME_STATUS.READY]);
-  subject.stop();
+test("a discarded cold press settles only when its call opens", () => {
+  const subject = new VoiceMachineController();
+  subject.setMicrophoneStatus("granted");
+  subject.pressDown();
+  subject.pressReleased(VOICE_MACHINE_RELEASE.SEND);
+  subject.pressDiscarded();
+  assert.equal(subject.status, REALTIME_STATUS.CONNECTING);
+  assert.equal(subject.talkOpening, false);
+  subject.observeSessionStatus(REALTIME_STATUS.READY);
+  assert.equal(subject.status, REALTIME_STATUS.READY);
+  subject.stopActor();
+});
+
+test("the controller exposes the press buffer owned by the active connect state", () => {
+  const subject = new VoiceMachineController();
+  subject.setMicrophoneStatus("granted");
+  subject.pressDown();
+  const buffer = subject.createPressAudioBuffer();
+  buffer.push(new Int16Array([1, 2, 3]));
+  assert.equal(buffer.isEmpty, false);
+  assert.deepEqual(
+    buffer.drain().map((chunk) => [...chunk]),
+    [[1, 2, 3]],
+  );
+  subject.observeSessionStatus(REALTIME_STATUS.FAILED);
+  assert.throws(() => buffer.push(new Int16Array([4])), /owns no press audio buffer/);
+  subject.stopActor();
 });
 
 test("Stately inspection is opt-in and impossible in packaged, fixture, or capture runs", () => {

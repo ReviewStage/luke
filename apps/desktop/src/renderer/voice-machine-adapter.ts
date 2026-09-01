@@ -1,37 +1,42 @@
 import { PRODUCT_EXCHANGE_KIND, type ProductExchangeKind } from "@sidecar/analytics";
 import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
 import {
+  PRESS_AUDIO_ACTOR_EVENT,
   selectDuckActive,
   selectExchangeKind,
+  selectMicrophoneCall,
   selectRealtimeStatus,
+  selectTalkLatched,
+  selectTalkOpening,
+  selectToolsAllowed,
+  selectTypedTurn,
   VOICE_EXCHANGE_KIND,
   VOICE_MACHINE_EVENT,
   VOICE_MICROPHONE_PERMISSION,
   VOICE_PRESS_RELEASE,
+  VOICE_RESOURCE,
   VOICE_TURN_ORIGIN,
   type VoiceExchangeKind,
+  type VoiceMachineSnapshot,
+  type VoicePressRelease,
+  type VoiceRestart,
+  type VoiceTurnOrigin,
   voiceMachine,
 } from "@sidecar/voice-machine";
-import { createActor, type InspectionEvent, type Observer } from "xstate";
+import { createActor, type InspectionEvent, type Observer, type Subscription } from "xstate";
 import type { MicrophoneStatus } from "#shared/wire/audio";
 
-export interface LegacyVoiceView {
-  meetingQuiet: boolean;
-  microphoneCall: boolean;
-  microphoneStatus: MicrophoneStatus;
-  outputSilent: boolean;
-  status: RealtimeStatus;
-  typedExchange: boolean;
-}
-
-export interface VoiceMachineParity {
-  duckActive: boolean;
-  status: RealtimeStatus;
-}
-
-export interface VoiceMachineAdapterOptions {
+export interface VoiceMachineControllerOptions {
   inspect?: Observer<InspectionEvent>;
-  onMismatch?: (legacy: LegacyVoiceView, chart: VoiceMachineParity) => void;
+  onRestart?: (restart: VoiceRestart) => void;
+}
+
+export interface VoiceMachinePressAudioBuffer {
+  push(chunk: Int16Array): void;
+  drain(): readonly Int16Array[];
+  readonly bufferedMs: number;
+  readonly droppedMs: number;
+  readonly isEmpty: boolean;
 }
 
 const PRODUCT_KIND_BY_VOICE_KIND = {
@@ -58,69 +63,167 @@ function microphonePermission(
     : VOICE_MICROPHONE_PERMISSION.DENIED;
 }
 
-export class VoiceMachineShadowAdapter {
+export class VoiceMachineController {
   readonly #actor;
-  readonly #onMismatch: VoiceMachineAdapterOptions["onMismatch"];
-  #view: LegacyVoiceView | undefined;
 
-  constructor(options: VoiceMachineAdapterOptions = {}) {
-    this.#onMismatch = options.onMismatch;
+  constructor(options: VoiceMachineControllerOptions = {}) {
     this.#actor = createActor(voiceMachine, {
-      input: {},
+      input: {
+        onRestart: options.onRestart,
+      },
       ...(options.inspect ? { inspect: options.inspect } : undefined),
     }).start();
   }
 
-  get snapshot() {
+  get snapshot(): VoiceMachineSnapshot {
     return this.#actor.getSnapshot();
   }
 
-  sync(next: LegacyVoiceView): VoiceMachineParity {
-    const previous = this.#view;
-    this.#view = next;
-    if (previous?.meetingQuiet !== next.meetingQuiet) {
-      this.#actor.send({
-        type: VOICE_MACHINE_EVENT.MEETING_QUIET_CHANGED,
-        active: next.meetingQuiet,
-      });
-    }
-    if (previous?.outputSilent !== next.outputSilent) {
-      this.#actor.send({
-        type: VOICE_MACHINE_EVENT.OUTPUT_SILENCE_CHANGED,
-        silent: next.outputSilent,
-      });
-    }
-    if (previous?.microphoneStatus !== next.microphoneStatus) {
-      const permission = microphonePermission(next.microphoneStatus);
-      if (permission !== undefined) {
-        this.#actor.send({
-          type: VOICE_MACHINE_EVENT.MICROPHONE_PERMISSION_CHANGED,
-          permission,
-        });
-      }
-    }
-    if (previous?.status !== next.status) this.#syncStatus(previous, next);
+  get status(): RealtimeStatus {
+    return selectRealtimeStatus(this.snapshot);
+  }
 
-    const parity = {
-      duckActive: selectDuckActive(this.snapshot),
-      status: selectRealtimeStatus(this.snapshot),
+  get duckActive(): boolean {
+    return selectDuckActive(this.snapshot);
+  }
+
+  get exchangeKind(): ProductExchangeKind | undefined {
+    return productExchangeKind(selectExchangeKind(this.snapshot));
+  }
+
+  get microphoneCall(): boolean {
+    return selectMicrophoneCall(this.snapshot);
+  }
+
+  get talkLatched(): boolean {
+    return selectTalkLatched(this.snapshot);
+  }
+
+  get talkOpening(): boolean {
+    return selectTalkOpening(this.snapshot);
+  }
+
+  get toolsAllowed(): boolean {
+    return selectToolsAllowed(this.snapshot);
+  }
+
+  get typedTurn(): boolean {
+    return selectTypedTurn(this.snapshot);
+  }
+
+  subscribe(observer: () => void): Subscription {
+    return this.#actor.subscribe(observer);
+  }
+
+  setAvailable(available: boolean): void {
+    this.#actor.send({
+      type: available ? VOICE_MACHINE_EVENT.AVAILABILITY_RESTORED : VOICE_MACHINE_EVENT.QUOTA_SPENT,
+    });
+  }
+
+  setMeetingQuiet(active: boolean): void {
+    this.#actor.send({ type: VOICE_MACHINE_EVENT.MEETING_QUIET_CHANGED, active });
+  }
+
+  setMicrophoneStatus(status: MicrophoneStatus): void {
+    const permission = microphonePermission(status);
+    if (permission === undefined) return;
+    this.#actor.send({
+      type: VOICE_MACHINE_EVENT.MICROPHONE_PERMISSION_CHANGED,
+      permission,
+    });
+  }
+
+  setOutputSilent(silent: boolean): void {
+    this.#actor.send({ type: VOICE_MACHINE_EVENT.OUTPUT_SILENCE_CHANGED, silent });
+  }
+
+  pressDown(): void {
+    this.#actor.send({ type: VOICE_MACHINE_EVENT.PRESS_DOWN });
+  }
+
+  pressReleased(release: VoicePressRelease): void {
+    this.#actor.send({ type: VOICE_MACHINE_EVENT.PRESS_RELEASED, release });
+  }
+
+  pressDiscarded(): void {
+    this.#actor.send({ type: VOICE_MACHINE_EVENT.PRESS_DISCARDED });
+  }
+
+  createPressAudioBuffer(): VoiceMachinePressAudioBuffer {
+    const read = () => {
+      let snapshot = { bufferedMs: 0, droppedMs: 0, isEmpty: true };
+      this.#sendToPressAudio({
+        type: PRESS_AUDIO_ACTOR_EVENT.READ,
+        consume: (next) => {
+          snapshot = next;
+        },
+      });
+      return snapshot;
     };
-    const legacyDuck =
-      next.status === REALTIME_STATUS.CONNECTING ||
-      next.status === REALTIME_STATUS.LISTENING ||
-      next.status === REALTIME_STATUS.RESPONDING;
-    if (parity.status !== next.status || parity.duckActive !== legacyDuck) {
-      this.#onMismatch?.(next, parity);
-    }
-    return parity;
+    return {
+      push: (chunk) => {
+        this.#sendToPressAudio({ type: PRESS_AUDIO_ACTOR_EVENT.PUSH, chunk });
+      },
+      drain: () => {
+        let chunks: readonly Int16Array[] = [];
+        this.#sendToPressAudio({
+          type: PRESS_AUDIO_ACTOR_EVENT.DRAIN,
+          consume: (next) => {
+            chunks = next;
+          },
+        });
+        return chunks;
+      },
+      get bufferedMs() {
+        return read().bufferedMs;
+      },
+      get droppedMs() {
+        return read().droppedMs;
+      },
+      get isEmpty() {
+        return read().isEmpty;
+      },
+    };
+  }
+
+  typedAsk(): void {
+    this.#actor.send({ type: VOICE_MACHINE_EVENT.TYPED_ASK });
+  }
+
+  speakLuke(
+    origin: Exclude<VoiceTurnOrigin, "developer-spoken" | "developer-typed" | "introduction">,
+  ): boolean {
+    const before = this.snapshot;
+    this.#actor.send({ type: VOICE_MACHINE_EVENT.SPEAK_LUKE, origin });
+    return this.snapshot !== before;
+  }
+
+  introductionStarted(): void {
+    this.#actor.send({ type: VOICE_MACHINE_EVENT.INTRODUCTION_STARTED });
+  }
+
+  introductionSpeak(): void {
+    this.#actor.send({
+      type: VOICE_MACHINE_EVENT.SPEAK_LUKE,
+      origin: VOICE_TURN_ORIGIN.PROACTIVE,
+    });
+  }
+
+  voiceChanged(live: boolean): void {
+    this.#actor.send({ type: VOICE_MACHINE_EVENT.VOICE_CHANGED, live });
+  }
+
+  restartDeveloperCall(): void {
+    this.#actor.send({ type: VOICE_MACHINE_EVENT.CALL_RESTARTED });
   }
 
   stop(): void {
-    this.#actor.stop();
+    this.#actor.send({ type: VOICE_MACHINE_EVENT.STOP });
   }
 
-  #syncStatus(previous: LegacyVoiceView | undefined, next: LegacyVoiceView): void {
-    switch (next.status) {
+  observeSessionStatus(status: RealtimeStatus): void {
+    switch (status) {
       case REALTIME_STATUS.UNAVAILABLE:
         this.#actor.send({ type: VOICE_MACHINE_EVENT.QUOTA_SPENT });
         return;
@@ -131,70 +234,62 @@ export class VoiceMachineShadowAdapter {
         this.#actor.send({ type: VOICE_MACHINE_EVENT.CALL_CLOSED });
         return;
       case REALTIME_STATUS.CONNECTING:
-        this.#startExchange(next);
         return;
       case REALTIME_STATUS.LISTENING:
-        if (previous?.status === REALTIME_STATUS.CONNECTING) {
+        if (this.status === REALTIME_STATUS.CONNECTING) {
           this.#actor.send({ type: VOICE_MACHINE_EVENT.CALL_CONNECTED });
-          return;
+        } else if (this.status !== REALTIME_STATUS.LISTENING) {
+          this.#actor.send({ type: VOICE_MACHINE_EVENT.PRESS_DOWN });
         }
-        this.#actor.send({ type: VOICE_MACHINE_EVENT.PRESS_DOWN });
         return;
       case REALTIME_STATUS.RESPONDING:
-        if (previous?.status === REALTIME_STATUS.CONNECTING) {
+        if (this.status === REALTIME_STATUS.CONNECTING) {
           this.#actor.send({ type: VOICE_MACHINE_EVENT.CALL_CONNECTED });
-          if (selectRealtimeStatus(this.snapshot) === REALTIME_STATUS.LISTENING) {
-            this.#actor.send({
-              type: VOICE_MACHINE_EVENT.PRESS_RELEASED,
-              release: VOICE_PRESS_RELEASE.SEND,
-            });
-          }
-          return;
-        }
-        if (previous?.status === REALTIME_STATUS.LISTENING) {
-          this.#actor.send({
-            type: VOICE_MACHINE_EVENT.PRESS_RELEASED,
-            release: VOICE_PRESS_RELEASE.SEND,
-          });
-          return;
-        }
-        if (next.typedExchange) {
-          this.#actor.send({ type: VOICE_MACHINE_EVENT.TYPED_ASK });
-        } else {
-          this.#actor.send({
-            type: VOICE_MACHINE_EVENT.SPEAK_LUKE,
-            origin: VOICE_TURN_ORIGIN.PROACTIVE,
-          });
         }
         return;
       case REALTIME_STATUS.READY:
-        if (previous?.status === REALTIME_STATUS.RESPONDING) {
-          this.#actor.send({ type: VOICE_MACHINE_EVENT.REPLY_SETTLED });
-        } else if (previous?.status === REALTIME_STATUS.CONNECTING) {
+        if (this.status === REALTIME_STATUS.CONNECTING) {
+          if (this.talkOpening) return;
           this.#actor.send({ type: VOICE_MACHINE_EVENT.CALL_CONNECTED });
-          if (selectRealtimeStatus(this.snapshot) === REALTIME_STATUS.RESPONDING) {
-            this.#actor.send({ type: VOICE_MACHINE_EVENT.REPLY_SETTLED });
-          }
+        } else if (this.status === REALTIME_STATUS.RESPONDING) {
+          this.#actor.send({ type: VOICE_MACHINE_EVENT.REPLY_SETTLED });
         }
     }
   }
 
-  #startExchange(view: LegacyVoiceView): void {
-    if (view.typedExchange) {
-      this.#actor.send({ type: VOICE_MACHINE_EVENT.TYPED_ASK });
-      return;
-    }
-    if (view.microphoneCall) {
-      this.#actor.send({ type: VOICE_MACHINE_EVENT.PRESS_DOWN });
-      return;
-    }
-    this.#actor.send({
-      type: VOICE_MACHINE_EVENT.SPEAK_LUKE,
-      origin: VOICE_TURN_ORIGIN.PROACTIVE,
-    });
+  stopActor(): void {
+    this.#actor.stop();
+  }
+
+  #sendToPressAudio(
+    event:
+      | {
+          type: typeof PRESS_AUDIO_ACTOR_EVENT.PUSH;
+          chunk: Int16Array;
+        }
+      | {
+          type: typeof PRESS_AUDIO_ACTOR_EVENT.DRAIN;
+          consume: (chunks: readonly Int16Array[]) => void;
+        }
+      | {
+          type: typeof PRESS_AUDIO_ACTOR_EVENT.READ;
+          consume: (snapshot: { bufferedMs: number; droppedMs: number; isEmpty: boolean }) => void;
+        },
+  ): void {
+    const actor = this.snapshot.children[VOICE_RESOURCE.PRESS_AUDIO_BUFFER];
+    if (!actor) throw new Error("The current voice state owns no press audio buffer.");
+    actor.send(event);
   }
 }
 
-export function shadowExchangeKind(adapter: VoiceMachineShadowAdapter) {
-  return productExchangeKind(selectExchangeKind(adapter.snapshot));
-}
+export const VOICE_MACHINE_RELEASE = {
+  LATCH: VOICE_PRESS_RELEASE.LATCH,
+  SEND: VOICE_PRESS_RELEASE.SEND,
+} as const;
+
+export const VOICE_MACHINE_ORIGIN = {
+  ARRIVAL: VOICE_TURN_ORIGIN.ARRIVAL,
+  EVALUATOR: VOICE_TURN_ORIGIN.EVALUATOR,
+  PROACTIVE: VOICE_TURN_ORIGIN.PROACTIVE,
+  TOOL_OUTCOME: VOICE_TURN_ORIGIN.TOOL_OUTCOME,
+} as const;

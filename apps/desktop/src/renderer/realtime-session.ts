@@ -171,7 +171,15 @@ interface LiveContext {
  */
 interface PressCaptureState {
   source: PressCaptureSource | undefined;
-  buffer: PressAudioBuffer;
+  buffer: PressAudioBufferPort;
+}
+
+export interface PressAudioBufferPort {
+  push(chunk: Int16Array): void;
+  drain(): readonly Int16Array[];
+  readonly bufferedMs: number;
+  readonly droppedMs: number;
+  readonly isEmpty: boolean;
 }
 
 /**
@@ -310,6 +318,8 @@ export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbac
   requestConnection(): Promise<RealtimeConnection | undefined>;
   /** Absent means Luke can only speak: every tool call is rejected with a reason. */
   carryAct?: ActCarrier;
+  /** The statechart's turn-origin guard; false keeps every tool call read-only. */
+  toolsAllowed?: () => boolean;
   /**
    * The browser pieces, injectable so the microphone state machine can be
    * exercised without a real device or peer connection. Push-to-talk decides
@@ -323,6 +333,7 @@ export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbac
    * state machine worth testing without a real audio graph.
    */
   createPressCapture?: PressCaptureFactory;
+  createPressAudioBuffer?: () => PressAudioBufferPort;
   exchangeDescription?: (url: string, init: RequestInit) => Promise<Response>;
   /**
    * The session events reasserted once the call opens, defaulting to the
@@ -1289,7 +1300,7 @@ export class RealtimeVoiceSession {
     this.#pressCommitPending = false;
     const capture: PressCaptureState = this.#pressCapture ?? {
       source: undefined,
-      buffer: new PressAudioBuffer(),
+      buffer: this.#options.createPressAudioBuffer?.() ?? new PressAudioBuffer(),
     };
     const buffer = capture.buffer;
     this.#pressCapture = capture;
@@ -1776,7 +1787,7 @@ export class RealtimeVoiceSession {
     this.#audibleSince = undefined;
     // A new turn: only a developer-opened one may run a tool, and any tool
     // follow-up still awaiting from the last turn will see this and stand down.
-    this.#toolTurnArmed = toolsArmed;
+    this.#toolTurnArmed = toolsArmed && (this.#options.toolsAllowed?.() ?? true);
     this.#turnEpoch += 1;
     // A new turn starts with a clean strip; a follow-up continuing the same
     // exchange keeps the words just said, and its own words stack under them.
