@@ -297,12 +297,11 @@ Trust constraints:
   ships rather than hardened. The first of them is what that client captures
   beside a recording: an autocaptured event names the text of whatever was
   clicked, so pressing a session row sends that row's title, recap, and
-  branch, and an unhandled error travels with its message and stack, which can
-  carry a path or a title. Nothing validates either — no allowlist stands
-  between the panel and the provider — and `productEventFromWire` never sees
-  them. Both stop with the recording switch, because the client opts out
+  branch. Nothing validates it — no allowlist stands between the panel and the
+  provider — and `productEventFromWire` never sees it. Autocapture stops with
+  the recording switch, because the client opts out
   rather than only stopping the recorder; a switch that named recording and
-  left these running would be a consent nobody gave.
+  left it running would be a consent nobody gave.
 - The replay stream has the opposite shape from the counted events. Except for
   the conversation History tab, it records the rendered panel, so everything
   drawn travels: a session's title, branch, recap, and error line, the account's
@@ -346,6 +345,20 @@ Trust constraints:
   the event list, a property's value set, or what the recording client may
   capture is a product decision, not an implementation detail, and each one
   widens what a user was never offered a way to decline.
+- Crash reporting is a separate Sentry stream, not one of the three analytics
+  streams above. The Electron SDK reports unhandled exceptions from main,
+  preload, and renderer code, anonymous main-process session health, and native
+  minidumps from Electron's main, renderer, and GPU processes. Its defaults add
+  breadcrumbs and Electron, operating-system, runtime, and device context.
+  Luke supplies no account or user identity and enables no tracing, Replay,
+  screenshots, profiling, PII, or manual handled-error capture. The main
+  process owns its baked DSN and initializes only after Luke's custom
+  `userData` and `sessionData` paths are set; renderer and context-isolated
+  preload events travel through main. The same run-mode network gate keeps
+  fixture and evidence runs silent, while deleting a Luke account neither
+  stops reporting nor identifies earlier anonymous reports for deletion.
+  Widening what Sentry captures is a product decision, not an implementation
+  detail.
 - The conversation Luke holds outlives the app, and one narrower thing beside
   it does too. The thread itself is words that were already said — the
   developer's asks, what Luke spoke or announced, the acts he carried at their

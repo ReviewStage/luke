@@ -23,6 +23,16 @@ if [[ -z "${POSTHOG_PROJECT_API_KEY:-}" ]]; then
     printf 'error: POSTHOG_PROJECT_API_KEY must hold the PostHog project key\n' >&2
     exit 1
 fi
+# The DSN is baked into main while the token lets the three JavaScript builds
+# upload their source maps before electron-builder packages them.
+if [[ -z "${SENTRY_DSN:-}" ]]; then
+    printf 'error: SENTRY_DSN must hold the Sentry project DSN\n' >&2
+    exit 1
+fi
+if [[ -z "${SENTRY_AUTH_TOKEN:-}" ]]; then
+    printf 'error: SENTRY_AUTH_TOKEN must hold the Sentry source-map upload token\n' >&2
+    exit 1
+fi
 
 "$SCRIPT_DIRECTORY/bootstrap.sh"
 "$SCRIPT_DIRECTORY/check.sh"

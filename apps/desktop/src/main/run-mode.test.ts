@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { runModeFor } from "./run-mode";
+import { runModeFor, sentryReportingEnabled } from "./run-mode";
 
 test("a live launch observes, talks, animates, focuses, and may send", () => {
   assert.deepEqual(runModeFor({ capture: false, fixture: false }), {
@@ -41,4 +41,10 @@ test("a capture launch is unattended: no keys, no focus, no motion, no network",
     runModeFor({ capture: true, fixture: true }),
     runModeFor({ capture: true, fixture: false }),
   );
+});
+
+test("Sentry needs both an ordinary network-permitted run and a DSN", () => {
+  assert.equal(sentryReportingEnabled(true, "https://public@sentry.invalid/1"), true);
+  assert.equal(sentryReportingEnabled(true, ""), false);
+  assert.equal(sentryReportingEnabled(false, "https://public@sentry.invalid/1"), false);
 });

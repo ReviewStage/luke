@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 28 August 2026
+Last updated: 1 September 2026
 
 Luke is a macOS app that watches your coding agent sessions. This policy
 explains what we collect, who we send it to, and how to turn it off.
@@ -53,14 +53,24 @@ feedback form. The History tab is blocked from recordings, so neither the words 
 conversation with Luke nor the things he remembers about you are included. Text you type into a field is replaced
 with blocks before the recording leaves your Mac, so an API key or a sign-in
 code you enter is not in it. While recording is on, Luke also reports what you
-clicked, including the text on it, and any error his panel runs into, with its
-message and code path; the fixed list above does not cover those two.
+clicked, including the text on it; the fixed list above does not cover those
+clicks.
 
 Recording starts when Luke opens, before you sign in, so it covers the spoken
 introduction on first launch and the signed-out panel. A recording that begins
 before you sign in is attached to your account if you sign in while it is
 running. One that never reaches a sign-in belongs to nobody, so deleting your
 account does not reach it — we have no way to tell it was yours.
+
+**Crash reports.** In ordinary runs, Luke sends Sentry anonymous reports of
+unhandled exceptions in its Electron main, preload, and renderer code, along
+with anonymous process-session status and native minidumps when an Electron
+main, renderer, or GPU process crashes. Sentry's default reports include the
+exception message and code path, breadcrumbs, and Electron, operating-system,
+runtime, and device context. Luke does not attach your Luke account or user
+identity, and does not enable PII collection, tracing, Sentry Replay,
+screenshots, profiling, or manual reports of handled errors. Fixture and
+evidence runs send no crash reports.
 
 **Provider API keys (server-side vault).** While the "Sync provider keys"
 switch in Settings > Connections is on — it starts on — the provider API keys
@@ -107,8 +117,10 @@ and email you signed it with, and any screenshots you attached.
   availability. Google returns busy times only, so event titles and attendees
   are never available to Luke.
 - PostHog, for usage data and screen recordings. The counts go through our own
-  service; the recordings, and the clicks and errors that ride with them, go
-  from Luke to PostHog directly.
+  service; the recordings and clicks that ride with them go from Luke to
+  PostHog directly.
+- Sentry, for the anonymous exception, process-session, and native crash reports
+  described above.
 - GitHub, to check for updates. These requests are unauthenticated and carry
   nothing about you.
 
@@ -130,7 +142,7 @@ local provider API keys, and calendar access stay on your Mac.
 Local keys and calendar access are encrypted in the macOS Keychain. Provider
 API keys you sync to the hosted service are stored encrypted in our own
 database, as described above. Your account information is held by our own
-service, and usage counts and recordings by PostHog.
+service, usage counts and recordings by PostHog, and crash reports by Sentry.
 
 ## Your choices
 
@@ -147,8 +159,10 @@ service, and usage counts and recordings by PostHog.
   and recordings. It does not reach a recording that was
   never attached to your account, as described above. Luke stops recording for
   the rest of the session, and starts again the next time you open it or sign
-  in. Deleting does not affect your Google or GitHub account, and anything
-  stored only on your Mac stays there until you remove it.
+  in. Sentry reporting continues after deletion, and prior anonymous crash
+  reports cannot be identified as yours and targeted through account deletion.
+  Deleting does not affect your Google or GitHub account, and anything stored
+  only on your Mac stays there until you remove it.
 
 ## Google user data
 

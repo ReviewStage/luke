@@ -15,7 +15,7 @@ import type { SessionReplayBootstrap } from "#shared/wire/session";
  * allowlist: a recording is the rendered panel, so a session title, branch,
  * recap, error line, and the account's own name and address all travel
  * because they are drawn; autocapture puts the text of whatever was clicked
- * on an event; and an unhandled error travels with its message and stack.
+ * on an event.
  * What is typed into a field stays masked by the library's default, and the
  * conversation History tab explicitly blocks its whole subtree with the
  * library's fixed `ph-no-capture` class.
@@ -229,10 +229,8 @@ declare global {
  * field the library's own default, including the input masking documented
  * above. `hasFeatureFlags: false` declines the flag fetch Luke has no use for.
  *
- * What this omits is deliberate and costs nothing: unhandled errors are
- * forced on by `capture_exceptions` client-side, and autocapture answers to a
- * disable flag rather than to a remote yes — which is why clicks and errors
- * arrived throughout, and recordings never did.
+ * Autocapture answers to a disable flag rather than to a remote yes, which is
+ * why clicks arrived throughout and recordings never did.
  */
 function preloadRemoteConfig(key: string): void {
   window._POSTHOG_REMOTE_CONFIG = {
@@ -291,7 +289,7 @@ function startSessionReplay(bootstrap: SessionReplayBootstrap): void {
     // is what takes that path off everything else.
     capture_pageview: false,
     capture_pageleave: false,
-    capture_exceptions: true,
+    capture_exceptions: false,
     person_profiles: "always",
     persistence: "localStorage",
     debug: false,
@@ -339,10 +337,9 @@ function identifyAccount(bootstrap: SessionReplayBootstrap): void {
 /**
  * Opting in and out rather than only starting and stopping the recorder,
  * because this client sends more than recordings. On the library's own
- * configuration it also autocaptures what was clicked and reports unhandled
- * errors, and neither answers to `stopSessionRecording`. A stop has to reach
- * all three — a deleted account whose clicks kept travelling would be the
- * erasure failing to erase.
+ * configuration it also autocaptures what was clicked, and that does not
+ * answer to `stopSessionRecording`. A stop has to reach both — a deleted
+ * account whose clicks kept travelling would be the erasure failing to erase.
  *
  * The opt-in names no event: `$opt_in` counts a consent moving, and nothing
  * here moves one.

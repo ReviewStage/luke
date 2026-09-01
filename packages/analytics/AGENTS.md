@@ -36,7 +36,7 @@ compromised renderer reaches none of the acts.
 `apps/desktop/src/renderer/session-replay.ts` holds the one analytics client
 the app runs, on the library's own configuration, and nothing in this package
 governs a byte of it. Do not let this file's promise be read as covering it.
-Three things leave that way and none is validated here:
+Two things leave that way and neither is validated here:
 
 - The recording itself, which is the rendered panel except for the History
   tab's explicitly blocked `ph-no-capture` subtree — a session's title, branch,
@@ -46,14 +46,13 @@ Three things leave that way and none is validated here:
   rather than a posture the app keeps.
 - Autocaptured events, which name the text of whatever was clicked. Pressing a
   session row sends that row's words.
-- Unhandled exceptions, with their message and stack.
 
-`productEventFromWire` never sees any of them, so a change here cannot make
+`productEventFromWire` never sees either, so a change here cannot make
 them safer and a change there cannot make them unsafe — they were never
 governed.
 
-`PRIVACY.md` describes all three in kind: fixed names and values with no free
+`PRIVACY.md` describes all three analytics streams in kind: fixed names and values with no free
 text for the counts, and a recording of Luke's own panel that shows what the
-panel showed, with the clicks and errors that ride beside it. None of the
+panel showed, with the clicks that ride beside it. None of the
 three has a switch, so that file is the whole of what a user is told. It moves
 when any of them stops being true, not when an event is added.
