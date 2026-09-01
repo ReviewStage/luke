@@ -17,8 +17,12 @@ export {
   isConversationEntryKind,
   maximumConversationEntries,
   maximumConversationEntryLength,
+  maximumStoredConversationEntries,
   recentConversationEntries,
+  retainedConversationEntries,
   sessionActConversationEntry,
+  storedConversationEntry,
+  storedConversationMaximumAgeMs,
   streamingConversationEntry,
 } from "./conversation-history.js";
 export {
@@ -39,6 +43,7 @@ export {
   contextSupersedeEventId,
   contextSupersedeEvents,
   conversationContextEvents,
+  rememberedFactsContextEvents,
   sessionContextEvents,
   sessionContextText,
   workspaceProjectContextEvents,

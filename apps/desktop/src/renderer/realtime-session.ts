@@ -1,3 +1,4 @@
+import { type RememberedFact, rememberedFactsText } from "@sidecar/acts";
 import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabulary";
 import { type AppGuideSnapshot, appGuideContextText, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import type { TrackedIssue } from "@sidecar/issues";
@@ -47,6 +48,7 @@ import {
   realtimeSessionSyncEvents,
   realtimeToolFamily,
   recentConversationEntries,
+  rememberedFactsContextEvents,
   type ScheduledTimer,
   SESSION_TOOL_KIND,
   sessionContextEvents,
@@ -111,6 +113,7 @@ export const VOICE_IDLE_TIMEOUT_MS = 3 * 60_000;
 const CONTEXT_FLUSH_ORDER: readonly ContextItemKind[] = [
   CONTEXT_ITEM_KIND.SESSIONS,
   CONTEXT_ITEM_KIND.CONVERSATION,
+  CONTEXT_ITEM_KIND.MEMORY,
   CONTEXT_ITEM_KIND.WORKSPACE_PROJECTS,
 ];
 
@@ -499,6 +502,8 @@ export class RealtimeVoiceSession {
    * call may only name a setting Luke was actually described as having.
    */
   #guide: AppGuideSnapshot = EMPTY_APP_GUIDE;
+  /** The complete bounded memory list that automatic updates are validated against. */
+  #rememberedFacts: readonly RememberedFact[] = [];
   /**
    * The guide's rendered text, waiting to ride the session instructions, and
    * the text the call's instructions last carried. The guide is not a context
@@ -1713,6 +1718,7 @@ export class RealtimeVoiceSession {
     this.#sessions = [];
     this.#conversationEntries = [];
     this.#guide = EMPTY_APP_GUIDE;
+    this.#rememberedFacts = [];
     this.#workspaceProjects = [];
     this.#issues = undefined;
     // What was said on the call goes with the call. The pending answers go too:
@@ -2097,7 +2103,7 @@ export class RealtimeVoiceSession {
     entries: readonly ConversationEntry[],
     { announced = false }: { announced?: boolean } = {},
   ): void {
-    // The caller may retain the whole current-launch thread for its own UI;
+    // The caller may retain the whole bounded thread for its own UI;
     // this transport accepts only the recent slice that may reach the model.
     this.#conversationEntries = recentConversationEntries(entries);
     if (announced) this.#conversationGrewAnnouncement = true;
@@ -2117,6 +2123,19 @@ export class RealtimeVoiceSession {
     }
     this.#rememberContext(CONTEXT_ITEM_KIND.CONVERSATION, text, (itemId) =>
       conversationContextEvents(text, itemId),
+    );
+  }
+
+  /** Supplies durable facts as silent reply context, separate from conversation history. */
+  updateRememberedFacts(facts: readonly RememberedFact[]): void {
+    this.#rememberedFacts = facts;
+    const text = rememberedFactsText(facts);
+    if (text === undefined) {
+      this.#forgetContext(CONTEXT_ITEM_KIND.MEMORY);
+      return;
+    }
+    this.#rememberContext(CONTEXT_ITEM_KIND.MEMORY, text, (itemId) =>
+      rememberedFactsContextEvents(text, itemId),
     );
   }
 
@@ -2619,7 +2638,7 @@ export class RealtimeVoiceSession {
     // An ask about Luke himself is validated against the guide the app
     // actually provided, then carried by the renderer the same way a session
     // act is: perform, and answer with what became of it.
-    const appAction = appToolAction(call, this.#guide, this.#sessions);
+    const appAction = appToolAction(call, this.#guide, this.#sessions, this.#rememberedFacts);
     if (appAction.status === ACT_RESULT_STATUS.REJECTED) {
       return { status: appAction.status, reason: appAction.reason };
     }

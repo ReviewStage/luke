@@ -1017,7 +1017,7 @@ test("the bounded roster keeps every provider's most recent openable chat", () =
   assert.match(text, /1 more observed session is not listed/);
 });
 
-test("the session is minted with the fourteen acts and nothing wider", () => {
+test("the session is minted with the sixteen acts and nothing wider", () => {
   const config = realtimeSessionConfig();
 
   assert.deepEqual(
@@ -1037,6 +1037,8 @@ test("the session is minted with the fourteen acts and nothing wider", () => {
       REALTIME_TOOL.SHOW_PANEL,
       REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER,
       REALTIME_TOOL.RUN_UPDATE_ACTION,
+      REALTIME_TOOL.REMEMBER_FACT,
+      REALTIME_TOOL.FORGET_FACT,
     ],
   );
   assert.equal(config.tool_choice, "auto");

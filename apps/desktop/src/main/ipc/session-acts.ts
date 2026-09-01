@@ -4,10 +4,15 @@ import {
   type ActEnvelope,
   APP_TOOL_KIND,
   actValidationTarget,
+  holdsRememberedFact,
   ISSUE_TOOL_KIND,
   isCarriedIssueAction,
   isCarriedSessionAction,
+  maximumRememberedFacts,
+  type RememberedFact,
+  rememberedFactText,
   SESSION_TOOL_KIND,
+  withoutRememberedFact,
 } from "@sidecar/acts";
 import {
   PRODUCT_EVENT,
@@ -75,12 +80,46 @@ export interface SessionActsIpcDependencies {
   supersetContext: (identity: SessionIdentity) => SupersetSessionContext | undefined;
   supersetCli: SupersetCli;
   recordProductEvent: RecordProductEvent;
+  /** The remembered entries as the main process holds them, and the write back. */
+  rememberedFacts: () => readonly RememberedFact[];
+  writeRememberedFacts: (facts: readonly RememberedFact[]) => boolean;
 }
 
 type ActAuthorizationDependencies = Pick<
   SessionActsIpcDependencies,
-  "sessionRegistry" | "adapterFor" | "trackedIssues"
+  "sessionRegistry" | "adapterFor" | "trackedIssues" | "rememberedFacts"
 >;
+
+type MemoryWriter = (facts: readonly RememberedFact[]) => boolean;
+
+export function saveRememberedFact(
+  held: readonly RememberedFact[],
+  words: string,
+  replaces: string | undefined,
+  id: string,
+  write: MemoryWriter,
+): readonly RememberedFact[] {
+  const remembered = rememberedFactText(words);
+  if (!remembered) return held;
+  if (replaces !== undefined && !holdsRememberedFact(held, replaces)) return held;
+  const retained = replaces ? withoutRememberedFact(held, replaces) : held;
+  if (retained.some((fact) => fact.words === remembered)) {
+    return retained.length === held.length || !write(retained) ? held : retained;
+  }
+  if (replaces === undefined && held.length >= maximumRememberedFacts) return held;
+  const next = [...retained, { id, words: remembered }];
+  return write(next) ? next : held;
+}
+
+export function forgetRememberedFact(
+  held: readonly RememberedFact[],
+  id: string,
+  write: MemoryWriter,
+): readonly RememberedFact[] {
+  if (!holdsRememberedFact(held, id)) return held;
+  const next = withoutRememberedFact(held, id);
+  return write(next) ? next : held;
+}
 
 /** Revalidates the renderer's act envelope against the main process's latest observations. */
 export function authorizeActEnvelope(
@@ -157,6 +196,18 @@ export function authorizeActEnvelope(
   if (target === ACT_VALIDATION_TARGET.UPDATE_ROW && act.kind !== APP_TOOL_KIND.UPDATE) {
     return { status: ACT_RESULT_STATUS.REJECTED, reason: "No such update act exists." };
   }
+  // The renderer validated the named entry against the list it was shown; this
+  // is the same check against the list the main process actually holds, which
+  // is the one the write lands on. A new entry names no prior id.
+  if (target === ACT_VALIDATION_TARGET.REMEMBERED_FACT) {
+    if (act.kind !== APP_TOOL_KIND.REMEMBER && act.kind !== APP_TOOL_KIND.FORGET) {
+      return { status: ACT_RESULT_STATUS.REJECTED, reason: "No such memory act exists." };
+    }
+    const named = act.kind === APP_TOOL_KIND.FORGET ? act.id : act.replaces;
+    if (named !== undefined && !holdsRememberedFact(dependencies.rememberedFacts(), named)) {
+      return { status: ACT_RESULT_STATUS.REJECTED, reason: "Nothing remembered goes by that id." };
+    }
+  }
   return { status: ACT_RESULT_STATUS.ACCEPTED };
 }
 
@@ -178,6 +229,8 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     supersetContext,
     supersetCli,
     recordProductEvent,
+    rememberedFacts,
+    writeRememberedFacts,
   } = dependencies;
   const registerAction = createActionHandler({
     ipcMain,
@@ -194,8 +247,28 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     });
 
   registerHandler(BRIDGE.authorizeAct, (envelope: ActEnvelope) =>
-    authorizeActEnvelope(envelope, { sessionRegistry, adapterFor, trackedIssues }),
+    authorizeActEnvelope(envelope, {
+      sessionRegistry,
+      adapterFor,
+      trackedIssues,
+      rememberedFacts,
+    }),
   );
+
+  /** The local writes behind automatic memory, returning only what actually persisted. */
+  registerHandler(BRIDGE.rememberFact, (words: string, replaces: string | undefined) => {
+    return saveRememberedFact(
+      rememberedFacts(),
+      words,
+      replaces,
+      randomUUID(),
+      writeRememberedFacts,
+    );
+  });
+
+  registerHandler(BRIDGE.forgetFact, (id: string) => {
+    return forgetRememberedFact(rememberedFacts(), id, writeRememberedFacts);
+  });
   /**
    * Counts an act that actually landed. It takes the result rather than
    * sitting inside `performSessionAct`, because a Superset-managed session

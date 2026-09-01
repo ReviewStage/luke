@@ -20,9 +20,11 @@ import {
   activeVoiceStream,
   authorizeConversationAct,
   conversationEntryBelongsToConversation,
+  conversationHistoryMayPersist,
   liveConversationEntries,
   liveSpeedApplies,
   lukeCaptionsToShow,
+  rebaseSpokenTurnMarks,
   replyIssueMentions,
   replyMentions,
   spokenAskBelongsToConversation,
@@ -36,6 +38,7 @@ import {
   voiceExchangeKind,
   voiceNoticeToShow,
   voiceRestartAction,
+  waitForConversationContext,
   waveformVoice,
 } from "./use-voice-conversation";
 import { WAVEFORM_VOICE } from "./waveform";
@@ -117,6 +120,37 @@ test("a gone call takes its half-transcribed previews with it", () => {
   assert.equal(spokenAskPreviewSurvives(REALTIME_STATUS.READY), true);
   assert.equal(spokenAskPreviewSurvives(REALTIME_STATUS.LISTENING), true);
   assert.equal(spokenAskPreviewSurvives(REALTIME_STATUS.RESPONDING), true);
+});
+
+test("restore anchors pending speech and is the first point history may persist", () => {
+  const restoredTail = { kind: "reply", words: "Earlier reply." } as const;
+  const unanchored = { after: undefined };
+  const anchored = { after: { kind: "reply", words: "Current reply." } as const };
+
+  rebaseSpokenTurnMarks([unanchored, anchored], restoredTail);
+
+  assert.equal(unanchored.after, restoredTail);
+  assert.equal(anchored.after.words, "Current reply.");
+  assert.equal(conversationHistoryMayPersist(false, false), false);
+  assert.equal(conversationHistoryMayPersist(true, true), false);
+  assert.equal(conversationHistoryMayPersist(true, false), true);
+});
+
+test("the first call waits for durable conversation context", async () => {
+  const waiters = new Set<() => void>();
+  let settled = false;
+  const waiting = waitForConversationContext(false, waiters).then(() => {
+    settled = true;
+  });
+  await Promise.resolve();
+  assert.equal(settled, false);
+  for (const resolve of waiters) resolve();
+  await waiting;
+  assert.equal(settled, true);
+
+  const readyWaiters = new Set<() => void>();
+  await waitForConversationContext(true, readyWaiters);
+  assert.equal(readyWaiters.size, 0);
 });
 
 test("an authorization that outlives Clear cannot record its act", async () => {

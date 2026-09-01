@@ -3,7 +3,8 @@ import {
   type AccountProvider,
   type AccountSnapshot,
 } from "@sidecar/account/snapshot";
-import { type ActEnvelope, isActEnvelope } from "@sidecar/acts";
+import type { RememberedFact } from "@sidecar/acts";
+import { type ActEnvelope, isActEnvelope, isRememberedFacts } from "@sidecar/acts";
 import {
   isProductExchangeKind,
   isProductSurfaceEventName,
@@ -32,10 +33,10 @@ import {
 import {
   type ConversationEntry,
   type IssueToolAction,
-  isConversationEntryKind,
   type RealtimeConnection,
   type RealtimeDiagnostics,
   type SessionAnnouncement,
+  storedConversationEntry,
 } from "@sidecar/realtime";
 import {
   isProviderId,
@@ -180,18 +181,6 @@ function isSessionIdentity(value: unknown): value is SessionIdentity {
     isProviderId(wire.providerId) &&
     isWireString(wire.providerSessionId) &&
     wire.providerSessionId.length > 0
-  );
-}
-
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This function parses an IPC field into a domain history line.
-function isConversationEntry(value: unknown): value is ConversationEntry {
-  const wire = wireValue(value);
-  if (!isRecord(wire)) return false;
-  if (!isConversationEntryKind(wire.kind) || !isWireString(wire.words)) return false;
-  if (wire.identity !== undefined && !isSessionIdentity(wire.identity)) return false;
-  return (
-    wire.recordedAt === undefined ||
-    (isWireNumber(wire.recordedAt) && Number.isFinite(wire.recordedAt))
   );
 }
 
@@ -540,6 +529,21 @@ export const BRIDGE = {
     ),
     result: result<ProviderControlResult>(),
   }),
+  /** Memory writes return the complete list that actually persisted. */
+  rememberFact: entry({
+    kind: "invoke",
+    channel: "app:remember-fact",
+    args: args<[string, string?]>(
+      (v) => v.length >= 1 && v.length <= 2 && isWireString(v[0]) && optionalString(v[1]),
+    ),
+    result: result<readonly RememberedFact[]>(isRememberedFacts),
+  }),
+  forgetFact: entry({
+    kind: "invoke",
+    channel: "app:forget-fact",
+    args: oneString,
+    result: result<readonly RememberedFact[]>(isRememberedFacts),
+  }),
   createSessionWorkspace: entry({
     kind: "invoke",
     channel: "app:create-session-workspace",
@@ -649,14 +653,24 @@ export const BRIDGE = {
     kind: "send",
     channel: "app:report-conversation-history",
     args: args<[readonly ConversationEntry[]]>(
-      (v) => v.length === 1 && Array.isArray(v[0]) && v[0].every(isConversationEntry),
+      (v) =>
+        v.length === 1 &&
+        Array.isArray(v[0]) &&
+        v[0].every((entry) => {
+          const stored = storedConversationEntry(entry);
+          return (
+            stored !== undefined &&
+            (stored.identity === undefined || isSessionIdentity(stored.identity))
+          );
+        }),
     ),
   }),
-  /** The History Clear press, relayed so every display lets the same thread go. */
-  reportConversationHistoryCleared: entry({
-    kind: "send",
-    channel: "app:report-conversation-history-cleared",
+  /** The History Clear press, persisted and relayed to every other display. */
+  clearConversationHistory: entry({
+    kind: "invoke",
+    channel: "app:clear-conversation-history",
     args: noArgs,
+    result: result<boolean>(isWireBoolean),
   }),
   /**
    * Words the renderer already draws, placed on this machine's clipboard and
@@ -775,6 +789,12 @@ export const BRIDGE = {
     channel: "app:settings-changed",
     args: noArgs,
     result: result<AppSettings>(),
+  }),
+  onRememberedFactsChanged: entry({
+    kind: "subscribe",
+    channel: "app:remembered-facts-changed",
+    args: noArgs,
+    result: result<readonly RememberedFact[]>(isRememberedFacts),
   }),
   onAccountChanged: entry({
     kind: "subscribe",

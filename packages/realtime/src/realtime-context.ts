@@ -261,6 +261,7 @@ export function sessionContextText(sessions: readonly Session[], now: number = D
 export const CONTEXT_ITEM_KIND = {
   SESSIONS: "sessions",
   CONVERSATION: "conversation",
+  MEMORY: "memory",
   WORKSPACE_PROJECTS: "workspace-projects",
 } as const;
 
@@ -363,6 +364,11 @@ export function sessionContextEvents(
  */
 export function conversationContextEvents(text: string, itemId: string): readonly WireRecord[] {
   return [labeledContextEvent("recent conversation, sent automatically", text, itemId)];
+}
+
+/** Carries durable personal memory as silent reply context, never authority to act. */
+export function rememberedFactsContextEvents(text: string, itemId: string): readonly WireRecord[] {
+  return [labeledContextEvent("durable personal memory", text, itemId)];
 }
 
 /** How many projects one context update may offer workspace creation in. */

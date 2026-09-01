@@ -19,8 +19,12 @@ import {
   isConversationEntryKind,
   maximumConversationEntries,
   maximumConversationEntryLength,
+  maximumStoredConversationEntries,
   recentConversationEntries,
+  retainedConversationEntries,
   sessionActConversationEntry,
+  storedConversationEntry,
+  storedConversationMaximumAgeMs,
   streamingConversationEntry,
 } from "./conversation-history.js";
 import { SESSION_NO_LONGER_OBSERVED_NOTE } from "./realtime-protocol.js";
@@ -103,7 +107,7 @@ test("every way into the thread stamps when the line was recorded", () => {
   assert.ok(!conversationHistoryText(placed, [])?.includes(String(placed[0]?.recordedAt)));
 });
 
-test("the current-launch thread keeps every entry while model context stays recent", () => {
+test("the retained thread keeps more entries than model context", () => {
   let thread: readonly ConversationEntry[] = [];
   for (let index = 0; index < maximumConversationEntries + 3; index += 1) {
     thread = appendConversationThreadEntry(thread, {
@@ -239,7 +243,7 @@ test("a spoken ask reads as the developer's own words, said rather than typed", 
   assert.match(text, /^- the developer said: "how is the checkout agent doing\?"$/m);
 });
 
-test("a delayed spoken ask keeps its place in the full current-launch thread", () => {
+test("a delayed spoken ask keeps its place in the retained thread", () => {
   const prior: ConversationEntry = {
     kind: CONVERSATION_ENTRY_KIND.REPLY,
     words: "Earlier reply.",
@@ -354,6 +358,93 @@ test("a line whose session left the roster keeps its words and says the session 
   );
   assert.ok(aboutNoSession);
   assert.doesNotMatch(aboutNoSession, /no longer observed/);
+});
+
+test("a thread restored from a past launch renders with no identity at all", () => {
+  // Across a launch this is the ordinary case rather than the exception: every
+  // session the last conversation named has a fresh roster to be absent from,
+  // and none of those lines may still offer an identity to a tool call.
+  const restored = [
+    {
+      kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
+      words: "how is checkout going",
+      recordedAt: 1_800_000_000_000,
+    },
+    {
+      kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+      words: "Claude Code finished checkout-service.",
+      identity: { providerId: "claude-code", providerSessionId: "yesterdays-session" },
+      recordedAt: 1_800_000_000_000,
+    },
+  ] satisfies ConversationEntry[];
+
+  const text = conversationHistoryText(restored, []);
+
+  assert.ok(text);
+  assert.match(text, /how is checkout going/);
+  assert.match(text, /finished checkout-service/);
+  assert.doesNotMatch(text, /provider_id=/);
+});
+
+test("a stored line reads back, and retention cuts by age and by count", () => {
+  const now = 1_800_000_000_000;
+  const line = {
+    kind: CONVERSATION_ENTRY_KIND.REPLY,
+    words: "two agents are working",
+    recordedAt: now,
+  };
+  assert.deepEqual(storedConversationEntry(JSON.parse(JSON.stringify(line))), line);
+  assert.equal(
+    storedConversationEntry({ kind: "invented", words: "no", recordedAt: now }),
+    undefined,
+  );
+  assert.equal(
+    storedConversationEntry({ kind: CONVERSATION_ENTRY_KIND.REPLY, words: line.words }),
+    undefined,
+  );
+  assert.equal(storedConversationEntry({ ...line, words: " two agents " }), undefined);
+  assert.equal(
+    storedConversationEntry({ ...line, identity: { providerId: "claude-code" } }),
+    undefined,
+  );
+
+  const stale = { ...line, recordedAt: now - storedConversationMaximumAgeMs - 1 };
+  assert.deepEqual(retainedConversationEntries([stale, line], now), [line]);
+
+  const many = Array.from({ length: maximumStoredConversationEntries + 5 }, (_, index) => ({
+    ...line,
+    words: `line ${index}`,
+  }));
+  assert.equal(retainedConversationEntries(many, now).length, maximumStoredConversationEntries);
+});
+
+test("the live thread obeys the same count and age retention as storage", () => {
+  const now = 1_800_000_000_000;
+  let entries: readonly ConversationEntry[] = [];
+  for (let index = 0; index <= maximumStoredConversationEntries; index += 1) {
+    entries = appendConversationThreadEntry(
+      entries,
+      { kind: CONVERSATION_ENTRY_KIND.REPLY, words: `line ${index}` },
+      now,
+    );
+  }
+  assert.equal(entries.length, maximumStoredConversationEntries);
+  assert.equal(entries[0]?.words, "line 1");
+  assert.deepEqual(
+    retainedConversationEntries(entries, now + storedConversationMaximumAgeMs + 1),
+    [],
+  );
+});
+
+test("an appended line carries retention's clock without it reaching the model", () => {
+  const now = 1_800_000_000_000;
+  const entries = appendConversationEntry(
+    [],
+    { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "what is running" },
+    now,
+  );
+  assert.equal(entries[0]?.recordedAt, now);
+  assert.doesNotMatch(conversationHistoryText(entries, []) ?? "", /1800000000000/);
 });
 
 test("an empty history says nothing at all", () => {

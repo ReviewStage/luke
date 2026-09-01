@@ -8,6 +8,7 @@ import {
   accountGateOpen,
   HostedVaultClient,
 } from "@sidecar/account";
+import type { RememberedFact } from "@sidecar/acts";
 import {
   PRODUCT_CREDENTIAL_SOURCE,
   PRODUCT_DIAGNOSTIC_KIND,
@@ -155,6 +156,15 @@ import { registerSettingsRowsIpc } from "./ipc/settings-rows";
 import { registerTrackerConnectionIpc } from "./ipc/tracker-connection";
 import { registerVoiceRuntimeIpc } from "./ipc/voice-runtime";
 import { registerWindowSurfaceIpc } from "./ipc/window-surface";
+import {
+  CONVERSATION_FILE,
+  conversationFromStored,
+  conversationRecord,
+  mergeConversationHistory,
+  REMEMBERED_FACTS_FILE,
+  rememberedFactsFromStored,
+  rememberedFactsRecord,
+} from "./memory-flow";
 import { MediaDuckController } from "./native/media-duck";
 import { MicrophoneRouteWatcher } from "./native/microphone-route";
 import { OutputVolumeWatcher } from "./native/output-volume";
@@ -448,15 +458,12 @@ const heldEvaluatorSpeech = new SessionNoticeHold<SessionAnnouncement>();
  */
 let meetingQuietActive = false;
 /**
- * The launch's conversation history, one thread shared by every panel window.
- * Held in memory alone like the renderer copies it mirrors: written to no
- * disk, dying with the app, never read by anything here — the main process
- * only relays it between windows and seeds a panel that opens late. Each
- * window reports the whole thread after a line it appended, and the last
- * report wins, which is the conversation's own shape: one developer holds
- * one exchange at a time.
+ * The conversation history, one retained thread shared by every panel window
+ * and persisted for the next launch. The main process merges whole-window
+ * snapshots before relaying them, so one display cannot erase another's line.
  */
 let conversationHistory: readonly ConversationEntry[] = [];
+let conversationClearedAt: number | undefined;
 // Notices come from status edges the registry observed, never from anything a
 // model decided, so they work — and matter most — with no evaluator configured.
 const sessionNoticeTracker = new SessionNoticeTracker();
@@ -810,6 +817,59 @@ function writeArrivalState(state: ArrivalState): void {
     );
   }
 }
+
+/**
+ * What Luke keeps across launches: the conversation thread and personal
+ * memory. Both are read once at launch and written
+ * back on every change, and neither is touched by a fixture or capture run —
+ * a deterministic run must draw the same panel every time, and an evidence
+ * PNG carrying a real conversation is the same mistake as a fixture copied
+ * from a real session.
+ */
+const conversationPath = () => path.join(app.getPath("userData"), CONVERSATION_FILE);
+const rememberedFactsPath = () => path.join(app.getPath("userData"), REMEMBERED_FACTS_FILE);
+
+function readStoredState(at: string): string | undefined {
+  try {
+    return fs.readFileSync(at, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+function writeStoredState(at: string, contents: string, what: string): boolean {
+  const temporary = `${at}.tmp`;
+  try {
+    fs.writeFileSync(temporary, contents, { mode: 0o600 });
+    fs.chmodSync(temporary, 0o600);
+    fs.renameSync(temporary, at);
+    return true;
+  } catch (error) {
+    try {
+      fs.rmSync(temporary, { force: true });
+    } catch {
+      // The original write failure is the useful one to report.
+    }
+    process.stderr.write(
+      `Could not persist ${what}: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    return false;
+  }
+}
+
+function removeStoredState(at: string, what: string): boolean {
+  try {
+    fs.rmSync(at, { force: true });
+    return true;
+  } catch (error) {
+    process.stderr.write(
+      `Could not clear ${what}: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    return false;
+  }
+}
+
+let rememberedFacts: readonly RememberedFact[] = [];
 
 /** Whether an attempt to speak the arrival beat is already under way. */
 let arrivalBeatSpeaking = false;
@@ -1407,27 +1467,46 @@ function registerIpc(): void {
         calendars: accountCapabilitiesActive() ? observedCalendars : [],
         meetingQuiet: accountCapabilitiesActive() && meetingQuietActive,
         conversationHistory,
+        rememberedFacts,
         sessionReplay: await sessionReplayBootstrap(),
         settings: await settingsStore.snapshot(),
       };
     },
   );
-  // The conversation history's relay between windows. The main process holds
-  // the thread and passes it along; it never reads a line, and the sender is
-  // excluded because it already drew what it reported — an echo could regress
-  // a window that appended again while its report was in flight.
+  // The conversation history's relay between windows and durable store.
   registerBridge(
     BRIDGE,
     {
       reportConversationHistory(context, entries) {
-        conversationHistory = entries;
-        const payload: ConversationHistoryPayload = { entries, cleared: false };
+        const now = Date.now();
+        const merged = runMode.observesProviders
+          ? mergeConversationHistory(conversationHistory, entries, conversationClearedAt, now)
+          : entries;
+        if (runMode.observesProviders) {
+          const persisted =
+            merged.length === 0
+              ? removeStoredState(conversationPath(), "the conversation")
+              : writeStoredState(
+                  conversationPath(),
+                  conversationRecord(merged, now),
+                  "the conversation",
+                );
+          if (!persisted) return;
+        }
+        conversationHistory = merged;
+        const payload: ConversationHistoryPayload = { entries: merged, cleared: false };
         panels.broadcast(channels.onConversationHistoryChanged, payload, context.sender);
       },
-      reportConversationHistoryCleared(context) {
+      clearConversationHistory(context) {
+        if (runMode.observesProviders) {
+          const clearedAt = Date.now();
+          if (!removeStoredState(conversationPath(), "the conversation")) return false;
+          conversationClearedAt = clearedAt;
+        }
         conversationHistory = [];
         const payload: ConversationHistoryPayload = { entries: [], cleared: true };
         panels.broadcast(channels.onConversationHistoryChanged, payload, context.sender);
+        return true;
       },
     },
     { ipcMain, trustedSender },
@@ -1628,6 +1707,16 @@ function registerIpc(): void {
       ),
     supersetCli,
     recordProductEvent,
+    rememberedFacts: () => rememberedFacts,
+    writeRememberedFacts: (facts) => {
+      if (!runMode.observesProviders) return false;
+      if (!writeStoredState(rememberedFactsPath(), rememberedFactsRecord(facts), "Luke's memory")) {
+        return false;
+      }
+      rememberedFacts = facts;
+      panels.broadcast(channels.onRememberedFactsChanged, facts);
+      return true;
+    },
   });
 
   // A note to the founders travels one road: typed in the composer, validated
@@ -2549,6 +2638,16 @@ export function startDesktopApp(): void {
       // sign-out lands on the ordinary gate instead of a first meeting.
       if (shouldBackfillIntroductionCompletion(introductionInput)) markIntroductionComplete();
       arrivalState = arrivalStateFromDisk();
+      // Read once, here, so the first bootstrap already carries them: a panel
+      // that opened on an empty History and filled it a beat later would read
+      // as a conversation arriving rather than one resumed.
+      if (runMode.observesProviders) {
+        conversationHistory = conversationFromStored(
+          readStoredState(conversationPath()),
+          Date.now(),
+        );
+        rememberedFacts = rememberedFactsFromStored(readStoredState(rememberedFactsPath()));
+      }
       // A signed-in install with no arrival record predates the beat: its
       // sign-in was never observed, so it is settled now rather than greeted
       // as an arrival on some later sign-in months in.

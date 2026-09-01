@@ -300,12 +300,13 @@ Trust constraints:
   bytes and which input masking does not reach. The one thing withheld is what
   is typed into a field, and that is the library's default rather than a
   posture Luke keeps. The one explicit blocked subtree is History: its root
-  carries the recording library's fixed blocking class, so the conversation's
-  words do not leave the machine in a recording. That view retains every
-  bounded line from the current app launch, including session acts, until the
-  developer clears it or quits — the same thread on every display's panel,
-  relayed between the windows through the main process and living nowhere but
-  in memory — while only the 20 most recent lines enter model context. There
+  carries the recording library's fixed blocking class, so neither the
+  conversation's words nor the entries Luke was asked to remember leave the
+  machine in a recording. That view retains every bounded line the retention
+  policy holds, including session acts and the lines that outlived the last
+  launch, until the developer clears it — the same thread on every display's
+  panel, relayed between windows through the main process — while only the 20
+  most recent lines enter model context. There
   is no general masking module to consult and nothing that makes any other new
   component silent by construction, so what a recording may see is decided by
   what the panel draws or explicitly blocks — which makes drawing something
@@ -334,6 +335,32 @@ Trust constraints:
   the event list, a property's value set, or what the recording client may
   capture is a product decision, not an implementation detail, and each one
   widens what a user was never offered a way to decline.
+- The conversation Luke holds outlives the app, and one narrower thing beside
+  it does too. The thread itself is words that were already said — the
+  developer's asks, what Luke spoke or announced, the acts he carried at their
+  ask — each of which reached the voice service once on the call that said it,
+  so storing it changes only how long it stands, not what it is. It lives in
+  Luke's own application data, never a provider's file, under a real retention
+  policy replacing the old "dies with the app": the 200 most recent lines,
+  nothing older than a fortnight. What reaches a model is unchanged — the same
+  bounded recent slice — and the panel's Clear reaches the file as well as the
+  screen, because a Clear that emptied only the view would leave the words on
+  the machine with nothing left to draw them. The narrower thing is a durable
+  fact about the developer themselves. During a turn the developer opened,
+  Luke may silently keep a concise stable preference, personal fact, goal, or
+  recurring constraint. He skips transient details and uncertain inferences,
+  never stores credentials, and stores a sensitive fact only when explicitly
+  asked. The write runs the same act gauntlet as every other write — validated
+  in the renderer, validated again in the main process, and armed only by a
+  developer-opened turn. A changed fact names the entry it replaces so
+  contradictions do not stand together; duplicates add nothing; and a request
+  to forget names one of the ids the conversation received. At most 32 bounded
+  facts stand in Luke's own application data and the complete list enters each
+  conversation as reply context. It is never drawn, never reaches a provider
+  file, never reaches a write path, and never reaches the attention evaluator,
+  whose input stays what a provider wrote about a session. Widening either —
+  what may be stored, how long it stands, or where it may travel — is a
+  product decision, not an implementation detail.
 - The development trace is the one place Luke's own agent traffic may reach a
   file, and it cannot exist for a user: only an unpackaged, live run whose
   shell set `LUKE_TRACE_DIR` constructs a writer at all, so a packaged build
@@ -579,8 +606,9 @@ What Luke may show:
   call that said it; a transcript reading enters the history only as the fact
   that one was read, never a word of the rendering; each line's identity is
   the roster-validated one the words traveled with, offered only while that
-  session is still observed; and the history lives in memory alone, written
-  to no disk, dying with the app, and never sent on Luke's speak-only call. Its
+  session is still observed; and the history is stored only where the constraint
+  above puts it, on this machine and under its retention policy, and is never
+  sent on Luke's speak-only call. Its
   trigger is a deterministic status edge, the arrival beat's one recorded
   sign-in edge, or the evaluator finding an update worth speaking. The edge
   announcements and approved evaluator sentences speak whenever voice can.

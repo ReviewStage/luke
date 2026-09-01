@@ -1,3 +1,4 @@
+import type { RememberedFact } from "@sidecar/acts";
 import { PRODUCT_EXCHANGE_KIND, type ProductExchangeKind } from "@sidecar/analytics";
 import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import { FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
@@ -21,8 +22,10 @@ import {
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
   recentConversationEntries,
+  retainedConversationEntries,
   SESSION_TOOL_KIND,
   sessionActConversationEntry,
+  storedConversationMaximumAgeMs,
   streamingConversationEntry,
 } from "@sidecar/realtime";
 import {
@@ -358,6 +361,28 @@ export function liveConversationEntries(input: {
   return lines;
 }
 
+/** Moves turns opened before restore behind the restored thread. */
+export function rebaseSpokenTurnMarks(
+  marks: readonly { after: ConversationEntry | undefined }[],
+  restoredTail: ConversationEntry,
+): void {
+  for (const mark of marks) mark.after ??= restoredTail;
+}
+
+/** Stored history may change only after restore and outside a pending Clear. */
+export function conversationHistoryMayPersist(seeded: boolean, clearing: boolean): boolean {
+  return seeded && !clearing;
+}
+
+/** Holds the first call until bootstrap has supplied its durable reply context. */
+export function waitForConversationContext(
+  ready: boolean,
+  waiters: Set<() => void>,
+): Promise<void> {
+  if (ready) return Promise.resolve();
+  return new Promise((resolve) => waiters.add(resolve));
+}
+
 /** Captures the reply that owns an act before main-process authorization can pause it. */
 export async function authorizeConversationAct<T>(
   activeReplyGeneration: { readonly current: number | undefined },
@@ -483,6 +508,10 @@ export interface VoiceConversationOptions {
    * {@link openSession}.
    */
   carryAppAction: AppActionCarrier;
+  /** Whether restored history and personal memory are ready for the first turn. */
+  conversationContextReady: boolean;
+  /** Durable personal memory supplied at bootstrap and kept current by pushes. */
+  rememberedFacts: readonly RememberedFact[];
 }
 
 export interface VoiceConversation {
@@ -515,13 +544,12 @@ export interface VoiceConversation {
   stopMicrophone: () => Promise<void>;
   askLuke: (text: string) => Promise<string | undefined>;
   /**
-   * Every bounded line from this app launch — the same thread on every
-   * display's panel, relayed through the main process and living nowhere but
-   * in memory; the model receives a recent slice and the whole view
-   * disappears on exit.
+   * Every bounded line the thread holds — this launch's and, ahead of them,
+   * what the last launch left within the retention policy — shared across
+   * every display's panel. The model still receives only the recent slice.
    */
   conversationHistory: readonly ConversationEntry[];
-  /** Clears the visible history and the context handed to the next call. */
+  /** Clears the visible history, the next call's context, and the stored file. */
   clearConversationHistory: () => void;
   /**
    * The lines still being said, for History to draw under the settled thread:
@@ -642,6 +670,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const workspaceProjectDefaultsRef = useRef(options.workspaceProjectDefaults);
   const guideRef = useRef<AppGuideSnapshot>(EMPTY_APP_GUIDE);
   const issuesRef = useRef<readonly TrackedIssue[] | undefined>(undefined);
+  /** The remembered entries an automatic replacement or removal is validated against. */
+  const rememberedFactsRef = useRef(options.rememberedFacts);
   // The same roster as state, because the issue chips are derived from it and
   // a derivation only reruns on what React can see change.
   const [trackedIssues, setTrackedIssues] = useState<readonly TrackedIssue[] | undefined>(
@@ -657,11 +687,26 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * goes with its teardown.
    */
   const conversationRef = useRef<readonly ConversationEntry[]>([]);
+  const conversationContextWaitersRef = useRef(new Set<() => void>());
+  /**
+   * Whether the stored thread has been placed. Once, at the first bootstrap
+   * that carries one: a second seeding would re-add lines the developer had
+   * already cleared, and a launch that clears before the bootstrap lands must
+   * stay cleared.
+   */
+  const conversationSeeded = useRef(false);
+  /** Whether a Clear's deletion is still in flight, so nothing may rewrite it. */
+  const conversationClearing = useRef(false);
   /** Rises when Clear retires every event that began before that press. */
   const conversationGenerationRef = useRef(0);
   // State is the ref's identical drawn copy, so History retains the whole
   // current launch even though a call receives only the recent context slice.
   const [conversationHistory, setConversationHistory] = useState<readonly ConversationEntry[]>([]);
+  useEffect(() => {
+    if (!options.conversationContextReady) return;
+    for (const resolve of conversationContextWaitersRef.current) resolve();
+    conversationContextWaitersRef.current.clear();
+  }, [options.conversationContextReady]);
   /** Where each server-identified spoken turn belongs when its transcript returns. */
   const spokenTurnMarksRef = useRef(
     new Map<
@@ -714,6 +759,37 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, []);
 
   /**
+   * Draws, re-feeds, and persists the same retained thread. Clear uses its own
+   * acknowledged path below so the screen cannot outrun the deletion.
+   */
+  const publishConversation = useCallback((announced = false) => {
+    conversationRef.current = retainedConversationEntries(conversationRef.current, Date.now());
+    setConversationHistory(conversationRef.current);
+    voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current), {
+      announced,
+    });
+    // Before the restore this thread is only part of itself, and while a Clear
+    // is in flight the file it would write is already being deleted: either
+    // write would stand in for a thread nobody has.
+    if (conversationHistoryMayPersist(conversationSeeded.current, conversationClearing.current)) {
+      window.sidecar.reportConversationHistory(conversationRef.current);
+    }
+  }, []);
+
+  useEffect(() => {
+    const expiresAt = conversationHistory.reduce(
+      (soonest, entry) =>
+        entry.recordedAt === undefined
+          ? soonest
+          : Math.min(soonest, entry.recordedAt + storedConversationMaximumAgeMs),
+      Number.POSITIVE_INFINITY,
+    );
+    if (!Number.isFinite(expiresAt)) return;
+    const timer = window.setTimeout(publishConversation, Math.max(0, expiresAt - Date.now() + 1));
+    return () => window.clearTimeout(timer);
+  }, [conversationHistory, publishConversation]);
+
+  /**
    * Appends one bounded line to this launch's history and tells the call now
    * open about only the recent context slice. A session leaving the roster
    * costs a line its identity at model render, never its visible words. An
@@ -731,33 +807,44 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
         return;
       }
       conversationRef.current = appendConversationThreadEntry(conversationRef.current, entry);
-      setConversationHistory(conversationRef.current);
-      // The whole thread goes to the main process, which mirrors it to every
-      // other display's panel: an exchange lands on one window, and the
-      // others' History tabs must read the same.
-      window.sidecar.reportConversationHistory(conversationRef.current);
-      voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current), {
-        announced: entry.kind === CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
-      });
+      publishConversation(entry.kind === CONVERSATION_ENTRY_KIND.ANNOUNCEMENT);
     },
-    [],
+    [publishConversation],
   );
 
   const clearConversationHistory = useCallback(() => {
-    conversationGenerationRef.current += 1;
-    conversationRef.current = [];
-    spokenTurnMarksRef.current.clear();
-    pendingSpokenTurnMarksRef.current = [];
-    setConversationHistory([]);
-    // The previews go with the marks: a transcription still arriving belongs
-    // to a turn the press just retired, and could never be recorded anyway.
-    setSpokenAskPreviews(NO_SPOKEN_ASK_PREVIEWS);
-    window.sidecar.reportConversationHistoryCleared();
-    talkLatched.current = false;
-    talkPressedAt.current = undefined;
-    voiceSession.current?.clearConversation();
-    activeReplyGenerationRef.current = undefined;
-    activeAnnouncementGenerationRef.current = undefined;
+    if (conversationClearing.current) return;
+    conversationClearing.current = true;
+    void window.sidecar
+      .clearConversationHistory()
+      .then((cleared) => {
+        if (!cleared) {
+          conversationClearing.current = false;
+          setVoiceError("Could not clear history. Try again.");
+          return;
+        }
+        conversationGenerationRef.current += 1;
+        // Seeded before it is emptied, so a bootstrap still in flight cannot
+        // deliver the very thread this press just cleared.
+        conversationSeeded.current = true;
+        conversationRef.current = [];
+        spokenTurnMarksRef.current.clear();
+        pendingSpokenTurnMarksRef.current = [];
+        setConversationHistory([]);
+        // The previews go with the marks: a transcription still arriving
+        // belongs to a turn the press just retired.
+        setSpokenAskPreviews(NO_SPOKEN_ASK_PREVIEWS);
+        talkLatched.current = false;
+        talkPressedAt.current = undefined;
+        voiceSession.current?.clearConversation();
+        activeReplyGenerationRef.current = undefined;
+        activeAnnouncementGenerationRef.current = undefined;
+        conversationClearing.current = false;
+      })
+      .catch(() => {
+        conversationClearing.current = false;
+        setVoiceError("Could not clear history. Try again.");
+      });
   }, []);
 
   /**
@@ -770,6 +857,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * latch alone, because a key held here is not another display's to let go.
    */
   const applySharedConversationHistory = useCallback((payload: ConversationHistoryPayload) => {
+    conversationSeeded.current = true;
     if (payload.cleared) {
       conversationGenerationRef.current += 1;
       conversationRef.current = [];
@@ -807,10 +895,25 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     (entries: readonly ConversationEntry[]) => {
       // A snapshot the main process built before this window's first report —
       // or before a Clear pressed here — must not stand old lines back up.
-      if (conversationRef.current.length > 0 || conversationGenerationRef.current > 0) return;
-      applySharedConversationHistory({ entries, cleared: false });
+      if (conversationSeeded.current || conversationGenerationRef.current > 0) return;
+      const restoredTail = entries.at(-1);
+      if (restoredTail) {
+        rebaseSpokenTurnMarks(
+          [
+            ...spokenTurnMarksRef.current.values(),
+            ...pendingSpokenTurnMarksRef.current,
+            ...(activeSpokenTurnMarkRef.current ? [activeSpokenTurnMarkRef.current] : []),
+          ],
+          restoredTail,
+        );
+      }
+      applySharedConversationHistory({
+        entries: [...entries, ...conversationRef.current],
+        cleared: false,
+      });
+      publishConversation();
     },
-    [applySharedConversationHistory],
+    [applySharedConversationHistory, publishConversation],
   );
 
   /**
@@ -846,11 +949,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       // displays no report.
       if (placed === conversationRef.current) return;
       conversationRef.current = placed;
-      setConversationHistory(conversationRef.current);
-      window.sidecar.reportConversationHistory(conversationRef.current);
-      voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current));
+      publishConversation();
     },
-    [dropSpokenAskPreview],
+    [dropSpokenAskPreview, publishConversation],
   );
 
   const ensureVoiceSession = useCallback((): RealtimeVoiceSession => {
@@ -1153,11 +1254,16 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    * has no part in it — the device stays the press's own act.
    */
   const startConversation = useCallback(async (): Promise<boolean> => {
+    await waitForConversationContext(
+      optionsRef.current.conversationContextReady,
+      conversationContextWaitersRef.current,
+    );
     setVoiceError(undefined);
     setVoiceNotice(undefined);
     const session = ensureVoiceSession();
     if (!(await session.connect())) return false;
-    session.updateSessions(sessionsRef.current);
+    const current = optionsRef.current;
+    session.updateSessions(current.sessions);
     // After the roster, which it is rendered against. The history outlives
     // the calls themselves on purpose: it is the conversation, and this call
     // is only the newest transport to carry it — the announcement a "what did
@@ -1165,12 +1271,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     // this one just replaced.
     session.updateConversation(recentConversationEntries(conversationRef.current));
     session.updateWorkspaceProjects(
-      workspaceProjectsRef.current,
-      defaultWorkspaceProviderRef.current,
-      workspaceProjectDefaultsRef.current,
+      current.workspaceProjects,
+      current.defaultWorkspaceProvider,
+      current.workspaceProjectDefaults,
     );
     session.updateGuide(guideRef.current);
     session.updateIssues(issuesRef.current);
+    session.updateRememberedFacts(current.rememberedFacts);
     return true;
   }, [ensureVoiceSession]);
 
@@ -1606,6 +1713,11 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     sessionsRef.current = options.sessions;
     voiceSession.current?.updateSessions(options.sessions);
   }, [options.sessions]);
+
+  useEffect(() => {
+    rememberedFactsRef.current = options.rememberedFacts;
+    voiceSession.current?.updateRememberedFacts(options.rememberedFacts);
+  }, [options.rememberedFacts]);
 
   useEffect(() => {
     workspaceProjectsRef.current = options.workspaceProjects;
