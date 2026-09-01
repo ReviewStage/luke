@@ -5,13 +5,11 @@ import SwiftUI
 struct SessionsView: View {
     @Environment(AccountSession.self) private var session
 
-    /// True once the first fetch has answered, success or failure alike. The
-    /// signed-in screen holds its loading screen over everything until then,
-    /// and never again: later refreshes redraw in place.
-    @Binding var firstLoadDone: Bool
-
     @State private var sessions: [RosterSession] = []
-    @State private var isLoading = false
+    /// Starts true because the list's first frame can paint before its
+    /// `.task` begins the fetch, and that frame must show the skeletons
+    /// rather than claim "No active sessions" nothing has checked yet.
+    @State private var isLoading = true
     @State private var fetchError: String?
     @State private var searchQuery = ""
     @State private var filters: Set<SessionFilter> = []
@@ -116,10 +114,7 @@ struct SessionsView: View {
                 .presentationDetents([.medium, .large])
         }
         .refreshable { await refreshSessions() }
-        .task {
-            await refreshSessions()
-            firstLoadDone = true
-        }
+        .task { await refreshSessions() }
     }
 
     private var optionsButton: some View {
