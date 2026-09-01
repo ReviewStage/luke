@@ -3,66 +3,41 @@ import SwiftUI
 
 // MARK: - Provider keys section
 
-/// The vault card on the signed-in screen: one row per provider the vault
-/// accepts, each opening an editor to enter or delete that provider's key.
-/// Only presence and timestamps are drawn — the vault never answers a key,
-/// nor any fragment of one.
+/// The provider-keys section of the profile sheet's grouped list: one row per
+/// provider the vault accepts, each opening an editor to enter or delete that
+/// provider's key. Only presence and timestamps are drawn — the vault never
+/// answers a key, nor any fragment of one. The editor selection is the
+/// sheet's, because a `Section` cannot carry presentation modifiers of its
+/// own inside a `List`.
 struct VaultSection: View {
     @Environment(VaultStore.self) private var vault
-    @State private var editing: VaultProviderID?
+    @Binding var editing: VaultProviderID?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Provider keys")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Color.ink)
-            Text("Stored encrypted in your Luke account so Luke can observe these providers' cloud sessions.")
-                .font(.caption)
-                .foregroundStyle(Color.inkSecondary)
-                .padding(.top, 4)
-
+        Section {
             if let error = vault.loadError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(Color.errorInk)
-                    .padding(.top, 12)
-                Button("Try again") {
-                    Task { await vault.load() }
-                }
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Color.ink)
-                .padding(.top, 8)
-            }
-
-            VStack(spacing: 0) {
-                ForEach(VaultProviderID.allCases) { provider in
-                    Button {
-                        editing = provider
-                    } label: {
-                        VaultProviderRow(provider: provider, entry: vault.entry(for: provider))
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(error)
+                        .font(.footnote)
+                        .foregroundStyle(Color.errorInk)
+                    Button("Try again") {
+                        Task { await vault.load() }
                     }
-                    .buttonStyle(.plain)
-                    if provider != VaultProviderID.allCases.last {
-                        Divider().overlay(Color.cardStroke)
-                    }
+                    .font(.footnote.weight(.semibold))
                 }
             }
-            .padding(.top, 16)
-            .redacted(reason: vault.isLoading ? .placeholder : [])
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.cardFill)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.cardStroke, lineWidth: 1)
-                )
-        )
-        .task { await vault.load() }
-        .sheet(item: $editing) { provider in
-            VaultKeyEditor(provider: provider)
+            ForEach(VaultProviderID.allCases) { provider in
+                Button {
+                    editing = provider
+                } label: {
+                    VaultProviderRow(provider: provider, entry: vault.entry(for: provider))
+                }
+                .redacted(reason: vault.isLoading ? .placeholder : [])
+            }
+        } header: {
+            Text("Provider keys")
+        } footer: {
+            Text("Stored encrypted in your Luke account so Luke can observe these providers' cloud sessions.")
         }
     }
 }
@@ -74,23 +49,23 @@ private struct VaultProviderRow: View {
     let entry: VaultKeyEntry?
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 12) {
             ProviderMark(provider: provider)
                 .frame(width: 18, height: 18)
+            // The concrete label colors, not the hierarchical styles: inside
+            // a list button the inherited foreground style is the tint, and
+            // hierarchical .primary would keep the row's words accent-blue.
             Text(provider.displayName)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(Color.ink)
+                .foregroundStyle(Color.primary)
             if entry != nil {
                 ConnectedCheck()
                     .frame(width: 12, height: 12)
             }
             Spacer()
             Image(systemName: "chevron.right")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color.inkTertiary)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.secondary)
         }
-        .padding(.vertical, 12)
-        .contentShape(Rectangle())
     }
 }
 
@@ -116,7 +91,7 @@ private struct ConnectedCheck: View {
 /// The sheet a row opens: paste a key to store or replace, or delete the one
 /// standing. The field is the one place a key ever appears, and it is never
 /// echoed back after Save.
-private struct VaultKeyEditor: View {
+struct VaultKeyEditor: View {
     @Environment(VaultStore.self) private var vault
     @Environment(\.dismiss) private var dismiss
     let provider: VaultProviderID

@@ -114,6 +114,87 @@ final class TokenResponseTests: XCTestCase {
     }
 }
 
+// MARK: - Userinfo identity tests
+
+final class UserInfoTests: XCTestCase {
+    private let base = URL(string: "https://example.com")!
+
+    private func identity(fromUserInfo payload: [String: Any]) async throws -> AccountIdentity {
+        let stub = StubHTTPClient { request in
+            XCTAssertTrue(request.url?.path.hasSuffix("oauth2/userinfo") == true)
+            return (jsonData(payload), makeResponse(url: request.url!, status: 200))
+        }
+        let client = AccountClient(baseURL: base, clientID: "c", http: stub)
+        return try await client.userInfo(accessToken: "at")
+    }
+
+    func testCarriesGoogleHostedPicture() async throws {
+        let identity = try await identity(fromUserInfo: [
+            "email": "dev@example.com",
+            "picture": "https://lh3.googleusercontent.com/a/photo",
+        ])
+        XCTAssertEqual(
+            identity.pictureURL?.absoluteString,
+            "https://lh3.googleusercontent.com/a/photo"
+        )
+    }
+
+    func testCarriesGitHubHostedPicture() async throws {
+        let identity = try await identity(fromUserInfo: [
+            "email": "dev@example.com",
+            "picture": "https://avatars.githubusercontent.com/u/1?v=4",
+        ])
+        XCTAssertEqual(
+            identity.pictureURL?.absoluteString,
+            "https://avatars.githubusercontent.com/u/1?v=4"
+        )
+    }
+
+    func testDropsPictureFromOtherHosts() async throws {
+        let identity = try await identity(fromUserInfo: [
+            "email": "dev@example.com",
+            "picture": "https://example.com/photo.png",
+        ])
+        XCTAssertNil(identity.pictureURL)
+    }
+
+    func testDropsInsecurePicture() async throws {
+        let identity = try await identity(fromUserInfo: [
+            "email": "dev@example.com",
+            "picture": "http://lh3.googleusercontent.com/a/photo",
+        ])
+        XCTAssertNil(identity.pictureURL)
+    }
+
+    func testDropsLookalikePictureHost() {
+        XCTAssertNil(AccountIdentity.pictureURL(fromWire: "https://evilgoogleusercontent.com/a"))
+    }
+}
+
+// MARK: - Initials tests
+
+final class AccountInitialsTests: XCTestCase {
+    func testFirstAndLastWordOfName() {
+        let identity = AccountIdentity(id: nil, email: "x@example.com", name: "Ada King Lovelace")
+        XCTAssertEqual(identity.initials, "AL")
+    }
+
+    func testSingleWordName() {
+        let identity = AccountIdentity(id: nil, email: "x@example.com", name: "ada")
+        XCTAssertEqual(identity.initials, "A")
+    }
+
+    func testEmailLocalPartWhenNameMissing() {
+        let identity = AccountIdentity(id: nil, email: "ada.lovelace@example.com", name: nil)
+        XCTAssertEqual(identity.initials, "AL")
+    }
+
+    func testEmptyNameFallsBackToEmail() {
+        let identity = AccountIdentity(id: nil, email: "grace_hopper@example.com", name: "")
+        XCTAssertEqual(identity.initials, "GH")
+    }
+}
+
 // MARK: - Refresh-retry logic tests
 
 final class RefreshRetryTests: XCTestCase {

@@ -33,11 +33,55 @@ public struct AccountIdentity: Sendable {
     public let id: String?
     public let email: String
     public let name: String?
+    public let pictureURL: URL?
 
-    public init(id: String?, email: String, name: String?) {
+    public init(id: String?, email: String, name: String?, pictureURL: URL? = nil) {
         self.id = id
         self.email = email
         self.name = name
+        self.pictureURL = pictureURL
+    }
+}
+
+extension AccountIdentity {
+    /// The only hosts an avatar may be loaded from, mirroring the desktop
+    /// account client's picture policy exactly: Google serves profile photos
+    /// from `googleusercontent.com` and GitHub from
+    /// `avatars.githubusercontent.com`. A picture anywhere else is dropped
+    /// rather than fetched — and the set is fixed by this build, like every
+    /// address the surface is given.
+    public static func pictureURL(fromWire value: String?) -> URL? {
+        guard let value, !value.isEmpty,
+              let url = URL(string: value),
+              url.scheme == "https",
+              let host = url.host
+        else { return nil }
+        let googleHosted = host == "googleusercontent.com"
+            || host.hasSuffix(".googleusercontent.com")
+        return googleHosted || host == "avatars.githubusercontent.com" ? url : nil
+    }
+
+    /// The account drawn as letters when it has no avatar image, mirroring the
+    /// web dashboard's fallback: the provider's own name for the account is
+    /// the first source, and an account that carries only an address falls
+    /// back to the local part, which is all such an account ever has to be
+    /// named by.
+    public var initials: String? {
+        Self.initials(from: name ?? "")
+            ?? Self.initials(from: email.components(separatedBy: "@").first ?? "")
+    }
+
+    private static let wordSeparators = CharacterSet(charactersIn: "._+-")
+        .union(.whitespacesAndNewlines)
+
+    private static func initials(from source: String) -> String? {
+        let words = source.components(separatedBy: wordSeparators).filter { !$0.isEmpty }
+        guard let first = words.first?.first else { return nil }
+        var letters = String(first).localizedUppercase
+        if words.count > 1, let last = words.last?.first {
+            letters += String(last).localizedUppercase
+        }
+        return letters
     }
 }
 
@@ -126,7 +170,8 @@ public final class AccountClient: Sendable {
         return AccountIdentity(
             id: json["sub"] as? String,
             email: email,
-            name: json["name"] as? String
+            name: json["name"] as? String,
+            pictureURL: AccountIdentity.pictureURL(fromWire: json["picture"] as? String)
         )
     }
 

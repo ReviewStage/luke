@@ -12,6 +12,7 @@ enum KeychainStore {
         case email
         case name
         case accountID = "account_id"
+        case pictureURL = "picture_url"
     }
 
     /// Returns whether the write landed. A keychain can refuse writes outright
@@ -42,7 +43,7 @@ enum KeychainStore {
     }
 
     static func clearAll() {
-        for key in [Key.accessToken, .refreshToken, .expiry, .email, .name, .accountID] {
+        for key in [Key.accessToken, .refreshToken, .expiry, .email, .name, .accountID, .pictureURL] {
             delete(key)
         }
     }

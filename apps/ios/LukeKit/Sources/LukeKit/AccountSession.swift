@@ -16,6 +16,7 @@ public enum AuthState: Equatable {
         case (.signedOut, .signedOut): return true
         case let (.signedIn(a), .signedIn(b)):
             return a.email == b.email && a.id == b.id && a.name == b.name
+                && a.pictureURL == b.pictureURL
         default: return false
         }
     }
@@ -157,29 +158,42 @@ public final class AccountSession {
         let identity = AccountIdentity(
             id: KeychainStore.get(.accountID),
             email: email,
-            name: KeychainStore.get(.name)
+            name: KeychainStore.get(.name),
+            // Re-validated on the way out of the keychain so a stored value
+            // is never trusted past the same host policy userinfo applies.
+            pictureURL: AccountIdentity.pictureURL(fromWire: KeychainStore.get(.pictureURL))
         )
         state = .signedIn(identity)
         let gen = generation
         Task { [weak self] in
             guard let self else { return }
-            await self.refreshIfNearExpiry(generation: gen)
+            await self.resolveRestoredIdentity(generation: gen)
         }
     }
 
-    private func refreshIfNearExpiry(generation: Int) async {
-        guard tokenIsNearExpiry else { return }
+    /// Re-resolves the identity from userinfo on every restore — refreshing
+    /// the token first when it is near expiry — so a field the keychain never
+    /// held (a photo added since the sign-in that stored it) arrives without
+    /// waiting for the token to age.
+    private func resolveRestoredIdentity(generation: Int) async {
         do {
-            let tokens = try await refreshStoredTokens()
+            let token: String
+            if tokenIsNearExpiry {
+                token = try await refreshStoredTokens().accessToken
+            } else if let accessToken {
+                token = accessToken
+            } else {
+                return
+            }
             guard self.generation == generation else { return }
-            let identity = try await client.userInfo(accessToken: tokens.accessToken)
+            let identity = try await resolvedIdentity(accessToken: token)
             guard self.generation == generation else { return }
             storeIdentity(identity)
             state = .signedIn(identity)
         } catch {
             // A rejected refresh has already signed out inside performRefresh;
             // anything else is transient (network error, rate limit, etc.) and
-            // the stored tokens may still work.
+            // the stored identity still stands.
         }
     }
 
@@ -206,12 +220,19 @@ public final class AccountSession {
     }
 
     private func storeIdentity(_ identity: AccountIdentity) {
-        // The email gates restore like the tokens do; the id and name are
-        // cosmetic, so their persistence does not decide the flag.
+        // The email gates restore like the tokens do; the id, name, and
+        // picture are cosmetic, so their persistence does not decide the flag.
         let emailPersisted = KeychainStore.set(identity.email, for: .email)
         credentialsPersisted = credentialsPersisted && emailPersisted
         if let id = identity.id { KeychainStore.set(id, for: .accountID) }
         if let name = identity.name { KeychainStore.set(name, for: .name) }
+        // Deleted when absent so a photo removed at the provider does not
+        // outlive the provider's own answer.
+        if let picture = identity.pictureURL {
+            KeychainStore.set(picture.absoluteString, for: .pictureURL)
+        } else {
+            KeychainStore.delete(.pictureURL)
+        }
     }
 }
 

@@ -42,7 +42,7 @@ struct ContentView: View {
         case .signedOut:
             signedOutCard
         case .signedIn(let identity):
-            signedInCard(identity: identity)
+            SignedInView(identity: identity)
         }
     }
 
@@ -101,53 +101,6 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Signed-in card
-
-    private func signedInCard(identity: AccountIdentity) -> some View {
-        ZStack {
-            Color.ground.ignoresSafeArea()
-            ScrollView {
-                VStack(spacing: 16) {
-                    VStack(spacing: 12) {
-                        Text(identity.name ?? identity.email)
-                            .font(.system(size: 22, weight: .semibold))
-                            .foregroundStyle(Color.ink)
-                        Text(identity.email)
-                            .font(.subheadline)
-                            .foregroundStyle(Color.inkSecondary)
-                        if !session.credentialsPersisted {
-                            Text("This device is not saving the sign-in, so the next launch will ask again.")
-                                .font(.caption)
-                                .multilineTextAlignment(.center)
-                                .foregroundStyle(Color.warningInk)
-                        }
-                        Button("Sign out") {
-                            Task { await session.signOut() }
-                        }
-                        .buttonStyle(CardButtonStyle())
-                        .padding(.top, 8)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(40)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.cardFill)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Color.cardStroke, lineWidth: 1)
-                            )
-                    )
-
-                    // Keyed by account so a different sign-in loads its own
-                    // list rather than standing on the last account's.
-                    VaultSection()
-                        .id(identity.email)
-                }
-                .padding(24)
-            }
-        }
-    }
-
     // MARK: - Sign-in flow
 
     private func startSignIn(provider: SocialProvider) {
@@ -200,6 +153,234 @@ struct ContentView: View {
         webSession.presentationContextProvider = contextProvider
         webSession.prefersEphemeralWebBrowserSession = false
         webSession.start()
+    }
+}
+
+// MARK: - Signed-in view
+
+/// Its own struct so `profileShown` lives and dies with the signed-in
+/// hierarchy: a sign-out tears the flag down with the view, and the next
+/// sign-in starts with the sheet closed rather than inheriting a stale true.
+private struct SignedInView: View {
+    @Environment(AccountSession.self) private var session
+    let identity: AccountIdentity
+    @State private var profileShown = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 16) {
+                    if !session.credentialsPersisted {
+                        persistenceNotice
+                    }
+                }
+                // Stretched to the proposal, or the scroll view adopts its
+                // content's ideal width and draws as a strip up the middle.
+                .frame(maxWidth: .infinity)
+                .padding(24)
+            }
+            .background(Color.ground.ignoresSafeArea())
+            .toolbar {
+                if #available(iOS 26.0, *) {
+                    ToolbarItem(placement: .topBarLeading) {
+                        profileButton
+                    }
+                    // Separated from the bar's shared glass, which hugs an
+                    // item as a capsule: the avatar's own circle is the
+                    // whole control.
+                    .sharedBackgroundVisibility(.hidden)
+                } else {
+                    ToolbarItem(placement: .topBarLeading) {
+                        profileButton
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $profileShown) {
+            ProfileSheet(identity: identity)
+        }
+    }
+
+    private var profileButton: some View {
+        Button {
+            profileShown = true
+        } label: {
+            avatarLabel
+        }
+        // Plain, not the toolbar's bordered default: with the shared
+        // background hidden the bordered style still insets its label to
+        // where the capsule's content would sit, holding the circle off the
+        // bar margin the system's own circles start at.
+        .buttonStyle(.plain)
+        .accessibilityLabel("Account profile for \(identity.name ?? identity.email)")
+    }
+
+    /// The avatar in its own circular glass: the shared toolbar background is
+    /// hidden because it hugs an item as a capsule, and this puts back the
+    /// system material in the circle the photo actually is. The label fills
+    /// the bar's own 44pt control size — anything smaller gets centered in
+    /// the item's minimum slot and sits visibly right of where the system's
+    /// circles sit.
+    @ViewBuilder
+    private var avatarLabel: some View {
+        if #available(iOS 26.0, *) {
+            AccountAvatar(identity: identity, diameter: 36)
+                .padding(4)
+                .glassEffect(.regular.interactive(), in: Circle())
+        } else {
+            AccountAvatar(identity: identity, diameter: 36)
+                .padding(4)
+        }
+    }
+
+    private var persistenceNotice: some View {
+        Text("This device is not saving the sign-in, so the next launch will ask again.")
+            .font(.caption)
+            .multilineTextAlignment(.center)
+            .foregroundStyle(Color.warningInk)
+            .frame(maxWidth: .infinity)
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.cardFill)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.cardStroke, lineWidth: 1)
+                    )
+            )
+    }
+}
+
+// MARK: - Profile sheet
+
+/// The account surface the header avatar opens, drawn with the system's own
+/// sheet vocabulary — inline title, close button, grouped list: the photo
+/// large at the top center, the account it belongs to, the provider keys,
+/// and at the very bottom the one account act, signing out, over the build's
+/// own version.
+private struct ProfileSheet: View {
+    @Environment(AccountSession.self) private var session
+    @Environment(VaultStore.self) private var vault
+    @Environment(\.dismiss) private var dismiss
+    let identity: AccountIdentity
+    @State private var editingProvider: VaultProviderID?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    VStack(spacing: 12) {
+                        AccountAvatar(identity: identity, diameter: 88)
+                        VStack(spacing: 2) {
+                            Text(identity.name ?? identity.email)
+                                .font(.title2.weight(.semibold))
+                            if identity.name != nil {
+                                Text(identity.email)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .listRowBackground(Color.clear)
+                }
+
+                if !session.credentialsPersisted {
+                    Section {
+                        Text("This device is not saving the sign-in, so the next launch will ask again.")
+                            .font(.footnote)
+                            .foregroundStyle(Color.warningInk)
+                    }
+                }
+
+                VaultSection(editing: $editingProvider)
+
+                Section {
+                    Button("Sign out", role: .destructive) {
+                        Task { await session.signOut() }
+                    }
+                    .frame(maxWidth: .infinity)
+                } footer: {
+                    Text(Self.versionLabel)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 8)
+                }
+            }
+            .navigationTitle("Profile")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    closeButton
+                }
+            }
+            // Keyed by account so a different sign-in loads its own list
+            // rather than standing on the last account's.
+            .task(id: identity.email) { await vault.load() }
+            .sheet(item: $editingProvider) { provider in
+                VaultKeyEditor(provider: provider)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var closeButton: some View {
+        if #available(iOS 26.0, *) {
+            Button(role: .close) { dismiss() }
+        } else {
+            Button { dismiss() } label: {
+                Image(systemName: "xmark")
+            }
+            .accessibilityLabel("Close")
+        }
+    }
+
+    private static let versionLabel: String = {
+        let version = Bundle.main
+            .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        return version.map { "Luke v\($0)" } ?? "Luke"
+    }()
+}
+
+// MARK: - Avatar
+
+/// The account's own avatar, falling back to its initials. A provider's
+/// avatar URL can outlive the image it named, so a failed fetch draws the
+/// letters rather than leaving a broken frame.
+private struct AccountAvatar: View {
+    let identity: AccountIdentity
+    let diameter: CGFloat
+
+    var body: some View {
+        Group {
+            if let url = identity.pictureURL {
+                AsyncImage(url: url) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFill()
+                    } else {
+                        initialsCircle
+                    }
+                }
+            } else {
+                initialsCircle
+            }
+        }
+        .frame(width: diameter, height: diameter)
+        .clipShape(Circle())
+    }
+
+    private var initialsCircle: some View {
+        ZStack {
+            Circle().fill(Color.ink.opacity(0.12))
+            if let initials = identity.initials {
+                Text(initials)
+                    .font(.system(size: diameter * 0.4, weight: .semibold))
+                    .foregroundStyle(Color.ink)
+            } else {
+                Image(systemName: "person.fill")
+                    .font(.system(size: diameter * 0.44))
+                    .foregroundStyle(Color.inkSecondary)
+            }
+        }
     }
 }
 
