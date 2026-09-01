@@ -132,8 +132,8 @@ struct VaultKeyEditor: View {
                             .frame(maxWidth: .infinity)
                             .disabled(busy)
                     } footer: {
-                        Text("A key stored \(entry.updatedAt.formatted(date: .abbreviated, time: .omitted)) "
-                            + "stands. Saving replaces it.")
+                        Text("A key was saved on \(entry.updatedAt.formatted(date: .abbreviated, time: .omitted)). "
+                            + "Saving a new key will replace it.")
                     }
                 }
             }
