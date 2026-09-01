@@ -16,7 +16,7 @@
     "db:migrate": "tsx server/db/migrate.ts",
     "dev": "vite",
     "preview": "vite preview",
-    "test": "tsx --test 'tests/**/*.test.ts'",
+    "test": "DATABASE_URL=${DATABASE_URL:-postgresql://test:test@127.0.0.1:5432/test} BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-test-secret-for-hosted-tests-only} tsx --test 'tests/**/*.test.ts'",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
@@ -37,6 +37,7 @@
     "@tailwindcss/vite": "4.3.3",
     "better-auth": "1.6.29",
     "drizzle-orm": "0.45.2",
+    "effect": "catalog:",
     "marked": "18.0.9",
     "pg": "8.23.0",
     "posthog-js": "1.418.3",
