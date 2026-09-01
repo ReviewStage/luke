@@ -7,6 +7,7 @@ import {
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDERS,
   providerRunsSessionsInCloud,
+  SPEECH_CREDENTIAL_PROVIDER,
   VOICE_CREDENTIAL_PROVIDER,
 } from "@sidecar/credentials/vocabulary";
 import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@sidecar/guide";
@@ -44,6 +45,7 @@ import {
   VOICE_HOTKEY_NONE,
   voiceHotkeyLabel,
 } from "@sidecar/settings";
+import { SPEECH_PROVIDER } from "@sidecar/speech";
 import {
   DEFAULT_PANEL_FORM_FACTOR,
   isPanelFormFactor,
@@ -51,7 +53,7 @@ import {
 } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACT_RESULT_STATUS, type ActResult } from "@sidecar/wire";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { APPLE_CALENDAR_ID, APPLE_CALENDAR_NAME } from "#shared/apple-calendar";
 import { SETTINGS_VIEW_COUNTED_AS } from "#shared/product-vocabulary";
 import type { AccountSnapshot, CredentialSource } from "#shared/wire/account";
@@ -85,6 +87,7 @@ import {
   VOICE_SOURCE,
   type VoiceSource,
 } from "#shared/wire/settings";
+import type { SpeechVoicesAnswer } from "#shared/wire/speech";
 import type { UpdateSnapshot } from "#shared/wire/update";
 import {
   CREDENTIAL_PLACEHOLDER,
@@ -165,6 +168,7 @@ import {
   type SettingsView,
   settingsNavRowId,
 } from "./settings-views";
+import { NO_SPEECH_VOICE_CHOICE, SPEECH_VOICES_STATE, speechVoicesView } from "./speech-voices";
 import { UPDATE_ROW_ACTION, type UpdateRowAction, updateRow } from "./update-row";
 
 /** One provider the default-workspace rows can offer, by id and display name. */
@@ -2446,10 +2450,15 @@ function VoiceSection({
   settings,
   writes,
   microphone,
+  credentials,
+  panelOpen,
 }: {
   settings: AppSettingsView;
   writes: SettingsWrites;
   microphone: MicrophoneControl;
+  /** The one credential being entered anywhere; the ElevenLabs row here uses it. */
+  credentials: CredentialEntryControl;
+  panelOpen: boolean;
 }): React.JSX.Element {
   const microphoneRow = microphoneAccessRow({
     voiceAvailable: microphone.voiceAvailable,
@@ -2528,25 +2537,211 @@ function VoiceSection({
       {/* `ready` already folds the key in — a microphone with no voice to
           reach never reports itself ready — so the controls stand exactly
           while both halves do. */}
-      {microphoneRow.ready ? <VoiceControlsSection settings={settings} writes={writes} /> : null}
+      {microphoneRow.ready ? (
+        <VoiceControlsSection
+          settings={settings}
+          writes={writes}
+          credentials={credentials}
+          panelOpen={panelOpen}
+        />
+      ) : null}
     </>
   );
 }
 
-/** The voice controls themselves, below the permission that lets Luke listen. */
-function VoiceControlsSection({
+/**
+ * The account's own ElevenLabs voices, and everything that stands in for them
+ * before there are any: the key that reads them, the way to make one, and the
+ * refresh that finds it. Drawn only while ElevenLabs is the chosen speech
+ * provider, because until then it is a page of settings for a service Luke is
+ * not speaking through.
+ *
+ * The list carries the recording library's fixed blocking class. The names in
+ * it are the developer's own, written when they made the clone, and a
+ * recording is the rendered panel — so this is the one thing that keeps them
+ * from leaving the machine with it.
+ */
+function SpeechVoiceRows({
   settings,
   writes,
+  credentials,
+  panelOpen,
 }: {
   settings: AppSettingsView;
   writes: SettingsWrites;
+  credentials: CredentialEntryControl;
+  panelOpen: boolean;
 }): React.JSX.Element {
+  const source = settings.credentialSources[SPEECH_CREDENTIAL_PROVIDER.id];
+  const connected = source !== CREDENTIAL_SOURCE.NONE;
+  const [answer, setAnswer] = useState<SpeechVoicesAnswer>();
+  const [loading, setLoading] = useState(false);
+  /**
+   * Which read the page is waiting on. A slow first read must not land over
+   * the refresh that overtook it, and a read left in flight by a key deleted
+   * mid-request must land nowhere at all.
+   */
+  const request = useRef(0);
+  const readVoices = useCallback(() => {
+    request.current += 1;
+    const generation = request.current;
+    if (!connected) {
+      setAnswer(undefined);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    void window.sidecar
+      .listSpeechVoices()
+      .then((read) => {
+        if (generation === request.current) setAnswer(read);
+      })
+      .finally(() => {
+        if (generation === request.current) setLoading(false);
+      });
+  }, [connected]);
+
+  // Read once when the key arrives, and afterwards only at the Refresh
+  // control's press: a list that re-read itself on every render would ask
+  // ElevenLabs a question per keystroke elsewhere on the page.
+  useEffect(() => {
+    readVoices();
+  }, [readVoices]);
+
+  const view = speechVoicesView({ connected, loading, answer, selected: settings.speechVoice });
+  const chosen = settings.speechVoice ?? "";
+  return (
+    <>
+      <ProviderCredential
+        provider={SPEECH_CREDENTIAL_PROVIDER}
+        source={source}
+        storageUnavailable={settings.secretStorage === SECRET_STORAGE.UNAVAILABLE}
+        control={credentials}
+        panelOpen={panelOpen}
+      />
+      {view.state === SPEECH_VOICES_STATE.READY ? (
+        /* PostHog blocks this fixed class and its whole subtree. The names in
+           this list are the developer's own, written when they made the clone,
+           and a recording is the rendered panel. */
+        <span className="ph-no-capture">
+          <SelectRow
+            label="ElevenLabs voice"
+            ariaLabel="Which of your ElevenLabs voices Luke speaks with"
+            changed={settings.speechVoice !== undefined}
+            busy={loading}
+            value={chosen}
+            options={[
+              ...(chosen === "" || view.selectionMissing
+                ? [{ value: chosen, label: NO_SPEECH_VOICE_CHOICE }]
+                : []),
+              ...view.voices.map((voice) => ({ value: voice.id, label: voice.name })),
+            ]}
+            // Only a voice the account just reported may be chosen. The row
+            // standing for "none chosen" and the one standing for a voice that
+            // has gone both carry values no write should land on.
+            parse={(raw) => (view.voices.some((voice) => voice.id === raw) ? raw : undefined)}
+            onChange={(voiceId) => {
+              // Choosing a voice is choosing the service: nothing else on this
+              // page says "speak through ElevenLabs now", and a choice that
+              // changed nothing audible would read as broken.
+              return writes
+                .setting(APP_SETTING_SCHEMA.speechVoice.field, voiceId)
+                .then(() =>
+                  writes.setting(
+                    APP_SETTING_SCHEMA.speechProvider.field,
+                    SPEECH_PROVIDER.ELEVENLABS,
+                  ),
+                );
+            }}
+          />
+        </span>
+      ) : null}
+      {view.note ? <p className="settings-note">{view.note}</p> : null}
+      {connected ? (
+        <div className="settings-row">
+          <span className="settings-copy">
+            <span className="settings-name">
+              <strong>Your ElevenLabs voices</strong>
+            </span>
+            <small>
+              Cloning happens in ElevenLabs, never here: Luke records nothing and uploads nothing.
+            </small>
+          </span>
+          <span className="settings-actions">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Open your voices in ElevenLabs"
+              title="ElevenLabs…"
+              onClick={() => window.sidecar.openSpeechVoicesPage()}
+            >
+              <ExternalIcon />
+            </button>
+            <button type="button" className="quiet-button" disabled={loading} onClick={readVoices}>
+              {loading ? "Refreshing…" : "Refresh"}
+            </button>
+          </span>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * The voice controls themselves, below the permission that lets Luke listen.
+ * Which service speaks leads, because it decides what the rows under it can
+ * be: OpenAI's own voice and pace mean nothing while another service is
+ * saying the words, so under ElevenLabs they give way to that account's
+ * voices rather than standing there doing nothing.
+ */
+function VoiceControlsSection({
+  settings,
+  writes,
+  credentials,
+  panelOpen,
+}: {
+  settings: AppSettingsView;
+  writes: SettingsWrites;
+  credentials: CredentialEntryControl;
+  panelOpen: boolean;
+}): React.JSX.Element {
+  const throughElevenLabs = settings.speechProvider === SPEECH_PROVIDER.ELEVENLABS;
   return (
     <section
       className="settings-section settings-plain"
       style={cssCustomProperties({ "--row-index": 2 })}
     >
-      <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.VOICE} settings={settings} writes={writes} />
+      <SchemaSettingRows
+        page={SCHEMA_SETTINGS_PAGE.VOICE}
+        settings={settings}
+        writes={writes}
+        fields={[APP_SETTING_SCHEMA.speechProvider.field]}
+      />
+      {throughElevenLabs ? (
+        <SpeechVoiceRows
+          settings={settings}
+          writes={writes}
+          credentials={credentials}
+          panelOpen={panelOpen}
+        />
+      ) : (
+        <SchemaSettingRows
+          page={SCHEMA_SETTINGS_PAGE.VOICE}
+          settings={settings}
+          writes={writes}
+          fields={[APP_SETTING_SCHEMA.voice.field, APP_SETTING_SCHEMA.voiceSpeed.field]}
+        />
+      )}
+      <SchemaSettingRows
+        page={SCHEMA_SETTINGS_PAGE.VOICE}
+        settings={settings}
+        writes={writes}
+        exclude={[
+          APP_SETTING_SCHEMA.speechProvider.field,
+          APP_SETTING_SCHEMA.voice.field,
+          APP_SETTING_SCHEMA.voiceSpeed.field,
+        ]}
+      />
     </section>
   );
 }
@@ -3803,7 +3998,13 @@ export function SettingsPanel({
       ) : null}
 
       {view === SETTINGS_VIEW.VOICE && settings && !search ? (
-        <VoiceSection settings={settings} writes={writes} microphone={microphone} />
+        <VoiceSection
+          settings={settings}
+          writes={writes}
+          microphone={microphone}
+          credentials={credentials}
+          panelOpen={panelOpen}
+        />
       ) : null}
 
       {view === SETTINGS_VIEW.APPEARANCE && settings && !search ? (

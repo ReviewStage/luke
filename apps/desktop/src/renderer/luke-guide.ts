@@ -25,6 +25,7 @@ import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDERS,
+  SPEECH_CREDENTIAL_PROVIDER_ID,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials/vocabulary";
 import {
@@ -45,6 +46,7 @@ import {
   settingGuideEntries,
   spokenSettingValue,
 } from "@sidecar/settings";
+import { SPEECH_PROVIDER } from "@sidecar/speech";
 import { ACT_RESULT_STATUS, type ActResult } from "@sidecar/wire";
 import type { AppBridge } from "#shared/bridge";
 import type { AccountSnapshot, CredentialSource } from "#shared/wire/account";
@@ -318,6 +320,34 @@ function voiceKeyFact(settings: AppSettingsView, voiceAvailable: boolean): AppGu
   };
 }
 
+/**
+ * The one key that buys nothing but Luke's own voice, described where its row
+ * lives: on the Voice page, under the choice of which service speaks. It is
+ * named as a connection and a bound, never a voice list — the voices are the
+ * developer's own, written by them, and the guide leaves the machine.
+ */
+function speechKeyFact(settings: AppSettingsView): AppGuideFact {
+  const elevenlabs = CREDENTIAL_PROVIDERS[SPEECH_CREDENTIAL_PROVIDER_ID];
+  const source = settings.credentialSources[elevenlabs.id];
+  const chosen = settings.speechProvider === SPEECH_PROVIDER.ELEVENLABS;
+  return {
+    label: elevenlabs.displayName,
+    detail:
+      `${elevenlabs.displayName} (${connectionWord(source)}). ` +
+      (chosen
+        ? "Luke's replies are spoken by this account, in the voice chosen on the Voice page. "
+        : "Luke speaks in an OpenAI voice; connecting this key and choosing one of the " +
+          "account's own voices on the Voice page is what moves speech here. ") +
+      "It buys speech alone: the conversation, hearing the developer, tools, and session " +
+      "review all stay with OpenAI and are billed the same way either way. Only the words " +
+      "Luke is about to say travel to it, never the microphone or a session's fields. " +
+      "Cloning happens in ElevenLabs itself — Luke records nothing and uploads nothing — and " +
+      "deleting the key here returns speech to OpenAI without touching the clone. The key is " +
+      "typed by hand on the Voice page, never read from the environment, never synced to the " +
+      "Luke account, never spoken, and never repeated back.",
+  };
+}
+
 /** The row's button, in the words a spoken update ask names an act by. */
 const UPDATE_BUTTON_FOR_ROW_ACTION = {
   [UPDATE_ROW_ACTION.CHECK]: APP_UPDATE_ACT.CHECK,
@@ -577,6 +607,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         ]),
     providersFact(input.settings),
     voiceKeyFact(input.settings, input.voiceAvailable),
+    speechKeyFact(input.settings),
     ...integrationFacts(input.settings),
     ...(input.settings.secretStorage === SECRET_STORAGE.UNAVAILABLE
       ? [

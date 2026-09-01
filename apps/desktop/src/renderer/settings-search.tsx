@@ -2,6 +2,7 @@ import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "@sidecar/calendar/voca
 import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_PROVIDER_ID,
+  SPEECH_CREDENTIAL_PROVIDER,
   VOICE_CREDENTIAL_PROVIDER,
 } from "@sidecar/credentials/vocabulary";
 import { ProviderMark } from "@sidecar/panel";
@@ -20,6 +21,7 @@ import {
   settingFieldForGuideId,
   settingGuideEntries,
 } from "@sidecar/settings";
+import { SPEECH_PROVIDER } from "@sidecar/speech";
 import { Fragment, useRef } from "react";
 import { APPLE_CALENDAR_ID, APPLE_CALENDAR_NAME } from "#shared/apple-calendar";
 import { CREDENTIAL_SOURCE } from "#shared/wire/account";
@@ -191,12 +193,22 @@ const conductorAgentRowDrawn = (input: SettingsSearchInput): boolean =>
 
 const voiceControlRowDrawn = (input: SettingsSearchInput): boolean => input.voiceControlsDrawn;
 
+/**
+ * The OpenAI voice and pace rows give way to the ElevenLabs list while
+ * ElevenLabs is the chosen speech provider, so they are searchable exactly
+ * while they are on screen — a result landing on a row that is not drawn
+ * scrolls to nothing.
+ */
+const openAiVoiceRowDrawn = (input: SettingsSearchInput): boolean =>
+  input.voiceControlsDrawn && input.settings.speechProvider !== SPEECH_PROVIDER.ELEVENLABS;
+
 const SETTING_ROW_DRAWN = {
   // The What Luke runs on section stands only over a signed-in account.
   [APP_SETTING_ID.VOICE_SOURCE]: (input: SettingsSearchInput) => input.accountDrawn,
   // The voice controls exist only once there is a voice to control.
-  [APP_SETTING_ID.VOICE]: voiceControlRowDrawn,
-  [APP_SETTING_ID.VOICE_SPEED]: voiceControlRowDrawn,
+  [APP_SETTING_ID.SPEECH_PROVIDER]: voiceControlRowDrawn,
+  [APP_SETTING_ID.VOICE]: openAiVoiceRowDrawn,
+  [APP_SETTING_ID.VOICE_SPEED]: openAiVoiceRowDrawn,
   [APP_SETTING_ID.VOICE_CAPTIONS]: voiceControlRowDrawn,
   [APP_SETTING_ID.DUCK_OTHER_MEDIA]: voiceControlRowDrawn,
   [APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE]: voiceControlRowDrawn,
@@ -274,6 +286,20 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: [
             `${VOICE_CREDENTIAL_PROVIDER.displayName} API key`,
             "credential connect voice unmetered what luke runs on",
+          ],
+        }
+      : undefined,
+    // The Voice page's own key row, drawn only while ElevenLabs is the chosen
+    // speech provider — until then the page holds no key at all.
+    input.voiceControlsDrawn && input.settings.speechProvider === SPEECH_PROVIDER.ELEVENLABS
+      ? {
+          id: SPEECH_CREDENTIAL_PROVIDER.id,
+          label: `${SPEECH_CREDENTIAL_PROVIDER.displayName} API key`,
+          page: SETTINGS_VIEW.VOICE,
+          icon: <ProviderMark providerId={SPEECH_CREDENTIAL_PROVIDER.id} />,
+          haystack: [
+            `${SPEECH_CREDENTIAL_PROVIDER.displayName} API key`,
+            "credential connect speech voice clone",
           ],
         }
       : undefined,

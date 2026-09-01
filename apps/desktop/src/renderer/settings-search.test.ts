@@ -25,6 +25,7 @@ function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
         [CREDENTIAL_PROVIDER_ID.COPILOT]: CREDENTIAL_SOURCE.NONE,
         [CREDENTIAL_PROVIDER_ID.CURSOR]: CREDENTIAL_SOURCE.NONE,
         [CREDENTIAL_PROVIDER_ID.DEVIN]: CREDENTIAL_SOURCE.NONE,
+        [CREDENTIAL_PROVIDER_ID.ELEVENLABS]: CREDENTIAL_SOURCE.NONE,
         [CREDENTIAL_PROVIDER_ID.JULES]: CREDENTIAL_SOURCE.NONE,
         [CREDENTIAL_PROVIDER_ID.LINEAR]: CREDENTIAL_SOURCE.NONE,
         [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
@@ -209,7 +210,7 @@ test("the kept rows come back grouped under their pages, in the pages' order", (
   ]);
   assert.equal(shortcuts.matched, 3);
 
-  // "key" lands on the front page and two others; the groups keep the front
+  // "key" lands on the front page and three others; the groups keep the front
   // page's own order, front page first.
   const keys = searchSettings(entries, "key");
   assert.ok(keys);
@@ -217,7 +218,7 @@ test("the kept rows come back grouped under their pages, in the pages' order", (
   const pages = keys.groups.map((group) => group.page);
   assert.deepEqual(
     pages,
-    [SETTINGS_VIEW.ROOT, SETTINGS_VIEW.SHORTCUTS, SETTINGS_VIEW.CONNECTIONS],
+    [SETTINGS_VIEW.ROOT, SETTINGS_VIEW.VOICE, SETTINGS_VIEW.SHORTCUTS, SETTINGS_VIEW.CONNECTIONS],
     "groups follow the nav's order",
   );
 });

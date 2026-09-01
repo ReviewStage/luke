@@ -72,6 +72,7 @@
     "typescript": "7.0.2"
   },
   "dependencies": {
+    "@sidecar/speech": "workspace:*",
     "electron-updater": "6.8.9"
   }
 }

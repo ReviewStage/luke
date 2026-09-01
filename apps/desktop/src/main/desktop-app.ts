@@ -27,7 +27,11 @@ import {
   type MeetingInterval,
   nextMeetingBoundary,
 } from "@sidecar/calendar";
-import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
+import {
+  CREDENTIAL_PROVIDER_ID,
+  type CredentialProviderId,
+  SPEECH_CREDENTIAL_PROVIDER_ID,
+} from "@sidecar/credentials";
 import { AgentTraceWriter, tracedAttentionEvaluator } from "@sidecar/devtrace";
 import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
 import { fixtureSnapshot } from "@sidecar/fixtures";
@@ -1571,6 +1575,8 @@ function registerIpc(): void {
     hostedUsageReader: () => voiceCapabilities.hostedUsageReader,
     recordProductEvent,
     recordAgentTrace: (trace) => agentTrace?.recordWire(trace),
+    readSpeechApiKey: () => settingsStore.readApiKey(SPEECH_CREDENTIAL_PROVIDER_ID),
+    speechReachesNetwork: () => runMode.sendsNetwork,
   });
 
   registerSessionActsIpc({

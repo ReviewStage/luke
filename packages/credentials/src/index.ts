@@ -11,6 +11,8 @@ export {
   INTEGRATION_PROVIDER_LIST,
   isCredentialProviderId,
   providerRunsSessionsInCloud,
+  SPEECH_CREDENTIAL_PROVIDER,
+  SPEECH_CREDENTIAL_PROVIDER_ID,
   VOICE_CREDENTIAL_PROVIDER,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "./credential-providers.js";

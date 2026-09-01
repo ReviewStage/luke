@@ -22,6 +22,7 @@
     "@sidecar/guide": "workspace:*",
     "@sidecar/realtime": "workspace:*",
     "@sidecar/session": "workspace:*",
+    "@sidecar/speech": "workspace:*",
     "@sidecar/surface": "workspace:*",
     "@sidecar/wire": "workspace:*"
   }

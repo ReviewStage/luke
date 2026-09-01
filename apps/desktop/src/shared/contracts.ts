@@ -39,4 +39,5 @@ export * from "./wire/audio";
 export * from "./wire/calendar";
 export * from "./wire/session";
 export * from "./wire/settings";
+export * from "./wire/speech";
 export * from "./wire/update";

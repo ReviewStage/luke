@@ -5,7 +5,17 @@ import {
 } from "@sidecar/analytics";
 import { CREDENTIAL_CONNECTION, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
 import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
+import {
+  ELEVENLABS_VOICES_URL,
+  listElevenlabsVoices,
+  mintElevenlabsToken,
+  TOKEN_MINT_OUTCOME,
+  tokenMintExplanation,
+  VOICE_LIST_OUTCOME,
+  voiceListExplanation,
+} from "@sidecar/speech";
 import type { HostedUsageReader, RealtimeCredentialMinter } from "@sidecar/voice";
+import type { CloudFetch } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { BRIDGE } from "#shared/bridge";
 import { registerBridge } from "../register-bridge";
@@ -37,10 +47,41 @@ export interface VoiceRuntimeIpcDependencies {
    * fire-and-forget send lands here and stops.
    */
   recordAgentTrace: (trace: AgentWireTrace) => void;
+  /**
+   * The stored ElevenLabs key, read here and nowhere the renderer can reach.
+   * Nothing at all wherever no key is connected, which is the same answer a
+   * machine with no key gives every other keyed service.
+   */
+  readSpeechApiKey: () => Promise<string | undefined>;
+  /**
+   * Whether this run may reach the network at all. A fixture or evidence run
+   * observes nothing and mints nothing, the same gate the realtime minter
+   * stands behind.
+   */
+  speechReachesNetwork: () => boolean;
+  fetch?: CloudFetch;
 }
+
+/**
+ * What both speech answers say where there is no key to ask with — a
+ * disconnected account, or a run that never reaches the network. The same
+ * shape a refused key produces, so the page draws one thing either way.
+ */
+const NO_SPEECH_KEY_VOICES = {
+  outcome: VOICE_LIST_OUTCOME.UNAUTHORIZED,
+  voices: [],
+  explanation: "No ElevenLabs key is connected, so there are no voices to read.",
+} as const;
+
+const NO_SPEECH_KEY_TOKEN = {
+  outcome: TOKEN_MINT_OUTCOME.UNAUTHORIZED,
+  explanation: "No ElevenLabs key is connected, so Luke cannot speak through it.",
+} as const;
 
 export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencies): void {
   const { panels } = dependencies;
+  const speechKey = async () =>
+    dependencies.speechReachesNetwork() ? dependencies.readSpeechApiKey() : undefined;
   registerBridge(
     BRIDGE,
     {
@@ -84,6 +125,35 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
       requestRealtimeDiagnostics: () =>
         dependencies.chooseRealtimeCredentials()?.minter.diagnostics() ??
         dependencies.unavailableDiagnostics(),
+      openSpeechVoicesPage: () => {
+        void dependencies.openExternal(ELEVENLABS_VOICES_URL);
+      },
+      async listSpeechVoices() {
+        const apiKey = await speechKey();
+        if (!apiKey) return NO_SPEECH_KEY_VOICES;
+        const result = await listElevenlabsVoices({ apiKey, fetch: dependencies.fetch ?? fetch });
+        return {
+          outcome: result.outcome,
+          voices: result.voices ?? [],
+          ...(result.outcome === VOICE_LIST_OUTCOME.OK
+            ? undefined
+            : { explanation: voiceListExplanation(result.outcome) }),
+        };
+      },
+      async mintSpeechToken() {
+        const apiKey = await speechKey();
+        if (!apiKey) return NO_SPEECH_KEY_TOKEN;
+        const result = await mintElevenlabsToken({ apiKey, fetch: dependencies.fetch ?? fetch });
+        // Only the token travels. The outcome and its sentence say what
+        // happened; the key that produced it stays in this process.
+        return {
+          outcome: result.outcome,
+          ...(result.token ? { token: result.token } : undefined),
+          ...(result.outcome === TOKEN_MINT_OUTCOME.OK
+            ? undefined
+            : { explanation: tokenMintExplanation(result.outcome) }),
+        };
+      },
       requestHostedUsage: () => dependencies.hostedUsageReader()?.read(),
       recordAgentTrace(_context, trace) {
         dependencies.recordAgentTrace(trace);

@@ -25,6 +25,7 @@ import {
   CURSOR_PATH,
   DEEPSEEK_PATH,
   DEVIN_PATH,
+  ELEVENLABS_PATH,
   GEMINI_CLI_MARK_LAYERS,
   GEMINI_CLI_MARK_MASK_PATH,
   GOOGLE_CALENDAR_MARK_LAYERS,
@@ -545,6 +546,20 @@ function LinearMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
+function ElevenLabsMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg
+      className={className}
+      data-mark={CREDENTIAL_PROVIDER_ID.ELEVENLABS}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path fill="currentColor" d={ELEVENLABS_PATH} />
+    </svg>
+  );
+}
+
 function OpenAiMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
@@ -687,6 +702,7 @@ export type MarkId =
   | IssueTrackerId
   | typeof APPLE_CALENDAR_ID
   | typeof GOOGLE_CALENDAR_ID
+  | typeof CREDENTIAL_PROVIDER_ID.ELEVENLABS
   | typeof CREDENTIAL_PROVIDER_ID.OPENAI
   | typeof SUPERSET_WORKSPACE_PROVIDER_ID
   | typeof CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID;
@@ -709,6 +725,7 @@ const PROVIDER_MARKS = {
   [SESSION_APPLICATION_ID.CURSOR]: CursorMark,
   [HOSTED_AGENT_ID.DEEPSEEK]: DeepSeekMark,
   [PROVIDER_ID.DEVIN]: DevinMark,
+  [CREDENTIAL_PROVIDER_ID.ELEVENLABS]: ElevenLabsMark,
   [PROVIDER_ID.GEMINI_CLI]: GeminiCliMark,
   [GOOGLE_CALENDAR_ID]: GoogleCalendarMark,
   [PROVIDER_ID.GROK_BUILD]: GrokBuildMark,

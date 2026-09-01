@@ -2,25 +2,33 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   CREDENTIAL_PROVIDER_LIST,
+  type CredentialProviderId,
+  SPEECH_CREDENTIAL_PROVIDER_ID,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials/vocabulary";
 import {
   credentialSettingsPage,
   PANEL_STAND_DOWN,
   SETTINGS_VIEW,
+  type SettingsView,
   standDownReturnPage,
 } from "./settings-views";
 
 test("a credential entry returns to the page its row is drawn on", () => {
   // The OpenAI row lives in the What Luke runs on section at the top of the front
-  // page — beside the allowance it replaces — and every other key lives under
+  // page — beside the allowance it replaces — the ElevenLabs row on the Voice
+  // page beside the voice it is what chooses, and every other key lives under
   // Connections. An entry's trip to
   // the key slot has to end back on the page it began on, or the check beside
   // the provider lands on a page nobody is looking at.
+  const expected = new Map<CredentialProviderId, SettingsView>([
+    [VOICE_CREDENTIAL_PROVIDER_ID, SETTINGS_VIEW.ROOT],
+    [SPEECH_CREDENTIAL_PROVIDER_ID, SETTINGS_VIEW.VOICE],
+  ]);
   for (const provider of CREDENTIAL_PROVIDER_LIST) {
     assert.equal(
       credentialSettingsPage(provider.id),
-      provider.id === VOICE_CREDENTIAL_PROVIDER_ID ? SETTINGS_VIEW.ROOT : SETTINGS_VIEW.CONNECTIONS,
+      expected.get(provider.id) ?? SETTINGS_VIEW.CONNECTIONS,
       provider.id,
     );
   }

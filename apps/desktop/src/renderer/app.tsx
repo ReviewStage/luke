@@ -34,6 +34,7 @@ import {
   voiceHotkeyLabel,
   voiceHotkeyToShow,
 } from "@sidecar/settings";
+import { SPEECH_PROVIDER } from "@sidecar/speech";
 import {
   MOTION_DURATION_MS,
   SESSION_NOTICE_HEIGHT,
@@ -2070,6 +2071,8 @@ export function App(): React.JSX.Element {
     workspaceProjectDefaults,
     voice: settings?.voice,
     voiceSpeed: settings?.voiceSpeed,
+    speechProvider: settings?.speechProvider ?? SPEECH_PROVIDER.OPENAI,
+    speechVoice: settings?.speechVoice,
     voiceCaptions: settings?.voiceCaptions === true,
     voiceAvailable: settings?.voiceAvailable,
     bootstrapVoiceHotkey: bootstrap?.voiceHotkey,

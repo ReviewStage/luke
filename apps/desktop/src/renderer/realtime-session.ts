@@ -71,6 +71,7 @@ import {
   type PressCaptureFactory,
   type PressCaptureSource,
 } from "./press-audio-capture";
+import type { SpeechListener, SpeechSynthesizer } from "./speech-output";
 
 const SDP_CONTENT_TYPE = "application/sdp";
 
@@ -331,6 +332,16 @@ export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbac
    * list — so its pre-account call is tool-free at the API itself.
    */
   sessionSyncEvents?: () => readonly WireRecord[];
+  /**
+   * Where Luke's words are said, when they are not said by the service
+   * writing them. Present only while the developer has chosen another speech
+   * provider, and it changes the shape of the whole call: the session asks
+   * for text alone, the deltas that would have been a transcript become both
+   * the caption and the words to speak, and the two edges the Realtime call
+   * reports about its own audio come from the synthesizer instead. Built here
+   * rather than handed in whole so its lifetime is the call's.
+   */
+  createSpeech?: (listener: SpeechListener) => SpeechSynthesizer | undefined;
   connectTimeoutMs?: number;
   /**
    * How long a call may sit idle before it is put away. Injectable so the
@@ -561,6 +572,13 @@ export class RealtimeVoiceSession {
    * it entirely under our control.
    */
   #remoteTrack: MediaStreamTrack | undefined;
+  /**
+   * Who says Luke's words on this call, when the service writing them does
+   * not. Built with the call and closed with it, so a provider changed
+   * mid-conversation takes effect on the call that replaces this one rather
+   * than halfway through a reply.
+   */
+  #speech: SpeechSynthesizer | undefined;
   /**
    * Whether the model has finished producing the reply. It is not the same as
    * the reply being over: `response.done` says generation is complete, and the
@@ -814,6 +832,12 @@ export class RealtimeVoiceSession {
       const peer: PeerConnection =
         this.#options.createPeerConnection?.() ?? new RTCPeerConnection();
       this.#peer = peer;
+      this.#speech = this.#options.createSpeech?.(this.#speechListener());
+      // The stream the panel plays is the synthesizer's, and it stands from
+      // the moment the call does: nothing arrives on the peer's own track
+      // when the session is asked for text alone, so waiting for `ontrack`
+      // would leave the element, the meter, and the duck with nothing.
+      if (this.#speech) this.#options.onRemoteStream(this.#speech.stream);
       if (this.#withMicrophone) {
         // The developer's call declares its sending half as a bare
         // transceiver: the line is negotiated now, and each turn's track
@@ -829,6 +853,11 @@ export class RealtimeVoiceSession {
       }
       peer.ontrack = (event) => {
         this.#remoteTrack = event.track;
+        // A call speaking through another service still negotiates its
+        // receiving line — the shape of the connection is the same — but
+        // nothing is ever sent on it, and handing the panel that silent
+        // track would replace the stream Luke is actually audible on.
+        if (this.#speech) return;
         // An answer that names no stream for the track (`a=msid` absent, which
         // a recvonly line permits) still delivers the audio on the track
         // itself, so one is built for the element rather than handing it
@@ -889,7 +918,10 @@ export class RealtimeVoiceSession {
 
       await this.#waitForChannel(channel, deadline.signal);
       if (this.#closed) return this.#abandonConnect();
-      this.#send((this.#options.sessionSyncEvents ?? realtimeSessionSyncEvents)());
+      this.#send(
+        this.#options.sessionSyncEvents?.() ??
+          realtimeSessionSyncEvents({ spokenElsewhere: this.#speech !== undefined }),
+      );
       this.#setStatus(REALTIME_STATUS.READY);
       // A pace changed during the handshake could not be sent then, and the
       // credential this call answered may have been minted before the change.
@@ -1510,6 +1542,10 @@ export class RealtimeVoiceSession {
     // made. A disabled track drops what is buffered rather than playing it
     // out, so the cut-off is immediate rather than eventual.
     this.#silenceLuke();
+    // Words already sent to the speech socket are already being played, and
+    // the socket is the only thing that can stop them: closing it drops what
+    // is queued, exactly as disabling the track does for Luke's own audio.
+    this.#speech?.cancel();
     // The caption is cut with the audio. It already held words the room
     // never heard — the text runs ahead of the speech — and leaving them up
     // would show Luke finishing a sentence he was just stopped from saying.
@@ -1726,6 +1762,10 @@ export class RealtimeVoiceSession {
     // Learned about this call, so it does not outlive it.
     this.#audioEndingsReported = false;
     this.#clearSettleTimer();
+    // The synthesizer's lifetime is the call's: its socket, its audio graph,
+    // and anything it still owed go with the connection they belonged to.
+    this.#speech?.close();
+    this.#speech = undefined;
     this.#options.onLocalStream(undefined);
     this.#options.onRemoteStream(undefined);
   }
@@ -1861,6 +1901,76 @@ export class RealtimeVoiceSession {
   }
 
   /**
+   * Audio flowing again says the drain the turn remembered was the pause
+   * between two things the reply had to say, not its ending. Left standing,
+   * the stale drain lets the `done` end the turn under the second half — the
+   * face and the duck released while Luke is still speaking. Only a resume
+   * that is attributably the current reply's own — or unnamed, the same
+   * reading the drain gets — may un-remember it. The backstop a drain armed
+   * is restarted rather than kept or cleared: kept, its clock ran from the
+   * pause and cuts a resumed half that outlives it; cleared, a `done` that
+   * never comes would hold the turn open with nothing left to end it.
+   *
+   * The Realtime call reports this about its own audio; a call spoken
+   * elsewhere reports the same edge from the synthesizer, so one reading of
+   * a pause serves both.
+   */
+  #noteAudioResumed(responseId: string | undefined): void {
+    if (responseId !== undefined && responseId !== this.#activeResponseId) return;
+    this.#audioDrained = false;
+    if (this.#settleTimer !== undefined) {
+      this.#clearSettleTimer();
+      this.#armSettleTimer();
+    }
+  }
+
+  /**
+   * The reply has played out every word it produced. The audio can run out
+   * while the server still owes the reply its `done` — generation finishing
+   * and playback finishing have no fixed order — and until that `done` the
+   * conversation holds an active response. A turn ended here would offer
+   * READY to a caller with a reply to ask for — the announcer reading out a
+   * notice that queued behind this reply is the one that takes it — and the
+   * create it sends would be refused as a conversation already in progress,
+   * the refusal read out as a voice error and the notice lost. So the drain
+   * is remembered and the `done` ends the turn, with the settle backstop for
+   * a `done` that never comes.
+   *
+   * An armed reply whose `done` has landed but whose follow-up is still owed
+   * holds the same way, in the mirror order: the write is under way, the
+   * READY an ending would offer is the same edge, and the `done` already gave
+   * the hold a clock of its own.
+   */
+  #noteAudioDrained(responseId: string | undefined): void {
+    this.#audioEndingsReported = true;
+    if (this.#responseOutstanding || this.#followUpPending) {
+      this.#audioDrained = { responseId };
+      this.#armSettleTimer();
+      return;
+    }
+    // The reply is over because the service says the audio ran out, not
+    // because this end guessed from a stretch of quiet. A pause between two
+    // sentences is quiet too, and guessing ended the turn in the middle of
+    // one — the meter and the face went with it while Luke talked on.
+    this.#finishResponse();
+  }
+
+  /**
+   * What the synthesizer reports back, read as the same three things the
+   * Realtime call reports about its own audio: audible again, drained, and
+   * failed. A failure never moves Luke back to the other provider — the
+   * developer chose this one — so it says what happened and lets the reply
+   * settle on the words already drawn.
+   */
+  #speechListener(): SpeechListener {
+    return {
+      onAudible: () => this.#noteAudioResumed(undefined),
+      onDrained: () => this.#noteAudioDrained(undefined),
+      onError: (message) => this.#options.onError(message),
+    };
+  }
+
+  /**
    * Whether the reply now under way has played out every word it generated.
    * Only a drain that is attributably this reply's own says so: an old
    * reply's late drain speaks for audio the current reply never played. A
@@ -1990,6 +2100,10 @@ export class RealtimeVoiceSession {
     // failed before it started would leave Luke silenced with nothing to
     // un-silence him.
     this.#unsilenceLuke();
+    // The turn is over, so a socket still owing words is owing them to nobody:
+    // the settle backstop is the one path that gets here with one open, and
+    // letting it play on would speak into the quiet the ending just declared.
+    this.#speech?.cancel();
     this.#clearQuietTimer();
     this.#clearSettleTimer();
     this.#heardLuke = false;
@@ -2338,6 +2452,9 @@ export class RealtimeVoiceSession {
         // confirmation and finds nothing to match.
         if (event.responseId) this.#activeResponseId = event.responseId;
         this.#unsilenceLuke();
+        // A fresh reply gets a fresh socket and a fresh token: nothing owed to
+        // the last one may be heard under this one.
+        this.#speech?.start();
         return;
       case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA:
         // Only the reply being spoken may write the caption. A cancelled reply's
@@ -2347,6 +2464,23 @@ export class RealtimeVoiceSession {
         // onto the next reply's.
         if (event.itemId === this.#responseItemId && event.delta) {
           this.#appendCaptionDelta(event.itemId, event.delta);
+        }
+        return;
+      case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_TEXT_DELTA:
+        // The same guard the transcript deltas keep, and the same words: on a
+        // call spoken elsewhere these are both what the caption draws and
+        // what the speech socket is fed, in the order they were generated.
+        if (event.itemId === this.#responseItemId && event.delta) {
+          this.#appendCaptionDelta(event.itemId, event.delta);
+          this.#speech?.append(event.delta);
+        }
+        return;
+      case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_TEXT_DONE:
+        // The server's whole rendering, which corrects a caption a lost delta
+        // left a hole in. It is not sent onward: the socket has already been
+        // given the deltas, and re-sending the sentence would say it twice.
+        if (event.transcript) {
+          this.#settleCaptionTranscript(event.itemId, event.transcript);
         }
         return;
       case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE:
@@ -2361,24 +2495,7 @@ export class RealtimeVoiceSession {
         }
         return;
       case REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STARTED:
-        // Audio flowing again says the drain the turn remembered was the
-        // pause between two things the reply had to say, not its ending.
-        // Left standing, the stale drain lets the `done` end the turn under
-        // the second half — the face and the duck released while Luke is
-        // still speaking. Only a resume that is attributably the current
-        // reply's own — or unnamed, the same reading the drain gets — may
-        // un-remember it. The backstop a drain armed is restarted rather
-        // than kept or cleared: kept, its clock ran from the pause and cuts
-        // a resumed half that outlives it; cleared, a `done` that never
-        // comes would hold the turn open with nothing left to end it.
-        if (event.responseId !== undefined && event.responseId !== this.#activeResponseId) {
-          return;
-        }
-        this.#audioDrained = false;
-        if (this.#settleTimer !== undefined) {
-          this.#clearSettleTimer();
-          this.#armSettleTimer();
-        }
+        this.#noteAudioResumed(event.responseId);
         return;
       case REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED:
         // Only the developer's own call has spoken turns to hand back; the
@@ -2390,31 +2507,7 @@ export class RealtimeVoiceSession {
         if (this.#withMicrophone) this.#options.onSpokenAskCommitted?.(event.itemId);
         return;
       case REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED:
-        this.#audioEndingsReported = true;
-        // The audio can run out while the server still owes the reply its
-        // `done` — generation finishing and playback finishing have no fixed
-        // order — and until that `done` the conversation holds an active
-        // response. A turn ended here would offer READY to a caller with a
-        // reply to ask for — the announcer reading out a notice that queued
-        // behind this reply is the one that takes it — and the create it
-        // sends would be refused as a conversation already in progress, the
-        // refusal read out as a voice error and the notice lost. So the
-        // drain is remembered and the `done` ends the turn, with the settle
-        // backstop for a `done` that never comes.
-        // An armed reply whose `done` has landed but whose follow-up is still
-        // owed holds the same way, in the mirror order: the write is under
-        // way, the READY an ending would offer is the same edge, and the
-        // `done` already gave the hold a clock of its own.
-        if (this.#responseOutstanding || this.#followUpPending) {
-          this.#audioDrained = { responseId: event.responseId };
-          this.#armSettleTimer();
-          return;
-        }
-        // The reply is over because the server says the audio ran out, not
-        // because this end guessed from a stretch of quiet. A pause between two
-        // sentences is quiet too, and guessing ended the turn in the middle of
-        // one — the meter and the face went with it while Luke talked on.
-        this.#finishResponse();
+        this.#noteAudioDrained(event.responseId);
         return;
       case REALTIME_SERVER_EVENT.RESPONSE_DONE: {
         // Whether this is the reply now under way, or the finished form of one
@@ -2428,6 +2521,12 @@ export class RealtimeVoiceSession {
         // Whatever this reply turns out to be below, the server has concluded
         // it: from here the conversation can take a new `response.create`.
         if (fresh) this.#responseOutstanding = false;
+        // Generation is over, so every word this reply had is already on its
+        // way to the socket: closing it flushes what it still owes. What comes
+        // back is whether anything is owed to be heard at all — a tool-only
+        // reply had no words, and one whose socket already failed has nothing
+        // more coming, so neither may hold the turn open on a drain.
+        const stillSpeaking = fresh && this.#speech ? this.#speech.finish() : false;
         // A reply that asked for tools has not finished talking: the calls are
         // answered and the reply resumes over their outcomes, so the turn stays
         // open rather than ending on a reply that was only half made.
@@ -2451,11 +2550,28 @@ export class RealtimeVoiceSession {
           }
           // The spoken half's audio already drained — its ending deferred to
           // this `done`, and a reply owing no follow-up ends here, exactly
-          // as the drain would have ended it.
-          if (fresh && this.#currentReplyDrained()) this.#finishResponse();
+          // as the drain would have ended it. A call spoken elsewhere reads
+          // the same ending off its socket: nothing owed is nothing to wait
+          // for, which is every reply that only called a tool.
+          const spokenHalfOver = this.#speech ? !stillSpeaking : this.#currentReplyDrained();
+          if (fresh && (spokenHalfOver || this.#currentReplyDrained())) this.#finishResponse();
           return;
         }
         if (!fresh) return;
+        // A call spoken elsewhere produces no audio at all, so what the server
+        // reports about its own says nothing about whether Luke has stopped
+        // talking. The synthesizer answers that instead: nothing owed ends the
+        // turn now, and anything owed ends it when the socket drains, with the
+        // same settle backstop behind it.
+        if (this.#speech) {
+          this.#generationDone = true;
+          if (!stillSpeaking || this.#currentReplyDrained()) {
+            this.#finishResponse();
+            return;
+          }
+          this.#armSettleTimer();
+          return;
+        }
         // A reply the server says made no sound has nothing to play out — a
         // success is said with silence, so the follow-up after a tool call is
         // often exactly this. The meter will never hear him and never call

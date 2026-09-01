@@ -33,7 +33,8 @@ screen, your editor, your terminal, or any other app. A recording shows whatever
 the panel showed you, including session titles, branches, summaries and error
 text, your name and email address, and any screenshot you attached to the
 feedback form. The History tab is blocked from recordings, so the words in your
-conversation with Luke are not included. Text you type into a field is replaced
+conversation with Luke are not included, and so is the list of your own
+ElevenLabs voices on the Voice page, so the names you gave them are not either. Text you type into a field is replaced
 with blocks before the recording leaves your Mac, so an API key or a sign-in
 code you enter is not in it. While recording is on, Luke also reports what you
 clicked, including the text on it, and any error his panel runs into, with its
@@ -79,6 +80,18 @@ and email you signed it with, and any screenshots you attached.
   practice moment. It plays once, can act on nothing, and our service issues
   its credential without an account — keeping only a hash of your network
   address for that day's rate limit, tied to nobody.
+- ElevenLabs, only if you connect an ElevenLabs key and choose one of your own
+  voices to have Luke speak with. It then receives the text of what Luke says,
+  and returns the audio, under your own key. It never receives your microphone
+  audio, your session fields, your files, or any voice-cloning sample: cloning
+  happens in ElevenLabs, and Luke records and uploads nothing. Everything else
+  — hearing you, writing the reply, tools, and session summaries — still goes
+  to OpenAI as above, and is billed the same way. Your ElevenLabs key stays
+  encrypted on your Mac and is never synced to our service; deleting it in Luke
+  returns Luke's voice to OpenAI and does not delete anything in your
+  ElevenLabs account. We do not ask ElevenLabs for Zero Retention Mode, which
+  ElevenLabs offers to enterprise accounts only, so what it keeps follows your
+  own ElevenLabs plan and settings.
 - Coding agent providers you connect (Conductor, Cursor, Devin, GitHub Copilot,
   Jules, Replicas) and Linear, using the key or account access you supply. For
   Codex cloud tasks and for messaging local Cursor chats, that access is the
@@ -117,6 +130,8 @@ service, and usage counts and recordings by PostHog.
 
 - Disconnect any provider, issue tracker, or calendar to stop it being read.
 - Delete your OpenAI key to turn voice off.
+- Delete your ElevenLabs key, or set Speech back to OpenAI on the Voice page, to
+  stop sending anything to ElevenLabs.
 - Delete any synced provider API key from that provider's row in Settings. Keys
   are also deleted when you delete your account.
 - Luke does not use your microphone until you start a turn.

@@ -38,6 +38,12 @@ import {
   workspaceAgentModels,
 } from "@sidecar/session";
 import {
+  isSpeechProvider,
+  isSpeechVoiceId,
+  SPEECH_PROVIDER,
+  type SpeechProvider,
+} from "@sidecar/speech";
+import {
   DEFAULT_PANEL_FORM_FACTOR,
   isPanelFormFactor,
   PANEL_FORM_FACTOR_LIST,
@@ -146,6 +152,17 @@ const VOICE_SOURCE_CHOICE = {
   [VOICE_SOURCE.ACCOUNT]: "your Luke account",
   [VOICE_SOURCE.KEY]: "your OpenAI key",
 };
+
+/** The two services that can say Luke's words, named as the row names them. */
+const SPEECH_PROVIDER_CHOICE = {
+  [SPEECH_PROVIDER.OPENAI]: "OpenAI",
+  [SPEECH_PROVIDER.ELEVENLABS]: "ElevenLabs",
+};
+
+const SPEECH_PROVIDER_BY_CHOICE = new Map<string, SpeechProvider>([
+  [SPEECH_PROVIDER_CHOICE[SPEECH_PROVIDER.OPENAI], SPEECH_PROVIDER.OPENAI],
+  [SPEECH_PROVIDER_CHOICE[SPEECH_PROVIDER.ELEVENLABS], SPEECH_PROVIDER.ELEVENLABS],
+]);
 
 const VOICE_SPEED_WORD = {
   SLOW: "slow",
@@ -378,6 +395,55 @@ export const APP_SETTING_SCHEMA = {
     mainProcessSideEffect: SETTING_SIDE_EFFECT.DOCK,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
     analytics: { id: APP_SETTING_ID.SHOW_IN_DOCK, value: toggleAnalytics },
+  },
+  speechProvider: {
+    field: "speechProvider",
+    default: SPEECH_PROVIDER.OPENAI,
+    guard: (value: UnparsedWireValue) => optional(value, isSpeechProvider),
+    settingsPage: SETTINGS_PAGE.VOICE,
+    resetScope: SETTINGS_RESET_SCOPE.VOICE,
+    guideEntry: settingGuideEntry(
+      "speechProvider",
+      [APP_SETTING_ID.SPEECH_PROVIDER],
+      (settings) => ({
+        id: APP_SETTING_ID.SPEECH_PROVIDER,
+        label: "Speech",
+        description:
+          "Which service says Luke's words out loud. OpenAI speaks in one of its own voices; " +
+          "ElevenLabs speaks in a personal voice from the developer's own ElevenLabs account, " +
+          "and needs an ElevenLabs key connected on the same page. Everything else — the " +
+          "conversation, hearing the developer, tools, and reviewing sessions — stays with " +
+          "OpenAI either way, and is billed the same way either way.",
+        kind: APP_SETTING_KIND.CHOICE,
+        value: SPEECH_PROVIDER_CHOICE[guideValue<SpeechProvider>(settings, "speechProvider")],
+        defaultValue: SPEECH_PROVIDER_CHOICE[SPEECH_PROVIDER.OPENAI],
+        choices: Object.values(SPEECH_PROVIDER_CHOICE),
+        // A hand only: choosing ElevenLabs means nothing until a key is
+        // connected and one of that account's voices is picked, and a spoken
+        // change that lands on neither would leave Luke unable to answer.
+        adjustable: false,
+        manual: VOICE_PAGE,
+      }),
+    ),
+    // The renderer owns what a change does: it restarts its own call once the
+    // reply under way has settled. Nothing in the main process holds a
+    // speech provider to reconfigure.
+    mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
+    spokenValue: (value: string) => SPEECH_PROVIDER_BY_CHOICE.get(value),
+  },
+  speechVoice: {
+    field: "speechVoice",
+    default: undefined,
+    guard: (value: UnparsedWireValue) => optional(value, isSpeechVoiceId),
+    settingsPage: SETTINGS_PAGE.VOICE,
+    resetScope: SETTINGS_RESET_SCOPE.VOICE,
+    // No guide entry of its own: the value is an ElevenLabs voice id, and the
+    // names beside it on the page are the developer's own, written when they
+    // made the clone. The guide leaves the machine, so the speech setting
+    // above is what Luke knows — which service speaks — and the Voice page's
+    // own list is where a voice is chosen.
+    guideEntry: settingGuideEntry("speechVoice", [], () => undefined),
+    mainProcessSideEffect: SETTING_SIDE_EFFECT.NONE,
   },
   voice: {
     field: "voice",

@@ -120,6 +120,15 @@ export const REALTIME_SERVER_EVENT = {
   RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA: "response.output_audio_transcript.delta",
   /** The reply's complete text, which supersedes whatever the deltas built. */
   RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE: "response.output_audio_transcript.done",
+  /**
+   * The same words on a call whose output is text alone, which is what a
+   * session speaking through another service asks for: there is no audio for
+   * a transcript to be of, so the reply arrives as text in its own right. The
+   * deltas are what the caption draws and what the speech socket is fed.
+   */
+  RESPONSE_OUTPUT_TEXT_DELTA: "response.output_text.delta",
+  /** The text reply's complete words, which supersede whatever the deltas built. */
+  RESPONSE_OUTPUT_TEXT_DONE: "response.output_text.done",
   /** The server has made one developer audio turn into a conversation item. */
   INPUT_AUDIO_BUFFER_COMMITTED: "input_audio_buffer.committed",
   /**
@@ -719,6 +728,16 @@ export type ParsedRealtimeServerEvent =
       transcript: string;
     }
   | {
+      type: typeof REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_TEXT_DELTA;
+      itemId?: string;
+      delta: string;
+    }
+  | {
+      type: typeof REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_TEXT_DONE;
+      itemId?: string;
+      transcript: string;
+    }
+  | {
       type: typeof REALTIME_SERVER_EVENT.INPUT_AUDIO_TRANSCRIPTION_COMPLETED;
       itemId: string;
       transcript: string;
@@ -860,6 +879,27 @@ export function parseRealtimeServerEvent(
       const itemId = optionalString(event.item_id);
       const parsed: ParsedRealtimeServerEvent = {
         type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE,
+        transcript,
+      };
+      if (itemId) parsed.itemId = itemId;
+      return parsed;
+    }
+    case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_TEXT_DELTA: {
+      if (!isWireString(event.delta) || event.delta.length === 0) return undefined;
+      const itemId = optionalString(event.item_id);
+      const parsed: ParsedRealtimeServerEvent = {
+        type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_TEXT_DELTA,
+        delta: event.delta,
+      };
+      if (itemId) parsed.itemId = itemId;
+      return parsed;
+    }
+    case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_TEXT_DONE: {
+      const transcript = text(event.text);
+      if (!transcript) return undefined;
+      const itemId = optionalString(event.item_id);
+      const parsed: ParsedRealtimeServerEvent = {
+        type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_TEXT_DONE,
         transcript,
       };
       if (itemId) parsed.itemId = itemId;

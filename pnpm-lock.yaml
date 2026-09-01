@@ -29,6 +29,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@sidecar/speech':
+        specifier: workspace:*
+        version: link:../../packages/speech
       electron-updater:
         specifier: 6.8.9
         version: 6.8.9
@@ -626,9 +629,28 @@ importers:
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
+      '@sidecar/speech':
+        specifier: workspace:*
+        version: link:../speech
       '@sidecar/surface':
         specifier: workspace:*
         version: link:../surface
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/speech:
+    dependencies:
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire

@@ -7,10 +7,12 @@ import {
   type CredentialFormat,
   type CredentialProvider,
   type CredentialProviderId,
+  SPEECH_CREDENTIAL_PROVIDER_ID,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials";
 import { REALTIME_DEFAULTS } from "@sidecar/realtime";
 import { parseWorkspaceAgentKindSelection, SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
+import { SPEECH_PROVIDER } from "@sidecar/speech";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import {
   ACT_RESULT_STATUS,
@@ -853,10 +855,20 @@ export class SettingsStore {
         providerId === VOICE_CREDENTIAL_PROVIDER_ID &&
         ciphertext !== undefined &&
         persisted.voiceSource !== VOICE_SOURCE.KEY;
+      // Deleting the key that only speaks takes what it was speaking with down
+      // with it: a stored voice id with no key behind it names a voice Luke
+      // cannot reach, and a speech provider he cannot mint a token for is
+      // silence rather than a setting. Connecting one chooses nothing — no
+      // voice has been picked yet, and picking one is what moves speech over.
+      const returnsSpeech =
+        providerId === SPEECH_CREDENTIAL_PROVIDER_ID &&
+        ciphertext === undefined &&
+        (persisted.speechProvider !== SPEECH_PROVIDER.OPENAI ||
+          persisted.speechVoice !== undefined);
       // A key that is already stored is not a write — unless it is also the
       // act of choosing it, which pasting the same key back while parked on
-      // the allowance is.
-      if (persisted.apiKeys[providerId] === ciphertext && !chooses) return;
+      // the allowance is, or of returning speech the deleted key was carrying.
+      if (persisted.apiKeys[providerId] === ciphertext && !chooses && !returnsSpeech) return;
       // Every other provider's ciphertext is carried over, so saving one key
       // never disturbs another.
       const apiKeys = { ...persisted.apiKeys };
@@ -868,6 +880,10 @@ export class SettingsStore {
         apiKeys,
       };
       if (chooses) next.voiceSource = VOICE_SOURCE.KEY;
+      if (returnsSpeech) {
+        next.speechProvider = SPEECH_PROVIDER.OPENAI;
+        delete next.speechVoice;
+      }
       await this.#write(next);
       this.#loading = Promise.resolve(next);
       this.#resolved.delete(providerId);
