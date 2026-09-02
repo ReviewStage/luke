@@ -34,9 +34,17 @@ public struct MarkdownListItem: Equatable, Sendable {
 
     /// An item read for the task box GitHub-flavored lists open with: the
     /// box leaves the words and becomes `checked`, and an item without one
-    /// is left exactly as it was.
+    /// is left exactly as it was. The box must be plain words: a `[x]` that
+    /// opens inside a code span, emphasis, or link is the author's own text,
+    /// and inline markup has already been applied by the time it is read.
     static func readingTaskBox(ordinal: Int, blocks: [MarkdownBlock]) -> MarkdownListItem {
-        guard case .paragraph(let words)? = blocks.first else {
+        guard
+            case .paragraph(let words)? = blocks.first,
+            let openingRun = words.runs.first,
+            openingRun.inlinePresentationIntent == nil,
+            openingRun.link == nil,
+            words.characters.distance(from: openingRun.range.lowerBound, to: openingRun.range.upperBound) >= 4
+        else {
             return MarkdownListItem(ordinal: ordinal, blocks: blocks)
         }
         let opening = String(words.characters.prefix(4))

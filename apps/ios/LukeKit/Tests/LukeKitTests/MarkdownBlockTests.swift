@@ -89,6 +89,15 @@ final class MarkdownBlockTests: XCTestCase {
         XCTAssertEqual(todo.runs.first?.inlinePresentationIntent, .stronglyEmphasized)
     }
 
+    func testATaskBoxInsideInlineMarkupIsTheAuthorsOwnWords() throws {
+        let blocks = MarkdownBlock.parse("- `[x]` in code\n- **[ ]** in bold\n- [[x]](https://example.com) in a link")
+        guard case .list(false, let items) = try XCTUnwrap(blocks.first) else {
+            return XCTFail("expected a list, got \(blocks)")
+        }
+        XCTAssertEqual(items.map(\.checked), [nil, nil, nil])
+        XCTAssertEqual(items.map { $0.blocks.compactMap(paragraphWords) }, [["[x] in code"], ["[ ] in bold"], ["[x] in a link"]])
+    }
+
     func testOrderedListKeepsTheSourceNumbering() throws {
         let blocks = MarkdownBlock.parse("3. three\n4. four")
         guard case .list(true, let items) = try XCTUnwrap(blocks.first) else {
