@@ -60,7 +60,7 @@ of supported agents below.
 
 ### Works around your schedule
 
-Connect your calendar and Luke stays quiet until your meeting is over.
+Connect your calendar, or just take a call, and Luke stays quiet until it's over.
 
 ## Supported agents and platforms
 

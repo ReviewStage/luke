@@ -199,7 +199,7 @@ export interface AppBootstrap {
   issues?: readonly TrackedIssue[];
   /** Each connected account's calendars, as last observed. */
   calendars: readonly ObservedAccountCalendars[];
-  /** Whether the calendar's quiet is holding announcements right now. */
+  /** Whether the quiet — a meeting or a call — is holding announcements right now. */
   meetingQuiet: boolean;
   /**
    * The conversation thread as the last launch left it, already retained.

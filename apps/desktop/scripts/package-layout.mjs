@@ -28,6 +28,7 @@ export const NATIVE_HELPERS = [
     // falls all the way back lands on the folder's own basename.
     bundle: "Luke.app",
   },
+  { source: "InputCapture.swift", binary: "mac-input-capture", frameworks: ["CoreAudio"] },
   { source: "MediaDuck.swift", binary: "mac-media-duck", frameworks: ["AppKit"] },
   {
     source: "MicrophoneRoute.swift",

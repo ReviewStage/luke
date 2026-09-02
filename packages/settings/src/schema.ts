@@ -581,14 +581,14 @@ export const APP_SETTING_SCHEMA = {
       [APP_SETTING_ID.QUIET_DURING_MEETINGS],
       (settings, defaultValue) => ({
         id: APP_SETTING_ID.QUIET_DURING_MEETINGS,
-        label: "Quiet during meetings",
+        label: "Quiet during meetings and calls",
         description:
-          "Whether spoken announcements wait while a connected calendar shows a meeting on, then read out together once it ends. Switched on mid-meeting it takes hold at once. It changes nothing until a calendar — a Google Calendar account, or this Mac's Apple Calendar — is connected.",
+          "Whether spoken announcements wait while a connected calendar shows a meeting on, or while another app is using this Mac's microphone, then read out together once it ends. The microphone is read as one yes-or-no from macOS, never as audio, and the quiet lifts a few seconds after the call ends. Switched on mid-meeting or mid-call it takes hold at once. The call part needs no calendar; the meeting part needs a Google Calendar account or this Mac's Apple Calendar connected.",
         kind: APP_SETTING_KIND.TOGGLE,
         value: appToggleText(guideValue<boolean>(settings, "quietDuringMeetings")),
         defaultValue: appToggleText(defaultValue),
         adjustable: true,
-        manual: `${CONNECTIONS_PAGE} — drawn once a calendar is connected`,
+        manual: CONNECTIONS_PAGE,
       }),
     ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.MEETING_QUIET,

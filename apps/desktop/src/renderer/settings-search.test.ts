@@ -119,7 +119,8 @@ test("a row a page is not drawing is not offered", () => {
   // draws it.
   const bare = labels(settingsSearchEntries(searchInput({ voiceControlsDrawn: false })));
   assert.ok(!bare.includes("Captions"), "no voice controls until voice can run");
-  assert.ok(!bare.includes("Quiet during meetings"), "no quiet row without a calendar account");
+  // The quiet holds for a call with no calendar at all, so its row always stands.
+  assert.ok(bare.includes("Quiet during meetings and calls"));
   assert.ok(!bare.includes("Linear"), "no Linear row without its OAuth client");
   assert.ok(!bare.includes("Superset"), "no Superset row while it is not installed");
   assert.ok(!bare.includes("New Conductor agents run"), "no agent row while disconnected");
@@ -131,7 +132,7 @@ test("a row a page is not drawing is not offered", () => {
   const wide = labels(settingsSearchEntries(everythingDrawn()));
   for (const label of [
     "Captions",
-    "Quiet during meetings",
+    "Quiet during meetings and calls",
     "Linear",
     "Superset",
     "New Conductor agents run",
@@ -180,7 +181,7 @@ test("a query narrows by every word, case-blind, and a blank query is no search"
   // Both words must land: "quiet" alone finds several rows, "quiet music" one.
   const quiet = labels(found(searchSettings(entries, "quiet")));
   assert.ok(quiet.includes("Quiet Music and Spotify"));
-  assert.ok(quiet.includes("Quiet during meetings"));
+  assert.ok(quiet.includes("Quiet during meetings and calls"));
   assert.deepEqual(labels(found(searchSettings(entries, "quiet music"))), [
     "Quiet Music and Spotify",
   ]);

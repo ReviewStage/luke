@@ -59,6 +59,7 @@ import {
   InMemorySessionRegistry,
   isProviderId,
   isWorkspaceProviderId,
+  MAXIMUM_RELEASED_NOTICES,
   normalizeObservedWorkspaceProjects,
   ObservationLoop,
   ObservationSupervisor,
@@ -140,6 +141,7 @@ import {
   countsFirstAnnouncement,
   shouldBackfillArrivalSettled,
 } from "./arrival-flow";
+import { CallQuietGate } from "./call-quiet";
 import {
   INTRODUCTION_FADE_MS,
   INTRODUCTION_HANDOFF_READY_MS,
@@ -167,6 +169,7 @@ import {
   rememberedFactsFromStored,
   rememberedFactsRecord,
 } from "./memory-flow";
+import { InputCaptureWatcher } from "./native/input-capture";
 import { MediaDuckController } from "./native/media-duck";
 import { MicrophoneRouteWatcher } from "./native/microphone-route";
 import { OutputVolumeWatcher } from "./native/output-volume";
@@ -455,24 +458,36 @@ const APPLE_ACCESS_POLL_INTERVAL_MS = 10_000;
 let appleAccessPollTimer: NodeJS.Timeout | undefined;
 /** Whether the last access probe failed, so only the edges reach the log. */
 let appleAccessProbeFailing = false;
-// Notices decided while a meeting is on wait here, in the main process: the
-// hold has to outlive any renderer, and this is the one place notices are
-// decided. What releases them is the clock against observed intervals —
-// deterministic, like the edges that produced them.
+// Notices decided while a meeting or a call is on wait here, in the main
+// process: the hold has to outlive any renderer, and this is the one place
+// notices are decided. What releases them is the clock against observed
+// intervals, or the capture helper's reading — deterministic, like the edges
+// that produced them.
 const heldNotices = new SessionNoticeHold();
 /**
- * Evaluator approvals deferred by meeting quiet. Their words are not replayed
- * after the meeting because the session may have moved on; release instead
- * reopens a fresh evaluator pass against the current roster.
+ * Evaluator approvals deferred by the quiet. Their words are not replayed
+ * after the meeting or call because the session may have moved on; release
+ * instead reopens a fresh evaluator pass against the current roster.
  */
 const heldEvaluatorSpeech = new SessionNoticeHold<SessionAnnouncement>();
 /**
  * Whether the quiet is holding right now, as last computed — what the
  * renderer draws Luke's sleeping face from. Kept and broadcast on change so
- * every window agrees, and false the moment the meetings or the setting say
- * so.
+ * every window agrees, and false the moment the meetings, the call, or the
+ * setting say so.
  */
 let meetingQuietActive = false;
+/**
+ * The call side of the quiet: another app holding the microphone past a
+ * short onset, read from a helper that reads one boolean and no audio. Its
+ * edges recompute the pooled quiet the same way a meeting boundary does.
+ */
+const callQuiet = new CallQuietGate({
+  onChange: () => {
+    void refreshMeetingQuiet();
+    void releaseHeldNotices();
+  },
+});
 /**
  * The conversation history, one retained thread shared by every panel window
  * and persisted for the next launch. The main process merges whole-window
@@ -735,6 +750,7 @@ function endSessionReplay(): void {
  */
 let outputAudio: OutputAudioState | undefined;
 let outputVolumeWatcher: OutputVolumeWatcher | undefined;
+let inputCaptureWatcher: InputCaptureWatcher | undefined;
 /**
  * Where the developer's voice would be captured from, as last read, and the
  * helper that reads it. The state lives here so the renderer's ask can be
@@ -751,6 +767,7 @@ function rendererUrl(): string {
 const panels = new PanelManager({
   runMode,
   mediaDuck,
+  onExchangeActive: (active) => callQuiet.setExchangeActive(active),
   preloadPath: path.join(__dirname, "preload.js"),
   rendererHtmlPath: path.join(__dirname, "renderer", "index.html"),
   rendererUrl: rendererUrl(),
@@ -1091,6 +1108,20 @@ function startOutputVolumeWatch(): void {
     onUnavailable: () => send(undefined),
   });
   if (!outputVolumeWatcher.start()) outputVolumeWatcher = undefined;
+}
+
+/**
+ * Starts watching whether another app is using the microphone, under the same
+ * rule as the output watch: read-only, one boolean, and not in a fixture or
+ * capture run. What it learns feeds the call quiet alone.
+ */
+function startInputCaptureWatch(): void {
+  if (!runMode.observesProviders) return;
+  inputCaptureWatcher = new InputCaptureWatcher({
+    onCapturing: (running) => callQuiet.setCapturing(running),
+    onUnavailable: () => callQuiet.setCapturing(undefined),
+  });
+  if (!inputCaptureWatcher.start()) inputCaptureWatcher = undefined;
 }
 
 /**
@@ -2167,11 +2198,12 @@ function openCreatedWorkspaces(sessions: readonly Session[]): void {
 }
 
 /**
- * Whether announcements should wait right now: a meeting on the connected
- * calendar covers this instant, and the quiet is switched on. The meetings
- * are consulted before the store so the common case — no calendar — costs no
- * read at all; the store's answer comes from its cached file either way,
- * never the keychain.
+ * Whether announcements should wait right now: an account is signed in, a
+ * meeting on the connected calendar covers this instant or another app has
+ * held the microphone past the call onset, and the quiet is switched on. The
+ * two facts pool under one flag, so the sleeping face and the renderer's gate
+ * need never know which one is holding. The store's answer comes from its
+ * cached file, never the keychain.
  *
  * Consulting it is also what keeps every window honest: the answer is
  * reconciled with the broadcast state on the way out, so speech can never be
@@ -2182,8 +2214,13 @@ function openCreatedWorkspaces(sessions: readonly Session[]): void {
 async function announcementsQuietNow(now: number): Promise<boolean> {
   const inMeeting =
     calendarMeetings !== undefined && activeMeetingEnd(calendarMeetings, now) !== undefined;
+  // The account gate is the call's: meetings are cleared at sign-out and so
+  // imply an account, while a call does not. The setting is read last so the
+  // common case — nothing on — costs no read at all.
   const holding =
-    inMeeting && (await settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field));
+    accountCapabilitiesActive() &&
+    (inMeeting || callQuiet.holding) &&
+    (await settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field));
   if (holding !== meetingQuietActive) {
     meetingQuietActive = holding;
     panels.broadcast(channels.onMeetingQuietChanged, holding);
@@ -2260,12 +2297,15 @@ async function releaseHeldNotices(): Promise<void> {
     }
     provider.set(session.providerSessionId, session.status);
   }
-  const released = heldNotices.release().filter((notice) => {
-    const status = current.get(notice.providerId)?.get(notice.providerSessionId);
-    // A session the registry no longer lists settled where the notice said —
-    // its parting words are still the answer to where the work stands.
-    return status === undefined || status === notice.status;
-  });
+  const released = heldNotices
+    .release()
+    .filter((notice) => {
+      const status = current.get(notice.providerId)?.get(notice.providerSessionId);
+      // A session the registry no longer lists settled where the notice said —
+      // its parting words are still the answer to where the work stands.
+      return status === undefined || status === notice.status;
+    })
+    .slice(-MAXIMUM_RELEASED_NOTICES);
   const deferredEvaluatorSpeech = heldEvaluatorSpeech.release();
   if (deferredEvaluatorSpeech.length > 0) {
     voiceCapabilities.attentionReviewer?.reconsider(deferredEvaluatorSpeech);
@@ -2411,6 +2451,9 @@ function startCalendarObservation(): void {
     }, APPLE_ACCESS_POLL_INTERVAL_MS);
     appleAccessPollTimer.unref();
   }
+  // A call already running at sign-in is honored at once, not at the first
+  // tick or pass.
+  void refreshMeetingQuiet();
 }
 
 /**
@@ -2788,6 +2831,7 @@ export function startDesktopApp(): void {
       // what the renderer draws while Luke speaks unheard, and nothing more.
       startOutputVolumeWatch();
       startMicrophoneRouteWatch();
+      startInputCaptureWatch();
       // The introduction owns the screen alone until it completes or is
       // abandoned; both of its endings reconcile the panels themselves.
       if (!introductionWindow.active) panels.reconcile();
@@ -2865,6 +2909,9 @@ export function startDesktopApp(): void {
     outputVolumeWatcher = undefined;
     microphoneRouteWatcher?.stop();
     microphoneRouteWatcher = undefined;
+    inputCaptureWatcher?.stop();
+    inputCaptureWatcher = undefined;
+    callQuiet.stop();
     // The duck helper outlives this by one fade: closing its stdin is what asks
     // it to bring the players back up, so quitting mid-sentence costs the user
     // nothing.

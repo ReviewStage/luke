@@ -125,6 +125,7 @@ export {
 } from "./session-mentions.js";
 export {
   MAXIMUM_HELD_NOTICES,
+  MAXIMUM_RELEASED_NOTICES,
   SessionNoticeHold,
 } from "./session-notice-hold.js";
 export {

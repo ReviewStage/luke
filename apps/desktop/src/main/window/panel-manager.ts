@@ -27,6 +27,11 @@ export interface PanelDuck {
 export interface PanelManagerOptions {
   runMode: RunMode;
   mediaDuck: PanelDuck;
+  /**
+   * Told the same edge the duck is: whether any window holds a live spoken
+   * exchange. The call quiet reads it to tell Luke's own capture from a call.
+   */
+  onExchangeActive?: (active: boolean) => void;
   preloadPath: string;
   rendererHtmlPath: string;
   rendererUrl: string;
@@ -58,6 +63,7 @@ function initialWindowMode(runMode: RunMode, argv: readonly string[]): WindowMod
 export class PanelManager {
   readonly #runMode: RunMode;
   readonly #mediaDuck: PanelDuck;
+  readonly #onExchangeActive: ((active: boolean) => void) | undefined;
   readonly #preloadPath: string;
   readonly #rendererHtmlPath: string;
   readonly #rendererUrl: string;
@@ -92,6 +98,7 @@ export class PanelManager {
   constructor(options: PanelManagerOptions) {
     this.#runMode = options.runMode;
     this.#mediaDuck = options.mediaDuck;
+    this.#onExchangeActive = options.onExchangeActive;
     this.#preloadPath = options.preloadPath;
     this.#rendererHtmlPath = options.rendererHtmlPath;
     this.#rendererUrl = options.rendererUrl;
@@ -416,7 +423,9 @@ export class PanelManager {
   }
 
   #applyVoiceExchanges(): void {
-    this.#mediaDuck.setExchangeActive([...this.#voiceExchanges.values()].some(Boolean));
+    const active = [...this.#voiceExchanges.values()].some(Boolean);
+    this.#mediaDuck.setExchangeActive(active);
+    this.#onExchangeActive?.(active);
   }
 
   #collapseDelay(): number {

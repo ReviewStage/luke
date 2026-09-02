@@ -1819,8 +1819,9 @@ function AppleCalendarRow({
  * capability: two ways into the same meetings — this Mac's own Calendar
  * behind macOS's consent dialog, and Google accounts behind Google's consent
  * page — sharing one line about what is read and the quiet switch the
- * intervals exist to drive. Each row appears only in a build that can offer
- * it, and the block only when either can.
+ * intervals exist to drive. Each calendar row appears only in a build that
+ * can offer it; the quiet switch stands in every build, because a call holds
+ * announcements with no calendar at all.
  */
 function CalendarIntegrations({
   settings,
@@ -1832,10 +1833,8 @@ function CalendarIntegrations({
   calendar: CalendarControl;
   appleCalendar: AppleCalendarControl;
   writes: SettingsWrites;
-}): React.JSX.Element | null {
-  if (!settings.calendarSignInAvailable && !settings.appleCalendarAvailable) return null;
+}): React.JSX.Element {
   const accounts = settings.calendarAccounts;
-  const connected = accounts.length > 0 || settings.appleCalendar !== undefined;
 
   return (
     <div className="credential">
@@ -1898,20 +1897,16 @@ function CalendarIntegrations({
         </>
       ) : null}
       <p className="settings-note">
-        Luke reads when your meetings start and end — never their titles — and can hold
-        announcements until they finish.
+        Luke reads when your meetings start and end — never their titles — and whether another app
+        is using your microphone — never the audio — and can hold announcements until the meeting or
+        call is over.
       </p>
-      {/* The quiet is a fact about the calendars above it, so it appears with
-          the first connection and leaves with the last — a switch gating what
-          a disconnected calendar cannot do would be a control over nothing. */}
-      {connected ? (
-        <SchemaSettingRows
-          page={SCHEMA_SETTINGS_PAGE.CONNECTIONS}
-          settings={settings}
-          writes={writes}
-          fields={[APP_SETTING_SCHEMA.quietDuringMeetings.field]}
-        />
-      ) : null}
+      <SchemaSettingRows
+        page={SCHEMA_SETTINGS_PAGE.CONNECTIONS}
+        settings={settings}
+        writes={writes}
+        fields={[APP_SETTING_SCHEMA.quietDuringMeetings.field]}
+      />
     </div>
   );
 }
