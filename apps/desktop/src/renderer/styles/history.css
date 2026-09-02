@@ -8,6 +8,12 @@
   gap: 8px;
 }
 
+/* The thread's own gap already separates the composer from the last bubble;
+   the margin the pill keeps under the sessions list would double it. */
+.history-view .ask-luke-row {
+  margin-top: 0;
+}
+
 .history-header {
   display: flex;
   flex: 0 0 auto;

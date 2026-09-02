@@ -48,6 +48,8 @@ test("an announcement shows its spoken transcript", () => {
         },
       ],
       onClear: () => undefined,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
       openable: () => false,
       onOpenSession: () => undefined,
     }),
@@ -69,6 +71,8 @@ test("a recorded entry shows its local time", () => {
         },
       ],
       onClear: () => undefined,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
       openable: () => false,
       onOpenSession: () => undefined,
     }),
@@ -85,6 +89,8 @@ test("conversation history is blocked from optional panel recordings", () => {
     createElement(ConversationHistoryPanel, {
       entries: [{ kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "private words" }],
       onClear: () => undefined,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
       openable: () => false,
       onOpenSession: () => undefined,
     }),
@@ -104,6 +110,8 @@ test("messages offer a copy control while quiet events offer none", () => {
         { kind: CONVERSATION_ENTRY_KIND.ACT, words: "Sent to Codex." },
       ],
       onClear: () => undefined,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
       openable: () => false,
       onOpenSession: () => undefined,
     }),
@@ -126,6 +134,8 @@ test("a line still being said draws as the bubble it will settle into", () => {
       ],
       live: [{ kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT, words: "Checkout is" }],
       onClear: () => undefined,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
       openable: () => false,
       onOpenSession: () => undefined,
     }),
@@ -145,6 +155,8 @@ test("words still arriving stand the thread up without a settled line", () => {
       entries: [],
       live: [{ kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Looking now." }],
       onClear: () => undefined,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
       openable: () => false,
       onOpenSession: () => undefined,
     }),
@@ -161,6 +173,8 @@ test("the empty history reports only its state", () => {
     createElement(ConversationHistoryPanel, {
       entries: [],
       onClear: () => undefined,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
       openable: () => false,
       onOpenSession: () => undefined,
     }),
@@ -198,6 +212,8 @@ test("a line's named chats draw pressable chips, worded as recorded", () => {
         { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "No session here." },
       ],
       onClear: () => undefined,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
       openable: (identity) => {
         asked.push(identity.providerSessionId);
         return true;
@@ -239,6 +255,8 @@ test("a chat with nowhere to go draws no chip", () => {
         },
       ],
       onClear: () => undefined,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
       openable: () => false,
       onOpenSession: () => undefined,
     }),
@@ -267,6 +285,8 @@ test("a quiet act line draws its chat's chip without a copy control", () => {
         },
       ],
       onClear: () => undefined,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
       openable: () => true,
       onOpenSession: () => undefined,
     }),
@@ -274,4 +294,36 @@ test("a quiet act line draws its chat's chip without a copy control", () => {
 
   assert.match(markup, /class="history-chip"/);
   assert.doesNotMatch(markup, /history-copy/);
+});
+
+test("the composer stands at the foot of the thread, empty or not", () => {
+  const empty = renderToStaticMarkup(
+    createElement(ConversationHistoryPanel, {
+      entries: [],
+      onClear: () => undefined,
+      openable: () => false,
+      onOpenSession: () => undefined,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
+    }),
+  );
+  // "What needs me?" is worth typing before any line has been recorded.
+  assert.match(empty, />No messages yet</);
+  assert.match(empty, /id="ask-luke-input"/);
+
+  const threaded = renderToStaticMarkup(
+    createElement(ConversationHistoryPanel, {
+      entries: [{ kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "ship it" }],
+      onClear: () => undefined,
+      openable: () => false,
+      onOpenSession: () => undefined,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
+      askShortcut: "Alt+Space",
+    }),
+  );
+  // One composer, after the list, inside the subtree recordings never see.
+  assert.equal(threaded.match(/id="ask-luke-input"/g)?.length, 1);
+  assert.ok(threaded.indexOf("</ol>") < threaded.indexOf('id="ask-luke-input"'));
+  assert.match(threaded, /aria-keyshortcuts="Alt\+Space"/);
 });
