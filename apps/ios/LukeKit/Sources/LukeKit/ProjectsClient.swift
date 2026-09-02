@@ -19,6 +19,8 @@ public struct RosterProject: Identifiable, Equatable, Sendable {
     public let taskSupport: ProjectTaskSupport
     /// The label of the execution target owning this project, when it has one.
     public let targetName: String?
+    /// The provider names a workspace here itself and refuses a name from the ask.
+    public let namesItself: Bool
 
     public var id: String { "\(providerId):\(providerProjectId)" }
 
@@ -27,13 +29,15 @@ public struct RosterProject: Identifiable, Equatable, Sendable {
         providerProjectId: String,
         repository: String,
         taskSupport: ProjectTaskSupport,
-        targetName: String? = nil
+        targetName: String? = nil,
+        namesItself: Bool = false
     ) {
         self.providerId = providerId
         self.providerProjectId = providerProjectId
         self.repository = repository
         self.taskSupport = taskSupport
         self.targetName = targetName
+        self.namesItself = namesItself
     }
 
     init?(json: [String: Any]) {
@@ -49,6 +53,8 @@ public struct RosterProject: Identifiable, Equatable, Sendable {
         self.repository = repository
         self.taskSupport = taskSupport
         self.targetName = json["targetName"] as? String
+        // Only the boolean it is crosses; anything else reads as absent.
+        self.namesItself = json["namesItself"] as? Bool == true
     }
 }
 

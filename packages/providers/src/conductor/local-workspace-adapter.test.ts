@@ -187,6 +187,7 @@ test("refresh offers each repository as an optional-task project", async (t) => 
       providerProjectId: "repo-luke",
       repository: "luke",
       taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+      namesItself: true,
       providerTargetId: "/Users/dev/repos/luke",
     },
   ]);

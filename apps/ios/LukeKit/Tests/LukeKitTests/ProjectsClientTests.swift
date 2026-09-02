@@ -55,6 +55,19 @@ final class RosterProjectTests: XCTestCase {
         XCTAssertEqual(project?.id, "replicas:env-1")
         XCTAssertEqual(project?.taskSupport, .required)
         XCTAssertEqual(project?.targetName, "Staging")
+        XCTAssertEqual(project?.namesItself, false)
+    }
+
+    func testNamesItselfCrossesOnlyAsABoolean() {
+        let base: [String: Any] = [
+            "providerId": "codex",
+            "providerProjectId": "env-1",
+            "repository": "owner/repo",
+            "taskSupport": "required",
+        ]
+        XCTAssertEqual(RosterProject(json: base.merging(["namesItself": true]) { $1 })?.namesItself, true)
+        XCTAssertEqual(RosterProject(json: base.merging(["namesItself": "yes"]) { $1 })?.namesItself, false)
+        XCTAssertEqual(RosterProject(json: base)?.namesItself, false)
     }
 }
 

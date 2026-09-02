@@ -751,6 +751,12 @@ function validateCreateWorkspace(
   }
   let name: string | undefined;
   if (parsed.name !== undefined) {
+    if (project.namesItself) {
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        reason: "That project names its own workspaces.",
+      };
+    }
     name = workspaceNameText(parsed.name);
     if (!name) {
       return {
@@ -1417,7 +1423,8 @@ export const ACTS = {
     validatedAgainst: ACT_VALIDATION_TARGET.WORKSPACE_PROJECT,
     narration: narrate(
       SESSION_TOOL_KIND.CREATE_WORKSPACE,
-      (action) => `asked ${action.providerId} to create a workspace`,
+      (action) =>
+        `asked ${action.providerId} to create a workspace${action.name ? ` named "${action.name}"` : ""}`,
     ),
     guide: "Create only in a project and target from the latest workspace roster.",
     schema: {
@@ -1443,7 +1450,11 @@ export const ACTS = {
           },
           name: {
             type: "string",
-            description: "An optional workspace name.",
+            description:
+              "The workspace's name: the developer's own when they chose one, otherwise a short, " +
+              "specific name composed from what the workspace is for, in a few words with no " +
+              "punctuation. Always supply one, except in a project listed as naming its own " +
+              "workspaces, which takes none.",
           },
           task: {
             type: "string",

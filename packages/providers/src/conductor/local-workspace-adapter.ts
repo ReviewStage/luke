@@ -215,6 +215,8 @@ export class ConductorLocalWorkspaceAdapter extends SessionProviderAdapterBase {
       // Conductor makes an idle workspace happily and takes the opening task
       // as its first prompt, so a task is welcome but never required.
       taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+      // The creation link documents no name, so Conductor names the workspace.
+      namesItself: true,
       // The repository's own main-worktree path, which the creation link
       // matches a project by and which a create reads back rather than trusts
       // from the request.

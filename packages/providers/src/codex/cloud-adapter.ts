@@ -370,6 +370,7 @@ function collectEnvironments(
       providerProjectId: target,
       repository: task.repositoryLabel,
       taskSupport: WORKSPACE_TASK_SUPPORT.REQUIRED,
+      namesItself: true,
     });
   }
 }

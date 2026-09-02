@@ -380,8 +380,13 @@ test("offers one creation target per observed environment, and none signed out",
   // accounts return — and the id is preferred where one exists.
   await adapter.observe();
   assert.deepEqual(adapter.workspaceProjects(), [
-    { providerProjectId: "reviewstage/luke", repository: "luke", taskSupport: "required" },
-    { providerProjectId: "env-2", repository: "site", taskSupport: "required" },
+    {
+      providerProjectId: "reviewstage/luke",
+      repository: "luke",
+      taskSupport: "required",
+      namesItself: true,
+    },
+    { providerProjectId: "env-2", repository: "site", taskSupport: "required", namesItself: true },
   ]);
 
   behavior.loggedIn = false;

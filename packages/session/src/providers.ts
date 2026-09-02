@@ -359,6 +359,11 @@ export interface WorkspaceProject {
   spawnableAgents?: readonly string[];
   /** The saved agent kind used when a creation ask names none. */
   defaultAgent?: string;
+  /**
+   * The provider names a workspace here itself and takes none from the ask,
+   * so an ask carrying one is refused rather than half honoured.
+   */
+  namesItself?: boolean;
 }
 
 /** A workspace project as the app reports it, stamped with who offered it. */
@@ -469,6 +474,7 @@ export function normalizeObservedWorkspaceProjects(
     }
     const defaultAgent = project.defaultAgent?.trim();
     if (defaultAgent) normalizedProject.defaultAgent = defaultAgent;
+    if (project.namesItself === true) normalizedProject.namesItself = true;
     normalized.push(normalizedProject);
   }
   const sorted = normalized.sort(compareWorkspaceProjects);
