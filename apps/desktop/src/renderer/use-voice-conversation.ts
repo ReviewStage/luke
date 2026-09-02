@@ -22,6 +22,7 @@ import {
   type RealtimeStatus,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
+  realtimeSessionConfig,
   recentConversationEntries,
   replyConversationEntry,
   retainedConversationEntries,
@@ -954,6 +955,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const ensureVoiceSession = useCallback((): RealtimeVoiceSession => {
     voiceSession.current ??= new RealtimeVoiceSession({
       requestConnection: () => window.sidecar.requestRealtimeCredential(),
+      sessionConfig: (model) =>
+        realtimeSessionConfig({
+          model,
+          ...(optionsRef.current.voice ? { voice: optionsRef.current.voice } : undefined),
+          ...(optionsRef.current.voiceSpeed ? { speed: optionsRef.current.voiceSpeed } : undefined),
+        }),
+      audioElement: () => remoteAudio.current,
       // The press's device, chosen by facts read natively: the Mac's own
       // microphone where a Bluetooth headset would otherwise pay for the
       // capture with its music codec, the browser's default everywhere else.

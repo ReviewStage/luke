@@ -1,10 +1,6 @@
 import { FIXTURE_EPOCH_MS } from "@sidecar/fixtures";
 import { WingFace as LukeFace } from "@sidecar/panel";
-import {
-  introductionSessionSyncEvents,
-  REALTIME_STATUS,
-  type RealtimeStatus,
-} from "@sidecar/realtime";
+import { introductionSessionConfig, REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
 import { DEFAULT_VOICE_HOTKEYS, TALK_KEY_RELEASE, talkKeyRelease } from "@sidecar/settings";
 import {
   FACE_MOTION,
@@ -322,7 +318,8 @@ export function IntroductionTakeover({
   const ensureSession = useCallback((): RealtimeVoiceSession => {
     sessionRef.current ??= new RealtimeVoiceSession({
       requestConnection: () => window.sidecar.requestRealtimeCredential(),
-      sessionSyncEvents: introductionSessionSyncEvents,
+      sessionConfig: (model) => introductionSessionConfig({ model }),
+      audioElement: () => remoteAudioRef.current,
       requestMicrophoneStream: () =>
         openPreferredMicrophone({
           route: () => window.sidecar.getMicrophoneRoute(),

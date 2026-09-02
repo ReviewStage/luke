@@ -1,17 +1,7 @@
 import type { RealtimeCredential } from "@sidecar/hosted";
-import {
-  isRecord,
-  text,
-  type UnparsedWireValue,
-  type WireRecord,
-  wholeNumber,
-} from "@sidecar/wire";
+import { isRecord, text, type UnparsedWireValue, wholeNumber } from "@sidecar/wire";
 import { PRESS_AUDIO_SAMPLE_RATE } from "./press-audio.js";
-import {
-  REALTIME_CLIENT_EVENT,
-  REALTIME_SESSION_TYPE,
-  realtimeInstructions,
-} from "./realtime-protocol.js";
+import { REALTIME_SESSION_TYPE, realtimeInstructions } from "./realtime-protocol.js";
 import { realtimeToolDefinitions } from "./realtime-tools.js";
 import { REALTIME_DEFAULTS } from "./realtime-voice-settings.js";
 
@@ -107,36 +97,6 @@ export function realtimeSessionConfig(options: RealtimeSessionOptions = {}) {
       },
     },
   };
-}
-
-/**
- * Reasserts the local build's instructions and tools after any credential
- * source opens a call. The transcription rides along for the same reason: the
- * hosted mint composes its session on the service, so the one place every
- * call can be asked to hand the developer's words back is the call itself.
- */
-export function realtimeSessionSyncEvents(model: string): readonly WireRecord[] {
-  const reasoning = realtimeReasoning(model);
-  const built = [
-    {
-      type: REALTIME_CLIENT_EVENT.SESSION_UPDATE,
-      session: {
-        type: REALTIME_SESSION_TYPE,
-        ...(reasoning ? { reasoning } : undefined),
-        instructions: realtimeInstructions(),
-        tools: realtimeToolDefinitions(),
-        tool_choice: "auto",
-        audio: { input: { transcription: { model: REALTIME_DEFAULTS.TRANSCRIPTION_MODEL } } },
-      },
-    },
-  ];
-  const parsed: UnparsedWireValue = JSON.parse(JSON.stringify(built));
-  if (!Array.isArray(parsed)) return [];
-  const records: WireRecord[] = [];
-  for (const item of parsed) {
-    if (isRecord(item)) records.push(item);
-  }
-  return records;
 }
 
 /** Builds the request body that mints an ephemeral client secret. */

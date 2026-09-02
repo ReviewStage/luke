@@ -33,7 +33,6 @@ export {
 export {
   type IntroductionLine,
   introductionSessionConfig,
-  introductionSessionSyncEvents,
   introductionSpeechEvents,
 } from "./introduction.js";
 export {
@@ -64,7 +63,7 @@ export {
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
   realtimeMintExplanation,
-  realtimeSessionSyncEvents,
+  realtimeSessionConfig,
 } from "./realtime-credentials.js";
 export {
   ARRIVAL_SPEECH_KIND,
@@ -76,11 +75,11 @@ export {
   clearOutputAudioEvents,
   decodeRealtimePayload,
   functionCallFollowUpEvents,
-  functionCallOutputEvents,
   inputAudioAppendEvents,
   inputAudioFormatUpdateEvents,
   isArrivalSpeech,
   maximumFeedbackDraftLength,
+  maximumTypedAskLength,
   outputSpeedUpdateEvents,
   type ProactiveSpeechTurn,
   parseRealtimeServerEvent,
@@ -98,7 +97,6 @@ export {
   SESSION_NO_LONGER_OBSERVED_NOTE,
   type SessionAnnouncement,
   truncateResponseEvents,
-  typedAskEvents,
 } from "./realtime-protocol.js";
 export {
   type ActEnvelope,
