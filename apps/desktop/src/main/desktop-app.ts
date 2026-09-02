@@ -2263,9 +2263,7 @@ async function deriveSessionSubjects(generation: number): Promise<void> {
   if (!subjectDeriver) return;
   try {
     const results = await subjectDeriver.derive(
-      rosterRelevantSessions(sessionRegistry.list(), Date.now()).filter(
-        (session) => session.realtimeVoice !== true,
-      ),
+      rosterRelevantSessions(sessionRegistry.list(), Date.now()),
     );
     if (!attentionObservationLoop.isCurrent(generation)) return;
     for (const result of results) sessionRegistry.setSubject(result, result.subject);

@@ -119,6 +119,22 @@ test("derives on first sight, then only on an edge into a notice status past the
   assert.equal(reads.length, 2);
 });
 
+test("a live voice exchange is not read, and its ending is not first sight", async () => {
+  const { evaluator } = scripted([{ subject: "first" }, { subject: "second" }]);
+  const { instance, reads, clock } = deriver(evaluator);
+
+  await instance.derive([session("a")]);
+  assert.equal(reads.length, 1);
+
+  clock.now += 1_000;
+  assert.deepEqual(await instance.derive([session("a", { realtimeVoice: true })]), []);
+  assert.equal(reads.length, 1);
+
+  clock.now += 1_000;
+  assert.deepEqual(await instance.derive([session("a")]), []);
+  assert.equal(reads.length, 1);
+});
+
 test("only local, open sessions are read, a bounded few a pass, one in flight each", async () => {
   let release: (() => void) | undefined;
   const evaluator: SubjectEvaluator = {

@@ -229,6 +229,10 @@ export class SessionSubjectDeriver {
     for (const session of sessions) {
       if (session.location !== SESSION_LOCATION.LOCAL) continue;
       if (session.completionCause === SESSION_COMPLETION_CAUSE.SESSION_CLOSED) continue;
+      // A realtime voice session's transcript is a live exchange, not work to
+      // name; it still keeps its record above so the exchange ending is not
+      // mistaken for first sight.
+      if (session.realtimeVoice === true) continue;
       if (this.#isPending(session)) continue;
       if (this.#isDue(session, now)) candidates.push(session);
     }

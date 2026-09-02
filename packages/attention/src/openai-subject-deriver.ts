@@ -167,9 +167,10 @@ export class OpenAiSubjectDeriver implements SubjectEvaluator {
     );
   }
 
-  async #payload(response: Response): Promise<void> {
+  async #payload(response: Response): Promise<UnparsedWireValue> {
     try {
-      return await response.json();
+      const payload: UnparsedWireValue = await response.json();
+      return payload;
     } catch {
       this.#report("OpenAI subject response was not JSON");
       return undefined;
