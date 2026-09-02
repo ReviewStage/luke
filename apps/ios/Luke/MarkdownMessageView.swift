@@ -47,13 +47,14 @@ private struct MarkdownBlockView: View {
         case .code(_, let code):
             codeBlock(code)
         case .quote(let blocks):
-            HStack(alignment: .top, spacing: 10) {
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(.tertiary)
-                    .frame(width: 3)
-                MarkdownBlocksView(blocks: blocks, spacing: 6)
-                    .foregroundStyle(.secondary)
-            }
+            MarkdownBlocksView(blocks: blocks, spacing: 6)
+                .foregroundStyle(.secondary)
+                .padding(.leading, 13)
+                .overlay(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(.tertiary)
+                        .frame(width: 3)
+                }
         case .list(let ordered, let items):
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
@@ -84,35 +85,34 @@ private struct MarkdownBlockView: View {
         }
     }
 
-    /// Verbatim text in the system's monospaced footnote, scrolling sideways
-    /// rather than wrapping, because a wrapped line of code is a different
-    /// line of code.
+    /// Verbatim text in the system's monospaced footnote on a block the
+    /// bubble's width, wrapping where it must: a scroll of its own inside a
+    /// chat bubble would fight the thread's scroll and the long-press that
+    /// selects text, and a wrapped line still reads where a hidden one does
+    /// not.
     private func codeBlock(_ code: String) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            Text(code)
-                .font(.system(.footnote, design: .monospaced))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-        }
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+        Text(code)
+            .font(.system(.footnote, design: .monospaced))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func table(header: [AttributedString], rows: [[AttributedString]]) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 6) {
-                if !header.isEmpty {
-                    GridRow {
-                        ForEach(Array(header.enumerated()), id: \.offset) { _, cell in
-                            Text(cell).font(.subheadline.weight(.semibold))
-                        }
+        Grid(alignment: .topLeading, horizontalSpacing: 14, verticalSpacing: 6) {
+            if !header.isEmpty {
+                GridRow {
+                    ForEach(Array(header.enumerated()), id: \.offset) { _, cell in
+                        Text(cell).font(.subheadline.weight(.semibold))
                     }
-                    Divider()
                 }
-                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                    GridRow {
-                        ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
-                            Text(cell).font(.subheadline)
-                        }
+                Divider()
+            }
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                GridRow {
+                    ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
+                        Text(cell).font(.subheadline)
                     }
                 }
             }
