@@ -26,6 +26,11 @@ test("Provider follows Permissions and precedes the voice controls", () => {
   assert.match(source, /<ProviderSection\s+rowIndex=\{2\}/);
 });
 
+test("the Voice page draws the provider once, through ProviderSection", () => {
+  const controls = source.slice(source.indexOf("function VoiceControlsSection"));
+  assert.match(controls, /exclude=\{\[APP_SETTING_SCHEMA\.voiceSource\.field\]\}/);
+});
+
 test("hosted quotas stay out of the customer-facing renderer", () => {
   assert.doesNotMatch(source, /<meter\b|hostedUsage|remaining|resetsAt/);
   assert.doesNotMatch(appSource, /requestHostedUsage/);

@@ -2531,7 +2531,13 @@ function VoiceControlsSection({
       className="settings-section settings-plain"
       style={cssCustomProperties({ "--row-index": 3 })}
     >
-      <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.VOICE} settings={settings} writes={writes} />
+      <SchemaSettingRows
+        page={SCHEMA_SETTINGS_PAGE.VOICE}
+        settings={settings}
+        writes={writes}
+        // Drawn by ProviderSection, whose picker knows the source values.
+        exclude={[APP_SETTING_SCHEMA.voiceSource.field]}
+      />
     </section>
   );
 }
