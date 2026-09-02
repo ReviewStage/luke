@@ -165,23 +165,16 @@ struct VoiceView: View {
 
     var body: some View {
         ZStack {
-            Color(red: 0.09, green: 0.09, blue: 0.10).ignoresSafeArea()
-            VStack(spacing: 24) {
-                statusLabel
-                conversationHistory
-                talkButton
-                if let error = model.errorMessage {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(Color(red: 0.95, green: 0.4, blue: 0.4))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
-                }
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 20)
+            conversationHistory
+            bottomControls
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.ground.ignoresSafeArea())
         .preferredColorScheme(.dark)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) { statusLabel }
+        }
         .task { await model.start(accountSession: accountSession) }
         .onDisappear { model.stop() }
     }
@@ -191,22 +184,16 @@ struct VoiceView: View {
     private var statusLabel: some View {
         Text(statusText)
             .font(.system(size: 15, weight: .medium))
-            .foregroundStyle(Color(white: 1, opacity: 0.5))
+            .foregroundStyle(Color.inkSecondary)
             .animation(.easeInOut(duration: 0.2), value: model.status)
     }
 
     private var conversationHistory: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(red: 0.12, green: 0.12, blue: 0.13))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color(white: 1, opacity: 0.08), lineWidth: 1)
-                )
             if model.messages.isEmpty {
                 Text(placeholderText)
                     .font(.system(size: 17))
-                    .foregroundStyle(Color(white: 1, opacity: 0.25))
+                    .foregroundStyle(Color.inkTertiary)
                     .multilineTextAlignment(.center)
                     .padding(20)
             } else {
@@ -214,58 +201,101 @@ struct VoiceView: View {
                     ScrollView {
                         VStack(spacing: 14) {
                             ForEach(model.messages) { message in
-                                switch message.speaker {
-                                case .developer:
-                                    DeveloperMessageBubble(words: message.words)
-                                case .luke:
-                                    AgentMessageBubble(words: message.words)
+                                Group {
+                                    switch message.speaker {
+                                    case .developer:
+                                        DeveloperMessageBubble(words: message.words)
+                                    case .luke:
+                                        AgentMessageBubble(words: message.words)
+                                    }
                                 }
+                                .id(message.id)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .top)
-                        .padding(16)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        // The controls float above the thread. Empty space at
+                        // its tail lets the newest bubble clear them while the
+                        // bubbles themselves can still scroll behind the glass.
+                        .padding(.bottom, 132)
                     }
                     .onChange(of: model.messages) {
                         guard let last = model.messages.last else { return }
-                        proxy.scrollTo(last.id, anchor: .bottom)
+                        withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                    }
+                    .onAppear {
+                        if let last = model.messages.last {
+                            proxy.scrollTo(last.id, anchor: .bottom)
+                        }
                     }
                 }
             }
         }
-        .frame(minHeight: 160)
         .frame(maxHeight: .infinity)
         .animation(.easeInOut(duration: 0.15), value: model.messages.isEmpty)
     }
 
+    private var bottomControls: some View {
+        VStack(spacing: 10) {
+            Spacer()
+            if let error = model.errorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(Color.errorInk)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            talkButton
+        }
+        .padding(.bottom, 10)
+        .animation(.easeInOut(duration: 0.2), value: model.errorMessage)
+    }
+
+    @ViewBuilder
     private var talkButton: some View {
         // Keep the view enabled while the user is actively pressing — disabling
         // during .listening would cancel the in-flight DragGesture and fire
         // onEnded immediately, collapsing every hold into an instant tap.
         let canTalk = model.status == .ready || model.status == .connecting || isPressing
-        return Circle()
-            .fill(talkButtonColor)
-            .overlay(
-                Image(systemName: isPressing ? "waveform" : "mic.fill")
-                    .font(.system(size: 28, weight: .medium))
-                    .foregroundStyle(Color.white)
-            )
-            .frame(width: 80, height: 80)
-            .scaleEffect(isPressing ? 1.12 : 1)
-            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: isPressing)
-            .opacity(canTalk ? 1 : 0.4)
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in
-                        guard !isPressing else { return }
-                        isPressing = true
-                        model.beginTurn()
-                    }
-                    .onEnded { _ in
-                        isPressing = false
-                        model.endTurn()
-                    }
-            )
-            .disabled(!canTalk)
+        if #available(iOS 26.0, *) {
+            Button(action: {}) { talkButtonLabel }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .tint(talkButtonColor)
+                .simultaneousGesture(talkGesture)
+                .disabled(!canTalk)
+                .accessibilityLabel("Hold to talk")
+        } else {
+            Button(action: {}) { talkButtonLabel }
+                .buttonStyle(.plain)
+                .background(talkButtonColor, in: Circle())
+                .simultaneousGesture(talkGesture)
+                .disabled(!canTalk)
+                .accessibilityLabel("Hold to talk")
+        }
+    }
+
+    private var talkButtonLabel: some View {
+        Image(systemName: isPressing ? "waveform" : "mic.fill")
+            .font(.system(size: 27, weight: .semibold))
+            .foregroundStyle(Color.white)
+            .frame(width: 58, height: 58)
+            .contentTransition(.symbolEffect(.replace))
+    }
+
+    private var talkGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { _ in
+                guard !isPressing else { return }
+                isPressing = true
+                model.beginTurn()
+            }
+            .onEnded { _ in
+                isPressing = false
+                model.endTurn()
+            }
     }
 
     // MARK: - Helpers
@@ -275,7 +305,7 @@ struct VoiceView: View {
         switch model.status {
         case .thinking: return Color(red: 0.9, green: 0.7, blue: 0.2)
         case .speaking: return Color(red: 0.2, green: 0.8, blue: 0.5)
-        default: return Color(red: 0.18, green: 0.18, blue: 0.20)
+        default: return Color.accentColor
         }
     }
 
