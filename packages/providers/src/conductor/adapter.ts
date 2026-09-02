@@ -212,10 +212,13 @@ const CONDUCTOR_SQL_FIELD = {
 } as const;
 
 /**
- * How much of the final message is read: enough for a recap's worth of its
- * opening words — where an agent puts the outcome — and no more of it.
+ * How much of the final message is read: the recap bound itself, because the
+ * tail is read only to feed the recap. Tying them keeps the read from ever
+ * fetching words the recap could not keep or cutting below what it may show,
+ * and makes moving the recap bound the one decision that also moves this
+ * read's width.
  */
-const CONDUCTOR_TRANSCRIPT_TAIL_LENGTH = 2_000;
+const CONDUCTOR_TRANSCRIPT_TAIL_LENGTH = maximumSessionRecapLength;
 
 /**
  * How Conductor's plain-text transcript marks who is speaking. A line inside a
