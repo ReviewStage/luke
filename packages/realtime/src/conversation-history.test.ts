@@ -41,18 +41,19 @@ function rosterSession(providerSessionId: string, title: string) {
   );
 }
 
-test("appending flattens, bounds, and retires the oldest lines", () => {
+test("appending flattens, keeps the words whole, and retires the oldest lines", () => {
   const identity = { providerId: "claude-code", providerSessionId: "session-a" };
-  // Whitespace is flattened before the bound, so a pasted paragraph cannot
-  // open a new section of the context item it will be rendered into.
+  // Whitespace is flattened at append, so a pasted paragraph cannot open a
+  // new section of the context item it will be rendered into. Length is not
+  // cut here: the thread is the developer's own record, and only the model
+  // render bounds its copy.
   const appended = appendConversationEntry([], {
     kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
     words: `  hello\n\nthere ${"x".repeat(2 * maximumConversationEntryLength)}  `,
     identity,
   });
   assert.equal(appended.length, 1);
-  assert.match(appended[0]?.words ?? "", /^hello there x/);
-  assert.ok((appended[0]?.words.length ?? 0) <= maximumConversationEntryLength);
+  assert.equal(appended[0]?.words, `hello there ${"x".repeat(2 * maximumConversationEntryLength)}`);
   assert.deepEqual(appended[0]?.identity, identity);
 
   // An entry with nothing left says nothing worth a window's space.
@@ -73,15 +74,14 @@ test("appending flattens, bounds, and retires the oldest lines", () => {
   assert.equal(entries[0]?.words, "line 3");
 });
 
-test("a streaming line is bounded like the settled line it previews", () => {
+test("a streaming line is flattened like the settled line it previews", () => {
   const identity = { providerId: "claude-code", providerSessionId: "session-a" };
   const line = streamingConversationEntry(
     CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
     `  Checkout\n\nfinished ${"x".repeat(2 * maximumConversationEntryLength)}  `,
     identity,
   );
-  assert.match(line?.words ?? "", /^Checkout finished x/);
-  assert.ok((line?.words.length ?? 0) <= maximumConversationEntryLength);
+  assert.equal(line?.words, `Checkout finished ${"x".repeat(2 * maximumConversationEntryLength)}`);
   assert.deepEqual(line?.identity, identity);
   // A line still growing has not happened yet: the record stamps at settle.
   assert.equal(line?.recordedAt, undefined);
@@ -89,6 +89,27 @@ test("a streaming line is bounded like the settled line it previews", () => {
   // Words that flatten to nothing preview nothing, exactly as they would
   // append nothing.
   assert.equal(streamingConversationEntry(CONVERSATION_ENTRY_KIND.REPLY, "   "), undefined);
+});
+
+test("the model render cuts a long line the retained thread keeps whole", () => {
+  const longAnswer = `The checkout work is done. ${"x".repeat(2 * maximumConversationEntryLength)}`;
+  const entries = appendConversationEntry(
+    [],
+    { kind: CONVERSATION_ENTRY_KIND.REPLY, words: longAnswer },
+    OBSERVED_AT,
+  );
+
+  // The panel and the stored file both hold every word that was said.
+  assert.equal(entries[0]?.words, longAnswer);
+  assert.deepEqual(storedConversationEntry(JSON.parse(JSON.stringify(entries[0]))), entries[0]);
+
+  // Only the render a model receives pays for the opening alone.
+  const text = conversationHistoryText(entries, []);
+  assert.ok(text);
+  const line = text.split("\n")[1] ?? "";
+  assert.match(line, /^- Luke said: "The checkout work is done\./);
+  assert.equal(line.includes(longAnswer), false);
+  assert.ok(line.includes(longAnswer.slice(0, maximumConversationEntryLength)));
 });
 
 test("every way into the thread stamps when the line was recorded", () => {

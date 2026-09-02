@@ -3,6 +3,8 @@ import {
   type CloudFetch,
   HOSTED_ACT_RESULT,
   type HostedActResult,
+  type HostedConversationAnswer,
+  type HostedConversationMessage,
   PROVIDER_IDENTITY_BY_ID,
   type ProviderActResult,
   type ProviderSessionObservation,
@@ -358,4 +360,84 @@ export async function executeCreateWorkspaceAct(options: {
   return fromProviderWorkspaceResult(
     await pass.adapter.createWorkspace({ providerProjectId, name, task, agentSelection }),
   );
+}
+
+/**
+ * The providers whose adapters carry the documented conversation read,
+ * mirroring exactly the `readConversation` seam each desktop adapter
+ * implements — the adapter seam is the authority here as it is for acts, so
+ * nothing may advertise a read the adapter does not already make under the
+ * provider's documented endpoint. Conductor documents
+ * `GET /v0/sessions/{id}/messages`; no other vaulted provider documents a
+ * transcript read this build carries.
+ */
+const CONVERSATION_READ_PROVIDERS: ReadonlySet<VaultProviderId> = new Set([
+  VAULT_PROVIDER_ID.CONDUCTOR,
+]);
+
+/** Whether the messages endpoint can read this provider's conversations. */
+export function providerReadsConversation(providerId: VaultProviderId): boolean {
+  return CONVERSATION_READ_PROVIDERS.has(providerId);
+}
+
+/** A conversation read that could not answer, with the reason it refused. */
+export interface ConversationReadRefusal {
+  refused: string;
+}
+
+/**
+ * Reads one observed session's conversation for the caller who just opened
+ * its screen: the same fresh-pass discipline every act keeps — the session
+ * must stand behind the pass the same request ran — followed by the
+ * adapter's own bounded read of the provider's documented transcript
+ * endpoint. The answer is assembled and returned; nothing is stored.
+ */
+export async function executeConversationRead(options: {
+  providerId: VaultProviderId;
+  providerSessionId: string;
+  afterMessageId?: string;
+  beforeOffset?: number;
+  apiKey: string;
+  seams?: ActExecuteSeams;
+}): Promise<HostedConversationAnswer | ConversationReadRefusal> {
+  const { providerId, providerSessionId, afterMessageId, beforeOffset, apiKey } = options;
+  if (!providerReadsConversation(providerId)) {
+    const displayName = PROVIDER_IDENTITY_BY_ID[providerId].displayName;
+    return {
+      refused: `${displayName} does not document reading a session's conversation through its API, so Luke does not offer it.`,
+    };
+  }
+
+  const pass = await observeForAct(providerId, apiKey, options.seams ?? {});
+  const observation = pass.observations.find(
+    (candidate) => candidate.providerSessionId === providerSessionId,
+  );
+  if (!observation) {
+    return { refused: missingTargetReason(providerId, pass, "Session not found.") };
+  }
+
+  const result = await pass.adapter.readConversation({
+    providerSessionId,
+    ...(afterMessageId ? { afterMessageId } : undefined),
+    ...(beforeOffset !== undefined ? { beforeOffset } : undefined),
+  });
+  if (result.status !== ACT_RESULT_STATUS.ACCEPTED) {
+    return { refused: result.reason };
+  }
+  // Copied field by field although the shapes are structurally identical
+  // today: this map is the allowlist of what crosses onto the wire, so a
+  // field the adapter's type grows later stays behind unless named here.
+  const messages: HostedConversationMessage[] = result.messages.map((message) => ({
+    id: message.id,
+    author: message.author,
+    text: message.text,
+    ...(message.receivedAt !== undefined ? { receivedAt: message.receivedAt } : undefined),
+  }));
+  return {
+    messages,
+    ...(result.lastMessageId ? { lastMessageId: result.lastMessageId } : undefined),
+    hasMore: result.hasMore,
+    ...(result.firstOffset !== undefined ? { firstOffset: result.firstOffset } : undefined),
+    ...(result.hasOlder !== undefined ? { hasOlder: result.hasOlder } : undefined),
+  };
 }

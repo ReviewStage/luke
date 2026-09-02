@@ -6,6 +6,7 @@ import {
   VAULT_PROVIDER_ID,
   type VaultProviderId,
 } from "../core.js";
+import { providerReadsConversation } from "./act-execute.js";
 import { cloudSessionAdapterFor } from "./cloud-adapters.js";
 import { decryptProviderKey } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
@@ -115,7 +116,10 @@ export async function handleObserve(options: ObserveOptions): Promise<Response> 
   return jsonResponse(HOSTED_HTTP_STATUS.OK, { sessions });
 }
 
-function toWireSession(providerId: string, obs: ProviderSessionObservation): ObservedSession {
+function toWireSession(
+  providerId: VaultProviderId,
+  obs: ProviderSessionObservation,
+): ObservedSession {
   const session: ObservedSession = {
     providerId,
     sessionId: obs.providerSessionId,
@@ -149,5 +153,8 @@ function toWireSession(providerId: string, obs: ProviderSessionObservation): Obs
   }
   if (obs.canRename) session.canRename = true;
   if (obs.renameTarget) session.canRenameWorkspace = true;
+  // A capability of the provider's documented transcript read, advertised so
+  // a screen offers the fetch only where the messages endpoint could answer.
+  if (providerReadsConversation(providerId)) session.canReadConversation = true;
   return session;
 }

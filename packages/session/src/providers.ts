@@ -207,6 +207,17 @@ export interface SessionProviderAdapter {
    * this build cannot render faithfully reports nothing rather than guessing.
    */
   readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult>;
+
+  /**
+   * Reads one observed session's conversation from the provider's documented
+   * transcript-read endpoint, as bounded pages of attributed messages kept
+   * nowhere. It exists only for a caller a user just opened a conversation
+   * screen for: it never rides an observation pass, it can express nothing
+   * but a read, and a message whose author the stored shape does not name is
+   * dropped rather than guessed at. An adapter whose provider documents no
+   * such read inherits the unsupported answer.
+   */
+  readConversation(request: ProviderConversationRequest): Promise<ProviderConversationResult>;
 }
 
 /**
@@ -246,6 +257,81 @@ export type ProviderMessageResult = ProviderActResult;
 
 export type ProviderTranscriptResult =
   | { status: typeof ACT_RESULT_STATUS.ACCEPTED; transcript: string }
+  | { status: typeof ACT_RESULT_STATUS.REJECTED; reason: string }
+  | { status: typeof ACT_RESULT_STATUS.UNSUPPORTED; reason: string };
+
+/**
+ * Who wrote one message of a conversation reading. Only the two voices a chat
+ * screen draws exist here: the developer's own sends and the agent's own
+ * words. Everything else a provider stores beside them — tool calls, tool
+ * output, lifecycle events, harness chatter — has no author a bubble can
+ * honestly wear, so it never becomes a `ProviderConversationMessage` at all.
+ */
+export const CONVERSATION_MESSAGE_AUTHOR = {
+  USER: "user",
+  AGENT: "agent",
+} as const;
+
+export type ConversationMessageAuthor =
+  (typeof CONVERSATION_MESSAGE_AUTHOR)[keyof typeof CONVERSATION_MESSAGE_AUTHOR];
+
+/**
+ * One attributed message of an observed session's conversation, exactly as
+ * the provider stored it: the words are never truncated — a cut message says
+ * something its author did not — and the bounds live on the page instead.
+ */
+export interface ProviderConversationMessage {
+  /** The provider's own id for this message. */
+  id: string;
+  author: ConversationMessageAuthor;
+  text: string;
+  /** Unix ms the provider recorded the message at, when it reported one. */
+  receivedAt?: number;
+}
+
+/**
+ * A user-asked read of one observed session's conversation, positioned the
+ * way a chat screen reads: opened with neither cursor, it answers the latest
+ * page; handed `beforeOffset`, it answers the page of older history ending
+ * there; handed `afterMessageId`, it answers only what is newer. The two
+ * cursors are different asks — a scroll up and a poll — so a request naming
+ * both is refused rather than guessed at.
+ */
+export interface ProviderConversationRequest {
+  providerSessionId: string;
+  /**
+   * The last provider message id an earlier page answered with, so a polling
+   * screen reads only what is newer.
+   */
+  afterMessageId?: string;
+  /**
+   * The stored-transcript offset an earlier page said it began at
+   * (`firstOffset`), so a scroll to the top reads the history just before
+   * what the screen already holds.
+   */
+  beforeOffset?: number;
+}
+
+/**
+ * What a conversation read answered with: one bounded page of attributed
+ * messages and the positions to continue from. `lastMessageId` names the
+ * newest stored message the page consumed — attributed or not — so a poll
+ * resumes where this read stopped; it is absent on an older-history page,
+ * which must never move the poll cursor backward. `firstOffset` names the
+ * stored offset the page began at and `hasOlder` whether history stands
+ * before it, so a scroll to the top can keep reading; both are absent on a
+ * poll, which never looks backward. `hasMore` says newer messages remain
+ * beyond a bounded poll page.
+ */
+export type ProviderConversationResult =
+  | {
+      status: typeof ACT_RESULT_STATUS.ACCEPTED;
+      messages: readonly ProviderConversationMessage[];
+      lastMessageId?: string;
+      hasMore: boolean;
+      firstOffset?: number;
+      hasOlder?: boolean;
+    }
   | { status: typeof ACT_RESULT_STATUS.REJECTED; reason: string }
   | { status: typeof ACT_RESULT_STATUS.UNSUPPORTED; reason: string };
 
@@ -662,6 +748,15 @@ export abstract class SessionProviderAdapterBase implements SessionProviderAdapt
     return {
       status: ACT_RESULT_STATUS.UNSUPPORTED,
       reason: "This provider keeps no transcript this build can read.",
+    };
+  }
+
+  async readConversation(
+    _request: ProviderConversationRequest,
+  ): Promise<ProviderConversationResult> {
+    return {
+      status: ACT_RESULT_STATUS.UNSUPPORTED,
+      reason: "This provider documents no conversation read this build carries.",
     };
   }
 }

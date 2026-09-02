@@ -543,9 +543,10 @@ export interface VoiceConversation {
   stopMicrophone: () => Promise<void>;
   askLuke: (text: string) => Promise<string | undefined>;
   /**
-   * Every bounded line the thread holds — this launch's and, ahead of them,
-   * what the last launch left within the retention policy — shared across
-   * every display's panel. The model still receives only the recent slice.
+   * Every line the thread holds, words whole — this launch's and, ahead of
+   * them, what the last launch left within the retention policy — shared
+   * across every display's panel. The model still receives only the recent
+   * slice, each line cut at render to its own length bound.
    */
   conversationHistory: readonly ConversationEntry[];
   /** Clears the visible history, the next call's context, and the stored file. */
@@ -789,7 +790,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, [conversationHistory, publishConversation]);
 
   /**
-   * Appends one bounded line to this launch's history and tells the call now
+   * Appends one flattened line to this launch's history and tells the call now
    * open about only the recent context slice. A session leaving the roster
    * costs a line its identity at model render, never its visible words. An
    * announcement line is marked as such: it is the one line an open call's
