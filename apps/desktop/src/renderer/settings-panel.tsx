@@ -1852,11 +1852,18 @@ export function CalendarIntegrations({
   calendar,
   appleCalendar,
   writes,
+  withQuietRow = true,
 }: {
   settings: AppSettingsView;
   calendar: CalendarControl;
   appleCalendar: AppleCalendarControl;
   writes: SettingsWrites;
+  /**
+   * The onboarding gate borrows this block with the quiet row withheld: the
+   * setting defaults on, and a switch offered before the first calendar is
+   * even confirmed reads as one more demand rather than a choice.
+   */
+  withQuietRow?: boolean;
 }): React.JSX.Element | null {
   if (!settings.calendarSignInAvailable && !settings.appleCalendarAvailable) return null;
   const accounts = settings.calendarAccounts;
@@ -1929,7 +1936,7 @@ export function CalendarIntegrations({
       {/* The quiet is a fact about the calendars above it, so it appears with
           the first connection and leaves with the last — a switch gating what
           a disconnected calendar cannot do would be a control over nothing. */}
-      {connected ? (
+      {connected && withQuietRow ? (
         <SchemaSettingRows
           page={SCHEMA_SETTINGS_PAGE.CONNECTIONS}
           settings={settings}

@@ -150,14 +150,6 @@
   justify-content: center;
 }
 
-.calendar-gate h1 {
-  font-size: 15px;
-}
-
-.calendar-gate p {
-  font-size: 11.5px;
-}
-
 .calendar-gate .sign-in-provider {
   min-height: 32px;
   font-size: 12px;

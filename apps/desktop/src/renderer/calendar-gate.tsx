@@ -45,14 +45,10 @@ export function CalendarGate({
 }): React.JSX.Element {
   const pending = control.apple?.connecting === true || control.google?.connecting === true;
   return (
-    <section className="sign-in-gate calendar-gate" aria-labelledby="calendar-gate-title">
-      <h1 id="calendar-gate-title">Quiet during meetings</h1>
-      {review === undefined ? (
-        <p>
-          Connect a calendar so announcements wait during your meetings. Luke reads only when
-          meetings start and end, never titles or attendees.
-        </p>
-      ) : null}
+    // No heading and no prose of its own: the spoken beat says why the panel
+    // is asking, and the review half's borrowed block carries the settings
+    // page's own note. The label survives for readers the voice cannot reach.
+    <section className="sign-in-gate calendar-gate" aria-label="Connect a calendar">
       {review !== undefined ? <div className="calendar-gate-review">{review}</div> : null}
       <div className="sign-in-actions">
         {review === undefined && control.apple ? (

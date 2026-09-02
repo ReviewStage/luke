@@ -33,19 +33,18 @@ test("unconnected, the gate offers exactly the sources the build can", () => {
   assert.match(googleOnly, /Connect Google Calendar/);
 });
 
-test("the gate says what connecting buys and what it will never read", () => {
+test("the gate carries no prose of its own; the label stands in for readers", () => {
   const markup = render({ apple: stillSource });
-  assert.match(markup, /Quiet during meetings/);
-  assert.match(markup, /never titles or attendees/);
+  assert.match(markup, /aria-label="Connect a calendar"/);
+  assert.doesNotMatch(markup, /Quiet during meetings/);
 });
 
 test("connected, the handed-in review replaces the ask, and Done answers it", () => {
   const markup = render({ apple: stillSource, google: stillSource }, REVIEW);
   assert.match(markup, /review-stand-in/);
   assert.match(markup, /calendar-gate-done[^>]*>Done/);
-  // The rows inside the review carry the connects now; the ask half's copy
-  // and buttons leave with the question they asked.
-  assert.doesNotMatch(markup, /never titles or attendees/);
+  // The rows inside the review carry the connects now; the ask half's
+  // buttons leave with the question they asked.
   assert.doesNotMatch(markup, /Use this Mac/);
   assert.doesNotMatch(markup, /Connect Google Calendar/);
 });
