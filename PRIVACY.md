@@ -169,6 +169,9 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 - Clear the History tab to delete your stored conversation from your Mac.
 - Ask Luke what he remembers, correct a memory, or tell him to forget one.
 - Luke does not use your microphone until you start a turn.
+- Luke reads whether another app is using your microphone, as one yes-or-no
+  answer from macOS and never as audio, only to hold spoken announcements
+  during calls. Nothing about it leaves your Mac.
 - Delete your account from the Account section in Settings. This erases your
   account, your sign-in records, your usage counts, and any provider API keys
   you synced to the hosted service, and asks PostHog to erase your usage data

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   MAXIMUM_HELD_NOTICES,
+  MAXIMUM_RELEASED_NOTICES,
   SESSION_NOTICE_STATUS,
   SESSION_STATUS,
   type SessionNotice,
@@ -97,4 +98,25 @@ test("the backlog is bounded, shedding the oldest first", () => {
   const released = hold.release();
   assert.equal(released[0]?.providerSessionId, "session-3");
   assert.equal(released.at(-1)?.providerSessionId, `session-${MAXIMUM_HELD_NOTICES + 2}`);
+});
+
+test("a limited release hands back the newest, oldest first, and sheds the rest", () => {
+  const hold = new SessionNoticeHold();
+  for (let index = 0; index < MAXIMUM_RELEASED_NOTICES + 2; index += 1) {
+    hold.hold([notice(`session-${index}`, SESSION_NOTICE_STATUS.COMPLETE)]);
+  }
+
+  const released = hold.release(MAXIMUM_RELEASED_NOTICES);
+  assert.deepEqual(
+    released.map((item) => item.providerSessionId),
+    ["session-2", "session-3", "session-4"],
+  );
+  assert.equal(hold.count, 0);
+  assert.deepEqual(hold.release(MAXIMUM_RELEASED_NOTICES), []);
+});
+
+test("a limit wider than the backlog changes nothing", () => {
+  const hold = new SessionNoticeHold();
+  hold.hold([notice("session-1", SESSION_NOTICE_STATUS.COMPLETE)]);
+  assert.equal(hold.release(MAXIMUM_RELEASED_NOTICES).length, 1);
 });

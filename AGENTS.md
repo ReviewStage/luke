@@ -485,7 +485,14 @@ Trust constraints:
   nothing about the user's intent. Disconnecting deletes the stored choice, and the
   grant stays the user's own in System Settings, withdrawable there like
   every system permission. The intervals pool with the signed-in accounts'
-  and decide nothing more than theirs do.
+  and decide nothing more than theirs do. A call the calendar never listed is
+  read the same way, through a native helper reporting whether any input
+  device is capturing (CoreAudio's running flag, or a Bluetooth headset's
+  switch to its call codec) as one boolean with no audio, device name, or
+  process name; Luke's own exchange is excluded, so his microphone never
+  counts as a call; the hold stands under the same setting, lifts a fixed
+  grace after capture stops, and decides nothing more than the meetings do.
+  Widening it is a product decision, not an implementation detail.
 - Quieting other media is bounded the way the talk key is: a native helper that
   can do one narrow thing. While a spoken exchange is live, Luke may lower the
   volume of the players the helper names (Music and Spotify, through their own

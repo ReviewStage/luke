@@ -15,9 +15,10 @@ export interface FaceContext {
   speaking: boolean;
   microphoneLive: boolean;
   /**
-   * Whether the calendar's quiet is holding announcements right now. A
-   * deterministic fact from the main process — the clock against observed
-   * meeting intervals — never anything a model decided.
+   * Whether the quiet — a meeting or a call — is holding announcements right
+   * now. A deterministic fact from the main process — the clock against
+   * observed meeting intervals, or a helper's reading of whether another app
+   * holds the microphone — never anything a model decided.
    */
   meetingQuiet: boolean;
   /**
@@ -97,10 +98,10 @@ export function faceYieldsToMeter(input: { turn?: SpeechTurn; hasAudioSignal: bo
 export function restingMotion(context: FaceContext): FaceMotion | undefined {
   if (context.speaking) return FACE_MOTION.TALKING;
   if (context.microphoneLive) return FACE_MOTION.LISTENING;
-  // A meeting the calendar is holding announcements through. Sleeping is the
-  // one visual report the hold makes — Luke is deliberately not speaking —
-  // and it stays true for exactly as long as the meeting covers now, which is
-  // what a rest must do. Speech still outranks it: a developer who opens a
+  // A meeting or a call the quiet is holding announcements through. Sleeping
+  // is the one visual report the hold makes — Luke is deliberately not
+  // speaking — and it stays true for exactly as long as the hold does, which
+  // is what a rest must do. Speech still outranks it: a developer who opens a
   // turn mid-meeting is talking to a face, not to a pillow.
   if (context.meetingQuiet) return FACE_MOTION.SLEEPING;
   // Nothing to watch at all, which is a different thing from nothing

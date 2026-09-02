@@ -87,9 +87,9 @@ export interface SpokenNoticeAnnouncerOptions {
  * A backlog that outlives its attempts is dropped, because every notice is
  * still standing in the panel.
  *
- * The meeting quiet reaches it through {@link setMeetingQuiet}: quiet
- * beginning silences it at once — the announcement mid-sentence on Luke's
- * own call included — and holds it silent until the quiet ends.
+ * The quiet — a meeting or a call — reaches it through {@link setMeetingQuiet}:
+ * quiet beginning silences it at once — the announcement mid-sentence on
+ * Luke's own call included — and holds it silent until the quiet ends.
  *
  * On the developer's own call, a reply Luke just gave them holds the whole
  * backlog for {@link ANNOUNCER_GRACE_MS}: the pause after an answer is where

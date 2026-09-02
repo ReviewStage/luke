@@ -199,11 +199,6 @@ const SETTING_ROW_DRAWN = {
   [APP_SETTING_ID.VOICE_CAPTIONS]: voiceControlRowDrawn,
   [APP_SETTING_ID.DUCK_OTHER_MEDIA]: voiceControlRowDrawn,
   [APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE]: voiceControlRowDrawn,
-  // The quiet rides the calendar block, and appears with its first
-  // connection — a Google account, or this Mac's own Calendar.
-  [APP_SETTING_ID.QUIET_DURING_MEETINGS]: (input) =>
-    (input.settings.calendarSignInAvailable && input.settings.calendarAccounts.length > 0) ||
-    input.settings.appleCalendar !== undefined,
   // The Conductor agent rows belong to a connected provider the build
   // documents a model table for.
   [APP_SETTING_ID.WORKSPACE_AGENT_MODEL]: conductorAgentRowDrawn,
