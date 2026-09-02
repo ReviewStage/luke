@@ -184,7 +184,14 @@
   width: 100%;
   min-height: 0;
   flex-shrink: 1;
+  /* The settings page's own posture, for the settings page's own rows: the
+     marks deliberately bleed past their rows (`.credential-mark`'s negative
+     margins), which the page absorbs with padding and clips against sideways
+     scrolling. Without both, the bleed makes this wrapper horizontally
+     scrollable and the whole block can be dragged off its left edge. */
+  padding: 0 4px;
   text-align: left;
+  overflow-x: clip;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
