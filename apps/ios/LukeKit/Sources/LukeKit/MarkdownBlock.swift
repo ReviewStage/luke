@@ -98,7 +98,7 @@ extension MarkdownBlock {
             node.text.append(inlinePiece(String(parsed[run.range].characters), run: run))
         }
         let blocks = root.children.flatMap { $0.blocks() }
-        return blocks.isEmpty ? fallback(text) : blocks
+        return (blocks.isEmpty ? fallback(text) : blocks).map { $0.withoutLinks() }
     }
 
     private static func fallback(_ text: String) -> [MarkdownBlock] {
@@ -106,12 +106,15 @@ extension MarkdownBlock {
         return words.isEmpty ? [] : [.paragraph(AttributedString(words))]
     }
 
-    /// A run's words carrying only what `Text` draws inline, emphasis and
-    /// links: the block intent is now the enum case around them, and the
-    /// parser's other bookkeeping (a list item's delimiter) is nothing a
-    /// bubble draws. A line break in the source is kept as one line break: a
-    /// message is a chat's words, where a new line means a new line, not a
-    /// manuscript whose soft breaks a typesetter joins.
+    /// A run's words carrying the inline styles `Text` draws. Links remain
+    /// briefly so structural reads can distinguish a linked `[x]` from a task
+    /// box, then `parse` removes every destination before exposing its blocks:
+    /// messages come from observed agent output, so their Markdown must never
+    /// become an outbound control. The block intent is now the enum case
+    /// around the words, and the parser's other bookkeeping (a list item's
+    /// delimiter) is nothing a bubble draws. A line break in the source is
+    /// kept as one line break: a message is a chat's words, where a new line
+    /// means a new line, not a manuscript whose soft breaks a typesetter joins.
     private static func inlinePiece(_ words: String, run: AttributedString.Runs.Run) -> AttributedString {
         if let intent = run.inlinePresentationIntent, intent.contains(.softBreak) || intent.contains(.lineBreak) {
             return AttributedString("\n")
@@ -120,6 +123,42 @@ extension MarkdownBlock {
         if let intent = run.inlinePresentationIntent { piece.inlinePresentationIntent = intent }
         if let link = run.link { piece.link = link }
         return piece
+    }
+
+    private func withoutLinks() -> MarkdownBlock {
+        switch self {
+        case .paragraph(let words):
+            return .paragraph(Self.inert(words))
+        case .heading(let level, let words):
+            return .heading(level: level, Self.inert(words))
+        case .code, .rule:
+            return self
+        case .quote(let blocks):
+            return .quote(blocks.map { $0.withoutLinks() })
+        case .list(let ordered, let items):
+            return .list(
+                ordered: ordered,
+                items: items.map { item in
+                    MarkdownListItem(
+                        ordinal: item.ordinal,
+                        checked: item.checked,
+                        blocks: item.blocks.map { $0.withoutLinks() }
+                    )
+                }
+            )
+        case .table(let header, let alignments, let rows):
+            return .table(
+                header: header.map(Self.inert),
+                alignments: alignments,
+                rows: rows.map { $0.map(Self.inert) }
+            )
+        }
+    }
+
+    private static func inert(_ words: AttributedString) -> AttributedString {
+        var inert = words
+        inert.link = nil
+        return inert
     }
 }
 

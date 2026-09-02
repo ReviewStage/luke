@@ -28,7 +28,7 @@ final class MarkdownBlockTests: XCTestCase {
         XCTAssertEqual(paragraphWords(blocks[1]), "Second paragraph")
     }
 
-    func testInlineStylesSurviveWithoutBlockIntent() throws {
+    func testInlineStylesSurviveWithoutBlockIntentAndLinksStayInert() throws {
         let blocks = MarkdownBlock.parse("Ran **all** tests with `pnpm test` at [the repo](https://example.com).")
         guard case .paragraph(let text) = try XCTUnwrap(blocks.first) else {
             return XCTFail("expected a paragraph, got \(blocks)")
@@ -40,7 +40,16 @@ final class MarkdownBlockTests: XCTestCase {
         XCTAssertTrue(styles.allSatisfy { $0.3 == nil })
         XCTAssertEqual(styles.first { $0.0 == "all" }?.1, .stronglyEmphasized)
         XCTAssertEqual(styles.first { $0.0 == "pnpm test" }?.1, .code)
-        XCTAssertEqual(styles.first { $0.0 == "the repo" }?.2, URL(string: "https://example.com"))
+        XCTAssertNil(styles.first { $0.0 == "the repo" }?.2)
+    }
+
+    func testAgentControlledLinkDestinationsNeverBecomeControls() throws {
+        let blocks = MarkdownBlock.parse("[review this](custom-scheme://run-action)")
+        guard case .paragraph(let text) = try XCTUnwrap(blocks.first) else {
+            return XCTFail("expected a paragraph, got \(blocks)")
+        }
+        XCTAssertEqual(words(text), "review this")
+        XCTAssertTrue(text.runs.allSatisfy { $0.link == nil })
     }
 
     func testHeadingsCarryTheirLevel() {
