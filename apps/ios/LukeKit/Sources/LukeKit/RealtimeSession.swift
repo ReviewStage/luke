@@ -176,7 +176,7 @@ public final class RealtimeSession {
                 ws = factory(connection.wsURL, connection.ephemeralKey)
             } else {
                 ws = URLSessionWebSocketChannel(
-                    url: connection.wsURL, bearerToken: connection.ephemeralKey
+                    url: connection.wsURL, ephemeralKey: connection.ephemeralKey
                 )
             }
             channel = ws
@@ -490,11 +490,11 @@ public final class RealtimeSession {
 private final class URLSessionWebSocketChannel: WebSocketTask, @unchecked Sendable {
     private let task: URLSessionWebSocketTask
 
-    init(url: URL, bearerToken: String) {
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
-        request.setValue("realtime=v1", forHTTPHeaderField: "OpenAI-Beta")
-        task = URLSession.shared.webSocketTask(with: request)
+    init(url: URL, ephemeralKey: String) {
+        task = URLSession.shared.webSocketTask(
+            with: url,
+            protocols: realtimeWebSocketProtocols(ephemeralKey: ephemeralKey)
+        )
     }
 
     func resume() { task.resume() }
@@ -514,4 +514,8 @@ private final class URLSessionWebSocketChannel: WebSocketTask, @unchecked Sendab
     func close() {
         task.cancel(with: .normalClosure, reason: nil)
     }
+}
+
+func realtimeWebSocketProtocols(ephemeralKey: String) -> [String] {
+    ["realtime", "openai-insecure-api-key.\(ephemeralKey)"]
 }

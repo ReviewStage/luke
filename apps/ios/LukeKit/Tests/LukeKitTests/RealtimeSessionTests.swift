@@ -64,6 +64,15 @@ private let testConnection = VoiceConnection(
     sessionsContext: testContext
 )
 
+final class RealtimeWebSocketAuthenticationTests: XCTestCase {
+    func testEphemeralKeyUsesClientSideWebSocketProtocols() {
+        XCTAssertEqual(
+            realtimeWebSocketProtocols(ephemeralKey: "ek_test"),
+            ["realtime", "openai-insecure-api-key.ek_test"]
+        )
+    }
+}
+
 // MARK: - State machine tests
 
 @MainActor
