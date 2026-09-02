@@ -98,7 +98,7 @@ final class VaultStoreTests: XCTestCase {
     func testEntriesAnswerOnlyUnderTheirAccount() async {
         let stub = StubHTTPClient { request in
             let payload: [String: Any] = [
-                "keys": [["providerId": "cursor", "updatedAt": 1000]],
+                "keys": [["providerId": "conductor", "updatedAt": 1000]],
             ]
             return (jsonData(payload), makeResponse(url: request.url!, status: 200))
         }
@@ -190,7 +190,7 @@ final class VaultStoreTests: XCTestCase {
                 return (jsonData(["stored": true]), makeResponse(url: request.url!, status: 200))
             default:
                 let payload: [String: Any] = [
-                    "keys": [["providerId": "cursor", "updatedAt": 1000]],
+                    "keys": [["providerId": "conductor", "updatedAt": 1000]],
                 ]
                 return (jsonData(payload), makeResponse(url: request.url!, status: 200))
             }
@@ -220,7 +220,7 @@ final class VaultStoreTests: XCTestCase {
                 return (jsonData(["stored": true]), makeResponse(url: request.url!, status: 200))
             default:
                 let payload: [String: Any] = [
-                    "keys": [["providerId": "cursor", "updatedAt": 1000]],
+                    "keys": [["providerId": "conductor", "updatedAt": 1000]],
                 ]
                 return (jsonData(payload), makeResponse(url: request.url!, status: 200))
             }

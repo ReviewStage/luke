@@ -50,7 +50,7 @@ final class RosterSessionTests: XCTestCase {
 
     func testOptionalFields() {
         let s = RosterSession(json: [
-            "providerId": "devin",
+            "providerId": "codex",
             "sessionId": "sess-2",
             "title": "Task",
             "status": "waiting",
@@ -125,7 +125,7 @@ final class RosterClientTests: XCTestCase {
 final class RosterSessionActAdvertisementTests: XCTestCase {
     func testAdvertisementsAbsentByDefault() {
         let s = RosterSession(json: [
-            "providerId": "copilot",
+            "providerId": "conductor",
             "sessionId": "task-1",
             "title": "Read-only task",
             "status": "working",

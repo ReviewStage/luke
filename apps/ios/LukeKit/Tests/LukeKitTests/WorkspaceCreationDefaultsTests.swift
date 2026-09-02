@@ -30,10 +30,10 @@ final class WorkspaceCreationDefaultsTests: XCTestCase {
     func testProjectIsRememberedPerProvider() {
         let defaults = WorkspaceCreationDefaults(store: store)
         defaults.setLastProjectId("proj-1", for: "conductor")
-        defaults.setLastProjectId("https://github.com/o/r", for: "cursor")
+        defaults.setLastProjectId("https://github.com/o/r", for: "codex")
         XCTAssertEqual(defaults.lastProjectId(for: "conductor"), "proj-1")
-        XCTAssertEqual(defaults.lastProjectId(for: "cursor"), "https://github.com/o/r")
-        XCTAssertNil(defaults.lastProjectId(for: "replicas"))
+        XCTAssertEqual(defaults.lastProjectId(for: "codex"), "https://github.com/o/r")
+        XCTAssertNil(defaults.lastProjectId(for: "conductor"))
     }
 
     func testAgentSelectionRoundTripsWithAndWithoutEffort() {

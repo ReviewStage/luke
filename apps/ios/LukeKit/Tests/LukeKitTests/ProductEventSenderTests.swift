@@ -238,7 +238,7 @@ final class ProductEventSenderTests: XCTestCase {
     func testPastTheQueueLimitTheOldestGoAndTheNewestStay() async {
         let (sender, log) = makeSender(queueLimit: 3)
         sender.arm()
-        for provider in [ProductProviderID.claudeCode, .codex, .conductor, .cursor] {
+        for provider in [ProductProviderID.claudeCode, .codex, .conductor, .omp] {
             sender.record(.sessionActSend(provider: provider, act: .messageSend))
         }
         await sender.flush().value
@@ -247,7 +247,7 @@ final class ProductEventSenderTests: XCTestCase {
         let providers = sentEvents(requests[0]).map {
             ($0["properties"] as? [String: String])?["provider_id"]
         }
-        XCTAssertEqual(providers, ["codex", "conductor", "cursor"])
+        XCTAssertEqual(providers, ["codex", "conductor", "omp"])
     }
 
     func testABatchPastTheWireLimitIsLeftForTheNextFlushRatherThanRefused() async {

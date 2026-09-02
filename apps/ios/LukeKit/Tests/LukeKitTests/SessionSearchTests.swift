@@ -62,7 +62,7 @@ final class SessionSearchMatchTests: XCTestCase {
     }
 
     func testMatchesProviderByWireId() {
-        XCTAssertTrue(SessionSearch.matches(makeSession(providerId: "cursor", title: "Untitled"), tokens: ["cursor"]))
+        XCTAssertTrue(SessionSearch.matches(makeSession(providerId: "codex", title: "Untitled"), tokens: ["codex"]))
         // A provider the vault does not list still matches on its wire id.
         XCTAssertTrue(SessionSearch.matches(makeSession(providerId: "claude-code", title: "Untitled"), tokens: ["claude"]))
     }
