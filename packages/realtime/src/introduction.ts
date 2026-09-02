@@ -1,12 +1,7 @@
 import { LUKE_PERSONA } from "@sidecar/attention";
 import type { WireRecord } from "@sidecar/wire";
-import {
-  type RealtimeSessionOptions,
-  realtimeReasoning,
-  realtimeSessionConfig,
-} from "./realtime-credentials.js";
-import { REALTIME_CLIENT_EVENT, REALTIME_SESSION_TYPE } from "./realtime-protocol.js";
-import { REALTIME_DEFAULTS } from "./realtime-voice-settings.js";
+import { type RealtimeSessionOptions, realtimeSessionConfig } from "./realtime-credentials.js";
+import { REALTIME_CLIENT_EVENT } from "./realtime-protocol.js";
 
 /**
  * The spoken introduction's wire grammar. The introduction is the one call
@@ -69,30 +64,6 @@ export function introductionSessionConfig(options: RealtimeSessionOptions = {}) 
     tools: [],
     tool_choice: "none",
   };
-}
-
-/**
- * Reasserts the introduction session after the call opens, the same moment the
- * conversation call reasserts its own instructions and tools. The differences
- * are the point: the introduction's instructions replace the conversation's,
- * the tool list is empty, and `tool_choice` is `"none"` — the call is
- * tool-free by declaration, not merely by nobody asking.
- */
-export function introductionSessionSyncEvents(model: string): readonly WireRecord[] {
-  const reasoning = realtimeReasoning(model);
-  return [
-    {
-      type: REALTIME_CLIENT_EVENT.SESSION_UPDATE,
-      session: {
-        type: REALTIME_SESSION_TYPE,
-        ...(reasoning ? { reasoning } : undefined),
-        instructions: introductionInstructions(),
-        tools: [],
-        tool_choice: "none",
-        audio: { input: { transcription: { model: REALTIME_DEFAULTS.TRANSCRIPTION_MODEL } } },
-      },
-    },
-  ];
 }
 
 /**

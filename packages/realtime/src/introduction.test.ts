@@ -1,13 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { isRecord } from "@sidecar/wire";
-import {
-  introductionSessionConfig,
-  introductionSessionSyncEvents,
-  introductionSpeechEvents,
-} from "./introduction.js";
+import { introductionSessionConfig, introductionSpeechEvents } from "./introduction.js";
 import { realtimeSessionConfig } from "./realtime-credentials.js";
-import { REALTIME_DEFAULTS } from "./realtime-voice-settings.js";
 
 test("the minted introduction session declares no tools and no way to choose one", () => {
   const config = introductionSessionConfig({ voice: "marin", speed: 1.2 });
@@ -22,18 +17,6 @@ test("the minted introduction session declares no tools and no way to choose one
   assert.equal(config.audio.input.turn_detection, null);
   assert.match(config.instructions, /audio is noisy, ambiguous, or cut off/i);
   assert.match(config.instructions, /never infer[\s\S]*or call a tool from unclear audio/i);
-});
-
-test("the sync events re-assert the same tool-free session after connect", () => {
-  const events = introductionSessionSyncEvents(REALTIME_DEFAULTS.MODEL);
-  assert.equal(events.length, 1);
-  const event = events[0];
-  assert.ok(event);
-  const session = event.session;
-  assert.ok(isRecord(session));
-  assert.deepEqual(session.tools, []);
-  assert.equal(session.tool_choice, "none");
-  assert.deepEqual(session.reasoning, { effort: "low" });
 });
 
 test("a scripted beat travels as data behind a marker and opens a tool-free turn", () => {

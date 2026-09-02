@@ -34,14 +34,15 @@ import { isRecord, text, type WireRecord } from "@sidecar/wire";
 import type { JsonValue, ParsedJsonObject } from "@sidecar/wire/testing";
 import {
   asMediaStream,
+  asMediaTrack,
   asPeerConnection,
-  type MockDataChannel,
   type MockMediaStream,
   type MockMediaTrack,
   type MockPeerConnection,
+  type MockRtpSender,
   type MockTrackEvent,
-  parseClientEvent,
 } from "#testing/realtime-fixtures";
+import type { SdkRealtimeTransport, SdkTransportFactoryOptions } from "./agents-realtime-transport";
 import {
   type ActCarrier,
   type AppActionCarrier,
@@ -60,22 +61,8 @@ function sessionField(event: ParsedJsonObject | undefined): ParsedJsonObject | u
   return isRecord(session) ? session : undefined;
 }
 
-function sessionHasTools(event: ParsedJsonObject): boolean {
-  const session = sessionField(event);
-  return session !== undefined && Array.isArray(session.tools);
-}
-
 function sessionAudioField(event: ParsedJsonObject | undefined): JsonValue | undefined {
   return sessionField(event)?.audio;
-}
-
-function toolParameterPropertyNames(tool: ParsedJsonObject | undefined): readonly string[] {
-  if (!tool) return [];
-  const parameters = tool.parameters;
-  if (!isRecord(parameters)) return [];
-  const properties = parameters.properties;
-  if (!isRecord(properties)) return [];
-  return Object.keys(properties);
 }
 
 const CONNECTION: RealtimeConnection = {
@@ -84,12 +71,6 @@ const CONNECTION: RealtimeConnection = {
   model: "gpt-realtime-2.1",
   callsUrl: "https://api.openai.com/v1/realtime/calls",
 };
-
-/** One transceiver a call declared, as the fixture peer recorded it. */
-interface RecordedTransceiver {
-  kind: string;
-  direction?: string;
-}
 
 interface Harness {
   session: RealtimeVoiceSession;
@@ -115,17 +96,17 @@ interface Harness {
   microphoneStopped: () => boolean;
   emit: (event: JsonValue) => void;
   emitRaw: (data: JsonValue) => void;
+  executeSdkTool: SdkTransportFactoryOptions["executeTool"];
   lukeAudible: () => boolean;
   deliverRemoteTrack: (streams?: readonly object[]) => void;
   provideConnection: () => void;
   setConnectionState: (state: RTCPeerConnectionState) => void;
   closeChannel: () => void;
-  requests: { url: string; init: RequestInit }[];
+  requests: { apiKey: string; model: string; url: string }[];
   /** The order the credential and the device were asked for and answered in. */
   calls: string[];
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  /** The transceivers declared instead of tracks, as a speak-only call does. */
-  transceivers: RecordedTransceiver[];
+  /** The stable synthetic track the SDK sender carries between presses. */
+  silenceTrack: MockMediaTrack;
   /** Every track handed to the sender, `null` standing for the device let go. */
   replacedTracks: () => (object | null)[];
   /**
@@ -173,7 +154,7 @@ function harness(
     carryAction?: SessionActionCarrier;
     carryAppAction?: AppActionCarrier;
     carryIssueAction?: IssueActionCarrier;
-    captureSessionSync?: boolean;
+    sdkCloseError?: Error;
     /** Lets a test ride the status edges, the way the announcer does. */
     onStatus?: (status: RealtimeStatus) => void;
     /** Lets a test stand where the development trace's tap does. */
@@ -199,7 +180,7 @@ function harness(
   const spokenAskFailures: string[] = [];
   const spokenAskItems: string[] = [];
   let spokenAskClosures = 0;
-  const requests: { url: string; init: RequestInit }[] = [];
+  const requests: { apiKey: string; model: string; url: string }[] = [];
   const calls: string[] = [];
   let enabled = false;
   let stopped = false;
@@ -217,51 +198,129 @@ function harness(
   };
   const stream: MockMediaStream = { getAudioTracks: () => [track], getTracks: () => [track] };
 
-  const channel: MockDataChannel = {
-    readyState: options.channelOpensImmediately === false ? "connecting" : "open",
-    send: (payload: string) => {
-      const event = parseClientEvent(payload);
-      const isSessionSync =
-        event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE && sessionHasTools(event);
-      if (options.captureSessionSync || !isSessionSync) sent.push(event);
-    },
-    close: () => {
-      channel.readyState = "closed";
-      queueMicrotask(() => channel.onclose?.());
+  const remoteTrack = { enabled: true };
+  const replacedTracks: (MockMediaTrack | null)[] = [];
+  const silenceTrack: MockMediaTrack = { kind: "audio" };
+  const connectionStateListeners = new Set<() => void>();
+  const sender: MockRtpSender = {
+    track: silenceTrack,
+    replaceTrack: async (next: MockMediaTrack | null) => {
+      sender.track = next;
+      replacedTracks.push(next);
     },
   };
-
-  const remoteTrack = { enabled: true };
-  const transceivers: RecordedTransceiver[] = [];
-  const replacedTracks: (MockMediaTrack | null)[] = [];
   const peer: MockPeerConnection = {
-    localDescription: { type: "offer", sdp: "v=0 local" },
     connectionState: "connected",
-    addTransceiver: (kind: string, init?: { direction?: string }) => {
-      const entry: RecordedTransceiver = { kind };
-      if (init?.direction) {
-        entry.direction = init.direction;
+    getSenders: () => [sender],
+    addEventListener: (_type, listener) => connectionStateListeners.add(listener),
+  };
+  let sdkOptions: SdkTransportFactoryOptions | undefined;
+  let sdkStatus: SdkRealtimeTransport["status"] = "disconnected";
+  let sdkCloseError = options.sdkCloseError;
+  const dispatchedCalls = new Set<string>();
+  let syntheticResponseSequence = 0;
+
+  const recordClientEvent = (event: WireRecord): void => {
+    const parsed: ParsedJsonObject = JSON.parse(JSON.stringify(event));
+    sent.push(parsed);
+    sdkOptions?.onClientEvent(event);
+  };
+  const dispatchToolCall = (call: ParsedJsonObject): void => {
+    const callId = text(call.call_id);
+    const name = text(call.name);
+    const argumentsJson = text(call.arguments);
+    if (!callId || !name || argumentsJson === undefined || dispatchedCalls.has(callId)) return;
+    dispatchedCalls.add(callId);
+    void sdkOptions
+      ?.executeTool(name, {
+        toolCall: { type: "function_call", callId, name, arguments: argumentsJson },
+      })
+      .then((output) => {
+        recordClientEvent({
+          type: REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
+          item: { type: "function_call_output", call_id: callId, output: JSON.stringify(output) },
+        });
+        sdkOptions?.onToolOutputSent(callId);
+      });
+  };
+  const emitServerEvent = (data: JsonValue): void => {
+    const wireData = JSON.parse(JSON.stringify(data));
+    if (!isRecord(wireData)) {
+      sdkOptions?.onTransportEvent(wireData);
+      return;
+    }
+    let event = wireData;
+    if (event.type === REALTIME_SERVER_EVENT.RESPONSE_DONE && isRecord(event.response)) {
+      const calls = Array.isArray(event.response.output)
+        ? event.response.output.filter(isRecord).filter((item) => item.type === "function_call")
+        : [];
+      if (calls.length > 0 && text(event.response.id) === undefined) {
+        const responseId = `response-${++syntheticResponseSequence}`;
+        sdkOptions?.onTransportEvent({
+          type: REALTIME_SERVER_EVENT.RESPONSE_CREATED,
+          response: { id: responseId },
+        });
+        event = { ...event, response: { ...event.response, id: responseId } };
       }
-      transceivers.push(entry);
-      return {
-        sender: {
-          replaceTrack: async (next: MockMediaTrack | null) => {
-            replacedTracks.push(next);
-          },
-        },
-      };
-    },
-    createDataChannel: () => {
-      channel.readyState = options.channelOpensImmediately === false ? "connecting" : "open";
-      return channel;
-    },
-    createOffer: async () => ({ type: "offer", sdp: "v=0 local" }),
-    setLocalDescription: async () => undefined,
-    setRemoteDescription: async () => undefined,
-    close: () => {
-      peer.connectionState = "closed";
-      queueMicrotask(() => peer.onconnectionstatechange?.());
-    },
+      sdkOptions?.onTransportEvent(JSON.parse(JSON.stringify(event)));
+      for (const call of calls) dispatchToolCall(call);
+      return;
+    }
+    sdkOptions?.onTransportEvent(JSON.parse(JSON.stringify(event)));
+    if (event.type === "response.output_item.done" && isRecord(event.item)) {
+      dispatchToolCall(event.item);
+    }
+  };
+
+  const createSdkTransport = (
+    transportOptions: SdkTransportFactoryOptions,
+  ): SdkRealtimeTransport => {
+    sdkOptions = transportOptions;
+    sender.track = silenceTrack;
+    peer.connectionState = "connected";
+    let closed = false;
+    return {
+      get status() {
+        return sdkStatus;
+      },
+      connect: async (request) => {
+        sdkStatus = "connecting";
+        requests.push(request);
+        connectionStateListeners.clear();
+        transportOptions.onPeerConnection(asPeerConnection(peer), asMediaTrack(silenceTrack));
+        if (options.sdpDelayMs) {
+          await new Promise((resolve) => setTimeout(resolve, options.sdpDelayMs));
+        }
+        const response = options.sdpResponse;
+        if (response && !response.ok)
+          throw new Error(`Realtime call failed with status ${response.status}.`);
+        if (options.channelOpensImmediately === false) {
+          await new Promise<void>(() => undefined);
+        }
+        if (closed) throw new Error("The voice connection closed while opening.");
+        sdkStatus = "connected";
+        transportOptions.onConnectionChange(sdkStatus);
+      },
+      sendEvent: recordClientEvent,
+      sendMessage: (message) => {
+        recordClientEvent({
+          type: REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
+          item: { type: "message", role: "user", content: [{ type: "input_text", text: message }] },
+        });
+        recordClientEvent({ type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE });
+      },
+      close: () => {
+        if (closed) return;
+        closed = true;
+        sdkStatus = "disconnected";
+        transportOptions.onConnectionChange(sdkStatus);
+        if (sdkCloseError) {
+          const error = sdkCloseError;
+          sdkCloseError = undefined;
+          throw error;
+        }
+      },
+    };
   };
 
   let connection = "connection" in options ? options.connection : CONNECTION;
@@ -300,14 +359,7 @@ function harness(
         },
       };
     },
-    createPeerConnection: () => asPeerConnection(peer),
-    exchangeDescription: async (url, init) => {
-      requests.push({ url, init });
-      if (options.sdpDelayMs) {
-        await new Promise((resolve) => setTimeout(resolve, options.sdpDelayMs));
-      }
-      return options.sdpResponse ?? new Response("v=0 remote", { status: 200 });
-    },
+    createSdkTransport,
     onStatus: (status) => options.onStatus?.(status),
     onLocalStream: () => undefined,
     onRemoteStream: (stream) => options.onRemoteStream?.(stream),
@@ -391,18 +443,22 @@ function harness(
       peer.ontrack?.(trackEvent);
     },
     emit: (event) => {
-      channel.onmessage?.({ data: JSON.stringify(event) });
+      emitServerEvent(event);
     },
     emitRaw: (data) => {
-      channel.onmessage?.({ data });
+      sdkOptions?.onTransportEvent(JSON.parse(JSON.stringify(data)));
+    },
+    executeSdkTool: async (name, details) => {
+      if (!sdkOptions) throw new Error("The SDK transport is not connected.");
+      return sdkOptions.executeTool(name, details);
     },
     setConnectionState: (state) => {
       peer.connectionState = state;
-      peer.onconnectionstatechange?.();
+      for (const listener of connectionStateListeners) listener();
     },
     closeChannel: () => {
-      channel.readyState = "closed";
-      channel.onclose?.();
+      sdkStatus = "disconnected";
+      sdkOptions?.onConnectionChange(sdkStatus);
     },
     requests,
     calls,
@@ -418,7 +474,7 @@ function harness(
       microphoneGate = undefined;
       for (const release of held) release();
     },
-    transceivers,
+    silenceTrack,
     pressCaptures,
   };
 }
@@ -492,11 +548,8 @@ test("connecting opens the call and leaves the microphone closed", async () => {
 
   const request = context.requests[0];
   assert.equal(request?.url, CONNECTION.callsUrl);
-  // SAFETY: Fixture headers map matches the string header shape the fake records.
-  const headers = request?.init.headers as Record<string, string>;
-  assert.equal(headers.authorization, `Bearer ${CONNECTION.value}`);
-  assert.equal(headers["content-type"], "application/sdp");
-  assert.equal(request?.init.body, "v=0 local");
+  assert.equal(request?.apiKey, CONNECTION.value);
+  assert.equal(request?.model, CONNECTION.model);
 });
 
 test("the wire tap sees both directions, raw, before the parser narrows or drops", async () => {
@@ -505,9 +558,9 @@ test("the wire tap sees both directions, raw, before the parser narrows or drops
     onWireEvent: (direction, event) => tapped.push({ direction, event }),
   });
   await context.session.connect();
+  context.session.applySpeed(1.25);
 
-  // The session sync the harness's channel filters out of `sent` still
-  // crosses the tap: it is what the call sends, instructions and tools whole.
+  // A live config change crosses the tap as the raw event the call sends.
   const clientTypes = tapped
     .filter((entry) => entry.direction === TRACE_DIRECTION.CLIENT)
     .map((entry) => entry.event.type);
@@ -596,7 +649,7 @@ test("push-to-talk opens the microphone only while held, then asks for a reply",
 
   // The exchange settling is what closes it, in the quiet after the reply.
   assert.equal(context.microphoneStopped(), true);
-  assert.equal(context.replacedTracks().at(-1), null);
+  assert.equal(context.replacedTracks().at(-1), context.silenceTrack);
   assert.deepEqual(
     context.sent.map((event) => event.type),
     [
@@ -1507,19 +1560,6 @@ test("a finished response returns the session to ready", async () => {
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });
 
-test("an opened call synchronizes the local build's tool schema", async () => {
-  const context = harness({ captureSessionSync: true });
-  await context.session.connect();
-
-  const update = context.sent.find(
-    (event) => event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE && sessionHasTools(event),
-  );
-  const tools = sessionField(update)?.tools;
-  const toolList = Array.isArray(tools) ? tools.filter(isRecord) : [];
-  const creation = toolList.find((tool) => tool.name === "create_workspace");
-  assert.deepEqual(toolParameterPropertyNames(creation).includes("agent"), true);
-});
-
 test("a changed pace reaches the live call without waiting for the next one", async () => {
   const context = harness();
   await context.session.connect();
@@ -2074,6 +2114,20 @@ test("a new call after teardown re-seeds the accumulated history", async () => {
   assert.equal(items.length, 1);
   assert.match(itemText(items[0]), /finished checkout-service/);
   assert.match(itemText(items[0]), /failed in payments/);
+});
+
+test("a transport close failure cannot strand teardown or the next call", async () => {
+  const context = harness({ sdkCloseError: new Error("close failed") });
+  await context.session.connect();
+  await holdTurn(context);
+
+  context.session.clearConversation();
+
+  assert.equal(context.session.status, REALTIME_STATUS.IDLE);
+  assert.equal(context.microphoneStopped(), true);
+  assert.deepEqual(reportedErrors(context), ["close failed"]);
+  assert.equal(await context.session.connect(), true);
+  assert.doesNotThrow(() => context.session.clearConversation());
 });
 
 test("clearing history deletes its live model-context item", async () => {
@@ -3422,6 +3476,79 @@ test("a spoken ask is carried through the carrier and its outcome is voiced", as
   );
   // The turn never ended: the reply resumes over the outcome.
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+});
+
+test("a response waits for every SDK tool output before one tool-free follow-up", async () => {
+  const pending = new Map<string, (output: ParsedJsonObject) => void>();
+  const context = harness({
+    carryAction: (action) =>
+      action.kind === "message"
+        ? new Promise<ParsedJsonObject>((resolve) => pending.set(action.text, resolve))
+        : Promise.resolve({ status: "rejected" }),
+  });
+  await context.session.connect();
+  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  await armDeveloperTurn(context);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-tools" } });
+  const sentBefore = context.sent.length;
+
+  const calls = [
+    {
+      type: "function_call",
+      name: "send_session_message",
+      call_id: "call-first",
+      arguments: '{"provider_id":"claude-code","provider_session_id":"session-a","text":"first"}',
+    },
+    {
+      type: "function_call",
+      name: "send_session_message",
+      call_id: "call-second",
+      arguments: '{"provider_id":"claude-code","provider_session_id":"session-a","text":"second"}',
+    },
+  ];
+  for (const item of calls) {
+    context.emit({ type: "response.output_item.done", response_id: "resp-tools", item });
+  }
+  await Promise.resolve();
+
+  pending.get("second")?.({ status: "accepted" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: { id: "resp-tools", output: calls },
+  });
+  assert.equal(
+    context.sent
+      .slice(sentBefore)
+      .filter((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE).length,
+    0,
+  );
+
+  pending.get("first")?.({ status: "accepted" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const followUps = context.sent
+    .slice(sentBefore)
+    .filter((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE);
+  assert.deepEqual(followUps, [
+    { type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE, response: { tools: [], tool_choice: "none" } },
+  ]);
+});
+
+test("malformed SDK call details are refused before the carrier", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAction: async (action) => {
+      carried.push(action);
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+
+  assert.deepEqual(await context.executeSdkTool("send_session_message", undefined), {
+    status: "rejected",
+    reason: "The tool call was malformed.",
+  });
+  assert.deepEqual(carried, []);
 });
 
 test("a session carrier that throws is refused with the error that caused it", async () => {
@@ -5335,8 +5462,9 @@ test("a speak-only connect never asks for the microphone", async () => {
   // The device was never requested, so there is no permission to ask and no
   // indicator to light.
   assert.ok(!context.calls.includes("microphone-requested"));
-  // The call is speak-only by shape: audio is received and none is offered.
-  assert.deepEqual(context.transceivers, [{ kind: "audio", direction: "recvonly" }]);
+  // The SDK keeps one synthetic track negotiated; no real device rides it.
+  assert.equal(context.replacedTracks().length, 0);
+  assert.equal(context.silenceTrack.kind, "audio");
   assert.equal(context.session.microphoneCall, false);
 });
 
@@ -5446,7 +5574,7 @@ test("the device closes with the exchange and the conversation stays", async () 
   // while the call, and the conversation on it, stay warm and stay the
   // developer's: the next press reopens the device, never replaces the call.
   assert.equal(context.microphoneStopped(), true);
-  assert.equal(context.replacedTracks().at(-1), null);
+  assert.equal(context.replacedTracks().at(-1), context.silenceTrack);
   assert.equal(context.session.isConnected, true);
   assert.equal(context.session.microphoneCall, true);
 });

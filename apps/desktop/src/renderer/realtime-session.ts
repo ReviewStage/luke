@@ -23,13 +23,13 @@ import {
   conversationHistoryText,
   decodeRealtimePayload,
   functionCallFollowUpEvents,
-  functionCallOutputEvents,
   type IntroductionLine,
   inputAudioAppendEvents,
   inputAudioFormatUpdateEvents,
   introductionSpeechEvents,
   isArrivalSpeech,
   issueToolAction,
+  maximumTypedAskLength,
   outputSpeedUpdateEvents,
   PressAudioBuffer,
   type ProactiveSpeechTurn,
@@ -37,7 +37,6 @@ import {
   proactiveSpeechEvents,
   pushToTalkCommitEvents,
   REALTIME_CLIENT_EVENT,
-  REALTIME_DATA_CHANNEL,
   REALTIME_SERVER_EVENT,
   REALTIME_STATUS,
   REALTIME_TOOL_FAMILY,
@@ -45,7 +44,7 @@ import {
   type RealtimeFunctionCall,
   type RealtimeStatus,
   type RealtimeToolFamily,
-  realtimeSessionSyncEvents,
+  realtimeSessionConfig,
   realtimeToolFamily,
   recentConversationEntries,
   rememberedFactsContextEvents,
@@ -54,7 +53,6 @@ import {
   sessionContextText,
   sessionToolAction,
   truncateResponseEvents,
-  typedAskEvents,
   workspaceProjectContextEvents,
   workspaceProjectContextText,
 } from "@sidecar/realtime";
@@ -62,10 +60,19 @@ import type { ObservedWorkspaceProject, Session, SessionIdentity } from "@sideca
 import { workspaceAgentModels } from "@sidecar/session";
 import {
   ACT_RESULT_STATUS,
+  isRecord,
   positiveInteger,
+  text,
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import {
+  type BuiltRealtimeSessionConfig,
+  createAgentsRealtimeTransport,
+  type SdkRealtimeTransport,
+  type SdkToolCallDetails,
+  type SdkTransportFactory,
+} from "./agents-realtime-transport";
 import { MICROPHONE_PROCESSING } from "./microphone-choice";
 import {
   createPressCaptureSource,
@@ -73,9 +80,7 @@ import {
   type PressCaptureSource,
 } from "./press-audio-capture";
 
-const SDP_CONTENT_TYPE = "application/sdp";
-
-/** Bounds the SDP exchange and the data channel opening, together. */
+/** Bounds the SDK's WebRTC handshake and initial session acknowledgement. */
 const CONNECT_TIMEOUT_MS = 15_000;
 
 /**
@@ -282,42 +287,16 @@ export interface MicrophoneSender {
   replaceTrack(next: MediaStreamTrack | null): Promise<void>;
 }
 
-export interface DataChannel {
-  readyState: RTCDataChannelState;
-  send(payload: string): void;
-  close(): void;
-  // Each handler names the event the browser really passes, because a
-  // no-argument signature would refuse the real one: a listener may take fewer
-  // arguments than it is given, never more.
-  onopen?: ((event: Event) => void) | null;
-  onclose?: ((event: Event) => void) | null;
-  onerror?: ((event: RTCErrorEvent) => void) | null;
-  onmessage?: ((event: MessageEvent<string>) => void) | null;
-}
-
-export interface PeerConnection {
-  localDescription: RTCSessionDescriptionInit | null;
-  connectionState: RTCPeerConnectionState;
-  addTransceiver(kind: string, init?: { direction?: string }): { sender: MicrophoneSender };
-  createDataChannel(label: string): DataChannel;
-  createOffer(): Promise<RTCSessionDescriptionInit>;
-  setLocalDescription(description?: RTCSessionDescriptionInit): Promise<void>;
-  setRemoteDescription(description: RTCSessionDescriptionInit): Promise<void>;
-  close(): void;
-  ontrack?: ((event: RTCTrackEvent) => void) | null;
-  onconnectionstatechange?: ((event: Event) => void) | null;
-}
-
 export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbacks {
   requestConnection(): Promise<RealtimeConnection | undefined>;
   /** Absent means Luke can only speak: every tool call is rejected with a reason. */
   carryAct?: ActCarrier;
-  /**
-   * The browser pieces, injectable so the microphone state machine can be
-   * exercised without a real device or peer connection. Push-to-talk decides
-   * when a microphone is live, which is worth testing directly.
-   */
-  createPeerConnection?: () => PeerConnection;
+  /** The SDK call seam, injectable so the complete transport can be tested without WebRTC. */
+  createSdkTransport?: SdkTransportFactory;
+  /** The full session document used by the SDK; the introduction narrows this to no tools. */
+  sessionConfig?: (model: string) => BuiltRealtimeSessionConfig;
+  /** The existing hidden playback element owned by the renderer. */
+  audioElement?: () => HTMLAudioElement | null;
   requestMicrophoneStream?: () => Promise<MediaStream>;
   /**
    * The local PCM capture a press runs while its call is still connecting.
@@ -325,14 +304,6 @@ export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbac
    * state machine worth testing without a real audio graph.
    */
   createPressCapture?: PressCaptureFactory;
-  exchangeDescription?: (url: string, init: RequestInit) => Promise<Response>;
-  /**
-   * The session events reasserted once the call opens, defaulting to the
-   * conversation's own instructions and tools. The introduction is the one
-   * caller that narrows this — to its own instructions and an empty tool
-   * list — so its pre-account call is tool-free at the API itself.
-   */
-  sessionSyncEvents?: (model: string) => readonly WireRecord[];
   connectTimeoutMs?: number;
   /** Injectable so a test can hold the clock a truncate measures against. */
   now?: () => number;
@@ -367,15 +338,25 @@ export function quietIsLukesOwn(input: { status: RealtimeStatus; heardLuke: bool
   return input.status === REALTIME_STATUS.RESPONDING && input.heardLuke;
 }
 
+interface SdkToolBatch {
+  responseId: string;
+  callIds: Set<string>;
+  outputCallIds: Set<string>;
+  epoch: number;
+  armed: boolean;
+  responseDone: boolean;
+  followUpStarted: boolean;
+}
+
 /**
  * Drives one Realtime conversation over WebRTC.
  *
  * The capture device is the developer's, not the call's: it opens when a
  * press takes a turn and closes when the exchange that press started settles,
  * and nothing else — not connecting, not typing, not an announcement — ever
- * touches it. The call negotiates its sending half up front as a bare
- * transceiver, so each turn's fresh track rides the same sender without
- * renegotiating. The press is held as a pending intention while the device
+ * touches it. The SDK negotiates a generated silent track up front, so each
+ * turn's fresh microphone track rides the same sender without renegotiating.
+ * The press is held as a pending intention while the device
  * opens, exactly as a press that beats the call's handshake is. The close
  * waits for the settle rather than the key coming up because closing a
  * capture device is itself audible on shared hardware — a Bluetooth headset
@@ -387,8 +368,8 @@ export function quietIsLukesOwn(input: { status: RealtimeStatus; heardLuke: bool
  */
 export class RealtimeVoiceSession {
   readonly #options: RealtimeVoiceSessionOptions;
-  #peer: PeerConnection | undefined;
-  #channel: DataChannel | undefined;
+  #sdkTransport: SdkRealtimeTransport | undefined;
+  #tearingDown = false;
   #microphone: MediaStreamTrack | undefined;
   #stream: MediaStream | undefined;
   /**
@@ -397,6 +378,7 @@ export class RealtimeVoiceSession {
    * lets the next press attach a fresh track without renegotiating.
    */
   #microphoneSender: MicrophoneSender | undefined;
+  #silenceTrack: MediaStreamTrack | undefined;
   /** The device being reopened, held so two presses cannot open it twice. */
   #acquiring: Promise<void> | undefined;
   /**
@@ -608,7 +590,8 @@ export class RealtimeVoiceSession {
    * reply comes next, the finish that ends the hold, or the interrupt of a
    * developer moving on.
    */
-  #followUpPending = false;
+  #toolBatch: SdkToolBatch | undefined;
+  #toolCallResponseIds = new Map<string, string>();
   /**
    * Whether Luke has actually been heard during this reply. Committing a turn
    * swaps the meter from the microphone to Luke, and the meter reports quiet as
@@ -712,7 +695,7 @@ export class RealtimeVoiceSession {
   }
 
   get isConnected(): boolean {
-    return this.#channel?.readyState === "open";
+    return this.#sdkTransport?.status === "connected";
   }
 
   /**
@@ -782,7 +765,6 @@ export class RealtimeVoiceSession {
     // its capture rides beside the mint — but that is the press's doing,
     // never the connect's.
     let connection: RealtimeConnection | undefined;
-    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
     try {
       connection = await this.#options.requestConnection();
     } catch (error) {
@@ -801,86 +783,41 @@ export class RealtimeVoiceSession {
     }
 
     try {
-      const peer: PeerConnection =
-        this.#options.createPeerConnection?.() ?? new RTCPeerConnection();
-      this.#peer = peer;
-      if (this.#withMicrophone) {
-        // The developer's call declares its sending half as a bare
-        // transceiver: the line is negotiated now, and each turn's track
-        // joins the kept sender later without renegotiating. No track, no
-        // device, no consent asked — until a press asks for a turn.
-        const transceiver = peer.addTransceiver("audio", { direction: "sendrecv" });
-        this.#microphoneSender = transceiver.sender;
-      } else {
-        // Luke's own call receives audio and offers none: the transceiver says
-        // so up front, so the connection is speak-only by shape rather than by
-        // a track that merely happens to be missing.
-        peer.addTransceiver("audio", { direction: "recvonly" });
-      }
-      peer.ontrack = (event) => {
-        this.#remoteTrack = event.track;
-        // An answer that names no stream for the track (`a=msid` absent, which
-        // a recvonly line permits) still delivers the audio on the track
-        // itself, so one is built for the element rather than handing it
-        // nothing and playing the reply into a healthy-looking silence.
-        this.#options.onRemoteStream(event.streams[0] ?? new MediaStream([event.track]));
-      };
-      peer.onconnectionstatechange = () => {
-        if (this.#closed) return;
-        // `disconnected` is recoverable in WebRTC — ICE routinely passes through
-        // it on a brief network blip — so only a terminal state ends the call.
-        if (peer.connectionState === "failed" || peer.connectionState === "closed") {
-          this.#fail("The voice connection dropped.");
-        }
-      };
-
-      const channel = peer.createDataChannel(REALTIME_DATA_CHANNEL);
-      this.#channel = channel;
-      channel.onmessage = (event) => this.#handleServerEvent(event.data);
-      channel.onclose = () => {
-        if (this.#closed) return;
-        // The service ends every session at an hour whether or not anyone is
-        // finished talking, so this is the ordinary end of a long call, not
-        // an exotic failure — and it costs nothing said: the history holds
-        // the conversation on this side of the wire, and the next press
-        // re-feeds it, so quiet is the honest report rather than a warning
-        // about a thread nobody lost.
-        // A channel that closes on its own still leaves the capture running,
-        // so this has to release the device as thoroughly as an explicit stop.
-        if (this.#captionAbout) this.#discardCaption();
-        this.#teardown();
-        this.#setStatus(REALTIME_STATUS.IDLE);
-      };
-
-      // One deadline covers the SDP exchange and the channel opening together.
-      // Without it a stalled endpoint leaves the panel on "Connecting…" forever,
-      // with the only control that could recover it disabled.
+      const factory = this.#options.createSdkTransport ?? createAgentsRealtimeTransport;
+      const sdkTransport = factory({
+        sessionConfig: (
+          this.#options.sessionConfig ?? ((model) => realtimeSessionConfig({ model }))
+        )(connection.model),
+        audioElement: this.#options.audioElement?.() ?? undefined,
+        onPeerConnection: (peer, silenceTrack) => this.#adoptPeerConnection(peer, silenceTrack),
+        onTransportEvent: (event) => this.#handleServerEvent(event),
+        onClientEvent: (event) => this.#options.onWireEvent?.(TRACE_DIRECTION.CLIENT, event),
+        onToolOutputSent: (callId) => this.#toolOutputSent(callId),
+        onConnectionChange: (status) => this.#connectionChanged(status),
+        onError: (message) => this.#options.onError(message),
+        executeTool: (name, details) => this.#sdkToolOutput(name, details),
+      });
+      this.#sdkTransport = sdkTransport;
       const timeoutMs = positiveInteger(this.#options.connectTimeoutMs, CONNECT_TIMEOUT_MS);
-      const deadline = new AbortController();
-      // AbortSignal.timeout() deliberately does not keep Node's event loop
-      // alive. A referenced timer makes the same product deadline observable
-      // to the test harness, and the finally below clears it once the call has
-      // settled so a successful handshake holds nothing open.
-      deadlineTimer = setTimeout(
-        () =>
-          deadline.abort(
-            new DOMException("The voice connection timed out while opening.", "TimeoutError"),
-          ),
-        timeoutMs,
-      );
-
-      await peer.setLocalDescription(await peer.createOffer());
-      const answer = await this.#exchangeDescription(
-        connection,
-        peer.localDescription?.sdp ?? "",
-        deadline.signal,
-      );
-      if (answer === undefined) return false;
-      await peer.setRemoteDescription({ type: "answer", sdp: answer });
-
-      await this.#waitForChannel(channel, deadline.signal);
+      let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+      const deadline = new Promise<never>((_resolve, reject) => {
+        deadlineTimer = setTimeout(() => {
+          reject(new Error("The voice connection timed out while opening."));
+        }, timeoutMs);
+      });
+      try {
+        await Promise.race([
+          sdkTransport.connect({
+            apiKey: connection.value,
+            model: connection.model,
+            url: connection.callsUrl,
+          }),
+          deadline,
+        ]);
+      } finally {
+        if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
+      }
       if (this.#closed) return this.#abandonConnect();
-      this.#send((this.#options.sessionSyncEvents ?? realtimeSessionSyncEvents)(connection.model));
       this.#setStatus(REALTIME_STATUS.READY);
       // A pace changed during the handshake could not be sent then, and the
       // credential this call answered may have been minted before the change.
@@ -913,8 +850,6 @@ export class RealtimeVoiceSession {
       if (this.#closed) return this.#abandonConnect();
       if (!(error instanceof Error)) return this.#fail(String(error));
       return this.#fail(errorMessage(error));
-    } finally {
-      if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
     }
   }
 
@@ -941,50 +876,34 @@ export class RealtimeVoiceSession {
     );
   }
 
-  async #exchangeDescription(
-    connection: RealtimeConnection,
-    offer: string,
-    deadline: AbortSignal,
-  ): Promise<string | undefined> {
-    const init: RequestInit = {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${connection.value}`,
-        "content-type": SDP_CONTENT_TYPE,
-      },
-      body: offer,
-      signal: deadline,
+  #adoptPeerConnection(peer: RTCPeerConnection, silenceTrack: MediaStreamTrack): void {
+    const sender = peer.getSenders().find((candidate) => candidate.track === silenceTrack);
+    if (!sender) throw new Error("The voice connection did not provide an audio sender.");
+    this.#silenceTrack = silenceTrack;
+    this.#microphoneSender = sender;
+    const sdkOnTrack = peer.ontrack;
+    peer.ontrack = (event) => {
+      sdkOnTrack?.call(peer, event);
+      this.#remoteTrack = event.track;
+      this.#options.onRemoteStream(event.streams[0] ?? new MediaStream([event.track]));
     };
-    const response = await (this.#options.exchangeDescription?.(connection.callsUrl, init) ??
-      fetch(connection.callsUrl, init));
-    if (!response.ok) {
-      // The status is the diagnosable part; the ephemeral secret never is.
-      this.#fail(`The voice service refused the call (status ${response.status}).`);
-      return undefined;
-    }
-    return response.text();
+    peer.addEventListener("connectionstatechange", () => {
+      if (peer.connectionState === "failed") this.#fail("The voice connection dropped.");
+    });
   }
 
-  #waitForChannel(channel: DataChannel, deadline: AbortSignal): Promise<void> {
-    if (channel.readyState === "open") return Promise.resolve();
-    // The deadline is shared with the SDP exchange and can already have fired
-    // by the time this waiter is armed, in which case no future `abort` event
-    // is coming and listening alone would wait forever.
-    if (deadline.aborted) {
-      return Promise.reject(new Error("The voice connection timed out while opening."));
+  #connectionChanged(status: SdkRealtimeTransport["status"]): void {
+    if (
+      status !== "disconnected" ||
+      this.#closed ||
+      this.#tearingDown ||
+      this.#status === REALTIME_STATUS.CONNECTING
+    ) {
+      return;
     }
-    return new Promise((resolve, reject) => {
-      const settle = (outcome: () => void) => {
-        deadline.removeEventListener("abort", onDeadline);
-        outcome();
-      };
-      const onDeadline = () =>
-        settle(() => reject(new Error("The voice connection timed out while opening.")));
-      deadline.addEventListener("abort", onDeadline, { once: true });
-      channel.onopen = () => settle(resolve);
-      channel.onerror = () =>
-        settle(() => reject(new Error("The voice data channel failed to open.")));
-    });
+    if (this.#captionAbout) this.#discardCaption();
+    this.#teardown();
+    this.#setStatus(REALTIME_STATUS.IDLE);
   }
 
   /**
@@ -1254,7 +1173,7 @@ export class RealtimeVoiceSession {
     stream?.getTracks().forEach((track) => {
       track.stop();
     });
-    void this.#microphoneSender?.replaceTrack(null);
+    void this.#microphoneSender?.replaceTrack(this.#silenceTrack ?? null);
     this.#options.onLocalStream(undefined);
   }
 
@@ -1485,10 +1404,11 @@ export class RealtimeVoiceSession {
     // needs no capture device, so one this call put away stays put away.
     if (!this.isConnected || !this.#withMicrophone) return false;
     if (this.#status === REALTIME_STATUS.LISTENING) return false;
-    const events = typedAskEvents(text);
-    if (events.length === 0) return false;
+    const ask = text.trim().slice(0, maximumTypedAskLength);
+    if (!ask) return false;
     if (this.#status === REALTIME_STATUS.RESPONDING) this.#interruptReply();
-    this.#startResponse(events, { toolsArmed: true });
+    this.#startResponse([], { toolsArmed: true });
+    this.#sdkTransport?.sendMessage(ask);
     return true;
   }
 
@@ -1550,7 +1470,8 @@ export class RealtimeVoiceSession {
     // active response above.
     this.#responseOutstanding = false;
     this.#audioDrained = false;
-    this.#followUpPending = false;
+    this.#toolBatch = undefined;
+    this.#toolCallResponseIds.clear();
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#heardLuke = false;
@@ -1646,26 +1567,19 @@ export class RealtimeVoiceSession {
    * to turn it off.
    */
   #teardown(): void {
-    const channel = this.#channel;
-    if (channel) {
-      // Detach before closing. `close()` fires `onclose` asynchronously, and
-      // letting that handler run would tear down a second time and force the
-      // status to idle — overwriting the `failed` the caller is about to set,
-      // so a refused call would surface as "Voice off".
-      channel.onclose = null;
-      channel.onmessage = null;
-      channel.close();
-    }
-    this.#channel = undefined;
-    const peer = this.#peer;
-    if (peer) {
-      // Detach for the same reason the channel does. `close()` drives the
-      // connection to `closed`, and this handler treats that as fatal.
-      peer.onconnectionstatechange = null;
-      peer.ontrack = null;
-      peer.close();
-    }
-    this.#peer = undefined;
+    if (this.#tearingDown) return;
+    this.#tearingDown = true;
+    let teardownError: unknown;
+    const release = (action: () => void): void => {
+      try {
+        action();
+      } catch (error) {
+        teardownError ??= error;
+      }
+    };
+    const transport = this.#sdkTransport;
+    this.#sdkTransport = undefined;
+    release(() => transport?.close());
     this.#remoteTrack = undefined;
     // A fresh token before the capture retires: a device still opening for
     // the attempt this teardown ends finds it stale and releases itself. The
@@ -1674,18 +1588,22 @@ export class RealtimeVoiceSession {
     // sender: there is no call left to carry it, and the words the capture
     // still held die with the attempt.
     this.#attempt = Symbol("connect-attempt");
-    this.#retirePressCapture();
+    release(() => this.#retirePressCapture());
     this.#microphone = undefined;
     this.#microphoneSender = undefined;
-    this.#stream?.getTracks().forEach((track) => {
-      track.stop();
-    });
+    this.#silenceTrack = undefined;
+    const stream = this.#stream;
     this.#stream = undefined;
+    let tracks: readonly MediaStreamTrack[] = [];
+    release(() => {
+      tracks = stream?.getTracks() ?? [];
+    });
+    for (const track of tracks) release(() => track.stop());
     // The reply's last words are handed over before the stores empty: the
     // handover's write-back re-enters this session, and landing it here means
     // the roster it renders against still stands — and everything it wrote is
     // cleared with the rest below, so a retired call keeps nothing pending.
-    this.#clearCaption();
+    release(() => this.#clearCaption());
     this.#sessions = [];
     this.#conversationEntries = [];
     this.#guide = EMPTY_APP_GUIDE;
@@ -1703,7 +1621,8 @@ export class RealtimeVoiceSession {
     this.#pendingInterruptions.clear();
     this.#responseOutstanding = false;
     this.#audioDrained = false;
-    this.#followUpPending = false;
+    this.#toolBatch = undefined;
+    this.#toolCallResponseIds.clear();
     this.#generationDone = false;
     this.#remoteQuiet = false;
     this.#heardLuke = false;
@@ -1717,8 +1636,18 @@ export class RealtimeVoiceSession {
     // Learned about this call, so it does not outlive it.
     this.#audioEndingsReported = false;
     this.#clearSettleTimer();
-    this.#options.onLocalStream(undefined);
-    this.#options.onRemoteStream(undefined);
+    release(() => this.#options.onLocalStream(undefined));
+    release(() => this.#options.onRemoteStream(undefined));
+    this.#tearingDown = false;
+    if (teardownError !== undefined) {
+      try {
+        this.#options.onError(
+          teardownError instanceof Error ? teardownError.message : String(teardownError),
+        );
+      } catch {
+        // Teardown has already completed; an error reporter cannot undo it.
+      }
+    }
   }
 
   #startResponse(
@@ -1756,7 +1685,8 @@ export class RealtimeVoiceSession {
     // waited on, this is the reply that answers or supersedes the wait.
     this.#responseOutstanding = true;
     this.#audioDrained = false;
-    this.#followUpPending = false;
+    this.#toolBatch = undefined;
+    this.#toolCallResponseIds.clear();
     this.#clearQuietTimer();
     this.#responseItemId = undefined;
     // Nothing has been confirmed for this turn yet: whatever `response.done`
@@ -1905,9 +1835,10 @@ export class RealtimeVoiceSession {
     // are handed over before they are let go: the one moment they are both
     // final and still known.
     const texts = this.#captionTexts();
-    if (texts) this.#options.onReplyEnded?.(texts, this.#captionAbout);
+    const about = this.#captionAbout;
     this.#captionSegments = [];
     this.#captionAbout = undefined;
+    if (texts) this.#options.onReplyEnded?.(texts, about);
     this.#options.onCaption(undefined, undefined);
   }
 
@@ -1968,7 +1899,8 @@ export class RealtimeVoiceSession {
     // comes cannot leave every later reply refused against it.
     this.#responseOutstanding = false;
     this.#audioDrained = false;
-    this.#followUpPending = false;
+    this.#toolBatch = undefined;
+    this.#toolCallResponseIds.clear();
     // The turn is over, and everything of it is spent — a write still in
     // flight from it finds this boundary and stands down, rather than opening
     // its follow-up out of a silence already declared.
@@ -2060,7 +1992,7 @@ export class RealtimeVoiceSession {
    * carried. It is what lets a bare "that chat" resolve on a call that never
    * heard the words it points back at: an announcement is often read out on
    * Luke's own speak-only call, which the developer's own press tears down,
-   * and an idle call retires with everything said on it. Context on the
+   * and a dropped call takes everything said on it. Context on the
    * roster's own terms, flushed with it at the first turn of each call and
    * left standing after that: what is said from then on lives in the call's
    * own conversation items — except an announcement, which the caller marks
@@ -2320,6 +2252,25 @@ export class RealtimeVoiceSession {
     return this.isConnected && this.#withMicrophone;
   }
 
+  get #toolFollowUpPending(): boolean {
+    const batch = this.#toolBatch;
+    return Boolean(
+      batch?.armed && batch.responseDone && !batch.followUpStarted && batch.callIds.size > 0,
+    );
+  }
+
+  #observeSdkToolCall(record: WireRecord): void {
+    if (record.type !== "response.output_item.done") return;
+    const item = isRecord(record.item) ? record.item : undefined;
+    if (item?.type !== "function_call") return;
+    const responseId = text(record.response_id);
+    const callId = text(item.call_id);
+    if (!responseId || !callId) return;
+    this.#toolCallResponseIds.set(callId, responseId);
+    const batch = this.#toolBatch;
+    if (batch?.responseId === responseId) batch.callIds.add(callId);
+  }
+
   #handleServerEvent(data: UnparsedWireValue): void {
     // Decoded once, here: the tap reads the record whole — the parser below
     // keeps only the events the conversation acts on, and what it discards
@@ -2327,7 +2278,10 @@ export class RealtimeVoiceSession {
     // of what a trace exists to show — and the parser accepts the decoded
     // record as readily as the string, so nothing is parsed twice.
     const record = decodeRealtimePayload(data);
-    if (record) this.#options.onWireEvent?.(TRACE_DIRECTION.SERVER, record);
+    if (record) {
+      this.#options.onWireEvent?.(TRACE_DIRECTION.SERVER, record);
+      this.#observeSdkToolCall(record);
+    }
     const event = parseRealtimeServerEvent(record);
     if (!event) return;
 
@@ -2347,7 +2301,18 @@ export class RealtimeVoiceSession {
         // `response.done` must present to be read as this reply's: the channel
         // is ordered, so a cancelled reply's `done` lands before this
         // confirmation and finds nothing to match.
-        if (event.responseId) this.#activeResponseId = event.responseId;
+        if (event.responseId) {
+          this.#activeResponseId = event.responseId;
+          this.#toolBatch = {
+            responseId: event.responseId,
+            callIds: new Set(),
+            outputCallIds: new Set(),
+            epoch: this.#turnEpoch,
+            armed: this.#toolTurnArmed,
+            responseDone: false,
+            followUpStarted: false,
+          };
+        }
         this.#unsilenceLuke();
         return;
       case REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA:
@@ -2425,7 +2390,7 @@ export class RealtimeVoiceSession {
         // owed holds the same way, in the mirror order: the write is under
         // way, the READY an ending would offer is the same edge, and the
         // `done` already gave the hold a clock of its own.
-        if (this.#responseOutstanding || this.#followUpPending) {
+        if (this.#responseOutstanding || this.#toolFollowUpPending) {
           this.#audioDrained = { responseId: event.responseId };
           this.#armSettleTimer();
           return;
@@ -2452,9 +2417,30 @@ export class RealtimeVoiceSession {
         // answered and the reply resumes over their outcomes, so the turn stays
         // open rather than ending on a reply that was only half made.
         if (event.calls.length > 0) {
-          void this.#answerToolCalls(event.calls, fresh && this.#toolTurnArmed);
-          if (fresh && this.#toolTurnArmed) {
-            this.#followUpPending = true;
+          let batch: SdkToolBatch | undefined;
+          if (fresh && event.responseId) {
+            batch =
+              this.#toolBatch?.responseId === event.responseId
+                ? this.#toolBatch
+                : {
+                    responseId: event.responseId,
+                    callIds: new Set<string>(),
+                    outputCallIds: new Set<string>(),
+                    epoch: this.#turnEpoch,
+                    armed: this.#toolTurnArmed,
+                    responseDone: false,
+                    followUpStarted: false,
+                  };
+          }
+          if (batch && batch.responseId === event.responseId) {
+            this.#toolBatch = batch;
+            batch.responseDone = true;
+            for (const call of event.calls) {
+              batch.callIds.add(call.callId);
+              this.#toolCallResponseIds.set(call.callId, batch.responseId);
+            }
+          }
+          if (batch?.armed) {
             // The turn now holds for the follow-up, because the READY an
             // ending here would offer while the writes run is the edge the
             // announcer rides — a reply taken there bumps the epoch, and the
@@ -2467,6 +2453,7 @@ export class RealtimeVoiceSession {
             // worse than one that ends early.
             this.#clearSettleTimer();
             this.#armSettleTimer();
+            this.#startToolFollowUpIfReady();
             return;
           }
           // The spoken half's audio already drained — its ending deferred to
@@ -2542,46 +2529,49 @@ export class RealtimeVoiceSession {
     }
   }
 
-  /**
-   * Answers the tool calls one reply made, then asks for the reply that voices
-   * their outcomes. Every call is validated against the roster Luke was shown
-   * before anything is carried, every outcome — including each refusal — is
-   * answered so the model never waits on a call that will not return, and the
-   * carrier's own failure is an outcome rather than an exception: the developer
-   * asked for something, and what became of it has to be said.
-   */
-  async #answerToolCalls(calls: readonly RealtimeFunctionCall[], armed: boolean): Promise<void> {
-    // `armed` is the hard gate, decided by the caller from two facts together:
-    // a write runs only in a turn the developer opened — by speaking, or by
-    // typing — and only out of the reply that turn actually asked for, never
-    // the finished form of one the developer already interrupted. A call
-    // failing either test is refused whatever it names, so a session summary
-    // or a tool output that reads like an instruction can never make Luke act.
-    // The turn's tools are also withheld at the API on every turn Luke opens
-    // himself, so this is belt to that suspenders rather than the only thing
-    // holding.
-    // The turn these calls belong to. If it is no longer the current turn by
-    // the time the writes finish, the developer has moved on and the outcome
-    // must not be spoken over whatever they are now saying or hearing.
-    const epoch = this.#turnEpoch;
-
-    for (const call of calls) {
-      const output = await this.#toolCallOutput(call, armed);
-      this.#send(functionCallOutputEvents(call.callId, output));
+  async #sdkToolOutput(
+    expectedName: string,
+    details: SdkToolCallDetails | undefined,
+  ): Promise<WireRecord> {
+    const toolCall = details?.toolCall;
+    const callId = toolCall?.callId;
+    const name = toolCall?.name;
+    if (toolCall?.type !== "function_call" || !callId || name !== expectedName) {
+      return { status: ACT_RESULT_STATUS.REJECTED, reason: "The tool call was malformed." };
     }
+    const argumentsJson = toolCall.arguments;
+    if (argumentsJson === undefined) {
+      return { status: ACT_RESULT_STATUS.REJECTED, reason: "The tool arguments were malformed." };
+    }
+    const responseId = this.#toolCallResponseIds.get(callId);
+    const batch = responseId === this.#toolBatch?.responseId ? this.#toolBatch : undefined;
+    const armed = Boolean(
+      batch?.armed && batch.epoch === this.#turnEpoch && batch.callIds.has(callId),
+    );
+    return this.#toolCallOutput({ name, callId, argumentsJson }, armed);
+  }
 
-    // An unarmed turn — a proactive readout, a follow-up — carries no outcome
-    // to voice: every call on it was refused, and opening a reply here would be
-    // a turn that was meant to stay silent talking on without its instructions.
-    // The calls are still answered above, so the model is not left waiting.
-    if (!armed) return;
-    // A follow-up now would talk over a live microphone or a newer reply: the
-    // developer took the turn, started another, or the call is gone. The
-    // outcomes were still delivered as items, so the next turn has them.
-    if (!this.isConnected || this.#turnEpoch !== epoch) return;
-    // The follow-up continues the exchange the developer opened, so whatever
-    // the reply said before its tool call stays on the strip and the outcome
-    // stacks under it, rather than replacing words still being read.
+  #toolOutputSent(callId: string): void {
+    const responseId = this.#toolCallResponseIds.get(callId);
+    const batch = responseId === this.#toolBatch?.responseId ? this.#toolBatch : undefined;
+    if (!batch?.callIds.has(callId)) return;
+    batch.outputCallIds.add(callId);
+    this.#startToolFollowUpIfReady();
+  }
+
+  #startToolFollowUpIfReady(): void {
+    const batch = this.#toolBatch;
+    if (
+      !batch?.armed ||
+      !batch.responseDone ||
+      batch.followUpStarted ||
+      batch.epoch !== this.#turnEpoch ||
+      !this.isConnected ||
+      [...batch.callIds].some((callId) => !batch.outputCallIds.has(callId))
+    ) {
+      return;
+    }
+    batch.followUpStarted = true;
     this.#startResponse(functionCallFollowUpEvents(), { keepCaption: true });
   }
 
@@ -2683,12 +2673,9 @@ export class RealtimeVoiceSession {
   }
 
   #send(events: readonly WireRecord[]): void {
-    const channel = this.#channel;
-    if (channel?.readyState !== "open") return;
-    for (const event of events) {
-      channel.send(JSON.stringify(event));
-      this.#options.onWireEvent?.(TRACE_DIRECTION.CLIENT, event);
-    }
+    const transport = this.#sdkTransport;
+    if (transport?.status !== "connected") return;
+    for (const event of events) transport.sendEvent(event);
   }
 
   #fail(message: string): boolean {

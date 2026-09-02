@@ -1,6 +1,3 @@
-import type { JsonValue, ParsedJsonObject } from "@sidecar/wire/testing";
-import type { PeerConnection } from "#renderer/realtime-session";
-
 export interface MockAudioTrack {
   enabled: boolean;
   stop: () => void;
@@ -16,15 +13,8 @@ export interface MockTrackEvent {
   streams: readonly object[];
 }
 
-export interface MockDataChannel {
-  readyState: "connecting" | "open" | "closed";
-  send: (payload: string) => void;
-  close: () => void;
-  onmessage?: ((event: { data: string | JsonValue }) => void) | null;
-  onclose?: (() => void) | null;
-}
-
 export interface MockRtpSender {
+  track: MockMediaTrack | null;
   replaceTrack: (next: MockMediaTrack | null) => Promise<void>;
 }
 
@@ -32,21 +22,11 @@ export interface MockMediaTrack {
   readonly kind: string;
 }
 
-export interface MockTransceiverInit {
-  direction?: string;
-}
-
 export interface MockPeerConnection {
-  localDescription: RTCSessionDescriptionInit;
   connectionState: RTCPeerConnectionState | "connected" | "closed";
-  addTransceiver: (kind: string, init?: MockTransceiverInit) => { sender: MockRtpSender };
-  createDataChannel: () => MockDataChannel;
-  createOffer: () => Promise<RTCSessionDescriptionInit>;
-  setLocalDescription: () => Promise<void>;
-  setRemoteDescription: () => Promise<void>;
-  close: () => void;
+  getSenders: () => MockRtpSender[];
+  addEventListener: (type: "connectionstatechange", listener: () => void) => void;
   ontrack?: ((event: MockTrackEvent) => void) | null;
-  onconnectionstatechange?: (() => void) | null;
 }
 
 /** Fixture audio stream implementing only the MediaStream surface the session opens. */
@@ -55,13 +35,14 @@ export function asMediaStream(stream: MockMediaStream): MediaStream {
   return stream as MediaStream;
 }
 
-/** Fixture peer connection, which is the surface the session names, not a cast. */
-export function asPeerConnection(peer: MockPeerConnection): PeerConnection {
-  return peer;
+/** Fixture track implementing only identity and kind, which the session reads. */
+export function asMediaTrack(track: MockMediaTrack): MediaStreamTrack {
+  // SAFETY: The session uses this synthetic track only to find its sender and restore it.
+  return track as MediaStreamTrack;
 }
 
-/** Parsed realtime client event from JSON sent over the data channel. */
-export function parseClientEvent(payload: string): ParsedJsonObject {
-  // SAFETY: Parsed JSON matches the realtime client event shape this harness records.
-  return JSON.parse(payload) as ParsedJsonObject;
+/** Fixture peer connection implementing only the browser surface the session reads. */
+export function asPeerConnection(peer: MockPeerConnection): RTCPeerConnection {
+  // SAFETY: The session reads only getSenders, ontrack, and connection state changes.
+  return peer as RTCPeerConnection;
 }

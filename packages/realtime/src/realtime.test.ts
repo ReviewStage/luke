@@ -10,7 +10,6 @@ import {
   contextSupersedeEvents,
   conversationContextEvents,
   functionCallFollowUpEvents,
-  functionCallOutputEvents,
   inputAudioAppendEvents,
   inputAudioFormatUpdateEvents,
   isIssueToolName,
@@ -32,18 +31,15 @@ import {
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
   realtimeInstructions,
-  realtimeSessionSyncEvents,
   SESSION_ANNOUNCEMENT_CHANGE,
   sessionContextEvents,
   sessionContextText,
   sessionToolAction,
   truncateResponseEvents,
-  typedAskEvents,
   workspaceProjectContextEvents,
   workspaceProjectContextText,
 } from "@sidecar/realtime";
 import {
-  maximumSessionMessageLength,
   maximumWorkspaceNameLength,
   normalizeSession,
   type ObservedWorkspaceProject,
@@ -68,7 +64,7 @@ import {
   maximumVoiceContextWorkspaceProjects,
 } from "./realtime-context.js";
 import { REALTIME_TRUNCATION, realtimeSessionConfig } from "./realtime-credentials.js";
-import { maximumTypedAskLength, REALTIME_SESSION_TYPE } from "./realtime-protocol.js";
+import { REALTIME_SESSION_TYPE } from "./realtime-protocol.js";
 import {
   ACTS,
   REALTIME_TOOL,
@@ -135,9 +131,6 @@ test("the minted session asks for the developer's spoken words back as text", ()
 
 test("a model override receives no unsupported reasoning configuration", () => {
   assert.equal(realtimeSessionConfig({ model: "gpt-realtime-preview" }).reasoning, undefined);
-  const [sync] = realtimeSessionSyncEvents("gpt-realtime-preview");
-  assert.ok(sync && isRecord(sync.session));
-  assert.equal(sync.session.reasoning, undefined);
 });
 
 test("unclear audio is clarified without guessing or acting", () => {
@@ -384,19 +377,6 @@ test("the keyed mint pins the same input format the appends travel as", () => {
   });
 });
 
-test("the session sync asks every call for the developer's words back", () => {
-  // The hosted mint composes its session on the service, so the sync the
-  // channel opens with is the one place every call — hosted or keyed — can be
-  // asked to transcribe the developer's spoken turns.
-  const [sync] = realtimeSessionSyncEvents(REALTIME_DEFAULTS.MODEL);
-
-  assert.ok(sync && isRecord(sync.session));
-  assert.deepEqual(sync.session.reasoning, { effort: "low" });
-  assert.deepEqual(sync.session.audio, {
-    input: { transcription: { model: REALTIME_DEFAULTS.TRANSCRIPTION_MODEL } },
-  });
-});
-
 test("captured audio travels as one append, little-endian PCM in base64", () => {
   const events = inputAudioAppendEvents(new Int16Array([0, 1, -1, 32_767, -32_768]));
 
@@ -451,36 +431,6 @@ test("an unusable pace builds no update rather than one the API refuses", () => 
   for (const speed of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
     assert.deepEqual(outputSpeedUpdateEvents(speed), []);
   }
-});
-
-test("a typed ask travels as the developer's own words and asks for a reply", () => {
-  const events = typedAskEvents("  What needs me right now?  ");
-
-  assert.equal(events.length, 2);
-  assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
-  const item = conversationItem(events[0]);
-  assert.equal(text(item?.role), "user");
-  const content = item?.content;
-  const firstContent = Array.isArray(content) && isRecord(content[0]) ? content[0] : undefined;
-  assert.equal(text(firstContent?.type), "input_text");
-  // No label ahead of the words: labels mark what the developer did not say,
-  // and a typed ask is theirs as surely as a spoken one.
-  assert.equal(text(firstContent?.text), "What needs me right now?");
-  // The reply keeps the session's own tool_choice, unlike every turn Luke
-  // opens himself: typing opens a developer turn the way a commit does.
-  assert.deepEqual(events[1], { type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE });
-});
-
-test("an empty ask opens no turn at all", () => {
-  for (const text of ["", "   ", "\n\t "]) {
-    assert.deepEqual(typedAskEvents(text), []);
-  }
-});
-
-test("a typed ask is bounded like a session message", () => {
-  assert.equal(maximumTypedAskLength, maximumSessionMessageLength);
-  const events = typedAskEvents("x".repeat(maximumTypedAskLength + 100));
-  assert.equal(conversationItemText(events[0]).length, maximumTypedAskLength);
 });
 
 function announcementInputText(event: WireRecord | undefined): string {
@@ -2071,18 +2021,6 @@ test("an opening task is held to the project's own word for it", () => {
   for (const refusal of refusals) assert.equal(refusal.status, ACT_RESULT_STATUS.REJECTED);
 });
 
-test("a tool call is answered with the outcome the provider gave", () => {
-  const events = functionCallOutputEvents("call-1", { status: "accepted" });
-
-  assert.equal(events.length, 1);
-  assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE);
-  const item = conversationItem(events[0]);
-  assert.equal(text(item?.type), "function_call_output");
-  assert.equal(text(item?.call_id), "call-1");
-  assert.equal(text(item?.output), '{"status":"accepted"}');
-  assert.deepEqual(functionCallOutputEvents("  ", { status: "accepted" }), []);
-});
-
 test("the reply that voices an outcome cannot itself call a tool", () => {
   const [request] = functionCallFollowUpEvents();
 
@@ -2092,6 +2030,7 @@ test("the reply that voices an outcome cannot itself call a tool", () => {
   // output that reads like an instruction has nothing to act with. It also
   // inherits the session's standing instructions rather than replacing them.
   assert.equal(response?.tool_choice, "none");
+  assert.deepEqual(response?.tools, []);
   assert.equal(response?.instructions, undefined);
 });
 
