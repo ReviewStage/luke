@@ -144,6 +144,7 @@ import {
   calendarOnboardingStateFromStored,
   shouldBackfillCalendarOnboardingSettled,
 } from "./calendar-onboarding-flow";
+import { DevHarness } from "./dev-harness";
 import {
   INTRODUCTION_FADE_MS,
   INTRODUCTION_HANDOFF_READY_MS,
@@ -502,6 +503,27 @@ const agentTrace = agentTraceDirectory
   ? new AgentTraceWriter({ directory: agentTraceDirectory })
   : undefined;
 if (agentTrace) process.stderr.write(`Agent trace: ${agentTrace.file}\n`);
+/*
+ * Dev control channel — same gate as the trace writer. Accepts JSON commands
+ * over a Unix socket so a developer can drive session state and the input-
+ * capture override without a live provider session. Nothing is constructed for
+ * a packaged build or a fixture/evidence run; the socket path comes from
+ * LUKE_DEV_HARNESS_SOCK, which run.sh sets by default.
+ */
+const devHarnessSocketPath =
+  app.isPackaged || !runMode.sendsNetwork ? undefined : process.env.LUKE_DEV_HARNESS_SOCK;
+let devHarness: DevHarness | undefined;
+if (devHarnessSocketPath) {
+  const harness = new DevHarness({
+    socketPath: devHarnessSocketPath,
+    onSessionChanged: () => void sessionRegistry.refresh(harness.adapter),
+    // Wire to CallQuietGate.setCapturing when the call-quiet branch lands.
+    onCaptureCommand: (on) =>
+      process.stderr.write(`[dev-harness] capture override: ${on ? "on" : "off"}\n`),
+  });
+  harness.start();
+  devHarness = harness;
+}
 const voiceCapabilities = new VoiceCapabilityAssembler({
   settings: settingsStore,
   credentialsUsable: () => runMode.sendsNetwork && accountCapabilitiesActive(),
@@ -3007,6 +3029,7 @@ export function startDesktopApp(): void {
     // nothing.
     mediaDuck.stop();
     supersetSignIn.shutdown();
+    devHarness?.stop();
   });
 
   app.on("before-quit", () => {
