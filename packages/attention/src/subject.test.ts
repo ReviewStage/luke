@@ -135,6 +135,14 @@ test("a live voice exchange is not read, and its ending is not first sight", asy
   assert.equal(reads.length, 1);
 });
 
+test("an ordinary session inside a live voice exchange is not read either", async () => {
+  const { evaluator } = scripted([{ subject: "first" }]);
+  const { instance, reads } = deriver(evaluator);
+
+  assert.deepEqual(await instance.derive([session("a", { realtimeVoiceLive: true })]), []);
+  assert.equal(reads.length, 0);
+});
+
 test("only local, open sessions are read, a bounded few a pass, one in flight each", async () => {
   let release: (() => void) | undefined;
   const evaluator: SubjectEvaluator = {

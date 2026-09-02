@@ -213,8 +213,9 @@ Trust constraints:
   fixture run, for roster-relevant local sessions only, on first sight and
   again when a session enters a notice status past a per-session floor, a
   bounded few a pass with one in flight per session; a cloud session, a
-  provider with no transcript this build reads, and a closed session derive
-  nothing. It travels the way an attention review travels: directly to OpenAI
+  provider with no transcript this build reads, a closed session, and a
+  session inside a live voice exchange derive nothing. It travels the way an
+  attention review travels: directly to OpenAI
   on the developer's own key, or through Luke's own service on the hosted
   tier, where the service validates it against the same bounds, spends the
   attention meter, asks OpenAI not to store it, and keeps and logs none of it.
