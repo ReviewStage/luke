@@ -1,7 +1,6 @@
 import os from "node:os";
 import path from "node:path";
 import {
-  maximumSessionRecapLength,
   maximumSessionTitleLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
@@ -24,6 +23,7 @@ import {
   text,
   type UnparsedWireValue,
   type WireRecord,
+  wholeLine,
 } from "@sidecar/wire";
 import {
   type HookStatusRefinement,
@@ -362,10 +362,7 @@ function parseCodexRolloutTail(tail: string): ParsedCodexRollout {
           // A turn that settled cleanly got past any failure it recorded on
           // the way, so a stale error must not outlive it.
           parsed.error = undefined;
-          parsed.lastAgentMessage = oneLine(
-            text(payload.last_agent_message),
-            maximumSessionRecapLength,
-          );
+          parsed.lastAgentMessage = wholeLine(text(payload.last_agent_message));
         }
       }
       continue;

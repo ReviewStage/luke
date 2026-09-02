@@ -6,7 +6,6 @@ import { fileURLToPath } from "node:url";
 import { boundedInvocation, DEFAULT_CLI_PATH_DIRECTORIES } from "@sidecar/process";
 import {
   ACT_RESULT_STATUS,
-  maximumSessionRecapLength,
   maximumSessionTitleLength,
   type ProviderMessageResult,
   type ProviderSessionObservation,
@@ -29,6 +28,7 @@ import {
   unparsedWire,
   type WireBoundaryInput,
   type WireRecord,
+  wholeLine,
   wholeNumber,
   wireRecord,
 } from "@sidecar/wire";
@@ -436,7 +436,7 @@ function parseCursorTail(tail: string): ParsedCursorTail {
       // A turn that ended is not running its last call, and holding it would
       // keep a stale line on the row until some other tool runs.
       parsed.activity = undefined;
-      parsed.recap = failed ? undefined : oneLine(partingWords, maximumSessionRecapLength);
+      parsed.recap = failed ? undefined : wholeLine(partingWords);
       partingWords = undefined;
       continue;
     }

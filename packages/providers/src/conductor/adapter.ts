@@ -3,7 +3,6 @@ import {
   agedStatus,
   agentIdentityFor,
   isListedWorkspaceAgentModel,
-  maximumSessionRecapLength,
   maximumSessionTitleLength,
   OBSERVATION_WINDOW,
   type ProviderSessionObservation,
@@ -1201,7 +1200,7 @@ function recapFromTranscriptTail(tail: string | undefined): string | undefined {
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
-  return recap ? recap.slice(0, maximumSessionRecapLength) : undefined;
+  return recap || undefined;
 }
 
 /**

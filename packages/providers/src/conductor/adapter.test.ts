@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { maximumSessionRecapLength, SESSION_STATUS, type SessionControl } from "@sidecar/session";
+import { SESSION_STATUS, type SessionControl } from "@sidecar/session";
 import type { JsonObject, JsonValue } from "@sidecar/wire/testing";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
 import { CLOUD_ADAPTER_DEFAULTS, type CloudFetch } from "../shared/cloud-session-adapter.js";
@@ -706,7 +706,8 @@ test("reports no recap for a tail it cannot attribute to the agent", async () =>
   }
 });
 
-test("cuts a recap only at the payload backstop and keeps real parting words whole", async () => {
+test("keeps parting words whole, however long the settled message ran", async () => {
+  const longWords = `the plan landed ${"and a word ".repeat(400)}`.trim();
   const partingWords = `all tests pass ${"and a word ".repeat(80)}`.trim();
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
@@ -720,7 +721,7 @@ test("cuts a recap only at the payload backstop and keeps real parting words who
         id: IDLE_SESSION_UUID,
         workspaceId: "workspace-idle",
         name: TEST_SESSION_NAME,
-        transcriptTail: `## Assistant\n\n${"a word ".repeat(10_000)}`,
+        transcriptTail: `## Assistant\n\n${longWords}`,
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
@@ -737,9 +738,9 @@ test("cuts a recap only at the payload backstop and keeps real parting words who
 
   const observations = await adapterFor(api.fetch).observe();
 
-  assert.equal(observations[0]?.recap?.length, maximumSessionRecapLength);
-  // The backstop refuses a runaway payload; real parting words — longer than
-  // the model's excerpt — reach the surfaces whole.
+  // Parting words carry no display bound of their own — the tail read is the
+  // only width — so both messages reach the surfaces whole.
+  assert.equal(observations[0]?.recap, longWords);
   assert.equal(observations[1]?.recap, partingWords);
 });
 

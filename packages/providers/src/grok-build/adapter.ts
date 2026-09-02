@@ -1,6 +1,5 @@
 import path from "node:path";
 import {
-  maximumSessionRecapLength,
   maximumSessionTitleLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
@@ -18,6 +17,7 @@ import {
   text,
   type UnparsedWireValue,
   type WireRecord,
+  wholeLine,
 } from "@sidecar/wire";
 import {
   discoverSessionFiles,
@@ -191,7 +191,7 @@ function recapFromUpdates(updates: readonly WireRecord[]): string | undefined {
     if (words !== undefined) chunks.unshift(words);
   }
   // Chunks are stream deltas of one message, so they join without separators.
-  return oneLine(chunks.join(""), maximumSessionRecapLength);
+  return wholeLine(chunks.join(""));
 }
 
 /** The words of the failure the CLI recorded on the turn's closing update. */
@@ -553,9 +553,7 @@ function observationFromSnapshot(
     // The recap the CLI wrote itself is reported only behind a settled turn:
     // while a newer turn runs, it describes the turn before and would pose
     // as an outcome the session has not reached.
-    ...(settled && snapshot.recap
-      ? { recap: oneLine(snapshot.recap, maximumSessionRecapLength) }
-      : undefined),
+    ...(settled && snapshot.recap ? { recap: wholeLine(snapshot.recap) } : undefined),
     ...(snapshot.directory ? { directory: snapshot.directory } : undefined),
     detail: {
       ...(snapshot.turn?.activity ? { activity: snapshot.turn.activity } : undefined),

@@ -2,7 +2,6 @@ import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "@sidecar/credentia
 import {
   agedStatus,
   maximumObservedWorkspaceProjects,
-  maximumSessionRecapLength,
   maximumSessionTitleLength,
   OBSERVATION_WINDOW,
   type ProviderSessionObservation,
@@ -606,7 +605,7 @@ export class CursorSessionAdapter extends CloudSessionAdapter {
       CURSOR_ADAPTER_DEFAULTS.MAXIMUM_REFERENCE_LABEL_LENGTH,
     );
     const pullRequestUrl = textFromRecord(branch, CURSOR_FIELD.PR_URL);
-    const result = textFromRecord(body, CURSOR_FIELD.RESULT)?.slice(0, maximumSessionRecapLength);
+    const result = textFromRecord(body, CURSOR_FIELD.RESULT);
     return {
       status: knownValue(CURSOR_RUN_STATUS, textFromRecord(body, CURSOR_FIELD.STATUS)),
       updatedAt:

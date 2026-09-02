@@ -1,7 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
-  maximumSessionRecapLength,
   maximumSessionTitleLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
@@ -20,6 +19,7 @@ import {
   resolveOptions,
   text,
   type WireRecord,
+  wholeLine,
   wholeNumber,
 } from "@sidecar/wire";
 import {
@@ -334,7 +334,7 @@ function readClaudeRecord(record: WireRecord, parsed: ParsedClaudeSessionTail): 
   }
   if (record.type === CLAUDE_RECORD_TYPE.SYSTEM) {
     if (record.subtype === CLAUDE_SYSTEM_SUBTYPE.AWAY_SUMMARY) {
-      parsed.awaySummary = oneLine(text(record.content), maximumSessionRecapLength);
+      parsed.awaySummary = wholeLine(text(record.content));
     }
     if (record.subtype === CLAUDE_SYSTEM_SUBTYPE.API_ERROR) {
       parsed.apiError = apiErrorFromRecord(record);

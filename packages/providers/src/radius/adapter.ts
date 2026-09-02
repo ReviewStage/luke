@@ -1,5 +1,4 @@
 import {
-  maximumSessionRecapLength,
   maximumSessionTitleLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
@@ -13,7 +12,14 @@ import {
   type SessionStatus,
   type SessionWorkspace,
 } from "@sidecar/session";
-import { isRecord, oneLine, recordFromJsonLine, text, type WireRecord } from "@sidecar/wire";
+import {
+  isRecord,
+  oneLine,
+  recordFromJsonLine,
+  text,
+  type WireRecord,
+  wholeLine,
+} from "@sidecar/wire";
 import {
   LocalSessionAdapter,
   type LocalSessionAdapterOptions,
@@ -230,7 +236,7 @@ function tipFromEvents(events: readonly WireRecord[]): RadiusTurnTip {
     }
     if (kind === RADIUS_EVENT_KIND.MESSAGE_COMPLETED && recap === undefined && payload) {
       if (text(payload.role) === RADIUS_MESSAGE_ROLE.ASSISTANT) {
-        recap = oneLine(text(payload.text), maximumSessionRecapLength);
+        recap = wholeLine(text(payload.text));
       }
     }
   }
