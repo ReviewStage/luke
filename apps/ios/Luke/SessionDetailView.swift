@@ -283,9 +283,9 @@ struct SessionDetailView: View {
         case .user:
             HStack {
                 Spacer(minLength: 48)
-                Text(message.text)
-                    .font(.system(size: 15))
+                MarkdownMessageView(message.text)
                     .foregroundStyle(.white)
+                    .tint(.white)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
                     .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 18))
