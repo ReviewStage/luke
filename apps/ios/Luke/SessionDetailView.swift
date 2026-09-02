@@ -214,7 +214,18 @@ struct SessionDetailView: View {
         .padding(.bottom, 4)
     }
 
-    private func agentBubble(_ words: String, isError: Bool) -> some View {
+    /// A temporary field diagnostic, to be removed once the conversation
+    /// read is verified on a device: red rings the recap fallback and green
+    /// rings fetched transcript messages, so a screen says at a glance which
+    /// path drew its bubbles.
+    private enum ReadPathDiagnostic {
+        static let recap = Color.red
+        static let transcript = Color.green
+    }
+
+    private func agentBubble(
+        _ words: String, isError: Bool, readPath: Color = ReadPathDiagnostic.recap
+    ) -> some View {
         HStack {
             Group {
                 if isError {
@@ -228,6 +239,7 @@ struct SessionDetailView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 9)
                 .background(Color.cardFill, in: RoundedRectangle(cornerRadius: 18))
+                .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(readPath, lineWidth: 1.5))
                 .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 18))
                 .contextMenu { copyAction(for: words) }
             Spacer(minLength: 48)
@@ -251,7 +263,7 @@ struct SessionDetailView: View {
     private func conversationBubble(_ message: ConversationMessage) -> some View {
         switch message.author {
         case .agent:
-            agentBubble(message.text, isError: false)
+            agentBubble(message.text, isError: false, readPath: ReadPathDiagnostic.transcript)
         case .user:
             HStack {
                 Spacer(minLength: 48)
@@ -261,6 +273,10 @@ struct SessionDetailView: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
                     .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 18))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18)
+                            .strokeBorder(ReadPathDiagnostic.transcript, lineWidth: 1.5)
+                    )
                     .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 18))
                     .contextMenu { copyAction(for: message.text) }
             }
