@@ -77,8 +77,9 @@ evidence runs send no crash reports.
 The iOS app records on the same terms: its own screens as screenshots, never
 anything else on your device, from the moment it opens, and shows the same
 things its screens show — session titles, branches, summaries, error text, and
-your name and email. Text you type into a field is masked, and a crash is
-reported on the next launch with its message and code path. Unlike the Mac
+your name and email. Text you type into a field is masked, a message you sent
+stays masked when it is drawn back as a chat bubble, and a crash is reported
+on the next launch with its message and code path. Unlike the Mac
 app, taps are not separately reported with their text — only the recording
 itself shows what was pressed. Signing in attaches the running recording to
 your account, and signing out starts a fresh anonymous one.

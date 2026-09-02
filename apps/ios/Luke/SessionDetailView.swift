@@ -1,4 +1,5 @@
 import LukeKit
+import PostHog
 import SwiftUI
 
 /// One message the developer sent from this screen, held in memory alone for
@@ -114,7 +115,13 @@ struct SessionDetailView: View {
         HStack {
             Spacer(minLength: 48)
             VStack(alignment: .trailing, spacing: 3) {
+                // Masked from the session recording: the bubble is the words
+                // the developer just typed, and a field's masking would be
+                // hollow if the same words traveled the moment they were
+                // drawn back. The recap bubble stays visible — it already
+                // travels on the roster rows the recording shows.
                 Text(message.text)
+                    .postHogMask()
                     .font(.system(size: 15))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 14)
