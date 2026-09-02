@@ -1,3 +1,4 @@
+import Foundation
 import LukeKit
 import Observation
 import SwiftUI
@@ -156,12 +157,14 @@ private final class VoiceSessionModel {
 
 // MARK: - VoiceView
 
-/// Push-to-talk voice conversation with Luke. Hold the button to speak;
-/// release to send; Luke responds with audio and a running caption.
+/// Voice conversation with Luke. Hold and release for push-to-talk, or tap
+/// once to leave the microphone open and tap again to send.
 struct VoiceView: View {
     @Environment(AccountSession.self) private var accountSession
     @State private var model = VoiceSessionModel()
     @State private var isPressing = false
+    @State private var isLatched = false
+    @State private var pressBeganAt: TimeInterval?
 
     var body: some View {
         ZStack {
@@ -176,6 +179,9 @@ struct VoiceView: View {
             ToolbarItem(placement: .principal) { statusLabel }
         }
         .task { await model.start(accountSession: accountSession) }
+        .onChange(of: model.status) { _, newStatus in
+            if newStatus != .listening { isLatched = false }
+        }
         .onDisappear { model.stop() }
     }
 
@@ -258,7 +264,11 @@ struct VoiceView: View {
         // Keep the view enabled while the user is actively pressing — disabling
         // during .listening would cancel the in-flight DragGesture and fire
         // onEnded immediately, collapsing every hold into an instant tap.
-        let canTalk = model.status == .ready || model.status == .connecting || isPressing
+        let canTalk = model.status == .ready
+            || model.status == .connecting
+            || model.status == .listening
+            || model.status == .speaking
+            || isPressing
         if #available(iOS 26.0, *) {
             Button(action: {}) { talkButtonLabel }
                 .buttonStyle(.glass)
@@ -266,19 +276,29 @@ struct VoiceView: View {
                 .tint(talkButtonColor)
                 .simultaneousGesture(talkGesture)
                 .disabled(!canTalk)
-                .accessibilityLabel("Hold to talk")
+                .accessibilityLabel(isLatched ? "Tap to send" : "Talk to Luke")
+                .accessibilityHint(
+                    isLatched
+                        ? "Stops listening and sends your message"
+                        : "Tap to keep listening, or hold to talk"
+                )
         } else {
             Button(action: {}) { talkButtonLabel }
                 .buttonStyle(.plain)
                 .background(talkButtonColor, in: Circle())
                 .simultaneousGesture(talkGesture)
                 .disabled(!canTalk)
-                .accessibilityLabel("Hold to talk")
+                .accessibilityLabel(isLatched ? "Tap to send" : "Talk to Luke")
+                .accessibilityHint(
+                    isLatched
+                        ? "Stops listening and sends your message"
+                        : "Tap to keep listening, or hold to talk"
+                )
         }
     }
 
     private var talkButtonLabel: some View {
-        Image(systemName: isPressing ? "waveform" : "mic.fill")
+        Image(systemName: isPressing || isLatched ? "waveform" : "mic.fill")
             .font(.system(size: 27, weight: .semibold))
             .foregroundStyle(Color.white)
             .frame(width: 58, height: 58)
@@ -288,20 +308,35 @@ struct VoiceView: View {
     private var talkGesture: some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { _ in
-                guard !isPressing else { return }
+                guard pressBeganAt == nil else { return }
+                pressBeganAt = ProcessInfo.processInfo.systemUptime
                 isPressing = true
-                model.beginTurn()
+                // A latched turn is already recording. Its second press says
+                // "send" and the release below owns that transition.
+                if !isLatched { model.beginTurn() }
             }
             .onEnded { _ in
+                guard let beganAt = pressBeganAt else { return }
+                let release = talkButtonReleaseAction(
+                    heldDuration: ProcessInfo.processInfo.systemUptime - beganAt,
+                    wasLatched: isLatched
+                )
+                pressBeganAt = nil
                 isPressing = false
-                model.endTurn()
+                switch release {
+                case .latch:
+                    isLatched = true
+                case .send:
+                    isLatched = false
+                    model.endTurn()
+                }
             }
     }
 
     // MARK: - Helpers
 
     private var talkButtonColor: Color {
-        if isPressing { return Color(red: 0.25, green: 0.55, blue: 1.0) }
+        if isPressing || isLatched { return Color(red: 0.25, green: 0.55, blue: 1.0) }
         switch model.status {
         case .thinking: return Color(red: 0.9, green: 0.7, blue: 0.2)
         case .speaking: return Color(red: 0.2, green: 0.8, blue: 0.5)
@@ -313,7 +348,7 @@ struct VoiceView: View {
         switch model.status {
         case .idle: return model.errorMessage != nil ? "Connection failed" : "Connecting…"
         case .connecting: return "Connecting…"
-        case .ready: return "Hold to talk"
+        case .ready: return "Tap or hold to talk"
         case .listening: return "Listening…"
         case .thinking: return "Thinking…"
         case .speaking: return "Speaking…"
@@ -321,6 +356,6 @@ struct VoiceView: View {
     }
 
     private var placeholderText: String {
-        model.status == .ready ? "Hold the button and speak." : ""
+        model.status == .ready ? "Tap once, or hold the button and speak." : ""
     }
 }

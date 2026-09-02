@@ -66,6 +66,21 @@ private final class RecordingPlayer: AudioPlayer, @unchecked Sendable {
     func stop() { stopCount += 1 }
 }
 
+private final class TestClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: TimeInterval
+
+    init(_ value: TimeInterval) { self.value = value }
+
+    func read() -> TimeInterval {
+        lock.withLock { value }
+    }
+
+    func set(_ value: TimeInterval) {
+        lock.withLock { self.value = value }
+    }
+}
+
 // MARK: - Helpers
 
 private let testContext = VoiceContextItem(
@@ -86,6 +101,32 @@ final class RealtimeWebSocketAuthenticationTests: XCTestCase {
         XCTAssertEqual(
             realtimeWebSocketProtocols(ephemeralKey: "ek_test"),
             ["realtime", "openai-insecure-api-key.ek_test"]
+        )
+    }
+}
+
+final class TalkButtonInteractionTests: XCTestCase {
+    func testQuickFirstTapLatchesListening() {
+        XCTAssertEqual(
+            talkButtonReleaseAction(heldDuration: 0.04, wasLatched: false),
+            .latch
+        )
+    }
+
+    func testHoldSendsOnFirstRelease() {
+        XCTAssertEqual(
+            talkButtonReleaseAction(
+                heldDuration: talkButtonTapDuration + 0.001,
+                wasLatched: false
+            ),
+            .send
+        )
+    }
+
+    func testSecondTapSendsLatchedTurn() {
+        XCTAssertEqual(
+            talkButtonReleaseAction(heldDuration: 0.01, wasLatched: true),
+            .send
         )
     }
 }
@@ -217,6 +258,110 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertEqual(player.drainCount, 1)
         XCTAssertEqual(player.stopCount, 1)
         XCTAssertEqual(session.status, .ready)
+    }
+
+    func testBeginningTurnInterruptsPlaybackAndCorrectsServerConversation() async throws {
+        let ws = MockWebSocketTask()
+        let player = RecordingPlayer()
+        let clock = TestClock(10.0)
+        var captions: [String?] = []
+        var dispatchedNames: [String] = []
+        let opts = makeOptions(
+            ws: ws,
+            player: player,
+            onCaption: { captions.append($0) },
+            dispatchToolCall: { name, _, _ in
+                dispatchedNames.append(name)
+                return #"{"result":"sent"}"#
+            },
+            now: { clock.read() }
+        )
+        let session = RealtimeSession(options: opts)
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        session.beginTurn()
+        session.endTurn()
+        ws.deliver(#"{"type":"response.created","response":{"id":"response_old"}}"#)
+        ws.deliver(
+            #"{"type":"response.output_item.added","response_id":"response_old","item":{"id":"item_old","type":"message","role":"assistant"}}"#
+        )
+        let audio = [Int16](repeating: 1, count: 2_400)
+            .withUnsafeBytes { Data($0).base64EncodedString() }
+        ws.deliver(
+            #"{"type":"response.output_audio.delta","response_id":"response_old","delta":"\#(audio)"}"#
+        )
+        ws.deliver(
+            #"{"type":"response.output_audio_transcript.delta","response_id":"response_old","delta":"The audible start"}"#
+        )
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        clock.set(11.0)
+        session.beginTurn()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(session.status, .listening)
+        XCTAssertEqual(player.stopCount, 1)
+        XCTAssertNil(captions.last ?? "not nil")
+        let sent = ws.outgoing.joined(separator: "\n")
+        XCTAssertTrue(sent.contains(#""type":"response.cancel""#))
+        XCTAssertTrue(sent.contains(#""type":"conversation.item.truncate""#))
+        XCTAssertTrue(sent.contains(#""item_id":"item_old""#))
+        XCTAssertTrue(sent.contains(#""audio_end_ms":100"#))
+
+        // Packets already in flight from the interrupted response cannot
+        // restart its audio or execute its tools under the new turn's arming.
+        ws.deliver(
+            #"{"type":"response.output_audio.delta","response_id":"response_old","delta":"AQABAA=="}"#
+        )
+        ws.deliver(
+            #"{"type":"response.output_audio_transcript.delta","response_id":"response_old","delta":" unheard tail"}"#
+        )
+        ws.deliver(
+            #"{"type":"response.done","response":{"id":"response_old","output":[{"type":"function_call","call_id":"old_call","name":"send_session_message","arguments":"{}"}]}}"#
+        )
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(player.batches.count, 1)
+        XCTAssertFalse(captions.compactMap { $0 }.contains { $0.contains("unheard tail") })
+        XCTAssertTrue(dispatchedNames.isEmpty)
+        XCTAssertEqual(session.status, .listening)
+    }
+
+    func testInterruptionProtocolErrorsStayOutOfTheConversation() async throws {
+        let ws = MockWebSocketTask()
+        let player = RecordingPlayer()
+        var recoverableErrors: [String] = []
+        let opts = makeOptions(
+            ws: ws,
+            player: player,
+            onRecoverableError: { recoverableErrors.append($0) }
+        )
+        let session = RealtimeSession(options: opts)
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        session.beginTurn()
+        session.endTurn()
+        ws.deliver(#"{"type":"response.created","response":{"id":"response_old"}}"#)
+        ws.deliver(
+            #"{"type":"response.output_audio.delta","response_id":"response_old","delta":"AQABAA=="}"#
+        )
+        try await Task.sleep(nanoseconds: 50_000_000)
+        session.beginTurn()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        ws.deliver(
+            #"{"type":"error","error":{"event_id":"ios_response_cancel_1","message":"Cancellation failed: no active response found"}}"#
+        )
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertTrue(recoverableErrors.isEmpty)
+        XCTAssertEqual(session.status, .listening)
     }
 
     func testGAOutputTranscriptEventsStreamAndFinishCaption() async throws {
@@ -364,7 +509,10 @@ final class RealtimeSessionStateTests: XCTestCase {
         onSpokenAsk: (@MainActor (String) -> Void)? = nil,
         onError: @MainActor @escaping (String?) -> Void = { _ in },
         onRecoverableError: (@MainActor (String) -> Void)? = nil,
-        dispatchToolCall: (@Sendable @MainActor (_ name: String, _ arguments: [String: Any], _ callId: String) async -> String)? = nil
+        dispatchToolCall: (@Sendable @MainActor (_ name: String, _ arguments: [String: Any], _ callId: String) async -> String)? = nil,
+        now: @Sendable @escaping () -> TimeInterval = {
+            ProcessInfo.processInfo.systemUptime
+        }
     ) -> RealtimeSessionOptions {
         RealtimeSessionOptions(
             requestConnection: { testConnection },
@@ -376,7 +524,8 @@ final class RealtimeSessionStateTests: XCTestCase {
             dispatchToolCall: dispatchToolCall,
             makeWebSocket: { _, _ in ws },
             makeAudioCapturer: { capturer },
-            makeAudioPlayer: { player }
+            makeAudioPlayer: { player },
+            now: now
         )
     }
 }
