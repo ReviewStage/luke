@@ -38,7 +38,7 @@ export const HOSTED_SERVICE_PATH = {
    * item (POST). Same quota meter as VOICE_MINT; narrowed to the tool set the
    * mobile act endpoints serve.
    */
-  MOBILE_VOICE_MINT: "/api/voice/mobile-mint",
+  REMOTE_VOICE_MINT: "/api/voice/remote-mint",
   /** Send a message to a cloud session (POST). */
   ACT_MESSAGE: "/api/acts/message",
   /** Create a workspace in a cloud project (POST). */
@@ -242,7 +242,7 @@ export function hostedMintAnswerFromWire(
  * phone wraps `text` verbatim in a `conversation.item.create` event keyed by
  * `itemId` — it does not re-serialize, re-label, or re-validate the content.
  */
-export interface MobileVoiceContextItem {
+export interface RemoteVoiceContextItem {
   /** The item id the phone names the `conversation.item.create` event with. */
   itemId: string;
   /** The labeled context text, ready to drop into `content[0].text`. */
@@ -250,13 +250,13 @@ export interface MobileVoiceContextItem {
 }
 
 /** The pre-serialized context the mobile mint endpoint answers with. */
-export interface MobileVoiceContext {
-  sessions: MobileVoiceContextItem;
+export interface RemoteVoiceContext {
+  sessions: RemoteVoiceContextItem;
 }
 
 /** What the mobile mint endpoint returns on success. */
-export interface MobileMintAnswer extends HostedMintAnswer {
-  context: MobileVoiceContext;
+export interface RemoteMintAnswer extends HostedMintAnswer {
+  context: RemoteVoiceContext;
 }
 
 /**
@@ -265,10 +265,10 @@ export interface MobileMintAnswer extends HostedMintAnswer {
  * with a sessions item. A malformed context is not repaired — the phone has
  * no fallback for context it cannot forward.
  */
-export function mobileMintAnswerFromWire(
+export function remoteMintAnswerFromWire(
   value: UnparsedWireValue,
   now: number,
-): MobileMintAnswer | undefined {
+): RemoteMintAnswer | undefined {
   const base = hostedMintAnswerFromWire(value, now);
   if (!base || !isRecord(value)) return undefined;
   if (!isRecord(value.context)) return undefined;

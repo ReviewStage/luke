@@ -5,9 +5,9 @@ import {
 } from "../core.js";
 
 /**
- * Context serialization for mobile voice sessions.
+ * Context serialization for remote voice sessions.
  *
- * Mobile can only observe cloud sessions through vault keys — no local
+ * Remote clients can only observe cloud sessions through vault keys — no local
  * sessions, no transcript reads, no desktop-app links. The output format
  * matches `sessionContextText` from `@sidecar/realtime` so the model's
  * instructions and this context share one vocabulary, with fields the server
@@ -15,7 +15,7 @@ import {
  * name) simply omitted.
  */
 
-const MAXIMUM_MOBILE_VOICE_CONTEXT_SESSIONS = 25;
+const MAXIMUM_REMOTE_VOICE_CONTEXT_SESSIONS = 25;
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -55,7 +55,7 @@ function mostRecentByProvider(sessions: readonly ObservedSession[]): ReadonlyMap
   return new Map([...newest].map(([providerId, { sessionId }]) => [providerId, sessionId]));
 }
 
-function mobileCapabilityText(
+function remoteCapabilityText(
   session: ObservedSession,
   mostRecent: ReadonlyMap<string, string>,
 ): string {
@@ -64,7 +64,7 @@ function mobileCapabilityText(
   const capabilities = [
     `provider_id=${session.providerId} provider_session_id=${session.sessionId}`,
     `messages=${Boolean(session.canReceiveMessage)}`,
-    // Cloud sessions have no mobile-accessible open link or local transcript.
+    // Cloud sessions have no remote-accessible open link or local transcript.
     "open=false",
     "transcript=false",
     ...(mostRecent.get(session.providerId) === session.sessionId
@@ -85,7 +85,7 @@ function mobileCapabilityText(
 }
 
 /**
- * Renders the session roster for a mobile voice session context item.
+ * Renders the session roster for a remote voice session context item.
  *
  * The format mirrors `sessionContextText` from `@sidecar/realtime` so the
  * session document the phone receives reads against the same instructions the
@@ -95,7 +95,7 @@ function mobileCapabilityText(
  * them is accurate, not a loss, because cloud sessions observed here have none
  * or the server cannot distinguish them from the repository label.
  */
-export function mobileSessionContextText(
+export function remoteSessionContextText(
   sessions: readonly ObservedSession[],
   now: number = Date.now(),
 ): string {
@@ -109,7 +109,7 @@ export function mobileSessionContextText(
     ...sessions.filter((s) => mostRecentIds.has(s.sessionId)),
     ...sessions.filter((s) => !mostRecentIds.has(s.sessionId)),
   ];
-  const included = prioritised.slice(0, MAXIMUM_MOBILE_VOICE_CONTEXT_SESSIONS);
+  const included = prioritised.slice(0, MAXIMUM_REMOTE_VOICE_CONTEXT_SESSIONS);
   const overflow = sessions.length - included.length;
 
   return [
@@ -135,7 +135,7 @@ export function mobileSessionContextText(
         ...(session.recap
           ? [`context for naming this work — do not list its parts: ${session.recap}`]
           : []),
-        `[${mobileCapabilityText(session, mostRecent)}]`,
+        `[${remoteCapabilityText(session, mostRecent)}]`,
       ].join(" — ");
     }),
     ...(overflow > 0

@@ -6,7 +6,7 @@ import { providerKey } from "../../server/db/schema.js";
 import {
   actUnsupportedReason,
   executeMessageAct,
-  MOBILE_SESSION_ACT,
+  REMOTE_SESSION_ACT,
 } from "../../server/hosted/act-execute.js";
 import { handleSessionAct } from "../../server/hosted/act-session.js";
 import { hostedUserId, oauthUserInfoFromAuthAnswer } from "../../server/hosted/bearer.js";
@@ -39,7 +39,7 @@ export default {
         return text ? { text } : undefined;
       },
       unsupportedReason: (providerId) =>
-        actUnsupportedReason(MOBILE_SESSION_ACT.MESSAGE, providerId),
+        actUnsupportedReason(REMOTE_SESSION_ACT.MESSAGE, providerId),
       execute: executeMessageAct,
     });
   },

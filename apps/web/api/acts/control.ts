@@ -6,7 +6,7 @@ import { providerKey } from "../../server/db/schema.js";
 import {
   actUnsupportedReason,
   executeControlAct,
-  MOBILE_SESSION_ACT,
+  REMOTE_SESSION_ACT,
 } from "../../server/hosted/act-execute.js";
 import { handleSessionAct } from "../../server/hosted/act-session.js";
 import { hostedUserId, oauthUserInfoFromAuthAnswer } from "../../server/hosted/bearer.js";
@@ -48,7 +48,7 @@ export default {
         return { controlId };
       },
       unsupportedReason: (providerId) =>
-        actUnsupportedReason(MOBILE_SESSION_ACT.CONTROL, providerId),
+        actUnsupportedReason(REMOTE_SESSION_ACT.CONTROL, providerId),
       execute: executeControlAct,
     });
   },

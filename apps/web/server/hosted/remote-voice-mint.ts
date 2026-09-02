@@ -1,19 +1,19 @@
 import {
   CONTEXT_ITEM_KIND,
   contextItemId,
-  mobileRealtimeClientSecretRequest,
   type ObservedSession,
   type ObservedSessionControl,
+  remoteRealtimeClientSecretRequest,
   VAULT_PROVIDER_ID,
   type VaultProviderId,
 } from "../core.js";
 import { cloudSessionAdapterFor } from "./cloud-adapters.js";
 import { decryptProviderKey } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
-import { mobileSessionContextText } from "./mobile-context.js";
 import type { VaultKeyRow } from "./observe.js";
 import type { FetchLike } from "./openai.js";
 import type { HostedSpend } from "./quota.js";
+import { remoteSessionContextText } from "./remote-context.js";
 import { mintRealtimeConnection, voiceMintPreferences } from "./voice-mint.js";
 
 /**
@@ -23,12 +23,12 @@ import { mintRealtimeConnection, voiceMintPreferences } from "./voice-mint.js";
  * so the phone can be a thin terminal: it forwards the opaque string into the
  * Realtime conversation without re-implementing context serialization logic.
  *
- * The tool list is narrowed to the acts the mobile act endpoints serve; the
+ * The tool list is narrowed to the acts the remote act endpoints serve; the
  * server re-validates every act on its own fresh observation pass regardless,
  * so the phone's narrowed set is a first gate, not the last.
  */
 
-export interface MobileVoiceMintOptions {
+export interface RemoteVoiceMintOptions {
   request: Request;
   apiKey: string | undefined;
   model?: string;
@@ -43,7 +43,7 @@ export interface MobileVoiceMintOptions {
 
 const MOBILE_MINT_STRICT_FIELDS: readonly string[] = ["voice", "speed"];
 
-export async function handleMobileVoiceMint(options: MobileVoiceMintOptions): Promise<Response> {
+export async function handleRemoteVoiceMint(options: RemoteVoiceMintOptions): Promise<Response> {
   const { request } = options;
   if (request.method !== "POST") {
     return errorResponse(
@@ -90,7 +90,7 @@ export async function handleMobileVoiceMint(options: MobileVoiceMintOptions): Pr
       apiKey,
       model,
       preferences,
-      clientSecretRequest: mobileRealtimeClientSecretRequest,
+      clientSecretRequest: remoteRealtimeClientSecretRequest,
       fetch: options.fetch,
       now: options.now,
       timeoutMs: options.timeoutMs,
@@ -106,9 +106,9 @@ export async function handleMobileVoiceMint(options: MobileVoiceMintOptions): Pr
   if ("failure" in minted) return minted.failure;
 
   const sessionItemId = contextItemId(CONTEXT_ITEM_KIND.SESSIONS, 0);
-  const contextText = mobileSessionContextText(sessions, now());
+  const contextText = remoteSessionContextText(sessions, now());
   // The label prefix matches the one `sessionContextEvents` in @sidecar/realtime
-  // applies, so the model reads mobile and desktop context items identically.
+  // applies, so the model reads remote and desktop context items identically.
   const sessionItemText = `[observed session status, sent automatically]\n${contextText}`;
 
   return jsonResponse(HOSTED_HTTP_STATUS.OK, {
@@ -125,7 +125,7 @@ export async function handleMobileVoiceMint(options: MobileVoiceMintOptions): Pr
 
 async function observeCloudSessions(
   userId: string,
-  options: MobileVoiceMintOptions,
+  options: RemoteVoiceMintOptions,
 ): Promise<ObservedSession[]> {
   const secret = (options.encryptionSecret ?? "").trim();
   if (!secret) return [];

@@ -1898,7 +1898,7 @@ export function realtimeToolDefinitions(): readonly RealtimeToolWireDefinition[]
  * equivalent endpoints for those. CREATE_WORKSPACE is excluded because mobile
  * carries no projects context, so the model cannot name a valid project.
  */
-const MOBILE_SESSION_ACTION_KINDS: ReadonlySet<string> = new Set([
+const REMOTE_SESSION_ACTION_KINDS: ReadonlySet<string> = new Set([
   SESSION_TOOL_KIND.MESSAGE,
   SESSION_TOOL_KIND.CONTROL,
   SESSION_TOOL_KIND.ADD_AGENT,
@@ -1906,11 +1906,11 @@ const MOBILE_SESSION_ACTION_KINDS: ReadonlySet<string> = new Set([
   SESSION_TOOL_KIND.RENAME_SESSION,
 ]);
 
-export function mobileRealtimeToolDefinitions(): readonly RealtimeToolWireDefinition[] {
+export function remoteRealtimeToolDefinitions(): readonly RealtimeToolWireDefinition[] {
   return REALTIME_TOOL_LIST.filter(
     (tool) =>
       tool.family === REALTIME_TOOL_FAMILY.SESSION &&
-      MOBILE_SESSION_ACTION_KINDS.has(tool.actionKind),
+      REMOTE_SESSION_ACTION_KINDS.has(tool.actionKind),
   ).map((tool) => ({
     type: "function",
     name: tool.name,

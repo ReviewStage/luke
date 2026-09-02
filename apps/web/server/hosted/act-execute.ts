@@ -19,11 +19,11 @@ import {
 } from "./cloud-adapters.js";
 
 /**
- * The acts mobile can ask of a cloud session, named for the endpoint that
+ * The acts a remote client can ask of a cloud session, named for the endpoint that
  * takes each. One vocabulary for the capability map below and for every route
  * that asks it, so a route cannot invent an act the map does not govern.
  */
-export const MOBILE_SESSION_ACT = {
+export const REMOTE_SESSION_ACT = {
   MESSAGE: "message",
   CONTROL: "control",
   AGENT: "agent",
@@ -32,7 +32,7 @@ export const MOBILE_SESSION_ACT = {
   CREATE_WORKSPACE: "create-workspace",
 } as const;
 
-export type MobileSessionAct = (typeof MOBILE_SESSION_ACT)[keyof typeof MOBILE_SESSION_ACT];
+export type RemoteSessionAct = (typeof REMOTE_SESSION_ACT)[keyof typeof REMOTE_SESSION_ACT];
 
 /**
  * Which acts each provider takes, mirroring exactly the write routes its
@@ -44,43 +44,43 @@ export type MobileSessionAct = (typeof MOBILE_SESSION_ACT)[keyof typeof MOBILE_S
  * document no workspace creation for an API key.
  */
 const SUPPORTED_ACTS = {
-  [VAULT_PROVIDER_ID.CONDUCTOR]: new Set<MobileSessionAct>([
-    MOBILE_SESSION_ACT.MESSAGE,
-    MOBILE_SESSION_ACT.CONTROL,
-    MOBILE_SESSION_ACT.AGENT,
-    MOBILE_SESSION_ACT.RENAME_SESSION,
-    MOBILE_SESSION_ACT.RENAME_WORKSPACE,
-    MOBILE_SESSION_ACT.CREATE_WORKSPACE,
+  [VAULT_PROVIDER_ID.CONDUCTOR]: new Set<RemoteSessionAct>([
+    REMOTE_SESSION_ACT.MESSAGE,
+    REMOTE_SESSION_ACT.CONTROL,
+    REMOTE_SESSION_ACT.AGENT,
+    REMOTE_SESSION_ACT.RENAME_SESSION,
+    REMOTE_SESSION_ACT.RENAME_WORKSPACE,
+    REMOTE_SESSION_ACT.CREATE_WORKSPACE,
   ]),
-  [VAULT_PROVIDER_ID.COPILOT]: new Set<MobileSessionAct>(),
-  [VAULT_PROVIDER_ID.CURSOR]: new Set<MobileSessionAct>([
-    MOBILE_SESSION_ACT.MESSAGE,
-    MOBILE_SESSION_ACT.CONTROL,
-    MOBILE_SESSION_ACT.CREATE_WORKSPACE,
+  [VAULT_PROVIDER_ID.COPILOT]: new Set<RemoteSessionAct>(),
+  [VAULT_PROVIDER_ID.CURSOR]: new Set<RemoteSessionAct>([
+    REMOTE_SESSION_ACT.MESSAGE,
+    REMOTE_SESSION_ACT.CONTROL,
+    REMOTE_SESSION_ACT.CREATE_WORKSPACE,
   ]),
-  [VAULT_PROVIDER_ID.DEVIN]: new Set<MobileSessionAct>([
-    MOBILE_SESSION_ACT.MESSAGE,
-    MOBILE_SESSION_ACT.CONTROL,
+  [VAULT_PROVIDER_ID.DEVIN]: new Set<RemoteSessionAct>([
+    REMOTE_SESSION_ACT.MESSAGE,
+    REMOTE_SESSION_ACT.CONTROL,
   ]),
-  [VAULT_PROVIDER_ID.JULES]: new Set<MobileSessionAct>([
-    MOBILE_SESSION_ACT.MESSAGE,
-    MOBILE_SESSION_ACT.CONTROL,
+  [VAULT_PROVIDER_ID.JULES]: new Set<RemoteSessionAct>([
+    REMOTE_SESSION_ACT.MESSAGE,
+    REMOTE_SESSION_ACT.CONTROL,
   ]),
-  [VAULT_PROVIDER_ID.REPLICAS]: new Set<MobileSessionAct>([
-    MOBILE_SESSION_ACT.MESSAGE,
-    MOBILE_SESSION_ACT.AGENT,
-    MOBILE_SESSION_ACT.CREATE_WORKSPACE,
+  [VAULT_PROVIDER_ID.REPLICAS]: new Set<RemoteSessionAct>([
+    REMOTE_SESSION_ACT.MESSAGE,
+    REMOTE_SESSION_ACT.AGENT,
+    REMOTE_SESSION_ACT.CREATE_WORKSPACE,
   ]),
-} satisfies Readonly<Record<VaultProviderId, ReadonlySet<MobileSessionAct>>>;
+} satisfies Readonly<Record<VaultProviderId, ReadonlySet<RemoteSessionAct>>>;
 
 const ACT_ABSENCE_PHRASE = {
-  [MOBILE_SESSION_ACT.MESSAGE]: "taking a message",
-  [MOBILE_SESSION_ACT.CONTROL]: "any session controls",
-  [MOBILE_SESSION_ACT.AGENT]: "starting another agent",
-  [MOBILE_SESSION_ACT.RENAME_SESSION]: "renaming a session",
-  [MOBILE_SESSION_ACT.RENAME_WORKSPACE]: "renaming a workspace",
-  [MOBILE_SESSION_ACT.CREATE_WORKSPACE]: "creating a workspace",
-} as const satisfies Readonly<Record<MobileSessionAct, string>>;
+  [REMOTE_SESSION_ACT.MESSAGE]: "taking a message",
+  [REMOTE_SESSION_ACT.CONTROL]: "any session controls",
+  [REMOTE_SESSION_ACT.AGENT]: "starting another agent",
+  [REMOTE_SESSION_ACT.RENAME_SESSION]: "renaming a session",
+  [REMOTE_SESSION_ACT.RENAME_WORKSPACE]: "renaming a workspace",
+  [REMOTE_SESSION_ACT.CREATE_WORKSPACE]: "creating a workspace",
+} as const satisfies Readonly<Record<RemoteSessionAct, string>>;
 
 /**
  * The reason a provider cannot take this act, or undefined for one that can.
@@ -90,7 +90,7 @@ const ACT_ABSENCE_PHRASE = {
  * that ordering.
  */
 export function actUnsupportedReason(
-  act: MobileSessionAct,
+  act: RemoteSessionAct,
   providerId: VaultProviderId,
 ): string | undefined {
   if (SUPPORTED_ACTS[providerId].has(act)) return undefined;
@@ -192,7 +192,7 @@ function fromProviderWorkspaceResult(result: ProviderWorkspaceResult): ActExecut
 }
 
 function capabilityGuard(
-  act: MobileSessionAct,
+  act: RemoteSessionAct,
   providerId: VaultProviderId,
 ): ActExecutionAnswer | undefined {
   const reason = actUnsupportedReason(act, providerId);
@@ -207,7 +207,7 @@ export async function executeMessageAct(options: {
   seams?: ActExecuteSeams;
 }): Promise<ActExecutionAnswer> {
   const { providerId, providerSessionId, text, apiKey } = options;
-  const guarded = capabilityGuard(MOBILE_SESSION_ACT.MESSAGE, providerId);
+  const guarded = capabilityGuard(REMOTE_SESSION_ACT.MESSAGE, providerId);
   if (guarded) return guarded;
 
   const pass = await observeForAct(providerId, apiKey, options.seams ?? {});
@@ -237,7 +237,7 @@ export async function executeControlAct(options: {
   seams?: ActExecuteSeams;
 }): Promise<ActExecutionAnswer> {
   const { providerId, providerSessionId, controlId, apiKey } = options;
-  const guarded = capabilityGuard(MOBILE_SESSION_ACT.CONTROL, providerId);
+  const guarded = capabilityGuard(REMOTE_SESSION_ACT.CONTROL, providerId);
   if (guarded) return guarded;
 
   const pass = await observeForAct(providerId, apiKey, options.seams ?? {});
@@ -274,7 +274,7 @@ export async function executeAgentAct(options: {
   seams?: ActExecuteSeams;
 }): Promise<ActExecutionAnswer> {
   const { providerId, providerSessionId, agent, name, task, apiKey } = options;
-  const guarded = capabilityGuard(MOBILE_SESSION_ACT.AGENT, providerId);
+  const guarded = capabilityGuard(REMOTE_SESSION_ACT.AGENT, providerId);
   if (guarded) return guarded;
 
   const pass = await observeForAct(providerId, apiKey, options.seams ?? {});
@@ -306,7 +306,7 @@ export async function executeRenameSessionAct(options: {
   seams?: ActExecuteSeams;
 }): Promise<ActExecutionAnswer> {
   const { providerId, providerSessionId, name, apiKey } = options;
-  const guarded = capabilityGuard(MOBILE_SESSION_ACT.RENAME_SESSION, providerId);
+  const guarded = capabilityGuard(REMOTE_SESSION_ACT.RENAME_SESSION, providerId);
   if (guarded) return guarded;
 
   const pass = await observeForAct(providerId, apiKey, options.seams ?? {});
@@ -336,7 +336,7 @@ export async function executeRenameWorkspaceAct(options: {
   seams?: ActExecuteSeams;
 }): Promise<ActExecutionAnswer> {
   const { providerId, providerSessionId, name, apiKey } = options;
-  const guarded = capabilityGuard(MOBILE_SESSION_ACT.RENAME_WORKSPACE, providerId);
+  const guarded = capabilityGuard(REMOTE_SESSION_ACT.RENAME_WORKSPACE, providerId);
   if (guarded) return guarded;
 
   const pass = await observeForAct(providerId, apiKey, options.seams ?? {});
@@ -369,7 +369,7 @@ export async function executeCreateWorkspaceAct(options: {
   seams?: ActExecuteSeams;
 }): Promise<ActExecutionAnswer> {
   const { providerId, providerProjectId, name, task, agentSelection, apiKey } = options;
-  const guarded = capabilityGuard(MOBILE_SESSION_ACT.CREATE_WORKSPACE, providerId);
+  const guarded = capabilityGuard(REMOTE_SESSION_ACT.CREATE_WORKSPACE, providerId);
   if (guarded) return guarded;
 
   // A creation ask is validated against the projects the same pass reported,

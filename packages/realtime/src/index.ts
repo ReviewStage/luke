@@ -54,7 +54,6 @@ export {
   workspaceProjectContextText,
 } from "./realtime-context.js";
 export {
-  mobileRealtimeClientSecretRequest,
   REALTIME_CLIENT_SECRETS_PATH,
   REALTIME_MINT_OUTCOME,
   REALTIME_TRUNCATION,
@@ -65,6 +64,7 @@ export {
   realtimeCredentialFromResponse,
   realtimeMintExplanation,
   realtimeSessionConfig,
+  remoteRealtimeClientSecretRequest,
 } from "./realtime-credentials.js";
 export {
   ARRIVAL_SPEECH_KIND,
@@ -116,11 +116,11 @@ export {
   isIssueToolName,
   isSessionToolName,
   issueToolAction,
-  mobileRealtimeToolDefinitions,
   REALTIME_TOOL,
   REALTIME_TOOL_FAMILY,
   type RealtimeToolFamily,
   realtimeToolFamily,
+  remoteRealtimeToolDefinitions,
   SESSION_LIST_ALL,
   SESSION_LIST_VOICE,
   SESSION_TOOL_KIND,

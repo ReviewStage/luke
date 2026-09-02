@@ -6,7 +6,7 @@ import { providerKey } from "../../server/db/schema.js";
 import {
   actUnsupportedReason,
   executeAgentAct,
-  MOBILE_SESSION_ACT,
+  REMOTE_SESSION_ACT,
 } from "../../server/hosted/act-execute.js";
 import { handleSessionAct } from "../../server/hosted/act-session.js";
 import { hostedUserId, oauthUserInfoFromAuthAnswer } from "../../server/hosted/bearer.js";
@@ -53,7 +53,7 @@ export default {
         if (rawTask !== undefined && task === undefined) return undefined;
         return { agent, name, task };
       },
-      unsupportedReason: (providerId) => actUnsupportedReason(MOBILE_SESSION_ACT.AGENT, providerId),
+      unsupportedReason: (providerId) => actUnsupportedReason(REMOTE_SESSION_ACT.AGENT, providerId),
       execute: executeAgentAct,
     });
   },
