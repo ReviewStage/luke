@@ -20,11 +20,39 @@ public indirect enum MarkdownBlock: Equatable, Sendable {
 public struct MarkdownListItem: Equatable, Sendable {
     /// The number a list item counts as, from the source's own numbering.
     public let ordinal: Int
+    /// Whether the item's task box is ticked, for an item that opened with
+    /// one (`[ ]` or `[x]`); nil for an ordinary item. Foundation's parser
+    /// reads no task lists, so the box is found in the item's first words.
+    public let checked: Bool?
     public let blocks: [MarkdownBlock]
 
-    public init(ordinal: Int, blocks: [MarkdownBlock]) {
+    public init(ordinal: Int, checked: Bool? = nil, blocks: [MarkdownBlock]) {
         self.ordinal = ordinal
+        self.checked = checked
         self.blocks = blocks
+    }
+
+    /// An item read for the task box GitHub-flavored lists open with: the
+    /// box leaves the words and becomes `checked`, and an item without one
+    /// is left exactly as it was.
+    static func readingTaskBox(ordinal: Int, blocks: [MarkdownBlock]) -> MarkdownListItem {
+        guard case .paragraph(let words)? = blocks.first else {
+            return MarkdownListItem(ordinal: ordinal, blocks: blocks)
+        }
+        let opening = String(words.characters.prefix(4))
+        let checked: Bool
+        switch opening {
+        case "[ ] ": checked = false
+        case "[x] ", "[X] ": checked = true
+        default: return MarkdownListItem(ordinal: ordinal, blocks: blocks)
+        }
+        var rest = words
+        rest.removeSubrange(rest.startIndex ..< rest.characters.index(rest.startIndex, offsetBy: 4))
+        return MarkdownListItem(
+            ordinal: ordinal,
+            checked: checked,
+            blocks: [.paragraph(rest)] + blocks.dropFirst()
+        )
     }
 }
 
@@ -119,7 +147,7 @@ private final class BlockNode {
         case .orderedList, .unorderedList:
             let items = children.compactMap { child -> MarkdownListItem? in
                 guard case .listItem(let ordinal) = child.kind else { return nil }
-                return MarkdownListItem(ordinal: ordinal, blocks: child.blocks())
+                return MarkdownListItem.readingTaskBox(ordinal: ordinal, blocks: child.blocks())
             }
             return [.list(ordered: kind == .orderedList, items: items)]
         case .table:

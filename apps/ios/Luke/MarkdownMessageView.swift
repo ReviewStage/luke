@@ -39,11 +39,9 @@ private struct MarkdownBlockView: View {
     var body: some View {
         switch block {
         case .paragraph(let text):
-            Text(text)
-                .font(.subheadline)
+            inlineText(text, font: .subheadline)
         case .heading(let level, let text):
-            Text(text)
-                .font(headingFont(level))
+            inlineText(text, font: headingFont(level))
         case .code(_, let code):
             codeBlock(code)
         case .quote(let blocks):
@@ -59,9 +57,8 @@ private struct MarkdownBlockView: View {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(ordered ? "\(item.ordinal)." : "•")
+                        listMarker(ordered: ordered, item: item)
                             .font(.subheadline)
-                            .monospacedDigit()
                             .frame(minWidth: 16, alignment: .trailing)
                         MarkdownBlocksView(blocks: item.blocks, spacing: 4)
                     }
@@ -72,6 +69,35 @@ private struct MarkdownBlockView: View {
         case .rule:
             Divider()
         }
+    }
+
+    /// A task box draws as the checklist glyph Notes uses; every other item
+    /// takes its number or a bullet.
+    @ViewBuilder
+    private func listMarker(ordered: Bool, item: MarkdownListItem) -> some View {
+        if let checked = item.checked {
+            Image(systemName: checked ? "checkmark.square.fill" : "square")
+                .foregroundStyle(checked ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+        } else {
+            Text(ordered ? "\(item.ordinal)." : "•")
+                .monospacedDigit()
+        }
+    }
+
+    /// Words with their inline styles, wrapping rather than truncating in a
+    /// tight height. `Text` draws a run marked both strong and emphasized as
+    /// italic alone, so that pairing is written onto the run as its own font.
+    private func inlineText(_ text: AttributedString, font: Font) -> some View {
+        var styled = text
+        for run in text.runs {
+            guard let intent = run.inlinePresentationIntent,
+                  intent.contains(.stronglyEmphasized), intent.contains(.emphasized)
+            else { continue }
+            styled[run.range].font = font.bold().italic()
+        }
+        return Text(styled)
+            .font(font)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     /// The three sizes a message can afford under a chat title: the top
@@ -93,6 +119,7 @@ private struct MarkdownBlockView: View {
     private func codeBlock(_ code: String) -> some View {
         Text(code)
             .font(.system(.footnote, design: .monospaced))
+            .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -104,7 +131,7 @@ private struct MarkdownBlockView: View {
             if !header.isEmpty {
                 GridRow {
                     ForEach(Array(header.enumerated()), id: \.offset) { _, cell in
-                        Text(cell).font(.subheadline.weight(.semibold))
+                        inlineText(cell, font: .subheadline.weight(.semibold))
                     }
                 }
                 Divider()
@@ -112,7 +139,7 @@ private struct MarkdownBlockView: View {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 GridRow {
                     ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
-                        Text(cell).font(.subheadline)
+                        inlineText(cell, font: .subheadline)
                     }
                 }
             }

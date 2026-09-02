@@ -78,6 +78,17 @@ final class MarkdownBlockTests: XCTestCase {
         XCTAssertEqual(inner.map { $0.blocks.compactMap(paragraphWords) }, [["inner a"], ["inner b"]])
     }
 
+    func testTaskBoxesLeaveTheWordsAndBecomeChecked() throws {
+        let blocks = MarkdownBlock.parse("- [x] Done\n- [ ] **Todo** soon\n- [x]\n- Plain")
+        guard case .list(false, let items) = try XCTUnwrap(blocks.first) else {
+            return XCTFail("expected a list, got \(blocks)")
+        }
+        XCTAssertEqual(items.map(\.checked), [true, false, nil, nil])
+        XCTAssertEqual(items.map { $0.blocks.compactMap(paragraphWords) }, [["Done"], ["Todo soon"], ["[x]"], ["Plain"]])
+        guard case .paragraph(let todo) = items[1].blocks[0] else { return XCTFail("expected words") }
+        XCTAssertEqual(todo.runs.first?.inlinePresentationIntent, .stronglyEmphasized)
+    }
+
     func testOrderedListKeepsTheSourceNumbering() throws {
         let blocks = MarkdownBlock.parse("3. three\n4. four")
         guard case .list(true, let items) = try XCTUnwrap(blocks.first) else {
