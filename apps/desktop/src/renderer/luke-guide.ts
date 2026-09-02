@@ -560,12 +560,26 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
             // to replay it.
             label: "The arrival beat",
             detail:
-              "Right after the account's first sign-in, Luke speaks once, unprompted: go " +
-              "back to work, and he will say when a session needs you, errors, or finishes " +
-              "— closing with one first ask to try, which may name a working session. It " +
-              "plays once per install from a fixed script, can act on nothing, and cannot " +
-              "be replayed; a launch that cannot speak it leaves it for the next one that " +
-              "can.",
+              "After the account's first sign-in, once the calendar onboarding step is " +
+              "answered, Luke speaks once, unprompted: go back to work, and he will say " +
+              "when a session needs you, errors, or finishes — closing with one first ask " +
+              "to try, which may name a working session. It plays once per install from a " +
+              "fixed script, can act on nothing, and cannot be replayed; a launch that " +
+              "cannot speak it leaves it for the next one that can.",
+          },
+          {
+            // A behavior rather than a setting, on the arrival beat's terms:
+            // Luke must be able to say why the panel is asking for a calendar
+            // and what answers it, and must not offer to replay the ask.
+            label: "Calendar onboarding",
+            detail:
+              "At the first sign-in, the panel asks once to connect a calendar (this Mac's " +
+              "own, or Google) so announcements wait during meetings; Luke reads only when " +
+              "meetings start and end, never titles or attendees. While the gate shows, " +
+              "Luke says so aloud from a fixed script. Connecting shows which calendars " +
+              "count, more connections can be added, and Done keeps the choice; Set up " +
+              "later declines it for good, and calendars connect any time from " +
+              "the Connections page.",
           },
           {
             label: "How long a conversation lasts",

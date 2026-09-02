@@ -17,6 +17,7 @@ import { useCallback, useRef, useState } from "react";
 import { ACCOUNT_STATUS, type AccountProvider, type AccountSnapshot } from "#shared/wire/account";
 import type { SessionOpenResult } from "#shared/wire/session";
 import { type AskHandler, AskLuke } from "./ask-luke";
+import { CalendarGate, type CalendarGateControl } from "./calendar-gate";
 import { ConversationHistoryPanel } from "./conversation-history-panel";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import {
@@ -59,7 +60,12 @@ import {
   widenedView,
 } from "./session-search";
 import { SendIcon, StopIcon } from "./settings-icons";
-import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
+import {
+  CalendarIntegrations,
+  SettingsPanel,
+  type SettingsPanelProps,
+  settingsWrites,
+} from "./settings-panel";
 import { SettingsSearchButton } from "./settings-search";
 import { SignInGate } from "./sign-in-gate";
 import { updateAvailable, updateRow } from "./update-row";
@@ -766,6 +772,12 @@ export interface PanelBodyProps {
   onBeginSignIn: (provider: AccountProvider) => void;
   /** Why the last sign-in ended without landing, for the gate to show. */
   signInFailure?: string;
+  /**
+   * The calendar step of onboarding, present exactly while it stands: signed
+   * in, still owed, and with at least one source this build can offer.
+   * Assembled by the app, which knows all three.
+   */
+  calendarGate?: CalendarGateControl;
   list: ArrangedSessions;
   /**
    * Whether the roster has been read at all yet. Until it has, an empty list
@@ -838,6 +850,7 @@ export function PanelBody({
   account,
   onBeginSignIn,
   signInFailure,
+  calendarGate,
   list,
   sessionsSettled,
   view,
@@ -887,6 +900,35 @@ export function PanelBody({
           account={account}
           {...(signInFailure ? { failure: signInFailure } : undefined)}
           onBegin={onBeginSignIn}
+          onQuit={settings.onQuit}
+        />
+      </div>
+    );
+  }
+  // Onboarding's second gate, past the account's: the roster and the settings
+  // both wait behind it until the step is answered — Done over a connected
+  // calendar, so Luke can tell a meeting from a moment to speak into, or the
+  // skip declining it for good. A connection moves the gate to its review
+  // half, which is the Connections page's own calendar block, so the
+  // calendars read exactly as they do everywhere else.
+  if (calendarGate) {
+    const gateReview =
+      settings.settings !== undefined &&
+      (settings.settings.calendarAccounts.length > 0 ||
+        settings.settings.appleCalendar !== undefined) ? (
+        <CalendarIntegrations
+          settings={settings.settings}
+          calendar={settings.calendar}
+          appleCalendar={settings.appleCalendar}
+          writes={settingsWrites(settings.onSettingsChange)}
+          withQuietRow={false}
+        />
+      ) : undefined;
+    return (
+      <div className="body">
+        <CalendarGate
+          control={calendarGate}
+          {...(gateReview !== undefined ? { review: gateReview } : undefined)}
           onQuit={settings.onQuit}
         />
       </div>

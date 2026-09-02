@@ -10,6 +10,7 @@ import {
   adoptConversationThread,
   announcementConversationEntry,
   appendConversationThreadEntry,
+  CALENDAR_ONBOARDING_SPEECH_KIND,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   dispatchByKind,
@@ -1746,6 +1747,24 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       ensureAnnouncer().enqueue({ kind: ARRIVAL_SPEECH_KIND, decidedAt: Date.now() });
     });
   }, [ensureAnnouncer]);
+
+  // The calendar onboarding beat rides the same queue on the same terms; it
+  // settles no record, because the gate it speaks about is the durable prompt.
+  useEffect(() => {
+    return window.sidecar.onCalendarOnboardingSpeech(() => {
+      ensureAnnouncer().enqueue({ kind: CALENDAR_ONBOARDING_SPEECH_KIND, decidedAt: Date.now() });
+    });
+  }, [ensureAnnouncer]);
+
+  // The gate standing down outruns a beat still queued about it: a fast Done
+  // or skip must not be answered by the ask it just settled, so the queued
+  // beat is dropped the moment the record says the step is over. The main
+  // process settles before it triggers the arrival, so the drop lands first.
+  useEffect(() => {
+    return window.sidecar.onCalendarOnboardingChanged((owed) => {
+      if (!owed) announcer.current?.dropCalendarOnboardingSpeech();
+    });
+  }, []);
 
   // The announcer paces itself by the session's status: READY is when a queued
   // sentence can speak and when an empty queue starts the walk toward closing

@@ -617,18 +617,24 @@ What Luke may show:
   but the transcript it was read from never travels. A
   spoken announcement (a session that started waiting, stopped on an error,
   or finished, or an evaluator sentence approved for speech) reaches the
-  voice service so it can be said aloud. The arrival beat is the
-  one member of that set about no session: spoken once per install at the
-  deterministic edge of the account's first sign-in, remembered in Luke's own
-  state file, worded from a script fixed by the build on the same speak-only,
-  tool-free terms as an edge announcement, and carrying as observed values
-  only one working session's title, read from the same roster the rows draw
-  and sent as data behind a marker, and the talk key's own name. A moment
-  that cannot speak it — no credential, a meeting's quiet, a beat dropped
-  before its reply began — leaves it owed for the next signed-in launch
-  rather than improvising a substitute; only the voice window reporting the
-  reply actually begun settles it, and being about no session it draws no
-  notice band and claims none. An edge announcement
+  voice service so it can be said aloud. Two onboarding beats are
+  the members of that set about no session, and each keeps the same terms:
+  worded from a script fixed by the build, speak-only and tool-free like an
+  edge announcement, drawing no notice band and claiming none. The arrival
+  beat is spoken once per install at the deterministic edge of the account's
+  first sign-in, remembered in Luke's own state file, and carrying as
+  observed values only one working session's title, read from the same roster
+  the rows draw and sent as data behind a marker, and the talk key's own
+  name. While the calendar onboarding gate stands, the arrival beat waits —
+  "you're all set" over a panel still asking for something would be false —
+  and the calendar onboarding beat speaks in its place: triggered by the
+  gate's own deterministic standing, once per run, carrying no observed value
+  at all, and gone with the gate, whose Done or skip is what lets the waiting
+  arrival speak. A moment
+  that cannot speak the arrival — no credential, a meeting's quiet, a beat
+  dropped before its reply began — leaves it owed for the next signed-in
+  launch rather than improvising a substitute; only the voice window
+  reporting the reply actually begun settles it. An edge announcement
   sends that update's *about* fields, the same ones the evaluator may see
   with a bounded excerpt of the recap included, and the voice words the
   sentence said aloud, so it can say what the session is waiting on rather
@@ -651,8 +657,9 @@ What Luke may show:
   session is still observed; and the history is stored only where the constraint
   above puts it, on this machine and under its retention policy, and is never
   sent on Luke's speak-only call. Its
-  trigger is a deterministic status edge, the arrival beat's one recorded
-  sign-in edge, or the evaluator finding an update worth speaking. The edge
+  trigger is a deterministic status edge, an onboarding beat's own
+  deterministic trigger (the recorded sign-in edge, or the calendar gate
+  standing), or the evaluator finding an update worth speaking. The edge
   announcements and approved evaluator sentences speak whenever voice can.
   Widening either set is a product decision, not an implementation detail;
   make it deliberately. While an announcement is being spoken, a notice on

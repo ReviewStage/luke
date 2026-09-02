@@ -13,6 +13,7 @@ import {
   CONTEXT_ITEM_KIND,
   type ContextItemKind,
   type ConversationEntry,
+  calendarOnboardingSpeechEvents,
   cancelResponseEvents,
   clearInputAudioEvents,
   clearOutputAudioEvents,
@@ -28,6 +29,7 @@ import {
   inputAudioFormatUpdateEvents,
   introductionSpeechEvents,
   isArrivalSpeech,
+  isCalendarOnboardingSpeech,
   issueToolAction,
   maximumTypedAskLength,
   outputSpeedUpdateEvents,
@@ -1522,6 +1524,13 @@ export class RealtimeVoiceSession {
       // like an introduction beat, so no notice may stand under the housing
       // claiming it does.
       this.#startResponse(arrivalEvents);
+      return true;
+    }
+    if (isCalendarOnboardingSpeech(speech)) {
+      if (!this.isConnected || this.#turnBusy) return false;
+      // About no session, on the arrival's own terms: no caption subject and
+      // no notice under the housing.
+      this.#startResponse(calendarOnboardingSpeechEvents());
       return true;
     }
     const events = proactiveSpeechEvents(speech);

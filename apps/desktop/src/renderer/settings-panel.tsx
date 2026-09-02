@@ -205,7 +205,7 @@ export interface UpdateControl {
   onOpenLatest: () => void;
 }
 
-interface SettingsWrites {
+export interface SettingsWrites {
   setting(field: AppSettingField, value: AppSettingValue<AppSettingField>): Promise<ActResult>;
   entry(
     field: KeyedAppSettingField,
@@ -213,6 +213,31 @@ interface SettingsWrites {
     value: SettingEntryValue<KeyedAppSettingField> | undefined,
   ): Promise<ActResult>;
   reset(scope: SettingsResetScope): Promise<ActResult>;
+}
+
+/**
+ * The one way a settings row writes: through the bridge, with the returned
+ * snapshot applied where the panel keeps it. A factory rather than a hook so
+ * the calendar gate can hand the same writes to the same rows it borrows.
+ */
+export function settingsWrites(onSettingsChange: (settings: AppSettings) => void): SettingsWrites {
+  return {
+    async setting(field, value) {
+      const result = await window.sidecar.updateSetting(field, value);
+      onSettingsChange(result.settings);
+      return result;
+    },
+    async entry(field, key, value) {
+      const result = await window.sidecar.updateSettingEntry(field, key, value);
+      onSettingsChange(result.settings);
+      return result;
+    },
+    async reset(scope) {
+      const result = await window.sidecar.resetSettings(scope);
+      onSettingsChange(result.settings);
+      return result;
+    },
+  };
 }
 
 /**
@@ -1822,16 +1847,23 @@ function AppleCalendarRow({
  * intervals exist to drive. Each row appears only in a build that can offer
  * it, and the block only when either can.
  */
-function CalendarIntegrations({
+export function CalendarIntegrations({
   settings,
   calendar,
   appleCalendar,
   writes,
+  withQuietRow = true,
 }: {
   settings: AppSettingsView;
   calendar: CalendarControl;
   appleCalendar: AppleCalendarControl;
   writes: SettingsWrites;
+  /**
+   * The onboarding gate borrows this block with the quiet row withheld: the
+   * setting defaults on, and a switch offered before the first calendar is
+   * even confirmed reads as one more demand rather than a choice.
+   */
+  withQuietRow?: boolean;
 }): React.JSX.Element | null {
   if (!settings.calendarSignInAvailable && !settings.appleCalendarAvailable) return null;
   const accounts = settings.calendarAccounts;
@@ -1904,7 +1936,7 @@ function CalendarIntegrations({
       {/* The quiet is a fact about the calendars above it, so it appears with
           the first connection and leaves with the last — a switch gating what
           a disconnected calendar cannot do would be a control over nothing. */}
-      {connected ? (
+      {connected && withQuietRow ? (
         <SchemaSettingRows
           page={SCHEMA_SETTINGS_PAGE.CONNECTIONS}
           settings={settings}
@@ -3538,23 +3570,7 @@ export function SettingsPanel({
   onSearchClose,
   onSearchEngaged,
 }: SettingsPanelProps): React.JSX.Element {
-  const writes: SettingsWrites = {
-    async setting(field, value) {
-      const result = await window.sidecar.updateSetting(field, value);
-      onSettingsChange(result.settings);
-      return result;
-    },
-    async entry(field, key, value) {
-      const result = await window.sidecar.updateSettingEntry(field, key, value);
-      onSettingsChange(result.settings);
-      return result;
-    },
-    async reset(scope) {
-      const result = await window.sidecar.resetSettings(scope);
-      onSettingsChange(result.settings);
-      return result;
-    },
-  };
+  const writes = settingsWrites(onSettingsChange);
   // Why the front page's Voice row wears its mark, or nothing while voice is
   // fully set up. Judged here rather than on the Voice page because the mark
   // has to stand while that page is not drawn: it is the front page saying a

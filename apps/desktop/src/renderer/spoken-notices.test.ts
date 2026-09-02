@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ProactiveSpeechTurn, RealtimeStatus, ScheduledTimer } from "@sidecar/realtime";
 import {
+  CALENDAR_ONBOARDING_SPEECH_KIND,
   isArrivalSpeech,
+  isCalendarOnboardingSpeech,
   REALTIME_STATUS,
   SESSION_ANNOUNCEMENT_CHANGE,
   type SessionAnnouncement,
@@ -70,7 +72,7 @@ function fakeSession(): FakeSession {
     },
     speak(item: ProactiveSpeechTurn) {
       if (!this.isConnected || this.status === REALTIME_STATUS.RESPONDING) return false;
-      if (!isArrivalSpeech(item)) {
+      if (!isArrivalSpeech(item) && !isCalendarOnboardingSpeech(item)) {
         this.turns.push([...item]);
         this.spoken.push(...item);
       }
@@ -194,6 +196,23 @@ test("separate batches stay separate while the bounded queue sheds oldest news",
     session.turns.map((turn) => turn.map(({ providerSessionId }) => providerSessionId)),
     [Array.from({ length: MAXIMUM_QUEUED_NOTICES - 1 }, (_, index) => `a-${index + 1}`), ["b"]],
   );
+});
+
+test("a calendar beat still queued is dropped when the gate stands down", async () => {
+  const session = fakeSession();
+  const timers = fakeTimers();
+  const subject = announcer(session, timers);
+
+  subject.enqueue({ kind: CALENDAR_ONBOARDING_SPEECH_KIND, decidedAt: 1_000 });
+  subject.enqueue([speech("after-done")]);
+  // The gate settled before the beat could speak; only the real notice says.
+  subject.dropCalendarOnboardingSpeech();
+  await Promise.resolve();
+  session.setStatus(REALTIME_STATUS.READY);
+  subject.onStatus(REALTIME_STATUS.READY);
+
+  assert.equal(session.spoken.length, 1);
+  assert.equal(session.spoken[0]?.providerSessionId, "after-done");
 });
 
 test("the call Luke opened lingers for stragglers, then closes itself", async () => {
