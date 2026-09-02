@@ -112,7 +112,6 @@ struct SessionDetailView: View {
     private func agentBubble(_ words: String, isError: Bool) -> some View {
         HStack {
             MarkdownMessageView(words)
-                .textSelection(.enabled)
                 .foregroundStyle(isError ? Color.errorInk : Color.ink)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 9)
@@ -145,7 +144,6 @@ struct SessionDetailView: View {
                 // travels on the roster rows the recording shows.
                 MarkdownMessageView(message.text)
                     .postHogMask()
-                    .textSelection(.enabled)
                     .foregroundStyle(.white)
                     .tint(.white)
                     .padding(.horizontal, 14)
