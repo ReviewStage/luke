@@ -49,7 +49,7 @@ extension MarkdownBlock {
             for component in path {
                 node = node.child(kind: component.kind, identity: component.identity)
             }
-            node.text.append(inlinePiece(of: parsed[run.range], intent: run.inlinePresentationIntent))
+            node.text.append(inlinePiece(String(parsed[run.range].characters), run: run))
         }
         let blocks = root.children.flatMap { $0.blocks() }
         return blocks.isEmpty ? fallback(text) : blocks
@@ -60,19 +60,19 @@ extension MarkdownBlock {
         return words.isEmpty ? [] : [.paragraph(AttributedString(words))]
     }
 
-    /// A run's words with the block intent removed, since the block is now
-    /// the enum case around them. A line break in the source is kept as one
-    /// line break: a message is a chat's words, where a new line means a new
-    /// line, not a manuscript whose soft breaks a typesetter joins.
-    private static func inlinePiece(
-        of substring: AttributedSubstring,
-        intent: InlinePresentationIntent?
-    ) -> AttributedString {
-        if let intent, intent.contains(.softBreak) || intent.contains(.lineBreak) {
+    /// A run's words carrying only what `Text` draws inline, emphasis and
+    /// links: the block intent is now the enum case around them, and the
+    /// parser's other bookkeeping (a list item's delimiter) is nothing a
+    /// bubble draws. A line break in the source is kept as one line break: a
+    /// message is a chat's words, where a new line means a new line, not a
+    /// manuscript whose soft breaks a typesetter joins.
+    private static func inlinePiece(_ words: String, run: AttributedString.Runs.Run) -> AttributedString {
+        if let intent = run.inlinePresentationIntent, intent.contains(.softBreak) || intent.contains(.lineBreak) {
             return AttributedString("\n")
         }
-        var piece = AttributedString(substring)
-        piece.presentationIntent = nil
+        var piece = AttributedString(words)
+        if let intent = run.inlinePresentationIntent { piece.inlinePresentationIntent = intent }
+        if let link = run.link { piece.link = link }
         return piece
     }
 }
