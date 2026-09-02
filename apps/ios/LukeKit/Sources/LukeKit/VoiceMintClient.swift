@@ -25,7 +25,7 @@ public enum VoiceMintClientError: Error, Equatable {
     case serverError(status: Int, apiError: HostedAPIError?)
 }
 
-/// HTTP client for `POST /api/voice/mobile-mint`. Validates the wire response
+/// HTTP client for `POST /api/voice/remote-mint`. Validates the wire response
 /// against the contract in `@sidecar/hosted`.
 public final class VoiceMintClient: Sendable {
     private let baseURL: URL
@@ -45,7 +45,7 @@ public final class VoiceMintClient: Sendable {
         if let voice { body["voice"] = voice }
         if let speed { body["speed"] = speed }
 
-        var request = URLRequest(url: baseURL.appendingPathComponent("api/voice/mobile-mint"))
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/voice/remote-mint"))
         request.httpMethod = "POST"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
