@@ -13,8 +13,18 @@ public indirect enum MarkdownBlock: Equatable, Sendable {
     case code(language: String?, String)
     case quote([MarkdownBlock])
     case list(ordered: Bool, items: [MarkdownListItem])
-    case table(header: [AttributedString], rows: [[AttributedString]])
+    case table(
+        header: [AttributedString],
+        alignments: [MarkdownTableAlignment],
+        rows: [[AttributedString]]
+    )
     case rule
+}
+
+public enum MarkdownTableAlignment: Equatable, Sendable {
+    case leading
+    case center
+    case trailing
 }
 
 public struct MarkdownListItem: Equatable, Sendable {
@@ -158,7 +168,7 @@ private final class BlockNode {
                 return MarkdownListItem.readingTaskBox(ordinal: ordinal, blocks: child.blocks())
             }
             return [.list(ordered: kind == .orderedList, items: items)]
-        case .table:
+        case .table(let columns):
             var header: [AttributedString] = []
             var rows: [[AttributedString]] = []
             for row in children {
@@ -168,7 +178,15 @@ private final class BlockNode {
                 default: break
                 }
             }
-            return [.table(header: header, rows: rows)]
+            let alignments = columns.map { column in
+                switch column.alignment {
+                case .left: MarkdownTableAlignment.leading
+                case .center: MarkdownTableAlignment.center
+                case .right: MarkdownTableAlignment.trailing
+                @unknown default: MarkdownTableAlignment.leading
+                }
+            }
+            return [.table(header: header, alignments: alignments, rows: rows)]
         case .listItem, .tableHeaderRow, .tableRow, .tableCell:
             return children.flatMap { $0.blocks() }
         @unknown default:

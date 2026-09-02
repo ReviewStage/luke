@@ -119,10 +119,22 @@ final class MarkdownBlockTests: XCTestCase {
         XCTAssertEqual(blocks, [
             .table(
                 header: [AttributedString("File"), AttributedString("Change")],
+                alignments: [.leading, .leading],
                 rows: [
                     [AttributedString("a.ts"), AttributedString("edited")],
                     [AttributedString("b.ts"), AttributedString("added")],
                 ]
+            ),
+        ])
+    }
+
+    func testTableKeepsColumnAlignment() {
+        let blocks = MarkdownBlock.parse("| Left | Center | Right |\n|:---|:---:|---:|\n| a | b | c |")
+        XCTAssertEqual(blocks, [
+            .table(
+                header: [AttributedString("Left"), AttributedString("Center"), AttributedString("Right")],
+                alignments: [.leading, .center, .trailing],
+                rows: [[AttributedString("a"), AttributedString("b"), AttributedString("c")]]
             ),
         ])
     }

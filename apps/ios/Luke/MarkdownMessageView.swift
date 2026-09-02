@@ -64,8 +64,8 @@ private struct MarkdownBlockView: View {
                     }
                 }
             }
-        case .table(let header, let rows):
-            table(header: header, rows: rows)
+        case .table(let header, let alignments, let rows):
+            table(header: header, alignments: alignments, rows: rows)
         case .rule:
             Divider()
         }
@@ -111,38 +111,72 @@ private struct MarkdownBlockView: View {
         }
     }
 
-    /// Verbatim text in the system's monospaced footnote on a block the
-    /// bubble's width, wrapping where it must: a scroll of its own inside a
-    /// chat bubble would fight the thread's scroll and the long-press that
-    /// selects text, and a wrapped line still reads where a hidden one does
-    /// not.
+    /// Verbatim text in the system's monospaced footnote. Code keeps each
+    /// source line whole and scrolls only sideways: wrapping a long identifier
+    /// makes iOS visibly hyphenate it, which reads as a character the author
+    /// never wrote, while a horizontal gesture does not compete with the
+    /// thread's vertical scroll.
     private func codeBlock(_ code: String) -> some View {
-        Text(code)
-            .font(.system(.footnote, design: .monospaced))
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+        ScrollView(.horizontal) {
+            Text(code)
+                .font(.system(.footnote, design: .monospaced))
+                .fixedSize(horizontal: true, vertical: true)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+        }
+        .scrollIndicators(.hidden)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.pressedFill, in: RoundedRectangle(cornerRadius: 10))
     }
 
-    private func table(header: [AttributedString], rows: [[AttributedString]]) -> some View {
+    private func table(
+        header: [AttributedString],
+        alignments: [MarkdownTableAlignment],
+        rows: [[AttributedString]]
+    ) -> some View {
         Grid(alignment: .topLeading, horizontalSpacing: 14, verticalSpacing: 6) {
             if !header.isEmpty {
                 GridRow {
-                    ForEach(Array(header.enumerated()), id: \.offset) { _, cell in
+                    ForEach(Array(header.enumerated()), id: \.offset) { column, cell in
                         inlineText(cell, font: .subheadline.weight(.semibold))
+                            .multilineTextAlignment(textAlignment(for: alignments, column: column))
+                            .gridColumnAlignment(columnAlignment(for: alignments, column: column))
                     }
                 }
                 Divider()
             }
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 GridRow {
-                    ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
+                    ForEach(Array(row.enumerated()), id: \.offset) { column, cell in
                         inlineText(cell, font: .subheadline)
+                            .multilineTextAlignment(textAlignment(for: alignments, column: column))
                     }
                 }
             }
+        }
+    }
+
+    private func columnAlignment(
+        for alignments: [MarkdownTableAlignment],
+        column: Int
+    ) -> HorizontalAlignment {
+        guard alignments.indices.contains(column) else { return .leading }
+        return switch alignments[column] {
+        case .leading: .leading
+        case .center: .center
+        case .trailing: .trailing
+        }
+    }
+
+    private func textAlignment(
+        for alignments: [MarkdownTableAlignment],
+        column: Int
+    ) -> TextAlignment {
+        guard alignments.indices.contains(column) else { return .leading }
+        return switch alignments[column] {
+        case .leading: .leading
+        case .center: .center
+        case .trailing: .trailing
         }
     }
 }
