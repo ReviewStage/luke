@@ -1,6 +1,7 @@
 import LukeKit
 import PostHog
 import SwiftUI
+import UIKit
 
 /// One message the developer sent from this screen, held in memory alone for
 /// the app run — the user's own words, never written to disk, drawn as the
@@ -114,7 +115,20 @@ struct SessionDetailView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 9)
                 .background(Color.cardFill, in: RoundedRectangle(cornerRadius: 18))
+                .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 18))
+                .contextMenu { copyAction(for: words) }
             Spacer(minLength: 48)
+        }
+    }
+
+    /// A held bubble answers with the system context menu, the way Messages
+    /// does; its one action today puts the bubble's own words on the
+    /// pasteboard, and the lifted preview keeps the bubble's shape.
+    private func copyAction(for words: String) -> some View {
+        Button {
+            UIPasteboard.general.string = words
+        } label: {
+            Label("Copy", systemImage: "doc.on.doc")
         }
     }
 
@@ -135,6 +149,8 @@ struct SessionDetailView: View {
                     .padding(.vertical, 9)
                     .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 18))
                     .opacity(message.delivery == .sending ? 0.55 : 1)
+                    .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 18))
+                    .contextMenu { copyAction(for: message.text) }
                 if case .failed(let reason) = message.delivery {
                     Text("Not Delivered — \(reason)")
                         .font(.caption2)
