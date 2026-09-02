@@ -146,7 +146,6 @@ export {
   type SessionAttentionEntry,
   type SessionRegistryListener,
   type SessionRegistrySnapshot,
-  type SessionSubjectEntry,
 } from "./session-registry.js";
 export {
   isListedWorkspaceAgentModel,

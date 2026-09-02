@@ -100,15 +100,11 @@ test("a concrete question is announced with the decision itself", () => {
   });
 });
 
-test("the title never reaches an announcement; only a derived subject names the work", () => {
+test("the title never reaches an announcement", () => {
   const notice = { ...waitingNotice(true), recap: "Should session replay capture screenshots?" };
   const unnamed = sessionNoticeAnnouncement(notice, 2_000);
   assert.equal(unnamed?.subject, undefined);
   assert.doesNotMatch(JSON.stringify(unnamed), /Notification fix/);
-
-  const named = sessionNoticeAnnouncement(notice, 2_000, "session replay privacy");
-  assert.equal(named?.subject, "session replay privacy");
-  assert.doesNotMatch(JSON.stringify(named), /Notification fix/);
 });
 
 test("a permission hold is announced with the action awaiting approval", () => {
@@ -181,11 +177,10 @@ test("only a developer hold with concrete input becomes needs-input", () => {
   assert.equal(urlOnlyQuestion, undefined);
 });
 
-test("a review's announcement carries the derived subject and never the title", () => {
+test("a review's announcement never carries the title", () => {
   const speech = sessionAnnouncementFromReview(
     review({ recap: "Should I run the migration?", context: undefined }),
-    "the billing migration",
   );
-  assert.equal(speech?.subject, "the billing migration");
+  assert.equal(speech?.subject, undefined);
   assert.doesNotMatch(JSON.stringify(speech), /Notification fix/);
 });

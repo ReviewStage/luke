@@ -53,7 +53,6 @@ export {
   type SubjectDerivation,
   type SubjectEvaluator,
   type SubjectInput,
-  type SubjectResult,
   subjectDerivationFromModel,
   subjectInputFromWire,
   subjectTranscript,

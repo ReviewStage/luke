@@ -220,4 +220,17 @@ test("the subject deriver is built beside the reviewer, and only with a transcri
   });
   await fixture.apply();
   assert.equal(fixture.subjectDeriver, undefined);
+
+  const wrapped: string[] = [];
+  const traced = new VoiceCapabilityAssembler({
+    ...seams,
+    readTranscript: async () => undefined,
+    wrapSubjectEvaluator: (evaluator) => {
+      wrapped.push(evaluator.model ?? "hosted");
+      return evaluator;
+    },
+  });
+  await traced.apply();
+  assert.ok(traced.subjectDeriver);
+  assert.equal(wrapped.length, 1);
 });

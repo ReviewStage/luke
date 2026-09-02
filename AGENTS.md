@@ -209,24 +209,26 @@ Trust constraints:
   through the same adapter method, bounded only by the file tail the adapter
   reads and its per-line cuts, together with the title as the developer's
   first ask and the bounded recap. The
-  derivation runs on the attention loop's own gate and cadence, never in a
-  fixture run, for roster-relevant local sessions only, on first sight and
-  again when a session enters a notice status past a per-session floor, a
-  bounded few a pass with one in flight per session; a cloud session, a
-  provider with no transcript this build reads, a closed session, and a
-  session inside a live voice exchange derive nothing. It travels the way an
+  derivation runs only for a session about to be announced, at the moment the
+  announcement is delivered, once per announcement, never in a fixture run,
+  under a fixed deadline past which the announcement speaks without it, so
+  the transcript it reads is the one holding the turn the announcement is
+  about; a cloud session, a provider with no transcript this build reads, a
+  closed session, and a session inside a live voice exchange derive nothing. It travels the way an
   attention review travels: directly to OpenAI
   on the developer's own key, or through Luke's own service on the hosted
   tier, where the service validates it against the same bounds, spends the
   attention meter, asks OpenAI not to store it, and keeps and logs none of it.
   The model is offered no tools, the transcript enters as data behind a
   marker, and the answer is a bounded phrase or an honest null, refused when
-  it merely echoes the title. The phrase stands beside the session in the
-  registry like an attention decision, pruned with the row, and reaches one
-  place: the announcement payload's `subject`, in the slot the title no
-  longer travels in. It is not drawn on the panel, reaches no write path,
-  never reaches the attention evaluator, and never reaches a provider file.
-  It counts no product event, because no developer asked. Widening what it
+  it merely echoes the title. The phrase lives only inside the announcement
+  payload that carries it and is kept nowhere: it reaches one place, the
+  payload's `subject`, in the slot the title no longer travels in. It is not
+  drawn on the panel, reaches no write path, never reaches the attention
+  evaluator, and never reaches a provider file. It counts no product event,
+  because no developer asked. The development trace records each
+  derivation's about-fields, answer, and timing, and the transcript's byte
+  count, never its text. Widening what it
   reads, where it travels, or where it is shown is a product decision, not an
   implementation detail, and `PRIVACY.md` says the read and the send in as
   many words.

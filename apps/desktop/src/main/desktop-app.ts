@@ -30,7 +30,11 @@ import {
   nextMeetingBoundary,
 } from "@sidecar/calendar";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
-import { AgentTraceWriter, tracedAttentionEvaluator } from "@sidecar/devtrace";
+import {
+  AgentTraceWriter,
+  tracedAttentionEvaluator,
+  tracedSubjectEvaluator,
+} from "@sidecar/devtrace";
 import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
 import { fixtureSnapshot } from "@sidecar/fixtures";
 import { normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
@@ -92,6 +96,7 @@ import {
   sessionAnnouncementFromReview,
   sessionNoticeAnnouncement,
   VoiceCapabilityAssembler,
+  withSubjects,
 } from "@sidecar/voice";
 import { ACT_RESULT_STATUS, isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
 import {
@@ -184,6 +189,7 @@ import {
   heldSessionAnnouncements,
   type PendingSessionAnnouncement,
   SessionAnnouncementBatch,
+  SUBJECT_DERIVATION_DEADLINE_MS,
 } from "./session-announcement-batch";
 import { createSettingsHandler } from "./settings-handler";
 import { SettingsStore } from "./settings-store";
@@ -517,6 +523,8 @@ const voiceCapabilities = new VoiceCapabilityAssembler({
     ? {
         wrapEvaluator: (evaluator) =>
           tracedAttentionEvaluator(evaluator, (record) => agentTrace.recordAttention(record)),
+        wrapSubjectEvaluator: (evaluator) =>
+          tracedSubjectEvaluator(evaluator, (record) => agentTrace.recordSubject(record)),
       }
     : undefined),
 });
@@ -2173,14 +2181,27 @@ async function deliverSessionAnnouncementBatch(
     heldEvaluatorSpeech.hold(held.reviews);
     return;
   }
+  if (!panels.voiceHost()) return;
+  // The subject is derived here, for the sessions about to be spoken of, from
+  // each transcript as it stands now: this is the moment it holds the settled
+  // turn worth naming. The deadline is the most speech waits for a name.
+  const subjectDeriver = voiceCapabilities.subjectDeriver;
+  const announcements = await withSubjects(
+    current.map((item) => item.announcement),
+    (identity) => {
+      const session = sessionRegistry.get(identity);
+      return session && subjectDeriver
+        ? subjectDeriver.deriveFor(session)
+        : Promise.resolve(undefined);
+    },
+    SUBJECT_DERIVATION_DEADLINE_MS,
+  );
+  // The window can close while the derivations run.
   const host = panels.voiceHost();
   if (!host) return;
   const notices = current.flatMap((item) => (item.source === "notice" ? [item.notice] : []));
   countSpokenAnnouncements(notices);
-  host.webContents.send(
-    channels.onSessionAnnouncements,
-    current.map((item) => item.announcement),
-  );
+  host.webContents.send(channels.onSessionAnnouncements, announcements);
   markFirstAnnouncementSpoken();
 }
 
@@ -2189,11 +2210,7 @@ function pendingSessionNotices(
   decidedAt: number,
 ): readonly PendingSessionAnnouncement[] {
   return notices.flatMap((notice) => {
-    const announcement = sessionNoticeAnnouncement(
-      notice,
-      decidedAt,
-      sessionRegistry.subject(notice),
-    );
+    const announcement = sessionNoticeAnnouncement(notice, decidedAt);
     return announcement
       ? [
           {
@@ -2232,7 +2249,7 @@ async function reviewSessionAttention(generation: number): Promise<void> {
     // `outcome` says whether to voice it now, which only these reviews do.
     sessionAnnouncementBatch.enqueue(
       reviews.flatMap((review) => {
-        const announcement = sessionAnnouncementFromReview(review, sessionRegistry.subject(review));
+        const announcement = sessionAnnouncementFromReview(review);
         if (!announcement) return [];
         return [
           {
@@ -2247,29 +2264,6 @@ async function reviewSessionAttention(generation: number): Promise<void> {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`Attention review failed: ${message}\n`);
-  }
-}
-
-/**
- * Derives a subject for the local sessions still worth a row, on the same
- * gate and cadence as the attention review, so the announcement about a
- * session can name what its agent is working on rather than the title it
- * began under. The deriver itself decides which sessions are due; the filter
- * here is the reviewer's, for the same reason: a subject for a session with no
- * row surfaces nowhere.
- */
-async function deriveSessionSubjects(generation: number): Promise<void> {
-  const subjectDeriver = voiceCapabilities.subjectDeriver;
-  if (!subjectDeriver) return;
-  try {
-    const results = await subjectDeriver.derive(
-      rosterRelevantSessions(sessionRegistry.list(), Date.now()),
-    );
-    if (!attentionObservationLoop.isCurrent(generation)) return;
-    for (const result of results) sessionRegistry.setSubject(result, result.subject);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Subject derivation failed: ${message}\n`);
   }
 }
 
@@ -2516,9 +2510,7 @@ const sessionObservationLoop = new ObservationLoop({
 const attentionObservationLoop = new ObservationLoop({
   gate: () => observationGate() && voiceCapabilities.attentionReviewer !== undefined,
   intervalMs: SESSION_REFRESH_INTERVAL_MS,
-  run: async (generation) => {
-    await Promise.all([reviewSessionAttention(generation), deriveSessionSubjects(generation)]);
-  },
+  run: reviewSessionAttention,
 });
 const issueObservationLoop = new ObservationLoop({
   gate: observationGate,

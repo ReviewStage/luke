@@ -4,6 +4,7 @@ import {
   openAiSubjectDeriver,
   SessionAttentionReviewer,
   SessionSubjectDeriver,
+  type SubjectEvaluator,
 } from "@sidecar/attention";
 import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
@@ -88,6 +89,8 @@ export interface VoiceCapabilityAssemblerOptions {
    * `AttentionEvaluator`, and absence means the evaluator is used as built.
    */
   wrapEvaluator?: (evaluator: AttentionEvaluator) => AttentionEvaluator;
+  /** The same decoration for the subject evaluator, under the same terms. */
+  wrapSubjectEvaluator?: (evaluator: SubjectEvaluator) => SubjectEvaluator;
 }
 
 export class VoiceCapabilityAssembler {
@@ -111,9 +114,10 @@ export class VoiceCapabilityAssembler {
   }
 
   /**
-   * Built beside the reviewer on the same policy, so a subject is derived
+   * Built beside the reviewer on the same policy, so a subject can be derived
    * exactly when an attention review could be: never in a fixture run, and
-   * on the key or the account the reviews travel on.
+   * on the key or the account the reviews travel on. It is asked only at an
+   * announcement, for the session being announced.
    */
   get subjectDeriver(): SessionSubjectDeriver | undefined {
     return this.#subjectDeriver;
@@ -167,20 +171,20 @@ export class VoiceCapabilityAssembler {
         })
       : undefined;
     const readTranscript = this.#options.readTranscript;
-    const subjectEvaluator = readTranscript
+    const builtSubjectEvaluator = readTranscript
       ? apiKey
         ? openAiSubjectDeriver(apiKey)
         : policy.useHosted
           ? new HostedSubjectDeriver(seams)
           : undefined
       : undefined;
+    const subjectEvaluator =
+      builtSubjectEvaluator && this.#options.wrapSubjectEvaluator
+        ? this.#options.wrapSubjectEvaluator(builtSubjectEvaluator)
+        : builtSubjectEvaluator;
     this.#subjectDeriver =
       subjectEvaluator && readTranscript
-        ? new SessionSubjectDeriver({
-            evaluator: subjectEvaluator,
-            readTranscript,
-            currentSession: this.#options.currentSession,
-          })
+        ? new SessionSubjectDeriver({ evaluator: subjectEvaluator, readTranscript })
         : undefined;
     const [voice, speed] = await Promise.all([
       this.#options.settings.get(APP_SETTING_SCHEMA.voice.field).catch(() => undefined),

@@ -1,3 +1,4 @@
+export { withSubjects } from "./announcement-subjects.js";
 export {
   resolveVoiceCapability,
   VoiceCapabilityAssembler,

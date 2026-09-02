@@ -1,8 +1,6 @@
 import type { SessionProviderAdapter } from "./providers.js";
 import {
   type AttentionDecision,
-  boundedText,
-  maximumSessionSubjectLength,
   normalizeAttention,
   normalizeSession,
   normalizeSessionIdentity,
@@ -20,17 +18,11 @@ export interface SessionRegistrySnapshot {
   revision: number;
   sessions: readonly Session[];
   attention: readonly SessionAttentionEntry[];
-  subjects: readonly SessionSubjectEntry[];
 }
 
 /** One evaluator decision, kept beside rather than inside provider-owned session state. */
 export interface SessionAttentionEntry extends SessionIdentity {
   decision: AttentionDecision;
-}
-
-/** One derived subject, kept beside provider-owned state exactly as a decision is. */
-export interface SessionSubjectEntry extends SessionIdentity {
-  subject: string;
 }
 
 export type SessionRegistryListener = (snapshot: SessionRegistrySnapshot) => void;
@@ -232,7 +224,6 @@ export class InMemorySessionRegistry {
   #revision = 0;
   #sessions: SessionStore = new Map();
   #attention = new Map<string, Map<string, AttentionDecision>>();
-  #subjects = new Map<string, Map<string, string>>();
   #providerMutationEpochs = new Map<string, number>();
   #nextProviderRefreshAttempts = new Map<string, number>();
   #latestAppliedRefreshAttempts = new Map<string, number>();
@@ -275,48 +266,7 @@ export class InMemorySessionRegistry {
           }),
         ),
       ),
-      subjects: [...this.#subjects].flatMap(([providerId, subjects]) =>
-        [...subjects].map(
-          ([providerSessionId, subject]): SessionSubjectEntry => ({
-            providerId,
-            providerSessionId,
-            subject,
-          }),
-        ),
-      ),
     };
-  }
-
-  /** The subject Luke last derived for a session, or nothing. */
-  subject(identity: SessionIdentity): string | undefined {
-    const normalizedIdentity = normalizeSessionIdentity(identity);
-    return this.#subjects
-      .get(normalizedIdentity.providerId)
-      ?.get(normalizedIdentity.providerSessionId);
-  }
-
-  /**
-   * Stores Luke's latest derived subject beside the session, or clears it
-   * when a derivation settled on none, without mutating provider-owned data.
-   */
-  setSubject(identity: SessionIdentity, subject: string | undefined): Session | undefined {
-    const normalizedIdentity = normalizeSessionIdentity(identity);
-    const existing = this.#sessions
-      .get(normalizedIdentity.providerId)
-      ?.get(normalizedIdentity.providerSessionId);
-    if (!existing) return undefined;
-
-    const normalized = boundedText(subject, maximumSessionSubjectLength);
-    const subjects = this.#subjects.get(normalizedIdentity.providerId) ?? new Map<string, string>();
-    const previous = subjects.get(normalizedIdentity.providerSessionId);
-    if (previous === normalized) return copySession(existing);
-    if (normalized) subjects.set(normalizedIdentity.providerSessionId, normalized);
-    else subjects.delete(normalizedIdentity.providerSessionId);
-    if (subjects.size > 0) this.#subjects.set(normalizedIdentity.providerId, subjects);
-    else this.#subjects.delete(normalizedIdentity.providerId);
-    this.#revision += 1;
-    this.#notify();
-    return copySession(existing);
   }
 
   subscribe(listener: SessionRegistryListener): () => void {
@@ -444,7 +394,6 @@ export class InMemorySessionRegistry {
     }
     this.#sessions = next;
     this.#pruneAttention(next);
-    this.#pruneSubjects(next);
     this.#revision += 1;
     this.#notify();
     return true;
@@ -461,20 +410,6 @@ export class InMemorySessionRegistry {
         if (!providerSessions.has(providerSessionId)) decisions.delete(providerSessionId);
       }
       if (decisions.size === 0) this.#attention.delete(providerId);
-    }
-  }
-
-  #pruneSubjects(sessions: SessionStore): void {
-    for (const [providerId, subjects] of this.#subjects) {
-      const providerSessions = sessions.get(providerId);
-      if (!providerSessions) {
-        this.#subjects.delete(providerId);
-        continue;
-      }
-      for (const providerSessionId of subjects.keys()) {
-        if (!providerSessions.has(providerSessionId)) subjects.delete(providerSessionId);
-      }
-      if (subjects.size === 0) this.#subjects.delete(providerId);
     }
   }
 
