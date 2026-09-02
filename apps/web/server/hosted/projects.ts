@@ -117,12 +117,7 @@ export async function handleProjects(options: ProjectsOptions): Promise<Response
     // to, so a provider with nowhere to create advertises no choices either.
     if (result.value.length > 0) {
       for (const entry of workspaceAgentModels(providerId)) {
-        agentModels.push({
-          providerId,
-          agent: entry.agent,
-          models: entry.models.map((model) => ({ id: model.id, label: model.label })),
-          efforts: [...entry.efforts],
-        });
+        agentModels.push({ providerId, ...entry });
       }
     }
   }

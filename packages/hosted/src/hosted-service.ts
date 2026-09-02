@@ -4,6 +4,7 @@ import {
   type ProviderId,
   SESSION_CONTROL_KIND,
   WORKSPACE_TASK_SUPPORT,
+  type WorkspaceAgentModels,
   type WorkspaceTaskSupport,
 } from "@sidecar/session";
 import {
@@ -498,17 +499,14 @@ export interface HostedWorkspaceProject {
 
 /**
  * One agent kind a provider's creation endpoint takes, with the models and
- * effort levels the build's table lists for it — `WORKSPACE_AGENT_MODELS`
- * from `@sidecar/session`, flattened onto the wire with its provider id. The
- * table is documented state fixed by the build, so mobile reading it here
- * offers exactly what the desktop offers, and the workspace act validates a
- * chosen selection against the same table again server-side.
+ * effort levels the build's table lists for it — a `WORKSPACE_AGENT_MODELS`
+ * entry from `@sidecar/session`, carried onto the wire with its provider id.
+ * Extending the table's own row type means the wire cannot drift from the
+ * table it exists to flatten, and the workspace act validates a chosen
+ * selection against the same table again server-side.
  */
-export interface HostedWorkspaceAgentModels {
+export interface HostedWorkspaceAgentModels extends WorkspaceAgentModels {
   providerId: string;
-  agent: string;
-  models: { id: string; label: string }[];
-  efforts: string[];
 }
 
 /** The projects endpoint answer: where the caller's keys can create a workspace. */
@@ -564,11 +562,7 @@ function hostedWorkspaceAgentModelsFromWire(
     models.push({ id, label });
   }
   if (models.length === 0) return undefined;
-  const efforts: string[] = [];
-  for (const effort of value.efforts) {
-    if (!isWireString(effort)) return undefined;
-    efforts.push(effort);
-  }
+  const efforts = wireStringList(value.efforts) ?? [];
   return { providerId, agent, models, efforts };
 }
 

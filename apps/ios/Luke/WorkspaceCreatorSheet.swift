@@ -71,15 +71,7 @@ struct WorkspaceCreatorSheet: View {
             .task { await loadProjects() }
         }
         .interactiveDismissDisabled(creating)
-        .alert(
-            "Not Created",
-            isPresented: Binding(presence: $failure),
-            presenting: failure
-        ) { _ in
-            Button("OK", role: .cancel) {}
-        } message: { reason in
-            Text(reason)
-        }
+        .failureAlert("Not Created", reason: $failure)
     }
 
     // MARK: - Form
@@ -240,9 +232,7 @@ struct WorkspaceCreatorSheet: View {
 
     private var canCreate: Bool {
         guard !creating, let project else { return false }
-        if project.taskSupport == .required,
-            task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        {
+        if project.taskSupport == .required, !task.contains(where: { !$0.isWhitespace }) {
             return false
         }
         // An agent choice needs a model beside it; the two only mean anything together.
@@ -331,6 +321,7 @@ struct AgentSpawnerSheet: View {
     let onDone: () -> Void
 
     @Environment(AccountSession.self) private var account
+    @Environment(ProductEventSender.self) private var events
     @State private var agent: String
     @State private var name = ""
     @State private var task = ""
@@ -385,15 +376,7 @@ struct AgentSpawnerSheet: View {
             }
         }
         .interactiveDismissDisabled(spawning)
-        .alert(
-            "Not Started",
-            isPresented: Binding(presence: $failure),
-            presenting: failure
-        ) { _ in
-            Button("OK", role: .cancel) {}
-        } message: { reason in
-            Text(reason)
-        }
+        .failureAlert("Not Started", reason: $failure)
     }
 
     private func spawn() {
@@ -404,26 +387,28 @@ struct AgentSpawnerSheet: View {
         failure = nil
         Task {
             defer { spawning = false }
-            do {
-                let answer = try await account.authorized { token in
-                    try await actClient.spawnAgent(
-                        accessToken: token,
-                        providerId: session.providerId,
-                        providerSessionId: session.sessionId,
-                        agent: agentKind,
-                        name: nameValue.isEmpty ? nil : nameValue,
-                        task: taskValue.isEmpty ? nil : taskValue
-                    )
-                }
-                if answer.result == .accepted {
-                    onDone()
-                } else {
-                    failure = answer.reason ?? "The agent was not started."
-                }
-            } catch is AccountSessionError {
-                ()  // Signed out — the state change redraws automatically.
-            } catch {
-                failure = error.localizedDescription
+            let outcome = await account.performAct(
+                counting: .agentAdd,
+                provider: session.providerId,
+                events: events,
+                fallbackReason: "The agent was not started."
+            ) { token in
+                try await actClient.spawnAgent(
+                    accessToken: token,
+                    providerId: session.providerId,
+                    providerSessionId: session.sessionId,
+                    agent: agentKind,
+                    name: nameValue.isEmpty ? nil : nameValue,
+                    task: taskValue.isEmpty ? nil : taskValue
+                )
+            }
+            switch outcome {
+            case .delivered:
+                onDone()
+            case .refused(let reason):
+                failure = reason
+            case .signedOut:
+                ()  // The state change redraws automatically.
             }
         }
     }

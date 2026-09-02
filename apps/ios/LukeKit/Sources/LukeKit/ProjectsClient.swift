@@ -138,6 +138,13 @@ public enum ProjectsClientError: LocalizedError {
     }
 }
 
+extension ProjectsClientError: HostedUnauthorizedSignaling {
+    public var isUnauthorized: Bool {
+        if case .serverError(let status) = self { return status == 401 }
+        return false
+    }
+}
+
 /// Fetches where the signed-in user's keys can create a workspace.
 public final class ProjectsClient: Sendable {
     private let serviceURL: URL

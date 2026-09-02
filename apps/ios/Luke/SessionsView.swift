@@ -29,26 +29,15 @@ struct SessionsView: View {
     @State private var actFailure: String?
 
     /// Which advertised rename a menu press opened: the session itself, or
-    /// the workspace it runs in. One alert serves both; the case picks the
-    /// words and the endpoint.
-    private enum RenameTarget: Identifiable {
-        case session(RosterSession)
-        case workspace(RosterSession)
-
-        var session: RosterSession {
-            switch self {
-            case .session(let s), .workspace(let s): s
-            }
-        }
+    /// the workspace it runs in. One alert serves both; the flag picks the
+    /// words, the count, and the endpoint.
+    private struct RenameTarget: Identifiable {
+        let session: RosterSession
+        let isWorkspace: Bool
 
         var id: String { session.id }
-
-        var title: String {
-            switch self {
-            case .session: "Rename Session"
-            case .workspace: "Rename Workspace"
-            }
-        }
+        var title: String { isWorkspace ? "Rename Workspace" : "Rename Session" }
+        var act: ProductSessionAct { isWorkspace ? .workspaceRename : .sessionRename }
     }
 
     private let rosterClient = RosterClient(serviceURL: AccountConstants.serviceURL)
@@ -101,37 +90,18 @@ struct SessionsView: View {
             Button("Rename") {
                 let name = renameText
                 Task {
-                    await performAct { token in
-                        switch target {
-                        case .session(let s):
-                            try await actClient.renameSession(
-                                accessToken: token,
-                                providerId: s.providerId,
-                                providerSessionId: s.sessionId,
-                                name: name
-                            )
-                        case .workspace(let s):
-                            try await actClient.renameWorkspace(
-                                accessToken: token,
-                                providerId: s.providerId,
-                                providerSessionId: s.sessionId,
-                                name: name
-                            )
-                        }
+                    await performAct(on: target.session, counting: target.act) { token in
+                        let rename =
+                            target.isWorkspace
+                            ? actClient.renameWorkspace : actClient.renameSession
+                        return try await rename(
+                            token, target.session.providerId, target.session.sessionId, name)
                     }
                 }
             }
             Button("Cancel", role: .cancel) {}
         }
-        .alert(
-            "Not Delivered",
-            isPresented: Binding(presence: $actFailure),
-            presenting: actFailure
-        ) { _ in
-            Button("OK", role: .cancel) {}
-        } message: { reason in
-            Text(reason)
-        }
+        .failureAlert("Not Delivered", reason: $actFailure)
     }
 
     /// The rows the query leaves: matched with the desktop's own search
@@ -142,17 +112,16 @@ struct SessionsView: View {
         return sessions.filter { SessionSearch.matches($0, tokens: tokens) }
     }
 
-    /// What the list draws: the query's rows, narrowed by the filter
-    /// selection, in the order the chosen sort names.
-    private var visibleSessions: [RosterSession] {
-        sortedSessions(
-            searchMatchedSessions.filter { matchesFilterSelection(filters, session: $0) },
+    private var searchableList: some View {
+        // Matched once per build: the empty check, the visible rows, and the
+        // filtered-out count all read the same pass instead of re-running the
+        // tokenized scan.
+        let matched = searchMatchedSessions
+        let visible = sortedSessions(
+            matched.filter { matchesFilterSelection(filters, session: $0) },
             by: sort
         )
-    }
-
-    private var searchableList: some View {
-        List {
+        return List {
             if isLoading && sessions.isEmpty {
                 ForEach(0 ..< 3, id: \.self) { _ in
                     SkeletonRow()
@@ -164,16 +133,16 @@ struct SessionsView: View {
                 emptyRow
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
-            } else if searchMatchedSessions.isEmpty {
+            } else if matched.isEmpty {
                 ContentUnavailableView.search(text: searchQuery)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
-            } else if visibleSessions.isEmpty {
-                filteredOutRow
+            } else if visible.isEmpty {
+                filteredOutRow(hiddenCount: matched.count)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
             } else {
-                ForEach(visibleSessions) { s in
+                ForEach(visible) { s in
                     sessionItem(s)
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
@@ -233,11 +202,11 @@ struct SessionsView: View {
         .tint(Color.ink)
     }
 
-    private var filteredOutRow: some View {
+    private func filteredOutRow(hiddenCount: Int) -> some View {
         ContentUnavailableView {
             Label("No matching sessions", systemImage: "line.3.horizontal.decrease")
         } description: {
-            Text("Filters hide ^[\(searchMatchedSessions.count) sessions](inflect: true).")
+            Text("Filters hide ^[\(hiddenCount) sessions](inflect: true).")
         } actions: {
             Button("Clear Filters") { filters.removeAll() }
                 .tint(Color.ink)
@@ -331,7 +300,7 @@ struct SessionsView: View {
             if s.canRename {
                 Button {
                     renameText = s.title
-                    renaming = .session(s)
+                    renaming = RenameTarget(session: s, isWorkspace: false)
                 } label: {
                     Label("Rename Session…", systemImage: "pencil")
                 }
@@ -339,7 +308,7 @@ struct SessionsView: View {
             if s.canRenameWorkspace {
                 Button {
                     renameText = s.workspace ?? ""
-                    renaming = .workspace(s)
+                    renaming = RenameTarget(session: s, isWorkspace: true)
                 } label: {
                     Label("Rename Workspace…", systemImage: "pencil.line")
                 }
@@ -369,7 +338,7 @@ struct SessionsView: View {
 
     private func runControl(_ s: RosterSession, _ control: RosterSessionControl) {
         Task {
-            await performAct { token in
+            await performAct(on: s, counting: .controlRun) { token in
                 try await actClient.executeControl(
                     accessToken: token,
                     providerId: s.providerId,
@@ -390,21 +359,28 @@ struct SessionsView: View {
         }
     }
 
-    /// Runs one row act with the account's token discipline, then refreshes
-    /// so the roster reflects what the act changed; a refusal is surfaced in
-    /// the failure alert with the server's own reason.
-    private func performAct(_ act: (String) async throws -> ActMessageAnswer) async {
-        do {
-            let answer = try await session.authorized(act)
-            if answer.result == .accepted {
-                await refreshSessions()
-            } else {
-                actFailure = answer.reason ?? "The act was not delivered."
-            }
-        } catch is AccountSessionError {
-            ()  // Signed out — the state change redraws automatically.
-        } catch {
-            actFailure = error.localizedDescription
+    /// Runs one row act through the shared runner, then refreshes so the
+    /// roster reflects what the act changed; a refusal is surfaced in the
+    /// failure alert with the server's own reason.
+    private func performAct(
+        on s: RosterSession,
+        counting act: ProductSessionAct,
+        _ call: (String) async throws -> ActMessageAnswer
+    ) async {
+        let outcome = await session.performAct(
+            counting: act,
+            provider: s.providerId,
+            events: events,
+            fallbackReason: "The act was not delivered.",
+            call
+        )
+        switch outcome {
+        case .delivered:
+            await refreshSessions()
+        case .refused(let reason):
+            actFailure = reason
+        case .signedOut:
+            ()  // The state change redraws automatically.
         }
     }
 
@@ -654,6 +630,17 @@ private struct StatusMark: View {
     }
 }
 
+/// Opaque on purpose: the context-menu lift snapshots the card alone, and a
+/// translucent fill reads as a ghost over the system's blur instead of a cell
+/// rising. Compositing the overlay onto the ground it always sits on looks
+/// identical in the list and solid in the lift.
+private var rowCardFill: some View {
+    ZStack {
+        Color.ground
+        Color(white: 1, opacity: 0.028)
+    }
+}
+
 // MARK: - Row preview
 
 /// The card the long-press lifts in place of the row's own snapshot: the same
@@ -676,7 +663,8 @@ private struct SessionRowPreview: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let size = envelope
+        return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 10) {
                 RosterProviderMark(providerId: session.providerId)
                 VStack(alignment: .leading, spacing: 3) {
@@ -702,13 +690,8 @@ private struct SessionRowPreview: View {
             Spacer(minLength: 0)
         }
         .padding(20)
-        .frame(width: envelope.width, height: envelope.height, alignment: .topLeading)
-        .background(
-            ZStack {
-                Color.ground
-                Color(white: 1, opacity: 0.028)
-            }
-        )
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
+        .background(rowCardFill)
     }
 }
 
@@ -747,16 +730,7 @@ private struct SessionRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
-        // Opaque on purpose: the context-menu lift snapshots the card alone,
-        // and a translucent fill reads as a ghost over the system's blur
-        // instead of a cell rising. Compositing the overlay onto the ground
-        // it always sits on looks identical in the list and solid in the lift.
-        .background(
-            ZStack {
-                Color.ground
-                Color(white: 1, opacity: 0.028)
-            }
-        )
+        .background(rowCardFill)
         .overlay(
             RoundedRectangle(cornerRadius: 15)
                 .strokeBorder(

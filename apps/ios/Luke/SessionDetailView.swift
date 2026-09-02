@@ -196,7 +196,7 @@ struct SessionDetailView: View {
     }
 
     private var canSend: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        text.contains { !$0.isWhitespace }
     }
 
     private func send() {

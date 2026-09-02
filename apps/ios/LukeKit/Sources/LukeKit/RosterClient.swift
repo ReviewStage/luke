@@ -11,6 +11,13 @@ public enum RosterClientError: LocalizedError {
     }
 }
 
+extension RosterClientError: HostedUnauthorizedSignaling {
+    public var isUnauthorized: Bool {
+        if case .serverError(let status) = self { return status == 401 }
+        return false
+    }
+}
+
 /// Fetches the signed-in user's cloud sessions from the observe endpoint.
 public final class RosterClient: Sendable {
     private let serviceURL: URL

@@ -29,12 +29,6 @@ public final class WorkspaceCreationDefaults {
         static let agentByProvider = "workspaceCreation.agentSelectionByProvider"
     }
 
-    private enum AgentField {
-        static let agent = "agent"
-        static let model = "model"
-        static let effort = "effort"
-    }
-
     private let store: UserDefaults
 
     public init(store: UserDefaults = .standard) {
@@ -66,10 +60,10 @@ public final class WorkspaceCreationDefaults {
         guard
             let held = store.dictionary(forKey: Key.agentByProvider) as? [String: [String: String]],
             let fields = held[providerId],
-            let agent = fields[AgentField.agent],
-            let model = fields[AgentField.model]
+            let agent = fields["agent"],
+            let model = fields["model"]
         else { return nil }
-        return WorkspaceAgentDefault(agent: agent, model: model, effort: fields[AgentField.effort])
+        return WorkspaceAgentDefault(agent: agent, model: model, effort: fields["effort"])
     }
 
     /// Passing nil forgets the provider's stored choice, so choosing the
@@ -77,8 +71,8 @@ public final class WorkspaceCreationDefaults {
     public func setAgentDefault(_ selection: WorkspaceAgentDefault?, for providerId: String) {
         var held = store.dictionary(forKey: Key.agentByProvider) as? [String: [String: String]] ?? [:]
         if let selection {
-            var fields = [AgentField.agent: selection.agent, AgentField.model: selection.model]
-            if let effort = selection.effort { fields[AgentField.effort] = effort }
+            var fields = ["agent": selection.agent, "model": selection.model]
+            if let effort = selection.effort { fields["effort"] = effort }
             held[providerId] = fields
         } else {
             held.removeValue(forKey: providerId)

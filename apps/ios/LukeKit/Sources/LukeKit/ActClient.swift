@@ -43,6 +43,10 @@ public enum ActClientError: Error, Equatable {
     case serverError(status: Int)
 }
 
+extension ActClientError: HostedUnauthorizedSignaling {
+    public var isUnauthorized: Bool { self == .unauthorized }
+}
+
 // MARK: - Client
 
 /// HTTP client for Luke's hosted act endpoints.
@@ -138,13 +142,13 @@ public final class ActClient: Sendable {
         providerSessionId: String,
         name: String
     ) async throws -> ActMessageAnswer {
-        let url = baseURL.appendingPathComponent("api/acts/rename-session")
-        let body: [String: String] = [
-            "providerId": providerId,
-            "providerSessionId": providerSessionId,
-            "name": name.trimmingCharacters(in: .whitespacesAndNewlines),
-        ]
-        return try await post(url: url, body: body, accessToken: accessToken)
+        try await rename(
+            path: "api/acts/rename-session",
+            accessToken: accessToken,
+            providerId: providerId,
+            providerSessionId: providerSessionId,
+            name: name
+        )
     }
 
     /// Renames the workspace an observed session runs in.
@@ -154,7 +158,23 @@ public final class ActClient: Sendable {
         providerSessionId: String,
         name: String
     ) async throws -> ActMessageAnswer {
-        let url = baseURL.appendingPathComponent("api/acts/rename-workspace")
+        try await rename(
+            path: "api/acts/rename-workspace",
+            accessToken: accessToken,
+            providerId: providerId,
+            providerSessionId: providerSessionId,
+            name: name
+        )
+    }
+
+    private func rename(
+        path: String,
+        accessToken: String,
+        providerId: String,
+        providerSessionId: String,
+        name: String
+    ) async throws -> ActMessageAnswer {
+        let url = baseURL.appendingPathComponent(path)
         let body: [String: String] = [
             "providerId": providerId,
             "providerSessionId": providerSessionId,
