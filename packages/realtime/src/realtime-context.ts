@@ -416,7 +416,7 @@ export function workspaceProjectContextText(
     "Projects a new workspace can be created in:",
     ...listed.map(
       (project) =>
-        `- ${project.providerName} — ${project.repository}${project.targetName ? ` on ${project.targetName}` : ""} [provider_id=${project.providerId} project_id=${project.providerProjectId}${project.providerTargetId ? ` target_id=${project.providerTargetId}` : ""}]; ${TASK_SUPPORT_TEXT[project.taskSupport]}${defaultProjectIds?.[project.providerId] === workspaceProjectSelectionId(project) ? "; the provider's default project" : ""}${project.spawnableAgents?.length ? `; agents: ${project.spawnableAgents.join(", ")}${project.defaultAgent ? `; default agent: ${project.defaultAgent}` : ""}` : ""}`,
+        `- ${project.providerName} — ${project.repository}${project.targetName ? ` on ${project.targetName}` : ""} [provider_id=${project.providerId} project_id=${project.providerProjectId}${project.providerTargetId ? ` target_id=${project.providerTargetId}` : ""}]; ${TASK_SUPPORT_TEXT[project.taskSupport]}${project.namesItself ? "; names its own workspaces" : ""}${defaultProjectIds?.[project.providerId] === workspaceProjectSelectionId(project) ? "; the provider's default project" : ""}${project.spawnableAgents?.length ? `; agents: ${project.spawnableAgents.join(", ")}${project.defaultAgent ? `; default agent: ${project.defaultAgent}` : ""}` : ""}`,
     ),
     chosenDefault
       ? `An ask that names no provider creates in ${chosenDefault.providerName} [provider_id=${chosenDefault.providerId}]; do not ask which provider unless the ask names a different one.`

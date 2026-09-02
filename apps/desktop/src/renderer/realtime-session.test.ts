@@ -3847,6 +3847,72 @@ test("a Superset workspace requires an observed host and agent", async () => {
   ]);
 });
 
+test("a project that names its own workspaces refuses a name and takes the rest", async () => {
+  const carried: unknown[] = [];
+  const context = harness({
+    carryAction: async (action) => {
+      carried.push(action);
+      return { status: "accepted" };
+    },
+  });
+  await context.session.connect();
+  context.session.updateWorkspaceProjects([
+    {
+      providerId: "codex",
+      providerName: "Codex cloud",
+      providerProjectId: "env-1",
+      repository: "luke",
+      taskSupport: "required",
+      namesItself: true,
+    },
+  ]);
+  await armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
+    response: {
+      output: [
+        {
+          type: "function_call",
+          name: "create_workspace",
+          call_id: "call-named",
+          arguments:
+            '{"provider_id":"codex","project_id":"env-1","name":"Panel fix","task":"Fix the panel"}',
+        },
+        {
+          type: "function_call",
+          name: "create_workspace",
+          call_id: "call-unnamed",
+          arguments: '{"provider_id":"codex","project_id":"env-1","task":"Fix the panel"}',
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // The named ask is refused before any bridge call exists — the provider
+  // would refuse it anyway, and a refusal here says why — and the same ask
+  // without a name is carried whole.
+  assert.deepEqual(carried, [
+    {
+      kind: "create-workspace",
+      providerId: "codex",
+      providerProjectId: "env-1",
+      task: "Fix the panel",
+    },
+  ]);
+  const outputs = context.sent.slice(sentBefore).filter(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
+  );
+  const [refused] = outputs;
+  assert.match(
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+    (refused?.item as { output?: string } | undefined)?.output ?? "",
+    /names its own workspaces/,
+  );
+});
+
 test("a sole Superset project resolves when the model omits its routing ids", async () => {
   const carried: unknown[] = [];
   const context = harness({

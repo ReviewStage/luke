@@ -136,6 +136,20 @@ test("hostedProjectsAnswerFromWire skips malformed entries rather than failing",
         taskSupport: "optional",
         targetName: "Main host",
       },
+      {
+        providerId: "codex",
+        providerProjectId: "env-1",
+        repository: "owner/repo",
+        taskSupport: "required",
+        namesItself: true,
+      },
+      {
+        providerId: "codex",
+        providerProjectId: "env-2",
+        repository: "owner/repo",
+        taskSupport: "required",
+        namesItself: "yes", // not a boolean
+      },
       { providerId: "conductor", providerProjectId: "proj-2" }, // missing fields
       {
         providerId: "conductor",
@@ -147,9 +161,13 @@ test("hostedProjectsAnswerFromWire skips malformed entries rather than failing",
   };
   const answer = hostedProjectsAnswerFromWire(JSON.parse(JSON.stringify(raw)));
   assert.ok(answer);
-  assert.equal(answer.projects.length, 1);
+  assert.equal(answer.projects.length, 3);
   assert.equal(answer.projects[0]?.providerProjectId, "proj-1");
   assert.equal(answer.projects[0]?.targetName, "Main host");
+  assert.equal(answer.projects[0]?.namesItself, undefined);
+  // The flag crosses only as the boolean it is; anything else reads as absent.
+  assert.equal(answer.projects[1]?.namesItself, true);
+  assert.equal(answer.projects[2]?.namesItself, undefined);
 });
 
 // --- The build's agent table rides beside the projects it applies to ---

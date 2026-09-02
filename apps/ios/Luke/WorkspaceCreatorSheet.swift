@@ -117,10 +117,12 @@ struct WorkspaceCreatorSheet: View {
                 }
             }
 
-            Section {
-                TextField("Name", text: $name)
-            } footer: {
-                Text("Optional — the provider names the workspace otherwise.")
+            if project?.namesItself != true {
+                Section {
+                    TextField("Name", text: $name)
+                } footer: {
+                    Text("Optional — the provider names the workspace otherwise.")
+                }
             }
 
             if project?.taskSupport != ProjectTaskSupport.none {
@@ -261,7 +263,7 @@ struct WorkspaceCreatorSheet: View {
         guard let project else { return }
         creating = true
         failure = nil
-        let chosenName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let chosenName = project.namesItself ? "" : name.trimmingCharacters(in: .whitespacesAndNewlines)
         let chosenTask =
             project.taskSupport == ProjectTaskSupport.none
             ? "" : task.trimmingCharacters(in: .whitespacesAndNewlines)

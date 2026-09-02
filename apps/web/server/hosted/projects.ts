@@ -136,5 +136,6 @@ function toWireProject(
     taskSupport: project.taskSupport,
   };
   if (project.targetName) wireProject.targetName = project.targetName;
+  if (project.namesItself) wireProject.namesItself = true;
   return wireProject;
 }

@@ -195,6 +195,19 @@ test("an act's line records the ask in words, with the identity it named", () =>
   );
   assert.equal(created.words, "asked conductor to create a workspace");
   assert.equal(created.identity, undefined);
+  const createdNamed = sessionActConversationEntry(
+    {
+      kind: SESSION_TOOL_KIND.CREATE_WORKSPACE,
+      providerId: "conductor",
+      providerProjectId: "p1",
+      name: "Notch panel clipping",
+    },
+    sessions,
+  );
+  assert.equal(
+    createdNamed.words,
+    'asked conductor to create a workspace named "Notch panel clipping"',
+  );
 });
 
 test("the rendering reads oldest first and says who each line speaks for", () => {

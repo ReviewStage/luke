@@ -495,6 +495,8 @@ export interface HostedWorkspaceProject {
   taskSupport: WorkspaceTaskSupport;
   /** The bounded label of the execution target owning this project, when it has one. */
   targetName?: string;
+  /** The provider names a workspace here itself and refuses a name from the ask. */
+  namesItself?: boolean;
 }
 
 /**
@@ -541,6 +543,7 @@ function hostedWorkspaceProjectFromWire(
     taskSupport: taskSupport as WorkspaceTaskSupport,
   };
   if (targetName) project.targetName = targetName;
+  if (value.namesItself === true) project.namesItself = true;
   return project;
 }
 

@@ -1535,6 +1535,13 @@ test("the projects context lists each project with the identity a call names", (
   const text = workspaceProjectContextText([OFFERED_PROJECT]);
 
   assert.match(text, /Conductor — luke \[provider_id=conductor project_id=proj-1\]/);
+  // A project that names its own workspaces says so, or the model would be
+  // asked to compose a name the provider refuses.
+  assert.doesNotMatch(text, /names its own workspaces/);
+  assert.match(
+    workspaceProjectContextText([{ ...OFFERED_PROJECT, namesItself: true }]),
+    /takes an opening task; names its own workspaces/,
+  );
   // An empty list is said in words, or the conversation would be free to
   // imagine somewhere a workspace could go.
   assert.match(workspaceProjectContextText([]), /No provider currently offers/);

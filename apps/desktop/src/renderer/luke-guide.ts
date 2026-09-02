@@ -462,8 +462,12 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       detail:
         "Where a connected provider documents a creation endpoint — Conductor, Cursor, and " +
         "Superset today — an ask in conversation, spoken or typed, can create a new " +
-        "workspace in a project that provider reports, optionally named, with an opening " +
-        "task in the developer's own words where the project takes one. Only reported " +
+        "workspace in a project that provider reports, with an opening task in the " +
+        "developer's own words where the project takes one, named as the developer chose or, " +
+        "when they chose none, by a short name Luke composes for the work, so a Conductor " +
+        "cloud workspace never falls back to the random city name it would otherwise get; a " +
+        "project listed as naming its own workspaces — Codex cloud, and Conductor's local " +
+        "create link — takes no name at all. Only reported " +
         "projects can be named, a project that needs a task cannot be created without one, " +
         "and a provider that reports none takes no ask; a new Superset workspace needs a " +
         "host, an agent, and an opening task, so a task-less ask for one is refused. A bare " +
