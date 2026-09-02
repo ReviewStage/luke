@@ -1297,10 +1297,11 @@ html[data-keyboard="true"] .row-application-button:focus-visible {
 
 /* Ask Luke ----------------------------------------------------------------- */
 
-/* The panel's own composer, pinned under the list. It arrives at the tail of
-   the row fan (the wrapper is in base.css's arrival stack) and holds the
-   panel's foot — which is where Luke's caption rides when he answers, so the
-   question and its answer share an edge. */
+/* The panel's own composer, pinned under the sessions list and under the
+   History thread. It arrives at the tail of the row fan (the wrapper is in
+   base.css's arrival stack) and holds the panel's foot — which is where Luke's
+   caption rides when he answers, so the question and its answer share an
+   edge. */
 .ask-luke-row {
   display: flex;
   flex: 0 0 auto;

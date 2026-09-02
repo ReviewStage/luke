@@ -414,7 +414,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "announcement, and session act, kept across launches in Luke's own file on this Mac — " +
         "up to 200 lines and 14 days, whichever cuts first. Luke carries only the 20 most " +
         "recent entries into a call. The view is blocked from panel recordings, is not " +
-        "exportable, and can be cleared by hand from that tab. A line draws a pressable chip " +
+        "exportable, and can be cleared by hand from that tab. Luke's own composer stands at " +
+        "its foot too, the same typed ask the sessions list offers, so a reply is asked for " +
+        "where it will land. A line draws a pressable chip " +
         "for each chat it named, going to that chat by hand; a chip keeps working for a chat " +
         "archived since — opened at the last address its provider reported this launch — and " +
         "a chat with no address draws none. A spoken open still reaches only sessions " +

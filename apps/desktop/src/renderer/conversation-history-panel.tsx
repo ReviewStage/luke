@@ -7,6 +7,7 @@ import {
 } from "@sidecar/realtime";
 import type { SessionIdentity } from "@sidecar/session";
 import { useEffect, useRef, useState } from "react";
+import { type AskHandler, AskLuke } from "./ask-luke";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CheckIcon, CopyIcon } from "./settings-icons";
 
@@ -169,12 +170,22 @@ function keyedHistoryEntries(entries: readonly ConversationEntry[]) {
  */
 const STREAM_FOLLOW_SLACK_PX = 48;
 
+/**
+ * Where the composer stands in the panel's arrival stack: the tab bar is index
+ * 0, and the thread above it is not a member of the stack, so the pill is the
+ * first thing to fan in under the bar.
+ */
+const HISTORY_COMPOSER_ROW_INDEX = 1;
+
 export function ConversationHistoryPanel({
   entries,
   live = [],
   onClear,
   openable,
   onOpenSession,
+  ask,
+  onAskEngaged,
+  askShortcut,
 }: {
   entries: readonly ConversationEntry[];
   /**
@@ -187,6 +198,10 @@ export function ConversationHistoryPanel({
   openable: (identity: SessionIdentity) => boolean;
   /** Hands a chip's roster-validated identity to the same open a row press takes. */
   onOpenSession: (identity: SessionIdentity) => void;
+  /** The same ask the sessions tab's composer carries: one conversation, reached from either tab. */
+  ask: AskHandler;
+  onAskEngaged: (engaged: boolean) => void;
+  askShortcut?: string;
 }): React.JSX.Element {
   const [confirmingClear, setConfirmingClear] = useState(false);
   const list = useRef<HTMLOListElement | null>(null);
@@ -278,6 +293,17 @@ export function ConversationHistoryPanel({
           ))}
         </ol>
       )}
+      {/* The thread is where a typed ask's reply lands as a bubble, so the field
+          that asks stands at its foot — the same composer the sessions tab
+          holds, addressed to the same conversation. It rides inside the
+          blocked subtree: a draft here is worded beside the words it will
+          join, and a recording sees neither. */}
+      <AskLuke
+        ask={ask}
+        onEngagedChange={onAskEngaged}
+        rowIndex={HISTORY_COMPOSER_ROW_INDEX}
+        {...(askShortcut ? { shortcut: askShortcut } : undefined)}
+      />
     </section>
   );
 }

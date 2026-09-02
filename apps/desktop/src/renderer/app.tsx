@@ -1672,9 +1672,12 @@ export function App(): React.JSX.Element {
       void changeMode(false);
       return;
     }
-    changeTab(PANEL_TAB.SESSIONS);
+    // Sessions and History each hold the composer, so a summons over either
+    // lands in the field already showing; only Settings, which has none,
+    // gives way to the sessions list.
+    if (tabNow() === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
     focusAskField();
-  }, [cancelHover, changeMode, changeTab, presentationOf]);
+  }, [cancelHover, changeMode, changeTab, presentationOf, tabNow]);
 
   /**
    * The session search summons, from its magnifier or Command-F over the

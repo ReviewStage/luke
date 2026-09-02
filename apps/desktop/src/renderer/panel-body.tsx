@@ -942,6 +942,9 @@ export function PanelBody({
           onClear={onClearConversationHistory}
           openable={conversationSessionOpenable}
           onOpenSession={onOpenConversationSession}
+          ask={ask}
+          onAskEngaged={onAskEngaged}
+          {...(askShortcut ? { askShortcut } : undefined)}
         />
       ) : (
         <SessionsPanel
