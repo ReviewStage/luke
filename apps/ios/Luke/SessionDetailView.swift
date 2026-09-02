@@ -61,6 +61,10 @@ struct SessionDetailView: View {
     @State private var hasOlder = false
     /// One older page at a time: the sentinel can reappear while a load runs.
     @State private var loadingOlder = false
+    /// Whether the opening read has answered at all — success or refusal —
+    /// which is what retires the skeleton: until then the screen holds the
+    /// thread's place, and after a refusal the recap stands as the fallback.
+    @State private var openAttempted = false
     /// Where the screen should land once the bubbles a read just handed it
     /// have been laid out. A `scrollTo` in the same turn as the state change
     /// would name rows the reader has not built yet, so the intent is state
@@ -105,7 +109,13 @@ struct SessionDetailView: View {
                             .onAppear { loadOlder() }
                     }
                     if conversation.isEmpty {
-                        if let words = session.error ?? session.recap {
+                        // While the opening read is in flight the screen says
+                        // "a thread is coming" rather than flashing the recap
+                        // it would only replace; the recap is the answer once
+                        // the read cannot give one, or was never advertised.
+                        if session.canReadConversation && !openAttempted {
+                            ConversationSkeleton()
+                        } else if let words = session.error ?? session.recap {
                             agentBubble(words, isError: session.error != nil)
                         }
                     } else {
@@ -295,6 +305,7 @@ struct SessionDetailView: View {
     /// opening changes nothing: the recap fallback stands, and the next tick
     /// tries again because the cursor is still unset.
     private func openConversation() async {
+        defer { openAttempted = true }
         do {
             let answer = try await read(.latest)
             conversation = answer.messages
@@ -559,6 +570,44 @@ struct SessionDetailView: View {
                 }
             }
             if delivery == .sent { await onDelivered() }
+        }
+    }
+}
+
+/// Pulsing placeholder bubbles while the opening read is in flight, shaped
+/// like the short exchange they stand for — the roster list's SkeletonRow at
+/// this screen's scale. Placeholder blocks carry no words, no copy menu, and
+/// no read-path ring: there is nothing to copy and no path has answered yet.
+private struct ConversationSkeleton: View {
+    @State private var opacity: Double = 0.55
+
+    var body: some View {
+        VStack(spacing: 14) {
+            skeletonBubble(agent: true, characters: 64)
+            skeletonBubble(agent: false, characters: 26)
+            skeletonBubble(agent: true, characters: 96)
+        }
+        .accessibilityHidden(true)
+        .opacity(opacity)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                opacity = 1.0
+            }
+        }
+    }
+
+    /// Neutral on both sides: an accent-filled placeholder would read as a
+    /// send nobody made, where a gray block only says a bubble belongs here.
+    private func skeletonBubble(agent: Bool, characters: Int) -> some View {
+        HStack {
+            if !agent { Spacer(minLength: 48) }
+            Text(String(repeating: "x", count: characters))
+                .font(.system(size: 15))
+                .redacted(reason: .placeholder)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(Color.cardFill, in: RoundedRectangle(cornerRadius: 18))
+            if agent { Spacer(minLength: 48) }
         }
     }
 }
