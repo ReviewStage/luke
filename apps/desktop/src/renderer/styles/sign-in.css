@@ -200,11 +200,6 @@
   animation-timeline: scroll(self block);
 }
 
-/* Done carries the step, so it reads a shade firmer than the connects. */
-.calendar-gate-done {
-  background: var(--raised-strong);
-}
-
 /* The two footnotes share a line and a voice; only the quit admits danger on
    hover, because only it ends the run. */
 .calendar-gate-footer {
