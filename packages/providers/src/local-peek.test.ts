@@ -28,18 +28,9 @@ async function temporaryDirectory(t: TestContext, prefix: string): Promise<strin
  */
 function pinnedPeekOptions(root: string): LocalPeekOptions {
   return {
-    antigravityHome: path.join(root, "antigravity"),
     claudeHome: path.join(root, "claude"),
     codexHome: path.join(root, "codex"),
-    cursorHome: path.join(root, "cursor"),
-    cursorWorkspaceStorageDirectory: path.join(root, "cursor-workspace-storage"),
-    cursorGlobalStorageStatePath: path.join(root, "cursor-global-storage", "state.vscdb"),
-    devinCliDirectory: path.join(root, "devin"),
-    geminiHome: path.join(root, "gemini"),
-    grokHome: path.join(root, "grok"),
     ompHome: path.join(root, "omp"),
-    openCodeDataDirectory: path.join(root, "opencode"),
-    radiusHome: path.join(root, "radius"),
   };
 }
 
@@ -134,7 +125,7 @@ test("a provider whose read throws does not sink the others", async (t) => {
     // A NUL byte is a path no filesystem read accepts, and the failure is not
     // one of the absent-or-unreadable codes the adapters absorb themselves,
     // so this exercises the peek's own per-provider absorption.
-    geminiHome: "\u0000gemini-unreadable",
+    ompHome: "\u0000omp-unreadable",
   });
 
   assert.equal(sessions.length, 1);

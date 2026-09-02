@@ -41,28 +41,14 @@ test("declares credentials and observation hooks beside their adapters", () => {
     Object.values(registrations)
       .flatMap((registration) => ("credential" in registration ? registration.credential.id : []))
       .sort(),
-    [
-      CREDENTIAL_PROVIDER_ID.CONDUCTOR,
-      CREDENTIAL_PROVIDER_ID.COPILOT,
-      CREDENTIAL_PROVIDER_ID.CURSOR,
-      CREDENTIAL_PROVIDER_ID.DEVIN,
-      CREDENTIAL_PROVIDER_ID.JULES,
-      CREDENTIAL_PROVIDER_ID.REPLICAS,
-    ].sort(),
+    [CREDENTIAL_PROVIDER_ID.CONDUCTOR],
   );
   assert.deepEqual(
     Object.entries(registrations)
       .filter(([, registration]) => "registerObservationHook" in registration)
       .map(([providerId]) => providerId)
       .sort(),
-    [
-      PROVIDER_ID.CLAUDE_CODE,
-      PROVIDER_ID.CODEX,
-      PROVIDER_ID.CURSOR,
-      PROVIDER_ID.DEVIN,
-      PROVIDER_ID.GEMINI_CLI,
-      PROVIDER_ID.OPENCODE,
-    ].sort(),
+    [PROVIDER_ID.CLAUDE_CODE, PROVIDER_ID.CODEX].sort(),
   );
 });
 
@@ -95,28 +81,22 @@ test("a diagnostic reported by a cloud adapter reaches the callback tagged with 
   });
 
   const report = (providerId: ProviderId) => {
-    // SAFETY: both adapters named below extend CloudSessionAdapter, whose
+    // SAFETY: the adapter named below extends CloudSessionAdapter, whose
     // protected `reportDiagnostic` is exactly this signature; reaching the
-    // seam directly is the narrowest way to prove each closure tags its own
+    // seam directly is the narrowest way to prove the closure tags its own
     // provider, since a real report needs a live pass.
     const adapter = tagged[providerId].adapter as unknown as {
       reportDiagnostic(kind: AdapterDiagnosticKind, error: Error): void;
     };
     adapter.reportDiagnostic(ADAPTER_DIAGNOSTIC_KIND.PASS_FAILURE, new Error(providerId));
   };
-  report(PROVIDER_ID.REPLICAS);
-  report(PROVIDER_ID.JULES);
+  report(PROVIDER_ID.CONDUCTOR);
 
   assert.deepEqual(diagnostics, [
     {
-      providerId: PROVIDER_ID.REPLICAS,
+      providerId: PROVIDER_ID.CONDUCTOR,
       kind: ADAPTER_DIAGNOSTIC_KIND.PASS_FAILURE,
-      message: PROVIDER_ID.REPLICAS,
-    },
-    {
-      providerId: PROVIDER_ID.JULES,
-      kind: ADAPTER_DIAGNOSTIC_KIND.PASS_FAILURE,
-      message: PROVIDER_ID.JULES,
+      message: PROVIDER_ID.CONDUCTOR,
     },
   ]);
 });
