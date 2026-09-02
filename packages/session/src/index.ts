@@ -72,6 +72,7 @@ export {
   maximumSessionDetailLength,
   maximumSessionMessageLength,
   maximumSessionRecapExcerptLength,
+  maximumSessionSubjectLength,
   maximumSessionTitleLength,
   normalizeAttention,
   normalizeSession,
@@ -144,6 +145,7 @@ export {
   type SessionAttentionEntry,
   type SessionRegistryListener,
   type SessionRegistrySnapshot,
+  type SessionSubjectEntry,
 } from "./session-registry.js";
 export {
   isListedWorkspaceAgentModel,

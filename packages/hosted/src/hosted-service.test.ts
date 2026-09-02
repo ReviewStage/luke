@@ -6,6 +6,7 @@ import {
   HOSTED_WS_BASE_URL,
   hostedConversationAnswerFromWire,
   hostedMintAnswerFromWire,
+  hostedSubjectAnswerFromWire,
   isVaultProviderId,
   VAULT_KEY_MAX_LENGTH,
   VAULT_PROVIDER_ID,
@@ -218,4 +219,16 @@ test("a conversation answer carries its history positions when the read reported
   // Positions that are not what a read reports are dropped, not repaired.
   assert.equal(malformed.firstOffset, undefined);
   assert.equal(malformed.hasOlder, undefined);
+});
+
+test("a subject answer is a bounded phrase or an honest null, and nothing else", () => {
+  assert.deepEqual(hostedSubjectAnswerFromWire({ subject: " the\n checkout bug " }), {
+    subject: "the checkout bug",
+  });
+  assert.deepEqual(hostedSubjectAnswerFromWire({ subject: null }), { subject: null });
+  assert.equal(hostedSubjectAnswerFromWire({ subject: "x".repeat(200) })?.subject?.length, 80);
+  assert.deepEqual(hostedSubjectAnswerFromWire({ subject: "   " }), { subject: null });
+  assert.equal(hostedSubjectAnswerFromWire({ subject: 7 }), undefined);
+  assert.equal(hostedSubjectAnswerFromWire({}), undefined);
+  assert.equal(HOSTED_SERVICE_PATH.SUBJECT_DERIVE, "/api/subject/derive");
 });

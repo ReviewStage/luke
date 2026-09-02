@@ -538,6 +538,13 @@ export const maximumSpawnableAgents = 8;
 export const maximumSessionRecapExcerptLength = 500;
 /** One line of context beside a title, not a paragraph. */
 export const maximumSessionDetailLength = 120;
+/**
+ * The one line Luke derives about what a local session is working on, read
+ * from a bounded slice of its own transcript. A phrase, never a sentence: it
+ * names the work in an announcement in place of a title that only ever said
+ * where the conversation began.
+ */
+export const maximumSessionSubjectLength = 80;
 /** Long enough for any provider's session address without becoming a payload. */
 export const maximumSessionLinkLength = 300;
 /** A reply typed into a row, not a document pasted through one. */

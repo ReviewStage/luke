@@ -15,6 +15,10 @@ export {
   type HostedRealtimeCredentialOptions,
 } from "./hosted-credentials.js";
 export {
+  HostedSubjectDeriver,
+  type HostedSubjectDeriverOptions,
+} from "./hosted-subject-deriver.js";
+export {
   IntroductionRealtimeCredentialMinter,
   type IntroductionRealtimeCredentialOptions,
 } from "./introduction-credentials.js";

@@ -520,3 +520,39 @@ test("a snapshot's diff summary is the caller's copy, never the store's", () => 
 
   assert.equal(registry.get(identity)?.detail.diff?.linesAdded, 12);
 });
+
+test("a subject stands beside a session, bounded, cleared on none, pruned with the row", () => {
+  const registry = new InMemorySessionRegistry();
+  const identity = { providerId: codex.id, providerSessionId: "active" };
+
+  assert.equal(registry.setSubject(identity, "researching ICHRA options"), undefined);
+  assert.equal(registry.revision, 0);
+
+  registry.upsert(codex, observation("active", 10));
+  registry.setSubject(identity, "  researching ICHRA options  ");
+  const revision = registry.revision;
+  assert.equal(registry.subject(identity), "researching ICHRA options");
+  assert.equal(
+    registry.setSubject(identity, "researching ICHRA options")?.providerSessionId,
+    "active",
+  );
+  assert.equal(registry.revision, revision);
+  assert.deepEqual(registry.snapshot().subjects, [
+    { providerId: codex.id, providerSessionId: "active", subject: "researching ICHRA options" },
+  ]);
+
+  registry.setSubject(identity, "x".repeat(200));
+  assert.equal(registry.subject(identity)?.length, 80);
+
+  registry.setSubject(identity, undefined);
+  assert.equal(registry.subject(identity), undefined);
+  assert.deepEqual(registry.snapshot().subjects, []);
+  const cleared = registry.revision;
+  registry.setSubject(identity, undefined);
+  assert.equal(registry.revision, cleared);
+
+  registry.setSubject(identity, "again");
+  registry.remove(identity);
+  assert.deepEqual(registry.snapshot().subjects, []);
+  assert.equal(registry.subject(identity), undefined);
+});

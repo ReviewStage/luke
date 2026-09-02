@@ -176,3 +176,48 @@ test("a signed-out live run is diagnosed as missing credentials, not as a fixtur
   assert.doesNotMatch(reports.at(-1) ?? "", /fixture/);
   assert.match(reports.at(-1) ?? "", /Signing in/);
 });
+
+test("the subject deriver is built beside the reviewer, and only with a transcript seam", async () => {
+  const seams = {
+    settings: settingsFor({ source: VOICE_SOURCE.KEY, key: "test-key" }),
+    credentialsUsable: () => true,
+    fixtureRun: () => false,
+    accountSignedIn: () => false,
+    hostedServiceBaseUrl: "https://example.test",
+    refreshAccount: async () => undefined,
+    currentSession: () => undefined,
+    report: () => undefined,
+  };
+  const withSeam = new VoiceCapabilityAssembler({
+    ...seams,
+    readTranscript: async () => undefined,
+  });
+  await withSeam.apply();
+  assert.ok(withSeam.attentionReviewer);
+  assert.ok(withSeam.subjectDeriver);
+
+  const withoutSeam = new VoiceCapabilityAssembler(seams);
+  await withoutSeam.apply();
+  assert.ok(withoutSeam.attentionReviewer);
+  assert.equal(withoutSeam.subjectDeriver, undefined);
+
+  const hosted = new VoiceCapabilityAssembler({
+    ...seams,
+    settings: settingsFor({ source: VOICE_SOURCE.ACCOUNT }),
+    accountSignedIn: () => true,
+    readTranscript: async () => undefined,
+    fetch: async () => new Response(null, { status: 204 }),
+  });
+  await hosted.apply();
+  assert.ok(hosted.subjectDeriver);
+
+  const fixture = new VoiceCapabilityAssembler({
+    ...seams,
+    credentialsUsable: () => false,
+    fixtureRun: () => true,
+    accountSignedIn: () => true,
+    readTranscript: async () => undefined,
+  });
+  await fixture.apply();
+  assert.equal(fixture.subjectDeriver, undefined);
+});

@@ -180,3 +180,12 @@ test("only a developer hold with concrete input becomes needs-input", () => {
   assert.equal(speech?.detail, "Should I run the migration?");
   assert.equal(urlOnlyQuestion, undefined);
 });
+
+test("a review's announcement carries the derived subject and never the title", () => {
+  const speech = sessionAnnouncementFromReview(
+    review({ recap: "Should I run the migration?", context: undefined }),
+    "the billing migration",
+  );
+  assert.equal(speech?.subject, "the billing migration");
+  assert.doesNotMatch(JSON.stringify(speech), /Notification fix/);
+});

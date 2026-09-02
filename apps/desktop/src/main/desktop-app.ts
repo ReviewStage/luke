@@ -64,7 +64,9 @@ import {
   type ProviderId,
   ReportedSessionLinks,
   rosterRelevantSessions,
+  SESSION_LOCATION,
   type Session,
+  type SessionIdentity,
   type SessionNotice,
   SessionNoticeHold,
   SessionNoticeTracker,
@@ -510,6 +512,7 @@ const voiceCapabilities = new VoiceCapabilityAssembler({
   hostedServiceBaseUrl: HOSTED_SERVICE_BASE_URL,
   refreshAccount: accountSession.refreshOnce,
   currentSession: (identity) => sessionRegistry.get(identity),
+  readTranscript: readLocalTranscriptRendering,
   ...(agentTrace
     ? {
         wrapEvaluator: (evaluator) =>
@@ -1393,6 +1396,24 @@ async function applyVoiceCredential(): Promise<void> {
   if (!voiceCapabilities.realtimeCredentials) sessionAnnouncementBatch.clear();
 }
 
+/**
+ * The subject deriver's read of one local session's transcript: the same
+ * adapter read the conversation tab's ask runs, bounded by the same rendering,
+ * for a session the registry still holds on this machine. It counts no
+ * developer act, because no developer asked; a cloud session, an unknown
+ * provider, or a provider with no transcript this build reads answers nothing.
+ */
+async function readLocalTranscriptRendering(
+  identity: SessionIdentity,
+): Promise<string | undefined> {
+  const session = sessionRegistry.get(identity);
+  if (!session || session.location !== SESSION_LOCATION.LOCAL) return undefined;
+  const adapter = adapterFor(identity.providerId);
+  if (!adapter) return undefined;
+  const result = await adapter.readTranscript(identity.providerSessionId);
+  return result.status === ACT_RESULT_STATUS.ACCEPTED ? result.transcript : undefined;
+}
+
 function adapterFor(providerId: string) {
   if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return supersetWorkspaceAdapter;
   if (providerId === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID) return conductorLocalWorkspaceAdapter;
@@ -2168,7 +2189,11 @@ function pendingSessionNotices(
   decidedAt: number,
 ): readonly PendingSessionAnnouncement[] {
   return notices.flatMap((notice) => {
-    const announcement = sessionNoticeAnnouncement(notice, decidedAt);
+    const announcement = sessionNoticeAnnouncement(
+      notice,
+      decidedAt,
+      sessionRegistry.subject(notice),
+    );
     return announcement
       ? [
           {
@@ -2207,7 +2232,7 @@ async function reviewSessionAttention(generation: number): Promise<void> {
     // `outcome` says whether to voice it now, which only these reviews do.
     sessionAnnouncementBatch.enqueue(
       reviews.flatMap((review) => {
-        const announcement = sessionAnnouncementFromReview(review);
+        const announcement = sessionAnnouncementFromReview(review, sessionRegistry.subject(review));
         if (!announcement) return [];
         return [
           {
@@ -2222,6 +2247,31 @@ async function reviewSessionAttention(generation: number): Promise<void> {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`Attention review failed: ${message}\n`);
+  }
+}
+
+/**
+ * Derives a subject for the local sessions still worth a row, on the same
+ * gate and cadence as the attention review, so the announcement about a
+ * session can name what its agent is working on rather than the title it
+ * began under. The deriver itself decides which sessions are due; the filter
+ * here is the reviewer's, for the same reason: a subject for a session with no
+ * row surfaces nowhere.
+ */
+async function deriveSessionSubjects(generation: number): Promise<void> {
+  const subjectDeriver = voiceCapabilities.subjectDeriver;
+  if (!subjectDeriver) return;
+  try {
+    const results = await subjectDeriver.derive(
+      rosterRelevantSessions(sessionRegistry.list(), Date.now()).filter(
+        (session) => session.realtimeVoice !== true,
+      ),
+    );
+    if (!attentionObservationLoop.isCurrent(generation)) return;
+    for (const result of results) sessionRegistry.setSubject(result, result.subject);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`Subject derivation failed: ${message}\n`);
   }
 }
 
@@ -2468,7 +2518,9 @@ const sessionObservationLoop = new ObservationLoop({
 const attentionObservationLoop = new ObservationLoop({
   gate: () => observationGate() && voiceCapabilities.attentionReviewer !== undefined,
   intervalMs: SESSION_REFRESH_INTERVAL_MS,
-  run: reviewSessionAttention,
+  run: async (generation) => {
+    await Promise.all([reviewSessionAttention(generation), deriveSessionSubjects(generation)]);
+  },
 });
 const issueObservationLoop = new ObservationLoop({
   gate: observationGate,
