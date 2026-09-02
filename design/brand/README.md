@@ -52,16 +52,16 @@ microphone's colour, and CSS animation, so the renderer's `--face-motion` token 
 a capture run or for reduced motion. SMIL answers to neither without JavaScript.
 
 So the generator emits its two inputs as well, from the same table these SVGs are
-cut from. They are generated files and are not to be hand-edited either:
+cut from. They are generated files, gitignored and written by `pnpm generate`,
+and are not to be hand-edited either:
 
 | File | What it carries |
 |---|---|
 | `packages/surface/src/generated/face-art.ts` | The geometry, the motion names, their cycle lengths, which parts each one needs drawn, and the wordmark's letterforms for the introduction's signature reveal |
 | `apps/desktop/src/renderer/styles/generated/face-motion.css` | One `@keyframes` per moving part, with each interval's easing |
 
-`scripts/repository-checks.sh` runs `generate-brand-assets.mjs --check`, which
-compares every committed output against what the script produces now and fails if
-any of them has drifted.
+`scripts/repository-checks.sh` runs `generate-brand-assets.mjs` and fails if any
+committed SVG then differs from what the script produces now.
 
 ## Modes
 

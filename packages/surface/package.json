@@ -10,8 +10,9 @@
   },
   "types": "./src/index.ts",
   "scripts": {
-    "test": "tsx --test 'src/**/*.test.ts'",
-    "typecheck": "tsc --project tsconfig.json"
+    "generate": "node ../../design/generate-surface-shared.mjs && node ../../design/generate-brand-assets.mjs",
+    "test": "pnpm generate && tsx --test 'src/**/*.test.ts'",
+    "typecheck": "pnpm generate && tsc --project tsconfig.json"
   },
   "dependencies": {
     "@sidecar/wire": "workspace:*"

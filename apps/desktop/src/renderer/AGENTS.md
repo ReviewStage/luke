@@ -89,12 +89,17 @@ shape it is drawn in comes forward again.
 ## Brand artwork
 
 `design/generate-brand-assets.mjs` is the only place the artwork is described.
-It writes three sets of committed outputs from that one description: the SVGs in
+It writes three sets of outputs from that one description: the SVGs in
 `design/brand/`, `packages/surface/src/generated/face-art.ts`, and
 `apps/desktop/src/renderer/styles/generated/face-motion.css`. None of the three may be
-hand-edited. Change the parameters or the motion table in the script, re-run it,
-and commit what it writes. `repository-checks.sh` runs it with `--check`, which
-compares every output without writing and fails on any drift.
+hand-edited. Only the SVGs are committed, because the README renders them from
+the repository; the other two are gitignored and written by `pnpm generate`,
+which `check`, `start`, the surface package's scripts, and the desktop build
+all run first. Change the parameters or the motion table in the script, re-run
+it, and commit the SVGs it writes; `repository-checks.sh` runs the generator and
+fails on any SVG drift. The generator asserts the motion table's stillness
+promises (no negative delay, every sleeping z invisible at time zero, `appear`
+ending at rest) before it writes.
 
 The app draws the face rather than loading the SVGs because it needs
 `currentColor` and CSS animation: `--face-motion` is what holds every loop still

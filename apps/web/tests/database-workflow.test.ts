@@ -22,8 +22,11 @@ test("migrations stay out of package lifecycle and application scripts", () => {
   );
 });
 
-test("Vercel migrates and seeds a deployment's database before it builds", () => {
-  assert.equal(vercelConfig.buildCommand, "pnpm db:migrate && pnpm auth:seed && pnpm build");
+test("Vercel generates the surface vocabulary, then migrates and seeds before it builds", () => {
+  assert.equal(
+    vercelConfig.buildCommand,
+    "node ../../design/generate-surface-shared.mjs && node ../../design/generate-brand-assets.mjs && pnpm db:migrate && pnpm auth:seed && pnpm build",
+  );
   assert.doesNotMatch(vercelConfig.buildCommand, /drizzle-kit push/);
 });
 

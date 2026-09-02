@@ -6,7 +6,8 @@
 //   node design/generate-brand-assets.mjs
 //
 // It writes three kinds of output, all from the one description of the face and
-// its motions further down:
+// its motions further down. Only the SVGs are committed; the other two are
+// gitignored and written by `pnpm generate` before every check, test, and build.
 //
 //   design/brand/**.svg                              standalone assets (SMIL)
 //   packages/surface/src/generated/face-art.ts       the face and the wordmark's letters
@@ -20,7 +21,8 @@
 // PNG derivatives (app icon sizes) are rasterized
 // separately — see design/brand/README.md.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import assert from "node:assert/strict";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DMG_WINDOW } from "./dmg-window.mjs";
@@ -1218,21 +1220,9 @@ function wordSvg({ body, width }, pad = 6) {
 }
 
 // ---------- Emission ----------
-// `--check` reports whether the committed outputs still match what this script
-// produces, without touching any of them. That is what the repository checks run:
-// three sets of outputs are committed alongside this one source, and a check that
-// depended on the state of the working tree could only tell you so while the tree
-// was clean.
-const CHECK_ONLY = process.argv.includes("--check");
 const written = [];
-const stale = [];
 
 function put(path, content) {
-  if (CHECK_ONLY) {
-    const current = existsSync(path) ? readFileSync(path, "utf8") : undefined;
-    if (current !== content) stale.push(path);
-    return;
-  }
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, content);
 }
@@ -1547,21 +1537,48 @@ emitModes(
   "LUKE — signature reveal",
 );
 
-// The desktop renderer's two inputs, from the same table the SVGs came from.
-put(join(SURFACE, "face-art.ts"), faceArtModule());
-put(join(APP_RENDERER, "styles", "generated", "face-motion.css"), faceMotionCss());
+// The motion table's promise to every capture run and reduced-motion still: a
+// paused loop shows its first frame, and the first frame shows nothing mid-air.
+// Checked on the one artifact the app loads, before it is written.
+function assertFaceMotionStill(css) {
+  // A paused animation with a negative delay holds at its resolved current
+  // time rather than its first keyframe, so "paused means the first frame"
+  // is only true while no generated rule carries one.
+  assert.doesNotMatch(
+    css,
+    /animation-delay:\s*-/,
+    "no generated motion may carry a negative delay",
+  );
 
-if (!CHECK_ONLY) {
-  process.stdout.write(`${written.length} SVGs written to design/brand/\n`);
-  process.stdout.write(
-    "face-art.ts written to @sidecar/surface and face-motion.css to the renderer\n",
+  const zStarts = [...css.matchAll(/@keyframes luke-sleep-z-\d \{\s*0% \{([^}]*)\}/g)];
+  assert.equal(zStarts.length, SLEEP_Z.length, "every sleeping z has a keyframes block");
+  for (const start of zStarts) {
+    assert.match(start[1] ?? "", /opacity: 0;/, "every sleeping z is invisible at time zero");
+  }
+
+  // Played once with no fill, a motion snaps to the drawn rest the instant it
+  // drops — so its last keyframe must already be there.
+  const appear = [...css.matchAll(/@keyframes luke-appear-\d \{[\s\S]*?\n\}/g)];
+  assert.equal(appear.length, 2, "appear animates two layers");
+  assert.match(
+    appear[0]?.[0] ?? "",
+    /100% \{\s*transform: rotate\(0deg\);/,
+    "appear's rotation ends at the resting pose",
   );
-} else if (stale.length > 0) {
-  process.stderr.write(
-    `${stale.length} generated file(s) no longer match this script:\n${stale.join("\n")}\n` +
-      "Run: node design/generate-brand-assets.mjs\n",
+  assert.match(
+    appear[1]?.[0] ?? "",
+    /100% \{\s*transform: translate\(0px, 0px\);/,
+    "appear's translation ends at the resting pose",
   );
-  process.exit(1);
-} else {
-  process.stdout.write(`${written.length + 2} generated files are up to date\n`);
 }
+
+// The desktop renderer's two inputs, from the same table the SVGs came from.
+const faceMotion = faceMotionCss();
+assertFaceMotionStill(faceMotion);
+put(join(SURFACE, "face-art.ts"), faceArtModule());
+put(join(APP_RENDERER, "styles", "generated", "face-motion.css"), faceMotion);
+
+process.stdout.write(`${written.length} SVGs written to design/brand/\n`);
+process.stdout.write(
+  "face-art.ts written to @sidecar/surface and face-motion.css to the renderer\n",
+);

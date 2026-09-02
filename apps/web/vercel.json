@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm db:migrate && pnpm auth:seed && pnpm build",
+  "buildCommand": "node ../../design/generate-surface-shared.mjs && node ../../design/generate-brand-assets.mjs && pnpm db:migrate && pnpm auth:seed && pnpm build",
   "routes": [
     { "src": "/api/auth/(.*)", "dest": "/api/auth/[...all].ts" },
     { "src": "/about", "dest": "/about.html" },

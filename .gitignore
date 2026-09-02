@@ -25,3 +25,7 @@ error.log
 # Xcode resolves the iOS app's packages into the workspace beside the project.
 apps/ios/Luke.xcodeproj/project.xcworkspace/
 apps/ios/Luke.xcodeproj/xcuserdata/
+
+# Design outputs `pnpm generate` writes from design/*.mjs; never inputs.
+packages/surface/src/generated/
+apps/desktop/src/renderer/styles/generated/

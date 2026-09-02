@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,7 +9,8 @@ import { signingModeDefine } from "./package-config.mjs";
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(scriptDirectory, "..");
 const outputRoot = path.join(appRoot, "dist");
-const brandRoot = path.resolve(appRoot, "../../design/brand");
+const designRoot = path.resolve(appRoot, "../../design");
+const brandRoot = path.join(designRoot, "brand");
 const appVersion = JSON.parse(
   await fs.readFile(path.join(appRoot, "package.json"), "utf8"),
 ).version;
@@ -28,6 +30,13 @@ function sentryPlugins() {
       release: { name: `Luke@${appVersion}` },
     }),
   ];
+}
+
+// The renderer's face-art and face-motion inputs are generated rather than
+// committed, so a standalone `pnpm --filter @luke/desktop build` writes them
+// itself instead of depending on a root script having run first.
+for (const generator of ["generate-surface-shared.mjs", "generate-brand-assets.mjs"]) {
+  execFileSync(process.execPath, [path.join(designRoot, generator)], { stdio: "inherit" });
 }
 
 await fs.rm(outputRoot, { recursive: true, force: true });

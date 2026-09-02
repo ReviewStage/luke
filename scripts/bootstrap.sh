@@ -19,4 +19,8 @@ else
     ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm install --frozen-lockfile
 fi
 
+# The surface vocabulary and face motion are generated, not committed, so a
+# fresh clone needs them written before an editor can typecheck.
+pnpm generate
+
 printf 'Sidecar workspace bootstrapped at %s\n' "$SIDECAR_REPO_ROOT"

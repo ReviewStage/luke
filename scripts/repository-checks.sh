@@ -99,16 +99,16 @@ if [[ -n "$engines_drift" ]]; then
     exit 1
 fi
 
-# The brand artwork has one source and three sets of committed outputs cut from
-# it: the SVGs, the face the renderer draws, and the motions it plays. If the
-# copies no longer match the source, one of them is telling a story the artwork
-# does not.
-node "$SIDECAR_REPO_ROOT/design/generate-brand-assets.mjs" --check
-
-# Motion tokens, layout sizes, provider-mark path data, and session labels are
-# the same contract between the desktop renderer and the marketing mock. One
-# source, four committed outputs in @sidecar/surface; --check fails if any drifted.
-node "$SIDECAR_REPO_ROOT/design/generate-surface-shared.mjs" --check
+# The brand artwork has one source and three sets of outputs cut from it: the
+# SVGs, the face the renderer draws, and the motions it plays. The surface
+# vocabulary — motion tokens, layout sizes, provider-mark path data, and session
+# labels — is the same contract between the desktop renderer and the marketing
+# mock. Only the SVGs are committed (the README renders them from the repo);
+# the rest is gitignored and written here, so the one drift that can exist is
+# an SVG no longer matching its source.
+node "$SIDECAR_REPO_ROOT/design/generate-surface-shared.mjs"
+node "$SIDECAR_REPO_ROOT/design/generate-brand-assets.mjs"
+git -C "$SIDECAR_REPO_ROOT" diff --exit-code -- ':(glob)design/brand/**/*.svg'
 
 # The public platform table is a direct projection of the session package's
 # narrow provider identity catalog. Privacy wording stays manually reviewed.

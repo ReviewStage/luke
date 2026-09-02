@@ -5,8 +5,8 @@
 //
 //   node design/generate-surface-shared.mjs
 //
-// It writes four committed outputs into packages/surface/src/generated, all from the
-// tables further down:
+// It writes four gitignored outputs into packages/surface/src/generated, all from
+// the tables further down:
 //
 //   src/motion-tokens.css       springs, durations, and the layout sizes
 //   src/motion-tokens.ts        the same durations and sizes, as numbers
@@ -16,9 +16,9 @@
 // The React that traces the marks, and the rules that consume the tokens, stay
 // in each app: a shared component would pull desktop-only marks into the web
 // bundle. Emitting the data from here keeps the second copy from being a
-// second source. `repository-checks.sh` runs this with `--check`.
+// second source. `pnpm generate` runs this before every check, test, and build.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -519,16 +519,9 @@ const CLOUD_BADGE_PATH =
   "M4.5 14a4.5 4.5 0 0 1-1.259-8.82 7 7 0 0 1 13.518 0A4.5 4.5 0 0 1 15.5 14z";
 
 // ---------- Emission ----------
-const CHECK_ONLY = process.argv.includes("--check");
 const written = [];
-const stale = [];
 
 function put(path, content) {
-  if (CHECK_ONLY) {
-    const current = existsSync(path) ? readFileSync(path, "utf8") : undefined;
-    if (current !== content) stale.push(path);
-    return;
-  }
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, content);
 }
@@ -793,14 +786,4 @@ for (const [name, content] of outputs) {
   written.push(name);
 }
 
-if (!CHECK_ONLY) {
-  process.stdout.write(`${written.length} files written to packages/surface/src/generated/\n`);
-} else if (stale.length > 0) {
-  process.stderr.write(
-    `${stale.length} generated file(s) no longer match this script:\n${stale.join("\n")}\n` +
-      "Run: node design/generate-surface-shared.mjs\n",
-  );
-  process.exit(1);
-} else {
-  process.stdout.write(`${written.length} generated files are up to date\n`);
-}
+process.stdout.write(`${written.length} files written to packages/surface/src/generated/\n`);
