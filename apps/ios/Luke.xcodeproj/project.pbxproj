@@ -25,6 +25,10 @@
 		AABBCC0000000000000000A2 /* PresenceBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000A1 /* PresenceBinding.swift */; };
 		AABBCC0000000000000000A4 /* MarkdownMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000A3 /* MarkdownMessageView.swift */; };
 		AABBCC000000000000000092 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = AABBCC000000000000000091 /* PostHog */; };
+		AABBCC0000000000000000AF /* VoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000AB /* VoiceView.swift */; };
+		AABBCC0000000000000000B0 /* VoiceAudioCapturer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000AC /* VoiceAudioCapturer.swift */; };
+		AABBCC0000000000000000B1 /* VoiceAudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000AD /* VoiceAudioPlayer.swift */; };
+		AABBCC0000000000000000B2 /* VoiceActDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000AE /* VoiceActDispatcher.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -46,6 +50,10 @@
 		AABBCC0000000000000000A1 /* PresenceBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresenceBinding.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000A3 /* MarkdownMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownMessageView.swift; sourceTree = "<group>"; };
 		AABBCC00000000000000001C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AABBCC0000000000000000AB /* VoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceView.swift; sourceTree = "<group>"; };
+		AABBCC0000000000000000AC /* VoiceAudioCapturer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceAudioCapturer.swift; sourceTree = "<group>"; };
+		AABBCC0000000000000000AD /* VoiceAudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceAudioPlayer.swift; sourceTree = "<group>"; };
+		AABBCC0000000000000000AE /* VoiceActDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceActDispatcher.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -102,6 +110,10 @@
 				AABBCC00000000000000001F /* SessionReplay.swift */,
 				AABBCC0000000000000000A1 /* PresenceBinding.swift */,
 				AABBCC0000000000000000A3 /* MarkdownMessageView.swift */,
+				AABBCC0000000000000000AB /* VoiceView.swift */,
+				AABBCC0000000000000000AC /* VoiceAudioCapturer.swift */,
+				AABBCC0000000000000000AD /* VoiceAudioPlayer.swift */,
+				AABBCC0000000000000000AE /* VoiceActDispatcher.swift */,
 				AABBCC000000000000000014 /* Assets.xcassets */,
 				AABBCC00000000000000001C /* Info.plist */,
 			);
@@ -238,6 +250,10 @@
 				AABBCC00000000000000008E /* SessionReplay.swift in Sources */,
 				AABBCC0000000000000000A2 /* PresenceBinding.swift in Sources */,
 				AABBCC0000000000000000A4 /* MarkdownMessageView.swift in Sources */,
+				AABBCC0000000000000000AF /* VoiceView.swift in Sources */,
+				AABBCC0000000000000000B0 /* VoiceAudioCapturer.swift in Sources */,
+				AABBCC0000000000000000B1 /* VoiceAudioPlayer.swift in Sources */,
+				AABBCC0000000000000000B2 /* VoiceActDispatcher.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
