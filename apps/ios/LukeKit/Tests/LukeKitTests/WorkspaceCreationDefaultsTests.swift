@@ -33,7 +33,7 @@ final class WorkspaceCreationDefaultsTests: XCTestCase {
         defaults.setLastProjectId("https://github.com/o/r", for: "codex")
         XCTAssertEqual(defaults.lastProjectId(for: "conductor"), "proj-1")
         XCTAssertEqual(defaults.lastProjectId(for: "codex"), "https://github.com/o/r")
-        XCTAssertNil(defaults.lastProjectId(for: "conductor"))
+        XCTAssertNil(defaults.lastProjectId(for: "superset"))
     }
 
     func testAgentSelectionRoundTripsWithAndWithoutEffort() {

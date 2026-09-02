@@ -105,13 +105,13 @@ final class VaultStoreTests: XCTestCase {
         let source = StubTokenSource(email: "first@example.com")
         let store = VaultStore(client: VaultClient(baseURL: base, http: stub), session: source)
         await store.load()
-        XCTAssertNotNil(store.entry(for: .cursor))
+        XCTAssertNotNil(store.entry(for: .conductor))
 
         source.accountEmail = "second@example.com"
-        XCTAssertNil(store.entry(for: .cursor))
+        XCTAssertNil(store.entry(for: .conductor))
 
         source.accountEmail = nil
-        XCTAssertNil(store.entry(for: .cursor))
+        XCTAssertNil(store.entry(for: .conductor))
     }
 
     func testARetryNeverActsForADifferentAccount() async throws {
@@ -130,7 +130,7 @@ final class VaultStoreTests: XCTestCase {
         let source = StubTokenSource(email: "first@example.com")
         let store = VaultStore(client: VaultClient(baseURL: base, http: stub), session: source)
 
-        let save = Task { try await store.store(key: "sk-abcd", for: .cursor) }
+        let save = Task { try await store.store(key: "sk-abcd", for: .conductor) }
         while await counter.calls < 1 { await Task.yield() }
         source.accountEmail = "second@example.com"
         await gate.open()
@@ -144,7 +144,7 @@ final class VaultStoreTests: XCTestCase {
             XCTFail("Unexpected: \(error)")
         }
         XCTAssertEqual(source.refreshCalls, 0)
-        XCTAssertNil(store.entry(for: .cursor))
+        XCTAssertNil(store.entry(for: .conductor))
     }
 
     func testASaveFinishingUnderANewAccountTouchesNothing() async throws {
@@ -164,7 +164,7 @@ final class VaultStoreTests: XCTestCase {
         let source = StubTokenSource(email: "first@example.com")
         let store = VaultStore(client: VaultClient(baseURL: base, http: stub), session: source)
 
-        let save = Task { try await store.store(key: "sk-abcd", for: .cursor) }
+        let save = Task { try await store.store(key: "sk-abcd", for: .conductor) }
         while await counter.calls < 1 { await Task.yield() }
 
         source.accountEmail = "second@example.com"
@@ -174,7 +174,7 @@ final class VaultStoreTests: XCTestCase {
 
         // The first account's delivered act must not install an entry into
         // the second account's visible list.
-        XCTAssertNil(store.entry(for: .cursor))
+        XCTAssertNil(store.entry(for: .conductor))
     }
 
     func testSuccessfulActClearsAStaleLoadError() async throws {
@@ -201,9 +201,9 @@ final class VaultStoreTests: XCTestCase {
         await store.load()
         XCTAssertNotNil(store.loadError)
 
-        try await store.store(key: "sk-k123", for: .cursor)
+        try await store.store(key: "sk-k123", for: .conductor)
         XCTAssertNil(store.loadError)
-        XCTAssertNotNil(store.entry(for: .cursor))
+        XCTAssertNotNil(store.entry(for: .conductor))
     }
 
     func testStaleListAnswerDoesNotOverwriteASave() async throws {
@@ -231,11 +231,11 @@ final class VaultStoreTests: XCTestCase {
         let initialLoad = Task { await store.load() }
         while await counter.calls < 1 { await Task.yield() }
 
-        try await store.store(key: "sk-k123", for: .cursor)
-        XCTAssertNotNil(store.entry(for: .cursor))
+        try await store.store(key: "sk-k123", for: .conductor)
+        XCTAssertNotNil(store.entry(for: .conductor))
 
         await gate.open()
         await initialLoad.value
-        XCTAssertNotNil(store.entry(for: .cursor))
+        XCTAssertNotNil(store.entry(for: .conductor))
     }
 }
