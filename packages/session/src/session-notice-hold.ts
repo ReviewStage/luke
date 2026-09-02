@@ -58,15 +58,10 @@ export class SessionNoticeHold<Notice extends HeldForSession = SessionNotice> {
     }
   }
 
-  /**
-   * Hands back what is held, oldest first, and holds nothing after. With a
-   * limit, only the newest `limit` are handed back; the rest are shed, still
-   * standing in the panel like every notice the cap shed on arrival.
-   */
-  release(limit?: number): readonly Notice[] {
+  /** Hands back what is held, oldest first, and holds nothing after. */
+  release(): readonly Notice[] {
     const released = this.#held;
     this.#held = [];
-    if (limit === undefined || released.length <= limit) return released;
-    return released.slice(released.length - Math.max(0, limit));
+    return released;
   }
 }
