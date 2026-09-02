@@ -32,6 +32,139 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.4.0 — 2026-09-02
+
+### Synced provider keys
+
+Enter a cloud provider's API key once and every Mac you sign Luke into has it.
+A Sync section in Settings governs the whole arrangement: while it is on, your
+account's vault holds what this Mac's encrypted store holds, re-synced at every
+signed-in launch and at every save, and turning it off deletes every synced copy
+while the local keys stay. The vault persists no fragment of a key, not even its
+last four characters, and a key your shell configured is never synced — only one
+you typed into Luke.
+([#574](https://github.com/ReviewStage/luke/pull/574),
+[#580](https://github.com/ReviewStage/luke/pull/580))
+
+### A conversation that outlives the app
+
+The History tab now survives a quit. The thread, and the facts you asked Luke to
+remember, live in his own application data under a real retention policy — the
+200 most recent lines, nothing older than a fortnight — and Clear still empties
+the file along with the screen. Lines draw as they are being said rather than
+after the speech ends, each carries its local timestamp, the same thread stands
+on every display's panel, and every chat a line attributably named draws a chip
+you can press to open it, still working after that chat has been archived.
+([#589](https://github.com/ReviewStage/luke/pull/589),
+[#614](https://github.com/ReviewStage/luke/pull/614),
+[#606](https://github.com/ReviewStage/luke/pull/606),
+[#618](https://github.com/ReviewStage/luke/pull/618),
+[#613](https://github.com/ReviewStage/luke/pull/613))
+
+### Luke on your iPhone
+
+The iPhone app grows from a roster you can read into one you can work from. Your
+cloud sessions arrive with search, filtering, and sorting in the header; a
+session opens its full chat, where you can read the conversation, copy any
+bubble's words with a long press, and reply; a row's long-press menu carries the
+acts its provider actually advertised — the provider's own controls, Add Agent,
+and renames — and a native sheet starts a whole new workspace, offering the same
+agent kinds, models, and effort levels the desktop offers from the same table.
+Provider keys are managed in the same account vault the Mac uses, the app follows
+your light and dark appearance, and Luke hums over the first load instead of a
+blank screen.
+([#612](https://github.com/ReviewStage/luke/pull/612),
+[#575](https://github.com/ReviewStage/luke/pull/575),
+[#576](https://github.com/ReviewStage/luke/pull/576),
+[#601](https://github.com/ReviewStage/luke/pull/601),
+[#602](https://github.com/ReviewStage/luke/pull/602),
+[#603](https://github.com/ReviewStage/luke/pull/603),
+[#638](https://github.com/ReviewStage/luke/pull/638),
+[#598](https://github.com/ReviewStage/luke/pull/598),
+[#570](https://github.com/ReviewStage/luke/pull/570),
+[#596](https://github.com/ReviewStage/luke/pull/596),
+[#594](https://github.com/ReviewStage/luke/pull/594))
+
+### Improvements
+
+- Luke opens at login, a switch under Appearance backed by macOS's own login
+  items ([#585](https://github.com/ReviewStage/luke/pull/585))
+- Spoken exchanges run on the OpenAI Agents realtime SDK, which owns the
+  connection, the session configuration, and the tool round-trips Luke used to
+  hand-roll ([#635](https://github.com/ReviewStage/luke/pull/635),
+  [#630](https://github.com/ReviewStage/luke/pull/630))
+- Several sessions changing at once arrive as one announcement instead of a run
+  of them ([#623](https://github.com/ReviewStage/luke/pull/623),
+  [#628](https://github.com/ReviewStage/luke/pull/628),
+  [#625](https://github.com/ReviewStage/luke/pull/625))
+- Luke observes local OMP sessions, reading their title, status, recap, current
+  tool, and conversation ([#584](https://github.com/ReviewStage/luke/pull/584))
+- A keyboard shortcut can be removed outright: the row says None, no default
+  stands in behind the absence, and Reset is the way back
+  ([#587](https://github.com/ReviewStage/luke/pull/587))
+- A session's parting words are shown whole on its row and its own screen; the
+  old 500-character cut now applies only where a recap reaches a model
+  ([#633](https://github.com/ReviewStage/luke/pull/633))
+- Luke words his own announcements from the observed fields rather than reading
+  a composed sentence
+  ([#588](https://github.com/ReviewStage/luke/pull/588))
+- Ask about "that chat" right after an announcement and Luke resolves it to the
+  one he just told you about, naming the candidates when nothing settles it
+  ([#599](https://github.com/ReviewStage/luke/pull/599))
+- Spoken time is no longer metered: the hosted voice quota and the settings it
+  needed are gone ([#634](https://github.com/ReviewStage/luke/pull/634))
+- Every provider API key hint reads the same way and links to the page that
+  issues the key ([#591](https://github.com/ReviewStage/luke/pull/591))
+
+### Fixes
+
+- Fixed the Updates row moving under your cursor while an update downloaded
+  ([#581](https://github.com/ReviewStage/luke/pull/581))
+- Fixed Luke silently losing the ability to lower and restore Music and Spotify,
+  leaving an unkillable helper at full CPU, when a stale player registration
+  wedged the automation consent read
+  ([#582](https://github.com/ReviewStage/luke/pull/582))
+- Fixed the landing page drawing its footer hairline across the hero art on
+  phones ([#583](https://github.com/ReviewStage/luke/pull/583))
+- Fixed the landing page's hero mock spilling outside the phone's screen
+  ([#590](https://github.com/ReviewStage/luke/pull/590))
+- Fixed iPhone session rows clipping at the bar instead of scrolling behind it
+  ([#626](https://github.com/ReviewStage/luke/pull/626))
+- Fixed a real session row showing through the iPhone app's skeleton loader
+  ([#607](https://github.com/ReviewStage/luke/pull/607),
+  [#619](https://github.com/ReviewStage/luke/pull/619))
+- Fixed iPhone session timestamps reading longer than the desktop's
+  ([#604](https://github.com/ReviewStage/luke/pull/604))
+- Fixed the iPhone app's main page carrying an account name where it should say
+  Sessions ([#605](https://github.com/ReviewStage/luke/pull/605),
+  [#615](https://github.com/ReviewStage/luke/pull/615))
+- Fixed the iPhone app icon being masked twice
+  ([#595](https://github.com/ReviewStage/luke/pull/595))
+- Fixed the iPhone options sheet crowding its rows with sort details and filter
+  counts ([#631](https://github.com/ReviewStage/luke/pull/631))
+- Fixed iPhone development builds losing a sign-in between launches
+  ([#592](https://github.com/ReviewStage/luke/pull/592))
+
+### Miscellaneous
+
+- Added Sentry crash reporting: unhandled exceptions from every Electron
+  process and native minidumps, carrying no account identity, and described in
+  as many words in `PRIVACY.md`
+  ([#632](https://github.com/ReviewStage/luke/pull/632))
+- Added session recording and product counts to the iPhone app, through the
+  same endpoint and the same event allowlist the desktop posts to
+  ([#627](https://github.com/ReviewStage/luke/pull/627))
+- Added the hosted `/api/observe` endpoint, which runs each cloud adapter once
+  under the caller's vault keys and answers a bounded roster
+  ([#573](https://github.com/ReviewStage/luke/pull/573))
+- Added hosted act endpoints for messaging a session and creating a workspace,
+  reaching every provider and act the adapters carry rather than
+  re-implementing one
+  ([#571](https://github.com/ReviewStage/luke/pull/571),
+  [#611](https://github.com/ReviewStage/luke/pull/611),
+  [#620](https://github.com/ReviewStage/luke/pull/620))
+- Updated Luke's persona to state his voice as decided axes rather than a list
+  of rules ([#639](https://github.com/ReviewStage/luke/pull/639))
 ## 0.3.13 — 2026-08-28
 
 ### History
