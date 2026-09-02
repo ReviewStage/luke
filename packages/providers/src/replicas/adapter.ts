@@ -17,7 +17,7 @@ import {
   type WorkspaceAgentSelection,
   type WorkspaceProject,
 } from "@sidecar/session";
-import { isRecord, isWireBoolean, text, type WireRecord } from "@sidecar/wire";
+import { isRecord, isWireBoolean, text, type WireRecord, wholeText } from "@sidecar/wire";
 import { ADAPTER_DIAGNOSTIC_KIND } from "../shared/adapter-diagnostics.js";
 import {
   CLOUD_FAILURE,
@@ -615,10 +615,9 @@ function modelLabel(
   return label || undefined;
 }
 
-/** One line of bounded parting words, flattened the way every recap is drawn. */
+/** The bounded parting words, their lines kept the way every recap keeps them. */
 function recapText(text: string): string | undefined {
-  const flattened = text.replace(/\s+/g, " ").trim();
-  return flattened || undefined;
+  return wholeText(text);
 }
 
 /**

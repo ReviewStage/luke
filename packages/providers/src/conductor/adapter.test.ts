@@ -549,7 +549,7 @@ const ERRORED_SESSION_UUID = "44444444-4444-4444-8444-444444444444";
 const TEST_TRANSCRIPT_TAIL =
   "st half of a message the tail cut into\n\n## User\n\nWire the panel.\n\n## Assistant\n\n" +
   "[12 messages elided]\n\nAll checks pass;\nnext, say whether to ship it.";
-const TEST_RECAP = "All checks pass; next, say whether to ship it.";
+const TEST_RECAP = "All checks pass;\nnext, say whether to ship it.";
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("reads a settled chat's parting words from the transcripts view as its recap", async () => {
@@ -591,8 +591,9 @@ test("reads a settled chat's parting words from the transcripts view as its reca
   const secondIdle = observations.find(
     (candidate) => candidate.providerSessionId === SECOND_IDLE_SESSION_UUID,
   );
-  // The recap is the last message's words alone: the elision mark is dropped,
-  // the header is not part of it, and nothing earlier in the tail survives.
+  // The recap is the last message's words alone, kept line for line: the
+  // elision mark is dropped, the header is not part of it, and nothing
+  // earlier in the tail survives.
   assert.equal(idle?.recap, TEST_RECAP);
   assert.equal(secondIdle?.recap, TEST_RECAP);
   // A mapped agent kind becomes the agent itself — the identity the row's

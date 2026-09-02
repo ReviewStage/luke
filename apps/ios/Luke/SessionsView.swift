@@ -824,7 +824,7 @@ private struct DoingLine: View {
                 .font(.system(size: 11))
                 .foregroundStyle(Color.errorInk)
                 .lineLimit(2)
-        } else if let recap = session.recap {
+        } else if let recap = session.recapLine {
             Text(recap)
                 .font(.system(size: 11))
                 .foregroundStyle(

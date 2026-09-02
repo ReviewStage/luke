@@ -19,8 +19,8 @@ import {
   resolveOptions,
   text,
   type WireRecord,
-  wholeLine,
   wholeNumber,
+  wholeText,
 } from "@sidecar/wire";
 import {
   discoverSessionFiles,
@@ -334,7 +334,7 @@ function readClaudeRecord(record: WireRecord, parsed: ParsedClaudeSessionTail): 
   }
   if (record.type === CLAUDE_RECORD_TYPE.SYSTEM) {
     if (record.subtype === CLAUDE_SYSTEM_SUBTYPE.AWAY_SUMMARY) {
-      parsed.awaySummary = wholeLine(text(record.content));
+      parsed.awaySummary = wholeText(text(record.content));
     }
     if (record.subtype === CLAUDE_SYSTEM_SUBTYPE.API_ERROR) {
       parsed.apiError = apiErrorFromRecord(record);

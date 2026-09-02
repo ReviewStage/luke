@@ -71,11 +71,19 @@ export function oneLine(value: string | undefined, maximumLength: number): strin
 }
 
 /**
- * Collapses whitespace like {@link oneLine} with no length bound, for a field
- * whose whole words are the point of reporting it.
+ * Trims a field whose whole words are the point of reporting it, keeping the
+ * line breaks they were written with: an agent's parting words are Markdown
+ * as often as not, and a heading, a list, or a fenced block exists only
+ * across lines. Line endings settle to one form, trailing space leaves each
+ * line, and a run of blank lines closes to one, which is all the structure
+ * Markdown reads; a surface that draws one line collapses the rest itself.
  */
-export function wholeLine(value: string | undefined): string | undefined {
-  const normalized = value?.replace(/\s+/gu, " ").trim();
+export function wholeText(value: string | undefined): string | undefined {
+  const normalized = value
+    ?.replace(/\r\n?/gu, "\n")
+    .replace(/[^\S\n]+$/gmu, "")
+    .replace(/\n{3,}/gu, "\n\n")
+    .trim();
   return normalized || undefined;
 }
 

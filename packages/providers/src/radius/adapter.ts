@@ -18,7 +18,7 @@ import {
   recordFromJsonLine,
   text,
   type WireRecord,
-  wholeLine,
+  wholeText,
 } from "@sidecar/wire";
 import {
   LocalSessionAdapter,
@@ -236,7 +236,7 @@ function tipFromEvents(events: readonly WireRecord[]): RadiusTurnTip {
     }
     if (kind === RADIUS_EVENT_KIND.MESSAGE_COMPLETED && recap === undefined && payload) {
       if (text(payload.role) === RADIUS_MESSAGE_ROLE.ASSISTANT) {
-        recap = wholeLine(text(payload.text));
+        recap = wholeText(text(payload.text));
       }
     }
   }

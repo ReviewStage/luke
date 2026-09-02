@@ -11,7 +11,7 @@ import {
   type SessionProvider,
   type SessionStatus,
 } from "@sidecar/session";
-import { isRecord, oneLine, type WireRecord, wholeLine } from "@sidecar/wire";
+import { isRecord, oneLine, type WireRecord, wholeText } from "@sidecar/wire";
 import {
   canIgnoreFilesystemError,
   fileStats,
@@ -428,7 +428,7 @@ export class AntigravitySessionAdapter extends LocalSessionAdapter {
     // The agent's latest notification is its own word on where the work
     // stands — the recap field of this store — but only once the turn is not
     // moving past it: mid-run it describes a moment already left behind.
-    const recap = status === SESSION_STATUS.WORKING ? undefined : wholeLine(summary.notifyWords);
+    const recap = status === SESSION_STATUS.WORKING ? undefined : wholeText(summary.notifyWords);
     const link = antigravitySessionLink(profile, summary.conversationId, summary.folderPath);
     return {
       providerSessionId: summary.conversationId,
@@ -508,7 +508,7 @@ export class AntigravitySessionAdapter extends LocalSessionAdapter {
     now: number,
   ): ProviderSessionObservation {
     const status = statusFromDerived(derived.tip, observedAt, now, this.activeSessionFreshnessMs);
-    const recap = status === SESSION_STATUS.WORKING ? undefined : wholeLine(derived.notifyWords);
+    const recap = status === SESSION_STATUS.WORKING ? undefined : wholeText(derived.notifyWords);
     const activity =
       status === SESSION_STATUS.WORKING ||
       (status === SESSION_STATUS.WAITING && derived.tip.holding)

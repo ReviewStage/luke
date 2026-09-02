@@ -19,7 +19,7 @@ import {
   type WorkspaceProject,
   workspaceAgentModels,
 } from "@sidecar/session";
-import type { WireRecord } from "@sidecar/wire";
+import { type WireRecord, wholeText } from "@sidecar/wire";
 import {
   CLOUD_ADAPTER_DEFAULTS,
   type CloudAdapterOptions,
@@ -1181,27 +1181,34 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
  * The parting words of the transcript's last message, only when that message
  * is attributably the agent's: the tail must still hold the message's own
  * header, and a chat whose user spoke last has no parting words to report.
- * The view's elision markers are dropped, whitespace is flattened to the one
- * line a recap is drawn as, and everything earlier in the tail is discarded
- * unread — the recap is what leaves this function, never the history.
+ * The view's elision markers are dropped, the message's own lines are kept
+ * as written because they are Markdown a chat draws, and everything earlier
+ * in the tail is discarded unread — the recap is what leaves this function,
+ * never the history.
  */
 function recapFromTranscriptTail(tail: string | undefined): string | undefined {
   if (!tail) return undefined;
-  const lines = tail.split("\n").map((line) => line.trim());
-  const lastHeader = lines.findLastIndex(
-    (line) =>
-      line === CONDUCTOR_TRANSCRIPT_SPEAKER.ASSISTANT || line === CONDUCTOR_TRANSCRIPT_SPEAKER.USER,
-  );
-  if (lastHeader < 0 || lines[lastHeader] !== CONDUCTOR_TRANSCRIPT_SPEAKER.ASSISTANT) {
+  const lines = tail.split("\n");
+  const speakerOf = (line: string): string => line.trim();
+  const lastHeader = lines.findLastIndex((line) => {
+    const speaker = speakerOf(line);
+    return (
+      speaker === CONDUCTOR_TRANSCRIPT_SPEAKER.ASSISTANT ||
+      speaker === CONDUCTOR_TRANSCRIPT_SPEAKER.USER
+    );
+  });
+  if (
+    lastHeader < 0 ||
+    speakerOf(lines[lastHeader] ?? "") !== CONDUCTOR_TRANSCRIPT_SPEAKER.ASSISTANT
+  ) {
     return undefined;
   }
-  const recap = lines
-    .slice(lastHeader + 1)
-    .filter((line) => !CONDUCTOR_TRANSCRIPT_ELIDED.test(line))
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return recap || undefined;
+  return wholeText(
+    lines
+      .slice(lastHeader + 1)
+      .filter((line) => !CONDUCTOR_TRANSCRIPT_ELIDED.test(line.trim()))
+      .join("\n"),
+  );
 }
 
 /**

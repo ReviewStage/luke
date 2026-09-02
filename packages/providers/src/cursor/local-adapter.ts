@@ -28,8 +28,8 @@ import {
   unparsedWire,
   type WireBoundaryInput,
   type WireRecord,
-  wholeLine,
   wholeNumber,
+  wholeText,
   wireRecord,
 } from "@sidecar/wire";
 import {
@@ -436,7 +436,7 @@ function parseCursorTail(tail: string): ParsedCursorTail {
       // A turn that ended is not running its last call, and holding it would
       // keep a stale line on the row until some other tool runs.
       parsed.activity = undefined;
-      parsed.recap = failed ? undefined : wholeLine(partingWords);
+      parsed.recap = failed ? undefined : wholeText(partingWords);
       partingWords = undefined;
       continue;
     }
