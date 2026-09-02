@@ -30,6 +30,6 @@ export {
   unavailableRealtimeDiagnostics,
 } from "./openai-credentials.js";
 export {
-  sessionAnnouncementsFromReviews,
+  sessionAnnouncementFromReview,
   sessionNoticeAnnouncement,
 } from "./session-notifications.js";
