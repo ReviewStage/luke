@@ -38,7 +38,7 @@ test("an entry belongs to one provider, so no other line draws a field", () => {
   const current = control(held);
 
   assert.equal(entryForProvider(current, CREDENTIAL_PROVIDER_ID.CONDUCTOR), held);
-  assert.equal(entryForProvider(current, CREDENTIAL_PROVIDER_ID.CURSOR), undefined);
+  assert.equal(entryForProvider(current, CREDENTIAL_PROVIDER_ID.LINEAR), undefined);
   assert.equal(
     entryForProvider(control(), CREDENTIAL_PROVIDER_ID.CONDUCTOR),
     undefined,
@@ -71,7 +71,7 @@ test("deleting a key ends the entry that was going to replace it", () => {
 });
 
 test("deleting one provider's key leaves another's entry alone", () => {
-  const held = entry({ providerId: CREDENTIAL_PROVIDER_ID.CURSOR });
+  const held = entry({ providerId: CREDENTIAL_PROVIDER_ID.LINEAR });
 
   assert.equal(removalEndsEntry(held, CREDENTIAL_PROVIDER_ID.CONDUCTOR, undefined), false);
   assert.equal(removalEndsEntry(undefined, CREDENTIAL_PROVIDER_ID.CONDUCTOR, undefined), false);

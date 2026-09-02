@@ -12,11 +12,7 @@ import {
   type VaultProviderId,
   type WorkspaceAgentSelection,
 } from "../core.js";
-import {
-  CURSOR_PROJECT_REFRESH,
-  type CursorProjectRefresh,
-  cloudSessionAdapterFor,
-} from "./cloud-adapters.js";
+import { cloudSessionAdapterFor } from "./cloud-adapters.js";
 
 /**
  * The acts a remote client can ask of a cloud session, named for the endpoint that
@@ -38,10 +34,7 @@ export type RemoteSessionAct = (typeof REMOTE_SESSION_ACT)[keyof typeof REMOTE_S
  * Which acts each provider takes, mirroring exactly the write routes its
  * desktop adapter implements — the adapter seam is the authority for acts,
  * and nothing here may advertise a capability the adapter does not already
- * carry under the provider's documented endpoint. Copilot is deliberately
- * write-free: GitHub documents no way to message, steer, or stop an agent
- * task. Replicas advertises no controls and no renames; Devin and Jules
- * document no workspace creation for an API key.
+ * carry under the provider's documented endpoint.
  */
 const SUPPORTED_ACTS = {
   [VAULT_PROVIDER_ID.CONDUCTOR]: new Set<RemoteSessionAct>([
@@ -50,25 +43,6 @@ const SUPPORTED_ACTS = {
     REMOTE_SESSION_ACT.AGENT,
     REMOTE_SESSION_ACT.RENAME_SESSION,
     REMOTE_SESSION_ACT.RENAME_WORKSPACE,
-    REMOTE_SESSION_ACT.CREATE_WORKSPACE,
-  ]),
-  [VAULT_PROVIDER_ID.COPILOT]: new Set<RemoteSessionAct>(),
-  [VAULT_PROVIDER_ID.CURSOR]: new Set<RemoteSessionAct>([
-    REMOTE_SESSION_ACT.MESSAGE,
-    REMOTE_SESSION_ACT.CONTROL,
-    REMOTE_SESSION_ACT.CREATE_WORKSPACE,
-  ]),
-  [VAULT_PROVIDER_ID.DEVIN]: new Set<RemoteSessionAct>([
-    REMOTE_SESSION_ACT.MESSAGE,
-    REMOTE_SESSION_ACT.CONTROL,
-  ]),
-  [VAULT_PROVIDER_ID.JULES]: new Set<RemoteSessionAct>([
-    REMOTE_SESSION_ACT.MESSAGE,
-    REMOTE_SESSION_ACT.CONTROL,
-  ]),
-  [VAULT_PROVIDER_ID.REPLICAS]: new Set<RemoteSessionAct>([
-    REMOTE_SESSION_ACT.MESSAGE,
-    REMOTE_SESSION_ACT.AGENT,
     REMOTE_SESSION_ACT.CREATE_WORKSPACE,
   ]),
 } satisfies Readonly<Record<VaultProviderId, ReadonlySet<RemoteSessionAct>>>;
@@ -131,7 +105,6 @@ async function observeForAct(
   providerId: VaultProviderId,
   apiKey: string,
   seams: ActExecuteSeams,
-  cursorProjectRefresh?: CursorProjectRefresh,
 ): Promise<ObservedActPass> {
   const pass = { unauthorized: false, unreachable: false };
   const inner: CloudFetch = seams.fetch ?? ((url, init) => fetch(url, init));
@@ -149,7 +122,6 @@ async function observeForAct(
     readApiKey: async () => apiKey,
     fetch: watchingFetch,
     ...(seams.now ? { now: seams.now } : undefined),
-    ...(cursorProjectRefresh ? { cursorProjectRefresh } : undefined),
   });
   const observations = await adapter.observe();
   return { adapter, observations, ...pass };
@@ -372,15 +344,8 @@ export async function executeCreateWorkspaceAct(options: {
   const guarded = capabilityGuard(REMOTE_SESSION_ACT.CREATE_WORKSPACE, providerId);
   if (guarded) return guarded;
 
-  // A creation ask is validated against the projects the same pass reported,
-  // so Cursor's project read — a background offer on the desktop — is awaited
-  // here: this one pass is what the ask must be validated against.
-  const pass = await observeForAct(
-    providerId,
-    apiKey,
-    options.seams ?? {},
-    providerId === VAULT_PROVIDER_ID.CURSOR ? CURSOR_PROJECT_REFRESH.AWAIT : undefined,
-  );
+  // A creation ask is validated against the projects the same pass reported.
+  const pass = await observeForAct(providerId, apiKey, options.seams ?? {});
   const project = pass.adapter
     .workspaceProjects()
     .find((candidate) => candidate.providerProjectId === providerProjectId);

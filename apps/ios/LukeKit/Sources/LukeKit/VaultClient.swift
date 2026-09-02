@@ -6,11 +6,6 @@ import Foundation
 /// an entry here before this app can offer it.
 public enum VaultProviderID: String, CaseIterable, Identifiable, Sendable {
     case conductor
-    case copilot
-    case cursor
-    case devin
-    case jules
-    case replicas
 
     public var id: String { rawValue }
 
@@ -18,11 +13,6 @@ public enum VaultProviderID: String, CaseIterable, Identifiable, Sendable {
     public var displayName: String {
         switch self {
         case .conductor: "Conductor"
-        case .copilot: "Copilot"
-        case .cursor: "Cursor"
-        case .devin: "Devin"
-        case .jules: "Jules"
-        case .replicas: "Replicas"
         }
     }
 
@@ -39,19 +29,6 @@ public enum VaultProviderID: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .conductor:
             "Create a key in Conductor under [Settings > API keys](\(keyPageURL))."
-        case .copilot:
-            "Create a fine-grained personal access token on GitHub under "
-                + "[Settings > Personal access tokens](\(keyPageURL)). Give it Agent tasks "
-                + "read access; classic and installation tokens will not work."
-        case .cursor:
-            "Create a key in Cursor under [Dashboard > API Keys](\(keyPageURL))."
-        case .devin:
-            "Create a personal access token in Devin under "
-                + "[Settings > Devin API > PATs](\(keyPageURL))."
-        case .jules:
-            "Create a key in Jules under [Settings > API Key](\(keyPageURL))."
-        case .replicas:
-            "Create a key in Replicas under [Dashboard > API Keys](\(keyPageURL))."
         }
     }
 
@@ -63,11 +40,6 @@ public enum VaultProviderID: String, CaseIterable, Identifiable, Sendable {
     public var keyPageURL: URL {
         let address = switch self {
         case .conductor: "https://app.conductor.build/users/api-keys"
-        case .copilot: "https://github.com/settings/personal-access-tokens/new"
-        case .cursor: "https://cursor.com/dashboard/api"
-        case .devin: "https://app.devin.ai/settings/devin-api?tab=pats"
-        case .jules: "https://jules.google.com/settings/api"
-        case .replicas: "https://replicas.dev/dashboard/account/api-keys"
         }
         // swiftlint:disable:next force_unwrapping
         return URL(string: address)!
@@ -76,18 +48,11 @@ public enum VaultProviderID: String, CaseIterable, Identifiable, Sendable {
     /// The only kind of credential Luke will hold for a provider that issues
     /// more than one — the desktop's `CredentialFormat`, mirrored so a key the
     /// service cannot use is refused with a reason instead of stored to fail
-    /// quietly. Only Devin publishes a format; the rest accept any key their
-    /// provider might issue.
+    /// quietly. No provider this build holds a key for publishes one, so every
+    /// key a provider might issue is accepted.
     public var keyFormat: VaultKeyFormat? {
         switch self {
-        case .devin:
-            VaultKeyFormat(
-                label: "Personal access token",
-                prefix: "cog_",
-                rejection: "Devin's personal access tokens start with cog_. The older apk_ keys "
-                    + "are for an API version Luke does not read."
-            )
-        default:
+        case .conductor:
             nil
         }
     }

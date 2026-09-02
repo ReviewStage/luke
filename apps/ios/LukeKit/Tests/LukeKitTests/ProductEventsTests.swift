@@ -51,6 +51,7 @@ final class ProductEventsTests: XCTestCase {
     /// an id the vocabulary has not answered for must fail the read.
     func testAnUnlistedProviderIdDoesNotRead() {
         XCTAssertNil(ProductProviderID(rawValue: "codex — /Users/me/luke on feature/x"))
-        XCTAssertEqual(ProductProviderID(rawValue: "gemini-cli"), .geminiCLI)
+        XCTAssertEqual(ProductProviderID(rawValue: "claude-code"), .claudeCode)
+        XCTAssertNil(ProductProviderID(rawValue: "gemini-cli"))
     }
 }

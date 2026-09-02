@@ -57,14 +57,13 @@
   /* Provider brand colours, used only by the marks and ported with them:
      Claude Code's published coral, the vertical gradient Codex draws its mark
      with, the light half of Conductor's two-colour palette, and the light
-     silhouettes Cursor and Devin publish for dark surfaces. */
+     silhouette Cursor publishes for dark surfaces. */
   --mark-claude-code: #d97757;
   --mark-codex-top: #b1a7ff;
   --mark-codex-middle: #7a9dff;
   --mark-codex-bottom: #3941ff;
   --mark-conductor: #eae8e6;
   --mark-cursor: #ffffff;
-  --mark-devin: #ffffff;
 
   /* Springs, durations, and the row fan arrive from motion-tokens.css on
      :root. --loop-motion stays here: the mock has no face to pause. */
@@ -378,13 +377,6 @@
 .mock .provider-mark[data-mark="cursor"] {
   color: var(--mark-cursor);
   transform: scale(0.94);
-}
-
-/* Devin's published mark leaves roughly a fifth of its box empty on every
-   side, so it is scaled up to the height the full-bleed marks reach. */
-.mock .provider-mark[data-mark="devin"] {
-  color: var(--mark-devin);
-  transform: scale(1.22);
 }
 
 /* Luke holds the place nearest the housing in every state, as the marks hold

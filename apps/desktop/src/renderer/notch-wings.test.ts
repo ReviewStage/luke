@@ -63,10 +63,10 @@ const providers = (...ids: string[]): ProviderTally[] =>
   ids.map((providerId) => ({ providerId, provider: providerId, total: 1, attention: 0 }));
 
 test("providers that fit are one slot each, named by their own id", () => {
-  const slots = wingSlots(providers("codex", "jules"), 4);
+  const slots = wingSlots(providers("codex", "omp"), 4);
   assert.deepEqual(
     slots.map((slot) => slot.id),
-    ["codex", "jules"],
+    ["codex", "omp"],
   );
 });
 

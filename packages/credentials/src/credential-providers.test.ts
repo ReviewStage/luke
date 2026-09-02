@@ -15,8 +15,8 @@ import {
 
 test("accepts only a provider the build ships", () => {
   assert.equal(isCredentialProviderId(CREDENTIAL_PROVIDER_ID.CONDUCTOR), true);
-  assert.equal(isCredentialProviderId(CREDENTIAL_PROVIDER_ID.CURSOR), true);
-  assert.equal(isCredentialProviderId(CREDENTIAL_PROVIDER_ID.DEVIN), true);
+  assert.equal(isCredentialProviderId(CREDENTIAL_PROVIDER_ID.LINEAR), true);
+  assert.equal(isCredentialProviderId(CREDENTIAL_PROVIDER_ID.OPENAI), true);
   assert.equal(isCredentialProviderId("unknown-cloud"), false);
   // An inherited property name is not a provider, and neither is a value that
   // is not a string at all.
@@ -100,47 +100,10 @@ test("the cloud badge belongs to the agents alone", () => {
   assert.equal(providerRunsSessionsInCloud(CREDENTIAL_PROVIDER_ID.OPENAI), false);
 });
 
-test("sends the user to the one GitHub token kind the agent-tasks API answers", () => {
-  const copilot = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.COPILOT];
-
-  assert.equal(copilot.displayName, "Copilot");
-  assert.deepEqual(copilot.environmentVariables, ["COPILOT_API_KEY"]);
-  // A pasted key carries both, and the matches below are what they must say.
-  assert.ok(copilot.hint);
-  assert.ok(copilot.apiKeysUrl);
-  // The endpoint takes only user tokens, and GitHub also issues the kinds it
-  // refuses, so the copy has to name what to create and what will not work.
-  assert.match(copilot.hint.lead, /fine-grained personal access token/i);
-  assert.match(copilot.hint.trail ?? "", /Agent tasks/);
-  assert.match(copilot.hint.trail ?? "", /installation/i);
-  assert.match(copilot.apiKeysUrl, /personal-access-tokens\/new$/);
-  // No key format: fine-grained PATs and GitHub App user tokens carry
-  // different prefixes, and a single one would refuse a working credential.
-  assert.equal(copilot.keyFormat, undefined);
-});
-
-test("takes only the Devin credentials its API version issues", () => {
-  const devin = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.DEVIN];
-
-  assert.equal(devin.displayName, "Devin");
-  assert.deepEqual(devin.environmentVariables, ["DEVIN_API_KEY"]);
-  // Luke reads Devin's v3 API, whose credentials all carry one prefix. The
-  // deprecated v1 and v2 keys carry another and would only ever be refused.
-  assert.equal(devin.keyFormat?.prefix, "cog_");
-  // Devin calls this a personal access token, and the settings field has to
-  // call it that too: its Settings > API keys page issues the `apk_` keys Luke
-  // refuses, so asking for an "API key" would send the user to the wrong one.
-  assert.equal(devin.keyFormat?.label, "Personal access token");
-  assert.ok(devin.apiKeysUrl);
-  assert.match(devin.apiKeysUrl, /devin-api\?tab=pats$/);
-  for (const legacy of ["apk_service-key", "apk_user_personal-key"]) {
-    assert.equal(legacy.startsWith(devin.keyFormat?.prefix ?? ""), false, legacy);
-  }
-  // Conductor and Cursor each publish one kind of key, so neither has a format
-  // worth holding a credential to.
-  for (const providerId of [CREDENTIAL_PROVIDER_ID.CONDUCTOR, CREDENTIAL_PROVIDER_ID.CURSOR]) {
-    assert.equal(CREDENTIAL_PROVIDERS[providerId].keyFormat, undefined, providerId);
-  }
+test("holds no key format for a provider that publishes one kind of key", () => {
+  // Conductor publishes one kind of key, so it has no format worth holding a
+  // credential to.
+  assert.equal(CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.CONDUCTOR].keyFormat, undefined);
 });
 
 test("connects Linear by consent rather than by a key", () => {

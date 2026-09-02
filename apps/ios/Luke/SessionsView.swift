@@ -651,7 +651,7 @@ private var rowCardFill: some View {
 /// mark and title, the place line, and the session's words given the room the
 /// row cannot spare — the full recap or error instead of two truncated lines.
 /// Everything here is already drawn on the row itself; the preview only lets
-/// it breathe, the way Cursor's mobile app previews a chat's last message.
+/// it breathe, the way a chat app previews a conversation's last message.
 private struct SessionRowPreview: View {
     let session: RosterSession
 

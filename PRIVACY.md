@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 1 September 2026
+Last updated: 2 September 2026
 
 Luke is a macOS app that watches your coding agent sessions, with a companion
 iOS app for the cloud sessions your account can see. This policy explains what
@@ -123,11 +123,10 @@ and email you signed it with, and any screenshots you attached.
   say during its practice moment. It plays once, can act on nothing, and our
   service issues its credential without an account — keeping only a hash of
   your network address for that day's rate limit, tied to nobody.
-- Coding agent providers you connect (Conductor, Cursor, Devin, GitHub Copilot,
-  Jules, Replicas) and Linear, using the key or account access you supply. For
-  Codex cloud tasks and for messaging local Cursor chats, that access is the
-  sign-in you already gave the provider's own command-line tool, which Luke runs
-  and never reads. Luke reads your sessions or issues, and sends something back
+- Coding agent providers you connect (Conductor) and Linear, using the key or
+  account access you supply. For Codex cloud tasks, that access is the sign-in
+  you already gave the provider's own command-line tool, which Luke runs and
+  never reads. The synced-key vault holds Conductor keys only. Luke reads your sessions or issues, and sends something back
   only when you ask it to, such as a message you wrote or an issue you moved.
 - Google, if you connect Google Calendar. We request your calendar list and your
   availability. Google returns busy times only, so event titles and attendees

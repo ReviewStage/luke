@@ -266,7 +266,7 @@ final class ActClientRowActTests: XCTestCase {
         let stub = StubHTTPClient { request in
             XCTAssertTrue(request.url?.path.hasSuffix("api/acts/control") == true)
             let body = self.bodyJSON(request)
-            XCTAssertEqual(body["providerId"] as? String, "jules")
+            XCTAssertEqual(body["providerId"] as? String, "conductor")
             XCTAssertEqual(body["providerSessionId"] as? String, "sess-1")
             XCTAssertEqual(body["controlId"] as? String, "approve-plan")
             return (jsonData(["result": "accepted"]), makeResponse(url: request.url!, status: 200))
@@ -274,7 +274,7 @@ final class ActClientRowActTests: XCTestCase {
         let client = ActClient(baseURL: base, http: stub)
         let answer = try await client.executeControl(
             accessToken: "tok",
-            providerId: "jules",
+            providerId: "conductor",
             providerSessionId: "sess-1",
             controlId: "approve-plan"
         )
@@ -296,7 +296,7 @@ final class ActClientRowActTests: XCTestCase {
         let client = ActClient(baseURL: base, http: stub)
         let answer = try await client.spawnAgent(
             accessToken: "tok",
-            providerId: "replicas",
+            providerId: "conductor",
             providerSessionId: "chat-1",
             agent: "claude",
             name: "   ",
@@ -362,7 +362,7 @@ final class ActClientRowActTests: XCTestCase {
         do {
             _ = try await client.executeControl(
                 accessToken: "tok",
-                providerId: "cursor",
+                providerId: "conductor",
                 providerSessionId: "agent-1",
                 controlId: "cancel-run"
             )
@@ -415,7 +415,7 @@ final class ActClientCreateWorkspaceSelectionTests: XCTestCase {
         let client = ActClient(baseURL: base, http: stub)
         _ = try await client.createWorkspace(
             accessToken: "tok",
-            providerId: "replicas",
+            providerId: "conductor",
             providerProjectId: "env-1",
             task: "build it"
         )

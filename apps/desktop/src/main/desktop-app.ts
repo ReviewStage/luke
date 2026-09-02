@@ -37,14 +37,10 @@ import { normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
 import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticKind,
-  CmuxSessionApplicationReader,
   CodexCloudSessionAdapter,
   ConductorLocalWorkspaceAdapter,
   ConductorSessionApplicationReader,
-  defaultOrcaDataDirectory,
-  HerdrSessionApplicationReader,
   ObservationHookRegistry,
-  OrcaWorkspaceReader,
   type ProviderRegistration,
   peekLocalSessions,
   providerRegistrations,
@@ -266,19 +262,6 @@ const conductorSessionApplications = new ConductorSessionApplicationReader();
 const conductorLocalWorkspaceAdapter = new ConductorLocalWorkspaceAdapter({
   openExternal: (url) => shell.openExternal(url),
 });
-const orcaWorkspaces = new OrcaWorkspaceReader({
-  dataDirectory: process.env.ORCA_USER_DATA_PATH ?? defaultOrcaDataDirectory(),
-});
-// cmux's CLI honors the same variable for its own state directory, so a
-// developer pointing cmux elsewhere points Luke's observation with it.
-const cmuxSessionApplications = new CmuxSessionApplicationReader({
-  ...(process.env.CMUX_AGENT_HOOK_STATE_DIR
-    ? { stateDirectory: process.env.CMUX_AGENT_HOOK_STATE_DIR }
-    : undefined),
-});
-// Herdr's CLI resolves its own sockets, so the reader takes no path at all:
-// where the user pointed herdr is where its own binary answers from.
-const herdrSessionApplications = new HerdrSessionApplicationReader();
 const supersetHomeDirectory =
   process.env.SUPERSET_HOME_DIR ?? path.join(app.getPath("home"), ".superset");
 const supersetWorkspaces = new SupersetWorkspaceReader({
@@ -299,9 +282,6 @@ const supersetWorkspaceHost: WorkspaceHostRegistration = {
 const workspaceHosts = workspaceHostRegistrations({
   superset: supersetWorkspaceHost,
   conductorApplications: conductorSessionApplications,
-  orcaWorkspaces,
-  cmuxApplications: cmuxSessionApplications,
-  herdrApplications: herdrSessionApplications,
 });
 // `directory` and the cipher are read lazily so the store can be declared before
 // the Electron app is ready.
@@ -368,11 +348,6 @@ const providerRegistry = providerRegistrations({
   readApiKey: (providerId) => settingsStore.readApiKey(providerId),
   observationHookInstallation: (providerId) => observationHooks.installation(providerId),
   codexCloudAdapter,
-  // A Replicas workspace opens in the Replicas desktop app when the OS has a
-  // handler for its scheme, and on the web dashboard otherwise. This asks
-  // LaunchServices the very question the open will ask it, so the address a
-  // row carries and the app that answers its press can never disagree.
-  replicasDesktopAppPresent: () => app.getApplicationNameForProtocol("replicas://open") !== "",
   onDiagnostic: reportAdapterDiagnostic,
 });
 // The record enforces completeness; the shared list preserves provider order.

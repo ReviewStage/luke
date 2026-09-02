@@ -782,7 +782,7 @@ function filterGroups(sessions: readonly SessionView[]): readonly SessionFilterG
     }
     // A hosted chat answers its agent's chip too: a Claude conversation in
     // Conductor's cloud is a Claude conversation for the agent axis, and an
-    // agent that exists only inside a hosting app — DeepSeek Harness, Pi —
+    // agent that exists only inside a hosting app — Cursor or OpenCode inside a Conductor workspace —
     // earns the same chip under its own hosted identity.
     if (session.agentId && (isProviderId(session.agentId) || isHostedAgentId(session.agentId))) {
       identities.set(session.agentId, session.agent ?? session.agentId);
