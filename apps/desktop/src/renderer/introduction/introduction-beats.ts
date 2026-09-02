@@ -215,5 +215,9 @@ export const INTRODUCTION_SCRIPT = {
       "held — and Luke will still tap them on the shoulder up here.",
   ],
   PRACTICE: ['Say close to: "Hold Option Space and ask me anything."'],
-  SIGN_OFF: ['Say close to: "One last thing — sign in, and I\'m all yours."'],
+  // Sign-in is not the last thing any more: the calendar step stands right
+  // behind it, so the sign-off promises both or the next screen calls it a lie.
+  SIGN_OFF: [
+    'Say close to: "Two last things — sign in, connect your calendar, and I\'m all yours."',
+  ],
 } as const;

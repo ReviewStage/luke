@@ -1,42 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createElement } from "react";
+import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import {
-  CalendarGate,
-  type CalendarGateConnection,
-  type CalendarGateControl,
-} from "./calendar-gate";
+import { CalendarGate, type CalendarGateControl } from "./calendar-gate";
 
-function render(control: Partial<CalendarGateControl>): string {
+function render(control: Partial<CalendarGateControl>, review?: ReactNode): string {
   return renderToStaticMarkup(
     createElement(CalendarGate, {
-      control: {
-        connections: [],
-        onSkip: () => undefined,
-        onDone: () => undefined,
-        ...control,
-      },
+      control: { onSkip: () => undefined, onDone: () => undefined, ...control },
+      ...(review !== undefined ? { review } : undefined),
       onQuit: () => undefined,
     }),
   );
 }
 
 const stillSource = { connecting: false, onConnect: () => undefined };
-
-function connection(overrides: Partial<CalendarGateConnection>): CalendarGateConnection {
-  return {
-    id: "person@example.com",
-    name: "person@example.com",
-    account: { id: "person@example.com", selectedCalendarIds: ["work"] },
-    calendars: [
-      { id: "work", label: "Work" },
-      { id: "family", label: "Family" },
-    ],
-    onToggle: () => undefined,
-    ...overrides,
-  };
-}
+const REVIEW = createElement("div", { className: "review-stand-in" }, "the settings block");
 
 test("unconnected, the gate offers exactly the sources the build can", () => {
   // React escapes the apostrophe in "Mac's", so the label is matched around it.
@@ -60,33 +39,21 @@ test("the gate says what connecting buys and what it will never read", () => {
   assert.match(markup, /never titles or attendees/);
 });
 
-test("connected, the gate reviews the calendars and offers Done", () => {
-  const markup = render({ apple: stillSource, google: stillSource, connections: [connection({})] });
-  assert.match(markup, /person@example\.com/);
-  assert.match(markup, /Work/);
-  assert.match(markup, /Family/);
-  // The chosen calendar is checked; the unchosen one is offered unchecked.
-  assert.match(markup, /checked/);
+test("connected, the handed-in review replaces the ask, and Done answers it", () => {
+  const markup = render({ apple: stillSource, google: stillSource }, REVIEW);
+  assert.match(markup, /review-stand-in/);
   assert.match(markup, /calendar-gate-done[^>]*>Done/);
-  // Another connection stays offered, and the Google button says it is adding.
-  assert.match(markup, /Use this Mac/);
-  assert.match(markup, /Add another Google account/);
+  // The rows inside the review carry the connects now; the ask half's copy
+  // and buttons leave with the question they asked.
+  assert.doesNotMatch(markup, /never titles or attendees/);
+  assert.doesNotMatch(markup, /Use this Mac/);
+  assert.doesNotMatch(markup, /Connect Google Calendar/);
 });
 
-test("a connection whose calendars have not been read yet says so", () => {
-  const markup = render({ google: stillSource, connections: [connection({ calendars: [] })] });
-  assert.match(markup, /Reading its calendars/);
-});
-
-test("a connect under way holds the buttons and the checkboxes, never the quit", () => {
-  const markup = render({
-    apple: { ...stillSource, connecting: true },
-    google: stillSource,
-    connections: [connection({})],
-  });
-  // Two sources, Done, and both checkboxes; the quit stays live.
+test("a connect under way holds the buttons, never the quit", () => {
+  const markup = render({ apple: { ...stillSource, connecting: true }, google: stillSource });
   const disabled = markup.match(/disabled=""/g) ?? [];
-  assert.equal(disabled.length, 5);
+  assert.equal(disabled.length, 3);
   assert.doesNotMatch(markup, /sign-in-quit[^>]*disabled/);
 });
 
@@ -95,7 +62,7 @@ test("the skip stands only while the question does; connected, Done is the answe
   assert.match(asking, /calendar-gate-skip[^>]*>Set up later/);
   assert.match(asking, /sign-in-quit[^>]*>Quit Luke/);
 
-  const reviewing = render({ google: stillSource, connections: [connection({})] });
+  const reviewing = render({ google: stillSource }, REVIEW);
   assert.doesNotMatch(reviewing, /Set up later/);
   assert.match(reviewing, /sign-in-quit[^>]*>Quit Luke/);
 });

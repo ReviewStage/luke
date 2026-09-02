@@ -205,7 +205,7 @@ export interface UpdateControl {
   onOpenLatest: () => void;
 }
 
-interface SettingsWrites {
+export interface SettingsWrites {
   setting(field: AppSettingField, value: AppSettingValue<AppSettingField>): Promise<ActResult>;
   entry(
     field: KeyedAppSettingField,
@@ -213,6 +213,31 @@ interface SettingsWrites {
     value: SettingEntryValue<KeyedAppSettingField> | undefined,
   ): Promise<ActResult>;
   reset(scope: SettingsResetScope): Promise<ActResult>;
+}
+
+/**
+ * The one way a settings row writes: through the bridge, with the returned
+ * snapshot applied where the panel keeps it. A factory rather than a hook so
+ * the calendar gate can hand the same writes to the same rows it borrows.
+ */
+export function settingsWrites(onSettingsChange: (settings: AppSettings) => void): SettingsWrites {
+  return {
+    async setting(field, value) {
+      const result = await window.sidecar.updateSetting(field, value);
+      onSettingsChange(result.settings);
+      return result;
+    },
+    async entry(field, key, value) {
+      const result = await window.sidecar.updateSettingEntry(field, key, value);
+      onSettingsChange(result.settings);
+      return result;
+    },
+    async reset(scope) {
+      const result = await window.sidecar.resetSettings(scope);
+      onSettingsChange(result.settings);
+      return result;
+    },
+  };
 }
 
 /**
@@ -1498,7 +1523,7 @@ export interface CalendarControl {
  * either way. The names drawn here are the user's own calendar names, on the
  * user's own screen.
  */
-export function CalendarChoices({
+function CalendarChoices({
   account,
   calendars,
   disabled,
@@ -1822,7 +1847,7 @@ function AppleCalendarRow({
  * intervals exist to drive. Each row appears only in a build that can offer
  * it, and the block only when either can.
  */
-function CalendarIntegrations({
+export function CalendarIntegrations({
   settings,
   calendar,
   appleCalendar,
@@ -3538,23 +3563,7 @@ export function SettingsPanel({
   onSearchClose,
   onSearchEngaged,
 }: SettingsPanelProps): React.JSX.Element {
-  const writes: SettingsWrites = {
-    async setting(field, value) {
-      const result = await window.sidecar.updateSetting(field, value);
-      onSettingsChange(result.settings);
-      return result;
-    },
-    async entry(field, key, value) {
-      const result = await window.sidecar.updateSettingEntry(field, key, value);
-      onSettingsChange(result.settings);
-      return result;
-    },
-    async reset(scope) {
-      const result = await window.sidecar.resetSettings(scope);
-      onSettingsChange(result.settings);
-      return result;
-    },
-  };
+  const writes = settingsWrites(onSettingsChange);
   // Why the front page's Voice row wears its mark, or nothing while voice is
   // fully set up. Judged here rather than on the Voice page because the mark
   // has to stand while that page is not drawn: it is the front page saying a

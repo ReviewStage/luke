@@ -60,7 +60,12 @@ import {
   widenedView,
 } from "./session-search";
 import { SendIcon, StopIcon } from "./settings-icons";
-import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
+import {
+  CalendarIntegrations,
+  SettingsPanel,
+  type SettingsPanelProps,
+  settingsWrites,
+} from "./settings-panel";
 import { SettingsSearchButton } from "./settings-search";
 import { SignInGate } from "./sign-in-gate";
 import { updateAvailable, updateRow } from "./update-row";
@@ -901,13 +906,30 @@ export function PanelBody({
     );
   }
   // Onboarding's second gate, past the account's: the roster and the settings
-  // both wait behind it until the step is answered — a calendar connected, so
-  // Luke can tell a meeting from a moment to speak into, or the skip
-  // declining it for good.
+  // both wait behind it until the step is answered — Done over a connected
+  // calendar, so Luke can tell a meeting from a moment to speak into, or the
+  // skip declining it for good. A connection moves the gate to its review
+  // half, which is the Connections page's own calendar block, so the
+  // calendars read exactly as they do everywhere else.
   if (calendarGate) {
+    const gateReview =
+      settings.settings !== undefined &&
+      (settings.settings.calendarAccounts.length > 0 ||
+        settings.settings.appleCalendar !== undefined) ? (
+        <CalendarIntegrations
+          settings={settings.settings}
+          calendar={settings.calendar}
+          appleCalendar={settings.appleCalendar}
+          writes={settingsWrites(settings.onSettingsChange)}
+        />
+      ) : undefined;
     return (
       <div className="body">
-        <CalendarGate control={calendarGate} onQuit={settings.onQuit} />
+        <CalendarGate
+          control={calendarGate}
+          {...(gateReview !== undefined ? { review: gateReview } : undefined)}
+          onQuit={settings.onQuit}
+        />
       </div>
     );
   }

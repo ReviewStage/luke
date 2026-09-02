@@ -137,9 +137,11 @@
 
 /* The calendar gate borrows the sign-in gate's voice but not its grid: the
    review half can hold more calendars than the panel has height, so the gate
-   is a column whose connections region alone shrinks and scrolls while the
+   is a column whose review region alone shrinks and scrolls while the
    title, the buttons, and the footer stay on screen. It reserves no face
-   box — signed in, Luke already stands in the housing's wing. */
+   box — signed in, Luke already stands in the housing's wing — and it is a
+   step rather than a first meeting, so its type sits at the settings pages'
+   scale instead of the sign-in gate's hero size. */
 .calendar-gate {
   display: flex;
   min-height: 0;
@@ -148,7 +150,20 @@
   justify-content: center;
 }
 
-/* Only the connections region may give up height; squashing a button or the
+.calendar-gate h1 {
+  font-size: 15px;
+}
+
+.calendar-gate p {
+  font-size: 11.5px;
+}
+
+.calendar-gate .sign-in-provider {
+  min-height: 32px;
+  font-size: 12px;
+}
+
+/* Only the review region may give up height; squashing a button or the
    heading instead would trade the crop for a different one. */
 .calendar-gate > * {
   flex-shrink: 0;
@@ -156,22 +171,19 @@
 
 /* Each source's own mark, at the size the account marks keep beside a label. */
 .calendar-gate .provider-mark {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   flex: 0 0 auto;
 }
 
-/* The review half: each connection is a bordered block of the settings rows'
-   own calendar checkboxes, reading left like the page they came from, and
-   scrolling on the settings page's own terms when the Mac's calendar list
-   outgrows the panel. */
-.calendar-gate-connections {
-  display: grid;
+/* The review half is the Connections page's own calendar block, handed in
+   whole so it reads exactly as it does there — this wrapper only lends it a
+   left-reading column that scrolls on the settings page's own terms when the
+   Mac's calendar list outgrows the panel. */
+.calendar-gate-review {
   width: 100%;
   min-height: 0;
   flex-shrink: 1;
-  gap: 8px;
-  margin-top: 4px;
   text-align: left;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -181,29 +193,7 @@
   animation-timeline: scroll(self block);
 }
 
-.calendar-gate-connection {
-  padding: 8px 10px;
-  border: 1px solid var(--hairline);
-  border-radius: 10px;
-}
-
-.calendar-gate-connection-name {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--text-primary);
-  font-size: 11.5px;
-  font-weight: 650;
-}
-
-/* The first observation pass has not answered yet; the block says so instead
-   of standing empty under its name. */
-.calendar-gate-reading {
-  margin: 0;
-  color: var(--text-tertiary);
-  font-size: 11px;
-}
-
-/* Done carries the step, so it reads a shade firmer than the add buttons. */
+/* Done carries the step, so it reads a shade firmer than the connects. */
 .calendar-gate-done {
   background: var(--raised-strong);
 }
