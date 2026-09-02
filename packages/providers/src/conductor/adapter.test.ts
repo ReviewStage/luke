@@ -706,7 +706,7 @@ test("reports no recap for a tail it cannot attribute to the agent", async () =>
   }
 });
 
-test("cuts a recap at the recap bound and keeps a shorter one whole", async () => {
+test("cuts a recap only at the payload backstop and keeps real parting words whole", async () => {
   const partingWords = `all tests pass ${"and a word ".repeat(80)}`.trim();
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
@@ -720,7 +720,7 @@ test("cuts a recap at the recap bound and keeps a shorter one whole", async () =
         id: IDLE_SESSION_UUID,
         workspaceId: "workspace-idle",
         name: TEST_SESSION_NAME,
-        transcriptTail: `## Assistant\n\n${"a word ".repeat(400)}`,
+        transcriptTail: `## Assistant\n\n${"a word ".repeat(10_000)}`,
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
@@ -738,7 +738,7 @@ test("cuts a recap at the recap bound and keeps a shorter one whole", async () =
   const observations = await adapterFor(api.fetch).observe();
 
   assert.equal(observations[0]?.recap?.length, maximumSessionRecapLength);
-  // The bound refuses a runaway tail; parting words within it — longer than
+  // The backstop refuses a runaway payload; real parting words — longer than
   // the model's excerpt — reach the surfaces whole.
   assert.equal(observations[1]?.recap, partingWords);
 });

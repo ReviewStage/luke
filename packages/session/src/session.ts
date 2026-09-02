@@ -543,15 +543,15 @@ export const maximumSpawnableAgentLength = 40;
 /** How many kinds of agent one session may offer to start. */
 export const maximumSpawnableAgents = 8;
 /**
- * How long a reported recap may run: a wire-hygiene bound on an observed
- * field, not a model bound. It matches the widest read any adapter
- * deliberately makes (Conductor's transcript tail), so a recap is never cut
- * below words an adapter was allowed to read, and the surfaces that draw it —
- * a row, a session's own screen — show the settled turn's parting words
- * whole. What may enter a model window or leave the machine unbidden is the
- * narrower {@link maximumSessionRecapExcerptLength}.
+ * How long a reported recap may run: a backstop against a corrupt or hostile
+ * session file, not a display budget. Real parting words never approach it,
+ * so every surface that draws a recap shows the whole message; what the
+ * bound refuses is a runaway payload riding the roster through IPC, the
+ * hosted wire, and a panel recording on every observation pass. What may
+ * enter a model window or leave the machine unbidden is the narrower
+ * {@link maximumSessionRecapExcerptLength}.
  */
-export const maximumSessionRecapLength = 2_000;
+export const maximumSessionRecapLength = 64_000;
 /**
  * The bounded excerpt of a recap that may reach a model: the attention
  * evaluator's update, the announcement worded from it, and the voice roster
