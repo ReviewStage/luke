@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { text } from "../server/core";
+import { text, type WorkspaceAgentSelection } from "../server/core";
 import {
   actUnsupportedReason,
   executeControlAct,
@@ -440,4 +440,84 @@ test("a workspace creation naming an unreported project is rejected without a wr
 
   assert.equal(answer.result, "rejected");
   assert.equal(answer.reason, "Project not found.");
+});
+
+// --- The workspace act's agent selection is held to the build's table ---
+
+test("a listed agent selection reaches the executor whole", async () => {
+  let received: WorkspaceAgentSelection | undefined;
+  const response = await handleActWorkspace(
+    workspaceOptions({
+      request: workspaceRequest({
+        providerId: "conductor",
+        providerProjectId: "project-1",
+        task: "build the thing",
+        agent: "claude",
+        model: "fable-5",
+        effort: "high",
+      }),
+      executeCreateWorkspace: async (options) => {
+        received = options.agentSelection;
+        return { result: "accepted" };
+      },
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(received, { agent: "claude", model: "fable-5", effort: "high" });
+});
+
+test("an agent selection outside the build's table is an invalid request", async () => {
+  const response = await handleActWorkspace(
+    workspaceOptions({
+      request: workspaceRequest({
+        providerId: "conductor",
+        providerProjectId: "project-1",
+        task: "build the thing",
+        agent: "claude",
+        model: "not-a-listed-model",
+      }),
+      executeCreateWorkspace: async () => {
+        throw new Error("executeCreateWorkspace must not run for an unlisted selection");
+      },
+    }),
+  );
+
+  assert.equal(response.status, 400);
+});
+
+test("a selection for a provider with no table is an invalid request", async () => {
+  const response = await handleActWorkspace(
+    workspaceOptions({
+      request: workspaceRequest({
+        providerId: "cursor",
+        providerProjectId: "https://github.com/owner/repo",
+        task: "build the thing",
+        agent: "claude",
+        model: "fable-5",
+      }),
+      executeCreateWorkspace: async () => {
+        throw new Error("executeCreateWorkspace must not run for an unlisted selection");
+      },
+    }),
+  );
+
+  assert.equal(response.status, 400);
+});
+
+test("no selection fields is no selection, never a guess", async () => {
+  let received: WorkspaceAgentSelection | undefined;
+  let ran = false;
+  await handleActWorkspace(
+    workspaceOptions({
+      executeCreateWorkspace: async (options) => {
+        received = options.agentSelection;
+        ran = true;
+        return { result: "accepted" };
+      },
+    }),
+  );
+
+  assert.equal(ran, true);
+  assert.equal(received, undefined);
 });

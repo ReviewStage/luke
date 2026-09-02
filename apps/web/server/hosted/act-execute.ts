@@ -10,6 +10,7 @@ import {
   type SessionProviderAdapter,
   VAULT_PROVIDER_ID,
   type VaultProviderId,
+  type WorkspaceAgentSelection,
 } from "../core.js";
 import {
   CURSOR_PROJECT_REFRESH,
@@ -362,10 +363,12 @@ export async function executeCreateWorkspaceAct(options: {
   providerProjectId: string;
   name: string | undefined;
   task: string | undefined;
+  /** Already validated against the build's table by the handler. */
+  agentSelection?: WorkspaceAgentSelection;
   apiKey: string;
   seams?: ActExecuteSeams;
 }): Promise<ActExecutionAnswer> {
-  const { providerId, providerProjectId, name, task, apiKey } = options;
+  const { providerId, providerProjectId, name, task, agentSelection, apiKey } = options;
   const guarded = capabilityGuard(MOBILE_SESSION_ACT.CREATE_WORKSPACE, providerId);
   if (guarded) return guarded;
 
@@ -388,6 +391,6 @@ export async function executeCreateWorkspaceAct(options: {
     };
   }
   return fromProviderWorkspaceResult(
-    await pass.adapter.createWorkspace({ providerProjectId, name, task }),
+    await pass.adapter.createWorkspace({ providerProjectId, name, task, agentSelection }),
   );
 }

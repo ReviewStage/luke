@@ -3,11 +3,14 @@ import {
   type HostedActResult,
   type HostedActWorkspaceAnswer,
   isRecord,
+  parseWorkspaceAgentSelection,
   sessionMessageText,
   text,
   type UnparsedWireValue,
   VAULT_PROVIDER_ID,
   type VaultProviderId,
+  type WireValue,
+  type WorkspaceAgentSelection,
   workspaceNameText,
 } from "../core.js";
 import { decryptProviderKey } from "./encryption.js";
@@ -64,6 +67,7 @@ export interface ActWorkspaceOptions {
     providerProjectId: string;
     name: string | undefined;
     task: string | undefined;
+    agentSelection: WorkspaceAgentSelection | undefined;
     apiKey: string;
   }) => Promise<ActWorkspaceExecuteResult>;
 }
@@ -129,6 +133,22 @@ export async function handleActWorkspace(options: ActWorkspaceOptions): Promise<
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
 
+  // An agent choice must be one the build's own table lists for this
+  // provider — the same gate the desktop's stores, offers, and adapters all
+  // answer to — so a request carrying any of the three fields either parses
+  // whole against that table or is invalid, never trimmed to something else.
+  let agentSelection: WorkspaceAgentSelection | undefined;
+  const selectionFields: Record<string, WireValue> = {};
+  if (body.agent !== undefined) selectionFields.agent = body.agent;
+  if (body.model !== undefined) selectionFields.model = body.model;
+  if (body.effort !== undefined) selectionFields.effort = body.effort;
+  if (Object.keys(selectionFields).length > 0) {
+    agentSelection = parseWorkspaceAgentSelection(providerId, selectionFields);
+    if (!agentSelection) {
+      return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+    }
+  }
+
   const unsupported = unsupportedReason(providerId);
   if (unsupported) {
     const answer: HostedActWorkspaceAnswer = {
@@ -159,6 +179,7 @@ export async function handleActWorkspace(options: ActWorkspaceOptions): Promise<
     providerProjectId,
     name,
     task,
+    agentSelection,
     apiKey,
   });
 

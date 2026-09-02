@@ -1,9 +1,11 @@
 import type { CloudFetch } from "../../../../packages/providers/src/shared/cloud-session-adapter.js";
 import {
+  type HostedWorkspaceAgentModels,
   type HostedWorkspaceProject,
   VAULT_PROVIDER_ID,
   type VaultProviderId,
   type WorkspaceProject,
+  workspaceAgentModels,
 } from "../core.js";
 import { actUnsupportedReason, MOBILE_SESSION_ACT } from "./act-execute.js";
 import { CURSOR_PROJECT_REFRESH, cloudSessionAdapterFor } from "./cloud-adapters.js";
@@ -103,15 +105,29 @@ export async function handleProjects(options: ProjectsOptions): Promise<Response
   );
 
   const projects: HostedWorkspaceProject[] = [];
+  const agentModels: HostedWorkspaceAgentModels[] = [];
   for (const [i, providerId] of providers.entries()) {
     const result = results[i];
     if (result?.status !== "fulfilled") continue;
     for (const project of result.value) {
       projects.push(toWireProject(providerId, project));
     }
+    // The build's own agent table for each provider that actually offered a
+    // project — documented state riding beside the observed state it applies
+    // to, so a provider with nowhere to create advertises no choices either.
+    if (result.value.length > 0) {
+      for (const entry of workspaceAgentModels(providerId)) {
+        agentModels.push({
+          providerId,
+          agent: entry.agent,
+          models: entry.models.map((model) => ({ id: model.id, label: model.label })),
+          efforts: [...entry.efforts],
+        });
+      }
+    }
   }
 
-  return jsonResponse(HOSTED_HTTP_STATUS.OK, { projects });
+  return jsonResponse(HOSTED_HTTP_STATUS.OK, { projects, agentModels });
 }
 
 function toWireProject(

@@ -496,9 +496,26 @@ export interface HostedWorkspaceProject {
   targetName?: string;
 }
 
+/**
+ * One agent kind a provider's creation endpoint takes, with the models and
+ * effort levels the build's table lists for it — `WORKSPACE_AGENT_MODELS`
+ * from `@sidecar/session`, flattened onto the wire with its provider id. The
+ * table is documented state fixed by the build, so mobile reading it here
+ * offers exactly what the desktop offers, and the workspace act validates a
+ * chosen selection against the same table again server-side.
+ */
+export interface HostedWorkspaceAgentModels {
+  providerId: string;
+  agent: string;
+  models: { id: string; label: string }[];
+  efforts: string[];
+}
+
 /** The projects endpoint answer: where the caller's keys can create a workspace. */
 export interface HostedProjectsAnswer {
   projects: HostedWorkspaceProject[];
+  /** Agent choices for providers in `projects` whose creation takes one. */
+  agentModels: HostedWorkspaceAgentModels[];
 }
 
 const WORKSPACE_TASK_SUPPORT_SET: ReadonlySet<string> = new Set(
@@ -529,6 +546,29 @@ function hostedWorkspaceProjectFromWire(
   return project;
 }
 
+function hostedWorkspaceAgentModelsFromWire(
+  value: UnparsedWireValue,
+): HostedWorkspaceAgentModels | undefined {
+  if (!isRecord(value)) return undefined;
+  const providerId = text(value.providerId);
+  if (!providerId) return undefined;
+  const agent = text(value.agent);
+  if (!agent) return undefined;
+  if (!Array.isArray(value.models) || !Array.isArray(value.efforts)) return undefined;
+  const models: { id: string; label: string }[] = [];
+  for (const model of value.models) {
+    if (!isRecord(model)) return undefined;
+    const id = text(model.id);
+    const label = text(model.label);
+    if (!id || !label) return undefined;
+    models.push({ id, label });
+  }
+  if (models.length === 0) return undefined;
+  const efforts = value.efforts.filter((effort): effort is string => isWireString(effort));
+  if (efforts.length !== value.efforts.length) return undefined;
+  return { providerId, agent, models, efforts };
+}
+
 /** Validates a projects answer; a malformed entry is skipped, not fatal. */
 export function hostedProjectsAnswerFromWire(
   value: UnparsedWireValue,
@@ -539,7 +579,14 @@ export function hostedProjectsAnswerFromWire(
     const project = hostedWorkspaceProjectFromWire(item);
     if (project) projects.push(project);
   }
-  return { projects };
+  const agentModels: HostedWorkspaceAgentModels[] = [];
+  if (Array.isArray(value.agentModels)) {
+    for (const item of value.agentModels) {
+      const entry = hostedWorkspaceAgentModelsFromWire(item);
+      if (entry) agentModels.push(entry);
+    }
+  }
+  return { projects, agentModels };
 }
 
 // --- Act wire contract ---
