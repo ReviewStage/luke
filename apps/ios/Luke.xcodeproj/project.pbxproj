@@ -23,6 +23,7 @@
 		AABBCC00000000000000008D /* WorkspaceCreatorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001E /* WorkspaceCreatorSheet.swift */; };
 		AABBCC00000000000000008E /* SessionReplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001F /* SessionReplay.swift */; };
 		AABBCC0000000000000000A2 /* PresenceBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000A1 /* PresenceBinding.swift */; };
+		AABBCC0000000000000000A4 /* MarkdownMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000A3 /* MarkdownMessageView.swift */; };
 		AABBCC000000000000000092 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = AABBCC000000000000000091 /* PostHog */; };
 /* End PBXBuildFile section */
 
@@ -43,6 +44,7 @@
 		AABBCC00000000000000001E /* WorkspaceCreatorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceCreatorSheet.swift; sourceTree = "<group>"; };
 		AABBCC00000000000000001F /* SessionReplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReplay.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000A1 /* PresenceBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresenceBinding.swift; sourceTree = "<group>"; };
+		AABBCC0000000000000000A3 /* MarkdownMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownMessageView.swift; sourceTree = "<group>"; };
 		AABBCC00000000000000001C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -99,6 +101,7 @@
 				AABBCC00000000000000001E /* WorkspaceCreatorSheet.swift */,
 				AABBCC00000000000000001F /* SessionReplay.swift */,
 				AABBCC0000000000000000A1 /* PresenceBinding.swift */,
+				AABBCC0000000000000000A3 /* MarkdownMessageView.swift */,
 				AABBCC000000000000000014 /* Assets.xcassets */,
 				AABBCC00000000000000001C /* Info.plist */,
 			);
@@ -234,6 +237,7 @@
 				AABBCC00000000000000008D /* WorkspaceCreatorSheet.swift in Sources */,
 				AABBCC00000000000000008E /* SessionReplay.swift in Sources */,
 				AABBCC0000000000000000A2 /* PresenceBinding.swift in Sources */,
+				AABBCC0000000000000000A4 /* MarkdownMessageView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
