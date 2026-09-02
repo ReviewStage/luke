@@ -135,6 +135,97 @@
   color: var(--state-attention);
 }
 
+/* The calendar gate borrows the sign-in gate's voice but not its grid: the
+   review half can hold more calendars than the panel has height, so the gate
+   is a column whose review region alone shrinks and scrolls while the
+   title, the buttons, and the footer stay on screen. It reserves no face
+   box — signed in, Luke already stands in the housing's wing — and it is a
+   step rather than a first meeting, so its type sits at the settings pages'
+   scale instead of the sign-in gate's hero size. */
+.calendar-gate {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.calendar-gate .sign-in-provider {
+  min-height: 32px;
+  font-size: 12px;
+}
+
+/* Only the review region may give up height; squashing a button or the
+   heading instead would trade the crop for a different one. */
+.calendar-gate > * {
+  flex-shrink: 0;
+}
+
+/* Each source's own mark, at the size the account marks keep beside a label. */
+.calendar-gate .provider-mark {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+/* The review half is the Connections page's own calendar block, handed in
+   whole so it reads exactly as it does there — this wrapper only lends it a
+   left-reading column that scrolls on the settings page's own terms when the
+   Mac's calendar list outgrows the panel. */
+.calendar-gate-review {
+  width: 100%;
+  min-height: 0;
+  flex-shrink: 1;
+  /* The settings page's own posture, for the settings page's own rows: the
+     marks deliberately bleed past their rows (`.credential-mark`'s negative
+     margins), which the page absorbs with padding and clips against sideways
+     scrolling. Without both, the bleed makes this wrapper horizontally
+     scrollable and the whole block can be dragged off its left edge. */
+  padding: 0 4px;
+  text-align: left;
+  overflow-x: clip;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-width: thin;
+  animation: scroll-edge-fade linear both;
+  animation-timeline: scroll(self block);
+}
+
+/* The two footnotes share a line and a voice; only the quit admits danger on
+   hover, because only it ends the run. */
+.calendar-gate-footer {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.calendar-gate-footer .sign-in-quit {
+  margin-top: 0;
+}
+
+.calendar-gate-skip {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+  font-weight: 620;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.calendar-gate-skip:hover:not(:disabled) {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.calendar-gate-skip:disabled {
+  opacity: 0.55;
+}
+
 /* Quiet on purpose: leaving is the one act here that is not the reason the
    screen exists, so it reads as a footnote until it is asked after — and then
    admits what it is the way every destructive control does. */

@@ -101,11 +101,6 @@ export const HOSTED_ATTENTION_CONTRACT_VERSION = "2";
  */
 export const VAULT_PROVIDER_ID = {
   CONDUCTOR: "conductor",
-  COPILOT: "copilot",
-  CURSOR: "cursor",
-  DEVIN: "devin",
-  JULES: "jules",
-  REPLICAS: "replicas",
 } as const satisfies Record<string, ProviderId>;
 
 export type VaultProviderId = (typeof VAULT_PROVIDER_ID)[keyof typeof VAULT_PROVIDER_ID];
@@ -418,7 +413,7 @@ export interface ObservedSessionControl {
  * rather than trusting these advertisements.
  */
 export interface ObservedSession {
-  /** The vault provider id for this session (conductor, devin, …). */
+  /** The vault provider id for this session (conductor today). */
   providerId: string;
   /** The provider's own id for this session. */
   sessionId: string;

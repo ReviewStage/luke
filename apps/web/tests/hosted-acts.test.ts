@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { JsonObject } from "../../../packages/wire/src/testing/json.js";
 import { text, type WorkspaceAgentSelection } from "../server/core";
 import {
   actUnsupportedReason,
@@ -73,13 +74,7 @@ function workspaceOptions(
 test("an unsupported provider gets 'unsupported' even with no key stored", async () => {
   const response = await handleSessionAct(
     messageOptions({
-      request: actRequest("/api/acts/message", {
-        providerId: "copilot",
-        providerSessionId: "session-1",
-        text: "hello",
-      }),
-      unsupportedReason: (providerId) =>
-        providerId === "conductor" ? undefined : "Not available.",
+      unsupportedReason: () => "Not available.",
       readKey: async () => undefined,
       execute: async () => {
         throw new Error("execute must not run for an unsupported provider");
@@ -96,9 +91,7 @@ test("an unsupported provider gets 'unsupported' even with no key stored", async
 test("an unsupported workspace provider gets 'unsupported' even with no key stored", async () => {
   const response = await handleActWorkspace(
     workspaceOptions({
-      request: workspaceRequest({ providerId: "devin", providerProjectId: "project-1" }),
-      unsupportedReason: (providerId) =>
-        providerId === "conductor" ? undefined : "Not available.",
+      unsupportedReason: () => "Not available.",
       readKey: async () => undefined,
       executeCreateWorkspace: async () => {
         throw new Error("executeCreateWorkspace must not run for an unsupported provider");
@@ -192,128 +185,158 @@ test("a session act answer carries a created session id to the wire", async () =
 
 test("the capability map matches each desktop adapter's implemented writes", () => {
   const supported = (act: (typeof REMOTE_SESSION_ACT)[keyof typeof REMOTE_SESSION_ACT]) =>
-    (["conductor", "copilot", "cursor", "devin", "jules", "replicas"] as const).filter(
+    (["conductor"] as const).filter(
       (providerId) => actUnsupportedReason(act, providerId) === undefined,
     );
 
-  assert.deepEqual(supported(REMOTE_SESSION_ACT.MESSAGE), [
-    "conductor",
-    "cursor",
-    "devin",
-    "jules",
-    "replicas",
-  ]);
-  assert.deepEqual(supported(REMOTE_SESSION_ACT.CONTROL), [
-    "conductor",
-    "cursor",
-    "devin",
-    "jules",
-  ]);
-  assert.deepEqual(supported(REMOTE_SESSION_ACT.AGENT), ["conductor", "replicas"]);
-  assert.deepEqual(supported(REMOTE_SESSION_ACT.RENAME_SESSION), ["conductor"]);
-  assert.deepEqual(supported(REMOTE_SESSION_ACT.RENAME_WORKSPACE), ["conductor"]);
-  assert.deepEqual(supported(REMOTE_SESSION_ACT.CREATE_WORKSPACE), [
-    "conductor",
-    "cursor",
-    "replicas",
-  ]);
-});
-
-test("an unsupported act names the provider and never reaches the network", async () => {
-  const answer = await executeMessageAct({
-    providerId: "copilot",
-    providerSessionId: "task-1",
-    text: "hello",
-    apiKey: "key-1",
-    seams: {
-      fetch: async () => {
-        throw new Error("an unsupported act must not touch the network");
-      },
-    },
-  });
-
-  assert.equal(answer.result, "unsupported");
-  assert.match(answer.reason ?? "", /Copilot/);
+  for (const act of Object.values(REMOTE_SESSION_ACT)) {
+    assert.deepEqual(supported(act), ["conductor"], act);
+  }
 });
 
 // --- Executors re-observe and act through the provider's adapter ---
 
-/** A Jules sessions listing with one session in the given state. */
-function julesListing(state: string): string {
-  return JSON.stringify({
-    sessions: [
-      {
-        id: "jules-1",
-        state,
-        updateTime: new Date().toISOString(),
-        sourceContext: { source: "github/owner/repo" },
-        url: "https://jules.google.com/session/jules-1",
-      },
-    ],
-  });
+const CONDUCTOR_PROJECT_ID = "project-1";
+const CONDUCTOR_WORKSPACE_ID = "workspace-1";
+const CONDUCTOR_SESSION_ID = "session-1";
+
+/**
+ * The read-only subset of Conductor's API one act pass walks — identity,
+ * projects, the caller's workspaces, each workspace's sessions and lifecycle,
+ * each session's status — with the session in the given state, plus a
+ * recorder for whatever the act itself posts.
+ */
+function conductorApi(status: string) {
+  const posts: Array<{ url: string; body: string }> = [];
+  const json = (value: JsonObject) => new Response(JSON.stringify(value), { status: 200 });
+  const fetch = async (url: string, init: RequestInit) => {
+    const { pathname } = new URL(url);
+    if (init.method === "POST") {
+      if (pathname.endsWith("/v0/sql")) return json({ rows: [], rowCount: 0, truncated: false });
+      posts.push({ url, body: String(init.body) });
+      if (pathname.endsWith("/v0/workspaces")) {
+        return new Response(
+          JSON.stringify({ workspaceId: "workspace-new", sessionId: "session-new" }),
+          { status: 201 },
+        );
+      }
+      return new Response(JSON.stringify({ messageId: "message-1", state: "queued" }), {
+        status: 201,
+      });
+    }
+    if (pathname.endsWith("/me")) return json({ userId: "user-1" });
+    if (pathname.endsWith("/v0/projects")) {
+      return json({
+        data: [
+          { id: CONDUCTOR_PROJECT_ID, gitRemote: "https://github.com/owner/repo", name: "repo" },
+        ],
+        offset: 0,
+        hasMore: false,
+      });
+    }
+    if (pathname.endsWith("/v0/workspaces")) {
+      return json({
+        data: [
+          {
+            id: CONDUCTOR_WORKSPACE_ID,
+            name: "amber-shoal",
+            state: "ready",
+            repoUrl: "https://github.com/owner/repo",
+            creatorId: "user-1",
+            createdAt: "2026-08-12T02:00:00.000Z",
+            lastActivityAt: "2026-08-12T02:40:00.000Z",
+            deepLink: `conductor://workspace?id=${CONDUCTOR_WORKSPACE_ID}`,
+          },
+        ],
+        offset: 0,
+        hasMore: false,
+      });
+    }
+    if (pathname.endsWith(`/v0/workspaces/${CONDUCTOR_WORKSPACE_ID}/sessions`)) {
+      return json({
+        data: [
+          {
+            id: CONDUCTOR_SESSION_ID,
+            name: "Revamp the panel",
+            deepLink: `conductor://workspace?session=${CONDUCTOR_SESSION_ID}`,
+          },
+        ],
+        offset: 0,
+        hasMore: false,
+      });
+    }
+    if (pathname.endsWith(`/v0/workspaces/${CONDUCTOR_WORKSPACE_ID}/status`)) {
+      return json({
+        workspaceId: CONDUCTOR_WORKSPACE_ID,
+        status: "ready",
+        updatedAt: "2026-08-12T02:40:00.000Z",
+      });
+    }
+    if (pathname.endsWith(`/v0/sessions/${CONDUCTOR_SESSION_ID}/status`)) {
+      const statusPayload: JsonObject = {
+        workspaceId: CONDUCTOR_WORKSPACE_ID,
+        sessionId: CONDUCTOR_SESSION_ID,
+        status,
+        updatedAt: "2026-08-12T02:40:00.000Z",
+      };
+      if (status === "error") statusPayload.errorMessage = "The agent container ran out of memory";
+      return json(statusPayload);
+    }
+    return new Response("{}", { status: 500 });
+  };
+  return { fetch, posts };
 }
 
-test("a message to a messageable Jules session lands on its sendMessage method", async () => {
-  const posts: Array<{ url: string; body: string }> = [];
+test("a message to a messageable Conductor session lands on its sendMessage method", async () => {
+  const api = conductorApi("idle");
   const answer = await executeMessageAct({
-    providerId: "jules",
-    providerSessionId: "jules-1",
+    providerId: "conductor",
+    providerSessionId: CONDUCTOR_SESSION_ID,
     text: "please continue",
     apiKey: "key-1",
-    seams: {
-      fetch: async (url, init) => {
-        if (init.method === "POST") {
-          posts.push({ url, body: String(init.body) });
-          return new Response("{}", { status: 200 });
-        }
-        return new Response(julesListing("IN_PROGRESS"), { status: 200 });
-      },
-    },
+    seams: { fetch: api.fetch },
   });
 
   assert.equal(answer.result, "accepted");
-  assert.equal(posts.length, 1);
-  assert.match(posts[0]?.url ?? "", /\/v1alpha\/sessions\/jules-1:sendMessage$/);
-  assert.deepEqual(JSON.parse(posts[0]?.body ?? ""), { prompt: "please continue" });
+  assert.equal(api.posts.length, 1);
+  assert.match(api.posts[0]?.url ?? "", /\/v0\/sessions\/session-1\/messages$/);
+  assert.deepEqual(JSON.parse(api.posts[0]?.body ?? ""), { message: "please continue" });
 });
 
-test("a message to a settled Jules session is rejected without a write", async () => {
+test("a message to an errored Conductor session is rejected without a write", async () => {
+  const api = conductorApi("error");
   const answer = await executeMessageAct({
-    providerId: "jules",
-    providerSessionId: "jules-1",
+    providerId: "conductor",
+    providerSessionId: CONDUCTOR_SESSION_ID,
     text: "hello",
     apiKey: "key-1",
-    seams: {
-      fetch: async (_url, init) => {
-        assert.notEqual(init.method, "POST", "a rejected act must not write");
-        return new Response(julesListing("COMPLETED"), { status: 200 });
-      },
-    },
+    seams: { fetch: api.fetch },
   });
 
   assert.equal(answer.result, "rejected");
   assert.match(answer.reason ?? "", /not currently accepting messages/);
+  assert.deepEqual(api.posts, []);
 });
 
 test("a message to a session the fresh pass did not observe is rejected", async () => {
+  const api = conductorApi("idle");
   const answer = await executeMessageAct({
-    providerId: "jules",
-    providerSessionId: "jules-9",
+    providerId: "conductor",
+    providerSessionId: "session-9",
     text: "hello",
     apiKey: "key-1",
-    seams: {
-      fetch: async () => new Response(julesListing("IN_PROGRESS"), { status: 200 }),
-    },
+    seams: { fetch: api.fetch },
   });
 
   assert.equal(answer.result, "rejected");
   assert.equal(answer.reason, "Session not found.");
+  assert.deepEqual(api.posts, []);
 });
 
 test("a key the provider refuses is named as the reason, not a missing session", async () => {
   const answer = await executeMessageAct({
-    providerId: "jules",
-    providerSessionId: "jules-1",
+    providerId: "conductor",
+    providerSessionId: CONDUCTOR_SESSION_ID,
     text: "hello",
     apiKey: "key-1",
     seams: { fetch: async () => new Response("{}", { status: 401 }) },
@@ -325,8 +348,8 @@ test("a key the provider refuses is named as the reason, not a missing session",
 
 test("a provider that cannot be reached is named as the reason", async () => {
   const answer = await executeMessageAct({
-    providerId: "jules",
-    providerSessionId: "jules-1",
+    providerId: "conductor",
+    providerSessionId: CONDUCTOR_SESSION_ID,
     text: "hello",
     apiKey: "key-1",
     seams: {
@@ -337,109 +360,80 @@ test("a provider that cannot be reached is named as the reason", async () => {
   });
 
   assert.equal(answer.result, "rejected");
-  assert.match(answer.reason ?? "", /Could not reach Jules/);
+  assert.match(answer.reason ?? "", /Could not reach Conductor/);
 });
 
 test("an advertised control runs through the provider's documented endpoint", async () => {
-  const posts: string[] = [];
+  const api = conductorApi("working");
   const answer = await executeControlAct({
-    providerId: "jules",
-    providerSessionId: "jules-1",
-    controlId: "approve-plan",
+    providerId: "conductor",
+    providerSessionId: CONDUCTOR_SESSION_ID,
+    controlId: "cancel-turn",
     apiKey: "key-1",
-    seams: {
-      fetch: async (url, init) => {
-        if (init.method === "POST") {
-          posts.push(url);
-          return new Response("{}", { status: 200 });
-        }
-        return new Response(julesListing("AWAITING_PLAN_APPROVAL"), { status: 200 });
-      },
-    },
+    seams: { fetch: api.fetch },
   });
 
   assert.equal(answer.result, "accepted");
   assert.deepEqual(
-    posts.map((url) => url.endsWith("/v1alpha/sessions/jules-1:approvePlan")),
+    api.posts.map((post) => post.url.endsWith("/v0/sessions/session-1/cancel")),
     [true],
   );
 });
 
 test("a control the fresh pass did not advertise is rejected without a write", async () => {
+  const api = conductorApi("idle");
   const answer = await executeControlAct({
-    providerId: "jules",
-    providerSessionId: "jules-1",
-    controlId: "approve-plan",
+    providerId: "conductor",
+    providerSessionId: CONDUCTOR_SESSION_ID,
+    controlId: "cancel-turn",
     apiKey: "key-1",
-    seams: {
-      fetch: async (_url, init) => {
-        assert.notEqual(init.method, "POST", "an unadvertised control must not write");
-        return new Response(julesListing("IN_PROGRESS"), { status: 200 });
-      },
-    },
+    seams: { fetch: api.fetch },
   });
 
   assert.equal(answer.result, "rejected");
   assert.match(answer.reason ?? "", /not currently offered/);
+  assert.deepEqual(api.posts, []);
 });
 
-test("a Cursor workspace creation awaits the project list and delivers the task inline", async () => {
-  const posts: Array<{ url: string; body: string }> = [];
+test("a Conductor workspace creation lands in a reported project with the task inline", async () => {
+  const api = conductorApi("idle");
   const answer = await executeCreateWorkspaceAct({
-    providerId: "cursor",
-    providerProjectId: "https://github.com/owner/repo",
+    providerId: "conductor",
+    providerProjectId: CONDUCTOR_PROJECT_ID,
     name: "Fix the flaky test",
     task: "Fix the flaky test in CI",
     apiKey: "key-1",
-    seams: {
-      fetch: async (url, init) => {
-        if (init.method === "POST") {
-          posts.push({ url, body: String(init.body) });
-          return new Response(JSON.stringify({ agent: { id: "agent-9" } }), { status: 200 });
-        }
-        if (url.includes("/v1/repositories")) {
-          return new Response(
-            JSON.stringify({ items: [{ url: "https://github.com/owner/repo" }] }),
-            { status: 200 },
-          );
-        }
-        return new Response(JSON.stringify({ items: [] }), { status: 200 });
-      },
-    },
+    seams: { fetch: api.fetch },
   });
 
   assert.equal(answer.result, "accepted");
-  assert.equal(answer.providerSessionId, "agent-9");
-  assert.equal(posts.length, 1);
-  assert.match(posts[0]?.url ?? "", /\/v1\/agents$/);
-  const body = JSON.parse(posts[0]?.body ?? "");
-  assert.deepEqual(body.prompt, { text: "Fix the flaky test in CI" });
-  assert.deepEqual(body.repos, [{ url: "https://github.com/owner/repo" }]);
+  assert.equal(answer.providerSessionId, "session-new");
+  // Conductor's creation endpoint documents no prompt field, so the task
+  // follows as a message to the session the creation response named.
+  assert.deepEqual(
+    api.posts.map((post) => new URL(post.url).pathname),
+    ["/v0/workspaces", "/v0/sessions/session-new/messages"],
+  );
+  const creation = JSON.parse(api.posts[0]?.body ?? "");
+  assert.equal(creation.projectId, CONDUCTOR_PROJECT_ID);
+  assert.equal(creation.name, "Fix the flaky test");
+  assert.equal(creation.prompt, undefined);
 });
 
 test("a workspace creation naming an unreported project is rejected without a write", async () => {
+  const api = conductorApi("idle");
   const answer = await executeCreateWorkspaceAct({
-    providerId: "cursor",
-    providerProjectId: "https://github.com/owner/other",
+    providerId: "conductor",
+    providerProjectId: "project-other",
     name: undefined,
     task: "Do the thing",
     apiKey: "key-1",
-    seams: {
-      fetch: async (url, init) => {
-        assert.notEqual(init.method, "POST", "an unreported project must not be created in");
-        if (url.includes("/v1/repositories")) {
-          return new Response(
-            JSON.stringify({ items: [{ url: "https://github.com/owner/repo" }] }),
-            { status: 200 },
-          );
-        }
-        return new Response(JSON.stringify({ items: [] }), { status: 200 });
-      },
-    },
+    seams: { fetch: api.fetch },
   });
 
   assert.equal(answer.result, "rejected");
   assert.equal(answer.reason, "Project not found.");
+  assert.deepEqual(api.posts, []);
 });
 
 // --- The workspace act's agent selection is held to the build's table ---
@@ -476,25 +470,6 @@ test("an agent selection outside the build's table is an invalid request", async
         task: "build the thing",
         agent: "claude",
         model: "not-a-listed-model",
-      }),
-      executeCreateWorkspace: async () => {
-        throw new Error("executeCreateWorkspace must not run for an unlisted selection");
-      },
-    }),
-  );
-
-  assert.equal(response.status, 400);
-});
-
-test("a selection for a provider with no table is an invalid request", async () => {
-  const response = await handleActWorkspace(
-    workspaceOptions({
-      request: workspaceRequest({
-        providerId: "cursor",
-        providerProjectId: "https://github.com/owner/repo",
-        task: "build the thing",
-        agent: "claude",
-        model: "fable-5",
       }),
       executeCreateWorkspace: async () => {
         throw new Error("executeCreateWorkspace must not run for an unlisted selection");

@@ -12,35 +12,23 @@ import {
   SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "@sidecar/session";
 import {
-  ANTIGRAVITY_MARK_BASE_FILL,
-  ANTIGRAVITY_MARK_LAYERS,
-  ANTIGRAVITY_MARK_MASK_PATH,
   APPLE_CALENDAR_MARK_LAYERS,
   CLAUDE_CODE_PATH,
   CLOUD_BADGE_PATH,
-  CMUX_PATH,
   CODEX_PATH,
   CONDUCTOR_MARK_PATHS,
   COPILOT_PATH,
   CURSOR_PATH,
-  DEEPSEEK_PATH,
-  DEVIN_PATH,
   GEMINI_CLI_MARK_LAYERS,
   GEMINI_CLI_MARK_MASK_PATH,
   GOOGLE_CALENDAR_MARK_LAYERS,
   GROK_BUILD_ORBIT_PATH,
   GROK_BUILD_TAIL_PATH,
-  HERDR_PATH,
-  JULES_PATH,
   LINEAR_PATH,
   OMP_PATH,
   OPENAI_PATH,
   OPENCODE_BLOCK_PATH,
   OPENCODE_FRAME_PATH,
-  ORCA_PATH,
-  PI_PATH,
-  RADIUS_PATH,
-  REPLICAS_PATH,
   SUPERSET_PATH,
 } from "@sidecar/surface";
 import React, { useId } from "react";
@@ -59,46 +47,29 @@ void React;
  * Provider marks are inlined as path data rather than bundled image files, so
  * the renderer stays asset-free and the marks scale with the surface.
  *
- * Each is the provider's own mark, reproduced rather than redrawn —
- * Antigravity's double-arch verbatim from the vector antigravity.google
- * inlines as its own site logo (trademark of Google LLC), keeping the masked,
- * blurred colour field over the flat blue base it is published with, Claude Code
- * via Simple Icons (CC0-1.0, sourced from code.claude.com), cmux's chevron
- * verbatim from the icon cmux.com serves as its own site mark, keeping the
- * horizontal gradient the icon draws it with, Codex via
+ * Each is the provider's own mark, reproduced rather than redrawn — Claude Code
+ * via Simple Icons (CC0-1.0, sourced from code.claude.com), Codex via
  * @lobehub/icons (MIT), Conductor's letter mark verbatim from the published
  * brand kit at https://www.conductor.build/brandkit, Copilot via Simple Icons
  * (MIT, sourced from https://primer.style/foundations/icons/copilot-24),
  * Cursor via Simple Icons (CC0-1.0, sourced from https://cursor.com/brand),
- * DeepSeek's whale via Simple Icons (CC0-1.0, sourced from
- * https://www.deepseek.com), Pi's pixel glyph verbatim from the inline SVG
- * https://pi.dev serves as its own site logo,
- * Devin's verbatim from the mark https://devin.ai serves as its own favicon
- * and site header, Gemini's aurora sparkle verbatim from the vector the
+ * Gemini's aurora sparkle verbatim from the vector the
  * Gemini web app inlines at gemini.google.com (trademark of Google LLC),
  * keeping the masked, blurred colour field it is published with,
  * Google Calendar via Simple Icons (CC0-1.0, sourced from
  * https://developers.google.com/calendar), Grok Build's comet mark verbatim
  * from the favicon https://grok.com serves (a trademark of xAI),
- * Herdr's ram mark verbatim from the icon https://herdr.dev serves as its own
- * site mark (assets/ram.svg, Apache-2.0),
- * Jules via Simple Icons (CC0-1.0, sourced from
- * https://jules.google), OpenAI via Simple Icons (CC0-1.0), Linear via Simple Icons (CC0-1.0, sourced from
+ * OpenAI via Simple Icons (CC0-1.0), Linear via Simple Icons (CC0-1.0, sourced from
  * https://linear.app), OpenCode's two-tone terminal mark verbatim from
- * the favicon https://opencode.ai serves, Orca's whale mark verbatim from the
- * logo the Orca repository publishes (stablyai/orca, MIT), Radius Browser's
- * banded sphere verbatim from the logomark https://radiusbrowser.com serves
- * as its own site mark and favicon (brand/radius/logomark-solid.svg),
- * Replicas' pixel R
- * verbatim from the site mark https://tryreplicas.com serves
- * (R-logo-new.svg), and Superset's bracket mark traced
+ * the favicon https://opencode.ai serves, OMP's pi verbatim from the favicon
+ * https://omp.sh serves, and Superset's bracket mark traced
  * from the pixel grid of the favicon https://superset.sh serves — the one
  * square mark Superset publishes — keeping the vertical metallic gradient the
  * favicon draws it with. Each keeps its own brand colour
  * (see the `--mark-*` custom properties), so a mark says which provider a
  * session belongs to while the chips and row tints say what state it is in.
- * Copilot, Cursor, Devin, Grok Build, Herdr, and Radius each publish one
- * silhouette rather than a colour, so all six are drawn in the light form
+ * Copilot, Cursor, and Grok Build each publish one
+ * silhouette rather than a colour, so all three are drawn in the light form
  * their brand uses on a dark surface. They are trademarks of their respective owners. Do not restyle the
  * geometry or recolour them; swap the path in the generator if a provider
  * publishes an updated mark. Apple Calendar is the one exception to
@@ -111,72 +82,6 @@ interface MarkProps {
   className?: string;
 }
 
-function AntigravityMark({ className }: MarkProps): React.JSX.Element {
-  // Like Gemini's sparkle, the double-arch mark is not one filled path: a
-  // flat blue base wears a field of gaussian-blurred colour shapes — the
-  // published ellipses under their own transforms, plus two blurred paths —
-  // under a mask of the same glyph, all in Google's published colours,
-  // reproduced exactly and never recoloured to a theme. `useId` keeps every
-  // reference unique when several rows render the mark at once.
-  const idPrefix = `antigravity-mark-${useId()}`;
-  const maskId = `${idPrefix}-mask`;
-
-  return (
-    <svg
-      className={className}
-      data-mark={PROVIDER_ID.ANTIGRAVITY}
-      viewBox="13.9 15.1 83.7 83.7"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <defs>
-        <mask id={maskId} maskUnits="userSpaceOnUse" x="13" y="18" width="85" height="78">
-          <path fill="#ffffff" d={ANTIGRAVITY_MARK_MASK_PATH} />
-        </mask>
-        {ANTIGRAVITY_MARK_LAYERS.map((layer, index) => (
-          <filter
-            // The published artwork stacks one ellipse twice, so the layer
-            // list holds duplicates and only the position names a layer.
-            // biome-ignore lint/suspicious/noArrayIndexKey: see above
-            key={index}
-            id={`${idPrefix}-blur-${index}`}
-            filterUnits="userSpaceOnUse"
-            colorInterpolationFilters="sRGB"
-            x={layer.region.x}
-            y={layer.region.y}
-            width={layer.region.width}
-            height={layer.region.height}
-          >
-            <feGaussianBlur stdDeviation={layer.blur} />
-          </filter>
-        ))}
-      </defs>
-      <path fill={ANTIGRAVITY_MARK_BASE_FILL} d={ANTIGRAVITY_MARK_MASK_PATH} />
-      <g mask={`url(#${maskId})`}>
-        {ANTIGRAVITY_MARK_LAYERS.map((layer, index) => (
-          <g
-            // biome-ignore lint/suspicious/noArrayIndexKey: same duplicate-layer list as above
-            key={index}
-            filter={`url(#${idPrefix}-blur-${index})`}
-          >
-            {layer.path !== undefined && <path fill={layer.fill} d={layer.path} />}
-            {layer.ellipse !== undefined && (
-              <ellipse
-                fill={layer.fill}
-                cx={layer.ellipse.cx}
-                cy={layer.ellipse.cy}
-                rx={layer.ellipse.rx}
-                ry={layer.ellipse.ry}
-                transform={layer.ellipse.transform}
-              />
-            )}
-          </g>
-        ))}
-      </g>
-    </svg>
-  );
-}
-
 function ClaudeCodeMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
@@ -187,39 +92,6 @@ function ClaudeCodeMark({ className }: MarkProps): React.JSX.Element {
       focusable="false"
     >
       <path fill="currentColor" d={CLAUDE_CODE_PATH} />
-    </svg>
-  );
-}
-
-function CmuxMark({ className }: MarkProps): React.JSX.Element {
-  // cmux's chevron is a horizontal gradient rather than a flat colour, so it
-  // needs its own paint server. `useId` keeps the reference unique when
-  // several rows render the mark at once.
-  const gradientId = `cmux-mark-${useId()}`;
-
-  return (
-    <svg
-      className={className}
-      data-mark={SESSION_APPLICATION_ID.CMUX}
-      viewBox="0 0 256 256"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <defs>
-        <linearGradient
-          id={gradientId}
-          gradientUnits="userSpaceOnUse"
-          x1="91"
-          x2="179"
-          y1="128"
-          y2="128"
-        >
-          <stop stopColor="var(--mark-cmux-left, #12c7f5)" />
-          <stop offset="0.52" stopColor="var(--mark-cmux-middle, #2d8cff)" />
-          <stop offset="1" stopColor="var(--mark-cmux-right, #6c5cff)" />
-        </linearGradient>
-      </defs>
-      <path fill={`url(#${gradientId})`} d={CMUX_PATH} />
     </svg>
   );
 }
@@ -279,7 +151,7 @@ function CopilotMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
       className={className}
-      data-mark={PROVIDER_ID.COPILOT}
+      data-mark={HOSTED_AGENT_ID.COPILOT}
       viewBox="0 0 24 24"
       aria-hidden="true"
       focusable="false"
@@ -293,26 +165,12 @@ function CursorMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
       className={className}
-      data-mark={PROVIDER_ID.CURSOR}
+      data-mark={HOSTED_AGENT_ID.CURSOR}
       viewBox="0 0 24 24"
       aria-hidden="true"
       focusable="false"
     >
       <path fill="currentColor" d={CURSOR_PATH} />
-    </svg>
-  );
-}
-
-function DevinMark({ className }: MarkProps): React.JSX.Element {
-  return (
-    <svg
-      className={className}
-      data-mark={PROVIDER_ID.DEVIN}
-      viewBox="0 0 425 425"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path fill="currentColor" d={DEVIN_PATH} />
     </svg>
   );
 }
@@ -329,7 +187,7 @@ function GeminiCliMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
       className={className}
-      data-mark={PROVIDER_ID.GEMINI_CLI}
+      data-mark={HOSTED_AGENT_ID.GEMINI_CLI}
       viewBox="0 0 65 65"
       aria-hidden="true"
       focusable="false"
@@ -380,106 +238,13 @@ function GrokBuildMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
       className={className}
-      data-mark={PROVIDER_ID.GROK_BUILD}
+      data-mark={HOSTED_AGENT_ID.GROK_BUILD}
       viewBox="56 56 400 400"
       aria-hidden="true"
       focusable="false"
     >
       <path fill="currentColor" d={GROK_BUILD_ORBIT_PATH} />
       <path fill="currentColor" d={GROK_BUILD_TAIL_PATH} />
-    </svg>
-  );
-}
-
-function HerdrMark({ className }: MarkProps): React.JSX.Element {
-  // Herdr's published artwork stores its geometry potrace-style, upside down
-  // at ten times the 512-square canvas; the group reproduces the published
-  // flip-and-scale rather than rewriting the verbatim path. The box crops the
-  // canvas to the glyph, which the artwork anchors to its lower right.
-  return (
-    <svg
-      className={className}
-      data-mark={SESSION_APPLICATION_ID.HERDR}
-      viewBox="103 138 409 374"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <g fill="currentColor" transform="translate(0 512) scale(0.1 -0.1)">
-        <path d={HERDR_PATH} />
-      </g>
-    </svg>
-  );
-}
-
-function JulesMark({ className }: MarkProps): React.JSX.Element {
-  return (
-    <svg
-      className={className}
-      data-mark={PROVIDER_ID.JULES}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path fill="currentColor" d={JULES_PATH} />
-    </svg>
-  );
-}
-
-function DeepSeekMark({ className }: MarkProps): React.JSX.Element {
-  return (
-    <svg
-      className={className}
-      data-mark={HOSTED_AGENT_ID.DEEPSEEK}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path fill="currentColor" d={DEEPSEEK_PATH} />
-    </svg>
-  );
-}
-
-function PiMark({ className }: MarkProps): React.JSX.Element {
-  return (
-    <svg
-      className={className}
-      data-mark={HOSTED_AGENT_ID.PI}
-      viewBox="0 0 800 800"
-      aria-hidden="true"
-      focusable="false"
-    >
-      {/* Even-odd, as pi.dev publishes it: the glyph's counter is a hole. */}
-      <path fill="currentColor" fillRule="evenodd" d={PI_PATH} />
-    </svg>
-  );
-}
-
-function RadiusMark({ className }: MarkProps): React.JSX.Element {
-  // The box is the published logomark's own viewBox; its two wide bands
-  // overlap, and one path under the default nonzero rule fills them once.
-  return (
-    <svg
-      className={className}
-      data-mark={PROVIDER_ID.RADIUS}
-      viewBox="0 0 450 405"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path fill="currentColor" d={RADIUS_PATH} />
-    </svg>
-  );
-}
-
-function ReplicasMark({ className }: MarkProps): React.JSX.Element {
-  return (
-    <svg
-      className={className}
-      data-mark={PROVIDER_ID.REPLICAS}
-      viewBox="0 0 225 300"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path fill="currentColor" d={REPLICAS_PATH} />
     </svg>
   );
 }
@@ -605,30 +370,13 @@ function OpenCodeMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
       className={className}
-      data-mark={PROVIDER_ID.OPENCODE}
+      data-mark={HOSTED_AGENT_ID.OPENCODE}
       viewBox="96 96 320 320"
       aria-hidden="true"
       focusable="false"
     >
       <path fill="var(--mark-opencode-block, #5a5858)" d={OPENCODE_BLOCK_PATH} />
       <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d={OPENCODE_FRAME_PATH} />
-    </svg>
-  );
-}
-
-function OrcaMark({ className }: MarkProps): React.JSX.Element {
-  // The box reproduces the published artwork's group offset — the path is
-  // drawn 6.67 right and 70.67 down of the origin — so the path itself stays
-  // verbatim from the logo the Orca repository publishes.
-  return (
-    <svg
-      className={className}
-      data-mark={SESSION_APPLICATION_ID.ORCA}
-      viewBox="6.6666669 70.666669 318.60232 202.66667"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path fill="currentColor" d={ORCA_PATH} />
     </svg>
   );
 }
@@ -686,36 +434,23 @@ export type MarkId =
   | typeof CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID;
 
 const PROVIDER_MARKS = {
-  [PROVIDER_ID.ANTIGRAVITY]: AntigravityMark,
   [APPLE_CALENDAR_ID]: AppleCalendarMark,
   [PROVIDER_ID.CLAUDE_CODE]: ClaudeCodeMark,
   [SESSION_APPLICATION_ID.CHATGPT]: ChatGptMark,
-  [SESSION_APPLICATION_ID.CMUX]: CmuxMark,
   [PROVIDER_ID.CODEX]: CodexMark,
   [PROVIDER_ID.CONDUCTOR]: ConductorMark,
   // Local Conductor creation wears the same mark as the cloud provider: both
   // are Conductor making a workspace, told apart only by where it lands.
   [CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID]: ConductorMark,
-  [PROVIDER_ID.COPILOT]: CopilotMark,
-  [PROVIDER_ID.CURSOR]: CursorMark,
-  // Cursor the app draws Cursor's own mark: the id differs from the agent's
-  // only so the two filter chips can answer different questions.
-  [SESSION_APPLICATION_ID.CURSOR]: CursorMark,
-  [HOSTED_AGENT_ID.DEEPSEEK]: DeepSeekMark,
-  [PROVIDER_ID.DEVIN]: DevinMark,
-  [PROVIDER_ID.GEMINI_CLI]: GeminiCliMark,
+  [HOSTED_AGENT_ID.COPILOT]: CopilotMark,
+  [HOSTED_AGENT_ID.CURSOR]: CursorMark,
+  [HOSTED_AGENT_ID.GEMINI_CLI]: GeminiCliMark,
   [GOOGLE_CALENDAR_ID]: GoogleCalendarMark,
-  [PROVIDER_ID.GROK_BUILD]: GrokBuildMark,
-  [SESSION_APPLICATION_ID.HERDR]: HerdrMark,
-  [PROVIDER_ID.JULES]: JulesMark,
+  [HOSTED_AGENT_ID.GROK_BUILD]: GrokBuildMark,
   [ISSUE_TRACKER_ID.LINEAR]: LinearMark,
   [CREDENTIAL_PROVIDER_ID.OPENAI]: OpenAiMark,
   [PROVIDER_ID.OMP]: OmpMark,
-  [PROVIDER_ID.OPENCODE]: OpenCodeMark,
-  [SESSION_APPLICATION_ID.ORCA]: OrcaMark,
-  [HOSTED_AGENT_ID.PI]: PiMark,
-  [PROVIDER_ID.RADIUS]: RadiusMark,
-  [PROVIDER_ID.REPLICAS]: ReplicasMark,
+  [HOSTED_AGENT_ID.OPENCODE]: OpenCodeMark,
   [SUPERSET_WORKSPACE_PROVIDER_ID]: SupersetMark,
 } as const satisfies Readonly<Record<MarkId, (props: MarkProps) => React.JSX.Element>>;
 

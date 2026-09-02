@@ -738,7 +738,6 @@ export const APP_SETTING_SCHEMA = {
           // default's plain "Conductor" as the only Conductor there is.
           workspaceProviderName(PROVIDER_ID.CONDUCTOR),
           workspaceProviderName(CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID),
-          workspaceProviderName(PROVIDER_ID.CURSOR),
           "Superset",
         ],
         defaultValue: ASK_EACH_TIME_CHOICE,

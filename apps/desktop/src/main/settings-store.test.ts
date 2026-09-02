@@ -609,6 +609,19 @@ test("a corrupt session search query reads as unset rather than refilling the fi
   assert.equal(appSettingsView(await storeIn(directory).snapshot()).sessionSearchQuery, undefined);
 });
 
+test("a stored connection answers presence without touching any grant", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+
+  assert.equal(await store.calendarConnectionStored(), false);
+  await store.connectAppleCalendar(["home"]);
+  assert.equal(await store.calendarConnectionStored(), true);
+  await store.disconnectAppleCalendar();
+  assert.equal(await store.calendarConnectionStored(), false);
+  await store.addCalendarAccount("dev@example.com", "1//grant", ["dev@example.com"]);
+  assert.equal(await store.calendarConnectionStored(), true);
+});
+
 test("a calendar account stores its grant encrypted and survives a reopen", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
@@ -1583,10 +1596,10 @@ test("changes the default workspace provider without touching the cipher", async
 
   const { settings } = await store.set(
     APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
-    PROVIDER_ID.CURSOR,
+    PROVIDER_ID.CODEX,
   );
 
-  assert.equal(appSettingsView(settings).defaultWorkspaceProvider, PROVIDER_ID.CURSOR);
+  assert.equal(appSettingsView(settings).defaultWorkspaceProvider, PROVIDER_ID.CODEX);
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
 });
 
@@ -1762,10 +1775,10 @@ test("changes a default project without touching the cipher", async (t) => {
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  const { settings } = await setWorkspaceProjectDefault(store, PROVIDER_ID.CURSOR, "proj-2");
+  const { settings } = await setWorkspaceProjectDefault(store, PROVIDER_ID.CODEX, "proj-2");
 
   assert.deepEqual(appSettingsView(settings).workspaceProjectDefaults, {
-    [PROVIDER_ID.CURSOR]: "proj-2",
+    [PROVIDER_ID.CODEX]: "proj-2",
   });
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
 });
@@ -1775,16 +1788,16 @@ test("keeps one provider's default project apart from another's", async (t) => {
   const store = storeIn(directory);
 
   await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1");
-  const { settings } = await setWorkspaceProjectDefault(store, PROVIDER_ID.CURSOR, "proj-2");
+  const { settings } = await setWorkspaceProjectDefault(store, PROVIDER_ID.CODEX, "proj-2");
 
   assert.deepEqual(appSettingsView(settings).workspaceProjectDefaults, {
     [PROVIDER_ID.CONDUCTOR]: "proj-1",
-    [PROVIDER_ID.CURSOR]: "proj-2",
+    [PROVIDER_ID.CODEX]: "proj-2",
   });
 
   const cleared = await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, undefined);
   assert.deepEqual(appSettingsView(cleared.settings).workspaceProjectDefaults, {
-    [PROVIDER_ID.CURSOR]: "proj-2",
+    [PROVIDER_ID.CODEX]: "proj-2",
   });
 });
 
@@ -1793,7 +1806,7 @@ test("forgetting a default no provider offers survives the reload it was written
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
   await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-gone");
-  await setWorkspaceProjectDefault(store, PROVIDER_ID.CURSOR, "proj-2");
+  await setWorkspaceProjectDefault(store, PROVIDER_ID.CODEX, "proj-2");
 
   // The write the observation pass makes when a provider stops offering the
   // project a default names. It has to reach the file, not just the snapshot:
@@ -1801,7 +1814,7 @@ test("forgetting a default no provider offers survives the reload it was written
   await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, undefined);
 
   assert.deepEqual(appSettingsView(await storeIn(directory).snapshot()).workspaceProjectDefaults, {
-    [PROVIDER_ID.CURSOR]: "proj-2",
+    [PROVIDER_ID.CODEX]: "proj-2",
   });
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
 });
@@ -1899,12 +1912,12 @@ test("overlapping default projects each survive the other's write", async (t) =>
   // copy back, and the later write would drop the other provider's choice.
   await Promise.all([
     setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1"),
-    setWorkspaceProjectDefault(store, PROVIDER_ID.CURSOR, "proj-2"),
+    setWorkspaceProjectDefault(store, PROVIDER_ID.CODEX, "proj-2"),
   ]);
 
   assert.deepEqual(appSettingsView(await storeIn(directory).snapshot()).workspaceProjectDefaults, {
     [PROVIDER_ID.CONDUCTOR]: "proj-1",
-    [PROVIDER_ID.CURSOR]: "proj-2",
+    [PROVIDER_ID.CODEX]: "proj-2",
   });
 });
 
@@ -1917,11 +1930,11 @@ test("an overlapping clear forgets its own entry and no other", async (t) => {
   // the map the clear was composed against.
   await Promise.all([
     setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, undefined),
-    setWorkspaceProjectDefault(store, PROVIDER_ID.CURSOR, "proj-2"),
+    setWorkspaceProjectDefault(store, PROVIDER_ID.CODEX, "proj-2"),
   ]);
 
   assert.deepEqual(appSettingsView(await storeIn(directory).snapshot()).workspaceProjectDefaults, {
-    [PROVIDER_ID.CURSOR]: "proj-2",
+    [PROVIDER_ID.CODEX]: "proj-2",
   });
 });
 

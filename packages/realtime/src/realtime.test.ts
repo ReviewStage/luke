@@ -581,13 +581,13 @@ test("session context carries only bounded, redacted fields", () => {
   assert.doesNotMatch(text, /https:/);
 
   const linked = normalizeSession(
-    { id: "devin", displayName: "Devin" },
+    { id: "conductor", displayName: "Conductor" },
     {
-      providerSessionId: "devin-1",
-      title: "Devin: luke",
+      providerSessionId: "conductor-1",
+      title: "Conductor: luke",
       status: SESSION_STATUS.WORKING,
       observedAt: DECIDED_AT,
-      detail: { link: "https://app.devin.ai/sessions/devin-1" },
+      detail: { link: "https://app.conductor.build/sessions/conductor-1" },
     },
   );
   const linkedText = sessionContextText([linked]);
@@ -661,20 +661,20 @@ test("the roster identifies sessions managed by Superset", () => {
   assert.match(sessionContextText([chat]), /managed by Superset/);
 });
 
-test("the roster names a session's app associations, so 'my cmux Cursor session' resolves", () => {
+test("the roster names a session's app associations, so 'my Superset Codex session' resolves", () => {
   const annotated = normalizeSession(
-    { id: "cursor", displayName: "Cursor" },
+    { id: "codex", displayName: "Codex" },
     {
-      providerSessionId: "cursor-1",
+      providerSessionId: "codex-1",
       title: "Refit the settings drawer",
       status: SESSION_STATUS.WORKING,
       observedAt: DECIDED_AT,
       applications: [
         {
-          id: SESSION_APPLICATION_ID.CMUX,
-          displayName: "cmux",
+          id: SESSION_APPLICATION_ID.SUPERSET,
+          displayName: "Superset",
           scope: SESSION_APPLICATION_SCOPE.SESSION,
-          link: "cmux://workspace/workspace-1/surface/surface-1",
+          link: "superset://v2-workspace/workspace-1?terminalId=terminal-1",
         },
       ],
     },
@@ -682,18 +682,18 @@ test("the roster names a session's app associations, so 'my cmux Cursor session'
 
   const text = sessionContextText([annotated]);
 
-  assert.match(text, /associated with cmux/);
-  // The association travels by name alone; the pane address stays on the machine.
-  assert.doesNotMatch(text, /cmux:\/\//);
+  assert.match(text, /associated with Superset/);
+  // The association travels by name alone; the terminal address stays on the machine.
+  assert.doesNotMatch(text, /superset:\/\//);
   // An association with an exact address is one an open ask may name, so the
   // capability line lists it — by the same name, and never the address.
-  assert.match(text, /opens_in=cmux/);
+  assert.match(text, /opens_in=Superset/);
 
   // A session no app claimed says nothing about associations at all.
   const unclaimed = normalizeSession(
-    { id: "cursor", displayName: "Cursor" },
+    { id: "codex", displayName: "Codex" },
     {
-      providerSessionId: "cursor-2",
+      providerSessionId: "codex-2",
       title: "Chase the flaky test",
       status: SESSION_STATUS.WORKING,
       observedAt: DECIDED_AT,
@@ -713,15 +713,15 @@ test("the roster names a session's app associations, so 'my cmux Cursor session'
       observedAt: DECIDED_AT,
       applications: [
         {
-          id: SESSION_APPLICATION_ID.ORCA,
-          displayName: "Orca",
+          id: SESSION_APPLICATION_ID.CONDUCTOR,
+          displayName: "Conductor",
           scope: SESSION_APPLICATION_SCOPE.WORKSPACE,
         },
       ],
     },
   );
   const identifiedText = sessionContextText([identifiedOnly]);
-  assert.match(identifiedText, /associated with Orca/);
+  assert.match(identifiedText, /associated with Conductor/);
   assert.doesNotMatch(identifiedText, /opens_in/);
 });
 
@@ -950,9 +950,9 @@ test("the roster says which sessions keep a readable transcript and a pull reque
   assert.match(sessionContextText([local]), /transcript=true/);
 
   const cloud = normalizeSession(
-    { id: "devin", displayName: "Devin" },
+    { id: "conductor", displayName: "Conductor" },
     {
-      providerSessionId: "devin-1",
+      providerSessionId: "conductor-1",
       title: "luke",
       status: SESSION_STATUS.WAITING,
       observedAt: DECIDED_AT,
@@ -1020,27 +1020,27 @@ test("the bounded roster keeps every provider's most recent openable chat", () =
       },
     ),
   );
-  const olderGemini = normalizeSession(
-    { id: "gemini-cli", displayName: "Gemini CLI" },
+  const olderClaude = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
     {
-      providerSessionId: "gemini-openable",
-      title: "Gemini chat",
+      providerSessionId: "claude-openable",
+      title: "Claude chat",
       status: SESSION_STATUS.WAITING,
       observedAt: 1,
       applications: [
         {
-          id: SESSION_APPLICATION_ID.CMUX,
-          displayName: "cmux",
+          id: SESSION_APPLICATION_ID.SUPERSET,
+          displayName: "Superset",
           scope: SESSION_APPLICATION_SCOPE.SESSION,
-          link: "cmux://workspace/one/surface/two",
+          link: "superset://v2-workspace/one?terminalId=two",
         },
       ],
     },
   );
 
-  const text = sessionContextText([...codexSessions, olderGemini]);
+  const text = sessionContextText([...codexSessions, olderClaude]);
 
-  assert.match(text, /provider_session_id=gemini-openable/);
+  assert.match(text, /provider_session_id=claude-openable/);
   assert.match(text, /most_recent_openable_for_provider=true/);
   assert.match(text, /1 more observed session is not listed/);
 });
@@ -1126,7 +1126,7 @@ test("tool calls are read whole from a finished response", () => {
           type: "function_call",
           name: REALTIME_TOOL.SEND_SESSION_MESSAGE,
           call_id: "call-1",
-          arguments: '{"provider_id":"devin"}',
+          arguments: '{"provider_id":"conductor"}',
         },
         { type: "function_call", name: "", call_id: "call-2", arguments: "{}" },
       ],
@@ -1140,7 +1140,7 @@ test("tool calls are read whole from a finished response", () => {
       {
         name: REALTIME_TOOL.SEND_SESSION_MESSAGE,
         callId: "call-1",
-        argumentsJson: '{"provider_id":"devin"}',
+        argumentsJson: '{"provider_id":"conductor"}',
       },
     ],
     hasAudio: false,
@@ -1344,15 +1344,15 @@ test("inbound events the conversation acts on are parsed, and nothing else is", 
 
 function actionableSession() {
   return normalizeSession(
-    { id: "devin", displayName: "Devin" },
+    { id: "conductor", displayName: "Conductor" },
     {
-      providerSessionId: "devin-1",
-      title: "Devin: luke",
+      providerSessionId: "conductor-1",
+      title: "Conductor: luke",
       status: SESSION_STATUS.WAITING,
       observedAt: DECIDED_AT,
       canReceiveMessage: true,
       controls: [{ id: "cancel-run", label: "Stop this run", kind: "stop" }],
-      detail: { link: "https://app.devin.ai/sessions/devin-1" },
+      detail: { link: "https://app.conductor.build/sessions/conductor-1" },
     },
   );
 }
@@ -1363,11 +1363,11 @@ function messageCall(argumentsJson: string, name: string = REALTIME_TOOL.SEND_SE
 
 test("a tool call can act only on a session Luke was shown, doing what it advertised", () => {
   const roster = [actionableSession()];
-  const identity = '"provider_id":"devin","provider_session_id":"devin-1"';
+  const identity = '"provider_id":"conductor","provider_session_id":"conductor-1"';
 
   assert.deepEqual(sessionToolAction(messageCall(`{${identity},"text":"add tests too"}`), roster), {
     kind: "message",
-    identity: { providerId: "devin", providerSessionId: "devin-1" },
+    identity: { providerId: "conductor", providerSessionId: "conductor-1" },
     text: "add tests too",
   });
   assert.deepEqual(
@@ -1377,7 +1377,7 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
     ),
     {
       kind: "control",
-      identity: { providerId: "devin", providerSessionId: "devin-1" },
+      identity: { providerId: "conductor", providerSessionId: "conductor-1" },
       control: { id: "cancel-run", label: "Stop this run", kind: "stop" },
     },
   );
@@ -1387,7 +1387,7 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
     sessionToolAction(messageCall(`{${identity}}`, REALTIME_TOOL.OPEN_SESSION), roster),
     {
       kind: "open",
-      identity: { providerId: "devin", providerSessionId: "devin-1" },
+      identity: { providerId: "conductor", providerSessionId: "conductor-1" },
     },
   );
 
@@ -1398,7 +1398,7 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
     sessionToolAction(messageCall(`{${identity}}`, REALTIME_TOOL.READ_SESSION_TRANSCRIPT), roster),
     {
       kind: "read-transcript",
-      identity: { providerId: "devin", providerSessionId: "devin-1" },
+      identity: { providerId: "conductor", providerSessionId: "conductor-1" },
     },
   );
 
@@ -1406,7 +1406,10 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
   // a reason he can say aloud, never a request that reaches a bridge.
   const refusals = [
     sessionToolAction(messageCall("not json"), roster),
-    sessionToolAction(messageCall('{"provider_id":"devin","provider_session_id":"other"}'), roster),
+    sessionToolAction(
+      messageCall('{"provider_id":"conductor","provider_session_id":"other"}'),
+      roster,
+    ),
     sessionToolAction(messageCall(`{${identity},"text":""}`), roster),
     sessionToolAction(messageCall(`{${identity},"text":"${"a".repeat(4_100)}"}`), roster),
     sessionToolAction(
@@ -1445,10 +1448,10 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
   // A cloud session's conversation lives with its provider, not on this
   // machine, so a transcript read is refused rather than guessed at.
   const cloudSession = normalizeSession(
-    { id: "devin", displayName: "Devin" },
+    { id: "conductor", displayName: "Conductor" },
     {
-      providerSessionId: "devin-9",
-      title: "Devin: cloud",
+      providerSessionId: "conductor-9",
+      title: "Conductor: cloud",
       status: SESSION_STATUS.WAITING,
       observedAt: DECIDED_AT,
       location: SESSION_LOCATION.CLOUD,
@@ -1456,7 +1459,7 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
   );
   const nothingToRead = sessionToolAction(
     messageCall(
-      '{"provider_id":"devin","provider_session_id":"devin-9"}',
+      '{"provider_id":"conductor","provider_session_id":"conductor-9"}',
       REALTIME_TOOL.READ_SESSION_TRANSCRIPT,
     ),
     [cloudSession],
@@ -1481,8 +1484,8 @@ test("an open ask can pick the app, held to the roster's own associations", () =
           link: "superset://v2-workspace/workspace-1?terminalId=terminal-1",
         },
         {
-          id: SESSION_APPLICATION_ID.ORCA,
-          displayName: "Orca",
+          id: SESSION_APPLICATION_ID.CONDUCTOR,
+          displayName: "Conductor",
           scope: SESSION_APPLICATION_SCOPE.WORKSPACE,
         },
       ],
@@ -1513,7 +1516,7 @@ test("an open ask can pick the app, held to the roster's own associations", () =
 
   // An association without an address opens nothing, and an app the roster
   // never listed opens nothing; each refusal says where the session does open.
-  for (const application of ["Orca", "TextEdit"]) {
+  for (const application of ["Conductor", "TextEdit"]) {
     const refusal = sessionToolAction(
       messageCall(`{${identity},"application":"${application}"}`, REALTIME_TOOL.OPEN_SESSION),
       [held],
@@ -1783,7 +1786,7 @@ test("a creation ask can only name a project Luke was shown", () => {
       projects,
     ),
     sessionToolAction(
-      messageCall('{"provider_id":"devin","project_id":"proj-1"}', REALTIME_TOOL.CREATE_WORKSPACE),
+      messageCall('{"provider_id":"codex","project_id":"proj-1"}', REALTIME_TOOL.CREATE_WORKSPACE),
       [],
       projects,
     ),
@@ -1944,13 +1947,13 @@ test("another agent can only be added as a kind the session's own entry lists", 
   const refusals = [
     // An agent kind the entry does not list is refused, not forwarded.
     sessionToolAction(
-      messageCall(`{${identity},"agent":"devin"}`, REALTIME_TOOL.ADD_WORKSPACE_AGENT),
+      messageCall(`{${identity},"agent":"unlisted-agent"}`, REALTIME_TOOL.ADD_WORKSPACE_AGENT),
       roster,
     ),
     // A session that lists no new agents takes no such ask at all.
     sessionToolAction(
       messageCall(
-        '{"provider_id":"devin","provider_session_id":"devin-1","agent":"claude"}',
+        '{"provider_id":"conductor","provider_session_id":"conductor-1","agent":"claude"}',
         REALTIME_TOOL.ADD_WORKSPACE_AGENT,
       ),
       roster,
@@ -1983,8 +1986,8 @@ test("an opening task is held to the project's own word for it", () => {
   };
   const takesNoTask: ObservedWorkspaceProject = {
     ...OFFERED_PROJECT,
-    providerId: "devin",
-    providerName: "Devin",
+    providerId: "codex",
+    providerName: "Codex",
     taskSupport: WORKSPACE_TASK_SUPPORT.NONE,
   };
   const projects = [OFFERED_PROJECT, requiresTask, takesNoTask];
@@ -2027,7 +2030,7 @@ test("an opening task is held to the project's own word for it", () => {
     // A project that takes none is handed none.
     sessionToolAction(
       messageCall(
-        '{"provider_id":"devin","project_id":"proj-1","task":"Add the XYZ feature"}',
+        '{"provider_id":"codex","project_id":"proj-1","task":"Add the XYZ feature"}',
         REALTIME_TOOL.CREATE_WORKSPACE,
       ),
       [],

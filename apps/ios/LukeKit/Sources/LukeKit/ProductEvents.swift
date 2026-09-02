@@ -15,20 +15,10 @@ import Foundation
 /// set before it may reach a count, so an id the vocabulary has not answered
 /// for is left uncounted rather than sent to be refused.
 public enum ProductProviderID: String, CaseIterable, Sendable {
-    case antigravity
     case claudeCode = "claude-code"
     case codex
     case conductor
-    case copilot
-    case cursor
-    case devin
-    case geminiCLI = "gemini-cli"
-    case grokBuild = "grok-build"
-    case jules
     case omp
-    case opencode
-    case radius
-    case replicas
 }
 
 /// Where a Luke account stands after an act, never who the account is.

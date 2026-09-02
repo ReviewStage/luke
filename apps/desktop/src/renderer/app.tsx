@@ -71,6 +71,7 @@ import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "#shared
 import { appSettingsView } from "#shared/wire/settings";
 import type { UpdateSnapshot } from "#shared/wire/update";
 import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
+import type { CalendarGateControl } from "./calendar-gate";
 import { type ConsentConnectEntry, ConsentConnectSlot } from "./consent-connect-slot";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
@@ -445,6 +446,8 @@ export function App(): React.JSX.Element {
   const [calendars, setCalendars] = useState<readonly ObservedAccountCalendars[]>([]);
   /** Whether the calendar's quiet is holding announcements — the face sleeps on it. */
   const [meetingQuiet, setMeetingQuiet] = useState(false);
+  /** Whether the mandatory calendar step of onboarding still stands. */
+  const [calendarOnboardingOwed, setCalendarOnboardingOwed] = useState(false);
   /**
    * Where the app stands against the latest release, as last pushed or
    * answered. Absent until bootstrap carries the main process's snapshot.
@@ -2512,6 +2515,11 @@ export function App(): React.JSX.Element {
     (onChange) => window.sidecar.onMeetingQuietChanged(onChange),
     setMeetingQuiet,
   );
+  // Whether the calendar step of onboarding stands, for the gate alone.
+  const acceptCalendarOnboardingBootstrap = useBootstrapRacedChannel(
+    (onChange) => window.sidecar.onCalendarOnboardingChanged(onChange),
+    setCalendarOnboardingOwed,
+  );
 
   /**
    * The two writes a row can ask for, handed to the main process by session
@@ -2600,6 +2608,7 @@ export function App(): React.JSX.Element {
       // holds the live pushes, and a thread this window has touched is always
       // the newer word than the snapshot.
       seedConversationHistory(value.conversationHistory);
+      acceptCalendarOnboardingBootstrap(value.calendarOnboardingOwed);
       acceptSessionReplayBootstrap(value.sessionReplay);
       acceptSettingsBootstrap(value.settings);
       // The stored filter chips and search words come back with the panel:
@@ -2690,6 +2699,7 @@ export function App(): React.JSX.Element {
     };
   }, [
     acceptAccountBootstrap,
+    acceptCalendarOnboardingBootstrap,
     acceptCalendarsBootstrap,
     acceptIssuesBootstrap,
     acceptMeetingQuietBootstrap,
@@ -3101,6 +3111,52 @@ export function App(): React.JSX.Element {
     onCapture: changeShortcutCapture,
   };
 
+  // The calendar step of onboarding, assembled only while it stands: still
+  // owed by the main process's record, and with at least one source this
+  // build can offer — a gate with no way through is never drawn. A connection
+  // does not lower it: the panel body hands the gate the Connections page's
+  // own calendar block to review, until Done or the skip answers the step and
+  // the record's broadcast takes it down.
+  const gateSettings = settings ?? bootstrapSettings ?? appSettingsView(bootstrap.settings);
+  const calendarGate: CalendarGateControl | undefined =
+    calendarOnboardingOwed &&
+    (gateSettings.appleCalendarAvailable || gateSettings.calendarSignInAvailable)
+      ? {
+          ...(gateSettings.appleCalendarAvailable
+            ? {
+                apple: {
+                  connecting:
+                    appleCalendarBusy ||
+                    consentConnect.entry?.serviceId === CONSENT_SERVICE_ID.APPLE_CALENDAR,
+                  onConnect: () => void connectAppleCalendar(),
+                },
+              }
+            : undefined),
+          ...(gateSettings.calendarSignInAvailable
+            ? {
+                google: {
+                  connecting:
+                    consentConnect.entry?.serviceId === CONSENT_SERVICE_ID.GOOGLE_CALENDAR,
+                  onConnect: () => beginConsentSignIn(CONSENT_SERVICE_ID.GOOGLE_CALENDAR),
+                },
+              }
+            : undefined),
+          // A consent flow run from the gate parks the panel's tab on the
+          // Connections page for its slot to come back to, and the gate masks
+          // that while it stands — so answering the step also brings the tab
+          // home, or onboarding would end on Integrations instead of the
+          // roster the arrival beat is about to call all set.
+          onSkip: () => {
+            changeTab(PANEL_TAB.SESSIONS);
+            void window.sidecar.skipCalendarOnboarding();
+          },
+          onDone: () => {
+            changeTab(PANEL_TAB.SESSIONS);
+            void window.sidecar.completeCalendarOnboarding();
+          },
+        }
+      : undefined;
+
   return (
     <div
       className="app-stage"
@@ -3156,6 +3212,7 @@ export function App(): React.JSX.Element {
             account={account ?? bootstrap.account}
             onBeginSignIn={beginSignIn}
             {...(signInFailure ? { signInFailure } : undefined)}
+            {...(calendarGate ? { calendarGate } : undefined)}
             list={list}
             sessionsSettled={sessionsSettled}
             view={sessionView}

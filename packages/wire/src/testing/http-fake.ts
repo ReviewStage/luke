@@ -11,7 +11,7 @@ export const HTTP_STATUS = {
   OK: 200,
   ...BOUNDARY_HTTP_STATUS,
   // What a production route answers a request missing a header it demands,
-  // reproduced by the Replicas fake so a forgotten header cannot pass.
+  // reproduced by a provider fake so a forgotten header cannot pass.
   BAD_REQUEST: 400,
   // Named by the OAuth tests, which treat it as transient alongside 408.
   TOO_MANY_REQUESTS: 429,
@@ -20,7 +20,7 @@ export const HTTP_STATUS = {
 
 /**
  * One recorded fetch, with the URL and headers already parsed. Provider tests
- * that need a header of their own — Jules's API key, GitHub's version pin —
+ * that need a header of their own — a provider's API key header —
  * read it from `headers`; everything else is here because every fake asked
  * for it.
  */

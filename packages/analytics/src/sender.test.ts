@@ -192,7 +192,7 @@ test("signed out the queue waits rather than being spent", async () => {
 
 test("past the queue limit the oldest go and the newest stay", async () => {
   const { sender, requests } = sharingSender({ queueLimit: 3 });
-  for (const providerId of ["claude-code", "codex", "conductor", "cursor"] as const) {
+  for (const providerId of ["claude-code", "codex", "conductor", "omp"] as const) {
     sender.record(PRODUCT_EVENT.SESSION_ACT_SEND, {
       provider_id: providerId,
       session_act: "message_send",
@@ -202,7 +202,7 @@ test("past the queue limit the oldest go and the newest stay", async () => {
 
   assert.deepEqual(
     sentEvents(recordedRequest(requests)).map((event) => event.properties.provider_id),
-    ["codex", "conductor", "cursor"],
+    ["codex", "conductor", "omp"],
   );
 });
 

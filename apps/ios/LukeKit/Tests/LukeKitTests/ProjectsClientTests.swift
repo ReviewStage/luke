@@ -46,13 +46,13 @@ final class RosterProjectTests: XCTestCase {
 
     func testAllFields() {
         let project = RosterProject(json: [
-            "providerId": "replicas",
+            "providerId": "conductor",
             "providerProjectId": "env-1",
             "repository": "owner/repo",
             "taskSupport": "required",
             "targetName": "Staging",
         ])
-        XCTAssertEqual(project?.id, "replicas:env-1")
+        XCTAssertEqual(project?.id, "conductor:env-1")
         XCTAssertEqual(project?.taskSupport, .required)
         XCTAssertEqual(project?.targetName, "Staging")
         XCTAssertEqual(project?.namesItself, false)

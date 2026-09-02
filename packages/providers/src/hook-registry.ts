@@ -3,16 +3,6 @@ import { PROVIDER_ID } from "@sidecar/session";
 import { CLAUDE_HOOK_SCRIPT_NAME, defaultClaudeHome } from "./claude-code/hooks.js";
 import { defaultCodexHome } from "./codex/adapter.js";
 import { CODEX_HOOK_SCRIPT_NAME } from "./codex/hooks.js";
-import { CURSOR_HOOK_SCRIPT_NAME } from "./cursor/hooks.js";
-import { defaultCursorHome } from "./cursor/local-adapter.js";
-import { DEVIN_HOOK_SCRIPT_NAME, defaultDevinConfigHome } from "./devin/hooks.js";
-import { GEMINI_HOOK_SCRIPT_NAME } from "./gemini-cli/hooks.js";
-import { defaultGeminiCliHome } from "./gemini-cli/records.js";
-import {
-  defaultOpenCodeConfigDirectory,
-  OPENCODE_PLUGIN_FILE_NAME,
-  openCodePluginDirectory,
-} from "./opencode/hooks.js";
 import type { ObservationHookInstallation } from "./shared/hook-merge.js";
 
 const SPOOL_DIRECTORY = "events";
@@ -21,12 +11,6 @@ interface ObservationHookProviderEntry {
   directoryName: string;
   scriptName: string;
   providerHome: () => string;
-  /**
-   * Where the installed artifact lives when it is not under Luke's own data:
-   * a provider that loads whole plugin files from a directory of its own has
-   * its one artifact resolve there, while the spool stays under Luke's.
-   */
-  artifactDirectory?: (providerHome: string) => string;
 }
 
 /**
@@ -45,30 +29,6 @@ const OBSERVATION_HOOK_PROVIDERS = {
     directoryName: "codex-hooks",
     scriptName: CODEX_HOOK_SCRIPT_NAME,
     providerHome: defaultCodexHome,
-  },
-  [PROVIDER_ID.CURSOR]: {
-    directoryName: "cursor-hooks",
-    scriptName: CURSOR_HOOK_SCRIPT_NAME,
-    providerHome: defaultCursorHome,
-  },
-  [PROVIDER_ID.DEVIN]: {
-    directoryName: "devin-hooks",
-    scriptName: DEVIN_HOOK_SCRIPT_NAME,
-    // The configuration home, not the data home the session database lives
-    // under: the registration merges into the CLI's user-level config.json,
-    // and the CLI creates this directory for itself on its first run.
-    providerHome: defaultDevinConfigHome,
-  },
-  [PROVIDER_ID.GEMINI_CLI]: {
-    directoryName: "gemini-cli-hooks",
-    scriptName: GEMINI_HOOK_SCRIPT_NAME,
-    providerHome: defaultGeminiCliHome,
-  },
-  [PROVIDER_ID.OPENCODE]: {
-    directoryName: "opencode-hooks",
-    scriptName: OPENCODE_PLUGIN_FILE_NAME,
-    providerHome: defaultOpenCodeConfigDirectory,
-    artifactDirectory: openCodePluginDirectory,
   },
 } as const satisfies Readonly<Record<string, ObservationHookProviderEntry>>;
 
@@ -94,10 +54,7 @@ export class ObservationHookRegistry {
     const providerHome = entry.providerHome();
     return {
       providerHome,
-      hookScriptPath: path.join(
-        entry.artifactDirectory?.(providerHome) ?? directory,
-        entry.scriptName,
-      ),
+      hookScriptPath: path.join(directory, entry.scriptName),
       spoolDirectory: path.join(directory, SPOOL_DIRECTORY),
     };
   }

@@ -3,6 +3,7 @@ import test from "node:test";
 import { FIXTURE_SPEAKING_CAPTION, fixtureSnapshot } from "@sidecar/fixtures";
 import {
   ATTENTION_DISPOSITION,
+  HOSTED_AGENT_ID,
   normalizeSession,
   PROVIDER_ID,
   PROVIDER_ID_LIST,
@@ -95,7 +96,7 @@ test("a row carries where its session runs, from either data source", () => {
     displaySessions(bootstrap(true), []).map((session) => [session.id, session.location]),
   );
 
-  assert.equal(fixture.get("cursor-agent"), SESSION_LOCATION.CLOUD);
+  assert.equal(fixture.get("conductor-cursor-agent"), SESSION_LOCATION.CLOUD);
   assert.equal(fixture.get("conductor-chat-tidy"), SESSION_LOCATION.CLOUD);
   assert.equal(fixture.get("codex-bootstrap"), SESSION_LOCATION.LOCAL);
 
@@ -212,7 +213,7 @@ test("a row carries the pull request's number when its address names one", () =>
 
   // The fixture's chip carries a number too, so the visual evidence shows the
   // label a live address would earn.
-  const cursor = FIXTURE_SESSIONS.find((session) => session.id === "cursor-agent");
+  const cursor = FIXTURE_SESSIONS.find((session) => session.id === "conductor-cursor-agent");
   assert.equal(cursor?.hasChange, true);
   assert.equal(cursor?.changeNumber, 31);
 });
@@ -233,9 +234,9 @@ test("a row carries the identifiers that tell it from its neighbours", () => {
 
   // The fixture keeps one row with a repository and no branch, so the surface's
   // fallback line stays visible in the evidence.
-  const devin = FIXTURE_SESSIONS.find((session) => session.id === "devin-session");
-  assert.equal(devin?.branch, undefined);
-  assert.equal(devin?.repository, "sidecar-native");
+  const opencode = FIXTURE_SESSIONS.find((session) => session.id === "conductor-opencode-session");
+  assert.equal(opencode?.branch, undefined);
+  assert.equal(opencode?.repository, "sidecar-native");
 });
 
 // The label answers "is this thing alive", so it reports the coarsest unit
@@ -327,16 +328,14 @@ test("the tally counts per state and per app", () => {
     },
   );
   // Apps follow the order their most urgent session takes, and a chat counts
-  // under the app holding it: both Conductor chats land under Conductor's
+  // under the app holding it: every Conductor chat lands under Conductor's
   // mark whatever agent runs them, the Codex chat under ChatGPT, its lead
-  // app, and a chat no app holds — the local Claude Code session, the Devin
-  // cloud session — under its provider's own.
+  // app, and a chat no app holds — the local Claude Code session — under its
+  // provider's own.
   assert.deepEqual(tally.providers, [
     { providerId: PROVIDER_ID.CLAUDE_CODE, provider: "Claude Code", total: 1, attention: 1 },
     { providerId: SESSION_APPLICATION_ID.CHATGPT, provider: "ChatGPT", total: 1, attention: 0 },
-    { providerId: SESSION_APPLICATION_ID.CONDUCTOR, provider: "Conductor", total: 2, attention: 0 },
-    { providerId: SESSION_APPLICATION_ID.CURSOR, provider: "Cursor", total: 1, attention: 0 },
-    { providerId: PROVIDER_ID.DEVIN, provider: "Devin", total: 1, attention: 0 },
+    { providerId: SESSION_APPLICATION_ID.CONDUCTOR, provider: "Conductor", total: 4, attention: 0 },
   ]);
 });
 
@@ -349,13 +348,7 @@ test("the apps re-seat with the rows when the other sort is chosen", () => {
 
   assert.deepEqual(
     recent.providers.map((provider) => provider.providerId),
-    [
-      SESSION_APPLICATION_ID.CONDUCTOR,
-      SESSION_APPLICATION_ID.CHATGPT,
-      PROVIDER_ID.CLAUDE_CODE,
-      SESSION_APPLICATION_ID.CURSOR,
-      PROVIDER_ID.DEVIN,
-    ],
+    [SESSION_APPLICATION_ID.CONDUCTOR, SESSION_APPLICATION_ID.CHATGPT, PROVIDER_ID.CLAUDE_CODE],
   );
   assert.deepEqual(
     { ...recent, providers: undefined },
@@ -401,17 +394,8 @@ test("the filters offered are grouped by axis, coarse to fine, counted", () => {
         {
           filter: SESSION_APPLICATION_ID.CONDUCTOR,
           label: "Conductor",
-          count: 3,
+          count: 5,
           markId: SESSION_APPLICATION_ID.CONDUCTOR,
-        },
-        {
-          // The app chip counts the chats the Cursor app can open; the agent
-          // chip below counts every Cursor chat. Separate ids keep the two
-          // questions on their own axes.
-          filter: SESSION_APPLICATION_ID.CURSOR,
-          label: "Cursor",
-          count: 1,
-          markId: SESSION_APPLICATION_ID.CURSOR,
         },
       ],
     },
@@ -428,8 +412,20 @@ test("the filters offered are grouped by axis, coarse to fine, counted", () => {
           markId: PROVIDER_ID.CLAUDE_CODE,
         },
         { filter: PROVIDER_ID.CODEX, label: "Codex", count: 1, markId: PROVIDER_ID.CODEX },
-        { filter: PROVIDER_ID.CURSOR, label: "Cursor", count: 1, markId: PROVIDER_ID.CURSOR },
-        { filter: PROVIDER_ID.DEVIN, label: "Devin", count: 1, markId: PROVIDER_ID.DEVIN },
+        // The hosted agents the Conductor chats run: identity alone, keyed
+        // by the hosted agent id the row's mark and chip share.
+        {
+          filter: HOSTED_AGENT_ID.CURSOR,
+          label: "Cursor",
+          count: 1,
+          markId: HOSTED_AGENT_ID.CURSOR,
+        },
+        {
+          filter: HOSTED_AGENT_ID.OPENCODE,
+          label: "OpenCode",
+          count: 1,
+          markId: HOSTED_AGENT_ID.OPENCODE,
+        },
       ],
     },
   ]);
@@ -565,7 +561,12 @@ test("a filter narrows the list without changing what is tracked", () => {
 
   assert.deepEqual(
     cloud.sessions.map((session) => session.id),
-    ["conductor-chat-package", "conductor-chat-tidy", "cursor-agent", "devin-session"],
+    [
+      "conductor-chat-package",
+      "conductor-chat-tidy",
+      "conductor-cursor-agent",
+      "conductor-opencode-session",
+    ],
   );
   // The agent chip reaches the hosted chat too: the Conductor cloud chat
   // whose agent is Claude Code answers the Claude Code narrowing.
@@ -595,7 +596,12 @@ test("filters on one axis widen each other and across axes narrow", () => {
   });
   assert.deepEqual(
     both.sessions.map((session) => session.id),
-    ["conductor-chat-package", "conductor-chat-tidy"],
+    [
+      "conductor-chat-package",
+      "conductor-chat-tidy",
+      "conductor-cursor-agent",
+      "conductor-opencode-session",
+    ],
   );
   assert.deepEqual(both.filters, [SESSION_FILTER.CLOUD, SESSION_APPLICATION_ID.CONDUCTOR]);
 });
@@ -606,7 +612,7 @@ test("filters on one axis widen each other and across axes narrow", () => {
 test("a combination no session answers falls back whole to everything", () => {
   const emptied = arrangeSessions(FIXTURE_SESSIONS, {
     ...DEFAULT_SESSION_VIEW,
-    filters: [SESSION_FILTER.LOCAL, SESSION_APPLICATION_ID.CONDUCTOR, PROVIDER_ID.CURSOR],
+    filters: [SESSION_FILTER.LOCAL, SESSION_APPLICATION_ID.CONDUCTOR, HOSTED_AGENT_ID.CURSOR],
   });
 
   assert.deepEqual(emptied.filters, []);
@@ -629,7 +635,7 @@ test("a filter whose last session has left falls back to showing everything", ()
     liveSession(CLAUDE_PROVIDER, "claude-1", SESSION_STATUS.COMPLETE),
   ]);
 
-  for (const filter of [SESSION_FILTER.CLOUD, PROVIDER_ID.CURSOR]) {
+  for (const filter of [SESSION_FILTER.CLOUD, HOSTED_AGENT_ID.CURSOR]) {
     const list = arrangeSessions(noCloud, { ...DEFAULT_SESSION_VIEW, filters: [filter] });
     assert.deepEqual(list.filters, []);
     assert.equal(list.sessions.length, 2);
@@ -685,7 +691,7 @@ test("the selection the list settles on is one it would settle on again", () => 
   for (const sessions of [oneAgent, []]) {
     const first = arrangeSessions(sessions, {
       ...DEFAULT_SESSION_VIEW,
-      filters: [PROVIDER_ID.CURSOR],
+      filters: [HOSTED_AGENT_ID.CURSOR],
     });
     const second = arrangeSessions(sessions, { ...DEFAULT_SESSION_VIEW, filters: first.filters });
 
@@ -726,8 +732,8 @@ test("the two orderings answer different questions about the same sessions", () 
       "codex-bootstrap",
       "conductor-chat-package",
       "conductor-chat-tidy",
-      "cursor-agent",
-      "devin-session",
+      "conductor-cursor-agent",
+      "conductor-opencode-session",
     ],
   );
   assert.deepEqual(
@@ -737,8 +743,8 @@ test("the two orderings answer different questions about the same sessions", () 
       "conductor-chat-package",
       "codex-bootstrap",
       "claude-review",
-      "cursor-agent",
-      "devin-session",
+      "conductor-cursor-agent",
+      "conductor-opencode-session",
     ],
   );
 });
@@ -752,7 +758,12 @@ test("filtering leaves the chosen ordering in force", () => {
 
   assert.deepEqual(
     recentCloud.sessions.map((session) => session.id),
-    ["conductor-chat-tidy", "conductor-chat-package", "cursor-agent", "devin-session"],
+    [
+      "conductor-chat-tidy",
+      "conductor-chat-package",
+      "conductor-cursor-agent",
+      "conductor-opencode-session",
+    ],
   );
 });
 
@@ -1187,15 +1198,15 @@ test("a row offers writes only where its provider promised them", () => {
   assert.equal(byId.get("cloud")?.canMessage, true);
   assert.deepEqual(byId.get("cloud")?.actions, [{ id: "approve-plan", label: "Approve the plan" }]);
   // The fixture draws the affordances so the evidence shows them, exactly
-  // where a live session would have them: the composer on the suspended Devin
+  // where a live session would have them: the composer on the suspended OpenCode
   // row, the stop on the working Cursor agent, and nothing anywhere else.
   const fixtureById = new Map(FIXTURE_SESSIONS.map((row) => [row.id, row]));
-  assert.equal(fixtureById.get("devin-session")?.canMessage, true);
-  assert.deepEqual(fixtureById.get("cursor-agent")?.actions, [
+  assert.equal(fixtureById.get("conductor-opencode-session")?.canMessage, true);
+  assert.deepEqual(fixtureById.get("conductor-cursor-agent")?.actions, [
     { id: "cancel-run", label: "Stop this run", kind: "stop" },
   ]);
   for (const row of FIXTURE_SESSIONS) {
-    if (row.id === "devin-session") continue;
+    if (row.id === "conductor-opencode-session") continue;
     assert.equal(row.canMessage, false);
   }
 });
@@ -1402,7 +1413,13 @@ test("searching leaves the chosen ordering and the workspace seating in force", 
   });
   assert.deepEqual(
     recent.sessions.map((session) => session.id),
-    ["conductor-chat-tidy", "conductor-chat-package", "codex-bootstrap"],
+    [
+      "conductor-chat-tidy",
+      "conductor-chat-package",
+      "codex-bootstrap",
+      "conductor-cursor-agent",
+      "conductor-opencode-session",
+    ],
   );
 
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -1415,6 +1432,8 @@ test("searching leaves the chosen ordering and the workspace seating in force", 
     [
       { workspaceId: "conductor-lisbon", indexes: [0, 1] },
       { workspaceId: undefined, indexes: [2] },
+      { workspaceId: "conductor-follow", indexes: [3] },
+      { workspaceId: "conductor-watch", indexes: [4] },
     ],
   );
 });

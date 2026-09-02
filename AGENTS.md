@@ -96,81 +96,20 @@ Trust constraints:
   absence stands rather than an improvised control. Widening the invocation
   set further, or observing another provider this way, is a product decision,
   not an implementation detail.
-- A message to a local Cursor chat is the same bounded CLI exception at one
-  remove: Cursor's own `cursor-agent` CLI documents resuming a chat by id and
-  taking one prompt non-interactively, so the one write Luke makes through it
-  is the message the developer just asked to send to a chat the latest
-  observation advertised for one. The advertisement itself is bounded on
-  every side — the turn is settled, because a resume into an open turn would
-  race it; the folder is the one Cursor's own workspace record names, because
-  the resume must be pinned there with `--workspace` or the CLI forks the
-  chat's transcript under the invoking directory's project; the CLI is
-  installed; and the Cursor app does not hold the chat, because Cursor does
-  not document whether an app window shows a turn landed behind it, and a
-  message the developer cannot see land is worse than none. The invocation is
-  direct without a shell, its arguments fixed by the build beside the
-  observed chat id, the observed folder, and the developer's own words as a
-  single argument behind an end-of-options separator. The moment of the act
-  re-checks what the advertisement rested on: the login is probed again by
-  exit code alone, and the chat's transcript must still stand, because the
-  CLI silently starts a fresh chat under an id it does not know, so a stale
-  id must refuse rather than fork. Nothing is read out of the launched turn —
-  the transcript observation already reads is the report — and a turn that
-  outlives the short refusal window is a delivered message, never a process
-  to kill. This authorizes no other `cursor-agent` command; widening it is a
-  product decision, not an implementation detail.
-- Herdr, the terminal multiplexer coding agents run inside, is the one local
-  surface observed through its own CLI, because its state lives inside its
-  server and the CLI is the documented read of it — the Codex cloud rule kept
-  its shape at one remove, here with no login at all. The reads are two:
-  `session list --json`, the CLI's client-side enumeration of its named
-  sessions, which answers with no server and starts none, and, for each
-  session that enumeration reported running, `agent list` behind a
-  `--session` carrying that session's own name, re-validated against the
-  charset Herdr itself enforces before it may ride the invocation. No shell
-  stands between Luke and the binary, no server is ever started — a
-  `server_not_running` answer is a machine observed as holding nothing, the
-  same answer an absent binary gives — and of each agent record one thing is
-  kept: the hosted session reference Herdr's own integrations recorded, the
-  id that joins a pane to a session Luke already observes from that
-  provider's own files. What the join earns is an association chip on the
-  row Luke already draws, never a row of Herdr's own — a Herdr pane's
-  session is its provider's session, and a pane Herdr cannot name a session
-  for draws nothing rather than a gamble. No write command of Herdr's is
-  ever invoked, and its sessions advertise nothing to write with. Widening
-  the invocation set, or the agent kinds the join reads, is a product
-  decision, not an implementation detail.
 - One registration is the exception the previous rule's word "require" leaves
   room for, and it is bounded on every side: Luke may join an observation
   hook to a provider's own user-level hook surface (today the `settings.json`
-  of Claude Code and Gemini CLI, the `hooks.json` of Codex and Cursor,
-  Devin's `config.json`, and OpenCode's plugin directory, and nothing else of
-  any provider's) so local rows can tell a turn that just ended from a
-  session walked away from, and can see a tool call holding for permission at
-  all. The
+  of Claude Code and the `hooks.json` of Codex, and nothing else of any
+  provider's) so local rows can tell a turn that just ended from a session
+  walked away from, and can see a tool call holding for permission at all. The
   hook itself writes one fixed status token into a spool under Luke's own
   application data, named by the session's id; the envelope the provider hands
-  it — piped in, passed as an argument, or handed over in process — is read
-  only for that id and never
+  it — piped in or passed as an argument — is read only for that id and never
   reaches disk. The merge preserves the user's own entries and settings as
   parsed, recognizes its own entries by the script's name, refuses to rewrite
   a file it cannot parse, converges at launch rather than accumulating, and
-  skips a machine with no provider home to join. OpenCode's registration is
-  the same exception in a different shape, and the difference is one of
-  character, named here deliberately: OpenCode has no hook configuration to
-  merge an entry into — it loads whole plugin files from its own plugin
-  directory and runs them inside its own process, not as a process beside it —
-  so Luke's one artifact there is one managed plugin file, generated by the
-  build, recognized by the marker in its own header, converged at launch, and
-  removed whole; a foreign file wearing its name is never rewritten or
-  deleted, and the arrangement quietly installs nothing. The plugin is
-  bounded exactly like the scripts: it writes one fixed token into Luke's own
-  spool, reads nothing from an event beyond the session id it names (and, for
-  a message event, which role wrote it, the same one-field filter the scripts
-  apply to a subagent's envelope), lets no failure escape into the session
-  that fired it, and goes silent the moment the spool is gone. The
-  registration is part of observing at all, like reading the transcripts, so
-  it converges at every
+  skips a machine with no provider home to join. The registration is part of
+  observing at all, like reading the transcripts, so it converges at every
   launch rather than answering to a preference; an entry outliving Luke is a
   guarded no-op, and everything the hook sharpens still observes from the
   transcripts alone wherever the hook is absent, including behind Codex's own
@@ -256,17 +195,10 @@ Trust constraints:
   on this machine, and rendered into a bounded reply that is kept nowhere:
   the read performs nothing, reaches no provider, and is offered only for a
   local session whose provider's transcript this build documents reading
-  (Antigravity, Claude Code, Codex, Gemini CLI, Grok Build, OMP, OpenCode, the
-  Radius browser's own agent chats, and the
-  Devin and Cursor agents running on this machine today); a cloud
-  session's conversation lives with its provider and is never fetched. The
-  read renders only what the provider actually wrote down (Cursor and Radius
-  both keep tool outputs out of their transcripts, so those readings carry
-  none, and Antigravity keeps tool outputs in blobs this build does not
-  render, so an Antigravity reading carries the calls and never their
-  answers) and a
-  provider whose stored shape this build cannot render faithfully keeps the
-  honest refusal instead.
+  (Claude Code, Codex, and OMP today); a cloud session's conversation lives
+  with its provider and is never fetched. The read renders only what the
+  provider actually wrote down, and a provider whose stored shape this build
+  cannot render faithfully keeps the honest refusal instead.
 - Counting is three streams with three different guarantees, and the
   difference is the thing to keep straight. Only the first carries the
   guarantee, and the other two must never be described as though they
@@ -619,18 +551,24 @@ What Luke may show:
   but the transcript it was read from never travels. A
   spoken announcement (a session that started waiting, stopped on an error,
   or finished, or an evaluator sentence approved for speech) reaches the
-  voice service so it can be said aloud. The arrival beat is the
-  one member of that set about no session: spoken once per install at the
-  deterministic edge of the account's first sign-in, remembered in Luke's own
-  state file, worded from a script fixed by the build on the same speak-only,
-  tool-free terms as an edge announcement, and carrying as observed values
-  only one working session's title, read from the same roster the rows draw
-  and sent as data behind a marker, and the talk key's own name. A moment
-  that cannot speak it — no credential, a meeting's quiet, a beat dropped
-  before its reply began — leaves it owed for the next signed-in launch
-  rather than improvising a substitute; only the voice window reporting the
-  reply actually begun settles it, and being about no session it draws no
-  notice band and claims none. An edge announcement
+  voice service so it can be said aloud. Two onboarding beats are
+  the members of that set about no session, and each keeps the same terms:
+  worded from a script fixed by the build, speak-only and tool-free like an
+  edge announcement, drawing no notice band and claiming none. The arrival
+  beat is spoken once per install at the deterministic edge of the account's
+  first sign-in, remembered in Luke's own state file, and carrying as
+  observed values only one working session's title, read from the same roster
+  the rows draw and sent as data behind a marker, and the talk key's own
+  name. While the calendar onboarding gate stands, the arrival beat waits —
+  "you're all set" over a panel still asking for something would be false —
+  and the calendar onboarding beat speaks in its place: triggered by the
+  gate's own deterministic standing, once per run, carrying no observed value
+  at all, and gone with the gate, whose Done or skip is what lets the waiting
+  arrival speak. A moment
+  that cannot speak the arrival — no credential, a meeting's quiet, a beat
+  dropped before its reply began — leaves it owed for the next signed-in
+  launch rather than improvising a substitute; only the voice window
+  reporting the reply actually begun settles it. An edge announcement
   sends that update's *about* fields, the same ones the evaluator may see
   with a bounded excerpt of the recap included, and the voice words the
   sentence said aloud, so it can say what the session is waiting on rather
@@ -653,8 +591,9 @@ What Luke may show:
   session is still observed; and the history is stored only where the constraint
   above puts it, on this machine and under its retention policy, and is never
   sent on Luke's speak-only call. Its
-  trigger is a deterministic status edge, the arrival beat's one recorded
-  sign-in edge, or the evaluator finding an update worth speaking. The edge
+  trigger is a deterministic status edge, an onboarding beat's own
+  deterministic trigger (the recorded sign-in edge, or the calendar gate
+  standing), or the evaluator finding an update worth speaking. The edge
   announcements and approved evaluator sentences speak whenever voice can.
   Widening either set is a product decision, not an implementation detail;
   make it deliberately. While an announcement is being spoken, a notice on

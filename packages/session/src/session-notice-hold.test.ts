@@ -64,7 +64,7 @@ test("a session that moved again keeps only its latest notice", () => {
 test("the same session id under another provider is another session", () => {
   const hold = new SessionNoticeHold();
   hold.hold([notice("a", SESSION_NOTICE_STATUS.WAITING, "conductor")]);
-  hold.hold([notice("a", SESSION_NOTICE_STATUS.ERROR, "devin")]);
+  hold.hold([notice("a", SESSION_NOTICE_STATUS.ERROR, "codex")]);
 
   assert.equal(hold.count, 2);
 });
@@ -79,7 +79,7 @@ test("already-worded speech holds on the same terms as a notice", () => {
   }>();
   hold.hold([{ providerId: "conductor", providerSessionId: "a", summary: "first answer" }]);
   hold.hold([{ providerId: "conductor", providerSessionId: "a", summary: "fresher answer" }]);
-  hold.hold([{ providerId: "devin", providerSessionId: "a", summary: "another session's" }]);
+  hold.hold([{ providerId: "codex", providerSessionId: "a", summary: "another session's" }]);
 
   assert.deepEqual(
     hold.release().map((item) => item.summary),

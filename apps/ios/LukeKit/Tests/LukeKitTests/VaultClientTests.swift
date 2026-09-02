@@ -67,11 +67,11 @@ final class VaultStoreKeyTests: XCTestCase {
             let body = try! JSONSerialization.jsonObject(
                 with: request.httpBody ?? Data()
             ) as! [String: String]
-            XCTAssertEqual(body, ["providerId": "cursor", "key": "sk-123"])
+            XCTAssertEqual(body, ["providerId": "conductor", "key": "sk-123"])
             return (jsonData(["stored": true]), makeResponse(url: request.url!, status: 200))
         }
         let client = VaultClient(baseURL: base, http: stub)
-        try await client.storeKey("sk-123", for: .cursor, accessToken: "at-1")
+        try await client.storeKey("sk-123", for: .conductor, accessToken: "at-1")
     }
 
     func testStoreRefusesMalformedKeyBeforeItTravels() async {
@@ -81,7 +81,7 @@ final class VaultStoreKeyTests: XCTestCase {
         }
         let client = VaultClient(baseURL: base, http: stub)
         do {
-            try await client.storeKey("has a space", for: .cursor, accessToken: "at-1")
+            try await client.storeKey("has a space", for: .conductor, accessToken: "at-1")
             XCTFail("Expected throw")
         } catch VaultClientError.invalidKey {
             // expected
@@ -96,7 +96,7 @@ final class VaultStoreKeyTests: XCTestCase {
         }
         let client = VaultClient(baseURL: base, http: stub)
         do {
-            try await client.storeKey("sk-123", for: .jules, accessToken: "at-1")
+            try await client.storeKey("sk-123", for: .conductor, accessToken: "at-1")
             XCTFail("Expected throw")
         } catch VaultClientError.invalidResponse {
             // expected
@@ -119,25 +119,23 @@ final class VaultListKeysTests: XCTestCase {
             XCTAssertNil(request.httpBody)
             let payload: [String: Any] = [
                 "keys": [
-                    ["providerId": "devin", "updatedAt": 1_700_000_000_000],
-                    ["providerId": "jules", "updatedAt": 0],
+                    ["providerId": "conductor", "updatedAt": 1_700_000_000_000],
                 ],
             ]
             return (jsonData(payload), makeResponse(url: request.url!, status: 200))
         }
         let client = VaultClient(baseURL: base, http: stub)
         let entries = try await client.listKeys(accessToken: "at-1")
-        XCTAssertEqual(entries.count, 2)
-        XCTAssertEqual(entries[0].provider, .devin)
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries[0].provider, .conductor)
         XCTAssertEqual(entries[0].updatedAt, Date(timeIntervalSince1970: 1_700_000_000))
-        XCTAssertEqual(entries[1].provider, .jules)
     }
 
     func testUnknownProviderDropsWholeAnswer() async {
         let stub = StubHTTPClient { request in
             let payload: [String: Any] = [
                 "keys": [
-                    ["providerId": "cursor", "updatedAt": 1000],
+                    ["providerId": "conductor", "updatedAt": 1000],
                     ["providerId": "not-a-provider", "updatedAt": 1000],
                 ],
             ]
@@ -157,7 +155,7 @@ final class VaultListKeysTests: XCTestCase {
     func testMissingUpdatedAtDropsWholeAnswer() async {
         let stub = StubHTTPClient { request in
             let payload: [String: Any] = [
-                "keys": [["providerId": "cursor"]],
+                "keys": [["providerId": "conductor"]],
             ]
             return (jsonData(payload), makeResponse(url: request.url!, status: 200))
         }
@@ -185,11 +183,11 @@ final class VaultDeleteKeyTests: XCTestCase {
             let body = try! JSONSerialization.jsonObject(
                 with: request.httpBody ?? Data()
             ) as! [String: String]
-            XCTAssertEqual(body, ["providerId": "replicas"])
+            XCTAssertEqual(body, ["providerId": "conductor"])
             return (jsonData(["deleted": true]), makeResponse(url: request.url!, status: 200))
         }
         let client = VaultClient(baseURL: base, http: stub)
-        let deleted = try await client.deleteKey(for: .replicas, accessToken: "at-1")
+        let deleted = try await client.deleteKey(for: .conductor, accessToken: "at-1")
         XCTAssertTrue(deleted)
     }
 

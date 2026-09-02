@@ -133,29 +133,33 @@ test("a manager without a linked mark cedes the press down the marks", () => {
   const normalized = normalizeSession(
     { id: "codex", displayName: "Codex" },
     {
-      providerSessionId: "run:orca",
+      providerSessionId: "run:conductor",
       title: "Implement the shared session core",
       status: SESSION_STATUS.WORKING,
       observedAt: TEST_NOW,
-      detail: { link: "codex://threads/run-orca" },
+      detail: { link: "codex://threads/run-conductor" },
       applications: [
-        { id: "orca", displayName: "Orca", scope: "workspace" },
+        { id: "conductor", displayName: "Conductor", scope: "workspace" },
         {
           id: "chatgpt",
           displayName: "ChatGPT",
           scope: "session",
-          link: "codex://threads/run-orca",
+          link: "codex://threads/run-conductor",
         },
       ],
-      workspace: { providerWorkspaceId: "worktree", scopeId: "orca", managerName: "Orca" },
+      workspace: {
+        providerWorkspaceId: "worktree",
+        scopeId: "conductor",
+        managerName: "Conductor",
+      },
     },
   );
 
   assert.deepEqual(
     normalized.applications.map((application) => application.id),
-    ["orca", "chatgpt"],
+    ["conductor", "chatgpt"],
   );
-  assert.equal(normalized.detail.link, "codex://threads/run-orca");
+  assert.equal(normalized.detail.link, "codex://threads/run-conductor");
 });
 
 test("an ungrouped row keeps the fixed mark order and its provider's press", () => {

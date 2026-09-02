@@ -8,7 +8,7 @@ import {
   workspaceAgentModels,
 } from "../core.js";
 import { actUnsupportedReason, REMOTE_SESSION_ACT } from "./act-execute.js";
-import { CURSOR_PROJECT_REFRESH, cloudSessionAdapterFor } from "./cloud-adapters.js";
+import { cloudSessionAdapterFor } from "./cloud-adapters.js";
 import { decryptProviderKey } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import type { VaultKeyRow } from "./observe.js";
@@ -43,9 +43,7 @@ export interface ProjectsOptions {
  * project the provider itself reported on a fresh observation pass, run here
  * on demand like observe and stored nowhere. Only creation-capable providers
  * are observed at all — a projects request must not spend the quota of a
- * provider that could offer nothing — and Cursor's project read, a background
- * offer on the desktop, is awaited because this pass is the one the answer
- * comes from.
+ * provider that could offer nothing.
  */
 export async function handleProjects(options: ProjectsOptions): Promise<Response> {
   const { request, resolveUserId, encryptionSecret, readVaultKeys } = options;
@@ -97,7 +95,6 @@ export async function handleProjects(options: ProjectsOptions): Promise<Response
         },
         ...(options.fetch ? { fetch: options.fetch } : undefined),
         ...(options.now ? { now: options.now } : undefined),
-        cursorProjectRefresh: CURSOR_PROJECT_REFRESH.AWAIT,
       });
       await adapter.observe();
       return adapter.workspaceProjects();

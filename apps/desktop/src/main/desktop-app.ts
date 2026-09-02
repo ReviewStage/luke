@@ -37,14 +37,10 @@ import { normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
 import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticKind,
-  CmuxSessionApplicationReader,
   CodexCloudSessionAdapter,
   ConductorLocalWorkspaceAdapter,
   ConductorSessionApplicationReader,
-  defaultOrcaDataDirectory,
-  HerdrSessionApplicationReader,
   ObservationHookRegistry,
-  OrcaWorkspaceReader,
   type ProviderRegistration,
   peekLocalSessions,
   providerRegistrations,
@@ -140,6 +136,14 @@ import {
   countsFirstAnnouncement,
   shouldBackfillArrivalSettled,
 } from "./arrival-flow";
+import {
+  CALENDAR_ONBOARDING_STATE_FILE,
+  type CalendarOnboardingState,
+  calendarOnboardingOwed,
+  calendarOnboardingRecord,
+  calendarOnboardingStateFromStored,
+  shouldBackfillCalendarOnboardingSettled,
+} from "./calendar-onboarding-flow";
 import {
   INTRODUCTION_FADE_MS,
   INTRODUCTION_HANDOFF_READY_MS,
@@ -258,19 +262,6 @@ const conductorSessionApplications = new ConductorSessionApplicationReader();
 const conductorLocalWorkspaceAdapter = new ConductorLocalWorkspaceAdapter({
   openExternal: (url) => shell.openExternal(url),
 });
-const orcaWorkspaces = new OrcaWorkspaceReader({
-  dataDirectory: process.env.ORCA_USER_DATA_PATH ?? defaultOrcaDataDirectory(),
-});
-// cmux's CLI honors the same variable for its own state directory, so a
-// developer pointing cmux elsewhere points Luke's observation with it.
-const cmuxSessionApplications = new CmuxSessionApplicationReader({
-  ...(process.env.CMUX_AGENT_HOOK_STATE_DIR
-    ? { stateDirectory: process.env.CMUX_AGENT_HOOK_STATE_DIR }
-    : undefined),
-});
-// Herdr's CLI resolves its own sockets, so the reader takes no path at all:
-// where the user pointed herdr is where its own binary answers from.
-const herdrSessionApplications = new HerdrSessionApplicationReader();
 const supersetHomeDirectory =
   process.env.SUPERSET_HOME_DIR ?? path.join(app.getPath("home"), ".superset");
 const supersetWorkspaces = new SupersetWorkspaceReader({
@@ -291,9 +282,6 @@ const supersetWorkspaceHost: WorkspaceHostRegistration = {
 const workspaceHosts = workspaceHostRegistrations({
   superset: supersetWorkspaceHost,
   conductorApplications: conductorSessionApplications,
-  orcaWorkspaces,
-  cmuxApplications: cmuxSessionApplications,
-  herdrApplications: herdrSessionApplications,
 });
 // `directory` and the cipher are read lazily so the store can be declared before
 // the Electron app is ready.
@@ -323,6 +311,20 @@ const accountSession = new AccountSessionManager({
     const signedIn = next.status === ACCOUNT_STATUS.SIGNED_IN;
     const wasSignedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
     account = next;
+    // The first sign-in ever observed is also where the calendar step of
+    // onboarding goes up: recorded on disk rather than derived, so quitting
+    // at the gate and relaunching finds it standing, while a record already
+    // on file — settled by a connect or backfilled for a veteran — keeps its
+    // history. Written before the account broadcast below, so the gate is
+    // already standing when the renderer learns it is signed in, rather than
+    // the roster being drawn for a beat and replaced. An install whose
+    // settings already hold a calendar has what the gate asks for, and
+    // settles as soon as the snapshot answers; the renderer's own connected
+    // check hides the gate in the meantime.
+    if (signedIn && !wasSignedIn && calendarOnboardingState === undefined) {
+      writeCalendarOnboardingState({ requiredAt: new Date().toISOString() });
+      void settleCalendarOnboardingIfConnected();
+    }
     broadcastAccount();
     void broadcastVoiceAvailability();
     void broadcastSessionReplay();
@@ -346,11 +348,6 @@ const providerRegistry = providerRegistrations({
   readApiKey: (providerId) => settingsStore.readApiKey(providerId),
   observationHookInstallation: (providerId) => observationHooks.installation(providerId),
   codexCloudAdapter,
-  // A Replicas workspace opens in the Replicas desktop app when the OS has a
-  // handler for its scheme, and on the web dashboard otherwise. This asks
-  // LaunchServices the very question the open will ask it, so the address a
-  // row carries and the app that answers its press can never disagree.
-  replicasDesktopAppPresent: () => app.getApplicationNameForProtocol("replicas://open") !== "",
   onDiagnostic: reportAdapterDiagnostic,
 });
 // The record enforces completeness; the shared list preserves provider order.
@@ -890,6 +887,67 @@ function removeStoredState(at: string, what: string): boolean {
 
 let rememberedFacts: readonly RememberedFact[] = [];
 
+/**
+ * The calendar onboarding record as this run knows it, loaded once at launch
+ * and written through `writeCalendarOnboardingState` from there on. Undefined
+ * is "no record", which only a launch may turn into a backfill and only a
+ * sign-in edge into a standing gate.
+ */
+let calendarOnboardingState: CalendarOnboardingState | undefined;
+const calendarOnboardingStatePath = () =>
+  path.join(app.getPath("userData"), CALENDAR_ONBOARDING_STATE_FILE);
+
+function calendarOnboardingStateFromDisk(): CalendarOnboardingState | undefined {
+  try {
+    return calendarOnboardingStateFromStored(
+      fs.readFileSync(calendarOnboardingStatePath(), "utf8"),
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+/** Whether the onboarding gate stands, as the panels should currently draw it. */
+function calendarOnboardingGateOwed(): boolean {
+  return runMode.requiresAccount && calendarOnboardingOwed(calendarOnboardingState);
+}
+
+function writeCalendarOnboardingState(state: CalendarOnboardingState): void {
+  calendarOnboardingState = state;
+  try {
+    fs.writeFileSync(calendarOnboardingStatePath(), calendarOnboardingRecord(state));
+  } catch (error) {
+    process.stderr.write(
+      `Could not persist the calendar onboarding record: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+  }
+  panels.broadcast(channels.onCalendarOnboardingChanged, calendarOnboardingGateOwed());
+}
+
+/**
+ * Settles an owed record the settings already satisfy, at a launch or a
+ * sign-in edge — never mid-run, where the gate deliberately stands over a
+ * fresh connection until Done confirms it. This covers the calendar that
+ * predates the record (an install that connected one before this step
+ * existed, then signed in again) and the connect made at the gate but never
+ * confirmed before a quit: either way the step's purpose is standing, and a
+ * record left owed over it would let a later disconnect resurrect a gate
+ * already passed.
+ */
+async function settleCalendarOnboardingIfConnected(): Promise<void> {
+  if (!calendarOnboardingOwed(calendarOnboardingState)) return;
+  // Presence alone, not the credential-resolving snapshot: the reconcile
+  // must land fast, because until it does an owed record over a standing
+  // calendar draws the gate's review half over a step already passed.
+  const connected = await settingsStore.calendarConnectionStored();
+  // Re-checked after the await: another settle may have landed first.
+  if (!connected || !calendarOnboardingOwed(calendarOnboardingState)) return;
+  writeCalendarOnboardingState({
+    ...(calendarOnboardingState ?? {}),
+    settledAt: new Date().toISOString(),
+  });
+}
+
 /** Whether an attempt to speak the arrival beat is already under way. */
 let arrivalBeatSpeaking = false;
 
@@ -901,6 +959,31 @@ let arrivalBeatSpeaking = false;
  * that went nowhere is the next launch's to retry.
  */
 let arrivalBeatTriggered = false;
+
+/**
+ * Whether this run has already sent the calendar onboarding beat's trigger.
+ * Per run rather than per install: the gate is the durable prompt, and a
+ * launch that still finds it standing may say so again, but one run says it
+ * once however many capability starts it has.
+ */
+let calendarOnboardingBeatTriggered = false;
+
+/**
+ * Whether the calendar gate is actually being offered: owed by the record,
+ * and with at least one source this build can connect — the same two facts
+ * the renderer draws the gate from. An owed record no gate can be drawn for
+ * must hold nothing, or the arrival beat would wait on a step that can
+ * never be answered.
+ */
+async function calendarGateOfferable(): Promise<boolean> {
+  if (!calendarOnboardingGateOwed()) return false;
+  const settings = await settingsStore.snapshot();
+  // Re-checked after the await: the reconcile settling a pre-standing
+  // calendar may have landed while the snapshot resolved, and a beat about
+  // a gate no longer standing must not go out over the roster.
+  if (!calendarOnboardingGateOwed()) return false;
+  return settings.status.appleCalendarAvailable || settings.status.calendarSignInAvailable;
+}
 
 /**
  * Speaks the one-time arrival beat, if it is owed and this moment can carry
@@ -916,14 +999,27 @@ let arrivalBeatTriggered = false;
  * nobody heard was not the one moment this plays. The first observation
  * pass is awaited first, so the beat's suggestion can name a session the
  * developer actually has running.
+ *
+ * While the calendar gate stands, the calendar onboarding beat speaks in the
+ * arrival's place — "you're all set" over a panel still asking for something
+ * would be false — and the arrival waits for the step to settle, whose Done
+ * and skip both call back here.
  */
 async function speakArrivalBeat(): Promise<void> {
-  if (arrivalBeatSpeaking || arrivalBeatTriggered) return;
+  if (arrivalBeatSpeaking) return;
   if (!runMode.requiresAccount || account.status !== ACCOUNT_STATUS.SIGNED_IN) return;
-  if (!arrivalBeatOwed(arrivalState)) return;
   if (!voiceCapabilities.realtimeCredentials) return;
   arrivalBeatSpeaking = true;
   try {
+    if (await calendarGateOfferable()) {
+      if (calendarOnboardingBeatTriggered) return;
+      const host = panels.voiceHost();
+      if (!host) return;
+      host.webContents.send(channels.onCalendarOnboardingSpeech, undefined);
+      calendarOnboardingBeatTriggered = true;
+      return;
+    }
+    if (arrivalBeatTriggered || !arrivalBeatOwed(arrivalState)) return;
     await sessionObservationLoop.refresh().catch(() => undefined);
     if (account.status !== ACCOUNT_STATUS.SIGNED_IN || !arrivalBeatOwed(arrivalState)) return;
     // The calendar may not have been read yet this early, so this check can
@@ -1488,6 +1584,7 @@ function registerIpc(): void {
         meetingQuiet: accountCapabilitiesActive() && meetingQuietActive,
         conversationHistory,
         rememberedFacts,
+        calendarOnboardingOwed: calendarOnboardingGateOwed(),
         sessionReplay: await sessionReplayBootstrap(),
         settings: await settingsStore.snapshot(),
       };
@@ -1535,6 +1632,29 @@ function registerIpc(): void {
     // A report that raced a settle already on file overwrites nothing.
     if (!arrivalBeatOwed(arrivalState)) return;
     writeArrivalState({ ...(arrivalState ?? {}), settledAt: new Date().toISOString() });
+  });
+  registerHandler(BRIDGE.skipCalendarOnboarding, () => {
+    // A skip that raced the step already settling overwrites nothing: it was
+    // answered, and a confirmed calendar answered it better than the decline.
+    if (!calendarOnboardingOwed(calendarOnboardingState)) return;
+    writeCalendarOnboardingState({
+      ...(calendarOnboardingState ?? {}),
+      skippedAt: new Date().toISOString(),
+    });
+    // The step is over, so the arrival beat it was holding may speak now.
+    void speakArrivalBeat();
+  });
+  registerHandler(BRIDGE.completeCalendarOnboarding, () => {
+    // Done is what settles the step, not the connect before it: the gate
+    // stays standing over a fresh connection so the calendars that count can
+    // still be chosen and another account added, and this press is the
+    // developer saying the choice is right.
+    if (!calendarOnboardingOwed(calendarOnboardingState)) return;
+    writeCalendarOnboardingState({
+      ...(calendarOnboardingState ?? {}),
+      settledAt: new Date().toISOString(),
+    });
+    void speakArrivalBeat();
   });
   registerHandler(BRIDGE.beginSupersetSignIn, async () => {
     recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
@@ -2681,6 +2801,23 @@ export function startDesktopApp(): void {
       ) {
         writeArrivalState({ settledAt: new Date().toISOString() });
       }
+      calendarOnboardingState = calendarOnboardingStateFromDisk();
+      // A signed-in install with no calendar onboarding record predates the
+      // mandatory step: it finished onboarding under the old terms, so it is
+      // settled now rather than gated by an update months in.
+      if (
+        shouldBackfillCalendarOnboardingSettled({
+          requiresAccount: runMode.requiresAccount,
+          signedIn: introductionInput.signedIn,
+          hasRecord: calendarOnboardingState !== undefined,
+        })
+      ) {
+        writeCalendarOnboardingState({ settledAt: new Date().toISOString() });
+      }
+      // A record left owed over a calendar that already stands — a crash
+      // between a connect's two writes, or a sign-in edge whose settle never
+      // ran — settles now rather than waiting to gate a disconnect.
+      void settleCalendarOnboardingIfConnected();
       await panels.refreshGeometry();
       registerIpc();
       // Resolving settings touches the filesystem, and the OS keychain only for a

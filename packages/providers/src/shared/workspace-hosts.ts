@@ -1,17 +1,8 @@
 import type { ProviderSessionObservation } from "@sidecar/session";
 import {
-  type CmuxSessionApplicationReader,
-  CmuxSessionApplicationSnapshot,
-} from "../cmux/session-applications.js";
-import {
   type ConductorSessionApplicationReader,
   ConductorSessionApplicationSnapshot,
 } from "../conductor/session-applications.js";
-import {
-  type HerdrSessionApplicationReader,
-  HerdrSessionApplicationSnapshot,
-} from "../herdr/session-applications.js";
-import { type OrcaWorkspaceReader, OrcaWorkspaceSnapshot } from "../orca/workspaces.js";
 
 /** One manager's annotation of one provider's already-observed sessions. */
 export type WorkspaceHostEnrichment = (
@@ -39,9 +30,6 @@ export interface WorkspaceHostRegistrationOptions {
    */
   superset: WorkspaceHostRegistration;
   conductorApplications: ConductorSessionApplicationReader;
-  orcaWorkspaces: OrcaWorkspaceReader;
-  cmuxApplications: CmuxSessionApplicationReader;
-  herdrApplications: HerdrSessionApplicationReader;
 }
 
 function enrichmentFrom(snapshot: {
@@ -55,14 +43,8 @@ function enrichmentFrom(snapshot: {
 
 /**
  * The workspace managers of one observation pass, in claim order. Superset
- * claims its workspaces first and Conductor next — the precedence that stood
- * before Orca joined, so no existing tray moves — and Orca defers to both:
- * one chat is grouped by exactly one manager however many of them hold it,
- * and a chat only Orca holds still groups under its worktree. cmux and Herdr
- * run last and claim no workspace at all: each only adds its own association —
- * cmux's pane address stands in as the row's link only where none of the
- * managers before it gave one, and Herdr, a terminal with no address scheme,
- * adds the association alone.
+ * claims its workspaces first and Conductor next: one chat is grouped by
+ * exactly one manager however many of them hold it.
  */
 export function workspaceHostRegistrations(
   options: WorkspaceHostRegistrationOptions,
@@ -73,21 +55,6 @@ export function workspaceHostRegistrations(
       observationFailureLabel: "Conductor application observation",
       read: async () => enrichmentFrom(await options.conductorApplications.read()),
       emptyEnrichment: enrichmentFrom(new ConductorSessionApplicationSnapshot()),
-    },
-    {
-      observationFailureLabel: "Orca application observation",
-      read: async () => enrichmentFrom(await options.orcaWorkspaces.read()),
-      emptyEnrichment: enrichmentFrom(new OrcaWorkspaceSnapshot()),
-    },
-    {
-      observationFailureLabel: "cmux application observation",
-      read: async () => enrichmentFrom(await options.cmuxApplications.read()),
-      emptyEnrichment: enrichmentFrom(new CmuxSessionApplicationSnapshot()),
-    },
-    {
-      observationFailureLabel: "Herdr application observation",
-      read: async () => enrichmentFrom(await options.herdrApplications.read()),
-      emptyEnrichment: enrichmentFrom(new HerdrSessionApplicationSnapshot()),
     },
   ];
 }

@@ -679,6 +679,29 @@ export const BRIDGE = {
    * permission but audio capture, the async clipboard included.
    */
   copyText: entry({ kind: "send", channel: "app:copy-text", args: oneString }),
+  /**
+   * The calendar gate's own skip: declines the onboarding step for good and
+   * is remembered like a settle. It carries nothing and answers nothing —
+   * the standing-down travels back on the onboarding broadcast.
+   */
+  skipCalendarOnboarding: entry({
+    kind: "invoke",
+    channel: "app:skip-calendar-onboarding",
+    args: noArgs,
+    result: result<void>(),
+  }),
+  /**
+   * The gate's Done: the developer confirming the connected calendars are
+   * the ones that should count, which is what settles the onboarding step —
+   * a connect alone leaves the gate standing so the choice can still be
+   * edited and another connection added.
+   */
+  completeCalendarOnboarding: entry({
+    kind: "invoke",
+    channel: "app:complete-calendar-onboarding",
+    args: noArgs,
+    result: result<void>(),
+  }),
   focusPanel: entry({ kind: "send", channel: "app:focus-panel", args: noArgs }),
   requestRealtimeCredential: entry({
     kind: "invoke",
@@ -826,6 +849,17 @@ export const BRIDGE = {
     args: noArgs,
     result: result<void>((v) => v === undefined),
   }),
+  /**
+   * The calendar onboarding beat, decided in the main process while the
+   * gate stands after the first sign-in. It carries nothing: the words are a
+   * script fixed by the build, about the gate alone.
+   */
+  onCalendarOnboardingSpeech: entry({
+    kind: "subscribe",
+    channel: "app:calendar-onboarding-speech",
+    args: noArgs,
+    result: result<void>((v) => v === undefined),
+  }),
   onWorkspaceProjectsChanged: entry({
     kind: "subscribe",
     channel: "app:workspace-projects-changed",
@@ -847,6 +881,12 @@ export const BRIDGE = {
   onMeetingQuietChanged: entry({
     kind: "subscribe",
     channel: "app:meeting-quiet-changed",
+    args: noArgs,
+    result: result<boolean>(isWireBoolean),
+  }),
+  onCalendarOnboardingChanged: entry({
+    kind: "subscribe",
+    channel: "app:calendar-onboarding-changed",
     args: noArgs,
     result: result<boolean>(isWireBoolean),
   }),

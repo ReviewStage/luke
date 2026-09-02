@@ -5,6 +5,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import {
+  HOSTED_AGENT_ID,
   PROVIDER_ID,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
@@ -148,14 +149,14 @@ test("indexes supported provider session ids from Conductor records", async (t) 
   for (const [providerId, providerSessionId] of [
     [PROVIDER_ID.CODEX, "codex-local"],
     [PROVIDER_ID.CLAUDE_CODE, "claude-local"],
-    [PROVIDER_ID.CURSOR, "cursor-local"],
-    [PROVIDER_ID.OPENCODE, "opencode-local"],
+    [HOSTED_AGENT_ID.CURSOR, "cursor-local"],
+    [HOSTED_AGENT_ID.OPENCODE, "opencode-local"],
   ] as const) {
     assert.equal(snapshot.has(providerId, providerSessionId), true);
   }
 
   assert.equal(snapshot.has(PROVIDER_ID.CLAUDE_CODE, "codex-local"), false);
-  assert.equal(snapshot.has(PROVIDER_ID.DEVIN, "devin-local"), false);
+  assert.equal(snapshot.has(PROVIDER_ID.OMP, "omp-local"), false);
 });
 
 test("a missing Conductor schema leaves provider observations intact", async (t) => {

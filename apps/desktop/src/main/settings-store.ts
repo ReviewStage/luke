@@ -1151,6 +1151,16 @@ export class SettingsStore {
     return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
+  /**
+   * Whether any calendar connection is stored at all — presence alone, with
+   * no grant decrypted and no keychain touched, for the onboarding reconcile
+   * that only needs to know the step's purpose is already standing.
+   */
+  async calendarConnectionStored(): Promise<boolean> {
+    const persisted = await this.#load();
+    return (persisted.calendarAccounts ?? []).length > 0 || persisted.appleCalendar !== undefined;
+  }
+
   /** The connection as the reader is fed it; absent means never run the helper. */
   async readAppleCalendarConnection(): Promise<AppleCalendarConnection | undefined> {
     const held = (await this.#load()).appleCalendar;

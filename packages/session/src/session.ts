@@ -17,7 +17,7 @@ export const SESSION_STATUS = {
   WAITING: sessionStatusBrand("waiting"),
   /**
    * The session stopped on something it cannot get past on its own. Providers
-   * report this natively — a Conductor `error`, a Cursor `ERROR` run, a Claude
+   * report this natively — a Conductor `error`, a Claude
    * Code `api_error` — and it is kept distinct from `waiting` because the two
    * ask different things of the developer: one wants an answer, the other wants
    * a rescue.
@@ -221,23 +221,7 @@ export interface SessionProvider {
  */
 export const SESSION_APPLICATION_ID = {
   CHATGPT: "chatgpt",
-  CMUX: "cmux",
   CONDUCTOR: "conductor",
-  // Cursor the app is deliberately not Cursor the agent: the app chip counts
-  // the chats the Cursor app can open — app-held local chats and cloud
-  // agents — where the agent chip counts every Cursor chat, CLI ones
-  // included, so the two ride separate axes under separate ids.
-  CURSOR: "cursor-app",
-  HERDR: "herdr",
-  ORCA: "orca",
-  // The browser is its provider, the same sharing Conductor and Replicas
-  // keep: every Radius row is native to the Radius app, so separate ids
-  // would only draw two chips that count identical rows.
-  RADIUS: "radius",
-  // Replicas the app deliberately is Replicas the provider, the same sharing
-  // Conductor keeps: every Replicas row is native to the Replicas app, so
-  // separate ids would only draw two chips that count identical rows.
-  REPLICAS: "replicas",
   SUPERSET: "superset",
 } as const;
 
@@ -291,13 +275,8 @@ export interface SessionIdentity {
  */
 export const SESSION_LINK_SCHEME = {
   HTTPS: "https:",
-  ANTIGRAVITY: "antigravity:",
-  ANTIGRAVITY_IDE: "antigravity-ide:",
-  CMUX: "cmux:",
   CODEX: "codex:",
   CONDUCTOR: "conductor:",
-  CURSOR: "cursor:",
-  REPLICAS: "replicas:",
   SUPERSET: "superset:",
 } as const;
 

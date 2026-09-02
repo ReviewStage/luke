@@ -23,7 +23,7 @@
      coral, the vertical gradient Codex draws its mark with, the light half of
      Conductor's two-colour palette — its dark half is the surface the mark
      already sits on, so the pairing is the published one — Cursor's and
-     Devin's marks, each published as one silhouette and so drawn in the light
+     Copilot's marks, each published as one silhouette and so drawn in the light
      form its brand uses on a dark surface, the two tones of OpenCode's
      terminal mark: the frame, and the gray block its favicon keeps inside the
      frame's opening on every surface, and the vertical metallic gradient
@@ -31,30 +31,19 @@
      by the chips and the row tints instead, so the two colour systems never
      compete for the same pixel. */
   --mark-claude-code: #d97757;
-  --mark-cmux-left: #12c7f5;
-  --mark-cmux-middle: #2d8cff;
-  --mark-cmux-right: #6c5cff;
   --mark-codex-top: #b1a7ff;
   --mark-codex-middle: #7a9dff;
   --mark-codex-bottom: #3941ff;
   --mark-conductor: #eae8e6;
   --mark-copilot: #ffffff;
   --mark-cursor: #ffffff;
-  --mark-deepseek: #5786fe;
-  --mark-devin: #ffffff;
   --mark-grok-build: #fcfcfc;
-  --mark-herdr: #ffffff;
-  --mark-pi: #ffffff;
-  --mark-jules: #715cd7;
   --mark-linear: #5e6ad2;
   --mark-omp-top: #ed4abf;
   --mark-omp-middle: #9b4dff;
   --mark-omp-bottom: #5ad8e6;
   --mark-opencode: #ffffff;
   --mark-opencode-block: #5a5858;
-  --mark-orca: #ffffff;
-  --mark-radius: #ffffff;
-  --mark-replicas: #3eeba3;
   --mark-superset-top: #b9b7b5;
   --mark-superset-bottom: #858483;
 
@@ -862,13 +851,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    short, the Codex and Cursor marks are full-bleed, and Conductor's letter mark
    is taller than it is wide — so each gets a uniform scale to sit at the same
    optical weight. Proportions are untouched. */
-/* Antigravity's double-arch mark carries Google's own published colours, so
-   none is set here; its box crops the site logo's canvas to the glyph, which
-   fills it edge to edge, so it takes the full-bleed marks' scale. */
-.provider-mark[data-mark="antigravity"] {
-  transform: scale(0.94);
-}
-
 .provider-mark[data-mark="claude-code"] {
   color: var(--mark-claude-code);
   transform: scale(1.12);
@@ -880,12 +862,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
 .provider-mark[data-mark="chatgpt"] {
   transform: scale(0.94);
-}
-
-/* cmux's chevron sits centred in its published canvas at half the canvas's
-   height, so it is scaled up to the height the full-bleed marks reach. */
-.provider-mark[data-mark="cmux"] {
-  transform: scale(1.9);
 }
 
 .provider-mark[data-mark="conductor"] {
@@ -903,29 +879,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .provider-mark[data-mark="cursor"] {
   color: var(--mark-cursor);
   transform: scale(0.94);
-}
-
-/* DeepSeek's whale fills its box edge to edge the way the Codex and Cursor
-   marks do, so it takes the same scale they do. */
-.provider-mark[data-mark="deepseek"] {
-  color: var(--mark-deepseek);
-  transform: scale(0.94);
-}
-
-/* Devin's published mark leaves roughly a fifth of its box empty on every side,
-   so it is scaled up to the height the full-bleed marks reach. */
-.provider-mark[data-mark="devin"] {
-  color: var(--mark-devin);
-  transform: scale(1.22);
-}
-
-/* Pi's glyph spans 470 of its 800-unit canvas, so it is scaled up to the
-   height the full-bleed marks reach. Like Copilot, Cursor, and Devin, pi.dev
-   publishes one silhouette rather than a colour, so it is drawn in the light
-   form a dark surface takes. */
-.provider-mark[data-mark="pi"] {
-  color: var(--mark-pi);
-  transform: scale(1.6);
 }
 
 /* The Apple Calendar mark carries its own colours, like Google Calendar's, so
@@ -957,22 +910,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transform: scale(0.94);
 }
 
-/* Herdr's ram fills its cropped box edge to edge the way the Codex and Cursor
-   marks do, so it takes the same scale they do. Herdr publishes the glyph as
-   a mask its site inks in the page colour, so it is drawn in the light form
-   its own dark surface uses, like Copilot, Cursor, and Devin. */
-.provider-mark[data-mark="herdr"] {
-  color: var(--mark-herdr);
-  transform: scale(0.94);
-}
-
-/* Jules fills its box top to bottom the way the Codex and Cursor marks do, so
-   it takes the same scale they do. */
-.provider-mark[data-mark="jules"] {
-  color: var(--mark-jules);
-  transform: scale(0.94);
-}
-
 /* Linear's mark is drawn full-bleed the way the Codex and Cursor marks are, so
    it takes the same scale they do. */
 .provider-mark[data-mark="linear"] {
@@ -992,32 +929,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    marks do, so it takes the same scale they do. */
 .provider-mark[data-mark="opencode"] {
   color: var(--mark-opencode);
-  transform: scale(0.94);
-}
-
-/* Orca's whale mark is half again as wide as it is tall, so fitted to the
-   box's width it carries less ink than the square marks; a modest uniform
-   scale brings it to their optical weight without touching the proportion.
-   Orca publishes the silhouette in the light form its own dark surface uses,
-   like Copilot, Cursor, and Devin. */
-.provider-mark[data-mark="orca"] {
-  color: var(--mark-orca);
-  transform: scale(1.18);
-}
-
-/* Radius' banded sphere fills its box top to bottom the way the Codex and
-   Cursor marks do, so it takes the same scale they do. Radius publishes the
-   glyph as a one-colour silhouette, so it is drawn in the light form its own
-   dark surface uses, like Copilot, Cursor, and Devin. */
-.provider-mark[data-mark="radius"] {
-  color: var(--mark-radius);
-  transform: scale(0.94);
-}
-
-/* Replicas' pixel R fills its box top to bottom the way the Codex and Cursor
-   marks do, so it takes the same scale they do. */
-.provider-mark[data-mark="replicas"] {
-  color: var(--mark-replicas);
   transform: scale(0.94);
 }
 

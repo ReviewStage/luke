@@ -17,6 +17,9 @@ test("the minted introduction session declares no tools and no way to choose one
   assert.equal(config.audio.input.turn_detection, null);
   assert.match(config.instructions, /audio is noisy, ambiguous, or cut off/i);
   assert.match(config.instructions, /never infer[\s\S]*or call a tool from unclear audio/i);
+  // The practice reply is the last word the developer can hear before the
+  // sign-off: a question asked there is one nobody can answer.
+  assert.match(config.instructions, /practice moment[\s\S]*ask no follow-up[\s\S]*question/i);
 });
 
 test("a scripted beat travels as data behind a marker and opens a tool-free turn", () => {

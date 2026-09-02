@@ -1,5 +1,12 @@
 import type { ProactiveSpeechTurn, RealtimeStatus, ScheduledTimer } from "@sidecar/realtime";
-import { isArrivalSpeech, REALTIME_STATUS } from "@sidecar/realtime";
+import { isArrivalSpeech, isCalendarOnboardingSpeech, REALTIME_STATUS } from "@sidecar/realtime";
+
+/** A turn that is one scripted onboarding beat rather than a batch of session announcements. */
+function isOnboardingBeat(
+  turn: ProactiveSpeechTurn,
+): turn is Exclude<ProactiveSpeechTurn, readonly unknown[]> {
+  return isArrivalSpeech(turn) || isCalendarOnboardingSpeech(turn);
+}
 
 /**
  * How long a notice stays worth saying. News about a session is news for
@@ -150,11 +157,22 @@ export class SpokenNoticeAnnouncer {
 
   /** Takes one turn the main process decided to voice, and starts saying it. */
   enqueue(turn: ProactiveSpeechTurn): void {
-    if (this.#quiet || (!isArrivalSpeech(turn) && turn.length === 0)) return;
+    if (this.#quiet) return;
+    if (!isOnboardingBeat(turn) && turn.length === 0) return;
     this.#queue.push(turn);
     this.#trimQueue();
     this.#cancelLinger();
     this.#flush();
+  }
+
+  /**
+   * Drops a calendar onboarding beat still waiting to be spoken: the gate it
+   * explains has stood down, and a sentence asking for what was just given
+   * would speak over the answer. One already being said finishes — a reply
+   * begun is delivered — and the arrival queues behind it.
+   */
+  dropCalendarOnboardingSpeech(): void {
+    this.#queue = this.#queue.filter((item) => !isCalendarOnboardingSpeech(item));
   }
 
   /**
@@ -227,7 +245,7 @@ export class SpokenNoticeAnnouncer {
     const now = this.#options.now?.() ?? Date.now();
     const fresh: ProactiveSpeechTurn[] = [];
     for (const turn of this.#queue) {
-      if (isArrivalSpeech(turn)) {
+      if (isOnboardingBeat(turn)) {
         if (now - turn.decidedAt <= SPOKEN_NOTICE_MAX_AGE_MS) fresh.push(turn);
         continue;
       }
@@ -290,17 +308,17 @@ export class SpokenNoticeAnnouncer {
   /** Sheds the oldest news without dissolving the remaining batch boundaries. */
   #trimQueue(): void {
     let excess =
-      this.#queue.reduce((count, turn) => count + (isArrivalSpeech(turn) ? 1 : turn.length), 0) -
+      this.#queue.reduce((count, turn) => count + (isOnboardingBeat(turn) ? 1 : turn.length), 0) -
       MAXIMUM_QUEUED_NOTICES;
     while (excess > 0) {
       const first = this.#queue[0];
       if (!first) return;
-      const length = isArrivalSpeech(first) ? 1 : first.length;
+      const length = isOnboardingBeat(first) ? 1 : first.length;
       if (length <= excess) {
         this.#queue.shift();
         excess -= length;
       } else {
-        this.#queue[0] = isArrivalSpeech(first) ? first : first.slice(excess);
+        this.#queue[0] = isOnboardingBeat(first) ? first : first.slice(excess);
         return;
       }
     }

@@ -20,23 +20,23 @@ final class SessionFilterMatchTests: XCTestCase {
     }
 
     func testValuesWithinAnAxisAreORed() {
-        let either: Set<SessionFilter> = [.provider("conductor"), .provider("devin")]
+        let either: Set<SessionFilter> = [.provider("conductor"), .provider("codex")]
         XCTAssertTrue(matchesFilterSelection(either, session: makeSession(provider: "conductor", status: "working")))
-        XCTAssertTrue(matchesFilterSelection(either, session: makeSession(provider: "devin", status: "waiting")))
-        XCTAssertFalse(matchesFilterSelection(either, session: makeSession(provider: "jules", status: "working")))
+        XCTAssertTrue(matchesFilterSelection(either, session: makeSession(provider: "codex", status: "waiting")))
+        XCTAssertFalse(matchesFilterSelection(either, session: makeSession(provider: "omp", status: "working")))
     }
 
     func testAxesAreANDed() {
         let both: Set<SessionFilter> = [.provider("conductor"), .status("waiting")]
         XCTAssertTrue(matchesFilterSelection(both, session: makeSession(provider: "conductor", status: "waiting")))
         XCTAssertFalse(matchesFilterSelection(both, session: makeSession(provider: "conductor", status: "working")))
-        XCTAssertFalse(matchesFilterSelection(both, session: makeSession(provider: "devin", status: "waiting")))
+        XCTAssertFalse(matchesFilterSelection(both, session: makeSession(provider: "codex", status: "waiting")))
     }
 
     func testAxisWithSelectionStillAsksWhenOtherAxisEmpty() {
         let statusOnly: Set<SessionFilter> = [.status("complete")]
-        XCTAssertTrue(matchesFilterSelection(statusOnly, session: makeSession(provider: "devin", status: "complete")))
-        XCTAssertFalse(matchesFilterSelection(statusOnly, session: makeSession(provider: "devin", status: "working")))
+        XCTAssertTrue(matchesFilterSelection(statusOnly, session: makeSession(provider: "codex", status: "complete")))
+        XCTAssertFalse(matchesFilterSelection(statusOnly, session: makeSession(provider: "codex", status: "working")))
     }
 }
 
@@ -46,7 +46,7 @@ final class SessionFilterOptionsTests: XCTestCase {
     func testAxisOfferedOnlyWhenARealChoice() {
         let sessions = [
             makeSession(provider: "conductor", status: "working"),
-            makeSession(provider: "devin", status: "working"),
+            makeSession(provider: "codex", status: "working"),
         ]
         let groups = sessionFilterOptions(sessions: sessions, selection: [])
         XCTAssertEqual(groups.map(\.axis), [.provider])
@@ -63,15 +63,15 @@ final class SessionFilterOptionsTests: XCTestCase {
 
     func testOptionsCarryCountsSortedByValue() {
         let sessions = [
-            makeSession(provider: "devin", status: "working"),
+            makeSession(provider: "codex", status: "working"),
             makeSession(provider: "conductor", status: "waiting"),
-            makeSession(provider: "devin", status: "complete"),
+            makeSession(provider: "codex", status: "complete"),
         ]
         let groups = sessionFilterOptions(sessions: sessions, selection: [])
         XCTAssertEqual(groups.map(\.axis), [.provider, .status])
         XCTAssertEqual(groups[0].options, [
+            SessionFilterOption(filter: .provider("codex"), count: 2),
             SessionFilterOption(filter: .provider("conductor"), count: 1),
-            SessionFilterOption(filter: .provider("devin"), count: 2),
         ])
         XCTAssertEqual(groups[1].options, [
             SessionFilterOption(filter: .status("complete"), count: 1),
@@ -83,10 +83,10 @@ final class SessionFilterOptionsTests: XCTestCase {
     func testSelectedValueNoLongerObservedStaysListedAtZero() {
         let sessions = [
             makeSession(provider: "conductor", status: "working"),
-            makeSession(provider: "devin", status: "working"),
+            makeSession(provider: "codex", status: "working"),
         ]
-        let groups = sessionFilterOptions(sessions: sessions, selection: [.provider("jules")])
+        let groups = sessionFilterOptions(sessions: sessions, selection: [.provider("omp")])
         XCTAssertEqual(groups.map(\.axis), [.provider])
-        XCTAssertTrue(groups[0].options.contains(SessionFilterOption(filter: .provider("jules"), count: 0)))
+        XCTAssertTrue(groups[0].options.contains(SessionFilterOption(filter: .provider("omp"), count: 0)))
     }
 }

@@ -385,11 +385,9 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Apps beside a session",
       detail:
-        "A chat held by several apps — Conductor, ChatGPT, Cursor, Herdr, Orca, Superset, cmux — " +
-        "wears their marks on its row. A mark with an exact address opens the chat in that " +
-        "app, and an ask can name which app it comes forward in. A Herdr pane earns its mark " +
-        "only once that agent's own `herdr integration install` has run, because that hook is " +
-        "how Herdr itself learns which session a pane holds.",
+        "A chat held by several apps — Conductor, ChatGPT, Superset — wears their marks on " +
+        "its row. A mark with an exact address opens the chat in that app, and an ask can " +
+        "name which app it comes forward in.",
     },
     {
       label: "Searching sessions",
@@ -443,27 +441,15 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "Reading a session's transcript",
       detail:
         "Asked what a local session did, said, or is stuck on, Luke can read that session's " +
-        "own recent transcript — Antigravity, Claude Code, Codex, Gemini CLI, Grok Build, " +
-        "OMP, OpenCode, Radius, and the Devin and Cursor agents on this machine today — and " +
-        "answer " +
-        "from it; the reading is kept nowhere. Some of those transcripts store no tool " +
-        "results, so a reading may carry words and calls alone. A cloud session's " +
-        "conversation stays with its provider, answered from roster fields alone.",
-    },
-    {
-      label: "Messaging local Cursor chats",
-      detail:
-        "A local Cursor chat whose turn has settled can take the developer's own message, " +
-        "typed on its row or asked of Luke. It is offered only with Cursor's own CLI " +
-        "installed and signed in, and never for chats the Cursor app's own windows hold, " +
-        "whose rows open the chat in the app instead; a Superset-managed Cursor chat " +
-        "messages through Superset.",
+        "own recent transcript — Claude Code, Codex, and OMP on this machine today — and " +
+        "answer from it; the reading is kept nowhere. A cloud session's conversation stays " +
+        "with its provider, answered from roster fields alone.",
     },
     {
       label: "Creating workspaces",
       detail:
-        "Where a connected provider documents a creation endpoint — Conductor, Cursor, and " +
-        "Superset today — an ask in conversation, spoken or typed, can create a new " +
+        "Where a connected provider documents a creation endpoint — Conductor and Superset " +
+        "today — an ask in conversation, spoken or typed, can create a new " +
         "workspace in a project that provider reports, with an opening task in the " +
         "developer's own words where the project takes one, named as the developer chose or, " +
         "when they chose none, by a short name Luke composes for the work, so a Conductor " +
@@ -508,8 +494,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Archiving",
       detail:
-        "Where a provider documents an archive endpoint — a Conductor workspace, a Cursor " +
-        "cloud agent, and a Devin cloud session today — Archive is offered once the work " +
+        "Where a provider documents an archive endpoint — a Conductor workspace today — " +
+        "Archive is offered once the work " +
         "was positively seen to settle: pressed, or asked of Luke, it files the work away, " +
         "and archiving a Conductor workspace files away every chat in it at once. A row " +
         "mid-turn offers no archive, a session whose roster entry lists no archive control " +
@@ -560,12 +546,26 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
             // to replay it.
             label: "The arrival beat",
             detail:
-              "Right after the account's first sign-in, Luke speaks once, unprompted: go " +
-              "back to work, and he will say when a session needs you, errors, or finishes " +
-              "— closing with one first ask to try, which may name a working session. It " +
-              "plays once per install from a fixed script, can act on nothing, and cannot " +
-              "be replayed; a launch that cannot speak it leaves it for the next one that " +
-              "can.",
+              "After the account's first sign-in, once the calendar onboarding step is " +
+              "answered, Luke speaks once, unprompted: go back to work, and he will say " +
+              "when a session needs you, errors, or finishes — closing with one first ask " +
+              "to try, which may name a working session. It plays once per install from a " +
+              "fixed script, can act on nothing, and cannot be replayed; a launch that " +
+              "cannot speak it leaves it for the next one that can.",
+          },
+          {
+            // A behavior rather than a setting, on the arrival beat's terms:
+            // Luke must be able to say why the panel is asking for a calendar
+            // and what answers it, and must not offer to replay the ask.
+            label: "Calendar onboarding",
+            detail:
+              "At the first sign-in, the panel asks once to connect a calendar (this Mac's " +
+              "own, or Google) so announcements wait during meetings; Luke reads only when " +
+              "meetings start and end, never titles or attendees. While the gate shows, " +
+              "Luke says so aloud from a fixed script. Connecting shows which calendars " +
+              "count, more connections can be added, and Done keeps the choice; Set up " +
+              "later declines it for good, and calendars connect any time from " +
+              "the Connections page.",
           },
           {
             label: "How long a conversation lasts",
