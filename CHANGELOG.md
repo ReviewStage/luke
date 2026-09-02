@@ -87,6 +87,13 @@ blank screen.
 
 ### Improvements
 
+- Luke now watches Conductor, Superset, Claude Code, Codex, and OMP, and
+  draws the Cursor, OpenCode, Copilot, Gemini CLI, and Grok Build agents only
+  as the agents a Conductor or Superset workspace runs; the Antigravity,
+  Copilot, Cursor, Devin, Gemini CLI, Grok Build, Jules, OpenCode, Radius, and
+  Replicas adapters and the cmux, Herdr, and Orca host readers are gone, so
+  the only hooks Luke registers are Claude Code's and Codex's and the only key
+  the vault syncs is Conductor's
 - Luke opens at login, a switch under Appearance backed by macOS's own login
   items ([#585](https://github.com/ReviewStage/luke/pull/585))
 - Spoken exchanges run on the OpenAI Agents realtime SDK, which owns the

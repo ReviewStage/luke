@@ -67,20 +67,10 @@ Connect your calendar and Luke stays quiet until your meeting is over.
 <!-- provider-agents:start -->
 | Agent | Local | Cloud |
 | --- | :---: | :---: |
-| Antigravity | ✅ |  |
 | Claude Code | ✅ |  |
 | Codex | ✅ | ✅ |
 | Conductor |  | ✅ |
-| Copilot |  | ✅ |
-| Cursor | ✅ | ✅ |
-| Devin | ✅ | ✅ |
-| Gemini CLI | ✅ |  |
-| Grok Build | ✅ |  |
-| Jules |  | ✅ |
 | OMP | ✅ |  |
-| OpenCode | ✅ |  |
-| Radius | ✅ |  |
-| Replicas |  | ✅ |
 <!-- provider-agents:end -->
 
 ## Install
