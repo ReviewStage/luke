@@ -6,7 +6,7 @@ import {
   executeControlAct,
   executeCreateWorkspaceAct,
   executeMessageAct,
-  MOBILE_SESSION_ACT,
+  REMOTE_SESSION_ACT,
 } from "../server/hosted/act-execute";
 import { handleSessionAct, type SessionActOptions } from "../server/hosted/act-session";
 import { handleActWorkspace } from "../server/hosted/act-workspace";
@@ -191,28 +191,28 @@ test("a session act answer carries a created session id to the wire", async () =
 // --- The capability map mirrors the adapters exactly ---
 
 test("the capability map matches each desktop adapter's implemented writes", () => {
-  const supported = (act: (typeof MOBILE_SESSION_ACT)[keyof typeof MOBILE_SESSION_ACT]) =>
+  const supported = (act: (typeof REMOTE_SESSION_ACT)[keyof typeof REMOTE_SESSION_ACT]) =>
     (["conductor", "copilot", "cursor", "devin", "jules", "replicas"] as const).filter(
       (providerId) => actUnsupportedReason(act, providerId) === undefined,
     );
 
-  assert.deepEqual(supported(MOBILE_SESSION_ACT.MESSAGE), [
+  assert.deepEqual(supported(REMOTE_SESSION_ACT.MESSAGE), [
     "conductor",
     "cursor",
     "devin",
     "jules",
     "replicas",
   ]);
-  assert.deepEqual(supported(MOBILE_SESSION_ACT.CONTROL), [
+  assert.deepEqual(supported(REMOTE_SESSION_ACT.CONTROL), [
     "conductor",
     "cursor",
     "devin",
     "jules",
   ]);
-  assert.deepEqual(supported(MOBILE_SESSION_ACT.AGENT), ["conductor", "replicas"]);
-  assert.deepEqual(supported(MOBILE_SESSION_ACT.RENAME_SESSION), ["conductor"]);
-  assert.deepEqual(supported(MOBILE_SESSION_ACT.RENAME_WORKSPACE), ["conductor"]);
-  assert.deepEqual(supported(MOBILE_SESSION_ACT.CREATE_WORKSPACE), [
+  assert.deepEqual(supported(REMOTE_SESSION_ACT.AGENT), ["conductor", "replicas"]);
+  assert.deepEqual(supported(REMOTE_SESSION_ACT.RENAME_SESSION), ["conductor"]);
+  assert.deepEqual(supported(REMOTE_SESSION_ACT.RENAME_WORKSPACE), ["conductor"]);
+  assert.deepEqual(supported(REMOTE_SESSION_ACT.CREATE_WORKSPACE), [
     "conductor",
     "cursor",
     "replicas",
