@@ -4,15 +4,29 @@ import SwiftUI
 
 // MARK: - Observable session state
 
+private struct VoiceTranscriptMessage: Identifiable, Equatable {
+    enum Speaker: Equatable {
+        case developer
+        case luke
+    }
+
+    let id = UUID()
+    let turnId: UUID
+    let speaker: Speaker
+    var words: String
+}
+
 /// Holds all observable voice session state. Lives on the main actor so the
 /// session's @MainActor callbacks can update it without hopping actors.
 @Observable
 @MainActor
 private final class VoiceSessionModel {
     var status: RealtimeStatus = .idle
-    var caption: String?
+    var messages: [VoiceTranscriptMessage] = []
     var errorMessage: String?
     private var session: RealtimeSession?
+    private var activeTurnId: UUID?
+    private var activeResponseMessageId: UUID?
     // Cleared by stop() before close() so an explicit stop does not trigger
     // an auto-reconnect through the onStatus(.idle) path.
     private var reconnectCallback: (@MainActor () async -> Void)?
@@ -43,7 +57,8 @@ private final class VoiceSessionModel {
                     }
                 }
             },
-            onCaption: { [weak self] text in self?.caption = text },
+            onCaption: { [weak self] text in self?.receiveCaption(text) },
+            onSpokenAsk: { [weak self] text in self?.receiveSpokenAsk(text) },
             onError: { [weak self] message in
                 // Stop auto-reconnect on errors — a quota failure or auth error
                 // would loop forever if we let onStatus(.idle) trigger a retry.
@@ -85,9 +100,58 @@ private final class VoiceSessionModel {
 
     func beginTurn() {
         errorMessage = nil
+        activeTurnId = UUID()
+        activeResponseMessageId = nil
         session?.beginTurn()
     }
     func endTurn() { session?.endTurn() }
+
+    private func receiveSpokenAsk(_ text: String) {
+        let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !words.isEmpty else { return }
+        let turnId = currentTurnId()
+        if let index = messages.firstIndex(where: {
+            $0.turnId == turnId && $0.speaker == .developer
+        }) {
+            messages[index].words = words
+            return
+        }
+        let message = VoiceTranscriptMessage(turnId: turnId, speaker: .developer, words: words)
+        if let responseIndex = messages.firstIndex(where: {
+            $0.turnId == turnId && $0.speaker == .luke
+        }) {
+            messages.insert(message, at: responseIndex)
+        } else {
+            messages.append(message)
+        }
+    }
+
+    private func receiveCaption(_ text: String?) {
+        guard let text, !text.isEmpty else {
+            activeResponseMessageId = nil
+            return
+        }
+        if let id = activeResponseMessageId,
+           let index = messages.firstIndex(where: { $0.id == id })
+        {
+            messages[index].words = text
+            return
+        }
+        let message = VoiceTranscriptMessage(
+            turnId: currentTurnId(),
+            speaker: .luke,
+            words: text
+        )
+        messages.append(message)
+        activeResponseMessageId = message.id
+    }
+
+    private func currentTurnId() -> UUID {
+        if let activeTurnId { return activeTurnId }
+        let id = UUID()
+        activeTurnId = id
+        return id
+    }
 }
 
 // MARK: - VoiceView
@@ -102,9 +166,9 @@ struct VoiceView: View {
     var body: some View {
         ZStack {
             Color(red: 0.09, green: 0.09, blue: 0.10).ignoresSafeArea()
-            VStack(spacing: 32) {
+            VStack(spacing: 24) {
                 statusLabel
-                captionArea
+                conversationHistory
                 talkButton
                 if let error = model.errorMessage {
                     Text(error)
@@ -114,7 +178,8 @@ struct VoiceView: View {
                         .padding(.horizontal, 24)
                 }
             }
-            .padding(32)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 20)
         }
         .preferredColorScheme(.dark)
         .task { await model.start(accountSession: accountSession) }
@@ -130,7 +195,7 @@ struct VoiceView: View {
             .animation(.easeInOut(duration: 0.2), value: model.status)
     }
 
-    private var captionArea: some View {
+    private var conversationHistory: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color(red: 0.12, green: 0.12, blue: 0.13))
@@ -138,25 +203,38 @@ struct VoiceView: View {
                     RoundedRectangle(cornerRadius: 10)
                         .stroke(Color(white: 1, opacity: 0.08), lineWidth: 1)
                 )
-            if let caption = model.caption {
-                ScrollView {
-                    Text(caption)
-                        .font(.system(size: 17))
-                        .foregroundStyle(Color.white)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                        .padding(20)
-                }
-            } else {
+            if model.messages.isEmpty {
                 Text(placeholderText)
                     .font(.system(size: 17))
                     .foregroundStyle(Color(white: 1, opacity: 0.25))
                     .multilineTextAlignment(.center)
                     .padding(20)
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 14) {
+                            ForEach(model.messages) { message in
+                                switch message.speaker {
+                                case .developer:
+                                    DeveloperMessageBubble(words: message.words)
+                                case .luke:
+                                    AgentMessageBubble(words: message.words)
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .top)
+                        .padding(16)
+                    }
+                    .onChange(of: model.messages) {
+                        guard let last = model.messages.last else { return }
+                        proxy.scrollTo(last.id, anchor: .bottom)
+                    }
+                }
             }
         }
         .frame(minHeight: 160)
-        .animation(.easeInOut(duration: 0.15), value: model.caption != nil)
+        .frame(maxHeight: .infinity)
+        .animation(.easeInOut(duration: 0.15), value: model.messages.isEmpty)
     }
 
     private var talkButton: some View {

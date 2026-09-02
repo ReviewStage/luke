@@ -10,6 +10,13 @@ final class VoiceAudioPlayer: AudioPlayer, @unchecked Sendable {
     private let format: AVAudioFormat
 
     init() {
+        let audioSession = AVAudioSession.sharedInstance()
+        try? audioSession.setCategory(
+            .playAndRecord,
+            mode: .default,
+            options: [.defaultToSpeaker, .allowBluetooth]
+        )
+        try? audioSession.setActive(true)
         // Float32 mono at 24 kHz — AVAudioPlayerNode's native scheduling format.
         format = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
@@ -57,5 +64,6 @@ final class VoiceAudioPlayer: AudioPlayer, @unchecked Sendable {
     func stop() {
         playerNode.stop()
         engine.stop()
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 }

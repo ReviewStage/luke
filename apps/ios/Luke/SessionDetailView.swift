@@ -23,6 +23,77 @@ struct OutgoingMessage: Identifiable, Equatable {
     var delivery: Delivery
 }
 
+/// The shared left-side bubble used for words coming back from Luke or one of
+/// the observed agents. Voice history reuses this exact shape.
+struct AgentMessageBubble: View {
+    let words: String
+    var isError = false
+
+    var body: some View {
+        HStack {
+            Group {
+                if isError {
+                    Text(words)
+                        .font(.subheadline)
+                } else {
+                    MarkdownMessageView(words)
+                }
+            }
+            .foregroundStyle(isError ? Color.errorInk : Color.ink)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(Color.cardFill, in: RoundedRectangle(cornerRadius: 18))
+                .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 18))
+                .contextMenu { MessageCopyAction(words: words) }
+            Spacer(minLength: 48)
+        }
+    }
+}
+
+/// The shared right-side developer bubble. Developer words stay masked from
+/// session replay whether they were typed in a session or transcribed from a
+/// voice turn.
+struct DeveloperMessageBubble: View {
+    let words: String
+    var delivery: OutgoingMessage.Delivery = .sent
+
+    var body: some View {
+        HStack {
+            Spacer(minLength: 48)
+            VStack(alignment: .trailing, spacing: 3) {
+                MarkdownMessageView(words)
+                    .postHogMask()
+                    .foregroundStyle(.white)
+                    .tint(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 18))
+                    .opacity(delivery == .sending ? 0.55 : 1)
+                    .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 18))
+                    .contextMenu { MessageCopyAction(words: words) }
+                if case .failed(let reason) = delivery {
+                    Text("Not Delivered — \(reason)")
+                        .font(.caption2)
+                        .foregroundStyle(Color.errorInk)
+                        .multilineTextAlignment(.trailing)
+                }
+            }
+        }
+    }
+}
+
+private struct MessageCopyAction: View {
+    let words: String
+
+    var body: some View {
+        Button {
+            UIPasteboard.general.string = words
+        } label: {
+            Label("Copy", systemImage: "doc.on.doc")
+        }
+    }
+}
+
 /// The session's own screen: the title at the top, the conversation as the
 /// bubbles a chat draws, and a chat input at the bottom where — and only
 /// where — the latest observation advertised taking a message. Where the
@@ -134,7 +205,7 @@ struct SessionDetailView: View {
                         if session.canReadConversation && !openAttempted {
                             ConversationSkeleton()
                         } else if let words = session.error ?? session.recap {
-                            agentBubble(words, isError: session.error != nil)
+                            AgentMessageBubble(words: words, isError: session.error != nil)
                         }
                     } else {
                         // Masked from the recording the way the desktop
@@ -148,11 +219,12 @@ struct SessionDetailView: View {
                         // The provider's failure word outranks parting words
                         // here exactly as it does on the row.
                         if let error = session.error {
-                            agentBubble(error, isError: true)
+                            AgentMessageBubble(words: error, isError: true)
                         }
                     }
                     ForEach(thread) { message in
-                        userBubble(message)
+                        DeveloperMessageBubble(words: message.text, delivery: message.delivery)
+                            .id(message.id)
                     }
                     // The end of the chat as a scroll target of its own:
                     // aiming a jump at the last bubble is unreliable in a
@@ -263,56 +335,15 @@ struct SessionDetailView: View {
         .padding(.bottom, 4)
     }
 
-    private func agentBubble(_ words: String, isError: Bool) -> some View {
-        HStack {
-            Group {
-                if isError {
-                    Text(words)
-                        .font(.subheadline)
-                } else {
-                    MarkdownMessageView(words)
-                }
-            }
-            .foregroundStyle(isError ? Color.errorInk : Color.ink)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(Color.cardFill, in: RoundedRectangle(cornerRadius: 18))
-                .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 18))
-                .contextMenu { copyAction(for: words) }
-            Spacer(minLength: 48)
-        }
-    }
-
-    /// A held bubble answers with the system context menu, the way Messages
-    /// does; its one action today puts the bubble's own words on the
-    /// pasteboard, and the lifted preview keeps the bubble's shape.
-    private func copyAction(for words: String) -> some View {
-        Button {
-            UIPasteboard.general.string = words
-        } label: {
-            Label("Copy", systemImage: "doc.on.doc")
-        }
-    }
-
     /// A fetched message wears the anatomy the screen already draws: the
     /// agent's words in the card bubble, the developer's in the accent one.
     @ViewBuilder
     private func conversationBubble(_ message: ConversationMessage) -> some View {
         switch message.author {
         case .agent:
-            agentBubble(message.text, isError: false)
+            AgentMessageBubble(words: message.text)
         case .user:
-            HStack {
-                Spacer(minLength: 48)
-                MarkdownMessageView(message.text)
-                    .foregroundStyle(.white)
-                    .tint(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
-                    .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 18))
-                    .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 18))
-                    .contextMenu { copyAction(for: message.text) }
-            }
+            DeveloperMessageBubble(words: message.text)
         }
     }
 
@@ -442,35 +473,6 @@ struct SessionDetailView: View {
         }
         if !handedOver.isEmpty {
             thread.removeAll { handedOver.contains($0.id) }
-        }
-    }
-
-    private func userBubble(_ message: OutgoingMessage) -> some View {
-        HStack {
-            Spacer(minLength: 48)
-            VStack(alignment: .trailing, spacing: 3) {
-                // Masked from the session recording: the bubble is the words
-                // the developer just typed, and a field's masking would be
-                // hollow if the same words traveled the moment they were
-                // drawn back. The recap bubble stays visible — it already
-                // travels on the roster rows the recording shows.
-                MarkdownMessageView(message.text)
-                    .postHogMask()
-                    .foregroundStyle(.white)
-                    .tint(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
-                    .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 18))
-                    .opacity(message.delivery == .sending ? 0.55 : 1)
-                    .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 18))
-                    .contextMenu { copyAction(for: message.text) }
-                if case .failed(let reason) = message.delivery {
-                    Text("Not Delivered — \(reason)")
-                        .font(.caption2)
-                        .foregroundStyle(Color.errorInk)
-                        .multilineTextAlignment(.trailing)
-                }
-            }
         }
     }
 

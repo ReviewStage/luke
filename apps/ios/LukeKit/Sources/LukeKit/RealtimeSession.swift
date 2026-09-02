@@ -145,16 +145,16 @@ public final class RealtimeSession {
     // response.done so only that one response may dispatch tool calls.
     private var isArmed = false
     // Set when a tool follow-up response.create has been sent and cleared when
-    // that follow-up's response.done arrives, so output_audio_buffer.stopped
-    // does not return the session to .ready while the follow-up is in flight.
+    // that follow-up's response.done arrives, so audio completion does not
+    // return the session to .ready while the follow-up is in flight.
     private var followUpPending = false
     // True once the server confirms the response requested for the current
     // turn. Before that confirmation, an error replaces response.done and must
     // return the session to ready rather than strand it in thinking.
     private var responseStarted = false
-    // Counts how many player drains are in progress. output_audio_buffer.stopped
-    // creates one drain per event; the session may not return to .ready until the
-    // last drain completes (pendingDrains == 0) and no follow-up is in flight.
+    // Counts how many player drains are in progress. Each output-audio ending
+    // creates one drain; the session may not return to .ready until the last
+    // drain completes (pendingDrains == 0) and no follow-up is in flight.
     private var pendingDrains = 0
     // Set when the developer releases while still connecting, so we commit
     // and request a response the moment the channel opens.
@@ -338,7 +338,7 @@ public final class RealtimeSession {
         case "response.created":
             responseStarted = true
 
-        case "response.audio.delta":
+        case "response.output_audio.delta", "response.audio.delta":
             responseStarted = true
             if player == nil { player = options.makeAudioPlayer() }
             if status != .speaking { status = .speaking }
@@ -347,39 +347,23 @@ public final class RealtimeSession {
                 player?.enqueue(samples)
             }
 
-        case "output_audio_buffer.stopped":
-            // The server has finished sending audio, but locally-buffered samples
-            // may not have played yet. Drain them before stopping and clearing.
-            // A primary response and its tool follow-up can each produce one
-            // output_audio_buffer.stopped; pendingDrains tracks both so the
-            // session stays in .speaking until the last drain completes.
-            if let p = player {
-                player = nil
-                pendingDrains += 1
-                p.drain { [weak self] in
-                    p.stop()
-                    self?.pendingDrains -= 1
-                    self?.options.onCaption(nil)
-                    if self?.status == .speaking,
-                       !(self?.followUpPending ?? false),
-                       self?.pendingDrains == 0
-                    {
-                        self?.status = .ready
-                        self?.resetIdleTimer()
-                    }
-                }
-            }
+        case "response.output_audio.done", "output_audio_buffer.stopped":
+            // WebSocket sessions finish audio with response.output_audio.done;
+            // output_audio_buffer.stopped is retained for older/alternate
+            // transports. Drain locally queued PCM before returning to ready.
+            finishOutputAudio()
 
-        case "response.audio_transcript.delta":
+        case "response.output_audio_transcript.delta", "response.audio_transcript.delta":
             if let delta = json["delta"] as? String {
                 captionBuffer += delta
                 options.onCaption(captionBuffer)
             }
 
-        case "response.audio_transcript.done":
-            // Reset the accumulation buffer so the next response's transcript
-            // starts fresh. The displayed caption stays until audio drains.
+        case "response.output_audio_transcript.done", "response.audio_transcript.done":
+            // The completed words now live in the conversation history. End
+            // this streaming segment so a tool follow-up gets its own bubble.
             captionBuffer = ""
+            options.onCaption(nil)
 
         case "response.output_item.added":
             if let item = json["item"] as? [String: Any],
@@ -427,6 +411,7 @@ public final class RealtimeSession {
         let output = (json["response"] as? [String: Any])
             .flatMap { $0["output"] as? [[String: Any]] } ?? []
         let functionCalls = output.filter { $0["type"] as? String == "function_call" }
+        responseStarted = false
 
         for item in functionCalls {
             guard
@@ -446,8 +431,8 @@ public final class RealtimeSession {
 
         if !functionCalls.isEmpty {
             // Follow-up response requested; stay in .thinking until the model speaks.
-            // Mark the follow-up in flight so output_audio_buffer.stopped from the
-            // current audio does not return the session to .ready prematurely.
+            // Mark the follow-up in flight so the current audio ending does not
+            // return the session to .ready prematurely.
             followUpPending = true
             responseStarted = false
             try? await ws.sendText(#"{"type":"response.create"}"#)
@@ -459,7 +444,7 @@ public final class RealtimeSession {
                 // arrived, or a silent response — transition to ready now.
                 status = .ready
                 resetIdleTimer()
-            } else if status == .speaking, pendingDrains == 0 {
+            } else if status == .speaking, pendingDrains == 0, player == nil {
                 // Silent follow-up: the primary drain already completed but could not
                 // transition because followUpPending was true. Transition now.
                 status = .ready
@@ -468,8 +453,29 @@ public final class RealtimeSession {
         }
 
         isArmed = false
-        responseStarted = false
         pendingCalls.removeAll()
+    }
+
+    private func finishOutputAudio() {
+        guard let p = player else {
+            options.onCaption(nil)
+            return
+        }
+        player = nil
+        pendingDrains += 1
+        p.drain { [weak self] in
+            p.stop()
+            self?.pendingDrains -= 1
+            self?.options.onCaption(nil)
+            if self?.status == .speaking,
+               !(self?.followUpPending ?? false),
+               !(self?.responseStarted ?? false),
+               self?.pendingDrains == 0
+            {
+                self?.status = .ready
+                self?.resetIdleTimer()
+            }
+        }
     }
 
     private func resetIdleTimer() {

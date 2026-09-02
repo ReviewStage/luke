@@ -6,6 +6,7 @@ import LukeKit
 /// Float32 via AVAudioConverter, then yields Int16 samples to the stream.
 final class VoiceAudioCapturer: AudioCapturer, @unchecked Sendable {
     private let engine = AVAudioEngine()
+    private var hasTap = false
 
     func start() throws -> AsyncStream<[Int16]> {
         let audioSession = AVAudioSession.sharedInstance()
@@ -14,7 +15,13 @@ final class VoiceAudioCapturer: AudioCapturer, @unchecked Sendable {
 
         let inputNode = engine.inputNode
         let hwFormat = inputNode.outputFormat(forBus: 0)
-        guard let targetFormat = AVAudioFormat(
+        // AVAudioEngine raises an Objective-C exception (rather than a Swift
+        // error) when installTap receives the zero-channel format that the
+        // simulator can briefly report while its microphone route changes.
+        // Reject it before installTap so the turn can fail normally instead
+        // of terminating the app.
+        guard hwFormat.sampleRate > 0, hwFormat.channelCount > 0,
+              let targetFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: Double(PressAudioBuffer.sampleRate),
             channels: 1,
@@ -58,14 +65,24 @@ final class VoiceAudioCapturer: AudioCapturer, @unchecked Sendable {
             }
             continuation.yield(samples)
         }
+        hasTap = true
 
-        try engine.start()
+        do {
+            try engine.start()
+        } catch {
+            inputNode.removeTap(onBus: 0)
+            hasTap = false
+            throw error
+        }
         continuation.onTermination = { [weak self] _ in self?.engine.stop() }
         return stream
     }
 
     func stop() {
-        engine.inputNode.removeTap(onBus: 0)
+        if hasTap {
+            engine.inputNode.removeTap(onBus: 0)
+            hasTap = false
+        }
         engine.stop()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }

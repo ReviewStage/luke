@@ -53,6 +53,19 @@ private final class NullPlayer: AudioPlayer, Sendable {
     func stop() {}
 }
 
+private final class RecordingPlayer: AudioPlayer, @unchecked Sendable {
+    private(set) var batches: [[Int16]] = []
+    private(set) var drainCount = 0
+    private(set) var stopCount = 0
+
+    func enqueue(_ samples: [Int16]) { batches.append(samples) }
+    func drain(then completion: @MainActor @Sendable @escaping () -> Void) {
+        drainCount += 1
+        Task { @MainActor in completion() }
+    }
+    func stop() { stopCount += 1 }
+}
+
 // MARK: - Helpers
 
 private let testContext = VoiceContextItem(
@@ -182,6 +195,67 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertEqual(ws.closeCount, 0)
     }
 
+    func testGAOutputAudioEventsPlayAndDrainBeforeReturningReady() async throws {
+        let ws = MockWebSocketTask()
+        let player = RecordingPlayer()
+        let opts = makeOptions(ws: ws, player: player)
+        let session = RealtimeSession(options: opts)
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        session.beginTurn()
+        session.endTurn()
+        ws.deliver(#"{"type":"response.created"}"#)
+        ws.deliver(#"{"type":"response.output_audio.delta","delta":"AQD+/w=="}"#)
+        ws.deliver(#"{"type":"response.output_audio.done"}"#)
+        ws.deliver(#"{"type":"response.done","response":{"output":[]}}"#)
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(player.batches, [[1, -2]])
+        XCTAssertEqual(player.drainCount, 1)
+        XCTAssertEqual(player.stopCount, 1)
+        XCTAssertEqual(session.status, .ready)
+    }
+
+    func testGAOutputTranscriptEventsStreamAndFinishCaption() async throws {
+        let ws = MockWebSocketTask()
+        var captions: [String?] = []
+        let opts = makeOptions(ws: ws, onCaption: { captions.append($0) })
+        let session = RealtimeSession(options: opts)
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        ws.deliver(#"{"type":"response.output_audio_transcript.delta","delta":"Hello"}"#)
+        ws.deliver(#"{"type":"response.output_audio_transcript.delta","delta":" there"}"#)
+        ws.deliver(#"{"type":"response.output_audio_transcript.done"}"#)
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(captions.count, 3)
+        XCTAssertEqual(captions[0], "Hello")
+        XCTAssertEqual(captions[1], "Hello there")
+        XCTAssertNil(captions[2])
+    }
+
+    func testCompletedInputTranscriptReturnsDeveloperWords() async throws {
+        let ws = MockWebSocketTask()
+        var spokenAsks: [String] = []
+        let opts = makeOptions(ws: ws, onSpokenAsk: { spokenAsks.append($0) })
+        let session = RealtimeSession(options: opts)
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        ws.deliver(#"{"type":"conversation.item.input_audio_transcription.completed","transcript":"  Hello Luke  "}"#)
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(spokenAsks, ["Hello Luke"])
+    }
+
     func testPressAudioBufferedDuringConnecting() async throws {
         let ws = MockWebSocketTask()
         let capturer = SequenceCapturer(chunks: [[1, 2, 3]])
@@ -284,7 +358,10 @@ final class RealtimeSessionStateTests: XCTestCase {
     private func makeOptions(
         ws: MockWebSocketTask,
         capturer: any AudioCapturer = SilentCapturer(),
+        player: any AudioPlayer = NullPlayer(),
         onStatus: @MainActor @escaping (RealtimeStatus) -> Void = { _ in },
+        onCaption: @MainActor @escaping (String?) -> Void = { _ in },
+        onSpokenAsk: (@MainActor (String) -> Void)? = nil,
         onError: @MainActor @escaping (String?) -> Void = { _ in },
         onRecoverableError: (@MainActor (String) -> Void)? = nil,
         dispatchToolCall: (@Sendable @MainActor (_ name: String, _ arguments: [String: Any], _ callId: String) async -> String)? = nil
@@ -292,13 +369,14 @@ final class RealtimeSessionStateTests: XCTestCase {
         RealtimeSessionOptions(
             requestConnection: { testConnection },
             onStatus: onStatus,
-            onCaption: { _ in },
+            onCaption: onCaption,
+            onSpokenAsk: onSpokenAsk,
             onError: onError,
             onRecoverableError: onRecoverableError,
             dispatchToolCall: dispatchToolCall,
             makeWebSocket: { _, _ in ws },
             makeAudioCapturer: { capturer },
-            makeAudioPlayer: { NullPlayer() }
+            makeAudioPlayer: { player }
         )
     }
 }
