@@ -1007,8 +1007,8 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
 /* Radius' banded sphere fills its box top to bottom the way the Codex and
    Cursor marks do, so it takes the same scale they do. Radius publishes the
-   glyph as a silhouette and draws it white on its own coloured tile, like
-   Copilot, Cursor, and Devin. */
+   glyph as a one-colour silhouette, so it is drawn in the light form its own
+   dark surface uses, like Copilot, Cursor, and Devin. */
 .provider-mark[data-mark="radius"] {
   color: var(--mark-radius);
   transform: scale(0.94);
