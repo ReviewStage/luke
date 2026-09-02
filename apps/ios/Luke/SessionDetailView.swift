@@ -34,6 +34,7 @@ struct SessionDetailView: View {
     @Environment(AccountSession.self) private var account
     @Environment(ProductEventSender.self) private var events
     @State private var text = ""
+    @FocusState private var composing: Bool
 
     var body: some View {
         // Top-anchored like a short Messages thread; a send scrolls to its
@@ -55,6 +56,12 @@ struct SessionDetailView: View {
             }
             .onChange(of: thread.count) {
                 guard let last = thread.last else { return }
+                withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+            }
+            // The keyboard rising must not cover the newest bubble: focus
+            // scrolls back to it once the inset settles, like Messages.
+            .onChange(of: composing) {
+                guard composing, let last = thread.last else { return }
                 withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
             }
             .onAppear {
@@ -180,6 +187,7 @@ struct SessionDetailView: View {
 
     private var composerField: some View {
         TextField("Message", text: $text, axis: .vertical)
+            .focused($composing)
             .lineLimit(1 ... 5)
             .font(.body)
             .foregroundStyle(Color.ink)

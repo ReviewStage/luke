@@ -27,6 +27,10 @@ struct SessionsView: View {
     @State private var renameText = ""
     @State private var creatorShown = false
     @State private var actFailure: String?
+    /// Counts refresh passes so only the newest may write: a pull-to-refresh
+    /// overlapping a post-act refresh must not land its older roster after
+    /// the newer one — an archived row would come back from the dead.
+    @State private var refreshPass = 0
 
     /// Which advertised rename a menu press opened: the session itself, or
     /// the workspace it runs in. One alert serves both; the flag picks the
@@ -678,10 +682,14 @@ private struct SessionRowPreview: View {
                 }
             }
             if let words = session.error ?? session.recap {
+                // Bounded in lines as well as by the envelope, so a recap
+                // that outgrows the card ends on an ellipsis rather than a
+                // clipped line.
                 Text(words)
                     .font(.system(size: 13))
                     .foregroundStyle(session.error != nil ? Color.errorInk : Color.ink.opacity(0.75))
                     .lineSpacing(3)
+                    .lineLimit(14)
             } else {
                 Text(session.status.capitalized)
                     .font(.system(size: 13))
