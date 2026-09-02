@@ -1,3 +1,4 @@
+import { boundedText, maximumSessionRecapExcerptLength } from "@sidecar/session";
 import {
   type ObservedSession,
   type ObservedSessionControl,
@@ -133,7 +134,9 @@ export function remoteSessionContextText(
         sessionAgeText(session.observedAt, now),
         ...aboutParts,
         ...(session.recap
-          ? [`context for naming this work — do not list its parts: ${session.recap}`]
+          ? [
+              `context for naming this work — do not list its parts: ${boundedText(session.recap, maximumSessionRecapExcerptLength)}`,
+            ]
           : []),
         `[${remoteCapabilityText(session, mostRecent)}]`,
       ].join(" — ");

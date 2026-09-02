@@ -85,6 +85,7 @@ export async function handleRemoteVoiceMint(options: RemoteVoiceMintOptions): Pr
 
   // Mint credential and observe sessions concurrently — neither depends on the
   // other, so there is no reason to serialize them.
+  let observeTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
   const [minted, sessions] = await Promise.all([
     mintRealtimeConnection({
       apiKey,
@@ -97,10 +98,10 @@ export async function handleRemoteVoiceMint(options: RemoteVoiceMintOptions): Pr
     }),
     Promise.race([
       observeCloudSessions(userId, options),
-      new Promise<ObservedSession[]>((resolve) =>
-        setTimeout(() => resolve([]), OBSERVE_TIMEOUT_MS),
-      ),
-    ]),
+      new Promise<ObservedSession[]>((resolve) => {
+        observeTimeoutHandle = setTimeout(() => resolve([]), OBSERVE_TIMEOUT_MS);
+      }),
+    ]).finally(() => clearTimeout(observeTimeoutHandle)),
   ]);
 
   if ("failure" in minted) return minted.failure;
