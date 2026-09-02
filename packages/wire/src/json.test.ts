@@ -41,6 +41,14 @@ test("wholeText keeps the lines Markdown is written across", () => {
   );
 });
 
+test("wholeText keeps a first line's indent and drops blank lines at either end", () => {
+  assert.equal(
+    wholeText("\n\n    def hello():\n        pass\n\n"),
+    "    def hello():\n        pass",
+  );
+  assert.equal(wholeText("  - nested first"), "  - nested first");
+});
+
 test("wholeText drops a value with no words at all", () => {
   assert.equal(wholeText(undefined), undefined);
   assert.equal(wholeText("  \n\n \t"), undefined);

@@ -75,7 +75,9 @@ export function oneLine(value: string | undefined, maximumLength: number): strin
  * line breaks they were written with: an agent's parting words are Markdown
  * as often as not, and a heading, a list, or a fenced block exists only
  * across lines. Line endings settle to one form, trailing space leaves each
- * line, and a run of blank lines closes to one, which is all the structure
+ * line, a run of blank lines closes to one, and blank lines at either end
+ * go, while a first line's own indent stays, because indented code or a
+ * nested item may be where the words begin. That is all the structure
  * Markdown reads; a surface that draws one line collapses the rest itself.
  */
 export function wholeText(value: string | undefined): string | undefined {
@@ -83,7 +85,7 @@ export function wholeText(value: string | undefined): string | undefined {
     ?.replace(/\r\n?/gu, "\n")
     .replace(/[^\S\n]+$/gmu, "")
     .replace(/\n{3,}/gu, "\n\n")
-    .trim();
+    .replace(/^\n+|\n+$/gu, "");
   return normalized || undefined;
 }
 

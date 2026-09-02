@@ -24,9 +24,10 @@ struct OutgoingMessage: Identifiable, Equatable {
 /// the latest observation advertised taking a message. The thread never
 /// pretends to be the transcript: a cloud session's conversation lives with
 /// its provider, so the agent's side is the bounded recap the roster already
-/// carries, and the sent bubbles live in memory for the app run alone. Both
-/// sides draw their words as Markdown, since an agent's parting words and a
-/// developer's ask are both written in it.
+/// carries, and the sent bubbles live in memory for the app run alone. The
+/// recap and the sent bubbles draw their words as Markdown, since an agent's
+/// parting words and a developer's ask are both written in it; an error is a
+/// provider's plain report and draws as the words it is.
 struct SessionDetailView: View {
     let session: RosterSession
     let actClient: ActClient
@@ -111,8 +112,15 @@ struct SessionDetailView: View {
 
     private func agentBubble(_ words: String, isError: Bool) -> some View {
         HStack {
-            MarkdownMessageView(words)
-                .foregroundStyle(isError ? Color.errorInk : Color.ink)
+            Group {
+                if isError {
+                    Text(words)
+                        .font(.subheadline)
+                } else {
+                    MarkdownMessageView(words)
+                }
+            }
+            .foregroundStyle(isError ? Color.errorInk : Color.ink)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 9)
                 .background(Color.cardFill, in: RoundedRectangle(cornerRadius: 18))
