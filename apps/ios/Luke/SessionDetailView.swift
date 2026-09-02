@@ -140,8 +140,14 @@ struct SessionDetailView: View {
             // The keyboard rising must not cover the newest bubble: focus
             // scrolls back to it once the inset settles, like Messages.
             .onChange(of: composing) {
-                guard composing, let last = thread.last else { return }
-                withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                guard composing else { return }
+                // The newest bubble may be a fetched one once every send has
+                // handed over, so the fallback mirrors the opening jump.
+                if let last = thread.last {
+                    withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                } else if let last = conversation.last {
+                    withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                }
             }
             .onAppear {
                 if let last = thread.last {
