@@ -42,13 +42,8 @@ function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
       ...APP_SETTING_DEFAULTS,
       credentialSources: {
         [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.ENCRYPTED_FILE,
-        [CREDENTIAL_PROVIDER_ID.COPILOT]: CREDENTIAL_SOURCE.NONE,
-        [CREDENTIAL_PROVIDER_ID.CURSOR]: CREDENTIAL_SOURCE.NONE,
-        [CREDENTIAL_PROVIDER_ID.DEVIN]: CREDENTIAL_SOURCE.ENVIRONMENT,
-        [CREDENTIAL_PROVIDER_ID.JULES]: CREDENTIAL_SOURCE.NONE,
         [CREDENTIAL_PROVIDER_ID.LINEAR]: CREDENTIAL_SOURCE.NONE,
         [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
-        [CREDENTIAL_PROVIDER_ID.REPLICAS]: CREDENTIAL_SOURCE.NONE,
       },
       secretStorage: SECRET_STORAGE.UNKNOWN,
       codexCloudConnection: CLI_CONNECTION.UNKNOWN,
@@ -205,8 +200,6 @@ test("the facts say what is connected, never what connects it", () => {
   const rendered = JSON.stringify(buildLukeGuide(guideInput()).facts);
 
   assert.match(rendered, /Conductor \(connected\)/);
-  assert.match(rendered, /Copilot \(not connected\)/);
-  assert.match(rendered, /Devin \(connected from the environment\)/);
   // Each integration is its own labeled fact, so an ask about one draws that
   // one alone rather than a summary of every integration at once.
   assert.match(rendered, /"label":"Superset"/);

@@ -125,14 +125,12 @@ type DefaultProjectProviderId =
   | typeof PROVIDER_ID.CONDUCTOR
   | typeof CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID
   | typeof PROVIDER_ID.CODEX
-  | typeof PROVIDER_ID.CURSOR
   | typeof SUPERSET_WORKSPACE_PROVIDER_ID;
 
 const DEFAULT_PROJECT_ROW_ID = {
   [PROVIDER_ID.CONDUCTOR]: "default-project-conductor",
   [CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID]: "default-project-conductor-local",
   [PROVIDER_ID.CODEX]: "default-project-codex",
-  [PROVIDER_ID.CURSOR]: "default-project-cursor",
   [SUPERSET_WORKSPACE_PROVIDER_ID]: "default-project-superset",
 } as const satisfies Readonly<Record<DefaultProjectProviderId, string>>;
 
