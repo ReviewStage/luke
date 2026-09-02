@@ -197,7 +197,8 @@ struct VoiceView: View {
 
     private var statusText: String {
         switch model.status {
-        case .idle, .connecting: return "Connecting…"
+        case .idle: return model.errorMessage != nil ? "Connection failed" : "Connecting…"
+        case .connecting: return "Connecting…"
         case .ready: return "Hold to talk"
         case .listening: return "Listening…"
         case .thinking: return "Thinking…"

@@ -185,8 +185,11 @@ public final class RealtimeSession {
                 await self?.runReceiveLoop(ws: ws, context: connection.sessionsContext)
             }
         } catch {
-            status = .idle
+            // onError must run before status = .idle: onError nils reconnectCallback,
+            // and onStatus(.idle) reads it — reversing the order creates an infinite
+            // reconnect loop that swallows the error message.
             options.onError(error.localizedDescription)
+            status = .idle
         }
     }
 
