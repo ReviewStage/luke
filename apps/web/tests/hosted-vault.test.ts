@@ -73,7 +73,7 @@ test("a secret that is not 64 hex chars throws at encrypt time", () => {
 
 function storeOptions(overrides: Partial<Parameters<typeof handleVaultKeyStore>[0]> = {}) {
   return {
-    request: storeRequest({ providerId: VAULT_PROVIDER_ID.COPILOT, key: "sk-abc1234" }),
+    request: storeRequest({ providerId: VAULT_PROVIDER_ID.CONDUCTOR, key: "sk-abc1234" }),
     encryptionSecret: SECRET,
     resolveUserId: async () => "user-1",
     storeKey: async (_userId: string, _providerId: string, _ciphertext: string) => {},
@@ -129,7 +129,7 @@ test("storing a valid key answers { stored: true } and writes an encrypted ciphe
   assert.equal((await response.json()).stored, true);
   assert.ok(stored);
   assert.equal(stored.userId, "user-1");
-  assert.equal(stored.providerId, VAULT_PROVIDER_ID.COPILOT);
+  assert.equal(stored.providerId, VAULT_PROVIDER_ID.CONDUCTOR);
   // Ciphertext must not equal the plaintext key.
   assert.notEqual(stored.ciphertext, "sk-abc1234");
   // Round-trip: decrypt recovers the original key.
@@ -149,7 +149,7 @@ test("an unknown provider id is refused", async () => {
 test("a key with internal whitespace is refused", async () => {
   const response = await handleVaultKeyStore(
     storeOptions({
-      request: storeRequest({ providerId: VAULT_PROVIDER_ID.CURSOR, key: "sk ab cd" }),
+      request: storeRequest({ providerId: VAULT_PROVIDER_ID.CONDUCTOR, key: "sk ab cd" }),
     }),
   );
   assert.equal(response.status, 400);
@@ -157,7 +157,7 @@ test("a key with internal whitespace is refused", async () => {
 
 test("an empty key is refused", async () => {
   const response = await handleVaultKeyStore(
-    storeOptions({ request: storeRequest({ providerId: VAULT_PROVIDER_ID.DEVIN, key: "" }) }),
+    storeOptions({ request: storeRequest({ providerId: VAULT_PROVIDER_ID.CONDUCTOR, key: "" }) }),
   );
   assert.equal(response.status, 400);
 });
@@ -165,7 +165,7 @@ test("an empty key is refused", async () => {
 test("a key longer than 512 characters is refused", async () => {
   const response = await handleVaultKeyStore(
     storeOptions({
-      request: storeRequest({ providerId: VAULT_PROVIDER_ID.JULES, key: "k".repeat(513) }),
+      request: storeRequest({ providerId: VAULT_PROVIDER_ID.CONDUCTOR, key: "k".repeat(513) }),
     }),
   );
   assert.equal(response.status, 400);
@@ -181,7 +181,7 @@ function listOptions(overrides: Partial<Parameters<typeof handleVaultKeysList>[0
     encryptionSecret: SECRET,
     resolveUserId: async () => "user-1",
     listKeys: async (_userId: string): Promise<VaultKeyEntry[]> => [
-      { providerId: VAULT_PROVIDER_ID.COPILOT, updatedAt: NOW_DATE },
+      { providerId: VAULT_PROVIDER_ID.CONDUCTOR, updatedAt: NOW_DATE },
     ],
     ...overrides,
   };
@@ -209,7 +209,7 @@ test("the list answer never contains ciphertext or plaintext keys", async () => 
   const body = await response.json();
   assert.ok(Array.isArray(body.keys));
   assert.equal(body.keys.length, 1);
-  assert.equal(body.keys[0].providerId, VAULT_PROVIDER_ID.COPILOT);
+  assert.equal(body.keys[0].providerId, VAULT_PROVIDER_ID.CONDUCTOR);
   assert.equal(body.keys[0].updatedAt, NOW_DATE.getTime());
   // No ciphertext, no plaintext key field anywhere.
   assert.ok(!("ciphertext" in body.keys[0]));
@@ -237,7 +237,7 @@ test("the list calls the seam with the resolved user id", async () => {
 
 function deleteOptions(overrides: Partial<Parameters<typeof handleVaultKeyDelete>[0]> = {}) {
   return {
-    request: deleteRequest({ providerId: VAULT_PROVIDER_ID.REPLICAS }),
+    request: deleteRequest({ providerId: VAULT_PROVIDER_ID.CONDUCTOR }),
     encryptionSecret: SECRET,
     resolveUserId: async () => "user-1",
     deleteKey: async (_userId: string, _providerId: string) => true,
@@ -287,7 +287,7 @@ test("the delete passes the resolved user id and provider id to the seam", async
   await handleVaultKeyDelete(
     deleteOptions({
       resolveUserId: async () => "user-abc",
-      request: deleteRequest({ providerId: VAULT_PROVIDER_ID.CURSOR }),
+      request: deleteRequest({ providerId: VAULT_PROVIDER_ID.CONDUCTOR }),
       deleteKey: async (userId, providerId) => {
         calledWith = { userId, providerId };
         return true;
@@ -295,7 +295,7 @@ test("the delete passes the resolved user id and provider id to the seam", async
     }),
   );
 
-  assert.deepEqual(calledWith, { userId: "user-abc", providerId: VAULT_PROVIDER_ID.CURSOR });
+  assert.deepEqual(calledWith, { userId: "user-abc", providerId: VAULT_PROVIDER_ID.CONDUCTOR });
 });
 
 // --- Provider set parity ---
@@ -318,14 +318,14 @@ test("storing again for the same provider replaces the previous entry (upsert)",
   // First store.
   await handleVaultKeyStore(
     storeOptions({
-      request: storeRequest({ providerId: VAULT_PROVIDER_ID.JULES, key: "first-key-0001" }),
+      request: storeRequest({ providerId: VAULT_PROVIDER_ID.CONDUCTOR, key: "first-key-0001" }),
       storeKey,
     }),
   );
   // Second store — same provider, different key.
   await handleVaultKeyStore(
     storeOptions({
-      request: storeRequest({ providerId: VAULT_PROVIDER_ID.JULES, key: "second-key-9999" }),
+      request: storeRequest({ providerId: VAULT_PROVIDER_ID.CONDUCTOR, key: "second-key-9999" }),
       storeKey,
     }),
   );
