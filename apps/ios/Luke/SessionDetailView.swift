@@ -88,6 +88,7 @@ struct SessionDetailView: View {
     /// remain.
     private static let pollSeconds: UInt64 = 10
     private static let maximumPollReads = 5
+    private static let conversationEndId = "conversation-end"
 
     var body: some View {
         // Anchored like Messages: the screen opens at the conversation's end,
@@ -136,10 +137,22 @@ struct SessionDetailView: View {
                     ForEach(thread) { message in
                         userBubble(message)
                     }
+                    // The end of the chat as a scroll target of its own:
+                    // aiming a jump at the last bubble is unreliable in a
+                    // lazy stack whose Markdown is still sizing, where this
+                    // marker is always laid out and always last.
+                    Color.clear
+                        .frame(height: 1)
+                        .id(Self.conversationEndId)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
             }
+            // A conversation opens at its end and follows new messages while
+            // the reader is already there — the system's own chat anchoring.
+            // A screen that will only ever draw the recap keeps the top
+            // anchor its short content has always had.
+            .defaultScrollAnchor(session.canReadConversation ? .bottom : .top)
             .onChange(of: thread.count) { previousCount, count in
                 // Only growth is a send worth following: a handover shrinks
                 // this thread from a poll, and a reader up in history must
@@ -169,14 +182,9 @@ struct SessionDetailView: View {
                 scrollIntent = nil
                 switch intent {
                 case .end:
-                    // Pending sends draw below the fetched thread, so a chat
-                    // holding one opens on it rather than leaving it under
-                    // the fold.
-                    if let last = thread.last {
-                        proxy.scrollTo(last.id, anchor: .bottom)
-                    } else if let last = conversation.last {
-                        proxy.scrollTo(last.id, anchor: .bottom)
-                    }
+                    // The marker sits below pending sends and fetched thread
+                    // alike, so the open lands on whichever is newest.
+                    proxy.scrollTo(Self.conversationEndId, anchor: .bottom)
                     openSettled = true
                 case .anchor(let id):
                     proxy.scrollTo(id, anchor: .top)
