@@ -887,16 +887,24 @@ export class RealtimeVoiceSession {
       this.#remoteTrack = event.track;
       this.#options.onRemoteStream(event.streams[0] ?? new MediaStream([event.track]));
     };
+    // The listener outlives the peer it was added to, so a stale peer's late
+    // `failed` is answered by the attempt token rather than by the live call.
+    const attempt = this.#attempt;
     peer.addEventListener("connectionstatechange", () => {
+      if (attempt !== this.#attempt || this.#closed) return;
       if (peer.connectionState === "failed") this.#fail("The voice connection dropped.");
     });
   }
 
   #connectionChanged(status: SdkRealtimeTransport["status"]): void {
+    // Teardown clears the transport before anything can report on it, so a
+    // `disconnected` with no transport standing is a call already ended — by
+    // a stop or a failure whose status must not be rewritten to idle.
     if (
       status !== "disconnected" ||
       this.#closed ||
       this.#tearingDown ||
+      !this.#sdkTransport ||
       this.#status === REALTIME_STATUS.CONNECTING
     ) {
       return;

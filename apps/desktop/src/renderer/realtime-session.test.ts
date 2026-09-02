@@ -101,6 +101,7 @@ interface Harness {
   deliverRemoteTrack: (streams?: readonly object[]) => void;
   provideConnection: () => void;
   setConnectionState: (state: RTCPeerConnectionState) => void;
+  failStalePeer: () => void;
   closeChannel: () => void;
   requests: { apiKey: string; model: string; url: string }[];
   /** The order the credential and the device were asked for and answered in. */
@@ -202,6 +203,7 @@ function harness(
   const replacedTracks: (MockMediaTrack | null)[] = [];
   const silenceTrack: MockMediaTrack = { kind: "audio" };
   const connectionStateListeners = new Set<() => void>();
+  const staleConnectionStateListeners = new Set<() => void>();
   const sender: MockRtpSender = {
     track: silenceTrack,
     replaceTrack: async (next: MockMediaTrack | null) => {
@@ -286,6 +288,8 @@ function harness(
       connect: async (request) => {
         sdkStatus = "connecting";
         requests.push(request);
+        for (const listener of connectionStateListeners)
+          staleConnectionStateListeners.add(listener);
         connectionStateListeners.clear();
         transportOptions.onPeerConnection(asPeerConnection(peer), asMediaTrack(silenceTrack));
         if (options.sdpDelayMs) {
@@ -455,6 +459,10 @@ function harness(
     setConnectionState: (state) => {
       peer.connectionState = state;
       for (const listener of connectionStateListeners) listener();
+    },
+    failStalePeer: () => {
+      peer.connectionState = "failed";
+      for (const listener of staleConnectionStateListeners) listener();
     },
     closeChannel: () => {
       sdkStatus = "disconnected";
@@ -1662,6 +1670,32 @@ test("a failed call releases the microphone instead of stranding it", async () =
   // FAILED offers "Start voice" again, so nothing may still hold the device.
   assert.equal(context.microphoneStopped(), true);
   assert.equal(context.session.isConnected, false);
+});
+
+test("a disconnect reported after a failure keeps the call failed", async () => {
+  const context = harness();
+  await context.session.connect();
+
+  context.setConnectionState("failed");
+  assert.equal(context.session.status, REALTIME_STATUS.FAILED);
+
+  // The SDK's own disconnect can land a tick after the failure tore the call
+  // down; "Voice off" for a call that failed would hide the retry.
+  context.closeChannel();
+  assert.equal(context.session.status, REALTIME_STATUS.FAILED);
+});
+
+test("a replaced peer's late failure does not end the new call", async () => {
+  const context = harness();
+  await context.session.connect();
+  await context.session.close();
+  await context.session.connect();
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+
+  context.failStalePeer();
+
+  assert.equal(context.session.status, REALTIME_STATUS.READY);
+  assert.equal(context.session.isConnected, true);
 });
 
 test("a stalled handshake times out instead of hanging on connecting", async () => {
