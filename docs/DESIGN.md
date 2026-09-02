@@ -165,8 +165,8 @@ Three categories, and only the first is ever cut:
 
 Prose describing the app's own layout rots, because it duplicates a fact that
 lives somewhere else. A note once told the developer that voice's two ways in
-"live under Account and usage", a section renamed to What Luke runs on
-everywhere but that sentence. A label cannot go stale that way; only a
+"live under Account and usage", a section now named Provider everywhere
+but that sentence. A label cannot go stale that way; only a
 paragraph about another part of the surface can. When a second place has to
 name a section, that is a reason to cut the sentence, not to maintain it.
 

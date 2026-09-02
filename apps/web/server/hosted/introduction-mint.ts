@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   introductionSessionConfig,
   type RealtimeSessionOptions,
@@ -16,8 +15,7 @@ import {
 /**
  * Mints the one credential a fresh install may ask for before any account
  * exists: the spoken onboarding introduction. The request carries no bearer
- * and no identity — nothing about the caller is stored beyond a hashed
- * rate-limit key, and nothing joins an account or an analytics person. The
+ * and no identity — nothing joins an account or an analytics person. The
  * session document is built from the same shared code the ordinary mint uses,
  * so the caller's whole say is still a voice and a pace, and everything else
  * about the credential — including the introduction's shorter expiry — is
@@ -54,35 +52,6 @@ export function introductionClientSecretRequest(options: RealtimeSessionOptions 
   };
 }
 
-const CALLER_ADDRESS_HEADER = {
-  /** Written by the deployment's own proxy, client address first. */
-  FORWARDED_FOR: "x-forwarded-for",
-  REAL_IP: "x-real-ip",
-} as const;
-
-/** Where a request with no readable address lands: one shared, bounded bucket. */
-const SHARED_CALLER_BUCKET = "no-address";
-
-/**
- * The rate-limit key for one request, and the only thing about the caller
- * that outlives it. The address is hashed before it can land anywhere
- * durable — the usage table needs a bucket for the day, never an address —
- * and a request whose address the proxy did not report shares one bucket
- * rather than minting unmetered.
- */
-export function introductionCallerKey(request: Request): string {
-  // The platform's own single-valued header first: a forwarded chain's first
-  // hop is whatever the client told the first proxy, so on a deployment that
-  // writes both, the spoofable one must only ever be the fallback. A caller
-  // rotating addresses past the per-caller cap still lands on the global one.
-  const forwarded = request.headers.get(CALLER_ADDRESS_HEADER.FORWARDED_FOR) ?? undefined;
-  const address =
-    trimmedText(request.headers.get(CALLER_ADDRESS_HEADER.REAL_IP) ?? undefined) ??
-    trimmedText(forwarded?.split(",")[0]);
-  if (!address) return SHARED_CALLER_BUCKET;
-  return createHash("sha256").update(address).digest("hex");
-}
-
 const INTRODUCTION_MINT_FIELDS: readonly string[] = ["voice", "speed"];
 
 /**
@@ -104,7 +73,7 @@ export interface IntroductionMintOptions {
   apiKey: string | undefined;
   /** A deployment-configured model override; the shared default otherwise. */
   model?: string;
-  spend: (callerKey: string) => Promise<IntroductionSpend>;
+  spend: () => Promise<IntroductionSpend>;
   fetch?: FetchLike;
   now?: () => number;
   timeoutMs?: number;
@@ -134,7 +103,7 @@ export async function handleIntroductionMint(options: IntroductionMintOptions): 
 
   // The refusal carries no quota: the introduction is not an allowance the
   // desktop tracks, only a cap it may run into.
-  const spend = await options.spend(introductionCallerKey(request));
+  const spend = await options.spend();
   if (!spend.allowed) {
     return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   }

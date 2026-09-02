@@ -46,14 +46,14 @@ export { SETTING_PAGE };
 /**
  * Which page draws a provider's credential row. Every key lives under
  * Connections except the one voice runs on: the OpenAI row stands in the
- * What Luke runs on section on the Settings front page, beside the allowance it
- * replaces. This is what brings a credential entry back from the key slot to
- * the page it began on — restoring Connections around an entry begun on the
- * front page would land the answer on a page nobody was looking at.
+ * Provider section on the Voice page, beside the feature it enables. This
+ * is what brings a credential entry back from the key slot to the page it
+ * began on — restoring Connections around an entry begun on the Voice page
+ * would land the answer on a page nobody was looking at.
  */
 export function credentialSettingsPage(providerId: CredentialProviderId): SettingsView {
   return providerId === VOICE_CREDENTIAL_PROVIDER_ID
-    ? SETTINGS_VIEW.ROOT
+    ? SETTINGS_VIEW.VOICE
     : SETTINGS_VIEW.CONNECTIONS;
 }
 

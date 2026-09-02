@@ -10,13 +10,11 @@ import {
   VOICE_CREDENTIAL_PROVIDER,
 } from "@sidecar/credentials/vocabulary";
 import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@sidecar/guide";
-import type { HostedQuota, HostedUsageAnswer } from "@sidecar/hosted";
 import { CloudBadge, ProviderMark } from "@sidecar/panel";
 import {
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
   REALTIME_DEFAULTS,
-  type RealtimeDiagnostics,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
 } from "@sidecar/realtime";
@@ -108,14 +106,8 @@ import { Keycaps } from "./keycaps";
 import { type ErrandTarget, errandTargetProps } from "./luke-errand";
 import { APP_SETTING_ID } from "./luke-guide";
 import {
-  currentQuota,
-  fresherQuota,
-  HOSTED_METER_LABEL,
-  hostedVoiceSpentNote,
   MICROPHONE_UNGRANTED_NOTE,
   microphoneAccessRow,
-  quotaLevel,
-  quotaResetsWhen,
   VOICE_KEYLESS_NOTE,
   VOICE_SOURCE_DETAIL,
   VOICE_SOURCE_LABEL,
@@ -307,18 +299,6 @@ export interface SettingsPanelProps {
   updates: UpdateControl;
   settings?: AppSettingsView;
   onSettingsChange: (settings: AppSettings) => void;
-  /**
-   * How voice stands right now, asked of the main process while the panel is
-   * up: whose credential it runs on and what remains of a hosted day's
-   * allowance. Absent until the first answer lands; the Voice page words its
-   * hosted note without it until then.
-   */
-  voiceService?: RealtimeDiagnostics;
-  /**
-   * Today's hosted allowance on both meters, read without spending either.
-   * Absent on a keyed or signed-out run, and until the first answer lands.
-   */
-  hostedUsage?: HostedUsageAnswer;
   /** The one credential being entered anywhere, and everything that can be done to it. */
   credentials: CredentialEntryControl;
   /** The one note to the founders being written, and everything that can be done to it. */
@@ -2422,18 +2402,11 @@ function SettingsPageHeader({
 }
 
 /**
- * How Luke sounds and what he says unprompted — led by what voice runs on.
- * The OpenAI credential stands at the top of this page rather than under
- * Connections because voice is what the key changes: included with the
- * signed-in account under a daily allowance, and run unmetered on the
- * developer's own key the moment one is connected — so the section that
- * explains whose credential is speaking is the section a key is typed into.
- * The page reveals itself in stages rather than all at once: the key section
- * alone until voice is available at all, the microphone permission beneath it
- * once there is a voice for the microphone to reach, and the voice controls
- * only once both stand —
- * a page of settings for a feature two steps from running reads as work
- * already done, and the one thing to do next reads clearest standing alone.
+ * How Luke sounds and what he says unprompted. Permission comes first, then
+ * the account or key voice uses, then the controls that need both.
+ * The page reveals itself in stages rather than all at once: until voice is
+ * available it says how to turn it on, and voice controls appear only once
+ * the microphone is ready.
  * Whichever stage is missing wears the same exclamation mark the front
  * page's Voice row wears, so the mark that brought someone here is the mark
  * they land on. The voice Luke speaks with leads the controls — it is what
@@ -2443,10 +2416,16 @@ function SettingsPageHeader({
  * panel rather than being clipped by it.
  */
 function VoiceSection({
+  accountSignedIn,
+  credentials,
+  panelOpen,
   settings,
   writes,
   microphone,
 }: {
+  accountSignedIn: boolean;
+  credentials: CredentialEntryControl;
+  panelOpen: boolean;
   settings: AppSettingsView;
   writes: SettingsWrites;
   microphone: MicrophoneControl;
@@ -2457,12 +2436,8 @@ function VoiceSection({
   });
   return (
     <>
-      {/* The key row lives with the account on the front page — voice's
-          two ways in stand together there. This page holds what voice does
-          once it runs; while it cannot run, the one section says where to
-          turn it on rather than drawing settings for a feature two steps
-          from working. The line stays because it is the way in, not a
-          description of one: without it the page is a heading and a tooltip. */}
+      {/* While voice cannot run, the one section says how to turn it on rather
+          than drawing settings for a feature two steps from working. */}
       {settings.voiceAvailable ? null : (
         <section className="settings-section" style={cssCustomProperties({ "--row-index": 1 })}>
           <h2>
@@ -2525,6 +2500,16 @@ function VoiceSection({
           </div>
         </section>
       ) : null}
+      {accountSignedIn ? (
+        <ProviderSection
+          rowIndex={2}
+          panelOpen={panelOpen}
+          storageLocked={settings.secretStorage === SECRET_STORAGE.UNAVAILABLE}
+          settings={settings}
+          credentials={credentials}
+          writes={writes}
+        />
+      ) : null}
       {/* `ready` already folds the key in — a microphone with no voice to
           reach never reports itself ready — so the controls stand exactly
           while both halves do. */}
@@ -2544,9 +2529,15 @@ function VoiceControlsSection({
   return (
     <section
       className="settings-section settings-plain"
-      style={cssCustomProperties({ "--row-index": 2 })}
+      style={cssCustomProperties({ "--row-index": 3 })}
     >
-      <SchemaSettingRows page={SCHEMA_SETTINGS_PAGE.VOICE} settings={settings} writes={writes} />
+      <SchemaSettingRows
+        page={SCHEMA_SETTINGS_PAGE.VOICE}
+        settings={settings}
+        writes={writes}
+        // Drawn by ProviderSection, whose picker knows the source values.
+        exclude={[APP_SETTING_SCHEMA.voiceSource.field]}
+      />
     </section>
   );
 }
@@ -3004,39 +2995,6 @@ const ACCOUNT_ASK = {
 type AccountAsk = (typeof ACCOUNT_ASK)[keyof typeof ACCOUNT_ASK];
 
 /**
- * One meter of today's allowance, drawn as a track the day fills. The native
- * `meter` rather than a progressbar, because nothing is underway: it reports
- * a level against a limit. Nothing about it animates — a changed value snaps
- * in place and only the section's arrival staggers.
- *
- * The fill is the working blue every live thing on the surface wears, and it
- * turns to the attention orange while the day is running out — at the same
- * level, and for the same reason, a session row wears it: something is about
- * to need the developer. The bar and the sentence beside it therefore say the
- * same thing at the same moment.
- */
-function UsageMeter({ label, quota }: { label: string; quota: HostedQuota }): React.JSX.Element {
-  const capped = Math.min(quota.used, quota.limit);
-  return (
-    <div className="usage-meter" data-level={quotaLevel(quota)}>
-      <span className="usage-words" aria-hidden="true">
-        <small>{label}</small>
-        <small>
-          {quota.remaining} of {quota.limit} left
-        </small>
-      </span>
-      <meter
-        className="usage-track"
-        min={0}
-        max={quota.limit > 0 ? quota.limit : 1}
-        value={quota.limit > 0 ? capped : 1}
-        aria-label={`${label}: ${quota.remaining} of ${quota.limit} left today`}
-      />
-    </div>
-  );
-}
-
-/**
  * The choice itself: two halves side by side, each carrying its own name, with
  * the live one marked. A radio group rather than two buttons, because it is
  * one value from a small fixed set — the same thing a
@@ -3133,23 +3091,19 @@ function VoiceSourceToggle({
 /**
  * The one question this section settles: which credential Luke speaks and
  * reviews sessions on. Both answers stand here, side by side and switchable,
- * because a choice split across two places — an allowance here, a key row
- * there — is a choice nobody knows they have. It leads the front page: what
- * Luke is running on, and what is left of it today, is the first thing worth
- * knowing.
+ * because a choice split across two places — an account here, a key row
+ * there — is a choice nobody knows they have.
  *
  * The account itself is not here. Signing out and deleting are rare acts that
- * cannot be taken back, and they sit at the foot of the page with the other
- * ways out; this section is only ever read and switched.
+ * cannot be taken back, and they sit at the foot of the Settings front page;
+ * this section is only ever read and switched.
  */
-function WhatLukeRunsOnSection({
+function ProviderSection({
   panelOpen,
   storageLocked,
   settings,
   credentials,
   writes,
-  voiceService,
-  hostedUsage,
   rowIndex,
 }: {
   panelOpen: boolean;
@@ -3164,8 +3118,6 @@ function WhatLukeRunsOnSection({
   /** The one credential being entered anywhere; the key row here uses it. */
   credentials: CredentialEntryControl;
   writes: SettingsWrites;
-  voiceService?: RealtimeDiagnostics;
-  hostedUsage?: HostedUsageAnswer;
 }): React.JSX.Element {
   const keySource = settings.credentialSources[VOICE_CREDENTIAL_PROVIDER.id];
   const keyStored = keySource !== CREDENTIAL_SOURCE.NONE;
@@ -3176,28 +3128,11 @@ function WhatLukeRunsOnSection({
   // panel brought back around it has to find the field still drawn — the
   // source itself does not move until the key lands.
   const keyBody = !hosted || entering;
-  // The freshest reading of each meter, wherever it came from: the usage read
-  // against the quota the last mint carried, day and remainder telling the two
-  // apart — and neither counted past its own reset, because a spent yesterday
-  // must not be drawn as an almost-back today.
-  const now = Date.now();
-  const voiceQuota = hosted
-    ? fresherQuota(currentQuota(hostedUsage?.voice, now), currentQuota(voiceService?.quota, now))
-    : undefined;
-  // Decided, not missed: a same-day reviews reading may trail a fresher voice
-  // mint, because mints say nothing about reviews — dropping it would delete
-  // the only reviews count for no accuracy gained. The skew is bounded by the
-  // refresh riding every settings change and tab turn, and a different day
-  // still discards it.
-  const reviewQuota =
-    voiceQuota && hostedUsage && hostedUsage.attention.resetsAt === voiceQuota.resetsAt
-      ? hostedUsage.attention
-      : undefined;
   return (
     <section className="settings-section" style={cssCustomProperties({ "--row-index": rowIndex })}>
       <h2>
         <LukeIcon />
-        What Luke runs on
+        Provider
         {/* The mark for voice having nothing to run on sits where both ways
             in are drawn: the two halves of the toggle below. */}
         {settings.voiceAvailable ? null : <AttentionMark note={VOICE_KEYLESS_NOTE} />}
@@ -3209,12 +3144,8 @@ function WhatLukeRunsOnSection({
         onChoose={(source) => writes.setting(APP_SETTING_SCHEMA.voiceSource.field, source)}
         onConnect={() => credentials.connect(VOICE_CREDENTIAL_PROVIDER.id)}
       />
-      {/* Each half's own contents, drawn under the toggle for whichever is
-          live. They answer the same two questions in the two ways the sources
-          differ: the allowance is a quantity, so it draws bars and says when
-          they return; a key is a connection, so it draws the connection and
-          says what runs on it. Neither half explains the other — the toggle
-          above is where they are compared. */}
+      {/* A key is a connection, so its half draws the credential row. The
+          account half is already fully described by the toggle. */}
       {keyBody ? (
         <ProviderCredential
           provider={VOICE_CREDENTIAL_PROVIDER}
@@ -3223,25 +3154,7 @@ function WhatLukeRunsOnSection({
           control={credentials}
           panelOpen={panelOpen}
         />
-      ) : (
-        /* The day's allowance from the usage read, or the voice meter alone
-           from the quota the last mint carried while no read has answered.
-           Every reading in hand having outlived its day reads as no reading at
-           all, and draws no meters rather than promising numbers. */
-        voiceQuota && (
-          <>
-            <UsageMeter label={HOSTED_METER_LABEL.VOICE} quota={voiceQuota} />
-            {reviewQuota ? (
-              <UsageMeter label={HOSTED_METER_LABEL.REVIEWS} quota={reviewQuota} />
-            ) : null}
-            <p className="settings-note">
-              {voiceQuota.remaining === 0
-                ? hostedVoiceSpentNote(quotaResetsWhen(voiceQuota.resetsAt, now))
-                : `Resets ${quotaResetsWhen(voiceQuota.resetsAt, now)}.`}
-            </p>
-          </>
-        )
-      )}
+      ) : null}
       {storageLocked ? <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p> : null}
     </section>
   );
@@ -3249,9 +3162,8 @@ function WhatLukeRunsOnSection({
 
 /**
  * Who is signed in, and the two ways out of that. It sits at the foot of the
- * front page rather than at its head: what an account is spending is checked
- * daily and belongs up top, where What Luke runs on now draws it, while signing
- * out and deleting are done once or never. Both ways out ask before they act.
+ * front page: signing out and deleting are done once or never. Both ways out
+ * ask before they act.
  */
 function AccountSection({
   account,
@@ -3314,7 +3226,7 @@ function AccountSection({
   };
 
   return (
-    <section className="settings-section" style={cssCustomProperties({ "--row-index": 5 })}>
+    <section className="settings-section" style={cssCustomProperties({ "--row-index": 4 })}>
       <h2>
         <UserIcon />
         Account
@@ -3612,8 +3524,6 @@ export function SettingsPanel({
   updates,
   settings,
   onSettingsChange,
-  voiceService,
-  hostedUsage,
   credentials,
   feedback,
   panelOpen,
@@ -3762,48 +3672,38 @@ export function SettingsPanel({
       ) : null}
 
       {view === SETTINGS_VIEW.ROOT && !search ? (
-        /* The front page: what voice runs on and what is left of it today,
-           then one row per page, then the sections that answer at a glance —
+        /* The front page: one row per page, then the sections that answer at a glance —
            what Luke is allowed, what he counts about his own use, the way to
-           the founders, whose account this is, and the way out. The allowance leads because it is the one
-           thing here worth checking daily; the account itself follows the
-           page down to the ways out, which are done once or never. A newer
+           the founders, whose account this is, and the way out. A newer
            release waiting is marked on the tab rather than moved here: a
            section that changed places as its own check found news would
            rearrange the page under the hand that pressed it. */
-        <>
-          {account.status === ACCOUNT_STATUS.SIGNED_IN && settings ? (
-            <WhatLukeRunsOnSection
-              rowIndex={1}
-              panelOpen={panelOpen}
-              storageLocked={settings.secretStorage === SECRET_STORAGE.UNAVAILABLE}
-              settings={settings}
-              credentials={credentials}
-              writes={writes}
-              {...(voiceService ? { voiceService } : undefined)}
-              {...(hostedUsage ? { hostedUsage } : undefined)}
+        <section
+          className="settings-section settings-index"
+          style={cssCustomProperties({ "--row-index": 1 })}
+        >
+          {SETTINGS_SUBVIEW_LIST.map((subview) => (
+            <SettingsNavRow
+              key={subview}
+              view={subview}
+              onOpen={onViewChange}
+              {...(subview === SETTINGS_VIEW.VOICE && voiceNote
+                ? { attention: voiceNote }
+                : undefined)}
             />
-          ) : null}
-          <section
-            className="settings-section settings-index"
-            style={cssCustomProperties({ "--row-index": 2 })}
-          >
-            {SETTINGS_SUBVIEW_LIST.map((subview) => (
-              <SettingsNavRow
-                key={subview}
-                view={subview}
-                onOpen={onViewChange}
-                {...(subview === SETTINGS_VIEW.VOICE && voiceNote
-                  ? { attention: voiceNote }
-                  : undefined)}
-              />
-            ))}
-          </section>
-        </>
+          ))}
+        </section>
       ) : null}
 
       {view === SETTINGS_VIEW.VOICE && settings && !search ? (
-        <VoiceSection settings={settings} writes={writes} microphone={microphone} />
+        <VoiceSection
+          accountSignedIn={account.status === ACCOUNT_STATUS.SIGNED_IN}
+          credentials={credentials}
+          panelOpen={panelOpen}
+          settings={settings}
+          writes={writes}
+          microphone={microphone}
+        />
       ) : null}
 
       {view === SETTINGS_VIEW.APPEARANCE && settings && !search ? (
@@ -3862,13 +3762,12 @@ export function SettingsPanel({
 
       {view !== SETTINGS_VIEW.ROOT || search ? null : (
         <>
-          <UpdatesSection control={updates} rowIndex={3} />
+          <UpdatesSection control={updates} rowIndex={2} />
 
           <FeedbackSection control={feedback} />
 
           {/* The account and the two ways out of it, last of the sections:
-              signing out and deleting are rare, cannot be taken back, and
-              have nothing to do with the allowance the page opens on. */}
+              signing out and deleting are rare and cannot be taken back. */}
           {account.status === ACCOUNT_STATUS.SIGNED_IN ? (
             <AccountSection
               account={account}
@@ -3881,7 +3780,7 @@ export function SettingsPanel({
           <button
             type="button"
             className="quit-button"
-            style={cssCustomProperties({ "--row-index": 6 })}
+            style={cssCustomProperties({ "--row-index": 5 })}
             {...searchAnchorProps(SETTINGS_SEARCH_ROW.QUIT)}
             onClick={onQuit}
           >

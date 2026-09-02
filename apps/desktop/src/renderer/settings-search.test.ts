@@ -143,19 +143,19 @@ test("a row a page is not drawing is not offered", () => {
     assert.ok(wide.includes(label), `${label} is offered once its row is drawn`);
   }
 
-  // The ways out — and the What Luke runs on section, key row included —
+  // The ways out — and the Provider section, key row included —
   // belong to a signed-in account alone.
   const signedOut = labels(settingsSearchEntries(searchInput({ accountDrawn: false })));
   assert.ok(!signedOut.includes("Sign out"));
   assert.ok(!signedOut.includes("Delete account"));
-  assert.ok(!signedOut.includes("What Luke runs on"));
+  assert.ok(!signedOut.includes("Provider"));
   assert.ok(!signedOut.includes("OpenAI API key"));
 
   // On the account, the key row is not drawn — the section's own entry is
   // what a key-shaped query finds, because its toggle is where a key begins.
   const hosted = settingsSearchEntries(searchInput());
   assert.ok(!labels(hosted).includes("OpenAI API key"));
-  assert.ok(labels(found(searchSettings(hosted, "openai"))).includes("What Luke runs on"));
+  assert.ok(labels(found(searchSettings(hosted, "openai"))).includes("Provider"));
 });
 
 test("ids and labels are unique, so a result names exactly one row", () => {
@@ -209,23 +209,22 @@ test("the kept rows come back grouped under their pages, in the pages' order", (
   ]);
   assert.equal(shortcuts.matched, 3);
 
-  // "key" lands on the front page and two others; the groups keep the front
-  // page's own order, front page first.
+  // "key" lands on Voice and two later pages; the groups keep the front
+  // page's navigation order.
   const keys = searchSettings(entries, "key");
   assert.ok(keys);
-  assert.equal(keys.groups[0]?.page, SETTINGS_VIEW.ROOT);
+  assert.equal(keys.groups[0]?.page, SETTINGS_VIEW.VOICE);
   const pages = keys.groups.map((group) => group.page);
   assert.deepEqual(
     pages,
-    [SETTINGS_VIEW.ROOT, SETTINGS_VIEW.SHORTCUTS, SETTINGS_VIEW.CONNECTIONS],
+    [SETTINGS_VIEW.VOICE, SETTINGS_VIEW.SHORTCUTS, SETTINGS_VIEW.CONNECTIONS],
     "groups follow the nav's order",
   );
 });
-
 test("the rows that are not settings are found by what they are", () => {
   const entries = settingsSearchEntries(everythingDrawn());
 
-  // Every key row answers to "api key": the voice key on the front page and
+  // Every key row answers to "api key": the voice key on the Voice page and
   // each cloud agent's under Connections.
   const keys = labels(found(searchSettings(entries, "api key")));
   assert.ok(keys.includes("OpenAI API key"));

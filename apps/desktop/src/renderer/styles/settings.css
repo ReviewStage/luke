@@ -400,60 +400,6 @@
   line-height: 1.4;
 }
 
-/* Today's allowance, drawn as the day filling a track: the native meter,
-   redrawn through Chromium's meter parts. Nothing about it animates — a
-   changed value snaps, and only the section's own arrival staggers. The fill
-   wears the same complete green the switches wear for on, and turns to the
-   attention color once the meter is spent, so the bar and the sentence
-   beneath it agree. */
-.usage-meter {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.usage-words {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--text-tertiary);
-  font-size: 10px;
-  line-height: 1.4;
-}
-
-.usage-track {
-  display: block;
-  width: 100%;
-  height: 4px;
-  appearance: none;
-}
-
-.usage-track::-webkit-meter-inner-element {
-  display: block;
-  height: 4px;
-}
-
-.usage-track::-webkit-meter-bar {
-  height: 4px;
-  border: none;
-  border-radius: 999px;
-  background: var(--raised-strong);
-}
-
-.usage-track::-webkit-meter-optimum-value {
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--state-working) 62%, transparent);
-}
-
-/* Getting close, and gone: the same attention orange a session row wears when
-   it is about to need the developer, at the same weight — the warning arrives
-   while there is still something left to spend differently, rather than only
-   once there is not. */
-.usage-meter[data-level="low"] .usage-track::-webkit-meter-optimum-value,
-.usage-meter[data-level="spent"] .usage-track::-webkit-meter-optimum-value {
-  background: color-mix(in srgb, var(--state-attention) 72%, transparent);
-}
-
 /* The two credentials Luke can run on, side by side: one value from a set of
    two, drawn open rather than as a pop-up because seeing both at once — with
    what each costs on its face — is the entire point of the control.
@@ -463,9 +409,8 @@
    `quiet-button` itself rather than a copy of its padding, radius, ground and
    type. What is added here is only what a choice needs and an offer does not —
    a second line, and the ground and edge a chosen filter chip takes for the
-   half that is live. Chosen is a state, not an act: the accent belongs to the
-   meters below, which say what the choice is costing, and a button wearing it
-   too would read as the thing to press rather than the thing already true. */
+   half that is live. Chosen is a state, not an act: a stronger accent would
+   read as the thing to press rather than the thing already true. */
 .source-toggle {
   display: flex;
   gap: 7px;

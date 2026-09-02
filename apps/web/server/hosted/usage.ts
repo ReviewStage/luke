@@ -2,10 +2,8 @@ import type { HostedUsageAnswer } from "../core.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 
 /**
- * Answers where today's allowance stands, spending nothing. This is the one
- * hosted endpoint that involves no OpenAI key: it reads Luke's own counters
- * for the signed-in account, so the panel can show what remains before the
- * first call of the day rather than only after one has answered.
+ * Answers today's hosted counters without spending either. The endpoint stays
+ * available for wire compatibility with desktop builds that read it.
  */
 
 export interface UsageOptions {

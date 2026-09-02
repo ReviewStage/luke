@@ -6,13 +6,11 @@ import { HOSTED_API_ERROR } from "../server/hosted/http";
 import {
   handleIntroductionMint,
   INTRODUCTION_SECRET_EXPIRY,
-  introductionCallerKey,
 } from "../server/hosted/introduction-mint";
 import type { IntroductionSpend } from "../server/hosted/quota";
 
 const NOW = Date.parse("2026-08-17T12:00:00.000Z");
 const API_KEY = "sk-hosted-secret";
-const CALLER_IP = "203.0.113.7";
 
 const OPEN: IntroductionSpend = { allowed: true };
 const SPENT: IntroductionSpend = { allowed: false };
@@ -27,7 +25,7 @@ interface MintRequestBody {
 function mintRequest(body?: MintRequestBody, headers: Record<string, string> = {}): Request {
   const init: RequestInit = {
     method: "POST",
-    headers: { "x-forwarded-for": CALLER_IP, ...headers },
+    headers,
   };
   if (body !== undefined) init.body = JSON.stringify(body);
   return new Request("https://luke.test/api/voice/introduction-mint", init);
@@ -154,59 +152,6 @@ test("the gate order is method, kill switch, body, meter", async () => {
   const body = await exhausted.json();
   assert.equal(body.error, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   assert.equal(body.quota, undefined);
-});
-
-test("the meter is keyed by a hash of the caller's address, never the address itself", async () => {
-  const keys: string[] = [];
-  const spend = async (callerKey: string) => {
-    keys.push(callerKey);
-    return OPEN;
-  };
-  await handleIntroductionMint(options({ spend, fetch: upstream({}, mintedPayload) }));
-
-  assert.equal(keys.length, 1);
-  assert.notEqual(keys[0], CALLER_IP);
-  assert.doesNotMatch(String(keys[0]), /203\.0\.113\.7/);
-  assert.match(String(keys[0]), /^[0-9a-f]{64}$/);
-});
-
-test("the caller key reads the proxy's first forwarded address, and shares one bucket without any", () => {
-  const forwarded = introductionCallerKey(
-    new Request("https://luke.test/api/voice/introduction-mint", {
-      method: "POST",
-      headers: { "x-forwarded-for": `${CALLER_IP}, 10.0.0.1` },
-    }),
-  );
-  const direct = introductionCallerKey(mintRequest());
-  assert.equal(forwarded, direct);
-
-  const realIp = introductionCallerKey(
-    new Request("https://luke.test/api/voice/introduction-mint", {
-      method: "POST",
-      headers: { "x-real-ip": CALLER_IP },
-    }),
-  );
-  assert.equal(realIp, direct);
-
-  // With both present, the platform's single-valued header wins: the
-  // forwarded chain's first hop is client-controlled and must never out-vote
-  // it.
-  const spoofedChain = introductionCallerKey(
-    new Request("https://luke.test/api/voice/introduction-mint", {
-      method: "POST",
-      headers: { "x-forwarded-for": "203.0.113.99, 10.0.0.1", "x-real-ip": CALLER_IP },
-    }),
-  );
-  assert.equal(spoofedChain, direct);
-
-  const anonymous = introductionCallerKey(
-    new Request("https://luke.test/api/voice/introduction-mint", { method: "POST" }),
-  );
-  assert.notEqual(anonymous, direct);
-  const anonymousAgain = introductionCallerKey(
-    new Request("https://luke.test/api/voice/introduction-mint", { method: "POST" }),
-  );
-  assert.equal(anonymous, anonymousAgain);
 });
 
 test("an upstream refusal answers with its status and never the key", async () => {

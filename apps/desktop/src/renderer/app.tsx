@@ -14,14 +14,8 @@ import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
 import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import { APP_UPDATE_ACT, FEEDBACK_COMPOSER_KIND } from "@sidecar/guide";
-import type { HostedUsageAnswer } from "@sidecar/hosted";
 import { WingFace as LukeFace, ProviderMark } from "@sidecar/panel";
-import {
-  APP_TOOL_KIND,
-  dispatchByKind,
-  REALTIME_STATUS,
-  type RealtimeDiagnostics,
-} from "@sidecar/realtime";
+import { APP_TOOL_KIND, dispatchByKind, REALTIME_STATUS } from "@sidecar/realtime";
 import {
   type ObservedWorkspaceProject,
   SESSION_MENTION_KIND,
@@ -74,7 +68,7 @@ import {
   SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "#shared/wire/session";
 import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "#shared/wire/settings";
-import { appSettingsView, VOICE_SOURCE } from "#shared/wire/settings";
+import { appSettingsView } from "#shared/wire/settings";
 import type { UpdateSnapshot } from "#shared/wire/update";
 import { ASK_LUKE_INPUT_ID, focusAskField } from "./ask-luke";
 import { type ConsentConnectEntry, ConsentConnectSlot } from "./consent-connect-slot";
@@ -115,7 +109,6 @@ import { KeySlot } from "./key-slot";
 import { type Errand, errandTargets, LukeErrand } from "./luke-errand";
 import { usePrefersReducedMotion } from "./luke-face-mood";
 import { applySpokenSetting, buildLukeGuide, isAppSettingId } from "./luke-guide";
-import { hostedVoiceReading, hostedVoiceSpentNote, quotaResetsWhen } from "./microphone-access";
 import { NotchWings } from "./notch-wings";
 import { PanelBody, type SessionWriteHandlers } from "./panel-body";
 import {
@@ -2070,7 +2063,6 @@ export function App(): React.JSX.Element {
     setMicrophoneStatus,
     voiceError,
     voiceNotice,
-    announceVoiceNotice,
     voiceStatus,
     talkOpening,
     voiceHotkey,
@@ -2969,137 +2961,6 @@ export function App(): React.JSX.Element {
     return () => window.removeEventListener("pointerdown", handlePointerDown, { capture: true });
   }, [optionsOpen]);
 
-  // How voice stands right now — whose credential it runs on and what remains
-  // of a hosted day's allowance — asked while the Settings tab is up. Asked
-  // again on every settings change because the answer moves with the key and
-  // the account; a call spent while the tab was away is caught by the next
-  // change or visit. Gated on the tab alone: the ask is one local IPC round
-  // trip answering from memory, and the tab is what decides whether the
-  // answer can be seen.
-  const [voiceService, setVoiceService] = useState<RealtimeDiagnostics | undefined>();
-  const [hostedUsage, setHostedUsage] = useState<HostedUsageAnswer | undefined>();
-  // Asked as soon as the app knows itself and again on every settings change,
-  // not on the first Settings visit: the answer is one cheap read, and the
-  // meters must be standing when the tab opens rather than arriving a blink
-  // after it.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the settings snapshot is not read here — its arrival is the signal the held answers went stale, because the key or the account may have moved with it.
-  useEffect(() => {
-    if (!bootstrap) return;
-    let stale = false;
-    void window.sidecar
-      .requestRealtimeDiagnostics()
-      .then((report) => {
-        if (!stale) setVoiceService(report);
-      })
-      .catch(() => undefined);
-    // An empty answer means two different things, told apart by the settings
-    // in hand: with no allowance in play — the key chosen, or voice off — it
-    // clears the numbers, because an allowance no longer bought must not keep
-    // being shown; while the account is still hosted it is a failed refresh,
-    // and the meters keep the last read rather than collapsing to prose over
-    // one dropped request. Hosted is the resolved source's answer, because a
-    // stored key parked behind the account toggle is still a connected one.
-    const snapshot = settings ?? bootstrapSettings ?? appSettingsView(bootstrap.settings);
-    const hostedNow = snapshot.voiceAvailable && snapshot.voiceSource === VOICE_SOURCE.ACCOUNT;
-    void window.sidecar
-      .requestHostedUsage()
-      .then((usage) => {
-        if (stale) return;
-        setHostedUsage((held) => usage ?? (hostedNow ? held : undefined));
-      })
-      .catch(() => undefined);
-    return () => {
-      stale = true;
-    };
-  }, [tab, settings, bootstrap]);
-
-  // The reading the calls move: a mint stores the service's own quota on
-  // success and refusal alike, so the moment a call settles is the moment the
-  // held diagnostics may be a day fresher than the panel's copy. One local
-  // IPC round trip, answered from the main process's memory — the settled
-  // statuses are exactly the ones a mint attempt can end on.
-  useEffect(() => {
-    if (
-      voiceStatus !== REALTIME_STATUS.IDLE &&
-      voiceStatus !== REALTIME_STATUS.FAILED &&
-      voiceStatus !== REALTIME_STATUS.UNAVAILABLE
-    ) {
-      return;
-    }
-    let stale = false;
-    void window.sidecar
-      .requestRealtimeDiagnostics()
-      .then((report) => {
-        if (!stale) setVoiceService(report);
-      })
-      .catch(() => undefined);
-    return () => {
-      stale = true;
-    };
-  }, [voiceStatus]);
-
-  // Whether voice runs on the account's included allowance right now — the
-  // gate every spent-day surface shares, so a key user or a signed-out launch
-  // never wears a meter they do not have. Read off the resolved source, not
-  // the key's absence: a stored key parked behind the account toggle is still
-  // a connected credential, and the allowance is still what a press spends.
-  const voiceSettings = settings ?? bootstrapSettings;
-  const hostedVoiceNow =
-    voiceSettings?.voiceAvailable === true && voiceSettings.voiceSource === VOICE_SOURCE.ACCOUNT;
-  const voiceReading = hostedVoiceReading({
-    hosted: hostedVoiceNow,
-    usage: hostedUsage?.voice,
-    minted: voiceService?.quota,
-    now: Date.now(),
-  });
-  // The spent state stands only while no call is up or opening: the day's
-  // last call is still a working conversation, and neither the composer nor
-  // the face may say "spent" over an ask that would still be answered. Past
-  // the quota's own reset the reading is no reading, so the state lifts on
-  // the next render of a fresh day without anyone asking.
-  const voiceCallSettled =
-    voiceStatus === REALTIME_STATUS.IDLE ||
-    voiceStatus === REALTIME_STATUS.FAILED ||
-    voiceStatus === REALTIME_STATUS.UNAVAILABLE;
-  const voiceSpentNote =
-    voiceCallSettled && voiceReading?.remaining === 0
-      ? hostedVoiceSpentNote(quotaResetsWhen(voiceReading.resetsAt, Date.now()))
-      : undefined;
-
-  // A reset is a moment on a clock, not an event anything else is bound to
-  // raise: an idle capsule may see no render between midnight and morning,
-  // and a spent face left standing into the fresh day would be the very lie
-  // this state exists to prevent. So the reading schedules its own rollover —
-  // one timer at its own resetsAt — and the render it forces finds the
-  // reading expired and lifts every surface at once.
-  const [, forceQuotaRollover] = useState(0);
-  const voiceResetsAt = voiceReading?.resetsAt;
-  useEffect(() => {
-    if (voiceResetsAt === undefined) return;
-    // A slack second past the boundary, so a clock answering exactly at the
-    // reset cannot re-arm a zero-length timer against the same reading.
-    const timer = window.setTimeout(
-      () => forceQuotaRollover((tick) => tick + 1),
-      Math.max(0, voiceResetsAt - Date.now()) + 1_000,
-    );
-    return () => window.clearTimeout(timer);
-  }, [voiceResetsAt]);
-
-  // The run-out is told once, at the moment it happens: the meter was seen
-  // running this session and now stands spent with no call open. A launch
-  // into a day already spent announces nothing — the standing surfaces carry
-  // it — and the latch re-arms when a fresh day's meter runs again.
-  const voiceRanToday = useRef(false);
-  useEffect(() => {
-    if (voiceReading !== undefined && voiceReading.remaining > 0) {
-      voiceRanToday.current = true;
-      return;
-    }
-    if (voiceSpentNote === undefined || !voiceRanToday.current) return;
-    voiceRanToday.current = false;
-    announceVoiceNotice(voiceSpentNote);
-  }, [voiceReading, voiceSpentNote, announceVoiceNotice]);
-
   if (!bootstrap || !display) return <div />;
 
   const visibleSessions = displaySessions(bootstrap, sessions, sessionRoster.attention);
@@ -3307,15 +3168,7 @@ export function App(): React.JSX.Element {
             conversationSessionOpenable={conversationSessionOpenable}
             onOpenConversationSession={openConversationSession}
             ask={askLuke}
-            // Reaching for the composer during a spent day is answered before
-            // a keystroke: the caret arriving re-announces the spent caption
-            // on the strip below, the same sentence the run-out was told with,
-            // so the state is read where the reply would land rather than
-            // discovered by an ask being refused.
-            onAskEngaged={(engaged) => {
-              changeAskEngagement(engaged);
-              if (engaged && voiceSpentNote) announceVoiceNotice(voiceSpentNote);
-            }}
+            onAskEngaged={changeAskEngagement}
             {...(shownAskHotkey ? { askShortcut: shownAskHotkey } : undefined)}
             offerOptions={offerOptions}
             optionsOpen={optionsOpen}
@@ -3354,8 +3207,6 @@ export function App(): React.JSX.Element {
               microphone,
               updates,
               settings,
-              ...(voiceService ? { voiceService } : undefined),
-              ...(hostedUsage ? { hostedUsage } : undefined),
               onSettingsChange: applySettings,
               credentials,
               feedback: feedbackControl,
@@ -3507,7 +3358,6 @@ export function App(): React.JSX.Element {
         hasAudioSignal={hasAudioSignal}
         voiceOpening={talkOpening}
         meetingQuiet={meetingQuiet}
-        voiceSpent={voiceSpentNote !== undefined}
         sessionsSettled={sessionsSettled}
         presentation={presentation}
         housingWidth={display.notch.housingWidth}

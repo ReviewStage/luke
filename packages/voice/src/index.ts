@@ -30,10 +30,6 @@ export {
   unavailableRealtimeDiagnostics,
 } from "./openai-credentials.js";
 export {
-  HostedUsageReader,
-  type HostedUsageReaderOptions,
-} from "./quota.js";
-export {
   sessionAnnouncementFromReview,
   sessionNoticeAnnouncement,
 } from "./session-notifications.js";

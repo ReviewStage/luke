@@ -190,7 +190,7 @@ export const REALTIME_MINT_OUTCOME = {
   EXPIRED_CREDENTIAL: "expired-credential",
   /** The hosted service found no signed-in account behind the request. */
   NOT_SIGNED_IN: "not-signed-in",
-  /** Today's included voice is spent; the diagnostics carry the quota that says when it returns. */
+  /** The hosted service's emergency ceiling refused the request. */
   QUOTA_EXHAUSTED: "quota-exhausted",
   /** The hosted tier is switched off service-side. */
   HOSTED_UNAVAILABLE: "hosted-unavailable",
@@ -220,7 +220,7 @@ export interface RealtimeDiagnostics {
   /** A status code or error name; never a request body or credential. */
   lastDetail?: string;
   lastAttemptAt?: number;
-  /** The hosted allowance as the service last reported it; absent on a keyed run. */
+  /** The hosted counter as the service last reported it; absent on a keyed run. */
   quota?: {
     used: number;
     limit: number;
@@ -233,7 +233,7 @@ const REALTIME_MINT_EXPLANATIONS = {
   [REALTIME_MINT_OUTCOME.NOT_ATTEMPTED]: "No credential has been requested yet.",
   [REALTIME_MINT_OUTCOME.SUCCEEDED]: "A short-lived credential was minted.",
   [REALTIME_MINT_OUTCOME.NO_API_KEY]:
-    "Voice has nothing to run on: no signed-in Luke account, and no OpenAI key. Signing in turns voice on with its included allowance; a key connected under What Luke runs on, at the top of the Settings tab, also works.",
+    "Voice has nothing to run on: no signed-in Luke account, and no OpenAI key. Signing in turns voice on; a key connected under Provider on the Voice page in Settings, after Permissions, also works.",
   [REALTIME_MINT_OUTCOME.DISABLED_BY_FIXTURE]:
     "This is a fixture or evidence run, which never uses credentials.",
   [REALTIME_MINT_OUTCOME.HTTP_ERROR]: "The API rejected the mint request.",
@@ -243,8 +243,7 @@ const REALTIME_MINT_EXPLANATIONS = {
     "The API returned a client secret that had already expired, which usually means the local clock is wrong.",
   [REALTIME_MINT_OUTCOME.NOT_SIGNED_IN]:
     "The Luke account behind hosted voice did not authenticate. Signing out and back in usually repairs it.",
-  [REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED]:
-    "Today's included voice is used up. It returns at midnight UTC, and a personal OpenAI key in Settings removes the daily allowance.",
+  [REALTIME_MINT_OUTCOME.QUOTA_EXHAUSTED]: "Voice is temporarily unavailable. Try again later.",
   [REALTIME_MINT_OUTCOME.HOSTED_UNAVAILABLE]:
     "Luke's hosted voice service is not answering right now. A personal OpenAI key in Settings works independently of it.",
 } satisfies Record<RealtimeMintOutcome, string>;

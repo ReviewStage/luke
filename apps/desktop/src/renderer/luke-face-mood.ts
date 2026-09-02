@@ -21,13 +21,6 @@ export interface FaceContext {
    */
   meetingQuiet: boolean;
   /**
-   * Whether today's hosted voice allowance is spent with no call left open —
-   * the panel's own standing state, read here so the face beside the housing
-   * can wear it too. Arithmetic on the service's reported quota, never
-   * anything a model decided.
-   */
-  voiceSpent: boolean;
-  /**
    * Whether the roster has been read at all yet. Until the first reading
    * lands, an empty total means "not looked yet" rather than "nothing to
    * watch", and the two must not wear the same face.
@@ -116,12 +109,6 @@ export function restingMotion(context: FaceContext): FaceMotion | undefined {
   // waits for it awake and still: falling asleep at launch would report an
   // empty desk he has not actually seen.
   if (context.total === 0 && context.settled) return FACE_MOTION.SLEEPING;
-  // The day's voice is spent. Ranked below both sleeps: a meeting's hold and
-  // an empty roster each say more about this moment than the meter does. It
-  // stays true until the quota's own reset, which is what a rest must do —
-  // and it is hushed rather than asleep, because the one thing a spent
-  // allowance must not say is that Luke stopped watching.
-  if (context.voiceSpent) return FACE_MOTION.HUSHED;
   return undefined;
 }
 

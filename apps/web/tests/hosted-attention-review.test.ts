@@ -22,7 +22,7 @@ const API_KEY = "sk-hosted-secret";
 
 const OPEN_SPEND: HostedSpend = {
   allowed: true,
-  quota: { used: 2, limit: 500, remaining: 498, resetsAt: NOW + 43_200_000 },
+  quota: { used: 2, limit: 5_000, remaining: 4_998, resetsAt: NOW + 43_200_000 },
 };
 
 const UPDATE = {
@@ -196,7 +196,7 @@ test("the gate order is method, kill switch, token, body, quota", async () => {
     options({
       spend: async () => ({
         allowed: false,
-        quota: { used: 501, limit: 500, remaining: 0, resetsAt: NOW + 43_200_000 },
+        quota: { used: 5_001, limit: 5_000, remaining: 0, resetsAt: NOW + 43_200_000 },
       }),
     }),
   );

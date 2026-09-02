@@ -18,7 +18,6 @@ import { HostedAttentionEvaluator } from "./hosted-attention-evaluator.js";
 import { HostedRealtimeCredentialMinter } from "./hosted-credentials.js";
 import type { RealtimeCredentialMinter } from "./minter.js";
 import { openAiRealtimeCredentials, unavailableRealtimeDiagnostics } from "./openai-credentials.js";
-import { HostedUsageReader } from "./quota.js";
 
 export interface VoiceCapabilityInput {
   credentialsUsable: boolean;
@@ -86,7 +85,6 @@ export class VoiceCapabilityAssembler {
   #attentionReviewer: SessionAttentionReviewer | undefined;
   #realtimeCredentials: RealtimeCredentialMinter | undefined;
   #unavailableDiagnostics: RealtimeDiagnostics;
-  #hostedUsageReader: HostedUsageReader | undefined;
   #voiceSource: VoiceSource = VOICE_SOURCE.ACCOUNT;
 
   constructor(options: VoiceCapabilityAssemblerOptions) {
@@ -107,10 +105,6 @@ export class VoiceCapabilityAssembler {
 
   get unavailableDiagnostics(): RealtimeDiagnostics {
     return this.#unavailableDiagnostics;
-  }
-
-  get hostedUsageReader(): HostedUsageReader | undefined {
-    return this.#hostedUsageReader;
   }
 
   /** Which credential the last applied policy settled on, for a count to name. */
@@ -169,7 +163,6 @@ export class VoiceCapabilityAssembler {
       fixtureMode: this.#options.fixtureRun(),
       apiKeyConfigured: apiKey !== undefined,
     });
-    this.#hostedUsageReader = policy.useHosted ? new HostedUsageReader(seams) : undefined;
     this.#voiceSource = policy.source;
     if (policy.useHosted) this.#warmHostedVoice();
     this.#report(apiKey !== undefined);

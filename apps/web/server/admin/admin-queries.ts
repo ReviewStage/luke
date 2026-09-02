@@ -18,7 +18,7 @@ import { adminFavorite } from "../db/favorite-schema.js";
 import type { createDatabase } from "../db/index.js";
 import { account, session, user } from "../db/schema.js";
 import { hostedUsage } from "../db/usage-schema.js";
-import { HOSTED_DAILY_LIMIT, HOSTED_METER, utcDayKey } from "../hosted/quota.js";
+import { HOSTED_DAILY_LIMIT, utcDayKey } from "../hosted/quota.js";
 import { isAdminRole, USER_ROLE } from "./admin-access.js";
 import { ADMIN_DAY_ACCOUNTS_LIMIT, type AdminDaySource } from "./admin-day.js";
 import {
@@ -279,8 +279,8 @@ async function readRetentionMetrics(
  */
 function ceilingReached(): SQL<unknown> | undefined {
   return or(
-    gt(hostedUsage.voiceCalls, HOSTED_DAILY_LIMIT[HOSTED_METER.VOICE_CALL]),
-    gt(hostedUsage.attentionReviews, HOSTED_DAILY_LIMIT[HOSTED_METER.ATTENTION_REVIEW]),
+    gt(hostedUsage.voiceCalls, HOSTED_DAILY_LIMIT),
+    gt(hostedUsage.attentionReviews, HOSTED_DAILY_LIMIT),
   );
 }
 

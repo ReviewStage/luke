@@ -135,7 +135,7 @@ interface SettingEntryDefinition<Value> {
 
 const SETTINGS_TAB = "the panel's Settings tab";
 const VOICE_PAGE = `${SETTINGS_TAB}, on its Voice page`;
-const VOICE_SOURCE_SECTION = `${SETTINGS_TAB}, on its front page, in the What Luke runs on section at the top`;
+const VOICE_SOURCE_SECTION = `${VOICE_PAGE}, in the Provider section after Permissions`;
 const APPEARANCE_PAGE = `${SETTINGS_TAB}, on its Appearance page`;
 const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
 const CONDUCTOR_ROW_PATH = `the Conductor row under Providers, in ${CONNECTIONS_PAGE} — drawn once Conductor is connected`;
@@ -527,14 +527,13 @@ export const APP_SETTING_SCHEMA = {
     field: "voiceSource",
     default: undefined,
     guard: (value: UnparsedWireValue) => optional(value, isVoiceSource),
-    settingsPage: SETTINGS_PAGE.ROOT,
+    settingsPage: SETTINGS_PAGE.VOICE,
     guideEntry: settingGuideEntry("voiceSource", [APP_SETTING_ID.VOICE_SOURCE], (settings) => ({
       id: APP_SETTING_ID.VOICE_SOURCE,
-      label: "What Luke runs on",
+      label: "Provider",
       description:
-        "Which credential Luke speaks and reviews sessions on: the signed-in Luke account, " +
-        "metered daily, or the developer's own OpenAI key, unmetered and billed by OpenAI. A " +
-        "key stays stored either way.",
+        "Which credential Luke speaks and reviews sessions on: the signed-in Luke account " +
+        "or the developer's own OpenAI key. A key stays stored either way.",
       kind: APP_SETTING_KIND.CHOICE,
       value: VOICE_SOURCE_CHOICE[guideValue<VoiceSource>(settings, "voiceSource")],
       defaultValue: VOICE_SOURCE_CHOICE[VOICE_SOURCE.ACCOUNT],

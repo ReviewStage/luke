@@ -88,7 +88,6 @@ test("the assembler builds and clears the keyed voice capabilities as one unit",
   await assembler.apply();
   assert.ok(assembler.realtimeCredentials);
   assert.ok(assembler.attentionReviewer);
-  assert.equal(assembler.hostedUsageReader, undefined);
 
   key = undefined;
   await assembler.apply();
@@ -151,7 +150,6 @@ test("the assembler keeps fixture runs credential-free without reading a key", a
   await assembler.apply();
   assert.equal(keyReads, 0);
   assert.equal(assembler.realtimeCredentials, undefined);
-  assert.equal(assembler.hostedUsageReader, undefined);
   assert.equal(
     assembler.unavailableDiagnostics.lastOutcome,
     REALTIME_MINT_OUTCOME.DISABLED_BY_FIXTURE,

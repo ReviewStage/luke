@@ -68,8 +68,8 @@ export { APP_SETTING_ID, isAppSettingId } from "@sidecar/settings";
 /** Where the switches live, said once so every entry words it the same way. */
 const SETTINGS_TAB = "the panel's Settings tab";
 
-/** Where the allowance meters and the OpenAI key row both live. */
-const VOICE_SOURCE_SECTION = `${SETTINGS_TAB}, on its front page, in the What Luke runs on section at the top`;
+/** Where the hosted account and OpenAI key choices both live. */
+const VOICE_SOURCE_SECTION = `${SETTINGS_TAB}, on its Voice page, in the Provider section after Permissions`;
 /** Where the signed-in identity and the two ways out of it live. */
 const ACCOUNT_SECTION = `the Account section, at the foot of ${SETTINGS_TAB}'s front page`;
 const SHORTCUTS_PAGE = `${SETTINGS_TAB}, on its Keyboard shortcuts page`;
@@ -294,7 +294,7 @@ function integrationFacts(settings: AppSettingsView): AppGuideFact[] {
 
 /**
  * The one key that is neither an agent's nor an integration's, described where
- * its row lives: at the top of the Voice page, beside the feature it turns on.
+ * its row lives: after Permissions on the Voice page, beside the feature it turns on.
  */
 function voiceKeyFact(settings: AppSettingsView, voiceAvailable: boolean): AppGuideFact {
   const openai = CREDENTIAL_PROVIDERS[VOICE_CREDENTIAL_PROVIDER_ID];
@@ -305,13 +305,11 @@ function voiceKeyFact(settings: AppSettingsView, voiceAvailable: boolean): AppGu
     detail:
       `${openai.displayName} (${connectionWord(source)}). ` +
       (hosted
-        ? `Voice and session review run on the signed-in Luke account's daily allowance; a ` +
-          `key of the developer's own runs them unmetered instead, billed by OpenAI. When a ` +
-          `day's allowance is spent, watching continues unmetered and only voice pauses ` +
-          `until the reset. `
+        ? `Voice and session review run on the signed-in Luke account; a key of the ` +
+          `developer's own runs them through OpenAI instead, billed by OpenAI. `
         : source === CREDENTIAL_SOURCE.NONE
           ? `Signing in — or connecting a key — is what lets Luke speak and review sessions. `
-          : `Voice and session review run on this key: no daily limit, nothing through Luke's ` +
+          : `Voice and session review run on this key: nothing through Luke's ` +
             `service, and OpenAI bills you for what you use. `) +
       `The key is typed by hand into ${VOICE_SOURCE_SECTION} — never read from the ` +
       `environment, never spoken, and never repeated back.`,
@@ -403,8 +401,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "The Settings tab",
       detail:
-        "Where Luke is configured by hand. The front page leads with What Luke runs on and " +
-        "its usage meters, and opens the Voice, Appearance, Keyboard shortcuts, and " +
+        "Where Luke is configured by hand. The front page opens the Voice, Appearance, " +
+        "Keyboard shortcuts, and " +
         "Connections pages; Feedback, Account, and Quit stay on the front page. A settings " +
         "search — the magnifier, or Command-F — finds any row, by hand alone: no spoken ask " +
         "can search it.",
@@ -577,7 +575,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
             label: "Voice",
             detail:
               "Off: nothing to run voice on, so no conversation can be opened. " +
-              `Signing in turns it on with the included allowance; a key entered in ${VOICE_SOURCE_SECTION} also works.`,
+              `Signing in turns it on; a key entered in ${VOICE_SOURCE_SECTION} also works.`,
           },
         ]),
     providersFact(input.settings),

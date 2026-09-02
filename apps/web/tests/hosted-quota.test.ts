@@ -4,8 +4,6 @@ import { hostedUsage, introductionUsage } from "../server/db/usage-schema";
 import {
   HOSTED_DAILY_LIMIT,
   HOSTED_METER,
-  INTRODUCTION_DAILY_LIMIT,
-  INTRODUCTION_GLOBAL_CALLER,
   spendHostedMeter,
   spendIntroductionMeter,
   utcDayEnd,
@@ -81,8 +79,8 @@ test("spending a voice call increments only its own counter", async () => {
   assert.equal(spend.allowed, true);
   assert.deepEqual(spend.quota, {
     used: 1,
-    limit: HOSTED_DAILY_LIMIT[HOSTED_METER.VOICE_CALL],
-    remaining: HOSTED_DAILY_LIMIT[HOSTED_METER.VOICE_CALL] - 1,
+    limit: HOSTED_DAILY_LIMIT,
+    remaining: HOSTED_DAILY_LIMIT - 1,
     resetsAt: utcDayEnd("2026-08-17"),
   });
 });
@@ -112,7 +110,7 @@ interface IntroductionUsageInsert {
 
 /**
  * A database that answers the introduction meter's upserts by keeping real
- * per-caller counts, so a test can walk a caller through its cap.
+ * count, so a test can walk the endpoint through its cap.
  */
 function introductionDatabase(counts: Map<string, number>): IntroductionDatabase {
   // SAFETY: Test double implements only the insert chain spendIntroductionMeter exercises.
@@ -134,64 +132,56 @@ function introductionDatabase(counts: Map<string, number>): IntroductionDatabase
   } as unknown as IntroductionDatabase;
 }
 
-test("an introduction spend moves the caller's row and the global row together", async () => {
+test("an introduction spend moves the shared counter", async () => {
   const counts = new Map<string, number>();
   const spend = await spendIntroductionMeter(introductionDatabase(counts), {
-    callerKey: "caller-hash",
     now: NOON_UTC,
   });
 
   assert.equal(spend.allowed, true);
-  assert.equal(counts.get("caller-hash"), 1);
-  assert.equal(counts.get(INTRODUCTION_GLOBAL_CALLER), 1);
+  assert.deepEqual([...counts.values()], [1]);
 });
 
-test("a caller past its own cap is refused without spending the shared allowance", async () => {
-  const counts = new Map<string, number>([["caller-hash", INTRODUCTION_DAILY_LIMIT.PER_CALLER]]);
+test("a spent introduction ceiling refuses the next mint", async () => {
+  const counts = new Map<string, number>([["global", HOSTED_DAILY_LIMIT]]);
   const spend = await spendIntroductionMeter(introductionDatabase(counts), {
-    callerKey: "caller-hash",
     now: NOON_UTC,
   });
 
   assert.equal(spend.allowed, false);
-  // The refused attempt still counts against its own row — past the ceiling
-  // every answer is the same no — but the global row never moves.
-  assert.equal(counts.get("caller-hash"), INTRODUCTION_DAILY_LIMIT.PER_CALLER + 1);
-  assert.equal(counts.get(INTRODUCTION_GLOBAL_CALLER), undefined);
+  assert.deepEqual([...counts.values()], [HOSTED_DAILY_LIMIT + 1]);
 });
 
-test("a spent global ceiling refuses a caller who has minted nothing today", async () => {
-  const counts = new Map<string, number>([
-    [INTRODUCTION_GLOBAL_CALLER, INTRODUCTION_DAILY_LIMIT.GLOBAL],
-  ]);
-  const spend = await spendIntroductionMeter(introductionDatabase(counts), {
-    callerKey: "fresh-caller",
-    now: NOON_UTC,
-  });
-
-  assert.equal(spend.allowed, false);
-  assert.equal(counts.get("fresh-caller"), 1);
+test("the emergency ceiling stays high", () => {
+  assert.equal(HOSTED_DAILY_LIMIT, 5_000);
 });
 
-test("the introduction ceilings stay a handful per caller under a bounded day", () => {
-  assert.equal(INTRODUCTION_DAILY_LIMIT.PER_CALLER, 5);
-  assert.equal(INTRODUCTION_DAILY_LIMIT.GLOBAL, 500);
-});
+test("each hosted ceiling allows its last use and refuses the next", async () => {
+  for (const meter of Object.values(HOSTED_METER)) {
+    const limit = HOSTED_DAILY_LIMIT;
+    const row =
+      meter === HOSTED_METER.VOICE_CALL
+        ? { voiceCalls: limit, attentionReviews: 0 }
+        : { voiceCalls: 0, attentionReviews: limit };
 
-test("the ceiling itself is allowed and the next use is refused with nothing left", async () => {
-  const limit = HOSTED_DAILY_LIMIT[HOSTED_METER.VOICE_CALL];
+    const atLimit = await spendHostedMeter(usageDatabase(row).database, {
+      userId: "user-1",
+      meter,
+      now: NOON_UTC,
+    });
+    assert.equal(atLimit.allowed, true);
+    assert.equal(atLimit.quota.remaining, 0);
 
-  const atLimit = await spendHostedMeter(
-    usageDatabase({ voiceCalls: limit, attentionReviews: 0 }).database,
-    { userId: "user-1", meter: HOSTED_METER.VOICE_CALL, now: NOON_UTC },
-  );
-  assert.equal(atLimit.allowed, true);
-  assert.equal(atLimit.quota.remaining, 0);
-
-  const overLimit = await spendHostedMeter(
-    usageDatabase({ voiceCalls: limit + 1, attentionReviews: 0 }).database,
-    { userId: "user-1", meter: HOSTED_METER.VOICE_CALL, now: NOON_UTC },
-  );
-  assert.equal(overLimit.allowed, false);
-  assert.equal(overLimit.quota.remaining, 0);
+    const overRow =
+      meter === HOSTED_METER.VOICE_CALL
+        ? { voiceCalls: limit + 1, attentionReviews: 0 }
+        : { voiceCalls: 0, attentionReviews: limit + 1 };
+    const overLimit = await spendHostedMeter(usageDatabase(overRow).database, {
+      userId: "user-1",
+      meter,
+      now: NOON_UTC,
+    });
+    assert.equal(overLimit.allowed, false);
+    assert.equal(overLimit.quota.remaining, 0);
+  }
 });

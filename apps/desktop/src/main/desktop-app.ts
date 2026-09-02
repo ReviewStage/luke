@@ -1700,7 +1700,6 @@ function registerIpc(): void {
       return undefined;
     },
     unavailableDiagnostics: () => voiceCapabilities.unavailableDiagnostics,
-    hostedUsageReader: () => voiceCapabilities.hostedUsageReader,
     recordProductEvent,
     recordAgentTrace: (trace) => agentTrace?.recordWire(trace),
   });

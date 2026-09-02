@@ -50,7 +50,7 @@ import type {
   WorkspaceProviderId,
 } from "#shared/wire/session";
 import { askRefusal } from "./ask-luke";
-import { voiceQuotaSpentNote } from "./microphone-access";
+import { hostedVoiceUnavailableNote } from "./microphone-access";
 import { openPreferredMicrophone } from "./microphone-choice";
 import { type AppActionCarrier, RealtimeVoiceSession } from "./realtime-session";
 import { SpokenNoticeAnnouncer } from "./spoken-notices";
@@ -529,16 +529,8 @@ export interface VoiceConversation {
    * running out — whichever comes first.
    */
   voiceError: string | undefined;
-  /**
-   * A state worth the same strip a failure borrows, in its own quieter tone:
-   * today's allowance spent under a talk-key press, or the run-out the panel
-   * noticed. Kept apart from {@link voiceError} because the two colour
-   * differently — a spent day is not a fault — while sharing its clock and
-   * its yielding to live words.
-   */
+  /** A temporary state shown on the caption strip in its quieter notice tone. */
   voiceNotice: string | undefined;
-  /** Puts a sentence on the notice strip: the run-out announcement's one way in. */
-  announceVoiceNotice: (text: string) => void;
   voiceStatus: RealtimeStatus;
   setVoiceStatus: (status: RealtimeStatus) => void;
   talkOpening: boolean;
@@ -1311,16 +1303,10 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     return permission;
   }, [ensureVoiceSession, startConversation]);
 
-  /**
-   * The spent-allowance sentence when that is what "unavailable" means right
-   * now, read off the voice service's own diagnostics at the moment of the
-   * refusal — or nothing, leaving the ordinary unavailability words to stand.
-   * Asked at the moment rather than held: the day turns over on its own, and
-   * a note decided at launch would outlive the allowance coming back.
-   */
-  const spentAllowanceNote = useCallback(async (): Promise<string | undefined> => {
+  /** The neutral note used when the hosted service's emergency brake refuses a call. */
+  const hostedUnavailableNote = useCallback(async (): Promise<string | undefined> => {
     const diagnostics = await window.sidecar.requestRealtimeDiagnostics().catch(() => undefined);
-    return voiceQuotaSpentNote(diagnostics, Date.now());
+    return hostedVoiceUnavailableNote(diagnostics);
   }, []);
 
   /**
@@ -1407,16 +1393,13 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     // `connect` inside stands Luke's own call down if one is open: the
     // developer pressing the key always gets the developer's call.
     await startMicrophone();
-    // A press against a spent allowance would otherwise be answered by
-    // nothing at all — the one silence that reads as Luke being broken. The
-    // sentence lands on the notice strip, where the reply would have: a
-    // notice rather than an error, because a spent day is a state with its
-    // own return, not a fault.
+    // A hosted refusal would otherwise be answered by nothing at all. Keep
+    // the emergency ceiling private and surface only temporary unavailability.
     if (session.status === REALTIME_STATUS.UNAVAILABLE) {
-      const spent = await spentAllowanceNote();
-      if (spent) setVoiceNotice(spent);
+      const unavailable = await hostedUnavailableNote();
+      if (unavailable) setVoiceNotice(unavailable);
     }
-  }, [ensureVoiceSession, microphoneStatus, spentAllowanceNote, startMicrophone]);
+  }, [ensureVoiceSession, hostedUnavailableNote, microphoneStatus, startMicrophone]);
 
   /**
    * The talk key coming up. How long it was held is the whole of the decision:
@@ -1507,12 +1490,12 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
         setVoiceNotice(undefined);
         return undefined;
       }
-      const spent =
-        session.status === REALTIME_STATUS.UNAVAILABLE ? await spentAllowanceNote() : undefined;
-      const refusal = askRefusal(session.status, spent);
+      const unavailable =
+        session.status === REALTIME_STATUS.UNAVAILABLE ? await hostedUnavailableNote() : undefined;
+      const refusal = askRefusal(session.status, unavailable);
       // The refusal lands where the reply would have: on the caption strip,
-      // in the notice tone, the same way a talk-key press against a spent
-      // allowance is answered. The composer draws no line of its own — one
+      // in the notice tone, the same way a talk-key press against a hosted
+      // refusal is answered. The composer draws no line of its own — one
       // mechanism, one look — and a failure's red already on the strip
       // outranks this, so the two never fight for the box.
       setVoiceNotice(refusal);
@@ -1522,7 +1505,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       markTranscriptSpoken,
       rememberConversationEntry,
       ensureVoiceSession,
-      spentAllowanceNote,
+      hostedUnavailableNote,
       startConversation,
     ],
   );
@@ -1652,8 +1635,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     return () => clearTimeout(timer);
   }, [voiceError]);
 
-  // The notice leaves on the same clock the error does: it shares the strip,
-  // and the state it reports keeps standing in the composer and on the face.
+  // The notice leaves on the same clock the error does: it shares the strip.
   useEffect(() => {
     if (voiceNotice === undefined) return;
     const timer = setTimeout(() => setVoiceNotice(undefined), VOICE_ERROR_NOTICE_MS);
@@ -1867,7 +1849,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     setMicrophoneStatus,
     voiceError,
     voiceNotice,
-    announceVoiceNotice: setVoiceNotice,
     voiceStatus,
     setVoiceStatus,
     talkOpening,
