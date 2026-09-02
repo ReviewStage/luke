@@ -31,6 +31,7 @@ struct SessionDetailView: View {
     let onDelivered: () async -> Void
 
     @Environment(AccountSession.self) private var account
+    @Environment(ProductEventSender.self) private var events
     @State private var text = ""
 
     var body: some View {
@@ -80,7 +81,6 @@ struct SessionDetailView: View {
                 }
             }
         }
-        .toolbarBackground(Color.ground, for: .navigationBar)
         .safeAreaInset(edge: .bottom, spacing: 0) { inputBar }
     }
 
@@ -132,43 +132,35 @@ struct SessionDetailView: View {
     }
 
     /// The input takes iMessage's own anatomy where a message is advertised —
-    /// body-size text in a stroked capsule, the send button inside the
-    /// capsule's trailing edge, popping in only once there is something to
-    /// send — and where none is, the honest absence is said quietly instead
-    /// of drawing a field that could only refuse.
+    /// body-size text in a capsule, the send button inscribed at its trailing
+    /// edge, popping in only once there is something to send. On systems that
+    /// draw Liquid Glass the capsule is the system's own glass floating over
+    /// the bubbles scrolling beneath; earlier systems keep an opaque bar on
+    /// the chat's own ground. Where no message is advertised, the honest
+    /// absence is said quietly instead of drawing a field that could only
+    /// refuse.
     @ViewBuilder
     private var inputBar: some View {
         if session.canReceiveMessage {
-            TextField("Message", text: $text, axis: .vertical)
-                .lineLimit(1 ... 5)
-                .font(.body)
-                .foregroundStyle(Color.ink)
-                .padding(.leading, 12)
-                .padding(.trailing, 36)
-                .padding(.vertical, 7)
-                .background(
-                    RoundedRectangle(cornerRadius: 18)
-                        .fill(Color.cardFill)
-                        .strokeBorder(Color.controlStroke, lineWidth: 1)
-                )
-                .overlay(alignment: .bottomTrailing) {
-                    if canSend {
-                        Button(action: send) {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.system(size: 28))
-                                .foregroundStyle(Color.accentColor)
-                        }
-                        .padding(3)
-                        .transition(.scale.combined(with: .opacity))
-                    }
-                }
-                .animation(.spring(duration: 0.25), value: canSend)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                // The chat's own ground, not the system bar material: the
-                // screen and its bars all stand on Color.ground, and a
-                // material would resolve near-white over it in light mode.
-                .background(Color.ground)
+            if #available(iOS 26.0, *) {
+                composerField
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+            } else {
+                composerField
+                    .background(
+                        RoundedRectangle(cornerRadius: 22)
+                            .fill(Color.cardFill)
+                            .strokeBorder(Color.controlStroke, lineWidth: 1)
+                    )
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    // Without glass to float on, the bar stands on the chat's
+                    // own ground — a system material would resolve near-white
+                    // over it in light mode.
+                    .background(Color.ground)
+            }
         } else {
             Text("This session isn't accepting messages right now.")
                 .font(.footnote)
@@ -177,6 +169,30 @@ struct SessionDetailView: View {
                 .padding(.vertical, 10)
                 .background(Color.ground)
         }
+    }
+
+    private var composerField: some View {
+        TextField("Message", text: $text, axis: .vertical)
+            .lineLimit(1 ... 5)
+            .font(.body)
+            .foregroundStyle(Color.ink)
+            .padding(.leading, 14)
+            .padding(.trailing, 42)
+            .padding(.vertical, 9)
+            .overlay(alignment: .bottomTrailing) {
+                if canSend {
+                    Button(action: send) {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 30, height: 30)
+                            .background(Color.accentColor, in: Circle())
+                    }
+                    .padding(5)
+                    .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .animation(.spring(duration: 0.25), value: canSend)
     }
 
     private var canSend: Bool {
@@ -202,10 +218,14 @@ struct SessionDetailView: View {
                         text: message.text
                     )
                 }
-                delivery =
-                    answer.result == .accepted
-                    ? .sent
-                    : .failed(reason: answer.reason ?? "The message was not delivered.")
+                if answer.result == .accepted {
+                    delivery = .sent
+                    if let provider = ProductProviderID(rawValue: session.providerId) {
+                        events.record(.sessionActSend(provider: provider, act: .messageSend))
+                    }
+                } else {
+                    delivery = .failed(reason: answer.reason ?? "The message was not delivered.")
+                }
             } catch is AccountSessionError {
                 delivery = .failed(reason: "Signed out.")
             } catch {

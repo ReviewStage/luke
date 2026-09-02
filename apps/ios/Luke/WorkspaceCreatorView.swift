@@ -16,6 +16,7 @@ struct WorkspaceCreatorSheet: View {
     let onCreated: () -> Void
 
     @Environment(AccountSession.self) private var session
+    @Environment(ProductEventSender.self) private var events
     @Environment(\.dismiss) private var dismiss
 
     private let defaults = WorkspaceCreationDefaults()
@@ -293,6 +294,9 @@ struct WorkspaceCreatorSheet: View {
                     )
                 }
                 if created.result == .accepted {
+                    if let provider = ProductProviderID(rawValue: project.providerId) {
+                        events.record(.sessionActSend(provider: provider, act: .workspaceCreate))
+                    }
                     rememberChoices()
                     onCreated()
                 } else {

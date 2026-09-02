@@ -5,14 +5,13 @@ import UIKit
 /// Shows the signed-in user's active cloud sessions with pull-to-refresh.
 struct SessionsView: View {
     @Environment(AccountSession.self) private var session
-
-    /// True once the first fetch has answered, success or failure alike. The
-    /// signed-in screen holds its loading screen over everything until then,
-    /// and never again: later refreshes redraw in place.
-    @Binding var firstLoadDone: Bool
+    @Environment(ProductEventSender.self) private var events
 
     @State private var sessions: [RosterSession] = []
-    @State private var isLoading = false
+    /// Starts true because the list's first frame can paint before its
+    /// `.task` begins the fetch, and that frame must show the skeletons
+    /// rather than claim "No active sessions" nothing has checked yet.
+    @State private var isLoading = true
     @State private var fetchError: String?
     @State private var searchQuery = ""
     @State private var filters: Set<SessionFilter> = []
@@ -185,8 +184,6 @@ struct SessionsView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Color.ground.ignoresSafeArea())
-        .toolbarBackground(Color.ground, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
         .searchable(text: $searchQuery, prompt: "Search sessions")
         .toolbar {
             // The filter rides with the search the way Notion docks one in
@@ -214,10 +211,7 @@ struct SessionsView: View {
                 .presentationDetents([.medium, .large])
         }
         .refreshable { await refreshSessions() }
-        .task {
-            await refreshSessions()
-            firstLoadDone = true
-        }
+        .task { await refreshSessions() }
     }
 
     private var optionsButton: some View {
@@ -451,10 +445,25 @@ struct SessionsView: View {
             // Animated so a row an act just removed — an archive above all —
             // slides out the way a deleted Mail row does, instead of blinking.
             withAnimation { sessions = fetched }
+            recordObservation(fetched)
         } catch is AccountSessionError {
             ()  // Signed out — the state change redraws automatically.
         } catch {
             fetchError = error.localizedDescription
+        }
+    }
+
+    /// One count per provider per day, in buckets — refreshing is not using.
+    /// A provider id the shared vocabulary has not answered for is left
+    /// uncounted rather than sent to be refused.
+    private func recordObservation(_ sessions: [RosterSession]) {
+        let rowsByProvider = Dictionary(grouping: sessions, by: \.providerId)
+        for (providerId, rows) in rowsByProvider {
+            guard let provider = ProductProviderID(rawValue: providerId) else { continue }
+            events.recordOncePerDay(
+                .sessionObserve(provider: provider, sessions: .bucket(for: rows.count)),
+                discriminator: providerId
+            )
         }
     }
 }
@@ -498,8 +507,8 @@ private struct SessionOptionsSheet: View {
         NavigationStack {
             List {
                 Section("Sort by") {
-                    sortRow(.urgency, label: "Urgent", detail: "Most urgent first")
-                    sortRow(.recency, label: "Recent", detail: "Most recently observed first")
+                    sortRow(.urgency, label: "Urgent")
+                    sortRow(.recency, label: "Recent")
                 }
                 if !groups.isEmpty {
                     Section("Filter by") {
@@ -531,18 +540,13 @@ private struct SessionOptionsSheet: View {
         }
     }
 
-    private func sortRow(_ value: SessionSort, label: String, detail: String) -> some View {
+    private func sortRow(_ value: SessionSort, label: String) -> some View {
         Button {
             sort = value
         } label: {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(label)
-                        .foregroundStyle(Color.ink)
-                    Text(detail)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+                Text(label)
+                    .foregroundStyle(Color.ink)
                 Spacer()
                 Image(systemName: "checkmark")
                     .fontWeight(.semibold)
@@ -582,8 +586,11 @@ private struct AxisFilterPage: View {
                         Text(optionTitle(option.filter))
                             .foregroundStyle(Color.ink)
                         Spacer()
+                        // .secondary here would resolve against the button's
+                        // tint and read blue; the count wears the panel's own
+                        // secondary ink instead.
                         Text(option.count, format: .number)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.inkSecondary)
                         Image(systemName: "checkmark")
                             .fontWeight(.semibold)
                             .opacity(filters.contains(option.filter) ? 1 : 0)
