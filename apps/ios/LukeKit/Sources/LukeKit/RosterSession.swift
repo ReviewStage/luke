@@ -63,6 +63,10 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
     public let canRename: Bool
     /// Whether the latest observation advertised renaming the session's workspace.
     public let canRenameWorkspace: Bool
+    /// Whether the hosted messages endpoint can read this session's
+    /// conversation — a capability of the provider's documented transcript
+    /// read, so a screen that sees it absent falls back to the recap alone.
+    public let canReadConversation: Bool
 
     public var id: String { "\(providerId):\(sessionId)" }
 
@@ -87,7 +91,8 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
         controls: [RosterSessionControl] = [],
         spawnableAgents: [String] = [],
         canRename: Bool = false,
-        canRenameWorkspace: Bool = false
+        canRenameWorkspace: Bool = false,
+        canReadConversation: Bool = false
     ) {
         self.providerId = providerId
         self.sessionId = sessionId
@@ -103,6 +108,7 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
         self.spawnableAgents = spawnableAgents
         self.canRename = canRename
         self.canRenameWorkspace = canRenameWorkspace
+        self.canReadConversation = canReadConversation
     }
 
     init?(json: [String: Any]) {
@@ -132,5 +138,6 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
         self.spawnableAgents = agents.filter { !$0.isEmpty }
         self.canRename = json["canRename"] as? Bool ?? false
         self.canRenameWorkspace = json["canRenameWorkspace"] as? Bool ?? false
+        self.canReadConversation = json["canReadConversation"] as? Bool ?? false
     }
 }
