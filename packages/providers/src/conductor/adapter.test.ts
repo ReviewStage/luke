@@ -53,6 +53,10 @@ interface TestSession {
   lastError?: string;
   agentType?: string;
   transcriptTail?: string;
+  /** What the documented transcript read holds for this session, in order. */
+  storedMessages?: readonly JsonObject[];
+  /** Misbehave: refuse the transcript read itself. */
+  messagesHttpStatus?: number;
 }
 
 interface TestApi {
@@ -64,6 +68,12 @@ interface TestApi {
   createWithoutSessionId?: boolean;
   /** Misbehave: refuse the transcripts-view read. */
   sqlHttpStatus?: number;
+  /**
+   * The page bound the transcript read enforces server-side, whatever limit
+   * was asked for — the real endpoint caps at 100; a smaller cap here lets a
+   * test walk several pages without hundreds of fixture messages.
+   */
+  messagesPageSize?: number;
 }
 
 function isoTimestamp(timestampMs: number): string {
@@ -229,6 +239,28 @@ function fakeConductorApi(api: TestApi) {
           api.sessions.filter((session) => session.workspaceId === segments[2]).map(sessionPayload),
         ),
       );
+    }
+    if (segments[1] === "sessions" && segments[3] === "messages") {
+      const session = api.sessions.find((candidate) => candidate.id === segments[2]);
+      if (!session) return jsonResponse({}, HTTP_STATUS.NOT_FOUND);
+      if (session.messagesHttpStatus) return jsonResponse({}, session.messagesHttpStatus);
+      const stored = session.storedMessages ?? [];
+      const after = request.searchParams.get("after");
+      let start = Number(request.searchParams.get("offset") ?? "0");
+      if (after !== null) {
+        const index = stored.findIndex((message) => message.id === after);
+        // The real store refuses a cursor it never issued.
+        if (index < 0) return jsonResponse({}, HTTP_STATUS.NOT_FOUND);
+        start = index + 1;
+      }
+      const pageBound = api.messagesPageSize ?? 100;
+      const limit = Math.min(Number(request.searchParams.get("limit") ?? "100"), pageBound);
+      const data = stored.slice(start, start + limit);
+      return jsonResponse({
+        data,
+        offset: start,
+        hasMore: start + data.length < stored.length,
+      });
     }
     if (segments[1] === "workspaces" && segments[3] === "status") {
       const workspace = api.workspaces.find((candidate) => candidate.id === segments[2]);
@@ -2497,4 +2529,392 @@ test("refuses to start an agent the row never listed, before any request exists"
     reason: "That act is not supported by the latest observation.",
   });
   assert.equal(api.requests.length, requestsBefore);
+});
+
+// --- Conversation reading ---
+
+const CONVERSATION_WORKSPACE_ID = "workspace-conversation";
+const STORED_MESSAGE_UUIDS = [
+  "aaaaaaaa-0000-4000-8000-000000000001",
+  "aaaaaaaa-0000-4000-8000-000000000002",
+  "aaaaaaaa-0000-4000-8000-000000000003",
+  "aaaaaaaa-0000-4000-8000-000000000004",
+  "aaaaaaaa-0000-4000-8000-000000000005",
+  "aaaaaaaa-0000-4000-8000-000000000006",
+  "aaaaaaaa-0000-4000-8000-000000000007",
+  "aaaaaaaa-0000-4000-8000-000000000008",
+] as const;
+
+function storedUserMessage(id: string, message: string, receivedAtMs: number): JsonObject {
+  return {
+    id,
+    sessionId: IDLE_SESSION_UUID,
+    sessionIndex: 1,
+    type: "userMessage",
+    content: { type: "userMessage", message },
+    receivedAt: isoTimestamp(receivedAtMs),
+  };
+}
+
+function storedAgentEvent(id: string, rawPayload: JsonObject, receivedAtMs: number): JsonObject {
+  return {
+    id,
+    sessionId: IDLE_SESSION_UUID,
+    sessionIndex: 2,
+    type: "agent",
+    content: { type: "agent", rawPayload },
+    receivedAt: isoTimestamp(receivedAtMs),
+  };
+}
+
+/** A conversation whose store holds every shape the parse must judge. */
+function conversationApi(overrides: Partial<TestSession> = {}, api: Partial<TestApi> = {}) {
+  return fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [{ ...ownedWorkspace(CONVERSATION_WORKSPACE_ID, TEST_TIME - 30_000) }],
+    sessions: [
+      {
+        id: IDLE_SESSION_UUID,
+        workspaceId: CONVERSATION_WORKSPACE_ID,
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 5_000,
+        storedMessages: [
+          storedUserMessage(
+            STORED_MESSAGE_UUIDS[0],
+            "Fix the flaky roster test",
+            TEST_TIME - 9_000,
+          ),
+          // Thinking alone is not the agent speaking, so no bubble may wear it.
+          storedAgentEvent(
+            STORED_MESSAGE_UUIDS[1],
+            { type: "assistant", message: { content: [{ type: "thinking", thinking: "plan" }] } },
+            TEST_TIME - 8_000,
+          ),
+          storedAgentEvent(
+            STORED_MESSAGE_UUIDS[2],
+            {
+              type: "assistant",
+              message: {
+                content: [
+                  { type: "thinking", thinking: "quiet" },
+                  { type: "text", text: "Looking at the test now." },
+                  { type: "tool_use", name: "Bash", input: {} },
+                  { type: "text", text: "It races the clock." },
+                ],
+              },
+            },
+            TEST_TIME - 7_000,
+          ),
+          // A Claude-shaped `user` event is tool output, not the developer.
+          storedAgentEvent(
+            STORED_MESSAGE_UUIDS[3],
+            { type: "user", message: { content: [{ type: "tool_result", content: "ok" }] } },
+            TEST_TIME - 6_000,
+          ),
+          // A Codex item still streaming has no words yet.
+          storedAgentEvent(
+            STORED_MESSAGE_UUIDS[4],
+            { event: { type: "item.started", item: { type: "agentMessage", text: "" } } },
+            TEST_TIME - 5_000,
+          ),
+          storedAgentEvent(
+            STORED_MESSAGE_UUIDS[5],
+            {
+              event: {
+                type: "item.completed",
+                item: { type: "agentMessage", text: "Fixed: the test now stubs the clock." },
+              },
+            },
+            TEST_TIME - 4_000,
+          ),
+          // A completed command is a tool at work, not the agent speaking.
+          storedAgentEvent(
+            STORED_MESSAGE_UUIDS[6],
+            {
+              event: {
+                type: "item.completed",
+                item: { type: "commandExecution", command: "pnpm test" },
+              },
+            },
+            TEST_TIME - 3_000,
+          ),
+          // A lifecycle event has no author a bubble can wear.
+          storedAgentEvent(
+            STORED_MESSAGE_UUIDS[7],
+            { type: "system", subtype: "init" },
+            TEST_TIME - 2_000,
+          ),
+        ],
+        ...overrides,
+      },
+    ],
+    ...api,
+  });
+}
+
+test("reads an observed chat's conversation as the attributed words alone", async () => {
+  const api = conversationApi();
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  const result = await adapter.readConversation({ providerSessionId: IDLE_SESSION_UUID });
+
+  assert.equal(result.status, "accepted");
+  if (result.status !== "accepted") return;
+  assert.deepEqual(result.messages, [
+    {
+      id: STORED_MESSAGE_UUIDS[0],
+      author: "user",
+      text: "Fix the flaky roster test",
+      receivedAt: TEST_TIME - 9_000,
+    },
+    {
+      id: STORED_MESSAGE_UUIDS[2],
+      author: "agent",
+      text: "Looking at the test now.\n\nIt races the clock.",
+      receivedAt: TEST_TIME - 7_000,
+    },
+    {
+      id: STORED_MESSAGE_UUIDS[5],
+      author: "agent",
+      text: "Fixed: the test now stubs the clock.",
+      receivedAt: TEST_TIME - 4_000,
+    },
+  ]);
+  // The cursor names the newest stored message the page consumed — dropped
+  // or kept — so the poll that follows resumes past the lifecycle noise too.
+  assert.equal(result.lastMessageId, STORED_MESSAGE_UUIDS[7]);
+  assert.equal(result.hasMore, false);
+  // The whole transcript fit in one page, so the history starts at its start.
+  assert.equal(result.firstOffset, 0);
+  assert.equal(result.hasOlder, false);
+
+  const read = api.requests.at(-1);
+  assert.equal(read?.method, "GET");
+  assert.equal(read?.pathname, `/v0/sessions/${IDLE_SESSION_UUID}/messages`);
+  // The opening read seeks the end and pages backward: offsets, never `after`.
+  assert.equal(read?.searchParams.get("after"), null);
+  assert.equal(read?.searchParams.get("offset"), "0");
+});
+
+test("continues a conversation read behind the cursor its last answer handed back", async () => {
+  const api = conversationApi();
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  const result = await adapter.readConversation({
+    providerSessionId: IDLE_SESSION_UUID,
+    afterMessageId: STORED_MESSAGE_UUIDS[2],
+  });
+
+  assert.equal(result.status, "accepted");
+  if (result.status !== "accepted") return;
+  assert.deepEqual(
+    result.messages.map((message) => message.id),
+    [STORED_MESSAGE_UUIDS[5]],
+  );
+  assert.equal(result.lastMessageId, STORED_MESSAGE_UUIDS[7]);
+  // A poll never looks backward, so it reports no history position.
+  assert.equal(result.firstOffset, undefined);
+  assert.equal(result.hasOlder, undefined);
+
+  const read = api.requests.at(-1);
+  assert.equal(read?.searchParams.get("after"), STORED_MESSAGE_UUIDS[2]);
+});
+
+test("a poll walks the store's pages to the fixed bounds and answers hasMore honestly", async () => {
+  const api = conversationApi(undefined, { messagesPageSize: 3 });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  const result = await adapter.readConversation({
+    providerSessionId: IDLE_SESSION_UUID,
+    afterMessageId: STORED_MESSAGE_UUIDS[0],
+  });
+
+  assert.equal(result.status, "accepted");
+  if (result.status !== "accepted") return;
+  // The seven stored messages behind the cursor fit inside the page budget,
+  // walked three at a time: the later pages ride the cursor the earlier
+  // ones handed back.
+  assert.deepEqual(
+    result.messages.map((message) => message.id),
+    [STORED_MESSAGE_UUIDS[2], STORED_MESSAGE_UUIDS[5]],
+  );
+  assert.equal(result.hasMore, false);
+  const reads = api.requests.filter(
+    (request) =>
+      request.method === "GET" && request.pathname.endsWith(`${IDLE_SESSION_UUID}/messages`),
+  );
+  assert.equal(reads.length, 3);
+  assert.equal(reads[0]?.searchParams.get("after"), STORED_MESSAGE_UUIDS[0]);
+  assert.equal(reads[1]?.searchParams.get("after"), STORED_MESSAGE_UUIDS[3]);
+  assert.equal(reads[2]?.searchParams.get("after"), STORED_MESSAGE_UUIDS[6]);
+});
+
+test("refuses a conversation read for anything the latest pass did not stand behind", async () => {
+  const api = conversationApi();
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+  const requestsBefore = api.requests.length;
+
+  const unobserved = await adapter.readConversation({
+    providerSessionId: "99999999-9999-4999-8999-999999999999",
+  });
+  const badCursor = await adapter.readConversation({
+    providerSessionId: IDLE_SESSION_UUID,
+    afterMessageId: "not-a-message-id",
+  });
+  const badPosition = await adapter.readConversation({
+    providerSessionId: IDLE_SESSION_UUID,
+    beforeOffset: -3,
+  });
+  const bothPositions = await adapter.readConversation({
+    providerSessionId: IDLE_SESSION_UUID,
+    afterMessageId: STORED_MESSAGE_UUIDS[0],
+    beforeOffset: 100,
+  });
+
+  assert.deepEqual(unobserved, {
+    status: "unsupported",
+    reason: "That act is not supported by the latest observation.",
+  });
+  assert.deepEqual(badCursor, {
+    status: "rejected",
+    reason: "That conversation cursor is not one Conductor handed back.",
+  });
+  assert.deepEqual(badPosition, {
+    status: "rejected",
+    reason: "That conversation position is not one Conductor handed back.",
+  });
+  assert.deepEqual(bothPositions, {
+    status: "rejected",
+    reason: "A poll and a history read are different asks; a request names one position.",
+  });
+  assert.equal(api.requests.length, requestsBefore);
+});
+
+// A transcript longer than one window: the opening read seeks the end and
+// pages backward from it, and a scroll to the top continues from where the
+// last page said it began.
+const LONG_TRANSCRIPT_LENGTH = 120;
+
+function longMessageUuid(index: number): string {
+  return `cccccccc-0000-4000-8000-${String(index).padStart(12, "0")}`;
+}
+
+function longConversationApi() {
+  return conversationApi({
+    storedMessages: Array.from({ length: LONG_TRANSCRIPT_LENGTH }, (_, index) =>
+      storedUserMessage(longMessageUuid(index), `message ${index}`, TEST_TIME - 100_000 + index),
+    ),
+  });
+}
+
+test("an opening read answers the latest page of a long transcript", async () => {
+  const api = longConversationApi();
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+  const requestsBefore = api.requests.length;
+
+  const result = await adapter.readConversation({ providerSessionId: IDLE_SESSION_UUID });
+
+  assert.equal(result.status, "accepted");
+  if (result.status !== "accepted") return;
+  // One hundred-message window paged back from the end of 120: the newest
+  // hundred stand, the page names where it began, and older history remains.
+  assert.equal(result.messages.length, 100);
+  assert.equal(result.messages[0]?.id, longMessageUuid(20));
+  assert.equal(result.messages.at(-1)?.id, longMessageUuid(119));
+  assert.equal(result.lastMessageId, longMessageUuid(119));
+  assert.equal(result.firstOffset, 20);
+  assert.equal(result.hasOlder, true);
+  assert.equal(result.hasMore, false);
+  // The seek and the page together stay within a bounded, `after`-free
+  // request budget: probes and windows carry arithmetic offsets alone.
+  const reads = api.requests.slice(requestsBefore);
+  assert.ok(reads.length <= 20, `expected a bounded seek, saw ${reads.length} requests`);
+  assert.ok(reads.every((request) => request.searchParams.get("after") === null));
+});
+
+test("a scroll to the top reads the history just before what the screen holds", async () => {
+  const api = longConversationApi();
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+
+  const result = await adapter.readConversation({
+    providerSessionId: IDLE_SESSION_UUID,
+    beforeOffset: 20,
+  });
+
+  assert.equal(result.status, "accepted");
+  if (result.status !== "accepted") return;
+  assert.equal(result.messages.length, 20);
+  assert.equal(result.messages[0]?.id, longMessageUuid(0));
+  assert.equal(result.messages.at(-1)?.id, longMessageUuid(19));
+  assert.equal(result.firstOffset, 0);
+  assert.equal(result.hasOlder, false);
+  // History must never move the poll: an older page names no forward cursor.
+  assert.equal(result.lastMessageId, undefined);
+
+  const read = api.requests.at(-1);
+  assert.equal(read?.searchParams.get("offset"), "0");
+  assert.equal(read?.searchParams.get("limit"), "20");
+});
+
+test("refuses a conversation read for an observed id that is not a UUID", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 30_000)],
+    sessions: [
+      {
+        id: "session-idle",
+        workspaceId: "workspace-active",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 5_000,
+      },
+    ],
+  });
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+  const requestsBefore = api.requests.length;
+
+  const result = await adapter.readConversation({ providerSessionId: "session-idle" });
+
+  assert.deepEqual(result, {
+    status: "unsupported",
+    reason: "That session's id is not a shape this build can read messages for.",
+  });
+  assert.equal(api.requests.length, requestsBefore);
+});
+
+test("a conversation read names what refused it without echoing the provider", async () => {
+  const refusedKey = conversationApi({ messagesHttpStatus: HTTP_STATUS.UNAUTHORIZED });
+  const refusedKeyAdapter = adapterFor(refusedKey.fetch);
+  await refusedKeyAdapter.observe();
+  const unauthorized = await refusedKeyAdapter.readConversation({
+    providerSessionId: IDLE_SESSION_UUID,
+  });
+  assert.deepEqual(unauthorized, {
+    status: "rejected",
+    reason: "Conductor rejected the configured API key.",
+  });
+
+  // A cursor the store no longer holds answers 404, which reads as the same
+  // transient refusal any unreadable answer does — never a fresh guess.
+  const staleCursor = conversationApi();
+  const staleCursorAdapter = adapterFor(staleCursor.fetch);
+  await staleCursorAdapter.observe();
+  const stale = await staleCursorAdapter.readConversation({
+    providerSessionId: IDLE_SESSION_UUID,
+    afterMessageId: "bbbbbbbb-0000-4000-8000-00000000000b",
+  });
+  assert.deepEqual(stale, {
+    status: "rejected",
+    reason: "Conductor did not answer, so the conversation could not be read.",
+  });
 });

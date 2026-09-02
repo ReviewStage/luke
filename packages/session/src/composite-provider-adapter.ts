@@ -3,6 +3,8 @@ import {
   type ProviderActResult,
   type ProviderControlRequest,
   type ProviderControlResult,
+  type ProviderConversationRequest,
+  type ProviderConversationResult,
   type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionRenameRequest,
@@ -121,6 +123,13 @@ export class CompositeSessionProviderAdapter extends SessionProviderAdapterBase 
 
   override async readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult> {
     return this.#dispatchAct((adapter) => adapter.readTranscript(providerSessionId));
+  }
+
+  /** A conversation read finds the observer holding its session the same way. */
+  override async readConversation(
+    request: ProviderConversationRequest,
+  ): Promise<ProviderConversationResult> {
+    return this.#dispatchAct((adapter) => adapter.readConversation(request));
   }
 
   /**

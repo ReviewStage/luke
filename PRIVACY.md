@@ -78,9 +78,12 @@ evidence runs send no crash reports.
 The iOS app records on the same terms: its own screens as screenshots, never
 anything else on your device, from the moment it opens, and shows the same
 things its screens show — session titles, branches, summaries, error text, and
-your name and email. Text you type into a field is masked, a message you sent
-stays masked when it is drawn back as a chat bubble, and a crash is reported
-on the next launch with its message and code path. Unlike the Mac
+your name and email. A Conductor session's conversation, fetched onto that
+session's screen, is masked out of recordings the way the desktop's History
+tab is blocked, so those messages reach your phone and nothing else. Text you
+type into a field is masked, a message you sent stays masked when it is drawn
+back as a chat bubble, and a crash is reported on the next launch with its
+message and code path. Unlike the Mac
 app, taps are not separately reported with their text — only the recording
 itself shows what was pressed. Signing in attaches the running recording to
 your account, and signing out starts a fresh anonymous one.
@@ -129,6 +132,12 @@ and email you signed it with, and any screenshots you attached.
   you already gave the provider's own command-line tool, which Luke runs and
   never reads. The synced-key vault holds Conductor keys only. Luke reads your sessions or issues, and sends something back
   only when you ask it to, such as a message you wrote or an issue you moved.
+  If you open a Conductor session's screen in the iOS app, our service also
+  reads that session's conversation from Conductor — your own messages and the
+  agent's replies, not its tool activity — using the key you synced, and
+  passes it to your phone while the screen is open. We store none of it: each
+  refresh is a new read, and nothing about the conversation stays on our
+  servers after the response is sent.
 - Google, if you connect Google Calendar. We request your calendar list and your
   availability. Google returns busy times only, so event titles and attendees
   are never available to Luke.

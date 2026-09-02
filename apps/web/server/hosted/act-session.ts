@@ -18,9 +18,11 @@ const SESSION_ID_MAX_LENGTH = 200;
 /**
  * A provider session id safe to embed in a URL segment: non-empty, no path
  * separators, under the length ceiling. The provider's API returns 404 for
- * an id that does not exist, so format validation here is minimal.
+ * an id that does not exist, so format validation here is minimal. The
+ * conversation read holds its message-id cursor to the same shape, since a
+ * cursor rides a request exactly the way a session id does.
  */
-function parseProviderSessionId(value: UnparsedWireValue): string | undefined {
+export function parseProviderSessionId(value: UnparsedWireValue): string | undefined {
   const s = text(value);
   if (!s || s.length > SESSION_ID_MAX_LENGTH) return undefined;
   if (s.includes("/") || s.includes("\\") || s.includes("\0")) return undefined;

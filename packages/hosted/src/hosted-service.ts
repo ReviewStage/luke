@@ -1,6 +1,8 @@
 import {
   type AttentionDecision,
   attentionDecisionFromWire,
+  CONVERSATION_MESSAGE_AUTHOR,
+  type ConversationMessageAuthor,
   type ProviderId,
   SESSION_CONTROL_KIND,
   WORKSPACE_TASK_SUPPORT,
@@ -78,6 +80,14 @@ export const HOSTED_SERVICE_PATH = {
    * bounded roster. Stateless: no session state is stored between requests.
    */
   OBSERVE: "/api/observe",
+  /**
+   * Read one observed session's conversation on demand (GET): a fresh
+   * observation pass validates the session, the provider's own documented
+   * transcript read answers in bounded attributed pages, and the server
+   * stores nothing after serving the response. Only a caller's own opened
+   * conversation screen asks; no observation pass ever issues this read.
+   */
+  SESSION_MESSAGES: "/api/sessions/messages",
 } as const;
 
 /** Selects the judgment-only attention response understood by current desktops. */
@@ -441,6 +451,12 @@ export interface ObservedSession {
   canRename?: boolean;
   /** Whether the latest observation advertised renaming the session's workspace. */
   canRenameWorkspace?: boolean;
+  /**
+   * Whether the messages endpoint can read this session's conversation — a
+   * capability of the provider's documented transcript read, not a per-turn
+   * state, so a screen that sees it absent falls back to the recap alone.
+   */
+  canReadConversation?: boolean;
 }
 
 /** The observe endpoint answer: the caller's cloud sessions across all providers. */
@@ -510,6 +526,7 @@ function observedSessionFromWire(value: UnparsedWireValue): ObservedSession | un
   if (spawnableAgents) session.spawnableAgents = spawnableAgents;
   if (value.canRename === true) session.canRename = true;
   if (value.canRenameWorkspace === true) session.canRenameWorkspace = true;
+  if (value.canReadConversation === true) session.canReadConversation = true;
   return session;
 }
 
@@ -522,6 +539,91 @@ export function observeAnswerFromWire(value: UnparsedWireValue): ObserveAnswer |
     if (session) sessions.push(session);
   }
   return { sessions };
+}
+
+// --- Conversation wire contract ---
+
+// Who wrote one message of a conversation reading is `@sidecar/session`'s own
+// vocabulary, imported rather than mirrored the way `HOSTED_ACT_RESULT`
+// mirrors `@sidecar/acts`: that package sits above this one, where session
+// sits below, so nothing stops the wire from sharing the adapters' set.
+const CONVERSATION_AUTHOR_SET: ReadonlySet<string> = new Set(
+  Object.values(CONVERSATION_MESSAGE_AUTHOR),
+);
+
+/**
+ * One attributed message of a session's conversation, as the messages
+ * endpoint relays it: the provider's own id, who wrote it, and the words
+ * whole — the read's bounds live on the page, never on the message. Only the
+ * two voices a chat screen draws exist on the wire, because a message the
+ * provider's store did not attribute never left the adapter at all.
+ */
+export interface HostedConversationMessage {
+  id: string;
+  author: ConversationMessageAuthor;
+  text: string;
+  /** Unix ms the provider recorded the message at, when it reported one. */
+  receivedAt?: number;
+}
+
+/**
+ * The messages endpoint answer: one bounded page of attributed messages and
+ * the positions to continue from. `lastMessageId` is where a poll resumes —
+ * absent on an older-history page, which must never move a poll backward —
+ * and `firstOffset`/`hasOlder` are where a scroll to the top continues,
+ * absent on a poll, which never looks backward. The server assembled it from
+ * a fresh read and stored nothing — a new request is a new read.
+ */
+export interface HostedConversationAnswer {
+  messages: HostedConversationMessage[];
+  lastMessageId?: string;
+  hasMore: boolean;
+  firstOffset?: number;
+  hasOlder?: boolean;
+}
+
+function hostedConversationMessageFromWire(
+  value: UnparsedWireValue,
+): HostedConversationMessage | undefined {
+  if (!isRecord(value)) return undefined;
+  const id = text(value.id);
+  if (!id) return undefined;
+  const author = text(value.author);
+  if (!author || !CONVERSATION_AUTHOR_SET.has(author)) return undefined;
+  // The words are read raw rather than through `text`: a message is rendered
+  // as its author wrote it, and trimming is a display decision this wire
+  // reader has no business making. Only an empty message is no message.
+  const words = isWireString(value.text) && value.text.length > 0 ? value.text : undefined;
+  if (!words) return undefined;
+  const receivedAt = wholeNumber(value.receivedAt);
+  // SAFETY: membership in CONVERSATION_AUTHOR_SET was checked above.
+  const message: HostedConversationMessage = {
+    id,
+    author: author as ConversationMessageAuthor,
+    text: words,
+  };
+  if (receivedAt !== undefined && receivedAt >= 0) message.receivedAt = receivedAt;
+  return message;
+}
+
+/** Validates a conversation answer; a malformed message is skipped, not fatal. */
+export function hostedConversationAnswerFromWire(
+  value: UnparsedWireValue,
+): HostedConversationAnswer | undefined {
+  if (!isRecord(value) || !Array.isArray(value.messages)) return undefined;
+  if (!isWireBoolean(value.hasMore)) return undefined;
+  const messages: HostedConversationMessage[] = [];
+  for (const item of value.messages) {
+    const message = hostedConversationMessageFromWire(item);
+    if (message) messages.push(message);
+  }
+  const lastMessageId = text(value.lastMessageId);
+  const answer: HostedConversationAnswer = { messages, hasMore: value.hasMore };
+  if (lastMessageId) answer.lastMessageId = lastMessageId;
+  const firstOffset = wholeNumber(value.firstOffset);
+  if (firstOffset !== undefined && firstOffset >= 0) answer.firstOffset = firstOffset;
+  if (isWireBoolean(value.hasOlder)) answer.hasOlder = value.hasOlder;
+  return answer;
 }
 
 // --- Projects wire contract ---

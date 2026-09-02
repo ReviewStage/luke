@@ -1,10 +1,15 @@
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "@sidecar/credentials/vocabulary";
 import {
+  ACT_RESULT_STATUS,
   agedStatus,
   agentIdentityFor,
+  CONVERSATION_MESSAGE_AUTHOR,
   isListedWorkspaceAgentModel,
   maximumSessionTitleLength,
   OBSERVATION_WINDOW,
+  type ProviderConversationMessage,
+  type ProviderConversationRequest,
+  type ProviderConversationResult,
   type ProviderSessionObservation,
   type ProviderWorkspaceAgentRequest,
   SESSION_APPLICATION_ID,
@@ -19,11 +24,13 @@ import {
   type WorkspaceProject,
   workspaceAgentModels,
 } from "@sidecar/session";
-import type { WireRecord } from "@sidecar/wire";
+import { isRecord, text, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import {
   CLOUD_ADAPTER_DEFAULTS,
+  CLOUD_FAILURE,
   type CloudAdapterOptions,
   type CloudRequest,
+  CloudRequestError,
   CloudSessionAdapter,
   type CloudWriteRoute,
   isDefined,
@@ -50,7 +57,11 @@ const CONDUCTOR_DEFAULT_API_URL = "https://api.conductor.build";
  * Documented public API routes. The reads walk projects, the user's own open
  * workspaces through the workspace listing's documented creator and archive
  * filters, and each workspace's sessions, and poll the status endpoints
- * workspaces and sessions document; the writers
+ * workspaces and sessions document. Beside those pass-driven reads stands one
+ * a user asks for by opening a conversation screen:
+ * `GET …/sessions/{id}/messages`, Conductor's documented read of one
+ * session's stored transcript, paged with the `after` cursor its own answers
+ * hand back and never issued by an observation pass. The writers
  * are `POST …/sessions/{id}/messages`, which is
  * Conductor's documented way to hand a prompt to an existing session — queued
  * while it is idle, steered into the running turn while it works —
@@ -172,6 +183,7 @@ function conductorArchiveWorkspaceControl(workspaceId: string): SessionControl {
  * page's own answer earned.
  */
 const CONDUCTOR_QUERY = {
+  AFTER: "after",
   CREATOR: "creator",
   INCLUDE_ARCHIVED: "includeArchived",
   LIMIT: "limit",
@@ -201,6 +213,88 @@ const CONDUCTOR_FIELD = {
   STATUS: "status",
   UPDATED_AT: "updatedAt",
   USER_ID: "userId",
+} as const;
+
+/** The fields one stored message answers with, named as the endpoint documents them. */
+const CONDUCTOR_STORED_MESSAGE_FIELD = {
+  ID: "id",
+  TYPE: "type",
+  CONTENT: "content",
+  RECEIVED_AT: "receivedAt",
+} as const;
+
+/**
+ * The two kinds of stored message whose author the store itself names: the
+ * developer's own send, and an event the session's harness emitted. Anything
+ * else the endpoint may answer with is a kind this build does not know, and
+ * is dropped rather than guessed at.
+ */
+const CONDUCTOR_STORED_MESSAGE_TYPE = {
+  USER_MESSAGE: "userMessage",
+  AGENT: "agent",
+} as const;
+
+/** Inside a stored user message's content: the developer's words themselves. */
+const CONDUCTOR_USER_CONTENT_FIELD = {
+  MESSAGE: "message",
+} as const;
+
+/** Inside a stored agent message's content: the harness event it wraps, whole. */
+const CONDUCTOR_AGENT_CONTENT_FIELD = {
+  RAW_PAYLOAD: "rawPayload",
+} as const;
+
+/**
+ * The two harness event shapes that carry the agent's own words, as
+ * Conductor's store actually holds them. Claude-shaped harnesses (Claude Code
+ * and Cursor both) store an `assistant` stream event whose message carries
+ * content blocks; Codex stores its app-server events, where a completed
+ * `agentMessage` item carries its text whole. Every other event — thinking,
+ * tool calls, tool output, lifecycle — is not the agent speaking to the
+ * developer, so it never becomes a bubble.
+ */
+const CONDUCTOR_HARNESS_EVENT_FIELD = {
+  TYPE: "type",
+  MESSAGE: "message",
+  CONTENT: "content",
+  EVENT: "event",
+  ITEM: "item",
+  TEXT: "text",
+} as const;
+
+const CONDUCTOR_CLAUDE_ASSISTANT_EVENT_TYPE = "assistant";
+const CONDUCTOR_CLAUDE_TEXT_BLOCK_TYPE = "text";
+const CONDUCTOR_CODEX_ITEM_COMPLETED_EVENT_TYPE = "item.completed";
+const CONDUCTOR_CODEX_AGENT_MESSAGE_ITEM_TYPE = "agentMessage";
+
+/**
+ * How a conversation read is bounded: the documented page size the endpoint
+ * itself caps at, how many pages one read may walk, and how many attributed
+ * messages one answer may carry. A read that stops at a bound answers with
+ * `hasMore` and the cursor to continue after, so nothing is lost — only
+ * deferred to the next ask.
+ */
+const CONDUCTOR_CONVERSATION_BOUNDS = {
+  /** The window one stored-messages read asks for — the endpoint's own server-side cap. */
+  PAGE_SIZE: 100,
+  /** How many pages one poll may chase forward while the endpoint says more remain. */
+  MAXIMUM_PAGES: 10,
+  /** How many attributed messages one poll answer may carry. */
+  MAXIMUM_MESSAGES: 200,
+  /** How many attributed messages a tail or older-history page aims to carry. */
+  HISTORY_TARGET_MESSAGES: 30,
+  /** How many raw windows one tail or older-history read may page backward. */
+  MAXIMUM_HISTORY_WINDOWS: 6,
+  /**
+   * The end-seek's opening probes, geometric so one parallel round brackets
+   * any transcript to two hundred thousand stored messages, and the shape of
+   * the refinement that follows: each bounded round splits the bracket with
+   * this many parallel probes, shrinking it sevenfold, until one window
+   * holds the end.
+   */
+  PROBE_GEOMETRIC_OFFSETS: [200, 800, 3_200, 12_800, 51_200, 204_800],
+  PROBE_REFINEMENT_POINTS: 6,
+  MAXIMUM_PROBE_ROUNDS: 6,
 } as const;
 
 /** The columns the transcripts read asks for, named as the view answers them. */
@@ -445,8 +539,12 @@ interface ConductorSession {
  * reads, one fixed query to Conductor's
  * transcripts view names the sessions the same pass observed and takes back
  * each chat's agent kind and the bounded tail its recap — the settled turn's
- * parting words — is read from; the history behind that tail is never asked
- * for, and the tail itself never leaves this adapter. Each chat is reported
+ * parting words — is read from; no observation pass asks for the history
+ * behind that tail, and the tail itself never leaves this adapter. The one
+ * wider read is `readConversation`, and it is not observation's: only a
+ * user's own ask reaches it, it reads one observed chat's stored messages
+ * through the documented transcript endpoint in bounded attributed pages,
+ * and it keeps nothing here. Each chat is reported
  * as its own session, carrying the workspace around it as its group — the
  * workspace is the unit Conductor's own surface shows, but the chat is the
  * thing a press opens and a write reaches, and a workspace holding two chats
@@ -899,6 +997,274 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     return undefined;
   }
 
+  /**
+   * Reads one observed chat's stored conversation through the documented
+   * transcript read, `GET …/sessions/{id}/messages`, only at a user's own
+   * ask — never from an observation pass. It reads the way a chat screen
+   * does: opened plain it answers the latest page, sought to the transcript's
+   * end first because the endpoint pages ascending; handed `beforeOffset` it
+   * answers the older history just before what the screen holds; handed
+   * `afterMessageId` it answers only what is newer, behind the endpoint's own
+   * polling cursor. Every mode keeps only the messages the store itself
+   * attributes — the developer's sends, and the agent's own words out of the
+   * two harness event shapes this build knows — and everything else is
+   * dropped unread. The page is answered to the caller and nothing is kept
+   * here: the conversation stays the provider's.
+   */
+  override async readConversation(
+    request: ProviderConversationRequest,
+  ): Promise<ProviderConversationResult> {
+    const observation = this.latestObservation(request.providerSessionId);
+    if (!observation) {
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That act is not supported by the latest observation.",
+      };
+    }
+    // Only ids that are actually UUIDs may enter the request path — the same
+    // rule the transcripts-view read holds, here for the session id in the
+    // route and the message id riding the query — and an offset must be the
+    // plain non-negative integer an earlier answer reported.
+    if (!UUID_PATTERN.test(request.providerSessionId)) {
+      return {
+        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        reason: "That session's id is not a shape this build can read messages for.",
+      };
+    }
+    if (request.afterMessageId !== undefined && !UUID_PATTERN.test(request.afterMessageId)) {
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        reason: "That conversation cursor is not one Conductor handed back.",
+      };
+    }
+    if (
+      request.beforeOffset !== undefined &&
+      (!Number.isSafeInteger(request.beforeOffset) || request.beforeOffset < 0)
+    ) {
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        reason: "That conversation position is not one Conductor handed back.",
+      };
+    }
+    if (request.afterMessageId !== undefined && request.beforeOffset !== undefined) {
+      return {
+        status: ACT_RESULT_STATUS.REJECTED,
+        reason: "A poll and a history read are different asks; a request names one position.",
+      };
+    }
+
+    try {
+      if (request.afterMessageId !== undefined) {
+        return await this.#readNewerMessages(request.providerSessionId, request.afterMessageId);
+      }
+      const endOffset =
+        request.beforeOffset ?? (await this.#conversationEnd(request.providerSessionId));
+      return await this.#readHistoryPage(
+        request.providerSessionId,
+        endOffset,
+        request.beforeOffset === undefined,
+      );
+    } catch (error) {
+      if (error instanceof CloudRequestError) {
+        return {
+          status: ACT_RESULT_STATUS.REJECTED,
+          reason:
+            error.failure === CLOUD_FAILURE.UNAUTHORIZED
+              ? `${CONDUCTOR_PROVIDER_NAME} rejected the configured API key.`
+              : `${CONDUCTOR_PROVIDER_NAME} did not answer, so the conversation could not be read.`,
+        };
+      }
+      throw error;
+    }
+  }
+
+  /** One documented stored-messages read, with the query the mode composed. */
+  async #messagesPage(
+    providerSessionId: string,
+    query: Readonly<Record<string, string>>,
+  ): Promise<WireRecord> {
+    let body: WireRecord = {};
+    await this.credentialBoundRead(
+      [
+        CONDUCTOR_ROUTE_SEGMENT.V0,
+        CONDUCTOR_ROUTE_SEGMENT.SESSIONS,
+        providerSessionId,
+        CONDUCTOR_ROUTE_SEGMENT.MESSAGES,
+      ],
+      query,
+      undefined,
+      (answer) => {
+        body = answer;
+      },
+    );
+    return body;
+  }
+
+  /**
+   * The poll: everything newer than the cursor the last answer handed back,
+   * walked forward behind the endpoint's own `after` to the fixed bounds.
+   */
+  async #readNewerMessages(
+    providerSessionId: string,
+    afterMessageId: string,
+  ): Promise<ProviderConversationResult> {
+    const messages: ProviderConversationMessage[] = [];
+    let cursor = afterMessageId;
+    let hasMore = false;
+    for (let page = 0; page < CONDUCTOR_CONVERSATION_BOUNDS.MAXIMUM_PAGES; page += 1) {
+      const body = await this.#messagesPage(providerSessionId, {
+        [CONDUCTOR_QUERY.LIMIT]: String(CONDUCTOR_CONVERSATION_BOUNDS.PAGE_SIZE),
+        [CONDUCTOR_QUERY.AFTER]: cursor,
+      });
+      const records = recordsFromPage(body, CONDUCTOR_FIELD.DATA);
+      // An empty page that still claims more would walk in place forever,
+      // so the claim is only believed of a page that moved the cursor.
+      if (records.length === 0) {
+        hasMore = false;
+        break;
+      }
+      for (const record of records) {
+        const message = conversationMessageFromRecord(record);
+        if (message) messages.push(message);
+      }
+      const lastRecord = records[records.length - 1];
+      const lastId = lastRecord
+        ? textFromRecord(lastRecord, CONDUCTOR_STORED_MESSAGE_FIELD.ID)
+        : undefined;
+      hasMore = body[CONDUCTOR_FIELD.HAS_MORE] === true;
+      if (!lastId) break;
+      cursor = lastId;
+      if (!hasMore || messages.length >= CONDUCTOR_CONVERSATION_BOUNDS.MAXIMUM_MESSAGES) {
+        break;
+      }
+    }
+    return { status: ACT_RESULT_STATUS.ACCEPTED, messages, lastMessageId: cursor, hasMore };
+  }
+
+  /**
+   * One page of history ending at `endOffset`, read the way a chat screen
+   * scrolls: fixed-width windows paged backward by offset arithmetic until
+   * enough attributed messages stand or the window budget is spent, answered
+   * with where the page began so the next scroll can continue. A tail page —
+   * the screen's opening read, whose end is the transcript's own — also
+   * names the newest stored message it consumed, the cursor the poll takes
+   * over from; an older-history page never does, because history must not
+   * move a poll backward.
+   */
+  async #readHistoryPage(
+    providerSessionId: string,
+    endOffset: number,
+    isTail: boolean,
+  ): Promise<ProviderConversationResult> {
+    const messages: ProviderConversationMessage[] = [];
+    let lastMessageId: string | undefined;
+    let chunkEnd = endOffset;
+    for (
+      let window = 0;
+      window < CONDUCTOR_CONVERSATION_BOUNDS.MAXIMUM_HISTORY_WINDOWS &&
+      chunkEnd > 0 &&
+      messages.length < CONDUCTOR_CONVERSATION_BOUNDS.HISTORY_TARGET_MESSAGES;
+      window += 1
+    ) {
+      const chunkStart = Math.max(0, chunkEnd - CONDUCTOR_CONVERSATION_BOUNDS.PAGE_SIZE);
+      const body = await this.#messagesPage(providerSessionId, {
+        [CONDUCTOR_QUERY.LIMIT]: String(chunkEnd - chunkStart),
+        [CONDUCTOR_QUERY.OFFSET]: String(chunkStart),
+      });
+      const records = recordsFromPage(body, CONDUCTOR_FIELD.DATA);
+      if (isTail && lastMessageId === undefined && records.length > 0) {
+        const newestRecord = records[records.length - 1];
+        lastMessageId = newestRecord
+          ? textFromRecord(newestRecord, CONDUCTOR_STORED_MESSAGE_FIELD.ID)
+          : undefined;
+      }
+      messages.unshift(...records.map(conversationMessageFromRecord).filter(isDefined));
+      chunkEnd = chunkStart;
+    }
+    return {
+      status: ACT_RESULT_STATUS.ACCEPTED,
+      messages,
+      hasMore: false,
+      firstOffset: chunkEnd,
+      hasOlder: chunkEnd > 0,
+      ...(lastMessageId ? { lastMessageId } : undefined),
+    };
+  }
+
+  /**
+   * Where the stored transcript currently ends, as an offset, found with the
+   * documented read alone: the endpoint pages ascending and reports no
+   * total, so the end is sought — one parallel round of one-message probes
+   * brackets it geometrically, bounded refinement rounds narrow the bracket,
+   * and a short ascending walk inside the final window names it exactly.
+   * Every probe is the same documented GET carrying nothing but arithmetic —
+   * an offset this seek composed and the fixed one-message limit — so no
+   * stored content can steer one. A transcript that outruns the deepest
+   * probe answers with the deepest bracket instead of more probing; the
+   * opening page then sits early, and the poll that follows walks forward to
+   * the true newest on its own.
+   */
+  async #conversationEnd(providerSessionId: string): Promise<number> {
+    const occupied = async (offset: number): Promise<boolean> => {
+      const body = await this.#messagesPage(providerSessionId, {
+        [CONDUCTOR_QUERY.LIMIT]: "1",
+        [CONDUCTOR_QUERY.OFFSET]: String(offset),
+      });
+      return recordsFromPage(body, CONDUCTOR_FIELD.DATA).length > 0;
+    };
+    const geometric = CONDUCTOR_CONVERSATION_BOUNDS.PROBE_GEOMETRIC_OFFSETS;
+    const answers = await Promise.all(
+      geometric.map(async (offset) => [offset, await occupied(offset)] as const),
+    );
+    let low = 0;
+    let high: number | undefined;
+    for (const [offset, hasMessage] of answers) {
+      if (hasMessage) low = Math.max(low, offset);
+      else high = high === undefined ? offset : Math.min(high, offset);
+    }
+    let bracketHigh = high ?? (geometric[geometric.length - 1] ?? 0) * 4;
+    for (
+      let round = 0;
+      round < CONDUCTOR_CONVERSATION_BOUNDS.MAXIMUM_PROBE_ROUNDS &&
+      bracketHigh - low > CONDUCTOR_CONVERSATION_BOUNDS.PAGE_SIZE;
+      round += 1
+    ) {
+      const step =
+        (bracketHigh - low) / (CONDUCTOR_CONVERSATION_BOUNDS.PROBE_REFINEMENT_POINTS + 1);
+      const points = [
+        ...new Set(
+          Array.from(
+            { length: CONDUCTOR_CONVERSATION_BOUNDS.PROBE_REFINEMENT_POINTS },
+            (_, index) => Math.floor(low + step * (index + 1)),
+          ).filter((offset) => offset > low && offset < bracketHigh),
+        ),
+      ];
+      if (points.length === 0) break;
+      const refined = await Promise.all(
+        points.map(async (offset) => [offset, await occupied(offset)] as const),
+      );
+      for (const [offset, hasMessage] of refined) {
+        if (hasMessage) low = Math.max(low, offset);
+        else bracketHigh = Math.min(bracketHigh, offset);
+      }
+    }
+    let end = low;
+    for (
+      let window = 0;
+      window < CONDUCTOR_CONVERSATION_BOUNDS.MAXIMUM_HISTORY_WINDOWS;
+      window += 1
+    ) {
+      const body = await this.#messagesPage(providerSessionId, {
+        [CONDUCTOR_QUERY.LIMIT]: String(CONDUCTOR_CONVERSATION_BOUNDS.PAGE_SIZE),
+        [CONDUCTOR_QUERY.OFFSET]: String(end),
+      });
+      const count = recordsFromPage(body, CONDUCTOR_FIELD.DATA).length;
+      end += count;
+      if (count === 0 || body[CONDUCTOR_FIELD.HAS_MORE] !== true) break;
+    }
+    return end;
+  }
+
   #observationFor(
     session: ConductorSession,
     reported: ConductorReportedStatus | undefined,
@@ -1202,6 +1568,80 @@ function recapFromTranscriptTail(tail: string | undefined): string | undefined {
     .replace(/\s+/g, " ")
     .trim();
   return recap || undefined;
+}
+
+/**
+ * One stored message, kept only when the store itself says who wrote it: a
+ * `userMessage` is the developer's own send and its content carries their
+ * words, and an `agent` message is kept only when the harness event it wraps
+ * is the agent speaking. The words are never cut — the read's bounds live on
+ * the page, not the message — and a message this build cannot attribute is
+ * dropped whole rather than rendered as a guess.
+ */
+function conversationMessageFromRecord(
+  record: WireRecord,
+): ProviderConversationMessage | undefined {
+  const id = textFromRecord(record, CONDUCTOR_STORED_MESSAGE_FIELD.ID);
+  if (!id) return undefined;
+  const content = record[CONDUCTOR_STORED_MESSAGE_FIELD.CONTENT];
+  if (!isRecord(content)) return undefined;
+  const kind = textFromRecord(record, CONDUCTOR_STORED_MESSAGE_FIELD.TYPE);
+  const words =
+    kind === CONDUCTOR_STORED_MESSAGE_TYPE.USER_MESSAGE
+      ? text(content[CONDUCTOR_USER_CONTENT_FIELD.MESSAGE])
+      : kind === CONDUCTOR_STORED_MESSAGE_TYPE.AGENT
+        ? agentWordsFromHarnessEvent(content[CONDUCTOR_AGENT_CONTENT_FIELD.RAW_PAYLOAD])
+        : undefined;
+  if (!words) return undefined;
+  const receivedAt = timestampFromRecord(record, CONDUCTOR_STORED_MESSAGE_FIELD.RECEIVED_AT);
+  return {
+    id,
+    author:
+      kind === CONDUCTOR_STORED_MESSAGE_TYPE.USER_MESSAGE
+        ? CONVERSATION_MESSAGE_AUTHOR.USER
+        : CONVERSATION_MESSAGE_AUTHOR.AGENT,
+    text: words,
+    ...(receivedAt !== undefined ? { receivedAt } : undefined),
+  };
+}
+
+/**
+ * The agent's own words inside one stored harness event, in the two shapes
+ * Conductor's store holds. A Claude-shaped `assistant` event speaks through
+ * its message's text blocks — thinking and tool-use blocks are not words to
+ * the developer, so only the text blocks join. A Codex `item.completed`
+ * event speaks only as a completed `agentMessage` item, whose text rides
+ * whole; a started item is still empty and an item of any other kind is a
+ * tool at work. Every other event answers nothing, which drops its message.
+ */
+function agentWordsFromHarnessEvent(rawPayload: UnparsedWireValue): string | undefined {
+  if (!isRecord(rawPayload)) return undefined;
+  if (rawPayload[CONDUCTOR_HARNESS_EVENT_FIELD.TYPE] === CONDUCTOR_CLAUDE_ASSISTANT_EVENT_TYPE) {
+    const message = rawPayload[CONDUCTOR_HARNESS_EVENT_FIELD.MESSAGE];
+    if (!isRecord(message)) return undefined;
+    const blocks = message[CONDUCTOR_HARNESS_EVENT_FIELD.CONTENT];
+    if (!Array.isArray(blocks)) return undefined;
+    const words = blocks
+      .filter(isRecord)
+      .filter(
+        (block) => block[CONDUCTOR_HARNESS_EVENT_FIELD.TYPE] === CONDUCTOR_CLAUDE_TEXT_BLOCK_TYPE,
+      )
+      .map((block) => text(block[CONDUCTOR_HARNESS_EVENT_FIELD.TEXT]))
+      .filter(isDefined)
+      .join("\n\n");
+    return words || undefined;
+  }
+  const event = rawPayload[CONDUCTOR_HARNESS_EVENT_FIELD.EVENT];
+  if (!isRecord(event)) return undefined;
+  if (event[CONDUCTOR_HARNESS_EVENT_FIELD.TYPE] !== CONDUCTOR_CODEX_ITEM_COMPLETED_EVENT_TYPE) {
+    return undefined;
+  }
+  const item = event[CONDUCTOR_HARNESS_EVENT_FIELD.ITEM];
+  if (!isRecord(item)) return undefined;
+  if (item[CONDUCTOR_HARNESS_EVENT_FIELD.TYPE] !== CONDUCTOR_CODEX_AGENT_MESSAGE_ITEM_TYPE) {
+    return undefined;
+  }
+  return text(item[CONDUCTOR_HARNESS_EVENT_FIELD.TEXT]);
 }
 
 /**
