@@ -539,8 +539,42 @@ What Luke may show:
   words become the recap only when that message is attributably the agent's
   and the chat is idle or closed: a settled turn's parting words say where the
   work stands, where half a sentence mid-turn poses as an outcome. The tail is
-  inspected in memory and discarded: the bounded recap is all that is ever
-  reported, and the history behind it is never read at all.
+  inspected in memory and discarded: the bounded recap is all an observation
+  pass ever reports, and no pass reads the history behind it. The one wider
+  read of that history is the next rule's, and it belongs to the developer's
+  own press, never to a pass.
+- A session's conversation itself is read in exactly one place, and the place
+  is deliberate: this is the read that widens the tail rule above, made in
+  the open rather than smuggled behind it. When the developer opens a
+  Conductor session's own screen in the iOS app, that screen asks Luke's
+  service for the conversation, and the service reads it through Conductor's
+  documented transcript endpoint (`GET /v0/sessions/{id}/messages`) under the
+  caller's own synced key — after a fresh observation pass on the same
+  request has reported that session, so the read lands only on a chat the
+  developer was actually shown. The read is bounded on every side:
+  user-initiated by the screen's opening, its polling while the screen stays
+  open, and its scroll back into history, never issued by an observation
+  pass, a timer of Luke's, or anything a model decided; read-only through the
+  documented GET, whose only parameters are the fixed page bound, the cursor
+  the endpoint's own previous answer handed back, and arithmetic offsets —
+  the endpoint pages only forward, so the screen's opening read seeks the
+  transcript's end with a bounded round of one-message position probes and
+  pages backward from it by offset, numbers the read composes that no stored
+  content can steer; paged to fixed budgets per ask; and stored nowhere — the
+  service assembles the page, answers, and keeps nothing, and the screen
+  holds it only while it stands open. What travels is only what
+  Conductor's own store attributes: the developer's sends and the agent's own
+  words. A tool call, tool output, harness event, or any message whose author
+  the store does not name is dropped whole rather than guessed at, and a
+  message that does travel is never truncated — the bounds live on the page,
+  because a cut message says something its author did not. On the phone the
+  fetched words are masked out of the session recording, the way the desktop
+  blocks its History subtree, so the conversation reaches the developer's own
+  screen and nothing else. A provider whose API documents no such read
+  advertises none, and its screen keeps the bounded recap it always drew;
+  widening this read to another provider, another caller, an unattributed
+  message kind, or anything stored is a product decision, not an
+  implementation detail.
 - Session material leaves the machine unbidden in exactly two places, each
   with its own narrower rule. An evaluator receives `AttentionContext`, what
   a provider wrote *about* a session, and never the transcript behind it: no

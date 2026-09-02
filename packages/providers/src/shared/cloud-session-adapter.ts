@@ -382,6 +382,18 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
   }
 
   /**
+   * What the latest pass observed for one session, for a subclass answering a
+   * read or write of its own: the same snapshot every base-implemented act
+   * validates against, so a subclass's operation can hold the same rule — it
+   * exists only for a session the last pass actually saw.
+   */
+  protected latestObservation(providerSessionId: string): ProviderSessionObservation | undefined {
+    return this.#observations.find(
+      (candidate) => candidate.providerSessionId === providerSessionId,
+    );
+  }
+
+  /**
    * Sends one user-typed message to one observed session, through the
    * provider's documented message endpoint. Everything that could make this a
    * different kind of write is refused before a request exists: a session the
