@@ -108,17 +108,21 @@ and email you signed it with, and any screenshots you attached.
 ## Who we send it to
 
 - OpenAI, for voice and session summaries. A spoken turn sends its audio, a
-  typed turn sends your words, and both send the session fields listed above.
-  We do not send message history, file contents, or command output, and we ask
-  OpenAI not to store the request. Your conversation and Luke's durable memory
-  are kept on your Mac and sent with a call so the
-  conversation carries across calls and across launches.
+  typed turn sends your words, and both send the session fields listed above —
+  on the Mac app, read locally from your machine; on iOS, drawn from the same
+  cloud observation your vault keys already allow (titles, status, repository,
+  branch, and summaries of your cloud sessions, as described under Provider API
+  keys above). We do not send message history, file contents, or command
+  output, and we ask OpenAI not to store the request. On the Mac app, your
+  conversation and Luke's durable memory are kept on your Mac and sent with a
+  call so the conversation carries across calls and across launches; on iOS,
+  the conversation is held in memory and discarded when the session closes.
   The one voice call that happens before you sign in is the spoken
-  introduction on first launch: it sends its own fixed script, the titles of
-  the coding agent sessions found on your Mac, and anything you say during its
-  practice moment. It plays once, can act on nothing, and our service issues
-  its credential without an account — keeping only a hash of your network
-  address for that day's rate limit, tied to nobody.
+  introduction on first launch of the Mac app: it sends its own fixed script,
+  the titles of the coding agent sessions found on your Mac, and anything you
+  say during its practice moment. It plays once, can act on nothing, and our
+  service issues its credential without an account — keeping only a hash of
+  your network address for that day's rate limit, tied to nobody.
 - Coding agent providers you connect (Conductor, Cursor, Devin, GitHub Copilot,
   Jules, Replicas) and Linear, using the key or account access you supply. For
   Codex cloud tasks and for messaging local Cursor chats, that access is the

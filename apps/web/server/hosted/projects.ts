@@ -7,7 +7,7 @@ import {
   type WorkspaceProject,
   workspaceAgentModels,
 } from "../core.js";
-import { actUnsupportedReason, MOBILE_SESSION_ACT } from "./act-execute.js";
+import { actUnsupportedReason, REMOTE_SESSION_ACT } from "./act-execute.js";
 import { CURSOR_PROJECT_REFRESH, cloudSessionAdapterFor } from "./cloud-adapters.js";
 import { decryptProviderKey } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
@@ -79,7 +79,7 @@ export async function handleProjects(options: ProjectsOptions): Promise<Response
 
   const providers = Object.values(VAULT_PROVIDER_ID).filter(
     (providerId) =>
-      actUnsupportedReason(MOBILE_SESSION_ACT.CREATE_WORKSPACE, providerId) === undefined &&
+      actUnsupportedReason(REMOTE_SESSION_ACT.CREATE_WORKSPACE, providerId) === undefined &&
       ciphertextByProviderId.has(providerId),
   );
 

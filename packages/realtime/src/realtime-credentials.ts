@@ -2,7 +2,7 @@ import type { RealtimeCredential } from "@sidecar/hosted";
 import { isRecord, text, type UnparsedWireValue, wholeNumber } from "@sidecar/wire";
 import { PRESS_AUDIO_SAMPLE_RATE } from "./press-audio.js";
 import { REALTIME_SESSION_TYPE, realtimeInstructions } from "./realtime-protocol.js";
-import { realtimeToolDefinitions } from "./realtime-tools.js";
+import { realtimeToolDefinitions, remoteRealtimeToolDefinitions } from "./realtime-tools.js";
 import { REALTIME_DEFAULTS } from "./realtime-voice-settings.js";
 
 /**
@@ -102,6 +102,15 @@ export function realtimeSessionConfig(options: RealtimeSessionOptions = {}) {
 /** Builds the request body that mints an ephemeral client secret. */
 export function realtimeClientSecretRequest(options: RealtimeSessionOptions = {}) {
   return { session: realtimeSessionConfig(options) };
+}
+
+/**
+ * Builds the request body for a mobile Realtime mint. The session config
+ * matches the desktop's — same instructions, audio format, and turn detection —
+ * but the tool list is narrowed to the acts the mobile act endpoints serve.
+ */
+export function remoteRealtimeClientSecretRequest(options: RealtimeSessionOptions = {}) {
+  return { session: { ...realtimeSessionConfig(options), tools: remoteRealtimeToolDefinitions() } };
 }
 
 /**

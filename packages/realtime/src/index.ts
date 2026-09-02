@@ -64,6 +64,7 @@ export {
   realtimeCredentialFromResponse,
   realtimeMintExplanation,
   realtimeSessionConfig,
+  remoteRealtimeClientSecretRequest,
 } from "./realtime-credentials.js";
 export {
   ARRIVAL_SPEECH_KIND,
@@ -119,6 +120,7 @@ export {
   REALTIME_TOOL_FAMILY,
   type RealtimeToolFamily,
   realtimeToolFamily,
+  remoteRealtimeToolDefinitions,
   SESSION_LIST_ALL,
   SESSION_LIST_VOICE,
   SESSION_TOOL_KIND,

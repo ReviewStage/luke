@@ -5,7 +5,7 @@ import { providerKey } from "../../server/db/schema.js";
 import {
   actUnsupportedReason,
   executeCreateWorkspaceAct,
-  MOBILE_SESSION_ACT,
+  REMOTE_SESSION_ACT,
 } from "../../server/hosted/act-execute.js";
 import { handleActWorkspace } from "../../server/hosted/act-workspace.js";
 import { hostedUserId, oauthUserInfoFromAuthAnswer } from "../../server/hosted/bearer.js";
@@ -34,7 +34,7 @@ export default {
         return rows[0];
       },
       unsupportedReason: (providerId) =>
-        actUnsupportedReason(MOBILE_SESSION_ACT.CREATE_WORKSPACE, providerId),
+        actUnsupportedReason(REMOTE_SESSION_ACT.CREATE_WORKSPACE, providerId),
       executeCreateWorkspace: executeCreateWorkspaceAct,
     });
   },
