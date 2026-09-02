@@ -9,7 +9,6 @@ import {
   type UnparsedWireValue,
   VAULT_PROVIDER_ID,
   type VaultProviderId,
-  type WireValue,
   type WorkspaceAgentSelection,
   workspaceNameText,
 } from "../core.js";
@@ -138,12 +137,8 @@ export async function handleActWorkspace(options: ActWorkspaceOptions): Promise<
   // answer to — so a request carrying any of the three fields either parses
   // whole against that table or is invalid, never trimmed to something else.
   let agentSelection: WorkspaceAgentSelection | undefined;
-  const selectionFields: Record<string, WireValue> = {};
-  if (body.agent !== undefined) selectionFields.agent = body.agent;
-  if (body.model !== undefined) selectionFields.model = body.model;
-  if (body.effort !== undefined) selectionFields.effort = body.effort;
-  if (Object.keys(selectionFields).length > 0) {
-    agentSelection = parseWorkspaceAgentSelection(providerId, selectionFields);
+  if (body.agent !== undefined || body.model !== undefined || body.effort !== undefined) {
+    agentSelection = parseWorkspaceAgentSelection(providerId, body);
     if (!agentSelection) {
       return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
     }

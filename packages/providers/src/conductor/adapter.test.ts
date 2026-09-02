@@ -1040,7 +1040,7 @@ test("leaves a filed-away chat off the roster while its workspace stays", async 
   // The filed-away chat neither settles the workspace nor holds it open: the
   // open sibling's own settled turn is what offers the archive.
   assert.deepEqual(observations[0]?.controls, [
-    { id: "archive-workspace", label: "Archive", target: "workspace-quieted" },
+    { id: "archive-workspace", label: "Archive", kind: "archive", target: "workspace-quieted" },
   ]);
   // Dropped before it is ever asked for: the filed-away chat costs no status
   // request, not just no row.
@@ -1632,7 +1632,7 @@ test("advertises a message for any open chat, a stop mid-turn, and an archive on
     ["session-failed", "workspace-failed"],
   ] as const) {
     assert.deepEqual(byId.get(sessionId)?.controls, [
-      { id: "archive-workspace", label: "Archive", target: workspaceId },
+      { id: "archive-workspace", label: "Archive", kind: "archive", target: workspaceId },
     ]);
   }
 });

@@ -19,9 +19,10 @@
 		AABBCC000000000000000088 /* Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000019 /* Palette.swift */; };
 		AABBCC000000000000000089 /* CanvasInkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001A /* CanvasInkTests.swift */; };
 		AABBCC00000000000000008A /* SessionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001B /* SessionsView.swift */; };
-		AABBCC00000000000000008C /* SessionComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001D /* SessionComposerView.swift */; };
-		AABBCC00000000000000008D /* WorkspaceCreatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001E /* WorkspaceCreatorView.swift */; };
+		AABBCC00000000000000008C /* SessionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001D /* SessionDetailView.swift */; };
+		AABBCC00000000000000008D /* WorkspaceCreatorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001E /* WorkspaceCreatorSheet.swift */; };
 		AABBCC00000000000000008E /* SessionReplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001F /* SessionReplay.swift */; };
+		AABBCC0000000000000000A2 /* PresenceBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000A1 /* PresenceBinding.swift */; };
 		AABBCC000000000000000092 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = AABBCC000000000000000091 /* PostHog */; };
 /* End PBXBuildFile section */
 
@@ -38,9 +39,10 @@
 		AABBCC000000000000000019 /* Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Palette.swift; sourceTree = "<group>"; };
 		AABBCC00000000000000001A /* CanvasInkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasInkTests.swift; sourceTree = "<group>"; };
 		AABBCC00000000000000001B /* SessionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsView.swift; sourceTree = "<group>"; };
-		AABBCC00000000000000001D /* SessionComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionComposerView.swift; sourceTree = "<group>"; };
-		AABBCC00000000000000001E /* WorkspaceCreatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceCreatorView.swift; sourceTree = "<group>"; };
+		AABBCC00000000000000001D /* SessionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionDetailView.swift; sourceTree = "<group>"; };
+		AABBCC00000000000000001E /* WorkspaceCreatorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceCreatorSheet.swift; sourceTree = "<group>"; };
 		AABBCC00000000000000001F /* SessionReplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReplay.swift; sourceTree = "<group>"; };
+		AABBCC0000000000000000A1 /* PresenceBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresenceBinding.swift; sourceTree = "<group>"; };
 		AABBCC00000000000000001C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -93,9 +95,10 @@
 				AABBCC000000000000000017 /* SVGPath.swift */,
 				AABBCC000000000000000018 /* VaultView.swift */,
 				AABBCC00000000000000001B /* SessionsView.swift */,
-				AABBCC00000000000000001D /* SessionComposerView.swift */,
-				AABBCC00000000000000001E /* WorkspaceCreatorView.swift */,
+				AABBCC00000000000000001D /* SessionDetailView.swift */,
+				AABBCC00000000000000001E /* WorkspaceCreatorSheet.swift */,
 				AABBCC00000000000000001F /* SessionReplay.swift */,
+				AABBCC0000000000000000A1 /* PresenceBinding.swift */,
 				AABBCC000000000000000014 /* Assets.xcassets */,
 				AABBCC00000000000000001C /* Info.plist */,
 			);
@@ -227,9 +230,10 @@
 				AABBCC000000000000000086 /* SVGPath.swift in Sources */,
 				AABBCC000000000000000087 /* VaultView.swift in Sources */,
 				AABBCC00000000000000008A /* SessionsView.swift in Sources */,
-				AABBCC00000000000000008C /* SessionComposerView.swift in Sources */,
-				AABBCC00000000000000008D /* WorkspaceCreatorView.swift in Sources */,
+				AABBCC00000000000000008C /* SessionDetailView.swift in Sources */,
+				AABBCC00000000000000008D /* WorkspaceCreatorSheet.swift in Sources */,
 				AABBCC00000000000000008E /* SessionReplay.swift in Sources */,
+				AABBCC0000000000000000A2 /* PresenceBinding.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

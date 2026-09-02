@@ -26,6 +26,12 @@ public enum VaultProviderID: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// The name a surface draws for a wire provider id, falling back to the
+    /// id itself for a provider this build does not know by name.
+    public static func displayLabel(forWireId id: String) -> String {
+        VaultProviderID(rawValue: id)?.displayName ?? id.capitalized
+    }
+
     /// Where the user creates a key, shown in the editor — the same copy the
     /// desktop's credential rows carry in `@sidecar/credentials`, as inline
     /// markdown with `keyPageURL` linked on the phrase that names the page.

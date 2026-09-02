@@ -43,12 +43,18 @@ public enum ActClientError: Error, Equatable {
     case serverError(status: Int)
 }
 
+extension ActClientError: HostedUnauthorizedSignaling {
+    public var isUnauthorized: Bool { self == .unauthorized }
+}
+
 // MARK: - Client
 
 /// HTTP client for Luke's hosted act endpoints.
 ///
 /// Acts are the write path for cloud sessions: message a session that is
-/// accepting messages, or create a workspace in a provider project.
+/// accepting messages, run a control its provider advertised, start another
+/// agent in its workspace, rename it or its workspace, or create a workspace
+/// in a provider project.
 ///
 /// Text bounds (`sessionMessageText` / `workspaceNameText`) are enforced on
 /// the server. The client trims text before sending as a courtesy.
@@ -81,16 +87,117 @@ public final class ActClient: Sendable {
         return try await post(url: url, body: body, accessToken: accessToken)
     }
 
+    /// Runs a control the session's latest observation advertised (stop a
+    /// turn, archive a settled workspace, approve a plan).
+    ///
+    /// The server re-observes before writing: a control the fresh pass no
+    /// longer advertises answers `rejected` rather than landing on a session
+    /// that moved on.
+    public func executeControl(
+        accessToken: String,
+        providerId: String,
+        providerSessionId: String,
+        controlId: String
+    ) async throws -> ActMessageAnswer {
+        let url = baseURL.appendingPathComponent("api/acts/control")
+        let body: [String: String] = [
+            "providerId": providerId,
+            "providerSessionId": providerSessionId,
+            "controlId": controlId,
+        ]
+        return try await post(url: url, body: body, accessToken: accessToken)
+    }
+
+    /// Starts another agent in the workspace an observed session runs in.
+    ///
+    /// `agent` must be one of the kinds the session's latest observation
+    /// listed as spawnable; the server re-observes and validates it again.
+    public func spawnAgent(
+        accessToken: String,
+        providerId: String,
+        providerSessionId: String,
+        agent: String,
+        name: String? = nil,
+        task: String? = nil
+    ) async throws -> ActWorkspaceAnswer {
+        let url = baseURL.appendingPathComponent("api/acts/agent")
+        var body: [String: String] = [
+            "providerId": providerId,
+            "providerSessionId": providerSessionId,
+            "agent": agent,
+        ]
+        if let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+            body["name"] = name
+        }
+        if let task = task?.trimmingCharacters(in: .whitespacesAndNewlines), !task.isEmpty {
+            body["task"] = task
+        }
+        return try await post(url: url, body: body, accessToken: accessToken)
+    }
+
+    /// Renames an observed session itself — the chat.
+    public func renameSession(
+        accessToken: String,
+        providerId: String,
+        providerSessionId: String,
+        name: String
+    ) async throws -> ActMessageAnswer {
+        try await rename(
+            path: "api/acts/rename-session",
+            accessToken: accessToken,
+            providerId: providerId,
+            providerSessionId: providerSessionId,
+            name: name
+        )
+    }
+
+    /// Renames the workspace an observed session runs in.
+    public func renameWorkspace(
+        accessToken: String,
+        providerId: String,
+        providerSessionId: String,
+        name: String
+    ) async throws -> ActMessageAnswer {
+        try await rename(
+            path: "api/acts/rename-workspace",
+            accessToken: accessToken,
+            providerId: providerId,
+            providerSessionId: providerSessionId,
+            name: name
+        )
+    }
+
+    private func rename(
+        path: String,
+        accessToken: String,
+        providerId: String,
+        providerSessionId: String,
+        name: String
+    ) async throws -> ActMessageAnswer {
+        let url = baseURL.appendingPathComponent(path)
+        let body: [String: String] = [
+            "providerId": providerId,
+            "providerSessionId": providerSessionId,
+            "name": name.trimmingCharacters(in: .whitespacesAndNewlines),
+        ]
+        return try await post(url: url, body: body, accessToken: accessToken)
+    }
+
     /// Creates a workspace in a cloud project.
     ///
-    /// `name` and `task` are optional. The server bounds them before passing
-    /// them to the provider.
+    /// `name` and `task` are optional; the server bounds them before passing
+    /// them to the provider. `agent`, `model`, and `effort` name a choice from
+    /// the projects answer's own agent table — the server validates the
+    /// pairing against the same table and refuses anything it does not list.
     public func createWorkspace(
         accessToken: String,
         providerId: String,
         providerProjectId: String,
         name: String? = nil,
-        task: String? = nil
+        task: String? = nil,
+        agent: String? = nil,
+        model: String? = nil,
+        effort: String? = nil
     ) async throws -> ActWorkspaceAnswer {
         let url = baseURL.appendingPathComponent("api/acts/workspace")
         var body: [String: String] = [
@@ -103,6 +210,9 @@ public final class ActClient: Sendable {
         if let task = task?.trimmingCharacters(in: .whitespacesAndNewlines), !task.isEmpty {
             body["task"] = task
         }
+        if let agent, !agent.isEmpty { body["agent"] = agent }
+        if let model, !model.isEmpty { body["model"] = model }
+        if let effort, !effort.isEmpty { body["effort"] = effort }
         return try await post(url: url, body: body, accessToken: accessToken)
     }
 

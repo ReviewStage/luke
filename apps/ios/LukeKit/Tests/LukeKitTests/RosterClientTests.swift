@@ -119,3 +119,54 @@ final class RosterClientTests: XCTestCase {
         XCTAssertEqual(sessions[0].sessionId, "s1")
     }
 }
+
+// MARK: - Act advertisements
+
+final class RosterSessionActAdvertisementTests: XCTestCase {
+    func testAdvertisementsAbsentByDefault() {
+        let s = RosterSession(json: [
+            "providerId": "copilot",
+            "sessionId": "task-1",
+            "title": "Read-only task",
+            "status": "working",
+        ])
+        XCTAssertEqual(s?.canReceiveMessage, false)
+        XCTAssertEqual(s?.controls, [])
+        XCTAssertEqual(s?.spawnableAgents, [])
+        XCTAssertEqual(s?.canRename, false)
+        XCTAssertEqual(s?.canRenameWorkspace, false)
+    }
+
+    func testAdvertisementsDecodeAndMalformedControlsAreSkipped() {
+        let s = RosterSession(json: [
+            "providerId": "conductor",
+            "sessionId": "sess-1",
+            "title": "My PR",
+            "status": "working",
+            "canReceiveMessage": true,
+            "controls": [
+                ["id": "cancel-turn", "label": "Stop", "kind": "stop"],
+                ["id": "archive-workspace", "label": "Archive", "kind": "archive"],
+                ["id": "approve-plan", "label": "Approve the plan", "kind": "someday-kind"],
+                ["id": "", "label": "nameless"],
+                ["id": "no-label"],
+            ],
+            "spawnableAgents": ["claude", "codex", ""],
+            "canRename": true,
+            "canRenameWorkspace": true,
+        ])
+        XCTAssertEqual(s?.canReceiveMessage, true)
+        XCTAssertEqual(
+            s?.controls,
+            [
+                RosterSessionControl(id: "cancel-turn", label: "Stop", kind: .stop),
+                RosterSessionControl(id: "archive-workspace", label: "Archive", kind: .archive),
+                // A kind this build does not know is dropped; the control stays.
+                RosterSessionControl(id: "approve-plan", label: "Approve the plan"),
+            ]
+        )
+        XCTAssertEqual(s?.spawnableAgents, ["claude", "codex"])
+        XCTAssertEqual(s?.canRename, true)
+        XCTAssertEqual(s?.canRenameWorkspace, true)
+    }
+}

@@ -121,6 +121,7 @@ function cursorCancelRunControl(runId: string): SessionControl {
 const CURSOR_ARCHIVE_AGENT_CONTROL = {
   id: "archive-agent",
   label: "Archive",
+  kind: SESSION_CONTROL_KIND.ARCHIVE,
 } as const;
 
 const CURSOR_QUERY = {

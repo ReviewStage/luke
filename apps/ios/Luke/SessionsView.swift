@@ -1,5 +1,6 @@
 import LukeKit
 import SwiftUI
+import UIKit
 
 /// Shows the signed-in user's active cloud sessions with pull-to-refresh.
 struct SessionsView: View {
@@ -16,10 +17,36 @@ struct SessionsView: View {
     @State private var filters: Set<SessionFilter> = []
     @State private var sort: SessionSort = .urgency
     @State private var optionsShown = false
-    @State private var composingSession: RosterSession?
+    @State private var openedSession: RosterSession?
+    /// Sent bubbles per session, in memory alone for the app run — the
+    /// developer's own words, never written to disk, surviving push and pop
+    /// so a chat reopened mid-run still shows what was just sent.
+    @State private var threads: [String: [OutgoingMessage]] = [:]
+    @State private var spawningSession: RosterSession?
+    @State private var renaming: RenameTarget?
+    @State private var renameText = ""
+    @State private var creatorShown = false
+    @State private var actFailure: String?
+    /// Counts refresh passes so only the newest may write: a pull-to-refresh
+    /// overlapping a post-act refresh must not land its older roster after
+    /// the newer one — an archived row would come back from the dead.
+    @State private var refreshPass = 0
+
+    /// Which advertised rename a menu press opened: the session itself, or
+    /// the workspace it runs in. One alert serves both; the flag picks the
+    /// words, the count, and the endpoint.
+    private struct RenameTarget: Identifiable {
+        let session: RosterSession
+        let isWorkspace: Bool
+
+        var id: String { session.id }
+        var title: String { isWorkspace ? "Rename Workspace" : "Rename Session" }
+        var act: ProductSessionAct { isWorkspace ? .workspaceRename : .sessionRename }
+    }
 
     private let rosterClient = RosterClient(serviceURL: AccountConstants.serviceURL)
     private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
+    private let projectsClient = ProjectsClient(serviceURL: AccountConstants.serviceURL)
 
     var body: some View {
         Group {
@@ -32,11 +59,53 @@ struct SessionsView: View {
                 searchableList
             }
         }
-        .sheet(item: $composingSession) { s in
-            ComposerSheet(session: s, actClient: actClient) {
-                composingSession = nil
+        .navigationDestination(item: $openedSession) { opened in
+            // The freshest observation of the opened session wins, so a
+            // refresh behind the screen updates the recap it draws; a session
+            // the refresh no longer reports keeps its last observed word.
+            SessionDetailView(
+                session: sessions.first { $0.id == opened.id } ?? opened,
+                actClient: actClient,
+                thread: Binding(
+                    get: { threads[opened.id] ?? [] },
+                    set: { threads[opened.id] = $0 }
+                ),
+                onDelivered: { await refreshSessions() }
+            )
+        }
+        .sheet(item: $spawningSession) { s in
+            AgentSpawnerSheet(session: s, actClient: actClient) {
+                spawningSession = nil
+                Task { await refreshSessions() }
             }
         }
+        .sheet(isPresented: $creatorShown) {
+            WorkspaceCreatorSheet(actClient: actClient, projectsClient: projectsClient) {
+                creatorShown = false
+                Task { await refreshSessions() }
+            }
+        }
+        .alert(
+            renaming?.title ?? "",
+            isPresented: Binding(presence: $renaming),
+            presenting: renaming
+        ) { target in
+            TextField("Name", text: $renameText)
+            Button("Rename") {
+                let name = renameText
+                Task {
+                    await performAct(on: target.session, counting: target.act) { token in
+                        let rename =
+                            target.isWorkspace
+                            ? actClient.renameWorkspace : actClient.renameSession
+                        return try await rename(
+                            token, target.session.providerId, target.session.sessionId, name)
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .failureAlert("Not Delivered", reason: $actFailure)
     }
 
     /// The rows the query leaves: matched with the desktop's own search
@@ -47,17 +116,16 @@ struct SessionsView: View {
         return sessions.filter { SessionSearch.matches($0, tokens: tokens) }
     }
 
-    /// What the list draws: the query's rows, narrowed by the filter
-    /// selection, in the order the chosen sort names.
-    private var visibleSessions: [RosterSession] {
-        sortedSessions(
-            searchMatchedSessions.filter { matchesFilterSelection(filters, session: $0) },
+    private var searchableList: some View {
+        // Matched once per build: the empty check, the visible rows, and the
+        // filtered-out count all read the same pass instead of re-running the
+        // tokenized scan.
+        let matched = searchMatchedSessions
+        let visible = sortedSessions(
+            matched.filter { matchesFilterSelection(filters, session: $0) },
             by: sort
         )
-    }
-
-    private var searchableList: some View {
-        List {
+        return List {
             if isLoading && sessions.isEmpty {
                 ForEach(0 ..< 3, id: \.self) { _ in
                     SkeletonRow()
@@ -69,16 +137,16 @@ struct SessionsView: View {
                 emptyRow
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
-            } else if searchMatchedSessions.isEmpty {
+            } else if matched.isEmpty {
                 ContentUnavailableView.search(text: searchQuery)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
-            } else if visibleSessions.isEmpty {
-                filteredOutRow
+            } else if visible.isEmpty {
+                filteredOutRow(hiddenCount: matched.count)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
             } else {
-                ForEach(visibleSessions) { s in
+                ForEach(visible) { s in
                     sessionItem(s)
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
@@ -107,6 +175,9 @@ struct SessionsView: View {
                     optionsButton
                 }
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                newWorkspaceButton
+            }
         }
         .sheet(isPresented: $optionsShown) {
             SessionOptionsSheet(sessions: sessions, filters: $filters, sort: $sort)
@@ -126,11 +197,20 @@ struct SessionsView: View {
         .tint(Color.ink)
     }
 
-    private var filteredOutRow: some View {
+    private var newWorkspaceButton: some View {
+        Button {
+            creatorShown = true
+        } label: {
+            Label("New Workspace", systemImage: "plus")
+        }
+        .tint(Color.ink)
+    }
+
+    private func filteredOutRow(hiddenCount: Int) -> some View {
         ContentUnavailableView {
             Label("No matching sessions", systemImage: "line.3.horizontal.decrease")
         } description: {
-            Text("Filters hide ^[\(searchMatchedSessions.count) sessions](inflect: true).")
+            Text("Filters hide ^[\(hiddenCount) sessions](inflect: true).")
         } actions: {
             Button("Clear Filters") { filters.removeAll() }
                 .tint(Color.ink)
@@ -140,33 +220,197 @@ struct SessionsView: View {
 
     private let rowInsets = EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16)
 
+    /// Whether the row offers anything beyond what it draws. Every offer here
+    /// is one the session's latest observation advertised — the row invents
+    /// no fallback for a provider that advertised nothing.
+    private func hasRowActs(_ s: RosterSession) -> Bool {
+        s.canReceiveMessage || !s.controls.isEmpty || !s.spawnableAgents.isEmpty || s.canRename
+            || s.canRenameWorkspace
+    }
+
     @ViewBuilder
     private func sessionItem(_ s: RosterSession) -> some View {
-        if s.status == "waiting" {
-            Button { composingSession = s } label: {
-                SessionRow(session: s)
+        // The preview the long-press lifts must be the card's own rounded
+        // shape, or the system snapshots the row's full rectangle and the
+        // lift reads as a foreign overlay instead of the card rising.
+        let core = rowCore(s)
+            .contentShape(
+                [.interaction, .contextMenuPreview], RoundedRectangle(cornerRadius: 15))
+        Group {
+            if hasRowActs(s) {
+                core.contextMenu {
+                    rowMenu(s)
+                } preview: {
+                    SessionRowPreview(session: s)
+                }
+            } else {
+                core
             }
-            .buttonStyle(.plain)
-        } else {
-            SessionRow(session: s)
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            if let archive = archiveControl(s) {
+                Button {
+                    runControl(s, archive)
+                } label: {
+                    Label(archive.label, systemImage: "archivebox")
+                }
+                .tint(.indigo)
+            }
         }
     }
 
-    private var emptyRow: some View {
-        VStack(spacing: 8) {
-            if let error = fetchError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(Color.errorInk)
-                    .multilineTextAlignment(.center)
-            } else {
-                Text("No active sessions")
-                    .font(.subheadline)
-                    .foregroundStyle(Color.inkSecondary)
+    @ViewBuilder
+    private func rowCore(_ s: RosterSession) -> some View {
+        // Every row opens the session's own screen; whether that screen takes
+        // a message is the observation's word, said there rather than by
+        // making some rows dead to the touch.
+        Button { openedSession = s } label: {
+            SessionRow(session: s)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// The menu reads in the system's own order: what the session takes now,
+    /// then the edits that open further UI, then the acts that end something
+    /// — a stop wearing the destructive role, the archive closing the menu
+    /// the way Mail's does. Every entry is still only an advertised act, and
+    /// each section holds only the kinds the adapters themselves declared.
+    @ViewBuilder
+    private func rowMenu(_ s: RosterSession) -> some View {
+        Section {
+            if s.canReceiveMessage {
+                Button {
+                    openedSession = s
+                } label: {
+                    Label("Send Message…", systemImage: "arrow.up.message")
+                }
+            }
+            ForEach(s.controls.filter { $0.kind != .stop && $0.kind != .archive }) { control in
+                Button {
+                    runControl(s, control)
+                } label: {
+                    Label(control.label, systemImage: controlSymbol(control))
+                }
+            }
+            if !s.spawnableAgents.isEmpty {
+                Button {
+                    spawningSession = s
+                } label: {
+                    Label("Add Agent…", systemImage: "plus.bubble")
+                }
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 60)
+        Section {
+            if s.canRename {
+                Button {
+                    renameText = s.title
+                    renaming = RenameTarget(session: s, isWorkspace: false)
+                } label: {
+                    Label("Rename Session…", systemImage: "pencil")
+                }
+            }
+            if s.canRenameWorkspace {
+                Button {
+                    renameText = s.workspace ?? ""
+                    renaming = RenameTarget(session: s, isWorkspace: true)
+                } label: {
+                    Label("Rename Workspace…", systemImage: "pencil.line")
+                }
+            }
+        }
+        Section {
+            ForEach(s.controls.filter { $0.kind == .stop }) { control in
+                Button(role: .destructive) {
+                    runControl(s, control)
+                } label: {
+                    Label(control.label, systemImage: controlSymbol(control))
+                }
+            }
+            ForEach(s.controls.filter { $0.kind == .archive }) { control in
+                Button {
+                    runControl(s, control)
+                } label: {
+                    Label(control.label, systemImage: controlSymbol(control))
+                }
+            }
+        }
+    }
+
+    private func archiveControl(_ s: RosterSession) -> RosterSessionControl? {
+        s.controls.first { $0.kind == .archive }
+    }
+
+    private func runControl(_ s: RosterSession, _ control: RosterSessionControl) {
+        Task {
+            await performAct(on: s, counting: .controlRun) { token in
+                try await actClient.executeControl(
+                    accessToken: token,
+                    providerId: s.providerId,
+                    providerSessionId: s.sessionId,
+                    controlId: control.id
+                )
+            }
+        }
+    }
+
+    /// A glyph for a control by its declared kind alone. An id or a label is
+    /// the provider's own words, and words are not a contract to draw from.
+    private func controlSymbol(_ control: RosterSessionControl) -> String {
+        switch control.kind {
+        case .stop: "stop.circle"
+        case .archive: "archivebox"
+        case .action, nil: "circle"
+        }
+    }
+
+    /// Runs one row act through the shared runner, then refreshes so the
+    /// roster reflects what the act changed; a refusal is surfaced in the
+    /// failure alert with the server's own reason.
+    private func performAct(
+        on s: RosterSession,
+        counting act: ProductSessionAct,
+        _ call: (String) async throws -> ActMessageAnswer
+    ) async {
+        let outcome = await session.performAct(
+            counting: act,
+            provider: s.providerId,
+            events: events,
+            fallbackReason: "The act was not delivered.",
+            call
+        )
+        switch outcome {
+        case .delivered:
+            await refreshSessions()
+        case .refused(let reason):
+            actFailure = reason
+        case .signedOut:
+            ()  // The state change redraws automatically.
+        }
+    }
+
+    @ViewBuilder
+    private var emptyRow: some View {
+        Group {
+            if let error = fetchError {
+                ContentUnavailableView {
+                    Label("Couldn't Load Sessions", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(error)
+                } actions: {
+                    Button("Try Again") {
+                        Task { await refreshSessions() }
+                    }
+                    .tint(Color.ink)
+                }
+            } else {
+                ContentUnavailableView {
+                    Label("No Active Sessions", systemImage: "tray")
+                } description: {
+                    Text("Sessions from providers with stored keys appear here.")
+                }
+            }
+        }
+        .padding(.top, 40)
     }
 
     private func refreshSessions() async {
@@ -175,16 +419,13 @@ struct SessionsView: View {
         defer { isLoading = false }
         guard case .signedIn = session.state else { return }
         do {
-            let token = try await session.validAccessToken()
-            do {
-                sessions = try await rosterClient.observe(bearerToken: token)
-            } catch RosterClientError.serverError(let status) where status == 401 {
-                // validAccessToken() refreshes near-expiry tokens; a 401 here
-                // means the server rejected the token — refresh and retry once.
-                let fresh = try await session.refreshAccessToken()
-                sessions = try await rosterClient.observe(bearerToken: fresh)
+            let fetched = try await session.authorized { token in
+                try await rosterClient.observe(bearerToken: token)
             }
-            recordObservation(sessions)
+            // Animated so a row an act just removed — an archive above all —
+            // slides out the way a deleted Mail row does, instead of blinking.
+            withAnimation { sessions = fetched }
+            recordObservation(fetched)
         } catch is AccountSessionError {
             ()  // Signed out — the state change redraws automatically.
         } catch {
@@ -219,7 +460,7 @@ private func axisTitle(_ axis: SessionFilterAxis) -> String {
 private func optionTitle(_ filter: SessionFilter) -> String {
     switch filter {
     case .provider(let providerId):
-        VaultProviderID(rawValue: providerId)?.displayName ?? providerId.capitalized
+        VaultProviderID.displayLabel(forWireId: providerId)
     case .status(let status):
         status.capitalized
     }
@@ -393,36 +634,72 @@ private struct StatusMark: View {
     }
 }
 
-// MARK: - Composer sheet
+/// Opaque on purpose: the context-menu lift snapshots the card alone, and a
+/// translucent fill reads as a ghost over the system's blur instead of a cell
+/// rising. Compositing the overlay onto the ground it always sits on looks
+/// identical in the list and solid in the lift.
+private var rowCardFill: some View {
+    ZStack {
+        Color.ground
+        Color(white: 1, opacity: 0.028)
+    }
+}
 
-/// Wraps SessionComposerView in a standard sheet with a navigation title and
-/// a Cancel button, then dismisses after a successful send.
-private struct ComposerSheet: View {
+// MARK: - Row preview
+
+/// The card the long-press lifts in place of the row's own snapshot: the same
+/// mark and title, the place line, and the session's words given the room the
+/// row cannot spare — the full recap or error instead of two truncated lines.
+/// Everything here is already drawn on the row itself; the preview only lets
+/// it breathe, the way Cursor's mobile app previews a chat's last message.
+private struct SessionRowPreview: View {
     let session: RosterSession
-    let actClient: ActClient
-    let onDismiss: () -> Void
+
+    /// UIKit sizes a custom preview to the view's own ideal size, and when
+    /// that ideal (plus the menu) outgrows the space beside it, the system
+    /// clips the platter — the title first. So the card takes iMessage's
+    /// posture instead: a fixed envelope proportional to the screen, most of
+    /// its width and a generous share of its height, inside which the words
+    /// truncate. The envelope is always whole; only the text ever gives.
+    private var envelope: CGSize {
+        let screen = UIScreen.main.bounds.size
+        return CGSize(width: min(screen.width - 40, 420), height: screen.height * 0.42)
+    }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                SessionComposerView(
-                    providerId: session.providerId,
-                    providerSessionId: session.sessionId,
-                    actClient: actClient,
-                    onDelivered: onDismiss
-                )
-                .padding(.horizontal)
-                .padding(.top, 8)
-            }
-            .background(Color.ground.ignoresSafeArea())
-            .navigationTitle(session.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel", action: onDismiss)
+        let size = envelope
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 10) {
+                RosterProviderMark(providerId: session.providerId)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(session.title)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.ink)
+                        .lineLimit(2)
+                    if let workspace = session.workspace {
+                        PlaceLine(workspace: workspace, branch: session.branch)
+                    }
                 }
             }
+            if let words = session.error ?? session.recap {
+                // Bounded in lines as well as by the envelope, so a recap
+                // that outgrows the card ends on an ellipsis rather than a
+                // clipped line.
+                Text(words)
+                    .font(.system(size: 13))
+                    .foregroundStyle(session.error != nil ? Color.errorInk : Color.ink.opacity(0.75))
+                    .lineSpacing(3)
+                    .lineLimit(14)
+            } else {
+                Text(session.status.capitalized)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.inkTertiary)
+            }
+            Spacer(minLength: 0)
         }
+        .padding(20)
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
+        .background(rowCardFill)
     }
 }
 
@@ -456,17 +733,12 @@ private struct SessionRow: View {
                     .font(.system(size: 10))
                     .foregroundStyle(Color.inkTertiary)
                 }
-                if session.status == "waiting" {
-                    Image(systemName: "arrow.up.message")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color(red: 1.0, green: 0.627, blue: 0.286, opacity: 0.8))
-                }
             }
             .padding(.top, 2)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
-        .background(Color(white: 1, opacity: 0.028))
+        .background(rowCardFill)
         .overlay(
             RoundedRectangle(cornerRadius: 15)
                 .strokeBorder(
@@ -484,8 +756,9 @@ private struct SessionRow: View {
 
 /// Wraps the app's real ProviderMark (SVG brand art) inside the fixed 30pt slot
 /// the desktop's row-mark uses. Falls back to a colored initial for provider IDs
-/// not covered by VaultProviderID.
-private struct RosterProviderMark: View {
+/// not covered by VaultProviderID. Shared with the session detail screen,
+/// whose title bar wears the same mark the row does.
+struct RosterProviderMark: View {
     let providerId: String
 
     var body: some View {
