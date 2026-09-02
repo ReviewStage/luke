@@ -70,8 +70,8 @@ final class SessionFilterOptionsTests: XCTestCase {
         let groups = sessionFilterOptions(sessions: sessions, selection: [])
         XCTAssertEqual(groups.map(\.axis), [.provider, .status])
         XCTAssertEqual(groups[0].options, [
-            SessionFilterOption(filter: .provider("conductor"), count: 1),
             SessionFilterOption(filter: .provider("codex"), count: 2),
+            SessionFilterOption(filter: .provider("conductor"), count: 1),
         ])
         XCTAssertEqual(groups[1].options, [
             SessionFilterOption(filter: .status("complete"), count: 1),

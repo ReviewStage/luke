@@ -23,8 +23,8 @@ export {
   type WirePrimitive,
   type WireRecord,
   type WireValue,
-  wholeLine,
   wholeNumber,
+  wholeText,
 } from "./json.js";
 export { parseReleaseVersion } from "./release-version.js";
 export {

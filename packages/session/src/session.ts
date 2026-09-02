@@ -560,9 +560,12 @@ function requiredText(value: string, field: string): string {
   return normalized;
 }
 
-/** Trims and cuts a provider-written field to its bound, or drops an empty one. */
+/**
+ * Closes a provider-written field to one line and cuts it to its bound, or
+ * drops an empty one: every field this reaches is drawn or sent as a line.
+ */
 export function boundedText(value: string | undefined, maximumLength: number): string | undefined {
-  const normalized = value?.trim();
+  const normalized = value?.replace(/\s+/gu, " ").trim();
   if (!normalized) return undefined;
   return normalized.slice(0, maximumLength);
 }

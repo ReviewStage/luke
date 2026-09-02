@@ -24,7 +24,10 @@ struct OutgoingMessage: Identifiable, Equatable {
 /// the latest observation advertised taking a message. The thread never
 /// pretends to be the transcript: a cloud session's conversation lives with
 /// its provider, so the agent's side is the bounded recap the roster already
-/// carries, and the sent bubbles live in memory for the app run alone.
+/// carries, and the sent bubbles live in memory for the app run alone. The
+/// recap and the sent bubbles draw their words as Markdown, since an agent's
+/// parting words and a developer's ask are both written in it; an error is a
+/// provider's plain report and draws as the words it is.
 struct SessionDetailView: View {
     let session: RosterSession
     let actClient: ActClient
@@ -109,9 +112,15 @@ struct SessionDetailView: View {
 
     private func agentBubble(_ words: String, isError: Bool) -> some View {
         HStack {
-            Text(words)
-                .font(.system(size: 15))
-                .foregroundStyle(isError ? Color.errorInk : Color.ink)
+            Group {
+                if isError {
+                    Text(words)
+                        .font(.subheadline)
+                } else {
+                    MarkdownMessageView(words)
+                }
+            }
+            .foregroundStyle(isError ? Color.errorInk : Color.ink)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 9)
                 .background(Color.cardFill, in: RoundedRectangle(cornerRadius: 18))
@@ -141,10 +150,10 @@ struct SessionDetailView: View {
                 // hollow if the same words traveled the moment they were
                 // drawn back. The recap bubble stays visible — it already
                 // travels on the roster rows the recording shows.
-                Text(message.text)
+                MarkdownMessageView(message.text)
                     .postHogMask()
-                    .font(.system(size: 15))
                     .foregroundStyle(.white)
+                    .tint(.white)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
                     .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 18))

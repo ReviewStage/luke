@@ -11,7 +11,7 @@ import {
   type SessionProvider,
   type SessionStatus,
 } from "@sidecar/session";
-import { isRecord, isWireString, oneLine, text, type WireRecord, wholeLine } from "@sidecar/wire";
+import { isRecord, isWireString, oneLine, text, type WireRecord, wholeText } from "@sidecar/wire";
 import {
   discoverSessionFiles,
   LOCAL_ADAPTER_DEFAULTS,
@@ -214,7 +214,7 @@ function parseTail(tail: string): Omit<ParsedOmpSession, "cwd" | "title"> {
     // sentence mid-turn — or cut by an abort or an error — poses as an outcome.
     parsed.recap =
       open.size === 0 && parsed.turnFailed !== true && parsed.turnAborted !== true
-        ? wholeLine(ompMessageText(message))
+        ? wholeText(ompMessageText(message))
         : undefined;
   }
 

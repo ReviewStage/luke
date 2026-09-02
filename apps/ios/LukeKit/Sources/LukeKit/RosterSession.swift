@@ -66,6 +66,13 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
 
     public var id: String { "\(providerId):\(sessionId)" }
 
+    /// The recap as the one line a row can spare: its line breaks and runs of
+    /// space closed to single spaces. The recap itself keeps the lines it was
+    /// written in, because the session screen draws them as Markdown.
+    public var recapLine: String? {
+        recap.map { $0.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
+    }
+
     public init(
         providerId: String,
         sessionId: String,

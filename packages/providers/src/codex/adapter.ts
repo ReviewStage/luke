@@ -23,7 +23,7 @@ import {
   text,
   type UnparsedWireValue,
   type WireRecord,
-  wholeLine,
+  wholeText,
 } from "@sidecar/wire";
 import {
   type HookStatusRefinement,
@@ -362,7 +362,7 @@ function parseCodexRolloutTail(tail: string): ParsedCodexRollout {
           // A turn that settled cleanly got past any failure it recorded on
           // the way, so a stale error must not outlive it.
           parsed.error = undefined;
-          parsed.lastAgentMessage = wholeLine(text(payload.last_agent_message));
+          parsed.lastAgentMessage = wholeText(text(payload.last_agent_message));
         }
       }
       continue;

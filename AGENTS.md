@@ -579,8 +579,10 @@ What Luke may show:
   with its own narrower rule. An evaluator receives `AttentionContext`, what
   a provider wrote *about* a session, and never the transcript behind it: no
   message history, file contents, or command output. A recap counts as *about*
-  even when it is the agent's own parting words, the one bounded line saying
-  where the turn ended, the same standing as a recap a provider designated,
+  even when it is the agent's own parting words, the bounded words saying
+  where the turn ended, kept with the line breaks they were written in so a
+  chat can draw them as the Markdown they are, and collapsed to one line only
+  where a row or an excerpt has room for one, the same standing as a recap a provider designated,
   but the transcript it was read from never travels. A
   spoken announcement (a session that started waiting, stopped on an error,
   or finished, or an evaluator sentence approved for speech) reaches the
