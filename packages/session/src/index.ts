@@ -108,6 +108,7 @@ export {
   sessionRosterRetentionMs,
   silentAttention,
   supportsSessionControl,
+  transcriptReadTailBytes,
   UNKNOWN_WORKSPACE_LABEL,
 } from "./session.js";
 export {

@@ -206,8 +206,9 @@ Trust constraints:
   announcement that named the agent by its title named work it had stopped
   doing. Luke therefore derives one short phrase per local session from the
   same bounded transcript rendering the conversation-tab ask already reads,
-  through the same adapter method, cut to its last 8,000 characters, together
-  with the title as the developer's first ask and the bounded recap. The
+  through the same adapter method, bounded only by the file tail the adapter
+  reads and its per-line cuts, together with the title as the developer's
+  first ask and the bounded recap. The
   derivation runs on the attention loop's own gate and cadence, never in a
   fixture run, for roster-relevant local sessions only, on first sight and
   again when a session enters a notice status past a per-session floor, a

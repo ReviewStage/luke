@@ -122,6 +122,6 @@ export async function readOmpSessionTranscript(
   const tail = await readTail(filePath, request.readTailBytes ?? TRANSCRIPT_BOUNDS.READ_TAIL_BYTES);
   return boundedTranscript(
     tailRecords(tail).flatMap(linesFromRecord),
-    request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
+    request.maximumRenderedLength,
   );
 }

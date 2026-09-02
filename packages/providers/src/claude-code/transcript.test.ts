@@ -112,6 +112,27 @@ test("keeps the newest turns when the rendering is cut, and says so", async (t) 
   }
 });
 
+test("renders every line uncut when no rendered length is asked for", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  const records = Array.from({ length: 400 }, (_, index) => ({
+    type: "user",
+    message: { role: "user", content: `prompt number ${index} ${"x".repeat(40)}` },
+  }));
+  await writeTranscript(claudeHome, TEST_SESSION_ID, records);
+
+  const rendered = await readClaudeSessionTranscript({
+    claudeHome,
+    providerSessionId: TEST_SESSION_ID,
+  });
+
+  assert.ok(rendered);
+  assert.ok(rendered.length > 8_000, "the old whole-rendering cap no longer applies");
+  assert.ok(!rendered.includes("[earlier turns omitted]"));
+  assert.equal(rendered.split("\n").length, 400);
+  assert.ok(rendered.startsWith("Developer: prompt number 0 "));
+  assert.ok(rendered.includes("prompt number 399"));
+});
+
 test("reads nothing for a session that has no transcript file", async (t) => {
   const claudeHome = await temporaryClaudeHome(t);
   await writeTranscript(claudeHome, TEST_SESSION_ID, [

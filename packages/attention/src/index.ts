@@ -46,7 +46,6 @@ export {
 } from "./persona.js";
 export {
   boundedSubject,
-  maximumSubjectTranscriptLength,
   SessionSubjectDeriver,
   type SessionSubjectDeriverOptions,
   SUBJECT_SCHEMA,
@@ -57,7 +56,7 @@ export {
   type SubjectResult,
   subjectDerivationFromModel,
   subjectInputFromWire,
-  subjectTranscriptSlice,
+  subjectTranscript,
 } from "./subject.js";
 export {
   SUBJECT_RESPONSES_PATH,

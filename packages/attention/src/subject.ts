@@ -10,6 +10,7 @@ import {
   type Session,
   type SessionIdentity,
   type SessionStatus,
+  transcriptReadTailBytes,
 } from "@sidecar/session";
 import {
   isRecord,
@@ -22,27 +23,22 @@ import {
 
 /**
  * The subject of a local session: one short phrase saying what its agent is
- * working on, derived by a model from a bounded slice of the session's own
- * transcript. It exists because no observed field says this — a title is the
- * first message, an activity is the tool running now, a recap is the latest
- * settled turn — and an announcement that names the agent by its title names
- * the work it stopped doing.
+ * working on, derived by a model from the rendering of the session's own
+ * transcript that the adapter already produces, bounded by the file tail it
+ * reads and its per-line cuts. It exists because no observed field says this —
+ * a title is the first message, an activity is the tool running now, a recap
+ * is the latest settled turn — and an announcement that names the agent by
+ * its title names the work it stopped doing.
  *
  * It mirrors the attention evaluator at every layer: a model's judgment about
  * one session, kept beside provider-owned state, reaching no write path. It
  * is the one place transcript content reaches a model unbidden, so the input
- * is bounded here, travels as data behind a marker, and the model is offered
- * no tools; the line it answers is bounded again before it is kept.
+ * is the adapter's own bounded rendering and nothing wider, travels as data
+ * behind a marker, and the model is offered no tools; the line it answers is
+ * bounded again before it is kept.
  */
 
 export const SUBJECT_SCHEMA_NAME = "session_subject";
-
-/**
- * The most transcript a derivation may carry: the same rendering bound the
- * conversation-tab reading already holds every provider to, so a derivation
- * never reads further than a developer's own ask would.
- */
-export const maximumSubjectTranscriptLength = 8_000;
 
 export const SUBJECT_SCHEMA = {
   type: "object",
@@ -70,7 +66,7 @@ const NOTICE_STATUSES: ReadonlySet<SessionStatus> = new Set(Object.values(SESSIO
 /**
  * What a derivation is given, and the only session material a subject model
  * ever receives: the provider's name, the title as the developer's first
- * ask, the bounded recap where one stands, and the bounded transcript slice.
+ * ask, the bounded recap where one stands, and the transcript rendering.
  * Identifiers and clocks never enter it.
  */
 export interface SubjectInput {
@@ -101,7 +97,7 @@ export interface SubjectResult extends SessionIdentity {
 export interface SessionSubjectDeriverOptions {
   evaluator: SubjectEvaluator;
   /**
-   * Reads the bounded transcript rendering of one local session, or nothing
+   * Reads the transcript rendering of one local session, or nothing
    * when its provider keeps none this build can read. Supplied by the main
    * process, which alone reaches the adapters.
    */
@@ -141,13 +137,10 @@ export function boundedSubject(value: string | undefined): string | undefined {
   return boundedText(value?.replace(/\s+/g, " "), maximumSessionSubjectLength);
 }
 
-/** The bounded slice of a transcript that may leave the machine: its tail, since the end is where the work stands. */
-export function subjectTranscriptSlice(transcript: string): string | undefined {
-  const trimmed = transcript.trim();
-  if (!trimmed) return undefined;
-  return trimmed.length <= maximumSubjectTranscriptLength
-    ? trimmed
-    : trimmed.slice(trimmed.length - maximumSubjectTranscriptLength);
+/** The rendering as it travels: whole, trimmed, or nothing when there is nothing in it. */
+export function subjectTranscript(rendering: string): string | undefined {
+  const trimmed = rendering.trim();
+  return trimmed || undefined;
 }
 
 /**
@@ -160,10 +153,11 @@ export function subjectInputFromWire(value: UnparsedWireValue): SubjectInput | u
   const title = boundedText(text(value.title), maximumSessionTitleLength);
   if (!providerName || !title) return undefined;
   // Refused rather than cut past the bounds: a longer transcript or recap is
-  // not an input this build produced.
+  // not an input this build produced. A rendering is a lossy cut of the file
+  // tail it was read from, so it cannot materially outrun those bytes.
   if (!isWireString(value.transcript)) return undefined;
   const transcript = value.transcript.trim();
-  if (!transcript || transcript.length > maximumSubjectTranscriptLength) return undefined;
+  if (!transcript || transcript.length > transcriptReadTailBytes) return undefined;
   if (value.recap !== undefined && !isWireString(value.recap)) return undefined;
   const recap = value.recap?.trim();
   if (recap !== undefined && recap.length > maximumSessionRecapExcerptLength) return undefined;
@@ -343,7 +337,7 @@ export class SessionSubjectDeriver {
   async #transcript(identity: SessionIdentity): Promise<string | undefined> {
     try {
       const rendering = await this.#readTranscript(identity);
-      return rendering ? subjectTranscriptSlice(rendering) : undefined;
+      return rendering ? subjectTranscript(rendering) : undefined;
     } catch {
       return undefined;
     }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SUBJECT_SCHEMA_NAME, type SubjectInput } from "@sidecar/attention";
+import { transcriptReadTailBytes } from "@sidecar/session";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import type { HostedSpend } from "../server/hosted/quota";
 import { HOSTED_SUBJECT_DEFAULTS, handleSubjectDerive } from "../server/hosted/subject-derive";
@@ -93,7 +94,10 @@ test("an input that fails the wire contract is refused before anything is spent"
     return OPEN_SPEND;
   };
   const tooLong = await handleSubjectDerive(
-    options({ request: deriveRequest({ ...INPUT, transcript: "x".repeat(8_001) }), spend }),
+    options({
+      request: deriveRequest({ ...INPUT, transcript: "x".repeat(transcriptReadTailBytes + 1) }),
+      spend,
+    }),
   );
   assert.equal(tooLong.status, 400);
   assert.equal((await tooLong.json()).error, HOSTED_API_ERROR.INVALID_REQUEST);

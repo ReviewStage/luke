@@ -71,7 +71,7 @@ export const HOSTED_SERVICE_PATH = {
   INTRODUCTION_MINT: "/api/voice/introduction-mint",
   ATTENTION_REVIEW: "/api/attention/review",
   /**
-   * Derive one local session's subject from a bounded transcript slice (POST),
+   * Derive one local session's subject from its bounded transcript rendering (POST),
    * on Luke's key, for a developer with none of their own. The slice is read
    * for the one phrase and stored nowhere.
    */

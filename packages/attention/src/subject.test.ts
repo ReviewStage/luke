@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  maximumSubjectTranscriptLength,
   SessionSubjectDeriver,
   type SubjectDerivation,
   type SubjectEvaluator,
@@ -9,7 +8,7 @@ import {
   subjectDerivationFromModel,
   subjectInputFromWire,
   subjectResponsesRequest,
-  subjectTranscriptSlice,
+  subjectTranscript,
 } from "@sidecar/attention";
 import {
   maximumSessionSubjectLength,
@@ -21,6 +20,7 @@ import {
   type Session,
   type SessionLocation,
   type SessionProvider,
+  transcriptReadTailBytes,
 } from "@sidecar/session";
 
 const codex: SessionProvider = { id: "codex", displayName: "Codex" };
@@ -210,17 +210,17 @@ test("an evaluator in its own quiet is not asked, and nothing is consumed", asyn
   assert.equal((await instance.derive([session("a")]))[0]?.subject, "later");
 });
 
-test("the transcript slice is the bounded tail, and the recap travels bounded", async () => {
-  const long = `${"early ".repeat(3_000)}THE END`;
+test("the whole rendering travels, trimmed, and the recap travels bounded", async () => {
+  const long = `  ${"early ".repeat(3_000)}THE END\n`;
   const { inputs, evaluator } = scripted([{ subject: "s" }]);
   const { instance } = deriver(evaluator, { transcripts: new Map([["a", long]]) });
   await instance.derive([session("a", { recap: `  ${"r".repeat(900)}  ` })]);
   const input = inputs[0];
   assert.ok(input);
-  assert.equal(input.transcript.length, maximumSubjectTranscriptLength);
+  assert.equal(input.transcript, long.trim());
   assert.ok(input.transcript.endsWith("THE END"));
   assert.equal(input.recap?.length, 500);
-  assert.equal(subjectTranscriptSlice("   "), undefined);
+  assert.equal(subjectTranscript("   "), undefined);
 });
 
 test("model output is validated and bounded, never repaired", () => {
@@ -247,7 +247,7 @@ test("a hosted input is validated to the bounds this build produces", () => {
     subjectInputFromWire({
       providerName: "Codex",
       title: TITLE,
-      transcript: "x".repeat(maximumSubjectTranscriptLength + 1),
+      transcript: "x".repeat(transcriptReadTailBytes + 1),
     }),
     undefined,
   );

@@ -11,12 +11,13 @@ we collect, who we send it to, and how to turn it off.
 **On your Mac.** Luke reads the session files your coding agents already write,
 using the session title, status, repository, branch, model, current tool,
 errors, and the summary the agent wrote. It writes none of this to disk. For a
-session running on your Mac, Luke also reads a bounded slice of that session's
-own conversation — the last 8,000 characters of the transcript file its agent
-already writes — to write himself a one-line phrase saying what the agent is
-working on, because a session's title is only its first message and the work
-usually moves on. That slice is read on your Mac, sent once to derive the
-phrase (see below), and kept nowhere: only the phrase is kept, in memory, and
+session running on your Mac, Luke also reads a bounded rendering of that
+session's own conversation — the end of the transcript file its agent already
+writes (up to the last 256 KB), with each message and tool result cut short —
+to write himself a one-line phrase saying what the agent is working on,
+because a session's title is only its first message and the work usually
+moves on. That rendering is read on your Mac, sent once to derive the phrase
+(see below), and kept nowhere: only the phrase is kept, in memory, and
 it is used to name the session when Luke speaks about it. Nothing else reads
 message history, file contents, or command output. If you run
 agents inside the Herdr terminal manager, Luke also asks Herdr's own

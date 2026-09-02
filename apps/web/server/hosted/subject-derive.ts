@@ -22,7 +22,7 @@ import type { HostedSpend } from "./quota.js";
  * Like the attention review this is not a proxy: the instructions, the schema,
  * and the refusal to store come from the shared construction the desktop's
  * keyed deriver sends, and the request's whole say is the bounded input,
- * validated here against the same bounds. The transcript slice it carries is
+ * validated here against the same bounds. The transcript rendering it carries is
  * read for the one phrase and kept nowhere: it is not logged, not stored, and
  * OpenAI is asked not to retain the request.
  */

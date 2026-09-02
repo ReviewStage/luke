@@ -3,10 +3,13 @@
  * must fit and the cut that enforces them. Each provider maps its own records
  * into the one line vocabulary — `Developer:` for the person, the agent's own
  * name for its replies, `→` for a tool call, `←` for its answer, `Error:` for
- * a failure the provider recorded — and this module keeps every rendering the
- * same bounded size however the records differ.
+ * a failure the provider recorded — and this module holds every rendering to
+ * the same bounds however the records differ: how much of the file one read
+ * loads, and how long any one line may run. There is no bound on the total:
+ * a reader sees the whole rendering the tail it read produces.
  */
 
+import { transcriptReadTailBytes } from "@sidecar/session";
 import { isRecord, isWireString, text, type WireRecord } from "@sidecar/wire";
 
 export const transcriptLine = {
@@ -19,17 +22,11 @@ export const transcriptLine = {
 
 export const TRANSCRIPT_BOUNDS = {
   /** How much of the file's end one read may load. */
-  READ_TAIL_BYTES: 256 * 1024,
+  READ_TAIL_BYTES: transcriptReadTailBytes,
   /** A rendered message line: enough to carry meaning, not a document. */
   MAXIMUM_MESSAGE_LENGTH: 400,
   /** A rendered tool call or its result: the gist, never the payload. */
   MAXIMUM_TOOL_LENGTH: 200,
-  /**
-   * The whole rendering. It enters a live conversation as one tool output,
-   * so it is sized for answering a question about the session, not for
-   * carrying the session.
-   */
-  MAXIMUM_RENDERED_LENGTH: 8_000,
 } as const;
 
 export const OMISSION_MARKER = "[earlier turns omitted]";
@@ -66,18 +63,20 @@ export function transcriptMessageText(
 }
 
 /**
- * Joins rendered lines into one bounded rendering, or nothing when there are
- * no lines to render. The newest turns win the space: a question about a
- * session is almost always about where it is now, so the rendering is cut
- * from the front, at a line, and says so.
+ * Joins rendered lines into one rendering, or nothing when there are no lines
+ * to render. With no maximum the whole rendering stands, bounded only by the
+ * tail the read loaded and the per-line cuts already applied. When a caller
+ * asks for one, the newest turns win the space: a question about a session is
+ * almost always about where it is now, so the rendering is cut from the
+ * front, at a line, and says so.
  */
 export function boundedTranscript(
   lines: readonly string[],
-  maximumLength: number,
+  maximumLength?: number,
 ): string | undefined {
   if (lines.length === 0) return undefined;
   let rendered = lines.join("\n");
-  if (rendered.length > maximumLength) {
+  if (maximumLength !== undefined && rendered.length > maximumLength) {
     const kept = rendered.slice(rendered.length - maximumLength);
     const firstWholeLine = kept.indexOf("\n");
     rendered = `${OMISSION_MARKER}\n${firstWholeLine >= 0 ? kept.slice(firstWholeLine + 1) : kept}`;

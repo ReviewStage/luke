@@ -33,7 +33,7 @@ function withoutTrailingSlash(value: string): string {
 /**
  * Derives subjects through Luke's hosted service on the signed-in account,
  * for a developer with no OpenAI key of their own. What leaves the machine is
- * identical to the keyed deriver's input — the bounded transcript slice, the
+ * identical to the keyed deriver's input — the bounded transcript rendering, the
  * title, the recap — by way of Luke's service, which holds the instructions
  * and schema fixed by its own build and stores none of it. A failure answers
  * nothing, and a spent allowance stands the deriver down until the counters
