@@ -39,7 +39,12 @@ test("the spoken sentence names rows of the roster it is captured beside", () =>
   // would ship the band unphotographed without failing anything else.
   assert.deepEqual(
     mentions.map((mention) => mention.providerSessionId),
-    ["claude-review", "conductor-chat-tidy", "cursor-agent", "devin-session"],
+    [
+      "claude-review",
+      "conductor-chat-tidy",
+      "conductor-cursor-agent",
+      "conductor-opencode-session",
+    ],
   );
   assert.ok(mentions.some((mention) => mention.kind === SESSION_MENTION_KIND.WORKSPACE));
 });

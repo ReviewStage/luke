@@ -20,7 +20,7 @@ const TEST_CONTROL = {
   INTERRUPT: "interrupt",
 } as const;
 const TEST_CONTROL_WITH_WHITESPACE = " open ";
-const TEST_DEVIN_LINK = "https://app.devin.ai/sessions/devin-1";
+const TEST_CONDUCTOR_LINK = "https://app.conductor.build/sessions/session-1";
 
 function observation(
   providerSessionId: string,
@@ -216,7 +216,7 @@ test("keeps only the addresses Luke would open, and never a shortened one", () =
   ]) {
     assert.equal(linkFor(link), link, `${link} is a session's own address`);
   }
-  assert.equal(linkFor("  https://app.devin.ai/sessions/devin-1  "), TEST_DEVIN_LINK);
+  assert.equal(linkFor("  https://app.conductor.build/sessions/session-1  "), TEST_CONDUCTOR_LINK);
 
   // A scheme outside the set never becomes a session's address, so nothing
   // downstream has to ask a second time whether an address is safe to open.

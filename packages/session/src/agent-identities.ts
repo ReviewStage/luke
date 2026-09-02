@@ -16,20 +16,11 @@ function providerIdentity(providerId: keyof typeof PROVIDER_IDENTITY_BY_ID): Ses
 export const AGENT_IDENTITY = {
   CLAUDE_CODE: providerIdentity(PROVIDER_ID.CLAUDE_CODE),
   CODEX: providerIdentity(PROVIDER_ID.CODEX),
-  COPILOT: providerIdentity(PROVIDER_ID.COPILOT),
-  CURSOR: providerIdentity(PROVIDER_ID.CURSOR),
-  DEVIN: providerIdentity(PROVIDER_ID.DEVIN),
-  GEMINI_CLI: providerIdentity(PROVIDER_ID.GEMINI_CLI),
-  GROK_BUILD: providerIdentity(PROVIDER_ID.GROK_BUILD),
-  OPENCODE: providerIdentity(PROVIDER_ID.OPENCODE),
-  DEEPSEEK: {
-    id: HOSTED_AGENT_ID.DEEPSEEK,
-    // The hosting app's own name for its DeepSeek-backed harness, not
-    // DeepSeek the model vendor: the mark is the vendor's, the word is the
-    // agent's.
-    displayName: "DeepSeek Harness",
-  },
-  PI: { id: HOSTED_AGENT_ID.PI, displayName: "Pi" },
+  COPILOT: { id: HOSTED_AGENT_ID.COPILOT, displayName: "Copilot" },
+  CURSOR: { id: HOSTED_AGENT_ID.CURSOR, displayName: "Cursor" },
+  GEMINI_CLI: { id: HOSTED_AGENT_ID.GEMINI_CLI, displayName: "Gemini CLI" },
+  GROK_BUILD: { id: HOSTED_AGENT_ID.GROK_BUILD, displayName: "Grok Build" },
+  OPENCODE: { id: HOSTED_AGENT_ID.OPENCODE, displayName: "OpenCode" },
 } as const satisfies Readonly<Record<string, SessionProvider>>;
 
 /**

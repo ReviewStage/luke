@@ -214,7 +214,7 @@ export function sessionContextText(sessions: readonly Session[], now: number = D
               `internal workspace name — never use to refer to the work: ${session.workspace.name}${session.workspace.managerName ? ` managed by ${session.workspace.managerName}` : ""}`,
             ]
           : []),
-        // An app that independently claims the session is how "my cmux Cursor
+        // An app that independently claims the session is how "my Superset Codex
         // session" reads apart from the agent's other rows, so each
         // association rides by name — and only by name: the pane address
         // behind it stays on the machine, like every other link.

@@ -5,6 +5,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import {
+  HOSTED_AGENT_ID,
   PROVIDER_ID,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
@@ -171,10 +172,10 @@ test("binds Cursor's agents CLI under Superset's own name for it", async (t) => 
   database.close();
 
   const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
-  const context = snapshot.context(PROVIDER_ID.CURSOR, "cli-session");
+  const context = snapshot.context(HOSTED_AGENT_ID.CURSOR, "cli-session");
   assert.equal(context?.workspaceId, "workspace-1");
   assert.equal(
-    snapshot.enrich(PROVIDER_ID.CURSOR, [
+    snapshot.enrich(HOSTED_AGENT_ID.CURSOR, [
       {
         providerSessionId: "cli-session",
         title: "square-geometry",
@@ -214,7 +215,7 @@ test("matches a chat Superset recorded no session id for by its worktree", async
     directory: "/Users/test/.superset/worktrees/repo-1/parallel-hippopotamus",
   };
 
-  const enriched = snapshot.enrich(PROVIDER_ID.OPENCODE, [observation], "host-local")[0];
+  const enriched = snapshot.enrich(HOSTED_AGENT_ID.OPENCODE, [observation], "host-local")[0];
   assert.deepEqual(enriched?.workspace, {
     providerWorkspaceId: "workspace-1",
     name: "parallel-hippopotamus",
@@ -249,25 +250,28 @@ test("matches a chat Superset recorded no session id for by its worktree", async
 
   // The act router resolves the matched chat against the same snapshot the
   // advertisement rode, terminal-less like a chatless workspace row.
-  const context = snapshot.actableContext(PROVIDER_ID.OPENCODE, "ses_grok", "host-local");
+  const context = snapshot.actableContext(HOSTED_AGENT_ID.OPENCODE, "ses_grok", "host-local");
   assert.equal(context?.workspaceId, "workspace-1");
   assert.equal(context?.terminalId, undefined);
 
   // A chat somewhere else, or one a cloud provider holds under a
   // coincidentally equal path, is never Superset's.
   const elsewhere = snapshot.enrich(
-    PROVIDER_ID.OPENCODE,
+    HOSTED_AGENT_ID.OPENCODE,
     [{ ...observation, providerSessionId: "ses_other", directory: "/Users/test/luke" }],
     "host-local",
   )[0];
   assert.equal(elsewhere?.workspace, undefined);
   const cloud = snapshot.enrich(
-    PROVIDER_ID.OPENCODE,
+    HOSTED_AGENT_ID.OPENCODE,
     [{ ...observation, providerSessionId: "ses_cloud", location: SESSION_LOCATION.CLOUD }],
     "host-local",
   )[0];
   assert.equal(cloud?.workspace, undefined);
-  assert.equal(snapshot.actableContext(PROVIDER_ID.OPENCODE, "ses_cloud", "host-local"), undefined);
+  assert.equal(
+    snapshot.actableContext(HOSTED_AGENT_ID.OPENCODE, "ses_cloud", "host-local"),
+    undefined,
+  );
 });
 
 test("carries directory matches into the next snapshot until enrichment re-decides", async (t) => {
@@ -293,26 +297,32 @@ test("carries directory matches into the next snapshot until enrichment re-decid
     directory: "/Users/test/.superset/worktrees/repo-1/parallel-hippopotamus",
   };
   const first = await reader.read();
-  first.enrich(PROVIDER_ID.OPENCODE, [observation], "host-local");
+  first.enrich(HOSTED_AGENT_ID.OPENCODE, [observation], "host-local");
 
   // A drawn row keeps advertising its acts until the next enrichment pass
   // commits, so the fresh snapshot must answer them before that pass runs.
   const second = await reader.read();
-  assert.equal(second.actableContext(PROVIDER_ID.OPENCODE, "ses_grok", "host-local"), undefined);
+  assert.equal(
+    second.actableContext(HOSTED_AGENT_ID.OPENCODE, "ses_grok", "host-local"),
+    undefined,
+  );
   second.adoptDirectoryMatches(first);
   assert.equal(
-    second.actableContext(PROVIDER_ID.OPENCODE, "ses_grok", "host-local")?.workspaceId,
+    second.actableContext(HOSTED_AGENT_ID.OPENCODE, "ses_grok", "host-local")?.workspaceId,
     "workspace-1",
   );
 
   // The observation is the match's whole authority: a chat re-observed
   // somewhere else loses the adopted entry on the same pass.
   second.enrich(
-    PROVIDER_ID.OPENCODE,
+    HOSTED_AGENT_ID.OPENCODE,
     [{ ...observation, directory: "/Users/test/elsewhere" }],
     "host-local",
   );
-  assert.equal(second.actableContext(PROVIDER_ID.OPENCODE, "ses_grok", "host-local"), undefined);
+  assert.equal(
+    second.actableContext(HOSTED_AGENT_ID.OPENCODE, "ses_grok", "host-local"),
+    undefined,
+  );
 
   // A worktree gone from the latest read anchors nothing, however recently
   // it was matched.
@@ -321,7 +331,7 @@ test("carries directory matches into the next snapshot until enrichment re-decid
   archived.close();
   const third = await reader.read();
   third.adoptDirectoryMatches(first);
-  assert.equal(third.actableContext(PROVIDER_ID.OPENCODE, "ses_grok", "host-local"), undefined);
+  assert.equal(third.actableContext(HOSTED_AGENT_ID.OPENCODE, "ses_grok", "host-local"), undefined);
 });
 
 test("path matching claims only live worktrees, never the main checkout or an archive", async (t) => {
@@ -342,7 +352,7 @@ test("path matching claims only live worktrees, never the main checkout or an ar
     "/Users/test/.superset/worktrees/repo-1/filed-away",
   ]) {
     const enriched = snapshot.enrich(
-      PROVIDER_ID.OPENCODE,
+      HOSTED_AGENT_ID.OPENCODE,
       [
         {
           providerSessionId: `ses_${directory}`,
@@ -373,7 +383,7 @@ test("binds Superset's grok agents to Grok Build sessions", async (t) => {
   database.close();
 
   const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
-  const context = snapshot.context(PROVIDER_ID.GROK_BUILD, "grok-session");
+  const context = snapshot.context(HOSTED_AGENT_ID.GROK_BUILD, "grok-session");
   assert.equal(context?.workspaceId, "workspace-1");
 });
 
@@ -647,7 +657,10 @@ test("attaches Superset's Gemini terminals to Gemini CLI rows", async (t) => {
   database.close();
 
   const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
-  assert.equal(snapshot.context(PROVIDER_ID.GEMINI_CLI, "session-1")?.workspaceId, "workspace-1");
+  assert.equal(
+    snapshot.context(HOSTED_AGENT_ID.GEMINI_CLI, "session-1")?.workspaceId,
+    "workspace-1",
+  );
 });
 
 test("prefers the live binding a resumed chat's terminal moved to", async (t) => {

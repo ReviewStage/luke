@@ -1,4 +1,6 @@
 import {
+  AGENT_IDENTITY,
+  type HostedAgentId,
   PROVIDER_ID,
   PROVIDER_IDENTITY_BY_ID,
   type ProviderId,
@@ -36,7 +38,7 @@ export interface SessionSnapshot {
   providerId: ProviderId;
   provider: string;
   /** The agent behind the chat, when the provider hosts rather than is it. */
-  agentId?: ProviderId;
+  agentId?: ProviderId | HostedAgentId;
   agent?: string;
   /** Drawn only: apps where this synthetic local chat also appears. */
   applications?: readonly SessionApplicationSnapshot[];
@@ -113,20 +115,15 @@ const providerName = (providerId: ProviderId): string =>
 
 /** Smoke rows owned by each provider, including explicit empty coverage. */
 export const FIXTURE_SESSION_IDS_BY_PROVIDER = {
-  [PROVIDER_ID.ANTIGRAVITY]: [],
   [PROVIDER_ID.CLAUDE_CODE]: ["claude-review"],
   [PROVIDER_ID.CODEX]: ["codex-bootstrap"],
-  [PROVIDER_ID.CONDUCTOR]: ["conductor-chat-package", "conductor-chat-tidy"],
-  [PROVIDER_ID.COPILOT]: [],
-  [PROVIDER_ID.CURSOR]: ["cursor-agent"],
-  [PROVIDER_ID.DEVIN]: ["devin-session"],
-  [PROVIDER_ID.GEMINI_CLI]: [],
-  [PROVIDER_ID.GROK_BUILD]: [],
-  [PROVIDER_ID.JULES]: [],
+  [PROVIDER_ID.CONDUCTOR]: [
+    "conductor-chat-package",
+    "conductor-chat-tidy",
+    "conductor-cursor-agent",
+    "conductor-opencode-session",
+  ],
   [PROVIDER_ID.OMP]: [],
-  [PROVIDER_ID.OPENCODE]: [],
-  [PROVIDER_ID.RADIUS]: [],
-  [PROVIDER_ID.REPLICAS]: [],
 } as const satisfies Readonly<Record<ProviderId, readonly string[]>>;
 
 const smokeFixture: FixtureSnapshot = {
@@ -243,57 +240,79 @@ const smokeFixture: FixtureSnapshot = {
         managerName: providerName(PROVIDER_ID.CONDUCTOR),
       },
     },
+    // A third Conductor workspace whose one chat runs an agent Luke draws
+    // only inside a host — Cursor here — so the one screenshot the evidence
+    // is reviewed from proves a hosted agent's own mark leads its row while
+    // the Conductor mark still trails it.
     {
-      id: "cursor-agent",
+      id: "conductor-cursor-agent",
       title: "Follow a cloud agent",
-      providerId: PROVIDER_ID.CURSOR,
-      provider: providerName(PROVIDER_ID.CURSOR),
-      // The Cursor app opens any cloud agent by id, so the row wears the app
-      // mark beside the agent identity — which also keeps both Cursor filter
-      // chips, app and agent, in the one screenshot the evidence is reviewed
-      // from.
+      providerId: PROVIDER_ID.CONDUCTOR,
+      provider: providerName(PROVIDER_ID.CONDUCTOR),
+      agentId: AGENT_IDENTITY.CURSOR.id,
+      agent: AGENT_IDENTITY.CURSOR.displayName,
       applications: [
         {
-          id: SESSION_APPLICATION_ID.CURSOR,
-          name: "Cursor",
+          id: SESSION_APPLICATION_ID.CONDUCTOR,
+          name: "Conductor",
           scope: SESSION_APPLICATION_SCOPE.SESSION,
         },
       ],
       detail: "Opened a pull request against sidecar.",
       repository: "sidecar",
       branch: "cursor/follow-agent-a1b2",
+      model: "composer-2.5",
       urgency: SESSION_URGENCY.WORKING,
       location: SESSION_LOCATION.CLOUD,
       observedAt: minutesBeforeEpoch(18),
-      // What a working Cursor agent advertises live, so the one screenshot the
-      // evidence is reviewed from also proves the stop control is drawn — and
-      // the pull-request chip beside it, on the row whose sentence names one,
-      // titled by a synthetic number the way a live address would title it.
+      // What a working Conductor chat advertises live, so the one screenshot
+      // the evidence is reviewed from also proves the stop control is drawn —
+      // and the pull-request chip beside it, on the row whose sentence names
+      // one, titled by a synthetic number the way a live address would title
+      // it.
       actions: [{ id: "cancel-run", label: "Stop this run", kind: SESSION_CONTROL_KIND.STOP }],
       hasChange: true,
       changeNumber: 31,
+      workspace: {
+        id: "conductor-follow",
+        name: "follow-agent",
+        scopeId: PROVIDER_ID.CONDUCTOR,
+        managerName: providerName(PROVIDER_ID.CONDUCTOR),
+      },
     },
     // A fifth session keeps every state visible in the one screenshot the
-    // visual evidence is reviewed from, and keeps the wing at five distinct
-    // marks — the apps holding the fixture's chats, and this provider's own
-    // where no app holds one. That is one more mark than the wings hold — the
-    // face has the place nearest the housing — so the same screenshot proves
-    // the remainder is counted rather than dropped. Reporting a repository
-    // and no branch, it is also the row that shows the identifier line
-    // falling back.
+    // visual evidence is reviewed from. Reporting a repository and no branch,
+    // it is also the row that shows the identifier line falling back, and its
+    // agent is the second hosted kind, so the wing proves two hosted marks
+    // apart.
     {
-      id: "devin-session",
+      id: "conductor-opencode-session",
       title: "Watch a cloud session",
-      providerId: PROVIDER_ID.DEVIN,
-      provider: providerName(PROVIDER_ID.DEVIN),
+      providerId: PROVIDER_ID.CONDUCTOR,
+      provider: providerName(PROVIDER_ID.CONDUCTOR),
+      agentId: AGENT_IDENTITY.OPENCODE.id,
+      agent: AGENT_IDENTITY.OPENCODE.displayName,
+      applications: [
+        {
+          id: SESSION_APPLICATION_ID.CONDUCTOR,
+          name: "Conductor",
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
+        },
+      ],
       detail: "Suspended before it opened a pull request.",
       repository: "sidecar-native",
       urgency: SESSION_URGENCY.UNKNOWN,
       location: SESSION_LOCATION.CLOUD,
       observedAt: minutesBeforeEpoch(41),
-      // A suspended Devin session takes a message live — sending is what
-      // resumes one — so this row is what puts the composer in the evidence.
+      // A settled Conductor chat takes a message live, so this row is what
+      // puts the composer in the evidence.
       canMessage: true,
+      workspace: {
+        id: "conductor-watch",
+        name: "watch-session",
+        scopeId: PROVIDER_ID.CONDUCTOR,
+        managerName: providerName(PROVIDER_ID.CONDUCTOR),
+      },
     },
   ],
 };

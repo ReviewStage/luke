@@ -21,20 +21,10 @@ export type ProviderLocationKind =
  * or matching on a display name.
  */
 export const PROVIDER_ID = {
-  ANTIGRAVITY: "antigravity",
   CLAUDE_CODE: "claude-code",
   CODEX: "codex",
   CONDUCTOR: "conductor",
-  COPILOT: "copilot",
-  CURSOR: "cursor",
-  DEVIN: "devin",
-  GEMINI_CLI: "gemini-cli",
-  GROK_BUILD: "grok-build",
-  JULES: "jules",
   OMP: "omp",
-  OPENCODE: "opencode",
-  RADIUS: "radius",
-  REPLICAS: "replicas",
 } as const;
 
 export type ProviderId = (typeof PROVIDER_ID)[keyof typeof PROVIDER_ID];
@@ -50,11 +40,6 @@ export interface ProviderIdentity {
  * and presentation stay in the packages that own those decisions.
  */
 export const PROVIDER_IDENTITY_BY_ID = {
-  [PROVIDER_ID.ANTIGRAVITY]: {
-    id: PROVIDER_ID.ANTIGRAVITY,
-    displayName: "Antigravity",
-    location: PROVIDER_LOCATION_KIND.LOCAL,
-  },
   [PROVIDER_ID.CLAUDE_CODE]: {
     id: PROVIDER_ID.CLAUDE_CODE,
     displayName: "Claude Code",
@@ -70,55 +55,10 @@ export const PROVIDER_IDENTITY_BY_ID = {
     displayName: "Conductor",
     location: PROVIDER_LOCATION_KIND.CLOUD,
   },
-  [PROVIDER_ID.COPILOT]: {
-    id: PROVIDER_ID.COPILOT,
-    displayName: "Copilot",
-    location: PROVIDER_LOCATION_KIND.CLOUD,
-  },
-  [PROVIDER_ID.CURSOR]: {
-    id: PROVIDER_ID.CURSOR,
-    displayName: "Cursor",
-    location: PROVIDER_LOCATION_KIND.LOCAL_AND_CLOUD,
-  },
-  [PROVIDER_ID.DEVIN]: {
-    id: PROVIDER_ID.DEVIN,
-    displayName: "Devin",
-    location: PROVIDER_LOCATION_KIND.LOCAL_AND_CLOUD,
-  },
-  [PROVIDER_ID.GEMINI_CLI]: {
-    id: PROVIDER_ID.GEMINI_CLI,
-    displayName: "Gemini CLI",
-    location: PROVIDER_LOCATION_KIND.LOCAL,
-  },
-  [PROVIDER_ID.GROK_BUILD]: {
-    id: PROVIDER_ID.GROK_BUILD,
-    displayName: "Grok Build",
-    location: PROVIDER_LOCATION_KIND.LOCAL,
-  },
-  [PROVIDER_ID.JULES]: {
-    id: PROVIDER_ID.JULES,
-    displayName: "Jules",
-    location: PROVIDER_LOCATION_KIND.CLOUD,
-  },
   [PROVIDER_ID.OMP]: {
     id: PROVIDER_ID.OMP,
     displayName: "OMP",
     location: PROVIDER_LOCATION_KIND.LOCAL,
-  },
-  [PROVIDER_ID.OPENCODE]: {
-    id: PROVIDER_ID.OPENCODE,
-    displayName: "OpenCode",
-    location: PROVIDER_LOCATION_KIND.LOCAL,
-  },
-  [PROVIDER_ID.RADIUS]: {
-    id: PROVIDER_ID.RADIUS,
-    displayName: "Radius",
-    location: PROVIDER_LOCATION_KIND.LOCAL,
-  },
-  [PROVIDER_ID.REPLICAS]: {
-    id: PROVIDER_ID.REPLICAS,
-    displayName: "Replicas",
-    location: PROVIDER_LOCATION_KIND.CLOUD,
   },
 } as const satisfies Readonly<Record<ProviderId, ProviderIdentity>>;
 
@@ -157,15 +97,18 @@ export const PROVIDER_ID_LIST: readonly ProviderId[] = Object.values(PROVIDER_ID
 );
 
 /**
- * Agents Luke draws only inside a hosting app's workspaces — today the
- * DeepSeek Harness and Pi chats Replicas runs. Identity alone: the id keys
- * the agent's own mark and filter chip, and nothing else exists behind it —
- * no adapter, no files, no credential — so the hosting provider stays the
- * thing observed, credentialed, and written through.
+ * Agents Luke draws only inside a hosting app's workspaces — the agents
+ * Conductor and Superset run beside Claude Code and Codex. Identity alone:
+ * the id keys the agent's own mark and filter chip, and nothing else exists
+ * behind it — no adapter, no files, no credential — so the hosting provider
+ * stays the thing observed, credentialed, and written through.
  */
 export const HOSTED_AGENT_ID = {
-  DEEPSEEK: "deepseek",
-  PI: "pi",
+  COPILOT: "copilot",
+  CURSOR: "cursor",
+  GEMINI_CLI: "gemini-cli",
+  GROK_BUILD: "grok-build",
+  OPENCODE: "opencode",
 } as const;
 
 export type HostedAgentId = (typeof HOSTED_AGENT_ID)[keyof typeof HOSTED_AGENT_ID];
