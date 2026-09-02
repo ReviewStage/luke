@@ -5,7 +5,7 @@ import {
 } from "@sidecar/analytics";
 import { CREDENTIAL_CONNECTION, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
 import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
-import type { HostedUsageReader, RealtimeCredentialMinter } from "@sidecar/voice";
+import type { RealtimeCredentialMinter } from "@sidecar/voice";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { BRIDGE } from "#shared/bridge";
 import { registerBridge } from "../register-bridge";
@@ -29,7 +29,6 @@ export interface VoiceRuntimeIpcDependencies {
   openExternal: (url: string) => Promise<void>;
   chooseRealtimeCredentials: () => ChosenRealtimeCredentials | undefined;
   unavailableDiagnostics: () => ReturnType<RealtimeCredentialMinter["diagnostics"]>;
-  hostedUsageReader: () => HostedUsageReader | undefined;
   recordProductEvent: RecordProductEvent;
   /**
    * Takes one tapped wire event into the development trace. On a run without
@@ -84,7 +83,6 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
       requestRealtimeDiagnostics: () =>
         dependencies.chooseRealtimeCredentials()?.minter.diagnostics() ??
         dependencies.unavailableDiagnostics(),
-      requestHostedUsage: () => dependencies.hostedUsageReader()?.read(),
       recordAgentTrace(_context, trace) {
         dependencies.recordAgentTrace(trace);
       },

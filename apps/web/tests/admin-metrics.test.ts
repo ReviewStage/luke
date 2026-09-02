@@ -30,7 +30,7 @@ import {
   adminMetricsWindow,
 } from "../server/admin/http";
 import { posthogProjectConsoleUrl } from "../server/hosted/posthog";
-import { HOSTED_DAILY_LIMIT, HOSTED_METER } from "../server/hosted/quota";
+import { HOSTED_DAILY_LIMIT } from "../server/hosted/quota";
 
 const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
 
@@ -384,11 +384,8 @@ test("the most active accounts pass through the builder untouched", () => {
 
 test("the daily ceilings are reported from the hosted quota, not restated", () => {
   const metrics = buildAdminMetrics(source(), NOON_UTC, ADMIN_METRICS_WINDOW_DEFAULT);
-  assert.equal(metrics.reliability.voiceDailyLimit, HOSTED_DAILY_LIMIT[HOSTED_METER.VOICE_CALL]);
-  assert.equal(
-    metrics.reliability.attentionDailyLimit,
-    HOSTED_DAILY_LIMIT[HOSTED_METER.ATTENTION_REVIEW],
-  );
+  assert.equal(metrics.reliability.voiceDailyLimit, HOSTED_DAILY_LIMIT);
+  assert.equal(metrics.reliability.attentionDailyLimit, HOSTED_DAILY_LIMIT);
   assert.equal(metrics.windowDays, ADMIN_METRICS_WINDOW_DEFAULT);
   assert.equal(metrics.generatedAt, NOON_UTC);
 });

@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { hostedUsage } from "../server/db/usage-schema";
-import {
-  HOSTED_DAILY_LIMIT,
-  HOSTED_METER,
-  readHostedUsage,
-  utcDayEnd,
-} from "../server/hosted/quota";
+import { HOSTED_DAILY_LIMIT, readHostedUsage, utcDayEnd } from "../server/hosted/quota";
 import { handleUsage } from "../server/hosted/usage";
 
 const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
@@ -38,14 +33,14 @@ test("a day with spending reads back both meters without touching either", async
 
   assert.deepEqual(usage.voice, {
     used: 3,
-    limit: HOSTED_DAILY_LIMIT[HOSTED_METER.VOICE_CALL],
-    remaining: HOSTED_DAILY_LIMIT[HOSTED_METER.VOICE_CALL] - 3,
+    limit: HOSTED_DAILY_LIMIT,
+    remaining: HOSTED_DAILY_LIMIT - 3,
     resetsAt: utcDayEnd("2026-08-17"),
   });
   assert.deepEqual(usage.attention, {
     used: 41,
-    limit: HOSTED_DAILY_LIMIT[HOSTED_METER.ATTENTION_REVIEW],
-    remaining: HOSTED_DAILY_LIMIT[HOSTED_METER.ATTENTION_REVIEW] - 41,
+    limit: HOSTED_DAILY_LIMIT,
+    remaining: HOSTED_DAILY_LIMIT - 41,
     resetsAt: utcDayEnd("2026-08-17"),
   });
 });
@@ -59,8 +54,8 @@ test("a day with no row yet has spent nothing, which is an answer", async () => 
 
 test("the endpoint answers GET for the signed-in account and nobody else", async () => {
   const answer = {
-    voice: { used: 1, limit: 50, remaining: 49, resetsAt: NOON_UTC + 43_200_000 },
-    attention: { used: 2, limit: 500, remaining: 498, resetsAt: NOON_UTC + 43_200_000 },
+    voice: { used: 1, limit: 5_000, remaining: 4_999, resetsAt: NOON_UTC + 43_200_000 },
+    attention: { used: 2, limit: 5_000, remaining: 4_998, resetsAt: NOON_UTC + 43_200_000 },
   };
   const options = {
     resolveUserId: async (): Promise<string | undefined> => "user-1",

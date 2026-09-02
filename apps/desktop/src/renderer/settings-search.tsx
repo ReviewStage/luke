@@ -33,7 +33,6 @@ import {
   ChevronIcon,
   CloseIcon,
   DownloadIcon,
-  LukeIcon,
   MegaphoneIcon,
   PlugIcon,
   PowerIcon,
@@ -192,7 +191,7 @@ const conductorAgentRowDrawn = (input: SettingsSearchInput): boolean =>
 const voiceControlRowDrawn = (input: SettingsSearchInput): boolean => input.voiceControlsDrawn;
 
 const SETTING_ROW_DRAWN = {
-  // The What Luke runs on section stands only over a signed-in account.
+  // The Provider section stands only over a signed-in account.
   [APP_SETTING_ID.VOICE_SOURCE]: (input: SettingsSearchInput) => input.accountDrawn,
   // The voice controls exist only once there is a voice to control.
   [APP_SETTING_ID.VOICE]: voiceControlRowDrawn,
@@ -239,14 +238,6 @@ const RESULT_PAGE_WORD = {
 /** The pages in the order the front page offers them, which orders results. */
 const PAGE_ORDER: readonly SettingsView[] = [SETTINGS_VIEW.ROOT, ...SETTINGS_SUBVIEW_LIST];
 
-/**
- * The front-page setting wears its section's own glyph, because the headless
- * front-page group has no head to carry one for it.
- */
-const ROOT_SETTING_ICON = {
-  [APP_SETTING_ID.VOICE_SOURCE]: <LukeIcon />,
-} satisfies Partial<Record<AppSettingId, React.JSX.Element>>;
-
 /** The words every shortcut row can be found by, beside its own name. */
 const SHORTCUT_WORDS = "keyboard shortcut hotkey key chord record remove delete none";
 
@@ -260,8 +251,7 @@ const KEY_WORDS = "API key credential connect cloud agent sync synced";
  */
 function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[] {
   const entries: (SettingsSearchEntry | undefined)[] = [
-    // The front page, in the order its sections stand. The key row is drawn
-    // only while the key half of What Luke runs on is the live one; on the
+    // The key row is drawn only while the key half of Provider is the live one; on the
     // account, the section's own entry is what a key-shaped query finds,
     // because its toggle is where a key is begun from there.
     input.accountDrawn && input.settings.voiceSource === VOICE_SOURCE.KEY
@@ -269,11 +259,11 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           // The row is a provider credential's, so it anchors by provider id.
           id: VOICE_CREDENTIAL_PROVIDER.id,
           label: `${VOICE_CREDENTIAL_PROVIDER.displayName} API key`,
-          page: SETTINGS_VIEW.ROOT,
+          page: SETTINGS_VIEW.VOICE,
           icon: <ProviderMark providerId={VOICE_CREDENTIAL_PROVIDER.id} />,
           haystack: [
             `${VOICE_CREDENTIAL_PROVIDER.displayName} API key`,
-            "credential connect voice unmetered what luke runs on",
+            "credential connect voice provider",
           ],
         }
       : undefined,
@@ -452,16 +442,11 @@ export function settingsSearchEntries(input: SettingsSearchInput): readonly Sett
     const field = settingFieldForGuideId(setting.id);
     if (!field) return [];
     if (isAppSettingId(setting.id) && !settingRowDrawn(setting.id, input)) return [];
-    const icon = Object.hasOwn(ROOT_SETTING_ICON, setting.id)
-      ? // SAFETY: hasOwn narrows the id to the table's own keys.
-        ROOT_SETTING_ICON[setting.id as keyof typeof ROOT_SETTING_ICON]
-      : undefined;
     return [
       {
         id: setting.id,
         label: setting.label,
         page: APP_SETTING_SCHEMA[field].settingsPage,
-        ...(icon ? { icon } : undefined),
         haystack: [setting.label, setting.description],
       },
     ];

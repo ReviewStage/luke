@@ -15,9 +15,8 @@
 /**
  * What kind of words the caption strip is carrying, which is what colours
  * them. Spoken words are the strip's own job; a failure borrows it in the
- * error red; a notice borrows it in the attention orange, because what it
- * reports — today's voice allowance running out — is a state with its own
- * return, not a fault.
+ * error red; a notice borrows it in the attention orange for a temporary state
+ * rather than a fault.
  */
 export const CAPTION_TONE = {
   WORDS: "words",

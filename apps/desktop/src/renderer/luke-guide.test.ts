@@ -280,15 +280,16 @@ test("the facts say what is connected, never what connects it", () => {
   assert.match(appleConnected, /Apple Calendar \(connected\)/);
   assert.match(appleConnected, /System Settings/);
   // The voice key stands in a fact of its own, placed where its row actually
-  // lives: the What Luke runs on section, not the Voice page or the
+  // lives: the Provider section on the Voice page, not the
   // Integrations section. With voice available and no key
-  // connected, the fact says whose allowance voice runs on — and what a key
+  // connected, the fact says whose account voice runs on — and what a key
   // of your own would cost instead; with voice unavailable, it says both ways
   // in.
   assert.match(rendered, /OpenAI \(not connected\)/);
-  assert.match(rendered, /signed-in Luke account's daily allowance/);
+  assert.match(rendered, /signed-in Luke account/);
+  assert.doesNotMatch(rendered, /daily allowance|daily limit|used up|reset/);
   assert.match(rendered, /billed by OpenAI/);
-  assert.match(rendered, /What Luke runs on section at the top/);
+  assert.match(rendered, /Provider section after Permissions/);
   // The voice key's handling bound lives in its own fact, not only in Cloud
   // providers, so an ask about this key retrieves it.
   assert.match(rendered, /never read from the environment, never spoken, and never repeated back/);
@@ -781,9 +782,9 @@ test("the facts follow the talk key, the microphone, and the storage the system 
 
   const voiceless = buildLukeGuide(guideInput({ voiceAvailable: false }));
   assert.match(JSON.stringify(voiceless.facts), /nothing to run voice on/);
-  // The refusal carries the way out: both ways in live under What Luke runs on,
+  // The refusal carries the way out: both ways in live under Provider,
   // and a fact that stopped at "off" would leave the ask unanswerable.
-  assert.match(JSON.stringify(voiceless.facts), /What Luke runs on section at the top/);
+  assert.match(JSON.stringify(voiceless.facts), /Provider section after Permissions/);
   const unprotected = buildLukeGuide(
     guideInput({ settings: settings({ secretStorage: SECRET_STORAGE.UNAVAILABLE }) }),
   );

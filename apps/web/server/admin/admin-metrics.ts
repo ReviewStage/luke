@@ -1,4 +1,4 @@
-import { HOSTED_DAILY_LIMIT, HOSTED_METER, utcDayKey } from "../hosted/quota.js";
+import { HOSTED_DAILY_LIMIT, utcDayKey } from "../hosted/quota.js";
 import { type AdminViewer, isAdminRole } from "./admin-access.js";
 import {
   ADMIN_ERROR,
@@ -446,8 +446,8 @@ export function buildAdminMetrics(
       cohorts: buildRetentionCohorts(source.retention, now),
     },
     reliability: {
-      voiceDailyLimit: HOSTED_DAILY_LIMIT[HOSTED_METER.VOICE_CALL],
-      attentionDailyLimit: HOSTED_DAILY_LIMIT[HOSTED_METER.ATTENTION_REVIEW],
+      voiceDailyLimit: HOSTED_DAILY_LIMIT,
+      attentionDailyLimit: HOSTED_DAILY_LIMIT,
       quotaLimitedUserDaysToday: source.reliability.quotaLimitedUserDaysToday,
       quotaLimitedUserDaysWindow: source.reliability.quotaLimitedUserDaysWindow,
       analyticsConsoleUrl: source.reliability.analyticsConsoleUrl,

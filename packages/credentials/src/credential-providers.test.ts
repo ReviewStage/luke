@@ -182,7 +182,7 @@ test("holds the key Luke speaks through, apart from the agents he observes", () 
   // Neither an agent nor an integration: Luke speaks through it and asks it
   // about sessions, and observes nothing of it — there are no OpenAI sessions
   // for a row to belong to, and no adapter for a saved key to refresh. Its
-  // row stands at the top of the Voice page, beside the feature it turns on.
+  // row stands after Permissions on the Voice page, beside the feature it turns on.
   assert.equal(VOICE_CREDENTIAL_PROVIDER, openai);
   assert.equal(INTEGRATION_PROVIDER_LIST.includes(openai), false);
   assert.equal(CLOUD_AGENT_PROVIDER_LIST.includes(openai), false);

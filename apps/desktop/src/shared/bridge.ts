@@ -23,7 +23,6 @@ import {
   feedbackSubmission,
   isFeedbackKind,
 } from "@sidecar/feedback";
-import type { HostedUsageAnswer } from "@sidecar/hosted";
 import {
   type IssueIdentity,
   isIssueTrackerId,
@@ -692,12 +691,6 @@ export const BRIDGE = {
     channel: "app:request-realtime-diagnostics",
     args: noArgs,
     result: result<RealtimeDiagnostics>(),
-  }),
-  requestHostedUsage: entry({
-    kind: "invoke",
-    channel: "app:request-hosted-usage",
-    args: noArgs,
-    result: result<HostedUsageAnswer | undefined>(),
   }),
   /**
    * One tapped realtime event for the development trace. Fire-and-forget on

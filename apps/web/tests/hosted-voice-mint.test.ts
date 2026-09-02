@@ -12,12 +12,12 @@ const API_KEY = "sk-hosted-secret";
 
 const OPEN_SPEND: HostedSpend = {
   allowed: true,
-  quota: { used: 1, limit: 50, remaining: 49, resetsAt: NOW + 43_200_000 },
+  quota: { used: 1, limit: 5_000, remaining: 4_999, resetsAt: NOW + 43_200_000 },
 };
 
 const SPENT: HostedSpend = {
   allowed: false,
-  quota: { used: 51, limit: 50, remaining: 0, resetsAt: NOW + 43_200_000 },
+  quota: { used: 5_001, limit: 5_000, remaining: 0, resetsAt: NOW + 43_200_000 },
 };
 
 interface VoiceMintRequestBody {

@@ -15,7 +15,7 @@ export default {
       request,
       apiKey: process.env[HOSTED_OPENAI_ENVIRONMENT.API_KEY],
       model: process.env[HOSTED_OPENAI_ENVIRONMENT.REALTIME_MODEL],
-      spend: (callerKey) => spendIntroductionMeter(getDatabase(), { callerKey, now: Date.now() }),
+      spend: () => spendIntroductionMeter(getDatabase(), { now: Date.now() }),
     });
   },
 };

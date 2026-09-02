@@ -11,17 +11,14 @@ export const HOSTED_METER = {
 
 export type HostedMeter = (typeof HOSTED_METER)[keyof typeof HOSTED_METER];
 
+export const HOSTED_DAILY_LIMIT = 5_000;
+
 /**
  * The free tier's daily ceilings. Product knobs, not implementation details:
  * a voice call is a conversation opened or an announcement spoken, and an
  * attention review is one session update weighed. The OpenAI project budget
  * behind the key is the backstop these ceilings exist to keep distant.
  */
-export const HOSTED_DAILY_LIMIT = {
-  [HOSTED_METER.VOICE_CALL]: 50,
-  [HOSTED_METER.ATTENTION_REVIEW]: 500,
-} as const satisfies Record<HostedMeter, number>;
-
 /* The quota shape is the wire contract's, imported rather than restated, so
    the endpoint and the desktop reading it cannot drift. */
 export type { HostedQuota } from "../core.js";
@@ -32,9 +29,13 @@ export interface HostedSpend {
 }
 
 /** Where one meter stands on one day, worded once for the spend and the read. */
-function meterStanding(used: number, meter: HostedMeter, day: string): HostedQuota {
-  const limit = HOSTED_DAILY_LIMIT[meter];
-  return { used, limit, remaining: Math.max(0, limit - used), resetsAt: utcDayEnd(day) };
+function meterStanding(used: number, day: string): HostedQuota {
+  return {
+    used,
+    limit: HOSTED_DAILY_LIMIT,
+    remaining: Math.max(0, HOSTED_DAILY_LIMIT - used),
+    resetsAt: utcDayEnd(day),
+  };
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -54,8 +55,8 @@ type UsageDatabase = Pick<ReturnType<typeof createDatabase>, "insert">;
 /**
  * Spends one use of a meter and answers whether it fit inside the day. The
  * increment is a single atomic upsert taken before the upstream call, so two
- * racing requests cannot both be the fiftieth: whichever lands second reads
- * fifty-one and is refused. A refused attempt still counts — the counter
+ * racing requests cannot both be the last allowed use: whichever lands second
+ * is refused. A refused attempt still counts — the counter
  * records what was asked, and past the ceiling every answer is the same no.
  */
 export async function spendHostedMeter(
@@ -83,35 +84,19 @@ export async function spendHostedMeter(
 
   const used = spendsVoice ? row.voiceCalls : row.attentionReviews;
   return {
-    allowed: used <= HOSTED_DAILY_LIMIT[input.meter],
-    quota: meterStanding(used, input.meter, day),
+    allowed: used <= HOSTED_DAILY_LIMIT,
+    quota: meterStanding(used, day),
   };
 }
 
-/**
- * The introduction mint's daily ceilings. Product knobs like the metered
- * tier's: PER_CALLER bounds one address to a handful of one-time
- * introductions, and GLOBAL is the second ceiling behind it, because an
- * endpoint that takes no bearer would otherwise let a rotating address pool
- * spend the OpenAI budget the metered ceilings exist to keep distant.
- */
-export const INTRODUCTION_DAILY_LIMIT = {
-  PER_CALLER: 5,
-  GLOBAL: 500,
-} as const;
-
 /** The one row every introduction request shares, holding the global count. */
-export const INTRODUCTION_GLOBAL_CALLER = "global";
+const INTRODUCTION_USAGE_KEY = "global";
 
-/** Increments one caller's row for the day and answers the new count. */
-async function spendIntroductionRow(
-  database: UsageDatabase,
-  caller: string,
-  day: string,
-): Promise<number> {
+/** Increments the shared introduction row for the day and answers the new count. */
+async function incrementIntroductionUsage(database: UsageDatabase, day: string): Promise<number> {
   const [row] = await database
     .insert(introductionUsage)
-    .values({ caller, day, mints: 1 })
+    .values({ caller: INTRODUCTION_USAGE_KEY, day, mints: 1 })
     .onConflictDoUpdate({
       target: [introductionUsage.caller, introductionUsage.day],
       set: { mints: sql`${introductionUsage.mints} + 1` },
@@ -132,32 +117,24 @@ export interface IntroductionSpend {
 }
 
 /**
- * Spends one introduction mint and answers whether it fit inside both
- * ceilings. Like the metered spend, each increment is a single atomic upsert
- * taken before the upstream call, and a refused attempt still counts. The
- * caller's own row is spent first, and the global row only moves for a caller
- * still inside its own cap: otherwise one refused caller's retries would
- * spend the shared allowance and shut the door on everyone else.
+ * Spends one introduction mint and answers whether it fit inside the shared
+ * ceiling. Like the metered spend, the increment is a single atomic upsert
+ * taken before the upstream call, and a refused attempt still counts.
  */
 export async function spendIntroductionMeter(
   database: UsageDatabase,
-  input: { callerKey: string; now: number },
+  input: { now: number },
 ): Promise<IntroductionSpend> {
   const day = utcDayKey(input.now);
-  const callerUsed = await spendIntroductionRow(database, input.callerKey, day);
-  if (callerUsed > INTRODUCTION_DAILY_LIMIT.PER_CALLER) {
-    return { allowed: false };
-  }
-  const globalUsed = await spendIntroductionRow(database, INTRODUCTION_GLOBAL_CALLER, day);
-  return { allowed: globalUsed <= INTRODUCTION_DAILY_LIMIT.GLOBAL };
+  const used = await incrementIntroductionUsage(database, day);
+  return { allowed: used <= HOSTED_DAILY_LIMIT };
 }
 
 type UsageReadDatabase = Pick<ReturnType<typeof createDatabase>, "select">;
 
 /**
- * Reads where today's allowance stands on both meters without spending
- * either. A day with no row yet has spent nothing, which is an answer, not
- * an absence — the panel asks this before the first call of the day.
+ * Reads today's two hosted counters without spending either. A day with no
+ * row yet has spent nothing, which is an answer, not an absence.
  */
 export async function readHostedUsage(
   database: UsageReadDatabase,
@@ -169,7 +146,7 @@ export async function readHostedUsage(
     .from(hostedUsage)
     .where(and(eq(hostedUsage.userId, input.userId), eq(hostedUsage.day, day)));
   return {
-    voice: meterStanding(row?.voiceCalls ?? 0, HOSTED_METER.VOICE_CALL, day),
-    attention: meterStanding(row?.attentionReviews ?? 0, HOSTED_METER.ATTENTION_REVIEW, day),
+    voice: meterStanding(row?.voiceCalls ?? 0, day),
+    attention: meterStanding(row?.attentionReviews ?? 0, day),
   };
 }

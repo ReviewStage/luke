@@ -66,20 +66,15 @@ export type AskHandler = (text: string) => Promise<string | undefined>;
  * would let a press capture. A failure's own message is not repeated here:
  * it lands on the caption strip directly below, where the reply would have.
  *
- * `quotaSpent` is the one unavailability with different words: a signed-in
- * account whose free day is used up needs neither way in, it needs tomorrow.
- * The sentence is the same one the settings meters stand behind, minted by
- * the caller from the voice service's own diagnostics.
+ * `unavailableNote` lets a hosted refusal stay neutral instead of sending a
+ * signed-in developer to connect a key they do not need.
  */
-export function askRefusal(status: RealtimeStatus, quotaSpent?: string): string {
+export function askRefusal(status: RealtimeStatus, unavailableNote?: string): string {
   if (status === REALTIME_STATUS.LISTENING) {
     return "The microphone is open. Finish saying it.";
   }
   if (status === REALTIME_STATUS.UNAVAILABLE) {
-    // Both ways in, because naming only the key would send a signed-in
-    // developer to buy one they do not need — and a spent allowance names
-    // itself, because its fix is tomorrow rather than either.
-    return quotaSpent ?? "Sign in, or connect an OpenAI key, in Settings.";
+    return unavailableNote ?? "Sign in, or connect an OpenAI key, in Settings.";
   }
   if (status === REALTIME_STATUS.CONNECTING) {
     return "Still connecting. Ask again in a moment.";

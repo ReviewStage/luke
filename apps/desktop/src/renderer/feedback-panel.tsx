@@ -45,7 +45,7 @@ export function FeedbackSection({ control }: { control: FeedbackEntryControl }):
   return (
     <section
       className="settings-section"
-      style={cssCustomProperties({ "--row-index": 4 })}
+      style={cssCustomProperties({ "--row-index": 3 })}
       {...searchAnchorProps(SETTINGS_SEARCH_ROW.FEEDBACK)}
     >
       <h2>
