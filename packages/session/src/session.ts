@@ -427,8 +427,10 @@ export interface ProviderSessionObservation {
    */
   agent?: SessionProvider;
   /**
-   * A bounded recap of where the work stands — provider-designated, or a
-   * settled turn's parting words. Never the transcript behind it.
+   * A recap of where the work stands — provider-designated, or a settled
+   * turn's parting words, kept whole. Never the transcript behind it, and
+   * never a model's whole to read: what may enter a model window is the
+   * {@link maximumSessionRecapExcerptLength} excerpt its consumers cut.
    */
   recap?: string;
   detail?: SessionDetail;
@@ -542,7 +544,15 @@ export const maximumSessionApplications = SESSION_APPLICATION_ID_LIST.length;
 export const maximumSpawnableAgentLength = 40;
 /** How many kinds of agent one session may offer to start. */
 export const maximumSpawnableAgents = 8;
-export const maximumSessionRecapLength = 500;
+/**
+ * The bounded excerpt of a recap that may reach a model: the attention
+ * evaluator's update, the announcement worded from it, and the voice roster
+ * context all cut to this at their own edge. The recap itself carries no
+ * length bound — it is the settled turn's whole parting words, drawn on the
+ * user's own surfaces — so this excerpt is the one place its length is a
+ * budget at all.
+ */
+export const maximumSessionRecapExcerptLength = 500;
 /** One line of context beside a title, not a paragraph. */
 export const maximumSessionDetailLength = 120;
 /** Long enough for any provider's session address without becoming a payload. */
@@ -873,7 +883,7 @@ export function normalizeSession(
   const observedAt = timestamp(observation.observedAt, "observedAt");
   const status = normalizeStatus(observation.status);
   const completionCause = normalizeCompletionCause(observation.completionCause, status);
-  const recap = boundedText(observation.recap, maximumSessionRecapLength);
+  const recap = observation.recap?.trim() || undefined;
   const parentProviderSessionId = boundedText(
     observation.parentProviderSessionId,
     maximumSessionDetailLength,

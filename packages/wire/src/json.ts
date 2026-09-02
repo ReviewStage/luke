@@ -70,6 +70,15 @@ export function oneLine(value: string | undefined, maximumLength: number): strin
     : normalized;
 }
 
+/**
+ * Collapses whitespace like {@link oneLine} with no length bound, for a field
+ * whose whole words are the point of reporting it.
+ */
+export function wholeLine(value: string | undefined): string | undefined {
+  const normalized = value?.replace(/\s+/gu, " ").trim();
+  return normalized || undefined;
+}
+
 export function recordFromJsonLine(line: string): WireRecord | undefined {
   try {
     // SAFETY: JSON.parse returns a runtime value; isRecord validates the object contract.

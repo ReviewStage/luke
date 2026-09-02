@@ -2,7 +2,6 @@ import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "@sidecar/credentia
 import {
   AGENT_IDENTITY,
   agedStatus,
-  maximumSessionRecapLength,
   OBSERVATION_WINDOW,
   type ProviderSessionObservation,
   type ProviderWorkspaceAgentRequest,
@@ -619,7 +618,7 @@ function modelLabel(
 /** One line of bounded parting words, flattened the way every recap is drawn. */
 function recapText(text: string): string | undefined {
   const flattened = text.replace(/\s+/g, " ").trim();
-  return flattened ? flattened.slice(0, maximumSessionRecapLength) : undefined;
+  return flattened || undefined;
 }
 
 /**

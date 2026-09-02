@@ -1,7 +1,7 @@
 import {
   boundedText,
   maximumSessionDetailLength,
-  maximumSessionRecapLength,
+  maximumSessionRecapExcerptLength,
   maximumSessionTitleLength,
   SESSION_STATUS,
   type SessionStatus,
@@ -104,9 +104,11 @@ function optionalWireText(value: UnparsedWireValue, maximumLength: number): Opti
 
 /**
  * Validates an update arriving as untrusted JSON — a hosted review request —
- * down to the fields the prompt reads, each held to the same bound the local
- * roster holds it to. A value set is checked against the set itself, a
- * malformed field refuses the whole update rather than being repaired.
+ * down to the fields the prompt reads, each held to the bound an update may
+ * carry it at: the roster's own bound for most, the recap's narrower excerpt
+ * bound for the one field the roster retains longer. A value set is checked
+ * against the set itself, a malformed field refuses the whole update rather
+ * than being repaired.
  */
 export function attentionPromptUpdateFromWire(
   value: UnparsedWireValue,
@@ -124,7 +126,10 @@ export function attentionPromptUpdateFromWire(
   if (value.previousStatus !== undefined && !previousStatus) return undefined;
 
   const workspace = optionalWireText(value.workspace, maximumSessionTitleLength);
-  const recap = optionalWireText(value.recap, maximumSessionRecapLength);
+  // The excerpt bound, not the roster's: an update's recap is cut to the
+  // excerpt before it may leave a machine, so a longer one here is not an
+  // update this build produced.
+  const recap = optionalWireText(value.recap, maximumSessionRecapExcerptLength);
   if (!workspace.valid || !recap.valid) return undefined;
 
   if (value.context !== undefined && !isRecord(value.context)) return undefined;

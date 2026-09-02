@@ -1,6 +1,5 @@
 import path from "node:path";
 import {
-  maximumSessionRecapLength,
   maximumSessionTitleLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
@@ -12,7 +11,7 @@ import {
   type SessionProvider,
   type SessionStatus,
 } from "@sidecar/session";
-import { isRecord, isWireString, oneLine, text, type WireRecord } from "@sidecar/wire";
+import { isRecord, isWireString, oneLine, text, type WireRecord, wholeLine } from "@sidecar/wire";
 import {
   discoverSessionFiles,
   type HookStatusRefinement,
@@ -212,7 +211,7 @@ export function parseGeminiSessionTail(tail: string): ParsedGeminiSessionTail {
       // A newer prompt or a recorded failure makes a different message the
       // tip, so neither can inherit a stale recap.
       if (parsed.holdingForApproval !== true && parsed.toolCallsOpen !== true) {
-        parsed.recap = oneLine(geminiContentText(message.content), maximumSessionRecapLength);
+        parsed.recap = wholeLine(geminiContentText(message.content));
       }
     }
   }

@@ -12,7 +12,7 @@ import {
   attentionUpdateInput,
 } from "@sidecar/attention";
 import {
-  maximumSessionRecapLength,
+  maximumSessionRecapExcerptLength,
   maximumSessionTitleLength,
   SESSION_STATUS,
 } from "@sidecar/session";
@@ -111,15 +111,17 @@ test("a wire update outside the build's value sets is refused, not repaired", ()
   assert.equal(attentionPromptUpdateFromWire("not a record"), undefined);
 });
 
-test("wire fields are cut to the bounds the local roster holds them to", () => {
+test("wire fields are cut to the bounds an update may carry them at", () => {
   const parsed = attentionPromptUpdateFromWire({
     trigger: ATTENTION_TRIGGER.OBSERVED,
     providerName: "p".repeat(maximumSessionTitleLength + 40),
     title: `  ${"t".repeat(maximumSessionTitleLength + 40)}  `,
     status: SESSION_STATUS.WORKING,
-    recap: "r".repeat(maximumSessionRecapLength + 40),
+    // The recap's wire bound is the excerpt's, not the roster's: the roster
+    // retains more than any update is allowed to carry off a machine.
+    recap: "r".repeat(maximumSessionRecapExcerptLength + 40),
   });
   assert.equal(parsed?.providerName.length, maximumSessionTitleLength);
   assert.equal(parsed?.title.length, maximumSessionTitleLength);
-  assert.equal(parsed?.recap?.length, maximumSessionRecapLength);
+  assert.equal(parsed?.recap?.length, maximumSessionRecapExcerptLength);
 });

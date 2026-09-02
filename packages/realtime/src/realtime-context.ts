@@ -1,4 +1,6 @@
 import {
+  boundedText,
+  maximumSessionRecapExcerptLength,
   type ObservedWorkspaceProject,
   SESSION_LOCATION,
   type Session,
@@ -227,9 +229,16 @@ export function sessionContextText(sessions: readonly Session[], now: number = D
         sessionAgeText(session.observedAt, now),
         ...sessionAboutText(session),
         // Stating an absence in context invites the voice to speak it, so a
-        // session without a recap simply omits the segment.
+        // session without a recap simply omits the segment. The excerpt, not
+        // the retained recap: the roster keeps a longer one for the panel,
+        // and this render is a place recaps leave the machine.
         ...(session.recap
-          ? [`context for naming this work — do not list its parts: ${session.recap}`]
+          ? [
+              `context for naming this work — do not list its parts: ${boundedText(
+                session.recap,
+                maximumSessionRecapExcerptLength,
+              )}`,
+            ]
           : []),
         `[${sessionCapabilityText(session, {
           mostRecentForProvider: mostRecent.get(session.providerId) === session,

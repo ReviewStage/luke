@@ -3,6 +3,8 @@ import {
   type AttentionDecision,
   type AttentionDisposition,
   attentionDecisionFromWire,
+  boundedText,
+  maximumSessionRecapExcerptLength,
   normalizeSessionIdentity,
   SESSION_COMPLETION_CAUSE,
   type Session,
@@ -120,6 +122,12 @@ export interface AttentionUpdate extends SessionIdentity {
   /** Local announcement context; intentionally absent from the evaluator prompt. */
   holdingForDeveloper?: boolean;
   previousStatus?: SessionStatus;
+  /**
+   * The bounded excerpt of the session's recap, never the retained recap
+   * whole: the roster may keep a longer one for the surfaces that draw it,
+   * but what leaves the machine in an update stays cut to
+   * {@link maximumSessionRecapExcerptLength}.
+   */
   recap?: string;
   context?: AttentionContext;
   observedAt: number;
@@ -237,10 +245,19 @@ const ATTENTION_DEVELOPMENT = [
   },
   {
     trigger: ATTENTION_TRIGGER.RECAP_CHANGED,
-    ofSession: (session: Session) => session.recap,
+    // The excerpt is what an update carries, so both accessors speak in
+    // excerpts: a recap that changed only past the excerpt is a difference
+    // no evaluator could see, and treating it as a development would open
+    // reviews the model must judge blind — and supersede ones it should not.
+    ofSession: (session: Session) => attentionRecapExcerpt(session.recap),
     ofUpdate: (update: AttentionUpdate) => update.recap,
   },
 ] as const;
+
+/** The one bounded slice of a recap that may leave the machine in an update. */
+function attentionRecapExcerpt(recap: string | undefined): string | undefined {
+  return boundedText(recap, maximumSessionRecapExcerptLength);
+}
 
 /** Fields that change what the voice would say, without opening extra model reviews. */
 function speechValues(update: AttentionUpdate): readonly (string | undefined)[] {
@@ -294,7 +311,8 @@ export function attentionUpdate(session: Session, previous?: Session): Attention
   if (workspace) update.workspace = workspace;
   if (session.holdingForDeveloper === true) update.holdingForDeveloper = true;
   if (previous) update.previousStatus = previous.status;
-  if (session.recap) update.recap = session.recap;
+  const recap = attentionRecapExcerpt(session.recap);
+  if (recap) update.recap = recap;
   if (context) update.context = context;
   return update;
 }

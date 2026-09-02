@@ -40,6 +40,7 @@ import {
   workspaceProjectContextText,
 } from "@sidecar/realtime";
 import {
+  maximumSessionRecapExcerptLength,
   maximumWorkspaceNameLength,
   normalizeSession,
   type ObservedWorkspaceProject,
@@ -917,6 +918,23 @@ test("the roster marks a recap as context for naming the work, not prose to reci
     sessionContextText([working]),
     /context for naming this work — do not list its parts: Unifying spawning/,
   );
+
+  // The roster retains a longer recap for the panel; what this render sends
+  // off the machine stays cut to the excerpt.
+  const talkative = normalizeSession(
+    { id: "codex", displayName: "Codex" },
+    {
+      providerSessionId: "session-with-long-recap",
+      title: "Implement the plan",
+      status: SESSION_STATUS.WORKING,
+      observedAt: DECIDED_AT,
+      recap: `The whole plan landed. ${"y".repeat(maximumSessionRecapExcerptLength + 200)}`,
+    },
+  );
+  assert.equal(talkative.recap?.length, maximumSessionRecapExcerptLength + 223);
+  const rendered = sessionContextText([talkative]);
+  assert.ok(rendered.includes(talkative.recap?.slice(0, maximumSessionRecapExcerptLength) ?? ""));
+  assert.ok(!rendered.includes(talkative.recap ?? ""));
 });
 
 test("the roster says which sessions keep a readable transcript and a pull request, never an address", () => {

@@ -337,7 +337,9 @@ test("a recap stands only while its turn is the newest word", async (t) => {
     [...settledTurn, messageRecord(TEST_ROLE.USER, TEST_CONTENT_TYPE.TEXT)],
     TEST_TIME - 5_000,
   );
-  // Parting words longer than a recap may carry are cut, not refused.
+  // Parting words carry no display bound: a long settled message is the
+  // recap whole, not an opening with an ellipsis.
+  const longParting = `done: ${"a word ".repeat(300)}`.trim();
   await writeTranscript(
     state,
     "Users-test-luke",
@@ -345,7 +347,7 @@ test("a recap stands only while its turn is the newest word", async (t) => {
     [
       {
         role: TEST_ROLE.ASSISTANT,
-        message: { content: [{ type: "text", text: "y".repeat(700) }] },
+        message: { content: [{ type: "text", text: longParting }] },
       },
       turnEndedRecord(TEST_TURN_STATUS.SUCCESS),
     ],
@@ -355,8 +357,7 @@ test("a recap stands only while its turn is the newest word", async (t) => {
   const observations = await adapterFor(state).observe();
 
   assert.equal(observations[0]?.recap, undefined);
-  assert.equal(observations[1]?.recap?.length, 500);
-  assert.ok(observations[1]?.recap?.endsWith("…"));
+  assert.equal(observations[1]?.recap, longParting);
   assert.equal(JSON.stringify(observations).includes(SECRET_TRANSCRIPT_TEXT), false);
 });
 

@@ -706,17 +706,30 @@ test("reports no recap for a tail it cannot attribute to the agent", async () =>
   }
 });
 
-test("cuts a recap at the recap bound", async () => {
+test("keeps parting words whole, however long the settled message ran", async () => {
+  const longWords = `the plan landed ${"and a word ".repeat(400)}`.trim();
+  const partingWords = `all tests pass ${"and a word ".repeat(80)}`.trim();
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
-    workspaces: [ownedWorkspace("workspace-idle", TEST_TIME - 30_000)],
+    workspaces: [
+      ownedWorkspace("workspace-idle", TEST_TIME - 30_000),
+      ownedWorkspace("workspace-talkative", TEST_TIME - 30_000),
+    ],
     sessions: [
       {
         id: IDLE_SESSION_UUID,
         workspaceId: "workspace-idle",
         name: TEST_SESSION_NAME,
-        transcriptTail: `## Assistant\n\n${"a word ".repeat(200)}`,
+        transcriptTail: `## Assistant\n\n${longWords}`,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+      {
+        id: SECOND_IDLE_SESSION_UUID,
+        workspaceId: "workspace-talkative",
+        name: TEST_SESSION_NAME,
+        transcriptTail: `## Assistant\n\n${partingWords}`,
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
@@ -725,7 +738,10 @@ test("cuts a recap at the recap bound", async () => {
 
   const observations = await adapterFor(api.fetch).observe();
 
-  assert.equal(observations[0]?.recap?.length, 500);
+  // Parting words carry no display bound of their own — the tail read is the
+  // only width — so both messages reach the surfaces whole.
+  assert.equal(observations[0]?.recap, longWords);
+  assert.equal(observations[1]?.recap, partingWords);
 });
 
 test("keeps a session id that is not a UUID out of the read document", async () => {

@@ -1,6 +1,5 @@
 import path from "node:path";
 import {
-  maximumSessionRecapLength,
   maximumSessionTitleLength,
   PROVIDER_ID,
   type ProviderSessionObservation,
@@ -12,7 +11,7 @@ import {
   type SessionProvider,
   type SessionStatus,
 } from "@sidecar/session";
-import { isRecord, isWireString, oneLine, text, type WireRecord } from "@sidecar/wire";
+import { isRecord, isWireString, oneLine, text, type WireRecord, wholeLine } from "@sidecar/wire";
 import {
   discoverSessionFiles,
   LOCAL_ADAPTER_DEFAULTS,
@@ -215,7 +214,7 @@ function parseTail(tail: string): Omit<ParsedOmpSession, "cwd" | "title"> {
     // sentence mid-turn — or cut by an abort or an error — poses as an outcome.
     parsed.recap =
       open.size === 0 && parsed.turnFailed !== true && parsed.turnAborted !== true
-        ? oneLine(ompMessageText(message), maximumSessionRecapLength)
+        ? wholeLine(ompMessageText(message))
         : undefined;
   }
 
