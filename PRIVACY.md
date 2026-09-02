@@ -21,8 +21,9 @@ anywhere. It stays on your Mac unless a feature below sends it.
 — what you typed or said, what he spoke or announced, and the actions he took
 at your request — in a file on your Mac, so it is still there the next time you
 open him. It holds the 200 most recent entries and nothing older than 14 days,
-whichever runs out first; each entry is capped at 400 characters. Only the 20
-most recent are carried into a call, the same as before. Clearing the History
+whichever runs out first, each kept in full so the History tab shows every
+word. Only the 20 most recent are carried into a call, and each of those is
+capped at 400 characters there. Clearing the History
 tab deletes the file as well as the view. Nothing about the conversation is
 written on our servers, and a fixture or evidence run keeps no conversation at
 all.
