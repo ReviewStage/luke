@@ -63,6 +63,9 @@ public struct RealtimeSessionOptions: Sendable {
     public var onSpokenAsk: (@MainActor (String) -> Void)?
     /// Called with an error description when the session closes unexpectedly. Always delivered on the main actor.
     public var onError: @MainActor (String?) -> Void
+    /// Called when the server rejects one event but keeps the session open.
+    /// The current turn may end, but the developer can immediately try again.
+    public var onRecoverableError: (@MainActor (String) -> Void)?
 
     /// Dispatches an armed tool call to the appropriate hosted act endpoint.
     /// Receives the tool name, the parsed arguments, and the call id; returns
@@ -95,6 +98,7 @@ public struct RealtimeSessionOptions: Sendable {
         onCaption: @MainActor @escaping (String?) -> Void,
         onSpokenAsk: (@MainActor (String) -> Void)? = nil,
         onError: @MainActor @escaping (String?) -> Void,
+        onRecoverableError: (@MainActor (String) -> Void)? = nil,
         dispatchToolCall: (
             @Sendable @MainActor (_ name: String, _ arguments: [String: Any], _ callId: String) async -> String
         )? = nil,
@@ -108,6 +112,7 @@ public struct RealtimeSessionOptions: Sendable {
         self.onCaption = onCaption
         self.onSpokenAsk = onSpokenAsk
         self.onError = onError
+        self.onRecoverableError = onRecoverableError
         self.dispatchToolCall = dispatchToolCall
         self.makeWebSocket = makeWebSocket
         self.makeAudioCapturer = makeAudioCapturer
@@ -143,6 +148,10 @@ public final class RealtimeSession {
     // that follow-up's response.done arrives, so output_audio_buffer.stopped
     // does not return the session to .ready while the follow-up is in flight.
     private var followUpPending = false
+    // True once the server confirms the response requested for the current
+    // turn. Before that confirmation, an error replaces response.done and must
+    // return the session to ready rather than strand it in thinking.
+    private var responseStarted = false
     // Counts how many player drains are in progress. output_audio_buffer.stopped
     // creates one drain per event; the session may not return to .ready until the
     // last drain completes (pendingDrains == 0) and no follow-up is in flight.
@@ -227,6 +236,7 @@ public final class RealtimeSession {
         channel?.close(); channel = nil
         isArmed = false
         followUpPending = false
+        responseStarted = false
         pendingDrains = 0
         pendingCommit = false
         pendingCalls.removeAll()
@@ -272,6 +282,7 @@ public final class RealtimeSession {
 
     private func commitAndRequestResponse() async {
         guard let ws = channel else { return }
+        responseStarted = false
         try? await ws.sendText(#"{"type":"input_audio_buffer.commit"}"#)
         try? await ws.sendText(#"{"type":"response.create"}"#)
     }
@@ -324,7 +335,11 @@ public final class RealtimeSession {
     private func handleEvent(type: String, json: [String: Any], ws: any WebSocketTask) async {
         switch type {
 
+        case "response.created":
+            responseStarted = true
+
         case "response.audio.delta":
+            responseStarted = true
             if player == nil { player = options.makeAudioPlayer() }
             if status != .speaking { status = .speaking }
             if let b64 = json["delta"] as? String, let data = Data(base64Encoded: b64) {
@@ -389,8 +404,19 @@ public final class RealtimeSession {
 
         case "error":
             let message = (json["error"] as? [String: Any])?["message"] as? String
-            options.onError(message)
-            close()
+                ?? "Realtime request failed."
+            options.onRecoverableError?(message)
+            // Realtime server errors normally leave the WebSocket open. An
+            // empty push-to-talk commit is answered with an error instead of
+            // response.done, so finish only that unstarted turn and keep the
+            // conversation available for the next press.
+            if status == .thinking, !responseStarted {
+                isArmed = false
+                followUpPending = false
+                pendingCalls.removeAll()
+                status = .ready
+                resetIdleTimer()
+            }
 
         default:
             break
@@ -423,6 +449,7 @@ public final class RealtimeSession {
             // Mark the follow-up in flight so output_audio_buffer.stopped from the
             // current audio does not return the session to .ready prematurely.
             followUpPending = true
+            responseStarted = false
             try? await ws.sendText(#"{"type":"response.create"}"#)
         } else {
             // This is the follow-up response itself (or an audio-only primary response).
@@ -441,6 +468,7 @@ public final class RealtimeSession {
         }
 
         isArmed = false
+        responseStarted = false
         pendingCalls.removeAll()
     }
 

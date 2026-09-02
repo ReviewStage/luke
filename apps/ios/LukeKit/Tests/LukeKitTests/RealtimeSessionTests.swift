@@ -11,6 +11,7 @@ private final class MockWebSocketTask: WebSocketTask, @unchecked Sendable {
     private let stream: AsyncStream<String>
     let continuation: AsyncStream<String>.Continuation
     private(set) var outgoing: [String] = []
+    private(set) var closeCount = 0
     private var iterator: AsyncStream<String>.AsyncIterator
 
     init() {
@@ -29,7 +30,10 @@ private final class MockWebSocketTask: WebSocketTask, @unchecked Sendable {
         return msg
     }
 
-    func close() { continuation.finish() }
+    func close() {
+        closeCount += 1
+        continuation.finish()
+    }
 
     func deliver(_ message: String) { continuation.yield(message) }
 }
@@ -131,6 +135,51 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertTrue(sent.contains("input_audio_buffer.commit"), "Should commit on endTurn")
         XCTAssertTrue(sent.contains("response.create"), "Should request response on endTurn")
         XCTAssertEqual(session.status, .thinking)
+    }
+
+    func testServerErrorBeforeResponseStartsReturnsReadyWithoutClosingConnection() async throws {
+        let ws = MockWebSocketTask()
+        var fatalErrors: [String] = []
+        var recoverableErrors: [String] = []
+        let opts = makeOptions(
+            ws: ws,
+            onError: { if let message = $0 { fatalErrors.append(message) } },
+            onRecoverableError: { recoverableErrors.append($0) }
+        )
+        let session = RealtimeSession(options: opts)
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        session.beginTurn()
+        session.endTurn()
+        ws.deliver(#"{"type":"error","error":{"message":"buffer too small"}}"#)
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(session.status, .ready)
+        XCTAssertEqual(recoverableErrors, ["buffer too small"])
+        XCTAssertTrue(fatalErrors.isEmpty)
+        XCTAssertEqual(ws.closeCount, 0)
+    }
+
+    func testServerErrorAfterResponseStartsDoesNotEndActiveResponse() async throws {
+        let ws = MockWebSocketTask()
+        let opts = makeOptions(ws: ws)
+        let session = RealtimeSession(options: opts)
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        session.beginTurn()
+        session.endTurn()
+        ws.deliver(#"{"type":"response.created"}"#)
+        ws.deliver(#"{"type":"error","error":{"message":"recoverable aside"}}"#)
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(session.status, .thinking)
+        XCTAssertEqual(ws.closeCount, 0)
     }
 
     func testPressAudioBufferedDuringConnecting() async throws {
@@ -236,13 +285,16 @@ final class RealtimeSessionStateTests: XCTestCase {
         ws: MockWebSocketTask,
         capturer: any AudioCapturer = SilentCapturer(),
         onStatus: @MainActor @escaping (RealtimeStatus) -> Void = { _ in },
+        onError: @MainActor @escaping (String?) -> Void = { _ in },
+        onRecoverableError: (@MainActor (String) -> Void)? = nil,
         dispatchToolCall: (@Sendable @MainActor (_ name: String, _ arguments: [String: Any], _ callId: String) async -> String)? = nil
     ) -> RealtimeSessionOptions {
         RealtimeSessionOptions(
             requestConnection: { testConnection },
             onStatus: onStatus,
             onCaption: { _ in },
-            onError: { _ in },
+            onError: onError,
+            onRecoverableError: onRecoverableError,
             dispatchToolCall: dispatchToolCall,
             makeWebSocket: { _, _ in ws },
             makeAudioCapturer: { capturer },

@@ -50,6 +50,9 @@ private final class VoiceSessionModel {
                 self?.reconnectCallback = nil
                 self?.errorMessage = message ?? "Connection error"
             },
+            onRecoverableError: { [weak self] message in
+                self?.errorMessage = message
+            },
             dispatchToolCall: { [weak accountSession] name, arguments, callId in
                 let token = (try? await accountSession?.validAccessToken()) ?? ""
                 return await dispatchVoiceToolCall(
@@ -80,7 +83,10 @@ private final class VoiceSessionModel {
         session = nil
     }
 
-    func beginTurn() { session?.beginTurn() }
+    func beginTurn() {
+        errorMessage = nil
+        session?.beginTurn()
+    }
     func endTurn() { session?.endTurn() }
 }
 
