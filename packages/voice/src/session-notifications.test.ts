@@ -94,11 +94,21 @@ test("a concrete question is announced with the decision itself", () => {
   assert.deepEqual(speech, {
     providerId: "conductor",
     providerSessionId: "agent-1",
-    work: "Notification fix",
     change: SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT,
     detail: "Should session replay capture screenshots?",
     decidedAt: 2_000,
   });
+});
+
+test("the title never reaches an announcement; only a derived subject names the work", () => {
+  const notice = { ...waitingNotice(true), recap: "Should session replay capture screenshots?" };
+  const unnamed = sessionNoticeAnnouncement(notice, 2_000);
+  assert.equal(unnamed?.subject, undefined);
+  assert.doesNotMatch(JSON.stringify(unnamed), /Notification fix/);
+
+  const named = sessionNoticeAnnouncement(notice, 2_000, "session replay privacy");
+  assert.equal(named?.subject, "session replay privacy");
+  assert.doesNotMatch(JSON.stringify(named), /Notification fix/);
 });
 
 test("a permission hold is announced with the action awaiting approval", () => {

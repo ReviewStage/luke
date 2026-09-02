@@ -64,7 +64,7 @@ test("only an arrival item reads as one", () => {
       {
         providerId: "codex",
         providerSessionId: "s1",
-        work: "checkout",
+        subject: "checkout",
         change: "finished",
         decidedAt: AT,
       },

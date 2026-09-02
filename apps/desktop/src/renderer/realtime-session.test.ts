@@ -702,7 +702,7 @@ test("a proactive update is spoken once the call is open", async () => {
     {
       providerId: "claude-code",
       providerSessionId: "session-a",
-      work: "checkout-service",
+      subject: "checkout-service",
       change: SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT,
       detail: "The checkout service needs a decision.",
       decidedAt: 1_800_000_000_000,
@@ -1209,7 +1209,7 @@ function announcedFinish(id: string): readonly SessionAnnouncement[] {
     {
       providerId: "claude-code",
       providerSessionId: id,
-      work: id,
+      subject: id,
       change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
       decidedAt: Date.now(),
     },
@@ -2366,7 +2366,7 @@ test("an announcement's reply hands its subject back with the words", async () =
     {
       providerId: "claude-code",
       providerSessionId: "session-a",
-      work: "checkout-service",
+      subject: "checkout-service",
       change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
       decidedAt: 1_800_000_000_000,
     },
@@ -2396,7 +2396,7 @@ test("a failed announcement delivery leaves no transcript for History", async ()
     {
       providerId: "claude-code",
       providerSessionId: "session-a",
-      work: "checkout-service",
+      subject: "checkout-service",
       change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
       decidedAt: 1_800_000_000_000,
     },
@@ -2506,7 +2506,7 @@ test("a turn is refused while another is already under way", async () => {
     {
       providerId: "claude-code",
       providerSessionId: "session-a",
-      work: "checkout-service",
+      subject: "checkout-service",
       change: SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT,
       detail: "The checkout service needs a decision.",
       decidedAt: 1_800_000_000_000,
@@ -4654,14 +4654,14 @@ test("an announcement's caption names its sessions; a conversation's names none"
     {
       providerId: "claude-code",
       providerSessionId: "session-a",
-      work: "checkout",
+      subject: "checkout",
       change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
       decidedAt: 1_800_000_000_000,
     },
     {
       providerId: "codex",
       providerSessionId: "session-b",
-      work: "billing",
+      subject: "billing",
       change: SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT,
       detail: "Approve the migration?",
       decidedAt: 1_800_000_000_001,
@@ -5579,7 +5579,7 @@ test("a speak-only call reads a notice out but refuses a typed ask", async () =>
       {
         providerId: "claude-code",
         providerSessionId: "session-a",
-        work: "checkout-service",
+        subject: "checkout-service",
         change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
         decidedAt: 1_800_000_000_000,
       },
@@ -5638,7 +5638,7 @@ test("the rosters and the guide never travel on Luke's own call", async () => {
       {
         providerId: "claude-code",
         providerSessionId: "session-a",
-        work: "checkout-service",
+        subject: "checkout-service",
         change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
         decidedAt: 1_800_000_000_000,
       },
