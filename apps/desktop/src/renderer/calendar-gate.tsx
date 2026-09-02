@@ -1,6 +1,6 @@
-import { GOOGLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
+import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "@sidecar/calendar/vocabulary";
 import { ProviderMark } from "@sidecar/panel";
-import { APPLE_CALENDAR_ID } from "#shared/apple-calendar";
+import { APPLE_CALENDAR_ID, APPLE_CALENDAR_NAME } from "#shared/apple-calendar";
 
 /** One connectable calendar source the gate offers, absent where the build cannot. */
 export interface CalendarGateSource {
@@ -59,7 +59,7 @@ export function CalendarGate({
             onClick={control.apple.onConnect}
           >
             <ProviderMark providerId={APPLE_CALENDAR_ID} />
-            Use this Mac's Calendar
+            {APPLE_CALENDAR_NAME}
           </button>
         ) : null}
         {review === undefined && control.google ? (
@@ -70,7 +70,7 @@ export function CalendarGate({
             onClick={control.google.onConnect}
           >
             <ProviderMark providerId={GOOGLE_CALENDAR_ID} />
-            Connect Google Calendar
+            {GOOGLE_CALENDAR_NAME}
           </button>
         ) : null}
         {review !== undefined ? (

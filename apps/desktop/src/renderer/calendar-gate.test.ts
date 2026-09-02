@@ -18,19 +18,19 @@ const stillSource = { connecting: false, onConnect: () => undefined };
 const REVIEW = createElement("div", { className: "review-stand-in" }, "the settings block");
 
 test("unconnected, the gate offers exactly the sources the build can", () => {
-  // React escapes the apostrophe in "Mac's", so the label is matched around it.
+  // The buttons wear the sources' own names, the same words their settings rows use.
   const both = render({ apple: stillSource, google: stillSource });
-  assert.match(both, /Use this Mac/);
-  assert.match(both, /Connect Google Calendar/);
+  assert.match(both, /Apple Calendar/);
+  assert.match(both, /Google Calendar/);
   assert.doesNotMatch(both, />Done</);
 
   const appleOnly = render({ apple: stillSource });
-  assert.match(appleOnly, /Use this Mac/);
-  assert.doesNotMatch(appleOnly, /Connect Google Calendar/);
+  assert.match(appleOnly, /Apple Calendar/);
+  assert.doesNotMatch(appleOnly, /Google Calendar/);
 
   const googleOnly = render({ google: stillSource });
-  assert.doesNotMatch(googleOnly, /Use this Mac/);
-  assert.match(googleOnly, /Connect Google Calendar/);
+  assert.doesNotMatch(googleOnly, /Apple Calendar/);
+  assert.match(googleOnly, /Google Calendar/);
 });
 
 test("the gate carries no prose of its own; the label stands in for readers", () => {
@@ -45,8 +45,8 @@ test("connected, the handed-in review replaces the ask, and Done answers it", ()
   assert.match(markup, /calendar-gate-done[^>]*>Done/);
   // The rows inside the review carry the connects now; the ask half's
   // buttons leave with the question they asked.
-  assert.doesNotMatch(markup, /Use this Mac/);
-  assert.doesNotMatch(markup, /Connect Google Calendar/);
+  assert.doesNotMatch(markup, /Apple Calendar/);
+  assert.doesNotMatch(markup, /Google Calendar/);
 });
 
 test("a connect under way holds the buttons, never the quit", () => {
