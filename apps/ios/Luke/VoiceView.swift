@@ -30,12 +30,12 @@ private final class VoiceSessionModel {
     private var activeResponseMessageId: UUID?
     // Kept while this screen is alive so a direct press can reopen a socket
     // after the three-minute idle close. An idle edge itself never remints.
-    private var reconnectCallback: (@MainActor () async -> Void)?
+    private var reconnectCallback: (@MainActor (_ startWithTurn: Bool) async -> Void)?
     private var reconnectTurnTask: Task<Void, Never>?
     private var reconnectingForTurn = false
     private var endTurnAfterReconnect = false
 
-    func start(accountSession: AccountSession) async {
+    func start(accountSession: AccountSession, startWithTurn: Bool = false) async {
         guard session == nil else { return }
         errorMessage = nil
 
@@ -78,13 +78,13 @@ private final class VoiceSessionModel {
             makeAudioCapturer: { VoiceAudioCapturer() },
             makeAudioPlayer: { VoiceAudioPlayer() }
         )
-        reconnectCallback = { [weak self, weak accountSession] in
+        reconnectCallback = { [weak self, weak accountSession] startWithTurn in
             guard let accountSession else { return }
-            await self?.start(accountSession: accountSession)
+            await self?.start(accountSession: accountSession, startWithTurn: startWithTurn)
         }
         let s = RealtimeSession(options: opts)
         session = s
-        await s.connect()
+        await s.connect(startWithTurn: startWithTurn)
     }
 
     func stop() {
@@ -110,9 +110,8 @@ private final class VoiceSessionModel {
         endTurnAfterReconnect = false
         status = .connecting
         reconnectTurnTask = Task { [weak self] in
-            await reconnect()
+            await reconnect(true)
             guard let self, !Task.isCancelled, self.reconnectingForTurn else { return }
-            self.session?.beginTurn()
             self.reconnectingForTurn = false
             self.reconnectTurnTask = nil
             if self.endTurnAfterReconnect {
@@ -125,6 +124,9 @@ private final class VoiceSessionModel {
     func endTurn() {
         if reconnectingForTurn {
             endTurnAfterReconnect = true
+            // Once start() has installed the new session this stops capture
+            // immediately, even while its mint request is still in flight.
+            session?.endTurn()
         } else {
             session?.endTurn()
         }
@@ -203,7 +205,9 @@ struct VoiceView: View {
         }
         .task { await model.start(accountSession: accountSession) }
         .onChange(of: model.status) { _, newStatus in
-            if newStatus != .listening { isLatched = false }
+            // Connecting is part of an idle tap's active turn. Clearing here
+            // would make VoiceOver lose the second-tap-to-send affordance.
+            if newStatus == .ready || newStatus == .idle { isLatched = false }
         }
         .onDisappear { model.stop() }
     }

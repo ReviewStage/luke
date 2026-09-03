@@ -487,6 +487,37 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertTrue(sent.contains("input_audio_buffer.append"), "Should flush buffered audio on open")
     }
 
+    func testReconnectPressCapturesWhileConnectionMintIsPending() async throws {
+        let ws = MockWebSocketTask()
+        let mintStarted = AsyncGate()
+        let allowMint = AsyncGate()
+        let capturer = SequenceCapturer(chunks: [[1, 2, 3]])
+        let opts = makeOptions(
+            ws: ws,
+            capturer: capturer,
+            requestConnection: {
+                await mintStarted.open()
+                await allowMint.wait()
+                return testConnection
+            }
+        )
+        let session = RealtimeSession(options: opts)
+
+        let connectTask = Task { await session.connect(startWithTurn: true) }
+        await mintStarted.wait()
+        try await Task.sleep(nanoseconds: 10_000_000)
+        session.endTurn()
+        await allowMint.open()
+        ws.deliver(#"{"type":"session.created"}"#)
+        await connectTask.value
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let sent = ws.outgoing.joined(separator: "\n")
+        XCTAssertTrue(sent.contains("input_audio_buffer.append"))
+        XCTAssertTrue(sent.contains("input_audio_buffer.commit"))
+        XCTAssertTrue(sent.contains(#""type":"response.create""#))
+    }
+
     func testNewTurnWhileConnectingSupersedesPendingCommit() async throws {
         let ws = MockWebSocketTask()
         let session = RealtimeSession(options: makeOptions(ws: ws))
@@ -762,13 +793,14 @@ final class RealtimeSessionStateTests: XCTestCase {
         onError: @MainActor @Sendable @escaping (String?) -> Void = { _ in },
         onRecoverableError: (@MainActor @Sendable (String) -> Void)? = nil,
         dispatchToolCall: (@Sendable @MainActor (_ name: String, _ arguments: [String: Any], _ callId: String) async -> String)? = nil,
+        requestConnection: @Sendable @escaping () async throws -> VoiceConnection = { testConnection },
         playerFactory: (@Sendable () -> any AudioPlayer)? = nil,
         now: @Sendable @escaping () -> TimeInterval = {
             ProcessInfo.processInfo.systemUptime
         }
     ) -> RealtimeSessionOptions {
         RealtimeSessionOptions(
-            requestConnection: { testConnection },
+            requestConnection: requestConnection,
             onStatus: onStatus,
             onCaption: onCaption,
             onSpokenAsk: onSpokenAsk,

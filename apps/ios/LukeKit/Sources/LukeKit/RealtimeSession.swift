@@ -193,9 +193,13 @@ public final class RealtimeSession {
 
     // MARK: - Public API
 
-    public func connect() async {
+    public func connect(startWithTurn: Bool = false) async {
         guard status == .idle else { return }
         status = .connecting
+        // An idle reconnect is initiated by the developer's press. Start the
+        // microphone before minting so speech during that network request is
+        // retained in PressAudioBuffer and flushed when the socket opens.
+        if startWithTurn { beginTurn() }
         do {
             let connection = try await options.requestConnection()
             // close() may have been called while the mint was in flight.
