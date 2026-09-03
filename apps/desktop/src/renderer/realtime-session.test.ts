@@ -1759,7 +1759,10 @@ test("the conversation is told which sessions Luke can see, at the turn that rea
   await context.session.connect();
 
   context.session.updateSessions([
-    observedSession("session-a", { status: SESSION_STATUS.WAITING, recap: "Waiting on input." }),
+    observedSession("session-a", {
+      status: SESSION_STATUS.WAITING,
+      detail: { activity: "Waiting on input." },
+    }),
   ]);
 
   // Nothing yet: a roster nobody has asked about is an answer waiting to be
@@ -1793,8 +1796,8 @@ test("a roster that churns between turns is only ever said once", async () => {
   // the rendered roster differs every time. None of it is worth an item until
   // somebody asks — otherwise the developer's own earlier turns are what gets
   // evicted to make room for a status that has already changed again.
-  for (const recap of ["Reading files.", "Editing.", "Running tests.", "Waiting on input."]) {
-    context.session.updateSessions([observedSession("session-a", { recap })]);
+  for (const activity of ["Reading files.", "Editing.", "Running tests.", "Waiting on input."]) {
+    context.session.updateSessions([observedSession("session-a", { detail: { activity } })]);
   }
   assert.deepEqual<ParsedJsonObject[]>(context.sent, []);
 
@@ -1810,12 +1813,16 @@ test("a fresh roster replaces the item the last one occupied", async () => {
   const context = harness();
   await context.session.connect();
 
-  context.session.updateSessions([observedSession("session-a", { recap: "Editing." })]);
+  context.session.updateSessions([
+    observedSession("session-a", { detail: { activity: "Editing." } }),
+  ]);
   await armDeveloperTurn(context);
   const first = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.SESSIONS);
   assert.ok(first);
 
-  context.session.updateSessions([observedSession("session-a", { recap: "Waiting on input." })]);
+  context.session.updateSessions([
+    observedSession("session-a", { detail: { activity: "Waiting on input." } }),
+  ]);
   context.session.stopSpeaking();
   const sentBefore = context.sent.length;
   await armDeveloperTurn(context);
@@ -1840,11 +1847,15 @@ test("a supersede the server refuses is this call's own business", async () => {
   const context = harness();
   await context.session.connect();
 
-  context.session.updateSessions([observedSession("session-a", { recap: "Editing." })]);
+  context.session.updateSessions([
+    observedSession("session-a", { detail: { activity: "Editing." } }),
+  ]);
   await armDeveloperTurn(context);
   const superseded = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.SESSIONS);
 
-  context.session.updateSessions([observedSession("session-a", { recap: "Waiting." })]);
+  context.session.updateSessions([
+    observedSession("session-a", { detail: { activity: "Waiting." } }),
+  ]);
   context.session.stopSpeaking();
   await armDeveloperTurn(context);
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.

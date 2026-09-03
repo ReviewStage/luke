@@ -13,7 +13,7 @@ import type { SessionReplayBootstrap } from "#shared/wire/session";
  * there. This client is the analytics library configured as it ships, posting
  * straight to the processor, and everything it sends is outside that
  * allowlist: a recording is the rendered panel, so a session title, branch,
- * recap, error line, and the account's own name and address all travel
+ * error line, and the account's own name and address all travel
  * because they are drawn; autocapture puts the text of whatever was clicked
  * on an event.
  * What is typed into a field stays masked by the library's default, and the

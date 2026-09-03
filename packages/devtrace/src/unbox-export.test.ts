@@ -188,7 +188,6 @@ test("a readable attention update renders as the exact prompt the model received
     title: "checkout-service",
     status: "complete",
     previousStatus: "working",
-    recap: "Shipped the retry fix.",
   };
   const attention = JSON.stringify({
     at: "2026-08-25T10:05:00.000Z",
@@ -210,7 +209,6 @@ test("a readable attention update renders as the exact prompt the model received
       title: "checkout-service",
       status: SESSION_STATUS.COMPLETE,
       previousStatus: SESSION_STATUS.WORKING,
-      recap: "Shipped the retry fix.",
     }),
   );
 });

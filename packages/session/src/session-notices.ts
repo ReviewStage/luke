@@ -57,12 +57,6 @@ export interface SessionNotice {
   previousStatus: SessionStatus;
   /** Whether this waiting turn cannot continue without the developer. */
   holdingForDeveloper?: boolean;
-  /**
-   * Where the settled turn left the work — provider-designated, or the agent's
-   * own parting words. For a waiting session this may be the question holding
-   * it, or simply the result of the turn that finished.
-   */
-  recap?: string;
   /** Why the session stopped, when its provider said. */
   error?: string;
   /** The provider's bounded description of the action currently awaiting permission. */
@@ -76,20 +70,12 @@ export interface SessionNotice {
 
 /**
  * Distinguishes a turn that needs the developer from one that merely finished.
- * A provider that saw a permission, an approval, or an open question says so
- * on the observation; a recap that itself asks is the same evidence when the
- * adapter could not tell. A query string inside
- * a URL is not a question. A `?` that ends a sentence after a link still
- * is: a query string has characters after the mark, and a trailing ask
- * does not.
+ * Only a provider that saw a permission, an approval, or an open question and
+ * said so on the observation counts: a waiting session whose adapter could
+ * not tell is the panel's to show, not a notice's to speak.
  */
 function waitingHoldsForDeveloper(session: Session): boolean {
-  if (session.status !== SESSION_STATUS.WAITING) return false;
-  if (session.holdingForDeveloper === true) return true;
-  if (!session.recap) return false;
-  return session.recap
-    .replace(/\bhttps?:\/\/[^\s?]+(?:\?[^\s#]+)?(?:#[^\s]+)?/gi, "")
-    .includes("?");
+  return session.status === SESSION_STATUS.WAITING && session.holdingForDeveloper === true;
 }
 
 interface TrackedSessionState {
@@ -119,7 +105,6 @@ function sessionNotice(session: Session, previousStatus: SessionStatus): Session
   if (status === SESSION_NOTICE_STATUS.WAITING) {
     notice.holdingForDeveloper = waitingHoldsForDeveloper(session);
   }
-  if (session.recap) notice.recap = session.recap;
   if (session.detail.error) notice.error = session.detail.error;
   if (session.detail.activity) notice.activity = session.detail.activity;
   if (session.detail.repository) notice.repository = session.detail.repository;

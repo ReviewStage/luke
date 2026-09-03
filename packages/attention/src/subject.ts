@@ -1,6 +1,5 @@
 import {
   boundedText,
-  maximumSessionRecapExcerptLength,
   maximumSessionSubjectLength,
   maximumSessionTitleLength,
   SESSION_COMPLETION_CAUSE,
@@ -16,9 +15,9 @@ import { isRecord, isWireString, text, type UnparsedWireValue } from "@sidecar/w
  * working on, derived by a model from the rendering of the session's own
  * transcript that the adapter already produces, bounded by the file tail it
  * reads and its per-line cuts. It exists because no observed field says this —
- * a title is the first message, an activity is the tool running now, a recap
- * is the latest settled turn — and an announcement that names the agent by
- * its title names the work it stopped doing.
+ * a title is the first message, an activity is the tool running now — and an
+ * announcement that names the agent by its title names the work it stopped
+ * doing.
  *
  * It mirrors the attention evaluator at every layer: a model's judgment about
  * one session, reaching no write path. It is the one place transcript content
@@ -48,13 +47,11 @@ export const SUBJECT_SCHEMA = {
 /**
  * What a derivation is given, and the only session material a subject model
  * ever receives: the provider's name, the title as the developer's first
- * ask, the bounded recap where one stands, and the transcript rendering.
- * Identifiers and clocks never enter it.
+ * ask, and the transcript rendering. Identifiers and clocks never enter it.
  */
 export interface SubjectInput {
   providerName: string;
   title: string;
-  recap?: string;
   transcript: string;
 }
 
@@ -117,16 +114,13 @@ export function subjectInputFromWire(value: UnparsedWireValue): SubjectInput | u
   const providerName = boundedText(text(value.providerName), maximumSessionTitleLength);
   const title = boundedText(text(value.title), maximumSessionTitleLength);
   if (!providerName || !title) return undefined;
-  // Refused rather than cut past the bounds: a longer transcript or recap is
-  // not an input this build produced. A rendering is a lossy cut of the file
-  // tail it was read from, so it cannot materially outrun those bytes.
+  // Refused rather than cut past the bound: a longer transcript is not an
+  // input this build produced. A rendering is a lossy cut of the file tail it
+  // was read from, so it cannot materially outrun those bytes.
   if (!isWireString(value.transcript)) return undefined;
   const transcript = value.transcript.trim();
   if (!transcript || transcript.length > transcriptReadTailBytes) return undefined;
-  if (value.recap !== undefined && !isWireString(value.recap)) return undefined;
-  const recap = value.recap?.trim();
-  if (recap !== undefined && recap.length > maximumSessionRecapExcerptLength) return undefined;
-  return { providerName, title, transcript, ...(recap ? { recap } : undefined) };
+  return { providerName, title, transcript };
 }
 
 /**
@@ -183,9 +177,6 @@ export class SessionSubjectDeriver {
       providerName: session.provider.displayName,
       title: session.title,
       transcript,
-      ...(session.recap
-        ? { recap: boundedText(session.recap, maximumSessionRecapExcerptLength) }
-        : undefined),
     };
     const derivation = await this.#evaluate(input);
     if (!derivation || derivation.subject === null) return undefined;

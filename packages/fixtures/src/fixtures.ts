@@ -209,7 +209,7 @@ const smokeFixture: FixtureSnapshot = {
     // The complete chat is also the most recently observed session while being
     // among the least urgent, so the fixture tells the two orderings apart
     // rather than agreeing with both. A provider that reported no activity,
-    // failure, or recap: the surface words the state itself, and this row is
+    // or failure: the surface words the state itself, and this row is
     // what proves it does. Its agent went unreported, so the row's mark falls
     // back to the Conductor mark — the honest fallback this row is also proof
     // of.

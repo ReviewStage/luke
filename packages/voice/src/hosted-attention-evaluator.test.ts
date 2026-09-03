@@ -20,7 +20,6 @@ const UPDATE: AttentionUpdate = {
   title: "checkout-service",
   status: SESSION_STATUS.WAITING,
   previousStatus: SESSION_STATUS.WORKING,
-  recap: "Waiting on a permission decision.",
   context: { branch: "main" },
   lastActivityAt: NOW - 1_000,
 };
@@ -90,7 +89,6 @@ test("sends only what the prompt reads — never the session's identifiers or cl
     title: UPDATE.title,
     status: UPDATE.status,
     previousStatus: UPDATE.previousStatus,
-    recap: UPDATE.recap,
     context: UPDATE.context,
   });
 });

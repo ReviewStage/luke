@@ -202,13 +202,13 @@ Trust constraints:
 - A session's subject is the one place transcript content reaches a model
   unbidden, and it is bounded on every side. No observed field says what an
   agent is generally working on — a title is the first message, an activity
-  is the tool running now, a recap is the latest settled turn — so an
+  is the tool running now — so an
   announcement that named the agent by its title named work it had stopped
   doing. Luke therefore derives one short phrase per local session from the
   same bounded transcript rendering the conversation-tab ask already reads,
   through the same adapter method, bounded only by the file tail the adapter
   reads and its per-line cuts, together with the title as the developer's
-  first ask and the bounded recap. The
+  first ask. The
   derivation runs only for a session about to be announced, at the moment the
   announcement is delivered, once per announcement, never in a fixture run,
   under a fixed deadline past which the announcement speaks without it, so
@@ -241,7 +241,7 @@ Trust constraints:
   from `as const` sets in that same file, validated by one reader both the
   desktop and the service run and which builds its output from the allowlist
   rather than from what arrived. No observed value (a title, a branch, a path,
-  a recap, a prompt, an error line) may reach a property, and no property may
+  a prompt, an error line) may reach a property, and no property may
   take free text; counts travel as buckets and versions as release versions.
   That guarantee is structural: there is no shape such a value could travel in.
   The desktop posts events to Luke's own service and never to an analytics
@@ -271,15 +271,15 @@ Trust constraints:
   end-of-edit, typed text no disclosure covers — so it stays at its off
   default. The first of them is what that client captures
   beside a recording: an autocaptured event names the text of whatever was
-  clicked, so pressing a session row sends that row's title, recap, and
-  branch. Nothing validates it — no allowlist stands between the panel and the
+  clicked, so pressing a session row sends that row's title and branch.
+  Nothing validates it — no allowlist stands between the panel and the
   provider — and `productEventFromWire` never sees it. Autocapture stops with
   the recording switch, because the client opts out
   rather than only stopping the recorder; a switch that named recording and
   left it running would be a consent nobody gave.
 - The replay stream has the opposite shape from the counted events. Except for
   the conversation History tab, it records the rendered panel, so everything
-  drawn travels: a session's title, branch, recap, and error line, the account's
+  drawn travels: a session's title, branch, and error line, the account's
   own name and address, and any
   screenshot attached to the feedback composer, which is drawn as its own
   bytes and which input masking does not reach. The one thing withheld is what
@@ -557,31 +557,21 @@ Trust constraints:
 - Keep Electron renderers sandboxed with context isolation and narrow IPC.
 - Commit only synthetic fixtures and repository-relative paths. This binds
   harder as Luke observes more: a fixture copied from a real session now carries
-  a real title, branch, and recap.
+  a real title and branch.
 
 What Luke may show:
 
 - Show whatever the local surface can read. A session's own title, branch,
-  model, current tool, failure, and the recap a provider wrote about it all
+  model, current tool, and failure all
   belong on the row: a sidecar that cannot tell two sessions apart is not worth
   the space beside the housing. This is the user's own data, on the user's own
   screen, and it is read-only.
 - Label a session by what its provider named it, falling back to the workspace
   or repository only when there is no name yet. Do not compose a sentence in an
   adapter; report the fields and let the surface word them.
-- A recap may be the agent's own parting words. A provider that designates no
-  recap field but hands over the conversation itself (Conductor's transcripts
-  view) is read for a bounded tail of its transcript, and the last message's
-  words become the recap only when that message is attributably the agent's
-  and the chat is idle or closed: a settled turn's parting words say where the
-  work stands, where half a sentence mid-turn poses as an outcome. The tail is
-  inspected in memory and discarded: the bounded recap is all an observation
-  pass ever reports, and no pass reads the history behind it. The one wider
-  read of that history is the next rule's, and it belongs to the developer's
-  own press, never to a pass.
 - A session's conversation itself is read in exactly one place, and the place
-  is deliberate: this is the read that widens the tail rule above, made in
-  the open rather than smuggled behind it. When the developer opens a
+  is deliberate: in the open, at the developer's own press, never behind an
+  observation pass, which reads no message of any chat. When the developer opens a
   Conductor session's own screen in the iOS app, that screen asks Luke's
   service for the conversation, and the service reads it through Conductor's
   documented transcript endpoint (`GET /v0/sessions/{id}/messages`) under the
@@ -607,19 +597,14 @@ What Luke may show:
   fetched words are masked out of the session recording, the way the desktop
   blocks its History subtree, so the conversation reaches the developer's own
   screen and nothing else. A provider whose API documents no such read
-  advertises none, and its screen keeps the bounded recap it always drew;
-  widening this read to another provider, another caller, an unattributed
+  advertises none, and its screen says so rather than standing in a summary
+  of its own; widening this read to another provider, another caller, an unattributed
   message kind, or anything stored is a product decision, not an
   implementation detail.
 - Session material leaves the machine unbidden in exactly two places, each
   with its own narrower rule. An evaluator receives `AttentionContext`, what
   a provider wrote *about* a session, and never the transcript behind it: no
-  message history, file contents, or command output. A recap counts as *about*
-  even when it is the agent's own parting words, the bounded words saying
-  where the turn ended, kept with the line breaks they were written in so a
-  chat can draw them as the Markdown they are, and collapsed to one line only
-  where a row or an excerpt has room for one, the same standing as a recap a provider designated,
-  but the transcript it was read from never travels. A
+  message history, file contents, or command output. A
   spoken announcement (a session that started waiting, stopped on an error,
   or finished, or an evaluator sentence approved for speech) reaches the
   voice service so it can be said aloud. Two onboarding beats are
@@ -640,8 +625,8 @@ What Luke may show:
   dropped before its reply began — leaves it owed for the next signed-in
   launch rather than improvising a substitute; only the voice window
   reporting the reply actually begun settles it. An edge announcement
-  sends that update's *about* fields, the same ones the evaluator may see
-  with a bounded excerpt of the recap included, and the voice words the
+  sends that update's *about* fields, the same ones the evaluator may see,
+  and the voice words the
   sentence said aloud, so it can say what the session is waiting on rather
   than only that it waits. When no conversation is open, Luke opens a call of
   his own to say it, and that call is speak-only by construction: it offers

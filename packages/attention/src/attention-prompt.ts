@@ -1,7 +1,6 @@
 import {
   boundedText,
   maximumSessionDetailLength,
-  maximumSessionRecapExcerptLength,
   maximumSessionTitleLength,
   SESSION_STATUS,
   type SessionStatus,
@@ -15,8 +14,8 @@ const ATTENTION_INSTRUCTION_LINES: readonly string[] = [
   "As the engineering manager for the user's coding agents, decide whether Luke should speak about an update.",
   "",
   "When to speak:",
-  "- Default to silence. Speak only for a concrete question, permission or approval, material error or risk, or material outcome that changes what happens next. A status change, completion, or recap alone is not enough.",
-  "- Treat waiting as actionable only when the recap or context shows a concrete question, permission, or approval.",
+  "- Default to silence. Speak only for a concrete question, permission or approval, material error or risk, or material outcome that changes what happens next. A status change or completion alone is not enough.",
+  "- Treat waiting as actionable only when the context shows a concrete question, permission, or approval.",
   "- A session waiting on automation it set in motion — CI, a merge queue, a watcher it left running — is not waiting on the developer: nothing they reply can move it, so stay silent and let the automation's outcome be the development.",
   "",
   "What you return:",
@@ -37,7 +36,6 @@ export interface AttentionPromptUpdate {
   workspace?: string;
   status: SessionStatus;
   previousStatus?: SessionStatus;
-  recap?: string;
   context?: AttentionContext;
 }
 
@@ -53,7 +51,6 @@ export function attentionUpdateInput(update: AttentionPromptUpdate): string {
     `Branch: ${update.context?.branch ?? NONE_LABEL}`,
     `Running: ${update.context?.activity ?? NONE_LABEL}`,
     `Error: ${update.context?.error ?? NONE_LABEL}`,
-    `Work recap: ${update.recap ?? NONE_LABEL}`,
   ].join("\n");
 }
 
@@ -104,11 +101,9 @@ function optionalWireText(value: UnparsedWireValue, maximumLength: number): Opti
 
 /**
  * Validates an update arriving as untrusted JSON — a hosted review request —
- * down to the fields the prompt reads, each held to the bound an update may
- * carry it at: the roster's own bound for most, the recap's narrower excerpt
- * bound for the one field the roster retains longer. A value set is checked
- * against the set itself, a malformed field refuses the whole update rather
- * than being repaired.
+ * down to the fields the prompt reads, each held to the roster's own bound
+ * for it. A value set is checked against the set itself, a malformed field
+ * refuses the whole update rather than being repaired.
  */
 export function attentionPromptUpdateFromWire(
   value: UnparsedWireValue,
@@ -126,11 +121,7 @@ export function attentionPromptUpdateFromWire(
   if (value.previousStatus !== undefined && !previousStatus) return undefined;
 
   const workspace = optionalWireText(value.workspace, maximumSessionTitleLength);
-  // The excerpt bound, not the roster's: an update's recap is cut to the
-  // excerpt before it may leave a machine, so a longer one here is not an
-  // update this build produced.
-  const recap = optionalWireText(value.recap, maximumSessionRecapExcerptLength);
-  if (!workspace.valid || !recap.valid) return undefined;
+  if (!workspace.valid) return undefined;
 
   if (value.context !== undefined && !isRecord(value.context)) return undefined;
   const contextRecord = isRecord(value.context) ? value.context : {};
@@ -154,7 +145,6 @@ export function attentionPromptUpdateFromWire(
   };
   if (workspace.text) update.workspace = workspace.text;
   if (previousStatus) update.previousStatus = previousStatus;
-  if (recap.text) update.recap = recap.text;
   if (Object.keys(context).length > 0) update.context = context;
   return update;
 }

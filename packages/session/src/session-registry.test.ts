@@ -43,7 +43,6 @@ test("normalizes provider observations without conflating provider-local identit
     observation("run:42", 100, {
       title: "  Implement the shared session core  ",
       parentProviderSessionId: "  run:parent  ",
-      recap: `  ${"a".repeat(2_000)}  `,
       controls: [{ id: TEST_CONTROL_WITH_WHITESPACE, label: " Open workspace " }],
     }),
   );
@@ -55,8 +54,6 @@ test("normalizes provider observations without conflating provider-local identit
   );
   assert.equal(session.title, "Implement the shared session core");
   assert.equal(session.parentProviderSessionId, "run:parent");
-  // Trimmed, never cut: the recap carries the whole parting words.
-  assert.equal(session.recap, "a".repeat(2_000));
   assert.deepEqual(session.controls, [{ id: TEST_CONTROL.OPEN, label: "Open workspace" }]);
   assert.deepEqual(registry.snapshot().attention, []);
   assert.equal(supportsSessionControl(session, TEST_CONTROL.OPEN), true);

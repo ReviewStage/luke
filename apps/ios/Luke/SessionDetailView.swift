@@ -139,7 +139,7 @@ struct SessionDetailView: View {
     @State private var loadingOlder = false
     /// Whether the opening read has answered at all — success or refusal —
     /// which is what retires the skeleton: until then the screen holds the
-    /// thread's place, and after a refusal the recap stands as the fallback.
+    /// thread's place, and after a refusal the empty state stands in its place.
     @State private var openAttempted = false
     /// Where the screen should land once the bubbles a read just handed it
     /// have been laid out. A `scrollTo` in the same turn as the state change
@@ -207,19 +207,27 @@ struct SessionDetailView: View {
                     }
                     if conversation.isEmpty {
                         // While the opening read is in flight the screen says
-                        // "a thread is coming" rather than flashing the recap
-                        // it would only replace; the recap is the answer once
-                        // the read cannot give one, or was never advertised.
+                        // "a thread is coming" rather than flashing the empty
+                        // state it would only replace. Once the read cannot
+                        // give one, or was never advertised, the screen says
+                        // where the conversation lives rather than standing
+                        // in a summary of its own; the provider's failure
+                        // word still outranks that, as it does on the row.
                         if session.canReadConversation && !openAttempted {
                             ConversationSkeleton()
-                        } else if let words = session.error ?? session.recap {
-                            AgentMessageBubble(words: words, isError: session.error != nil)
+                        } else if let error = session.error {
+                            AgentMessageBubble(words: error, isError: true)
+                        } else {
+                            Text("Conductor holds this session's conversation.")
+                                .font(.footnote)
+                                .foregroundStyle(Color.inkTertiary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
                         }
                     } else {
                         // Masked from the recording the way the desktop
                         // blocks its History subtree: a session's own words
-                        // do not leave the machine in a replay, where the
-                        // recap always traveled and still does.
+                        // do not leave the machine in a replay.
                         ForEach(conversation) { message in
                             conversationBubble(message)
                                 .postHogMask()
@@ -247,8 +255,8 @@ struct SessionDetailView: View {
             }
             // A conversation opens at its end and follows new messages while
             // the reader is already there — the system's own chat anchoring.
-            // A screen that will only ever draw the recap keeps the top
-            // anchor its short content has always had.
+            // A screen with no conversation to draw keeps the top anchor
+            // its short content has always had.
             .defaultScrollAnchor(session.canReadConversation ? .bottom : .top)
             .onChange(of: thread.count) { previousCount, count in
                 // Only growth is a send worth following: a handover shrinks
@@ -387,7 +395,7 @@ struct SessionDetailView: View {
     /// The opening read: the latest page of the conversation, drawn from its
     /// end the way Messages opens a chat. Its answer seeds both positions —
     /// the poll's forward cursor and the scroll's oldest offset. A failed
-    /// opening changes nothing: the recap fallback stands, and the next tick
+    /// opening changes nothing: the empty state stands, and the next tick
     /// tries again because the cursor is still unset.
     private func openConversation() async {
         defer { openAttempted = true }

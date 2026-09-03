@@ -46,7 +46,7 @@ export const INTERRUPTION_CONTEXT_INSTRUCTION =
  */
 export const AGENT_WORK_LANGUAGE_INSTRUCTION =
   "An agent is known by what it is doing, never by where it lives. Take that from the subject an " +
-  "update carries, else from what it is currently running or from its recap, and fall back to its " +
+  "update carries, else from what it is currently running, and fall back to its " +
   'Work field; with only a bare label to go on it is "your agent working on [work]". Never "your ' +
   'agent", "the agent", or "it" by itself, which leaves them guessing which one — except once an ' +
   "agent is already the one under discussion in the current exchange, where they just asked about " +

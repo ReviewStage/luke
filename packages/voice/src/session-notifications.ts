@@ -12,62 +12,27 @@ import {
   type SessionNotice,
 } from "@sidecar/session";
 
-const maximumRecapExcerptLength = 240;
-const MINIMUM_RECAP_SENTENCE_CUT = maximumRecapExcerptLength / 2;
-
-function recapExcerpt(value: string): string {
-  const line = flattened(value);
-  if (line.length <= maximumRecapExcerptLength) return line;
-  const window = line.slice(0, maximumRecapExcerptLength + 1);
-  const sentenceEnd = Math.max(
-    window.lastIndexOf(". "),
-    window.lastIndexOf("? "),
-    window.lastIndexOf("! "),
-  );
-  if (sentenceEnd + 1 >= MINIMUM_RECAP_SENTENCE_CUT) return window.slice(0, sentenceEnd + 1);
-  const cut = line.slice(0, maximumRecapExcerptLength - 1);
-  const wordEnd = cut.lastIndexOf(" ");
-  return `${(wordEnd > 0 ? cut.slice(0, wordEnd) : cut).trimEnd()}…`;
-}
-
 function flattened(value: string): string {
   return value.replace(/\s+/g, " ").trim();
-}
-
-function containsConcreteQuestion(value: string | undefined): value is string {
-  if (!value) return false;
-  return value.replace(/\bhttps?:\/\/[^\s?]+(?:\?[^\s#]+)?(?:#[^\s]+)?/gi, "").includes("?");
 }
 
 interface AnnouncementSource extends SessionIdentity {
   activity?: string;
   error?: string;
-  recap?: string;
 }
 
+/**
+ * The one line an announcement may add to its session's name: the failure
+ * for a session that stopped, else the tool it is running or holding on. A
+ * finished turn with neither says only that it finished — what the work was
+ * is the subject's to name, never a scrape of the agent's last message.
+ */
 function announcementDetail(
   source: AnnouncementSource,
   change: SessionAnnouncement["change"],
 ): string | undefined {
-  if (change === SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT) {
-    if (source.activity) return flattened(source.activity);
-    if (containsConcreteQuestion(source.recap)) return recapExcerpt(source.recap);
-    return undefined;
-  }
-  if (change === SESSION_ANNOUNCEMENT_CHANGE.FAILED) {
-    return source.error
-      ? flattened(source.error)
-      : source.recap
-        ? recapExcerpt(source.recap)
-        : source.activity
-          ? flattened(source.activity)
-          : undefined;
-  }
-  return source.recap
-    ? recapExcerpt(source.recap)
-    : source.activity
-      ? flattened(source.activity)
-      : undefined;
+  if (change === SESSION_ANNOUNCEMENT_CHANGE.FAILED && source.error) return flattened(source.error);
+  return source.activity ? flattened(source.activity) : undefined;
 }
 
 function announcement(
@@ -132,7 +97,6 @@ export function sessionAnnouncementFromReview(
       providerSessionId: review.providerSessionId,
       ...(update.context?.activity ? { activity: update.context.activity } : undefined),
       ...(update.context?.error ? { error: update.context.error } : undefined),
-      ...(update.recap ? { recap: update.recap } : undefined),
     },
     change,
     review.decision.decidedAt,

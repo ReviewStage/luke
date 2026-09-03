@@ -45,7 +45,7 @@ final class RosterSessionTests: XCTestCase {
         XCTAssertEqual(s?.id, "conductor:sess-1")
         XCTAssertEqual(s?.title, "My PR")
         XCTAssertNil(s?.workspace)
-        XCTAssertNil(s?.recap)
+        XCTAssertNil(s?.error)
     }
 
     func testOptionalFields() {
@@ -58,14 +58,13 @@ final class RosterSessionTests: XCTestCase {
             "branch": "main",
             "change": "https://github.com/ReviewStage/luke/pull/642",
             "link": "conductor://workspace?id=ws-1&session=sess-2",
-            "recap": "Waiting for approval",
+            "error": "Rate limit reached",
         ])
         XCTAssertEqual(s?.workspace, "my-repo")
         XCTAssertEqual(s?.branch, "main")
         XCTAssertEqual(s?.change, URL(string: "https://github.com/ReviewStage/luke/pull/642"))
         XCTAssertEqual(s?.link, URL(string: "conductor://workspace?id=ws-1&session=sess-2"))
-        XCTAssertEqual(s?.recap, "Waiting for approval")
-        XCTAssertNil(s?.error)
+        XCTAssertEqual(s?.error, "Rate limit reached")
     }
 
     func testLastActivityReadsTheNewNameAndFallsBackToTheOld() {

@@ -14,7 +14,7 @@ import PostHog
 /// the way the launch before the sign-in was.
 ///
 /// Everything this app draws travels in a recording — session titles,
-/// branches, recaps, error lines, the account's own name and address — and
+/// branches, error lines, the account's own name and address — and
 /// what is typed into a field is withheld by the library's default masking
 /// rather than a posture this app keeps. Nothing here is validated by the
 /// counted events' allowlist, which never covered this stream on any

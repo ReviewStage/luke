@@ -3,8 +3,6 @@ import {
   type AttentionDecision,
   type AttentionDisposition,
   attentionDecisionFromWire,
-  boundedText,
-  maximumSessionRecapExcerptLength,
   normalizeSessionIdentity,
   SESSION_COMPLETION_CAUSE,
   type Session,
@@ -18,7 +16,6 @@ import { nonNegativeNumber, positiveInteger, type UnparsedWireValue } from "@sid
 export const ATTENTION_TRIGGER = {
   OBSERVED: "observed",
   STATUS_CHANGED: "status-changed",
-  RECAP_CHANGED: "recap-changed",
   ERROR_REPORTED: "error-reported",
 } as const;
 
@@ -89,9 +86,9 @@ export interface AttentionContext {
 /**
  * A bounded description of what changed for one session, and the only session
  * material an attention evaluator ever receives. It carries what a provider
- * wrote *about* a session — its title, its state, its own closing recap — and
- * never the transcript that sits behind them: no message history, file
- * contents, or command output.
+ * wrote *about* a session — its title, its state, the tool it is running,
+ * the failure it reports — and never the transcript that sits behind them:
+ * no message history, file contents, or command output.
  */
 export interface AttentionUpdate extends SessionIdentity {
   trigger: AttentionTrigger;
@@ -108,13 +105,6 @@ export interface AttentionUpdate extends SessionIdentity {
   /** Local announcement context; intentionally absent from the evaluator prompt. */
   holdingForDeveloper?: boolean;
   previousStatus?: SessionStatus;
-  /**
-   * The bounded excerpt of the session's recap, never the retained recap
-   * whole: the roster may keep a longer one for the surfaces that draw it,
-   * but what leaves the machine in an update stays cut to
-   * {@link maximumSessionRecapExcerptLength}.
-   */
-  recap?: string;
   context?: AttentionContext;
   lastActivityAt: number;
 }
@@ -227,21 +217,7 @@ const ATTENTION_DEVELOPMENT = [
     ofSession: (session: Session) => session.detail.error,
     ofUpdate: (update: AttentionUpdate) => update.context?.error,
   },
-  {
-    trigger: ATTENTION_TRIGGER.RECAP_CHANGED,
-    // The excerpt is what an update carries, so both accessors speak in
-    // excerpts: a recap that changed only past the excerpt is a difference
-    // no evaluator could see, and treating it as a development would open
-    // reviews the model must judge blind — and supersede ones it should not.
-    ofSession: (session: Session) => attentionRecapExcerpt(session.recap),
-    ofUpdate: (update: AttentionUpdate) => update.recap,
-  },
 ] as const;
-
-/** The one bounded slice of a recap that may leave the machine in an update. */
-function attentionRecapExcerpt(recap: string | undefined): string | undefined {
-  return boundedText(recap, maximumSessionRecapExcerptLength);
-}
 
 /** Fields that change what the voice would say, without opening extra model reviews. */
 function speechValues(update: AttentionUpdate): readonly (string | undefined)[] {
@@ -252,14 +228,13 @@ function speechValues(update: AttentionUpdate): readonly (string | undefined)[] 
     update.holdingForDeveloper ? "holding-for-developer" : undefined,
     update.context?.activity,
     update.context?.error,
-    update.recap,
   ];
 }
 
 /**
  * What a session is running changes with every tool call, so it is deliberately
  * not a development: reviewing it would put a model call behind each one. Only
- * the state, a new failure, or a new recap is worth a decision.
+ * the state or a new failure is worth a decision.
  */
 function attentionTrigger(
   session: Session,
@@ -295,8 +270,6 @@ export function attentionUpdate(session: Session, previous?: Session): Attention
   if (workspace) update.workspace = workspace;
   if (session.holdingForDeveloper === true) update.holdingForDeveloper = true;
   if (previous) update.previousStatus = previous.status;
-  const recap = attentionRecapExcerpt(session.recap);
-  if (recap) update.recap = recap;
   if (context) update.context = context;
   return update;
 }

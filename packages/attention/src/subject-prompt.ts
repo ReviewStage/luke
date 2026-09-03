@@ -1,8 +1,6 @@
 import { maximumSessionSubjectLength } from "@sidecar/session";
 import type { SubjectInput } from "./subject.js";
 
-const NONE_LABEL = "none";
-
 /**
  * The marker that separates the transcript from the fields above it. The
  * transcript is the agent's and the developer's own words, and anything in
@@ -34,7 +32,6 @@ export function subjectInput(input: SubjectInput): string {
   return [
     `Provider: ${input.providerName}`,
     `First ask: ${input.title}`,
-    `Latest recap: ${input.recap ?? NONE_LABEL}`,
     TRANSCRIPT_MARKER,
     input.transcript,
   ].join("\n");

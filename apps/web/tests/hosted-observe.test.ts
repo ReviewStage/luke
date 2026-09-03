@@ -183,7 +183,6 @@ test("observeAnswerFromWire accepts a valid answer", () => {
         branch: "main",
         change: "https://github.com/ReviewStage/luke/pull/642",
         link: "conductor://workspace?id=ws-1&session=sess-1",
-        recap: "Working on tests",
       },
     ],
   };

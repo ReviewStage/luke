@@ -57,7 +57,7 @@ test("an announcement shows its spoken transcript", () => {
 
   assert.match(markup, /data-speaker="luke"/);
   assert.match(markup, />Checkout is ready\.<\/p>/);
-  assert.doesNotMatch(markup, /provider:|work recap:/);
+  assert.doesNotMatch(markup, /provider:|running:/);
 });
 
 test("a recorded entry shows its local time", () => {

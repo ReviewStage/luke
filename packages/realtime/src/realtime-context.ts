@@ -1,6 +1,4 @@
 import {
-  boundedText,
-  maximumSessionRecapExcerptLength,
   type ObservedWorkspaceProject,
   SESSION_LOCATION,
   type Session,
@@ -176,7 +174,7 @@ function sessionSpokenName(session: Session): string {
  *
  * These are the same bounded, redacted fields the attention layer already
  * sends — provider, title, status, when last seen, repository or branch,
- * current tool, reported error, and the provider's own recap — plus the
+ * current tool, and reported error — plus the
  * workspace a chat belongs to when its provider groups them, the apps that
  * independently associate themselves with it, what each session can be asked to do, and the
  * identity a tool call names it by. The newest session and newest openable
@@ -228,18 +226,6 @@ export function sessionContextText(sessions: readonly Session[], now: number = D
         session.status,
         sessionAgeText(session.lastActivityAt, now),
         ...sessionAboutText(session),
-        // Stating an absence in context invites the voice to speak it, so a
-        // session without a recap simply omits the segment. The excerpt, not
-        // the retained recap: the roster keeps a longer one for the panel,
-        // and this render is a place recaps leave the machine.
-        ...(session.recap
-          ? [
-              `context for naming this work — do not list its parts: ${boundedText(
-                session.recap,
-                maximumSessionRecapExcerptLength,
-              )}`,
-            ]
-          : []),
         `[${sessionCapabilityText(session, {
           mostRecentForProvider: mostRecent.get(session.providerId) === session,
           mostRecentOpenableForProvider: mostRecentOpenable.get(session.providerId) === session,

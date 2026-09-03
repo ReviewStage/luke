@@ -720,7 +720,6 @@ test("reports a finished Codex turn as waiting for its developer", async (t) => 
   const [observation] = await adapter.observe();
 
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
-  assert.equal(observation?.recap, "Released 0.1.6 and merged the PR.");
   assert.equal(observation?.detail?.activity, undefined);
 });
 
@@ -756,7 +755,6 @@ test("reports a running Codex turn as working with the call it is making", async
   const [observation] = await adapter.observe();
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
-  assert.equal(observation?.recap, undefined);
   assert.equal(observation?.detail?.activity, "exec_command: pnpm test");
 });
 
@@ -862,7 +860,6 @@ test("drops the previous turn's call when a new Codex turn starts", async (t) =>
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
   assert.equal(observation?.detail?.activity, undefined);
-  assert.equal(observation?.recap, undefined);
 });
 
 test("reports a Codex turn that stopped on an error", async (t) => {
@@ -906,8 +903,6 @@ test("reports a failed turn's error instead of its parting words", async (t) => 
       type: "event_msg",
       payload: {
         type: "task_complete",
-        // Parting words beside a failure predate what went wrong, so the row
-        // must carry the error and no recap at all.
         last_agent_message: "I was about to run the tests.",
         error: { message: "exceeded usage quota" },
       },
@@ -922,7 +917,6 @@ test("reports a failed turn's error instead of its parting words", async (t) => 
 
   assert.equal(observation?.status, SESSION_STATUS.ERROR);
   assert.equal(observation?.detail?.error, "exceeded usage quota");
-  assert.equal(observation?.recap, undefined);
 });
 
 test("keeps a failed Codex turn at error past the freshness decay", async (t) => {

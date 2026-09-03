@@ -167,7 +167,6 @@ const sameSession = exhaustiveSame<Session>({
   standing: (first, second) => first.standing === second.standing,
   location: (first, second) => first.location === second.location,
   agent: (first, second) => sameOptional(first.agent, second.agent, sameProvider),
-  recap: (first, second) => first.recap === second.recap,
   detail: (first, second) => sameDetail(first.detail, second.detail),
   applications: (first, second) =>
     sameItems(first.applications, second.applications, sameApplication),
