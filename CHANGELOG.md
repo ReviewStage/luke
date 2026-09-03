@@ -34,58 +34,24 @@ the date its release was published.
 
 ## 0.5.0 — 2026-09-03
 
-### Spoken sessions on your iPhone
-
-Hold the button and talk to Luke from your phone. The iPhone app opens a
-realtime voice session on the same kind of short-lived credential the desktop
-mints, carrying your session roster with it, with running captions while you
-speak and while he answers. What he can carry from there is the six acts the
-phone's own endpoints serve — sending a session a message, pressing a control,
-adding an agent, creating a workspace, and renaming a workspace or a session —
-each re-validated on the server. A gear on the voice screen offers the same
-voice and speed the desktop does: a speed change reaches the session already
-open, a voice change reopens it in the new voice. Tapping a session opens its
-conversation, paged from Conductor's own messages endpoint and drawn as
-Markdown, and an info button holds that session's details beside the GitHub
-changes and pull requests its provider published.
-([#617](https://github.com/ReviewStage/luke/pull/617),
-[#616](https://github.com/ReviewStage/luke/pull/616),
-[#658](https://github.com/ReviewStage/luke/pull/658),
-[#654](https://github.com/ReviewStage/luke/pull/654),
-[#637](https://github.com/ReviewStage/luke/pull/637),
-[#640](https://github.com/ReviewStage/luke/pull/640),
-[#647](https://github.com/ReviewStage/luke/pull/647))
-
-### Announcements that say what an agent is working on
-
-No field a provider writes says what an agent is generally working on: a title
-is your first message, an activity is the tool running right now, and a recap is
-the last settled turn — so an announcement that named a session by its title
-named work it had stopped doing. Luke now derives one short phrase from a local
-session's own transcript and speaks that instead. The derivation runs only for a
-session about to be announced, at the moment the announcement is delivered, once
-per announcement and under a deadline past which the announcement speaks without
-it; the phrase lives in that one payload, is drawn nowhere, and reaches no act.
-`PRIVACY.md` says the read and the send in as many words.
-([#649](https://github.com/ReviewStage/luke/pull/649))
-
 ### Improvements
 
-- Onboarding now ends at a calendar: from your first sign-in Luke stands a gate
-  offering this Mac's own Calendar or Google, because the quiet that keeps
-  announcements out of your meetings only works once he can see one
+- Announcements now say what an agent is working on: a short phrase Luke
+  derives from the session's transcript as the announcement is delivered,
+  instead of the session's title
+  ([#649](https://github.com/ReviewStage/luke/pull/649))
+- Onboarding ends by asking for a calendar — this Mac's own or Google — so
+  meeting quiet can hold announcements from your first sign-in
   ([#561](https://github.com/ReviewStage/luke/pull/561))
 - A Pause announcements switch on the Voice page holds spoken announcements by
-  hand, over the same speech a meeting's quiet holds, while replies in a
-  conversation you opened still speak
+  hand; replies in a conversation you opened still speak
   ([#651](https://github.com/ReviewStage/luke/pull/651))
-- The Ask Luke composer now stands at the foot of the History tab too, so
-  reading the thread and continuing it no longer costs a tab change
+- The Ask Luke composer also sits at the foot of the History tab, so you
+  can continue the thread without changing tabs
   ([#643](https://github.com/ReviewStage/luke/pull/643))
-- Luke names every workspace he creates — yours when you chose one out loud,
-  otherwise a short name composed for the work — instead of leaving Conductor to
-  fall back to a random city
-  ([#636](https://github.com/ReviewStage/luke/pull/636))
+- Luke names every workspace he creates — your name when you gave one,
+  otherwise a short name for the work — instead of Conductor's random-city
+  fallback ([#636](https://github.com/ReviewStage/luke/pull/636))
 
 ### Fixes
 
@@ -99,26 +65,21 @@ it; the phrase lives in that one payload, is drawn nowhere, and reaches no act.
 
 ### Miscellaneous
 
-- Updated the provider set to Conductor, Superset, Claude Code, Codex, and OMP,
-  with Cursor, OpenCode, Copilot, Gemini CLI, and Grok Build staying on as the
-  agents a Conductor or Superset workspace runs
+- Updated the provider set to Conductor, Superset, Claude Code, Codex, and OMP;
+  Cursor, OpenCode, Copilot, Gemini CLI, and Grok Build stay on as the agents a
+  Conductor or Superset workspace runs
   ([#645](https://github.com/ReviewStage/luke/pull/645))
-- Added a LukeWatch watchOS companion target, carrying the Luke icon cut for the
-  watch's circular mask
-  ([#652](https://github.com/ReviewStage/luke/pull/652),
-  [#657](https://github.com/ReviewStage/luke/pull/657))
 
 ## 0.4.0 — 2026-09-02
 
 ### Synced provider keys
 
 Enter a cloud provider's API key once and every Mac you sign Luke into has it.
-A Sync section in Settings governs the whole arrangement: while it is on, your
-account's vault holds what this Mac's encrypted store holds, re-synced at every
-signed-in launch and at every save, and turning it off deletes every synced copy
-while the local keys stay. The vault persists no fragment of a key, not even its
-last four characters, and a key your shell configured is never synced — only one
-you typed into Luke.
+A Sync section in Settings governs it: while on, your account's vault holds
+what this Mac's encrypted store holds, re-synced at every signed-in launch and
+save, and turning it off deletes every synced copy while the local keys stay.
+The vault persists no fragment of a key, and a key your shell configured is
+never synced — only one you typed into Luke.
 ([#574](https://github.com/ReviewStage/luke/pull/574),
 [#580](https://github.com/ReviewStage/luke/pull/580))
 
@@ -127,49 +88,17 @@ you typed into Luke.
 The History tab now survives a quit. The thread, and the facts you asked Luke to
 remember, live in his own application data under a real retention policy — the
 200 most recent lines, nothing older than a fortnight — and Clear still empties
-the file along with the screen. Lines draw as they are being said rather than
-after the speech ends, each carries its local timestamp, the same thread stands
-on every display's panel, and every chat a line attributably named draws a chip
-you can press to open it, still working after that chat has been archived.
+the file along with the screen. Lines draw as they are being said, each carries
+its local timestamp, the same thread stands on every display's panel, and every
+chat a line named draws a chip that opens it, even after the chat is archived.
 ([#589](https://github.com/ReviewStage/luke/pull/589),
 [#614](https://github.com/ReviewStage/luke/pull/614),
 [#606](https://github.com/ReviewStage/luke/pull/606),
 [#618](https://github.com/ReviewStage/luke/pull/618),
 [#613](https://github.com/ReviewStage/luke/pull/613))
 
-### Luke on your iPhone
-
-The iPhone app grows from a roster you can read into one you can work from. Your
-cloud sessions arrive with search, filtering, and sorting in the header; a
-session opens its full chat, where you can read the conversation, copy any
-bubble's words with a long press, and reply; a row's long-press menu carries the
-acts its provider actually advertised — the provider's own controls, Add Agent,
-and renames — and a native sheet starts a whole new workspace, offering the same
-agent kinds, models, and effort levels the desktop offers from the same table.
-Provider keys are managed in the same account vault the Mac uses, the app follows
-your light and dark appearance, and Luke hums over the first load instead of a
-blank screen.
-([#612](https://github.com/ReviewStage/luke/pull/612),
-[#575](https://github.com/ReviewStage/luke/pull/575),
-[#576](https://github.com/ReviewStage/luke/pull/576),
-[#601](https://github.com/ReviewStage/luke/pull/601),
-[#602](https://github.com/ReviewStage/luke/pull/602),
-[#603](https://github.com/ReviewStage/luke/pull/603),
-[#638](https://github.com/ReviewStage/luke/pull/638),
-[#598](https://github.com/ReviewStage/luke/pull/598),
-[#570](https://github.com/ReviewStage/luke/pull/570),
-[#596](https://github.com/ReviewStage/luke/pull/596),
-[#594](https://github.com/ReviewStage/luke/pull/594))
-
 ### Improvements
 
-- Luke now watches Conductor, Superset, Claude Code, Codex, and OMP, and
-  draws the Cursor, OpenCode, Copilot, Gemini CLI, and Grok Build agents only
-  as the agents a Conductor or Superset workspace runs; the Antigravity,
-  Copilot, Cursor, Devin, Gemini CLI, Grok Build, Jules, OpenCode, Radius, and
-  Replicas adapters and the cmux, Herdr, and Orca host readers are gone, so
-  the only hooks Luke registers are Claude Code's and Codex's and the only key
-  the vault syncs is Conductor's
 - Luke opens at login, a switch under Appearance backed by macOS's own login
   items ([#585](https://github.com/ReviewStage/luke/pull/585))
 - Spoken exchanges run on the OpenAI Agents realtime SDK, which owns the
@@ -182,11 +111,11 @@ blank screen.
   [#625](https://github.com/ReviewStage/luke/pull/625))
 - Luke observes local OMP sessions, reading their title, status, recap, current
   tool, and conversation ([#584](https://github.com/ReviewStage/luke/pull/584))
-- A keyboard shortcut can be removed outright: the row says None, no default
-  stands in behind the absence, and Reset is the way back
+- A keyboard shortcut can be removed outright: the row says None and Reset
+  restores the default
   ([#587](https://github.com/ReviewStage/luke/pull/587))
 - A session's parting words are shown whole on its row and its own screen; the
-  old 500-character cut now applies only where a recap reaches a model
+  500-character cut now applies only where a recap reaches a model
   ([#633](https://github.com/ReviewStage/luke/pull/633))
 - Luke words his own announcements from the observed fields rather than reading
   a composed sentence
@@ -211,32 +140,12 @@ blank screen.
   phones ([#583](https://github.com/ReviewStage/luke/pull/583))
 - Fixed the landing page's hero mock spilling outside the phone's screen
   ([#590](https://github.com/ReviewStage/luke/pull/590))
-- Fixed iPhone session rows clipping at the bar instead of scrolling behind it
-  ([#626](https://github.com/ReviewStage/luke/pull/626))
-- Fixed a real session row showing through the iPhone app's skeleton loader
-  ([#607](https://github.com/ReviewStage/luke/pull/607),
-  [#619](https://github.com/ReviewStage/luke/pull/619))
-- Fixed iPhone session timestamps reading longer than the desktop's
-  ([#604](https://github.com/ReviewStage/luke/pull/604))
-- Fixed the iPhone app's main page carrying an account name where it should say
-  Sessions ([#605](https://github.com/ReviewStage/luke/pull/605),
-  [#615](https://github.com/ReviewStage/luke/pull/615))
-- Fixed the iPhone app icon being masked twice
-  ([#595](https://github.com/ReviewStage/luke/pull/595))
-- Fixed the iPhone options sheet crowding its rows with sort details and filter
-  counts ([#631](https://github.com/ReviewStage/luke/pull/631))
-- Fixed iPhone development builds losing a sign-in between launches
-  ([#592](https://github.com/ReviewStage/luke/pull/592))
 
 ### Miscellaneous
 
 - Added Sentry crash reporting: unhandled exceptions from every Electron
-  process and native minidumps, carrying no account identity, and described in
-  as many words in `PRIVACY.md`
-  ([#632](https://github.com/ReviewStage/luke/pull/632))
-- Added session recording and product counts to the iPhone app, through the
-  same endpoint and the same event allowlist the desktop posts to
-  ([#627](https://github.com/ReviewStage/luke/pull/627))
+  process and native minidumps, carrying no account identity, described in
+  `PRIVACY.md` ([#632](https://github.com/ReviewStage/luke/pull/632))
 - Added the hosted `/api/observe` endpoint, which runs each cloud adapter once
   under the caller's vault keys and answers a bounded roster
   ([#573](https://github.com/ReviewStage/luke/pull/573))
@@ -246,8 +155,9 @@ blank screen.
   ([#571](https://github.com/ReviewStage/luke/pull/571),
   [#611](https://github.com/ReviewStage/luke/pull/611),
   [#620](https://github.com/ReviewStage/luke/pull/620))
-- Updated Luke's persona to state his voice as decided axes rather than a list
-  of rules ([#639](https://github.com/ReviewStage/luke/pull/639))
+- Updated how Luke's persona instructions describe his voice
+  ([#639](https://github.com/ReviewStage/luke/pull/639))
+
 ## 0.3.13 — 2026-08-28
 
 ### History
@@ -297,16 +207,10 @@ session recordings.
 
 ### Miscellaneous
 
-- Added an iPhone app that signs in through LukeKit and the registered
-  `luke-mobile` OAuth client
-  ([#554](https://github.com/ReviewStage/luke/pull/554),
-  [#559](https://github.com/ReviewStage/luke/pull/559),
-  [#565](https://github.com/ReviewStage/luke/pull/565))
 - Added the hosted provider-key vault, which encrypts a stored cloud provider
   key at rest and offers no way to read one back
   ([#568](https://github.com/ReviewStage/luke/pull/568))
-- Added the websocket realtime endpoint to the voice mint, so a mobile client
-  can open a spoken session on the same credential
+- Added the websocket realtime endpoint to the voice mint
   ([#562](https://github.com/ReviewStage/luke/pull/562))
 - Updated an act handler's refusals to name their cause
   ([#572](https://github.com/ReviewStage/luke/pull/572))
