@@ -444,7 +444,7 @@ export function App(): React.JSX.Element {
   const [outputAudio, setOutputAudio] = useState<OutputAudioState>();
   /** Each connected account's calendars, for the settings rows' checkboxes. */
   const [calendars, setCalendars] = useState<readonly ObservedAccountCalendars[]>([]);
-  /** Whether announcements are held — by the pause or a meeting — and the face sleeps on it. */
+  /** Whether announcements are held — the announce switch off or a meeting — and the face sleeps on it. */
   const [announcementsHeld, setAnnouncementsHeld] = useState(false);
   /** Whether the mandatory calendar step of onboarding still stands. */
   const [calendarOnboardingOwed, setCalendarOnboardingOwed] = useState(false);

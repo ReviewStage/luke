@@ -802,47 +802,47 @@ test("a corrupt meeting quiet value reads as the default rather than as off", as
   assert.equal(appSettingsView(await storeIn(directory).snapshot()).quietDuringMeetings, true);
 });
 
-test("announcements speak until paused by hand, and the pause survives a reopen", async (t) => {
+test("announcements speak until switched off by hand, and the quiet survives a reopen", async (t) => {
   const directory = await temporaryDirectory(t);
-  // The pause is read on every announcement pass, so like the meeting quiet
+  // The switch is read on every announcement pass, so like the meeting quiet
   // it must answer from the file alone and never reach the Keychain.
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  assert.equal(appSettingsView(await store.snapshot()).pauseAnnouncements, false);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.pauseAnnouncements.field), false);
-  const paused = await store.set(APP_SETTING_SCHEMA.pauseAnnouncements.field, true);
+  assert.equal(appSettingsView(await store.snapshot()).announceSessions, true);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.announceSessions.field), true);
+  const quiet = await store.set(APP_SETTING_SCHEMA.announceSessions.field, false);
 
-  assert.equal(appSettingsView(paused.settings).pauseAnnouncements, true);
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.pauseAnnouncements.field), true);
-  assert.equal(appSettingsView(await storeIn(directory).snapshot()).pauseAnnouncements, true);
+  assert.equal(appSettingsView(quiet.settings).announceSessions, false);
+  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.announceSessions.field), false);
+  assert.equal(appSettingsView(await storeIn(directory).snapshot()).announceSessions, false);
   assert.equal(cipher.calls.isAvailable, 0);
   assert.equal(cipher.calls.encrypt, 0);
 });
 
-test("switching the pause never disturbs a stored key", async (t) => {
+test("switching announcements never disturbs a stored key", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
   await store.setApiKey(CONDUCTOR, TEST_API_KEY);
 
-  await store.set(APP_SETTING_SCHEMA.pauseAnnouncements.field, true);
-  const off = await store.set(APP_SETTING_SCHEMA.pauseAnnouncements.field, false);
+  await store.set(APP_SETTING_SCHEMA.announceSessions.field, false);
+  const on = await store.set(APP_SETTING_SCHEMA.announceSessions.field, true);
 
-  assert.equal(appSettingsView(off.settings).pauseAnnouncements, false);
+  assert.equal(appSettingsView(on.settings).announceSessions, true);
   assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), TEST_API_KEY);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("a corrupt pause value reads as the default rather than as paused", async (t) => {
+test("a corrupt announce value reads as the default rather than as silence", async (t) => {
   const directory = await temporaryDirectory(t);
-  // This one's default is off: nonsense must not silence Luke.
+  // This one's default is on: nonsense must not silence Luke.
   await fs.writeFile(
     path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, pauseAnnouncements: "yes" }),
+    JSON.stringify({ version: 2, apiKeys: {}, announceSessions: "yes" }),
     "utf8",
   );
 
-  assert.equal(appSettingsView(await storeIn(directory).snapshot()).pauseAnnouncements, false);
+  assert.equal(appSettingsView(await storeIn(directory).snapshot()).announceSessions, true);
 });
 
 test("keeps each provider's key, environment fallback, and reported source separate", async (t) => {

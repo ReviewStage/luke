@@ -53,7 +53,7 @@ function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
       voiceCaptions: false,
       duckOtherMedia: true,
       quietDuringMeetings: true,
-      pauseAnnouncements: false,
+      announceSessions: true,
       calendarSignInAvailable: false,
       appleCalendarAvailable: false,
       linearSignInAvailable: false,
@@ -894,10 +894,10 @@ test("every adjustable setting is carried to the bridge call its row uses", asyn
   }
 
   assert.deepEqual(calls.sort(), [
+    "announceSessions:true",
     "duckOtherMedia:true",
     "formFactor:notch",
     "openAtLogin:true",
-    "pauseAnnouncements:true",
     "preferBuiltInMicrophone:true",
     "quietDuringMeetings:true",
     "showInDock:true",

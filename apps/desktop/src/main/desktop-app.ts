@@ -2337,11 +2337,12 @@ function openCreatedWorkspaces(sessions: readonly Session[]): void {
 }
 
 /**
- * Whether announcements should wait right now: the developer's pause switch
- * is on, or a meeting on the connected calendar covers this instant under the
- * meeting quiet. The pause is read first and the meetings before the quiet
- * setting, so the common case — no pause, no calendar — costs one read; the
- * store's answers come from its cached file either way, never the keychain.
+ * Whether announcements should wait right now: the developer's announce
+ * switch is off, or a meeting on the connected calendar covers this instant
+ * under the meeting quiet. The switch is read first and the meetings before
+ * the quiet setting, so the common case — announcing, no calendar — costs one
+ * read; the store's answers come from its cached file either way, never the
+ * keychain.
  *
  * Consulting it is also what keeps every window honest: the answer is
  * reconciled with the broadcast state on the way out, so speech can never be
@@ -2350,7 +2351,7 @@ function openCreatedWorkspaces(sessions: readonly Session[]): void {
  * end would speak over a face still drawn asleep until the next tick.
  */
 async function announcementsQuietNow(now: number): Promise<boolean> {
-  const paused = await settingsStore.get(APP_SETTING_SCHEMA.pauseAnnouncements.field);
+  const paused = !(await settingsStore.get(APP_SETTING_SCHEMA.announceSessions.field));
   const inMeeting =
     !paused &&
     calendarMeetings !== undefined &&
