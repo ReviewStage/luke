@@ -212,11 +212,11 @@ struct WatchSessionDetailView: View {
                     if session.canReceiveMessage {
                         composer
                             .id(Self.composerId)
+                    } else {
+                        Color.clear
+                            .frame(height: 1)
+                            .id(Self.conversationEndId)
                     }
-
-                    Color.clear
-                        .frame(height: 1)
-                        .id(Self.conversationEndId)
                 }
                 .padding(.horizontal, 4)
                 .padding(.top, 6)
