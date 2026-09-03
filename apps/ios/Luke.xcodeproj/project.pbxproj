@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 60;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -22,9 +22,9 @@
 		AABBCC00000000000000008C /* SessionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001D /* SessionDetailView.swift */; };
 		AABBCC00000000000000008D /* WorkspaceCreatorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001E /* WorkspaceCreatorSheet.swift */; };
 		AABBCC00000000000000008E /* SessionReplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001F /* SessionReplay.swift */; };
+		AABBCC000000000000000092 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = AABBCC000000000000000091 /* PostHog */; };
 		AABBCC0000000000000000A2 /* PresenceBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000A1 /* PresenceBinding.swift */; };
 		AABBCC0000000000000000A4 /* MarkdownMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000A3 /* MarkdownMessageView.swift */; };
-		AABBCC000000000000000092 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = AABBCC000000000000000091 /* PostHog */; };
 		AABBCC0000000000000000B4 /* LukeWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000B0 /* LukeWatchApp.swift */; };
 		AABBCC0000000000000000B5 /* LukeWatchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000B1 /* LukeWatchView.swift */; };
 		AABBCC0000000000000000B6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000B2 /* Assets.xcassets */; };
@@ -55,12 +55,12 @@
 		AABBCC000000000000000019 /* Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Palette.swift; sourceTree = "<group>"; };
 		AABBCC00000000000000001A /* CanvasInkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasInkTests.swift; sourceTree = "<group>"; };
 		AABBCC00000000000000001B /* SessionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsView.swift; sourceTree = "<group>"; };
+		AABBCC00000000000000001C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AABBCC00000000000000001D /* SessionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionDetailView.swift; sourceTree = "<group>"; };
 		AABBCC00000000000000001E /* WorkspaceCreatorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceCreatorSheet.swift; sourceTree = "<group>"; };
 		AABBCC00000000000000001F /* SessionReplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReplay.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000A1 /* PresenceBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresenceBinding.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000A3 /* MarkdownMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownMessageView.swift; sourceTree = "<group>"; };
-		AABBCC00000000000000001C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AABBCC0000000000000000B0 /* LukeWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LukeWatchApp.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000B1 /* LukeWatchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LukeWatchView.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000B2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -108,7 +108,7 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		AABBCC000000000000000002 /* */ = {
+		AABBCC000000000000000002 = {
 			isa = PBXGroup;
 			children = (
 				AABBCC000000000000000004 /* Luke */,
@@ -496,12 +496,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_IDENTITY = "-";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7UHHCDBUK2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Luke/Info.plist;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Luke uses the microphone to hear your voice when you hold the talk button.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -514,8 +516,9 @@
 				);
 				MARKETING_VERSION = 0.1.1;
 				POSTHOG_PROJECT_API_KEY = "";
-				PRODUCT_BUNDLE_IDENTIFIER = "dev.tryluke.ios";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.tryluke.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -527,12 +530,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_IDENTITY = "-";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7UHHCDBUK2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Luke/Info.plist;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Luke uses the microphone to hear your voice when you hold the talk button.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -545,8 +550,9 @@
 				);
 				MARKETING_VERSION = 0.1.1;
 				POSTHOG_PROJECT_API_KEY = "";
-				PRODUCT_BUNDLE_IDENTIFIER = "dev.tryluke.ios";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.tryluke.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -561,7 +567,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 0.1.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "dev.tryluke.ios.LukeTests";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.tryluke.ios.LukeTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
@@ -577,7 +583,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 0.1.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "dev.tryluke.ios.LukeTests";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.tryluke.ios.LukeTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
@@ -595,13 +601,13 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "dev.tryluke.ios";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = dev.tryluke.ios;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "dev.tryluke.ios.watchkitapp";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.tryluke.ios.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -621,13 +627,13 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "dev.tryluke.ios";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = dev.tryluke.ios;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "dev.tryluke.ios.watchkitapp";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.tryluke.ios.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -718,7 +724,6 @@
 			productName = LukeKit;
 		};
 /* End XCSwiftPackageProductDependency section */
-
 	};
 	rootObject = AABBCC000000000000000001 /* Project object */;
 }
