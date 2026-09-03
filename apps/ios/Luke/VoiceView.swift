@@ -344,7 +344,7 @@ struct VoiceView: View {
             || isPressing
         if #available(iOS 26.0, *) {
             Button(action: {}) { talkButtonLabel }
-                .buttonStyle(.glass)
+                .buttonStyle(.glassProminent)
                 .buttonBorderShape(.circle)
                 .tint(talkButtonColor)
                 .simultaneousGesture(talkGesture)
