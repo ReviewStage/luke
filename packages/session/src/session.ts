@@ -377,9 +377,9 @@ export interface ProviderSessionObservation {
    * recency columns, an API `updatedAt`, or the observation hook's spool
    * entry where it stands past the provider's clock. It is never composed by
    * Luke — a pass adopts the provider's own moment, never the clock it ran
-   * at — and it is corrected in exactly one place, Conductor's adapter, which
-   * declines a workspace wake that moved none of the chat's own facts. No
-   * provider records when a status was entered, and nothing here pretends
+   * at — and where a provider gives none for a chat it may be the enclosing
+   * workspace's, which its siblings share. No provider records when a status
+   * was entered, and nothing here pretends
    * to: the sort, the age chip, roster retention, and the decay of a quiet
    * waiting or working session to unknown all read this one moment for what
    * it is.

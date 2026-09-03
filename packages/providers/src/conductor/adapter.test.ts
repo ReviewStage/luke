@@ -1151,44 +1151,6 @@ test("does not treat a long-idle chat as waiting because its workspace is busy",
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("keeps a walked-away chat stale across the wake its own press caused", async () => {
-  // Opening a stale chat in Conductor's app wakes its sleeping workspace, and
-  // the wake rewrites the session record: `updatedAt` and the workspace's
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // `lastActivityAt` both jump to now while the chat itself did nothing.
-  const walkedAwayAt = TEST_TIME - 2 * 60 * 60 * 1000;
-  const workspace = ownedWorkspace("workspace-woken", walkedAwayAt);
-  const chat: TestSession = {
-    id: IDLE_SESSION_UUID,
-    workspaceId: "workspace-woken",
-    name: TEST_SESSION_NAME,
-    transcriptTail: TEST_TRANSCRIPT_TAIL,
-    status: TEST_CONDUCTOR_STATUS.IDLE,
-    statusUpdatedAt: walkedAwayAt,
-  };
-  const api = fakeConductorApi({
-    userId: TEST_USER_ID,
-    projects: [LUKE_PROJECT],
-    workspaces: [workspace],
-    sessions: [chat],
-  });
-  let now = TEST_TIME;
-  const adapter = adapterFor(api.fetch, { now: () => now });
-
-  const beforeWake = await adapter.observe();
-  assert.equal(beforeWake[0]?.status, SESSION_STATUS.UNKNOWN);
-  assert.equal(beforeWake[0]?.lastActivityAt, walkedAwayAt);
-
-  now = TEST_TIME + 60_000;
-  chat.statusUpdatedAt = now;
-  workspace.lastActivityAt = now;
-
-  const afterWake = await adapter.observe();
-  assert.equal(afterWake[0]?.status, SESSION_STATUS.UNKNOWN);
-  assert.equal(afterWake[0]?.lastActivityAt, walkedAwayAt);
-});
-
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("adopts the provider's timestamp again the moment the chat's work moves", async () => {
   const walkedAwayAt = TEST_TIME - 2 * 60 * 60 * 1000;
   const workspace = ownedWorkspace("workspace-resumed", walkedAwayAt);
@@ -1266,61 +1228,10 @@ test("a whole turn between passes still reads as fresh through its parting words
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("a failed read never counts as the chat's work moving", async () => {
-  const walkedAwayAt = TEST_TIME - 2 * 60 * 60 * 1000;
-  const workspace = ownedWorkspace("workspace-unreadable", walkedAwayAt);
-  const chat: TestSession = {
-    id: IDLE_SESSION_UUID,
-    workspaceId: "workspace-unreadable",
-    name: TEST_SESSION_NAME,
-    transcriptTail: TEST_TRANSCRIPT_TAIL,
-    status: TEST_CONDUCTOR_STATUS.IDLE,
-    statusUpdatedAt: walkedAwayAt,
-  };
-  const testApi: TestApi = {
-    userId: TEST_USER_ID,
-    projects: [LUKE_PROJECT],
-    workspaces: [workspace],
-    sessions: [chat],
-  };
-  const api = fakeConductorApi(testApi);
-  let now = TEST_TIME;
-  const adapter = adapterFor(api.fetch, { now: () => now });
-  await adapter.observe();
-
-  // A wake bumps the timestamps on a pass whose transcripts read fails: the
-  // recap is unknowable, which says nothing about the chat, not that it moved.
-  now = TEST_TIME + 60_000;
-  chat.statusUpdatedAt = now;
-  workspace.lastActivityAt = now;
-  testApi.sqlHttpStatus = HTTP_STATUS.SERVER_ERROR;
-  const unreadable = await adapter.observe();
-  assert.equal(unreadable[0]?.status, SESSION_STATUS.UNKNOWN);
-  assert.equal(unreadable[0]?.lastActivityAt, walkedAwayAt);
-
-  // The transcripts answer again with the same parting words: still nothing
-  // moved, so the wake's timestamps stay a side effect.
-  now = TEST_TIME + 120_000;
-  delete testApi.sqlHttpStatus;
-  const readable = await adapter.observe();
-  assert.equal(readable[0]?.status, SESSION_STATUS.UNKNOWN);
-  assert.equal(readable[0]?.lastActivityAt, walkedAwayAt);
-
-  // The status read failing likewise leaves the walked-away moment standing
-  // rather than falling back to the workspace's wake-bumped activity.
-  now = TEST_TIME + 180_000;
-  chat.statusHttpStatus = HTTP_STATUS.SERVER_ERROR;
-  const statusless = await adapter.observe();
-  assert.equal(statusless[0]?.status, SESSION_STATUS.UNKNOWN);
-  assert.equal(statusless[0]?.lastActivityAt, walkedAwayAt);
-});
-
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("a chat first seen through a failed status read is not pinned to the fallback", async () => {
-  // With no readable status there is nothing to remember yet: seeding from
-  // the workspace's fallback timestamp would stand as a moment no later read
+test("a chat with no readable status falls back to its workspace's moment", async () => {
+  // The workspace's timestamp covers every sibling chat, so it stands only
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // could displace, so the first readable status is the true first sight.
+  // while the chat's own status read says nothing, and yields to it after.
   const walkedAwayAt = TEST_TIME - 2 * 60 * 60 * 1000;
   const workspace = ownedWorkspace("workspace-first-unreadable", TEST_TIME - 1_000);
   const chat: TestSession = {
