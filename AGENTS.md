@@ -693,12 +693,20 @@ Before handoff, run `./scripts/check.sh` for portable-only changes. For any
 macOS or UI change, `./scripts/verify.sh` is the completion invariant. Report
 exact results; UI changes also require inspection of the visual evidence and a
 note stating whether a physical-notch check was performed. CI links generated
-evidence from the pull request description. Attach physical-device screenshots
-or recordings through GitHub's PR editor; do not commit generated evidence or
-one-off QA worksheets. Keep generated state and private planning files
-untracked. `docs/media/` is the one exception and is not evidence: it holds the
-README's own product screenshots, cut from a fixture capture and replaced
-whenever the surface they show has moved on.
+evidence from the pull request description. Screenshots and recordings are
+never committed, on any platform: a macOS capture, an iOS Simulator
+screenshot, and a physical-device recording all reach a pull request through
+GitHub's editor, which uploads them to its own attachment host, never through
+a file in the tree, under `docs/media/` or anywhere else. A merged PR that
+carried one is a mistake to remove, not a precedent to follow. An agent that
+cannot use that editor describes what it captured and inspected, and leaves
+the attaching to the developer, rather than committing the file so a link can
+point at it. Do not commit one-off QA worksheets either, and keep generated
+state and private planning files untracked. `docs/media/` is not an exception
+for evidence: it holds only the README's own product screenshots, each one
+the README references, cut from a fixture capture and replaced whenever the
+surface they show has moved on; a file there the README does not reference is
+evidence by another name and does not belong.
 
 Biome is the executable style policy for TypeScript, JavaScript, JSON,
 Markdown, and CSS. Husky runs the same checks against staged files as a local
