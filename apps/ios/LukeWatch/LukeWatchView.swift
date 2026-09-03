@@ -19,7 +19,7 @@ private struct SignedOutView: View {
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: "iphone")
-                .font(.system(size: 28, weight: .semibold))
+                .font(.title2)
                 .foregroundStyle(Color.accentColor)
             Text("Open Luke on your iPhone")
                 .font(.caption2)

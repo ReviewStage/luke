@@ -103,7 +103,7 @@ private struct WatchSessionRow: View {
 
     var body: some View {
         VStack(alignment: .leading) {
-            HStack(alignment: .top, spacing: 6) {
+            HStack(alignment: .top) {
                 Text(session.title)
                     .font(.headline)
                     .lineLimit(2)
@@ -115,7 +115,7 @@ private struct WatchSessionRow: View {
                         .padding(.top, 4)
                 }
             }
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
                 Text(session.error ?? session.status.capitalized)
                     .font(.caption2)
                     .foregroundStyle(session.error == nil ? Color.secondary : Color.red)
@@ -321,11 +321,9 @@ struct WatchSessionDetailView: View {
                     .id(message.id)
             }
             if let error = session.error {
-                Text(error)
+                Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption2)
                     .foregroundStyle(.red)
-                    .padding(8)
-                    .background(.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
             }
         }
     }
