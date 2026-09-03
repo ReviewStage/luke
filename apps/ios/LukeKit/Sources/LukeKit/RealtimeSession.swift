@@ -186,6 +186,9 @@ public final class RealtimeSession {
     private var interruptedResponseIds: Set<String> = []
     private var pendingInterruptionEventIds: Set<String> = []
     private var interruptionSequence = 0
+    // A speed chosen while the socket is still opening: session.update needs
+    // the channel, so it waits for the open and is sent then, once.
+    private var pendingSpeed: Double?
 
     public init(options: RealtimeSessionOptions) {
         self.options = options
@@ -257,6 +260,26 @@ public final class RealtimeSession {
         }
     }
 
+    /// Asks the open session to speak at `speed` times the voice's natural
+    /// rate from its next reply on. The API applies a speed only between
+    /// model turns, so one landing while Luke is speaking is heard on the
+    /// following reply. An idle session sends nothing: its next connection
+    /// is minted at the speed the caller holds, so there is nothing to update.
+    public func applySpeed(_ speed: Double) {
+        guard speed.isFinite, speed > 0 else { return }
+        switch status {
+        case .idle:
+            pendingSpeed = nil
+        case .connecting:
+            pendingSpeed = speed
+        default:
+            pendingSpeed = nil
+            guard let channel else { return }
+            let event = sessionSpeedUpdateJSON(speed)
+            Task { try? await channel.sendText(event) }
+        }
+    }
+
     /// Closes the connection and resets to idle.
     public func close() {
         idleTask?.cancel(); idleTask = nil
@@ -273,6 +296,7 @@ public final class RealtimeSession {
         responseStarted = false
         pendingDrains = 0
         pendingCommit = false
+        pendingSpeed = nil
         pendingCalls.removeAll()
         captionBuffer = ""
         clearActiveResponse()
@@ -353,6 +377,10 @@ public final class RealtimeSession {
 
     private func onChannelOpen(ws: any WebSocketTask, context: VoiceContextItem) async {
         try? await ws.sendText(contextItemJSON(context))
+        if let speed = pendingSpeed {
+            pendingSpeed = nil
+            try? await ws.sendText(sessionSpeedUpdateJSON(speed))
+        }
         for chunk in pressBuffer.drain() {
             try? await ws.sendText(audioAppendJSON(chunk))
         }
@@ -706,6 +734,10 @@ public final class RealtimeSession {
         return """
             {"type":"conversation.item.create","item":{"type":"function_call_output","call_id":"\(callId)","output":"\(escaped)"}}
             """
+    }
+
+    private func sessionSpeedUpdateJSON(_ speed: Double) -> String {
+        #"{"type":"session.update","session":{"type":"realtime","audio":{"output":{"speed":\#(speed)}}}}"#
     }
 
     private func responseCreateJSON(sequence: Int) -> String {
