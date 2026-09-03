@@ -49,6 +49,20 @@ public enum RealtimeVoiceSpeed: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    /// The span a slider over the steps covers, and the step between them:
+    /// with these bounds a slider lands on exactly the four multiples above
+    /// and on nothing between, so a drag can never ask for a pace the mint
+    /// would refuse.
+    public static let multiplierRange: ClosedRange<Double> = 0.75 ... 1.5
+    public static let multiplierStep: Double = 0.25
+
+    /// The step a slider's value names, or nil for a value off the steps.
+    public init?(multiplier: Double) {
+        guard let match = Self.allCases.first(where: { abs($0.multiplier - multiplier) < 0.001 })
+        else { return nil }
+        self = match
+    }
+
     public var displayName: String { rawValue.capitalized }
 
     /// The multiple as the settings sheet words it: "1.25×".

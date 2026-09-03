@@ -10,7 +10,8 @@ import SwiftUI
 /// run on, so they are not drawn rather than drawn disabled. The two values
 /// live in UserDefaults under keys the voice screen reads too, so a change
 /// here is heard there: the voice at once, by a fresh connection, and the
-/// speed from the next reply on.
+/// speed from the next reply on. The speed is a slider over the vocabulary's
+/// four multiples, labelled in numbers, stepping so it lands on nothing between.
 struct VoiceSettingsSheet: View {
     @AppStorage(VoiceSettingsKey.voice) private var voice = RealtimeVoice.default
     @AppStorage(VoiceSettingsKey.speed) private var speed = RealtimeVoiceSpeed.default
@@ -31,16 +32,23 @@ struct VoiceSettingsSheet: View {
                 }
 
                 Section {
-                    Picker("Speed", selection: $speed) {
-                        ForEach(RealtimeVoiceSpeed.allCases) { candidate in
-                            Text(candidate.displayName).tag(candidate)
-                        }
+                    LabeledContent("Speed", value: speed.multipleLabel)
+                    Slider(
+                        value: speedMultiplier,
+                        in: RealtimeVoiceSpeed.multiplierRange,
+                        step: RealtimeVoiceSpeed.multiplierStep
+                    ) {
+                        Text("Speed")
+                    } minimumValueLabel: {
+                        Text(RealtimeVoiceSpeed.slow.multipleLabel)
+                    } maximumValueLabel: {
+                        Text(RealtimeVoiceSpeed.fast.multipleLabel)
                     }
-                    .pickerStyle(.segmented)
-                } header: {
-                    Text("Speed")
+                    .font(.footnote)
+                    .foregroundStyle(Color.inkSecondary)
+                    .accessibilityValue(speed.multipleLabel)
                 } footer: {
-                    Text(speedFooter)
+                    Text("Times the voice's natural rate. A change is heard from the next reply on.")
                 }
 
                 if isChanged {
@@ -69,13 +77,16 @@ struct VoiceSettingsSheet: View {
         voice != RealtimeVoice.default || speed != RealtimeVoiceSpeed.default
     }
 
-    /// The chosen pace as a multiple of the voice's natural rate, so the
-    /// segment's one word is explained in the footer beneath it.
-    private var speedFooter: String {
-        let rate = speed == .normal
-            ? "The voice's natural rate."
-            : "\(speed.multipleLabel) the voice's natural rate."
-        return "\(rate) A change is heard from the next reply on."
+    /// The slider's steps are the vocabulary's multiples and nothing between,
+    /// so every value it can settle on reads back as a speed; one that does
+    /// not is left unstored rather than sent for the mint to refuse.
+    private var speedMultiplier: Binding<Double> {
+        Binding(
+            get: { speed.multiplier },
+            set: { value in
+                if let step = RealtimeVoiceSpeed(multiplier: value) { speed = step }
+            }
+        )
     }
 
     private func resetToDefaults() {
