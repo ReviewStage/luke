@@ -18,21 +18,30 @@
      "Added/Updated …". "Now" only where the old behavior is the contrast;
      a new capability speaks in plain present tense. Name things concretely
      and lead with the benefit. Link pull requests where relevant.
-     Screenshots live in apps/web/public/changelog/<version>/, one file per
-     `###` section named by the section heading's kebab-case slug (a second
-     image for a section keeps the slug as its prefix), and are written here
-     repository-relative (apps/web/public/changelog/<version>/<slug>.png) so
-     GitHub renders them too; the page rewrites that prefix to the site root.
-     A release's screenshots are frozen with it. They show what shipped, so
-     a UI change gets a new screenshot in the release that changed it, never
-     an edit to an old one, and every capture uses fixture data
-     (./scripts/run.sh --fixture smoke), because a real session's title or
-     branch committed to history stays there. -->
+     Screenshots live in apps/web/public/changelog/<version>/, each named for
+     what it shows and placed under the section it illustrates, and are
+     written here repository-relative
+     (apps/web/public/changelog/<version>/<name>.png) so GitHub renders them
+     too; the page rewrites that prefix to the site root. A release's
+     screenshots are frozen with it: a UI change gets a new screenshot in the
+     release that changed it, never an edit to an old one. A capture may show
+     real sessions instead of fixture data, but mind what it carries: a
+     title, branch, or conversation committed to history stays there, and
+     whatever it reveals is published with it. -->
 
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
 ## 0.5.0 — 2026-09-03
+
+### Onboarding ends at a calendar
+
+Onboarding ends by asking for a calendar — this Mac's own or Google — so
+meeting quiet can hold announcements from your first sign-in. Connect one and
+announcements wait out your meetings; skip it and Luke carries on without.
+([#561](https://github.com/ReviewStage/luke/pull/561))
+
+![The calendar gate at the end of onboarding, offering this Mac's Calendar or Google.](apps/web/public/changelog/0.5.0/onboarding-ends-at-a-calendar.png)
 
 ### Improvements
 
@@ -40,9 +49,6 @@ the date its release was published.
   derives from the session's transcript as the announcement is delivered,
   instead of the session's title
   ([#649](https://github.com/ReviewStage/luke/pull/649))
-- Onboarding ends by asking for a calendar — this Mac's own or Google — so
-  meeting quiet can hold announcements from your first sign-in
-  ([#561](https://github.com/ReviewStage/luke/pull/561))
 - A Pause announcements switch on the Voice page holds spoken announcements by
   hand; replies in a conversation you opened still speak
   ([#651](https://github.com/ReviewStage/luke/pull/651))
@@ -52,6 +58,8 @@ the date its release was published.
 - Luke names every workspace he creates — your name when you gave one,
   otherwise a short name for the work — instead of Conductor's random-city
   fallback ([#636](https://github.com/ReviewStage/luke/pull/636))
+
+![Luke's face asleep beside the housing while announcements are paused.](apps/web/public/changelog/0.5.0/pause-announcements.png)
 
 ### Fixes
 
@@ -170,6 +178,8 @@ see and the context the model still holds, and the whole tab stays out of
 session recordings.
 ([#513](https://github.com/ReviewStage/luke/pull/513),
 [#569](https://github.com/ReviewStage/luke/pull/569))
+
+![The History tab holding the conversation, with a session chip and the Ask Luke composer.](apps/web/public/changelog/0.3.13/history-composer.png)
 
 ### Improvements
 
@@ -407,8 +417,6 @@ providers without credentials working as before.
   consistent inset ([#377](https://github.com/ReviewStage/luke/pull/377))
 - Fixed macOS releases failing while electron-builder assembled the installer
   DMG ([#380](https://github.com/ReviewStage/luke/pull/380))
-
-![Luke's panel with consistent spacing beneath the strip](apps/web/public/changelog/0.3.8/fixes.png)
 
 ### Miscellaneous
 
