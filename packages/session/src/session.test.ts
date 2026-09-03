@@ -201,6 +201,29 @@ test("an ungrouped row keeps the fixed mark order and its provider's press", () 
   assert.equal(normalized.detail.link, "codex://threads/run-plain");
 });
 
+test("the Claude app's own scheme is an address a row may open", () => {
+  const normalized = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "cli-1",
+      title: "Held by the Claude app",
+      status: SESSION_STATUS.WAITING,
+      lastActivityAt: TEST_NOW,
+      applications: [
+        {
+          id: "claude",
+          displayName: "Claude",
+          scope: "session",
+          link: "claude://claude.ai/epitaxy/local_desk-1",
+        },
+      ],
+    },
+  );
+
+  assert.equal(normalized.detail.link, "claude://claude.ai/epitaxy/local_desk-1");
+  assert.equal(normalized.applications[0]?.link, "claude://claude.ai/epitaxy/local_desk-1");
+});
+
 test("reads the pull request's number off every host's address shape", () => {
   assert.equal(sessionChangeNumber("https://github.com/reviewstage/luke/pull/245"), 245);
   assert.equal(

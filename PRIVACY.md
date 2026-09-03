@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 2 September 2026
+Last updated: 3 September 2026
 
 Luke is a macOS app that watches your coding agent sessions, with a companion
 iOS app for the cloud sessions your account can see. This policy explains what
@@ -24,7 +24,11 @@ message history, file contents, or command output. If you run
 agents inside the Herdr terminal manager, Luke also asks Herdr's own
 command-line tool which of those sessions it holds, so their rows can say so;
 that read never starts Herdr, reads no terminal output, and sends nothing
-anywhere. It stays on your Mac unless a feature below sends it.
+anywhere. If you run Claude Code sessions in the Claude desktop app's Code tab,
+Luke also reads that app's own list of the sessions it holds — each one's
+title, whether you archived it, and the id the app opens it by — so their rows
+can say which app holds them and open there; that read opens no transcript and
+sends nothing anywhere. It stays on your Mac unless a feature below sends it.
 
 **Your conversation with Luke.** Luke keeps the conversation you have with him
 — what you typed or said, what he spoke or announced, and the actions he took

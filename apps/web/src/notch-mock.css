@@ -58,6 +58,7 @@
      Claude Code's published coral, the vertical gradient Codex draws its mark
      with, the light half of Conductor's two-colour palette, and the light
      silhouette Cursor publishes for dark surfaces. */
+  --mark-claude: #d97757;
   --mark-claude-code: #d97757;
   --mark-codex-top: #b1a7ff;
   --mark-codex-middle: #7a9dff;
@@ -359,6 +360,11 @@
 .mock .provider-mark[data-mark="claude-code"] {
   color: var(--mark-claude-code);
   transform: scale(1.12);
+}
+
+.mock .provider-mark[data-mark="claude"] {
+  color: var(--mark-claude);
+  transform: scale(0.94);
 }
 
 .mock .provider-mark[data-mark="codex"] {

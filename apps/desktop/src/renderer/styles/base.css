@@ -30,6 +30,7 @@
      Superset's favicon draws its bracket mark with. Session state is carried
      by the chips and the row tints instead, so the two colour systems never
      compete for the same pixel. */
+  --mark-claude: #d97757;
   --mark-claude-code: #d97757;
   --mark-codex-top: #b1a7ff;
   --mark-codex-middle: #7a9dff;
@@ -854,6 +855,13 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .provider-mark[data-mark="claude-code"] {
   color: var(--mark-claude-code);
   transform: scale(1.12);
+}
+
+/* The Claude app's mark fills its box edge to edge like Codex's, in the same
+   coral Claude Code's glyph wears: one brand, two marks. */
+.provider-mark[data-mark="claude"] {
+  color: var(--mark-claude);
+  transform: scale(0.94);
 }
 
 .provider-mark[data-mark="codex"] {

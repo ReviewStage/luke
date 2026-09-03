@@ -1203,3 +1203,84 @@ test("a notification the transcript has answered stands down at once", async (t)
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
 });
+
+test("a chosen title outranks the generated one, wherever the tail read finds it", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-named",
+    "named-session",
+    [
+      { type: "ai-title", aiTitle: "Investigate flaky tests", sessionId: "named-session" },
+      { type: "custom-title", customTitle: "Claude Code app chat detection" },
+      {
+        type: TEST_CLAUDE_EVENT_TYPE.USER,
+        cwd: "/Users/test/luke",
+        timestamp: "2026-08-11T23:44:50.000Z",
+        message: { content: SECRET_TRANSCRIPT_TEXT },
+      },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({ claudeHome, now: () => TEST_TIME });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.title, "Claude Code app chat detection");
+});
+
+test("recovers a chosen title from the head of a session too long to hold one in its tail", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  const filler = Array.from({ length: 40 }, (_, index) => ({
+    type: TEST_CLAUDE_EVENT_TYPE.USER,
+    cwd: "/Users/test/luke",
+    timestamp: `2026-08-11T23:44:${String(10 + index).padStart(2, "0")}.000Z`,
+    message: { content: SECRET_TRANSCRIPT_TEXT.repeat(4) },
+  }));
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-renamed",
+    "renamed-session",
+    [{ type: "custom-title", customTitle: "Renamed early" }, ...filler],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+    readTailBytes: 512,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.title, "Renamed early");
+});
+
+test("a chosen title in the head outranks a generated one the tail still holds", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  const filler = Array.from({ length: 40 }, (_, index) => ({
+    type: TEST_CLAUDE_EVENT_TYPE.USER,
+    cwd: "/Users/test/luke",
+    timestamp: `2026-08-11T23:44:${String(10 + index).padStart(2, "0")}.000Z`,
+    message: { content: SECRET_TRANSCRIPT_TEXT.repeat(4) },
+  }));
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-retitled",
+    "retitled-session",
+    [
+      { type: "custom-title", customTitle: "Chosen early" },
+      ...filler,
+      { type: "ai-title", aiTitle: "Generated late", sessionId: "retitled-session" },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+    readTailBytes: 512,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.title, "Chosen early");
+});

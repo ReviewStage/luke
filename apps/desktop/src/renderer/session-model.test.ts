@@ -330,10 +330,10 @@ test("the tally counts per state and per app", () => {
   // Apps follow the order their most urgent session takes, and a chat counts
   // under the app holding it: every Conductor chat lands under Conductor's
   // mark whatever agent runs them, the Codex chat under ChatGPT, its lead
-  // app, and a chat no app holds — the local Claude Code session — under its
-  // provider's own.
+  // app, and the local Claude Code session under the Claude app whose Code
+  // tab holds it.
   assert.deepEqual(tally.providers, [
-    { providerId: PROVIDER_ID.CLAUDE_CODE, provider: "Claude Code", total: 1, attention: 1 },
+    { providerId: SESSION_APPLICATION_ID.CLAUDE, provider: "Claude", total: 1, attention: 1 },
     { providerId: SESSION_APPLICATION_ID.CHATGPT, provider: "ChatGPT", total: 1, attention: 0 },
     { providerId: SESSION_APPLICATION_ID.CONDUCTOR, provider: "Conductor", total: 4, attention: 0 },
   ]);
@@ -348,7 +348,11 @@ test("the apps re-seat with the rows when the other sort is chosen", () => {
 
   assert.deepEqual(
     recent.providers.map((provider) => provider.providerId),
-    [SESSION_APPLICATION_ID.CONDUCTOR, SESSION_APPLICATION_ID.CHATGPT, PROVIDER_ID.CLAUDE_CODE],
+    [
+      SESSION_APPLICATION_ID.CONDUCTOR,
+      SESSION_APPLICATION_ID.CHATGPT,
+      SESSION_APPLICATION_ID.CLAUDE,
+    ],
   );
   assert.deepEqual(
     { ...recent, providers: undefined },
@@ -390,6 +394,12 @@ test("the filters offered are grouped by axis, coarse to fine, counted", () => {
           label: "ChatGPT",
           count: 1,
           markId: SESSION_APPLICATION_ID.CHATGPT,
+        },
+        {
+          filter: SESSION_APPLICATION_ID.CLAUDE,
+          label: "Claude",
+          count: 1,
+          markId: SESSION_APPLICATION_ID.CLAUDE,
         },
         {
           filter: SESSION_APPLICATION_ID.CONDUCTOR,
