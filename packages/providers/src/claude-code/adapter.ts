@@ -99,8 +99,11 @@ const CLAUDE_ADAPTER_DEFAULTS = {
   MAXIMUM_PROJECT_DIRECTORIES: 200,
   /**
    * Claude Code writes its generated title early and then only when the subject
-   * changes, so a long session's title sits far behind the tail. Only a file
-   * whose tail carried no title pays for this second read.
+   * changes, and a chosen title is written when it is chosen, so a long
+   * session's titles sit far behind the tail. Only a file whose tail carried
+   * no chosen title pays for this second read: a generated title in the tail
+   * cannot settle the question, because the chosen one outranks it wherever
+   * it sits.
    */
   READ_HEAD_BYTES: 64 * 1024,
   MAXIMUM_ACTIVITY_LENGTH: 80,
@@ -575,11 +578,10 @@ export class ClaudeCodeSessionAdapter extends LocalFileSessionAdapter<
       );
       if (rescued.timestampMs !== undefined) parsed = rescued;
     }
-    if (!parsed.aiTitle && !parsed.customTitle) {
-      Object.assign(
-        parsed,
-        titlesFromHead(await readHead(candidate.filePath, this.#readHeadBytes)),
-      );
+    if (!parsed.customTitle) {
+      const titles = titlesFromHead(await readHead(candidate.filePath, this.#readHeadBytes));
+      parsed.customTitle = titles.customTitle;
+      parsed.aiTitle ??= titles.aiTitle;
     }
     return parsed;
   }

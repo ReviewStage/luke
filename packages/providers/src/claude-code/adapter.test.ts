@@ -1254,3 +1254,33 @@ test("recovers a chosen title from the head of a session too long to hold one in
 
   assert.equal(observation?.title, "Renamed early");
 });
+
+test("a chosen title in the head outranks a generated one the tail still holds", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  const filler = Array.from({ length: 40 }, (_, index) => ({
+    type: TEST_CLAUDE_EVENT_TYPE.USER,
+    cwd: "/Users/test/luke",
+    timestamp: `2026-08-11T23:44:${String(10 + index).padStart(2, "0")}.000Z`,
+    message: { content: SECRET_TRANSCRIPT_TEXT.repeat(4) },
+  }));
+  await writeSessionFile(
+    claudeHome,
+    "-Users-test-retitled",
+    "retitled-session",
+    [
+      { type: "custom-title", customTitle: "Chosen early" },
+      ...filler,
+      { type: "ai-title", aiTitle: "Generated late", sessionId: "retitled-session" },
+    ],
+    TEST_TIME - 1_000,
+  );
+
+  const adapter = new ClaudeCodeSessionAdapter({
+    claudeHome,
+    now: () => TEST_TIME,
+    readTailBytes: 512,
+  });
+  const [observation] = await adapter.observe();
+
+  assert.equal(observation?.title, "Chosen early");
+});
