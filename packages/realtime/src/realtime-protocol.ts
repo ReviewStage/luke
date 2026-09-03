@@ -615,7 +615,7 @@ export function isCalendarOnboardingSpeech(
 /**
  * How much observed text either arrival value may carry to the voice. A title
  * fits many times over; anything past this is a value trying to carry a
- * recap, which no arrival field is allowed to.
+ * transcript, which no arrival field is allowed to.
  */
 const maximumArrivalValueLength = 200;
 

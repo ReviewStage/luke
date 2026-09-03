@@ -62,7 +62,7 @@ struct SessionsView: View {
         }
         .navigationDestination(item: $openedSession) { opened in
             // The freshest observation of the opened session wins, so a
-            // refresh behind the screen updates the recap it draws; a session
+            // refresh behind the screen updates the words it draws; a session
             // the refresh no longer reports keeps its last observed word.
             let current = sessions.first { $0.id == opened.id } ?? opened
             SessionDetailView(
@@ -693,10 +693,10 @@ private var rowCardFill: some View {
 // MARK: - Row preview
 
 /// The card the long-press lifts in place of the row's own snapshot: the same
-/// mark and title, the place line, and the session's words given the room the
-/// row cannot spare — the full recap or error instead of two truncated lines.
+/// mark and title, the place line, and the session's failure given the room
+/// the row cannot spare — the full error instead of two truncated lines.
 /// Everything here is already drawn on the row itself; the preview only lets
-/// it breathe, the way a chat app previews a conversation's last message.
+/// it breathe.
 private struct SessionRowPreview: View {
     let session: RosterSession
 
@@ -726,13 +726,13 @@ private struct SessionRowPreview: View {
                     }
                 }
             }
-            if let words = session.error ?? session.recap {
-                // Bounded in lines as well as by the envelope, so a recap
+            if let error = session.error {
+                // Bounded in lines as well as by the envelope, so an error
                 // that outgrows the card ends on an ellipsis rather than a
                 // clipped line.
-                Text(words)
+                Text(error)
                     .font(.system(size: 13))
-                    .foregroundStyle(session.error != nil ? Color.errorInk : Color.ink.opacity(0.75))
+                    .foregroundStyle(Color.errorInk)
                     .lineSpacing(3)
                     .lineLimit(14)
             } else {
@@ -823,7 +823,7 @@ struct RosterProviderMark: View {
 
 // MARK: - Doing line
 
-/// The status sentence: spinner or check prefix, then the recap or error text.
+/// The status sentence: spinner or check prefix, then the error or the status word.
 private struct DoingLine: View {
     let session: RosterSession
 
@@ -866,15 +866,6 @@ private struct DoingLine: View {
             Text(error)
                 .font(.system(size: 11))
                 .foregroundStyle(Color.errorInk)
-                .lineLimit(2)
-        } else if let recap = session.recapLine {
-            Text(recap)
-                .font(.system(size: 11))
-                .foregroundStyle(
-                    session.status == "waiting"
-                        ? Color(red: 1.0, green: 0.627, blue: 0.286)
-                        : Color.ink.opacity(0.55)
-                )
                 .lineLimit(2)
         } else {
             Text(session.status)
@@ -927,7 +918,6 @@ private struct SkeletonRow: View {
         status: "complete",
         workspace: "workspace",
         branch: "branch-name",
-        recap: "Placeholder recap sized like a settled turn's parting words",
         lastActivityAt: Date()
     )
 

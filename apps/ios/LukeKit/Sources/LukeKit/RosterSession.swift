@@ -54,7 +54,6 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
     /// Provider-owned address that opens this session where it lives, when
     /// the provider reported one — a deep link into the provider's own app.
     public let link: URL?
-    public let recap: String?
     public let error: String?
     /// When the provider last wrote anything about the session, when the endpoint reported it.
     public let lastActivityAt: Date?
@@ -70,17 +69,11 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
     public let canRenameWorkspace: Bool
     /// Whether the hosted messages endpoint can read this session's
     /// conversation — a capability of the provider's documented transcript
-    /// read, so a screen that sees it absent falls back to the recap alone.
+    /// read, so a screen that sees it absent has no conversation to draw and
+    /// says so.
     public let canReadConversation: Bool
 
     public var id: String { "\(providerId):\(sessionId)" }
-
-    /// The recap as the one line a row can spare: its line breaks and runs of
-    /// space closed to single spaces. The recap itself keeps the lines it was
-    /// written in, because the session screen draws them as Markdown.
-    public var recapLine: String? {
-        recap.map { $0.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
-    }
 
     public init(
         providerId: String,
@@ -91,7 +84,6 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
         branch: String? = nil,
         change: URL? = nil,
         link: URL? = nil,
-        recap: String? = nil,
         error: String? = nil,
         lastActivityAt: Date? = nil,
         canReceiveMessage: Bool = false,
@@ -109,7 +101,6 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
         self.branch = branch
         self.change = change
         self.link = link
-        self.recap = recap
         self.error = error
         self.lastActivityAt = lastActivityAt
         self.canReceiveMessage = canReceiveMessage
@@ -135,7 +126,6 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
         self.branch = json["branch"] as? String
         self.change = Self.httpsURL(json["change"])
         self.link = Self.openableURL(json["link"])
-        self.recap = json["recap"] as? String
         self.error = json["error"] as? String
         // `observedAt` is the name this field traveled under before the rename;
         // a service still sending only that name dates the session the same way.

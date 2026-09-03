@@ -26,7 +26,6 @@ function session(
     repository?: string;
     branch?: string;
     lastActivityAt?: number;
-    recap?: string;
     workspace?: string;
     canReceiveMessage?: boolean;
     holdingForDeveloper?: boolean;
@@ -42,7 +41,6 @@ function session(
     detail: {},
   };
   if (overrides.completionCause) observation.completionCause = overrides.completionCause;
-  if (overrides.recap) observation.recap = overrides.recap;
   if (overrides.workspace) {
     observation.workspace = { providerWorkspaceId: "ws-1", name: overrides.workspace };
   }
@@ -234,16 +232,13 @@ test("the provider's own context rides the notice", () => {
   assert.equal(notices[0]?.branch, "algiers");
 });
 
-test("the recap, workspace, and reply-ability ride a waiting notice", () => {
+test("the workspace and reply-ability ride a waiting notice", () => {
   const tracker = new SessionNoticeTracker();
   tracker.notices([session(conductor, "asks", SESSION_STATUS.WORKING)], 1_000);
 
-  // The agent's parting words at the edge are usually the question the
-  // session is now waiting on — the whole reason the notice is worth hearing.
   const notices = tracker.notices(
     [
       session(conductor, "asks", SESSION_STATUS.WAITING, {
-        recap: "Should sessions expire after 24 hours?",
         workspace: "Albany",
         canReceiveMessage: true,
       }),
@@ -251,19 +246,19 @@ test("the recap, workspace, and reply-ability ride a waiting notice", () => {
     2_000,
   );
 
-  assert.equal(notices[0]?.recap, "Should sessions expire after 24 hours?");
   assert.equal(notices[0]?.workspace, "Albany");
   assert.equal(notices[0]?.canReceiveMessage, true);
 });
 
-test("a finished turn produces a notice without claiming it needs the developer", () => {
+test("a waiting session whose adapter reported no hold claims no developer", () => {
   const tracker = new SessionNoticeTracker();
   tracker.notices([session(conductor, "idle", SESSION_STATUS.WORKING)], 1_000);
 
+  // Conductor reports idle and nothing about why, so the notice is the
+  // panel's to show and never a hold: only the adapter's own word makes one.
   const notices = tracker.notices(
     [
       session(conductor, "idle", SESSION_STATUS.WAITING, {
-        recap: "The notch panel now follows the menu bar depth.",
         canReceiveMessage: true,
       }),
     ],
@@ -271,45 +266,11 @@ test("a finished turn produces a notice without claiming it needs the developer"
   );
 
   assert.equal(notices.length, 1);
-  assert.equal(notices[0]?.holdingForDeveloper, false);
-});
-
-test("a waiting recap that only has a URL query string is a finish, not an ask", () => {
-  const tracker = new SessionNoticeTracker();
-  tracker.notices([session(conductor, "link", SESSION_STATUS.WORKING)], 1_000);
-
-  const notices = tracker.notices(
-    [
-      session(conductor, "link", SESSION_STATUS.WAITING, {
-        recap: "Opened https://github.com/review/luke/pull/12?w=1 for the panel follow.",
-      }),
-    ],
-    2_000,
-  );
-
-  assert.equal(notices.length, 1);
-  assert.equal(notices[0]?.holdingForDeveloper, false);
-});
-
-test("a question that ends on a URL is still an ask", () => {
-  const tracker = new SessionNoticeTracker();
-  tracker.notices([session(conductor, "ask", SESSION_STATUS.WORKING)], 1_000);
-
-  const notices = tracker.notices(
-    [
-      session(conductor, "ask", SESSION_STATUS.WAITING, {
-        recap: "Should I open https://github.com/review/luke/pull/12?",
-      }),
-    ],
-    2_000,
-  );
-
-  assert.equal(notices.length, 1);
   assert.equal(notices[0]?.status, SESSION_NOTICE_STATUS.WAITING);
-  assert.equal(notices[0]?.holdingForDeveloper, true);
+  assert.equal(notices[0]?.holdingForDeveloper, false);
 });
 
-test("a permission hold is a waiting notice even without a question in the recap", () => {
+test("a permission hold is a waiting notice on the adapter's word", () => {
   const tracker = new SessionNoticeTracker();
   tracker.notices([session(claude, "held", SESSION_STATUS.WORKING)], 1_000);
 
@@ -317,7 +278,6 @@ test("a permission hold is a waiting notice even without a question in the recap
     [
       session(claude, "held", SESSION_STATUS.WAITING, {
         activity: "Bash: pnpm test",
-        recap: "Editing the shared session core.",
         holdingForDeveloper: true,
       }),
     ],

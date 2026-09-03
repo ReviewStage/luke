@@ -497,19 +497,18 @@ function sessionNeedsAttention(session: SessionWithAttention): boolean {
 }
 
 /**
- * The line under the title. What stopped a session outranks everything, and
- * what a session was doing outranks the recap of a turn that has already
- * ended. An attention decision adds nothing here: it is a judgment about
+ * The line under the title. What stopped a session outranks what it is
+ * running. An attention decision adds nothing here: it is a judgment about
  * whether to speak, carrying no words of its own, and the fields it was
  * reached on are the ones already in this chain.
  *
- * When a provider reported none of them, the line says the state in so many
- * words. This sentence is the one place the row states it, so a session whose
+ * When a provider reported neither, the line says the state in so many words.
+ * This sentence is the one place the row states it, so a session whose
  * provider said nothing still reads as Working or Complete rather than as a
  * row with a line missing.
  */
 function sessionDetail(session: SessionWithAttention, urgency: SessionUrgency): string {
-  return session.detail.error ?? session.detail.activity ?? session.recap ?? urgencyLabel(urgency);
+  return session.detail.error ?? session.detail.activity ?? urgencyLabel(urgency);
 }
 
 /**

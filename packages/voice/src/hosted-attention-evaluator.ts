@@ -52,7 +52,6 @@ function promptFields(update: AttentionUpdate): AttentionPromptUpdate {
     status: update.status,
     ...(update.workspace ? { workspace: update.workspace } : undefined),
     ...(update.previousStatus ? { previousStatus: update.previousStatus } : undefined),
-    ...(update.recap ? { recap: update.recap } : undefined),
     ...(update.context ? { context: update.context } : undefined),
   };
 }

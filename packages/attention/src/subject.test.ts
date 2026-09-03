@@ -148,16 +148,16 @@ test("an evaluator in its own quiet is not asked, and nothing is read", async ()
   assert.equal(await instance.deriveFor(session("a")), "later");
 });
 
-test("the whole rendering travels, trimmed, and the recap travels bounded", async () => {
+test("the whole rendering travels, trimmed, beside the title alone", async () => {
   const long = `  ${"early ".repeat(3_000)}THE END\n`;
   const { inputs, evaluator } = scripted([{ subject: "s" }]);
   const { instance } = deriver(evaluator, { transcripts: new Map([["a", long]]) });
-  await instance.deriveFor(session("a", { recap: `  ${"r".repeat(900)}  ` }));
+  await instance.deriveFor(session("a"));
   const input = inputs[0];
   assert.ok(input);
   assert.equal(input.transcript, long.trim());
   assert.ok(input.transcript.endsWith("THE END"));
-  assert.equal(input.recap?.length, 500);
+  assert.deepEqual(Object.keys(input).sort(), ["providerName", "title", "transcript"]);
   assert.equal(subjectTranscript("   "), undefined);
 });
 
@@ -190,16 +190,7 @@ test("a hosted input is validated to the bounds this build produces", () => {
     undefined,
   );
   assert.equal(
-    subjectInputFromWire({
-      providerName: "Codex",
-      title: TITLE,
-      transcript: TRANSCRIPT,
-      recap: "r".repeat(501),
-    }),
-    undefined,
-  );
-  assert.equal(
-    subjectInputFromWire({ providerName: "Codex", title: TITLE, transcript: TRANSCRIPT, recap: 1 }),
+    subjectInputFromWire({ providerName: "Codex", title: TITLE, transcript: 1 }),
     undefined,
   );
 });

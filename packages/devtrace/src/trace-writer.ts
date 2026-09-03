@@ -28,7 +28,6 @@ export interface AttentionTraceRecord {
 export interface SubjectTraceRecord {
   providerName: string;
   title: string;
-  recap?: string;
   transcriptBytes: number;
   subject: string | null | undefined;
   elapsedMs: number;

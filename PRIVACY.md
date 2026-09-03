@@ -10,7 +10,7 @@ we collect, who we send it to, and how to turn it off.
 
 **On your Mac.** Luke reads the session files your coding agents already write,
 using the session title, status, repository, branch, model, current tool,
-errors, and the summary the agent wrote. It writes none of this to disk. For a
+errors, and the tool it is running. It writes none of this to disk. For a
 session running on your Mac, Luke also reads a bounded rendering of that
 session's own conversation — the end of the transcript file its agent already
 writes (up to the last 256 KB), with each message and tool result cut short —
@@ -55,11 +55,11 @@ signed in, and a daily count of how much voice and review you have used.
 iOS app, and attach your name and email to that record. The counts are event
 names and values from a fixed list, and each one says which of the two apps it
 came from. Nothing you type or say and nothing from a session can appear in
-one: no titles, branches, file paths, summaries, prompts, or error text.
+one: no titles, branches, file paths, prompts, or error text.
 
 **Screen recordings.** Luke records what his own panel draws, and never your
 screen, your editor, your terminal, or any other app. A recording shows whatever
-the panel showed you, including session titles, branches, summaries and error
+the panel showed you, including session titles, branches and error
 text, your name and email address, and any screenshot you attached to the
 feedback form. The History tab is blocked from recordings, so neither the words in your
 conversation with Luke nor the things he remembers about you are included. Text you type into a field is replaced
@@ -86,7 +86,7 @@ evidence runs send no crash reports.
 
 The iOS app records on the same terms: its own screens as screenshots, never
 anything else on your device, from the moment it opens, and shows the same
-things its screens show — session titles, branches, summaries, error text, and
+things its screens show — session titles, branches, error text, and
 your name and email. A Conductor session's conversation, fetched onto that
 session's screen, is masked out of recordings the way the desktop's History
 tab is blocked, so those messages reach your phone and nothing else. Text you
@@ -124,12 +124,12 @@ and email you signed it with, and any screenshots you attached.
   typed turn sends your words, and both send the session fields listed above —
   on the Mac app, read locally from your machine; on iOS, drawn from the same
   cloud observation your vault keys already allow (titles, status, repository,
-  branch, and summaries of your cloud sessions, as described under Provider API
+  and branch of your cloud sessions, as described under Provider API
   keys above). We do not send message history, file contents, or command
   output, and we ask OpenAI not to store the request. The one exception is the
   subject phrase above: to derive it, only when Luke is about to announce a
   local session and once per announcement, Luke sends the bounded transcript
-  slice of that session, its title, and its summary — directly to OpenAI on
+  slice of that session and its title — directly to OpenAI on
   your own key if you entered one, otherwise through our service on our key —
   asks OpenAI not to store the request, and our service stores and logs none
   of it either. The phrase that comes back is spoken with that announcement

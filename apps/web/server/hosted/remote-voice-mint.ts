@@ -172,7 +172,6 @@ async function observeCloudSessions(
       };
       if (obs.detail?.repository) session.workspace = obs.detail.repository;
       if (obs.detail?.branch) session.branch = obs.detail.branch;
-      if (obs.recap) session.recap = obs.recap;
       if (obs.detail?.error) session.error = obs.detail.error;
       if (obs.lastActivityAt !== undefined) {
         session.lastActivityAt = obs.lastActivityAt;

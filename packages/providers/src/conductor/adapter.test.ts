@@ -52,7 +52,6 @@ interface TestSession {
   statusHttpStatus?: number;
   lastError?: string;
   agentType?: string;
-  transcriptTail?: string;
   /** What the documented transcript read holds for this session, in order. */
   storedMessages?: readonly JsonObject[];
   /** Misbehave: refuse the transcript read itself. */
@@ -134,11 +133,14 @@ function fakeConductorApi(api: TestApi) {
         if (!query.startsWith("SELECT ")) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
         const ids = [...query.matchAll(/'([^']*)'/g)].map((match) => match[1]);
         const rows = api.sessions
-          .filter((session) => ids.includes(session.id) && session.transcriptTail !== undefined)
+          .filter((session) => ids.includes(session.id))
           .map((session) => ({
             session_id: session.id,
             agent_type: session.agentType ?? null,
-            transcript_tail: session.transcriptTail,
+            // The view's own transcript column, answered whether or not the
+            // document asked for it: a chat's words, which no observation
+            // may carry.
+            transcript: TEST_TRANSCRIPT_WORDS,
           }));
         return jsonResponse({ rows, rowCount: rows.length, truncated: false });
       }
@@ -489,7 +491,7 @@ test("words a workspace still being built onto its rows, ready and asleep say no
 
   // A workspace being stood up or rebuilt is why its chat sits quiet, so the
   // row says so; a ready workspace is the normal case and a sleeping one is
-  // Conductor's own economy, so neither takes the activity slot from a recap.
+  // Conductor's own economy, so neither takes the activity slot.
   assert.equal(byId.get("chat-building")?.detail?.activity, "Workspace initializing");
   assert.equal(byId.get("chat-rebuilding")?.detail?.activity, "Workspace updating");
   assert.equal(byId.get("chat-ready")?.detail?.activity, undefined);
@@ -576,15 +578,11 @@ const IDLE_SESSION_UUID = "11111111-1111-4111-8111-111111111111";
 const SECOND_IDLE_SESSION_UUID = "22222222-2222-4222-8222-222222222222";
 const WORKING_SESSION_UUID = "33333333-3333-4333-8333-333333333333";
 const ERRORED_SESSION_UUID = "44444444-4444-4444-8444-444444444444";
-
-/** A tail the way the view writes one: headers, an elision mark, parting words. */
-const TEST_TRANSCRIPT_TAIL =
-  "st half of a message the tail cut into\n\n## User\n\nWire the panel.\n\n## Assistant\n\n" +
-  "[12 messages elided]\n\nAll checks pass;\nnext, say whether to ship it.";
-const TEST_RECAP = "All checks pass;\nnext, say whether to ship it.";
+/** What the transcripts view holds for every chat and an observation never reports. */
+const TEST_TRANSCRIPT_WORDS = "SECRET_TRANSCRIPT_WORDS";
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("reads a settled chat's parting words from the transcripts view as its recap", async () => {
+test("reads each chat's agent kind from the transcripts view, and nothing else", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
@@ -599,7 +597,6 @@ test("reads a settled chat's parting words from the transcripts view as its reca
         name: TEST_SESSION_NAME,
         resolvedModel: "gpt-5.5",
         agentType: "codex",
-        transcriptTail: TEST_TRANSCRIPT_TAIL,
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
@@ -609,7 +606,6 @@ test("reads a settled chat's parting words from the transcripts view as its reca
         workspaceId: "workspace-second-idle",
         name: TEST_SESSION_NAME,
         agentType: "claude",
-        transcriptTail: TEST_TRANSCRIPT_TAIL,
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 2_000,
       },
@@ -623,11 +619,6 @@ test("reads a settled chat's parting words from the transcripts view as its reca
   const secondIdle = observations.find(
     (candidate) => candidate.providerSessionId === SECOND_IDLE_SESSION_UUID,
   );
-  // The recap is the last message's words alone, kept line for line: the
-  // elision mark is dropped, the header is not part of it, and nothing
-  // earlier in the tail survives.
-  assert.equal(idle?.recap, TEST_RECAP);
-  assert.equal(secondIdle?.recap, TEST_RECAP);
   // A mapped agent kind becomes the agent itself — the identity the row's
   // mark leads with — and the model rides plain beside it.
   assert.equal(idle?.detail?.model, "gpt-5.5");
@@ -641,21 +632,20 @@ test("reads a settled chat's parting words from the transcripts view as its reca
   assert.equal(reads.length, 1);
   assert.equal(reads[0]?.pathname, "/v0/sql");
   assert.equal(reads[0]?.authorization, `Bearer ${TEST_API_KEY}`);
-  assert.deepEqual(JSON.parse(reads[0]?.body ?? ""), {
-    query:
-      "SELECT session_id, agent_type, " +
-      "CASE WHEN assistant_from_end > 0 AND (user_from_end = 0 OR assistant_from_end < user_from_end) " +
-      "THEN SUBSTRING(transcript FROM GREATEST(LENGTH(transcript) - assistant_from_end - 12, 1) FOR 2014) " +
-      "END AS transcript_tail " +
-      "FROM (SELECT session_id, agent_type, transcript, " +
-      "position(reverse(E'\\n## Assistant\\n') in reverse(transcript)) AS assistant_from_end, " +
-      "position(reverse(E'\\n## User\\n') in reverse(transcript)) AS user_from_end " +
-      "FROM session_transcripts_view WHERE session_id IN " +
-      `('${IDLE_SESSION_UUID}', '${SECOND_IDLE_SESSION_UUID}')) AS attributed`,
-  });
+  // The view holds each chat's transcript too, and the document names no
+  // column of it: an observation pass reads who runs the chat, never what
+  // was said in it, so no observation carries a word of the conversation.
+  const { query } = JSON.parse(reads[0]?.body ?? "");
+  assert.equal(
+    query,
+    "SELECT session_id, agent_type FROM session_transcripts_view WHERE session_id IN " +
+      `('${IDLE_SESSION_UUID}', '${SECOND_IDLE_SESSION_UUID}')`,
+  );
+  assert.doesNotMatch(query, /\btranscript\b/);
+  assert.doesNotMatch(JSON.stringify(observations), new RegExp(TEST_TRANSCRIPT_WORDS));
 });
 
-test("keeps parting words off a chat that is still working or newly failed", async () => {
+test("reports the agent kind whatever state the chat is in", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
@@ -664,22 +654,18 @@ test("keeps parting words off a chat that is still working or newly failed", asy
       ownedWorkspace("workspace-errored", TEST_TIME - 40_000),
     ],
     sessions: [
-      // Mid-turn the words are half a sentence, not an outcome.
       {
         id: WORKING_SESSION_UUID,
         workspaceId: "workspace-working",
         name: TEST_SESSION_NAME,
         agentType: "cursor",
-        transcriptTail: TEST_TRANSCRIPT_TAIL,
         status: TEST_CONDUCTOR_STATUS.WORKING,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
-      // Beside a failure the parting words predate what the row has to say.
       {
         id: ERRORED_SESSION_UUID,
         workspaceId: "workspace-errored",
         name: TEST_SESSION_NAME,
-        transcriptTail: TEST_TRANSCRIPT_TAIL,
         status: TEST_CONDUCTOR_STATUS.ERROR,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
@@ -689,92 +675,11 @@ test("keeps parting words off a chat that is still working or newly failed", asy
   const observations = await adapterFor(api.fetch).observe();
 
   assert.equal(observations.length, 2);
-  for (const observation of observations) {
-    assert.equal(observation.recap, undefined);
-  }
   // The agent kind is configuration, not conversation, so it rides regardless.
   const working = observations.find(
     (candidate) => candidate.providerSessionId === WORKING_SESSION_UUID,
   );
   assert.deepEqual(working?.agent, { id: "cursor", displayName: "Cursor" });
-});
-
-test("reports no recap for a tail it cannot attribute to the agent", async () => {
-  const api = fakeConductorApi({
-    userId: TEST_USER_ID,
-    projects: [LUKE_PROJECT],
-    workspaces: [
-      ownedWorkspace("workspace-user-last", TEST_TIME - 30_000),
-      ownedWorkspace("workspace-headerless", TEST_TIME - 40_000),
-    ],
-    sessions: [
-      // The user spoke last, so there are no parting words to report.
-      {
-        id: IDLE_SESSION_UUID,
-        workspaceId: "workspace-user-last",
-        name: TEST_SESSION_NAME,
-        transcriptTail: `${TEST_TRANSCRIPT_TAIL}\n\n## User\n\nPlease also update the docs.`,
-        status: TEST_CONDUCTOR_STATUS.IDLE,
-        statusUpdatedAt: TEST_TIME - 1_000,
-      },
-      // A tail with no header names no speaker. The view anchors what it
-      // returns at the final message's own header, so this is a misbehaving
-      // answer — attribution is still refused rather than assumed.
-      {
-        id: SECOND_IDLE_SESSION_UUID,
-        workspaceId: "workspace-headerless",
-        name: TEST_SESSION_NAME,
-        transcriptTail: "words with no header anywhere above them",
-        status: TEST_CONDUCTOR_STATUS.IDLE,
-        statusUpdatedAt: TEST_TIME - 1_000,
-      },
-    ],
-  });
-
-  const observations = await adapterFor(api.fetch).observe();
-
-  assert.equal(observations.length, 2);
-  for (const observation of observations) {
-    assert.equal(observation.recap, undefined);
-  }
-});
-
-test("keeps parting words whole, however long the settled message ran", async () => {
-  const longWords = `the plan landed ${"and a word ".repeat(400)}`.trim();
-  const partingWords = `all tests pass ${"and a word ".repeat(80)}`.trim();
-  const api = fakeConductorApi({
-    userId: TEST_USER_ID,
-    projects: [LUKE_PROJECT],
-    workspaces: [
-      ownedWorkspace("workspace-idle", TEST_TIME - 30_000),
-      ownedWorkspace("workspace-talkative", TEST_TIME - 30_000),
-    ],
-    sessions: [
-      {
-        id: IDLE_SESSION_UUID,
-        workspaceId: "workspace-idle",
-        name: TEST_SESSION_NAME,
-        transcriptTail: `## Assistant\n\n${longWords}`,
-        status: TEST_CONDUCTOR_STATUS.IDLE,
-        statusUpdatedAt: TEST_TIME - 1_000,
-      },
-      {
-        id: SECOND_IDLE_SESSION_UUID,
-        workspaceId: "workspace-talkative",
-        name: TEST_SESSION_NAME,
-        transcriptTail: `## Assistant\n\n${partingWords}`,
-        status: TEST_CONDUCTOR_STATUS.IDLE,
-        statusUpdatedAt: TEST_TIME - 1_000,
-      },
-    ],
-  });
-
-  const observations = await adapterFor(api.fetch).observe();
-
-  // Parting words carry no display bound of their own — the tail read is the
-  // only width — so both messages reach the surfaces whole.
-  assert.equal(observations[0]?.recap, longWords);
-  assert.equal(observations[1]?.recap, partingWords);
 });
 
 test("keeps a session id that is not a UUID out of the read document", async () => {
@@ -790,7 +695,6 @@ test("keeps a session id that is not a UUID out of the read document", async () 
         id: IDLE_SESSION_UUID,
         workspaceId: "workspace-idle",
         name: TEST_SESSION_NAME,
-        transcriptTail: TEST_TRANSCRIPT_TAIL,
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
@@ -834,7 +738,7 @@ test("keeps a session id that is not a UUID out of the read document", async () 
   );
 });
 
-test("a refused transcripts read costs the recap and agent kind, never the pass", async () => {
+test("a refused transcripts read costs the agent kind, never the pass", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
     projects: [LUKE_PROJECT],
@@ -846,7 +750,6 @@ test("a refused transcripts read costs the recap and agent kind, never the pass"
         name: TEST_SESSION_NAME,
         resolvedModel: "gpt-5.5",
         agentType: "codex",
-        transcriptTail: TEST_TRANSCRIPT_TAIL,
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
@@ -858,10 +761,10 @@ test("a refused transcripts read costs the recap and agent kind, never the pass"
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
-  assert.equal(observations[0]?.recap, undefined);
+  assert.equal(observations[0]?.agent, undefined);
   assert.equal(observations[0]?.detail?.model, "gpt-5.5");
 
-  // Even a credential refusal on this one endpoint costs only the recap: a
+  // Even a credential refusal on this one endpoint costs only the agent kind: a
   // key an org scopes away from the query endpoint still reads the roster,
   // and only the roster reads may judge the credential.
   const scopedKeyApi = fakeConductorApi({
@@ -873,7 +776,6 @@ test("a refused transcripts read costs the recap and agent kind, never the pass"
         id: IDLE_SESSION_UUID,
         workspaceId: "workspace-idle",
         name: TEST_SESSION_NAME,
-        transcriptTail: TEST_TRANSCRIPT_TAIL,
         status: TEST_CONDUCTOR_STATUS.IDLE,
         statusUpdatedAt: TEST_TIME - 1_000,
       },
@@ -885,7 +787,7 @@ test("a refused transcripts read costs the recap and agent kind, never the pass"
 
   assert.equal(scopedKeyObservations.length, 1);
   assert.equal(scopedKeyObservations[0]?.status, SESSION_STATUS.WAITING);
-  assert.equal(scopedKeyObservations[0]?.recap, undefined);
+  assert.equal(scopedKeyObservations[0]?.agent, undefined);
 });
 
 // Every chat of a workspace is its own row, so no chat has to speak for a
@@ -1158,7 +1060,6 @@ test("adopts the provider's timestamp again the moment the chat's work moves", a
     id: IDLE_SESSION_UUID,
     workspaceId: "workspace-resumed",
     name: TEST_SESSION_NAME,
-    transcriptTail: TEST_TRANSCRIPT_TAIL,
     status: TEST_CONDUCTOR_STATUS.IDLE,
     statusUpdatedAt: walkedAwayAt,
   };
@@ -1181,29 +1082,30 @@ test("adopts the provider's timestamp again the moment the chat's work moves", a
   assert.equal(working[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(working[0]?.lastActivityAt, now);
 
-  // The turn settles with new parting words: freshly waiting, on the
-  // provider's own timestamp for the settle.
+  // The turn settles: freshly waiting, on the provider's own timestamp for
+  // the settle.
   const settledAt = TEST_TIME + 120_000;
   now = settledAt + 5_000;
   chat.status = TEST_CONDUCTOR_STATUS.IDLE;
   chat.statusUpdatedAt = settledAt;
-  chat.transcriptTail = "## Assistant\n\nShipped; anything else?";
   const settled = await adapter.observe();
   assert.equal(settled[0]?.status, SESSION_STATUS.WAITING);
   assert.equal(settled[0]?.lastActivityAt, settledAt);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("a whole turn between passes still reads as fresh through its parting words", async () => {
+test("a whole turn between passes reads as unmoved", async () => {
   // A short turn can start and settle inside one refresh interval, so both
-  // passes read idle — the new parting words are what say the work moved.
+  // passes read idle. Status and failure are the only facts compared, and
+  // neither moved, so the wake-bumped timestamp is not adopted: the accepted
+  // cost of reading no words of the conversation is that such a turn keeps
+  // the moment already reported.
   const walkedAwayAt = TEST_TIME - 2 * 60 * 60 * 1000;
   const workspace = ownedWorkspace("workspace-quick-turn", walkedAwayAt);
   const chat: TestSession = {
     id: IDLE_SESSION_UUID,
     workspaceId: "workspace-quick-turn",
     name: TEST_SESSION_NAME,
-    transcriptTail: TEST_TRANSCRIPT_TAIL,
     status: TEST_CONDUCTOR_STATUS.IDLE,
     statusUpdatedAt: walkedAwayAt,
   };
@@ -1220,11 +1122,10 @@ test("a whole turn between passes still reads as fresh through its parting words
   const settledAt = TEST_TIME + 60_000;
   now = settledAt + 5_000;
   chat.statusUpdatedAt = settledAt;
-  chat.transcriptTail = "## Assistant\n\nDone; want the follow-up too?";
+  workspace.lastActivityAt = settledAt;
   const settled = await adapter.observe();
   assert.equal(settled[0]?.status, SESSION_STATUS.WAITING);
   assert.equal(settled[0]?.lastActivityAt, settledAt);
-  assert.equal(settled[0]?.recap, "Done; want the follow-up too?");
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -1238,7 +1139,6 @@ test("a chat with no readable status falls back to its workspace's moment", asyn
     id: IDLE_SESSION_UUID,
     workspaceId: "workspace-first-unreadable",
     name: TEST_SESSION_NAME,
-    transcriptTail: TEST_TRANSCRIPT_TAIL,
     status: TEST_CONDUCTOR_STATUS.IDLE,
     statusUpdatedAt: walkedAwayAt,
     statusHttpStatus: HTTP_STATUS.SERVER_ERROR,

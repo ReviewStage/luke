@@ -24,7 +24,6 @@ export function tracedSubjectEvaluator(
   const about = (input: SubjectInput) => ({
     providerName: input.providerName,
     title: input.title,
-    ...(input.recap ? { recap: input.recap } : undefined),
     transcriptBytes: Buffer.byteLength(input.transcript, "utf8"),
   });
   const quietUntil = evaluator.quietUntil;

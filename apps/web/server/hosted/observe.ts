@@ -136,7 +136,6 @@ export function observedSessionForResponse(
   if (change) session.change = change;
   const link = detail.link;
   if (link) session.link = link;
-  if (obs.recap) session.recap = obs.recap;
   const error = detail.error;
   if (error) session.error = error;
   session.lastActivityAt = obs.lastActivityAt;

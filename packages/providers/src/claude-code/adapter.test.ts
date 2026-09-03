@@ -581,7 +581,7 @@ test("recovers a title from a session too long to hold one in its tail", async (
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
 });
 
-test("carries the away recap Claude Code writes for a developer who stepped out", async (t) => {
+test("a settled turn's words and Claude Code's own away summary stay off the observation", async (t) => {
   const claudeHome = await temporaryClaudeHome(t);
   await writeSessionFile(
     claudeHome,
@@ -611,96 +611,11 @@ test("carries the away recap Claude Code writes for a developer who stepped out"
   });
   const [observation] = await adapter.observe();
 
+  // Neither is a field about the session: the closing message is the
+  // transcript itself, and the away summary is prose Claude Code wrote for
+  // its own developer. An observation reports fields, never prose.
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
-  assert.equal(
-    observation?.recap,
-    "You asked for the notch geometry; next, say whether to ship it.",
-  );
-});
-
-test("drops the previous turn's recap when a new prompt opens a turn", async (t) => {
-  const claudeHome = await temporaryClaudeHome(t);
-  await writeSessionFile(
-    claudeHome,
-    "-Users-test-recap",
-    "recap-session",
-    [
-      {
-        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
-        cwd: "/Users/test/luke",
-        timestamp: "2026-08-11T23:44:40.000Z",
-        message: { stop_reason: "end_turn", content: [{ type: "text", text: "First turn." }] },
-      },
-      {
-        type: TEST_CLAUDE_EVENT_TYPE.SYSTEM,
-        subtype: "away_summary",
-        cwd: "/Users/test/luke",
-        timestamp: "2026-08-11T23:44:42.000Z",
-        content: "The first turn's recap.",
-      },
-      {
-        type: TEST_CLAUDE_EVENT_TYPE.USER,
-        cwd: "/Users/test/luke",
-        timestamp: "2026-08-11T23:44:50.000Z",
-        message: { content: [{ type: "text", text: "Now do the other thing." }] },
-      },
-      {
-        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
-        cwd: "/Users/test/luke",
-        timestamp: "2026-08-11T23:44:55.000Z",
-        message: { stop_reason: "end_turn", content: [{ type: "text", text: "Second turn." }] },
-      },
-      {
-        type: TEST_CLAUDE_EVENT_TYPE.SYSTEM,
-        subtype: "away_summary",
-        cwd: "/Users/test/luke",
-        timestamp: "2026-08-11T23:44:57.000Z",
-        content: "The second turn's recap.",
-      },
-    ],
-    TEST_TIME - 1_000,
-  );
-
-  const adapter = new ClaudeCodeSessionAdapter({
-    claudeHome,
-    now: () => TEST_TIME,
-  });
-  const [observation] = await adapter.observe();
-
-  assert.equal(observation?.status, SESSION_STATUS.WAITING);
-  assert.equal(observation?.recap, "The second turn's recap.");
-});
-
-test("reports no recap for a turn whose closing words are all it wrote", async (t) => {
-  const claudeHome = await temporaryClaudeHome(t);
-  await writeSessionFile(
-    claudeHome,
-    "-Users-test-closing",
-    "closing-session",
-    [
-      {
-        type: TEST_CLAUDE_EVENT_TYPE.ASSISTANT,
-        cwd: "/Users/test/luke",
-        timestamp: "2026-08-11T23:44:55.000Z",
-        message: {
-          stop_reason: "end_turn",
-          content: [{ type: "text", text: "Everything in src/totals.ts now rounds per line." }],
-        },
-      },
-    ],
-    TEST_TIME - 1_000,
-  );
-
-  const adapter = new ClaudeCodeSessionAdapter({
-    claudeHome,
-    now: () => TEST_TIME,
-  });
-  const [observation] = await adapter.observe();
-
-  // The closing message is the transcript itself, not a recap Claude Code wrote
-  // about the session, and a recap reaches the attention evaluator.
-  assert.equal(observation?.status, SESSION_STATUS.WAITING);
-  assert.equal(observation?.recap, undefined);
+  assert.doesNotMatch(JSON.stringify(observation), /Closing words|notch geometry/);
 });
 
 test("stops reporting a tool once the turn that ran it has ended", async (t) => {
@@ -740,13 +655,6 @@ test("stops reporting a tool once the turn that ran it has ended", async (t) => 
           content: [{ type: "text", text: "Packaging passed." }],
         },
       },
-      {
-        type: TEST_CLAUDE_EVENT_TYPE.SYSTEM,
-        subtype: "away_summary",
-        cwd: "/Users/test/luke",
-        timestamp: "2026-08-11T23:44:57.000Z",
-        content: "Packaging passed; next, say whether to notarize.",
-      },
     ],
     TEST_TIME - 1_000,
   );
@@ -757,11 +665,10 @@ test("stops reporting a tool once the turn that ran it has ended", async (t) => 
   });
   const [observation] = await adapter.observe();
 
-  // The row prefers activity over the recap, so a tool left behind here would
-  // hide what the session actually wants to say.
+  // A tool left behind here would make the settled session read as though it
+  // were still working on it.
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
   assert.equal(observation?.detail?.activity, undefined);
-  assert.equal(observation?.recap, "Packaging passed; next, say whether to notarize.");
 });
 
 test("keeps reporting a tool between one call and the next", async (t) => {

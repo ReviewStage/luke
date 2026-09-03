@@ -142,7 +142,7 @@ export async function handleConversationRead(options: ConversationReadOptions): 
     apiKey,
   });
   if ("refused" in outcome) {
-    // The screen behind this request falls back to the recap either way; the
+    // The screen behind this request draws its empty state either way; the
     // status says only that the provider side, not the request, refused.
     return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR);
   }

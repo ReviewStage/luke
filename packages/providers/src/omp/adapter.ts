@@ -11,7 +11,7 @@ import {
   type SessionProvider,
   type SessionStatus,
 } from "@sidecar/session";
-import { isRecord, isWireString, oneLine, text, type WireRecord, wholeText } from "@sidecar/wire";
+import { isRecord, isWireString, oneLine, text, type WireRecord } from "@sidecar/wire";
 import {
   discoverSessionFiles,
   LOCAL_ADAPTER_DEFAULTS,
@@ -98,7 +98,6 @@ export interface ParsedOmpSession {
   title?: string;
   model?: string;
   timestampMs?: number;
-  recap?: string;
   activity?: string;
   failure?: string;
   turnFailed?: boolean;
@@ -176,7 +175,6 @@ function parseTail(tail: string): Omit<ParsedOmpSession, "cwd" | "title"> {
     parsed.lastRole = role;
 
     if (role === OMP_MESSAGE_ROLE.USER) {
-      parsed.recap = undefined;
       parsed.failure = undefined;
       parsed.turnFailed = false;
       parsed.turnAborted = false;
@@ -210,12 +208,6 @@ function parseTail(tail: string): Omit<ParsedOmpSession, "cwd" | "title"> {
         intent: text(block.intent),
       });
     }
-    // A settled turn's parting words say where the work stands, where half a
-    // sentence mid-turn — or cut by an abort or an error — poses as an outcome.
-    parsed.recap =
-      open.size === 0 && parsed.turnFailed !== true && parsed.turnAborted !== true
-        ? wholeText(ompMessageText(message))
-        : undefined;
   }
 
   parsed.openTools = open.size > 0;
@@ -354,7 +346,6 @@ export class OmpSessionAdapter extends LocalFileSessionAdapter<
         ? { completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED }
         : undefined),
       lastActivityAt: conversationAt,
-      ...(parsed.recap ? { recap: parsed.recap } : undefined),
       detail: detailFromParsed(parsed, workspace),
     };
   }

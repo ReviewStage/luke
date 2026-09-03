@@ -7,7 +7,6 @@ import type { SubjectTraceRecord } from "./trace-writer.js";
 const INPUT: SubjectInput = {
   providerName: "Codex",
   title: "what is our burn",
-  recap: "About 40k a month.",
   transcript: "User: what is our burn\nAssistant: about 40k — ok",
 };
 
@@ -27,7 +26,6 @@ test("a traced derivation returns the answer unchanged and records the transcrip
     {
       providerName: "Codex",
       title: "what is our burn",
-      recap: "About 40k a month.",
       transcriptBytes: Buffer.byteLength(INPUT.transcript, "utf8"),
       subject: "the monthly burn",
       elapsedMs: 40,

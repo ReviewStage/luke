@@ -24,7 +24,7 @@ import {
   type WorkspaceProject,
   workspaceAgentModels,
 } from "@sidecar/session";
-import { isRecord, text, type UnparsedWireValue, type WireRecord, wholeText } from "@sidecar/wire";
+import { isRecord, text, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import {
   CLOUD_ADAPTER_DEFAULTS,
   CLOUD_FAILURE,
@@ -302,38 +302,7 @@ const CONDUCTOR_SQL_FIELD = {
   ROWS: "rows",
   SESSION_ID: "session_id",
   AGENT_TYPE: "agent_type",
-  TRANSCRIPT_TAIL: "transcript_tail",
 } as const;
-
-/**
- * How much of the final message is read: enough for a recap's worth of its
- * opening words — where an agent puts the outcome — and no more of it. This
- * is the read's own width, a decision about how much transcript leaves
- * Conductor on every pass, so it deliberately does not follow the recap
- * bound, which is only a payload backstop; a whole conversation is the
- * documented messages endpoint's job, never this tail's.
- */
-const CONDUCTOR_TRANSCRIPT_TAIL_LENGTH = 2_000;
-
-/**
- * How Conductor's plain-text transcript marks who is speaking. A line inside a
- * message can imitate a header, so the parse can misattribute the tail of a
- * chat whose agent wrote one — the cost is a recap dropped or drawn from the
- * wrong words, never anything acted on.
- */
-const CONDUCTOR_TRANSCRIPT_SPEAKER = {
-  USER: "## User",
-  ASSISTANT: "## Assistant",
-} as const;
-
-/** A header as the transcript embeds it: its own line between two messages. */
-const CONDUCTOR_ASSISTANT_HEADER = `\n${CONDUCTOR_TRANSCRIPT_SPEAKER.ASSISTANT}\n`;
-const CONDUCTOR_USER_HEADER = `\n${CONDUCTOR_TRANSCRIPT_SPEAKER.USER}\n`;
-
-/** The header as a Postgres string literal, its newlines written as escapes. */
-function sqlHeaderLiteral(header: string): string {
-  return `E'${header.replaceAll("\n", "\\n")}'`;
-}
 
 /**
  * The one query document this adapter ever sends, fixed by this build. The
@@ -343,33 +312,18 @@ function sqlHeaderLiteral(header: string): string {
  * same pass reported — each validated as a UUID first, so no name, title, or
  * message a provider controls can ever be spliced into the document.
  *
- * The columns ask for the agent kind and the opening of the transcript's
- * final message — the settled turn's parting words — and never the
- * conversation behind it. Who wrote that message is computed in the view,
- * from whichever speaker header stands nearest the transcript's end, and the
- * returned tail is anchored at that header rather than cut at a fixed
- * distance: a fixed cut left any final message longer than the cut without
- * its header, which read as unattributable and silently cost most long-form
- * agents their recap. A chat whose user spoke last answers with no tail at
- * all.
+ * The columns ask for the agent kind and nothing else. The view also holds
+ * each chat's transcript, and no column of it is named here: the
+ * conversation is the documented messages endpoint's to read, at the
+ * developer's own press, never an observation pass's.
  */
-const CONDUCTOR_READ_TRANSCRIPT_TAILS_PREFIX =
-  `SELECT ${CONDUCTOR_SQL_FIELD.SESSION_ID}, ${CONDUCTOR_SQL_FIELD.AGENT_TYPE}, ` +
-  `CASE WHEN assistant_from_end > 0 AND (user_from_end = 0 OR assistant_from_end < user_from_end) ` +
-  `THEN SUBSTRING(transcript FROM GREATEST(LENGTH(transcript) - assistant_from_end - ${CONDUCTOR_ASSISTANT_HEADER.length - 2}, 1) ` +
-  `FOR ${CONDUCTOR_ASSISTANT_HEADER.length + CONDUCTOR_TRANSCRIPT_TAIL_LENGTH}) ` +
-  `END AS ${CONDUCTOR_SQL_FIELD.TRANSCRIPT_TAIL} ` +
-  `FROM (SELECT ${CONDUCTOR_SQL_FIELD.SESSION_ID}, ${CONDUCTOR_SQL_FIELD.AGENT_TYPE}, transcript, ` +
-  `position(reverse(${sqlHeaderLiteral(CONDUCTOR_ASSISTANT_HEADER)}) in reverse(transcript)) AS assistant_from_end, ` +
-  `position(reverse(${sqlHeaderLiteral(CONDUCTOR_USER_HEADER)}) in reverse(transcript)) AS user_from_end ` +
+const CONDUCTOR_READ_AGENT_KINDS_PREFIX =
+  `SELECT ${CONDUCTOR_SQL_FIELD.SESSION_ID}, ${CONDUCTOR_SQL_FIELD.AGENT_TYPE} ` +
   `FROM session_transcripts_view WHERE ${CONDUCTOR_SQL_FIELD.SESSION_ID} IN (`;
 
-const CONDUCTOR_READ_TRANSCRIPT_TAILS_SUFFIX = ")) AS attributed";
+const CONDUCTOR_READ_AGENT_KINDS_SUFFIX = ")";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** The view's own mark for history it left out of the concise transcript. */
-const CONDUCTOR_TRANSCRIPT_ELIDED = /^\[\d+ messages? elided\]$/;
 
 const CONDUCTOR_SESSION_STATUS = {
   IDLE: "idle",
@@ -383,10 +337,11 @@ type ConductorSessionStatus =
 /**
  * An idle Conductor session has finished its turn and is holding for the user,
  * which is what Luke reports as waiting on the row. That is not itself an
- * ask: a waiting notice still needs the recap to ask, because a settled turn
- * that merely leaves the next prompt to them is silence. A session the
- * provider reports as errored stopped on something the user has to deal with,
- * and it carries the message that says what.
+ * ask: Conductor does not say whether the turn ended on a question, so the
+ * row shows the wait and no notice speaks it, because a settled turn that
+ * merely leaves the next prompt to them is silence. A session the provider
+ * reports as errored stopped on something the user has to deal with, and it
+ * carries the message that says what.
  */
 const SESSION_STATUS_BY_CONDUCTOR_STATUS = {
   [CONDUCTOR_SESSION_STATUS.IDLE]: SESSION_STATUS.WAITING,
@@ -412,8 +367,8 @@ type ConductorWorkspaceStatus =
  * built or rebuilt is why its chats are quiet, and without the words a
  * just-created session reads as unaccountably idle. A ready workspace is the
  * normal case and says nothing, and a sleeping one is Conductor's own economy
- * — it wakes on the next message — so wording it would bump the recap off the
- * row to report a non-event.
+ * — it wakes on the next message — so wording it would put a non-event on
+ * the row.
  */
 const CONDUCTOR_WORKSPACE_ACTIVITY = {
   [CONDUCTOR_WORKSPACE_STATUS.INITIALIZING]: "Workspace initializing",
@@ -463,10 +418,9 @@ interface ConductorWorkspaceLifecycle {
   errorMessage?: string;
 }
 
-/** What the transcripts view said about one session: who runs it, and how it left off. */
+/** What the transcripts view said about one session: who runs it. */
 interface ConductorTranscript {
   agentKind?: string;
-  recap?: string;
 }
 
 export const CONDUCTOR_PROVIDER: SessionProvider = {
@@ -517,15 +471,13 @@ interface ConductorSession {
  * and a chat filed away on its own is dropped the same way from a workspace
  * that stays — observation issues no request that can change provider state,
  * and it reports nothing at all without a credential. Beside the roster
- * reads, one fixed query to Conductor's
- * transcripts view names the sessions the same pass observed and takes back
- * each chat's agent kind and the bounded tail its recap — the settled turn's
- * parting words — is read from; no observation pass asks for the history
- * behind that tail, and the tail itself never leaves this adapter. The one
- * wider read is `readConversation`, and it is not observation's: only a
- * user's own ask reaches it, it reads one observed chat's stored messages
- * through the documented transcript endpoint in bounded attributed pages,
- * and it keeps nothing here. Each chat is reported
+ * reads, one fixed query to Conductor's transcripts view names the sessions
+ * the same pass observed and takes back each chat's agent kind and nothing
+ * else; no observation pass reads a word of the conversation. The one read
+ * of it is `readConversation`, and it is not observation's: only a user's
+ * own ask reaches it, it reads one observed chat's stored messages through
+ * the documented transcript endpoint in bounded attributed pages, and it
+ * keeps nothing here. Each chat is reported
  * as its own session, carrying the workspace around it as its group — the
  * workspace is the unit Conductor's own surface shows, but the chat is the
  * thing a press opens and a write reaches, and a workspace holding two chats
@@ -722,8 +674,8 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       .flat();
 
     // The transcripts read rides beside the status reads: one bounded query
-    // for every observed session, so a failed or missing answer costs a recap
-    // and an agent kind, never the pass. That holds even for a credential
+    // for every observed session, so a failed or missing answer costs an
+    // agent kind, never the pass. That holds even for a credential
     // refusal: a key an org scopes away from the query endpoint alone still
     // reads the roster, and the roster reads above are what judge the
     // credential — so this one read swallows everything rather than letting
@@ -1241,12 +1193,6 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     const transcript = transcripts?.get(session.id);
     const lastActivityAt = reported?.updatedAt ?? session.workspace.lastActivityAt;
     const status = this.#statusFor(reported?.status, lastActivityAt, now);
-    // The parting words are a recap only once the turn has actually parted:
-    // read for an idle chat, they say where the agent left the work; read
-    // mid-turn they are half a sentence posing as an outcome, and read beside
-    // a failure they predate the thing the row now has to say.
-    const recap =
-      reported?.status === CONDUCTOR_SESSION_STATUS.IDLE ? transcript?.recap : undefined;
     // The chat is the agent's conversation before it is Conductor's, so a
     // mapped agent kind leads the row as the agent itself and the model rides
     // plain. Only a kind this build cannot map keeps riding the model label,
@@ -1333,7 +1279,6 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       // spawn target does.
       renameTarget: session.workspace.id,
       ...(controls.length > 0 ? { controls } : undefined),
-      ...(recap ? { recap } : undefined),
       detail: {
         repository: session.workspace.repositoryLabel,
         ...(model ? { model } : undefined),
@@ -1420,11 +1365,11 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
   }
 
   /**
-   * One bounded read of the transcripts view for every session this pass
-   * observed: which agent runs each chat, and the tail its recap is taken
-   * from. Only ids that are actually UUIDs may enter the fixed document — an
-   * id that is anything else is a shape this build does not know, so it is
-   * left out rather than sent — and with none there is no read at all.
+   * One read of the transcripts view for every session this pass observed:
+   * which agent runs each chat, and nothing else. Only ids that are actually
+   * UUIDs may enter the fixed document — an id that is anything else is a
+   * shape this build does not know, so it is left out rather than sent — and
+   * with none there is no read at all.
    */
   async #sessionTranscripts(
     request: CloudRequest,
@@ -1434,9 +1379,9 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     const ids = sessions.map((session) => session.id).filter((id) => UUID_PATTERN.test(id));
     if (ids.length === 0) return transcripts;
 
-    const document = `${CONDUCTOR_READ_TRANSCRIPT_TAILS_PREFIX}${ids
+    const document = `${CONDUCTOR_READ_AGENT_KINDS_PREFIX}${ids
       .map((id) => `'${id}'`)
-      .join(", ")}${CONDUCTOR_READ_TRANSCRIPT_TAILS_SUFFIX}`;
+      .join(", ")}${CONDUCTOR_READ_AGENT_KINDS_SUFFIX}`;
     const body = await request(CONDUCTOR_ROUTE.SQL, undefined, { document });
     for (const row of recordsFromPage(body, CONDUCTOR_SQL_FIELD.ROWS)) {
       const sessionId = textFromRecord(row, CONDUCTOR_SQL_FIELD.SESSION_ID);
@@ -1445,50 +1390,12 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
         0,
         CONDUCTOR_ADAPTER_DEFAULTS.MAXIMUM_AGENT_KIND_LENGTH,
       );
-      const recap = recapFromTranscriptTail(
-        textFromRecord(row, CONDUCTOR_SQL_FIELD.TRANSCRIPT_TAIL),
-      );
       transcripts.set(sessionId, {
         ...(agentKind ? { agentKind } : undefined),
-        ...(recap ? { recap } : undefined),
       });
     }
     return transcripts;
   }
-}
-
-/**
- * The parting words of the transcript's last message, only when that message
- * is attributably the agent's: the tail must still hold the message's own
- * header, and a chat whose user spoke last has no parting words to report.
- * The view's elision markers are dropped, the message's own lines are kept
- * as written because they are Markdown a chat draws, and everything earlier
- * in the tail is discarded unread — the recap is what leaves this function,
- * never the history.
- */
-function recapFromTranscriptTail(tail: string | undefined): string | undefined {
-  if (!tail) return undefined;
-  const lines = tail.split("\n");
-  const speakerOf = (line: string): string => line.trim();
-  const lastHeader = lines.findLastIndex((line) => {
-    const speaker = speakerOf(line);
-    return (
-      speaker === CONDUCTOR_TRANSCRIPT_SPEAKER.ASSISTANT ||
-      speaker === CONDUCTOR_TRANSCRIPT_SPEAKER.USER
-    );
-  });
-  if (
-    lastHeader < 0 ||
-    speakerOf(lines[lastHeader] ?? "") !== CONDUCTOR_TRANSCRIPT_SPEAKER.ASSISTANT
-  ) {
-    return undefined;
-  }
-  return wholeText(
-    lines
-      .slice(lastHeader + 1)
-      .filter((line) => !CONDUCTOR_TRANSCRIPT_ELIDED.test(line.trim()))
-      .join("\n"),
-  );
 }
 
 /**

@@ -53,7 +53,6 @@ function waitingNotice(holdingForDeveloper: boolean): SessionNotice {
     status: SESSION_NOTICE_STATUS.WAITING,
     previousStatus: SESSION_STATUS.WORKING,
     holdingForDeveloper,
-    recap: "Updated the notification behavior.",
     repository: "luke",
     branch: "charleslpan/jarvis-like-voice",
     canReceiveMessage: true,
@@ -69,7 +68,10 @@ function completionNotice(): SessionNotice {
   };
 }
 
-test("a routine finish does not bypass the attention evaluator", () => {
+test("a waiting session with no reported hold is not announced", () => {
+  // A Conductor chat reports idle and nothing about why, so its notice never
+  // claims the developer and the deterministic path stays silent; the
+  // attention evaluator is the one thing that may still decide to speak.
   const speech = sessionNoticeAnnouncement(waitingNotice(false), 2_000);
 
   assert.equal(speech, undefined);
@@ -85,23 +87,8 @@ test("a bare hold does not invent a decision for the developer", () => {
   assert.equal(speech, undefined);
 });
 
-test("a concrete question is announced with the decision itself", () => {
-  const speech = sessionNoticeAnnouncement(
-    { ...waitingNotice(true), recap: "Should session replay capture screenshots?" },
-    2_000,
-  );
-
-  assert.deepEqual(speech, {
-    providerId: "conductor",
-    providerSessionId: "agent-1",
-    change: SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT,
-    detail: "Should session replay capture screenshots?",
-    decidedAt: 2_000,
-  });
-});
-
 test("the title never reaches an announcement", () => {
-  const notice = { ...waitingNotice(true), recap: "Should session replay capture screenshots?" };
+  const notice = { ...waitingNotice(true), activity: "Bash: pnpm test" };
   const unnamed = sessionNoticeAnnouncement(notice, 2_000);
   assert.equal(unnamed?.subject, undefined);
   assert.doesNotMatch(JSON.stringify(unnamed), /Notification fix/);
@@ -109,25 +96,25 @@ test("the title never reaches an announcement", () => {
 
 test("a permission hold is announced with the action awaiting approval", () => {
   const speech = sessionNoticeAnnouncement(
-    {
-      ...waitingNotice(true),
-      activity: "Bash: pnpm test",
-      recap: "Should the test plan cover live audio?",
-    },
+    { ...waitingNotice(true), activity: "Bash:  pnpm\ntest" },
     2_000,
   );
 
-  assert.equal(speech?.detail, "Bash: pnpm test");
-  assert.equal(speech?.change, SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT);
+  assert.deepEqual(speech, {
+    providerId: "conductor",
+    providerSessionId: "agent-1",
+    change: SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT,
+    detail: "Bash: pnpm test",
+    decidedAt: 2_000,
+  });
 });
 
-test("an error announces the error before recap or activity", () => {
+test("an error announces the error before activity", () => {
   const speech = sessionNoticeAnnouncement(
     {
       ...waitingNotice(false),
       status: SESSION_NOTICE_STATUS.ERROR,
       activity: "running tests",
-      recap: "The test run stopped.",
       error: "Typecheck failed.",
     },
     2_000,
@@ -135,6 +122,16 @@ test("an error announces the error before recap or activity", () => {
 
   assert.equal(speech?.change, SESSION_ANNOUNCEMENT_CHANGE.FAILED);
   assert.equal(speech?.detail, "Typecheck failed.");
+});
+
+test("an error with no message still announces, naming what was running", () => {
+  const speech = sessionNoticeAnnouncement(
+    { ...waitingNotice(false), status: SESSION_NOTICE_STATUS.ERROR, activity: "running tests" },
+    2_000,
+  );
+
+  assert.equal(speech?.change, SESSION_ANNOUNCEMENT_CHANGE.FAILED);
+  assert.equal(speech?.detail, "running tests");
 });
 
 test("a new error remains a failure when the session is still working", () => {
@@ -153,34 +150,41 @@ test("a new error remains a failure when the session is still working", () => {
 
 test("an automation wait is an update, not a request for developer input", () => {
   const speech = sessionAnnouncementFromReview(
-    review({
-      holdingForDeveloper: false,
-      recap: "Waiting for the merge queue.",
-      context: { activity: "watching CI" },
-    }),
+    review({ holdingForDeveloper: false, context: { activity: "watching CI" } }),
   );
 
   assert.equal(speech?.change, SESSION_ANNOUNCEMENT_CHANGE.UPDATED);
-  assert.equal(speech?.detail, "Waiting for the merge queue.");
+  assert.equal(speech?.detail, "watching CI");
 });
 
-test("only a developer hold with concrete input becomes needs-input", () => {
+test("only a developer hold with a concrete action becomes needs-input", () => {
   const speech = sessionAnnouncementFromReview(
-    review({ recap: "Should I run the migration?", context: undefined }),
+    review({ context: { activity: "Approve running the migration" } }),
   );
-  const urlOnlyQuestion = sessionAnnouncementFromReview(
-    review({ recap: "See https://example.com/run?mode=test", context: undefined }),
-  );
+  const bareHold = sessionAnnouncementFromReview(review({ context: undefined }));
 
   assert.equal(speech?.change, SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT);
-  assert.equal(speech?.detail, "Should I run the migration?");
-  assert.equal(urlOnlyQuestion, undefined);
+  assert.equal(speech?.detail, "Approve running the migration");
+  assert.equal(bareHold, undefined);
+});
+
+test("a finished turn announces with no detail rather than a scrape of the last message", () => {
+  const speech = sessionAnnouncementFromReview(
+    review({ status: SESSION_STATUS.COMPLETE, holdingForDeveloper: false, context: undefined }),
+  );
+
+  assert.deepEqual(speech, {
+    providerId: "claude-code",
+    providerSessionId: "session-a",
+    change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
+    decidedAt: 2_000,
+  });
 });
 
 test("a review's announcement never carries the title", () => {
   const speech = sessionAnnouncementFromReview(
-    review({ recap: "Should I run the migration?", context: undefined }),
+    review({ context: { activity: "Approve running the migration" } }),
   );
   assert.equal(speech?.subject, undefined);
-  assert.doesNotMatch(JSON.stringify(speech), /Notification fix/);
+  assert.doesNotMatch(JSON.stringify(speech), /Checkout service/);
 });

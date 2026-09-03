@@ -422,13 +422,6 @@ export interface ProviderSessionObservation {
    * that did not say which agent runs a chat reports none rather than a guess.
    */
   agent?: SessionProvider;
-  /**
-   * A recap of where the work stands — provider-designated, or a settled
-   * turn's parting words, kept whole. Never the transcript behind it, and
-   * never a model's whole to read: what may enter a model window is the
-   * {@link maximumSessionRecapExcerptLength} excerpt its consumers cut.
-   */
-  recap?: string;
   detail?: SessionDetail;
   /** Apps on this machine that independently associate themselves with the session. */
   applications?: readonly SessionApplication[];
@@ -443,9 +436,9 @@ export interface ProviderSessionObservation {
   /**
    * Whether a waiting session is holding for the developer to act — a
    * permission, an approval, or a question the provider itself reported.
-   * Absent means the adapter could not tell: a waiting notice then speaks
-   * only when the recap itself asks, because idle-after-a-turn is the
-   * panel's to show, not a banner's to read as an ask.
+   * Absent means the adapter could not tell, and no waiting notice speaks
+   * for it: idle-after-a-turn is the panel's to show, not a banner's to
+   * read as an ask.
    */
   holdingForDeveloper?: boolean;
   /**
@@ -505,7 +498,6 @@ export interface Session extends SessionIdentity {
   location: SessionLocation;
   /** The agent behind this session, when its provider hosts rather than is it. */
   agent?: SessionProvider;
-  recap?: string;
   detail: SessionDetail;
   /** Apps on this machine that independently associate themselves with the session. */
   applications: readonly SessionApplication[];
@@ -541,15 +533,6 @@ export const maximumSessionApplications = SESSION_APPLICATION_ID_LIST.length;
 export const maximumSpawnableAgentLength = 40;
 /** How many kinds of agent one session may offer to start. */
 export const maximumSpawnableAgents = 8;
-/**
- * The bounded excerpt of a recap that may reach a model: the attention
- * evaluator's update, the announcement worded from it, and the voice roster
- * context all cut to this at their own edge. The recap itself carries no
- * length bound — it is the settled turn's whole parting words, drawn on the
- * user's own surfaces — so this excerpt is the one place its length is a
- * budget at all.
- */
-export const maximumSessionRecapExcerptLength = 500;
 /** One line of context beside a title, not a paragraph. */
 export const maximumSessionDetailLength = 120;
 /**
@@ -896,7 +879,6 @@ export function normalizeSession(
   const lastActivityAt = timestamp(observation.lastActivityAt, "lastActivityAt");
   const status = normalizeStatus(observation.status);
   const completionCause = normalizeCompletionCause(observation.completionCause, status);
-  const recap = observation.recap?.trim() || undefined;
   const parentProviderSessionId = boundedText(
     observation.parentProviderSessionId,
     maximumSessionDetailLength,
@@ -948,7 +930,6 @@ export function normalizeSession(
     session.parentProviderSessionId = parentProviderSessionId;
   }
   if (completionCause) session.completionCause = completionCause;
-  if (recap) session.recap = recap;
   if (agent) session.agent = agent;
   if (spawnTarget) session.spawnTarget = spawnTarget;
   if (renameTarget) session.renameTarget = renameTarget;

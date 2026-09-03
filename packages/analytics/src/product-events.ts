@@ -24,7 +24,7 @@ import {
  * The vocabulary is the privacy boundary, not a convention on top of one. An
  * event is a name from this file, and every property value is a member of an
  * `as const` set here, a rung on the session-count ladder, or a release
- * version — so a session title, a branch, a path, a recap, a prompt, or an
+ * version — so a session title, a branch, a path, a prompt, or an
  * error line has no shape it could travel in. Nothing observed and nothing
  * typed or spoken can be expressed, and the reader below builds its output
  * from the allowlist rather than from the envelope, so a field cannot be

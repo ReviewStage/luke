@@ -478,8 +478,6 @@ export interface ObservedSession {
    * an address outside the set never crosses the wire at all.
    */
   link?: string;
-  /** Bounded recap of where the work stands, when the provider reported one. */
-  recap?: string;
   /** Error description, when the session stopped on something it cannot pass. */
   error?: string;
   /** Unix milliseconds of the provider's last write about the session, when it reported one. */
@@ -505,7 +503,8 @@ export interface ObservedSession {
   /**
    * Whether the messages endpoint can read this session's conversation — a
    * capability of the provider's documented transcript read, not a per-turn
-   * state, so a screen that sees it absent falls back to the recap alone.
+   * state, so a screen that sees it absent has no conversation to draw and
+   * says so.
    */
   canReadConversation?: boolean;
 }
@@ -565,7 +564,6 @@ function observedSessionFromWire(value: UnparsedWireValue): ObservedSession | un
   const change = changeValue ? normalizeSessionDetail({ change: changeValue }).change : undefined;
   const linkValue = text(value.link);
   const link = linkValue ? normalizeSessionDetail({ link: linkValue }).link : undefined;
-  const recap = text(value.recap);
   const error = text(value.error);
   const lastActivityAt = wholeNumber(value.lastActivityAt) ?? wholeNumber(value.observedAt);
   const session: ObservedSession = { providerId, sessionId, title, status };
@@ -573,7 +571,6 @@ function observedSessionFromWire(value: UnparsedWireValue): ObservedSession | un
   if (branch) session.branch = branch;
   if (change) session.change = change;
   if (link) session.link = link;
-  if (recap) session.recap = recap;
   if (error) session.error = error;
   if (lastActivityAt !== undefined) session.lastActivityAt = lastActivityAt;
   if (value.canReceiveMessage === true) session.canReceiveMessage = true;

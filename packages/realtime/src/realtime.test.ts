@@ -40,7 +40,6 @@ import {
   workspaceProjectContextText,
 } from "@sidecar/realtime";
 import {
-  maximumSessionRecapExcerptLength,
   maximumWorkspaceNameLength,
   normalizeSession,
   type ObservedWorkspaceProject,
@@ -586,7 +585,6 @@ test("session context carries only bounded, redacted fields", () => {
       title: "Claude Code: checkout-service",
       status: SESSION_STATUS.WAITING,
       lastActivityAt: DECIDED_AT,
-      recap: "Claude Code is waiting; transcript content is not retained.",
     },
   );
 
@@ -928,42 +926,6 @@ test("the roster says what a session is doing and where, in the attention update
   assert.match(bareText, /in repository luke/);
   assert.doesNotMatch(bareText, /running/);
   assert.doesNotMatch(bareText, /error:/);
-  assert.doesNotMatch(bareText, /recap/);
-});
-
-test("the roster marks a recap as context for naming the work, not prose to recite", () => {
-  const working = normalizeSession(
-    { id: "codex", displayName: "Codex" },
-    {
-      providerSessionId: "session-with-recap",
-      title: "Implement the plan",
-      status: SESSION_STATUS.WORKING,
-      lastActivityAt: DECIDED_AT,
-      recap: "Unifying spawning, invocation, the package graph, and the panel.",
-    },
-  );
-
-  assert.match(
-    sessionContextText([working]),
-    /context for naming this work — do not list its parts: Unifying spawning/,
-  );
-
-  // The roster retains a longer recap for the panel; what this render sends
-  // off the machine stays cut to the excerpt.
-  const talkative = normalizeSession(
-    { id: "codex", displayName: "Codex" },
-    {
-      providerSessionId: "session-with-long-recap",
-      title: "Implement the plan",
-      status: SESSION_STATUS.WORKING,
-      lastActivityAt: DECIDED_AT,
-      recap: `The whole plan landed. ${"y".repeat(maximumSessionRecapExcerptLength + 200)}`,
-    },
-  );
-  assert.equal(talkative.recap?.length, maximumSessionRecapExcerptLength + 223);
-  const rendered = sessionContextText([talkative]);
-  assert.ok(rendered.includes(talkative.recap?.slice(0, maximumSessionRecapExcerptLength) ?? ""));
-  assert.ok(!rendered.includes(talkative.recap ?? ""));
 });
 
 test("the roster says which sessions keep a readable transcript and a pull request, never an address", () => {

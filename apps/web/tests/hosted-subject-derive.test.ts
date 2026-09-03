@@ -17,7 +17,6 @@ const OPEN_SPEND: HostedSpend = {
 const INPUT: SubjectInput = {
   providerName: "Codex",
   title: "what is our burn",
-  recap: "Thatch looks best.",
   transcript: "User: look into ICHRA options\nAssistant: Thatch looks best.",
 };
 

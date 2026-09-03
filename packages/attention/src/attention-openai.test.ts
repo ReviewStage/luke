@@ -11,11 +11,7 @@ import {
   attentionResponsesRequest,
   attentionUpdateInput,
 } from "@sidecar/attention";
-import {
-  maximumSessionRecapExcerptLength,
-  maximumSessionTitleLength,
-  SESSION_STATUS,
-} from "@sidecar/session";
+import { maximumSessionTitleLength, SESSION_STATUS } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 import { isRecord } from "@sidecar/wire";
 
@@ -25,7 +21,6 @@ const UPDATE: AttentionPromptUpdate = {
   title: "checkout-service",
   status: SESSION_STATUS.WAITING,
   previousStatus: SESSION_STATUS.WORKING,
-  recap: "Waiting on a permission decision.",
   context: { branch: "main" },
 };
 
@@ -105,7 +100,7 @@ test("a wire update outside the build's value sets is refused, not repaired", ()
   delete noTitle.title;
   assert.equal(attentionPromptUpdateFromWire(noTitle), undefined);
   assert.equal(attentionPromptUpdateFromWire({ ...validWire, title: "   " }), undefined);
-  assert.equal(attentionPromptUpdateFromWire({ ...validWire, recap: 7 }), undefined);
+  assert.equal(attentionPromptUpdateFromWire({ ...validWire, workspace: 7 }), undefined);
   assert.equal(attentionPromptUpdateFromWire({ ...validWire, context: "not a record" }), undefined);
   assert.equal(attentionPromptUpdateFromWire({ ...validWire, context: { error: 9 } }), undefined);
   assert.equal(attentionPromptUpdateFromWire("not a record"), undefined);
@@ -117,11 +112,7 @@ test("wire fields are cut to the bounds an update may carry them at", () => {
     providerName: "p".repeat(maximumSessionTitleLength + 40),
     title: `  ${"t".repeat(maximumSessionTitleLength + 40)}  `,
     status: SESSION_STATUS.WORKING,
-    // The recap's wire bound is the excerpt's, not the roster's: the roster
-    // retains more than any update is allowed to carry off a machine.
-    recap: "r".repeat(maximumSessionRecapExcerptLength + 40),
   });
   assert.equal(parsed?.providerName.length, maximumSessionTitleLength);
   assert.equal(parsed?.title.length, maximumSessionTitleLength);
-  assert.equal(parsed?.recap?.length, maximumSessionRecapExcerptLength);
 });

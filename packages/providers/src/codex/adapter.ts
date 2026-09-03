@@ -23,7 +23,6 @@ import {
   text,
   type UnparsedWireValue,
   type WireRecord,
-  wholeText,
 } from "@sidecar/wire";
 import {
   type HookStatusRefinement,
@@ -285,7 +284,6 @@ function activityFromCall(payload: WireRecord): string | undefined {
 interface ParsedCodexRollout {
   activity?: string;
   error?: string;
-  lastAgentMessage?: string;
   turnComplete?: boolean;
   /** Whether a realtime voice conversation is live over this thread, when the tail says. */
   realtimeVoiceLive?: boolean;
@@ -333,7 +331,6 @@ function parseCodexRolloutTail(tail: string): ParsedCodexRollout {
     if (record.type === CODEX_ROLLOUT_TYPE.EVENT_MSG) {
       if (payload.type === CODEX_EVENT_PAYLOAD.TASK_STARTED) {
         parsed.turnComplete = false;
-        parsed.lastAgentMessage = undefined;
         // A new turn is not running the previous turn's last call, and holding
         // it would keep a stale line on the row until some other tool runs.
         parsed.activity = undefined;
@@ -350,19 +347,15 @@ function parseCodexRolloutTail(tail: string): ParsedCodexRollout {
         parsed.turnComplete = true;
         parsed.activity = undefined;
         if (isRecord(payload.error)) {
-          // A turn that ended on a failure gets no recap: the agent's parting
-          // words predate what went wrong, and the error is what the row now
-          // has to say. The fallback keeps a standalone error event's message
-          // when the boundary's own error carries none.
+          // The fallback keeps a standalone error event's message when the
+          // boundary's own error carries none.
           parsed.error =
             oneLine(text(payload.error.message), CODEX_ADAPTER_DEFAULTS.MAXIMUM_ACTIVITY_LENGTH) ??
             parsed.error;
-          parsed.lastAgentMessage = undefined;
         } else {
           // A turn that settled cleanly got past any failure it recorded on
           // the way, so a stale error must not outlive it.
           parsed.error = undefined;
-          parsed.lastAgentMessage = wholeText(text(payload.last_agent_message));
         }
       }
       continue;
@@ -733,7 +726,6 @@ function observationFromThreadRow(
     status: refined.status,
     ...(completionCause ? { completionCause } : undefined),
     lastActivityAt: refined.lastActivityAt,
-    ...(rollout?.lastAgentMessage ? { recap: rollout.lastAgentMessage } : undefined),
     detail,
     ...(detail.link ? { applications: [chatGptApplication(detail.link)] } : undefined),
     ...(refined.holdingForDeveloper ? { holdingForDeveloper: true } : undefined),

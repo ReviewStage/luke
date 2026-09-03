@@ -136,7 +136,6 @@ test("observes a settled OMP session and labels it by its project", async (t) =>
   assert.equal(observations[0]?.detail?.repository, "luke");
   assert.equal(observations[0]?.detail?.model, "grok-4.6");
   assert.equal(observations[0]?.controls, undefined);
-  assert.equal(observations[0]?.recap, "Done; the tests pass.");
 });
 
 test("titles a session from the header when the slot is empty", async (t) => {
@@ -224,30 +223,7 @@ test("reports an open tool call as working, named by what it is for", async (t) 
 
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.detail?.activity, "bash: Run the check suite");
-  assert.equal(observations[0]?.recap, undefined);
   assert.equal(observations[0]?.lastActivityAt, Date.parse("2026-08-20T11:59:40.000Z"));
-});
-
-test("keeps a recap only for a turn that settled cleanly", async (t) => {
-  const ompHome = await temporaryOmpHome(t);
-  await writeSessionFile(
-    ompHome,
-    "luke",
-    SESSION_ID.PROMPT,
-    [
-      titleSlot(""),
-      sessionHeader(SESSION_ID.PROMPT, "/Users/test/luke"),
-      assistantMessage("m1", "2026-08-20T11:58:00.000Z"),
-      userMessage("m2", "2026-08-20T11:59:00.000Z", SECRET_TRANSCRIPT_TEXT),
-    ],
-    TEST_TIME - 1_000,
-  );
-
-  const adapter = new OmpSessionAdapter({ ompHome, now: () => TEST_TIME });
-  const observations = await adapter.observe();
-
-  assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
-  assert.equal(observations[0]?.recap, undefined);
 });
 
 test("keeps a fresh prompt working and a stale one unknown", async (t) => {
@@ -369,7 +345,6 @@ test("reports the error that stopped a session", async (t) => {
 
   assert.equal(observations[0]?.status, SESSION_STATUS.ERROR);
   assert.equal(observations[0]?.detail?.error, "Provider rejected the request.");
-  assert.equal(observations[0]?.recap, undefined);
 });
 
 test("a new prompt supersedes the turn that failed before it", async (t) => {
@@ -434,7 +409,6 @@ test("an interrupted turn holds for the developer past its placeholder results",
   const observations = await adapter.observe();
 
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
-  assert.equal(observations[0]?.recap, undefined);
 });
 
 test("a resumed session leaves its exit behind", async (t) => {

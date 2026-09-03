@@ -30,7 +30,7 @@ const UPDATE = {
   providerName: "Claude Code",
   title: "checkout-service",
   status: SESSION_STATUS.WAITING,
-  recap: "Waiting on a permission decision.",
+  context: { activity: "Approve running pnpm test" },
 };
 
 const SPOKEN_DECISION = {
@@ -98,7 +98,7 @@ test("a review sends the build's own construction and answers the parsed decisio
   assert.equal(sent.store, false);
   assert.equal(sent.text.format.name, ATTENTION_DECISION_SCHEMA_NAME);
   assert.match(sent.input, /Work: checkout-service/);
-  assert.match(sent.input, /Work recap: Waiting on a permission decision\./);
+  assert.match(sent.input, /Running: Approve running pnpm test/);
   assert.equal(
     String(call.init?.headers && new Headers(call.init.headers).get("authorization")),
     `Bearer ${API_KEY}`,

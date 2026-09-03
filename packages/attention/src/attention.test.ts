@@ -11,13 +11,13 @@ import {
 import {
   ATTENTION_DISPOSITION,
   type AttentionDecision,
-  maximumSessionRecapExcerptLength,
   normalizeSession,
   type ProviderSessionObservation,
   SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type Session,
   type SessionProvider,
+  type SessionStatus,
 } from "@sidecar/session";
 import {
   ATTENTION_REVIEW_OUTCOME,
@@ -29,8 +29,7 @@ import {
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
 const codex: SessionProvider = { id: "codex", displayName: "Codex" };
 const DECIDED_AT = 1_800_000_000_000;
-const SPOKEN_RECAP = "Claude Code is waiting on you in checkout-service.";
-const OTHER_RECAP = "Claude Code finished its turn in checkout-service.";
+const SPOKEN_SENTENCE = "Claude Code is waiting on you in checkout-service.";
 const TRANSCRIPT_SECRET = "SECRET_TRANSCRIPT_TEXT";
 /**
  * A session's own address and the change it opened stay on the machine, so the
@@ -64,15 +63,14 @@ function speakDecision(): AttentionDecision {
 }
 
 /** A development the ledger can weigh: the observed fields, not a sentence. */
-function spokenUpdate(recap = SPOKEN_RECAP): AttentionUpdate {
+function spokenUpdate(status: SessionStatus = SESSION_STATUS.WAITING): AttentionUpdate {
   return {
     providerId: claude.id,
     providerSessionId: "review",
-    trigger: ATTENTION_TRIGGER.RECAP_CHANGED,
+    trigger: ATTENTION_TRIGGER.STATUS_CHANGED,
     providerName: claude.displayName,
     title: "Review the trust constraints",
-    status: SESSION_STATUS.WAITING,
-    recap,
+    status,
     lastActivityAt: DECIDED_AT,
   };
 }
@@ -108,10 +106,6 @@ test("derives an update only when a session reports something new", () => {
   assert.equal(attentionUpdate(working, working), undefined);
   assert.equal(attentionUpdate(waiting, working)?.trigger, ATTENTION_TRIGGER.STATUS_CHANGED);
   assert.equal(attentionUpdate(waiting, working)?.previousStatus, SESSION_STATUS.WORKING);
-  assert.equal(
-    attentionUpdate(session(claude, "review", { recap: "Claude Code waiting." }), working)?.trigger,
-    ATTENTION_TRIGGER.RECAP_CHANGED,
-  );
 
   const held = attentionUpdate(
     session(claude, "held", {
@@ -122,26 +116,6 @@ test("derives an update only when a session reports something new", () => {
   assert.ok(held);
   assert.equal(held?.holdingForDeveloper, true);
   assert.doesNotMatch(attentionUpdateInput(held), /holdingForDeveloper/);
-});
-
-test("an update carries the recap's excerpt, and a change past it is no development", () => {
-  const opening = `Waiting on the rounding rule. ${"y".repeat(700)}`;
-  const before = session(claude, "review", { recap: opening });
-
-  const update = attentionUpdate(before);
-  assert.equal(update?.recap, opening.slice(0, maximumSessionRecapExcerptLength));
-
-  // A recap that differs only past the excerpt reads identical to the
-  // evaluator, so it opens no review the model would have to judge blind.
-  const changedPastExcerpt = session(claude, "review", { recap: `${opening} and one more word` });
-  assert.equal(attentionUpdate(changedPastExcerpt, before), undefined);
-
-  // A change inside the excerpt is still the development it always was.
-  const changedInsideExcerpt = session(claude, "review", { recap: `Settled. ${opening}` });
-  assert.equal(
-    attentionUpdate(changedInsideExcerpt, before)?.trigger,
-    ATTENTION_TRIGGER.RECAP_CHANGED,
-  );
 });
 
 test("the update names the workspace a chat belongs to, and only by its name", () => {
@@ -179,7 +153,7 @@ test("rejects model output that does not satisfy the decision contract", () => {
   // anyway are dropped rather than kept: the voice writes what is said.
   assert.deepEqual(
     attentionDecisionFromModel(
-      { disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN, summary: SPOKEN_RECAP },
+      { disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN, summary: SPOKEN_SENTENCE },
       DECIDED_AT,
     ),
     speakDecision(),
@@ -223,7 +197,10 @@ test("deduplicates repeated speech per session without composing identity keys",
   );
   // The decision carries no words, so what tells fresh news from a repeat is
   // the observed state the decision was reached on.
-  assert.equal(ledger.shouldSpeak(review, speakDecision(), spokenUpdate(OTHER_RECAP)), true);
+  assert.equal(
+    ledger.shouldSpeak(review, speakDecision(), spokenUpdate(SESSION_STATUS.COMPLETE)),
+    true,
+  );
   assert.equal(
     ledger.shouldSpeak(
       review,
@@ -457,8 +434,8 @@ test("drops a decision about a failure the session has already replaced", async 
     status: SESSION_STATUS.ERROR,
     detail: { error: "429 rate limit exceeded" },
   });
-  // Same status and no recap either side, so the failure itself is the only
-  // thing that moved. A trigger that can open a review has to be able to
+  // Same status either side, so the failure itself is the only thing that
+  // moved. A trigger that can open a review has to be able to
   // supersede one, or Luke speaks about a failure that is no longer true.
   const disconnected = session(claude, "review", {
     status: SESSION_STATUS.ERROR,
@@ -824,7 +801,6 @@ test("sends bounded material and withholds what a decision does not turn on", as
   await reviewer.review([
     session(claude, "review", {
       title: `Split the checkout total ${TRANSCRIPT_SECRET}`.padEnd(400, "x"),
-      recap: `Waiting on the rounding rule. ${TRANSCRIPT_SECRET}`.padEnd(900, "y"),
       detail: {
         repository: "checkout-service",
         branch: "dean/line-items",
@@ -845,13 +821,11 @@ test("sends bounded material and withholds what a decision does not turn on", as
     "providerId",
     "providerName",
     "providerSessionId",
-    "recap",
     "status",
     "title",
     "trigger",
   ]);
   assert.equal(update.title.length, 160, "titles stay bounded by session normalization");
-  assert.equal(update.recap?.length, 500, "recaps leave only as the update's bounded excerpt");
 
   // An evaluator is the one place session material leaves the machine, so the
   // session's own address and the change it published stay behind: they are

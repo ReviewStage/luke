@@ -5,7 +5,7 @@
 An event is a name from `product-events.ts` and properties whose values come
 from `as const` sets in that same file. One reader validates both sides and
 builds its output from the allowlist rather than from what arrived, so a title,
-branch, path, recap, prompt, or anything typed or spoken has no shape it could
+branch, path, prompt, or anything typed or spoken has no shape it could
 travel in. Counts travel as buckets and versions as release versions; no
 property takes free text.
 
@@ -53,7 +53,7 @@ covering them. Three things leave that way and none is validated here:
 
 - The recording itself, which is the rendered panel except for the History
   tab's explicitly blocked `ph-no-capture` subtree — a session's title, branch,
-  recap, and error line, the account's name and address, and a screenshot
+  and error line, the account's name and address, and a screenshot
   attached to the feedback composer all travel because they are drawn. Only
   what is typed into a field is masked, and that is the library's default
   rather than a posture the app keeps. The iOS recording is the app's own

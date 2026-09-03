@@ -8,7 +8,6 @@ private func makeSession(
     status: String = "working",
     workspace: String? = nil,
     branch: String? = nil,
-    recap: String? = nil,
     error: String? = nil
 ) -> RosterSession {
     var json: [String: Any] = [
@@ -19,7 +18,6 @@ private func makeSession(
     ]
     if let workspace { json["workspace"] = workspace }
     if let branch { json["branch"] = branch }
-    if let recap { json["recap"] = recap }
     if let error { json["error"] = error }
     return RosterSession(json: json)!
 }
@@ -54,7 +52,6 @@ final class SessionSearchMatchTests: XCTestCase {
 
     func testMatchesEachField() {
         XCTAssertTrue(SessionSearch.matches(makeSession(title: "Rework onboarding"), tokens: ["onboard"]))
-        XCTAssertTrue(SessionSearch.matches(makeSession(recap: "Opened a draft PR"), tokens: ["draft"]))
         XCTAssertTrue(SessionSearch.matches(makeSession(error: "Rate limit reached"), tokens: ["rate"]))
         XCTAssertTrue(SessionSearch.matches(makeSession(workspace: "luke-ios"), tokens: ["luke-ios"]))
         XCTAssertTrue(SessionSearch.matches(makeSession(branch: "feat/search-header"), tokens: ["search-header"]))

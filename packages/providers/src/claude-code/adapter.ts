@@ -20,7 +20,6 @@ import {
   text,
   type WireRecord,
   wholeNumber,
-  wholeText,
 } from "@sidecar/wire";
 import {
   discoverSessionFiles,
@@ -68,14 +67,6 @@ const CLAUDE_RECORD_TYPE = {
 } as const;
 
 const CLAUDE_SYSTEM_SUBTYPE = {
-  /**
-   * A recap Claude Code composes for a developer who stepped away. It is the
-   * only recap this adapter reports, because it is the only one Claude Code
-   * designates as being *about* the session. The closing text of the last
-   * assistant message would read similarly, but it is the message stream
-   * itself, and a recap reaches the attention evaluator off-machine.
-   */
-  AWAY_SUMMARY: "away_summary",
   API_ERROR: "api_error",
 } as const;
 
@@ -143,7 +134,6 @@ interface ParsedClaudeSessionTail {
   activity?: string;
   aiTitle?: string;
   apiError?: string;
-  awaySummary?: string;
   branch?: string;
   cwd?: string;
   eventType?: ClaudeEventType;
@@ -333,9 +323,6 @@ function readClaudeRecord(record: WireRecord, parsed: ParsedClaudeSessionTail): 
     return;
   }
   if (record.type === CLAUDE_RECORD_TYPE.SYSTEM) {
-    if (record.subtype === CLAUDE_SYSTEM_SUBTYPE.AWAY_SUMMARY) {
-      parsed.awaySummary = wholeText(text(record.content));
-    }
     if (record.subtype === CLAUDE_SYSTEM_SUBTYPE.API_ERROR) {
       parsed.apiError = apiErrorFromRecord(record);
     }
@@ -356,12 +343,10 @@ function readClaudeRecord(record: WireRecord, parsed: ParsedClaudeSessionTail): 
     // is doing. A tool result does not: it sits between one call and the next,
     // and clearing there would blank the line every other record.
     if (eventType === CLAUDE_EVENT_TYPE.RESULT) parsed.activity = undefined;
-    // A new prompt opens a new turn, so the previous turn's recap has stopped
-    // describing this session. Keeping it would let a stale recap outrank the
-    // closing words of the turn that actually just ended.
+    // A new prompt opens a new turn, and the previous turn's last call is not
+    // what this one is running.
     if (eventType === CLAUDE_EVENT_TYPE.USER && !isToolResult(record)) {
       parsed.activity = undefined;
-      parsed.awaySummary = undefined;
     }
     return;
   }
@@ -370,9 +355,8 @@ function readClaudeRecord(record: WireRecord, parsed: ParsedClaudeSessionTail): 
     (block) => block.type === CLAUDE_CONTENT_TYPE.TOOL_USE,
   );
   parsed.model = modelFromRecord(record) ?? parsed.model;
-  // A turn that ended is not running anything. Holding the last call would keep
-  // it ahead of the recap the surface should show instead, so the session would
-  // read as though it were still working.
+  // A turn that ended is not running anything. Holding the last call would
+  // make the session read as though it were still working.
   parsed.activity = turnEnded(parsed)
     ? undefined
     : (activityFromAssistant(record) ?? parsed.activity);
@@ -514,7 +498,6 @@ function observationFromSessionFile(
     status: refined.status,
     ...(completionCause ? { completionCause } : undefined),
     lastActivityAt: refined.lastActivityAt,
-    ...(parsed.awaySummary ? { recap: parsed.awaySummary } : undefined),
     detail: detailFromTail(parsed),
     ...(refined.holdingForDeveloper ? { holdingForDeveloper: true } : undefined),
   };
