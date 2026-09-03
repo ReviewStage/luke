@@ -34,15 +34,21 @@ the date its release was published.
 
 ## 0.5.0 — 2026-09-03
 
+### Onboarding ends at a calendar
+
+Onboarding ends by asking for a calendar — this Mac's own or Google — so
+meeting quiet can hold announcements from your first sign-in. Connect one and
+announcements wait out your meetings; skip it and Luke carries on without.
+([#561](https://github.com/ReviewStage/luke/pull/561))
+
+![The calendar gate at the end of onboarding, offering this Mac's Calendar or Google.](apps/web/public/changelog/0.5.0/onboarding-ends-at-a-calendar.png)
+
 ### Improvements
 
 - Announcements now say what an agent is working on: a short phrase Luke
   derives from the session's transcript as the announcement is delivered,
   instead of the session's title
   ([#649](https://github.com/ReviewStage/luke/pull/649))
-- Onboarding ends by asking for a calendar — this Mac's own or Google — so
-  meeting quiet can hold announcements from your first sign-in
-  ([#561](https://github.com/ReviewStage/luke/pull/561))
 - A Pause announcements switch on the Voice page holds spoken announcements by
   hand; replies in a conversation you opened still speak
   ([#651](https://github.com/ReviewStage/luke/pull/651))
@@ -52,6 +58,10 @@ the date its release was published.
 - Luke names every workspace he creates — your name when you gave one,
   otherwise a short name for the work — instead of Conductor's random-city
   fallback ([#636](https://github.com/ReviewStage/luke/pull/636))
+
+![The Voice page's Pause announcements switch.](apps/web/public/changelog/0.5.0/improvements.png)
+
+![The History tab with the Ask Luke composer at its foot.](apps/web/public/changelog/0.5.0/improvements-history-composer.png)
 
 ### Fixes
 
