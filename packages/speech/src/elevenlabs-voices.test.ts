@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  elevenlabsVoicesUrl,
-  listElevenlabsVoices,
-  MAXIMUM_VOICES,
-  VOICE_LIST_OUTCOME,
-} from "./elevenlabs-voices.js";
-import { MAXIMUM_VOICE_FIELD_LENGTH } from "./speech-provider.js";
+import { elevenlabsVoicesUrl, listElevenlabsVoices, MAXIMUM_VOICES } from "./elevenlabs-voices.js";
+import { ELEVENLABS_OUTCOME, MAXIMUM_VOICE_FIELD_LENGTH } from "./speech-provider.js";
 
 /** One voice record, as ElevenLabs writes it and as the fixtures bend it. */
 interface VoiceFixture {
@@ -69,7 +64,7 @@ test("keeps only the bounded fields a row draws", async () => {
     },
   ]);
   const result = await listElevenlabsVoices({ apiKey: "secret", fetch });
-  assert.equal(result.outcome, VOICE_LIST_OUTCOME.OK);
+  assert.equal(result.outcome, ELEVENLABS_OUTCOME.OK);
   assert.deepEqual(result.voices, [
     { id: "v1", name: "Ada", category: "cloned" },
     { id: "v2", name: "Bee" },
@@ -94,17 +89,8 @@ test("follows the cursor the previous page handed back", async () => {
 test("refuses a page claiming more with no way to ask for it", async () => {
   const { fetch } = recordingFetch([{ voices: [], has_more: true }]);
   const result = await listElevenlabsVoices({ apiKey: "secret", fetch });
-  assert.equal(result.outcome, VOICE_LIST_OUTCOME.MALFORMED_RESPONSE);
+  assert.equal(result.outcome, ELEVENLABS_OUTCOME.MALFORMED_RESPONSE);
   assert.equal(result.voices, undefined);
-});
-
-test("refuses a cursor it has already followed", async () => {
-  const { fetch, urls } = recordingFetch([
-    { voices: [{ voice_id: "v1", name: "Ada" }], has_more: true, next_page_token: "loop" },
-  ]);
-  const result = await listElevenlabsVoices({ apiKey: "secret", fetch });
-  assert.equal(result.outcome, VOICE_LIST_OUTCOME.MALFORMED_RESPONSE);
-  assert.equal(urls.length, 2);
 });
 
 test("stops at the cap rather than reading a list that never ends", async () => {
@@ -121,22 +107,21 @@ test("stops at the cap rather than reading a list that never ends", async () => 
     });
   };
   const result = await listElevenlabsVoices({ apiKey: "secret", fetch });
-  assert.equal(result.outcome, VOICE_LIST_OUTCOME.OK);
+  assert.equal(result.outcome, ELEVENLABS_OUTCOME.OK);
   assert.equal(result.voices?.length, MAXIMUM_VOICES);
 });
 
 test("tells a refused key apart from any other rejection", async () => {
   for (const [status, outcome] of [
-    [401, VOICE_LIST_OUTCOME.UNAUTHORIZED],
-    [403, VOICE_LIST_OUTCOME.UNAUTHORIZED],
-    [500, VOICE_LIST_OUTCOME.HTTP_ERROR],
+    [401, ELEVENLABS_OUTCOME.UNAUTHORIZED],
+    [403, ELEVENLABS_OUTCOME.UNAUTHORIZED],
+    [500, ELEVENLABS_OUTCOME.HTTP_ERROR],
   ] as const) {
     const result = await listElevenlabsVoices({
       apiKey: "secret",
       fetch: async () => jsonResponse({}, status),
     });
     assert.equal(result.outcome, outcome);
-    assert.equal(result.detail, String(status));
   }
 });
 
@@ -147,8 +132,7 @@ test("reports a network failure without a list", async () => {
       throw new TypeError("offline");
     },
   });
-  assert.equal(result.outcome, VOICE_LIST_OUTCOME.NETWORK_ERROR);
-  assert.equal(result.detail, "TypeError");
+  assert.equal(result.outcome, ELEVENLABS_OUTCOME.NETWORK_ERROR);
   assert.equal(result.voices, undefined);
 });
 
@@ -157,7 +141,7 @@ test("reports an answer that is not a voice list", async () => {
     apiKey: "secret",
     fetch: async () => new Response("not json", { status: 200 }),
   });
-  assert.equal(result.outcome, VOICE_LIST_OUTCOME.MALFORMED_RESPONSE);
+  assert.equal(result.outcome, ELEVENLABS_OUTCOME.MALFORMED_RESPONSE);
 });
 
 test("reads an account with no personal voices as an empty list", async () => {
@@ -165,6 +149,6 @@ test("reads an account with no personal voices as an empty list", async () => {
     apiKey: "secret",
     fetch: async () => jsonResponse({ voices: [] }),
   });
-  assert.equal(result.outcome, VOICE_LIST_OUTCOME.OK);
+  assert.equal(result.outcome, ELEVENLABS_OUTCOME.OK);
   assert.deepEqual(result.voices, []);
 });

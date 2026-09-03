@@ -6,6 +6,11 @@ import {
   type UnparsedWireValue,
 } from "@sidecar/wire";
 import { ELEVENLABS_API_ORIGIN, ELEVENLABS_KEY_HEADER } from "./elevenlabs-voices.js";
+import {
+  ELEVENLABS_OUTCOME,
+  type ElevenlabsFailure,
+  type ElevenlabsOutcome,
+} from "./speech-provider.js";
 
 /**
  * Minting the one credential a speech socket may carry.
@@ -30,36 +35,22 @@ export const ELEVENLABS_TOKEN_URL = new URL(
   ELEVENLABS_API_ORIGIN,
 ).toString();
 
-export const TOKEN_MINT_OUTCOME = {
-  OK: "ok",
-  /** The key was refused: revoked, or missing the `text_to_speech` permission. */
-  UNAUTHORIZED: "unauthorized",
-  HTTP_ERROR: "http-error",
-  NETWORK_ERROR: "network-error",
-  MALFORMED_RESPONSE: "malformed-response",
-} as const;
-
-export type TokenMintOutcome = (typeof TOKEN_MINT_OUTCOME)[keyof typeof TOKEN_MINT_OUTCOME];
-
 export interface TokenMintResult {
-  outcome: TokenMintOutcome;
+  outcome: ElevenlabsOutcome;
   /** Present on `ok`, and only then. */
   token?: string;
-  /** A status code or error name. Never a response body, and never the key. */
-  detail?: string;
 }
 
 const TOKEN_MINT_EXPLANATIONS = {
-  [TOKEN_MINT_OUTCOME.OK]: "A single-use speech token was minted.",
-  [TOKEN_MINT_OUTCOME.UNAUTHORIZED]:
+  [ELEVENLABS_OUTCOME.UNAUTHORIZED]:
     "ElevenLabs refused the key. It may have been revoked, or it may not carry the Text to speech permission.",
-  [TOKEN_MINT_OUTCOME.HTTP_ERROR]: "ElevenLabs rejected the token request.",
-  [TOKEN_MINT_OUTCOME.NETWORK_ERROR]: "The token request did not complete.",
-  [TOKEN_MINT_OUTCOME.MALFORMED_RESPONSE]: "ElevenLabs answered without a usable token.",
-} satisfies Record<TokenMintOutcome, string>;
+  [ELEVENLABS_OUTCOME.HTTP_ERROR]: "ElevenLabs rejected the token request.",
+  [ELEVENLABS_OUTCOME.NETWORK_ERROR]: "The token request did not complete.",
+  [ELEVENLABS_OUTCOME.MALFORMED_RESPONSE]: "ElevenLabs answered without a usable token.",
+} satisfies Record<ElevenlabsFailure, string>;
 
-/** Explains a mint outcome in one sentence, for the panel and for logs. */
-export function tokenMintExplanation(outcome: TokenMintOutcome): string {
+/** Explains a failed mint in one sentence, for the panel and for logs. */
+export function tokenMintExplanation(outcome: ElevenlabsFailure): string {
   return TOKEN_MINT_EXPLANATIONS[outcome];
 }
 
@@ -81,19 +72,15 @@ export async function mintElevenlabsToken(options: TokenMintOptions): Promise<To
       method: "POST",
       headers: { [ELEVENLABS_KEY_HEADER]: options.apiKey },
     });
-  } catch (error) {
-    return {
-      outcome: TOKEN_MINT_OUTCOME.NETWORK_ERROR,
-      detail: error instanceof Error ? error.name : undefined,
-    };
+  } catch {
+    return { outcome: ELEVENLABS_OUTCOME.NETWORK_ERROR };
   }
 
   if (!response.ok) {
     const unauthorized =
       response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN;
     return {
-      outcome: unauthorized ? TOKEN_MINT_OUTCOME.UNAUTHORIZED : TOKEN_MINT_OUTCOME.HTTP_ERROR,
-      detail: String(response.status),
+      outcome: unauthorized ? ELEVENLABS_OUTCOME.UNAUTHORIZED : ELEVENLABS_OUTCOME.HTTP_ERROR,
     };
   }
 
@@ -102,10 +89,10 @@ export async function mintElevenlabsToken(options: TokenMintOptions): Promise<To
     // SAFETY: An untrusted body is unparsed wire until `elevenlabsTokenFromResponse` reads it.
     payload = (await response.json()) as UnparsedWireValue;
   } catch {
-    return { outcome: TOKEN_MINT_OUTCOME.MALFORMED_RESPONSE };
+    return { outcome: ELEVENLABS_OUTCOME.MALFORMED_RESPONSE };
   }
 
   const token = elevenlabsTokenFromResponse(payload);
-  if (!token) return { outcome: TOKEN_MINT_OUTCOME.MALFORMED_RESPONSE };
-  return { outcome: TOKEN_MINT_OUTCOME.OK, token };
+  if (!token) return { outcome: ELEVENLABS_OUTCOME.MALFORMED_RESPONSE };
+  return { outcome: ELEVENLABS_OUTCOME.OK, token };
 }

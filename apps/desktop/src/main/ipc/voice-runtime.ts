@@ -6,12 +6,11 @@ import {
 import { CREDENTIAL_CONNECTION, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
 import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import {
+  ELEVENLABS_OUTCOME,
   ELEVENLABS_VOICES_URL,
   listElevenlabsVoices,
   mintElevenlabsToken,
-  TOKEN_MINT_OUTCOME,
   tokenMintExplanation,
-  VOICE_LIST_OUTCOME,
   voiceListExplanation,
 } from "@sidecar/speech";
 import type { HostedUsageReader, RealtimeCredentialMinter } from "@sidecar/voice";
@@ -68,13 +67,12 @@ export interface VoiceRuntimeIpcDependencies {
  * shape a refused key produces, so the page draws one thing either way.
  */
 const NO_SPEECH_KEY_VOICES = {
-  outcome: VOICE_LIST_OUTCOME.UNAUTHORIZED,
   voices: [],
   explanation: "No ElevenLabs key is connected, so there are no voices to read.",
 } as const;
 
 const NO_SPEECH_KEY_TOKEN = {
-  outcome: TOKEN_MINT_OUTCOME.UNAUTHORIZED,
+  outcome: ELEVENLABS_OUTCOME.UNAUTHORIZED,
   explanation: "No ElevenLabs key is connected, so Luke cannot speak through it.",
 } as const;
 
@@ -132,13 +130,9 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
         const apiKey = await speechKey();
         if (!apiKey) return NO_SPEECH_KEY_VOICES;
         const result = await listElevenlabsVoices({ apiKey, fetch: dependencies.fetch ?? fetch });
-        return {
-          outcome: result.outcome,
-          voices: result.voices ?? [],
-          ...(result.outcome === VOICE_LIST_OUTCOME.OK
-            ? undefined
-            : { explanation: voiceListExplanation(result.outcome) }),
-        };
+        return result.outcome === ELEVENLABS_OUTCOME.OK
+          ? { voices: result.voices ?? [] }
+          : { voices: [], explanation: voiceListExplanation(result.outcome) };
       },
       async mintSpeechToken() {
         const apiKey = await speechKey();
@@ -146,13 +140,9 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
         const result = await mintElevenlabsToken({ apiKey, fetch: dependencies.fetch ?? fetch });
         // Only the token travels. The outcome and its sentence say what
         // happened; the key that produced it stays in this process.
-        return {
-          outcome: result.outcome,
-          ...(result.token ? { token: result.token } : undefined),
-          ...(result.outcome === TOKEN_MINT_OUTCOME.OK
-            ? undefined
-            : { explanation: tokenMintExplanation(result.outcome) }),
-        };
+        return result.outcome === ELEVENLABS_OUTCOME.OK
+          ? { outcome: result.outcome, ...(result.token ? { token: result.token } : undefined) }
+          : { outcome: result.outcome, explanation: tokenMintExplanation(result.outcome) };
       },
       requestHostedUsage: () => dependencies.hostedUsageReader()?.read(),
       recordAgentTrace(_context, trace) {

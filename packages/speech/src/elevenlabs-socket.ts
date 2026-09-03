@@ -137,15 +137,7 @@ const PCM16_SCALE = 0x8000;
  * dropped, because half of one is not a quieter sound, it is a click.
  */
 export function decodeSpeechAudio(base64: string): Float32Array {
-  const binary = atob(base64);
-  const sampleCount = Math.floor(binary.length / 2);
-  const samples = new Float32Array(sampleCount);
-  for (let index = 0; index < sampleCount; index += 1) {
-    const low = binary.charCodeAt(index * 2);
-    const high = binary.charCodeAt(index * 2 + 1);
-    const unsigned = (high << 8) | low;
-    const signed = unsigned >= PCM16_SCALE ? unsigned - 0x10000 : unsigned;
-    samples[index] = signed / PCM16_SCALE;
-  }
-  return samples;
+  const bytes = Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
+  const pcm = new Int16Array(bytes.buffer, 0, bytes.length >> 1);
+  return Float32Array.from(pcm, (sample) => sample / PCM16_SCALE);
 }

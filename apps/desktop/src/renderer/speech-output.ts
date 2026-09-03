@@ -2,6 +2,7 @@ import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabula
 import type { ScheduledTimer } from "@sidecar/realtime";
 import {
   decodeSpeechAudio,
+  ELEVENLABS_OUTCOME,
   ELEVENLABS_SAMPLE_RATE,
   elevenlabsSpeechUrl,
   MAXIMUM_SPEECH_ERROR_LENGTH,
@@ -9,7 +10,6 @@ import {
   speechCloseFrame,
   speechOpeningFrame,
   speechTextFrame,
-  TOKEN_MINT_OUTCOME,
 } from "@sidecar/speech";
 import type { WireRecord } from "@sidecar/wire";
 import type { SpeechTokenAnswer } from "#shared/contracts";
@@ -104,7 +104,6 @@ export class WebAudioSpeechSink implements SpeechAudioSink {
   }
 
   play(samples: Float32Array): void {
-    if (samples.length === 0) return;
     // A context that has never been resumed schedules nothing; the press that
     // opened the turn is the gesture this rides on.
     void this.#context.resume().catch(() => undefined);
@@ -312,7 +311,7 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
       type: SPEECH_TRACE.MINT,
       outcome: answer?.outcome ?? "threw",
     });
-    if (!answer || answer.outcome !== TOKEN_MINT_OUTCOME.OK || !answer.token) {
+    if (!answer || answer.outcome !== ELEVENLABS_OUTCOME.OK || !answer.token) {
       this.#fail(answer?.explanation ?? "Luke could not reach the speech service.");
       return;
     }
@@ -323,7 +322,7 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
     // error would ever arrive to settle, which is a reply that simply stops.
     let socket: SpeechSocket;
     try {
-      socket = (this.#options.createSocket ?? defaultSocket)(url);
+      socket = this.#options.createSocket?.(url) ?? new WebSocket(url);
     } catch (error) {
       this.#fail(
         `Luke could not open the speech connection: ${error instanceof Error ? error.message : "the connection was refused"}`,
@@ -346,10 +345,8 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
       if (generation !== this.#generation) return;
       this.#readFrame(event.data);
     };
-    socket.onerror = () => {
-      // Every socket error is followed by a close, and the close is the one
-      // that knows why. Reporting here would win the race and say less.
-    };
+    // No `onerror`: every socket error is followed by a close, and the close
+    // is the one that knows why. Reporting there would win the race and say less.
     socket.onclose = (event) => {
       if (generation !== this.#generation) return;
       // A close after the service's last word is the ordinary ending, and the
@@ -455,8 +452,4 @@ export class ElevenLabsSpeech implements SpeechSynthesizer {
     (this.#options.cancelScheduled ?? clearTimeout)(this.#drainTimer as number);
     this.#drainTimer = undefined;
   }
-}
-
-function defaultSocket(url: string): SpeechSocket {
-  return new WebSocket(url);
 }

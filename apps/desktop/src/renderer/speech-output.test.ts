@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TOKEN_MINT_OUTCOME } from "@sidecar/speech";
+import { ELEVENLABS_OUTCOME } from "@sidecar/speech";
 import type { SpeechTokenAnswer } from "#shared/contracts";
 import { ElevenLabsSpeech, type SpeechAudioSink, type SpeechSocket } from "./speech-output";
 
@@ -106,7 +106,7 @@ function harness(
     mintToken: async () => {
       mints += 1;
       if (options.failMint) throw new Error("offline");
-      return options.token ?? { outcome: TOKEN_MINT_OUTCOME.OK, token: `single-use-${mints}` };
+      return options.token ?? { outcome: ELEVENLABS_OUTCOME.OK, token: `single-use-${mints}` };
     },
     createSocket: (url) => {
       urls.push(url);
@@ -290,7 +290,7 @@ test("an error frame carrying only its sentence is still a failure", async () =>
 
 test("a refused mint reports the service's own sentence and owes nothing", async () => {
   const h = harness({
-    token: { outcome: TOKEN_MINT_OUTCOME.UNAUTHORIZED, explanation: "ElevenLabs refused the key." },
+    token: { outcome: ELEVENLABS_OUTCOME.UNAUTHORIZED, explanation: "ElevenLabs refused the key." },
   });
   h.speech.start();
   h.speech.append("Hello");

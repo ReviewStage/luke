@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { VOICE_LIST_OUTCOME } from "@sidecar/speech";
 import type { SpeechVoicesAnswer } from "#shared/contracts";
 import { SPEECH_VOICES_STATE, speechVoicesView } from "./speech-voices";
 
@@ -8,7 +7,7 @@ const ADA = { id: "v1", name: "Ada" };
 const BEE = { id: "v2", name: "Bee" };
 
 function answer(overrides: Partial<SpeechVoicesAnswer> = {}): SpeechVoicesAnswer {
-  return { outcome: VOICE_LIST_OUTCOME.OK, voices: [ADA, BEE], ...overrides };
+  return { voices: [ADA, BEE], ...overrides };
 }
 
 test("says where a key goes before it offers anything to choose", () => {
@@ -28,7 +27,6 @@ test("a refresh under way is a refresh, whatever the last answer said", () => {
     connected: true,
     loading: true,
     answer: answer({
-      outcome: VOICE_LIST_OUTCOME.UNAUTHORIZED,
       voices: [],
       explanation: "refused",
     }),
@@ -51,7 +49,6 @@ test("a failed read draws its own sentence and no list", () => {
     connected: true,
     loading: false,
     answer: {
-      outcome: VOICE_LIST_OUTCOME.UNAUTHORIZED,
       voices: [],
       explanation: "ElevenLabs refused the key.",
     },

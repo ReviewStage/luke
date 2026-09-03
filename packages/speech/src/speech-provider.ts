@@ -17,13 +17,28 @@ export const SPEECH_PROVIDER = {
 
 export type SpeechProvider = (typeof SPEECH_PROVIDER)[keyof typeof SPEECH_PROVIDER];
 
-/** Settings offers the providers in this order, the default first. */
-export const SPEECH_PROVIDER_LIST: readonly SpeechProvider[] = Object.values(SPEECH_PROVIDER);
-
 /** Guards a provider arriving from storage or IPC. */
 export function isSpeechProvider(value: UnparsedWireValue): value is SpeechProvider {
   return value === SPEECH_PROVIDER.OPENAI || value === SPEECH_PROVIDER.ELEVENLABS;
 }
+
+/**
+ * How one call to ElevenLabs ended, shared by the voice list and the token
+ * mint because the two fail in exactly the same ways.
+ */
+export const ELEVENLABS_OUTCOME = {
+  OK: "ok",
+  /** The key was refused: revoked, or missing the permission the call needs. */
+  UNAUTHORIZED: "unauthorized",
+  HTTP_ERROR: "http-error",
+  NETWORK_ERROR: "network-error",
+  MALFORMED_RESPONSE: "malformed-response",
+} as const;
+
+export type ElevenlabsOutcome = (typeof ELEVENLABS_OUTCOME)[keyof typeof ELEVENLABS_OUTCOME];
+
+/** The outcomes that need a sentence on the page; `ok` draws the result instead. */
+export type ElevenlabsFailure = Exclude<ElevenlabsOutcome, typeof ELEVENLABS_OUTCOME.OK>;
 
 /**
  * A voice as the panel draws it: the three bounded fields the list read keeps

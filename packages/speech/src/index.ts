@@ -1,7 +1,5 @@
 export {
   decodeSpeechAudio,
-  ELEVENLABS_MODEL_ID,
-  ELEVENLABS_OUTPUT_FORMAT,
   ELEVENLABS_SAMPLE_RATE,
   elevenlabsSpeechUrl,
   MAXIMUM_SPEECH_ERROR_LENGTH,
@@ -12,32 +10,24 @@ export {
   speechTextFrame,
 } from "./elevenlabs-socket.js";
 export {
-  ELEVENLABS_TOKEN_URL,
-  elevenlabsTokenFromResponse,
   mintElevenlabsToken,
-  TOKEN_MINT_OUTCOME,
-  type TokenMintOutcome,
   type TokenMintResult,
   tokenMintExplanation,
 } from "./elevenlabs-token.js";
 export {
-  ELEVENLABS_API_ORIGIN,
-  ELEVENLABS_KEY_HEADER,
   ELEVENLABS_VOICES_URL,
-  elevenlabsVoicesUrl,
   listElevenlabsVoices,
-  MAXIMUM_VOICES,
-  VOICE_LIST_OUTCOME,
-  type VoiceListOutcome,
   type VoiceListResult,
   voiceListExplanation,
 } from "./elevenlabs-voices.js";
 export {
+  ELEVENLABS_OUTCOME,
+  type ElevenlabsFailure,
+  type ElevenlabsOutcome,
   isSpeechProvider,
   isSpeechVoiceId,
   MAXIMUM_VOICE_FIELD_LENGTH,
   SPEECH_PROVIDER,
-  SPEECH_PROVIDER_LIST,
   type SpeechProvider,
   type SpeechVoice,
 } from "./speech-provider.js";

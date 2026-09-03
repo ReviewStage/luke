@@ -159,10 +159,10 @@ const SPEECH_PROVIDER_CHOICE = {
   [SPEECH_PROVIDER.ELEVENLABS]: "ElevenLabs",
 };
 
-const SPEECH_PROVIDER_BY_CHOICE = new Map<string, SpeechProvider>([
-  [SPEECH_PROVIDER_CHOICE[SPEECH_PROVIDER.OPENAI], SPEECH_PROVIDER.OPENAI],
-  [SPEECH_PROVIDER_CHOICE[SPEECH_PROVIDER.ELEVENLABS], SPEECH_PROVIDER.ELEVENLABS],
-]);
+const SPEECH_PROVIDER_BY_CHOICE = new Map<string, SpeechProvider>(
+  // SAFETY: The keys of SPEECH_PROVIDER_CHOICE are exactly the SPEECH_PROVIDER values.
+  Object.entries(SPEECH_PROVIDER_CHOICE).map(([id, word]) => [word, id as SpeechProvider]),
+);
 
 const VOICE_SPEED_WORD = {
   SLOW: "slow",

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TOKEN_MINT_OUTCOME, VOICE_LIST_OUTCOME } from "@sidecar/speech";
+import { ELEVENLABS_OUTCOME } from "@sidecar/speech";
 import type { IpcMainInvokeEvent } from "electron";
 import { BRIDGE } from "#shared/bridge";
 import type { SpeechTokenAnswer, SpeechVoicesAnswer } from "#shared/contracts";
@@ -99,11 +99,8 @@ test("the long-lived key authenticates the reads and never crosses the bridge", 
   // And nothing that came back carries it.
   assert.equal(JSON.stringify(voices).includes(SPEECH_KEY), false);
   assert.equal(JSON.stringify(token).includes(SPEECH_KEY), false);
-  assert.deepEqual(voices, {
-    outcome: VOICE_LIST_OUTCOME.OK,
-    voices: [{ id: "v1", name: "Ada" }],
-  });
-  assert.deepEqual(token, { outcome: TOKEN_MINT_OUTCOME.OK, token: "single-use" });
+  assert.deepEqual(voices, { voices: [{ id: "v1", name: "Ada" }] });
+  assert.deepEqual(token, { outcome: ELEVENLABS_OUTCOME.OK, token: "single-use" });
 });
 
 test("no key connected reads nothing and mints nothing", async () => {
@@ -117,12 +114,11 @@ test("no key connected reads nothing and mints nothing", async () => {
   });
 
   assert.deepEqual(await invoke(BRIDGE.listSpeechVoices.channel), {
-    outcome: VOICE_LIST_OUTCOME.UNAUTHORIZED,
     voices: [],
     explanation: "No ElevenLabs key is connected, so there are no voices to read.",
   });
   assert.deepEqual(await invoke(BRIDGE.mintSpeechToken.channel), {
-    outcome: TOKEN_MINT_OUTCOME.UNAUTHORIZED,
+    outcome: ELEVENLABS_OUTCOME.UNAUTHORIZED,
     explanation: "No ElevenLabs key is connected, so Luke cannot speak through it.",
   });
   assert.equal(asked, false);
@@ -140,7 +136,6 @@ test("a run that reaches no network never reads the key at all", async () => {
 
   const voices = await invoke(BRIDGE.listSpeechVoices.channel);
   assert.deepEqual(voices, {
-    outcome: VOICE_LIST_OUTCOME.UNAUTHORIZED,
     voices: [],
     explanation: "No ElevenLabs key is connected, so there are no voices to read.",
   });
@@ -151,7 +146,6 @@ test("a failed read answers with its own sentence and an empty list", async () =
   const { invoke } = register({ fetch: async () => new Response("", { status: 401 }) });
   const voices = await invoke(BRIDGE.listSpeechVoices.channel);
   assert.deepEqual(voices, {
-    outcome: VOICE_LIST_OUTCOME.UNAUTHORIZED,
     voices: [],
     explanation:
       "ElevenLabs refused the key. It may have been revoked, or it may not carry the Voices read permission.",

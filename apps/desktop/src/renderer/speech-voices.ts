@@ -19,7 +19,7 @@ export const SPEECH_VOICES_STATE = {
   READY: "ready",
 } as const;
 
-export type SpeechVoicesState = (typeof SPEECH_VOICES_STATE)[keyof typeof SPEECH_VOICES_STATE];
+type SpeechVoicesState = (typeof SPEECH_VOICES_STATE)[keyof typeof SPEECH_VOICES_STATE];
 
 export interface SpeechVoicesView {
   state: SpeechVoicesState;

@@ -6,7 +6,13 @@ import {
   text,
   type UnparsedWireValue,
 } from "@sidecar/wire";
-import { MAXIMUM_VOICE_FIELD_LENGTH, type SpeechVoice } from "./speech-provider.js";
+import {
+  ELEVENLABS_OUTCOME,
+  type ElevenlabsFailure,
+  type ElevenlabsOutcome,
+  MAXIMUM_VOICE_FIELD_LENGTH,
+  type SpeechVoice,
+} from "./speech-provider.js";
 
 /**
  * Reading the voices an ElevenLabs account holds. Only the main process calls
@@ -49,40 +55,26 @@ const PAGE_TOKEN_PARAMETER = "next_page_token";
 /**
  * How many voices Luke will read before stopping. Far past any personal
  * library, and there so a server answering `has_more` forever cannot spin the
- * read: the cap is the backstop behind the cursor checks, not a page budget.
+ * read.
  */
 export const MAXIMUM_VOICES = 1_000;
 
-export const VOICE_LIST_OUTCOME = {
-  OK: "ok",
-  /** The key was refused: revoked, or missing the `voices_read` permission. */
-  UNAUTHORIZED: "unauthorized",
-  HTTP_ERROR: "http-error",
-  NETWORK_ERROR: "network-error",
-  MALFORMED_RESPONSE: "malformed-response",
-} as const;
-
-export type VoiceListOutcome = (typeof VOICE_LIST_OUTCOME)[keyof typeof VOICE_LIST_OUTCOME];
-
 export interface VoiceListResult {
-  outcome: VoiceListOutcome;
+  outcome: ElevenlabsOutcome;
   /** Present on `ok`, and only then; a partial read is a failure, not a short list. */
   voices?: readonly SpeechVoice[];
-  /** A status code or error name. Never a response body, and never the key. */
-  detail?: string;
 }
 
 const VOICE_LIST_EXPLANATIONS = {
-  [VOICE_LIST_OUTCOME.OK]: "The voices were read.",
-  [VOICE_LIST_OUTCOME.UNAUTHORIZED]:
+  [ELEVENLABS_OUTCOME.UNAUTHORIZED]:
     "ElevenLabs refused the key. It may have been revoked, or it may not carry the Voices read permission.",
-  [VOICE_LIST_OUTCOME.HTTP_ERROR]: "ElevenLabs rejected the request for the voice list.",
-  [VOICE_LIST_OUTCOME.NETWORK_ERROR]: "The request for the voice list did not complete.",
-  [VOICE_LIST_OUTCOME.MALFORMED_RESPONSE]: "ElevenLabs answered without a usable voice list.",
-} satisfies Record<VoiceListOutcome, string>;
+  [ELEVENLABS_OUTCOME.HTTP_ERROR]: "ElevenLabs rejected the request for the voice list.",
+  [ELEVENLABS_OUTCOME.NETWORK_ERROR]: "The request for the voice list did not complete.",
+  [ELEVENLABS_OUTCOME.MALFORMED_RESPONSE]: "ElevenLabs answered without a usable voice list.",
+} satisfies Record<ElevenlabsFailure, string>;
 
-/** Explains a voice-list outcome in one sentence, for the panel and for logs. */
-export function voiceListExplanation(outcome: VoiceListOutcome): string {
+/** Explains a failed voice list in one sentence, for the panel and for logs. */
+export function voiceListExplanation(outcome: ElevenlabsFailure): string {
   return VOICE_LIST_EXPLANATIONS[outcome];
 }
 
@@ -145,16 +137,10 @@ export interface VoiceListOptions {
 
 /**
  * Reads every page of the account's personal voices, following the cursor the
- * previous page handed back.
- *
- * A cursor the read has already followed ends it as malformed: a server
- * cycling two tokens would otherwise be read until the cap, and the cap is
- * meant to be unreachable. Deduplicating by id would hide the same fault,
- * which is why the cursor is what is checked.
+ * previous page handed back, up to the cap.
  */
 export async function listElevenlabsVoices(options: VoiceListOptions): Promise<VoiceListResult> {
   const voices: SpeechVoice[] = [];
-  const seenCursors = new Set<string>();
   let pageToken: string | undefined;
 
   for (;;) {
@@ -164,19 +150,15 @@ export async function listElevenlabsVoices(options: VoiceListOptions): Promise<V
         method: "GET",
         headers: { [ELEVENLABS_KEY_HEADER]: options.apiKey },
       });
-    } catch (error) {
-      return {
-        outcome: VOICE_LIST_OUTCOME.NETWORK_ERROR,
-        detail: error instanceof Error ? error.name : undefined,
-      };
+    } catch {
+      return { outcome: ELEVENLABS_OUTCOME.NETWORK_ERROR };
     }
 
     if (!response.ok) {
       const unauthorized =
         response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN;
       return {
-        outcome: unauthorized ? VOICE_LIST_OUTCOME.UNAUTHORIZED : VOICE_LIST_OUTCOME.HTTP_ERROR,
-        detail: String(response.status),
+        outcome: unauthorized ? ELEVENLABS_OUTCOME.UNAUTHORIZED : ELEVENLABS_OUTCOME.HTTP_ERROR,
       };
     }
 
@@ -185,11 +167,11 @@ export async function listElevenlabsVoices(options: VoiceListOptions): Promise<V
       // SAFETY: An untrusted body is unparsed wire until `pageFromPayload` reads it.
       payload = (await response.json()) as UnparsedWireValue;
     } catch {
-      return { outcome: VOICE_LIST_OUTCOME.MALFORMED_RESPONSE };
+      return { outcome: ELEVENLABS_OUTCOME.MALFORMED_RESPONSE };
     }
 
     const page = pageFromPayload(payload);
-    if (!page) return { outcome: VOICE_LIST_OUTCOME.MALFORMED_RESPONSE };
+    if (!page) return { outcome: ELEVENLABS_OUTCOME.MALFORMED_RESPONSE };
 
     for (const voice of page.voices) {
       if (voices.length >= MAXIMUM_VOICES) break;
@@ -197,12 +179,8 @@ export async function listElevenlabsVoices(options: VoiceListOptions): Promise<V
     }
 
     if (page.nextPageToken === undefined || voices.length >= MAXIMUM_VOICES) {
-      return { outcome: VOICE_LIST_OUTCOME.OK, voices };
+      return { outcome: ELEVENLABS_OUTCOME.OK, voices };
     }
-    if (seenCursors.has(page.nextPageToken)) {
-      return { outcome: VOICE_LIST_OUTCOME.MALFORMED_RESPONSE };
-    }
-    seenCursors.add(page.nextPageToken);
     pageToken = page.nextPageToken;
   }
 }

@@ -4,8 +4,8 @@ import {
   ELEVENLABS_TOKEN_URL,
   elevenlabsTokenFromResponse,
   mintElevenlabsToken,
-  TOKEN_MINT_OUTCOME,
 } from "./elevenlabs-token.js";
+import { ELEVENLABS_OUTCOME } from "./speech-provider.js";
 
 test("mints at the documented path, with the key in its own header alone", async () => {
   assert.equal(ELEVENLABS_TOKEN_URL, "https://api.elevenlabs.io/v1/single-use-token/tts_websocket");
@@ -17,7 +17,7 @@ test("mints at the documented path, with the key in its own header alone", async
       return new Response(JSON.stringify({ token: "single-use" }), { status: 200 });
     },
   });
-  assert.equal(result.outcome, TOKEN_MINT_OUTCOME.OK);
+  assert.equal(result.outcome, ELEVENLABS_OUTCOME.OK);
   assert.equal(result.token, "single-use");
   assert.equal(seen?.url, ELEVENLABS_TOKEN_URL);
   assert.equal(seen?.init.method, "POST");
@@ -39,9 +39,9 @@ test("reads a token only from an answer that carries one", () => {
 
 test("tells a refused key apart from any other rejection", async () => {
   for (const [status, outcome] of [
-    [401, TOKEN_MINT_OUTCOME.UNAUTHORIZED],
-    [403, TOKEN_MINT_OUTCOME.UNAUTHORIZED],
-    [502, TOKEN_MINT_OUTCOME.HTTP_ERROR],
+    [401, ELEVENLABS_OUTCOME.UNAUTHORIZED],
+    [403, ELEVENLABS_OUTCOME.UNAUTHORIZED],
+    [502, ELEVENLABS_OUTCOME.HTTP_ERROR],
   ] as const) {
     const result = await mintElevenlabsToken({
       apiKey: "secret",
@@ -59,13 +59,12 @@ test("reports a failed or unusable mint without a token", async () => {
       throw new TypeError("offline");
     },
   });
-  assert.equal(network.outcome, TOKEN_MINT_OUTCOME.NETWORK_ERROR);
-  assert.equal(network.detail, "TypeError");
+  assert.equal(network.outcome, ELEVENLABS_OUTCOME.NETWORK_ERROR);
 
   const malformed = await mintElevenlabsToken({
     apiKey: "secret",
     fetch: async () => new Response(JSON.stringify({}), { status: 200 }),
   });
-  assert.equal(malformed.outcome, TOKEN_MINT_OUTCOME.MALFORMED_RESPONSE);
+  assert.equal(malformed.outcome, ELEVENLABS_OUTCOME.MALFORMED_RESPONSE);
   assert.equal(malformed.token, undefined);
 });
