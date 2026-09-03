@@ -39,7 +39,7 @@ interface NotchWingsProps {
   hasAudioSignal: boolean;
   /** A pressed talk key still waiting for the call it asked to open. */
   voiceOpening: boolean;
-  /** Whether announcements are held, by the pause or a meeting — the face sleeps on it. */
+  /** Whether announcements are held, by the announce switch off or a meeting — the face sleeps on it. */
   announcementsHeld: boolean;
   /**
    * Whether the roster has been read at all yet. Until it has, the wing is

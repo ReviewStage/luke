@@ -483,8 +483,8 @@ export interface VoiceConversationOptions {
   voiceAvailable: boolean | undefined;
   outputSilent: boolean;
   /**
-   * Whether announcements are held — the developer's pause switch is on, or a
-   * meeting on the connected calendar covers now under the meeting quiet.
+   * Whether announcements are held — the developer's announce switch is off,
+   * or a meeting on the connected calendar covers now under the meeting quiet.
    * True silences the announcer at once, the announcement mid-sentence on
    * Luke's own call included.
    */

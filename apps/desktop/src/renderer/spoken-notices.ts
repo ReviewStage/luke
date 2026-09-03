@@ -95,7 +95,7 @@ export interface SpokenNoticeAnnouncerOptions {
  * still standing in the panel.
  *
  * The announcement hold reaches it through {@link setHeld}: a hold beginning
- * — the developer's pause or a meeting's quiet — silences it at once, the
+ * — the announce switch turned off or a meeting's quiet — silences it at once, the
  * announcement mid-sentence on Luke's own call included, and holds it silent
  * until the hold ends.
  *
@@ -130,7 +130,7 @@ export class SpokenNoticeAnnouncer {
 
   /**
    * Follows the announcement hold the main process decided. A hold beginning
-   * — the pause switched on, the quiet switched on mid-meeting, or a meeting
+   * — announcements switched off, the quiet switched on mid-meeting, or a meeting
    * starting under it — is asked-for silence right now: the announcement
    * mid-sentence on Luke's own call is cut off and the call closed rather
    * than left lingering into the hold, and the backlog is dropped rather than

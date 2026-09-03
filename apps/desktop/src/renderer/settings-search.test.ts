@@ -36,7 +36,7 @@ function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
       duckOtherMedia: true,
       preferBuiltInMicrophone: true,
       quietDuringMeetings: true,
-      pauseAnnouncements: false,
+      announceSessions: true,
       calendarSignInAvailable: false,
       appleCalendarAvailable: false,
       linearSignInAvailable: false,
@@ -115,7 +115,10 @@ test("a row a page is not drawing is not offered", () => {
   // draws it.
   const bare = labels(settingsSearchEntries(searchInput({ voiceControlsDrawn: false })));
   assert.ok(!bare.includes("Captions"), "no voice controls until voice can run");
-  assert.ok(!bare.includes("Pause announcements"), "the pause rides the voice controls");
+  assert.ok(
+    !bare.includes("Announce when sessions need you"),
+    "the announce switch rides the voice controls",
+  );
   assert.ok(!bare.includes("Quiet during meetings"), "no quiet row without a calendar account");
   assert.ok(!bare.includes("Linear"), "no Linear row without its OAuth client");
   assert.ok(!bare.includes("Superset"), "no Superset row while it is not installed");

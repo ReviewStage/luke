@@ -16,7 +16,7 @@ export interface FaceContext {
   microphoneLive: boolean;
   /**
    * Whether announcements are held right now. A deterministic fact from the
-   * main process — the developer's own pause switch, or the clock against
+   * main process — the developer's own announce switch off, or the clock against
    * observed meeting intervals — never anything a model decided.
    */
   announcementsHeld: boolean;
