@@ -62,7 +62,7 @@ const OPENAI_ENVIRONMENT = {
 
 export const BRAIN_OPENAI_DEFAULTS = {
   BASE_URL: "https://api.openai.com/v1",
-  MODEL: "gpt-5.6-sol",
+  MODEL: "gpt-5.6-terra",
   REASONING_EFFORT: BRAIN_REASONING_EFFORT.MEDIUM,
   /** A turn may read a transcript, reason over it, and act; the ceiling is for a runaway, not a budget. */
   REQUEST_TIMEOUT_MS: 90_000,
