@@ -652,14 +652,10 @@ struct StatusMark: View {
     let status: String
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 7)
-                .fill(Color.pressedFill)
-                .frame(width: 30, height: 30)
-            Image(systemName: symbol)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(color)
-        }
+        Image(systemName: symbol)
+            .font(.system(size: 15, weight: .medium))
+            .foregroundStyle(color)
+            .frame(width: 30, height: 30)
     }
 
     private var symbol: String {
@@ -811,10 +807,7 @@ struct RosterProviderMark: View {
     let providerId: String
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 7)
-                .fill(Color.pressedFill)
-                .frame(width: 30, height: 30)
+        Group {
             if let provider = VaultProviderID(rawValue: providerId) {
                 ProviderMark(provider: provider)
                     .frame(width: 20, height: 20)
@@ -824,6 +817,7 @@ struct RosterProviderMark: View {
                     .foregroundStyle(Color.inkSecondary)
             }
         }
+        .frame(width: 30, height: 30)
     }
 }
 
