@@ -113,7 +113,7 @@ struct VaultKeyEditor: View {
                 }
 
                 Section {
-                    SecureField("Paste \(credentialNoun.lowercased())", text: $key)
+                    SecureField("Paste \(credentialNoun)", text: $key)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 } footer: {
