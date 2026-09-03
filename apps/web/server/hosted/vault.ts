@@ -119,11 +119,18 @@ export async function handleVaultKeysList(options: VaultKeysListOptions): Promis
 
   const rows = await listKeys(userId);
 
+  // The table outlives the provider set: a key stored for a provider this
+  // build no longer accepts still has a row, and both clients' readers drop
+  // the whole answer on an id they do not know. The list answers only for
+  // the providers the wire contract names, and a stale row is held silently
+  // rather than surfaced as a key that cannot be deleted or used.
   return jsonResponse(HOSTED_HTTP_STATUS.OK, {
-    keys: rows.map((row) => ({
-      providerId: row.providerId,
-      updatedAt: row.updatedAt.getTime(),
-    })),
+    keys: rows
+      .filter((row) => isVaultProviderId(row.providerId))
+      .map((row) => ({
+        providerId: row.providerId,
+        updatedAt: row.updatedAt.getTime(),
+      })),
   });
 }
 

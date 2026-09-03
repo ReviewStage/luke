@@ -217,6 +217,24 @@ test("the list answer never contains ciphertext or plaintext keys", async () => 
   assert.doesNotMatch(JSON.stringify(body), /ciphertext/);
 });
 
+test("the list omits rows stored for a provider the vault no longer accepts", async () => {
+  const response = await handleVaultKeysList(
+    listOptions({
+      listKeys: async () => [
+        { providerId: "cursor", updatedAt: NOW_DATE },
+        { providerId: VAULT_PROVIDER_ID.CONDUCTOR, updatedAt: NOW_DATE },
+        { providerId: "devin", updatedAt: NOW_DATE },
+      ],
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(body.keys, [
+    { providerId: VAULT_PROVIDER_ID.CONDUCTOR, updatedAt: NOW_DATE.getTime() },
+  ]);
+});
+
 test("the list calls the seam with the resolved user id", async () => {
   let calledWithUserId: string | undefined;
 
