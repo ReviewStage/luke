@@ -163,7 +163,7 @@ struct SessionsView: View {
         .toolbar {
             // Search and list options flank the primary voice action. Keeping
             // all three in the system bar gives each control native Liquid
-            // Glass while the microphone remains centered and easy to reach.
+            // Glass while Luke remains centered and easy to reach.
             if #available(iOS 26.0, *) {
                 DefaultToolbarItem(kind: .search, placement: .bottomBar)
                 ToolbarSpacer(.flexible, placement: .bottomBar)
@@ -208,14 +208,18 @@ struct SessionsView: View {
     private var voiceButton: some View {
         if #available(iOS 26.0, *) {
             NavigationLink(value: "voice") {
-                Image(systemName: "mic.fill")
+                LukeMark()
+                    .foregroundStyle(Color.ink)
+                    .frame(width: 22, height: 20)
             }
-            .buttonStyle(.glassProminent)
+            .buttonStyle(.glass)
             .buttonBorderShape(.circle)
             .accessibilityLabel("Talk to Luke")
         } else {
             NavigationLink(value: "voice") {
-                Image(systemName: "mic.fill")
+                LukeMark()
+                    .foregroundStyle(Color.ink)
+                    .frame(width: 22, height: 20)
             }
             .accessibilityLabel("Talk to Luke")
         }
