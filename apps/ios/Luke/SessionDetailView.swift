@@ -89,6 +89,12 @@ struct SessionDetailView: View {
     private static let pollSeconds: UInt64 = 10
     private static let maximumPollReads = 5
     private static let conversationEndId = "conversation-end"
+    /// How long the opening layout gets to settle before the end is pinned a
+    /// second time, and how long the top sentinel must stay visible before
+    /// its ask counts — both measured against the churn of a tall thread
+    /// realizing its rows, which is over well inside half a second.
+    private static let layoutSettleNanoseconds: UInt64 = 300_000_000
+    private static let sentinelDwellNanoseconds: UInt64 = 450_000_000
 
     var body: some View {
         // Anchored like Messages: the screen opens at the conversation's end,
@@ -107,7 +113,18 @@ struct SessionDetailView: View {
                         ProgressView()
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
-                            .onAppear { loadOlder() }
+                            // A dwell, not a glance: a lazy row can flash
+                            // realized while a tall thread's layout churns,
+                            // and a page loaded off that flash re-anchors the
+                            // opened screen into history. Scrolling away
+                            // cancels the wait, so only a reader actually
+                            // holding the top asks for more.
+                            .task {
+                                try? await Task.sleep(
+                                    nanoseconds: Self.sentinelDwellNanoseconds)
+                                guard !Task.isCancelled else { return }
+                                loadOlder()
+                            }
                     }
                     if conversation.isEmpty {
                         // While the opening read is in flight the screen says
@@ -183,9 +200,17 @@ struct SessionDetailView: View {
                 switch intent {
                 case .end:
                     // The marker sits below pending sends and fetched thread
-                    // alike, so the open lands on whichever is newest.
+                    // alike, so the open lands on whichever is newest. A very
+                    // long newest message can finish sizing after this jump,
+                    // growing the content below the landed offset, so one
+                    // late second jump pins the end once layout has settled —
+                    // and only then may the history sentinel exist.
                     proxy.scrollTo(Self.conversationEndId, anchor: .bottom)
-                    openSettled = true
+                    Task {
+                        try? await Task.sleep(nanoseconds: Self.layoutSettleNanoseconds)
+                        proxy.scrollTo(Self.conversationEndId, anchor: .bottom)
+                        openSettled = true
+                    }
                 case .anchor(let id):
                     proxy.scrollTo(id, anchor: .top)
                 }
