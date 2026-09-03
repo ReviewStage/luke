@@ -28,9 +28,12 @@ private final class VoiceSessionModel {
     private var session: RealtimeSession?
     private var activeTurnId: UUID?
     private var activeResponseMessageId: UUID?
-    // Cleared by stop() before close() so an explicit stop does not trigger
-    // an auto-reconnect through the onStatus(.idle) path.
+    // Kept while this screen is alive so a direct press can reopen a socket
+    // after the three-minute idle close. An idle edge itself never remints.
     private var reconnectCallback: (@MainActor () async -> Void)?
+    private var reconnectTurnTask: Task<Void, Never>?
+    private var reconnectingForTurn = false
+    private var endTurnAfterReconnect = false
 
     func start(accountSession: AccountSession) async {
         guard session == nil else { return }
@@ -48,22 +51,15 @@ private final class VoiceSessionModel {
             },
             onStatus: { [weak self] newStatus in
                 self?.status = newStatus
-                // Clear the session reference when it goes idle so start() can
-                // reconnect. If reconnectCallback is set (not a stop() path),
-                // automatically restart so the button becomes live again.
+                // An idle timeout releases the socket and quota until the
+                // developer explicitly presses again.
                 if newStatus == .idle {
                     self?.session = nil
-                    if let reconnect = self?.reconnectCallback {
-                        Task { await reconnect() }
-                    }
                 }
             },
             onCaption: { [weak self] text in self?.receiveCaption(text) },
             onSpokenAsk: { [weak self] text in self?.receiveSpokenAsk(text) },
             onError: { [weak self] message in
-                // Stop auto-reconnect on errors — a quota failure or auth error
-                // would loop forever if we let onStatus(.idle) trigger a retry.
-                self?.reconnectCallback = nil
                 self?.errorMessage = message ?? "Connection error"
             },
             onRecoverableError: { [weak self] message in
@@ -92,8 +88,10 @@ private final class VoiceSessionModel {
     }
 
     func stop() {
-        // Nil the callback before close() so the .idle status change triggered
-        // by close() does not schedule a reconnect on an explicit stop.
+        reconnectTurnTask?.cancel()
+        reconnectTurnTask = nil
+        reconnectingForTurn = false
+        endTurnAfterReconnect = false
         reconnectCallback = nil
         session?.close()
         session = nil
@@ -103,9 +101,34 @@ private final class VoiceSessionModel {
         errorMessage = nil
         activeTurnId = UUID()
         activeResponseMessageId = nil
-        session?.beginTurn()
+        if let session {
+            session.beginTurn()
+            return
+        }
+        guard let reconnect = reconnectCallback, !reconnectingForTurn else { return }
+        reconnectingForTurn = true
+        endTurnAfterReconnect = false
+        status = .connecting
+        reconnectTurnTask = Task { [weak self] in
+            await reconnect()
+            guard let self, !Task.isCancelled, self.reconnectingForTurn else { return }
+            self.session?.beginTurn()
+            self.reconnectingForTurn = false
+            self.reconnectTurnTask = nil
+            if self.endTurnAfterReconnect {
+                self.endTurnAfterReconnect = false
+                self.session?.endTurn()
+            }
+        }
     }
-    func endTurn() { session?.endTurn() }
+
+    func endTurn() {
+        if reconnectingForTurn {
+            endTurnAfterReconnect = true
+        } else {
+            session?.endTurn()
+        }
+    }
 
     private func receiveSpokenAsk(_ text: String) {
         let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -265,6 +288,7 @@ struct VoiceView: View {
         // during .listening would cancel the in-flight DragGesture and fire
         // onEnded immediately, collapsing every hold into an instant tap.
         let canTalk = model.status == .ready
+            || model.status == .idle
             || model.status == .connecting
             || model.status == .listening
             || model.status == .speaking
@@ -361,7 +385,7 @@ struct VoiceView: View {
 
     private var statusText: String {
         switch model.status {
-        case .idle: return model.errorMessage != nil ? "Connection failed" : "Connecting…"
+        case .idle: return model.errorMessage != nil ? "Connection failed" : "Tap or hold to talk"
         case .connecting: return "Connecting…"
         case .ready: return "Tap or hold to talk"
         case .listening: return "Listening…"
@@ -371,6 +395,8 @@ struct VoiceView: View {
     }
 
     private var placeholderText: String {
-        model.status == .ready ? "Tap once, or hold the button and speak." : ""
+        model.status == .ready || model.status == .idle
+            ? "Tap once, or hold the button and speak."
+            : ""
     }
 }

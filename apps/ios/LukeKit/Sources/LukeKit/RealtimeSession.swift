@@ -214,9 +214,8 @@ public final class RealtimeSession {
                 await self?.runReceiveLoop(ws: ws, context: connection.sessionsContext)
             }
         } catch {
-            // onError must run before status = .idle: onError nils reconnectCallback,
-            // and onStatus(.idle) reads it — reversing the order creates an infinite
-            // reconnect loop that swallows the error message.
+            // Publish the failure before the idle edge so the screen renders
+            // the reason while leaving a later retry to the developer's press.
             options.onError(error.localizedDescription)
             status = .idle
         }
@@ -504,6 +503,9 @@ public final class RealtimeSession {
             followUpPending = true
             responseStarted = false
             try? await ws.sendText(responseCreateJSON(sequence: responseInterruptionSequence))
+            // A barge-in can land while the socket send is suspended. Its new
+            // turn is already armed and must not be cleared by this old turn.
+            guard interruptionSequence == responseInterruptionSequence else { return }
         } else {
             // This is the follow-up response itself (or an audio-only primary response).
             followUpPending = false

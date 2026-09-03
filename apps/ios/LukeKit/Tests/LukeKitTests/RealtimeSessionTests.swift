@@ -13,17 +13,22 @@ private final class MockWebSocketTask: WebSocketTask, @unchecked Sendable {
     private(set) var outgoing: [String] = []
     private(set) var closeCount = 0
     private var iterator: AsyncStream<String>.AsyncIterator
+    private let onSend: @Sendable (String) async -> Void
 
-    init() {
+    init(onSend: @Sendable @escaping (String) async -> Void = { _ in }) {
         var cont: AsyncStream<String>.Continuation!
         stream = AsyncStream { cont = $0 }
         continuation = cont
         iterator = stream.makeAsyncIterator()
+        self.onSend = onSend
     }
 
     func resume() {}
 
-    func sendText(_ text: String) async throws { outgoing.append(text) }
+    func sendText(_ text: String) async throws {
+        outgoing.append(text)
+        await onSend(text)
+    }
 
     func receiveText() async throws -> String {
         guard let msg = await iterator.next() else { throw URLError(.cancelled) }
@@ -113,6 +118,16 @@ private actor AsyncGate {
         let current = waiters
         waiters.removeAll()
         for waiter in current { waiter.resume() }
+    }
+}
+
+private actor ResponseCreateCounter {
+    private var count = 0
+
+    func isSecond(_ text: String) -> Bool {
+        guard text.contains(#""type":"response.create""#) else { return false }
+        count += 1
+        return count == 2
     }
 }
 
@@ -528,6 +543,51 @@ final class RealtimeSessionStateTests: XCTestCase {
             1,
             "Only the new turn's original response request may exist"
         )
+    }
+
+    func testInterruptionDuringFollowUpRequestKeepsNewTurnArmed() async throws {
+        let followUpSendStarted = AsyncGate()
+        let allowFollowUpSend = AsyncGate()
+        let createCounter = ResponseCreateCounter()
+        let ws = MockWebSocketTask(onSend: { text in
+            if await createCounter.isSecond(text) {
+                await followUpSendStarted.open()
+                await allowFollowUpSend.wait()
+            }
+        })
+        var dispatchedNames: [String] = []
+        let session = RealtimeSession(options: makeOptions(
+            ws: ws,
+            dispatchToolCall: { name, _, _ in
+                dispatchedNames.append(name)
+                return #"{"result":"sent"}"#
+            }
+        ))
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        session.beginTurn()
+        session.endTurn()
+        ws.deliver(#"{"type":"response.created","response":{"id":"primary"}}"#)
+        ws.deliver(#"{"type":"response.output_audio.delta","response_id":"primary","delta":"AQABAA=="}"#)
+        ws.deliver(
+            #"{"type":"response.done","response":{"id":"primary","output":[{"type":"function_call","call_id":"first_call","name":"send_session_message","arguments":"{}"}]}}"#
+        )
+        await followUpSendStarted.wait()
+
+        session.beginTurn()
+        await allowFollowUpSend.open()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        session.endTurn()
+        ws.deliver(#"{"type":"response.created","response":{"id":"new_response","metadata":{"ios_interruption_sequence":"1"}}}"#)
+        ws.deliver(
+            #"{"type":"response.done","response":{"id":"new_response","output":[{"type":"function_call","call_id":"new_call","name":"rename_workspace","arguments":"{}"}]}}"#
+        )
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(dispatchedNames, ["send_session_message", "rename_workspace"])
     }
 
     func testDelayedToolFollowUpCannotActAfterInterruption() async throws {
