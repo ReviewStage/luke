@@ -1,4 +1,3 @@
-export { withSubjects } from "./announcement-subjects.js";
 export {
   resolveVoiceCapability,
   VoiceCapabilityAssembler,
@@ -8,17 +7,9 @@ export {
   type VoiceSettings,
 } from "./capability-assembler.js";
 export {
-  HostedAttentionEvaluator,
-  type HostedAttentionEvaluatorOptions,
-} from "./hosted-attention-evaluator.js";
-export {
   HostedRealtimeCredentialMinter,
   type HostedRealtimeCredentialOptions,
 } from "./hosted-credentials.js";
-export {
-  HostedSubjectDeriver,
-  type HostedSubjectDeriverOptions,
-} from "./hosted-subject-deriver.js";
 export {
   IntroductionRealtimeCredentialMinter,
   type IntroductionRealtimeCredentialOptions,
@@ -34,7 +25,3 @@ export {
   openAiRealtimeCredentials,
   unavailableRealtimeDiagnostics,
 } from "./openai-credentials.js";
-export {
-  sessionAnnouncementFromReview,
-  sessionNoticeAnnouncement,
-} from "./session-notifications.js";

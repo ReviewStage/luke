@@ -5,11 +5,7 @@
  * off, the same kill switch the feedback endpoint uses.
  */
 
-import type {
-  attentionResponsesRequest,
-  realtimeClientSecretRequest,
-  subjectResponsesRequest,
-} from "../core.js";
+import type { realtimeClientSecretRequest, remoteRealtimeClientSecretRequest } from "../core.js";
 // Type-only, so the value-level import the introduction handler takes from
 // this module never becomes a runtime cycle.
 import type { introductionClientSecretRequest } from "./introduction-mint.js";
@@ -18,8 +14,6 @@ export const HOSTED_OPENAI_ENVIRONMENT = {
   API_KEY: "OPENAI_API_KEY",
   /** The same override names the desktop honours, so one convention configures both. */
   REALTIME_MODEL: "LUKE_REALTIME_MODEL",
-  ATTENTION_MODEL: "LUKE_ATTENTION_MODEL",
-  SUBJECT_MODEL: "LUKE_SUBJECT_MODEL",
 } as const;
 
 export const HOSTED_OPENAI_DEFAULTS = {
@@ -32,9 +26,8 @@ export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 /** Build-fixed documents the hosted tier POSTs to OpenAI. */
 export type OpenAiPostBody =
   | ReturnType<typeof realtimeClientSecretRequest>
-  | ReturnType<typeof introductionClientSecretRequest>
-  | ReturnType<typeof attentionResponsesRequest>
-  | ReturnType<typeof subjectResponsesRequest>;
+  | ReturnType<typeof remoteRealtimeClientSecretRequest>
+  | ReturnType<typeof introductionClientSecretRequest>;
 
 export interface OpenAiUpstreamOptions {
   apiKey: string;

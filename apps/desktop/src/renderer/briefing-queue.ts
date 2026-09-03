@@ -1,16 +1,9 @@
 import type { ProactiveSpeechTurn, RealtimeStatus, ScheduledTimer } from "@sidecar/realtime";
-import { isArrivalSpeech, isCalendarOnboardingSpeech, REALTIME_STATUS } from "@sidecar/realtime";
-
-/** A turn that is one scripted onboarding beat rather than a batch of session announcements. */
-function isOnboardingBeat(
-  turn: ProactiveSpeechTurn,
-): turn is Exclude<ProactiveSpeechTurn, readonly unknown[]> {
-  return isArrivalSpeech(turn) || isCalendarOnboardingSpeech(turn);
-}
+import { isCalendarOnboardingSpeech, REALTIME_STATUS } from "@sidecar/realtime";
 
 /**
- * How long a notice stays worth saying. News about a session is news for
- * minutes, not for whenever a long conversation happens to end: a sentence
+ * How long a briefing stays worth saying. News about a session is news for
+ * minutes, not for whenever a long conversation happens to end: a briefing
  * older than this is dropped rather than read out as though it just happened —
  * the panel has shown the state the whole time.
  */
@@ -24,7 +17,7 @@ export const SPOKEN_NOTICE_MAX_AGE_MS = 2 * 60_000;
  */
 export const ANNOUNCER_LINGER_MS = 60_000;
 
-/** A backlog is stale news read in order; only this many notices ever wait. */
+/** A backlog is stale news read in order; only this many briefings ever wait. */
 export const MAXIMUM_QUEUED_NOTICES = 8;
 
 /**
@@ -54,11 +47,11 @@ export const MAXIMUM_CONNECT_ATTEMPTS = 3;
 export const ANNOUNCER_GRACE_MS = 10_000;
 
 /**
- * The slice of the voice session the announcer drives. `microphoneCall` is the
+ * The slice of the voice session the queue drives. `microphoneCall` is the
  * ownership question: true means the call up or coming is the developer's own,
- * which the announcer may speak on but must never close.
+ * which the queue may speak on but must never close.
  */
-export interface AnnouncerSession {
+export interface BriefingQueueSession {
   readonly isConnected: boolean;
   readonly isConnecting: boolean;
   readonly status: RealtimeStatus;
@@ -69,26 +62,26 @@ export interface AnnouncerSession {
   close(): Promise<void>;
 }
 
-export interface SpokenNoticeAnnouncerOptions {
-  session: () => AnnouncerSession;
+export interface BriefingQueueOptions {
+  session: () => BriefingQueueSession;
   now?: () => number;
   schedule?: (callback: () => void, delayMs: number) => ScheduledTimer;
   cancel?: (timer: ScheduledTimer) => void;
 }
 
 /**
- * Speaks proactive notices whether or not a conversation is open.
+ * Speaks the briefings the brain decided, and the scripted onboarding beats,
+ * whether or not a conversation is open.
  *
- * A notice arriving while the developer's call is up rides it, exactly as
- * attention speech always has. One arriving into silence is what this class
- * exists for: it opens a call of Luke's own — speak-only, no microphone, no
- * context — reads each main-process batch in one reply, lingers briefly for
- * the cluster of finishes that usually follows the first, and closes the call
- * it opened. It never closes the developer's call.
+ * A briefing arriving while the developer's call is up rides it. One arriving
+ * into silence is what this class exists for: it opens a call of Luke's own —
+ * speak-only, no microphone, no context — says each briefing as one reply,
+ * lingers briefly for the next one the same cluster of finishes usually
+ * brings, and closes the call it opened. It never closes the developer's call.
  *
  * A call that is refused keeps the backlog and tries again on a short clock,
  * because the refusal this path actually meets is transient — a rate limit,
- * a network mid-blink — and a first-try-only announcer turns each one into
+ * a network mid-blink — and a first-try-only queue turns each one into
  * permanent silence. The retry cannot become a loop: the attempts are capped
  * per backlog, and every queued sentence ages out of being news regardless.
  * A backlog that outlives its attempts is dropped, because every notice is
@@ -105,14 +98,14 @@ export interface SpokenNoticeAnnouncerOptions {
  * that turn from them. Luke's own announcements chain without the wait — the
  * readout is already his turn.
  */
-export class SpokenNoticeAnnouncer {
-  readonly #options: SpokenNoticeAnnouncerOptions;
+export class BriefingQueue {
+  readonly #options: BriefingQueueOptions;
   #queue: ProactiveSpeechTurn[] = [];
-  /** Whether the call now up is one this announcer opened, and so must close. */
+  /** Whether the call now up is one this queue opened, and so must close. */
   #ownsCall = false;
   /** The last status seen, which tells a reply's READY from a connect's. */
   #lastStatus: RealtimeStatus | undefined;
-  /** Whether the reply now under way — or just ended — is one this announcer spoke. */
+  /** Whether the reply now under way — or just ended — is one this queue spoke. */
   #ownReply = false;
   /** Until when the developer keeps the floor, as the injected clock reads it. */
   #holdUntil = 0;
@@ -121,10 +114,10 @@ export class SpokenNoticeAnnouncer {
   /** How many times the backlog now queued has tried to open Luke's own call. */
   #connectAttempts = 0;
   #retryTimer: unknown;
-  /** Whether the meeting quiet is holding, which silences this announcer. */
+  /** Whether the meeting quiet is holding, which silences this queue. */
   #quiet = false;
 
-  constructor(options: SpokenNoticeAnnouncerOptions) {
+  constructor(options: BriefingQueueOptions) {
     this.#options = options;
   }
 
@@ -159,7 +152,6 @@ export class SpokenNoticeAnnouncer {
   /** Takes one turn the main process decided to voice, and starts saying it. */
   enqueue(turn: ProactiveSpeechTurn): void {
     if (this.#quiet) return;
-    if (!isOnboardingBeat(turn) && turn.length === 0) return;
     this.#queue.push(turn);
     this.#trimQueue();
     this.#cancelLinger();
@@ -177,7 +169,7 @@ export class SpokenNoticeAnnouncer {
   }
 
   /**
-   * Follows the session's status, which is the announcer's only clock: READY
+   * Follows the session's status, which is the queue's only clock: READY
    * is when a queued sentence can be spoken and when an empty queue starts the
    * linger toward closing Luke's own call.
    */
@@ -244,18 +236,7 @@ export class SpokenNoticeAnnouncer {
     // start the linger toward closing a call the quiet already closed.
     if (this.#quiet) return;
     const now = this.#options.now?.() ?? Date.now();
-    const fresh: ProactiveSpeechTurn[] = [];
-    for (const turn of this.#queue) {
-      if (isOnboardingBeat(turn)) {
-        if (now - turn.decidedAt <= SPOKEN_NOTICE_MAX_AGE_MS) fresh.push(turn);
-        continue;
-      }
-      const announcements = turn.filter(
-        (announcement) => now - announcement.decidedAt <= SPOKEN_NOTICE_MAX_AGE_MS,
-      );
-      if (announcements.length > 0) fresh.push(announcements);
-    }
-    this.#queue = fresh;
+    this.#queue = this.#queue.filter((turn) => now - turn.decidedAt <= SPOKEN_NOTICE_MAX_AGE_MS);
     const session = this.#options.session();
     if (this.#queue.length === 0) {
       this.#connectAttempts = 0;
@@ -306,22 +287,10 @@ export class SpokenNoticeAnnouncer {
       });
   }
 
-  /** Sheds the oldest news without dissolving the remaining batch boundaries. */
+  /** Sheds the oldest news, so a backlog is never longer than it is worth. */
   #trimQueue(): void {
-    let excess =
-      this.#queue.reduce((count, turn) => count + (isOnboardingBeat(turn) ? 1 : turn.length), 0) -
-      MAXIMUM_QUEUED_NOTICES;
-    while (excess > 0) {
-      const first = this.#queue[0];
-      if (!first) return;
-      const length = isOnboardingBeat(first) ? 1 : first.length;
-      if (length <= excess) {
-        this.#queue.shift();
-        excess -= length;
-      } else {
-        this.#queue[0] = isOnboardingBeat(first) ? first : first.slice(excess);
-        return;
-      }
+    if (this.#queue.length > MAXIMUM_QUEUED_NOTICES) {
+      this.#queue = this.#queue.slice(-MAXIMUM_QUEUED_NOTICES);
     }
   }
 

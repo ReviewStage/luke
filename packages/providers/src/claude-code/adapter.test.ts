@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { isRosterRelevant, SESSION_COMPLETION_CAUSE, SESSION_STATUS } from "@sidecar/session";
+import { SESSION_COMPLETION_CAUSE, SESSION_STATUS } from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import { CLAUDE_CODE_PROVIDER, ClaudeCodeSessionAdapter } from "./adapter.js";
 
@@ -852,14 +852,6 @@ test("reads past a tail of appended bookkeeping to the conversation's own clock"
   assert.equal(observation?.lastActivityAt, Date.parse(lastConversationTime));
   assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
   assert.equal(observation?.title, "Old refactor");
-  assert.equal(
-    observation &&
-      isRosterRelevant(
-        { status: observation.status, lastActivityAt: observation.lastActivityAt },
-        TEST_TIME,
-      ),
-    false,
-  );
 });
 
 test("keeps a bookkeeping record's timestamp from re-dating the conversation", async (t) => {
@@ -900,14 +892,6 @@ test("keeps a bookkeeping record's timestamp from re-dating the conversation", a
   // because the provider stamped a bookkeeping line beside it.
   assert.equal(observation?.lastActivityAt, Date.parse(lastConversationTime));
   assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
-  assert.equal(
-    observation &&
-      isRosterRelevant(
-        { status: observation.status, lastActivityAt: observation.lastActivityAt },
-        TEST_TIME,
-      ),
-    false,
-  );
 });
 
 // ---------------------------------------------------------------------------

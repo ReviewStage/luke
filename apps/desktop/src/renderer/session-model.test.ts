@@ -2,23 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { FIXTURE_SPEAKING_CAPTION, fixtureSnapshot } from "@sidecar/fixtures";
 import {
-  ATTENTION_DISPOSITION,
   HOSTED_AGENT_ID,
   normalizeSession,
   PROVIDER_ID,
   PROVIDER_ID_LIST,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
-  SESSION_CONTROL_KIND,
   SESSION_LOCATION,
   SESSION_STATUS,
-  type SessionControl,
   type SessionProvider,
 } from "@sidecar/session";
 import { SESSION_URGENCY } from "@sidecar/surface";
 import type { AppBootstrap } from "#shared/wire/session";
 import {
-  actsOnWorkspace,
   arrangeSessions,
   DEFAULT_SESSION_VIEW,
   displaySessions,
@@ -36,7 +32,6 @@ import {
   spokenSearchOutcome,
   tallySummary,
   toggledSessionFilters,
-  workspaceTrayActions,
   workspaceTrayChange,
 } from "./session-model";
 
@@ -256,57 +251,6 @@ test("how long ago a session was seen is worded by the unit that has begun", () 
   assert.equal(lastActivityLabel(now - 23 * 60 * minute, now), "23h");
   assert.equal(lastActivityLabel(now - 24 * 60 * minute, now), "1d");
   assert.equal(lastActivityLabel(now - 3 * 24 * 60 * minute, now), "3d");
-});
-
-test("a speaking disposition needs a person even while the session works", () => {
-  const speaking = normalizeSession(CLAUDE_PROVIDER, {
-    providerSessionId: "claude-speaking",
-    title: "Speaking session",
-    status: SESSION_STATUS.WORKING,
-    lastActivityAt: 1_000,
-  });
-
-  const [session] = displaySessions(
-    bootstrap(false),
-    [speaking],
-    [
-      {
-        providerId: speaking.providerId,
-        providerSessionId: speaking.providerSessionId,
-        decision: { disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END, decidedAt: 1_000 },
-      },
-    ],
-  );
-  assert.equal(session?.urgency, SESSION_URGENCY.ATTENTION);
-});
-
-test("attention joins on the whole provider identity and never words the row", () => {
-  const codex = liveSession(CODEX_PROVIDER, "shared-id", SESSION_STATUS.WORKING);
-  const claude = liveSession(CLAUDE_PROVIDER, "shared-id", SESSION_STATUS.WORKING);
-  const sessions = displaySessions(
-    bootstrap(false),
-    [codex, claude],
-    [
-      {
-        providerId: claude.providerId,
-        providerSessionId: claude.providerSessionId,
-        decision: { disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END, decidedAt: 1_000 },
-      },
-      {
-        providerId: CODEX_PROVIDER.id,
-        providerSessionId: "missing",
-        decision: { disposition: ATTENTION_DISPOSITION.SPEAK_AT_TURN_END, decidedAt: 1_000 },
-      },
-    ],
-  );
-
-  const byProvider = new Map(sessions.map((session) => [session.providerId, session]));
-  assert.equal(byProvider.get(CLAUDE_PROVIDER.id)?.urgency, SESSION_URGENCY.ATTENTION);
-  // A decision carries no words, so the row says its own state rather than
-  // anything the evaluator wrote; the orphan decision still attaches to no row.
-  assert.equal(byProvider.get(CLAUDE_PROVIDER.id)?.detail, "Needs you");
-  assert.equal(byProvider.get(CODEX_PROVIDER.id)?.urgency, SESSION_URGENCY.WORKING);
-  assert.equal(byProvider.get(CODEX_PROVIDER.id)?.detail, "Working");
 });
 
 test("the tally counts per state and per app", () => {
@@ -1034,66 +978,6 @@ test("a lone chat is a run of one, and namesake workspaces never join", () => {
   );
 });
 
-test("an act aimed at the workspace is the tray's, said once", () => {
-  // Every settled chat advertises the same workspace archive; the tray offers
-  // it once, carried by the first chat that advertised it, while a chat's own
-  // acts — the stop, aimed at its run — stay on the row that owns them.
-  const archive = { id: "archive-workspace", label: "Archive", target: "workspace-lisbon" };
-  const stop = {
-    id: "cancel-run",
-    label: "Stop this run",
-    kind: SESSION_CONTROL_KIND.STOP,
-    target: "run-1",
-  };
-  const chatOf = (id: string, controls: readonly SessionControl[]) =>
-    normalizeSession(CONDUCTOR_PROVIDER, {
-      providerSessionId: id,
-      title: `Chat ${id}`,
-      status: SESSION_STATUS.COMPLETE,
-      lastActivityAt: 1_000,
-      controls,
-      workspace: { providerWorkspaceId: "workspace-lisbon", name: "lisbon-v2" },
-    });
-
-  const rows = displaySessions(bootstrap(false), [
-    chatOf("chat-one", [stop, archive]),
-    chatOf("chat-two", [archive]),
-  ]);
-
-  const acts = workspaceTrayActions(rows);
-  assert.deepEqual(
-    acts.map((act) => ({ actionId: act.action.id, sessionId: act.session.id })),
-    [{ actionId: "archive-workspace", sessionId: "chat-one" }],
-  );
-
-  const [first] = rows;
-  assert.ok(first);
-  const [firstStop, firstArchive] = first.actions;
-  assert.ok(firstStop && firstArchive);
-  assert.equal(actsOnWorkspace(first, firstStop), false);
-  assert.equal(actsOnWorkspace(first, firstArchive), true);
-});
-
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("an ungrouped session's acts never read as a workspace's", () => {
-  // A target can only say "the workspace" beside a workspace to say it of: a
-  // session no provider grouped keeps every act its own, whatever the target.
-  const [row] = displaySessions(bootstrap(false), [
-    normalizeSession(CONDUCTOR_PROVIDER, {
-      providerSessionId: "chat-alone",
-      title: "Chat alone",
-      status: SESSION_STATUS.COMPLETE,
-      lastActivityAt: 1_000,
-      controls: [{ id: "archive-workspace", label: "Archive", target: "workspace-lisbon" }],
-    }),
-  ]);
-  assert.ok(row);
-  const [action] = row.actions;
-  assert.ok(action);
-  assert.equal(actsOnWorkspace(row, action), false);
-  assert.deepEqual(workspaceTrayActions([row]), []);
-});
-
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a tray's shared pull request is said once, through the chat that reported it", () => {
   const chatOf = (id: string, change?: string) =>
@@ -1177,38 +1061,6 @@ test("a row carries its workspace by name, falling back to the id", () => {
     liveSession(CODEX_PROVIDER, "codex-1", SESSION_STATUS.WORKING),
   ]);
   assert.equal(ungrouped?.workspace, undefined);
-});
-
-test("a row offers writes only where its provider promised them", () => {
-  const quiet = liveSession(CLAUDE_PROVIDER, "local", SESSION_STATUS.WORKING);
-  const writable = normalizeSession(CODEX_PROVIDER, {
-    providerSessionId: "cloud",
-    title: "Session cloud",
-    status: SESSION_STATUS.WAITING,
-    lastActivityAt: 1_000,
-    canReceiveMessage: true,
-    controls: [{ id: "approve-plan", label: "Approve the plan" }],
-  });
-
-  const rows = displaySessions(bootstrap(false), [quiet, writable]);
-  const byId = new Map(rows.map((row) => [row.id, row]));
-
-  assert.equal(byId.get("local")?.canMessage, false);
-  assert.deepEqual(byId.get("local")?.actions, []);
-  assert.equal(byId.get("cloud")?.canMessage, true);
-  assert.deepEqual(byId.get("cloud")?.actions, [{ id: "approve-plan", label: "Approve the plan" }]);
-  // The fixture draws the affordances so the evidence shows them, exactly
-  // where a live session would have them: the composer on the suspended OpenCode
-  // row, the stop on the working Cursor agent, and nothing anywhere else.
-  const fixtureById = new Map(FIXTURE_SESSIONS.map((row) => [row.id, row]));
-  assert.equal(fixtureById.get("conductor-opencode-session")?.canMessage, true);
-  assert.deepEqual(fixtureById.get("conductor-cursor-agent")?.actions, [
-    { id: "cancel-run", label: "Stop this run", kind: "stop" },
-  ]);
-  for (const row of FIXTURE_SESSIONS) {
-    if (row.id === "conductor-opencode-session") continue;
-    assert.equal(row.canMessage, false);
-  }
 });
 
 test("a query keeps only rows saying every word, wherever each word lands", () => {

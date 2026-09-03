@@ -1,37 +1,23 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabulary";
-import { APP_SETTING_KIND, type AppGuideSnapshot } from "@sidecar/guide";
-import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
 import {
-  appendConversationEntry,
-  CONTEXT_ITEM_KIND,
-  CONVERSATION_ENTRY_KIND,
-  type ConversationEntry,
+  ARRIVAL_SPEECH_KIND,
+  ASK_BRAIN_TOOL,
+  BRIEFING_SPEECH_KIND,
+  type BriefingSpeech,
+  CALENDAR_ONBOARDING_SPEECH_KIND,
   inputAudioAppendEvents,
   inputAudioFormatUpdateEvents,
-  isCarriedAppAction,
-  isCarriedIssueAction,
-  maximumConversationEntries,
   REALTIME_CLIENT_EVENT,
   REALTIME_SERVER_EVENT,
   REALTIME_STATUS,
   type RealtimeConnection,
   type RealtimeStatus,
-  SESSION_ANNOUNCEMENT_CHANGE,
-  SESSION_NO_LONGER_OBSERVED_NOTE,
-  type SessionAnnouncement,
 } from "@sidecar/realtime";
-import {
-  normalizeSession,
-  type ProviderSessionObservation,
-  SESSION_STATUS,
-  type Session,
-  WORKSPACE_TASK_SUPPORT,
-} from "@sidecar/session";
-import { isRecord, text, type WireRecord } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, isRecord, text, type WireRecord } from "@sidecar/wire";
 import type { JsonValue, ParsedJsonObject } from "@sidecar/wire/testing";
+import type { BrainAskResult } from "#shared/wire/brain";
 import {
   asMediaStream,
   asMediaTrack,
@@ -43,17 +29,16 @@ import {
   type MockTrackEvent,
 } from "#testing/realtime-fixtures";
 import type { SdkRealtimeTransport, SdkTransportFactoryOptions } from "./agents-realtime-transport";
+import { BriefingQueue } from "./briefing-queue";
 import {
-  type ActCarrier,
-  type AppActionCarrier,
-  type IssueActionCarrier,
+  BRAIN_ASK_SETTLE_TIMEOUT_MS,
   quietIsLukesOwn,
   REALTIME_SETTLE_TIMEOUT_MS,
   REMOTE_QUIET_MS,
+  REPLY_KIND,
   RealtimeVoiceSession,
-  type SessionActionCarrier,
+  type ReplyKind,
 } from "./realtime-session";
-import { SpokenNoticeAnnouncer } from "./spoken-notices";
 
 function sessionField(event: ParsedJsonObject | undefined): ParsedJsonObject | undefined {
   if (!event) return undefined;
@@ -72,16 +57,24 @@ const CONNECTION: RealtimeConnection = {
   callsUrl: "https://api.openai.com/v1/realtime/calls",
 };
 
+interface ReplyEnding {
+  texts: readonly string[];
+  about: readonly string[] | undefined;
+  kind: ReplyKind | undefined;
+}
+
 interface Harness {
   session: RealtimeVoiceSession;
   sent: ParsedJsonObject[];
   errors: (string | undefined)[];
   /** Each caption emission: one text per stacked response, or a clear. */
   captions: (readonly string[] | undefined)[];
-  /** The announced sessions each caption emission carried, by session id. */
+  /** The sessions each caption emission was about, by session id. */
   captionSubjects: (readonly string[] | undefined)[];
-  /** The words each ended reply left behind, with its announced subject. */
-  replyEndings: { texts: readonly string[]; about: readonly string[] | undefined }[];
+  /** The words each ended reply left behind, with its subject and its kind. */
+  replyEndings: ReplyEnding[];
+  /** The questions the voice asked the brain, in order. */
+  asked: string[];
   /** The developer's spoken turns, as the service handed them back. */
   spokenAsks: string[];
   /** The growing pieces of those turns' words, in arrival order. */
@@ -112,11 +105,9 @@ interface Harness {
   replacedTracks: () => (object | null)[];
   /**
    * The press captures the session created, in order. `feed` plays samples
-   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
    * into one as the audio graph would; `stopped` says the session let go.
    */
   pressCaptures: { stopped: boolean; feed: (samples: readonly number[]) => void }[];
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   /** Makes the next device request refuse, as a vanished microphone would. */
   failMicrophone: () => void;
   /** Holds device opens in flight until `ungateMicrophone` lets them land. */
@@ -124,20 +115,13 @@ interface Harness {
   ungateMicrophone: () => void;
 }
 
-function observedSession(
-  providerSessionId: string,
-  overrides: Partial<ProviderSessionObservation> = {},
-): Session {
-  return normalizeSession(
-    { id: "claude-code", displayName: "Claude Code" },
-    {
-      providerSessionId,
-      title: "Claude Code: checkout-service",
-      status: SESSION_STATUS.WORKING,
-      lastActivityAt: 1_800_000_000_000,
-      ...overrides,
-    },
-  );
+/** An answer the brain accepted: words to say, about the sessions named. */
+function brainAnswer(briefing: string, ...sessionIds: readonly string[]): BrainAskResult {
+  return {
+    status: ACT_RESULT_STATUS.ACCEPTED,
+    briefing,
+    sessionIds: sessionIds.map((id) => ({ providerId: "claude-code", providerSessionId: id })),
+  };
 }
 
 function harness(
@@ -151,31 +135,26 @@ function harness(
     connectionDelayMs?: number;
     connectionError?: Error;
     now?: () => number;
-    carryAct?: ActCarrier;
-    carryAction?: SessionActionCarrier;
-    carryAppAction?: AppActionCarrier;
-    carryIssueAction?: IssueActionCarrier;
+    /**
+     * Answers the voice's one tool. Absent by default, as a call with no brain
+     * behind it is; a test that wants the ask answered supplies the brain.
+     */
+    askBrain?: (question: string) => Promise<BrainAskResult>;
     sdkCloseError?: Error;
-    /** Lets a test ride the status edges, the way the announcer does. */
+    /** Lets a test ride the status edges, the way the briefing queue does. */
     onStatus?: (status: RealtimeStatus) => void;
     /** Lets a test stand where the development trace's tap does. */
     onWireEvent?: (direction: TraceDirection, event: WireRecord) => void;
     /** Lets a test see what the element would be handed to play. */
     onRemoteStream?: (stream: MediaStream | undefined) => void;
-    /**
-     * Mimics the caller's history: an ended reply's words are written back
-     * into the session as a conversation update, the way the hook records
-     * them. What the write-back does to a call being torn down is exactly
-     * what the tests using this are about.
-     */
-    writeBackOnReplyEnded?: boolean;
   } = {},
 ): Harness {
   const sent: ParsedJsonObject[] = [];
   const errors: (string | undefined)[] = [];
   const captions: (readonly string[] | undefined)[] = [];
   const captionSubjects: (readonly string[] | undefined)[] = [];
-  const replyEndings: { texts: readonly string[]; about: readonly string[] | undefined }[] = [];
+  const replyEndings: ReplyEnding[] = [];
+  const asked: string[] = [];
   const spokenAsks: string[] = [];
   const spokenAskDeltas: { itemId: string; delta: string }[] = [];
   const spokenAskFailures: string[] = [];
@@ -372,16 +351,12 @@ function harness(
       captions.push(texts);
       captionSubjects.push(about?.map(({ providerSessionId }) => providerSessionId));
     },
-    onReplyEnded: (texts, about) => {
-      replyEndings.push({ texts, about: about?.map(({ providerSessionId }) => providerSessionId) });
-      if (options.writeBackOnReplyEnded) {
-        session.updateConversation(
-          appendConversationEntry([], {
-            kind: CONVERSATION_ENTRY_KIND.REPLY,
-            words: texts.join(" "),
-          }),
-        );
-      }
+    onReplyEnded: (texts, about, kind) => {
+      replyEndings.push({
+        texts,
+        about: about?.map(({ providerSessionId }) => providerSessionId),
+        kind,
+      });
     },
     onSpokenAsk: (transcript) => {
       spokenAsks.push(transcript);
@@ -406,17 +381,11 @@ function harness(
   if (options.now) {
     sessionOptions.now = options.now;
   }
-  if (options.carryAct) {
-    sessionOptions.carryAct = options.carryAct;
-  } else if (options.carryAction || options.carryAppAction || options.carryIssueAction) {
-    sessionOptions.carryAct = ({ act }) => {
-      if (isCarriedAppAction(act)) {
-        return options.carryAppAction?.(act) ?? Promise.resolve({ status: "rejected" });
-      }
-      if (isCarriedIssueAction(act)) {
-        return options.carryIssueAction?.(act) ?? Promise.resolve({ status: "rejected" });
-      }
-      return options.carryAction?.(act) ?? Promise.resolve({ status: "rejected" });
+  const askBrain = options.askBrain;
+  if (askBrain) {
+    sessionOptions.askBrain = (question) => {
+      asked.push(question);
+      return askBrain(question);
     };
   }
   const session = new RealtimeVoiceSession(sessionOptions);
@@ -428,6 +397,7 @@ function harness(
     captions,
     captionSubjects,
     replyEndings,
+    asked,
     spokenAsks,
     spokenAskDeltas,
     spokenAskFailures,
@@ -487,8 +457,6 @@ function harness(
   };
 }
 
-const CONVERSATION_ITEM_DELETE = REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_DELETE;
-
 /** Lets the device a press asked for arrive: one macrotask drains the open. */
 function deviceArrives(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
@@ -503,39 +471,66 @@ async function holdTurn(context: Harness): Promise<void> {
   await deviceArrives();
 }
 
+/** Opens and commits a developer turn, the turn a spoken ask of the brain arrives in. */
+async function armDeveloperTurn(context: Harness): Promise<void> {
+  await holdTurn(context);
+  context.session.stopListening(true);
+}
+
 /** Ends the reply the server was producing, settling the exchange to READY. */
 function settleReply(context: Harness): void {
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
   context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
 }
 
-/** The words one context item carries, or nothing when the event is not one. */
-function itemText(event: ParsedJsonObject | undefined): string {
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const item = event?.item as { content?: { text?: string }[] } | undefined;
-  return item?.content?.[0]?.text ?? "";
+/** One briefing the brain decided about one session, decided a moment ago. */
+function briefingAbout(id: string, briefing = `Claude Code finished ${id}.`): BriefingSpeech {
+  return {
+    kind: BRIEFING_SPEECH_KIND,
+    briefing,
+    sessionIds: [{ providerId: "claude-code", providerSessionId: id }],
+    decidedAt: Date.now(),
+  };
 }
 
-/** The context items of one kind that were sent, named by their own label. */
-function contextItems(context: Harness, label: string, from = 0): ParsedJsonObject[] {
-  return context.sent
-    .slice(from)
-    .filter(
-      (event) =>
-        event.type === REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE &&
-        itemText(event).startsWith(label),
-    );
+/** One `ask_brain` call as it sits inside a finished response's output. */
+function askBrainCall(question: string, callId = "call-1"): JsonValue {
+  return {
+    type: "function_call",
+    name: ASK_BRAIN_TOOL.name,
+    call_id: callId,
+    arguments: JSON.stringify({ question }),
+  };
 }
 
-/** The instructions each guide-carrying session update sent, oldest first. */
-function guideInstructionUpdates(context: Harness, from = 0): string[] {
+/** A `response.done` whose one output is an `ask_brain` call carrying the developer's words. */
+function askBrainDone(
+  question: string,
+  options: { callId?: string; responseId?: string } = {},
+): JsonValue {
+  const output = [askBrainCall(question, options.callId)];
+  const response =
+    options.responseId === undefined ? { output } : { id: options.responseId, output };
+  return { type: REALTIME_SERVER_EVENT.RESPONSE_DONE, response };
+}
+
+/** The tool outputs sent since `from`, each parsed back out of its item. */
+function toolOutputs(context: Harness, from = 0): ParsedJsonObject[] {
+  return context.sent.slice(from).flatMap((event) => {
+    const item = isRecord(event.item) ? event.item : undefined;
+    if (item?.type !== "function_call_output") return [];
+    const output = text(item.output);
+    if (output === undefined) return [];
+    const parsed: ParsedJsonObject = JSON.parse(output);
+    return [parsed];
+  });
+}
+
+/** The reply requests sent since `from`. */
+function responseCreates(context: Harness, from = 0): ParsedJsonObject[] {
   return context.sent
     .slice(from)
-    .filter((event) => event.type === REALTIME_CLIENT_EVENT.SESSION_UPDATE)
-    .flatMap((event) => {
-      const instructions = text(sessionField(event)?.instructions);
-      return instructions !== undefined ? [instructions] : [];
-    });
+    .filter((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE);
 }
 
 /** The errors actually shown, past the clearing every connect starts with. */
@@ -696,26 +691,18 @@ test("push-to-talk does nothing before the call is open", () => {
   assert.deepEqual<ParsedJsonObject[]>(context.sent, []);
 });
 
-test("a proactive update is spoken once the call is open", async () => {
+test("a briefing is spoken once the call is open", async () => {
   const context = harness();
-  const speech = [
-    {
-      providerId: "claude-code",
-      providerSessionId: "session-a",
-      subject: "checkout-service",
-      change: SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT,
-      detail: "The checkout service needs a decision.",
-      decidedAt: 1_800_000_000_000,
-    },
-  ];
+  const speech = briefingAbout("session-a", "The checkout service needs a decision.");
 
   // Nothing is spoken before there is a call to speak over.
   assert.equal(context.session.speak(speech), false);
 
   await context.session.connect();
   assert.equal(context.session.speak(speech), true);
-  // The sentence travels inside one isolated response request, so it can read
-  // neither the developer's conversation nor another agent's announcement.
+  // The briefing travels inside one isolated response request, so it can read
+  // neither the developer's conversation nor another briefing, and no tool
+  // may answer it.
   assert.deepEqual(
     context.sent.map((event) => event.type),
     [REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
@@ -723,6 +710,8 @@ test("a proactive update is spoken once the call is open", async () => {
   const response = context.sent[0]?.response;
   assert.ok(isRecord(response));
   assert.equal(response.conversation, "none");
+  assert.deepEqual(response.tools, []);
+  assert.equal(response.tool_choice, "none");
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -909,10 +898,8 @@ test("a release during the handshake delivers the words once the channel opens",
   assert.equal(context.session.turnPending, true);
 
   assert.equal(await opening, true);
-  // The delivery waits a beat for exactly this: the caller re-feeds the
-  // roster right after connect resolves, and the held words' reply must be
-  // answered from that context rather than from none.
-  context.session.updateSessions([observedSession("session-1")]);
+  // The delivery waits a beat after the channel opens rather than landing
+  // inside the connect that resolved.
   assert.equal(context.session.status, REALTIME_STATUS.READY);
   await deviceArrives();
 
@@ -925,7 +912,6 @@ test("a release during the handshake delivers the words once the channel opens",
       REALTIME_CLIENT_EVENT.SESSION_UPDATE,
       REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_CLEAR,
       REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_APPEND,
-      REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
       REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_COMMIT,
       REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
     ],
@@ -1203,19 +1189,6 @@ test("the reply ends when the server says the audio ran out", async () => {
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });
 
-/** A proactive update on the announcer's terms, decided a moment ago. */
-function announcedFinish(id: string): readonly SessionAnnouncement[] {
-  return [
-    {
-      providerId: "claude-code",
-      providerSessionId: id,
-      subject: id,
-      change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
-      decidedAt: Date.now(),
-    },
-  ];
-}
-
 test("audio draining before response.done does not free the turn early", async () => {
   const context = harness();
   await context.session.connect();
@@ -1230,13 +1203,11 @@ test("audio draining before response.done does not free the turn early", async (
   context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 
-  // The announcement that queued behind the reply is refused rather than
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // sent: the create it would open is the one the service refuses as a
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+  // The briefing that queued behind the reply is refused rather than sent:
+  // the create it would open is the one the service refuses as a
   // conversation already in progress, surfacing the refusal as a voice error
-  // with the notice lost behind it.
-  assert.equal(context.session.speak(announcedFinish("session-a")), false);
+  // with the briefing lost behind it.
+  assert.equal(context.session.speak(briefingAbout("session-a")), false);
   assert.equal(
     context.sent.filter((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE).length,
     1,
@@ -1247,7 +1218,7 @@ test("audio draining before response.done does not free the turn early", async (
   // welcome.
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE, response: { id: "resp-1" } });
   assert.equal(context.session.status, REALTIME_STATUS.READY);
-  assert.equal(context.session.speak(announcedFinish("session-a")), true);
+  assert.equal(context.session.speak(briefingAbout("session-a")), true);
   assert.deepEqual(reportedErrors(context), []);
 });
 
@@ -1298,15 +1269,15 @@ test("a drain's backstop restarts when the audio resumes", async (t) => {
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });
 
-test("an announcement queued mid-reply waits out the server's own ending", async () => {
-  // The reported shape of the fault, whole: Luke is reading one announcement
-  // out on his own call when another agent finishes. The second announcement
-  // must wait for the server to conclude the first reply — not for the audio
+test("a briefing queued mid-reply waits out the server's own ending", async () => {
+  // The reported shape of the fault, whole: Luke is reading one briefing out
+  // on his own call when another agent finishes. The second briefing must
+  // wait for the server to conclude the first reply — not for the audio
   // alone — or its create collides with the active response.
-  let announcer: SpokenNoticeAnnouncer | undefined;
-  const context = harness({ onStatus: (status) => announcer?.onStatus(status) });
+  let queue: BriefingQueue | undefined;
+  const context = harness({ onStatus: (status) => queue?.onStatus(status) });
   const timers: (() => void)[] = [];
-  announcer = new SpokenNoticeAnnouncer({
+  queue = new BriefingQueue({
     session: () => context.session,
     schedule: (callback) => {
       timers.push(callback);
@@ -1315,19 +1286,19 @@ test("an announcement queued mid-reply waits out the server's own ending", async
     cancel: () => undefined,
   });
 
-  announcer.enqueue(announcedFinish("session-a"));
-  // The call the announcer opens for itself is a handshake away.
+  queue.enqueue(briefingAbout("session-a"));
+  // The call the queue opens for itself is a handshake away.
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
 
   // The second agent finishes mid-reply, and then the first reply's audio
   // drains before its done arrives.
-  announcer.enqueue(announcedFinish("session-b"));
+  queue.enqueue(briefingAbout("session-b"));
   context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
 
   // One reply asked for so far: the drain freed nothing, so the READY edge
-  // the announcer rides has not fired into the server's open response.
+  // the queue rides has not fired into the server's open response.
   assert.equal(
     context.sent.filter((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE).length,
     1,
@@ -1383,7 +1354,7 @@ test("an error behind a confirmed reply does not end the turn under it", async (
 test("a reply the server refused outright still frees the turn at its error", async () => {
   const context = harness();
   await context.session.connect();
-  const spoken = context.session.speak(announcedFinish("session-a"));
+  const spoken = context.session.speak(briefingAbout("session-a"));
   assert.equal(spoken, true);
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 
@@ -1754,137 +1725,9 @@ test("an error instead of response.done still frees the turn", async () => {
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
 });
 
-test("the conversation is told which sessions Luke can see, at the turn that reads them", async () => {
-  const context = harness();
-  await context.session.connect();
-
-  context.session.updateSessions([
-    observedSession("session-a", {
-      status: SESSION_STATUS.WAITING,
-      detail: { activity: "Waiting on input." },
-    }),
-  ]);
-
-  // Nothing yet: a roster nobody has asked about is an answer waiting to be
-  // given, not an item to keep in the conversation.
-  assert.deepEqual<ParsedJsonObject[]>(context.sent, []);
-  assert.equal(context.session.status, REALTIME_STATUS.READY);
-
-  await armDeveloperTurn(context);
-
-  const item = context.sent.find(
-    (event) => event.type === REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
-  );
-  assert.ok(item);
-  const text = JSON.stringify(item);
-  assert.ok(text.includes("Claude Code"));
-  assert.ok(text.includes("waiting"));
-  assert.ok(text.includes("Waiting on input."));
-  // And it goes in ahead of the turn it is answering, not after it.
-  const rosterIndex = context.sent.indexOf(item);
-  const commitIndex = context.sent.findIndex(
-    (event) => event.type === REALTIME_CLIENT_EVENT.INPUT_AUDIO_BUFFER_COMMIT,
-  );
-  assert.ok(rosterIndex >= 0 && rosterIndex < commitIndex);
-});
-
-test("a roster that churns between turns is only ever said once", async () => {
-  const context = harness();
-  await context.session.connect();
-
-  // Five seconds apart, all day: the poll sees a working session tick over and
-  // the rendered roster differs every time. None of it is worth an item until
-  // somebody asks — otherwise the developer's own earlier turns are what gets
-  // evicted to make room for a status that has already changed again.
-  for (const activity of ["Reading files.", "Editing.", "Running tests.", "Waiting on input."]) {
-    context.session.updateSessions([observedSession("session-a", { detail: { activity } })]);
-  }
-  assert.deepEqual<ParsedJsonObject[]>(context.sent, []);
-
-  await armDeveloperTurn(context);
-
-  const rosters = contextItems(context, "[observed session status");
-  assert.equal(rosters.length, 1);
-  // The newest one, not the first: the turn is answered from what is true now.
-  assert.match(itemText(rosters[0]), /Waiting on input\./);
-});
-
-test("a fresh roster replaces the item the last one occupied", async () => {
-  const context = harness();
-  await context.session.connect();
-
-  context.session.updateSessions([
-    observedSession("session-a", { detail: { activity: "Editing." } }),
-  ]);
-  await armDeveloperTurn(context);
-  const first = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.SESSIONS);
-  assert.ok(first);
-
-  context.session.updateSessions([
-    observedSession("session-a", { detail: { activity: "Waiting on input." } }),
-  ]);
-  context.session.stopSpeaking();
-  const sentBefore = context.sent.length;
-  await armDeveloperTurn(context);
-
-  // The old item is deleted, then the new one created — in that order, on a
-  // channel that keeps it, so the conversation never holds two rosters.
-  const events = context.sent.slice(sentBefore);
-  const deleteIndex = events.findIndex((event) => event.type === CONVERSATION_ITEM_DELETE);
-  const createIndex = events.findIndex(
-    (event) => event.type === REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
-  );
-  assert.ok(deleteIndex >= 0 && deleteIndex < createIndex);
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  assert.equal((events[deleteIndex] as { item_id?: string }).item_id, first);
-
-  const second = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.SESSIONS);
-  assert.ok(second);
-  assert.notEqual(second, first);
-});
-
-test("a supersede the server refuses is this call's own business", async () => {
-  const context = harness();
-  await context.session.connect();
-
-  context.session.updateSessions([
-    observedSession("session-a", { detail: { activity: "Editing." } }),
-  ]);
-  await armDeveloperTurn(context);
-  const superseded = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.SESSIONS);
-
-  context.session.updateSessions([
-    observedSession("session-a", { detail: { activity: "Waiting." } }),
-  ]);
-  context.session.stopSpeaking();
-  await armDeveloperTurn(context);
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const supersede = context.sent.findLast((event) => event.type === CONVERSATION_ITEM_DELETE) as {
-    event_id?: string;
-  };
-
-  // The item was already gone — evicted at the window's edge is how that
-  // happens — so the delete is answered with an error naming the event we sent.
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // It is not a fault of the developer's and must not be shown as one, nor end
-  // the reply they are listening to.
-  context.emit({
-    type: REALTIME_SERVER_EVENT.ERROR,
-    error: {
-      type: "invalid_request_error",
-      message: `Item with id '${superseded}' not found.`,
-      event_id: supersede.event_id,
-    },
-  });
-
-  assert.deepEqual(reportedErrors(context), []);
-  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
-});
-
 test("an error that is not ours is still reported and still ends the turn", async () => {
   const context = harness();
   await context.session.connect();
-  context.session.updateSessions([observedSession("session-a")]);
   await armDeveloperTurn(context);
 
   context.emit({
@@ -1894,271 +1737,6 @@ test("an error that is not ours is still reported and still ends the turn", asyn
 
   assert.deepEqual(reportedErrors(context), ["The commit held no audio."]);
   assert.equal(context.session.status, REALTIME_STATUS.READY);
-});
-
-test("an unchanged session roster is not resent", async () => {
-  const context = harness();
-  await context.session.connect();
-
-  context.session.updateSessions([observedSession("session-a")]);
-  await armDeveloperTurn(context);
-  const sentBefore = context.sent.length;
-
-  // The same roster again, and another turn: there is nothing new to say, so
-  // nothing is said and the item already standing keeps its place.
-  context.session.updateSessions([observedSession("session-a")]);
-  context.session.stopSpeaking();
-  await armDeveloperTurn(context);
-
-  assert.deepEqual(contextItems(context, "[observed session status", sentBefore), []);
-  assert.equal(
-    context.sent.slice(sentBefore).some((event) => event.type === CONVERSATION_ITEM_DELETE),
-    false,
-  );
-});
-
-test("a stale session aging across clock ticks does not resend the roster", async (t) => {
-  const context = harness();
-  await context.session.connect();
-  // Six minutes past the fixture's lastActivityAt, inside the minutes bucket.
-  t.mock.timers.enable({ apis: ["Date"], now: 1_800_000_360_000 });
-
-  context.session.updateSessions([observedSession("session-a")]);
-  await armDeveloperTurn(context);
-  const sentBefore = context.sent.length;
-
-  // Two minutes pass and the same roster is reported against the fresh clock.
-  // The bucketed age phrase holds still, so the item keeps its place and the
-  // conversation's cached prefix survives the tick.
-  t.mock.timers.tick(2 * 60_000);
-  context.session.updateSessions([observedSession("session-a")]);
-  context.session.stopSpeaking();
-  await armDeveloperTurn(context);
-
-  assert.deepEqual(contextItems(context, "[observed session status", sentBefore), []);
-});
-
-function conversationEntries(
-  ...entries: readonly ConversationEntry[]
-): readonly ConversationEntry[] {
-  let history: readonly ConversationEntry[] = [];
-  for (const entry of entries) history = appendConversationEntry(history, entry);
-  return history;
-}
-
-test("the history travels with the roster, carrying the identities its lines named", async () => {
-  const context = harness();
-  await context.session.connect();
-
-  context.session.updateSessions([
-    observedSession("session-a"),
-    observedSession("session-b", { title: "Claude Code: payments" }),
-  ]);
-  // The announcement this line records named the session only by title — and
-  // was often read out on a call this one replaced. The history is what
-  // carries the words and the identity into the turn that says "open that
-  // chat".
-  context.session.updateConversation(
-    conversationEntries({
-      kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
-      words: "Claude Code finished payments.",
-      identity: { providerId: "claude-code", providerSessionId: "session-b" },
-    }),
-  );
-  // Remembered, not sent: the words go in at the turn that reads them.
-  assert.deepEqual<ParsedJsonObject[]>(context.sent, []);
-
-  await armDeveloperTurn(context);
-
-  const items = contextItems(context, "[recent conversation");
-  assert.equal(items.length, 1);
-  assert.match(itemText(items[0]), /Luke announced: "Claude Code finished payments\."/);
-  assert.match(itemText(items[0]), /provider_id=claude-code provider_session_id=session-b/);
-  // After the roster it is rendered against, on a channel that keeps order.
-  const rosterIndex = context.sent.findIndex((event) =>
-    itemText(event).startsWith("[observed session status"),
-  );
-  assert.ok(rosterIndex >= 0 && rosterIndex < context.sent.indexOf(items[0] ?? {}));
-});
-
-test("an empty history says nothing at all", async () => {
-  const context = harness();
-  await context.session.connect();
-
-  context.session.updateSessions([observedSession("session-a")]);
-  context.session.updateConversation([]);
-  await armDeveloperTurn(context);
-
-  assert.deepEqual(contextItems(context, "[recent conversation"), []);
-});
-
-test("a call accepts only the recent slice of the retained thread", async () => {
-  const context = harness();
-  await context.session.connect();
-  const thread = Array.from(
-    { length: maximumConversationEntries + 3 },
-    (_, index): ConversationEntry => ({
-      kind: CONVERSATION_ENTRY_KIND.REPLY,
-      words: `launch line ${index}`,
-    }),
-  );
-
-  context.session.updateConversation(thread);
-  await armDeveloperTurn(context);
-
-  const item = contextItems(context, "[recent conversation")[0];
-  assert.ok(item);
-  assert.doesNotMatch(itemText(item), /launch line 0/);
-  assert.match(itemText(item), /launch line 3/);
-  assert.match(itemText(item), /launch line 22/);
-});
-
-test("the history is rendered from the roster as it now stands", async () => {
-  const context = harness();
-  await context.session.connect();
-
-  const history = conversationEntries({
-    kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
-    words: "Claude Code finished checkout-service.",
-    identity: { providerId: "claude-code", providerSessionId: "session-a" },
-  });
-  context.session.updateSessions([observedSession("session-a")]);
-  context.session.updateConversation(history);
-
-  // The words are history and keep their line; the identity is an offer to a
-  // tool call, and a session the roster no longer shows is one no call may
-  // name — so the line trades it for the note saying the session is gone,
-  // rather than steering "that chat" toward a certain refusal or leaving it
-  // to be guessed among the sessions still observed.
-  context.session.updateSessions([]);
-  await armDeveloperTurn(context);
-
-  const items = contextItems(context, "[recent conversation");
-  assert.equal(items.length, 1);
-  assert.match(itemText(items[0]), /finished checkout-service/);
-  assert.doesNotMatch(itemText(items[0]), /provider_session_id=session-a/);
-  assert.ok(itemText(items[0]).includes(`[${SESSION_NO_LONGER_OBSERVED_NOTE}]`));
-});
-
-test("the history is seeded once per call and later lines are not re-sent", async () => {
-  const context = harness();
-  await context.session.connect();
-
-  const first = conversationEntries({
-    kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
-    words: "Claude Code finished checkout-service.",
-  });
-  context.session.updateConversation(first);
-  await armDeveloperTurn(context);
-  const seeded = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION);
-  assert.ok(seeded);
-
-  // Every turn taken from here on rides this call as its own conversation
-  // items, so re-sending the digest would delete an item out of the cached
-  // prefix to restate turns the model already holds. The seed stands, and the
-  // new line waits for the next call.
-  context.session.stopSpeaking();
-  context.session.updateConversation(
-    appendConversationEntry(first, {
-      kind: CONVERSATION_ENTRY_KIND.REPLY,
-      words: "Codex failed in payments.",
-    }),
-  );
-  const sentBefore = context.sent.length;
-  await armDeveloperTurn(context);
-
-  assert.deepEqual(contextItems(context, "[recent conversation", sentBefore), []);
-  assert.equal(
-    context.sent.slice(sentBefore).some((event) => event.type === CONVERSATION_ITEM_DELETE),
-    false,
-  );
-  assert.equal(context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION), seeded);
-});
-
-test("a history that grew an announcement re-seeds at the next developer turn", async () => {
-  const context = harness();
-  await context.session.connect();
-
-  const first = conversationEntries({
-    kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
-    words: "how is checkout going?",
-  });
-  context.session.updateSessions([observedSession("session-b", { title: "payments" })]);
-  context.session.updateConversation(first);
-  await armDeveloperTurn(context);
-  const seeded = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION);
-  assert.ok(seeded);
-
-  // An announcement is voiced out-of-band and enters this call's conversation
-  // nowhere else, so unlike every other line it is one the model has not
-  // seen: the item is re-seeded at the next turn, or "archive that chat"
-  // would be resolved against a history missing the chat it means.
-  context.session.stopSpeaking();
-  context.session.updateConversation(
-    appendConversationEntry(first, {
-      kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
-      words: "Codex finished payments.",
-      identity: { providerId: "claude-code", providerSessionId: "session-b" },
-    }),
-    { announced: true },
-  );
-  const sentBefore = context.sent.length;
-  await armDeveloperTurn(context);
-
-  const events = context.sent.slice(sentBefore);
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const deletes = events.filter((event) => event.type === CONVERSATION_ITEM_DELETE) as {
-    item_id?: string;
-  }[];
-  assert.deepEqual(
-    deletes.map((event) => event.item_id),
-    [seeded],
-  );
-  const items = contextItems(context, "[recent conversation", sentBefore);
-  assert.equal(items.length, 1);
-  assert.match(itemText(items[0]), /Luke announced: "Codex finished payments\."/);
-  assert.match(itemText(items[0]), /provider_id=claude-code provider_session_id=session-b/);
-  const reseeded = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION);
-  assert.ok(reseeded);
-  assert.notEqual(reseeded, seeded);
-
-  // The re-seed spends the announcement: the next turn stands pat again.
-  context.session.stopSpeaking();
-  const sentAfter = context.sent.length;
-  await armDeveloperTurn(context);
-  assert.deepEqual(contextItems(context, "[recent conversation", sentAfter), []);
-  assert.equal(context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION), reseeded);
-});
-
-test("a new call after teardown re-seeds the accumulated history", async () => {
-  const context = harness();
-  await context.session.connect();
-
-  const first = conversationEntries({
-    kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
-    words: "Claude Code finished checkout-service.",
-  });
-  context.session.updateConversation(first);
-  await armDeveloperTurn(context);
-
-  const grown = appendConversationEntry(first, {
-    kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
-    words: "Codex failed in payments.",
-  });
-  context.session.updateConversation(grown);
-
-  // The call retires with everything said on it; the caller keeps the thread
-  // and re-reports it, and the next call seeds the whole of it.
-  context.closeChannel();
-  await context.session.connect();
-  context.session.updateConversation(grown);
-  const sentBefore = context.sent.length;
-  await armDeveloperTurn(context);
-
-  const items = contextItems(context, "[recent conversation", sentBefore);
-  assert.equal(items.length, 1);
-  assert.match(itemText(items[0]), /finished checkout-service/);
-  assert.match(itemText(items[0]), /failed in payments/);
 });
 
 test("a transport close failure cannot strand teardown or the next call", async () => {
@@ -2175,38 +1753,9 @@ test("a transport close failure cannot strand teardown or the next call", async 
   assert.doesNotThrow(() => context.session.clearConversation());
 });
 
-test("clearing history deletes its live model-context item", async () => {
+test("a reply ending at teardown still hands its words over, once", async () => {
   const context = harness();
   await context.session.connect();
-  context.session.updateConversation(
-    conversationEntries({ kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Earlier words." }),
-  );
-  await armDeveloperTurn(context);
-  const historyItem = context.session.liveContextItemIds.get(CONTEXT_ITEM_KIND.CONVERSATION);
-  assert.ok(historyItem);
-
-  context.session.stopSpeaking();
-  context.session.updateConversation([]);
-  const sentBefore = context.sent.length;
-  await armDeveloperTurn(context);
-
-  assert.equal(
-    context.sent.slice(sentBefore).some(
-      (event) =>
-        event.type === CONVERSATION_ITEM_DELETE &&
-        // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-        (event as { item_id?: string }).item_id === historyItem,
-    ),
-    true,
-  );
-  assert.equal(context.session.liveContextItemIds.has(CONTEXT_ITEM_KIND.CONVERSATION), false);
-  assert.deepEqual(contextItems(context, "[recent conversation", sentBefore), []);
-});
-
-test("a reply ending at teardown writes nothing back into the retired call", async () => {
-  const context = harness({ writeBackOnReplyEnded: true });
-  await context.session.connect();
-  context.session.updateSessions([observedSession("session-a")]);
   await armDeveloperTurn(context);
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
@@ -2219,18 +1768,17 @@ test("a reply ending at teardown writes nothing back into the retired call", asy
   });
 
   // The call drops mid-reply. The words are still handed over — the caller's
-  // history keeps them — but the write-back that handover makes must land
-  // before the stores empty and leave with them, or the retired call would
-  // carry a pending item, rendered against an emptied roster, into a call
-  // whose caller has said nothing yet.
+  // history keeps them — and the retired call keeps nothing pending, so the
+  // next call starts clean.
   context.closeChannel();
-  assert.equal(context.replyEndings.length, 1);
+  assert.deepEqual(context.replyEndings, [
+    { texts: ["Half a sentence."], about: undefined, kind: undefined },
+  ]);
+  assert.equal(context.captions.at(-1), undefined);
 
   await context.session.connect();
-  const sentBefore = context.sent.length;
   await armDeveloperTurn(context);
-
-  assert.deepEqual(contextItems(context, "[recent conversation", sentBefore), []);
+  assert.equal(context.replyEndings.length, 1);
 });
 
 test("the developer's spoken words come back only from their own call", async () => {
@@ -2364,24 +1912,18 @@ test("a reply hands its words back as it ends, whole and once", async () => {
   // known, so the caller can record them for the next call to remember.
   context.session.stopSpeaking();
 
+  // A reply the brain was not asked for is about no session and is neither a
+  // briefing nor an answer: History records it as plain words.
   assert.deepEqual(context.replyEndings, [
-    { texts: ["The checkout work is done."], about: undefined },
+    { texts: ["The checkout work is done."], about: undefined, kind: undefined },
   ]);
 });
 
-test("an announcement's reply hands its subject back with the words", async () => {
+test("a briefing's reply hands its subject and its kind back with the words", async () => {
   const context = harness();
   await context.session.connect({ microphone: false });
 
-  context.session.speak([
-    {
-      providerId: "claude-code",
-      providerSessionId: "session-a",
-      subject: "checkout-service",
-      change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
-      decidedAt: 1_800_000_000_000,
-    },
-  ]);
+  context.session.speak(briefingAbout("session-a", "Claude Code finished checkout-service."));
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
     item: { id: "item-1" },
@@ -2394,24 +1936,67 @@ test("an announcement's reply hands its subject back with the words", async () =
   context.session.stopSpeaking();
 
   // The subject rides along so the caller can store the spoken transcript
-  // with the identity the approved announcement carried.
+  // with the identity the brain's decision carried, and the kind says it was
+  // a briefing rather than an answer.
   assert.deepEqual(context.replyEndings, [
-    { texts: ["Claude Code finished checkout-service."], about: ["session-a"] },
+    {
+      texts: ["Claude Code finished checkout-service."],
+      about: ["session-a"],
+      kind: REPLY_KIND.BRIEFING,
+    },
   ]);
 });
 
-test("a failed announcement delivery leaves no transcript for History", async () => {
+test("an onboarding beat is about no session and hands its words back as plain words", async () => {
   const context = harness();
   await context.session.connect({ microphone: false });
-  context.session.speak([
-    {
-      providerId: "claude-code",
-      providerSessionId: "session-a",
-      subject: "checkout-service",
-      change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
-      decidedAt: 1_800_000_000_000,
-    },
+
+  assert.equal(
+    context.session.speak({
+      kind: ARRIVAL_SPEECH_KIND,
+      sessionTitle: "Claude Code: checkout-service",
+      talkKeyLabel: "the right Option key",
+      decidedAt: Date.now(),
+    }),
+    true,
+  );
+  // The beat's turn is opened with no tools, and no notice may stand under the
+  // housing claiming it is about an observed session.
+  const response = context.sent.at(-1)?.response;
+  assert.ok(isRecord(response));
+  assert.equal(response.tool_choice, "none");
+  assert.deepEqual(context.captionSubjects, []);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    delta: "You're all set.",
+  });
+  assert.deepEqual(context.captionSubjects, [undefined]);
+  settleReply(context);
+  assert.deepEqual(context.replyEndings, [
+    { texts: ["You're all set."], about: undefined, kind: undefined },
   ]);
+
+  // The calendar beat keeps the same terms.
+  assert.equal(
+    context.session.speak({ kind: CALENDAR_ONBOARDING_SPEECH_KIND, decidedAt: Date.now() }),
+    true,
+  );
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    delta: "Your calendar can quiet me.",
+  });
+  settleReply(context);
+  assert.deepEqual(context.replyEndings.at(-1), {
+    texts: ["Your calendar can quiet me."],
+    about: undefined,
+    kind: undefined,
+  });
+});
+
+test("a failed briefing delivery leaves no transcript for History", async () => {
+  const context = harness();
+  await context.session.connect({ microphone: false });
+  context.session.speak(briefingAbout("session-a", "Checkout finished."));
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
     delta: "Checkout finished.",
@@ -2513,16 +2098,7 @@ test("a stop that beats the device still releases it", async () => {
 test("a turn is refused while another is already under way", async () => {
   const context = harness();
   await context.session.connect();
-  const speech = [
-    {
-      providerId: "claude-code",
-      providerSessionId: "session-a",
-      subject: "checkout-service",
-      change: SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT,
-      detail: "The checkout service needs a decision.",
-      decidedAt: 1_800_000_000_000,
-    },
-  ];
+  const speech = briefingAbout("session-a", "The checkout service needs a decision.");
 
   // While the developer holds the microphone open.
   await holdTurn(context);
@@ -2970,33 +2546,21 @@ test("a stop after the reply's audio ran out leaves nothing to trim", async () =
 
 test("a stale drain from the spoken half does not skip the follow-up's trim", async () => {
   let clock = 1_000;
-  const context = harness({ now: () => clock, carryAction: async () => ({ status: "sent" }) });
+  const context = harness({
+    now: () => clock,
+    askBrain: async () => brainAnswer("Sent.", "session-a"),
+  });
   await context.session.connect();
   context.deliverRemoteTrack();
-  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
   await armDeveloperTurn(context);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED, item: { id: "spoken" } });
   context.session.reportRemoteAudioActive();
 
-  // The reply calls a tool, its follow-up is asked for, and only then does the
-  // spoken half's buffer report itself empty: the drain is the old reply's,
-  // arriving after the follow-up already owns the turn.
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      id: "resp-1",
-      output: [
-        {
-          type: "function_call",
-          name: "send_session_message",
-          call_id: "call-1",
-          arguments:
-            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"run the tests"}',
-        },
-      ],
-    },
-  });
+  // The reply asks the brain, its follow-up is asked for, and only then does
+  // the spoken half's buffer report itself empty: the drain is the old
+  // reply's, arriving after the follow-up already owns the turn.
+  context.emit(askBrainDone("run the tests", { responseId: "resp-1" }));
   await new Promise((resolve) => setTimeout(resolve, 0));
   context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED, response_id: "resp-1" });
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-2" } });
@@ -3086,16 +2650,9 @@ test("a stop with nothing being spoken reports so and sends nothing", async () =
 });
 
 test("a stop that races the reply's confirmation still holds", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryAction: async (action) => {
-      carried.push(action);
-      return { status: "accepted" };
-    },
-  });
+  const context = harness({ askBrain: async () => brainAnswer("Done.") });
   await context.session.connect();
   context.deliverRemoteTrack();
-  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
   // The stop lands in the gap between asking for the reply and the server
   // confirming it: the cancel and the confirmation cross on the wire.
   await armDeveloperTurn(context);
@@ -3108,42 +2665,20 @@ test("a stop that races the reply's confirmation still holds", async () => {
   assert.equal(context.lukeAudible(), false);
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 
-  // And its finished form must not act: the turn its arming belonged to
-  // ended with the stop, however armed it was when the reply was asked for.
+  // And its finished form must not reach the brain: the turn it belonged to
+  // ended with the stop.
   const before = context.sent.length;
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      id: "resp-a",
-      output: [
-        {
-          type: "function_call",
-          name: "send_session_message",
-          call_id: "call-late",
-          arguments:
-            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"do it anyway"}',
-        },
-      ],
-    },
-  });
+  context.emit(askBrainDone("do it anyway", { callId: "call-late", responseId: "resp-a" }));
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  assert.deepEqual(carried, []);
-  const events = context.sent.slice(before);
-  const output = events.find(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-  );
-  assert.equal(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (
-      JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
-        status?: string;
-      }
-    ).status,
-    "rejected",
-  );
-  assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
+  assert.deepEqual(context.asked, []);
+  assert.deepEqual(toolOutputs(context, before), [
+    {
+      status: ACT_RESULT_STATUS.REJECTED,
+      reason: "That turn is over; ask again if it still matters.",
+    },
+  ]);
+  assert.deepEqual(responseCreates(context, before), []);
 
   // The next reply the developer actually asks for is heard again.
   context.session.sendText("what needs me?");
@@ -3151,53 +2686,31 @@ test("a stop that races the reply's confirmation still holds", async () => {
   assert.equal(context.lukeAudible(), true);
 });
 
-test("a stopped reply's tool follow-up stands down instead of speaking over the quiet", async () => {
-  let resolveCarry: ((outcome: ParsedJsonObject) => void) | undefined;
+test("a stopped reply's brain follow-up stands down instead of speaking over the quiet", async () => {
+  let answer: ((result: BrainAskResult) => void) | undefined;
   const context = harness({
-    carryAction: () =>
+    askBrain: () =>
       new Promise((resolve) => {
-        resolveCarry = resolve;
+        answer = resolve;
       }),
   });
   await context.session.connect();
-  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
   await armDeveloperTurn(context);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-a" } });
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      id: "resp-a",
-      output: [
-        {
-          type: "function_call",
-          name: "send_session_message",
-          call_id: "call-1",
-          arguments:
-            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
-        },
-      ],
-    },
-  });
+  context.emit(askBrainDone("add tests", { responseId: "resp-a" }));
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.ok(resolveCarry, "the write is under way when the stop lands");
+  assert.ok(answer, "the ask is out when the stop lands");
 
-  // The developer asks for quiet while the write is still in flight.
+  // The developer asks for quiet while the brain is still thinking.
   assert.equal(context.session.stopSpeaking(), true);
   const before = context.sent.length;
-  resolveCarry?.({ status: "accepted" });
+  answer?.(brainAnswer("Sent.", "session-a"));
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // The outcome is still delivered as an item, so the next turn has it — but
-  // no reply opens to voice it: the quiet just asked for holds.
-  const events = context.sent.slice(before);
-  assert.ok(
-    events.some(
-      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-    ),
-  );
-  assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
+  // The answer is still delivered as an item, so the model is not left
+  // waiting — but no reply opens to voice it: the quiet just asked for holds.
+  assert.deepEqual(toolOutputs(context, before), [{ briefing: "Sent." }]);
+  assert.deepEqual(responseCreates(context, before), []);
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });
 
@@ -3215,27 +2728,20 @@ test("closing stops the microphone track", async () => {
 test("clearing a conversation retires its call before another turn can begin", async () => {
   const context = harness();
   await context.session.connect();
-  context.session.updateConversation([
-    { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "Do not keep this after Clear." },
-  ]);
   assert.equal(context.session.sendText("This real turn belongs to the old call."), true);
 
   context.session.clearConversation();
 
   assert.equal(context.session.status, REALTIME_STATUS.IDLE);
   assert.equal(context.session.isConnected, false);
-  const sentBeforeReconnect = context.sent.length;
   await context.session.connect();
   await armDeveloperTurn(context);
 
+  // The next turn rides a fresh call, so the server-side conversation the
+  // cleared words lived in is gone with the old one.
   assert.equal(context.requests.length, 2);
-  assert.deepEqual(contextItems(context, "[recent conversation", sentBeforeReconnect), []);
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 });
-/** Opens and commits a developer turn, which is the only turn a tool may run in. */
-async function armDeveloperTurn(context: Harness): Promise<void> {
-  await holdTurn(context);
-  context.session.stopListening(true);
-}
 
 test("a typed ask opens a developer turn and asks for the reply to it", async () => {
   const context = harness();
@@ -3258,46 +2764,20 @@ test("a typed ask opens a developer turn and asks for the reply to it", async ()
   assert.equal(item.content?.[0]?.text, "What needs me right now?");
 });
 
-test("a typed ask can carry a tool call, because the developer opened the turn", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryAction: async (action) => {
-      carried.push(action);
-      return { status: "accepted" };
-    },
-  });
+test("a typed ask's reply can ask the brain, exactly as a spoken one's can", async () => {
+  const context = harness({ askBrain: async () => brainAnswer("Asked.", "session-a") });
   await context.session.connect();
-  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
-  // The turn is opened by typing rather than by the talk key: the two arm the
-  // gate on the same terms, because both are the developer's own ask.
+  // The turn is opened by typing rather than by the talk key: both are the
+  // developer's own ask, and the voice's one tool answers in either.
   context.session.sendText("ask claude code to add tests");
 
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "send_session_message",
-          call_id: "call-1",
-          arguments:
-            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
-        },
-      ],
-    },
-  });
+  context.emit(askBrainDone("ask claude code to add tests"));
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  assert.deepEqual(carried, [
-    {
-      kind: "message",
-      identity: { providerId: "claude-code", providerSessionId: "session-a" },
-      text: "add tests",
-    },
-  ]);
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // The outcome is voiced, exactly as a spoken ask's would be.
+  assert.deepEqual(context.asked, ["ask claude code to add tests"]);
+  // The answer is voiced, exactly as a spoken ask's would be.
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  assert.deepEqual(context.captionSubjects.at(-1), ["session-a"]);
 });
 
 test("a typed ask interrupts the reply it arrives over", async () => {
@@ -3339,83 +2819,40 @@ test("a typed ask interrupts the reply it arrives over", async () => {
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 });
 
-test("a cancelled reply's late finish cannot act in the turn that replaced it", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryAction: async (action) => {
-      carried.push(action);
-      return { status: "accepted" };
-    },
-  });
+test("a cancelled reply's late finish cannot ask the brain in the turn that replaced it", async () => {
+  const context = harness({ askBrain: async () => brainAnswer("Done.") });
   await context.session.connect();
-  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
   // A spoken turn opens reply A, and the server confirms it by name.
   await armDeveloperTurn(context);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-a" } });
-  // The developer types over it, opening a new armed turn.
+  // The developer types over it, opening a new turn.
   assert.equal(context.session.sendText("never mind — what needs me?"), true);
   const sentBefore = context.sent.length;
 
   // Reply A's finished form arrives late — the server had completed it before
-  // the cancel landed — carrying the very call the developer interrupted.
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      id: "resp-a",
-      output: [
-        {
-          type: "function_call",
-          name: "send_session_message",
-          call_id: "call-stale",
-          arguments:
-            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"do it anyway"}',
-        },
-      ],
-    },
-  });
+  // the cancel landed — carrying the very ask the developer interrupted.
+  context.emit(askBrainDone("do it anyway", { callId: "call-stale", responseId: "resp-a" }));
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  // Nothing was carried: the session takes messages and the identity is real,
-  // so only the freshness of the reply stands between the call and the write —
-  // and it holds, however armed the turn that superseded it is.
-  assert.deepEqual(carried, []);
-  const events = context.sent.slice(sentBefore);
-  const output = events.find(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-  );
-  assert.equal(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (
-      JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
-        status?: string;
-      }
-    ).status,
-    "rejected",
-  );
+  // Nothing reached the brain: only the freshness of the reply stands between
+  // the call and the ask, and it holds against a turn the developer moved on
+  // from.
+  assert.deepEqual(context.asked, []);
+  assert.deepEqual(toolOutputs(context, sentBefore), [
+    {
+      status: ACT_RESULT_STATUS.REJECTED,
+      reason: "That turn is over; ask again if it still matters.",
+    },
+  ]);
   // No reply was opened to voice the refusal, and the new turn is still under way.
-  assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
+  assert.deepEqual(responseCreates(context, sentBefore), []);
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 
-  // The reply the typed ask actually asked for still acts in full.
+  // The reply the typed ask actually asked for still asks in full.
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-b" } });
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      id: "resp-b",
-      output: [
-        {
-          type: "function_call",
-          name: "send_session_message",
-          call_id: "call-fresh",
-          arguments:
-            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"status?"}',
-        },
-      ],
-    },
-  });
+  context.emit(askBrainDone("status?", { callId: "call-fresh", responseId: "resp-b" }));
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(carried.length, 1);
+  assert.deepEqual(context.asked, ["status?"]);
 });
 
 test("a cancelled reply's late finish does not end the turn that replaced it", async () => {
@@ -3467,17 +2904,118 @@ test("a typed ask before the call is open reports it could not go", () => {
   assert.deepEqual<ParsedJsonObject[]>(context.sent, []);
 });
 
-test("a spoken ask is carried through the carrier and its outcome is voiced", async () => {
-  const carried: unknown[] = [];
+test("a spoken ask goes to the brain and its answer is voiced about the sessions it named", async () => {
   const context = harness({
-    carryAction: async (action) => {
-      carried.push(action);
-      return { status: "accepted" };
-    },
+    askBrain: async () => brainAnswer("Claude Code is on the tests now.", "session-a"),
   });
   await context.session.connect();
-  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
-  // The tool call arrives inside a turn the developer opened by speaking.
+  // The call arrives inside a turn the developer opened by speaking.
+  await armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  context.emit(askBrainDone("ask claude code to add tests"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // The developer's words reach the brain as the voice passed them, and the
+  // brain's reply is the tool's output, for the follow-up to say.
+  assert.deepEqual(context.asked, ["ask claude code to add tests"]);
+  assert.deepEqual(toolOutputs(context, sentBefore), [
+    { briefing: "Claude Code is on the tests now." },
+  ]);
+  // The follow-up that says it carries no tools: it was opened to say what the
+  // brain answered, not to ask it again.
+  assert.deepEqual(responseCreates(context, sentBefore), [
+    { type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE, response: { tools: [], tool_choice: "none" } },
+  ]);
+  assert.equal(context.sent.at(-1)?.type, REALTIME_CLIENT_EVENT.RESPONSE_CREATE);
+  // The turn never ended: the reply resumes over the answer, about the
+  // sessions the brain named.
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  assert.deepEqual(context.captionSubjects.at(-1), ["session-a"]);
+
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item-answer" },
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    item_id: "item-answer",
+    delta: "Claude Code is on the tests now.",
+  });
+  assert.deepEqual(context.captionSubjects.at(-1), ["session-a"]);
+  settleReply(context);
+
+  // History records the words as a reply, about the sessions the answer named.
+  assert.deepEqual(context.replyEndings, [
+    {
+      texts: ["Claude Code is on the tests now."],
+      about: ["session-a"],
+      kind: REPLY_KIND.REPLY,
+    },
+  ]);
+  assert.equal(context.captionSubjects.at(-1), undefined);
+});
+
+test("a rejected answer's reason is the tool's output, and the follow-up still speaks", async () => {
+  const context = harness({
+    askBrain: async () => ({
+      status: ACT_RESULT_STATUS.REJECTED,
+      reason: "That session is no longer observed.",
+    }),
+  });
+  await context.session.connect();
+  await armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  context.emit(askBrainDone("open the codex one"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(toolOutputs(context, sentBefore), [
+    { status: ACT_RESULT_STATUS.REJECTED, reason: "That session is no longer observed." },
+  ]);
+  // The refusal is voiced like any answer, but about no session: nothing the
+  // brain refused may put a notice under the housing.
+  assert.equal(responseCreates(context, sentBefore).length, 1);
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  assert.equal(context.captionSubjects.at(-1), undefined);
+});
+
+test("a call with no brain behind it is refused, and the refusal is voiced", async () => {
+  const context = harness();
+  await context.session.connect();
+  await armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  context.emit(askBrainDone("what needs me?"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(toolOutputs(context, sentBefore), [
+    {
+      status: ACT_RESULT_STATUS.REJECTED,
+      reason: "Luke's judgment is not available on this call.",
+    },
+  ]);
+  assert.equal(responseCreates(context, sentBefore).length, 1);
+});
+
+test("an ask carrying no words never reaches the brain", async () => {
+  const context = harness({ askBrain: async () => brainAnswer("Done.") });
+  await context.session.connect();
+  await armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  context.emit(askBrainDone("   "));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(context.asked, []);
+  assert.deepEqual(toolOutputs(context, sentBefore), [
+    { status: ACT_RESULT_STATUS.REJECTED, reason: "The ask carried no words." },
+  ]);
+});
+
+test("a call to a tool the voice was never given is refused before the brain", async () => {
+  const context = harness({ askBrain: async () => brainAnswer("Done.") });
+  await context.session.connect();
   await armDeveloperTurn(context);
   const sentBefore = context.sent.length;
 
@@ -3497,804 +3035,206 @@ test("a spoken ask is carried through the carrier and its outcome is voiced", as
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  assert.deepEqual(carried, [
-    {
-      kind: "message",
-      identity: { providerId: "claude-code", providerSessionId: "session-a" },
-      text: "add tests",
-    },
+  assert.deepEqual(context.asked, []);
+  assert.deepEqual(toolOutputs(context, sentBefore), [
+    { status: ACT_RESULT_STATUS.REJECTED, reason: "No such tool exists." },
   ]);
-  const followUp = context.sent.slice(sentBefore);
-  const output = followUp.find(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-  );
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  assert.equal(
-    (output?.item as { output?: string } | undefined)?.output,
-    '{"outcome":"message-sent"}',
-  );
-  assert.equal(
-    followUp.at(-1)?.type,
-    REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
-    "the outcome is voiced by the reply that follows",
-  );
-  // The turn never ended: the reply resumes over the outcome.
-  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 });
 
-test("a response waits for every SDK tool output before one tool-free follow-up", async () => {
-  const pending = new Map<string, (output: ParsedJsonObject) => void>();
+test("a response waits for every ask's answer before one tool-free follow-up", async () => {
+  const pending = new Map<string, (result: BrainAskResult) => void>();
   const context = harness({
-    carryAction: (action) =>
-      action.kind === "message"
-        ? new Promise<ParsedJsonObject>((resolve) => pending.set(action.text, resolve))
-        : Promise.resolve({ status: "rejected" }),
+    askBrain: (question) => new Promise((resolve) => pending.set(question, resolve)),
   });
   await context.session.connect();
-  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
   await armDeveloperTurn(context);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-tools" } });
   const sentBefore = context.sent.length;
 
-  const calls = [
-    {
-      type: "function_call",
-      name: "send_session_message",
-      call_id: "call-first",
-      arguments: '{"provider_id":"claude-code","provider_session_id":"session-a","text":"first"}',
-    },
-    {
-      type: "function_call",
-      name: "send_session_message",
-      call_id: "call-second",
-      arguments: '{"provider_id":"claude-code","provider_session_id":"session-a","text":"second"}',
-    },
-  ];
+  const calls = [askBrainCall("first", "call-first"), askBrainCall("second", "call-second")];
   for (const item of calls) {
     context.emit({ type: "response.output_item.done", response_id: "resp-tools", item });
   }
   await Promise.resolve();
 
-  pending.get("second")?.({ status: "accepted" });
+  pending.get("second")?.(brainAnswer("Second."));
   await new Promise((resolve) => setTimeout(resolve, 0));
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
     response: { id: "resp-tools", output: calls },
   });
-  assert.equal(
-    context.sent
-      .slice(sentBefore)
-      .filter((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE).length,
-    0,
-  );
+  assert.deepEqual(responseCreates(context, sentBefore), []);
 
-  pending.get("first")?.({ status: "accepted" });
+  pending.get("first")?.(brainAnswer("First."));
   await new Promise((resolve) => setTimeout(resolve, 0));
-  const followUps = context.sent
-    .slice(sentBefore)
-    .filter((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE);
-  assert.deepEqual(followUps, [
+  assert.deepEqual(responseCreates(context, sentBefore), [
     { type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE, response: { tools: [], tool_choice: "none" } },
   ]);
 });
 
-test("malformed SDK call details are refused before the carrier", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryAction: async (action) => {
-      carried.push(action);
-      return { status: "accepted" };
-    },
-  });
+test("malformed SDK call details are refused before the brain", async () => {
+  const context = harness({ askBrain: async () => brainAnswer("Done.") });
   await context.session.connect();
 
-  assert.deepEqual(await context.executeSdkTool("send_session_message", undefined), {
-    status: "rejected",
+  assert.deepEqual(await context.executeSdkTool(ASK_BRAIN_TOOL.name, undefined), {
+    status: ACT_RESULT_STATUS.REJECTED,
     reason: "The tool call was malformed.",
   });
-  assert.deepEqual(carried, []);
+  assert.deepEqual(
+    await context.executeSdkTool(ASK_BRAIN_TOOL.name, {
+      toolCall: { type: "function_call", callId: "call-1", name: ASK_BRAIN_TOOL.name },
+    }),
+    { status: ACT_RESULT_STATUS.REJECTED, reason: "The tool arguments were malformed." },
+  );
+  assert.deepEqual(context.asked, []);
 });
 
-test("a session carrier that throws is refused with the error that caused it", async () => {
+test("a brain that throws is refused with a bounded reason", async () => {
   const context = harness({
-    carryAction: async () => {
-      throw new Error("Claude Code could not be reached.");
+    askBrain: async () => {
+      throw new Error("The bridge dropped the ask.");
     },
   });
   await context.session.connect();
-  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
   await armDeveloperTurn(context);
   const sentBefore = context.sent.length;
 
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "send_session_message",
-          call_id: "call-1",
-          arguments:
-            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
-        },
-      ],
-    },
-  });
+  context.emit(askBrainDone("add tests"));
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  const output = context.sent.slice(sentBefore).find(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-  );
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const parsed = JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
-    status?: string;
-    reason?: string;
-  };
-  assert.equal(parsed.status, "rejected");
-  assert.equal(parsed.reason, "Claude Code could not be reached.");
+  // The error's own words never reach the model; the refusal is fixed by the build.
+  assert.deepEqual(toolOutputs(context, sentBefore), [
+    { status: ACT_RESULT_STATUS.REJECTED, reason: "Luke's judgment did not answer." },
+  ]);
 });
 
-test("a spoken ask to open a session is carried, and one with no address is refused", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryAction: async (action) => {
-      carried.push(action);
-      return { status: "opened" };
-    },
-  });
+test("the brain's reply to a typed ask is spoken about the sessions it named", async () => {
+  const context = harness();
   await context.session.connect();
-  // One session reported an address; the other reported none and so has
-  // nowhere to be opened, however real its identity is.
-  context.session.updateSessions([
-    observedSession("session-a", { detail: { link: "https://claude.ai/session/session-a" } }),
-    observedSession("session-b"),
-  ]);
-  await armDeveloperTurn(context);
   const sentBefore = context.sent.length;
 
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "open_session",
-          call_id: "call-1",
-          arguments: '{"provider_id":"claude-code","provider_session_id":"session-a"}',
-        },
-        {
-          type: "function_call",
-          name: "open_session",
-          call_id: "call-2",
-          arguments: '{"provider_id":"claude-code","provider_session_id":"session-b"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  // The carried action names the session, never its address: the main process
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // reads the link back out of its own registry, the same as a pressed row.
-  assert.deepEqual(carried, [
-    { kind: "open", identity: { providerId: "claude-code", providerSessionId: "session-a" } },
-  ]);
-  const outputs = context.sent.slice(sentBefore).filter(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-  );
-  const statuses = outputs.map(
-    (event) =>
-      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-      (
-        JSON.parse((event.item as { output?: string } | undefined)?.output ?? "{}") as {
-          status?: string;
-        }
-      ).status,
-  );
-  assert.deepEqual(statuses, ["opened", "rejected"]);
-});
-
-test("a spoken ask for a new workspace is carried, and an unlisted project is refused", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryAction: async (action) => {
-      carried.push(action);
-      return { status: "accepted" };
-    },
-  });
-  await context.session.connect();
-  const project = {
-    providerId: "conductor",
-    providerName: "Conductor",
-    providerProjectId: "proj-1",
-    repository: "luke",
-    taskSupport: "optional",
-  } as const;
-  context.session.updateWorkspaceProjects([project]);
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // The projects travel as context the way the roster does, and an identical
-  // list is not resent.
-  context.session.updateWorkspaceProjects([project]);
-  await armDeveloperTurn(context);
-  assert.equal(contextItems(context, "[workspace projects").length, 1);
-
-  // A changed default is news the way a changed list is: the context is
-  // resent, now saying by id where a nameless ask goes.
-  const sentBeforeDefault = context.sent.length;
-  context.session.updateWorkspaceProjects([project], "conductor");
-  context.session.stopSpeaking();
-  await armDeveloperTurn(context);
-  const chosen = contextItems(context, "[workspace projects", sentBeforeDefault);
-  assert.equal(chosen.length, 1);
-  const chosenItem = chosen[0];
-  assert.ok(chosenItem);
-  assert.match(
-    itemText(chosenItem),
-    /names no provider creates in Conductor \[provider_id=conductor\]/,
-  );
-
-  const sentBefore = context.sent.length;
-
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "create_workspace",
-          call_id: "call-1",
-          arguments:
-            '{"provider_id":"conductor","project_id":"proj-1","name":"fix the panel","task":"wire the XYZ feature"}',
-        },
-        {
-          type: "function_call",
-          name: "create_workspace",
-          call_id: "call-2",
-          arguments: '{"provider_id":"conductor","project_id":"proj-unlisted"}',
-        },
-        {
-          type: "function_call",
-          name: "create_workspace",
-          call_id: "call-3",
-          arguments:
-            '{"provider_id":"conductor","project_id":"proj-1","model":"Fable 5","effort":"max"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  // Only the listed project reaches the carrier; the unlisted one is refused
-  // before any bridge call exists. A model named for one creation arrives
-  // resolved to the wire pairing the build's own table documents.
-  assert.deepEqual(carried, [
-    {
-      kind: "create-workspace",
-      providerId: "conductor",
-      providerProjectId: "proj-1",
-      name: "fix the panel",
-      task: "wire the XYZ feature",
-    },
-    {
-      kind: "create-workspace",
-      providerId: "conductor",
-      providerProjectId: "proj-1",
-      agentSelection: { agent: "claude", model: "fable-5", effort: "max" },
-    },
-  ]);
-  const outputs = context.sent.slice(sentBefore).filter(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-  );
-  const statuses = outputs.map(
-    (event) =>
-      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-      (
-        JSON.parse((event.item as { output?: string } | undefined)?.output ?? "{}") as {
-          status?: string;
-        }
-      ).status,
-  );
-  assert.deepEqual(statuses, ["accepted", "rejected", "accepted"]);
-});
-
-test("a Superset workspace requires an observed host and agent", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryAction: async (action) => {
-      carried.push(action);
-      return { status: "accepted" };
-    },
-  });
-  await context.session.connect();
-  context.session.updateWorkspaceProjects([
-    {
-      providerId: "superset",
-      providerName: "Superset",
-      providerProjectId: "project-1",
-      providerTargetId: "host-1",
-      targetName: "Build Mac",
-      repository: "Luke",
-      taskSupport: "required",
-      spawnableAgents: ["codex"],
-    },
-  ]);
-  await armDeveloperTurn(context);
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "create_workspace",
-          call_id: "call-superset",
-          arguments:
-            '{"provider_id":"superset","project_id":"project-1","target_id":"host-1","agent":"codex","task":"Fix the panel"}',
-        },
-        {
-          type: "function_call",
-          name: "create_workspace",
-          call_id: "call-stale",
-          arguments:
-            '{"provider_id":"superset","project_id":"project-1","target_id":"host-old","agent":"codex","task":"Fix the panel"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  assert.deepEqual(carried, [
-    {
-      kind: "create-workspace",
-      providerId: "superset",
-      providerProjectId: "project-1",
-      providerTargetId: "host-1",
-      agent: "codex",
-      task: "Fix the panel",
-    },
-  ]);
-});
-
-test("a project that names its own workspaces refuses a name and takes the rest", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryAction: async (action) => {
-      carried.push(action);
-      return { status: "accepted" };
-    },
-  });
-  await context.session.connect();
-  context.session.updateWorkspaceProjects([
-    {
-      providerId: "codex",
-      providerName: "Codex cloud",
-      providerProjectId: "env-1",
-      repository: "luke",
-      taskSupport: "required",
-      namesItself: true,
-    },
-  ]);
-  await armDeveloperTurn(context);
-  const sentBefore = context.sent.length;
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "create_workspace",
-          call_id: "call-named",
-          arguments:
-            '{"provider_id":"codex","project_id":"env-1","name":"Panel fix","task":"Fix the panel"}',
-        },
-        {
-          type: "function_call",
-          name: "create_workspace",
-          call_id: "call-unnamed",
-          arguments: '{"provider_id":"codex","project_id":"env-1","task":"Fix the panel"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  // The named ask is refused before any bridge call exists — the provider
-  // would refuse it anyway, and a refusal here says why — and the same ask
-  // without a name is carried whole.
-  assert.deepEqual(carried, [
-    {
-      kind: "create-workspace",
-      providerId: "codex",
-      providerProjectId: "env-1",
-      task: "Fix the panel",
-    },
-  ]);
-  const outputs = context.sent.slice(sentBefore).filter(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-  );
-  const [refused] = outputs;
-  assert.match(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (refused?.item as { output?: string } | undefined)?.output ?? "",
-    /names its own workspaces/,
-  );
-});
-
-test("a sole Superset project resolves when the model omits its routing ids", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryAction: async (action) => {
-      carried.push(action);
-      return { status: "accepted" };
-    },
-  });
-  await context.session.connect();
-  context.session.updateWorkspaceProjects([
-    {
-      providerId: "superset",
-      providerName: "Superset",
-      providerProjectId: "project-1",
-      providerTargetId: "local",
-      targetName: "This Mac",
-      repository: "Luke",
-      taskSupport: "required",
-      spawnableAgents: ["codex"],
-    },
-  ]);
-  await armDeveloperTurn(context);
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "create_workspace",
-          call_id: "call-superset-implicit-project",
-          arguments: '{"provider_id":"superset","agent":"codex","task":"Fix the panel"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  assert.deepEqual(carried, [
-    {
-      kind: "create-workspace",
-      providerId: "superset",
-      providerProjectId: "project-1",
-      providerTargetId: "local",
-      agent: "codex",
-      task: "Fix the panel",
-    },
-  ]);
-});
-
-test("a Superset agent display name resolves to its advertised preset id", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryAction: async (action) => {
-      carried.push(action);
-      return { status: "accepted" };
-    },
-  });
-  await context.session.connect();
-  context.session.updateWorkspaceProjects([
-    {
-      providerId: "superset",
-      providerName: "Superset",
-      providerProjectId: "project-1",
-      providerTargetId: "local",
-      targetName: "This Mac",
-      repository: "Luke",
-      taskSupport: "required",
-      spawnableAgents: ["claude", "codex"],
-    },
-  ]);
-  await armDeveloperTurn(context);
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "create_workspace",
-          call_id: "call-superset-display-agent",
-          arguments: '{"provider_id":"superset","agent":"Codex","task":"Fix the panel"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  assert.deepEqual(carried, [
-    {
-      kind: "create-workspace",
-      providerId: "superset",
-      providerProjectId: "project-1",
-      providerTargetId: "local",
-      agent: "codex",
-      task: "Fix the panel",
-    },
-  ]);
-});
-
-test("a spoken ask to add an agent is carried, and an unlisted kind is refused", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryAction: async (action) => {
-      carried.push(action);
-      return { status: "accepted" };
-    },
-  });
-  await context.session.connect();
-  context.session.updateSessions([
-    observedSession("chat-1", { spawnableAgents: ["claude", "codex", "cursor"] }),
-  ]);
-  await armDeveloperTurn(context);
-  const sentBefore = context.sent.length;
-
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "add_workspace_agent",
-          call_id: "call-1",
-          arguments:
-            '{"provider_id":"claude-code","provider_session_id":"chat-1","agent":"codex","task":"Build the XYZ feature"}',
-        },
-        {
-          type: "function_call",
-          name: "add_workspace_agent",
-          call_id: "call-2",
-          arguments:
-            '{"provider_id":"claude-code","provider_session_id":"chat-1","agent":"unlisted-agent"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  // Only a kind the roster entry listed reaches the carrier; the other is
-  // refused before any bridge call exists.
-  assert.deepEqual(carried, [
-    {
-      kind: "add-agent",
-      identity: { providerId: "claude-code", providerSessionId: "chat-1" },
-      agent: "codex",
-      task: "Build the XYZ feature",
-    },
-  ]);
-  const outputs = context.sent.slice(sentBefore).filter(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-  );
-  const statuses = outputs.map(
-    (event) =>
-      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-      (
-        JSON.parse((event.item as { output?: string } | undefined)?.output ?? "{}") as {
-          status?: string;
-        }
-      ).status,
-  );
-  assert.deepEqual(statuses, ["accepted", "rejected"]);
-});
-
-test("a tool call outside the roster is refused before any carrier runs", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryAction: async (action) => {
-      carried.push(action);
-      return { status: "accepted" };
-    },
-  });
-  await context.session.connect();
-  // The roster names one session that takes nothing.
-  context.session.updateSessions([observedSession("session-a")]);
-  await armDeveloperTurn(context);
-  const sentBefore = context.sent.length;
-
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "send_session_message",
-          call_id: "call-1",
-          arguments:
-            '{"provider_id":"claude-code","provider_session_id":"session-unknown","text":"hi"}',
-        },
-        {
-          type: "function_call",
-          name: "send_session_message",
-          call_id: "call-2",
-          arguments: '{"provider_id":"claude-code","provider_session_id":"session-a","text":"hi"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  // Nothing was carried: one call named a session Luke was never shown, the
-  // other named one that advertised nothing. Both were answered anyway, so the
-  // model is never left waiting on a call that will not return.
-  assert.deepEqual(carried, []);
-  const outputs = context.sent.slice(sentBefore).filter(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-  );
-  assert.equal(outputs.length, 2);
-  for (const event of outputs) {
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    const raw = (event.item as { output?: string } | undefined)?.output ?? "{}";
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    assert.equal((JSON.parse(raw) as { status?: string }).status, "rejected");
-  }
-});
-
-test("a tool call outside a turn the developer opened cannot act", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryAction: async (action) => {
-      carried.push(action);
-      return { status: "accepted" };
-    },
-  });
-  await context.session.connect();
-  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
-  // No developer turn is opened: the call arrives on a turn Luke was not asked
-  // to act in — the shape a summary-driven injection would take.
-  const sentBefore = context.sent.length;
-
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "send_session_message",
-          call_id: "call-1",
-          arguments:
-            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  // The session takes messages and the identity is real, so only the turn gate
-  // stands between the call and the write — and it holds.
-  assert.deepEqual(carried, []);
-  const events = context.sent.slice(sentBefore);
-  const output = events.find(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-  );
   assert.equal(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (
-      JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
-        status?: string;
-      }
-    ).status,
-    "rejected",
+    context.session.speakReply("Two sessions need you.", [
+      { providerId: "claude-code", providerSessionId: "session-a" },
+      { providerId: "codex", providerSessionId: "session-b" },
+    ]),
+    true,
   );
-  // The call is answered so the model is not left waiting, but the turn opens
-  // no reply: a turn Luke was not asked to act in must not talk on either.
-  assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
-});
 
-test("a tool outcome is not spoken over a turn the developer has taken", async () => {
-  let resolveWrite: ((output: ParsedJsonObject) => void) | undefined;
-  const context = harness({
-    carryAction: () =>
-      new Promise<ParsedJsonObject>((resolve) => {
-        resolveWrite = resolve;
-      }),
-  });
-  await context.session.connect();
-  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
-  await armDeveloperTurn(context);
-  const sentBefore = context.sent.length;
+  // The reply travels on the briefing's own out-of-band terms — no tools, no
+  // conversation — and the caption is about the sessions the brain named from
+  // the moment it is asked for.
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  const [request] = responseCreates(context, sentBefore);
+  assert.ok(isRecord(request?.response));
+  assert.equal(request.response.conversation, "none");
+  assert.deepEqual(request.response.tools, []);
+  assert.deepEqual(context.captionSubjects.at(-1), ["session-a", "session-b"]);
 
   context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "send_session_message",
-          call_id: "call-1",
-          arguments:
-            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
-        },
-      ],
-    },
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    delta: "Two sessions need you.",
   });
-  // Let the answer reach the point where it is awaiting the write.
-  await Promise.resolve();
-  // The developer takes the turn while the write is still in flight.
-  context.session.beginTurn();
-  await deviceArrives();
-  resolveWrite?.({ status: "accepted" });
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  settleReply(context);
+  assert.deepEqual(context.replyEndings, [
+    {
+      texts: ["Two sessions need you."],
+      about: ["session-a", "session-b"],
+      kind: REPLY_KIND.REPLY,
+    },
+  ]);
+  // A reply with nothing to say opens nothing.
+  assert.equal(context.session.speakReply("   ", []), false);
+});
 
-  const events = context.sent.slice(sentBefore);
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // The outcome was still delivered as an item, so the next turn has it...
-  assert.ok(
-    events.some(
-      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-    ),
+test("the brain's reply interrupts the reply it arrives over, never the developer's microphone", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  await armDeveloperTurn(context);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
+  const sentBefore = context.sent.length;
+
+  assert.equal(context.session.speakReply("Here is the answer.", []), true);
+  assert.equal(context.lukeAudible(), false);
+  assert.deepEqual(
+    context.sent.slice(sentBefore).map((event) => event.type),
+    [
+      REALTIME_CLIENT_EVENT.RESPONSE_CANCEL,
+      REALTIME_CLIENT_EVENT.OUTPUT_AUDIO_BUFFER_CLEAR,
+      REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
+    ],
   );
-  // ...but no reply was opened to voice it over the microphone now open.
-  assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
+  settleReply(context);
+
+  // Half a spoken question is still the developer's.
+  await holdTurn(context);
+  assert.equal(context.session.speakReply("Here is the answer.", []), false);
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
 });
 
-test("a drained tool reply holds the turn for the follow-up it owes", async () => {
-  let resolveWrite: ((output: ParsedJsonObject) => void) | undefined;
+test("the brain's answer is not spoken over a turn the developer has taken", async () => {
+  let answer: ((result: BrainAskResult) => void) | undefined;
   const context = harness({
-    carryAction: () =>
-      new Promise<ParsedJsonObject>((resolve) => {
-        resolveWrite = resolve;
+    askBrain: () =>
+      new Promise((resolve) => {
+        answer = resolve;
       }),
   });
   await context.session.connect();
-  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
+  await armDeveloperTurn(context);
+  const sentBefore = context.sent.length;
+
+  context.emit(askBrainDone("add tests"));
+  // Let the call reach the point where it is awaiting the brain.
+  await Promise.resolve();
+  // The developer takes the turn while the ask is still out.
+  context.session.beginTurn();
+  await deviceArrives();
+  answer?.(brainAnswer("Sent.", "session-a"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // The answer was still delivered as an item, so the model is not left
+  // waiting — but no reply was opened to voice it over the microphone now open.
+  assert.deepEqual(toolOutputs(context, sentBefore), [{ briefing: "Sent." }]);
+  assert.deepEqual(responseCreates(context, sentBefore), []);
+  assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+});
+
+test("a drained reply that asked the brain holds the turn for the follow-up it owes", async () => {
+  let answer: ((result: BrainAskResult) => void) | undefined;
+  const context = harness({
+    askBrain: () =>
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+  });
+  await context.session.connect();
   await armDeveloperTurn(context);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
 
-  // The spoken half's audio drains before the done that carries the calls.
+  // The spoken half's audio drains before the done that carries the call.
   context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      id: "resp-1",
-      output: [
-        {
-          type: "function_call",
-          name: "send_session_message",
-          call_id: "call-1",
-          arguments:
-            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
-        },
-      ],
-    },
-  });
+  context.emit(askBrainDone("add tests", { responseId: "resp-1" }));
   await Promise.resolve();
 
-  // The turn holds through the write: the READY an ending here would offer is
-  // the edge the announcer rides, and a reply taken there would abandon the
-  // follow-up that is the outcome's only voice.
+  // The turn holds while the brain thinks: the READY an ending here would
+  // offer is the edge the briefing queue rides, and a briefing taken there
+  // would abandon the follow-up that is the answer's only voice.
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
-  assert.equal(context.session.speak(announcedFinish("session-b")), false);
+  assert.equal(context.session.speak(briefingAbout("session-b")), false);
 
-  resolveWrite?.({ status: "accepted" });
+  answer?.(brainAnswer("Sent.", "session-a"));
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  // The follow-up opened: the outcome is voiced rather than abandoned.
-  assert.equal(
-    context.sent.filter((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE).length,
-    2,
-  );
+  // The follow-up opened: the answer is voiced rather than abandoned.
+  assert.equal(responseCreates(context).length, 2);
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 });
 
-test("the write's hold gets a clock of its own, not the drain's leftovers", async (t) => {
-  const context = harness({
-    carryAction: () => new Promise<ParsedJsonObject>(() => undefined),
-  });
+test("an ask out to the brain gets a clock of its own, longer than a reply's", async (t) => {
+  const context = harness({ askBrain: () => new Promise(() => undefined) });
   await context.session.connect();
-  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
   await armDeveloperTurn(context);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
 
@@ -4303,149 +3243,93 @@ test("the write's hold gets a clock of its own, not the drain's leftovers", asyn
   context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
   t.mock.timers.tick(REALTIME_SETTLE_TIMEOUT_MS - 1);
 
-  // The done it was watching for arrives, carrying calls: the hold that
-  // follows is the write's, not the tail of the drain's clock.
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      id: "resp-1",
-      output: [
-        {
-          type: "function_call",
-          name: "send_session_message",
-          call_id: "call-1",
-          arguments:
-            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
-        },
-      ],
-    },
-  });
+  // The done it was watching for arrives, carrying the ask: the hold that
+  // follows is the ask's, not the tail of the drain's clock.
+  context.emit(askBrainDone("add tests", { responseId: "resp-1" }));
   await Promise.resolve();
 
-  // The drain's leftover second must not cut the hold mid-write...
+  // The drain's leftover moment must not cut the hold while the brain
+  // thinks, and neither may a reply's whole settle window: a brain turn reads
+  // and may act before it answers.
   t.mock.timers.tick(1);
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
-
-  // ...while a write that hangs past a whole window still meets the backstop:
-  // a turn that never ends is worse than one that ends early.
   t.mock.timers.tick(REALTIME_SETTLE_TIMEOUT_MS);
+  assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+
+  // An ask that hangs past even the brain's own window still meets a
+  // backstop: a turn that never ends is worse than one that ends early.
+  assert.ok(BRAIN_ASK_SETTLE_TIMEOUT_MS > REALTIME_SETTLE_TIMEOUT_MS);
+  t.mock.timers.tick(BRAIN_ASK_SETTLE_TIMEOUT_MS - REALTIME_SETTLE_TIMEOUT_MS);
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });
 
-test("audio draining mid-write holds the turn the same way", async () => {
-  let resolveWrite: ((output: ParsedJsonObject) => void) | undefined;
+test("audio draining while the ask is out holds the turn the same way", async () => {
+  let answer: ((result: BrainAskResult) => void) | undefined;
   const context = harness({
-    carryAction: () =>
-      new Promise<ParsedJsonObject>((resolve) => {
-        resolveWrite = resolve;
+    askBrain: () =>
+      new Promise((resolve) => {
+        answer = resolve;
       }),
   });
   await context.session.connect();
-  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
   await armDeveloperTurn(context);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
 
-  // The ordinary order: the done carrying the calls lands while the spoken
-  // half is still audible, and the audio drains during the write.
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      id: "resp-1",
-      output: [
-        {
-          type: "function_call",
-          name: "send_session_message",
-          call_id: "call-1",
-          arguments:
-            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
-        },
-      ],
-    },
-  });
+  // The ordinary order: the done carrying the ask lands while the spoken half
+  // is still audible, and the audio drains while the brain thinks.
+  context.emit(askBrainDone("add tests", { responseId: "resp-1" }));
   await Promise.resolve();
   context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
 
-  // The same hold, in the mirror order: no READY edge mid-write for the
-  // announcer to take the turn on.
+  // The same hold, in the mirror order: no READY edge mid-ask for the
+  // briefing queue to take the turn on.
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
-  assert.equal(context.session.speak(announcedFinish("session-b")), false);
+  assert.equal(context.session.speak(briefingAbout("session-b")), false);
 
-  resolveWrite?.({ status: "accepted" });
+  answer?.(brainAnswer("Sent.", "session-a"));
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  // The follow-up opened: the outcome is voiced rather than abandoned.
-  assert.equal(
-    context.sent.filter((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE).length,
-    2,
-  );
+  // The follow-up opened: the answer is voiced rather than abandoned.
+  assert.equal(responseCreates(context).length, 2);
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
 });
 
-test("a write that outlives the backstop cannot speak out of the spent turn", async (t) => {
-  let resolveWrite: ((output: ParsedJsonObject) => void) | undefined;
+test("an answer that outlives the backstop cannot speak out of the spent turn", async (t) => {
+  let answer: ((result: BrainAskResult) => void) | undefined;
   const context = harness({
-    carryAction: () =>
-      new Promise<ParsedJsonObject>((resolve) => {
-        resolveWrite = resolve;
+    askBrain: () =>
+      new Promise((resolve) => {
+        answer = resolve;
       }),
   });
   await context.session.connect();
-  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
   await armDeveloperTurn(context);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
 
   t.mock.timers.enable({ apis: ["setTimeout"] });
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      id: "resp-1",
-      output: [
-        {
-          type: "function_call",
-          name: "send_session_message",
-          call_id: "call-1",
-          arguments:
-            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
-        },
-      ],
-    },
-  });
+  context.emit(askBrainDone("add tests", { responseId: "resp-1" }));
   await Promise.resolve();
 
-  // The write hangs past the whole window; the backstop declares the turn
-  // over, and the developer has been shown the silence.
-  t.mock.timers.tick(REALTIME_SETTLE_TIMEOUT_MS);
+  // The ask hangs past the brain's whole window; the backstop declares the
+  // turn over, and the developer has been shown the silence.
+  t.mock.timers.tick(BRAIN_ASK_SETTLE_TIMEOUT_MS);
   assert.equal(context.session.status, REALTIME_STATUS.READY);
   t.mock.timers.reset();
 
   const sentBefore = context.sent.length;
-  resolveWrite?.({ status: "accepted" });
+  answer?.(brainAnswer("Sent.", "session-a"));
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // The outcome is still delivered as an item, so the next turn has it...
-  const events = context.sent.slice(sentBefore);
-  assert.ok(
-    events.some(
-      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-    ),
-  );
-  // ...but no reply opens out of a silence already declared.
-  assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
+  // The answer is still delivered as an item, so the model is not left
+  // waiting — but no reply opens out of a silence already declared.
+  assert.deepEqual(toolOutputs(context, sentBefore), [{ briefing: "Sent." }]);
+  assert.deepEqual(responseCreates(context, sentBefore), []);
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });
 
-test("a done that outlives the settle backstop cannot act with the spent turn's arming", async (t) => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryAction: async (action) => {
-      carried.push(action);
-      return { status: "accepted" };
-    },
-  });
+test("a done that outlives the settle backstop cannot ask the brain out of the spent turn", async (t) => {
+  const context = harness({ askBrain: async () => brainAnswer("Done.") });
   await context.session.connect();
-  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
   await armDeveloperTurn(context);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
 
@@ -4457,43 +3341,20 @@ test("a done that outlives the settle backstop cannot act with the spent turn's 
   t.mock.timers.reset();
 
   const sentBefore = context.sent.length;
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      id: "resp-1",
-      output: [
-        {
-          type: "function_call",
-          name: "send_session_message",
-          call_id: "call-1",
-          arguments:
-            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
-        },
-      ],
-    },
-  });
+  context.emit(askBrainDone("add tests", { responseId: "resp-1" }));
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  // The turn ended with the backstop and its arming went with it: the late
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // calls are answered refused rather than run as writes out of a turn the
-  // developer was already told had ended, and no reply opens over the quiet.
-  assert.deepEqual(carried, []);
-  const events = context.sent.slice(sentBefore);
-  const output = events.find(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-  );
-  assert.equal(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (
-      JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
-        status?: string;
-      }
-    ).status,
-    "rejected",
-  );
-  assert.ok(!events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE));
+  // The turn ended with the backstop: the late call is answered refused
+  // rather than asked out of a turn the developer was already told had
+  // ended, and no reply opens over the quiet.
+  assert.deepEqual(context.asked, []);
+  assert.deepEqual(toolOutputs(context, sentBefore), [
+    {
+      status: ACT_RESULT_STATUS.REJECTED,
+      reason: "That turn is over; ask again if it still matters.",
+    },
+  ]);
+  assert.deepEqual(responseCreates(context, sentBefore), []);
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });
 
@@ -4588,10 +3449,9 @@ test("back-to-back responses stack as two captions instead of running together",
   assert.deepEqual(context.captions.at(-1), ["Second response, finished.", "Third."]);
 });
 
-test("a tool follow-up keeps the words said before the call and stacks the outcome", async () => {
-  const context = harness({ carryAction: async () => ({ status: "accepted" }) });
+test("a brain follow-up keeps the words said before the ask and stacks the answer", async () => {
+  const context = harness({ askBrain: async () => brainAnswer("Sent.", "session-a") });
   await context.session.connect();
-  context.session.updateSessions([observedSession("session-a", { canReceiveMessage: true })]);
   await armDeveloperTurn(context);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
   context.emit({
@@ -4603,26 +3463,12 @@ test("a tool follow-up keeps the words said before the call and stacks the outco
     item_id: "item-ask",
     delta: "Sending that now.",
   });
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      id: "resp-1",
-      output: [
-        {
-          type: "function_call",
-          name: "send_session_message",
-          call_id: "call-1",
-          arguments:
-            '{"provider_id":"claude-code","provider_session_id":"session-a","text":"add tests"}',
-        },
-      ],
-    },
-  });
+  context.emit(askBrainDone("add tests", { responseId: "resp-1" }));
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   // The follow-up continues the exchange, so the sentence spoken before the
-  // call stays on the strip and the outcome's words stack under it, instead
-  // of the outcome erasing words still being read.
+  // ask stays on the strip and the answer's words stack under it, instead of
+  // the answer erasing words still being read.
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
     item: { id: "item-outcome" },
@@ -4654,30 +3500,22 @@ test("the caption leaves when the reply does", async () => {
   assert.deepEqual(context.captions, [["All quiet."], undefined]);
 });
 
-test("an announcement's caption names its sessions; a conversation's names none", async () => {
+test("a briefing's caption names its sessions; a conversation's names none", async () => {
   const context = harness();
   await context.session.connect();
 
-  // The subject stands from the moment the announcement's reply is asked for
-  // — the pressable notice may precede the first word — and every caption of
+  // The subject stands from the moment the briefing's reply is asked for —
+  // the pressable notice may precede the first word — and every caption of
   // that reply carries it.
-  context.session.speak([
-    {
-      providerId: "claude-code",
-      providerSessionId: "session-a",
-      subject: "checkout",
-      change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
-      decidedAt: 1_800_000_000_000,
-    },
-    {
-      providerId: "codex",
-      providerSessionId: "session-b",
-      subject: "billing",
-      change: SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT,
-      detail: "Approve the migration?",
-      decidedAt: 1_800_000_000_001,
-    },
-  ]);
+  context.session.speak({
+    kind: BRIEFING_SPEECH_KIND,
+    briefing: "Checkout just finished, and billing wants the migration approved.",
+    sessionIds: [
+      { providerId: "claude-code", providerSessionId: "session-a" },
+      { providerId: "codex", providerSessionId: "session-b" },
+    ],
+    decidedAt: Date.now(),
+  });
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
     delta: "Checkout just finished.",
@@ -4689,13 +3527,13 @@ test("an announcement's caption names its sessions; a conversation's names none"
   ]);
 
   // The reply ending takes the subject with the words: the notice can never
-  // outlive the announcement it stands for.
+  // outlive the briefing it stands for.
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
   context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
   assert.equal(context.captions.at(-1), undefined);
   assert.equal(context.captionSubjects.at(-1), undefined);
 
-  // A conversation reply is nobody's announcement, whatever was said before.
+  // A conversation reply is nobody's briefing, whatever was said before.
   await holdTurn(context);
   context.session.endTurn(true);
   context.emit({
@@ -4782,789 +3620,6 @@ test("a cancelled reply's late transcript cannot pollute the next caption", asyn
   );
 });
 
-const CAPTIONS_GUIDE: AppGuideSnapshot = {
-  facts: [{ label: "What Luke is", detail: "A macOS sidecar living beside the notch." }],
-  settings: [
-    {
-      id: "voice_captions",
-      label: "Captions",
-      description: "Luke's words on screen while he speaks.",
-      kind: APP_SETTING_KIND.TOGGLE,
-      value: "off",
-      adjustable: true,
-      manual: "the panel's Settings tab, on its Voice page",
-    },
-  ],
-};
-
-test("the app guide rides the session instructions, and identical guides are not resent", async () => {
-  const context = harness();
-  await context.session.connect();
-
-  context.session.updateGuide(CAPTIONS_GUIDE);
-  // The same knowledge again is not news; a changed value is. Neither is worth
-  // an update on its own — the turn that asks is what collects the latest.
-  context.session.updateGuide({ ...CAPTIONS_GUIDE });
-  await armDeveloperTurn(context);
-  const updates = guideInstructionUpdates(context);
-  assert.equal(updates.length, 1);
-  // The guide is instructions now, never a conversation item: the standing
-  // prompt stays the stable prefix and the guide travels appended behind it.
-  assert.match(updates[0] ?? "", /You are Luke\./);
-  assert.match(updates[0] ?? "", /setting_id=voice_captions/);
-  assert.match(updates[0] ?? "", /value=off/);
-  assert.deepEqual(contextItems(context, "[app guide"), []);
-
-  // A turn opened over an unchanged guide re-sends nothing: the instructions
-  // the call already holds are still true.
-  context.session.stopSpeaking();
-  await armDeveloperTurn(context);
-  assert.equal(guideInstructionUpdates(context).length, 1);
-
-  const sentBefore = context.sent.length;
-  context.session.updateGuide({
-    ...CAPTIONS_GUIDE,
-    settings: [
-      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-      { ...CAPTIONS_GUIDE.settings[0], value: "on" } as (typeof CAPTIONS_GUIDE.settings)[0],
-    ],
-  });
-  context.session.stopSpeaking();
-  await armDeveloperTurn(context);
-
-  const refreshed = guideInstructionUpdates(context, sentBefore);
-  assert.equal(refreshed.length, 1);
-  assert.match(refreshed[0] ?? "", /value=on/);
-});
-
-test("a spoken settings change is validated against the guide and carried", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryAct: async (envelope) => {
-      carried.push(envelope);
-      return { status: "accepted" };
-    },
-  });
-  await context.session.connect();
-  context.session.updateGuide(CAPTIONS_GUIDE);
-  await armDeveloperTurn(context);
-
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "change_app_setting",
-          call_id: "call-guide-1",
-          arguments: '{"setting_id":"voice_captions","value":"on"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  assert.deepEqual(carried, [
-    {
-      id: "change_app_setting",
-      armed: true,
-      act: { kind: "setting", setting: CAPTIONS_GUIDE.settings[0], value: "on" },
-    },
-  ]);
-});
-
-const MODEL_GUIDE_ENTRY = {
-  id: "workspace_agent_model",
-  label: "New Conductor agents run",
-  description: "Which model a Conductor workspace or agent created through Luke starts with.",
-  kind: APP_SETTING_KIND.CHOICE,
-  value: "Conductor's default",
-  choices: ["Conductor's default", "Fable 5"],
-  adjustable: true,
-  manual: "the Conductor row under Providers",
-} as const;
-
-const MODEL_ONLY_GUIDE: AppGuideSnapshot = {
-  facts: CAPTIONS_GUIDE.facts,
-  settings: [MODEL_GUIDE_ENTRY],
-};
-
-const MODEL_AND_EFFORT_GUIDE: AppGuideSnapshot = {
-  facts: CAPTIONS_GUIDE.facts,
-  settings: [
-    { ...MODEL_GUIDE_ENTRY, value: "Fable 5" },
-    {
-      id: "workspace_agent_effort",
-      label: "New Conductor agents' effort",
-      description: "How hard the chosen model thinks.",
-      kind: APP_SETTING_KIND.CHOICE,
-      value: "Conductor's default",
-      choices: ["Conductor's default", "high", "max"],
-      adjustable: true,
-      manual: "the Conductor row under Providers",
-    },
-  ],
-};
-
-test("the second call of a turn is validated against the guide the first call's carry rewrote", async () => {
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // A model and its effort asked for in one breath arrive as two calls in one
-  // turn, and the effort entry only exists in the guide once the model is
-  // stored. The renderer republishes the guide from the store's answer before
-  // its carrier returns, so the calls being carried one at a time is what
-  // lets the second half validate — this pins that ordering.
-  const carried: { setting: string; value: string }[] = [];
-  const context = harness({
-    carryAppAction: async (action) => {
-      if (action.kind !== "setting") return { status: "rejected" };
-      carried.push({ setting: String(action.setting.id), value: action.value });
-      context.session.updateGuide(MODEL_AND_EFFORT_GUIDE);
-      return { status: "changed" };
-    },
-  });
-  await context.session.connect();
-  context.session.updateGuide(MODEL_ONLY_GUIDE);
-  await armDeveloperTurn(context);
-
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "change_app_setting",
-          call_id: "call-paired-model",
-          arguments: '{"setting_id":"workspace_agent_model","value":"Fable 5"}',
-        },
-        {
-          type: "function_call",
-          name: "change_app_setting",
-          call_id: "call-paired-effort",
-          arguments: '{"setting_id":"workspace_agent_effort","value":"high"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  assert.deepEqual(carried, [
-    { setting: "workspace_agent_model", value: "Fable 5" },
-    { setting: "workspace_agent_effort", value: "high" },
-  ]);
-});
-
-test("an app carrier that throws is refused with the error that caused it", async () => {
-  const context = harness({
-    carryAppAction: async () => {
-      throw new Error("Captions could not be saved.");
-    },
-  });
-  await context.session.connect();
-  context.session.updateGuide(CAPTIONS_GUIDE);
-  await armDeveloperTurn(context);
-  const sentBefore = context.sent.length;
-
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "change_app_setting",
-          call_id: "call-guide-fail",
-          arguments: '{"setting_id":"voice_captions","value":"on"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  const output = context.sent.slice(sentBefore).find(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-  );
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const parsed = JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
-    status?: string;
-    reason?: string;
-  };
-  assert.equal(parsed.status, "rejected");
-  assert.equal(parsed.reason, "Captions could not be saved.");
-});
-
-test("a spoken ask about a setting the guide does not carry is refused before the carrier", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryAppAction: async (action) => {
-      carried.push(action);
-      return { status: "changed" };
-    },
-  });
-  await context.session.connect();
-  // The guide was never provided, so the conversation was told about nothing.
-  await armDeveloperTurn(context);
-  const sentBefore = context.sent.length;
-
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "change_app_setting",
-          call_id: "call-guide-2",
-          arguments: '{"setting_id":"voice_captions","value":"on"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  assert.deepEqual(carried, []);
-  const output = context.sent.slice(sentBefore).find(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-  );
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const answered = (output?.item as { output?: string } | undefined)?.output;
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const outcome = JSON.parse(answered ?? "{}") as { status?: string };
-  assert.equal(outcome.status, "rejected");
-});
-
-test("a spoken panel ask is validated against the roster and carried", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryAppAction: async (action) => {
-      carried.push(action);
-      return { status: "shown" };
-    },
-  });
-  await context.session.connect();
-  context.session.updateGuide(CAPTIONS_GUIDE);
-  context.session.updateSessions([observedSession("session-a")]);
-  await armDeveloperTurn(context);
-
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "show_panel",
-          call_id: "call-guide-3",
-          arguments: '{"filters":["claude-code"],"sort":"recency"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  assert.deepEqual(carried, [
-    { kind: "panel", tab: "sessions", filters: ["claude-code"], sort: "recency" },
-  ]);
-
-  // Switching to the settings tab is the same ask carried with a tab, not a
-  // different act — the carrier presses the tab an open panel already shows.
-  await armDeveloperTurn(context);
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "show_panel",
-          call_id: "call-guide-4",
-          arguments: '{"tab":"settings"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  assert.deepEqual(carried.at(-1), { kind: "panel", tab: "settings" });
-
-  // A workspace manager's scope is validated against the same roster: with no
-  // observed session under Superset the narrowing is refused rather than
-  // carried, and Luke never reports a narrowing that never happened.
-  await armDeveloperTurn(context);
-  const askedBefore = carried.length;
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "show_panel",
-          call_id: "call-guide-5",
-          arguments: '{"filters":["superset"]}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(carried.length, askedBefore);
-
-  context.session.updateSessions([
-    observedSession("session-a", {
-      workspace: {
-        providerWorkspaceId: "workspace-1",
-        scopeId: "superset",
-        name: "power-vacation",
-      },
-    }),
-  ]);
-  await armDeveloperTurn(context);
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "show_panel",
-          call_id: "call-guide-6",
-          arguments: '{"filters":["superset"]}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  assert.deepEqual(carried.at(-1), { kind: "panel", tab: "sessions", filters: ["superset"] });
-
-  // A hosted chat answers its agent's filter and its apps' filters the way
-  // its chips do: the agent behind the chat and an associated app are
-  // identities of the same standing as the provider id, so a spoken ask
-  // reaches exactly the rows the matching chip would keep.
-  context.session.updateSessions([
-    observedSession("session-a", {
-      agent: { id: "codex", displayName: "Codex" },
-      applications: [{ id: "conductor", displayName: "Conductor", scope: "session" }],
-    }),
-  ]);
-  await armDeveloperTurn(context);
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "show_panel",
-          call_id: "call-guide-7",
-          arguments: '{"filters":["codex"]}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.deepEqual(carried.at(-1), { kind: "panel", tab: "sessions", filters: ["codex"] });
-
-  await armDeveloperTurn(context);
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "show_panel",
-          call_id: "call-guide-8",
-          arguments: '{"filters":["conductor"]}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.deepEqual(carried.at(-1), { kind: "panel", tab: "sessions", filters: ["conductor"] });
-
-  // Several values combine like the chips: the observed session is a local
-  // Codex chat associated with Conductor, so the combination is carried
-  // whole — and one nothing occupies is refused rather than carried.
-  await armDeveloperTurn(context);
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "show_panel",
-          call_id: "call-guide-9",
-          arguments: '{"filters":["codex","conductor","local"]}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.deepEqual(carried.at(-1), {
-    kind: "panel",
-    tab: "sessions",
-    filters: ["codex", "conductor", "local"],
-  });
-
-  await armDeveloperTurn(context);
-  const combinedBefore = carried.length;
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "show_panel",
-          call_id: "call-guide-10",
-          arguments: '{"filters":["codex","cloud"]}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(carried.length, combinedBefore);
-});
-
-test("a spoken search is bounded by the list the magnifier is offered beside", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryAppAction: async (action) => {
-      carried.push(action);
-      return { status: "shown" };
-    },
-  });
-  await context.session.connect();
-  context.session.updateGuide(CAPTIONS_GUIDE);
-  context.session.updateSessions([observedSession("session-a")]);
-  await armDeveloperTurn(context);
-
-  // One session offers no magnifier, so the ask is refused rather than
-  // carried into a field the panel will not draw.
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "show_panel",
-          call_id: "call-search-1",
-          arguments: '{"query":"parser"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.deepEqual(carried, []);
-
-  context.session.updateSessions([observedSession("session-a"), observedSession("session-b")]);
-  await armDeveloperTurn(context);
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "show_panel",
-          call_id: "call-search-2",
-          arguments: '{"query":" parser "}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.deepEqual(carried, [{ kind: "panel", tab: "sessions", query: "parser" }]);
-});
-
-test("a spoken composer open is validated against the fixed kinds and carried, never sent", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryAppAction: async (action) => {
-      carried.push(action);
-      return { status: "opened" };
-    },
-  });
-  await context.session.connect();
-  context.session.updateGuide(CAPTIONS_GUIDE);
-  await armDeveloperTurn(context);
-  const sentBefore = context.sent.length;
-
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "open_feedback_composer",
-          call_id: "call-guide-4",
-          arguments: '{"kind":"prompt","draft":"let Luke restart a stuck run"}',
-        },
-        // A kind outside the composer's two is refused before the carrier.
-        {
-          type: "function_call",
-          name: "open_feedback_composer",
-          call_id: "call-guide-5",
-          arguments: '{"kind":"complaint"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  // The carrier only ever receives an open: there is no send for it to carry,
-  // so a note leaves the machine only by the composer's own button.
-  assert.deepEqual(carried, [
-    { kind: "feedback", composer: "prompt", draft: "let Luke restart a stuck run" },
-  ]);
-  const outputs = context.sent
-    .slice(sentBefore)
-    .filter(
-      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-      (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-    )
-    .map(
-      (event) =>
-        // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-        JSON.parse((event.item as { output?: string }).output ?? "{}") as {
-          status?: string;
-        },
-    );
-  assert.deepEqual(
-    outputs.map((outcome) => outcome.status),
-    ["opened", "rejected"],
-  );
-});
-
-function trackedIssue(
-  overrides: Partial<Parameters<typeof normalizeTrackedIssue>[1]> = {},
-): TrackedIssue {
-  const issue = normalizeTrackedIssue(
-    { id: ISSUE_TRACKER_ID.LINEAR, displayName: "Linear" },
-    {
-      trackerIssueId: "issue-uuid-1",
-      identifier: "LUKE-123",
-      title: "Add Codex support",
-      stateName: "In Progress",
-      observedAt: 1_800_000_000_000,
-      transitions: [{ id: "state-done", name: "Done" }],
-      canComment: true,
-      ...overrides,
-    },
-  );
-  if (!issue) throw new Error("test fixture must normalize");
-  return issue;
-}
-
-test("a spoken issue ask is carried through its own carrier and voiced", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryIssueAction: async (action) => {
-      carried.push(action);
-      return { status: "accepted" };
-    },
-  });
-  await context.session.connect();
-  context.session.updateIssues([trackedIssue()]);
-  await armDeveloperTurn(context);
-  const sentBefore = context.sent.length;
-
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "update_issue_state",
-          call_id: "call-1",
-          arguments: '{"tracker_id":"linear","issue_id":"LUKE-123","state":"Done"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  assert.deepEqual(carried, [
-    {
-      kind: "issue-state",
-      identity: { trackerId: "linear", identifier: "LUKE-123" },
-      transition: { id: "state-done", name: "Done" },
-    },
-  ]);
-  const followUp = context.sent.slice(sentBefore);
-  const output = followUp.find(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-  );
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  assert.equal((output?.item as { output?: string } | undefined)?.output, '{"status":"accepted"}');
-  assert.equal(
-    followUp.at(-1)?.type,
-    REALTIME_CLIENT_EVENT.RESPONSE_CREATE,
-    "the outcome is voiced by the reply that follows",
-  );
-});
-
-test("an issue carrier that throws is refused with the error that caused it", async () => {
-  const context = harness({
-    carryIssueAction: async () => {
-      throw new Error("Linear could not be reached.");
-    },
-  });
-  await context.session.connect();
-  context.session.updateIssues([trackedIssue()]);
-  await armDeveloperTurn(context);
-  const sentBefore = context.sent.length;
-
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "update_issue_state",
-          call_id: "call-1",
-          arguments: '{"tracker_id":"linear","issue_id":"LUKE-123","state":"Done"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  const output = context.sent.slice(sentBefore).find(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-  );
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const parsed = JSON.parse((output?.item as { output?: string } | undefined)?.output ?? "{}") as {
-    status?: string;
-    reason?: string;
-  };
-  assert.equal(parsed.status, "rejected");
-  assert.equal(parsed.reason, "Linear could not be reached.");
-});
-
-test("an issue call with no tracker connected is refused before any carrier runs", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryIssueAction: async (action) => {
-      carried.push(action);
-      return { status: "accepted" };
-    },
-  });
-  await context.session.connect();
-  // No updateIssues call: no roster was ever sent.
-  await armDeveloperTurn(context);
-  const sentBefore = context.sent.length;
-
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "update_issue_state",
-          call_id: "call-1",
-          arguments: '{"tracker_id":"linear","issue_id":"LUKE-123","state":"Done"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  assert.deepEqual(carried, []);
-  const output = context.sent.slice(sentBefore).find(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-  );
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const raw = (output?.item as { output?: string } | undefined)?.output ?? "{}";
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const parsed = JSON.parse(raw) as { status?: string; reason?: string };
-  assert.equal(parsed.status, "rejected");
-  assert.match(parsed.reason ?? "", /no issue tracker is connected/i);
-});
-
-test("an issue call outside the roster is refused before any carrier runs", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryIssueAction: async (action) => {
-      carried.push(action);
-      return { status: "accepted" };
-    },
-  });
-  await context.session.connect();
-  context.session.updateIssues([trackedIssue({ canComment: false })]);
-  await armDeveloperTurn(context);
-  const sentBefore = context.sent.length;
-
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "update_issue_state",
-          call_id: "call-1",
-          arguments: '{"tracker_id":"linear","issue_id":"LUKE-999","state":"Done"}',
-        },
-        {
-          type: "function_call",
-          name: "comment_on_issue",
-          call_id: "call-2",
-          arguments: '{"tracker_id":"linear","issue_id":"LUKE-123","body":"hi"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  // Nothing was carried: one call named an issue Luke was never shown, the
-  // other an act the issue does not take. Both were answered anyway.
-  assert.deepEqual(carried, []);
-  const outputs = context.sent.slice(sentBefore).filter(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-  );
-  assert.equal(outputs.length, 2);
-  for (const event of outputs) {
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    const raw = (event.item as { output?: string } | undefined)?.output ?? "{}";
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    assert.equal((JSON.parse(raw) as { status?: string }).status, "rejected");
-  }
-});
-
-test("an issue call outside a turn the developer opened cannot act", async () => {
-  const carried: unknown[] = [];
-  const context = harness({
-    carryIssueAction: async (action) => {
-      carried.push(action);
-      return { status: "accepted" };
-    },
-  });
-  await context.session.connect();
-  context.session.updateIssues([trackedIssue()]);
-  // No developer turn: the call arrives on a turn Luke opened himself.
-
-  context.emit({
-    type: REALTIME_SERVER_EVENT.RESPONSE_DONE,
-    response: {
-      output: [
-        {
-          type: "function_call",
-          name: "update_issue_state",
-          call_id: "call-1",
-          arguments: '{"tracker_id":"linear","issue_id":"LUKE-123","state":"Done"}',
-        },
-      ],
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  assert.deepEqual(carried, []);
-  const output = context.sent.find(
-    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-    (event) => (event.item as { type?: string } | undefined)?.type === "function_call_output",
-  );
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const raw = (output?.item as { output?: string } | undefined)?.output ?? "{}";
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  assert.equal((JSON.parse(raw) as { status?: string }).status, "rejected");
-});
-
 test("a speak-only connect never asks for the microphone", async () => {
   const context = harness();
 
@@ -5580,87 +3635,23 @@ test("a speak-only connect never asks for the microphone", async () => {
   assert.equal(context.session.microphoneCall, false);
 });
 
-test("a speak-only call reads a notice out but refuses a typed ask", async () => {
+test("a speak-only call reads a briefing out but refuses a typed ask and its reply", async () => {
   const context = harness();
   await context.session.connect({ microphone: false });
   const sentAfterConnect = context.sent.length;
 
-  assert.equal(
-    context.session.speak([
-      {
-        providerId: "claude-code",
-        providerSessionId: "session-a",
-        subject: "checkout-service",
-        change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
-        decidedAt: 1_800_000_000_000,
-      },
-    ]),
-    true,
-  );
+  assert.equal(context.session.speak(briefingAbout("session-a")), true);
   assert.deepEqual(
     context.sent.slice(sentAfterConnect).map((event) => event.type),
     [REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
   );
+  settleReply(context);
 
-  // A typed ask arms tools, and this call was sent nothing to validate one
-  // against: the caller stands the call down and opens the developer's own.
+  // A typed ask is a conversation, and Luke's own call is not one: the caller
+  // stands the call down and opens the developer's own. The brain's reply to
+  // a typed ask is refused on the same terms.
   assert.equal(context.session.sendText("stop the deploy"), false);
-});
-
-test("the rosters and the guide never travel on Luke's own call", async () => {
-  const context = harness();
-  await context.session.connect({ microphone: false });
-  const before = context.sent.length;
-
-  context.session.updateSessions([observedSession("session-a")]);
-  // The history is under the same gate: Luke's own call is sent the one
-  // sentence it exists to say, never the context items.
-  context.session.updateConversation(
-    conversationEntries({
-      kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
-      words: "Claude Code finished checkout-service.",
-      identity: { providerId: "claude-code", providerSessionId: "session-a" },
-    }),
-  );
-  context.session.updateGuide({
-    facts: [{ label: "What Luke is", detail: "A sidecar." }],
-    settings: [],
-  });
-  context.session.updateWorkspaceProjects([
-    {
-      providerId: "conductor",
-      providerName: "Conductor",
-      providerProjectId: "project-1",
-      repository: "luke",
-      taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
-    },
-  ]);
-  context.session.updateIssues([]);
-
-  // The stores still updated — the developer's next call starts current — but
-  // nothing left on this one beyond the sentence it exists to say.
-  assert.equal(context.sent.length, before);
-
-  // Even the announcement it exists for carries no guide: the readout is the
-  // update's own fields inside its isolated response, with no instructions
-  // refresh riding ahead of it.
-  assert.equal(
-    context.session.speak([
-      {
-        providerId: "claude-code",
-        providerSessionId: "session-a",
-        subject: "checkout-service",
-        change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
-        decidedAt: 1_800_000_000_000,
-      },
-    ]),
-    true,
-  );
-  assert.deepEqual(guideInstructionUpdates(context, before), []);
-  assert.deepEqual(
-    context.sent.slice(before).map((event) => event.type),
-    [REALTIME_CLIENT_EVENT.RESPONSE_CREATE],
-  );
+  assert.equal(context.session.speakReply("Stopped.", []), false);
 });
 
 test("an idle call stays open until the provider closes it", async (t) => {
@@ -5824,7 +3815,6 @@ test("a device that vanishes mid-conversation fails the call at the press", asyn
 test("a call that drops goes quietly, because the history lost nothing", async () => {
   const context = harness();
   await context.session.connect();
-  context.session.updateSessions([observedSession("session-a")]);
   await armDeveloperTurn(context);
 
   // The service ends every session at an hour, so this is how a long
@@ -5866,25 +3856,4 @@ test("the developer's call replaces Luke's own and keeps the waiting press", asy
   assert.ok(context.calls.includes("microphone-requested"));
   assert.equal(context.microphoneEnabled(), true);
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
-});
-
-test("a spoken tool call is still validated in both processes", () => {
-  const renderer = readFileSync(new URL("./realtime-session.ts", import.meta.url), "utf8");
-  const main = readFileSync(new URL("../main/ipc/session-acts.ts", import.meta.url), "utf8");
-
-  // The renderer validates against the roster and the guide before a carrier runs.
-  assert.match(renderer, /\bsessionToolAction\b/);
-  assert.match(renderer, /\bissueToolAction\b/);
-  assert.match(renderer, /\bappToolAction\b/);
-
-  // The main process must not share those validators: it re-checks against its
-  // own registry before an adapter or tracker sees anything.
-  assert.doesNotMatch(main, /\bsessionToolAction\b/);
-  assert.doesNotMatch(main, /\bissueToolAction\b/);
-  assert.doesNotMatch(main, /\bappToolAction\b/);
-  assert.match(main, /sessionRegistry\.get/);
-  assert.match(main, /BRIDGE\.executeIssueAction/);
-  assert.match(renderer, /carryAct\(\{ id: call\.name, act: action, armed \}\)/);
-  assert.match(main, /if \(!envelope\.armed\)/);
-  assert.match(main, /actValidationTarget\(envelope\.id\)/);
 });

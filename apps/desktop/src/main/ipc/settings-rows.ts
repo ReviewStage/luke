@@ -42,7 +42,7 @@ export interface SettingsRowsIpcDependencies {
   mediaDuck: MediaDuckController;
   workspaceProjectOffered: (providerId: string, providerProjectId: string) => boolean;
   refreshAnnouncementHold: () => void;
-  releaseHeldNotices: () => void;
+  releaseHeldBriefings: () => void;
   recordProductEvent: RecordProductEvent;
   /** Mirrors local provider keys into the account vault, main-process only. */
   vaultSync: ProviderKeyVaultSync;
@@ -64,7 +64,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     mediaDuck,
     workspaceProjectOffered,
     refreshAnnouncementHold,
-    releaseHeldNotices,
+    releaseHeldBriefings,
     recordProductEvent,
     vaultSync,
   } = dependencies;
@@ -87,7 +87,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
         refreshIssues();
       }
       // The voice key connects neither: it is what the spoken conversation and
-      // the attention review are built from, so a change to it rebuilds both
+      // the brain are built from, so a change to it rebuilds both
       // and then moves the talk key — claimed now that there is something to
       // talk to, or given back to the machine now that there is not. Awaited,
       // because a press right after the save has to find a minter.
@@ -177,7 +177,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
         break;
       case SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD:
         refreshAnnouncementHold();
-        releaseHeldNotices();
+        releaseHeldBriefings();
         break;
       case SETTING_SIDE_EFFECT.VAULT_SYNC:
         // The flip is a hand on the switch, so an on claims the keys for the

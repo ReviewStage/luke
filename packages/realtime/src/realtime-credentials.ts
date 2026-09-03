@@ -1,8 +1,13 @@
+import { remoteRealtimeToolDefinitions } from "@sidecar/acts";
 import type { RealtimeCredential } from "@sidecar/hosted";
 import { isRecord, text, type UnparsedWireValue, wholeNumber } from "@sidecar/wire";
 import { PRESS_AUDIO_SAMPLE_RATE } from "./press-audio.js";
-import { REALTIME_SESSION_TYPE, realtimeInstructions } from "./realtime-protocol.js";
-import { realtimeToolDefinitions, remoteRealtimeToolDefinitions } from "./realtime-tools.js";
+import {
+  mouthToolDefinitions,
+  REALTIME_SESSION_TYPE,
+  realtimeInstructions,
+  remoteRealtimeInstructions,
+} from "./realtime-protocol.js";
 import { REALTIME_DEFAULTS } from "./realtime-voice-settings.js";
 
 /**
@@ -65,8 +70,9 @@ export function realtimeSessionConfig(options: RealtimeSessionOptions = {}) {
     model,
     ...(reasoning ? { reasoning } : undefined),
     instructions: trimmedText(options.instructions) ?? realtimeInstructions(),
-    tools: realtimeToolDefinitions(),
-    // Auto for the conversation; each proactive readout narrows itself to none.
+    tools: mouthToolDefinitions(),
+    // Auto for the conversation: the voice decides when to ask the brain;
+    // each briefing narrows itself to none.
     tool_choice: "auto",
     truncation: {
       type: REALTIME_TRUNCATION.TYPE,
@@ -106,11 +112,21 @@ export function realtimeClientSecretRequest(options: RealtimeSessionOptions = {}
 
 /**
  * Builds the request body for a mobile Realtime mint. The session config
- * matches the desktop's — same instructions, audio format, and turn detection —
- * but the tool list is narrowed to the acts the mobile act endpoints serve.
+ * matches the desktop's audio format and turn detection, but the call still
+ * carries the roster itself and acts through its own tools, so it keeps the
+ * instructions that resolve agents from that roster and the acts the mobile
+ * act endpoints serve.
  */
 export function remoteRealtimeClientSecretRequest(options: RealtimeSessionOptions = {}) {
-  return { session: { ...realtimeSessionConfig(options), tools: remoteRealtimeToolDefinitions() } };
+  return {
+    session: {
+      ...realtimeSessionConfig({
+        ...options,
+        instructions: trimmedText(options.instructions) ?? remoteRealtimeInstructions(),
+      }),
+      tools: remoteRealtimeToolDefinitions(),
+    },
+  };
 }
 
 /**

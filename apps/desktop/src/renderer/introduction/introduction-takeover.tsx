@@ -107,14 +107,12 @@ const SIGNATURE_STROKES = signatureStrokes();
 
 /**
  * The rows the introduction stages are pictures of sessions, not handles to
- * them: nothing on them may open, message, or act. The stripping below is
- * what guarantees these handlers are never called; they answer anyway, with
- * a refusal, so a slip is a wrong sentence rather than a wrong act.
+ * them: nothing on them may open or act. The stripping below is what
+ * guarantees this handler is never called; it answers anyway, with a refusal,
+ * so a slip is a wrong sentence rather than a wrong act.
  */
 const INTRODUCTION_REFUSAL = "The introduction takes no writes.";
 const INERT_WRITES: SessionWriteHandlers = {
-  sendMessage: async () => ({ status: ACT_RESULT_STATUS.REJECTED, reason: INTRODUCTION_REFUSAL }),
-  runAction: async () => ({ status: ACT_RESULT_STATUS.REJECTED, reason: INTRODUCTION_REFUSAL }),
   openChange: async () => ({ status: ACT_RESULT_STATUS.REJECTED, reason: INTRODUCTION_REFUSAL }),
 };
 
@@ -122,8 +120,6 @@ function inertRow(row: SessionView): SessionView {
   return {
     ...row,
     openable: false,
-    canMessage: false,
-    actions: [],
     hasChange: false,
     applications: row.applications.map((application) => ({ ...application, openable: false })),
   };

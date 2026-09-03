@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ATTENTION_TRIGGER, attentionInstructions, attentionUpdateInput } from "@sidecar/attention";
-import { SESSION_STATUS } from "@sidecar/session";
+import { BRAIN_TOOL, BRAIN_TURN_TRIGGER, brainToolDefinitions } from "@sidecar/brain";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
 import { TRACE_ENTRY_KIND } from "./trace-writer.js";
 import { unboxTraceFromLines } from "./unbox-export.js";
@@ -19,6 +18,11 @@ function generations(trace: WireRecord): readonly WireRecord[] {
 function messagesOf(generation: WireRecord | undefined): readonly WireRecord[] {
   const messages = generation?.messages;
   return Array.isArray(messages) ? messages.filter(isRecord) : [];
+}
+
+function toolsOf(generation: WireRecord | undefined): readonly WireRecord[] {
+  const tools = generation?.available_tools;
+  return Array.isArray(tools) ? tools.filter(isRecord) : [];
 }
 
 const SESSION_SYNC = wireLine("2026-08-25T10:00:00.000Z", TRACE_DIRECTION.CLIENT, {
@@ -84,11 +88,10 @@ test("a replied turn becomes one generation with the cumulative conversation", (
     tokens: { input: 900, output: 40, cache_read: 512 },
     cost: 0,
   });
-  const tools = generation.available_tools;
-  assert.ok(Array.isArray(tools) && tools.length === 1);
-  const [tool] = tools.filter(isRecord);
-  assert.equal(tool?.name, "open_session");
-  assert.ok(isRecord(tool?.inputSchema));
+  const tools = toolsOf(generation);
+  assert.equal(tools.length, 1);
+  assert.equal(tools[0]?.name, "open_session");
+  assert.ok(isRecord(tools[0]?.inputSchema));
   assert.deepEqual(
     messagesOf(generation).map((message) => [message.role, message.content]),
     [
@@ -147,68 +150,96 @@ test("a spoken turn's transcription joins the conversation as the developer's wo
   assert.equal(user?.content, "Read me the update.");
 });
 
-test("an attention pass becomes its own generation, and junk lines cost only themselves", () => {
-  const attention = JSON.stringify({
+test("a brain turn becomes its own generation, and junk lines cost only themselves", () => {
+  const turn = JSON.stringify({
     at: "2026-08-25T10:05:00.000Z",
-    kind: TRACE_ENTRY_KIND.ATTENTION,
-    update: { title: "checkout-service", status: "waiting" },
-    decision: { disposition: "silent" },
+    kind: TRACE_ENTRY_KIND.BRAIN,
+    trigger: BRAIN_TURN_TRIGGER.WAKE,
+    inputItemKinds: ["message", "function_call_output"],
+    inputTokens: 1_500,
+    transcriptBytes: 4_096,
+    toolCalls: [{ name: BRAIN_TOOL.ANNOUNCE, argumentsChars: 120, outcomeStatus: "accepted" }],
+    outputText: "Checkout is waiting on you.",
+    deliveries: [{ briefingChars: 96, sessionCount: 1 }],
     elapsedMs: 321,
+    iterations: 1,
+    compacted: false,
   });
-  const trace = unboxTraceFromLines(["not json", attention]);
+  const trace = unboxTraceFromLines(["not json", turn]);
+  assert.deepEqual(trace.total_tokens, { input: 1_500, output: 0 });
   const [generation] = generations(trace);
   assert.ok(generation);
-  assert.equal(generation.name, "attention-review");
-  // A record carrying no model — a hosted pass, or an older trace — keeps the
-  // placeholder rather than guessing.
-  assert.equal(generation.model, "attention-review");
-  const metrics = isRecord(generation.metrics) ? generation.metrics : undefined;
-  assert.equal(metrics?.latency, 0.321);
-  const definitions = Array.isArray(generation.available_tools)
-    ? generation.available_tools.filter(isRecord)
-    : [];
-  assert.equal(definitions[0]?.type, "response_format");
-  assert.equal(definitions[0]?.name, "attention_decision");
-  assert.ok(isRecord(definitions[0]?.inputSchema));
-  const [instructions, update, decision] = messagesOf(generation);
-  assert.equal(instructions?.role, "system");
-  assert.equal(instructions?.content, attentionInstructions());
-  // The update misses fields the prompt renderer requires, so it stands as
-  // its raw JSON rather than posing as the prompt the model received.
-  assert.equal(update?.role, "user");
-  assert.match(String(update?.content), /checkout-service/u);
-  assert.equal(decision?.role, "assistant");
-  assert.match(String(decision?.content), /silent/u);
+  assert.equal(generation.name, "brain-turn");
+  // A record carrying no model — a hosted turn — shows the keyed default
+  // rather than a blank.
+  assert.equal(generation.model, "gpt-5.6-sol");
+  assert.deepEqual(generation.metrics, {
+    latency: 0.321,
+    tokens: { input: 1_500, output: 0 },
+    cost: 0,
+  });
+  const toolNames = toolsOf(generation).map((tool) => tool.name);
+  assert.deepEqual(
+    toolNames,
+    brainToolDefinitions().map((tool) => tool.name),
+  );
+  const announce = toolsOf(generation).find((tool) => tool.name === BRAIN_TOOL.ANNOUNCE);
+  assert.equal(announce?.type, "function");
+  assert.ok(isRecord(announce?.inputSchema));
+  const [input, output] = messagesOf(generation);
+  assert.equal(input?.role, "user");
+  assert.equal(
+    input?.content,
+    ["trigger: wake", "input items: message, function_call_output", "transcript bytes: 4096"].join(
+      "\n",
+    ),
+  );
+  assert.equal(output?.role, "assistant");
+  assert.equal(
+    output?.content,
+    [
+      "Checkout is waiting on you.",
+      "tool call: announce -> accepted",
+      "delivery: 96 chars about 1 sessions",
+    ].join("\n"),
+  );
 });
 
-test("a readable attention update renders as the exact prompt the model received", () => {
-  const update = {
-    trigger: "status-changed",
-    providerName: "Claude Code",
-    title: "checkout-service",
-    status: "complete",
-    previousStatus: "working",
-  };
-  const attention = JSON.stringify({
+test("a failed brain turn shows its error, and a keyed turn its model", () => {
+  const turn = JSON.stringify({
     at: "2026-08-25T10:05:00.000Z",
-    kind: TRACE_ENTRY_KIND.ATTENTION,
-    update,
-    decision: { disposition: "speak" },
+    kind: TRACE_ENTRY_KIND.BRAIN,
+    trigger: BRAIN_TURN_TRIGGER.ASK,
+    inputItemKinds: [],
+    transcriptBytes: 0,
+    toolCalls: [],
+    deliveries: [],
     elapsedMs: 100,
+    iterations: 0,
+    compacted: false,
     model: "gpt-5.6-luna",
+    error: "request failed with status 500",
   });
-  const trace = unboxTraceFromLines([attention]);
-  const [generation] = generations(trace);
+  const [generation] = generations(unboxTraceFromLines([turn]));
   assert.equal(generation?.model, "gpt-5.6-luna");
-  const rendered = messagesOf(generation).find((message) => message.role === "user");
+  const [input, output] = messagesOf(generation);
   assert.equal(
-    rendered?.content,
-    attentionUpdateInput({
-      trigger: ATTENTION_TRIGGER.STATUS_CHANGED,
-      providerName: "Claude Code",
-      title: "checkout-service",
-      status: SESSION_STATUS.COMPLETE,
-      previousStatus: SESSION_STATUS.WORKING,
-    }),
+    input?.content,
+    ["trigger: ask", "input items: none", "transcript bytes: 0"].join("\n"),
   );
+  assert.equal(output?.content, "error: request failed with status 500");
+});
+
+test("a brain request entry stays in the raw trace and draws no generation", () => {
+  const request = JSON.stringify({
+    at: "2026-08-25T10:05:00.000Z",
+    kind: TRACE_ENTRY_KIND.BRAIN_REQUEST,
+    inputItems: 3,
+    inputChars: 2_048,
+    outcome: "answered",
+    elapsedMs: 900,
+  });
+  const trace = unboxTraceFromLines([request]);
+  assert.equal(trace.timestamp, "2026-08-25T10:05:00.000Z");
+  assert.deepEqual(generations(trace), []);
 });

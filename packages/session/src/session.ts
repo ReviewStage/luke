@@ -1,4 +1,4 @@
-import { isRecord, isWireString, text, type UnparsedWireValue } from "@sidecar/wire";
+import { text, type UnparsedWireValue } from "@sidecar/wire";
 
 /**
  * Provider-observed condition. Distinct from `SESSION_URGENCY`, the surface's
@@ -75,52 +75,6 @@ export const OBSERVATION_WINDOW = {
   ACTIVE_SESSION_FRESHNESS_MS: 15 * 60 * 1000,
 } as const;
 
-/**
- * How long a status keeps its session on the roster, measured from the
- * provider's last activity. This is the one bound on the roster — no adapter
- * ages out or caps its sessions: relevance follows what the status asks of the
- * user, never a blanket clock over every conversation. A failure does not heal
- * by going stale, but a rescue nobody made for days is a session the user has
- * left behind; a settled or unreadable session says only where work ended,
- * which is news while the user might still come back for it and history after.
- */
-export const SESSION_ROSTER_RETENTION_MS = {
-  RESCUE_MS: 3 * 24 * 60 * 60 * 1000,
-  SETTLED_MS: 2 * 24 * 60 * 60 * 1000,
-} as const;
-
-/** The retention one status earns. */
-export function sessionRosterRetentionMs(status: SessionStatus): number {
-  if (status === SESSION_STATUS.ERROR) return SESSION_ROSTER_RETENTION_MS.RESCUE_MS;
-  if (status === SESSION_STATUS.COMPLETE || status === SESSION_STATUS.UNKNOWN) {
-    return SESSION_ROSTER_RETENTION_MS.SETTLED_MS;
-  }
-  // Working and waiting are live right now, so neither expires: the age of
-  // the ask is not the age of its relevance.
-  return Number.POSITIVE_INFINITY;
-}
-
-/** Whether a session's status still earns it a place on the roster. */
-export function isRosterRelevant(
-  session: Pick<Session, "status" | "lastActivityAt" | "standing">,
-  now: number,
-): boolean {
-  // Retention ages out history — settled chats whose files linger after the
-  // work ended. A standing session is not history: its provider re-reports it
-  // while the thing it names still exists and stops the moment it is gone, so
-  // there is nothing here to age out, however old its own timestamp grows.
-  if (session.standing) return true;
-  return now - session.lastActivityAt <= sessionRosterRetentionMs(session.status);
-}
-
-/** The sessions still worth a row, in the order they arrived. */
-export function rosterRelevantSessions(
-  sessions: readonly Session[],
-  now: number,
-): readonly Session[] {
-  return sessions.filter((session) => isRosterRelevant(session, now));
-}
-
 /** The label a session takes when Luke cannot name the folder or repository it belongs to. */
 export const UNKNOWN_WORKSPACE_LABEL = "workspace";
 
@@ -136,43 +90,6 @@ export const SESSION_LOCATION = {
 } as const;
 
 export type SessionLocation = (typeof SESSION_LOCATION)[keyof typeof SESSION_LOCATION];
-
-export const ATTENTION_DISPOSITION = {
-  SILENT: "silent",
-  SPEAK_DURING_TURN: "speak-during-turn",
-  SPEAK_AT_TURN_END: "speak-at-turn-end",
-} as const;
-
-export type AttentionDisposition =
-  (typeof ATTENTION_DISPOSITION)[keyof typeof ATTENTION_DISPOSITION];
-
-/**
- * The result of Luke's attention evaluation: a judgment about one session and
- * nothing else. It carries no words, deliberately — an evaluator decides
- * whether a development is worth an interruption, and the voice that will
- * actually be heard words what gets said, from the same observed fields the
- * evaluator judged.
- */
-export interface AttentionDecision {
-  disposition: AttentionDisposition;
-  decidedAt: number;
-}
-
-/** Validates an untrusted attention decision without importing evaluator behavior. */
-export function attentionDecisionFromWire(
-  value: UnparsedWireValue,
-  decidedAt: number,
-): AttentionDecision | undefined {
-  if (!isRecord(value) || !isWireString(value.disposition)) return undefined;
-  const disposition = Object.values(ATTENTION_DISPOSITION).find(
-    (candidate) => candidate === value.disposition,
-  );
-  if (!disposition) return undefined;
-  return normalizeAttention({
-    disposition,
-    decidedAt,
-  });
-}
 
 /**
  * What a control does to the session, at the altitude a surface draws at: a
@@ -296,7 +213,7 @@ export function isOpenableSessionLink(link: string): boolean {
  * optional because no provider reports all of them, and every field is bounded
  * so a row stays a row. Adapters fill in whatever their provider actually
  * knows rather than composing a sentence, which leaves the wording to the
- * surface that renders it and the reasoning to the attention evaluator.
+ * surface that renders it.
  */
 export interface SessionDetail {
   /** What the session is doing right now, such as the tool it is running. */
@@ -379,10 +296,9 @@ export interface ProviderSessionObservation {
    * Luke — a pass adopts the provider's own moment, never the clock it ran
    * at — and where a provider gives none for a chat it may be the enclosing
    * workspace's, which its siblings share. No provider records when a status
-   * was entered, and nothing here pretends
-   * to: the sort, the age chip, roster retention, and the decay of a quiet
-   * waiting or working session to unknown all read this one moment for what
-   * it is.
+   * was entered, and nothing here pretends to: the sort, the age chip, and
+   * the decay of a quiet waiting or working session to unknown all read this
+   * one moment for what it is.
    */
   lastActivityAt: number;
   /** Whether this session is a realtime voice/delegation chat. */
@@ -397,10 +313,9 @@ export interface ProviderSessionObservation {
   /**
    * Whether this row reports a thing that currently stands rather than a
    * conversation that happened: the adapter re-reports it on every pass for as
-   * long as it exists and drops it the pass after it is gone, so roster
-   * retention never ages it out. `lastActivityAt` then carries the provider's own
-   * timestamp for the thing itself, however old, without costing the row its
-   * place. Absent means the row is history like any other.
+   * long as it exists and drops it the pass after it is gone. `lastActivityAt`
+   * then carries the provider's own timestamp for the thing itself, however
+   * old. Absent means the row is history like any other.
    */
   standing?: boolean;
   /** Omitted by an adapter that reads sessions off this machine. */
@@ -436,9 +351,9 @@ export interface ProviderSessionObservation {
   /**
    * Whether a waiting session is holding for the developer to act — a
    * permission, an approval, or a question the provider itself reported.
-   * Absent means the adapter could not tell, and no waiting notice speaks
-   * for it: idle-after-a-turn is the panel's to show, not a banner's to
-   * read as an ask.
+   * Absent means the adapter could not tell, and nothing reads the wait as
+   * an ask for it: idle-after-a-turn is the panel's to show as waiting, not
+   * a banner's to read as an ask.
    */
   holdingForDeveloper?: boolean;
   /**
@@ -477,8 +392,8 @@ export interface ProviderSessionObservation {
 }
 
 /**
- * The normalized model shared by observers, attention evaluation, the UI, and
- * any future capability-gated controls.
+ * The normalized model shared by observers, the UI, and any future
+ * capability-gated controls.
  */
 export interface Session extends SessionIdentity {
   provider: SessionProvider;
@@ -493,7 +408,7 @@ export interface Session extends SessionIdentity {
   realtimeVoice?: boolean;
   /** Whether a realtime voice conversation is live over this session right now. */
   realtimeVoiceLive?: boolean;
-  /** Whether this row reports a thing that currently stands, exempt from retention. */
+  /** Whether this row reports a thing that currently stands rather than a conversation that happened. */
   standing?: boolean;
   location: SessionLocation;
   /** The agent behind this session, when its provider hosts rather than is it. */
@@ -843,31 +758,7 @@ export function normalizeSessionIdentity(identity: SessionIdentity): SessionIden
   };
 }
 
-/** Creates the silent default used until an attention evaluator returns a decision. */
-export function silentAttention(lastActivityAt: number): AttentionDecision {
-  return {
-    disposition: ATTENTION_DISPOSITION.SILENT,
-    decidedAt: timestamp(lastActivityAt, "lastActivityAt"),
-  };
-}
-
-/** Ensures an attention decision is safe to share with the rest of the app. */
-export function normalizeAttention(decision: AttentionDecision): AttentionDecision {
-  if (!Object.values(ATTENTION_DISPOSITION).includes(decision.disposition)) {
-    throw new Error(`Unknown attention disposition: ${decision.disposition}`);
-  }
-  const normalized: AttentionDecision = {
-    disposition: decision.disposition,
-    decidedAt: timestamp(decision.decidedAt, "attention decidedAt"),
-  };
-  return normalized;
-}
-
-/**
- * Normalizes a provider observation without retaining provider-specific shapes.
- * A supplied attention decision is used by the registry when an evaluator has
- * already made one for this session.
- */
+/** Normalizes a provider observation without retaining provider-specific shapes. */
 export function normalizeSession(
   provider: SessionProvider,
   observation: ProviderSessionObservation,

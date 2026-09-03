@@ -1,15 +1,7 @@
-import {
-  type AttentionEvaluator,
-  openAiAttentionEvaluator,
-  openAiSubjectDeriver,
-  SessionAttentionReviewer,
-  SessionSubjectDeriver,
-  type SubjectEvaluator,
-} from "@sidecar/attention";
+import { type BrainClient, openAiBrainClient } from "@sidecar/brain";
 import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { type RealtimeDiagnostics, realtimeMintExplanation } from "@sidecar/realtime";
-import type { Session, SessionIdentity } from "@sidecar/session";
 import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
@@ -17,9 +9,7 @@ import {
   VOICE_SOURCE,
   type VoiceSource,
 } from "@sidecar/settings";
-import { HostedAttentionEvaluator } from "./hosted-attention-evaluator.js";
 import { HostedRealtimeCredentialMinter } from "./hosted-credentials.js";
-import { HostedSubjectDeriver } from "./hosted-subject-deriver.js";
 import type { RealtimeCredentialMinter } from "./minter.js";
 import { openAiRealtimeCredentials, unavailableRealtimeDiagnostics } from "./openai-credentials.js";
 
@@ -72,31 +62,20 @@ export interface VoiceCapabilityAssemblerOptions {
   accountSignedIn: () => boolean;
   hostedServiceBaseUrl: string;
   refreshAccount: () => Promise<void>;
-  currentSession: (identity: SessionIdentity) => Session | undefined;
-  /**
-   * Reads one local session's bounded transcript rendering for the subject
-   * deriver, or nothing. Only the main process reaches the adapters, so it
-   * is injected here the way `currentSession` is; absent means no subjects
-   * are derived at all.
-   */
-  readTranscript?: (identity: SessionIdentity) => Promise<string | undefined>;
   fetch?: typeof fetch;
   report?: (message: string) => void;
   /**
-   * Decorates whichever evaluator the policy builds — keyed or hosted — so a
-   * traced development run reads the same however the pass is credentialed.
-   * The decoration may only observe: the reviewer still sees an
-   * `AttentionEvaluator`, and absence means the evaluator is used as built.
+   * Decorates the brain client the policy builds, so a traced development
+   * run records every turn's request without the client learning it is being
+   * watched. The decoration may only observe: the agent still sees a
+   * `BrainClient`, and absence means the client is used as built.
    */
-  wrapEvaluator?: (evaluator: AttentionEvaluator) => AttentionEvaluator;
-  /** The same decoration for the subject evaluator, under the same terms. */
-  wrapSubjectEvaluator?: (evaluator: SubjectEvaluator) => SubjectEvaluator;
+  wrapBrainClient?: (client: BrainClient) => BrainClient;
 }
 
 export class VoiceCapabilityAssembler {
   readonly #options: VoiceCapabilityAssemblerOptions;
-  #attentionReviewer: SessionAttentionReviewer | undefined;
-  #subjectDeriver: SessionSubjectDeriver | undefined;
+  #brainClient: BrainClient | undefined;
   #realtimeCredentials: RealtimeCredentialMinter | undefined;
   #unavailableDiagnostics: RealtimeDiagnostics;
   #voiceSource: VoiceSource = VOICE_SOURCE.ACCOUNT;
@@ -109,18 +88,14 @@ export class VoiceCapabilityAssembler {
     });
   }
 
-  get attentionReviewer(): SessionAttentionReviewer | undefined {
-    return this.#attentionReviewer;
-  }
-
   /**
-   * Built beside the reviewer on the same policy, so a subject can be derived
-   * exactly when an attention review could be: never in a fixture run, and
-   * on the key or the account the reviews travel on. It is asked only at an
-   * announcement, for the session being announced.
+   * The client the brain's turns run on, or nothing. In this build the brain
+   * runs only on the developer's own key: a signed-in account with no key
+   * has voice through the hosted mint and no brain, so nothing is announced
+   * and an ask is answered with the honest refusal.
    */
-  get subjectDeriver(): SessionSubjectDeriver | undefined {
-    return this.#subjectDeriver;
+  get brainClient(): BrainClient | undefined {
+    return this.#brainClient;
   }
 
   get realtimeCredentials(): RealtimeCredentialMinter | undefined {
@@ -155,37 +130,11 @@ export class VoiceCapabilityAssembler {
       refreshAccount: this.#options.refreshAccount,
       ...(this.#options.fetch ? { fetch: this.#options.fetch } : undefined),
     };
-    const builtEvaluator = apiKey
-      ? openAiAttentionEvaluator(apiKey)
-      : policy.useHosted
-        ? new HostedAttentionEvaluator(seams)
-        : undefined;
-    const evaluator =
-      builtEvaluator && this.#options.wrapEvaluator
-        ? this.#options.wrapEvaluator(builtEvaluator)
-        : builtEvaluator;
-    this.#attentionReviewer = evaluator
-      ? new SessionAttentionReviewer({
-          evaluator,
-          currentSession: this.#options.currentSession,
-        })
-      : undefined;
-    const readTranscript = this.#options.readTranscript;
-    const builtSubjectEvaluator = readTranscript
-      ? apiKey
-        ? openAiSubjectDeriver(apiKey)
-        : policy.useHosted
-          ? new HostedSubjectDeriver(seams)
-          : undefined
-      : undefined;
-    const subjectEvaluator =
-      builtSubjectEvaluator && this.#options.wrapSubjectEvaluator
-        ? this.#options.wrapSubjectEvaluator(builtSubjectEvaluator)
-        : builtSubjectEvaluator;
-    this.#subjectDeriver =
-      subjectEvaluator && readTranscript
-        ? new SessionSubjectDeriver({ evaluator: subjectEvaluator, readTranscript })
-        : undefined;
+    const builtBrainClient = openAiBrainClient(apiKey);
+    this.#brainClient =
+      builtBrainClient && this.#options.wrapBrainClient
+        ? this.#options.wrapBrainClient(builtBrainClient)
+        : builtBrainClient;
     const [voice, speed] = await Promise.all([
       this.#options.settings.get(APP_SETTING_SCHEMA.voice.field).catch(() => undefined),
       this.#options.settings.get(APP_SETTING_SCHEMA.voiceSpeed.field).catch(() => undefined),
@@ -216,15 +165,22 @@ export class VoiceCapabilityAssembler {
     }).catch(() => undefined);
   }
 
-  #report(_apiKeyConfigured: boolean): void {
+  #report(apiKeyConfigured: boolean): void {
     const write = this.#options.report ?? ((message: string) => process.stderr.write(message));
     if (this.#realtimeCredentials) {
       const report = this.#realtimeCredentials.diagnostics();
       write(`Luke voice: enabled (${report.hosted ? "hosted, " : ""}${report.model})\n`);
-      return;
+    } else {
+      write(
+        `Luke voice: unavailable — ${realtimeMintExplanation(this.#unavailableDiagnostics.lastOutcome)}\n`,
+      );
     }
-    write(
-      `Luke voice: unavailable — ${realtimeMintExplanation(this.#unavailableDiagnostics.lastOutcome)}\n`,
-    );
+    if (this.#brainClient) {
+      write(`Luke brain: enabled (${this.#brainClient.model ?? "model chosen by the service"})\n`);
+    } else if (apiKeyConfigured) {
+      write("Luke brain: unavailable — the key was found but no client was built\n");
+    } else {
+      write("Luke brain: absent — this build runs the brain only on an OpenAI key\n");
+    }
   }
 }

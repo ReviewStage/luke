@@ -53,7 +53,6 @@ test("a wake item carries each event's observed fields and transcript delta as d
     kind: BRAIN_WAKE_KIND.HOOK,
     hookEvent: "Stop",
     identity: { providerId: claude.id, providerSessionId: "abc" },
-    previousStatus: SESSION_STATUS.WORKING,
     session: session(),
     transcriptDelta: { text: "assistant: done", truncated: false, status: "accepted" },
     atMs: NOW,
@@ -67,7 +66,6 @@ test("a wake item carries each event's observed fields and transcript delta as d
         hook: "Stop",
         provider_id: "claude-code",
         provider_session_id: "abc",
-        previous_status: "working",
         session: {
           provider_name: "Claude Code",
           title: "Fix the checkout tests",
@@ -88,7 +86,7 @@ test("an ask item carries the question and the events that arrived since the las
       "what's running?",
       [
         {
-          kind: BRAIN_WAKE_KIND.STATUS_EDGE,
+          kind: BRAIN_WAKE_KIND.HOOK,
           identity: { providerId: claude.id, providerSessionId: "abc" },
           atMs: NOW,
         },

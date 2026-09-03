@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { SESSION_TOOL_KIND } from "@sidecar/acts";
 import {
   normalizeSession,
   SESSION_APPLICATION_ID,
@@ -30,7 +31,6 @@ import {
   streamingConversationEntry,
 } from "./conversation-history.js";
 import { SESSION_NO_LONGER_OBSERVED_NOTE } from "./realtime-protocol.js";
-import { SESSION_TOOL_KIND } from "./realtime-tools.js";
 
 const OBSERVED_AT = 1_800_000_000_000;
 

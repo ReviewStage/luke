@@ -81,22 +81,23 @@ test("the assembler builds and clears the keyed voice capabilities as one unit",
     accountSignedIn: () => false,
     hostedServiceBaseUrl: "https://example.test",
     refreshAccount: async () => undefined,
-    currentSession: () => undefined,
     report: (message) => reports.push(message),
   });
 
   await assembler.apply();
   assert.ok(assembler.realtimeCredentials);
-  assert.ok(assembler.attentionReviewer);
+  assert.ok(assembler.brainClient);
+  assert.match(reports.at(-1) ?? "", /Luke brain: enabled/);
 
   key = undefined;
   await assembler.apply();
   assert.equal(assembler.realtimeCredentials, undefined);
-  assert.equal(assembler.attentionReviewer, undefined);
-  assert.match(reports.at(-1) ?? "", /unavailable/);
+  assert.equal(assembler.brainClient, undefined);
+  assert.match(reports.at(-2) ?? "", /unavailable/);
+  assert.match(reports.at(-1) ?? "", /Luke brain: absent/);
 });
 
-test("a wrapped evaluator stands where the built one would, and only when one was built", async () => {
+test("a wrapped brain client stands where the built one would, and only when one was built", async () => {
   const wrapped: string[] = [];
   let key: string | undefined = "test-key";
   const assembler = new VoiceCapabilityAssembler({
@@ -109,23 +110,22 @@ test("a wrapped evaluator stands where the built one would, and only when one wa
     accountSignedIn: () => false,
     hostedServiceBaseUrl: "https://example.test",
     refreshAccount: async () => undefined,
-    currentSession: () => undefined,
     report: () => undefined,
-    wrapEvaluator: (evaluator) => {
-      wrapped.push("wrapped");
-      return evaluator;
+    wrapBrainClient: (client) => {
+      wrapped.push(client.model ?? "unnamed");
+      return client;
     },
   });
 
   await assembler.apply();
-  assert.ok(assembler.attentionReviewer);
-  assert.deepEqual(wrapped, ["wrapped"]);
+  assert.ok(assembler.brainClient);
+  assert.deepEqual(wrapped, ["gpt-5.6-sol"]);
 
-  // No evaluator, nothing to decorate: the wrapper must not conjure one.
+  // No client, nothing to decorate: the wrapper must not conjure one.
   key = undefined;
   await assembler.apply();
-  assert.equal(assembler.attentionReviewer, undefined);
-  assert.deepEqual(wrapped, ["wrapped"]);
+  assert.equal(assembler.brainClient, undefined);
+  assert.deepEqual(wrapped, ["gpt-5.6-sol"]);
 });
 
 test("the assembler keeps fixture runs credential-free without reading a key", async () => {
@@ -143,7 +143,6 @@ test("the assembler keeps fixture runs credential-free without reading a key", a
     accountSignedIn: () => true,
     hostedServiceBaseUrl: "https://example.test",
     refreshAccount: async () => undefined,
-    currentSession: () => undefined,
     report: () => undefined,
   });
 
@@ -165,7 +164,6 @@ test("a signed-out live run is diagnosed as missing credentials, not as a fixtur
     accountSignedIn: () => false,
     hostedServiceBaseUrl: "https://example.test",
     refreshAccount: async () => undefined,
-    currentSession: () => undefined,
     report: (message) => reports.push(message),
   });
 
@@ -173,64 +171,44 @@ test("a signed-out live run is diagnosed as missing credentials, not as a fixtur
   assert.equal(assembler.realtimeCredentials, undefined);
   assert.equal(assembler.unavailableDiagnostics.fixtureMode, false);
   assert.equal(assembler.unavailableDiagnostics.lastOutcome, REALTIME_MINT_OUTCOME.NO_API_KEY);
-  assert.doesNotMatch(reports.at(-1) ?? "", /fixture/);
-  assert.match(reports.at(-1) ?? "", /Signing in/);
+  const voiceReport = reports.find((report) => report.startsWith("Luke voice"));
+  assert.doesNotMatch(voiceReport ?? "", /fixture/);
+  assert.match(voiceReport ?? "", /Signing in/);
 });
 
-test("the subject deriver is built beside the reviewer, and only with a transcript seam", async () => {
+test("the brain runs only on the developer's own key in this build", async () => {
   const seams = {
-    settings: settingsFor({ source: VOICE_SOURCE.KEY, key: "test-key" }),
     credentialsUsable: () => true,
     fixtureRun: () => false,
-    accountSignedIn: () => false,
+    accountSignedIn: () => true,
     hostedServiceBaseUrl: "https://example.test",
     refreshAccount: async () => undefined,
-    currentSession: () => undefined,
     report: () => undefined,
+    fetch: async () => new Response(null, { status: 204 }),
   };
-  const withSeam = new VoiceCapabilityAssembler({
-    ...seams,
-    readTranscript: async () => undefined,
-  });
-  await withSeam.apply();
-  assert.ok(withSeam.attentionReviewer);
-  assert.ok(withSeam.subjectDeriver);
-
-  const withoutSeam = new VoiceCapabilityAssembler(seams);
-  await withoutSeam.apply();
-  assert.ok(withoutSeam.attentionReviewer);
-  assert.equal(withoutSeam.subjectDeriver, undefined);
-
   const hosted = new VoiceCapabilityAssembler({
     ...seams,
     settings: settingsFor({ source: VOICE_SOURCE.ACCOUNT }),
-    accountSignedIn: () => true,
-    readTranscript: async () => undefined,
-    fetch: async () => new Response(null, { status: 204 }),
   });
   await hosted.apply();
-  assert.ok(hosted.subjectDeriver);
+  // Voice through the hosted mint, and no brain behind it: nothing is
+  // announced and an ask meets the honest refusal rather than a service call.
+  assert.ok(hosted.realtimeCredentials);
+  assert.equal(hosted.brainClient, undefined);
+
+  const keyed = new VoiceCapabilityAssembler({
+    ...seams,
+    settings: settingsFor({ source: VOICE_SOURCE.KEY, key: "test-key" }),
+  });
+  await keyed.apply();
+  assert.ok(keyed.brainClient);
 
   const fixture = new VoiceCapabilityAssembler({
     ...seams,
+    settings: settingsFor({ source: VOICE_SOURCE.KEY, key: "test-key" }),
     credentialsUsable: () => false,
     fixtureRun: () => true,
-    accountSignedIn: () => true,
-    readTranscript: async () => undefined,
   });
   await fixture.apply();
-  assert.equal(fixture.subjectDeriver, undefined);
-
-  const wrapped: string[] = [];
-  const traced = new VoiceCapabilityAssembler({
-    ...seams,
-    readTranscript: async () => undefined,
-    wrapSubjectEvaluator: (evaluator) => {
-      wrapped.push(evaluator.model ?? "hosted");
-      return evaluator;
-    },
-  });
-  await traced.apply();
-  assert.ok(traced.subjectDeriver);
-  assert.equal(wrapped.length, 1);
+  assert.equal(fixture.brainClient, undefined);
 });

@@ -13,18 +13,13 @@
  * itself, never the export.
  */
 
-import {
-  ATTENTION_DECISION_SCHEMA,
-  ATTENTION_DECISION_SCHEMA_NAME,
-  attentionInstructions,
-  attentionPromptUpdateFromWire,
-  attentionUpdateInput,
-} from "@sidecar/attention";
+import { brainToolDefinitions } from "@sidecar/brain";
 import { REALTIME_CLIENT_EVENT, REALTIME_SERVER_EVENT } from "@sidecar/realtime";
 import {
   isRecord,
   recordFromJsonLine,
   text,
+  unparsedWire,
   type WireRecord,
   type WireValue,
   wholeNumber,
@@ -40,20 +35,13 @@ export interface UnboxExportOptions {
 
 const DEFAULT_TRACE_NAME = "luke-agent-trace";
 const UNKNOWN_MODEL = "gpt-realtime";
-const ATTENTION_GENERATION_NAME = "attention-review";
-
+const BRAIN_GENERATION_NAME = "brain-turn";
 /**
- * The strict decision schema the review pins as its response format, shown in
- * the gateway document's definitions slot. The viewer's format has no
- * response-format field of its own, so the schema travels as a tool-shaped
- * definition typed by what it actually is, never as a callable function —
- * the review declares no tools at all.
+ * A hosted brain turn records no model, because the service's build owns that
+ * choice and the desktop never learns it; the export shows the keyed default
+ * rather than a blank, since the viewer requires a model on every generation.
  */
-const ATTENTION_RESPONSE_FORMAT = {
-  type: "response_format",
-  name: ATTENTION_DECISION_SCHEMA_NAME,
-  inputSchema: ATTENTION_DECISION_SCHEMA,
-};
+const UNKNOWN_BRAIN_MODEL = "gpt-5.6-sol";
 
 function recordItems(value: WireValue | undefined): readonly WireRecord[] {
   return Array.isArray(value) ? value.filter(isRecord) : [];
@@ -230,43 +218,78 @@ function applyWireEntry(state: ExportState, entry: WireRecord, atMs: number | un
 }
 
 /**
- * The prompt the review actually sent, rebuilt from the recorded update by the
- * same rendering the evaluator uses. An update the current renderer cannot read
- * — one an older build recorded — falls back to its raw JSON, so the entry
- * still shows what was reviewed even when it cannot show it verbatim.
+ * The brain's own tool definitions, in the viewer's shape. They are already
+ * the Responses API's function-tool form, the same one a realtime session
+ * update carries, so the JSON round trip lets the wire reader above render
+ * them the way it renders the session's.
  */
-function attentionInputText(update: WireValue | undefined): string {
-  const promptUpdate = attentionPromptUpdateFromWire(update);
-  if (promptUpdate) return attentionUpdateInput(promptUpdate);
-  return JSON.stringify(update ?? {}, undefined, 2);
+function brainAvailableTools(): readonly WireRecord[] {
+  return toolDefinitions(unparsedWire(JSON.parse(JSON.stringify(brainToolDefinitions()))));
 }
 
-function applyAttentionEntry(state: ExportState, entry: WireRecord): void {
-  const decision = wireRecord(entry.decision);
+/**
+ * The turn's input as the trace kept it: what woke it, the kinds of items it
+ * carried, and how many transcript bytes it read. The items' text was never
+ * recorded, so none is shown.
+ */
+function brainInputText(entry: WireRecord): string {
+  const itemKinds = Array.isArray(entry.inputItemKinds)
+    ? entry.inputItemKinds.map((kind) => text(kind)).filter((kind) => kind !== undefined)
+    : [];
+  return [
+    `trigger: ${text(entry.trigger) ?? "unknown"}`,
+    `input items: ${itemKinds.length > 0 ? itemKinds.join(", ") : "none"}`,
+    `transcript bytes: ${wholeNumber(entry.transcriptBytes) ?? 0}`,
+  ].join("\n");
+}
+
+/**
+ * The turn's produce: the text it ended on, one line per tool call with how
+ * the act came out, and one line per briefing it handed the mouth, as counts.
+ * A turn that ended in an error shows the error where its text would be.
+ */
+function brainOutputText(entry: WireRecord): string {
+  const toolCalls = recordItems(entry.toolCalls).map(
+    (call) =>
+      `tool call: ${text(call.name) ?? "unknown"} -> ${text(call.outcomeStatus) ?? "unknown"}`,
+  );
+  const deliveries = recordItems(entry.deliveries).map(
+    (delivery) =>
+      `delivery: ${wholeNumber(delivery.briefingChars) ?? 0} chars about ${
+        wholeNumber(delivery.sessionCount) ?? 0
+      } sessions`,
+  );
+  const outputText = text(entry.outputText);
   const error = text(entry.error);
+  const lines = [
+    ...(outputText ? [outputText] : []),
+    ...toolCalls,
+    ...deliveries,
+    ...(error ? [`error: ${error}`] : []),
+  ];
+  return lines.length > 0 ? lines.join("\n") : "no output";
+}
+
+function applyBrainEntry(state: ExportState, entry: WireRecord): void {
+  const inputTokens = wholeNumber(entry.inputTokens) ?? 0;
   state.events.push({
     type: "generation",
-    name: ATTENTION_GENERATION_NAME,
-    // A hosted pass records no model, because the service's build owns that
-    // choice and the desktop never learns it; the placeholder says so rather
-    // than guessing.
-    model: text(entry.model) ?? ATTENTION_GENERATION_NAME,
+    name: BRAIN_GENERATION_NAME,
+    model: text(entry.model) ?? UNKNOWN_BRAIN_MODEL,
     provider: "openai",
     metrics: {
       // The viewer reads latency in seconds; the trace stamps milliseconds.
       latency: (wholeNumber(entry.elapsedMs) ?? 0) / 1_000,
-      tokens: { input: 0, output: 0 },
+      tokens: { input: inputTokens, output: 0 },
       cost: 0,
     },
-    available_tools: [ATTENTION_RESPONSE_FORMAT],
+    available_tools: brainAvailableTools(),
     messages: [
-      { role: "system", content: attentionInstructions() },
-      { role: "user", content: attentionInputText(entry.update) },
-      decision
-        ? { role: "assistant", content: JSON.stringify(decision, undefined, 2) }
-        : { role: "assistant", content: error ?? "no decision" },
+      { role: "user", content: brainInputText(entry) },
+      { role: "assistant", content: brainOutputText(entry) },
     ],
   });
+  state.totalInput += inputTokens;
 }
 
 /** Reads one trace, already split into lines, into unbox-ai's gateway document. */
@@ -293,7 +316,9 @@ export function unboxTraceFromLines(
     const parsedAt = at !== undefined ? Date.parse(at) : Number.NaN;
     const atMs = Number.isFinite(parsedAt) ? parsedAt : undefined;
     if (entry.kind === TRACE_ENTRY_KIND.WIRE) applyWireEntry(state, entry, atMs);
-    if (entry.kind === TRACE_ENTRY_KIND.ATTENTION) applyAttentionEntry(state, entry);
+    // A brain-request entry is the raw JSONL's own record of one model call;
+    // the turn entry already stands for it in the viewer.
+    if (entry.kind === TRACE_ENTRY_KIND.BRAIN) applyBrainEntry(state, entry);
   }
   const name = options.name ?? DEFAULT_TRACE_NAME;
   return {

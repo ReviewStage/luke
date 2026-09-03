@@ -1,10 +1,6 @@
 import {
-  type AttentionDecision,
-  attentionDecisionFromWire,
-  boundedText,
   CONVERSATION_MESSAGE_AUTHOR,
   type ConversationMessageAuthor,
-  maximumSessionSubjectLength,
   normalizeSessionDetail,
   type ProviderId,
   SESSION_CONTROL_KIND,
@@ -31,8 +27,7 @@ import {
 /**
  * The wire contract between Luke's hosted service and the desktop. The web
  * endpoints answer with these shapes and the desktop's hosted clients validate
- * against them, both importing from here, so the two sides cannot drift — the
- * same standing the attention request construction has.
+ * against them, both importing from here, so the two sides cannot drift.
  */
 
 /** The hosted endpoints, rooted at the service origin. */
@@ -70,13 +65,6 @@ export const HOSTED_SERVICE_PATH = {
    * ordinary endpoint does, so `hostedMintAnswerFromWire` validates both.
    */
   INTRODUCTION_MINT: "/api/voice/introduction-mint",
-  ATTENTION_REVIEW: "/api/attention/review",
-  /**
-   * Derive one local session's subject from its bounded transcript rendering (POST),
-   * on Luke's key, for a developer with none of their own. The slice is read
-   * for the one phrase and stored nowhere.
-   */
-  SUBJECT_DERIVE: "/api/subject/derive",
   /**
    * Run one turn of Luke's brain on Luke's key (POST), for a developer with
    * none of their own. The desktop sends the brain's own input array — its
@@ -108,10 +96,6 @@ export const HOSTED_SERVICE_PATH = {
    */
   SESSION_MESSAGES: "/api/sessions/messages",
 } as const;
-
-/** Selects the judgment-only attention response understood by current desktops. */
-export const HOSTED_ATTENTION_CONTRACT_HEADER = "x-luke-attention-contract";
-export const HOSTED_ATTENTION_CONTRACT_VERSION = "2";
 
 /**
  * The cloud providers whose API keys the vault accepts. Only providers that
@@ -308,31 +292,6 @@ export function remoteMintAnswerFromWire(
   };
 }
 
-export interface HostedSubjectAnswer {
-  /** The derived phrase, or null when the transcript supported none. */
-  subject: string | null;
-  quota?: HostedQuota;
-}
-
-/**
- * Validates a hosted subject answer: a bounded string or an honest null, and
- * nothing else, cut to the same bound the registry keeps a subject at.
- */
-export function hostedSubjectAnswerFromWire(
-  value: UnparsedWireValue,
-): HostedSubjectAnswer | undefined {
-  if (!isRecord(value)) return undefined;
-  if (value.subject !== null && !isWireString(value.subject)) return undefined;
-  const subject =
-    value.subject === null
-      ? null
-      : (boundedText(value.subject.replace(/\s+/g, " "), maximumSessionSubjectLength) ?? null);
-  const quota = hostedQuotaFromWire(value.quota);
-  const answer: HostedSubjectAnswer = { subject };
-  if (quota !== undefined) answer.quota = quota;
-  return answer;
-}
-
 /**
  * What one hosted brain turn carries up: the input array as the desktop holds
  * it, every item a record the Responses API shaped or the desktop built, and
@@ -367,29 +326,6 @@ export function hostedBrainRequestFromWire(
     request.max_output_tokens = budget;
   }
   return request;
-}
-
-export interface HostedReviewAnswer {
-  decision: AttentionDecision;
-  quota?: HostedQuota;
-}
-
-/**
- * Validates a hosted attention answer through the same contract a model's own
- * decision passes, and stamps it with the reader's clock: `decidedAt` feeds
- * local dedup windows, so the service's clock has no business in it.
- */
-export function hostedReviewAnswerFromWire(
-  value: UnparsedWireValue,
-  decidedAt: number,
-): HostedReviewAnswer | undefined {
-  if (!isRecord(value) || !isRecord(value.decision)) return undefined;
-  const decision = attentionDecisionFromWire(value.decision, decidedAt);
-  if (!decision) return undefined;
-  const quota = hostedQuotaFromWire(value.quota);
-  const answer: HostedReviewAnswer = { decision };
-  if (quota !== undefined) answer.quota = quota;
-  return answer;
 }
 
 /**

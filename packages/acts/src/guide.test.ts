@@ -15,18 +15,19 @@ import {
   SESSION_LIST_SORT,
 } from "@sidecar/guide";
 import {
-  appGuideInstructionsEvents,
+  maximumSessionMessageLength,
+  normalizeSession,
+  SESSION_LOCATION,
+  SESSION_STATUS,
+} from "@sidecar/session";
+import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import {
   appToolAction,
   isAppToolCall,
-  REALTIME_CLIENT_EVENT,
+  REALTIME_TOOL,
   type RealtimeFunctionCall,
-  realtimeInstructions,
   SESSION_LIST_VOICE,
-} from "@sidecar/realtime";
-import { normalizeSession, SESSION_LOCATION, SESSION_STATUS } from "@sidecar/session";
-import { ACT_RESULT_STATUS, isRecord, text } from "@sidecar/wire";
-import { maximumFeedbackDraftLength } from "./realtime-protocol.js";
-import { REALTIME_TOOL } from "./realtime-tools.js";
+} from "./acts.js";
 
 const GUIDE: AppGuideSnapshot = {
   facts: [
@@ -82,7 +83,7 @@ const GUIDE: AppGuideSnapshot = {
 };
 
 function call(name: string, argumentsJson: string): RealtimeFunctionCall {
-  return { name, callId: "call-1", argumentsJson };
+  return { name, argumentsJson };
 }
 
 function observedConductorSession(realtimeVoice = false) {
@@ -119,30 +120,6 @@ test("the guide's text carries app facts and compact setting data", () => {
 
 test("an empty guide says so rather than describing an app it was never told about", () => {
   assert.match(appGuideContextText(EMPTY_APP_GUIDE), /has not been provided/);
-});
-
-test("the guide rides the session instructions and never opens Luke's mouth", () => {
-  const events = appGuideInstructionsEvents(appGuideContextText(GUIDE));
-
-  assert.equal(events.length, 1);
-  assert.equal(events[0]?.type, REALTIME_CLIENT_EVENT.SESSION_UPDATE);
-  const session = isRecord(events[0]?.session) ? events[0].session : undefined;
-  const instructions = text(session?.instructions) ?? "";
-  // The standing instructions stay the stable prefix the service can cache;
-  // the guide is appended behind its marker as data, never as a new prompt.
-  assert.ok(instructions.startsWith(realtimeInstructions()));
-  assert.match(instructions, /\[app guide\]/);
-  assert.match(instructions, /setting_id=voice_captions/);
-  // A partial update: the tools the call opened with are not touched, so the
-  // guide can never widen or narrow what a turn may do.
-  assert.equal(session !== undefined && "tools" in session, false);
-  assert.equal(
-    events.some((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE),
-    false,
-  );
-
-  // Blank text builds nothing rather than erasing the standing instructions.
-  assert.deepEqual(appGuideInstructionsEvents("   "), []);
 });
 
 test("a spoken toggle accepts the unambiguous words and nothing else", () => {
@@ -463,7 +440,7 @@ test("a spoken draft is bounded like a typed ask", () => {
   const action = appToolAction(
     call(
       REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER,
-      `{"kind":"prompt","draft":"${"a".repeat(maximumFeedbackDraftLength + 100)}"}`,
+      `{"kind":"prompt","draft":"${"a".repeat(maximumSessionMessageLength + 100)}"}`,
     ),
     GUIDE,
     [],
@@ -472,7 +449,7 @@ test("a spoken draft is bounded like a typed ask", () => {
   assert.equal(action.kind, "feedback");
   if (action.kind === "feedback") {
     assert.ok(action.draft);
-    assert.equal(action.draft.length, maximumFeedbackDraftLength);
+    assert.equal(action.draft.length, maximumSessionMessageLength);
   }
 });
 

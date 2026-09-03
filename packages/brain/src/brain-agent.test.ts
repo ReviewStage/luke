@@ -6,6 +6,7 @@ import {
   normalizeSession,
   type ProviderSessionObservation,
   type ProviderTranscriptResult,
+  type ProviderTranscriptSinceResult,
   SESSION_STATUS,
   type Session,
   type SessionIdentity,
@@ -20,6 +21,7 @@ import {
   wireRecord,
 } from "@sidecar/wire";
 import {
+  BRAIN_ROSTER_WAKE_INTERVAL_MS,
   BRAIN_TURN_TRIGGER,
   BrainAgent,
   type BrainAgentOptions,
@@ -42,7 +44,6 @@ import { BRAIN_INPUT_MARKER } from "./brain-input.js";
 import type { BrainPersistedState } from "./brain-memory.js";
 import { RESPONSES_ITEM_TYPE, type ResponsesInputItem } from "./brain-openai.js";
 import { BRAIN_TOOL } from "./brain-tools.js";
-import type { ProviderTranscriptSinceResult } from "./transcript-since.js";
 
 const NOW = 1_800_000_000_000;
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
@@ -63,9 +64,9 @@ function session(id: string, overrides: Partial<ProviderSessionObservation> = {}
 
 function edge(identity: SessionIdentity, atMs = NOW): BrainWakeEvent {
   return {
-    kind: BRAIN_WAKE_KIND.STATUS_EDGE,
+    kind: BRAIN_WAKE_KIND.HOOK,
+    hookEvent: "Stop",
     identity,
-    previousStatus: SESSION_STATUS.WORKING,
     session: session(identity.providerSessionId),
     atMs,
   };
@@ -567,4 +568,101 @@ test("stop drops pending wakes and takes nothing more", async () => {
   await h.clock.advance(NOW + 10_000);
   assert.equal(h.client.inputs.length, 0);
   assert.equal(await h.agent.ask("hello?"), undefined);
+});
+
+test("a scheduled roster look carries the roster and only the transcripts that grew", async () => {
+  const working = session("abc", { status: SESSION_STATUS.WORKING });
+  const settled = session("def", { status: SESSION_STATUS.COMPLETE, lastActivityAt: NOW - 60_000 });
+  const cloud = normalizeSession(
+    { id: "conductor", displayName: "Conductor" },
+    {
+      providerSessionId: "cloud-1",
+      title: "Conductor: cloud",
+      status: SESSION_STATUS.WORKING,
+      lastActivityAt: NOW,
+      location: "cloud",
+    },
+  );
+  const read: string[] = [];
+  const h = harness({
+    roster: () => ({
+      text: "Currently observed sessions:\n- abc\n- def\n- cloud-1",
+      identities: [ABC, DEF, { providerId: "conductor", providerSessionId: "cloud-1" }],
+      sessions: [working, settled, cloud],
+    }),
+    readTranscriptSince: async (identity): Promise<ProviderTranscriptSinceResult> => {
+      read.push(identity.providerSessionId);
+      return {
+        status: ACT_RESULT_STATUS.ACCEPTED,
+        text: identity.providerSessionId === "abc" ? "assistant: still going" : "",
+        cursor: `${identity.providerSessionId}-cursor`,
+        truncated: false,
+      };
+    },
+  });
+  h.agent.start();
+  assert.equal(h.client.inputs.length, 0);
+  await h.clock.advance(NOW + BRAIN_ROSTER_WAKE_INTERVAL_MS);
+
+  assert.equal(h.client.inputs.length, 1);
+  const input = h.client.inputs[0] ?? [];
+  const opening = itemText(itemsOfType(input, RESPONSES_ITEM_TYPE.MESSAGE)[0]);
+  assert.ok(opening.startsWith(`${BRAIN_INPUT_MARKER.OBSERVED_EVENTS} `));
+  const body = wireRecord(unparsedWire(JSON.parse(opening.slice(opening.indexOf("\n") + 1))));
+  assert.ok(body);
+  assert.equal(body.scheduled_roster_look, true);
+  assert.match(String(body.roster), /cloud-1/);
+  // Only the working local session's transcript is carried: the settled one
+  // had no cursor and nothing live, the cloud one is not read on a look, and
+  // a delta that came back empty is left out rather than reported as news.
+  assert.ok(Array.isArray(body.events));
+  assert.equal(body.events.length, 1);
+  const only = wireRecord(unparsedWire(body.events[0]));
+  assert.equal(only?.kind, BRAIN_WAKE_KIND.ROSTER);
+  assert.equal(only?.provider_session_id, "abc");
+  assert.deepEqual(read, ["abc"]);
+  assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.ROSTER);
+
+  // The look repeats on its own clock.
+  await h.clock.advance(NOW + 2 * BRAIN_ROSTER_WAKE_INTERVAL_MS);
+  assert.equal(h.client.inputs.length, 2);
+  await h.agent.stop();
+});
+
+test("a roster look is skipped while the client is quiet or a turn is in flight", async () => {
+  const h = harness({
+    roster: () => ({
+      text: "roster",
+      identities: [ABC],
+      sessions: [session("abc", { status: SESSION_STATUS.WORKING })],
+    }),
+  });
+  h.agent.start();
+  h.client.quiet = NOW + BRAIN_ROSTER_WAKE_INTERVAL_MS + 30_000;
+  await h.clock.advance(NOW + BRAIN_ROSTER_WAKE_INTERVAL_MS);
+  assert.equal(h.client.inputs.length, 0);
+
+  // Quiet over, but a turn is under way: the look yields and the next one catches up.
+  h.client.quiet = undefined;
+  let release: (() => void) | undefined;
+  const slow = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const respond = h.client.respond.bind(h.client);
+  h.client.respond = async (input, options) => {
+    await slow;
+    return respond(input, options);
+  };
+  const ask = h.agent.ask("what's up?");
+  await settle();
+  await h.clock.advance(NOW + 2 * BRAIN_ROSTER_WAKE_INTERVAL_MS);
+  assert.equal(h.client.inputs.length, 0);
+  release?.();
+  await ask;
+  await settle();
+  assert.equal(h.client.inputs.length, 1);
+  await h.clock.advance(NOW + 3 * BRAIN_ROSTER_WAKE_INTERVAL_MS);
+  assert.equal(h.client.inputs.length, 2);
+  assert.equal(h.traces.at(-1)?.trigger, BRAIN_TURN_TRIGGER.ROSTER);
+  await h.agent.stop();
 });

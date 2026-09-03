@@ -1,23 +1,21 @@
 # `@sidecar/realtime`
 
-## `realtime-protocol` and `realtime-tools` now point one way
+## The protocol is the mouth's, and the acts live below it
 
-`realtime-tools.ts` imports `type RealtimeFunctionCall` from
-`realtime-protocol.ts`, and the protocol imports nothing back. The cycle these
-six modules were kept together for is gone: the spoken surfaces no longer
-count tools, so the protocol has no reach into the tools.
+`realtime-protocol.ts` carries the wire grammar, the standing instructions,
+and the one tool the desktop's call is configured with, `ask_brain`. The acts
+themselves — their schemas, validators, and narrations — live in
+`@sidecar/acts`, and this package no longer re-exports them: it imports
+`actNarration` for the history lines a carried act leaves, and
+`remoteRealtimeToolDefinitions` for the phone's mint, which still carries the
+roster as context and the session acts as its own tools. Anything else that
+wants an act imports `@sidecar/acts` directly rather than reaching it through
+this barrel.
 
-So splitting a protocol package from a tools package is now possible where it
-once was not. It is still a product decision rather than a tidying: the two
-halves are read together by everything that speaks, and a split earns its
-keep only if something outside needs one without the other. Until then, do
-not add a module that points the protocol back at the tools; that would
-restore the knot rather than inherit it.
+## The act and guide validator tests live in `packages/acts`
 
-## The guide's tests live here
-
-`guide.test.ts` covers `@sidecar/guide` through the spoken tool grammar:
-`REALTIME_TOOL`, the app-tool routing, and the protocol's own bounds. The
-guide itself depends on nothing but `@sidecar/wire`; only its tests need the
-protocol, and keeping them here is what stops guide and realtime depending on
-each other.
+`acts-validation.test.ts` and `guide.test.ts` there cover the session, issue,
+and app tools — `REALTIME_TOOL`, the routing, and each validator's bounds —
+against `./acts.js`. The tests here cover only what this package owns: the
+protocol's events and parser, the roster and projects context text, the mint,
+and the briefing and onboarding speech builders.

@@ -51,9 +51,9 @@ importers:
       '@sidecar/analytics':
         specifier: workspace:*
         version: link:../../packages/analytics
-      '@sidecar/attention':
+      '@sidecar/brain':
         specifier: workspace:*
-        version: link:../../packages/attention
+        version: link:../../packages/brain
       '@sidecar/calendar':
         specifier: workspace:*
         version: link:../../packages/calendar
@@ -165,9 +165,6 @@ importers:
       '@paper-design/shaders':
         specifier: 0.0.80
         version: 0.0.80
-      '@sidecar/attention':
-        specifier: workspace:*
-        version: link:../../packages/attention
       '@sidecar/credentials':
         specifier: workspace:*
         version: link:../../packages/credentials
@@ -323,28 +320,6 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
-  packages/attention:
-    dependencies:
-      '@sidecar/guide':
-        specifier: workspace:*
-        version: link:../guide
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../wire
-    devDependencies:
-      '@types/node':
-        specifier: 26.2.0
-        version: 26.2.0
-      tsx:
-        specifier: 4.23.12
-        version: 4.23.12
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
-
   packages/brain:
     dependencies:
       '@sidecar/acts':
@@ -422,9 +397,9 @@ importers:
 
   packages/devtrace:
     dependencies:
-      '@sidecar/attention':
+      '@sidecar/brain':
         specifier: workspace:*
-        version: link:../attention
+        version: link:../brain
       '@sidecar/realtime':
         specifier: workspace:*
         version: link:../realtime
@@ -751,9 +726,9 @@ importers:
 
   packages/voice:
     dependencies:
-      '@sidecar/attention':
+      '@sidecar/brain':
         specifier: workspace:*
-        version: link:../attention
+        version: link:../brain
       '@sidecar/credentials':
         specifier: workspace:*
         version: link:../credentials

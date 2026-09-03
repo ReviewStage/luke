@@ -17,7 +17,7 @@ export interface RunMode {
   readonly animates: boolean;
   /** Steal keyboard focus, raise windows, stand on more than the main display. */
   readonly takesFocus: boolean;
-  /** Mint credentials, evaluate attention, create workspaces, send notes. */
+  /** Mint credentials, run the brain, create workspaces, send notes. */
   readonly sendsNetwork: boolean;
 }
 
