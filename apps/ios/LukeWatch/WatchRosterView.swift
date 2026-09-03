@@ -24,8 +24,13 @@ struct WatchRosterView: View {
                         RoundedRectangle(cornerRadius: 15)
                             .fill(Color(white: 0.14))
                             .overlay {
-                                RoundedRectangle(cornerRadius: 15)
-                                    .strokeBorder(session.rowBorderColor, lineWidth: 1)
+                                if session.status == "waiting" {
+                                    RoundedRectangle(cornerRadius: 15)
+                                        .strokeBorder(
+                                            Color(red: 1.0, green: 0.627, blue: 0.286, opacity: 0.3),
+                                            lineWidth: 1
+                                        )
+                                }
                             }
                     )
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -1003,12 +1008,6 @@ private struct WatchMarkdownText: View {
 // MARK: - Helpers
 
 private extension RosterSession {
-    var rowBorderColor: Color {
-        status == "waiting"
-            ? Color(red: 1.0, green: 0.627, blue: 0.286, opacity: 0.3)
-            : Color(white: 1, opacity: 0.08)
-    }
-
     static let placeholder = RosterSession(
         providerId: "placeholder",
         sessionId: "placeholder",
