@@ -103,7 +103,7 @@ private struct WatchSessionRow: View {
     let session: RosterSession
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading) {
             HStack(alignment: .top, spacing: 6) {
                 Text(session.title)
                     .font(.headline)
