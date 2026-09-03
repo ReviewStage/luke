@@ -23,6 +23,14 @@ export {
   textFromRow,
 } from "./shared/local-sqlite.js";
 export {
+  type ObservationSpoolWatcher,
+  type ObservationSpoolWatcherOptions,
+  type ObservedSpoolEvent,
+  type SpoolWatch,
+  type SpoolWatchHandle,
+  watchObservationSpool,
+} from "./shared/spool-watcher.js";
+export {
   type WorkspaceHostEnrichment,
   type WorkspaceHostRegistration,
   type WorkspaceHostRegistrationOptions,
