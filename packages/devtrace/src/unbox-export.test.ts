@@ -172,7 +172,7 @@ test("a brain turn becomes its own generation, and junk lines cost only themselv
   assert.equal(generation.name, "brain-turn");
   // A record carrying no model — a hosted turn — shows the keyed default
   // rather than a blank.
-  assert.equal(generation.model, "gpt-5.6-sol");
+  assert.equal(generation.model, "gpt-5.6-terra");
   assert.deepEqual(generation.metrics, {
     latency: 0.321,
     tokens: { input: 1_500, output: 0 },

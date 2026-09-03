@@ -108,7 +108,7 @@ test("the factory builds nothing without a key and honors the model option", () 
   assert.equal(openAiBrainClient(undefined), undefined);
   assert.equal(openAiBrainClient("   "), undefined);
   assert.equal(openAiBrainClient("sk", { model: "gpt-other" })?.model, "gpt-other");
-  assert.equal(openAiBrainClient("sk")?.model, "gpt-5.6-sol");
+  assert.equal(openAiBrainClient("sk")?.model, "gpt-5.6-terra");
 });
 
 test("the hosted client sends only the input and budget, retries once on 401, and quiets on quota", async () => {

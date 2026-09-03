@@ -41,7 +41,7 @@ const BRAIN_GENERATION_NAME = "brain-turn";
  * choice and the desktop never learns it; the export shows the keyed default
  * rather than a blank, since the viewer requires a model on every generation.
  */
-const UNKNOWN_BRAIN_MODEL = "gpt-5.6-sol";
+const UNKNOWN_BRAIN_MODEL = "gpt-5.6-terra";
 
 function recordItems(value: WireValue | undefined): readonly WireRecord[] {
   return Array.isArray(value) ? value.filter(isRecord) : [];

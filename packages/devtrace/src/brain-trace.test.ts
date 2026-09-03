@@ -145,13 +145,13 @@ test("a recorder that throws costs the trace line, never the request", async () 
 test("the model is recorded and forwarded only when the client names one", async () => {
   const records: BrainRequestTraceRecord[] = [];
   const keyed = tracedBrainClient(
-    clientAnswering(ANSWERED, "gpt-5.6-sol"),
+    clientAnswering(ANSWERED, "gpt-5.6-terra"),
     (record) => records.push(record),
     () => 0,
   );
-  assert.equal(keyed.model, "gpt-5.6-sol");
+  assert.equal(keyed.model, "gpt-5.6-terra");
   await keyed.respond(INPUT, OPTIONS);
-  assert.equal(records[0]?.model, "gpt-5.6-sol");
+  assert.equal(records[0]?.model, "gpt-5.6-terra");
 
   const hosted = tracedBrainClient(
     clientAnswering(ANSWERED),
