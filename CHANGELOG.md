@@ -27,7 +27,7 @@
      release that changed it, never an edit to an old one. A capture may show
      real sessions instead of fixture data, but mind what it carries: a
      title, branch, or conversation committed to history stays there, and
-     nothing unannounced may show. -->
+     whatever it reveals is published with it. -->
 
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
@@ -59,7 +59,7 @@ announcements wait out your meetings; skip it and Luke carries on without.
   otherwise a short name for the work — instead of Conductor's random-city
   fallback ([#636](https://github.com/ReviewStage/luke/pull/636))
 
-![The Voice page's Pause announcements switch.](apps/web/public/changelog/0.5.0/pause-announcements.png)
+![Luke's face asleep beside the housing while announcements are paused.](apps/web/public/changelog/0.5.0/pause-announcements.png)
 
 ### Fixes
 
