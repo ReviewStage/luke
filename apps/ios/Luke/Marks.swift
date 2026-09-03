@@ -174,10 +174,13 @@ struct ProviderMark: View {
                 y: (side - art.height * scale) / 2
             )
             ctx.scaleBy(x: scale, y: scale)
+            // One fill per path, like the Canvas above: Conductor's paired
+            // halves overlap with opposite windings, and a single non-zero
+            // fill over all of them would cancel the overlaps into holes.
             for path in art.paths {
                 ctx.addPath(cgPath(fromSVG: path))
+                ctx.fillPath()
             }
-            ctx.fillPath()
         }
         return image.withRenderingMode(.alwaysTemplate)
     }
