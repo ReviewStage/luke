@@ -408,14 +408,14 @@ test("quiet beginning cuts the announcement mid-sentence and closes Luke's own c
   await Promise.resolve();
   assert.equal(session.status, REALTIME_STATUS.RESPONDING);
 
-  subject.setMeetingQuiet(true);
+  subject.setHeld(true);
   assert.equal(session.stops, 1, "the reply under way is cut off");
   assert.equal(session.closes, 1, "the call Luke opened is closed");
 
   // The backlog was dropped with the reply: quiet ending finds nothing to
   // say, and no clock is left ticking toward saying it.
   subject.onStatus(REALTIME_STATUS.IDLE);
-  subject.setMeetingQuiet(false);
+  subject.setHeld(false);
   assert.equal(timers.armed(), 0);
   assert.equal(session.connects, 1);
   assert.deepEqual(
@@ -437,7 +437,7 @@ test("a notice arriving under the quiet never opens a call", async () => {
   const timers = fakeTimers();
   const subject = announcer(session, timers);
 
-  subject.setMeetingQuiet(true);
+  subject.setHeld(true);
   subject.enqueue([speech("a")]);
   await Promise.resolve();
 
@@ -457,7 +457,7 @@ test("quiet beginning never touches the developer's own call", () => {
   subject.enqueue([speech("a")]);
   assert.deepEqual<SessionAnnouncement[]>(session.spoken, []);
 
-  subject.setMeetingQuiet(true);
+  subject.setHeld(true);
   assert.equal(session.stops, 0, "the developer's reply is theirs to finish");
   assert.equal(session.closes, 0);
 

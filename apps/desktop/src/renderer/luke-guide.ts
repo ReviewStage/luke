@@ -538,7 +538,11 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               "conversation needs to be open, the microphone stays off, and it is always on " +
               "while voice is available. Luke waits five seconds for nearby updates and says " +
               "them together in one announcement. A session in a live voice conversation " +
-              "with its own provider announces nothing until that conversation closes.",
+              "with its own provider announces nothing until that conversation closes. " +
+              "Announcements can be paused by hand — the Pause announcements switch on the " +
+              "Voice page, or by asking Luke — and held ones are read out once the pause " +
+              "ends, the still-true ones only; conversations the developer opens still " +
+              "answer aloud while paused.",
           },
           {
             // A behavior rather than a setting, for the announcements' own

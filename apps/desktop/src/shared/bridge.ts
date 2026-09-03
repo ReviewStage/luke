@@ -878,9 +878,9 @@ export const BRIDGE = {
     args: noArgs,
     result: result<readonly ObservedAccountCalendars[]>(),
   }),
-  onMeetingQuietChanged: entry({
+  onAnnouncementsHeldChanged: entry({
     kind: "subscribe",
-    channel: "app:meeting-quiet-changed",
+    channel: "app:announcements-held-changed",
     args: noArgs,
     result: result<boolean>(isWireBoolean),
   }),

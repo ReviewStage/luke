@@ -94,9 +94,10 @@ export interface SpokenNoticeAnnouncerOptions {
  * A backlog that outlives its attempts is dropped, because every notice is
  * still standing in the panel.
  *
- * The meeting quiet reaches it through {@link setMeetingQuiet}: quiet
- * beginning silences it at once — the announcement mid-sentence on Luke's
- * own call included — and holds it silent until the quiet ends.
+ * The announcement hold reaches it through {@link setHeld}: a hold beginning
+ * — the developer's pause or a meeting's quiet — silences it at once, the
+ * announcement mid-sentence on Luke's own call included, and holds it silent
+ * until the hold ends.
  *
  * On the developer's own call, a reply Luke just gave them holds the whole
  * backlog for {@link ANNOUNCER_GRACE_MS}: the pause after an answer is where
@@ -128,18 +129,18 @@ export class SpokenNoticeAnnouncer {
   }
 
   /**
-   * Follows the meeting quiet the main process decided. Quiet beginning —
-   * the setting switched on mid-meeting, or a meeting starting under it — is
-   * asked-for silence right now: the announcement mid-sentence on Luke's own
-   * call is cut off and the call closed rather than left lingering into the
-   * meeting, and the backlog is dropped rather than played — every notice in
-   * it is still standing in the panel, and anything decided from here waits
-   * in the main process for the release. The developer's own call is never
-   * touched: a conversation they are holding passes, meeting or not. Quiet
-   * ending needs no act here — the main process re-sends what the meeting
-   * held, and that arrives as a fresh backlog.
+   * Follows the announcement hold the main process decided. A hold beginning
+   * — the pause switched on, the quiet switched on mid-meeting, or a meeting
+   * starting under it — is asked-for silence right now: the announcement
+   * mid-sentence on Luke's own call is cut off and the call closed rather
+   * than left lingering into the hold, and the backlog is dropped rather than
+   * played — every notice in it is still standing in the panel, and anything
+   * decided from here waits in the main process for the release. The
+   * developer's own call is never touched: a conversation they are holding
+   * passes, held or not. A hold ending needs no act here — the main process
+   * re-sends what it held, and that arrives as a fresh backlog.
    */
-  setMeetingQuiet(active: boolean): void {
+  setHeld(active: boolean): void {
     this.#quiet = active;
     if (!active) return;
     this.#queue = [];

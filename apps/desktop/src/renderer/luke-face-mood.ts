@@ -15,11 +15,11 @@ export interface FaceContext {
   speaking: boolean;
   microphoneLive: boolean;
   /**
-   * Whether the calendar's quiet is holding announcements right now. A
-   * deterministic fact from the main process — the clock against observed
-   * meeting intervals — never anything a model decided.
+   * Whether announcements are held right now. A deterministic fact from the
+   * main process — the developer's own pause switch, or the clock against
+   * observed meeting intervals — never anything a model decided.
    */
-  meetingQuiet: boolean;
+  announcementsHeld: boolean;
   /**
    * Whether the roster has been read at all yet. Until the first reading
    * lands, an empty total means "not looked yet" rather than "nothing to
@@ -101,8 +101,8 @@ export function restingMotion(context: FaceContext): FaceMotion | undefined {
   // one visual report the hold makes — Luke is deliberately not speaking —
   // and it stays true for exactly as long as the meeting covers now, which is
   // what a rest must do. Speech still outranks it: a developer who opens a
-  // turn mid-meeting is talking to a face, not to a pillow.
-  if (context.meetingQuiet) return FACE_MOTION.SLEEPING;
+  // turn mid-hold is talking to a face, not to a pillow.
+  if (context.announcementsHeld) return FACE_MOTION.SLEEPING;
   // Nothing to watch at all, which is a different thing from nothing
   // happening — and different again from not having looked yet. Until the
   // first roster reading lands, the zero is the reading's absence, and Luke

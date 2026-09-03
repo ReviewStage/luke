@@ -39,8 +39,8 @@ interface NotchWingsProps {
   hasAudioSignal: boolean;
   /** A pressed talk key still waiting for the call it asked to open. */
   voiceOpening: boolean;
-  /** Whether the calendar's quiet is holding announcements — the face sleeps on it. */
-  meetingQuiet: boolean;
+  /** Whether announcements are held, by the pause or a meeting — the face sleeps on it. */
+  announcementsHeld: boolean;
   /**
    * Whether the roster has been read at all yet. Until it has, the wing is
    * loading rather than empty: the face waits awake instead of sleeping on a
@@ -135,7 +135,7 @@ export function NotchWings({
   fixtureSpeaking,
   hasAudioSignal,
   voiceOpening,
-  meetingQuiet,
+  announcementsHeld,
   sessionsSettled,
   presentation,
   housingWidth,
@@ -175,7 +175,7 @@ export function NotchWings({
         fixtureSpeaking,
         voiceActive,
       }),
-      meetingQuiet,
+      announcementsHeld,
       settled: sessionsSettled,
       attention: tally.attentionIds,
       working: tally.working,

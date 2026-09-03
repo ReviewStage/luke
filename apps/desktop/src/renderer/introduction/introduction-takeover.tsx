@@ -859,7 +859,7 @@ export function IntroductionTakeover({
           fixtureSpeaking={false}
           hasAudioSignal={meterAnalyser !== undefined}
           voiceOpening={false}
-          meetingQuiet={false}
+          announcementsHeld={false}
           sessionsSettled={true}
           presentation={presentation}
           housingWidth={bootstrap.display.notch.housingWidth}

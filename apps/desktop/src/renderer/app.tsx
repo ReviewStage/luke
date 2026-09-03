@@ -444,8 +444,8 @@ export function App(): React.JSX.Element {
   const [outputAudio, setOutputAudio] = useState<OutputAudioState>();
   /** Each connected account's calendars, for the settings rows' checkboxes. */
   const [calendars, setCalendars] = useState<readonly ObservedAccountCalendars[]>([]);
-  /** Whether the calendar's quiet is holding announcements — the face sleeps on it. */
-  const [meetingQuiet, setMeetingQuiet] = useState(false);
+  /** Whether announcements are held — by the pause or a meeting — and the face sleeps on it. */
+  const [announcementsHeld, setAnnouncementsHeld] = useState(false);
   /** Whether the mandatory calendar step of onboarding still stands. */
   const [calendarOnboardingOwed, setCalendarOnboardingOwed] = useState(false);
   /**
@@ -2103,7 +2103,7 @@ export function App(): React.JSX.Element {
     voiceAvailable: settings?.voiceAvailable,
     bootstrapVoiceHotkey: bootstrap?.voiceHotkey,
     outputSilent: outputSilent(outputAudio),
-    meetingQuiet,
+    announcementsHeld,
     fixtureSpeaking,
     capturingShortcut: () => shortcutCapture.current,
     openSession: openSessionAloud,
@@ -2510,10 +2510,10 @@ export function App(): React.JSX.Element {
     (onChange) => window.sidecar.onCalendarsChanged(onChange),
     setCalendars,
   );
-  // Whether the quiet is holding, for the face alone.
-  const acceptMeetingQuietBootstrap = useBootstrapRacedChannel(
-    (onChange) => window.sidecar.onMeetingQuietChanged(onChange),
-    setMeetingQuiet,
+  // Whether announcements are held, for the face alone.
+  const acceptAnnouncementsHeldBootstrap = useBootstrapRacedChannel(
+    (onChange) => window.sidecar.onAnnouncementsHeldChanged(onChange),
+    setAnnouncementsHeld,
   );
   // Whether the calendar step of onboarding stands, for the gate alone.
   const acceptCalendarOnboardingBootstrap = useBootstrapRacedChannel(
@@ -2603,7 +2603,7 @@ export function App(): React.JSX.Element {
       acceptProjectsBootstrap(value.workspaceProjects);
       acceptIssuesBootstrap(value.issues);
       acceptCalendarsBootstrap(value.calendars);
-      acceptMeetingQuietBootstrap(value.meetingQuiet);
+      acceptAnnouncementsHeldBootstrap(value.announcementsHeld);
       // The shared thread's seed guards itself: the conversation hook already
       // holds the live pushes, and a thread this window has touched is always
       // the newer word than the snapshot.
@@ -2702,7 +2702,7 @@ export function App(): React.JSX.Element {
     acceptCalendarOnboardingBootstrap,
     acceptCalendarsBootstrap,
     acceptIssuesBootstrap,
-    acceptMeetingQuietBootstrap,
+    acceptAnnouncementsHeldBootstrap,
     acceptOutputAudioBootstrap,
     acceptProjectsBootstrap,
     acceptRememberedFactsBootstrap,
@@ -3417,7 +3417,7 @@ export function App(): React.JSX.Element {
         fixtureSpeaking={fixtureSpeaking}
         hasAudioSignal={hasAudioSignal}
         voiceOpening={talkOpening}
-        meetingQuiet={meetingQuiet}
+        announcementsHeld={announcementsHeld}
         sessionsSettled={sessionsSettled}
         presentation={presentation}
         housingWidth={display.notch.housingWidth}
