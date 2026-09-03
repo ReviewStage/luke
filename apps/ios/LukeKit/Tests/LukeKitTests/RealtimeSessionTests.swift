@@ -504,11 +504,11 @@ final class RealtimeSessionStateTests: XCTestCase {
         ws: MockWebSocketTask,
         capturer: any AudioCapturer = SilentCapturer(),
         player: any AudioPlayer = NullPlayer(),
-        onStatus: @MainActor @escaping (RealtimeStatus) -> Void = { _ in },
-        onCaption: @MainActor @escaping (String?) -> Void = { _ in },
-        onSpokenAsk: (@MainActor (String) -> Void)? = nil,
-        onError: @MainActor @escaping (String?) -> Void = { _ in },
-        onRecoverableError: (@MainActor (String) -> Void)? = nil,
+        onStatus: @MainActor @Sendable @escaping (RealtimeStatus) -> Void = { _ in },
+        onCaption: @MainActor @Sendable @escaping (String?) -> Void = { _ in },
+        onSpokenAsk: (@MainActor @Sendable (String) -> Void)? = nil,
+        onError: @MainActor @Sendable @escaping (String?) -> Void = { _ in },
+        onRecoverableError: (@MainActor @Sendable (String) -> Void)? = nil,
         dispatchToolCall: (@Sendable @MainActor (_ name: String, _ arguments: [String: Any], _ callId: String) async -> String)? = nil,
         now: @Sendable @escaping () -> TimeInterval = {
             ProcessInfo.processInfo.systemUptime

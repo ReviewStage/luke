@@ -185,16 +185,9 @@ private struct SignedInView: View {
                         // item as a capsule: the avatar's own circle is the
                         // whole control.
                         .sharedBackgroundVisibility(.hidden)
-                        ToolbarItem(placement: .topBarTrailing) {
-                            voiceButton
-                        }
-                        .sharedBackgroundVisibility(.hidden)
                     } else {
                         ToolbarItem(placement: .topBarLeading) {
                             profileButton
-                        }
-                        ToolbarItem(placement: .topBarTrailing) {
-                            voiceButton
                         }
                     }
                 }
@@ -205,14 +198,6 @@ private struct SignedInView: View {
         .sheet(isPresented: $profileShown) {
             ProfileSheet(identity: identity)
         }
-    }
-
-    private var voiceButton: some View {
-        NavigationLink(value: "voice") {
-            Image(systemName: "waveform.and.mic")
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Talk to Luke")
     }
 
     private var profileButton: some View {
@@ -438,4 +423,3 @@ private struct CardButtonStyle: ButtonStyle {
             .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
-

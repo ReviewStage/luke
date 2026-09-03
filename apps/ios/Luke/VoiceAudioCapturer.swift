@@ -10,7 +10,7 @@ final class VoiceAudioCapturer: AudioCapturer, @unchecked Sendable {
 
     func start() throws -> AsyncStream<[Int16]> {
         let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
+        try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
         try audioSession.setActive(true)
 
         let inputNode = engine.inputNode

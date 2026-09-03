@@ -14,7 +14,7 @@ final class VoiceAudioPlayer: AudioPlayer, @unchecked Sendable {
         try? audioSession.setCategory(
             .playAndRecord,
             mode: .default,
-            options: [.defaultToSpeaker, .allowBluetooth]
+            options: [.defaultToSpeaker, .allowBluetoothHFP]
         )
         try? audioSession.setActive(true)
         // Float32 mono at 24 kHz — AVAudioPlayerNode's native scheduling format.

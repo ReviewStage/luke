@@ -161,18 +161,23 @@ struct SessionsView: View {
         .background(Color.ground.ignoresSafeArea())
         .searchable(text: $searchQuery, prompt: "Search sessions")
         .toolbar {
-            // The filter rides with the search the way Notion docks one in
-            // its search pill: on iOS 26 the system search moves into the
-            // bottom bar and the button stands beside it; earlier systems
-            // keep the bar's own search presentation, so the button keeps
-            // the trailing slot above it.
+            // Search and list options flank the primary voice action. Keeping
+            // all three in the system bar gives each control native Liquid
+            // Glass while the microphone remains centered and easy to reach.
             if #available(iOS 26.0, *) {
                 DefaultToolbarItem(kind: .search, placement: .bottomBar)
+                ToolbarSpacer(.flexible, placement: .bottomBar)
+                ToolbarItem(placement: .bottomBar) {
+                    voiceButton
+                }
                 ToolbarSpacer(.flexible, placement: .bottomBar)
                 ToolbarItem(placement: .bottomBar) {
                     optionsButton
                 }
             } else {
+                ToolbarItem(placement: .topBarTrailing) {
+                    voiceButton
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     optionsButton
                 }
@@ -197,6 +202,23 @@ struct SessionsView: View {
                 .symbolVariant(filters.isEmpty ? .none : .circle.fill)
         }
         .tint(Color.ink)
+    }
+
+    @ViewBuilder
+    private var voiceButton: some View {
+        if #available(iOS 26.0, *) {
+            NavigationLink(value: "voice") {
+                Image(systemName: "mic.fill")
+            }
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.circle)
+            .accessibilityLabel("Talk to Luke")
+        } else {
+            NavigationLink(value: "voice") {
+                Image(systemName: "mic.fill")
+            }
+            .accessibilityLabel("Talk to Luke")
+        }
     }
 
     private var newWorkspaceButton: some View {

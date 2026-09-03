@@ -56,16 +56,16 @@ public struct RealtimeSessionOptions: Sendable {
     public var requestConnection: @Sendable () async throws -> VoiceConnection
 
     /// Called on each status change. Always delivered on the main actor.
-    public var onStatus: @MainActor (RealtimeStatus) -> Void
+    public var onStatus: @MainActor @Sendable (RealtimeStatus) -> Void
     /// Called with the running caption text while the model speaks, nil when done. Always delivered on the main actor.
-    public var onCaption: @MainActor (String?) -> Void
+    public var onCaption: @MainActor @Sendable (String?) -> Void
     /// Called with the developer's transcribed words when a turn ends. Always delivered on the main actor.
-    public var onSpokenAsk: (@MainActor (String) -> Void)?
+    public var onSpokenAsk: (@MainActor @Sendable (String) -> Void)?
     /// Called with an error description when the session closes unexpectedly. Always delivered on the main actor.
-    public var onError: @MainActor (String?) -> Void
+    public var onError: @MainActor @Sendable (String?) -> Void
     /// Called when the server rejects one event but keeps the session open.
     /// The current turn may end, but the developer can immediately try again.
-    public var onRecoverableError: (@MainActor (String) -> Void)?
+    public var onRecoverableError: (@MainActor @Sendable (String) -> Void)?
 
     /// Dispatches an armed tool call to the appropriate hosted act endpoint.
     /// Receives the tool name, the parsed arguments, and the call id; returns
@@ -98,11 +98,11 @@ public struct RealtimeSessionOptions: Sendable {
 
     public init(
         requestConnection: @Sendable @escaping () async throws -> VoiceConnection,
-        onStatus: @MainActor @escaping (RealtimeStatus) -> Void,
-        onCaption: @MainActor @escaping (String?) -> Void,
-        onSpokenAsk: (@MainActor (String) -> Void)? = nil,
-        onError: @MainActor @escaping (String?) -> Void,
-        onRecoverableError: (@MainActor (String) -> Void)? = nil,
+        onStatus: @MainActor @Sendable @escaping (RealtimeStatus) -> Void,
+        onCaption: @MainActor @Sendable @escaping (String?) -> Void,
+        onSpokenAsk: (@MainActor @Sendable (String) -> Void)? = nil,
+        onError: @MainActor @Sendable @escaping (String?) -> Void,
+        onRecoverableError: (@MainActor @Sendable (String) -> Void)? = nil,
         dispatchToolCall: (
             @Sendable @MainActor (_ name: String, _ arguments: [String: Any], _ callId: String) async -> String
         )? = nil,
