@@ -406,7 +406,7 @@ struct WatchSessionDetailView: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
-                .padding(.vertical, 11)
+                .padding(.vertical, 9)
         } onSubmit: { submittedText in
             send(submittedText)
         }
