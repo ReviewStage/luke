@@ -389,13 +389,29 @@ struct WatchSessionDetailView: View {
         }
     }
 
+    @ViewBuilder
     private var composer: some View {
+        if #available(watchOS 26.0, *) {
+            composerLink
+                .glassEffect(.regular.interactive())
+        } else {
+            composerLink
+                .background(.ultraThinMaterial, in: Capsule())
+        }
+    }
+
+    private var composerLink: some View {
         TextFieldLink(prompt: Text("Message")) {
-            Label("Message", systemImage: "message")
+            Text("Message")
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 11)
         } onSubmit: { submittedText in
             send(submittedText)
         }
         .submitLabel(.send)
+        .buttonStyle(.plain)
     }
 
     private func send(_ submittedText: String) {
