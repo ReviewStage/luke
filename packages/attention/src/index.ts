@@ -1,4 +1,10 @@
 export {
+  AGENT_WORK_LANGUAGE_INSTRUCTION,
+  CTO_RELEVANCE_INSTRUCTION,
+  INTERRUPTION_CONTEXT_INSTRUCTION,
+  LUKE_PERSONA,
+} from "@sidecar/guide";
+export {
   ATTENTION_DECISION_SCHEMA,
   ATTENTION_DECISION_SCHEMA_NAME,
   ATTENTION_REVIEW_OUTCOME,
@@ -37,12 +43,6 @@ export {
   type OpenAiSubjectOptions,
   openAiSubjectDeriver,
 } from "./openai-subject-deriver.js";
-export {
-  AGENT_WORK_LANGUAGE_INSTRUCTION,
-  CTO_RELEVANCE_INSTRUCTION,
-  INTERRUPTION_CONTEXT_INSTRUCTION,
-  LUKE_PERSONA,
-} from "./persona.js";
 export {
   boundedSubject,
   SessionSubjectDeriver,

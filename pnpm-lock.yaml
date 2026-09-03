@@ -272,9 +272,6 @@ importers:
 
   packages/acts:
     dependencies:
-      '@sidecar/attention':
-        specifier: workspace:*
-        version: link:../attention
       '@sidecar/guide':
         specifier: workspace:*
         version: link:../guide
@@ -328,6 +325,9 @@ importers:
 
   packages/attention:
     dependencies:
+      '@sidecar/guide':
+        specifier: workspace:*
+        version: link:../guide
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
@@ -576,9 +576,6 @@ importers:
       '@sidecar/acts':
         specifier: workspace:*
         version: link:../acts
-      '@sidecar/attention':
-        specifier: workspace:*
-        version: link:../attention
       '@sidecar/guide':
         specifier: workspace:*
         version: link:../guide

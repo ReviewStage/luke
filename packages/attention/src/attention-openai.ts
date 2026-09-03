@@ -1,3 +1,4 @@
+import { LUKE_PERSONA } from "@sidecar/guide";
 import { ATTENTION_DISPOSITION, type AttentionDisposition } from "@sidecar/session";
 import { isRecord, isWireString, text, type UnparsedWireValue } from "@sidecar/wire";
 import {
@@ -11,7 +12,6 @@ import {
   attentionInstructions,
   attentionUpdateInput,
 } from "./attention-prompt.js";
-import { LUKE_PERSONA } from "./persona.js";
 
 /**
  * The one OpenAI Responses request an attention review may be. The desktop
