@@ -1,0 +1,7 @@
+<task-notification>
+<task-id>bio6w2qko</task-id>
+<tool-use-id>toolu_01RDuu6i6pg83e72CvTLpEou</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-deanstratakos-Developer-luke--claude-worktrees-code-app-chat-detection-3ab594/8fd0c5c8-6e70-46a0-90cb-71e328a3ef87/tasks/bio6w2qko.output</output-file>
+<status>completed</status>
+<summary>Background command "Wait for PR checks to settle" completed (exit code 0)</summary>
+</task-notification>

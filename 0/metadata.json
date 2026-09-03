@@ -1,0 +1,84 @@
+{
+  "cli_version": "0.10.2",
+  "checkpoint_id": "01M1MJCK9CSGV667QQ7GDFH945",
+  "session_id": "8fd0c5c8-6e70-46a0-90cb-71e328a3ef87",
+  "strategy": "manual-commit",
+  "created_at": "2026-09-03T21:21:55.64664Z",
+  "branch": "claude/code-app-chat-detection-3ab594",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "packages/providers/src/claude-code/adapter.test.ts",
+    "packages/providers/src/claude-code/adapter.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-fable-5-1",
+  "turn_id": "0656e6eb3e31",
+  "checkpoint_transcript_start": 896,
+  "transcript_lines_at_start": 896,
+  "compact_transcript_start": 126,
+  "token_usage": {
+    "input_tokens": 314,
+    "cache_creation_tokens": 6738,
+    "cache_read_tokens": 2101833,
+    "output_tokens": 5608,
+    "api_call_count": 6
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_01F7NG8x7QBsPD363iH3eUBS",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "ready-for-review"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "0656e6eb3e31",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 845,
+        "end": 846,
+        "entry_ids": [
+          "2c7cb2ac-aeb1-429e-a2b4-0ef888abeefe"
+        ],
+        "tool_use_id": "toolu_01F7NG8x7QBsPD363iH3eUBS"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01F7NG8x7QBsPD363iH3eUBS"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: ready-for-review",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-09-03T21:21:55.501825Z",
+    "agent_lines": 39,
+    "agent_removed": 7,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 39,
+    "total_lines_changed": 46,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
