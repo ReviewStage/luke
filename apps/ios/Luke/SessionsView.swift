@@ -8,10 +8,13 @@ struct SessionsView: View {
     @Environment(ProductEventSender.self) private var events
 
     @State private var sessions: [RosterSession] = []
-    /// Starts true because the list's first frame can paint before its
-    /// `.task` begins the fetch, and that frame must show the skeletons
-    /// rather than claim "No active sessions" nothing has checked yet.
-    @State private var isLoading = true
+    /// True until the first roster fetch answers, because the list's first
+    /// frame can paint before its `.task` begins the fetch, and that frame
+    /// must show the skeletons rather than claim "No active sessions" nothing
+    /// has checked yet. Only that first wait may show them: a later refresh
+    /// that finds the list already empty (the last chat just archived) must
+    /// not flash skeletons over an emptiness that is real.
+    @State private var awaitingFirstRoster = true
     @State private var fetchError: String?
     @State private var searchQuery = ""
     @State private var filters: Set<SessionFilter> = []
@@ -144,7 +147,7 @@ struct SessionsView: View {
             by: sort
         )
         return List {
-            if isLoading && sessions.isEmpty {
+            if awaitingFirstRoster && sessions.isEmpty {
                 ForEach(0 ..< 3, id: \.self) { _ in
                     SkeletonRow()
                         .listRowBackground(Color.clear)
@@ -413,6 +416,15 @@ struct SessionsView: View {
             if control.kind == .archive {
                 archivingIds.remove(s.id)
                 if !delivered {
+                    // Restored locally before the refresh converges, because
+                    // the outage that refused the act usually fails the
+                    // refresh too, and a chat the server never archived must
+                    // not stay gone on the refusal's word alone.
+                    withAnimation {
+                        if !sessions.contains(where: { $0.id == s.id }) {
+                            sessions.append(s)
+                        }
+                    }
                     await refreshSessions()
                 }
             }
@@ -485,10 +497,9 @@ struct SessionsView: View {
     private func refreshSessions() async {
         refreshPass += 1
         let pass = refreshPass
-        isLoading = true
         fetchError = nil
-        defer { isLoading = false }
         guard case .signedIn = session.state else { return }
+        defer { awaitingFirstRoster = false }
         do {
             let fetched = try await session.authorized { token in
                 try await rosterClient.observe(bearerToken: token)
