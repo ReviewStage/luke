@@ -495,64 +495,74 @@ private struct WatchSessionInfoView: View {
 
     var body: some View {
         List {
-            Section("Details") {
-                LabeledContent("Title", value: session.title)
-                LabeledContent(
-                    "Provider",
-                    value: VaultProviderID.displayLabel(forWireId: session.providerId)
-                )
-                LabeledContent("Status") {
-                    Label {
-                        Text(session.status.capitalized)
-                    } icon: {
-                        Circle()
-                            .fill(session.statusColor)
-                            .frame(width: 8, height: 8)
+            Section {
+                infoField("Title") {
+                    Text(session.title)
+                }
+                infoField("Provider") {
+                    HStack(spacing: 8) {
+                        WatchProviderMark(providerId: session.providerId)
+                        Text(VaultProviderID.displayLabel(forWireId: session.providerId))
                     }
                 }
+                infoField("Status") {
+                    HStack(spacing: 8) {
+                        WatchStatusMark(status: session.status)
+                        Text(session.status.capitalized)
+                    }
+                }
+            } header: {
+                sectionHeader("Details")
             }
 
             if session.workspace != nil || session.branch != nil {
-                Section("Location") {
+                Section {
                     if let workspace = session.workspace {
-                        LabeledContent("Repository", value: workspace)
+                        infoField("Repository") {
+                            Text(workspace)
+                        }
                     }
                     if let branch = session.branch {
-                        LabeledContent("Branch") {
+                        infoField("Branch") {
                             Text(branch)
                                 .monospaced()
                         }
                     }
+                } header: {
+                    sectionHeader("Location")
                 }
             }
 
             if session.lastActivityAt != nil || session.error != nil {
-                Section("Activity") {
+                Section {
                     if let lastActivityAt = session.lastActivityAt {
-                        LabeledContent(
-                            "Last activity",
-                            value: lastActivityAt.formatted(date: .abbreviated, time: .shortened)
-                        )
+                        infoField("Last activity") {
+                            Text(lastActivityAt.formatted(date: .abbreviated, time: .shortened))
+                        }
                     }
                     if let error = session.error {
-                        LabeledContent("Error") {
+                        infoField("Error") {
                             Text(error)
                                 .foregroundStyle(.red)
                         }
                     }
+                } header: {
+                    sectionHeader("Activity")
                 }
             }
 
             if let change = session.change {
-                Section("Links") {
+                Section {
                     actionButton(changeLabel(change), systemImage: "arrow.up.right.square") {
                         openURL(change)
                     }
+                } header: {
+                    sectionHeader("Links")
                 }
             }
 
             if hasSessionActions {
-                Section("Actions") {
+                Section {
                     ForEach(session.controls.filter { $0.kind != .stop && $0.kind != .archive }) {
                         controlButton($0)
                     }
@@ -577,6 +587,8 @@ private struct WatchSessionInfoView: View {
                     ForEach(session.controls.filter { $0.kind == .stop }) { control in
                         controlButton(control, destructive: true)
                     }
+                } header: {
+                    sectionHeader("Actions")
                 }
             }
         }
@@ -614,6 +626,24 @@ private struct WatchSessionInfoView: View {
     private var hasSessionActions: Bool {
         !session.controls.isEmpty || !session.spawnableAgents.isEmpty || session.canRename
             || session.canRenameWorkspace
+    }
+
+    private func infoField<Value: View>(
+        _ label: String,
+        @ViewBuilder value: () -> Value
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            value()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .foregroundStyle(Color.accentColor)
     }
 
     private func actionButton(
@@ -819,6 +849,59 @@ private struct WatchAgentSpawnerView: View {
             } catch {
                 failure = error.localizedDescription
             }
+        }
+    }
+}
+
+private struct WatchProviderMark: View {
+    let providerId: String
+
+    var body: some View {
+        Group {
+            if providerId == VaultProviderID.conductor.rawValue {
+                Image("ConductorMark")
+                    .resizable()
+                    .scaledToFit()
+                    .scaleEffect(0.93)
+                    .frame(width: 20, height: 20)
+            } else {
+                Text(String(providerId.prefix(1).uppercased()))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 30, height: 30)
+    }
+}
+
+/// Matches the glyph, size, and dark-appearance colors of iOS's StatusMark.
+private struct WatchStatusMark: View {
+    let status: String
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 15, weight: .medium))
+            .foregroundStyle(color)
+            .frame(width: 30, height: 30)
+    }
+
+    private var symbol: String {
+        switch status {
+        case "working": "circle.dashed"
+        case "waiting": "exclamationmark.circle"
+        case "complete": "checkmark.circle"
+        case "error": "xmark.circle"
+        default: "questionmark.circle"
+        }
+    }
+
+    private var color: Color {
+        switch status {
+        case "working": Color(white: 1, opacity: 0.5)
+        case "waiting": Color(red: 1, green: 0.627, blue: 0.286)
+        case "complete": Color(red: 0x6F / 255, green: 0xDC / 255, blue: 0xA4 / 255)
+        case "error": Color(red: 0.95, green: 0.4, blue: 0.4)
+        default: Color(white: 1, opacity: 0.3)
         }
     }
 }
