@@ -32,10 +32,16 @@ struct SessionsView: View {
     @State private var renameText = ""
     @State private var creatorShown = false
     @State private var actFailure: String?
-    /// Counts refresh passes so only the newest may write: a pull-to-refresh
-    /// overlapping a post-act refresh must not land its older roster after
-    /// the newer one — an archived row would come back from the dead.
+    /// Counts refresh passes so a stale answer cannot outrank a newer one:
+    /// a pass's roster lands only when no newer pass has landed one (an
+    /// older roster written after a newer would bring an archived row back
+    /// from the dead, but one written where a newer pass only failed still
+    /// beats an error over nothing), and only the newest pass may claim
+    /// failure, since an old outage says nothing about the request still
+    /// running.
     @State private var refreshPass = 0
+    /// The newest pass whose roster actually landed.
+    @State private var landedPass = 0
     /// Sessions whose archive act is still in flight. The row leaves at the
     /// press, so every roster write filters these ids: a refresh whose roster
     /// was read before the archive landed would otherwise bring the row back.
@@ -505,7 +511,8 @@ struct SessionsView: View {
             let fetched = try await session.authorized { token in
                 try await rosterClient.observe(bearerToken: token)
             }
-            guard pass == refreshPass else { return }
+            guard pass > landedPass else { return }
+            landedPass = pass
             // Animated so a row an act just removed slides out the way a
             // deleted Mail row does, instead of blinking.
             withAnimation { sessions = fetched.filter { !archivingIds.contains($0.id) } }
@@ -514,6 +521,7 @@ struct SessionsView: View {
         } catch is AccountSessionError {
             ()  // Signed out — the state change redraws automatically.
         } catch {
+            guard pass == refreshPass else { return }
             fetchError = error.localizedDescription
         }
     }
