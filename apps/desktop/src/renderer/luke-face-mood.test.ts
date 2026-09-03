@@ -25,7 +25,7 @@ function context(overrides: Partial<FaceContext> = {}): FaceContext {
   return {
     speaking: false,
     microphoneLive: false,
-    meetingQuiet: false,
+    announcementsHeld: false,
     settled: true,
     attention: [],
     working: 0,
@@ -92,13 +92,16 @@ test("a meeting the calendar is holding through puts the face to sleep", () => {
   // The one visual report the quiet makes — and it holds whatever the
   // sessions are doing, because the sessions are exactly what is being held.
   assert.equal(
-    restingMotion(context({ meetingQuiet: true, attention: ["a"], working: 3, total: 5 })),
+    restingMotion(context({ announcementsHeld: true, attention: ["a"], working: 3, total: 5 })),
     FACE_MOTION.SLEEPING,
   );
   // A developer who opens a turn mid-meeting is still talking to a face.
-  assert.equal(restingMotion(context({ meetingQuiet: true, speaking: true })), FACE_MOTION.TALKING);
   assert.equal(
-    restingMotion(context({ meetingQuiet: true, microphoneLive: true })),
+    restingMotion(context({ announcementsHeld: true, speaking: true })),
+    FACE_MOTION.TALKING,
+  );
+  assert.equal(
+    restingMotion(context({ announcementsHeld: true, microphoneLive: true })),
     FACE_MOTION.LISTENING,
   );
 });
@@ -111,7 +114,7 @@ test("a roster not yet read holds the face awake rather than asleep", () => {
   // The meeting's sleep reports the calendar's hold, not the roster, so it
   // does not wait for one; and speech is speech whatever has been read.
   assert.equal(
-    restingMotion(context({ settled: false, meetingQuiet: true })),
+    restingMotion(context({ settled: false, announcementsHeld: true })),
     FACE_MOTION.SLEEPING,
   );
   assert.equal(restingMotion(context({ settled: false, speaking: true })), FACE_MOTION.TALKING);
@@ -323,7 +326,7 @@ test("a turn drives the resting motion the face plays", () => {
     working: 2,
     complete: 0,
     total: 3,
-    meetingQuiet: false,
+    announcementsHeld: false,
   };
 
   // Waiting sessions do not outrank a conversation in progress.

@@ -464,12 +464,12 @@ const heldNotices = new SessionNoticeHold();
  */
 const heldEvaluatorSpeech = new SessionNoticeHold<SessionAnnouncement>();
 /**
- * Whether the quiet is holding right now, as last computed — what the
+ * Whether announcements are held right now, as last computed — what the
  * renderer draws Luke's sleeping face from. Kept and broadcast on change so
- * every window agrees, and false the moment the meetings or the setting say
- * so.
+ * every window agrees, and false the moment neither cause stands: the
+ * developer's own pause switch, or a meeting under the calendar's quiet.
  */
-let meetingQuietActive = false;
+let announcementsHeld = false;
 /**
  * The conversation history, one retained thread shared by every panel window
  * and persisted for the next launch. The main process merges whole-window
@@ -1581,7 +1581,7 @@ function registerIpc(): void {
         // The calendar is a capability like the rosters: nothing of it is
         // shown, or held quiet, before the account gate opens.
         calendars: accountCapabilitiesActive() ? observedCalendars : [],
-        meetingQuiet: accountCapabilitiesActive() && meetingQuietActive,
+        announcementsHeld: accountCapabilitiesActive() && announcementsHeld,
         conversationHistory,
         rememberedFacts,
         calendarOnboardingOwed: calendarOnboardingGateOwed(),
@@ -1726,7 +1726,7 @@ function registerIpc(): void {
     realtimeCredentials: () => voiceCapabilities.realtimeCredentials,
     mediaDuck,
     workspaceProjectOffered,
-    refreshMeetingQuiet: () => void refreshMeetingQuiet(),
+    refreshAnnouncementHold: () => void refreshAnnouncementHold(),
     releaseHeldNotices: () => void releaseHeldNotices(),
     recordProductEvent,
     vaultSync: providerKeyVaultSync,
@@ -2287,11 +2287,11 @@ function openCreatedWorkspaces(sessions: readonly Session[]): void {
 }
 
 /**
- * Whether announcements should wait right now: a meeting on the connected
- * calendar covers this instant, and the quiet is switched on. The meetings
- * are consulted before the store so the common case — no calendar — costs no
- * read at all; the store's answer comes from its cached file either way,
- * never the keychain.
+ * Whether announcements should wait right now: the developer's pause switch
+ * is on, or a meeting on the connected calendar covers this instant under the
+ * meeting quiet. The pause is read first and the meetings before the quiet
+ * setting, so the common case — no pause, no calendar — costs one read; the
+ * store's answers come from its cached file either way, never the keychain.
  *
  * Consulting it is also what keeps every window honest: the answer is
  * reconciled with the broadcast state on the way out, so speech can never be
@@ -2300,24 +2300,29 @@ function openCreatedWorkspaces(sessions: readonly Session[]): void {
  * end would speak over a face still drawn asleep until the next tick.
  */
 async function announcementsQuietNow(now: number): Promise<boolean> {
+  const paused = await settingsStore.get(APP_SETTING_SCHEMA.pauseAnnouncements.field);
   const inMeeting =
-    calendarMeetings !== undefined && activeMeetingEnd(calendarMeetings, now) !== undefined;
+    !paused &&
+    calendarMeetings !== undefined &&
+    activeMeetingEnd(calendarMeetings, now) !== undefined;
   const holding =
-    inMeeting && (await settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field));
-  if (holding !== meetingQuietActive) {
-    meetingQuietActive = holding;
-    panels.broadcast(channels.onMeetingQuietChanged, holding);
+    paused ||
+    (inMeeting && (await settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field)));
+  if (holding !== announcementsHeld) {
+    announcementsHeld = holding;
+    panels.broadcast(channels.onAnnouncementsHeldChanged, holding);
   }
   return holding;
 }
 
 /**
- * Recomputes whether the quiet is holding — the face sleeps beside the
- * housing for exactly as long as it is. The recompute itself broadcasts any
- * change; this name is for the callers with nothing to say and only the face
- * to keep current: the boundary timer, the ticks, and the setting's toggle.
+ * Recomputes whether announcements are held — the face sleeps beside the
+ * housing for exactly as long as they are. The recompute itself broadcasts
+ * any change; this name is for the callers with nothing to say and only the
+ * face to keep current: the boundary timer, the ticks, and either setting's
+ * toggle.
  */
-async function refreshMeetingQuiet(): Promise<void> {
+async function refreshAnnouncementHold(): Promise<void> {
   await announcementsQuietNow(Date.now());
 }
 
@@ -2341,7 +2346,7 @@ function armQuietBoundaryTimer(): void {
   quietBoundaryTimer = setTimeout(
     () => {
       quietBoundaryTimer = undefined;
-      void refreshMeetingQuiet();
+      void refreshAnnouncementHold();
       void releaseHeldNotices();
       armQuietBoundaryTimer();
     },
@@ -2441,7 +2446,7 @@ async function refreshCalendarMeetings(generation: number): Promise<void> {
     process.stderr.write(`Calendar observation failed: ${message}\n`);
   }
   if (!calendarObservationLoop.isCurrent(generation)) return;
-  void refreshMeetingQuiet();
+  void refreshAnnouncementHold();
   void releaseHeldNotices();
   armQuietBoundaryTimer();
 }
@@ -2521,7 +2526,7 @@ function startCalendarObservation(): void {
   heldNoticeReleaseTimer = setInterval(() => {
     // The boundary timer answers the meeting edges on time; this tick is the
     // net under it, re-asking on a cadence no missed timer can silence.
-    void refreshMeetingQuiet();
+    void refreshAnnouncementHold();
     void releaseHeldNotices();
   }, HELD_NOTICE_RELEASE_INTERVAL_MS);
   heldNoticeReleaseTimer.unref();
@@ -2535,9 +2540,11 @@ function startCalendarObservation(): void {
 
 /**
  * The sign-out mirror of the start: the timers go, the meetings and the
- * backlog are forgotten, and the face wakes — a quiet cannot outlive the
- * account whose calendars declared it. The stored grants stay: signing back
- * in finds the same accounts connected, exactly like the provider keys.
+ * backlog are forgotten, and the meeting's hold ends — a quiet cannot outlive
+ * the account whose calendars declared it. The developer's own pause is not
+ * the calendar's to end, so the hold is recomputed rather than forced off.
+ * The stored grants stay: signing back in finds the same accounts connected,
+ * exactly like the provider keys.
  */
 function stopCalendarObservation(): void {
   if (heldNoticeReleaseTimer) clearInterval(heldNoticeReleaseTimer);
@@ -2556,10 +2563,7 @@ function stopCalendarObservation(): void {
   heldNotices.release();
   heldEvaluatorSpeech.release();
   panels.broadcast(channels.onCalendarsChanged, observedCalendars);
-  if (meetingQuietActive) {
-    meetingQuietActive = false;
-    panels.broadcast(channels.onMeetingQuietChanged, false);
-  }
+  void refreshAnnouncementHold();
 }
 
 /**

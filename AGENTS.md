@@ -400,7 +400,10 @@ Trust constraints:
   as the hold stands, a clock read against observed intervals, never
   anything a model wrote, and holding is the whole power: a calendar entry
   can delay an announcement and put a drawn face to sleep, never create,
-  reword, or act on one. This Mac's own Calendar is read under the same rule
+  reword, or act on one. The developer's own Pause announcements switch
+  raises the same hold by hand, over the same set of speech and nothing
+  wider: replies in a conversation they open still speak, and the switch
+  reaches no write path. This Mac's own Calendar is read under the same rule
   with no credential at all, through a native helper behind macOS's own
   consent dialog. The dialog is the connection, and nothing is stored but
   the fact of it and the user's calendar choices. EventKit publishes no

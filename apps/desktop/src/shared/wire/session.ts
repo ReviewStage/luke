@@ -199,8 +199,8 @@ export interface AppBootstrap {
   issues?: readonly TrackedIssue[];
   /** Each connected account's calendars, as last observed. */
   calendars: readonly ObservedAccountCalendars[];
-  /** Whether the calendar's quiet is holding announcements right now. */
-  meetingQuiet: boolean;
+  /** Whether announcements are held right now, by the pause switch or a meeting's quiet. */
+  announcementsHeld: boolean;
   /**
    * The conversation thread as the last launch left it, already retained.
    * Only the recent slice reaches a model; the rest is shared across every

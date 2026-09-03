@@ -41,7 +41,7 @@ export interface SettingsRowsIpcDependencies {
   realtimeCredentials: () => RealtimeCredentialMinter | undefined;
   mediaDuck: MediaDuckController;
   workspaceProjectOffered: (providerId: string, providerProjectId: string) => boolean;
-  refreshMeetingQuiet: () => void;
+  refreshAnnouncementHold: () => void;
   releaseHeldNotices: () => void;
   recordProductEvent: RecordProductEvent;
   /** Mirrors local provider keys into the account vault, main-process only. */
@@ -63,7 +63,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     realtimeCredentials,
     mediaDuck,
     workspaceProjectOffered,
-    refreshMeetingQuiet,
+    refreshAnnouncementHold,
     releaseHeldNotices,
     recordProductEvent,
     vaultSync,
@@ -175,8 +175,8 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
       case SETTING_SIDE_EFFECT.VOICE_SOURCE:
         void applyVoiceCredential();
         break;
-      case SETTING_SIDE_EFFECT.MEETING_QUIET:
-        refreshMeetingQuiet();
+      case SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD:
+        refreshAnnouncementHold();
         releaseHeldNotices();
         break;
       case SETTING_SIDE_EFFECT.VAULT_SYNC:

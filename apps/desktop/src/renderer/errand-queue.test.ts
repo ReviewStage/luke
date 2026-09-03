@@ -46,6 +46,7 @@ function settings(captions: boolean): AppSettingsView {
     voiceCaptions: captions,
     duckOtherMedia: true,
     quietDuringMeetings: true,
+    pauseAnnouncements: false,
     calendarSignInAvailable: false,
     linearSignInAvailable: false,
     appleCalendarAvailable: false,

@@ -93,7 +93,7 @@ export const SETTING_SIDE_EFFECT = {
   STOP_HOTKEY: "stop-hotkey",
   MEDIA_DUCK: "media-duck",
   VOICE_SOURCE: "voice-source",
-  MEETING_QUIET: "meeting-quiet",
+  ANNOUNCEMENT_HOLD: "announcement-hold",
   VAULT_SYNC: "vault-sync",
 } as const;
 
@@ -571,6 +571,31 @@ export const APP_SETTING_SCHEMA = {
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
     analytics: { id: APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE, value: toggleAnalytics },
   },
+  pauseAnnouncements: {
+    field: "pauseAnnouncements",
+    default: false,
+    guard: boolean(false),
+    settingsPage: SETTINGS_PAGE.VOICE,
+    resetScope: SETTINGS_RESET_SCOPE.VOICE,
+    guideEntry: settingGuideEntry(
+      "pauseAnnouncements",
+      [APP_SETTING_ID.PAUSE_ANNOUNCEMENTS],
+      (settings, defaultValue) => ({
+        id: APP_SETTING_ID.PAUSE_ANNOUNCEMENTS,
+        label: "Pause announcements",
+        description:
+          "Whether spoken announcements — a session waiting, stopping on an error, or finishing, and Luke's other unprompted remarks — are held while this is on, then read out together, the still-true ones only, once it is switched off. Conversations you open still answer aloud. Luke's face sleeps for as long as the pause holds.",
+        kind: APP_SETTING_KIND.TOGGLE,
+        value: appToggleText(guideValue<boolean>(settings, "pauseAnnouncements")),
+        defaultValue: appToggleText(defaultValue),
+        adjustable: true,
+        manual: VOICE_PAGE,
+      }),
+    ),
+    mainProcessSideEffect: SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD,
+    spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
+    analytics: { id: APP_SETTING_ID.PAUSE_ANNOUNCEMENTS, value: toggleAnalytics },
+  },
   quietDuringMeetings: {
     field: "quietDuringMeetings",
     default: true,
@@ -591,7 +616,7 @@ export const APP_SETTING_SCHEMA = {
         manual: `${CONNECTIONS_PAGE} — drawn once a calendar is connected`,
       }),
     ),
-    mainProcessSideEffect: SETTING_SIDE_EFFECT.MEETING_QUIET,
+    mainProcessSideEffect: SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
     analytics: { id: APP_SETTING_ID.QUIET_DURING_MEETINGS, value: toggleAnalytics },
   },
