@@ -4,21 +4,25 @@ import WatchConnectivity
 /// Sends the signed-in account's tokens to the paired Apple Watch via
 /// WatchConnectivity, and responds to on-demand token requests from the watch.
 ///
-/// Tokens are pushed proactively on sign-in and after each refresh, and the
-/// watch can request them at any time via a `requestTokens` message.
+/// Tokens are pushed proactively on sign-in, after each token rotation, and
+/// when the WatchConnectivity session becomes reachable or the watch state
+/// changes, so the watch never works with a stale refresh token.
 final class PhoneSessionRelay: NSObject, WCSessionDelegate {
     private let accountSession: AccountSession
 
     init(accountSession: AccountSession) {
         self.accountSession = accountSession
         super.init()
+        accountSession.onTokensRefreshed = { [weak self] in
+            Task { @MainActor [weak self] in self?.push() }
+        }
         guard WCSession.isSupported() else { return }
         WCSession.default.delegate = self
         WCSession.default.activate()
     }
 
-    /// Pushes current tokens to the watch. Called after sign-in and after
-    /// token refresh so the watch never works with a stale refresh token.
+    /// Pushes current tokens to the watch. Called after sign-in, after token
+    /// rotation, and when the WatchConnectivity session becomes active/reachable.
     @MainActor
     func push() {
         let s = WCSession.default
@@ -45,7 +49,14 @@ final class PhoneSessionRelay: NSObject, WCSessionDelegate {
         error: (any Error)?
     ) {
         guard activationState == .activated else { return }
-        Task { @MainActor [weak self] in self?.push() }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if accountSession.tokenPayload() != nil {
+                push()
+            } else {
+                pushSignOut()
+            }
+        }
     }
 
     func session(

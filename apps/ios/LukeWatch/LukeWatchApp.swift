@@ -1,4 +1,3 @@
-import LukeKit
 import SwiftUI
 
 @main
@@ -8,12 +7,7 @@ struct LukeWatchApp: App {
     private let connectivity: WatchConnectivityReceiver
 
     init() {
-        let watchSession = WatchAccountSession(
-            client: AccountClient(
-                baseURL: AccountConstants.baseURL,
-                clientID: AccountConstants.clientID
-            )
-        )
+        let watchSession = WatchAccountSession()
         _watchSession = State(initialValue: watchSession)
         connectivity = WatchConnectivityReceiver(watchSession: watchSession)
     }

@@ -23,17 +23,9 @@ final class WatchAccountSession {
     private(set) var state: State = .signedOut
 
     private var accessToken: String?
-    private var refreshToken: String?
     private var tokenExpiry: Date?
-    private var refreshInFlight: Task<String, Error>?
-    private var generation = 0
 
-    // AccountClient is reused from LukeKit — the token endpoint is the same
-    // as on the phone and works identically from watchOS.
-    let client: AccountClient
-
-    init(client: AccountClient) {
-        self.client = client
+    init() {
         restoreFromKeychain()
     }
 
@@ -62,30 +54,30 @@ final class WatchAccountSession {
         )
         WatchTokenStore.save(stored)
         self.accessToken = accessToken
-        self.refreshToken = refreshToken
         self.tokenExpiry = stored.expiry
         state = .signedIn(email: email, name: stored.name)
     }
 
     func signOut() {
-        generation += 1
         accessToken = nil
-        refreshToken = nil
         tokenExpiry = nil
-        refreshInFlight = nil
         WatchTokenStore.clear()
         state = .signedOut
     }
 
-    /// Returns a valid access token, refreshing first when near expiry.
-    /// Concurrent callers coalesce onto the same in-flight refresh, mirroring
-    /// the phone's AccountSession discipline.
+    /// Returns the stored access token when it is still valid.
+    ///
+    /// The watch never refreshes tokens independently — doing so would spend
+    /// the rotating refresh token the phone holds, invalidating the phone's
+    /// own session. When the stored token is near expiry the watch throws
+    /// `.signedOut` and waits for the phone to push a fresh pair via
+    /// WatchConnectivity, which it does after every token rotation.
     func validAccessToken() async throws -> String {
         guard case .signedIn = state, let accessToken else {
             throw AccountSessionError.signedOut
         }
-        guard tokenNearExpiry else { return accessToken }
-        return try await coalesceRefresh()
+        guard !tokenNearExpiry else { throw AccountSessionError.signedOut }
+        return accessToken
     }
 
     // MARK: - Private
@@ -95,42 +87,9 @@ final class WatchAccountSession {
         return tokenExpiry.timeIntervalSinceNow < 300
     }
 
-    private func coalesceRefresh() async throws -> String {
-        if let inflight = refreshInFlight { return try await inflight.value }
-        let task = Task<String, Error> {
-            defer { self.refreshInFlight = nil }
-            return try await self.performRefresh()
-        }
-        refreshInFlight = task
-        return try await task.value
-    }
-
-    private func performRefresh() async throws -> String {
-        guard let refreshToken else { throw AccountSessionError.signedOut }
-        let gen = generation
-        do {
-            let tokens = try await client.refresh(refreshToken: refreshToken)
-            guard generation == gen else { throw AccountSessionError.signedOut }
-            if var stored = WatchTokenStore.load() {
-                stored.accessToken = tokens.accessToken
-                stored.refreshToken = tokens.refreshToken
-                stored.expiry = tokens.expiry
-                WatchTokenStore.save(stored)
-            }
-            self.accessToken = tokens.accessToken
-            self.refreshToken = tokens.refreshToken
-            self.tokenExpiry = tokens.expiry
-            return tokens.accessToken
-        } catch AccountClientError.serverError(_, let oauthError) where oauthError == "invalid_grant" {
-            if generation == gen { signOut() }
-            throw AccountSessionError.signedOut
-        }
-    }
-
     private func restoreFromKeychain() {
         guard let stored = WatchTokenStore.load() else { return }
         accessToken = stored.accessToken
-        refreshToken = stored.refreshToken
         tokenExpiry = stored.expiry
         state = .signedIn(email: stored.email, name: stored.name)
     }

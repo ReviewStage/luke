@@ -89,7 +89,9 @@ enum WatchTokenStore {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key.rawValue,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            // AfterFirstUnlock lets writes succeed while the watch is locked,
+            // which is the normal state when transferUserInfo delivers tokens.
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
     }
 }
