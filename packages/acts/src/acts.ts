@@ -55,6 +55,7 @@ import {
   PROVIDER_ID_LIST,
   SESSION_APPLICATION_ID,
   SESSION_LOCATION,
+  SESSION_STATUS,
   type Session,
   type SessionApplicationId,
   type SessionControl,
@@ -167,6 +168,23 @@ const SESSION_LIST_FILTER_DESCRIPTION =
   `${SESSION_LIST_VOICE} for voice chats, an agent's provider_id, or an associated app's id. ` +
   `Values combine — ${SESSION_LOCATION.LOCAL} with an agent keeps that agent's local ` +
   `sessions — and ${SESSION_LIST_ALL} stands alone.`;
+
+/**
+ * The narrowing vocabulary the phone's list holds: its chips read a row's
+ * provider and status and nothing else, so a spoken narrowing there picks
+ * from those two axes and the whole-list scope. Which values narrow to
+ * anything is the observed roster's question, answered on the phone.
+ */
+const REMOTE_SESSION_LIST_FILTER_VALUES: readonly string[] = [
+  ...new Set<string>([SESSION_LIST_ALL, ...PROVIDER_ID_LIST, ...Object.values(SESSION_STATUS)]),
+];
+
+const REMOTE_SESSION_LIST_FILTER_DESCRIPTION =
+  `The values to narrow the session list to: ${SESSION_LIST_ALL} for every session, a ` +
+  `provider_id for one provider's sessions, or a status (${Object.values(SESSION_STATUS).join(
+    ", ",
+  )}). Values combine — a provider with a status keeps that provider's sessions in that ` +
+  `status — and ${SESSION_LIST_ALL} stands alone.`;
 
 /** What one validated tool call asks for, ready for the bridge that carries it. */
 type CarriedSessionActionFields =
@@ -411,6 +429,13 @@ type SessionToolSpec = {
   narration: ActNarration;
   guide: string;
   schema: RealtimeToolSchema;
+  /**
+   * The same act as the phone offers it, where the phone's surface gives the
+   * act a different shape: an open lands on the app's own screen rather than
+   * a provider's address, and the list narrows on the axes its chips hold.
+   * Absent, the phone is handed the desktop's schema unchanged.
+   */
+  remoteSchema?: RealtimeToolSchema;
   validate: SessionToolValidate;
 };
 
@@ -422,6 +447,7 @@ type IssueToolSpec = {
   narration: ActNarration;
   guide: string;
   schema: RealtimeToolSchema;
+  remoteSchema?: RealtimeToolSchema;
   validate: IssueToolValidate;
 };
 
@@ -433,6 +459,7 @@ type AppToolSpec = {
   narration: ActNarration;
   guide: string;
   schema: RealtimeToolSchema;
+  remoteSchema?: RealtimeToolSchema;
   validate: AppToolValidate;
 };
 
@@ -1393,6 +1420,19 @@ export const ACTS = {
         required: ["provider_id", "provider_session_id"],
       },
     },
+    remoteSchema: {
+      description:
+        "Open one observed session's own screen in this app, leaving this conversation — only " +
+        "when the developer asks to open, go to, or jump into that specific session. An ask to " +
+        'show, see, or list sessions or agents — "show me the waiting sessions" — narrows the ' +
+        "list through show_panel instead, never this. The phone shows one screen, so open one " +
+        "session per response; asked for several, ask which.",
+      parameters: {
+        type: "object",
+        properties: { ...SESSION_IDENTITY_PARAMETERS },
+        required: ["provider_id", "provider_session_id"],
+      },
+    },
     validate: validateOpenSession,
   },
   READ_SESSION_TRANSCRIPT: {
@@ -1703,6 +1743,35 @@ export const ACTS = {
         required: [],
       },
     },
+    remoteSchema: {
+      description:
+        "Show the session list — and narrow, search, or reorder it. An ask to show, see, or " +
+        'list sessions of some kind — "show me the waiting sessions", "show me the Conductor ' +
+        'agents" — is this tool with a filter, not open_session.',
+      parameters: {
+        type: "object",
+        properties: {
+          filters: {
+            type: "array",
+            items: { type: "string", enum: REMOTE_SESSION_LIST_FILTER_VALUES },
+            description: REMOTE_SESSION_LIST_FILTER_DESCRIPTION,
+          },
+          sort: {
+            type: "string",
+            enum: Object.values(SESSION_LIST_SORT),
+            description:
+              `Reorders the session list: ${SESSION_LIST_SORT.URGENCY} puts what needs the ` +
+              `developer first, ${SESSION_LIST_SORT.RECENCY} puts what moved last first.`,
+          },
+          query: {
+            type: "string",
+            description:
+              "Optional words to search the session list for; only rows saying every word stay.",
+          },
+        },
+        required: [],
+      },
+    },
     validate: validateShowPanel,
   },
   OPEN_FEEDBACK_COMPOSER: {
@@ -1891,32 +1960,44 @@ export function realtimeToolDefinitions(): readonly RealtimeToolWireDefinition[]
 }
 
 /**
- * The SESSION acts the mobile act endpoints already serve — MESSAGE, CONTROL,
- * ADD_AGENT, RENAME_WORKSPACE, RENAME_SESSION — as tool schemas for a mobile
- * Realtime session. OPEN and READ_TRANSCRIPT are excluded because no mobile
- * endpoint takes them; ISSUE and APP tools are excluded because mobile has no
- * equivalent endpoints for those. CREATE_WORKSPACE is excluded because mobile
- * carries no projects context, so the model cannot name a valid project.
+ * The acts the phone carries, as tool schemas for a mobile Realtime session.
+ * The session writes are the ones the hosted act endpoints serve — MESSAGE,
+ * CONTROL, CREATE_WORKSPACE, ADD_AGENT, RENAME_WORKSPACE, RENAME_SESSION —
+ * and the phone validates each against the roster and projects it was shown
+ * before an endpoint sees it, the renderer's half of the gauntlet. OPEN lands
+ * on the session's own screen in the app and PANEL on the app's own list, so
+ * each is performed on the phone and reaches no endpoint at all.
+ *
+ * READ_TRANSCRIPT is absent because the phone observes no local session, and
+ * a cloud conversation is read only by its own opened screen. The issue
+ * acts are absent because no tracker is connected on the phone; a setting
+ * change, the feedback composer, and the Updates row are surfaces the phone
+ * does not draw. REMEMBER and FORGET are absent because the phone keeps no
+ * memory: Luke's durable facts live on the Mac alone.
  */
-const REMOTE_SESSION_ACTION_KINDS: ReadonlySet<string> = new Set([
+const REMOTE_ACTION_KINDS: ReadonlySet<string> = new Set([
   SESSION_TOOL_KIND.MESSAGE,
   SESSION_TOOL_KIND.CONTROL,
+  SESSION_TOOL_KIND.OPEN,
+  SESSION_TOOL_KIND.CREATE_WORKSPACE,
   SESSION_TOOL_KIND.ADD_AGENT,
   SESSION_TOOL_KIND.RENAME_WORKSPACE,
   SESSION_TOOL_KIND.RENAME_SESSION,
+  APP_TOOL_KIND.PANEL,
 ]);
 
 export function remoteRealtimeToolDefinitions(): readonly RealtimeToolWireDefinition[] {
-  return REALTIME_TOOL_LIST.filter(
-    (tool) =>
-      tool.family === REALTIME_TOOL_FAMILY.SESSION &&
-      REMOTE_SESSION_ACTION_KINDS.has(tool.actionKind),
-  ).map((tool) => ({
-    type: "function",
-    name: tool.name,
-    description: tool.schema.description,
-    parameters: tool.schema.parameters,
-  }));
+  return REALTIME_TOOL_LIST.filter((tool) => REMOTE_ACTION_KINDS.has(tool.actionKind)).map(
+    (tool) => {
+      const schema = tool.remoteSchema ?? tool.schema;
+      return {
+        type: "function",
+        name: tool.name,
+        description: schema.description,
+        parameters: schema.parameters,
+      };
+    },
+  );
 }
 
 /**

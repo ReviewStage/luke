@@ -172,9 +172,16 @@ private struct SignedInView: View {
     @Environment(AccountSession.self) private var session
     let identity: AccountIdentity
     @State private var profileShown = false
+    /// The list's state and the stack above it, owned here so the voice
+    /// screen can drive the same presses the list offers by hand, and torn
+    /// down with the signed-in hierarchy like the profile flag.
+    @State private var store = SessionsStore(
+        rosterClient: RosterClient(serviceURL: AccountConstants.serviceURL)
+    )
 
     var body: some View {
-        NavigationStack {
+        @Bindable var store = store
+        return NavigationStack(path: $store.path) {
             SessionsView()
                 .toolbar {
                     if #available(iOS 26.0, *) {
@@ -191,10 +198,8 @@ private struct SignedInView: View {
                         }
                     }
                 }
-            .navigationDestination(for: String.self) { destination in
-                if destination == "voice" { VoiceView() }
-            }
         }
+        .environment(store)
         .sheet(isPresented: $profileShown) {
             ProfileSheet(identity: identity)
         }

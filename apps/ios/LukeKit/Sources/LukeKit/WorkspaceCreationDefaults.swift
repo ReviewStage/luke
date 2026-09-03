@@ -50,6 +50,12 @@ public final class WorkspaceCreationDefaults {
         projectsByProvider()[providerId]
     }
 
+    /// Every provider's remembered project at once, keyed by provider id —
+    /// the tie-breaks a spoken creation ask is settled against.
+    public var lastProjectIds: [String: String] {
+        projectsByProvider()
+    }
+
     public func setLastProjectId(_ projectId: String, for providerId: String) {
         var held = projectsByProvider()
         held[providerId] = projectId

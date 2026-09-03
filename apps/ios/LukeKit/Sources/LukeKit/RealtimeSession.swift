@@ -66,6 +66,10 @@ public struct RealtimeSessionOptions: Sendable {
     /// Called when the server rejects one event but keeps the session open.
     /// The current turn may end, but the developer can immediately try again.
     public var onRecoverableError: (@MainActor @Sendable (String) -> Void)?
+    /// Called with the names of the tools the service minted this call with,
+    /// read off the session the server confirms at channel open. The one
+    /// place the phone learns what Luke can actually be asked for.
+    public var onSessionTools: (@MainActor @Sendable ([String]) -> Void)?
 
     /// Dispatches an armed tool call to the appropriate hosted act endpoint.
     /// Receives the tool name, the parsed arguments, and the call id; returns
@@ -76,6 +80,12 @@ public struct RealtimeSessionOptions: Sendable {
         _ arguments: [String: Any],
         _ callId: String
     ) async -> String)?
+
+    /// The context items the phone composes itself — where a workspace can
+    /// be created — read at the moment the channel opens and sent after the
+    /// mint's roster item. Context, never a prompt: sending them requests no
+    /// response.
+    public var contextItems: @MainActor @Sendable () -> [VoiceContextItem]
 
     /// Overrides the WebSocket factory for tests. When nil, the session opens
     /// a URLSessionWebSocketTask to `connection.wsURL` with the ephemeral key.
@@ -103,9 +113,11 @@ public struct RealtimeSessionOptions: Sendable {
         onSpokenAsk: (@MainActor @Sendable (String) -> Void)? = nil,
         onError: @MainActor @Sendable @escaping (String?) -> Void,
         onRecoverableError: (@MainActor @Sendable (String) -> Void)? = nil,
+        onSessionTools: (@MainActor @Sendable ([String]) -> Void)? = nil,
         dispatchToolCall: (
             @Sendable @MainActor (_ name: String, _ arguments: [String: Any], _ callId: String) async -> String
         )? = nil,
+        contextItems: @MainActor @Sendable @escaping () -> [VoiceContextItem] = { [] },
         makeWebSocket: (@Sendable (URL, String) -> any WebSocketTask)? = nil,
         makeAudioCapturer: @Sendable @escaping () -> any AudioCapturer,
         makeAudioPlayer: @Sendable @escaping () -> any AudioPlayer,
@@ -120,7 +132,9 @@ public struct RealtimeSessionOptions: Sendable {
         self.onSpokenAsk = onSpokenAsk
         self.onError = onError
         self.onRecoverableError = onRecoverableError
+        self.onSessionTools = onSessionTools
         self.dispatchToolCall = dispatchToolCall
+        self.contextItems = contextItems
         self.makeWebSocket = makeWebSocket
         self.makeAudioCapturer = makeAudioCapturer
         self.makeAudioPlayer = makeAudioPlayer
@@ -357,6 +371,7 @@ public final class RealtimeSession {
                 if !channelOpen {
                     guard type == "session.created" || type == "session.updated" else { continue }
                     channelOpen = true
+                    options.onSessionTools?(mintedToolNames(json))
                     await onChannelOpen(ws: ws, context: context)
                     continue
                 }
@@ -377,6 +392,9 @@ public final class RealtimeSession {
         if let speed = pendingSpeed {
             pendingSpeed = nil
             try? await ws.sendText(sessionSpeedUpdateJSON(speed))
+        }
+        for item in options.contextItems() {
+            try? await ws.sendText(contextItemJSON(item))
         }
         for chunk in pressBuffer.drain() {
             try? await ws.sendText(audioAppendJSON(chunk))
@@ -503,6 +521,11 @@ public final class RealtimeSession {
             .flatMap { $0["output"] as? [[String: Any]] } ?? []
         let functionCalls = output.filter { $0["type"] as? String == "function_call" }
         responseStarted = false
+        // Marked in flight before the first act is carried, not after: the
+        // primary reply's audio can finish draining while an act's output is
+        // still being sent, and a drain that found no follow-up pending would
+        // return the session to ready with the follow-up's words still to come.
+        if !functionCalls.isEmpty { followUpPending = true }
 
         for item in functionCalls {
             guard
@@ -526,10 +549,8 @@ public final class RealtimeSession {
         }
 
         if !functionCalls.isEmpty {
-            // Follow-up response requested; stay in .thinking until the model speaks.
-            // Mark the follow-up in flight so the current audio ending does not
-            // return the session to .ready prematurely.
-            followUpPending = true
+            // Follow-up response requested; the session stays in .thinking or
+            // .speaking until the model's follow-up speaks and settles.
             responseStarted = false
             try? await ws.sendText(responseCreateJSON(sequence: responseInterruptionSequence))
             // A barge-in can land while the socket send is suspended. Its new
@@ -714,10 +735,19 @@ public final class RealtimeSession {
 
     // MARK: - JSON helpers
 
+    /// The tool names on the session the server confirmed; a session that
+    /// lists none, or lists them in a shape this build does not read, is a
+    /// session with no tools.
+    private func mintedToolNames(_ json: [String: Any]) -> [String] {
+        let tools = (json["session"] as? [String: Any])?["tools"] as? [[String: Any]] ?? []
+        return tools.compactMap { $0["name"] as? String }
+    }
+
     private func contextItemJSON(_ item: VoiceContextItem) -> String {
+        let escapedId = jsonEscape(item.itemId)
         let escaped = jsonEscape(item.text)
         return """
-            {"type":"conversation.item.create","item":{"id":"\(item.itemId)","type":"message","role":"user","content":[{"type":"input_text","text":"\(escaped)"}]}}
+            {"type":"conversation.item.create","item":{"id":"\(escapedId)","type":"message","role":"user","content":[{"type":"input_text","text":"\(escaped)"}]}}
             """
     }
 

@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
-import { APP_TOOL_KIND, actNarration, appToolAction, REALTIME_TOOL } from "./acts.js";
+import {
+  APP_TOOL_KIND,
+  actNarration,
+  appToolAction,
+  REALTIME_TOOL,
+  realtimeToolDefinitions,
+  remoteRealtimeToolDefinitions,
+} from "./acts.js";
 import { maximumRememberedFacts } from "./memory.js";
 
 test("a setting act narrates the setting label and accepted value", () => {
@@ -112,4 +119,63 @@ test("forgetting can only name an entry that stands", () => {
     ).status,
     ACT_RESULT_STATUS.REJECTED,
   );
+});
+
+test("the phone is handed the acts it carries, in the shape its own surface gives them", () => {
+  const remote = remoteRealtimeToolDefinitions();
+  const names: readonly string[] = remote.map((tool) => tool.name);
+  // Spread so the equality narrows a copy, leaving `names` a plain string list.
+  assert.deepEqual(
+    [...names],
+    [
+      REALTIME_TOOL.SEND_SESSION_MESSAGE,
+      REALTIME_TOOL.RUN_SESSION_CONTROL,
+      REALTIME_TOOL.OPEN_SESSION,
+      REALTIME_TOOL.CREATE_WORKSPACE,
+      REALTIME_TOOL.ADD_WORKSPACE_AGENT,
+      REALTIME_TOOL.RENAME_WORKSPACE,
+      REALTIME_TOOL.RENAME_SESSION,
+      REALTIME_TOOL.SHOW_PANEL,
+    ],
+  );
+  // No local transcript, tracker, setting, composer, Updates row, or memory stands on the phone.
+  for (const absent of [
+    REALTIME_TOOL.READ_SESSION_TRANSCRIPT,
+    REALTIME_TOOL.REMEMBER_FACT,
+    REALTIME_TOOL.FORGET_FACT,
+    REALTIME_TOOL.UPDATE_ISSUE_STATE,
+    REALTIME_TOOL.COMMENT_ON_ISSUE,
+    REALTIME_TOOL.CHANGE_APP_SETTING,
+    REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER,
+    REALTIME_TOOL.RUN_UPDATE_ACTION,
+  ]) {
+    assert.ok(!names.includes(absent), `${absent} must not reach the phone`);
+  }
+
+  // An open on the phone lands on the app's own screen, so no app to open in is offered.
+  const open = remote.find((tool) => tool.name === REALTIME_TOOL.OPEN_SESSION);
+  assert.ok(open);
+  assert.deepEqual(Object.keys(open.parameters.properties), ["provider_id", "provider_session_id"]);
+  assert.match(open.description, /own screen in this app/);
+
+  // The phone's list narrows on provider and status, and has no tabs to show.
+  const panel = remote.find((tool) => tool.name === REALTIME_TOOL.SHOW_PANEL);
+  assert.ok(panel);
+  assert.deepEqual(Object.keys(panel.parameters.properties), ["filters", "sort", "query"]);
+  const filters = panel.parameters.properties.filters;
+  assert.ok(filters && filters.type === "array");
+  const values = filters.items.enum ?? [];
+  assert.ok(values.includes("all"));
+  assert.ok(values.includes("waiting"));
+  assert.ok(values.includes("conductor"));
+  assert.ok(!values.includes("local"));
+  assert.ok(!values.includes("voice"));
+
+  // Every other act keeps the desktop's own schema.
+  const desktop = new Map(realtimeToolDefinitions().map((tool) => [tool.name, tool]));
+  for (const tool of remote) {
+    if (tool.name === REALTIME_TOOL.OPEN_SESSION || tool.name === REALTIME_TOOL.SHOW_PANEL)
+      continue;
+    assert.deepEqual(tool, desktop.get(tool.name));
+  }
 });

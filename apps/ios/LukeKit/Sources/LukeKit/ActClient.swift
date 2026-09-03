@@ -112,13 +112,17 @@ public final class ActClient: Sendable {
     ///
     /// `agent` must be one of the kinds the session's latest observation
     /// listed as spawnable; the server re-observes and validates it again.
+    /// `model` and `effort` name a choice from the projects answer's own
+    /// agent table, validated by the server against the same table.
     public func spawnAgent(
         accessToken: String,
         providerId: String,
         providerSessionId: String,
         agent: String,
         name: String? = nil,
-        task: String? = nil
+        task: String? = nil,
+        model: String? = nil,
+        effort: String? = nil
     ) async throws -> ActWorkspaceAnswer {
         let url = baseURL.appendingPathComponent("api/acts/agent")
         var body: [String: String] = [
@@ -132,6 +136,8 @@ public final class ActClient: Sendable {
         if let task = task?.trimmingCharacters(in: .whitespacesAndNewlines), !task.isEmpty {
             body["task"] = task
         }
+        if let model, !model.isEmpty { body["model"] = model }
+        if let effort, !effort.isEmpty { body["effort"] = effort }
         return try await post(url: url, body: body, accessToken: accessToken)
     }
 
