@@ -318,7 +318,7 @@ public final class RealtimeSession {
         guard let ws = channel else { return }
         responseStarted = false
         try? await ws.sendText(#"{"type":"input_audio_buffer.commit"}"#)
-        try? await ws.sendText(#"{"type":"response.create"}"#)
+        try? await ws.sendText(responseCreateJSON(sequence: interruptionSequence))
     }
 
     // MARK: - Receive loop
@@ -370,6 +370,7 @@ public final class RealtimeSession {
         switch type {
 
         case "response.created":
+            guard !isStaleCreatedResponse(json) else { return }
             responseStarted = true
             activeResponseId = (json["response"] as? [String: Any])?["id"] as? String
             activeResponseItemId = nil
@@ -502,7 +503,7 @@ public final class RealtimeSession {
             // return the session to .ready prematurely.
             followUpPending = true
             responseStarted = false
-            try? await ws.sendText(#"{"type":"response.create"}"#)
+            try? await ws.sendText(responseCreateJSON(sequence: responseInterruptionSequence))
         } else {
             // This is the follow-up response itself (or an audio-only primary response).
             followUpPending = false
@@ -646,6 +647,23 @@ public final class RealtimeSession {
         return status == .listening && activeResponseId == nil
     }
 
+    private func isStaleCreatedResponse(_ json: [String: Any]) -> Bool {
+        let response = json["response"] as? [String: Any]
+        let metadata = response?["metadata"] as? [String: Any]
+        let sequence = (metadata?["ios_interruption_sequence"] as? String).flatMap(Int.init)
+        let isStale = sequence.map { $0 != interruptionSequence }
+            ?? (status == .listening && activeResponseId == nil)
+        guard isStale else { return false }
+
+        if let responseId = response?["id"] as? String {
+            interruptedResponseIds.insert(responseId)
+            while interruptedResponseIds.count > 8 {
+                interruptedResponseIds.remove(interruptedResponseIds.first!)
+            }
+        }
+        return true
+    }
+
     private func clearActiveResponse() {
         activeResponseId = nil
         activeResponseItemId = nil
@@ -682,6 +700,12 @@ public final class RealtimeSession {
         return """
             {"type":"conversation.item.create","item":{"type":"function_call_output","call_id":"\(callId)","output":"\(escaped)"}}
             """
+    }
+
+    private func responseCreateJSON(sequence: Int) -> String {
+        """
+        {"type":"response.create","response":{"metadata":{"ios_interruption_sequence":"\(sequence)"}}}
+        """
     }
 
     private func responseCancelJSON(eventId: String) -> String {

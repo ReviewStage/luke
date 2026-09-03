@@ -530,6 +530,45 @@ final class RealtimeSessionStateTests: XCTestCase {
         )
     }
 
+    func testDelayedToolFollowUpCannotActAfterInterruption() async throws {
+        let ws = MockWebSocketTask()
+        var dispatchedNames: [String] = []
+        let session = RealtimeSession(options: makeOptions(
+            ws: ws,
+            dispatchToolCall: { name, _, _ in
+                dispatchedNames.append(name)
+                return #"{"result":"sent"}"#
+            }
+        ))
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        session.beginTurn()
+        session.endTurn()
+        ws.deliver(#"{"type":"response.created","response":{"id":"primary","metadata":{"ios_interruption_sequence":"0"}}}"#)
+        ws.deliver(#"{"type":"response.output_audio.delta","response_id":"primary","delta":"AQABAA=="}"#)
+        ws.deliver(
+            #"{"type":"response.done","response":{"id":"primary","output":[{"type":"function_call","call_id":"first_call","name":"send_session_message","arguments":"{}"}]}}"#
+        )
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(dispatchedNames, ["send_session_message"])
+
+        // The primary response requested its follow-up, but the server has
+        // not announced that response yet when the developer takes the floor.
+        session.beginTurn()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        ws.deliver(#"{"type":"response.created","response":{"id":"stale_follow_up","metadata":{"ios_interruption_sequence":"0"}}}"#)
+        ws.deliver(
+            #"{"type":"response.done","response":{"id":"stale_follow_up","output":[{"type":"function_call","call_id":"stale_call","name":"rename_workspace","arguments":"{}"}]}}"#
+        )
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(dispatchedNames, ["send_session_message"])
+        XCTAssertEqual(session.status, .listening)
+    }
+
     func testPrimaryPlayerStaysActiveUntilToolFollowUpFinishes() async throws {
         let ws = MockWebSocketTask()
         let primaryPlayer = ControlledDrainPlayer()
