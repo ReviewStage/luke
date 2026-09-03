@@ -148,6 +148,10 @@ public final class RealtimeSession {
     private var capturer: (any AudioCapturer)?
     private var player: (any AudioPlayer)?
     private var drainingPlayers: [UUID: any AudioPlayer] = [:]
+    // A drained player stays alive until every response in the chain has
+    // finished. Stopping it sooner may deactivate the shared AVAudioSession
+    // while a tool follow-up player is already speaking.
+    private var drainedPlayers: [any AudioPlayer] = []
     private var pressBuffer = PressAudioBuffer()
 
     // True during a turn the developer explicitly opened; cleared after
@@ -222,6 +226,12 @@ public final class RealtimeSession {
     public func beginTurn() {
         guard status == .connecting || status == .ready || status == .speaking else { return }
         if status == .speaking { interruptResponse() }
+        if status == .connecting, pendingCommit {
+            // A new press supersedes the released turn that was waiting for
+            // the socket. Its buffered audio must not leak into the new turn.
+            pendingCommit = false
+            _ = pressBuffer.drain()
+        }
         isArmed = true
         // Idle timer only runs between turns; cancel it rather than restart.
         idleTask?.cancel(); idleTask = nil
@@ -252,6 +262,8 @@ public final class RealtimeSession {
         player?.stop(); player = nil
         for drainingPlayer in drainingPlayers.values { drainingPlayer.stop() }
         drainingPlayers.removeAll()
+        for drainedPlayer in drainedPlayers { drainedPlayer.stop() }
+        drainedPlayers.removeAll()
         channel?.close(); channel = nil
         isArmed = false
         followUpPending = false
@@ -457,6 +469,7 @@ public final class RealtimeSession {
     }
 
     private func handleResponseDone(json: [String: Any], ws: any WebSocketTask) async {
+        let responseInterruptionSequence = interruptionSequence
         let output = (json["response"] as? [String: Any])
             .flatMap { $0["output"] as? [[String: Any]] } ?? []
         let functionCalls = output.filter { $0["type"] as? String == "function_call" }
@@ -475,7 +488,12 @@ public final class RealtimeSession {
             } else {
                 result = #"{"error":"not authorized"}"#
             }
+            // A new developer turn may have interrupted while the hosted act
+            // was in flight. The act has already happened, but its old model
+            // response must not resume over the new microphone turn.
+            guard interruptionSequence == responseInterruptionSequence else { return }
             try? await ws.sendText(functionCallOutputJSON(callId: callId, output: result))
+            guard interruptionSequence == responseInterruptionSequence else { return }
         }
 
         if !functionCalls.isEmpty {
@@ -494,12 +512,14 @@ public final class RealtimeSession {
                 status = .ready
                 clearActiveResponse()
                 resetIdleTimer()
+                stopDrainedPlayers()
             } else if status == .speaking, pendingDrains == 0, player == nil {
                 // Silent follow-up: the primary drain already completed but could not
                 // transition because followUpPending was true. Transition now.
                 status = .ready
                 clearActiveResponse()
                 resetIdleTimer()
+                stopDrainedPlayers()
             }
         }
 
@@ -520,7 +540,7 @@ public final class RealtimeSession {
             guard let self,
                   self.drainingPlayers.removeValue(forKey: drainId) != nil
             else { return }
-            p.stop()
+            self.drainedPlayers.append(p)
             self.pendingDrains -= 1
             self.options.onCaption(nil)
             if self.status == .speaking,
@@ -531,8 +551,14 @@ public final class RealtimeSession {
                 self.status = .ready
                 self.clearActiveResponse()
                 self.resetIdleTimer()
+                self.stopDrainedPlayers()
             }
         }
+    }
+
+    private func stopDrainedPlayers() {
+        for drainedPlayer in drainedPlayers { drainedPlayer.stop() }
+        drainedPlayers.removeAll()
     }
 
     /// The developer's turn wins immediately over a response that is still
@@ -549,6 +575,8 @@ public final class RealtimeSession {
         player = nil
         for drainingPlayer in drainingPlayers.values { drainingPlayer.stop() }
         drainingPlayers.removeAll()
+        for drainedPlayer in drainedPlayers { drainedPlayer.stop() }
+        drainedPlayers.removeAll()
         pendingDrains = 0
         captionBuffer = ""
         options.onCaption(nil)

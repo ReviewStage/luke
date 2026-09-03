@@ -282,6 +282,7 @@ struct VoiceView: View {
                         ? "Stops listening and sends your message"
                         : "Tap to keep listening, or hold to talk"
                 )
+                .accessibilityAction { activateTalkButton() }
         } else {
             Button(action: {}) { talkButtonLabel }
                 .buttonStyle(.plain)
@@ -294,6 +295,20 @@ struct VoiceView: View {
                         ? "Stops listening and sends your message"
                         : "Tap to keep listening, or hold to talk"
                 )
+                .accessibilityAction { activateTalkButton() }
+        }
+    }
+
+    /// VoiceOver invokes the control's default accessibility action rather
+    /// than its zero-distance drag gesture. Treat each activation as the
+    /// quick-tap path: the first starts a latched turn and the second sends it.
+    private func activateTalkButton() {
+        if isLatched {
+            isLatched = false
+            model.endTurn()
+        } else {
+            model.beginTurn()
+            isLatched = true
         }
     }
 

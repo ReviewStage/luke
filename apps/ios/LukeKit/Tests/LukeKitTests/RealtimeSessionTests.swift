@@ -66,6 +66,56 @@ private final class RecordingPlayer: AudioPlayer, @unchecked Sendable {
     func stop() { stopCount += 1 }
 }
 
+private final class ControlledDrainPlayer: AudioPlayer, @unchecked Sendable {
+    private(set) var drainCount = 0
+    private(set) var stopCount = 0
+    private var completion: (@MainActor @Sendable () -> Void)?
+
+    func enqueue(_ samples: [Int16]) {}
+
+    func drain(then completion: @MainActor @Sendable @escaping () -> Void) {
+        drainCount += 1
+        self.completion = completion
+    }
+
+    func completeDrain() {
+        let completion = completion
+        self.completion = nil
+        Task { @MainActor in completion?() }
+    }
+
+    func stop() { stopCount += 1 }
+}
+
+private final class PlayerFactory: @unchecked Sendable {
+    private let lock = NSLock()
+    private var players: [any AudioPlayer]
+
+    init(_ players: [any AudioPlayer]) { self.players = players }
+
+    func make() -> any AudioPlayer {
+        lock.withLock { players.removeFirst() }
+    }
+}
+
+private actor AsyncGate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        if isOpen { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func open() {
+        guard !isOpen else { return }
+        isOpen = true
+        let current = waiters
+        waiters.removeAll()
+        for waiter in current { waiter.resume() }
+    }
+}
+
 private final class TestClock: @unchecked Sendable {
     private let lock = NSLock()
     private var value: TimeInterval
@@ -422,6 +472,109 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertTrue(sent.contains("input_audio_buffer.append"), "Should flush buffered audio on open")
     }
 
+    func testNewTurnWhileConnectingSupersedesPendingCommit() async throws {
+        let ws = MockWebSocketTask()
+        let session = RealtimeSession(options: makeOptions(ws: ws))
+
+        await session.connect()
+        session.beginTurn()
+        session.endTurn()
+        session.beginTurn()
+
+        ws.deliver(#"{"type":"session.created"}"#)
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(session.status, .listening)
+        XCTAssertFalse(ws.outgoing.contains { $0.contains("input_audio_buffer.commit") })
+        XCTAssertFalse(ws.outgoing.contains { $0.contains(#""type":"response.create""#) })
+    }
+
+    func testInterruptionDuringToolDispatchDoesNotResumeOldResponse() async throws {
+        let ws = MockWebSocketTask()
+        let dispatchStarted = AsyncGate()
+        let allowDispatchToFinish = AsyncGate()
+        let session = RealtimeSession(options: makeOptions(
+            ws: ws,
+            dispatchToolCall: { _, _, _ in
+                await dispatchStarted.open()
+                await allowDispatchToFinish.wait()
+                return #"{"result":"sent"}"#
+            }
+        ))
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        session.beginTurn()
+        session.endTurn()
+        ws.deliver(#"{"type":"response.created","response":{"id":"response_old"}}"#)
+        ws.deliver(
+            #"{"type":"response.output_audio.delta","response_id":"response_old","delta":"AQABAA=="}"#
+        )
+        ws.deliver(
+            #"{"type":"response.done","response":{"id":"response_old","output":[{"type":"function_call","call_id":"old_call","name":"send_session_message","arguments":"{}"}]}}"#
+        )
+        await dispatchStarted.wait()
+
+        session.beginTurn()
+        await allowDispatchToFinish.open()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(session.status, .listening)
+        XCTAssertFalse(ws.outgoing.contains { $0.contains("function_call_output") })
+        XCTAssertEqual(
+            ws.outgoing.filter { $0.contains(#""type":"response.create""#) }.count,
+            1,
+            "Only the new turn's original response request may exist"
+        )
+    }
+
+    func testPrimaryPlayerStaysActiveUntilToolFollowUpFinishes() async throws {
+        let ws = MockWebSocketTask()
+        let primaryPlayer = ControlledDrainPlayer()
+        let followUpPlayer = ControlledDrainPlayer()
+        let players = PlayerFactory([primaryPlayer, followUpPlayer])
+        let session = RealtimeSession(options: makeOptions(
+            ws: ws,
+            dispatchToolCall: { _, _, _ in #"{"result":"sent"}"# },
+            playerFactory: { players.make() }
+        ))
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        session.beginTurn()
+        session.endTurn()
+        ws.deliver(#"{"type":"response.created","response":{"id":"primary"}}"#)
+        ws.deliver(#"{"type":"response.output_audio.delta","response_id":"primary","delta":"AQABAA=="}"#)
+        ws.deliver(#"{"type":"response.output_audio.done","response_id":"primary"}"#)
+        ws.deliver(
+            #"{"type":"response.done","response":{"id":"primary","output":[{"type":"function_call","call_id":"call","name":"send_session_message","arguments":"{}"}]}}"#
+        )
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        ws.deliver(#"{"type":"response.created","response":{"id":"follow_up"}}"#)
+        ws.deliver(#"{"type":"response.output_audio.delta","response_id":"follow_up","delta":"AQABAA=="}"#)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        primaryPlayer.completeDrain()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(primaryPlayer.stopCount, 0)
+        XCTAssertEqual(followUpPlayer.stopCount, 0)
+
+        ws.deliver(#"{"type":"response.output_audio.done","response_id":"follow_up"}"#)
+        ws.deliver(#"{"type":"response.done","response":{"id":"follow_up","output":[]}}"#)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        followUpPlayer.completeDrain()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(primaryPlayer.stopCount, 1)
+        XCTAssertEqual(followUpPlayer.stopCount, 1)
+        XCTAssertEqual(session.status, .ready)
+    }
+
     func testUnarmedResponseDoneRefusesCalls() async throws {
         let ws = MockWebSocketTask()
         var dispatchedNames: [String] = []
@@ -510,6 +663,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         onError: @MainActor @Sendable @escaping (String?) -> Void = { _ in },
         onRecoverableError: (@MainActor @Sendable (String) -> Void)? = nil,
         dispatchToolCall: (@Sendable @MainActor (_ name: String, _ arguments: [String: Any], _ callId: String) async -> String)? = nil,
+        playerFactory: (@Sendable () -> any AudioPlayer)? = nil,
         now: @Sendable @escaping () -> TimeInterval = {
             ProcessInfo.processInfo.systemUptime
         }
@@ -524,7 +678,7 @@ final class RealtimeSessionStateTests: XCTestCase {
             dispatchToolCall: dispatchToolCall,
             makeWebSocket: { _, _ in ws },
             makeAudioCapturer: { capturer },
-            makeAudioPlayer: { player },
+            makeAudioPlayer: playerFactory ?? { player },
             now: now
         )
     }
