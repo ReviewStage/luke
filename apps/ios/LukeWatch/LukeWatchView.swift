@@ -6,7 +6,7 @@ struct LukeWatchView: View {
         VStack(spacing: 8) {
             Image(systemName: "bolt.fill")
                 .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(.accent)
+                .foregroundStyle(Color.accentColor)
             Text("Luke")
                 .font(.headline)
         }
