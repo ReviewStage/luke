@@ -64,6 +64,11 @@ final class PhoneSessionRelay: NSObject, WCSessionDelegate {
         }
     }
 
+    func sessionReachabilityDidChange(_ session: WCSession) {
+        guard session.isReachable else { return }
+        Task { @MainActor [weak self] in self?.push() }
+    }
+
     func sessionDidBecomeInactive(_ session: WCSession) {}
     func sessionDidDeactivate(_ session: WCSession) {
         session.activate()

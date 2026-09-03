@@ -24,6 +24,10 @@ final class WatchConnectivityReceiver: NSObject, WCSessionDelegate {
         requestTokensIfNeeded()
     }
 
+    func sessionReachabilityDidChange(_ session: WCSession) {
+        requestTokensIfNeeded()
+    }
+
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
         Task { @MainActor [weak self] in self?.watchSession.receive(payload: userInfo) }
     }
