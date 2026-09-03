@@ -1,0 +1,1 @@
+Check out PR #659. Spin up an iOS simulator and look at the voice settings debug section. You can see that some of the tools are not enabled. Figure out how to fix that and then update and babysit the PR.

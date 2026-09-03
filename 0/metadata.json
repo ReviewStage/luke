@@ -1,0 +1,80 @@
+{
+  "cli_version": "0.10.2",
+  "checkpoint_id": "01M1MH8A669PR27XGQCSJW3TXX",
+  "session_id": "8fa8d13a-9415-456f-bf4c-e55443712556",
+  "strategy": "manual-commit",
+  "created_at": "2026-09-03T21:02:06.774732Z",
+  "branch": "dastratakos/guangzhou-v3",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/ios/Luke/VoiceActDispatcher.swift",
+    "apps/ios/LukeKit/Sources/LukeKit/RealtimeSession.swift",
+    "apps/ios/LukeKit/Tests/LukeKitTests/RealtimeSessionTests.swift"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-fable-5-1",
+  "turn_id": "459f3956895e",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 3844,
+    "cache_creation_tokens": 200981,
+    "cache_read_tokens": 12721785,
+    "output_tokens": 46282,
+    "api_call_count": 73
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "claude-skill-toolu_01Rd542nJKhUjVo4ViSUEjGq",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "computer-use"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "459f3956895e",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 247,
+        "end": 248,
+        "entry_ids": [
+          "b7ae314a-2856-41b4-aba1-4598eaf7b93b"
+        ],
+        "tool_use_id": "toolu_01Rd542nJKhUjVo4ViSUEjGq"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01Rd542nJKhUjVo4ViSUEjGq"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: computer-use",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "initial_attribution": {
+    "calculated_at": "2026-09-03T21:02:06.587189Z",
+    "agent_lines": 329,
+    "agent_removed": 71,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 329,
+    "total_lines_changed": 400,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
