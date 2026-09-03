@@ -5,6 +5,7 @@ import {
   ARRIVAL_SPEECH_KIND,
   type ArrivalSpeech,
   arrivalSpeechEvents,
+  BRIEFING_SPEECH_KIND,
   isArrivalSpeech,
 } from "./realtime-protocol.js";
 
@@ -60,15 +61,12 @@ test("values are bounded and a blank value is an absent one", () => {
 test("only an arrival item reads as one", () => {
   assert.equal(isArrivalSpeech({ kind: ARRIVAL_SPEECH_KIND, decidedAt: AT }), true);
   assert.equal(
-    isArrivalSpeech([
-      {
-        providerId: "codex",
-        providerSessionId: "s1",
-        subject: "checkout",
-        change: "finished",
-        decidedAt: AT,
-      },
-    ]),
+    isArrivalSpeech({
+      kind: BRIEFING_SPEECH_KIND,
+      briefing: "Codex on checkout finished.",
+      sessionIds: [{ providerId: "codex", providerSessionId: "s1" }],
+      decidedAt: AT,
+    }),
     false,
   );
 });

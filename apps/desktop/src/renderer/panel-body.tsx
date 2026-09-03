@@ -2,10 +2,7 @@ import { SessionRow as PanelSessionRow, ProviderMark } from "@sidecar/panel";
 import type { ConversationEntry } from "@sidecar/realtime";
 import {
   isSessionApplicationId,
-  type ProviderControlResult,
-  type ProviderMessageResult,
   SESSION_APPLICATION_SCOPE,
-  SESSION_CONTROL_KIND,
   SESSION_LOCATION,
   type SessionApplicationId,
   type SessionIdentity,
@@ -13,7 +10,7 @@ import {
 import { SESSION_URGENCY } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { ACCOUNT_STATUS, type AccountProvider, type AccountSnapshot } from "#shared/wire/account";
 import type { SessionOpenResult } from "#shared/wire/session";
 import { type AskHandler, AskLuke } from "./ask-luke";
@@ -22,18 +19,14 @@ import { ConversationHistoryPanel } from "./conversation-history-panel";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import {
   type ArrangedSessions,
-  actsOnWorkspace,
   lastActivityLabel,
-  type SessionAction,
   type SessionArrangement,
   type SessionFilter,
   type SessionListRun,
   type SessionView,
   sessionListRuns,
   sessionRunKeys,
-  type WorkspaceTrayAction,
   type WorkspaceTrayChange,
-  workspaceTrayActions,
   workspaceTrayChange,
 } from "./session-model";
 import {
@@ -59,7 +52,6 @@ import {
   SessionSearchButton,
   widenedView,
 } from "./session-search";
-import { SendIcon, StopIcon } from "./settings-icons";
 import {
   CalendarIntegrations,
   SettingsPanel,
@@ -71,173 +63,35 @@ import { SignInGate } from "./sign-in-gate";
 import { updateAvailable, updateRow } from "./update-row";
 import { useMeasuredHeight } from "./use-measured-height";
 
-/** Handed up rather than performed here: the row knows sessions, not IPC. */
+/**
+ * Handed up rather than performed here: the row knows sessions, not IPC. The
+ * panel is read-only — a message or a control for a session is asked of Luke
+ * in conversation, never typed or pressed on the row — so the one thing a row
+ * hands up is not a provider write at all: opening the pull request hands an
+ * address to the operating system, and it keeps the act-result shape so the
+ * chip can report a refusal on its own line.
+ */
 export interface SessionWriteHandlers {
-  sendMessage: (session: SessionView, text: string) => Promise<ProviderMessageResult>;
-  runAction: (session: SessionView, actionId: string) => Promise<ProviderControlResult>;
-  /**
-   * Not a provider write — the address is handed to the operating system —
-   * but it rides the same shape so the chip can report a refusal on the same
-   * line the other acts answer on.
-   */
   openChange: (session: SessionView) => Promise<SessionOpenResult>;
 }
 
 /**
- * What the field is for, in the words every agent chat box uses: the message
- * is a follow-up to work already under way, whoever the provider is. The
- * provider's name still identifies the field to a screen reader, where "which
- * session is this" is the question; sighted readers have the whole row.
- */
-const COMPOSE_PLACEHOLDER = "Send a follow-up…";
-
-/** One outcome line under the actions, said once and replaced by the next. */
-function feedbackFor(result: ProviderMessageResult | ProviderControlResult): string | undefined {
-  if (result.status === ACT_RESULT_STATUS.REJECTED) return result.reason;
-  if (result.status === ACT_RESULT_STATUS.UNSUPPORTED) {
-    return "The session has moved on and no longer takes this.";
-  }
-  return undefined;
-}
-
-/**
- * One advertised action. A stop is drawn as the square glyph every chat
- * surface stops with — its label survives as what a reader hears and hover
- * shows — and anything else is drawn as a chip in the provider's own words.
- */
-function RowActionButton({
-  action,
-  pendingAction,
-  busy,
-  onRun,
-}: {
-  action: SessionAction;
-  pendingAction: string | undefined;
-  /** Any write in flight, the composer's included, holds every control down. */
-  busy: boolean;
-  onRun: (actionId: string) => void;
-}): React.JSX.Element {
-  const held = busy;
-  // The whole row opens the session; a press on a control is a press on the
-  // control alone, so it must not travel up and open a window as well.
-  const run = (event: React.MouseEvent) => {
-    event.stopPropagation();
-    onRun(action.id);
-  };
-  if (action.kind === SESSION_CONTROL_KIND.STOP) {
-    return (
-      <button
-        type="button"
-        className="row-stop"
-        aria-label={action.label}
-        title={action.label}
-        disabled={held}
-        onClick={run}
-      >
-        <StopIcon />
-      </button>
-    );
-  }
-  return (
-    <button type="button" className="row-action" disabled={held} onClick={run}>
-      {pendingAction === action.id ? "Asking…" : action.label}
-    </button>
-  );
-}
-
-/**
- * The second line a row earns only when its provider promised something: a
- * message field that is simply there, the way every chat surface keeps its
- * composer on screen, and each advertised action beside it — a stop as the
- * square glyph, anything else as a chip in the provider's own words.
- * Every outcome that needs words answers back onto the same line — sending, an
- * action's acceptance, or the provider's refusal — because a write is the
- * user's own act and its outcome may not vanish into a log. An accepted
- * message alone answers silently: the draft emptying is the confirmation, and
- * a line saying so again only holds the row taller than it needs to be.
+ * The second line a row earns only when its provider reported published work:
+ * the pull-request chip. A failure to open answers back onto the same line,
+ * because the press is the user's own act and its outcome may not vanish into
+ * a log; an opened page is its own answer.
  */
 function SessionRowActions({
   session,
-  actions,
-  withChange,
   writes,
 }: {
   session: SessionView;
-  /** The actions this row draws itself: inside a tray, the workspace-level
-   * ones live in the tray's own header. */
-  actions: readonly SessionAction[];
-  /** Whether this row draws the pull-request chip itself: inside a tray whose
-   * header carries the workspace's one change, it does not. */
-  withChange: boolean;
   writes: SessionWriteHandlers;
 }): React.JSX.Element {
-  const [sending, setSending] = useState(false);
-  const [draft, setDraft] = useState("");
   const [feedback, setFeedback] = useState<string | undefined>(undefined);
-  const composeField = useRef<HTMLInputElement | null>(null);
-  /** The action in flight, which is the one drawn asking and the reason all are held. */
-  const [pendingAction, setPendingAction] = useState<string | undefined>(undefined);
-  /**
-   * The row's one write at a time, as a ref rather than state: disabling the
-   * controls only lands with the next render, and a second Enter inside that
-   * window would send the same words twice. A ref answers in the same tick.
-   */
-  const writeInFlight = useRef(false);
-  // One write at a time for the whole row: while the composer is sending, the
-  // controls are held, and while a control runs, the composer is. Otherwise the
-  // one not in flight stays enabled, takes a press, and does nothing — the row
-  // looking clickable while only the in-flight write will run.
-  const busy = sending || pendingAction !== undefined;
-
-  const send = useCallback(async () => {
-    const text = draft.trim();
-    if (!text || writeInFlight.current) return;
-    writeInFlight.current = true;
-    setSending(true);
-    setFeedback(undefined);
-    try {
-      const result = await writes.sendMessage(session, text);
-      if (result.status === ACT_RESULT_STATUS.ACCEPTED) {
-        // The draft has become the session's; the field emptying for the next
-        // message is the whole confirmation, so no line repeats it.
-        setDraft("");
-      } else {
-        // The draft stays: a refused message is still the user's words.
-        setFeedback(feedbackFor(result));
-      }
-    } finally {
-      writeInFlight.current = false;
-      setSending(false);
-    }
-  }, [draft, session, writes]);
-
-  const runAction = useCallback(
-    async (actionId: string) => {
-      if (writeInFlight.current) return;
-      writeInFlight.current = true;
-      setPendingAction(actionId);
-      setFeedback(undefined);
-      try {
-        const result = await writes.runAction(session, actionId);
-        // An accepted action answers too: the session will not look different
-        // until its provider is observed again, and a control that seems to have
-        // done nothing would be pressed a second time.
-        setFeedback(
-          result.status === ACT_RESULT_STATUS.ACCEPTED
-            ? `${session.provider} accepted`
-            : feedbackFor(result),
-        );
-      } finally {
-        writeInFlight.current = false;
-        setPendingAction(undefined);
-      }
-    },
-    [session, writes],
-  );
 
   const openChange = useCallback(async () => {
     const result = await writes.openChange(session);
-    // An opened page is its own answer; only a failure needs the line.
     if (result.status === ACT_RESULT_STATUS.ACCEPTED) return;
     setFeedback(
       result.status === ACT_RESULT_STATUS.REJECTED
@@ -248,143 +102,42 @@ function SessionRowActions({
 
   return (
     <div className="row-actions">
-      {session.canMessage ? (
-        // biome-ignore lint/a11y/useKeyWithClickEvents: pointer-only by design — the keyboard already lands in the field by tabbing, and the click handler only stops the row's open and places the caret.
-        <form
-          className="row-compose"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void send();
-          }}
-          // A press anywhere on the pill — the field, its padding, the send
-          // button — is about the message, so none of it may travel up and
-          // open the session mid-thought. And a pill pressed anywhere is the
-          // field being asked for, so the caret lands rather than nothing.
-          onClick={(event) => {
-            event.stopPropagation();
-            composeField.current?.focus();
-          }}
-        >
-          <input
-            ref={composeField}
-            className="row-compose-input"
-            aria-label={`Message ${session.provider}`}
-            placeholder={COMPOSE_PLACEHOLDER}
-            autoComplete="off"
-            spellCheck={false}
-            value={draft}
-            disabled={busy}
-            onChange={(event) => setDraft(event.target.value)}
-            onFocus={() => {
-              // The panel can be showing without its window being key, and a
-              // field that cannot be typed into is worse than no field.
-              window.sidecar.focusPanel();
-            }}
-            onKeyDown={(event) => {
-              // Escape lets go of the field rather than closing the panel
-              // behind it. The draft survives: the field is not going anywhere.
-              if (event.key === "Escape") {
-                event.stopPropagation();
-                event.currentTarget.blur();
-              }
-            }}
-          />
-          <button
-            type="submit"
-            className="row-send"
-            aria-label={`Send to ${session.provider}`}
-            title={`Send to ${session.provider}`}
-            disabled={busy || !draft.trim()}
-          >
-            <SendIcon />
-          </button>
-        </form>
-      ) : null}
-      {actions.map((action) => (
-        <RowActionButton
-          key={action.id}
-          action={action}
-          pendingAction={pendingAction}
-          busy={busy}
-          onRun={(actionId) => void runAction(actionId)}
-        />
-      ))}
-      {withChange ? (
-        <button
-          type="button"
-          className="row-action"
-          title="Open the pull request this session published"
-          // Opening the pull request hands an address to the system, not a
-          // write to a provider, so it stays offered while a provider write is
-          // in flight — only the row's open-on-press must not fire with it.
-          onClick={(event) => {
-            event.stopPropagation();
-            void openChange();
-          }}
-        >
-          {session.changeNumber !== undefined ? `#${session.changeNumber}` : "Pull request"}
-        </button>
-      ) : null}
+      <button
+        type="button"
+        className="row-action"
+        title="Open the pull request this session published"
+        // The whole row opens the session; a press on the chip is a press on
+        // the chip alone, so it must not travel up and open a window as well.
+        onClick={(event) => {
+          event.stopPropagation();
+          void openChange();
+        }}
+      >
+        {session.changeNumber !== undefined ? `#${session.changeNumber}` : "Pull request"}
+      </button>
       {feedback ? <small className="row-feedback">{feedback}</small> : null}
     </div>
   );
 }
 
 /**
- * The tray header's own acts: every workspace-level action the tray's chats
- * advertise, drawn once where the workspace is named once. Archiving files
- * away every chat in the tray, so the same chip repeated on each row read as
- * several different acts when any press did the whole thing. The press still
- * travels as a session write — through the first chat that advertised the act
- * — so it is validated against the same roster row that promised it, and its
- * outcome answers on the header's own line the way a row's writes do. The
- * workspace's one pull request rides here on the same reasoning: the chats
- * share a branch, so the chip repeated on each row read as several changes,
- * and its open travels through the chat that reported it the way an act does.
+ * The tray header's one chip: the workspace's pull request. The chats share a
+ * branch, so the chip repeated on each row read as several changes; the header
+ * says it once, where the workspace is named once, and its open travels
+ * through the chat that reported it so it is validated against the same
+ * roster row.
  */
-function WorkspaceTrayActs({
-  acts,
+function WorkspaceTrayChangeChip({
   change,
   writes,
 }: {
-  acts: readonly WorkspaceTrayAction[];
-  change?: WorkspaceTrayChange | undefined;
+  change: WorkspaceTrayChange;
   writes: SessionWriteHandlers;
 }): React.JSX.Element {
-  const [pendingAction, setPendingAction] = useState<string | undefined>(undefined);
   const [feedback, setFeedback] = useState<string | undefined>(undefined);
-  /** One write at a time for the header, in a ref for the same same-tick
-   * reason a row keeps one: disabling only lands with the next render. */
-  const writeInFlight = useRef(false);
-
-  const run = useCallback(
-    async (act: WorkspaceTrayAction) => {
-      if (writeInFlight.current) return;
-      writeInFlight.current = true;
-      setPendingAction(act.action.id);
-      setFeedback(undefined);
-      try {
-        const result = await writes.runAction(act.session, act.action.id);
-        // An accepted act answers too: the tray will not look different until
-        // its provider is observed again, and a control that seems to have
-        // done nothing would be pressed a second time.
-        setFeedback(
-          result.status === ACT_RESULT_STATUS.ACCEPTED
-            ? `${act.session.provider} accepted`
-            : feedbackFor(result),
-        );
-      } finally {
-        writeInFlight.current = false;
-        setPendingAction(undefined);
-      }
-    },
-    [writes],
-  );
 
   const openChange = useCallback(async () => {
-    if (!change) return;
     const result = await writes.openChange(change.session);
-    // An opened page is its own answer; only a failure needs the line.
     if (result.status === ACT_RESULT_STATUS.ACCEPTED) return;
     setFeedback(
       result.status === ACT_RESULT_STATUS.REJECTED
@@ -395,28 +148,14 @@ function WorkspaceTrayActs({
 
   return (
     <>
-      {acts.map((act) => (
-        <RowActionButton
-          key={act.action.id}
-          action={act.action}
-          pendingAction={pendingAction}
-          busy={pendingAction !== undefined}
-          onRun={() => void run(act)}
-        />
-      ))}
-      {change ? (
-        <button
-          type="button"
-          className="row-action"
-          title="Open the pull request this workspace published"
-          // Opening the pull request hands an address to the system, not a
-          // write to a provider, so it stays offered while a provider write is
-          // in flight.
-          onClick={() => void openChange()}
-        >
-          {change.changeNumber !== undefined ? `#${change.changeNumber}` : "Pull request"}
-        </button>
-      ) : null}
+      <button
+        type="button"
+        className="row-action"
+        title="Open the pull request this workspace published"
+        onClick={() => void openChange()}
+      >
+        {change.changeNumber !== undefined ? `#${change.changeNumber}` : "Pull request"}
+      </button>
       {feedback ? <small className="row-feedback">{feedback}</small> : null}
     </>
   );
@@ -442,10 +181,11 @@ function WorkspaceTrayActs({
  * answers with the name — and the model, which identifies the session to nobody
  * and so earns a hover rather than a line.
  *
- * A row whose provider promised writes — a message it will take, an action it
- * advertised — grows a second line for them. The press target for opening
- * shrinks to the row's first line, so a mispress near the field cannot open a
- * window, and the whole row stays one article for a reader.
+ * A row whose provider reported a pull request grows a second line for its
+ * chip. The press target for opening shrinks to the row's first line, so a
+ * mispress near the chip cannot open a window, and the whole row stays one
+ * article for a reader. Nothing else on the row writes: a message or a control
+ * for the session is asked of Luke in conversation, not pressed here.
  */
 export function SessionRow({
   session,
@@ -474,18 +214,10 @@ export function SessionRow({
   onOpenApplication: (session: SessionView, applicationId: SessionApplicationId) => void;
   writes: SessionWriteHandlers;
 }): React.JSX.Element {
-  // Inside a tray, an action aimed at the whole workspace is the tray
-  // header's to offer — drawn beside every chat it would file away, it read
-  // as several different acts — so the row keeps only the actions that are
-  // its own. A lone chat is its workspace here too: with no tray to carry the
-  // act, the row does.
-  const actions = inWorkspaceTray
-    ? session.actions.filter((action) => !actsOnWorkspace(session, action))
-    : session.actions;
-  // The workspace's pull request is the tray header's chip on the same terms:
-  // repeated on every chat of the branch it read as several changes.
+  // The workspace's pull request is the tray header's chip: repeated on every
+  // chat of the branch it read as several changes. A lone chat is its
+  // workspace here too: with no tray to carry the chip, the row does.
   const withChange = session.hasChange && !changeInTrayHeader;
-  const withActions = session.canMessage || actions.length > 0 || withChange;
   const shared = {
     className: "session-row",
     "data-state": session.urgency,
@@ -602,7 +334,7 @@ export function SessionRow({
     />
   );
 
-  if (!withActions && !hasOpenableApplication) {
+  if (!withChange && !hasOpenableApplication) {
     if (!session.openable) return <article {...shared}>{content}</article>;
     return (
       <button
@@ -619,7 +351,7 @@ export function SessionRow({
     );
   }
 
-  if (!withActions) {
+  if (!withChange) {
     return (
       <article
         {...shared}
@@ -634,11 +366,11 @@ export function SessionRow({
   }
 
   return (
-    // The row is the press target, controls and all: the gaps beside the
-    // composer are still the session, and a press there must not be a press on
-    // nothing. Ordinarily the first line is its keyboard button; when an app
-    // mark is independently pressable, the title becomes that button instead
-    // so interactive controls are siblings rather than invalidly nested.
+    // The row is the press target, chip and all: the gaps beside the chip are
+    // still the session, and a press there must not be a press on nothing.
+    // Ordinarily the first line is its keyboard button; when an app mark is
+    // independently pressable, the title becomes that button instead so
+    // interactive controls are siblings rather than invalidly nested.
     <article
       {...shared}
       data-actions="true"
@@ -654,12 +386,7 @@ export function SessionRow({
       ) : (
         <div className="row-main">{content}</div>
       )}
-      <SessionRowActions
-        session={session}
-        actions={actions}
-        withChange={withChange}
-        writes={writes}
-      />
+      <SessionRowActions session={session} writes={writes} />
     </article>
   );
 }
@@ -675,19 +402,17 @@ export function runDrawsTray(run: SessionListRun): boolean {
  * the workspace's name on the left, and at the far end the glyph leading the
  * repository — with the chats divided by hairlines inside.
  * A workspace holding one chat earns no tray — its one row carries the
- * workspace's acts and mark itself — and an ungrouped session never does;
+ * workspace's chip and mark itself — and an ungrouped session never does;
  * either way the wrapper stays, drawing as nothing. It has to: a workspace crosses
  * between one chat and several as siblings come and go, and if that crossing
- * changed the row's parent element, React would remount the row and wipe a
- * follow-up someone was typing into it. The chrome is a class, never a
+ * changed the row's parent element, React would remount the row and lose the
+ * outcome line a chip had just answered on. The chrome is a class, never a
  * different tree.
  *
  * The header opens nothing — the rows are what press through to a provider's
- * window — but it does carry the acts that belong to the workspace rather
- * than to any one chat: an archive files away every chat in the tray, so its
- * chip sits where the workspace is named once instead of on each row it
- * would empty, and the one pull request the chats share sits beside it on the
- * same reasoning. The header names the tray in the reading order the same way
+ * window — but it does carry the one pull request the chats share, which
+ * sits where the workspace is named once instead of on each row of the
+ * branch. The header names the tray in the reading order the same way
  * it does on screen: the workspace once, then its chats. A tray is a member of the
  * arrival stack in its rows' stead: it fans in at its lead row's turn, and
  * the rows ride it rather than fanning a second time inside it. A wrapper
@@ -695,17 +420,12 @@ export function runDrawsTray(run: SessionListRun): boolean {
  */
 function SessionRun({
   run,
-  sessions,
   change,
   highlight,
   writes,
   children,
 }: {
   run: SessionListRun;
-  /** The tray's living chats, in drawn order — what the header's acts are
-   * read from and carried through. A leaving row's session is already gone
-   * from the model, so it can neither offer an act nor carry one. */
-  sessions: readonly SessionView[];
   /** The workspace's one pull request, when the header carries it. Handed in
    * rather than read here, because the rows suppressing their own chips must
    * answer to the same reading. */
@@ -716,7 +436,6 @@ function SessionRun({
   children: React.ReactNode;
 }): React.JSX.Element {
   const tray = runDrawsTray(run);
-  const acts = tray ? workspaceTrayActions(sessions) : [];
   return (
     <section
       className={tray ? "workspace-tray" : "session-run"}
@@ -755,9 +474,7 @@ function SessionRun({
               </span>
             ) : null}
           </span>
-          {acts.length > 0 || change ? (
-            <WorkspaceTrayActs acts={acts} {...(change ? { change } : undefined)} writes={writes} />
-          ) : null}
+          {change ? <WorkspaceTrayChangeChip change={change} writes={writes} /> : null}
         </header>
       ) : null}
       {children}
@@ -799,7 +516,7 @@ export interface PanelBodyProps {
   onOpenSession: (session: SessionView) => void;
   /** Opens one exact app association without exposing its address to the renderer. */
   onOpenSessionApplication: (session: SessionView, applicationId: SessionApplicationId) => void;
-  /** Carries a typed reply or an advertised action to the session's provider. */
+  /** Opens the pull request a row or tray header reports; the panel writes nothing else. */
   writes: SessionWriteHandlers;
   /** The conversation between the developer and Luke, this launch's and what survived the last. */
   conversationHistory: readonly ConversationEntry[];
@@ -1045,7 +762,6 @@ export function PanelBody({
                   <SessionRun
                     key={runKeys[at]}
                     run={run}
-                    sessions={living}
                     {...(change ? { change } : undefined)}
                     highlight={highlight}
                     writes={writes}

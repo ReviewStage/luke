@@ -43,7 +43,6 @@ function eventRecord(event: BrainWakeEvent): WireRecord {
     ...(event.hookEvent ? { hook: event.hookEvent } : undefined),
     provider_id: event.identity.providerId,
     provider_session_id: event.identity.providerSessionId,
-    ...(event.previousStatus ? { previous_status: event.previousStatus } : undefined),
     ...(event.session ? { session: sessionSummary(event.session) } : undefined),
     ...(event.transcriptDelta
       ? {
@@ -57,12 +56,23 @@ function eventRecord(event: BrainWakeEvent): WireRecord {
   };
 }
 
-/** The item an observed-events turn opens with. */
-export function wakeInputItem(events: readonly BrainWakeEvent[], now: number): ResponsesInputItem {
+/**
+ * The item an observed-events turn opens with. A scheduled roster wake also
+ * carries the whole roster as `list_sessions` would answer it, so the look is
+ * at everything observed, not only the sessions whose transcripts grew.
+ */
+export function wakeInputItem(
+  events: readonly BrainWakeEvent[],
+  now: number,
+  roster?: string,
+): ResponsesInputItem {
   return markedItem(
     BRAIN_INPUT_MARKER.OBSERVED_EVENTS,
     now,
-    JSON.stringify({ events: events.map(eventRecord) }),
+    JSON.stringify({
+      ...(roster !== undefined ? { scheduled_roster_look: true, roster } : undefined),
+      events: events.map(eventRecord),
+    }),
   );
 }
 

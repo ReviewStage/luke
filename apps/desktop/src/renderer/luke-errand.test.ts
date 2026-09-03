@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { SESSION_LIST_ALL } from "@sidecar/acts";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import {
   APP_PANEL_TAB,
@@ -7,7 +8,7 @@ import {
   type AppGuideSetting,
   SESSION_LIST_SORT,
 } from "@sidecar/guide";
-import { REALTIME_VOICE, REALTIME_VOICE_SPEED, SESSION_LIST_ALL } from "@sidecar/realtime";
+import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/wire/account";
 import type { AppSettingsView } from "#shared/wire/settings";

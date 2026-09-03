@@ -3,13 +3,7 @@ import test from "node:test";
 import { BRIDGE } from "./bridge";
 
 test("act bridge entries reject legacy and malformed outcomes", () => {
-  for (const entry of [
-    BRIDGE.authorizeAct,
-    BRIDGE.disconnectSuperset,
-    BRIDGE.renameSessionWorkspace,
-    BRIDGE.renameSession,
-    BRIDGE.executeIssueAction,
-  ]) {
+  for (const entry of [BRIDGE.disconnectSuperset]) {
     const guard = entry.result;
     assert.ok(guard);
     assert.equal(guard({ status: "accepted" }), true);
@@ -71,8 +65,8 @@ test("clearing conversation history is acknowledged", () => {
   assert.equal(BRIDGE.clearConversationHistory.result?.(undefined), false);
 });
 
-test("remembered-fact responses enforce their complete bounded shape", () => {
-  const guard = BRIDGE.rememberFact.result;
+test("remembered-fact pushes enforce their complete bounded shape", () => {
+  const guard = BRIDGE.onRememberedFactsChanged.result;
   assert.equal(guard?.([{ id: "one", words: "kept" }]), true);
   assert.equal(guard?.([{ id: "one", words: "x".repeat(241) }]), false);
   assert.equal(
@@ -82,4 +76,53 @@ test("remembered-fact responses enforce their complete bounded shape", () => {
     ]),
     false,
   );
+});
+
+test("a brain ask is one bounded string and nothing else", () => {
+  assert.equal(BRIDGE.askBrain.kind, "invoke");
+  assert.equal(BRIDGE.askBrain.args(["what needs me?"]), true);
+  assert.equal(BRIDGE.askBrain.args([]), false);
+  assert.equal(BRIDGE.askBrain.args([3]), false);
+  assert.equal(BRIDGE.askBrain.args(["a", "b"]), false);
+});
+
+test("a reported guide is refused whole when any entry is malformed", () => {
+  const guard = BRIDGE.reportAppGuide.args;
+  const setting = {
+    id: "voice_captions",
+    label: "Captions",
+    description: "Luke's words on screen.",
+    kind: "toggle",
+    value: "off",
+    defaultValue: "off",
+    adjustable: true,
+    manual: "the Voice page",
+  };
+  assert.equal(guard([{ facts: [], settings: [] }]), true);
+  assert.equal(
+    guard([{ facts: [{ label: "Talk key", detail: "⌥Space" }], settings: [setting] }]),
+    true,
+  );
+  assert.equal(
+    guard([
+      { facts: [], settings: [], update: { version: "1", detail: "Up to date", button: "check" } },
+    ]),
+    true,
+  );
+  assert.equal(guard([{ facts: [], settings: [{ ...setting, adjustable: "yes" }] }]), false);
+  assert.equal(guard([{ facts: [{ label: "x" }], settings: [] }]), false);
+  assert.equal(
+    guard([{ facts: [], settings: [], update: { version: "1", detail: "", button: "eject" } }]),
+    false,
+  );
+  assert.equal(guard([{ facts: [] }]), false);
+});
+
+test("an app act pushed to the renderer never carries a memory write", () => {
+  const guard = BRIDGE.onBrainAppAct.result;
+  assert.ok(guard);
+  assert.equal(guard({ requestId: "r1", action: { kind: "panel", tab: "sessions" } }), true);
+  assert.equal(guard({ requestId: "r1", action: { kind: "remember", words: "x" } }), false);
+  assert.equal(guard({ requestId: "r1", action: { kind: "forget", id: "f" } }), false);
+  assert.equal(guard({ action: { kind: "panel", tab: "sessions" } }), false);
 });

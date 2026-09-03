@@ -162,8 +162,8 @@ export interface SessionProviderAdapter {
    * documented endpoint. It is one of the three places an adapter may change
    * provider state, and only ever with text a user chose to send: adapters
    * must refuse any session that did not advertise `canReceiveMessage` on its
-   * latest observation, and nothing that decides on the user's behalf — the
-   * attention evaluator above all — may reach it.
+   * latest observation, and nothing that decides on the user's behalf may
+   * reach it.
    */
   sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult>;
 

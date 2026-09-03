@@ -36,6 +36,7 @@ export type { WindowMode } from "@sidecar/surface";
 export { type AppBridge, BRIDGE, channels } from "./bridge";
 export * from "./wire/account";
 export * from "./wire/audio";
+export * from "./wire/brain";
 export * from "./wire/calendar";
 export * from "./wire/session";
 export * from "./wire/settings";

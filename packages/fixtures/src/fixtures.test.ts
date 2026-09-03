@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { FIXTURE_SPEAKING_CAPTION, fixtureSnapshot } from "@sidecar/fixtures";
 import { mentionedSessions, SESSION_MENTION_KIND } from "@sidecar/session";
-import { attentionCount, FIXTURE_SESSION_IDS_BY_PROVIDER } from "./fixtures.js";
+import { FIXTURE_SESSION_IDS_BY_PROVIDER, urgentSessionCount } from "./fixtures.js";
 
 test("the smoke fixture is stable and contains no duplicate identities", () => {
   const snapshot = fixtureSnapshot("smoke");
@@ -10,7 +10,7 @@ test("the smoke fixture is stable and contains no duplicate identities", () => {
 
   assert.equal(snapshot.scenario, "smoke");
   assert.equal(new Set(identities).size, identities.length);
-  assert.equal(attentionCount(snapshot), 1);
+  assert.equal(urgentSessionCount(snapshot), 1);
 });
 
 test("registered fixture rows are the smoke fixture's provider rows", () => {

@@ -2,7 +2,7 @@ import type { RememberedFact } from "@sidecar/acts";
 import { PRODUCT_EXCHANGE_KIND, type ProductExchangeKind } from "@sidecar/analytics";
 import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import { FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
-import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
+import type { AppGuideSnapshot } from "@sidecar/guide";
 import { mentionedIssues, type TrackedIssue } from "@sidecar/issues";
 import {
   ARRIVAL_SPEECH_KIND,
@@ -10,25 +10,19 @@ import {
   adoptConversationThread,
   announcementConversationEntry,
   appendConversationThreadEntry,
+  BRIEFING_SPEECH_KIND,
   CALENDAR_ONBOARDING_SPEECH_KIND,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
-  dispatchByKind,
   insertSpokenAskThreadEntry,
   isArrivalSpeech,
-  isCarriedAppAction,
-  isCarriedIssueAction,
-  isCarriedSessionAction,
   REALTIME_STATUS,
   type RealtimeStatus,
   type RealtimeVoice,
   type RealtimeVoiceSpeed,
   realtimeSessionConfig,
-  recentConversationEntries,
   replyConversationEntry,
   retainedConversationEntries,
-  SESSION_TOOL_KIND,
-  sessionActConversationEntry,
   storedConversationMaximumAgeMs,
   streamingConversationEntry,
 } from "@sidecar/realtime";
@@ -51,11 +45,10 @@ import type {
   SessionOpenResult,
   WorkspaceProviderId,
 } from "#shared/wire/session";
-import { askRefusal } from "./ask-luke";
+import { BriefingQueue } from "./briefing-queue";
 import { hostedVoiceUnavailableNote } from "./microphone-access";
 import { openPreferredMicrophone } from "./microphone-choice";
-import { type AppActionCarrier, RealtimeVoiceSession } from "./realtime-session";
-import { SpokenNoticeAnnouncer } from "./spoken-notices";
+import { type AppActionCarrier, REPLY_KIND, RealtimeVoiceSession } from "./realtime-session";
 import { useStateWithRef } from "./use-state-with-ref";
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
 
@@ -651,7 +644,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const audioContext = useRef<AudioContext | undefined>(undefined);
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
   const voiceSession = useRef<RealtimeVoiceSession | undefined>(undefined);
-  const announcer = useRef<SpokenNoticeAnnouncer | undefined>(undefined);
+  const announcer = useRef<BriefingQueue | undefined>(undefined);
   /** When the talk key went down, which is what tells a hold from a tap. */
   const talkPressedAt = useRef<number | undefined>(undefined);
   /** Whether a tap has left a turn open for a later press to end. */
@@ -666,13 +659,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    */
   const typedExchange = useRef(false);
   const sessionsRef = useRef(options.sessions);
-  const workspaceProjectsRef = useRef(options.workspaceProjects);
-  const defaultWorkspaceProviderRef = useRef(options.defaultWorkspaceProvider);
-  const workspaceProjectDefaultsRef = useRef(options.workspaceProjectDefaults);
-  const guideRef = useRef<AppGuideSnapshot>(EMPTY_APP_GUIDE);
   const issuesRef = useRef<readonly TrackedIssue[] | undefined>(undefined);
-  /** The remembered entries an automatic replacement or removal is validated against. */
-  const rememberedFactsRef = useRef(options.rememberedFacts);
   // The same roster as state, because the issue chips are derived from it and
   // a derivation only reruns on what React can see change.
   const [trackedIssues, setTrackedIssues] = useState<readonly TrackedIssue[] | undefined>(
@@ -760,15 +747,14 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, []);
 
   /**
-   * Draws, re-feeds, and persists the same retained thread. Clear uses its own
-   * acknowledged path below so the screen cannot outrun the deletion.
+   * Draws and persists the same retained thread. The brain reads the thread
+   * from the main process's own copy, so nothing is re-fed to a call here.
+   * Clear uses its own acknowledged path below so the screen cannot outrun
+   * the deletion.
    */
-  const publishConversation = useCallback((announced = false) => {
+  const publishConversation = useCallback(() => {
     conversationRef.current = retainedConversationEntries(conversationRef.current, Date.now());
     setConversationHistory(conversationRef.current);
-    voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current), {
-      announced,
-    });
     // Before the restore this thread is only part of itself, and while a Clear
     // is in flight the file it would write is already being deleted: either
     // write would stand in for a thread nobody has.
@@ -791,13 +777,8 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, [conversationHistory, publishConversation]);
 
   /**
-   * Appends one flattened line to this launch's history and tells the call now
-   * open about only the recent context slice. A session leaving the roster
-   * costs a line its identity at model render, never its visible words. An
-   * announcement line is marked as such: it is the one line an open call's
-   * own conversation items never hold — voiced out-of-band, or only shown —
-   * so the call re-seeds its history item for it, and the next turn's bare
-   * "that chat" can find the announced session.
+   * Appends one flattened line to this launch's history. A session leaving the
+   * roster costs a line its identity at model render, never its visible words.
    */
   const rememberConversationEntry = useCallback(
     (entry: ConversationEntry | undefined, generation = conversationGenerationRef.current) => {
@@ -808,7 +789,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
         return;
       }
       conversationRef.current = appendConversationThreadEntry(conversationRef.current, entry);
-      publishConversation(entry.kind === CONVERSATION_ENTRY_KIND.ANNOUNCEMENT);
+      publishConversation();
     },
     [publishConversation],
   );
@@ -837,7 +818,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
         setSpokenAskPreviews(NO_SPOKEN_ASK_PREVIEWS);
         talkLatched.current = false;
         talkPressedAt.current = undefined;
-        voiceSession.current?.clearConversation();
         activeReplyGenerationRef.current = undefined;
         activeAnnouncementGenerationRef.current = undefined;
         conversationClearing.current = false;
@@ -868,19 +848,12 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       // The previews go with the marks here too: the turns they belong to
       // were just retired, wherever the Clear was pressed.
       setSpokenAskPreviews(NO_SPOKEN_ASK_PREVIEWS);
-      voiceSession.current?.clearConversation();
       activeReplyGenerationRef.current = undefined;
       activeAnnouncementGenerationRef.current = undefined;
       return;
     }
     conversationRef.current = adoptConversationThread(conversationRef.current, payload.entries);
     setConversationHistory(conversationRef.current);
-    // An announcement tail re-seeds an open call's history item exactly as a
-    // local announcement line would: the line enters that call's own
-    // conversation items nowhere else.
-    voiceSession.current?.updateConversation(recentConversationEntries(conversationRef.current), {
-      announced: payload.entries.at(-1)?.kind === CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
-    });
   }, []);
 
   // Every other display's half of the one conversation, mirrored by the main
@@ -978,104 +951,35 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
           enumerate: () => navigator.mediaDevices.enumerateDevices(),
           open: (audio) => navigator.mediaDevices.getUserMedia({ audio, video: false }),
         }),
-      // The same bridge calls the rows use — the composer, the chips, and the
-      // press that opens a session: a spoken ask is a third way to ask for the
-      // same act, behind the same gauntlet in the main process.
-      carryAct: async (envelope) => {
-        const { authorization, generation } = await authorizeConversationAct(
-          activeReplyGenerationRef,
-          () => window.sidecar.authorizeAct(envelope),
-        );
-        if (authorization.status !== ACT_RESULT_STATUS.ACCEPTED) return authorization;
-        const { act: action, armed } = envelope;
-        if (!armed) {
-          return {
-            status: ACT_RESULT_STATUS.REJECTED,
-            reason: "Only a request you make yourself can carry an act.",
-          };
+      // The voice's one tool: the developer's words go to the brain in the
+      // main process, which reads, decides, and acts behind its own validators,
+      // and the reply comes back for the voice to say. A reply to an ask the
+      // developer made is recorded when the words end, like every reply.
+      askBrain: async (question) => {
+        const generation = conversationGenerationRef.current;
+        const answer = await window.sidecar.askBrain(question);
+        if (answer.status === ACT_RESULT_STATUS.ACCEPTED) {
+          activeReplyGenerationRef.current = generation;
         }
-        if (isCarriedAppAction(action)) {
-          return optionsRef.current.carryAppAction(action);
-        }
-        if (isCarriedIssueAction(action)) {
-          return window.sidecar.executeIssueAction(action);
-        }
-        if (!isCarriedSessionAction(action)) {
-          return {
-            status: ACT_RESULT_STATUS.REJECTED,
-            reason: "No handler carries that act.",
-          };
-        }
-        // The ask is recorded before the outcome is known: a refusal still
-        // leaves the developer having asked it, and the next turn may point
-        // back at the session it named. The outcome needs no line of its own —
-        // the reply voicing it is recorded as what Luke said.
-        rememberConversationEntry(
-          sessionActConversationEntry(action, sessionsRef.current),
-          generation,
-        );
-        // The reply that voices a transcript reading must stay out of the
-        // history: the rendering travels only in the turn that asked for it.
-        if (action.kind === SESSION_TOOL_KIND.READ_TRANSCRIPT) {
-          markTranscriptSpoken(true);
-        }
-        return dispatchByKind(action, {
-          [SESSION_TOOL_KIND.MESSAGE]: (act) =>
-            window.sidecar.sendSessionMessage(act.identity, act.text),
-          [SESSION_TOOL_KIND.CONTROL]: (act) =>
-            window.sidecar.executeSessionControl(act.identity, act.control.id),
-          [SESSION_TOOL_KIND.CREATE_WORKSPACE]: (act) =>
-            window.sidecar.createSessionWorkspace(
-              act.providerId,
-              act.providerProjectId,
-              act.providerTargetId,
-              act.agent,
-              act.name,
-              act.task,
-              act.agentSelection,
-            ),
-          [SESSION_TOOL_KIND.ADD_AGENT]: (act) =>
-            window.sidecar.addWorkspaceAgent(
-              act.identity,
-              act.agent,
-              act.name,
-              act.task,
-              act.model,
-              act.effort,
-            ),
-          [SESSION_TOOL_KIND.RENAME_WORKSPACE]: (act) =>
-            window.sidecar.renameSessionWorkspace(act.identity, act.name),
-          [SESSION_TOOL_KIND.RENAME_SESSION]: (act) =>
-            window.sidecar.renameSession(act.identity, act.name),
-          [SESSION_TOOL_KIND.OPEN]: (act) =>
-            act.applicationId
-              ? optionsRef.current.openSessionApplication(act.identity, act.applicationId)
-              : optionsRef.current.openSession(act.identity),
-          [SESSION_TOOL_KIND.READ_TRANSCRIPT]: (act) =>
-            window.sidecar.readSessionTranscript(act.identity),
-        });
+        return answer;
       },
       onStatus: setVoiceStatus,
       onLocalStream: setLocalStream,
       onRemoteStream: setRemoteStream,
       onError: setVoiceError,
       onCaption: (texts, about) => setVoiceCaption({ texts, about }),
-      onReplyEnded: (texts, about) => {
-        if (about) {
+      onReplyEnded: (texts, about, kind) => {
+        if (kind === REPLY_KIND.BRIEFING) {
           const generation = activeAnnouncementGenerationRef.current;
           activeAnnouncementGenerationRef.current = undefined;
           rememberConversationEntry(
-            announcementConversationEntry(texts.join(" "), about, sessionsRef.current),
+            announcementConversationEntry(texts.join(" "), about ?? [], sessionsRef.current),
             generation,
           );
           return;
         }
         const generation = activeReplyGenerationRef.current;
         activeReplyGenerationRef.current = undefined;
-        const spokeTranscript = transcriptSpokenRef.current;
-        markTranscriptSpoken(false);
-        // A transcript reading enters the record only as the act it was.
-        if (spokeTranscript) return;
         // The chats the reply named ride along as chips, read from its words
         // against the roster at this moment — the same rule the notice
         // band's chips keep — so the line can offer a way back to the chats
@@ -1129,13 +1033,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       },
     });
     return voiceSession.current;
-  }, [
-    dropSpokenAskPreview,
-    markTranscriptSpoken,
-    rememberConversationEntry,
-    rememberSpokenAsk,
-    setVoiceStatus,
-  ]);
+  }, [dropSpokenAskPreview, rememberConversationEntry, rememberSpokenAsk, setVoiceStatus]);
 
   /**
    * Words the arrival beat from what is true at the moment it is spoken, not
@@ -1168,15 +1066,15 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   );
 
   /**
-   * The announcer that lets Luke speak into silence: it queues the notices the
-   * main process decided to voice and, when no conversation is open, opens a
-   * speak-only call of Luke's own to say them through — then closes it. Built
-   * beside the session because it drives nothing else. The session it drives
-   * is wrapped once, so an arrival beat leaving the queue is worded at the
-   * moment of speaking; every other member forwards untouched.
+   * The queue that lets Luke speak into silence: it holds the briefings the
+   * brain decided and the onboarding beats and, when no conversation is open,
+   * opens a speak-only call of Luke's own to say them through — then closes
+   * it. Built beside the session because it drives nothing else. The session
+   * it drives is wrapped once, so an arrival beat leaving the queue is worded
+   * at the moment of speaking; every other member forwards untouched.
    */
-  const ensureAnnouncer = useCallback((): SpokenNoticeAnnouncer => {
-    announcer.current ??= new SpokenNoticeAnnouncer({
+  const ensureAnnouncer = useCallback((): BriefingQueue => {
+    announcer.current ??= new BriefingQueue({
       session: () => {
         const session = ensureVoiceSession();
         return {
@@ -1256,10 +1154,12 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, [options.voiceAvailable, setVoiceStatus, stopMicrophone, voiceStatusNow]);
 
   /**
-   * Opens the developer's call and feeds it everything a turn is validated
-   * against. Nothing is asked of the system on the way: connecting declares a
-   * bare transceiver, no capture device opens, and the microphone permission
-   * has no part in it — the device stays the press's own act.
+   * Opens the developer's call. Nothing is fed to it: the roster, the history,
+   * and the guide are the brain's, in the main process, and the voice reaches
+   * them through its one tool. Nothing is asked of the system on the way
+   * either: connecting declares a bare transceiver, no capture device opens,
+   * and the microphone permission has no part in it — the device stays the
+   * press's own act.
    */
   const startConversation = useCallback(async (): Promise<boolean> => {
     await waitForConversationContext(
@@ -1269,24 +1169,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     setVoiceError(undefined);
     setVoiceNotice(undefined);
     const session = ensureVoiceSession();
-    if (!(await session.connect())) return false;
-    const current = optionsRef.current;
-    session.updateSessions(current.sessions);
-    // After the roster, which it is rendered against. The history outlives
-    // the calls themselves on purpose: it is the conversation, and this call
-    // is only the newest transport to carry it — the announcement a "what did
-    // you just say?" points back at was often read out on the speak-only call
-    // this one just replaced.
-    session.updateConversation(recentConversationEntries(conversationRef.current));
-    session.updateWorkspaceProjects(
-      current.workspaceProjects,
-      current.defaultWorkspaceProvider,
-      current.workspaceProjectDefaults,
-    );
-    session.updateGuide(guideRef.current);
-    session.updateIssues(issuesRef.current);
-    session.updateRememberedFacts(current.rememberedFacts);
-    return true;
+    return session.connect();
   }, [ensureVoiceSession]);
 
   /**
@@ -1460,65 +1343,57 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   }, [voiceStatusNow]);
 
   /**
-   * A typed ask to Luke himself. It rides the same call the talk key opens
-   * and opens the same kind of turn: typing is the developer asking in their
-   * own words, so the turn may carry a tool the way a spoken one may, behind
-   * the same roster gauntlet. But it asks the system for nothing on the way:
-   * typing opens no capture device, and the reply arrives on the call's
-   * receiving half, so a typed ask goes whether or not the system would let
-   * a press capture. Answers with why the ask could not go, or nothing when
-   * it did — the reply is spoken, and its words land under the panel as the
-   * answer.
+   * A typed ask to Luke himself. The words go to the brain over the bridge —
+   * typing is the developer asking in their own words, so the brain's turn may
+   * act, behind the same validators every act runs — and the reply comes back
+   * to be spoken on the same call the talk key opens. It asks the system for
+   * nothing on the way: typing opens no capture device, and the reply arrives
+   * on the call's receiving half. Answers with why the ask could not go, or
+   * nothing when it did — the reply is spoken, and its words land under the
+   * panel as the answer; where voice cannot speak it, the words stand on the
+   * strip instead, so an ask is never answered with silence.
    */
   const askLuke = useCallback(
     async (text: string): Promise<string | undefined> => {
       const generation = conversationGenerationRef.current;
       const session = ensureVoiceSession();
       typedExchange.current = true;
-      // Luke's own speak-only call cannot carry a typed ask — it was sent no
-      // roster to validate one against — so it counts as no call here, and
-      // `connect` inside stands it down for the developer's own. A microphone
-      // call still connecting is awaited, not doubled.
-      if (!session.isConnected || !session.microphoneCall) {
-        await startConversation();
+      // The developer's own words enter the history as they were typed, so
+      // the thread holds both halves of the exchange the reply answers.
+      rememberConversationEntry(
+        { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: text },
+        generation,
+      );
+      // A sent ask outdates whatever refusal the strip was still reading.
+      setVoiceNotice(undefined);
+      // Luke's own speak-only call cannot carry the reply to a typed ask — it
+      // is not a conversation — so it counts as no call here, and `connect`
+      // inside stands it down for the developer's own. A microphone call
+      // still connecting is awaited, not doubled.
+      const connecting =
+        !session.isConnected || !session.microphoneCall
+          ? startConversation()
+          : Promise.resolve(true);
+      const [connected, answer] = await Promise.all([connecting, window.sidecar.askBrain(text)]);
+      if (answer.status !== ACT_RESULT_STATUS.ACCEPTED) {
+        setVoiceNotice(answer.reason);
+        return answer.reason;
       }
-      if (session.sendText(text)) {
+      if (connected && session.speakReply(answer.briefing, answer.sessionIds)) {
         activeReplyGenerationRef.current = generation;
         setTypedAsk(true);
-        // A new typed turn lets a leftover transcript skip go, exactly as a
-        // spoken one does — after the send, whose interrupt hands over the
-        // cut reply's words and is the flag's last rightful consumer.
-        markTranscriptSpoken(false);
-        // The developer's own words enter the history as they were typed, so
-        // the thread holds both halves of the exchange the reply answers.
-        rememberConversationEntry(
-          { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: text },
-          generation,
-        );
-        // A sent ask outdates whatever refusal the strip was still reading:
-        // a call already open skips `startConversation`, so the clear it
-        // would have run happens here.
-        setVoiceNotice(undefined);
         return undefined;
       }
-      const unavailable =
-        session.status === REALTIME_STATUS.UNAVAILABLE ? await hostedUnavailableNote() : undefined;
-      const refusal = askRefusal(session.status, unavailable);
-      // The refusal lands where the reply would have: on the caption strip,
-      // in the notice tone, the same way a talk-key press against a hosted
-      // refusal is answered. The composer draws no line of its own — one
-      // mechanism, one look — and a failure's red already on the strip
-      // outranks this, so the two never fight for the box.
-      setVoiceNotice(refusal);
-      return refusal;
+      // Voice cannot say it, so the words stand on the strip and enter the
+      // record as the reply they are.
+      rememberConversationEntry(
+        replyConversationEntry(answer.briefing, sessionsRef.current),
+        generation,
+      );
+      setVoiceNotice(answer.briefing);
+      return undefined;
     },
-    [
-      markTranscriptSpoken,
-      rememberConversationEntry,
-      ensureVoiceSession,
-      hostedUnavailableNote,
-      startConversation,
-    ],
+    [rememberConversationEntry, ensureVoiceSession, startConversation],
   );
 
   const discardListening = useCallback(() => {
@@ -1529,18 +1404,19 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
 
   const stopSpeaking = useCallback(() => voiceSession.current?.stopSpeaking() === true, []);
 
+  // The guide goes to the main process, where the brain reads it and an app
+  // act the brain asks for is validated against it; the voice itself is told
+  // nothing about the app.
   const syncGuide = useCallback((guide: AppGuideSnapshot) => {
-    guideRef.current = guide;
-    voiceSession.current?.updateGuide(guide);
+    window.sidecar.reportAppGuide(guide);
   }, []);
 
   const syncIssues = useCallback((issues: readonly TrackedIssue[] | undefined) => {
     issuesRef.current = issues;
     // Held as state beside the ref, because the issue chips derive from it:
-    // the ref feeds a call being opened, the state re-renders the band when
-    // an observation pass moves the board under a reply already speaking.
+    // the state re-renders the band when an observation pass moves the board
+    // under a reply already speaking.
     setTrackedIssues(issues);
-    voiceSession.current?.updateIssues(issues);
   }, []);
 
   const heardSpeed = useRef<RealtimeVoiceSpeed | undefined>(undefined);
@@ -1709,34 +1585,37 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
 
   useEffect(() => {
     sessionsRef.current = options.sessions;
-    voiceSession.current?.updateSessions(options.sessions);
   }, [options.sessions]);
 
+  // A briefing the brain decided, on its way to be spoken: queued like every
+  // beat, riding an open call or opening Luke's own, held by the quiet, and
+  // aged out rather than spoken stale.
   useEffect(() => {
-    rememberedFactsRef.current = options.rememberedFacts;
-    voiceSession.current?.updateRememberedFacts(options.rememberedFacts);
-  }, [options.rememberedFacts]);
-
-  useEffect(() => {
-    workspaceProjectsRef.current = options.workspaceProjects;
-    defaultWorkspaceProviderRef.current = options.defaultWorkspaceProvider;
-    workspaceProjectDefaultsRef.current = options.workspaceProjectDefaults;
-    voiceSession.current?.updateWorkspaceProjects(
-      options.workspaceProjects,
-      options.defaultWorkspaceProvider,
-      options.workspaceProjectDefaults,
-    );
-  }, [
-    options.defaultWorkspaceProvider,
-    options.workspaceProjectDefaults,
-    options.workspaceProjects,
-  ]);
-
-  useEffect(() => {
-    return window.sidecar.onSessionAnnouncements((announcements) => {
-      if (announcements.length > 0) ensureAnnouncer().enqueue(announcements);
+    return window.sidecar.onBriefing((delivery) => {
+      ensureAnnouncer().enqueue({
+        kind: BRIEFING_SPEECH_KIND,
+        briefing: delivery.briefing,
+        sessionIds: delivery.sessionIds,
+        decidedAt: delivery.decidedAt,
+      });
     });
   }, [ensureAnnouncer]);
+
+  // An app act the brain decided that only this renderer can perform. It was
+  // validated against the guide in the main process; the carrier performs it
+  // and the answer goes back by the request's id, so the brain's turn can say
+  // what happened.
+  useEffect(() => {
+    return window.sidecar.onBrainAppAct((request) => {
+      void optionsRef.current
+        .carryAppAction(request.action)
+        .catch((error: Error) => ({
+          status: ACT_RESULT_STATUS.REJECTED,
+          reason: error instanceof Error ? error.message : "The change could not be made.",
+        }))
+        .then((answer) => window.sidecar.answerBrainAppAct(request.requestId, answer));
+    });
+  }, []);
 
   // The one-time arrival beat, decided in the main process at the sign-in
   // edge. What is queued is only the fact of it: the beat's observed values —

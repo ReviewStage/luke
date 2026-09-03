@@ -6,7 +6,7 @@ import type { SessionIdentity } from "./session.js";
  * scrolls past that — this cap is about twice the visible band, deep enough
  * for any reply worth hearing out and shallow enough that the scroll stays a
  * glance. A reply that walks through more sessions than that has the panel
- * for a record, the way a burst of notices does.
+ * for a record.
  */
 export const MAXIMUM_MENTIONED_SESSIONS = 12;
 

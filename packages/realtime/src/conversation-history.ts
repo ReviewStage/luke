@@ -30,6 +30,7 @@
  * app" was itself a policy and persisting means replacing it with a real one.
  */
 
+import { actNarration, type CarriedSessionAction } from "@sidecar/acts";
 import {
   MAXIMUM_MENTIONED_SESSIONS,
   mentionedSessions,
@@ -40,7 +41,6 @@ import {
 } from "@sidecar/session";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { SESSION_NO_LONGER_OBSERVED_NOTE } from "./realtime-protocol.js";
-import { actNarration, type CarriedSessionAction } from "./realtime-tools.js";
 
 /** What one history line records, which also says who it speaks for. */
 export const CONVERSATION_ENTRY_KIND = {
@@ -441,7 +441,7 @@ function rosterMention(
 /**
  * How each line leads, which is also who it speaks for. Only the typed-ask
  * lines speak for the developer; words inside a reply, an announcement, or an
- * act never do — the same rule the attention update keeps.
+ * act never do — the same rule every observed value keeps.
  */
 const CONVERSATION_ENTRY_LEAD = {
   [CONVERSATION_ENTRY_KIND.TYPED_ASK]: "the developer typed",

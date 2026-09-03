@@ -3,8 +3,7 @@ import {
   type AccountProvider,
   type AccountSnapshot,
 } from "@sidecar/account/snapshot";
-import type { RememberedFact } from "@sidecar/acts";
-import { type ActEnvelope, isActEnvelope, isRememberedFacts } from "@sidecar/acts";
+import { APP_TOOL_KIND, isRememberedFacts, type RememberedFact } from "@sidecar/acts";
 import {
   isProductExchangeKind,
   isProductSurfaceEventName,
@@ -23,34 +22,21 @@ import {
   feedbackSubmission,
   isFeedbackKind,
 } from "@sidecar/feedback";
-import {
-  type IssueIdentity,
-  isIssueTrackerId,
-  type TrackedIssue,
-  type TrackerActionResult,
-} from "@sidecar/issues";
+import { type AppGuideSnapshot, isAppGuideSnapshot } from "@sidecar/guide";
+import { type IssueIdentity, isIssueTrackerId, type TrackedIssue } from "@sidecar/issues";
 import {
   type ConversationEntry,
-  type IssueToolAction,
   type RealtimeConnection,
   type RealtimeDiagnostics,
-  type SessionAnnouncement,
   storedConversationEntry,
 } from "@sidecar/realtime";
 import {
   isProviderId,
   isSessionApplicationId,
-  isWorkspaceAgentSelection,
-  isWorkspaceProviderId,
   type ObservedWorkspaceProject,
-  type ProviderActResult,
-  type ProviderControlResult,
-  type ProviderMessageResult,
-  type ProviderWorkspaceResult,
   type Session,
   type SessionApplicationId,
   type SessionIdentity,
-  type WorkspaceAgentSelection,
 } from "@sidecar/session";
 import {
   APP_SETTING_SCHEMA,
@@ -83,6 +69,12 @@ import type {
   OutputAudioState,
   VoiceHotkeyState,
 } from "./wire/audio";
+import type {
+  BrainAppActAnswer,
+  BrainAppActRequest,
+  BrainAskResult,
+  BriefingPayload,
+} from "./wire/brain";
 import {
   type AppBootstrap,
   type ConversationHistoryPayload,
@@ -90,7 +82,6 @@ import {
   type SessionOpenResult,
   type SessionReplayBootstrap,
   type SessionRosterPayload,
-  type SessionTranscriptResult,
   WINDOW_ROLE,
   type WindowRole,
 } from "./wire/session";
@@ -193,24 +184,6 @@ function isIssueIdentity(value: unknown): value is IssueIdentity {
     isWireString(wire.identifier) &&
     wire.identifier.length > 0
   );
-}
-
-type IssueActionAsk = Extract<IssueToolAction, { kind: "issue-state" | "issue-comment" }>;
-
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This function parses an IPC field into a domain action.
-function isIssueActionAsk(value: unknown): value is IssueActionAsk {
-  const wire = wireValue(value);
-  if (!isRecord(wire) || !isWireString(wire.kind) || !isIssueIdentity(wire.identity)) return false;
-  if (wire.kind === "issue-state") {
-    return (
-      isRecord(wire.transition) &&
-      isWireString(wire.transition.id) &&
-      wire.transition.id.length > 0 &&
-      isWireString(wire.transition.name) &&
-      wire.transition.name.length > 0
-    );
-  }
-  return wire.kind === "issue-comment" && isWireString(wire.body);
 }
 
 const optionalString = (value: UnparsedWireValue): value is string | undefined =>
@@ -475,12 +448,6 @@ export const BRIDGE = {
         (v[1] === undefined || (v[0] === true && isProductExchangeKind(v[1]))),
     ),
   }),
-  authorizeAct: entry({
-    kind: "invoke",
-    channel: "app:authorize-act",
-    args: args<[ActEnvelope]>((v) => v.length === 1 && isActEnvelope(v[0])),
-    result: result<ActResult>(isActResult),
-  }),
   openSession: entry({
     kind: "invoke",
     channel: "app:open-session",
@@ -505,107 +472,38 @@ export const BRIDGE = {
     args: args<[SessionIdentity]>((v) => v.length === 1 && isSessionIdentity(v[0])),
     result: result<SessionOpenResult>(),
   }),
-  readSessionTranscript: entry({
+  /**
+   * A typed ask to Luke's brain, in the developer's own words. The reply comes
+   * back as the words the voice speaks, with the observed sessions it named;
+   * a run with no brain answers a bounded refusal the voice says instead.
+   */
+  askBrain: entry({
     kind: "invoke",
-    channel: "app:read-session-transcript",
-    args: args<[SessionIdentity]>((v) => v.length === 1 && isSessionIdentity(v[0])),
-    result: result<SessionTranscriptResult>(),
-  }),
-  sendSessionMessage: entry({
-    kind: "invoke",
-    channel: "app:send-session-message",
-    args: args<[SessionIdentity, string]>(
-      (v) => v.length === 2 && isSessionIdentity(v[0]) && isWireString(v[1]),
-    ),
-    result: result<ProviderMessageResult>(),
-  }),
-  executeSessionControl: entry({
-    kind: "invoke",
-    channel: "app:execute-session-control",
-    args: args<[SessionIdentity, string]>(
-      (v) =>
-        v.length === 2 && isSessionIdentity(v[0]) && isWireString(v[1]) && v[1].trim().length > 0,
-    ),
-    result: result<ProviderControlResult>(),
-  }),
-  /** Memory writes return the complete list that actually persisted. */
-  rememberFact: entry({
-    kind: "invoke",
-    channel: "app:remember-fact",
-    args: args<[string, string?]>(
-      (v) => v.length >= 1 && v.length <= 2 && isWireString(v[0]) && optionalString(v[1]),
-    ),
-    result: result<readonly RememberedFact[]>(isRememberedFacts),
-  }),
-  forgetFact: entry({
-    kind: "invoke",
-    channel: "app:forget-fact",
+    channel: "app:ask-brain",
     args: oneString,
-    result: result<readonly RememberedFact[]>(isRememberedFacts),
+    result: result<BrainAskResult>(),
   }),
-  createSessionWorkspace: entry({
-    kind: "invoke",
-    channel: "app:create-session-workspace",
-    args: args<[string, string, string?, string?, string?, string?, WorkspaceAgentSelection?]>(
-      (v) => {
-        if (
-          v.length < 2 ||
-          v.length > 7 ||
-          !isWireString(v[0]) ||
-          !isWorkspaceProviderId(v[0]) ||
-          !isWireString(v[1])
-        )
-          return false;
-        if (
-          !optionalString(v[2]) ||
-          !optionalString(v[3]) ||
-          !optionalString(v[4]) ||
-          !optionalString(v[5])
-        )
-          return false;
-        return v[6] === undefined || isWorkspaceAgentSelection(v[0], v[6]);
-      },
+  /**
+   * The renderer's guide snapshot, pushed whenever it changes, so the main
+   * process can validate an app act against the settings the panel actually
+   * describes and hand the brain the same text.
+   */
+  reportAppGuide: entry({
+    kind: "send",
+    channel: "app:report-app-guide",
+    args: args<[AppGuideSnapshot]>((v) => v.length === 1 && isAppGuideSnapshot(v[0])),
+  }),
+  /**
+   * The renderer's answer to one app act the brain asked it to perform,
+   * matched to the request by id. The answer is the outcome record the brain
+   * reads, as the renderer's own carrier produced it.
+   */
+  answerBrainAppAct: entry({
+    kind: "send",
+    channel: "app:answer-brain-app-act",
+    args: args<[string, BrainAppActAnswer]>(
+      (v) => v.length === 2 && isWireString(v[0]) && isRecord(v[1]) && isWireValue(v[1]),
     ),
-    result: result<ProviderWorkspaceResult>(),
-  }),
-  addWorkspaceAgent: entry({
-    kind: "invoke",
-    channel: "app:add-workspace-agent",
-    args: args<[SessionIdentity, string, string?, string?, string?, string?]>(
-      (v) =>
-        v.length >= 2 &&
-        v.length <= 6 &&
-        isSessionIdentity(v[0]) &&
-        isWireString(v[1]) &&
-        optionalString(v[2]) &&
-        optionalString(v[3]) &&
-        optionalString(v[4]) &&
-        optionalString(v[5]) &&
-        (v[5] === undefined || v[4] !== undefined),
-    ),
-    result: result<ProviderWorkspaceResult>(),
-  }),
-  renameSessionWorkspace: entry({
-    kind: "invoke",
-    channel: "app:rename-session-workspace",
-    args: args<[SessionIdentity, string]>(
-      (v) => v.length === 2 && isSessionIdentity(v[0]) && isWireString(v[1]),
-    ),
-    result: result<ProviderActResult>(isActResult),
-  }),
-  renameSession: entry({
-    kind: "invoke",
-    channel: "app:rename-session",
-    args: args<[SessionIdentity, string]>(
-      (v) => v.length === 2 && isSessionIdentity(v[0]) && isWireString(v[1]),
-    ),
-    result: result<ProviderActResult>(isActResult),
-  }),
-  executeIssueAction: entry({
-    kind: "invoke",
-    channel: "app:execute-issue-action",
-    args: args<[IssueActionAsk]>((v) => v.length === 1 && isIssueActionAsk(v[0])),
-    result: result<TrackerActionResult>(isActResult),
   }),
   openIssue: entry({
     kind: "invoke",
@@ -938,11 +836,30 @@ export const BRIDGE = {
     args: noArgs,
     result: result<SupersetSignInSnapshot>(),
   }),
-  onSessionAnnouncements: entry({
+  /** One briefing the brain decided to give, for the voice to speak as written. */
+  onBriefing: entry({
     kind: "subscribe",
-    channel: "app:session-announcements",
+    channel: "app:briefing",
     args: noArgs,
-    result: result<readonly SessionAnnouncement[]>(),
+    result: result<BriefingPayload>(),
+  }),
+  /**
+   * An app act the brain decided that only the renderer can perform, already
+   * validated in the main process against the guide the renderer reported.
+   */
+  onBrainAppAct: entry({
+    kind: "subscribe",
+    channel: "app:brain-app-act",
+    args: noArgs,
+    result: result<BrainAppActRequest>(
+      (v) =>
+        isRecord(v) &&
+        isWireString(v.requestId) &&
+        isRecord(v.action) &&
+        isWireString(v.action.kind) &&
+        v.action.kind !== APP_TOOL_KIND.REMEMBER &&
+        v.action.kind !== APP_TOOL_KIND.FORGET,
+    ),
   }),
   onConversationHistoryChanged: entry({
     kind: "subscribe",

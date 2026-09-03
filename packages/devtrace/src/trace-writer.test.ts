@@ -3,8 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { ATTENTION_TRIGGER } from "@sidecar/attention";
-import { ATTENTION_DISPOSITION, SESSION_STATUS } from "@sidecar/session";
+import { BRAIN_CLIENT_OUTCOME, BRAIN_TURN_TRIGGER } from "@sidecar/brain";
 import { isRecord, isWireString, recordFromJsonLine } from "@sidecar/wire";
 import { AgentTraceWriter, TRACE_ENTRY_KIND } from "./trace-writer.js";
 import { TRACE_DIRECTION } from "./vocabulary.js";
@@ -24,31 +23,41 @@ test("lines land in the named file, stamped, in the order they were recorded", a
     direction: TRACE_DIRECTION.CLIENT,
     event: { type: "response.create" },
   });
-  writer.recordAttention({
-    update: {
-      providerId: "claude-code",
-      providerSessionId: "abc",
-      trigger: ATTENTION_TRIGGER.OBSERVED,
-      providerName: "Claude Code",
-      title: "checkout-service",
-      status: SESSION_STATUS.WAITING,
-      lastActivityAt: 1_800_000_000_000,
-    },
-    decision: {
-      disposition: ATTENTION_DISPOSITION.SILENT,
-      decidedAt: 1_800_000_000_500,
-    },
-    elapsedMs: 250,
+  writer.recordBrainRequest({
+    inputItems: 3,
+    inputChars: 2_048,
+    outcome: BRAIN_CLIENT_OUTCOME.ANSWERED,
+    elapsedMs: 900,
+    outputItemKinds: ["reasoning", "message"],
+    inputTokens: 1_500,
+    outputTokens: 60,
+  });
+  writer.recordBrainTurn({
+    trigger: BRAIN_TURN_TRIGGER.WAKE,
+    inputItemKinds: ["message", "message"],
+    inputTokens: 1_500,
+    transcriptBytes: 4_096,
+    toolCalls: [{ name: "announce", argumentsChars: 120, outcomeStatus: "accepted" }],
+    deliveries: [{ briefingChars: 96, sessionCount: 1 }],
+    elapsedMs: 1_250,
+    iterations: 1,
+    compacted: false,
   });
   await writer.settled();
   const lines = (await readFile(writer.file, "utf8")).split("\n").filter((line) => line.length > 0);
   const entries = lines.map(recordFromJsonLine);
-  assert.equal(entries.length, 2);
+  assert.equal(entries.length, 3);
   assert.equal(entries[0]?.kind, TRACE_ENTRY_KIND.WIRE);
   assert.equal(entries[0]?.direction, TRACE_DIRECTION.CLIENT);
-  assert.equal(entries[1]?.kind, TRACE_ENTRY_KIND.ATTENTION);
-  assert.equal(entries[1]?.elapsedMs, 250);
-  assert.ok(isRecord(entries[1]?.decision));
+  assert.equal(entries[1]?.kind, TRACE_ENTRY_KIND.BRAIN_REQUEST);
+  assert.equal(entries[1]?.outcome, BRAIN_CLIENT_OUTCOME.ANSWERED);
+  assert.equal(entries[1]?.inputChars, 2_048);
+  assert.ok(entries[1] && !("model" in entries[1]));
+  assert.equal(entries[2]?.kind, TRACE_ENTRY_KIND.BRAIN);
+  assert.equal(entries[2]?.trigger, BRAIN_TURN_TRIGGER.WAKE);
+  assert.equal(entries[2]?.elapsedMs, 1_250);
+  const toolCalls = entries[2]?.toolCalls;
+  assert.ok(Array.isArray(toolCalls) && isRecord(toolCalls[0]));
   for (const entry of entries) {
     assert.ok(isWireString(entry?.at));
   }

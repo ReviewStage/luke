@@ -10,10 +10,10 @@ import {
   type ProviderId,
   type SessionProviderAdapter,
 } from "@sidecar/session";
-import { installClaudeCodeObservationHooks } from "./claude-code/hooks.js";
+import { CLAUDE_HOOK_EVENT, installClaudeCodeObservationHooks } from "./claude-code/hooks.js";
 import { CODEX_PROVIDER } from "./codex/adapter.js";
 import type { CodexCloudSessionAdapter } from "./codex/cloud-adapter.js";
-import { installCodexObservationHooks } from "./codex/hooks.js";
+import { CODEX_HOOK_EVENT, installCodexObservationHooks } from "./codex/hooks.js";
 import { ConductorSessionAdapter } from "./conductor/adapter.js";
 import type { ObservationHookProviderId } from "./hook-registry.js";
 import { localSessionAdapters } from "./local-adapters.js";
@@ -27,10 +27,20 @@ import {
   pruneObservationHookSpool,
 } from "./shared/hook-merge.js";
 
+/**
+ * Where a hooked provider's observation spool lives and which tokens its hook
+ * may write, so a watcher can stand on the spool the registration converged.
+ */
+export interface ProviderObservationSpool {
+  directory: () => string;
+  events: readonly string[];
+}
+
 export interface ProviderRegistration {
   adapter: SessionProviderAdapter;
   credential?: CredentialProvider;
   registerObservationHook?: () => Promise<void>;
+  observationSpool?: ProviderObservationSpool;
 }
 
 export interface ProviderRegistrationOptions {
@@ -109,6 +119,10 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
         claudeInstallation,
         now,
       ),
+      observationSpool: {
+        directory: () => claudeInstallation().spoolDirectory,
+        events: Object.values(CLAUDE_HOOK_EVENT),
+      },
     },
     [PROVIDER_ID.CODEX]: {
       adapter: codex,
@@ -117,6 +131,10 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
         codexInstallation,
         now,
       ),
+      observationSpool: {
+        directory: () => codexInstallation().spoolDirectory,
+        events: Object.values(CODEX_HOOK_EVENT),
+      },
     },
     [PROVIDER_ID.CONDUCTOR]: {
       adapter: new ConductorSessionAdapter({

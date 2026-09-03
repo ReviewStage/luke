@@ -21,14 +21,17 @@
  * compilation alone cannot silently collide with a name a door above it
  * already exports.
  */
-import "../../../packages/acts/src/index.js";
 import "../../../packages/credentials/src/credential-providers.js";
 import "../../../packages/guide/src/index.js";
 import "../../../packages/issues/src/index.js";
 
+export * from "../../../packages/acts/src/index.js";
 export * from "../../../packages/analytics/src/index.js";
-export * from "../../../packages/attention/src/index.js";
+export * from "../../../packages/brain/src/index.js";
 export * from "../../../packages/hosted/src/index.js";
+// Both the acts table and the protocol name a function call; the protocol's
+// carries the call id the wire hands back, and is the one server code reads.
+export type { RealtimeFunctionCall } from "../../../packages/realtime/src/index.js";
 export * from "../../../packages/realtime/src/index.js";
 export * from "../../../packages/session/src/index.js";
 export * from "../../../packages/wire/src/index.js";

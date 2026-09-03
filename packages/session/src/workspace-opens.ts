@@ -25,8 +25,8 @@ export const CREATED_WORKSPACE_OPEN_WINDOW_MS = 2 * 60_000;
  * `CREATED_WORKSPACE_OPEN_WINDOW_MS` is quietly forgotten, because a session
  * that reports no address is offered nowhere to open.
  *
- * Deterministic by construction, like the notice tracker beside it: nothing a
- * model decided can add an entry, only the validated creation act itself.
+ * Deterministic by construction: nothing a model decided can add an entry,
+ * only the validated creation act itself.
  */
 export class CreatedWorkspaceOpenTracker {
   /** Deadlines keyed by the original identifiers, never a composite string. */

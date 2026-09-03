@@ -3,10 +3,10 @@ import type { RememberedFact } from "@sidecar/acts";
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { FixtureSnapshot } from "@sidecar/fixtures";
 import type { TrackedIssue } from "@sidecar/issues";
-import type { ConversationEntry, IssueToolAction } from "@sidecar/realtime";
-import type { ObservedWorkspaceProject, Session, SessionAttentionEntry } from "@sidecar/session";
+import type { ConversationEntry } from "@sidecar/realtime";
+import type { ObservedWorkspaceProject, Session } from "@sidecar/session";
 import type { Rectangle, ResolvedNotchGeometry, WindowMode } from "@sidecar/surface";
-import type { ACT_RESULT_STATUS, ActResult } from "@sidecar/wire";
+import type { ActResult } from "@sidecar/wire";
 import type { MicrophoneStatus, OutputAudioState } from "./audio";
 import type { AppSettings } from "./settings";
 import type { UpdateSnapshot } from "./update";
@@ -32,17 +32,6 @@ export type { WindowMode } from "@sidecar/surface";
  * is why this is answered at all.
  */
 export type SessionOpenResult = ActResult;
-
-/**
- * What became of a request to read a session's transcript. Reading is a local
- * act like opening — nothing reaches a provider — and the rendering rides the
- * answer so the conversation that asked can ground its reply in the session's
- * own words. Every refusal carries words Luke can say aloud.
- */
-export type SessionTranscriptResult =
-  | { status: typeof ACT_RESULT_STATUS.ACCEPTED; transcript: string }
-  | { status: typeof ACT_RESULT_STATUS.REJECTED; reason: string }
-  | { status: typeof ACT_RESULT_STATUS.UNSUPPORTED; reason: string };
 
 /**
  * Which surface a window exists to draw. Every window loads the same renderer
@@ -224,8 +213,4 @@ export interface AppBootstrap {
 /** The complete session state one observation revision publishes to a desktop surface. */
 export interface SessionRosterPayload {
   sessions: readonly Session[];
-  attention: readonly SessionAttentionEntry[];
 }
-
-/** One validated issue act on its way to the main process. */
-export type IssueActionAsk = Extract<IssueToolAction, { kind: "issue-state" | "issue-comment" }>;

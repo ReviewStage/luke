@@ -63,33 +63,25 @@ export {
   workspaceProjectSelectionId,
 } from "./providers.js";
 export {
-  ATTENTION_DISPOSITION,
-  type AttentionDecision,
-  type AttentionDisposition,
   agedStatus,
-  attentionDecisionFromWire,
   boundedText,
-  isRosterRelevant,
   isSessionApplicationId,
   maximumSessionApplications,
   maximumSessionDetailLength,
   maximumSessionMessageLength,
   maximumSessionSubjectLength,
   maximumSessionTitleLength,
-  normalizeAttention,
   normalizeSession,
   normalizeSessionDetail,
   normalizeSessionIdentity,
   OBSERVATION_WINDOW,
   type ProviderSessionObservation,
-  rosterRelevantSessions,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_ID_LIST,
   SESSION_APPLICATION_SCOPE,
   SESSION_COMPLETION_CAUSE,
   SESSION_CONTROL_KIND,
   SESSION_LOCATION,
-  SESSION_ROSTER_RETENTION_MS,
   SESSION_STATUS,
   type Session,
   type SessionApplication,
@@ -107,8 +99,6 @@ export {
   type SessionWorkspace,
   sessionChangeNumber,
   sessionMessageText,
-  sessionRosterRetentionMs,
-  silentAttention,
   supportsSessionControl,
   transcriptReadTailBytes,
   UNKNOWN_WORKSPACE_LABEL,
@@ -133,22 +123,7 @@ export {
   type SessionMention,
   type SessionMentionKind,
 } from "./session-mentions.js";
-export {
-  MAXIMUM_HELD_NOTICES,
-  SessionNoticeHold,
-} from "./session-notice-hold.js";
-export {
-  SESSION_NOTICE_STATUS,
-  type SessionNotice,
-  type SessionNoticeStatus,
-  SessionNoticeTracker,
-} from "./session-notices.js";
-export {
-  InMemorySessionRegistry,
-  type SessionAttentionEntry,
-  type SessionRegistryListener,
-  type SessionRegistrySnapshot,
-} from "./session-registry.js";
+export { SessionRoster, type SessionRosterListener } from "./session-registry.js";
 export {
   isListedWorkspaceAgentModel,
   isWorkspaceAgentSelection,

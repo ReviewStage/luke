@@ -1,4 +1,4 @@
-import type { RememberedFact } from "@sidecar/acts";
+import { APP_TOOL_KIND, dispatchByKind, type RememberedFact } from "@sidecar/acts";
 import {
   PRODUCT_PANEL_SOURCE,
   PRODUCT_SEARCH_SURFACE,
@@ -15,7 +15,7 @@ import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "@
 import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import { APP_UPDATE_ACT, FEEDBACK_COMPOSER_KIND } from "@sidecar/guide";
 import { WingFace as LukeFace, ProviderMark } from "@sidecar/panel";
-import { APP_TOOL_KIND, dispatchByKind, REALTIME_STATUS } from "@sidecar/realtime";
+import { REALTIME_STATUS } from "@sidecar/realtime";
 import {
   type ObservedWorkspaceProject,
   SESSION_MENTION_KIND,
@@ -365,7 +365,6 @@ export function App(): React.JSX.Element {
   const [account, setAccount, accountNow] = useStateWithRef<AccountSnapshot | undefined>(undefined);
   const [sessionRoster, setSessionRoster] = useState<SessionRosterPayload>({
     sessions: [],
-    attention: [],
   });
   const sessions = sessionRoster.sessions;
   // Whether the roster above has been read at all yet. It only ever settles —
@@ -1937,7 +1936,7 @@ export function App(): React.JSX.Element {
           // waits for the flight, never the report.
           const searched =
             action.query !== undefined && bootstrap !== undefined
-              ? spokenSearchOutcome(displaySessions(bootstrap, sessions, sessionRoster.attention), {
+              ? spokenSearchOutcome(displaySessions(bootstrap, sessions), {
                   ...sessionView,
                   ...view,
                 })
@@ -2013,32 +2012,6 @@ export function App(): React.JSX.Element {
             note: "Luke is quitting to install the downloaded release; this conversation ends with it.",
           };
         },
-        // Automatic memory stays silent; the returned list updates context.
-        [APP_TOOL_KIND.REMEMBER]: async (action): Promise<WireRecord> => {
-          const facts = await window.sidecar.rememberFact(action.words, action.replaces);
-          setRememberedFacts(facts);
-          // The store's answer is the whole report: the words are there or the
-          // write did not land, and a claim to have remembered something the
-          // list does not hold is worse than the refusal.
-          if (!facts.some((fact) => fact.words === action.words)) {
-            return {
-              status: ACT_RESULT_STATUS.REJECTED,
-              reason: "That memory could not be saved.",
-            };
-          }
-          return { status: ACT_RESULT_STATUS.ACCEPTED };
-        },
-        [APP_TOOL_KIND.FORGET]: async (action): Promise<WireRecord> => {
-          const facts = await window.sidecar.forgetFact(action.id);
-          setRememberedFacts(facts);
-          if (facts.some((fact) => fact.id === action.id)) {
-            return {
-              status: ACT_RESULT_STATUS.REJECTED,
-              reason: "That memory could not be removed.",
-            };
-          }
-          return { status: ACT_RESULT_STATUS.ACCEPTED };
-        },
       }),
     [
       accountNow,
@@ -2051,7 +2024,6 @@ export function App(): React.JSX.Element {
       feedbackEntry.latest,
       presentationOf,
       sessions,
-      sessionRoster.attention,
       sessionView,
       bootstrapSettings,
     ],
@@ -2522,22 +2494,12 @@ export function App(): React.JSX.Element {
   );
 
   /**
-   * The two writes a row can ask for, handed to the main process by session
-   * identity. Unlike opening, neither closes the panel: the answer lands back
-   * on the row that asked, and the user is mid-conversation with it.
+   * The one act a row's chip can ask for, handed to the main process by
+   * session identity. Unlike opening the session, it leaves the panel up: a
+   * refusal lands back on the row that asked.
    */
   const sessionWrites: SessionWriteHandlers = useMemo(
     () => ({
-      sendMessage: (session, text) =>
-        window.sidecar.sendSessionMessage(
-          { providerId: session.providerId, providerSessionId: session.id },
-          text,
-        ),
-      runAction: (session, actionId) =>
-        window.sidecar.executeSessionControl(
-          { providerId: session.providerId, providerSessionId: session.id },
-          actionId,
-        ),
       openChange: (session) =>
         window.sidecar.openSessionChange({
           providerId: session.providerId,
@@ -2976,7 +2938,7 @@ export function App(): React.JSX.Element {
 
   if (!bootstrap || !display) return <div />;
 
-  const visibleSessions = displaySessions(bootstrap, sessions, sessionRoster.attention);
+  const visibleSessions = displaySessions(bootstrap, sessions);
   // The tally is taken before the list is narrowed — the capsule reports what
   // Luke is watching, not what the panel is currently showing — but it reads
   // in the list's own sort, so the wing's marks sit in the order the rows do.

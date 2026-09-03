@@ -194,7 +194,7 @@ export class PanelManager {
   /**
    * The one window a spoken conversation lives in. Voice is a single thing —
    * one microphone, one reply, one face speaking — so the talk key and the
-   * attention readouts go to a single renderer rather than opening one
+   * briefings go to a single renderer rather than opening one
    * conversation per display: the main display's window when Luke stands there,
    * else the first window standing anywhere. The thread the exchange leaves
    * behind is not the host's alone: each appended line comes back through the

@@ -1,15 +1,17 @@
-import type { Session, SessionIdentity, SessionStatus } from "@sidecar/session";
+import type { Session, SessionIdentity } from "@sidecar/session";
 import type { ActResultStatus } from "@sidecar/wire";
 
 /**
  * What wakes the brain, and what it hands back. A wake is a provider's hook
- * firing or a status edge the poll saw; a delivery is one briefing the brain
- * decided to give, for the host to speak or hold.
+ * firing, or the scheduled look at the whole roster the brain takes on its
+ * own clock; a delivery is one briefing the brain decided to give, for the
+ * host to speak or hold. Nothing here detects a change: the brain notices
+ * changes itself, against its own memory.
  */
 
 export const BRAIN_WAKE_KIND = {
   HOOK: "hook",
-  STATUS_EDGE: "status-edge",
+  ROSTER: "roster",
 } as const;
 
 export type BrainWakeKind = (typeof BRAIN_WAKE_KIND)[keyof typeof BRAIN_WAKE_KIND];
@@ -31,7 +33,6 @@ export interface BrainWakeEvent {
   identity: SessionIdentity;
   /** The provider's own name for the hook that fired, when the wake is one. */
   hookEvent?: string;
-  previousStatus?: SessionStatus;
   /** The session as the roster held it at the wake, when it still held it. */
   session?: Session;
   transcriptDelta?: BrainTranscriptDelta;

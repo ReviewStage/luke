@@ -42,7 +42,7 @@
     "@sidecar/account": "workspace:*",
     "@sidecar/acts": "workspace:*",
     "@sidecar/analytics": "workspace:*",
-    "@sidecar/attention": "workspace:*",
+    "@sidecar/brain": "workspace:*",
     "@sidecar/calendar": "workspace:*",
     "@sidecar/credentials": "workspace:*",
     "@sidecar/devtrace": "workspace:*",

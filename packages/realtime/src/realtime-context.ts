@@ -6,15 +6,12 @@ import {
   type WorkspaceTaskSupport,
   workspaceProjectSelectionId,
 } from "@sidecar/session";
-import type { WireRecord } from "@sidecar/wire";
-import { REALTIME_CLIENT_EVENT } from "./realtime-protocol.js";
 
 /**
  * Roster context serialization: the bounded, redacted view of sessions and
- * workspace projects that a conversation is allowed to know about.
- * Context, never a prompt — arriving must not open Luke's mouth. The app
- * guide deliberately does not travel this way: it is build-fixed prose, so it
- * rides the session instructions instead of a conversation item.
+ * workspace projects a model is allowed to know about. On the desktop it is
+ * the brain's standing context; on a remote call it is the roster item the
+ * call is sent. Context, never a prompt.
  */
 
 /**
@@ -142,9 +139,9 @@ function sessionAgeText(lastActivityAt: number, now: number): SessionAgeText {
 
 /**
  * The checkout, current tool, and reported failure a session's line carries —
- * the same bounded about-fields the attention update already sends, worded as
- * short labelled phrases so Luke can say what a session is doing or stuck on
- * rather than only that it works or waits.
+ * the same bounded about-fields the panel draws, worded as short labelled
+ * phrases so Luke can say what a session is doing or stuck on rather than
+ * only that it works or waits.
  */
 function sessionAboutText(session: Session): readonly string[] {
   return [
@@ -172,8 +169,8 @@ function sessionSpokenName(session: Session): string {
 /**
  * Renders the session roster the conversation is allowed to know about.
  *
- * These are the same bounded, redacted fields the attention layer already
- * sends — provider, title, status, when last seen, repository or branch,
+ * These are the same bounded, redacted fields the panel already draws —
+ * provider, title, status, when last seen, repository or branch,
  * current tool, and reported error — plus the
  * workspace a chat belongs to when its provider groups them, the apps that
  * independently associate themselves with it, what each session can be asked to do, and the
@@ -206,7 +203,7 @@ export function sessionContextText(sessions: readonly Session[], now: number = D
         // beside the title wherever a provider named one — and only by its
         // name: an internal workspace id identifies nothing out loud, so an
         // unnamed workspace goes unmentioned rather than leaking the id off
-        // the machine, the same rule the attention update follows.
+        // the machine, the same rule every observed value follows.
         ...(session.workspace?.name
           ? [
               `internal workspace name — never use to refer to the work: ${session.workspace.name}${session.workspace.managerName ? ` managed by ${session.workspace.managerName}` : ""}`,
@@ -244,14 +241,9 @@ export function sessionContextText(sessions: readonly Session[], now: number = D
 }
 
 /**
- * The kinds of context a conversation is told, each of which answers exactly
- * one standing question: what Luke can see, what was already said across
- * calls, and where he can create.
- *
- * A kind holds one live item at a time. Saying it again replaces the item that
- * said it before rather than adding a second answer beside the first, because
- * a conversation holding nine rosters is holding eight wrong ones — and paying
- * for all nine out of a window the developer's own turns are evicted from.
+ * The kinds of context a remote call is told, each answering one standing
+ * question. The desktop's call is told none of them: its roster, history, and
+ * projects are the brain's, and the voice reaches them through its one tool.
  */
 export const CONTEXT_ITEM_KIND = {
   SESSIONS: "sessions",
@@ -263,107 +255,12 @@ export const CONTEXT_ITEM_KIND = {
 export type ContextItemKind = (typeof CONTEXT_ITEM_KIND)[keyof typeof CONTEXT_ITEM_KIND];
 
 /**
- * Names the item one context update will occupy, so the update after it has
- * something to delete. The Realtime API lets the client name an item on
- * creation, which is what makes a replacement possible without waiting to be
- * told the server's own name for it.
- *
- * The sequence rises rather than the name being reused: a delete that failed
- * would otherwise leave the old item sitting under the name the new one is
- * about to claim. This composes a wire identifier, not a lookup key — nothing
- * indexes on it, and both halves are the build's own.
+ * Names the item one context update occupies on a call that still carries
+ * context items — the remote call, until it too is given a brain. Nothing
+ * indexes on the name; both halves are the build's own.
  */
 export function contextItemId(kind: ContextItemKind, sequence: number): string {
   return `luke_ctx_${kind}_${sequence}`;
-}
-
-/** Names the delete itself, so the error a failed one answers with is known as ours. */
-export function contextSupersedeEventId(sequence: number): string {
-  return `luke_supersede_${sequence}`;
-}
-
-/**
- * Builds the event that removes the context item a fresher one is replacing.
- *
- * Only ever aimed at an item this build named and created. Deleting an item
- * the conversation does not hold is answered with an error rather than
- * silence, which is why the event is named: the caller keeps the name and
- * knows the answer for its own rather than reporting it to the developer as a
- * fault in their call.
- */
-export function contextSupersedeEvents(input: {
-  itemId: string;
-  eventId: string;
-}): readonly WireRecord[] {
-  if (!input.itemId.trim() || !input.eventId.trim()) return [];
-  return [
-    {
-      type: REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_DELETE,
-      event_id: input.eventId,
-      item_id: input.itemId,
-    },
-  ];
-}
-
-/**
- * The conversation.item.create envelope every roster update travels in. A
- * user-role item is universally accepted by the Realtime API, and the explicit
- * label keeps it from reading as something the developer said.
- *
- * The item is named on creation so a fresher answer of the same kind can take
- * its place rather than pile up beside it.
- */
-function labeledContextEvent(label: string, text: string, itemId: string): WireRecord {
-  return {
-    type: REALTIME_CLIENT_EVENT.CONVERSATION_ITEM_CREATE,
-    item: {
-      id: itemId,
-      type: "message",
-      role: "user",
-      content: [{ type: "input_text", text: `[${label}]\n${text}` }],
-    },
-  };
-}
-
-/**
- * Builds the event that tells the conversation what Luke can currently see.
- *
- * Deliberately no `response.create`: this is context, not a prompt, so adding
- * it must never make Luke start talking. Without it the standing instructions
- * would claim Luke can see sessions it was never told about, and a spoken
- * question about live work could not be answered from real data.
- */
-export function sessionContextEvents(
-  sessions: readonly Session[],
-  itemId: string,
-  now: number = Date.now(),
-): readonly WireRecord[] {
-  return [
-    labeledContextEvent(
-      "observed session status, sent automatically",
-      sessionContextText(sessions, now),
-      itemId,
-    ),
-  ];
-}
-
-/**
- * Builds the event that carries the conversation history — what was already
- * said and done across calls, rendered by the history module against the
- * roster as both now stand. It exists because the call that said a thing is
- * often not the call being asked about it: an announcement is read out on a
- * speak-only call the talk-key press tears down, and an idle call retires —
- * so the thread is re-fed to whichever call the developer opens next.
- * Context on the roster's own terms: never a prompt, so remembering what was
- * said must not make Luke say anything more.
- */
-export function conversationContextEvents(text: string, itemId: string): readonly WireRecord[] {
-  return [labeledContextEvent("recent conversation, sent automatically", text, itemId)];
-}
-
-/** Carries durable personal memory as silent reply context, never authority to act. */
-export function rememberedFactsContextEvents(text: string, itemId: string): readonly WireRecord[] {
-  return [labeledContextEvent("durable personal memory", text, itemId)];
 }
 
 /** How many projects one context update may offer workspace creation in. */
@@ -443,23 +340,3 @@ const TASK_SUPPORT_TEXT = {
   [WORKSPACE_TASK_SUPPORT.OPTIONAL]: "takes an opening task",
   [WORKSPACE_TASK_SUPPORT.REQUIRED]: "needs an opening task",
 } satisfies Record<WorkspaceTaskSupport, string>;
-
-/**
- * Builds the event that tells the conversation where a workspace can be
- * created. The same shape as the roster, for the same reason: context, never
- * a prompt, so arriving must not open Luke's mouth.
- */
-export function workspaceProjectContextEvents(
-  projects: readonly ObservedWorkspaceProject[],
-  itemId: string,
-  defaultProviderId?: string,
-  defaultProjectIds?: Readonly<Partial<Record<string, string>>>,
-): readonly WireRecord[] {
-  return [
-    labeledContextEvent(
-      "workspace projects, sent automatically",
-      workspaceProjectContextText(projects, defaultProviderId, defaultProjectIds),
-      itemId,
-    ),
-  ];
-}

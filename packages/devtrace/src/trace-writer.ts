@@ -1,55 +1,46 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import type { AttentionUpdate } from "@sidecar/attention";
-import type { AttentionDecision } from "@sidecar/session";
+import type { BrainTurnTraceRecord } from "@sidecar/brain";
 import { type AgentWireTrace, sanitizedTraceEvent } from "./vocabulary.js";
 
 /**
- * One evaluator pass as the trace records it: the bounded update that went to
- * the model, the decision that came back — absent when the pass failed — how
- * long the round trip took, and which model reviewed it, absent when the pass
- * ran through the hosted service, whose model the desktop never learns.
+ * One model request a brain turn made, as the trace records it. The input
+ * travels as counts alone — how many items, how many JSON characters — the
+ * way an audio append travels as its byte count: a turn's input carries
+ * transcript text, and the trace widening to it is a product decision. The
+ * answer side keeps the outcome, the kinds of items that came back, and the
+ * token counts the payload reported; the model when the client knows one,
+ * absent through the hosted service, whose model the desktop never learns.
  */
-export interface AttentionTraceRecord {
-  update: AttentionUpdate;
-  decision: AttentionDecision | undefined;
+export interface BrainRequestTraceRecord {
+  inputItems: number;
+  inputChars: number;
+  outcome: string;
   elapsedMs: number;
-  error?: string;
   model?: string;
-}
-
-/**
- * One subject derivation as the trace records it: the about-fields that went
- * with the transcript, the transcript reduced to its byte count the way an
- * audio append is — the trace widening to its text is a product decision —
- * the phrase that came back (`null` for the model's own no answer, absent
- * when the call failed), how long it took, and the model when known.
- */
-export interface SubjectTraceRecord {
-  providerName: string;
-  title: string;
-  transcriptBytes: number;
-  subject: string | null | undefined;
-  elapsedMs: number;
+  outputItemKinds?: readonly string[];
+  inputTokens?: number;
+  outputTokens?: number;
   error?: string;
-  model?: string;
 }
 
 export const TRACE_ENTRY_KIND = {
   WIRE: "wire",
-  ATTENTION: "attention",
-  SUBJECT: "subject",
+  BRAIN: "brain",
+  BRAIN_REQUEST: "brain-request",
 } as const;
+
+export type TraceEntryKind = (typeof TRACE_ENTRY_KIND)[keyof typeof TRACE_ENTRY_KIND];
 
 /**
  * One line of the trace before its timestamp is stamped on. `JSON.stringify`
- * drops undefined-valued fields, so an absent decision or error never reaches
+ * drops undefined-valued fields, so an absent model or error never reaches
  * the file as a key.
  */
 type PendingTraceEntry =
   | ({ kind: typeof TRACE_ENTRY_KIND.WIRE } & AgentWireTrace)
-  | ({ kind: typeof TRACE_ENTRY_KIND.ATTENTION } & AttentionTraceRecord)
-  | ({ kind: typeof TRACE_ENTRY_KIND.SUBJECT } & SubjectTraceRecord);
+  | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN } & BrainTurnTraceRecord)
+  | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN_REQUEST } & BrainRequestTraceRecord);
 
 export interface AgentTraceWriterOptions {
   /** Where the trace lands, created on the first line rather than up front. */
@@ -97,12 +88,12 @@ export class AgentTraceWriter {
     });
   }
 
-  recordAttention(record: AttentionTraceRecord): void {
-    this.#append({ kind: TRACE_ENTRY_KIND.ATTENTION, ...record });
+  recordBrainTurn(record: BrainTurnTraceRecord): void {
+    this.#append({ kind: TRACE_ENTRY_KIND.BRAIN, ...record });
   }
 
-  recordSubject(record: SubjectTraceRecord): void {
-    this.#append({ kind: TRACE_ENTRY_KIND.SUBJECT, ...record });
+  recordBrainRequest(record: BrainRequestTraceRecord): void {
+    this.#append({ kind: TRACE_ENTRY_KIND.BRAIN_REQUEST, ...record });
   }
 
   /** The queue drained, for a test to await what `record*` fired and forgot. */

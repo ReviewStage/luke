@@ -1,27 +1,13 @@
-import { type RememberedFact, rememberedFactsText } from "@sidecar/acts";
 import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabulary";
-import { type AppGuideSnapshot, appGuideContextText, EMPTY_APP_GUIDE } from "@sidecar/guide";
-import type { TrackedIssue } from "@sidecar/issues";
 import {
-  type ActEnvelope,
-  appGuideInstructionsEvents,
-  appToolAction,
+  ASK_BRAIN_TOOL,
   arrivalSpeechEvents,
-  type CarriedAppAction,
-  type CarriedIssueAction,
-  type CarriedSessionAction,
-  CONTEXT_ITEM_KIND,
-  type ContextItemKind,
-  type ConversationEntry,
+  BRIEFING_SPEECH_KIND,
+  briefingSpeechEvents,
   calendarOnboardingSpeechEvents,
   cancelResponseEvents,
   clearInputAudioEvents,
   clearOutputAudioEvents,
-  contextItemId,
-  contextSupersedeEventId,
-  contextSupersedeEvents,
-  conversationContextEvents,
-  conversationHistoryText,
   decodeRealtimePayload,
   functionCallFollowUpEvents,
   type IntroductionLine,
@@ -30,36 +16,22 @@ import {
   introductionSpeechEvents,
   isArrivalSpeech,
   isCalendarOnboardingSpeech,
-  issueToolAction,
   maximumTypedAskLength,
   outputSpeedUpdateEvents,
   PressAudioBuffer,
   type ProactiveSpeechTurn,
   parseRealtimeServerEvent,
-  proactiveSpeechEvents,
   pushToTalkCommitEvents,
   REALTIME_CLIENT_EVENT,
   REALTIME_SERVER_EVENT,
   REALTIME_STATUS,
-  REALTIME_TOOL_FAMILY,
   type RealtimeConnection,
   type RealtimeFunctionCall,
   type RealtimeStatus,
-  type RealtimeToolFamily,
   realtimeSessionConfig,
-  realtimeToolFamily,
-  recentConversationEntries,
-  rememberedFactsContextEvents,
-  SESSION_TOOL_KIND,
-  sessionContextEvents,
-  sessionContextText,
-  sessionToolAction,
   truncateResponseEvents,
-  workspaceProjectContextEvents,
-  workspaceProjectContextText,
 } from "@sidecar/realtime";
-import type { ObservedWorkspaceProject, Session, SessionIdentity } from "@sidecar/session";
-import { workspaceAgentModels } from "@sidecar/session";
+import type { SessionIdentity } from "@sidecar/session";
 import {
   ACT_RESULT_STATUS,
   isRecord,
@@ -68,6 +40,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import type { BrainAppActRequest, BrainAskResult } from "#shared/contracts";
 import {
   type BuiltRealtimeSessionConfig,
   createAgentsRealtimeTransport,
@@ -94,24 +67,25 @@ const CONNECT_TIMEOUT_MS = 15_000;
 export const REALTIME_SETTLE_TIMEOUT_MS = 20_000;
 
 /**
- * The order context is flushed in, so a turn's items land the same way every
- * time: what Luke can see, then what was already said across calls, then
- * where he can create. What Luke knows about himself is not an item at all:
- * the guide rides the session instructions, flushed ahead of these.
+ * How long a turn that asked the brain may wait for the answer and the reply
+ * voicing it. A brain turn reads transcripts and may act before it answers,
+ * so the ordinary settle backstop is far too short for it; the main process's
+ * own ask deadline is what ends a turn the brain never answers, and this is
+ * the backstop under that.
  */
-const CONTEXT_FLUSH_ORDER: readonly ContextItemKind[] = [
-  CONTEXT_ITEM_KIND.SESSIONS,
-  CONTEXT_ITEM_KIND.CONVERSATION,
-  CONTEXT_ITEM_KIND.MEMORY,
-  CONTEXT_ITEM_KIND.WORKSPACE_PROJECTS,
-];
+export const BRAIN_ASK_SETTLE_TIMEOUT_MS = 60_000;
 
 /**
- * How many unanswered deletes are worth remembering. One flush issues at most
- * one per kind, and each is answered within the round trip, so this is already
- * two turns' worth of room for something that ordinarily clears immediately.
+ * Whose words the caption is showing: a briefing the brain decided to give,
+ * or a reply to the developer. History records the two differently, and the
+ * band under the housing draws its chips for both from the same subject.
  */
-const MAXIMUM_PENDING_SUPERSEDES = CONTEXT_FLUSH_ORDER.length * 2;
+export const REPLY_KIND = {
+  BRIEFING: BRIEFING_SPEECH_KIND,
+  REPLY: "reply",
+} as const;
+
+export type ReplyKind = (typeof REPLY_KIND)[keyof typeof REPLY_KIND];
 
 /** Bounds interruption events whose successful requests receive no matching acknowledgement. */
 const MAXIMUM_PENDING_INTERRUPTIONS = 24;
@@ -134,27 +108,6 @@ const NO_ACTIVE_RESPONSE_CANCELLATION = /^Cancellation failed:\s*no active respo
  * trim would have corrected is already right.
  */
 const TRUNCATION_PAST_AUDIO_END = /^Audio content of \d+ms is already shorter than\b/i;
-
-/**
- * One kind of context as it is waiting to be said: the words, for telling an
- * unchanged answer from a fresh one, and how to build the item once it has a
- * name to occupy.
- */
-type PendingContext =
-  | {
-      text: string;
-      build: (itemId: string) => readonly WireRecord[];
-    }
-  | {
-      /** This kind should occupy no item once the next turn flushes context. */
-      text: undefined;
-    };
-
-/** A context item this call put in the conversation, and what it says. */
-interface LiveContext {
-  itemId: string;
-  text: string;
-}
 
 /**
  * One press's words on their way through a handshake: the capture reading the
@@ -188,27 +141,14 @@ export const REMOTE_QUIET_MS = 2_500;
 export const CAPTION_SEGMENT_LIMIT = 2;
 
 /**
- * Carries one validated action to the process that can perform it, answering
- * with what became of it. The renderer validates a tool call against the
- * observed roster before this is called, and the main process validates it
- * again against its registry — the carrier is a courier, not a gate.
+ * Carries one app act the brain decided — a settings change, the panel shown,
+ * the feedback composer brought up, the Updates row's button — to the renderer
+ * that can perform it, and answers what became of it. The act was validated
+ * against the guide in the main process before it got here; the carrier only
+ * performs and reports. Nothing here sends a note: the feedback act opens the
+ * composer, and what it holds leaves only by its own Send button.
  */
-export type SessionActionCarrier = (action: CarriedSessionAction) => Promise<WireRecord>;
-
-/**
- * Carries one validated app-level act — a settings change, the panel being
- * shown, or the feedback composer brought up — to the renderer that can
- * perform it. The same posture as the session carrier: validation happened
- * against the guide before this is called, and the carrier only performs and
- * reports. Nothing here sends a note: the feedback act opens the composer,
- * and what it holds leaves only by its own Send button.
- */
-export type AppActionCarrier = (action: CarriedAppAction) => Promise<WireRecord>;
-
-/** The issue half of the same courier: validated here, validated again in main. */
-export type IssueActionCarrier = (action: CarriedIssueAction) => Promise<WireRecord>;
-
-export type ActCarrier = (envelope: ActEnvelope) => Promise<WireRecord>;
+export type AppActionCarrier = (action: BrainAppActRequest["action"]) => Promise<WireRecord>;
 
 export interface RealtimeVoiceSessionCallbacks {
   onStatus(status: RealtimeStatus): void;
@@ -223,10 +163,10 @@ export interface RealtimeVoiceSessionCallbacks {
    * over both, oldest first, so the surface can stack them apart instead of
    * running two sentences together. The session owns the whole lifecycle —
    * the captions clear when the reply ends, is cut off, or the call closes —
-   * so the caller only ever draws what it is handed. `about` is the session a
-   * proactive announcement names, carried from the roster-validated update
-   * `speak()` was handed and living exactly as long as that reply; a
-   * conversation reply carries none.
+   * so the caller only ever draws what it is handed. `about` is the sessions
+   * the reply is about — a briefing's roster-validated subjects, or the ones
+   * the brain's answer named — living exactly as long as that reply; a reply
+   * the brain was not asked for carries none.
    */
   onCaption(
     texts: readonly string[] | undefined,
@@ -234,13 +174,18 @@ export interface RealtimeVoiceSessionCallbacks {
   ): void;
   /**
    * The words a reply leaves behind at the moment it ends — finished, talked
-   * over, or the call closing under it, whichever came. `about` is the
-   * announcement subject `speak()` set, or nothing for a conversation reply.
-   * The words were already spoken toward the room (the caption runs a little
-   * ahead of the audio, so a cut reply hands over slightly more than was
-   * heard); the caller records them so the thread survives the call.
+   * over, or the call closing under it, whichever came. `about` is what the
+   * caption was about, and `kind` says whether the words were a briefing or a
+   * reply, so History records each as itself. The words were already spoken
+   * toward the room (the caption runs a little ahead of the audio, so a cut
+   * reply hands over slightly more than was heard); the caller records them
+   * so the thread survives the call.
    */
-  onReplyEnded?(texts: readonly string[], about: readonly SessionIdentity[] | undefined): void;
+  onReplyEnded?(
+    texts: readonly string[],
+    about: readonly SessionIdentity[] | undefined,
+    kind: ReplyKind | undefined,
+  ): void;
   /**
    * The developer's own spoken turn, as the voice service transcribed it. It
    * arrives on the transcription's clock — often after the reply to it has
@@ -291,8 +236,12 @@ export interface MicrophoneSender {
 
 export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbacks {
   requestConnection(): Promise<RealtimeConnection | undefined>;
-  /** Absent means Luke can only speak: every tool call is rejected with a reason. */
-  carryAct?: ActCarrier;
+  /**
+   * Answers the voice's one tool: the developer's words go to the brain and
+   * its reply comes back for the voice to say. Absent means the voice can only
+   * speak for itself, and every ask is answered with a bounded refusal.
+   */
+  askBrain?: (question: string) => Promise<BrainAskResult>;
   /** The SDK call seam, injectable so the complete transport can be tested without WebRTC. */
   createSdkTransport?: SdkTransportFactory;
   /** The full session document used by the SDK; the introduction narrows this to no tools. */
@@ -323,6 +272,18 @@ function errorMessage(error: Error): string {
   return error.message;
 }
 
+/** The developer's words as the voice handed them to the brain, or nothing worth asking. */
+function askQuestion(argumentsJson: string): string | undefined {
+  try {
+    // SAFETY: JSON.parse returns a wire value; the record and string checks are the validation.
+    const parsed = JSON.parse(argumentsJson) as UnparsedWireValue;
+    if (!isRecord(parsed)) return undefined;
+    return text(parsed.question)?.trim().slice(0, maximumTypedAskLength) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Whether a quiet stretch is Luke's to answer for.
  *
@@ -345,7 +306,6 @@ interface SdkToolBatch {
   callIds: Set<string>;
   outputCallIds: Set<string>;
   epoch: number;
-  armed: boolean;
   responseDone: boolean;
   followUpStarted: boolean;
 }
@@ -432,99 +392,6 @@ export class RealtimeVoiceSession {
   #status: RealtimeStatus = REALTIME_STATUS.IDLE;
   #connecting: Promise<boolean> | undefined;
   #closed = false;
-  /**
-   * The roster as last reported, kept whole rather than as its rendered text:
-   * it is what a tool call is validated against, and a call may only name a
-   * session Luke was actually shown.
-   */
-  #sessions: readonly Session[] = [];
-  /**
-   * The conversation history as the caller last reported it: what was already
-   * said and done across calls, kept whole rather than as rendered text
-   * because each line's identity is offered only while the roster still
-   * observes its session — so the render happens against the roster as both
-   * now stand. The caller keeps its own copy and re-reports it after a
-   * reconnect, because the thread outlives any one call on purpose.
-   */
-  #conversationEntries: readonly ConversationEntry[] = [];
-  /**
-   * Whether the history has grown an announcement its live context item does
-   * not hold. An announcement is spoken out-of-band and writes nothing into
-   * the conversation, so it is the one history line a call cannot already
-   * hold as its own items — and the reason the seeded item may be superseded
-   * mid-call: without the re-seed, the turn after a mid-call announcement
-   * says "archive that chat" to a model that never saw which chat was
-   * announced. Cleared whenever the history item is brought current.
-   */
-  #conversationGrewAnnouncement = false;
-  /**
-   * The app guide as last provided, kept whole for the same reason the roster
-   * is: it is what a spoken ask about Luke himself is validated against, and a
-   * call may only name a setting Luke was actually described as having.
-   */
-  #guide: AppGuideSnapshot = EMPTY_APP_GUIDE;
-  /** The complete bounded memory list that automatic updates are validated against. */
-  #rememberedFacts: readonly RememberedFact[] = [];
-  /**
-   * The guide's rendered text, waiting to ride the session instructions, and
-   * the text the call's instructions last carried. The guide is not a context
-   * item: it is the same build-fixed prose on every turn, so it travels as a
-   * `session.update` refreshing the instructions — a stable prefix the
-   * service can cache — held here on the items' own economy: sent at the
-   * turn that reads it, and an unchanged guide sends nothing at all.
-   */
-  #guideTextPending: string | undefined;
-  #guideTextLive: string | undefined;
-  /**
-   * The projects a workspace can be created in, as last reported — kept whole
-   * for the same reason the roster is: a spoken creation ask may only name a
-   * project Luke was actually shown.
-   */
-  #workspaceProjects: readonly ObservedWorkspaceProject[] = [];
-  /**
-   * The developer's saved creation tie-breaks, as last reported beside the
-   * projects — kept because the validator applies them to a creation ask that
-   * names less than a full identity, the same defaulting the context text
-   * narrates. Held here or the narrated default and the validated one could
-   * drift apart.
-   */
-  #defaultWorkspaceProviderId: string | undefined;
-  #workspaceProjectDefaultIds: Readonly<Partial<Record<string, string>>> | undefined;
-  /**
-   * The issue roster, held to the same rule — and `undefined` while no
-   * tracker is connected, so an issue call then has nothing to be validated
-   * against and is refused as such.
-   */
-  #issues: readonly TrackedIssue[] | undefined;
-  /**
-   * The context each kind would send if a turn opened now, and the item each
-   * kind actually occupies in the conversation.
-   *
-   * Nothing is sent when it changes. A roster that churns every five seconds
-   * while the developer says nothing would otherwise write a fresh copy of
-   * itself into the conversation every five seconds, and the model's window is
-   * evicted oldest-first — so the developer's own earlier turns are what a pile
-   * of superseded rosters costs. Instead the newest answer waits here and goes
-   * in at the moment a turn opens, which is both the only moment it is read and
-   * the moment it is most nearly true.
-   *
-   * Teardown clears both, so the next call starts current rather than believing
-   * the last call already told it.
-   */
-  #contextPending = new Map<ContextItemKind, PendingContext>();
-  #contextLive = new Map<ContextItemKind, LiveContext>();
-  /**
-   * Rises for every context item named, so a replacement never claims the name
-   * of something a failed delete left behind.
-   */
-  #contextSequence = 0;
-  /**
-   * The deletes issued and not yet answered, by the name stamped on each. A
-   * delete is answered with an error when the item is already gone — evicted at
-   * the window's edge, most likely — and that error is this call's own business
-   * rather than a fault to report to the developer.
-   */
-  #pendingSupersedes = new Map<string, string>();
   /**
    * Cancel, clear, and trim requests not yet answered with an error, by their
    * stamped names. Their errors belong to the reply that was interrupted, so
@@ -644,13 +511,15 @@ export class RealtimeVoiceSession {
    */
   #captionSegments: { itemId: string | undefined; text: string }[] = [];
   /**
-   * The session the reply under way is announcing, or nothing for a
-   * conversation reply. Set only by `speak()` from the identity the attention
-   * layer validated, and cleared wherever the caption is — so the pressable
-   * face the surface draws for it can never outlive the announcement, and
-   * nothing a model said can choose what it points at.
+   * The sessions the reply under way is about, or nothing. Set only from
+   * identities the main process validated against the roster — a briefing's
+   * subjects, or the ones the brain's answer named — and cleared wherever the
+   * caption is, so the pressable notice the surface draws for them can never
+   * outlive the reply, and nothing the voice said can choose what it points at.
    */
   #captionAbout: readonly SessionIdentity[] | undefined;
+  /** Whether the words under way are a briefing or a reply, for History to record as such. */
+  #captionKind: ReplyKind | undefined;
   /**
    * Whether this call has ever reported a reply's audio running out. Once it
    * has, silence stops being evidence of anything: the server says when Luke is
@@ -660,18 +529,6 @@ export class RealtimeVoiceSession {
    */
   #audioEndingsReported = false;
   #settleTimer: ReturnType<typeof setTimeout> | undefined;
-  /**
-   * Whether the turn now under way is one the developer opened themselves — by
-   * speaking, or by typing an ask — and so the one and only kind of turn a tool
-   * call may run in. It is set true when a push-to-talk commit or a typed ask
-   * opens a response and false for every turn Luke opens himself — a proactive
-   * readout, the reply that voices a tool's outcome — so a session summary or a
-   * tool output that reads like an instruction can never make Luke act. Nothing
-   * that decides on the developer's behalf reaches a write path; this is the
-   * runtime half of that, beside the standing instructions and the
-   * `tool_choice` withheld on every turn Luke opens himself.
-   */
-  #toolTurnArmed = false;
   /**
    * A monotonic id for the turn now under way, bumped at every boundary a
    * turn crosses — a new one beginning, or the old one declared over. A tool
@@ -1308,10 +1165,9 @@ export class RealtimeVoiceSession {
     this.#pressCommitPending = false;
     this.#flushHeldAudio(capture, "delivered sealed");
     this.#retirePressCapture();
-    // A turn a tool may run in, exactly as a live commit is: the developer
-    // opened it by holding the key and spoke into it; only the delivery
-    // waited.
-    this.#startResponse(pushToTalkCommitEvents(), { toolsArmed: true });
+    // A turn exactly as a live commit is: the developer opened it by holding
+    // the key and spoke into it; only the delivery waited.
+    this.#startResponse(pushToTalkCommitEvents());
   }
 
   /**
@@ -1373,7 +1229,7 @@ export class RealtimeVoiceSession {
       }
       // The commit follows the last append on the same ordered channel, so it
       // closes over every word the capture delivered.
-      this.#startResponse(pushToTalkCommitEvents(), { toolsArmed: true });
+      this.#startResponse(pushToTalkCommitEvents());
       return;
     }
     this.#microphone.enabled = false;
@@ -1384,14 +1240,14 @@ export class RealtimeVoiceSession {
       this.#setStatus(REALTIME_STATUS.READY);
       return;
     }
-    // A turn a tool may run in: the developer opened it and spoke into it, so
-    // a tool call it emits is the developer's own ask. The device is NOT
+    // The developer opened this turn and spoke into it, so an ask the voice
+    // makes of the brain out of it is the developer's own. The device is NOT
     // released here, deliberately: closing a capture device is itself audible
     // on shared hardware — a Bluetooth headset renegotiates its codec and
     // playback drops out for a beat — and this is the very moment Luke starts
     // to answer. The track is disabled, so nothing is sent; the device itself
     // is let go when the exchange settles, in the quiet after the reply.
-    this.#startResponse(pushToTalkCommitEvents(), { toolsArmed: true });
+    this.#startResponse(pushToTalkCommitEvents());
   }
 
   /**
@@ -1407,18 +1263,45 @@ export class RealtimeVoiceSession {
    * and a keystroke is no reason to discard it.
    */
   sendText(text: string): boolean {
-    // A typed ask runs only on the developer's own call. Luke's speak-only
-    // call has been sent no roster and no guide, so a turn armed
-    // for tools has nothing real to validate against there — the caller
-    // stands that call down and opens the full one before asking. A typed ask
+    // A typed ask runs only on the developer's own call: Luke's speak-only
+    // call exists to say one thing and is not a conversation. A typed ask
     // needs no capture device, so one this call put away stays put away.
     if (!this.isConnected || !this.#withMicrophone) return false;
     if (this.#status === REALTIME_STATUS.LISTENING) return false;
     const ask = text.trim().slice(0, maximumTypedAskLength);
     if (!ask) return false;
     if (this.#status === REALTIME_STATUS.RESPONDING) this.#interruptReply();
-    this.#startResponse([], { toolsArmed: true });
+    this.#startResponse([]);
     this.#sdkTransport?.sendMessage(ask);
+    return true;
+  }
+
+  /**
+   * Speaks the brain's reply to a typed ask, reporting whether it could. The
+   * ask itself went to the brain over the bridge — the voice never saw it —
+   * so what the call is handed is the finished reply, on the briefing's own
+   * out-of-band terms, with the sessions the brain named as the caption's
+   * subject. A reply arriving over another interrupts it: the developer's
+   * turn always wins, however it is taken.
+   */
+  speakReply(briefing: string, sessionIds: readonly SessionIdentity[]): boolean {
+    if (!this.isConnected || !this.#withMicrophone) return false;
+    if (this.#status === REALTIME_STATUS.LISTENING) return false;
+    const events = briefingSpeechEvents({
+      kind: BRIEFING_SPEECH_KIND,
+      briefing,
+      sessionIds,
+      decidedAt: Date.now(),
+    });
+    if (events.length === 0) return false;
+    if (this.#status === REALTIME_STATUS.RESPONDING) this.#interruptReply();
+    this.#startResponse(events);
+    this.#captionAbout = sessionIds.map(({ providerId, providerSessionId }) => ({
+      providerId,
+      providerSessionId,
+    }));
+    this.#captionKind = REPLY_KIND.REPLY;
+    this.#emitCaption();
     return true;
   }
 
@@ -1470,10 +1353,6 @@ export class RealtimeVoiceSession {
     // the current turn's: a `response.done` that matches nothing can neither
     // act with the new turn's arming nor end the new turn early.
     this.#activeResponseId = undefined;
-    // The turn the arming belonged to is over with the reply. Every caller
-    // that opens a new developer turn arms it afresh in #startResponse; left
-    // true here, the cancelled reply's late calls would find it still standing.
-    this.#toolTurnArmed = false;
     // The cancel concludes the reply at the server before anything sent after
     // it is read — the channel is ordered — so nothing is outstanding from
     // here, and whatever `done` the cancelled reply still sends matches no
@@ -1510,11 +1389,11 @@ export class RealtimeVoiceSession {
   }
 
   /**
-   * Voices a proactive update that the attention layer already approved,
-   * reporting whether it could. A refusal is not a loss: the caller shows the
-   * sentence instead, which is the same thing it does when voice is off. That
-   * is better than holding it — the attention layer supersedes its own
-   * decisions, so a sentence saved for later is a sentence likely to be stale.
+   * Voices one turn the main process decided — a briefing the brain handed
+   * the voice, or a scripted onboarding beat — reporting whether it could. A
+   * refusal is not a loss: the queue keeps the turn and tries again on its
+   * own clock, and a briefing that waits too long ages out rather than being
+   * read out as though it just happened.
    */
   speak(speech: ProactiveSpeechTurn): boolean {
     if (isArrivalSpeech(speech)) {
@@ -1533,16 +1412,17 @@ export class RealtimeVoiceSession {
       this.#startResponse(calendarOnboardingSpeechEvents());
       return true;
     }
-    const events = proactiveSpeechEvents(speech);
+    const events = briefingSpeechEvents(speech);
     if (events.length === 0 || !this.isConnected || this.#turnBusy) return false;
     this.#startResponse(events);
     // After the start, which clears the last reply's caption and subject: the
-    // announcement's reply is the one now under way, and everything it
-    // captions is about this session until the reply ends.
-    this.#captionAbout = speech.map(({ providerId, providerSessionId }) => ({
+    // briefing's reply is the one now under way, and everything it captions
+    // is about these sessions until the reply ends.
+    this.#captionAbout = speech.sessionIds.map(({ providerId, providerSessionId }) => ({
       providerId,
       providerSessionId,
     }));
+    this.#captionKind = REPLY_KIND.BRIEFING;
     this.#emitCaption();
     return true;
   }
@@ -1621,20 +1501,9 @@ export class RealtimeVoiceSession {
     // the roster it renders against still stands — and everything it wrote is
     // cleared with the rest below, so a retired call keeps nothing pending.
     release(() => this.#clearCaption());
-    this.#sessions = [];
-    this.#conversationEntries = [];
-    this.#guide = EMPTY_APP_GUIDE;
-    this.#rememberedFacts = [];
-    this.#workspaceProjects = [];
-    this.#issues = undefined;
     // What was said on the call goes with the call. The pending answers go too:
     // they were built from stores this teardown is emptying, and the next call
     // is filled from the app afresh before it takes a turn.
-    this.#contextPending.clear();
-    this.#contextLive.clear();
-    this.#guideTextPending = undefined;
-    this.#guideTextLive = undefined;
-    this.#pendingSupersedes.clear();
     this.#pendingInterruptions.clear();
     this.#responseOutstanding = false;
     this.#audioDrained = false;
@@ -1669,24 +1538,13 @@ export class RealtimeVoiceSession {
 
   #startResponse(
     events: readonly WireRecord[],
-    {
-      toolsArmed = false,
-      keepCaption = false,
-    }: { toolsArmed?: boolean; keepCaption?: boolean } = {},
+    { keepCaption = false }: { keepCaption?: boolean } = {},
   ): void {
     // A pace still waiting from the last reply lands here, ahead of the
     // request: the channel is ordered and no response is in progress — a
     // cancel for the reply being talked over was sent before this — so the
     // reply about to be asked for is already spoken at the new pace.
     this.#flushPendingSpeed();
-    // The turn the developer just opened is the one that reads the context, so
-    // it is the moment the context goes in — ahead of the events asking for the
-    // reply, on a channel that keeps them in that order. The turns Luke opens
-    // himself get none: a readout has a sentence to say and nothing to look up,
-    // and a tool follow-up is answering from what this same flush already sent.
-    if (toolsArmed) {
-      this.#flushContext();
-    }
     // The track is deliberately left as it is. A reply that was cut off left it
     // disabled, and re-opening it here would let the tail of that reply — still
     // arriving, because the server sent it before it was told to stop — be
@@ -1711,9 +1569,8 @@ export class RealtimeVoiceSession {
     // one, and must find no active response to match.
     this.#activeResponseId = undefined;
     this.#audibleSince = undefined;
-    // A new turn: only a developer-opened one may run a tool, and any tool
-    // follow-up still awaiting from the last turn will see this and stand down.
-    this.#toolTurnArmed = toolsArmed;
+    // A new turn: any brain follow-up still awaiting from the last turn will
+    // see this and stand down.
     this.#turnEpoch += 1;
     // A new turn starts with a clean strip; a follow-up continuing the same
     // exchange keeps the words just said, and its own words stack under them.
@@ -1825,11 +1682,11 @@ export class RealtimeVoiceSession {
   }
 
   /** Starts the backstop for a reply whose proper ending never arrives. */
-  #armSettleTimer(): void {
+  #armSettleTimer(delayMs: number = REALTIME_SETTLE_TIMEOUT_MS): void {
     this.#settleTimer ??= setTimeout(() => {
       this.#settleTimer = undefined;
       this.#finishResponse();
-    }, REALTIME_SETTLE_TIMEOUT_MS);
+    }, delayMs);
   }
 
   #clearSettleTimer(): void {
@@ -1853,16 +1710,19 @@ export class RealtimeVoiceSession {
     // final and still known.
     const texts = this.#captionTexts();
     const about = this.#captionAbout;
+    const kind = this.#captionKind;
     this.#captionSegments = [];
     this.#captionAbout = undefined;
-    if (texts) this.#options.onReplyEnded?.(texts, about);
+    this.#captionKind = undefined;
+    if (texts) this.#options.onReplyEnded?.(texts, about, kind);
     this.#options.onCaption(undefined, undefined);
   }
 
-  /** Clears an undelivered announcement without admitting it to History. */
+  /** Clears an undelivered briefing without admitting it to History. */
   #discardCaption(): void {
     this.#captionSegments = [];
     this.#captionAbout = undefined;
+    this.#captionKind = undefined;
     this.#options.onCaption(undefined, undefined);
   }
 
@@ -1922,12 +1782,10 @@ export class RealtimeVoiceSession {
     // flight from it finds this boundary and stands down, rather than opening
     // its follow-up out of a silence already declared.
     this.#turnEpoch += 1;
-    // No reply is current once the turn is over, and the arming went with the
-    // turn: a `done` that outlives the settle backstop reads as a stranger's,
-    // its calls answered refused rather than run as writes out of a turn the
-    // developer was already told had ended.
+    // No reply is current once the turn is over: a `done` that outlives the
+    // settle backstop reads as a stranger's, and nothing of it reaches the
+    // turn the developer was already told had ended.
     this.#activeResponseId = undefined;
-    this.#toolTurnArmed = false;
     // The caption is of speech, and the speech is over. Whatever ended the
     // reply — the audio draining, an error, the settle timer — the words leave
     // with the meter and the face rather than lingering under a quiet capsule.
@@ -1981,250 +1839,6 @@ export class RealtimeVoiceSession {
   }
 
   /**
-   * Tells the conversation what Luke can currently see.
-   *
-   * The standing instructions describe session state as something Luke knows,
-   * so without this the prompt would assert a capability the connection never
-   * provides and a question about live work could not be answered from real
-   * data. Identical rosters are not resent.
-   */
-  updateSessions(sessions: readonly Session[]): void {
-    this.#sessions = sessions;
-    const now = Date.now();
-    this.#rememberContext(CONTEXT_ITEM_KIND.SESSIONS, sessionContextText(sessions, now), (itemId) =>
-      sessionContextEvents(sessions, itemId, now),
-    );
-    // The history is rendered against the roster, so a fresh roster re-renders
-    // it: a line whose session left the roster keeps its words and trades the
-    // identity no tool call may name any more for the note saying so. The
-    // render reaches the wire only until this call seeds its one history item;
-    // after that the staged copy is kept current for an announcement's
-    // re-seed, and otherwise waits for teardown to clear it.
-    this.#rememberConversation();
-  }
-
-  /**
-   * Tells the conversation what was already said and done across calls — the
-   * developer's typed asks, the words Luke spoke or announced, the acts he
-   * carried. It is what lets a bare "that chat" resolve on a call that never
-   * heard the words it points back at: an announcement is often read out on
-   * Luke's own speak-only call, which the developer's own press tears down,
-   * and a dropped call takes everything said on it. Context on the
-   * roster's own terms, flushed with it at the first turn of each call and
-   * left standing after that: what is said from then on lives in the call's
-   * own conversation items — except an announcement, which the caller marks
-   * with `announced` so the item is re-seeded at the next turn. An
-   * announcement is voiced out-of-band and enters the conversation nowhere
-   * else, so the item standing pat would leave "that chat" pointing at a
-   * line this call's model has never seen.
-   */
-  updateConversation(
-    entries: readonly ConversationEntry[],
-    { announced = false }: { announced?: boolean } = {},
-  ): void {
-    // The caller may retain the whole bounded thread for its own UI;
-    // this transport accepts only the recent slice that may reach the model.
-    this.#conversationEntries = recentConversationEntries(entries);
-    if (announced) this.#conversationGrewAnnouncement = true;
-    this.#rememberConversation();
-  }
-
-  /**
-   * Renders the history against the roster as both now stand. A history with
-   * nothing in it says nothing at all — a conversation that has not begun
-   * needs no line saying so.
-   */
-  #rememberConversation(): void {
-    const text = conversationHistoryText(this.#conversationEntries, this.#sessions);
-    if (text === undefined) {
-      this.#forgetContext(CONTEXT_ITEM_KIND.CONVERSATION);
-      return;
-    }
-    this.#rememberContext(CONTEXT_ITEM_KIND.CONVERSATION, text, (itemId) =>
-      conversationContextEvents(text, itemId),
-    );
-  }
-
-  /** Supplies durable facts as silent reply context, separate from conversation history. */
-  updateRememberedFacts(facts: readonly RememberedFact[]): void {
-    this.#rememberedFacts = facts;
-    const text = rememberedFactsText(facts);
-    if (text === undefined) {
-      this.#forgetContext(CONTEXT_ITEM_KIND.MEMORY);
-      return;
-    }
-    this.#rememberContext(CONTEXT_ITEM_KIND.MEMORY, text, (itemId) =>
-      rememberedFactsContextEvents(text, itemId),
-    );
-  }
-
-  /**
-   * Tells the conversation where a workspace can be created, the same way the
-   * roster travels: context that must never open Luke's mouth, kept whole
-   * because it is what a spoken creation ask is validated against. The default
-   * provider and the per-provider default projects ride along because they
-   * are part of the same answer — where a nameless ask goes — and a changed
-   * default is news the way a changed list is. Identical lists under
-   * identical defaults are not resent.
-   */
-  updateWorkspaceProjects(
-    projects: readonly ObservedWorkspaceProject[],
-    defaultProviderId?: string,
-    defaultProjectIds?: Readonly<Partial<Record<string, string>>>,
-  ): void {
-    this.#workspaceProjects = projects;
-    this.#defaultWorkspaceProviderId = defaultProviderId;
-    this.#workspaceProjectDefaultIds = defaultProjectIds;
-    this.#rememberContext(
-      CONTEXT_ITEM_KIND.WORKSPACE_PROJECTS,
-      workspaceProjectContextText(projects, defaultProviderId, defaultProjectIds),
-      (itemId) =>
-        workspaceProjectContextEvents(projects, itemId, defaultProviderId, defaultProjectIds),
-    );
-  }
-
-  /**
-   * Tells the conversation what Luke currently knows about himself. The guide
-   * rides the session instructions rather than a context item — build-fixed
-   * prose belongs on the cacheable prefix, not in a user message competing
-   * with the conversation — but it travels on the items' own terms: at the
-   * turn that reads it, only on the developer's call, and identical guides
-   * are not resent. The snapshot is kept whole for validating the spoken asks
-   * it advertises.
-   */
-  updateGuide(guide: AppGuideSnapshot): void {
-    this.#guide = guide;
-    this.#guideTextPending = appGuideContextText(guide);
-  }
-
-  /**
-   * Holds the tracker's roster a spoken issue act is validated against, here
-   * and again in the main process.
-   */
-  updateIssues(issues: readonly TrackedIssue[] | undefined): void {
-    this.#issues = issues;
-  }
-
-  /**
-   * Holds one kind of context until a turn asks for it. Nothing is sent here:
-   * what a turn needs is the newest answer, not every answer on the way to it.
-   */
-  #rememberContext(
-    kind: ContextItemKind,
-    text: string,
-    build: (itemId: string) => readonly WireRecord[],
-  ): void {
-    this.#contextPending.set(kind, { text, build });
-  }
-
-  /** Holds the absence of one context kind until the next developer turn. */
-  #forgetContext(kind: ContextItemKind): void {
-    this.#contextPending.set(kind, { text: undefined });
-  }
-
-  /**
-   * Puts the context a turn is about to be answered from into the conversation,
-   * each kind replacing whatever it said before.
-   *
-   * Two things happen per changed kind, in this order: the item holding the old
-   * answer is deleted, and the new one is created under a fresh name. Ordered
-   * that way because the channel is ordered — the conversation is never briefly
-   * holding two rosters, and never briefly holding none.
-   *
-   * An answer that has not changed since it was last said is left alone
-   * entirely, which is what keeps a quiet stretch of the conversation cached.
-   */
-  #flushContext(): void {
-    if (!this.#carriesContext()) return;
-    // The guide leads the items: it refreshes the instructions rather than
-    // occupying a conversation item, so there is nothing to supersede and an
-    // unchanged guide leaves the cached prefix exactly where it was.
-    if (this.#guideTextPending !== undefined && this.#guideTextPending !== this.#guideTextLive) {
-      this.#send(appGuideInstructionsEvents(this.#guideTextPending));
-      this.#guideTextLive = this.#guideTextPending;
-    }
-    for (const kind of CONTEXT_FLUSH_ORDER) {
-      const pending = this.#contextPending.get(kind);
-      if (!pending) continue;
-      const live = this.#contextLive.get(kind);
-      if (pending.text === undefined) {
-        if (!live) continue;
-        this.#contextSequence += 1;
-        this.#supersede(live.itemId);
-        this.#contextLive.delete(kind);
-        continue;
-      }
-      // The history is seeded once per call and re-seeded only for a grown
-      // announcement. Every turn the developer takes since the seed is
-      // already held by this call as real conversation items — so superseding
-      // the item for those would delete part of the conversation's cached
-      // prefix to restate turns the model already has. An announcement is the
-      // one line the call's items never hold: it is voiced out-of-band, so a
-      // history that grew one re-seeds at this turn, or a bare "that chat"
-      // would be resolved against a model that never saw the announcement.
-      // Teardown clears the live map either way, so the next call seeds
-      // everything said by then.
-      if (kind === CONTEXT_ITEM_KIND.CONVERSATION) {
-        if (live && !this.#conversationGrewAnnouncement) continue;
-        this.#conversationGrewAnnouncement = false;
-      }
-      if (live?.text === pending.text) continue;
-      this.#contextSequence += 1;
-      const itemId = contextItemId(kind, this.#contextSequence);
-      if (live) this.#supersede(live.itemId);
-      this.#send(pending.build(itemId));
-      this.#contextLive.set(kind, { itemId, text: pending.text });
-    }
-  }
-
-  /** Removes the item a fresher answer is replacing, and remembers asking. */
-  #supersede(itemId: string): void {
-    const eventId = contextSupersedeEventId(this.#contextSequence);
-    // A delete is answered within the round trip or not at all, so anything
-    // still waiting after this many is an answer that was never coming — and a
-    // record kept for the length of a call is one that grows for the length of
-    // a call. The oldest goes; insertion order is what makes it the oldest.
-    while (this.#pendingSupersedes.size >= MAXIMUM_PENDING_SUPERSEDES) {
-      const [oldest] = this.#pendingSupersedes.keys();
-      if (oldest === undefined) break;
-      this.#pendingSupersedes.delete(oldest);
-    }
-    this.#pendingSupersedes.set(eventId, itemId);
-    this.#send(contextSupersedeEvents({ itemId, eventId }));
-  }
-
-  /** Forgets a delete that has been answered, however it was answered. */
-  #settleSupersede(itemId: string): void {
-    for (const [eventId, pending] of this.#pendingSupersedes) {
-      if (pending === itemId) this.#pendingSupersedes.delete(eventId);
-    }
-  }
-
-  /**
-   * Whether an error is one of this call's own deletes coming back refused.
-   *
-   * The event is named when it is sent, so the answer naming it back is the
-   * reliable half of this. The item id is checked too because the field
-   * carrying the name back is not one the API reference states plainly, and a
-   * silent mismatch here would put an error on screen for something the
-   * developer neither did nor can do anything about.
-   */
-  #supersedeError(event: { message: string; eventId?: string }): boolean {
-    if (this.#pendingSupersedes.size === 0) return false;
-    if (event.eventId !== undefined && this.#pendingSupersedes.has(event.eventId)) {
-      this.#pendingSupersedes.delete(event.eventId);
-      return true;
-    }
-    for (const [eventId, itemId] of this.#pendingSupersedes) {
-      if (event.message.includes(itemId)) {
-        this.#pendingSupersedes.delete(eventId);
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /**
    * Handles an error answering one interruption without letting an old reply's
    * failure finish the new turn that interrupted it. The documented
    * no-active-response race is quiet; every other refusal still reaches the
@@ -2243,37 +1857,9 @@ export class RealtimeVoiceSession {
     return true;
   }
 
-  /**
-   * The context items this call currently holds, by kind — what the
-   * conversation would be answered from if a turn opened now. Exposed for the
-   * tests that hold this class to its one-item-per-kind promise.
-   */
-  get liveContextItemIds(): ReadonlyMap<ContextItemKind, string> {
-    return new Map([...this.#contextLive].map(([kind, live]) => [kind, live.itemId] as const));
-  }
-
-  /**
-   * Whether this call is one the rosters and the guide travel on. Only the
-   * developer's own call is: one Luke opened for himself exists to read a
-   * sentence out, so it is sent that sentence and nothing else — the narrowest
-   * thing that can leave the machine in a conversation nobody opened by hand.
-   * The stores above still update either way, so the developer's next call
-   * starts current.
-   *
-   * Judged by whose call it is, not by whether a device is open this instant:
-   * the device is the press's and comes and goes with each turn, while the
-   * context belongs to the conversation — a typed ask between turns and a
-   * held press delivered after its release are both answered from it.
-   */
-  #carriesContext(): boolean {
-    return this.isConnected && this.#withMicrophone;
-  }
-
   get #toolFollowUpPending(): boolean {
     const batch = this.#toolBatch;
-    return Boolean(
-      batch?.armed && batch.responseDone && !batch.followUpStarted && batch.callIds.size > 0,
-    );
+    return Boolean(batch?.responseDone && !batch.followUpStarted && batch.callIds.size > 0);
   }
 
   #observeSdkToolCall(record: WireRecord): void {
@@ -2325,7 +1911,6 @@ export class RealtimeVoiceSession {
             callIds: new Set(),
             outputCallIds: new Set(),
             epoch: this.#turnEpoch,
-            armed: this.#toolTurnArmed,
             responseDone: false,
             followUpStarted: false,
           };
@@ -2423,9 +2008,9 @@ export class RealtimeVoiceSession {
         // the developer already talked or typed over. The server had completed
         // the old reply before the cancel landed — it generates ahead of the
         // room — so its `done` still arrives, after the interrupt has already
-        // opened a new turn. Nothing of it may act with that turn's arming or
-        // end that turn early: its calls are answered refused so the model is
-        // not left waiting, and everything else about it is ignored.
+        // opened a new turn. Nothing of it may reach the brain as that turn's
+        // ask or end that turn early: its calls are answered refused so the
+        // model is not left waiting, and everything else about it is ignored.
         const fresh = event.responseId === this.#activeResponseId;
         // Whatever this reply turns out to be below, the server has concluded
         // it: from here the conversation can take a new `response.create`.
@@ -2444,7 +2029,6 @@ export class RealtimeVoiceSession {
                     callIds: new Set<string>(),
                     outputCallIds: new Set<string>(),
                     epoch: this.#turnEpoch,
-                    armed: this.#toolTurnArmed,
                     responseDone: false,
                     followUpStarted: false,
                   };
@@ -2457,19 +2041,18 @@ export class RealtimeVoiceSession {
               this.#toolCallResponseIds.set(call.callId, batch.responseId);
             }
           }
-          if (batch?.armed) {
+          if (batch) {
             // The turn now holds for the follow-up, because the READY an
-            // ending here would offer while the writes run is the edge the
-            // announcer rides — a reply taken there bumps the epoch, and the
-            // follow-up voicing the outcome stands down against it, the
-            // developer's answer abandoned for a notice. The hold is the
-            // write's, so it gets a clock of its own: whatever backstop the
-            // drain or an aside armed was watching for this `done` and may
-            // have seconds left on it, while a write that hangs past a whole
-            // window still meets a backstop — a turn that never ends is
-            // worse than one that ends early.
+            // ending here would offer while the brain thinks is the edge the
+            // queue rides — a briefing taken there bumps the epoch, and the
+            // follow-up voicing the answer stands down against it, the
+            // developer's answer abandoned for a briefing. The hold is the
+            // ask's, so it gets a clock of its own, long enough for a brain
+            // turn that reads and acts before it answers — while an ask that
+            // hangs past even that still meets a backstop, because a turn
+            // that never ends is worse than one that ends early.
             this.#clearSettleTimer();
-            this.#armSettleTimer();
+            this.#armSettleTimer(BRAIN_ASK_SETTLE_TIMEOUT_MS);
             this.#startToolFollowUpIfReady();
             return;
           }
@@ -2514,7 +2097,6 @@ export class RealtimeVoiceSession {
         return;
       }
       case REALTIME_SERVER_EVENT.CONVERSATION_ITEM_DELETED:
-        if (event.itemId) this.#settleSupersede(event.itemId);
         return;
       case REALTIME_SERVER_EVENT.ERROR:
         // Only Luke's own trim can draw a past-the-end refusal, the service
@@ -2522,12 +2104,6 @@ export class RealtimeVoiceSession {
         // it by — `error.event_id` is null on the wire. Recognized by its
         // sentence and never shown.
         if (TRUNCATION_PAST_AUDIO_END.test(event.message)) return;
-        // A delete this call issued can be answered with an error rather than a
-        // deletion, because the item was already gone — evicted at the window's
-        // edge is the way that happens. It is nothing the developer did and
-        // nothing they can act on, and reporting it would both put a fault on
-        // screen and, below, end a reply that is still being spoken.
-        if (this.#supersedeError(event)) return;
         if (this.#interruptionError(event)) return;
         this.#options.onError(event.message);
         // An error can arrive *instead of* `response.done` — an empty push-to-talk
@@ -2562,10 +2138,11 @@ export class RealtimeVoiceSession {
     }
     const responseId = this.#toolCallResponseIds.get(callId);
     const batch = responseId === this.#toolBatch?.responseId ? this.#toolBatch : undefined;
-    const armed = Boolean(
-      batch?.armed && batch.epoch === this.#turnEpoch && batch.callIds.has(callId),
-    );
-    return this.#toolCallOutput({ name, callId, argumentsJson }, armed);
+    // Only the reply now under way may ask the brain: a cancelled reply's
+    // late call — the developer already talked over it — is answered with a
+    // refusal rather than an ask the developer moved on from.
+    const current = Boolean(batch && batch.epoch === this.#turnEpoch && batch.callIds.has(callId));
+    return this.#toolCallOutput({ name, callId, argumentsJson }, current);
   }
 
   #toolOutputSent(callId: string): void {
@@ -2579,8 +2156,7 @@ export class RealtimeVoiceSession {
   #startToolFollowUpIfReady(): void {
     const batch = this.#toolBatch;
     if (
-      !batch?.armed ||
-      !batch.responseDone ||
+      !batch?.responseDone ||
       batch.followUpStarted ||
       batch.epoch !== this.#turnEpoch ||
       !this.isConnected ||
@@ -2592,101 +2168,67 @@ export class RealtimeVoiceSession {
     this.#startResponse(functionCallFollowUpEvents(), { keepCaption: true });
   }
 
-  async #toolCallOutput(call: RealtimeFunctionCall, armed: boolean): Promise<WireRecord> {
-    if (!armed) {
+  /**
+   * Answers the voice's one tool. The developer's words go to the brain over
+   * the bridge, and what comes back — the reply, or a bounded refusal — is
+   * the tool's output, for the follow-up to say. The brain acts on its own
+   * side behind its own validators; nothing here performs anything. The
+   * sessions the reply named become the caption's subject, so the band under
+   * the housing can point at them while the follow-up speaks.
+   */
+  async #toolCallOutput(call: RealtimeFunctionCall, current: boolean): Promise<WireRecord> {
+    if (!current) {
       return {
         status: ACT_RESULT_STATUS.REJECTED,
-        reason: "Only a request you make yourself can act on a session or an issue.",
+        reason: "That turn is over; ask again if it still matters.",
       };
     }
-    const family = realtimeToolFamily(call.name);
-    if (family === undefined) {
+    if (call.name !== ASK_BRAIN_TOOL.name) {
       return { status: ACT_RESULT_STATUS.REJECTED, reason: "No such tool exists." };
     }
-    const outputForFamily = {
-      [REALTIME_TOOL_FAMILY.APP]: () => this.#appToolCallOutput(call, armed),
-      [REALTIME_TOOL_FAMILY.ISSUE]: () => this.#issueToolCallOutput(call, armed),
-      [REALTIME_TOOL_FAMILY.SESSION]: () => this.#sessionToolCallOutput(call, armed),
-    } as const satisfies Record<RealtimeToolFamily, () => Promise<WireRecord>>;
-    return outputForFamily[family]();
-  }
-
-  async #appToolCallOutput(call: RealtimeFunctionCall, armed: boolean): Promise<WireRecord> {
-    // An ask about Luke himself is validated against the guide the app
-    // actually provided, then carried by the renderer the same way a session
-    // act is: perform, and answer with what became of it.
-    const appAction = appToolAction(call, this.#guide, this.#sessions, this.#rememberedFacts);
-    if (appAction.status === ACT_RESULT_STATUS.REJECTED) {
-      return { status: appAction.status, reason: appAction.reason };
+    const question = askQuestion(call.argumentsJson);
+    if (!question) {
+      return { status: ACT_RESULT_STATUS.REJECTED, reason: "The ask carried no words." };
     }
-    if (!this.#options.carryAct) {
+    if (!this.#options.askBrain) {
       return {
         status: ACT_RESULT_STATUS.REJECTED,
-        reason: "Acting on Luke's own settings is not available.",
+        reason: "Luke's judgment is not available on this call.",
       };
     }
+    // The ask can take a while — a brain turn reads and may act — so the
+    // turn's backstop is stretched to the ask's own clock for its duration.
+    this.#clearSettleTimer();
+    this.#armSettleTimer(BRAIN_ASK_SETTLE_TIMEOUT_MS);
+    const epoch = this.#turnEpoch;
+    let answer: BrainAskResult;
     try {
-      return await this.#options.carryAct({ id: call.name, act: appAction, armed });
-    } catch (error) {
+      answer = await this.#options.askBrain(question);
+    } catch {
       return {
         status: ACT_RESULT_STATUS.REJECTED,
-        reason: error instanceof Error ? error.message : "The change could not be made.",
+        reason: "Luke's judgment did not answer.",
       };
     }
-  }
-
-  async #sessionToolCallOutput(call: RealtimeFunctionCall, armed: boolean): Promise<WireRecord> {
-    // The build's own model tables ride into validation, so a creation ask
-    // that names a model is held to the same set the settings rows offer.
-    const action = sessionToolAction(
-      call,
-      this.#sessions,
-      this.#workspaceProjects,
-      workspaceAgentModels,
-      this.#defaultWorkspaceProviderId,
-      this.#workspaceProjectDefaultIds,
-    );
-    if (action.status === ACT_RESULT_STATUS.REJECTED)
-      return { status: action.status, reason: action.reason };
-    if (!this.#options.carryAct) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: "Acting on sessions is not available." };
+    if (answer.status !== ACT_RESULT_STATUS.ACCEPTED) {
+      return { status: answer.status, reason: answer.reason };
     }
-    try {
-      const output = await this.#options.carryAct({ id: call.name, act: action, armed });
-      if (
-        action.kind === SESSION_TOOL_KIND.MESSAGE &&
-        output.status === ACT_RESULT_STATUS.ACCEPTED
-      ) {
-        return { outcome: "message-sent" };
-      }
-      return output;
-    } catch (error) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: error instanceof Error ? error.message : "The action could not be carried out.",
-      };
+    // The follow-up that says the answer is the reply now under way, and its
+    // caption is about the sessions the brain named — set here, before the
+    // follow-up opens with the caption kept, so the chips stand with the words.
+    // Unless the developer stopped or took the turn while the ask was out: the
+    // follow-up stands down on that edge, and a late answer must not leave its
+    // sessions standing under the housing with no words to answer for. The
+    // answer itself still travels, because the brain did what it says it did.
+    if (epoch === this.#turnEpoch) {
+      this.#captionAbout = answer.sessionIds.map(({ providerId, providerSessionId }) => ({
+        providerId,
+        providerSessionId,
+      }));
+      this.#captionKind = REPLY_KIND.REPLY;
+      this.#emitCaption();
     }
-  }
-
-  async #issueToolCallOutput(call: RealtimeFunctionCall, armed: boolean): Promise<WireRecord> {
-    // No roster was ever sent, so there is nothing a call could have named.
-    if (!this.#issues) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: "No issue tracker is connected." };
-    }
-    const action = issueToolAction(call, this.#issues);
-    if (action.status === ACT_RESULT_STATUS.REJECTED)
-      return { status: action.status, reason: action.reason };
-    if (!this.#options.carryAct) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: "Acting on issues is not available." };
-    }
-    try {
-      return await this.#options.carryAct({ id: call.name, act: action, armed });
-    } catch (error) {
-      return {
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: error instanceof Error ? error.message : "The action could not be carried out.",
-      };
-    }
+    return { briefing: answer.briefing };
   }
 
   #send(events: readonly WireRecord[]): void {
