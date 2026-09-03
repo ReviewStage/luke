@@ -191,6 +191,9 @@ private struct SignedInView: View {
                         }
                     }
                 }
+            .navigationDestination(for: String.self) { destination in
+                if destination == "voice" { VoiceView() }
+            }
         }
         .sheet(isPresented: $profileShown) {
             ProfileSheet(identity: identity)
@@ -420,4 +423,3 @@ private struct CardButtonStyle: ButtonStyle {
             .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
-

@@ -29,6 +29,10 @@
 		AABBCC0000000000000000B5 /* LukeWatchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000B1 /* LukeWatchView.swift */; };
 		AABBCC0000000000000000B6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000B2 /* Assets.xcassets */; };
 		AABBCC0000000000000000B7 /* LukeKit in Frameworks */ = {isa = PBXBuildFile; productRef = AABBCC0000000000000000C0 /* LukeKit */; };
+		AABBCC0000000000000000D4 /* VoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D0 /* VoiceView.swift */; };
+		AABBCC0000000000000000D5 /* VoiceAudioCapturer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D1 /* VoiceAudioCapturer.swift */; };
+		AABBCC0000000000000000D6 /* VoiceAudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D2 /* VoiceAudioPlayer.swift */; };
+		AABBCC0000000000000000D7 /* VoiceActDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D3 /* VoiceActDispatcher.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -54,6 +58,10 @@
 		AABBCC0000000000000000B1 /* LukeWatchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LukeWatchView.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000B2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AABBCC0000000000000000B3 /* LukeWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LukeWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AABBCC0000000000000000D0 /* VoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceView.swift; sourceTree = "<group>"; };
+		AABBCC0000000000000000D1 /* VoiceAudioCapturer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceAudioCapturer.swift; sourceTree = "<group>"; };
+		AABBCC0000000000000000D2 /* VoiceAudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceAudioPlayer.swift; sourceTree = "<group>"; };
+		AABBCC0000000000000000D3 /* VoiceActDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceActDispatcher.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -120,6 +128,10 @@
 				AABBCC00000000000000001F /* SessionReplay.swift */,
 				AABBCC0000000000000000A1 /* PresenceBinding.swift */,
 				AABBCC0000000000000000A3 /* MarkdownMessageView.swift */,
+				AABBCC0000000000000000D0 /* VoiceView.swift */,
+				AABBCC0000000000000000D1 /* VoiceAudioCapturer.swift */,
+				AABBCC0000000000000000D2 /* VoiceAudioPlayer.swift */,
+				AABBCC0000000000000000D3 /* VoiceActDispatcher.swift */,
 				AABBCC000000000000000014 /* Assets.xcassets */,
 				AABBCC00000000000000001C /* Info.plist */,
 			);
@@ -298,6 +310,10 @@
 				AABBCC00000000000000008E /* SessionReplay.swift in Sources */,
 				AABBCC0000000000000000A2 /* PresenceBinding.swift in Sources */,
 				AABBCC0000000000000000A4 /* MarkdownMessageView.swift in Sources */,
+				AABBCC0000000000000000D4 /* VoiceView.swift in Sources */,
+				AABBCC0000000000000000D5 /* VoiceAudioCapturer.swift in Sources */,
+				AABBCC0000000000000000D6 /* VoiceAudioPlayer.swift in Sources */,
+				AABBCC0000000000000000D7 /* VoiceActDispatcher.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -455,6 +471,7 @@
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Luke uses the microphone to hear your voice when you hold the talk button.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -485,6 +502,7 @@
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Luke uses the microphone to hear your voice when you hold the talk button.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
