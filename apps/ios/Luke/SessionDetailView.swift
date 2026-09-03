@@ -15,22 +15,31 @@ struct OutgoingMessage: Identifiable, Equatable {
 
     let id = UUID()
     let text: String
+    /// When the developer pressed send, so a fetched copy of these words can
+    /// prove it is this send and not an identical, older message: a
+    /// conversation is allowed to repeat itself, and matching on the words
+    /// alone would hand this bubble to history.
+    let sentAt = Date()
     var delivery: Delivery
 }
 
-/// The session's own screen: the title at the top, the provider's word on
-/// where the turn stands as the agent's bubble, the developer's sends as
-/// their own bubbles, and a chat input at the bottom where — and only where —
-/// the latest observation advertised taking a message. The thread never
-/// pretends to be the transcript: a cloud session's conversation lives with
-/// its provider, so the agent's side is the bounded recap the roster already
-/// carries, and the sent bubbles live in memory for the app run alone. The
-/// recap and the sent bubbles draw their words as Markdown, since an agent's
-/// parting words and a developer's ask are both written in it; an error is a
+/// The session's own screen: the title at the top, the conversation as the
+/// bubbles a chat draws, and a chat input at the bottom where — and only
+/// where — the latest observation advertised taking a message. Where the
+/// roster advertised the provider's documented conversation read, opening
+/// this screen fetches the thread itself — the developer's sends and the
+/// agent's own words, read on demand and kept only while the screen shows
+/// them — and polls behind the cursor while the screen stays open. Where the
+/// read is not advertised, or a fetch cannot answer, the screen keeps
+/// exactly what it always drew: the provider's word on where the turn
+/// stands as the one agent bubble, and the sent bubbles in memory for the
+/// app run alone. Every bubble draws its words as Markdown, since an agent's
+/// words and a developer's ask are both written in it; an error is a
 /// provider's plain report and draws as the words it is.
 struct SessionDetailView: View {
     let session: RosterSession
     let actClient: ActClient
+    let conversationClient: ConversationClient
     @Binding var thread: [OutgoingMessage]
     /// Runs after a delivered send so the roster refreshes behind this screen.
     let onDelivered: () async -> Void
@@ -39,38 +48,182 @@ struct SessionDetailView: View {
     @Environment(ProductEventSender.self) private var events
     @State private var text = ""
     @FocusState private var composing: Bool
+    /// The fetched conversation, alive only while this screen is: state, not
+    /// storage, so closing the screen is what forgetting means here.
+    @State private var conversation: [ConversationMessage] = []
+    /// The poll's position: the newest provider message id a read consumed,
+    /// so each tick reads only what is newer. Nil until the opening read
+    /// lands, which is also what makes a failed opening retry on the tick.
+    @State private var forwardCursor: String?
+    /// The scroll's position: the stored offset the oldest fetched page began
+    /// at, and whether history stands before it.
+    @State private var oldestOffset: Int?
+    @State private var hasOlder = false
+    /// One older page at a time: the sentinel can reappear while a load runs.
+    @State private var loadingOlder = false
+    /// Whether the opening read has answered at all — success or refusal —
+    /// which is what retires the skeleton: until then the screen holds the
+    /// thread's place, and after a refusal the recap stands as the fallback.
+    @State private var openAttempted = false
+    /// Where the screen should land once the bubbles a read just handed it
+    /// have been laid out. A `scrollTo` in the same turn as the state change
+    /// would name rows the reader has not built yet, so the intent is state
+    /// and the jump runs from its own `onChange`, after the update.
+    @State private var scrollIntent: ScrollIntent?
+    /// Set once the opening jump to the conversation's end has run, and the
+    /// one thing that lets the history sentinel exist: before it, the first
+    /// layout still sits at the top, where the sentinel would fire at once
+    /// and drag the opened screen into history.
+    @State private var openSettled = false
+
+    private enum ScrollIntent: Equatable {
+        /// The newest bubble, pending sends included: how a chat opens.
+        case end
+        /// The bubble that was topmost before older history was prepended.
+        case anchor(String)
+    }
+
+    /// How long the poll rests between asks while the screen stays open, and
+    /// how many pages one poll may chase while the server says newer messages
+    /// remain.
+    private static let pollSeconds: UInt64 = 10
+    private static let maximumPollReads = 5
+    private static let conversationEndId = "conversation-end"
+    /// How long the opening layout gets to settle before the end is pinned a
+    /// second time, and how long the top sentinel must stay visible before
+    /// its ask counts — both measured against the churn of a tall thread
+    /// realizing its rows, which is over well inside half a second.
+    private static let layoutSettleNanoseconds: UInt64 = 300_000_000
+    private static let sentinelDwellNanoseconds: UInt64 = 450_000_000
 
     var body: some View {
-        // Top-anchored like a short Messages thread; a send scrolls to its
-        // own bubble instead of re-anchoring the whole thread, which would
-        // drop short content to the screen's bottom edge.
+        // Anchored like Messages: the screen opens at the conversation's end,
+        // and scrolling to the top reaches back into history one page at a
+        // time.
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(spacing: 14) {
+                // Lazy so the top sentinel appears — and fetches — only when
+                // the scroll actually reaches it.
+                LazyVStack(spacing: 14) {
                     metaHeader
-                    if let words = session.error ?? session.recap {
-                        agentBubble(words, isError: session.error != nil)
+                    if hasOlder && openSettled {
+                        // The sentinel: reaching it is the ask for the page
+                        // before the one on screen. A failed page leaves it
+                        // standing, and scrolling away and back asks again.
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            // A dwell, not a glance: a lazy row can flash
+                            // realized while a tall thread's layout churns,
+                            // and a page loaded off that flash re-anchors the
+                            // opened screen into history. Scrolling away
+                            // cancels the wait, so only a reader actually
+                            // holding the top asks for more.
+                            .task {
+                                try? await Task.sleep(
+                                    nanoseconds: Self.sentinelDwellNanoseconds)
+                                guard !Task.isCancelled else { return }
+                                loadOlder()
+                            }
+                    }
+                    if conversation.isEmpty {
+                        // While the opening read is in flight the screen says
+                        // "a thread is coming" rather than flashing the recap
+                        // it would only replace; the recap is the answer once
+                        // the read cannot give one, or was never advertised.
+                        if session.canReadConversation && !openAttempted {
+                            ConversationSkeleton()
+                        } else if let words = session.error ?? session.recap {
+                            agentBubble(words, isError: session.error != nil)
+                        }
+                    } else {
+                        // Masked from the recording the way the desktop
+                        // blocks its History subtree: a session's own words
+                        // do not leave the machine in a replay, where the
+                        // recap always traveled and still does.
+                        ForEach(conversation) { message in
+                            conversationBubble(message)
+                                .postHogMask()
+                        }
+                        // The provider's failure word outranks parting words
+                        // here exactly as it does on the row.
+                        if let error = session.error {
+                            agentBubble(error, isError: true)
+                        }
                     }
                     ForEach(thread) { message in
                         userBubble(message)
                     }
+                    // The end of the chat as a scroll target of its own:
+                    // aiming a jump at the last bubble is unreliable in a
+                    // lazy stack whose Markdown is still sizing, where this
+                    // marker is always laid out and always last.
+                    Color.clear
+                        .frame(height: 1)
+                        .id(Self.conversationEndId)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
             }
-            .onChange(of: thread.count) {
-                guard let last = thread.last else { return }
+            // A conversation opens at its end and follows new messages while
+            // the reader is already there — the system's own chat anchoring.
+            // A screen that will only ever draw the recap keeps the top
+            // anchor its short content has always had.
+            .defaultScrollAnchor(session.canReadConversation ? .bottom : .top)
+            .onChange(of: thread.count) { previousCount, count in
+                // Only growth is a send worth following: a handover shrinks
+                // this thread from a poll, and a reader up in history must
+                // not be dragged to the bottom by it.
+                guard count > previousCount, let last = thread.last else { return }
                 withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
             }
             // The keyboard rising must not cover the newest bubble: focus
             // scrolls back to it once the inset settles, like Messages.
             .onChange(of: composing) {
-                guard composing, let last = thread.last else { return }
-                withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                guard composing else { return }
+                // The newest bubble may be a fetched one once every send has
+                // handed over, so the fallback mirrors the opening jump.
+                if let last = thread.last {
+                    withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                } else if let last = conversation.last {
+                    withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                }
             }
             .onAppear {
                 if let last = thread.last {
                     proxy.scrollTo(last.id, anchor: .bottom)
+                }
+            }
+            .onChange(of: scrollIntent) {
+                guard let intent = scrollIntent else { return }
+                scrollIntent = nil
+                switch intent {
+                case .end:
+                    // The marker sits below pending sends and fetched thread
+                    // alike, so the open lands on whichever is newest. A very
+                    // long newest message can finish sizing after this jump,
+                    // growing the content below the landed offset, so one
+                    // late second jump pins the end once layout has settled —
+                    // and only then may the history sentinel exist.
+                    proxy.scrollTo(Self.conversationEndId, anchor: .bottom)
+                    Task {
+                        try? await Task.sleep(nanoseconds: Self.layoutSettleNanoseconds)
+                        proxy.scrollTo(Self.conversationEndId, anchor: .bottom)
+                        openSettled = true
+                    }
+                case .anchor(let id):
+                    proxy.scrollTo(id, anchor: .top)
+                }
+            }
+            .task(id: session.id) {
+                guard session.canReadConversation else { return }
+                while !Task.isCancelled {
+                    if forwardCursor == nil {
+                        await openConversation()
+                    } else {
+                        await pollNewer()
+                    }
+                    try? await Task.sleep(nanoseconds: Self.pollSeconds * 1_000_000_000)
                 }
             }
         }
@@ -138,6 +291,157 @@ struct SessionDetailView: View {
             UIPasteboard.general.string = words
         } label: {
             Label("Copy", systemImage: "doc.on.doc")
+        }
+    }
+
+    /// A fetched message wears the anatomy the screen already draws: the
+    /// agent's words in the card bubble, the developer's in the accent one.
+    @ViewBuilder
+    private func conversationBubble(_ message: ConversationMessage) -> some View {
+        switch message.author {
+        case .agent:
+            agentBubble(message.text, isError: false)
+        case .user:
+            HStack {
+                Spacer(minLength: 48)
+                MarkdownMessageView(message.text)
+                    .foregroundStyle(.white)
+                    .tint(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 18))
+                    .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 18))
+                    .contextMenu { copyAction(for: message.text) }
+            }
+        }
+    }
+
+    /// The opening read: the latest page of the conversation, drawn from its
+    /// end the way Messages opens a chat. Its answer seeds both positions —
+    /// the poll's forward cursor and the scroll's oldest offset. A failed
+    /// opening changes nothing: the recap fallback stands, and the next tick
+    /// tries again because the cursor is still unset.
+    private func openConversation() async {
+        defer { openAttempted = true }
+        do {
+            let answer = try await read(.latest)
+            conversation = answer.messages
+            forwardCursor = answer.lastMessageId
+            oldestOffset = answer.firstOffset
+            hasOlder = answer.hasOlder
+            handOverDeliveredSends()
+            scrollIntent = .end
+        } catch {}
+    }
+
+    /// The poll: everything newer than the cursor, chased while the server
+    /// says more remain, to a bounded number of pages. New bubbles append
+    /// without moving the scroll — a reader up in history stays where they
+    /// are, like Messages.
+    private func pollNewer() async {
+        for _ in 0 ..< Self.maximumPollReads {
+            guard !Task.isCancelled, let cursor = forwardCursor else { return }
+            do {
+                let answer = try await read(.after(cursor))
+                let known = Set(conversation.map(\.id))
+                conversation.append(contentsOf: answer.messages.filter { !known.contains($0.id) })
+                if let last = answer.lastMessageId {
+                    forwardCursor = last
+                }
+                handOverDeliveredSends()
+                guard answer.hasMore else { return }
+            } catch {
+                return
+            }
+        }
+    }
+
+    /// A scroll to the top: the page of history just before what the screen
+    /// holds, prepended with the viewport re-anchored to the bubble that was
+    /// topmost, so the reader stays on the words they were looking at.
+    private func loadOlder() {
+        guard !loadingOlder, hasOlder, let offset = oldestOffset, offset > 0 else { return }
+        loadingOlder = true
+        Task {
+            defer { loadingOlder = false }
+            do {
+                let answer = try await read(.before(offset))
+                let anchor = conversation.first?.id
+                let known = Set(conversation.map(\.id))
+                conversation.insert(
+                    contentsOf: answer.messages.filter { !known.contains($0.id) },
+                    at: 0
+                )
+                if let first = answer.firstOffset {
+                    oldestOffset = first
+                }
+                hasOlder = answer.hasOlder
+                if let anchor {
+                    scrollIntent = .anchor(anchor)
+                }
+            } catch {}
+        }
+    }
+
+    private func read(_ position: ConversationPosition) async throws -> ConversationAnswer {
+        try await account.authorized { token in
+            try await conversationClient.read(
+                accessToken: token,
+                providerId: session.providerId,
+                providerSessionId: session.sessionId,
+                position: position
+            )
+        }
+    }
+
+    /// A send whose words now stand in the fetched thread hands its bubble
+    /// over rather than standing beside it twice. The handover demands the
+    /// fetched copy be recorded around this send's own moment — behind a
+    /// tolerance for the two clocks involved — because the same words earlier
+    /// in the history are a different message, and a page carrying them must
+    /// not swallow the bubble of a send still in flight. A copy the provider
+    /// gave no timestamp proves nothing, so the bubble stands beside it
+    /// rather than vanishing on a guess.
+    private static let sendClockTolerance: TimeInterval = 120
+
+    /// A copy hands over one bubble and is spent: without the claim, a second
+    /// identical quick send would match the first send's copy — the sweep
+    /// runs on every poll — and both bubbles would vanish on one message.
+    /// Claims live as long as the screen's own fetched thread does.
+    @State private var claimedCopyIds: Set<String> = []
+
+    /// Claims the oldest unspent fetched copy of this send's words recorded
+    /// at or after its own moment, or answers that none stands yet.
+    private func claimFetchedCopy(for outgoing: OutgoingMessage) -> Bool {
+        let match = conversation.first { fetched in
+            fetched.author == .user
+                && !claimedCopyIds.contains(fetched.id)
+                && fetched.text == outgoing.text
+                && fetched.receivedAt.map {
+                    $0 >= outgoing.sentAt.addingTimeInterval(-Self.sendClockTolerance)
+                } == true
+        }
+        guard let match else { return false }
+        claimedCopyIds.insert(match.id)
+        return true
+    }
+
+    /// Runs against the whole fetched thread rather than one page, because a
+    /// copy can land in a poll while its send is still in flight: the sweep
+    /// here catches bubbles already delivered, and `send` checks once more at
+    /// the moment a bubble turns delivered, so neither order leaves the same
+    /// words standing twice. Oldest send first, so claims pair bubbles and
+    /// copies in arrival order.
+    private func handOverDeliveredSends() {
+        let delivered = thread
+            .filter { $0.delivery == .sent }
+            .sorted { $0.sentAt < $1.sentAt }
+        var handedOver: Set<UUID> = []
+        for bubble in delivered where claimFetchedCopy(for: bubble) {
+            handedOver.insert(bubble.id)
+        }
+        if !handedOver.isEmpty {
+            thread.removeAll { handedOver.contains($0.id) }
         }
     }
 
@@ -272,9 +576,55 @@ struct SessionDetailView: View {
                 delivery = .failed(reason: error.localizedDescription)
             }
             if let index = thread.firstIndex(where: { $0.id == message.id }) {
-                thread[index].delivery = delivery
+                // A poll can fetch the send's copy while the bubble is still
+                // in flight, and that page never comes again: the moment of
+                // delivery re-checks, so the bubble hands over instead of
+                // standing beside its own copy.
+                if delivery == .sent, claimFetchedCopy(for: thread[index]) {
+                    thread.remove(at: index)
+                } else {
+                    thread[index].delivery = delivery
+                }
             }
             if delivery == .sent { await onDelivered() }
+        }
+    }
+}
+
+/// Pulsing placeholder bubbles while the opening read is in flight, shaped
+/// like the short exchange they stand for — the roster list's SkeletonRow at
+/// this screen's scale. Placeholder blocks carry no words, no copy menu, and
+/// no read-path ring: there is nothing to copy and no path has answered yet.
+private struct ConversationSkeleton: View {
+    @State private var opacity: Double = 0.55
+
+    var body: some View {
+        VStack(spacing: 14) {
+            skeletonBubble(agent: true, characters: 64)
+            skeletonBubble(agent: false, characters: 26)
+            skeletonBubble(agent: true, characters: 96)
+        }
+        .accessibilityHidden(true)
+        .opacity(opacity)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                opacity = 1.0
+            }
+        }
+    }
+
+    /// Neutral on both sides: an accent-filled placeholder would read as a
+    /// send nobody made, where a gray block only says a bubble belongs here.
+    private func skeletonBubble(agent: Bool, characters: Int) -> some View {
+        HStack {
+            if !agent { Spacer(minLength: 48) }
+            Text(String(repeating: "x", count: characters))
+                .font(.system(size: 15))
+                .redacted(reason: .placeholder)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(Color.cardFill, in: RoundedRectangle(cornerRadius: 18))
+            if agent { Spacer(minLength: 48) }
         }
     }
 }

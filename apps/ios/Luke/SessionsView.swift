@@ -47,6 +47,7 @@ struct SessionsView: View {
     private let rosterClient = RosterClient(serviceURL: AccountConstants.serviceURL)
     private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
     private let projectsClient = ProjectsClient(serviceURL: AccountConstants.serviceURL)
+    private let conversationClient = ConversationClient(serviceURL: AccountConstants.serviceURL)
 
     var body: some View {
         Group {
@@ -66,6 +67,7 @@ struct SessionsView: View {
             SessionDetailView(
                 session: sessions.first { $0.id == opened.id } ?? opened,
                 actClient: actClient,
+                conversationClient: conversationClient,
                 thread: Binding(
                     get: { threads[opened.id] ?? [] },
                     set: { threads[opened.id] = $0 }
