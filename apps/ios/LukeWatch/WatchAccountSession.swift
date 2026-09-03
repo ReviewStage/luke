@@ -98,3 +98,20 @@ final class WatchAccountSession {
         value.flatMap { $0.isEmpty ? nil : $0 }
     }
 }
+
+// MARK: - AccountTokenProviding
+
+extension WatchAccountSession: AccountTokenProviding {
+    var accountEmail: String? {
+        guard case .signedIn(let email, _) = state else { return nil }
+        return email
+    }
+
+    /// The watch never refreshes tokens independently — spending the phone's
+    /// rotating refresh token would invalidate the phone's own session. A near-
+    /// expiry token is surfaced as `.signedOut` so the caller waits for the phone
+    /// to push a fresh pair rather than attempting a refresh.
+    func refreshAccessToken() async throws -> String {
+        throw AccountSessionError.signedOut
+    }
+}

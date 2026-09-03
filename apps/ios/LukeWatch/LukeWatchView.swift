@@ -8,7 +8,9 @@ struct LukeWatchView: View {
         case .signedOut:
             SignedOutView()
         case .signedIn:
-            SignedInPlaceholderView()
+            NavigationStack {
+                WatchRosterView()
+            }
         }
     }
 }
@@ -25,17 +27,5 @@ private struct SignedOutView: View {
                 .foregroundStyle(.secondary)
         }
         .padding()
-    }
-}
-
-private struct SignedInPlaceholderView: View {
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "bolt.fill")
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-            Text("Luke")
-                .font(.headline)
-        }
     }
 }
