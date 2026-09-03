@@ -25,9 +25,7 @@ private final class VoiceSessionModel {
     var status: RealtimeStatus = .idle
     var messages: [VoiceTranscriptMessage] = []
     var errorMessage: String?
-    // What the next mint asks for. Read at each start rather than captured
-    // once, so a reconnect after the idle close speaks in the voice and at
-    // the pace chosen since.
+    // Read at each start, so a reconnect mints with the latest choice.
     var voice = RealtimeVoice.default
     var speed = RealtimeVoiceSpeed.default
     private var session: RealtimeSession?
@@ -128,10 +126,7 @@ private final class VoiceSessionModel {
         }
     }
 
-    /// A new voice is heard right away: a connection already open was minted
-    /// in the old one, so it is closed and a fresh one opened, the way the
-    /// desktop starts a conversation under way afresh. An idle screen only
-    /// remembers the choice, and the next press mints in it.
+    /// The voice is fixed at mint time, so an open connection is reopened.
     func changeVoice(_ newVoice: RealtimeVoice, accountSession: AccountSession) async {
         guard newVoice != voice else { return }
         voice = newVoice
@@ -140,8 +135,6 @@ private final class VoiceSessionModel {
         await start(accountSession: accountSession)
     }
 
-    /// A new pace reaches the open session at once and is heard from the
-    /// next reply on; the next mint carries it too.
     func changeSpeed(_ newSpeed: RealtimeVoiceSpeed) {
         guard newSpeed != speed else { return }
         speed = newSpeed

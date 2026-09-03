@@ -41,16 +41,13 @@ public enum ProductSessionAct: String, Sendable {
     case agentAdd = "agent_add"
 }
 
-/// The settings this app can change, of the shared vocabulary's
-/// `APP_SETTING_ID`: the voice settings its sheet offers and nothing wider.
+/// The subset of the shared vocabulary's `APP_SETTING_ID` this app can change.
 public enum ProductSettingID: String, Sendable {
     case voice
     case voiceSpeed = "voice_speed"
 }
 
-/// The shape a setting's new value is counted in, never the value itself:
-/// whether a choice was made or returned to nothing is the whole of what
-/// travels, so the voice chosen is not a property a count could carry.
+/// The shape of a setting's change, never its value.
 public enum ProductSettingValue: String, Sendable {
     case on
     case off

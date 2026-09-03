@@ -833,7 +833,6 @@ final class RealtimeSessionStateTests: XCTestCase {
         let updates = ws.outgoing.filter { $0.contains(#""type":"session.update""#) }
         XCTAssertEqual(updates.count, 1)
         XCTAssertTrue(updates[0].contains(#""speed":1.5"#))
-        // The context item still leads: the model learns the sessions before it hears a pace.
         let contextIndex = ws.outgoing.firstIndex { $0.contains(#""type":"conversation.item.create""#) }
         let updateIndex = ws.outgoing.firstIndex { $0.contains(#""type":"session.update""#) }
         XCTAssertNotNil(contextIndex)
@@ -849,8 +848,6 @@ final class RealtimeSessionStateTests: XCTestCase {
         try await Task.sleep(nanoseconds: 20_000_000)
         XCTAssertTrue(ws.outgoing.isEmpty)
 
-        // Nothing waits for the next open either: the caller mints that
-        // connection at the speed it holds, so an update would repeat it.
         Task { ws.deliver(#"{"type":"session.created"}"#) }
         await session.connect()
         try await Task.sleep(nanoseconds: 50_000_000)

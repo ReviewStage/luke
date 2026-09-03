@@ -1,17 +1,8 @@
 import LukeKit
 import SwiftUI
 
-/// The voice settings the desktop's Voice page offers that reach this
-/// device's own conversation: the voice Luke speaks with and how fast. In the
-/// system's own sheet vocabulary like the Filter & Sort sheet — inline title,
-/// toolbar Done, grouped form — and presented at a half height that expands.
-/// The Mac-only rows (the microphone choice, quieting Music and Spotify,
-/// pausing announcements, captions) are about a machine this app does not
-/// run on, so they are not drawn rather than drawn disabled. The two values
-/// live in UserDefaults under keys the voice screen reads too, so a change
-/// here is heard there: the voice at once, by a fresh connection, and the
-/// speed from the next reply on. The speed is a slider over the vocabulary's
-/// four multiples, labelled in numbers, stepping so it lands on nothing between.
+/// The desktop's voice settings that apply on this device. The Mac-only rows
+/// (microphone choice, media ducking, announcements, captions) are not drawn.
 struct VoiceSettingsSheet: View {
     @AppStorage(VoiceSettingsKey.voice) private var voice = RealtimeVoice.default
     @AppStorage(VoiceSettingsKey.speed) private var speed = RealtimeVoiceSpeed.default
@@ -75,8 +66,7 @@ struct VoiceSettingsSheet: View {
         voice != RealtimeVoice.default || speed != RealtimeVoiceSpeed.default
     }
 
-    // Each control counts its own change, so a reset counts once as a reset
-    // rather than once more per field it moved, the way the desktop counts.
+    // Each control counts its own change so a reset counts once, as a reset.
 
     private var voiceChoice: Binding<RealtimeVoice> {
         Binding(
@@ -89,9 +79,6 @@ struct VoiceSettingsSheet: View {
         )
     }
 
-    /// The slider's steps are the vocabulary's multiples and nothing between,
-    /// so every value it can settle on reads back as a speed; one that does
-    /// not is left unstored rather than sent for the mint to refuse.
     private var speedMultiplier: Binding<Double> {
         Binding(
             get: { speed.multiplier },

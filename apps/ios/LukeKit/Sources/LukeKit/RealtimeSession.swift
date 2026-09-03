@@ -186,8 +186,7 @@ public final class RealtimeSession {
     private var interruptedResponseIds: Set<String> = []
     private var pendingInterruptionEventIds: Set<String> = []
     private var interruptionSequence = 0
-    // A speed chosen while the socket is still opening: session.update needs
-    // the channel, so it waits for the open and is sent then, once.
+    // session.update needs the channel; a speed chosen while connecting waits for it.
     private var pendingSpeed: Double?
 
     public init(options: RealtimeSessionOptions) {
@@ -260,11 +259,9 @@ public final class RealtimeSession {
         }
     }
 
-    /// Asks the open session to speak at `speed` times the voice's natural
-    /// rate from its next reply on. The API applies a speed only between
-    /// model turns, so one landing while Luke is speaking is heard on the
-    /// following reply. An idle session sends nothing: its next connection
-    /// is minted at the speed the caller holds, so there is nothing to update.
+    /// The API applies a speed between model turns, so it is heard from the
+    /// next reply. An idle session sends nothing: the caller mints the next
+    /// connection at the speed it holds.
     public func applySpeed(_ speed: Double) {
         guard speed.isFinite, speed > 0 else { return }
         switch status {
