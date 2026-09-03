@@ -48,8 +48,6 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
     public let title: String
     public let status: String
     public let workspace: String?
-    /// HTTPS page for the session's repository, when its provider reported one.
-    public let repositoryLink: URL?
     public let branch: String?
     /// HTTPS address of the work this session published, when it reported one.
     public let change: URL?
@@ -87,7 +85,6 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
         title: String,
         status: String,
         workspace: String? = nil,
-        repositoryLink: URL? = nil,
         branch: String? = nil,
         change: URL? = nil,
         recap: String? = nil,
@@ -105,7 +102,6 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
         self.title = title
         self.status = status
         self.workspace = workspace
-        self.repositoryLink = repositoryLink
         self.branch = branch
         self.change = change
         self.recap = recap
@@ -131,7 +127,6 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
         self.title = title
         self.status = status
         self.workspace = json["workspace"] as? String
-        self.repositoryLink = Self.httpsURL(json["repositoryLink"])
         self.branch = json["branch"] as? String
         self.change = Self.httpsURL(json["change"])
         self.recap = json["recap"] as? String

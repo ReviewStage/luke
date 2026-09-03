@@ -302,8 +302,6 @@ export interface SessionDetail {
   /** What the session is doing right now, such as the tool it is running. */
   activity?: string;
   repository?: string;
-  /** The repository's provider-owned HTTPS page, when it reports one. */
-  repositoryLink?: string;
   branch?: string;
   model?: string;
   /** Why the session stopped, when it stopped on something it cannot pass. */
@@ -756,7 +754,6 @@ export function normalizeSessionDetail(detail: SessionDetail | undefined): Sessi
 
   const activity = boundedText(detail.activity, maximumSessionDetailLength);
   const repository = boundedText(detail.repository, maximumSessionDetailLength);
-  const repositoryLink = sessionChange(detail.repositoryLink);
   const branch = boundedText(detail.branch, maximumSessionDetailLength);
   const model = boundedText(detail.model, maximumSessionDetailLength);
   const error = boundedText(detail.error, maximumSessionDetailLength);
@@ -767,7 +764,6 @@ export function normalizeSessionDetail(detail: SessionDetail | undefined): Sessi
   const result: SessionDetail = {};
   if (activity) result.activity = activity;
   if (repository) result.repository = repository;
-  if (repositoryLink) result.repositoryLink = repositoryLink;
   if (branch) result.branch = branch;
   if (model) result.model = model;
   if (error) result.error = error;

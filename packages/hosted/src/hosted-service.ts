@@ -434,8 +434,6 @@ export interface ObservedSession {
   status: string;
   /** Repository label or workspace name, when the provider reported one. */
   workspace?: string;
-  /** HTTPS page for that repository, when the provider reported one. */
-  repositoryLink?: string;
   /** Current branch, when the provider reported one. */
   branch?: string;
   /** HTTPS address of the work the session published, when it reported one. */
@@ -514,10 +512,6 @@ function observedSessionFromWire(value: UnparsedWireValue): ObservedSession | un
   const status = text(value.status);
   if (!status || !OBSERVED_SESSION_STATUS_SET.has(status)) return undefined;
   const workspace = text(value.workspace);
-  const repositoryLinkValue = text(value.repositoryLink);
-  const repositoryLink = repositoryLinkValue
-    ? normalizeSessionDetail({ repositoryLink: repositoryLinkValue }).repositoryLink
-    : undefined;
   const branch = text(value.branch);
   const changeValue = text(value.change);
   const change = changeValue ? normalizeSessionDetail({ change: changeValue }).change : undefined;
@@ -526,7 +520,6 @@ function observedSessionFromWire(value: UnparsedWireValue): ObservedSession | un
   const observedAt = wholeNumber(value.observedAt);
   const session: ObservedSession = { providerId, sessionId, title, status };
   if (workspace) session.workspace = workspace;
-  if (repositoryLink) session.repositoryLink = repositoryLink;
   if (branch) session.branch = branch;
   if (change) session.change = change;
   if (recap) session.recap = recap;

@@ -690,18 +690,12 @@ private struct SessionInfoSheet: View {
     }
 
     private var changeDestination: (url: URL, label: String, showsGitHubMark: Bool)? {
-        if let change = session.change {
-            return (
-                change,
-                changeButtonLabel(for: change),
-                change.host?.lowercased() == "github.com"
-            )
-        }
-        guard
-            let repository = session.repositoryLink,
-            repository.host?.lowercased() == "github.com"
-        else { return nil }
-        return (repository.appending(path: "pulls"), "View PRs", true)
+        guard let change = session.change else { return nil }
+        return (
+            change,
+            changeButtonLabel(for: change),
+            change.host?.lowercased() == "github.com"
+        )
     }
 }
 

@@ -130,8 +130,6 @@ export function observedSessionForResponse(
   const detail = normalizeSessionDetail(obs.detail);
   const workspace = detail.repository;
   if (workspace) session.workspace = workspace;
-  const repositoryLink = detail.repositoryLink;
-  if (repositoryLink) session.repositoryLink = repositoryLink;
   const branch = detail.branch;
   if (branch) session.branch = branch;
   const change = detail.change;

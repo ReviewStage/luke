@@ -105,7 +105,6 @@ function sameOptional<T extends object>(
 const sameDetail = exhaustiveSame<SessionDetail>({
   activity: (first, second) => first.activity === second.activity,
   repository: (first, second) => first.repository === second.repository,
-  repositoryLink: (first, second) => first.repositoryLink === second.repositoryLink,
   branch: (first, second) => first.branch === second.branch,
   model: (first, second) => first.model === second.model,
   error: (first, second) => first.error === second.error,
