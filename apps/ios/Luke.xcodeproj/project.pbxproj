@@ -33,6 +33,7 @@
 		AABBCC0000000000000000D5 /* VoiceAudioCapturer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D1 /* VoiceAudioCapturer.swift */; };
 		AABBCC0000000000000000D6 /* VoiceAudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D2 /* VoiceAudioPlayer.swift */; };
 		AABBCC0000000000000000D7 /* VoiceActDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D3 /* VoiceActDispatcher.swift */; };
+		AABBCC0000000000000000D9 /* VoiceSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D8 /* VoiceSettingsSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -62,6 +63,7 @@
 		AABBCC0000000000000000D1 /* VoiceAudioCapturer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceAudioCapturer.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000D2 /* VoiceAudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceAudioPlayer.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000D3 /* VoiceActDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceActDispatcher.swift; sourceTree = "<group>"; };
+		AABBCC0000000000000000D8 /* VoiceSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSettingsSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -132,6 +134,7 @@
 				AABBCC0000000000000000D1 /* VoiceAudioCapturer.swift */,
 				AABBCC0000000000000000D2 /* VoiceAudioPlayer.swift */,
 				AABBCC0000000000000000D3 /* VoiceActDispatcher.swift */,
+				AABBCC0000000000000000D8 /* VoiceSettingsSheet.swift */,
 				AABBCC000000000000000014 /* Assets.xcassets */,
 				AABBCC00000000000000001C /* Info.plist */,
 			);
@@ -314,6 +317,7 @@
 				AABBCC0000000000000000D5 /* VoiceAudioCapturer.swift in Sources */,
 				AABBCC0000000000000000D6 /* VoiceAudioPlayer.swift in Sources */,
 				AABBCC0000000000000000D7 /* VoiceActDispatcher.swift in Sources */,
+				AABBCC0000000000000000D9 /* VoiceSettingsSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

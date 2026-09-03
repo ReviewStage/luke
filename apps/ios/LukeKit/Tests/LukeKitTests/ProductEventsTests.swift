@@ -45,6 +45,15 @@ final class ProductEventsTests: XCTestCase {
             act.wireProperties(appVersion: "0.1.1") as? [String: String],
             ["provider_id": "conductor", "session_act": "message_send"]
         )
+
+        let update = ProductEvent.settingUpdate(setting: .voiceSpeed, value: .set)
+        XCTAssertEqual(update.name, "setting:update")
+        XCTAssertEqual(
+            update.wireProperties(appVersion: "0.1.1") as? [String: String],
+            ["setting_id": "voice_speed", "setting_value": "set"]
+        )
+        XCTAssertEqual(ProductEvent.settingsReset.name, "settings:reset")
+        XCTAssertTrue(ProductEvent.settingsReset.wireProperties(appVersion: "0.1.1").isEmpty)
     }
 
     /// A roster row's provider id reaches a count only through this set, so

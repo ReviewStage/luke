@@ -783,6 +783,77 @@ final class RealtimeSessionStateTests: XCTestCase {
 
     // MARK: - Helpers
 
+    // MARK: - Speed
+
+    func testApplySpeedOnAnOpenSessionSendsOneSessionUpdate() async throws {
+        let ws = MockWebSocketTask()
+        let session = RealtimeSession(options: makeOptions(ws: ws))
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(session.status, .ready)
+
+        session.applySpeed(1.25)
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let updates = ws.outgoing.filter { $0.contains(#""type":"session.update""#) }
+        XCTAssertEqual(updates.count, 1)
+        XCTAssertTrue(updates[0].contains(#""audio":{"output":{"speed":1.25}}"#))
+        XCTAssertTrue(updates[0].contains(#""session":{"type":"realtime""#))
+    }
+
+    func testSpeedChosenWhileConnectingIsSentOnceTheChannelOpens() async throws {
+        let ws = MockWebSocketTask()
+        let mintStarted = AsyncGate()
+        let allowMint = AsyncGate()
+        let session = RealtimeSession(
+            options: makeOptions(
+                ws: ws,
+                requestConnection: {
+                    await mintStarted.open()
+                    await allowMint.wait()
+                    return testConnection
+                }
+            )
+        )
+
+        let connecting = Task { await session.connect() }
+        await mintStarted.wait()
+        XCTAssertEqual(session.status, .connecting)
+        session.applySpeed(0.75)
+        session.applySpeed(1.5)
+        XCTAssertTrue(ws.outgoing.isEmpty)
+
+        await allowMint.open()
+        ws.deliver(#"{"type":"session.created"}"#)
+        await connecting.value
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let updates = ws.outgoing.filter { $0.contains(#""type":"session.update""#) }
+        XCTAssertEqual(updates.count, 1)
+        XCTAssertTrue(updates[0].contains(#""speed":1.5"#))
+        let contextIndex = ws.outgoing.firstIndex { $0.contains(#""type":"conversation.item.create""#) }
+        let updateIndex = ws.outgoing.firstIndex { $0.contains(#""type":"session.update""#) }
+        XCTAssertNotNil(contextIndex)
+        XCTAssertLessThan(contextIndex!, updateIndex!)
+    }
+
+    func testApplySpeedWhileIdleSendsNothing() async throws {
+        let ws = MockWebSocketTask()
+        let session = RealtimeSession(options: makeOptions(ws: ws))
+        session.applySpeed(1.25)
+        session.applySpeed(0)
+        session.applySpeed(-1)
+        try await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertTrue(ws.outgoing.isEmpty)
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertFalse(ws.outgoing.contains { $0.contains(#""type":"session.update""#) })
+    }
+
     private func makeOptions(
         ws: MockWebSocketTask,
         capturer: any AudioCapturer = SilentCapturer(),

@@ -186,6 +186,8 @@ public final class RealtimeSession {
     private var interruptedResponseIds: Set<String> = []
     private var pendingInterruptionEventIds: Set<String> = []
     private var interruptionSequence = 0
+    // session.update needs the channel; a speed chosen while connecting waits for it.
+    private var pendingSpeed: Double?
 
     public init(options: RealtimeSessionOptions) {
         self.options = options
@@ -257,6 +259,24 @@ public final class RealtimeSession {
         }
     }
 
+    /// The API applies a speed between model turns, so it is heard from the
+    /// next reply. An idle session sends nothing: the caller mints the next
+    /// connection at the speed it holds.
+    public func applySpeed(_ speed: Double) {
+        guard speed.isFinite, speed > 0 else { return }
+        switch status {
+        case .idle:
+            pendingSpeed = nil
+        case .connecting:
+            pendingSpeed = speed
+        default:
+            pendingSpeed = nil
+            guard let channel else { return }
+            let event = sessionSpeedUpdateJSON(speed)
+            Task { try? await channel.sendText(event) }
+        }
+    }
+
     /// Closes the connection and resets to idle.
     public func close() {
         idleTask?.cancel(); idleTask = nil
@@ -273,6 +293,7 @@ public final class RealtimeSession {
         responseStarted = false
         pendingDrains = 0
         pendingCommit = false
+        pendingSpeed = nil
         pendingCalls.removeAll()
         captionBuffer = ""
         clearActiveResponse()
@@ -353,6 +374,10 @@ public final class RealtimeSession {
 
     private func onChannelOpen(ws: any WebSocketTask, context: VoiceContextItem) async {
         try? await ws.sendText(contextItemJSON(context))
+        if let speed = pendingSpeed {
+            pendingSpeed = nil
+            try? await ws.sendText(sessionSpeedUpdateJSON(speed))
+        }
         for chunk in pressBuffer.drain() {
             try? await ws.sendText(audioAppendJSON(chunk))
         }
@@ -706,6 +731,10 @@ public final class RealtimeSession {
         return """
             {"type":"conversation.item.create","item":{"type":"function_call_output","call_id":"\(callId)","output":"\(escaped)"}}
             """
+    }
+
+    private func sessionSpeedUpdateJSON(_ speed: Double) -> String {
+        #"{"type":"session.update","session":{"type":"realtime","audio":{"output":{"speed":\#(speed)}}}}"#
     }
 
     private func responseCreateJSON(sequence: Int) -> String {

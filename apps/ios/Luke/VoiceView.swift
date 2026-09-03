@@ -25,6 +25,9 @@ private final class VoiceSessionModel {
     var status: RealtimeStatus = .idle
     var messages: [VoiceTranscriptMessage] = []
     var errorMessage: String?
+    // Read at each start, so a reconnect mints with the latest choice.
+    var voice = RealtimeVoice.default
+    var speed = RealtimeVoiceSpeed.default
     private var session: RealtimeSession?
     private var activeTurnId: UUID?
     private var activeResponseMessageId: UUID?
@@ -39,6 +42,8 @@ private final class VoiceSessionModel {
         guard session == nil else { return }
         errorMessage = nil
 
+        let mintVoice = voice.rawValue
+        let mintSpeed = speed.multiplier
         let opts = RealtimeSessionOptions(
             requestConnection: { [weak accountSession] in
                 guard let accountSession else {
@@ -46,7 +51,7 @@ private final class VoiceSessionModel {
                 }
                 let token = try await accountSession.validAccessToken()
                 let connection = try await VoiceMintClient(baseURL: AccountConstants.serviceURL)
-                    .mint(accessToken: token)
+                    .mint(accessToken: token, voice: mintVoice, speed: mintSpeed)
                 return connection
             },
             onStatus: { [weak self] newStatus in
@@ -121,6 +126,21 @@ private final class VoiceSessionModel {
         }
     }
 
+    /// The voice is fixed at mint time, so an open connection is reopened.
+    func changeVoice(_ newVoice: RealtimeVoice, accountSession: AccountSession) async {
+        guard newVoice != voice else { return }
+        voice = newVoice
+        guard session != nil else { return }
+        stop()
+        await start(accountSession: accountSession)
+    }
+
+    func changeSpeed(_ newSpeed: RealtimeVoiceSpeed) {
+        guard newSpeed != speed else { return }
+        speed = newSpeed
+        session?.applySpeed(newSpeed.multiplier)
+    }
+
     func endTurn() {
         if reconnectingForTurn {
             endTurnAfterReconnect = true
@@ -186,10 +206,13 @@ private final class VoiceSessionModel {
 /// once to leave the microphone open and tap again to send.
 struct VoiceView: View {
     @Environment(AccountSession.self) private var accountSession
+    @AppStorage(VoiceSettingsKey.voice) private var voice = RealtimeVoice.default
+    @AppStorage(VoiceSettingsKey.speed) private var speed = RealtimeVoiceSpeed.default
     @State private var model = VoiceSessionModel()
     @State private var isPressing = false
     @State private var isLatched = false
     @State private var pressBeganAt: TimeInterval?
+    @State private var settingsShown = false
 
     var body: some View {
         ZStack {
@@ -202,8 +225,22 @@ struct VoiceView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) { statusLabel }
+            ToolbarItem(placement: .topBarTrailing) { settingsButton }
         }
-        .task { await model.start(accountSession: accountSession) }
+        .sheet(isPresented: $settingsShown) {
+            VoiceSettingsSheet()
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .task {
+            model.voice = voice
+            model.speed = speed
+            await model.start(accountSession: accountSession)
+        }
+        .onChange(of: voice) { _, newVoice in
+            Task { await model.changeVoice(newVoice, accountSession: accountSession) }
+        }
+        .onChange(of: speed) { _, newSpeed in model.changeSpeed(newSpeed) }
         .onChange(of: model.status) { _, newStatus in
             // Connecting is part of an idle tap's active turn. Clearing here
             // would make VoiceOver lose the second-tap-to-send affordance.
@@ -213,6 +250,15 @@ struct VoiceView: View {
     }
 
     // MARK: - Sub-views
+
+    private var settingsButton: some View {
+        Button {
+            settingsShown = true
+        } label: {
+            Label("Voice Settings", systemImage: "gearshape")
+        }
+        .tint(Color.ink)
+    }
 
     private var statusLabel: some View {
         Text(statusText)

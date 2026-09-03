@@ -41,6 +41,20 @@ public enum ProductSessionAct: String, Sendable {
     case agentAdd = "agent_add"
 }
 
+/// The subset of the shared vocabulary's `APP_SETTING_ID` this app can change.
+public enum ProductSettingID: String, Sendable {
+    case voice
+    case voiceSpeed = "voice_speed"
+}
+
+/// The shape of a setting's change, never its value.
+public enum ProductSettingValue: String, Sendable {
+    case on
+    case off
+    case set
+    case cleared
+}
+
 /// The rungs every count travels on. A raw count is a weak fingerprint —
 /// "137 Codex sessions" identifies a device across days — where a rung says
 /// the same thing about adoption and says it about a crowd rather than a
@@ -71,6 +85,8 @@ public enum ProductEvent: Equatable, Sendable {
     case accountAct(ProductAccountAct)
     case sessionObserve(provider: ProductProviderID, sessions: ProductSessionCountBucket)
     case sessionActSend(provider: ProductProviderID, act: ProductSessionAct)
+    case settingUpdate(setting: ProductSettingID, value: ProductSettingValue)
+    case settingsReset
 
     public var name: String {
         switch self {
@@ -80,6 +96,8 @@ public enum ProductEvent: Equatable, Sendable {
         case .accountAct: "account:act"
         case .sessionObserve: "session:observe"
         case .sessionActSend: "session:act_send"
+        case .settingUpdate: "setting:update"
+        case .settingsReset: "settings:reset"
         }
     }
 
@@ -90,6 +108,8 @@ public enum ProductEvent: Equatable, Sendable {
         static let providerID = "provider_id"
         static let sessionCount = "session_count"
         static let sessionAct = "session_act"
+        static let settingID = "setting_id"
+        static let settingValue = "setting_value"
     }
 
     /// The properties the event's allowlist row names, in the wire's shape.
@@ -105,6 +125,10 @@ public enum ProductEvent: Equatable, Sendable {
             [Property.providerID: provider.rawValue, Property.sessionCount: sessions.rawValue]
         case .sessionActSend(let provider, let act):
             [Property.providerID: provider.rawValue, Property.sessionAct: act.rawValue]
+        case .settingUpdate(let setting, let value):
+            [Property.settingID: setting.rawValue, Property.settingValue: value.rawValue]
+        case .settingsReset:
+            [:]
         }
     }
 }
