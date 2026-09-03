@@ -114,7 +114,7 @@
 				AABBCC000000000000000004 /* Luke */,
 				AABBCC000000000000000005 /* LukeTests */,
 				AABBCC0000000000000000B8 /* LukeWatch */,
-				AABBCC0000000000000000D0 /* Frameworks */,
+				AABBCC0000000000000000E0 /* Frameworks */,
 				AABBCC000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -178,7 +178,7 @@
 			path = LukeWatch;
 			sourceTree = "<group>";
 		};
-		AABBCC0000000000000000D0 /* Frameworks */ = {
+		AABBCC0000000000000000E0 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
 				AABBCC0000000000000000C5 /* WatchConnectivity.framework */,
