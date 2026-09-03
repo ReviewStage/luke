@@ -298,13 +298,14 @@ test("a speaking decision deferred by the caller can be reviewed again", async (
   assert.equal(evaluator.updates.length, 2);
 });
 
-test("history arriving late is consumed silently and never resurfaces", async () => {
+test("a development reaches the evaluator however old its timestamp", async () => {
   const evaluator = evaluatorReturning(speakDecision());
   const reviewer = new SessionAttentionReviewer({ evaluator, now: () => DECIDED_AT });
 
-  // A launch reads a roster whose sessions settled hours ago: one asked its
-  // question, one failed, one finished. The panel shows all of it; none is
-  // news, and none is worth a model call.
+  // The timestamp is when the provider last wrote about the session, never
+  // when the status was entered, so its age cannot tell late history from a
+  // change that just landed. The difference between two readings is the
+  // development, and every one is reviewed exactly once.
   const asked = session(claude, "asked", {
     status: SESSION_STATUS.WAITING,
     observedAt: DECIDED_AT - 4 * 60 * 60 * 1000,
@@ -318,17 +319,21 @@ test("history arriving late is consumed silently and never resurfaces", async ()
     observedAt: DECIDED_AT - 7 * 60 * 60 * 1000,
   });
 
-  assert.deepEqual(await reviewer.review([asked, failed, finished]), []);
-  assert.equal(evaluator.updates.length, 0, "a stale development costs no model call");
+  const reviews = await reviewer.review([asked, failed, finished]);
+  assert.deepEqual(
+    reviews.map((review) => review.providerSessionId),
+    ["asked", "failed", "finished"],
+  );
+  assert.equal(evaluator.updates.length, 3);
   assert.deepEqual(
     await reviewer.review([asked, failed, finished]),
     [],
-    "consumed, not deferred: the same history is not re-derived next pass",
+    "consumed, not deferred: the same development is not re-derived next pass",
   );
-  assert.equal(evaluator.updates.length, 0);
+  assert.equal(evaluator.updates.length, 3);
 
-  // The baseline still advanced: the next real development is reviewed, and
-  // it honestly reports the stale state the session moved from.
+  // The baseline advanced: the next real development is reviewed, and it
+  // honestly reports the state the session moved from.
   const revived = session(claude, "asked", {
     status: SESSION_STATUS.WORKING,
     observedAt: DECIDED_AT,
@@ -336,27 +341,30 @@ test("history arriving late is consumed silently and never resurfaces", async ()
   const [review] = await reviewer.review([revived, failed, finished]);
   assert.equal(review?.providerSessionId, "asked");
   assert.equal(review?.update.previousStatus, SESSION_STATUS.WAITING);
-  assert.equal(evaluator.updates.length, 1);
+  assert.equal(evaluator.updates.length, 4);
 });
 
-test("a wake from hours of sleep reviews nothing about the evening it slept through", async () => {
+test("an edge first seen after hours of sleep is reviewed like any other", async () => {
   let now = DECIDED_AT;
   const evaluator = evaluatorReturning(speakDecision());
   const reviewer = new SessionAttentionReviewer({ evaluator, now: () => now });
 
   const working = session(claude, "overnight", { observedAt: DECIDED_AT });
   await reviewer.review([working]);
-  assert.equal(evaluator.updates.length, 1, "a fresh first sight is still reviewed");
+  assert.equal(evaluator.updates.length, 1);
 
   // The Mac sleeps for six hours; the session finished half an hour in. The
-  // edge is real, but its event is old — the finish already kept.
+  // edge is only visible on the first pass after waking, and it is the edge
+  // that is the development: the timestamp's age decides nothing.
   now = DECIDED_AT + 6 * 60 * 60 * 1000;
   const finished = session(claude, "overnight", {
     status: SESSION_STATUS.COMPLETE,
     observedAt: DECIDED_AT + 30 * 60 * 1000,
   });
-  assert.deepEqual(await reviewer.review([finished]), []);
-  assert.equal(evaluator.updates.length, 1, "the sleep-aged finish costs no model call");
+  const [review] = await reviewer.review([finished]);
+  assert.equal(review?.outcome, ATTENTION_REVIEW_OUTCOME.DECIDED);
+  assert.equal(review?.update.previousStatus, SESSION_STATUS.WORKING);
+  assert.equal(evaluator.updates.length, 2);
 });
 
 test("keeps a second real development visible when Luke stays quiet about it", async () => {

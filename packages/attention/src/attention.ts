@@ -49,20 +49,6 @@ const ATTENTION_REVIEW_DEFAULTS = {
 } as const;
 
 /**
- * How recently a development must have happened to be worth a model call. The
- * reviewer sees the difference between two readings, not the event itself, and
- * on first sight it has no earlier reading at all: a launch reads the whole
- * roster — sessions that settled, stopped, or asked their question hours ago —
- * and every one of them derives an update as though it just happened. The same
- * notice tracker that announces status edges already refuses an edge whose
- * event is old; this is the identical rule for the evaluator's door, keyed on
- * the same provider-written timestamp, so history arriving late is consumed
- * silently instead of reviewed as news. The panel has shown the state the
- * whole time.
- */
-export const ATTENTION_EVENT_FRESH_AGE_MS = 5 * 60_000;
-
-/**
  * The decision contract an evaluator must satisfy. It is one judgment and no
  * words at all, deliberately: a background classifier scoring dispositions
  * under a character cap has no ear for how a sentence lands out loud, and a
@@ -205,8 +191,6 @@ export interface SessionAttentionReviewerOptions {
   maximumUpdatesPerReview?: number;
   /** How many extra passes may retry one update after an evaluator failure. */
   maximumUnavailableRetries?: number;
-  /** How recently a development must have happened to reach the evaluator. */
-  freshEventAgeMs?: number;
 }
 
 interface SpokenRecord {
@@ -427,10 +411,8 @@ export class SessionAttentionReviewer {
   readonly #maximumUpdatesPerReview: number;
   readonly #ledger: AttentionSpeechLedger;
   readonly #maximumUnavailableRetries: number;
-  readonly #freshEventAgeMs: number;
   #observed = new Map<string, Map<string, Session>>();
   readonly #pending = new Map<string, Set<string>>();
-  readonly #reconsidered = new Map<string, Set<string>>();
   readonly #unavailableRetries = new Map<string, Map<string, number>>();
 
   constructor(options: SessionAttentionReviewerOptions) {
@@ -444,10 +426,6 @@ export class SessionAttentionReviewer {
     this.#maximumUnavailableRetries = nonNegativeNumber(
       options.maximumUnavailableRetries,
       ATTENTION_REVIEW_DEFAULTS.MAXIMUM_UNAVAILABLE_RETRIES,
-    );
-    this.#freshEventAgeMs = nonNegativeNumber(
-      options.freshEventAgeMs,
-      ATTENTION_EVENT_FRESH_AGE_MS,
     );
     const ledgerOptions: AttentionSpeechLedgerOptions = {};
     if (options.now) ledgerOptions.now = options.now;
@@ -463,30 +441,17 @@ export class SessionAttentionReviewer {
     const quietUntil = this.#evaluator.quietUntil?.();
     if (quietUntil !== undefined && quietUntil > this.#now()) return [];
     this.#ledger.retain(sessions);
-    this.#retainReconsidered(sessions);
 
     const candidates: AttentionCandidate[] = [];
-    // Developments whose events are already old: consumed without a model
-    // call, but their baselines still advance, so history never resurfaces.
-    const staleConsumed: AttentionCandidate[] = [];
     const closedConsumed: Session[] = [];
-    const now = this.#now();
     for (const session of sessions) {
       if (this.#isPending(session)) continue;
       if (session.completionCause === SESSION_COMPLETION_CAUSE.SESSION_CLOSED) {
-        this.#clearReconsidered(session);
         closedConsumed.push(session);
         continue;
       }
       const update = attentionUpdate(session, this.#observedSession(session));
       if (!update) continue;
-      // An event older than the freshness window is history arriving late — a
-      // launch reading yesterday's roster, a wake replaying the afternoon —
-      // and is never news.
-      if (!this.#isReconsidered(session) && now - update.observedAt > this.#freshEventAgeMs) {
-        staleConsumed.push({ session, update });
-        continue;
-      }
       candidates.push({ session, update });
     }
 
@@ -495,12 +460,9 @@ export class SessionAttentionReviewer {
       .slice(0, this.#maximumUpdatesPerReview);
 
     // Sessions left out of this pass keep their previous baseline so the same
-    // development is derived again once a slot frees up. A stale development
-    // advances its baseline exactly as a reviewed one does: it was decided —
-    // deterministically, to silence — not deferred.
+    // development is derived again once a slot frees up.
     this.#observed = this.#nextObserved(sessions, [
       ...selected.map((candidate) => candidate.session),
-      ...staleConsumed.map((candidate) => candidate.session),
       ...closedConsumed,
     ]);
     for (const candidate of selected) this.#markPending(candidate.session);
@@ -519,12 +481,8 @@ export class SessionAttentionReviewer {
         const candidate = selected[index];
         // A development is only consumed once a decision was actually reached
         // about it. Anything else must stay derivable, or the update is lost.
-        if (candidate) {
-          if (this.#keepsDevelopmentPending(settled, candidate.session)) {
-            this.#reopen(candidate.session);
-          } else {
-            this.#clearReconsidered(candidate.session);
-          }
+        if (candidate && this.#keepsDevelopmentPending(settled, candidate.session)) {
+          this.#reopen(candidate.session);
         }
         return settled;
       });
@@ -543,41 +501,6 @@ export class SessionAttentionReviewer {
     for (const identity of identities) {
       this.#ledger.forget(identity);
       this.#reopen(identity);
-      this.#markReconsidered(identity);
-    }
-  }
-
-  #isReconsidered(identity: SessionIdentity): boolean {
-    return this.#reconsidered.get(identity.providerId)?.has(identity.providerSessionId) === true;
-  }
-
-  #markReconsidered(identity: SessionIdentity): void {
-    const providerSessionIds = this.#reconsidered.get(identity.providerId) ?? new Set<string>();
-    providerSessionIds.add(identity.providerSessionId);
-    this.#reconsidered.set(identity.providerId, providerSessionIds);
-  }
-
-  #clearReconsidered(identity: SessionIdentity): void {
-    const providerSessionIds = this.#reconsidered.get(identity.providerId);
-    if (!providerSessionIds) return;
-    providerSessionIds.delete(identity.providerSessionId);
-    if (providerSessionIds.size === 0) this.#reconsidered.delete(identity.providerId);
-  }
-
-  #retainReconsidered(identities: readonly SessionIdentity[]): void {
-    const live = new Map<string, Set<string>>();
-    for (const identity of identities) {
-      const providerSessionIds = live.get(identity.providerId) ?? new Set<string>();
-      providerSessionIds.add(identity.providerSessionId);
-      live.set(identity.providerId, providerSessionIds);
-    }
-    for (const [providerId, providerSessionIds] of this.#reconsidered) {
-      const liveProviderSessionIds = live.get(providerId);
-      for (const providerSessionId of providerSessionIds) {
-        if (!liveProviderSessionIds?.has(providerSessionId))
-          providerSessionIds.delete(providerSessionId);
-      }
-      if (providerSessionIds.size === 0) this.#reconsidered.delete(providerId);
     }
   }
 
