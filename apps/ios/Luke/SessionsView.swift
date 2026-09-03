@@ -8,12 +8,14 @@ struct SessionsView: View {
     @Environment(ProductEventSender.self) private var events
 
     @State private var sessions: [RosterSession] = []
-    /// True until the first roster fetch answers, because the list's first
-    /// frame can paint before its `.task` begins the fetch, and that frame
-    /// must show the skeletons rather than claim "No active sessions" nothing
-    /// has checked yet. Only that first wait may show them: a later refresh
-    /// that finds the list already empty (the last chat just archived) must
-    /// not flash skeletons over an emptiness that is real.
+    /// True until a fetched roster has actually landed, so every empty frame
+    /// before one — the first paint racing its `.task`, the first request in
+    /// flight, and a retry running after a failed first load — shows the
+    /// skeletons rather than claim "No active sessions" nothing has
+    /// confirmed. Only that unknown may show them: a refresh that finds the
+    /// list already empty (the last chat just archived) must not flash
+    /// skeletons over an emptiness that is real, and a standing fetch error
+    /// still outranks them.
     @State private var awaitingFirstRoster = true
     @State private var fetchError: String?
     @State private var searchQuery = ""
@@ -147,7 +149,7 @@ struct SessionsView: View {
             by: sort
         )
         return List {
-            if awaitingFirstRoster && sessions.isEmpty {
+            if awaitingFirstRoster && sessions.isEmpty && fetchError == nil {
                 ForEach(0 ..< 3, id: \.self) { _ in
                     SkeletonRow()
                         .listRowBackground(Color.clear)
@@ -499,7 +501,6 @@ struct SessionsView: View {
         let pass = refreshPass
         fetchError = nil
         guard case .signedIn = session.state else { return }
-        defer { awaitingFirstRoster = false }
         do {
             let fetched = try await session.authorized { token in
                 try await rosterClient.observe(bearerToken: token)
@@ -508,6 +509,7 @@ struct SessionsView: View {
             // Animated so a row an act just removed slides out the way a
             // deleted Mail row does, instead of blinking.
             withAnimation { sessions = fetched.filter { !archivingIds.contains($0.id) } }
+            awaitingFirstRoster = false
             recordObservation(fetched)
         } catch is AccountSessionError {
             ()  // Signed out — the state change redraws automatically.
