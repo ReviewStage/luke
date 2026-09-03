@@ -174,84 +174,96 @@ struct WatchSessionDetailView: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 8) {
-                    if session.canReadConversation {
-                        if hasOlder {
-                            Button {
-                                Task { await loadOlder() }
-                            } label: {
-                                if loadingOlder {
-                                    ProgressView()
-                                        .frame(maxWidth: .infinity)
-                                } else {
-                                    Label("Earlier Messages", systemImage: "arrow.up")
-                                        .font(.caption2)
-                                        .frame(maxWidth: .infinity)
+            GeometryReader { geometry in
+                ScrollView {
+                    ZStack {
+                        LazyVStack(alignment: .leading, spacing: 8) {
+                            if session.canReadConversation {
+                                if hasOlder {
+                                    Button {
+                                        Task { await loadOlder() }
+                                    } label: {
+                                        if loadingOlder {
+                                            ProgressView()
+                                                .frame(maxWidth: .infinity)
+                                        } else {
+                                            Label("Earlier Messages", systemImage: "arrow.up")
+                                                .font(.caption2)
+                                                .frame(maxWidth: .infinity)
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(loadingOlder)
+                                    .padding(.vertical, 4)
                                 }
+
+                                if !centersConversationState {
+                                    conversationContent
+                                }
+
+                                ForEach(outgoing) { message in
+                                    WatchOutgoingBubble(message: message)
+                                        .id(message.id)
+                                }
+                            } else {
+                                Text("Conversation unavailable for this session.")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.vertical, 6)
                             }
-                            .buttonStyle(.plain)
-                            .disabled(loadingOlder)
-                            .padding(.vertical, 4)
+
+                            if session.canReceiveMessage {
+                                composer
+                                    .id(Self.composerId)
+                            }
+
+                            Color.clear
+                                .frame(height: 1)
+                                .id(Self.conversationEndId)
                         }
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 6)
+                        .frame(minHeight: geometry.size.height, alignment: .bottom)
 
-                        conversationContent
-
-                        ForEach(outgoing) { message in
-                            WatchOutgoingBubble(message: message)
-                                .id(message.id)
+                        if centersConversationState {
+                            conversationContent
+                                .padding(.horizontal, 4)
                         }
-                    } else {
-                        Text("Conversation unavailable for this session.")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 6)
                     }
-
-                    if session.canReceiveMessage {
-                        composer
-                            .id(Self.composerId)
-                    }
-
-                    Color.clear
-                        .frame(height: 1)
-                        .id(Self.conversationEndId)
                 }
-                .padding(.horizontal, 4)
-                .padding(.vertical, 6)
-            }
-            .refreshable { await refreshConversation() }
-            .onChange(of: scrollIntent) {
-                guard let intent = scrollIntent else { return }
-                scrollIntent = nil
-                switch intent {
-                case .end:
-                    let target = session.canReceiveMessage
-                        ? Self.composerId
-                        : (outgoing.last?.id ?? conversation.last?.id ?? Self.conversationEndId)
-                    proxy.scrollTo(target, anchor: .bottom)
-                    Task {
-                        try? await Task.sleep(nanoseconds: Self.layoutSettleNanoseconds)
-                        guard !Task.isCancelled else { return }
-                        let settledTarget = session.canReceiveMessage
+                .refreshable { await refreshConversation() }
+                .onChange(of: scrollIntent) {
+                    guard let intent = scrollIntent else { return }
+                    scrollIntent = nil
+                    switch intent {
+                    case .end:
+                        let target = session.canReceiveMessage
                             ? Self.composerId
                             : (outgoing.last?.id ?? conversation.last?.id ?? Self.conversationEndId)
-                        proxy.scrollTo(settledTarget, anchor: .bottom)
+                        proxy.scrollTo(target, anchor: .bottom)
+                        Task {
+                            try? await Task.sleep(nanoseconds: Self.layoutSettleNanoseconds)
+                            guard !Task.isCancelled else { return }
+                            let settledTarget = session.canReceiveMessage
+                                ? Self.composerId
+                                : (outgoing.last?.id ?? conversation.last?.id ?? Self.conversationEndId)
+                            proxy.scrollTo(settledTarget, anchor: .bottom)
+                        }
+                    case .anchor(let id):
+                        proxy.scrollTo(id, anchor: .top)
                     }
-                case .anchor(let id):
-                    proxy.scrollTo(id, anchor: .top)
                 }
-            }
-            .task(id: session.id) {
-                guard session.canReadConversation else { return }
-                while !Task.isCancelled {
-                    if forwardCursor == nil {
-                        await openConversation()
-                    } else {
-                        await pollNewer()
+                .task(id: session.id) {
+                    guard session.canReadConversation else { return }
+                    while !Task.isCancelled {
+                        if forwardCursor == nil {
+                            await openConversation()
+                        } else {
+                            await pollNewer()
+                        }
+                        try? await Task.sleep(nanoseconds: Self.pollSeconds * 1_000_000_000)
                     }
-                    try? await Task.sleep(nanoseconds: Self.pollSeconds * 1_000_000_000)
                 }
             }
         }
@@ -272,6 +284,10 @@ struct WatchSessionDetailView: View {
                 dismiss()
             }
         }
+    }
+
+    private var centersConversationState: Bool {
+        session.canReadConversation && conversation.isEmpty && outgoing.isEmpty
     }
 
     @ViewBuilder
