@@ -492,9 +492,6 @@ importers:
 
   packages/issues:
     dependencies:
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire

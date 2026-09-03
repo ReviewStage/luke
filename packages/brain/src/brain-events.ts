@@ -49,8 +49,6 @@ export type BrainDeliverySource =
 
 export interface BrainDelivery {
   briefing: string;
-  /** The observed sessions the briefing is about, each validated against the roster at the decision. */
-  sessionIds: readonly SessionIdentity[];
   decidedAt: number;
   source: BrainDeliverySource;
 }

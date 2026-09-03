@@ -43,11 +43,7 @@ export async function askBrain(
   if (!answer) {
     return { status: ACT_RESULT_STATUS.REJECTED, reason: BRAIN_ASK_REFUSAL.TIMED_OUT };
   }
-  return {
-    status: ACT_RESULT_STATUS.ACCEPTED,
-    briefing: answer.text,
-    sessionIds: answer.sessionIds,
-  };
+  return { status: ACT_RESULT_STATUS.ACCEPTED, briefing: answer.text };
 }
 
 export function registerBrainIpc(dependencies: BrainIpcDependencies): void {

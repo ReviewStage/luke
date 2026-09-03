@@ -5,8 +5,6 @@ import {
   PROVIDER_ID,
   PROVIDER_ID_LIST,
   type ProviderId,
-  SESSION_STATUS,
-  type SessionStatus,
 } from "@sidecar/session";
 import {
   isRecord,
@@ -106,7 +104,6 @@ export const PRODUCT_EVENT_PROPERTY = {
   CALENDAR_SOURCE: "calendar_source",
   SESSION_COUNT: "session_count",
   IMAGE_COUNT: "image_count",
-  SESSION_STATUS: "session_status",
   CREDENTIAL_SOURCE: "credential_source",
   SESSION_ACT: "session_act",
   DIAGNOSTIC_KIND: "diagnostic_kind",
@@ -326,12 +323,6 @@ export type ProductPermissionResult =
 export const PRODUCT_ISSUE_ACT = {
   STATE_MOVE: "state_move",
   COMMENT_ADD: "comment_add",
-  /**
-   * The issue's own page, handed to the operating system. It sits here rather
-   * than beside the session acts because an issue has a tracker and no
-   * provider, and `session:act_send` cannot be built without a provider id.
-   */
-  ISSUE_OPEN: "issue_open",
 } as const;
 
 export type ProductIssueAct = (typeof PRODUCT_ISSUE_ACT)[keyof typeof PRODUCT_ISSUE_ACT];
@@ -426,7 +417,6 @@ interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE]: ProductCalendarSource;
   [PRODUCT_EVENT_PROPERTY.SESSION_COUNT]: ProductSessionCountBucket;
   [PRODUCT_EVENT_PROPERTY.IMAGE_COUNT]: ProductSessionCountBucket;
-  [PRODUCT_EVENT_PROPERTY.SESSION_STATUS]: SessionStatus;
   [PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE]: ProductCredentialSource;
   [PRODUCT_EVENT_PROPERTY.SESSION_ACT]: ProductSessionAct;
   [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: ProductDiagnosticKind;
@@ -464,7 +454,6 @@ export const PRODUCT_EVENT_PROPERTY_VALUES = {
   [PRODUCT_EVENT_PROPERTY.PROVIDER_ID]: PROVIDER_ID_LIST,
   [PRODUCT_EVENT_PROPERTY.TRACKER_ID]: Object.values(ISSUE_TRACKER_ID),
   [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE]: Object.values(PRODUCT_CALENDAR_SOURCE),
-  [PRODUCT_EVENT_PROPERTY.SESSION_STATUS]: Object.values(SESSION_STATUS),
   [PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE]: Object.values(PRODUCT_CREDENTIAL_SOURCE),
   [PRODUCT_EVENT_PROPERTY.SESSION_ACT]: Object.values(PRODUCT_SESSION_ACT),
   [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: Object.values(PRODUCT_DIAGNOSTIC_KIND),
@@ -531,10 +520,7 @@ export const PRODUCT_EVENT_PROPERTIES = {
   ],
   [PRODUCT_EVENT.VOICE_CALL_START]: [PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE],
   [PRODUCT_EVENT.INTRODUCTION_COMPLETE]: [],
-  [PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK]: [
-    PRODUCT_EVENT_PROPERTY.PROVIDER_ID,
-    PRODUCT_EVENT_PROPERTY.SESSION_STATUS,
-  ],
+  [PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK]: [],
   [PRODUCT_EVENT.VOICE_FIRST_ANNOUNCEMENT]: [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE],
   [PRODUCT_EVENT.SETTING_UPDATE]: [
     PRODUCT_EVENT_PROPERTY.SETTING_ID,
@@ -650,9 +636,6 @@ const PRODUCT_EVENT_PROPERTY_READER: PropertyReader = {
   ),
   [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE]: memberReader(
     PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE],
-  ),
-  [PRODUCT_EVENT_PROPERTY.SESSION_STATUS]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SESSION_STATUS],
   ),
   [PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE]: memberReader(
     PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE],

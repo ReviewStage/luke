@@ -4,7 +4,7 @@ import { BRAIN_DELIVERY_SOURCE, type BrainDelivery } from "@sidecar/brain";
 import { BriefingHold, MAXIMUM_HELD_BRIEFINGS } from "./briefing-hold";
 
 function delivery(briefing: string): BrainDelivery {
-  return { briefing, sessionIds: [], decidedAt: 1, source: BRAIN_DELIVERY_SOURCE.WAKE };
+  return { briefing, decidedAt: 1, source: BRAIN_DELIVERY_SOURCE.WAKE };
 }
 
 test("a hold keeps the most recent briefings and hands them back once", () => {

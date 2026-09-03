@@ -23,7 +23,7 @@ import {
   isFeedbackKind,
 } from "@sidecar/feedback";
 import { type AppGuideSnapshot, isAppGuideSnapshot } from "@sidecar/guide";
-import { type IssueIdentity, isIssueTrackerId, type TrackedIssue } from "@sidecar/issues";
+import type { TrackedIssue } from "@sidecar/issues";
 import {
   type ConversationEntry,
   type RealtimeConnection,
@@ -171,18 +171,6 @@ function isSessionIdentity(value: unknown): value is SessionIdentity {
     isProviderId(wire.providerId) &&
     isWireString(wire.providerSessionId) &&
     wire.providerSessionId.length > 0
-  );
-}
-
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This function parses an IPC field into a domain identity.
-function isIssueIdentity(value: unknown): value is IssueIdentity {
-  const wire = wireValue(value);
-  if (!isRecord(wire)) return false;
-  return (
-    isWireString(wire.trackerId) &&
-    isIssueTrackerId(wire.trackerId) &&
-    isWireString(wire.identifier) &&
-    wire.identifier.length > 0
   );
 }
 
@@ -505,12 +493,6 @@ export const BRIDGE = {
       (v) => v.length === 2 && isWireString(v[0]) && isRecord(v[1]) && isWireValue(v[1]),
     ),
   }),
-  openIssue: entry({
-    kind: "invoke",
-    channel: "app:open-issue",
-    args: args<[IssueIdentity]>((v) => v.length === 1 && isIssueIdentity(v[0])),
-    result: result<SessionOpenResult>(),
-  }),
   sendFeedback: entry({
     kind: "invoke",
     channel: "app:send-feedback",
@@ -557,8 +539,7 @@ export const BRIDGE = {
           const stored = storedConversationEntry(entry);
           return (
             stored !== undefined &&
-            (stored.identity === undefined || isSessionIdentity(stored.identity)) &&
-            (stored.identities === undefined || stored.identities.every(isSessionIdentity))
+            (stored.identity === undefined || isSessionIdentity(stored.identity))
           );
         }),
     ),

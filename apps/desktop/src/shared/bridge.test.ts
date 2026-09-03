@@ -26,17 +26,10 @@ test("a conversation history report carries only well-formed history lines", () 
     identity: { providerId: "claude-code", providerSessionId: "session-a" },
     recordedAt: 2,
   };
-  const batch = {
-    kind: "announcement",
-    words: "Two chats changed.",
-    identities: [
-      { providerId: "claude-code", providerSessionId: "session-a" },
-      { providerId: "codex", providerSessionId: "session-b" },
-    ],
-    recordedAt: 3,
-  };
   assert.equal(guard([[]]), true);
-  assert.equal(guard([[ask, announcement, batch]]), true);
+  assert.equal(guard([[ask, announcement]]), true);
+  // A field an older build stored beside the words is left unread, not refused.
+  assert.equal(guard([[{ ...announcement, mentions: [{ title: "checkout" }] }]]), true);
   // One argument, and it is the thread itself.
   assert.equal(guard([]), false);
   assert.equal(guard([[ask], [announcement]]), false);
@@ -49,10 +42,6 @@ test("a conversation history report carries only well-formed history lines", () 
   assert.equal(guard([[{ ...ask, identity: { providerId: "claude-code" } }]]), false);
   assert.equal(
     guard([[{ ...ask, identity: { providerId: "nope", providerSessionId: "s" } }]]),
-    false,
-  );
-  assert.equal(
-    guard([[{ ...batch, identities: [{ providerId: "nope", providerSessionId: "s" }] }]]),
     false,
   );
   assert.equal(guard([[{ ...ask, recordedAt: Number.POSITIVE_INFINITY }]]), false);

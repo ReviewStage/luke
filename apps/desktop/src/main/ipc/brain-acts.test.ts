@@ -40,7 +40,6 @@ function performer(overrides: Partial<BrainActPerformerDependencies> = {}) {
       openSession: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }),
       openSessionApplication: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }),
       openSessionChange: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }),
-      openIssue: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }),
     },
     sessions: (): readonly Session[] => [observed],
     workspaceProjects: () => [],

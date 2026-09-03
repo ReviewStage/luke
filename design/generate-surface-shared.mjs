@@ -73,32 +73,15 @@ const SURFACE_GEOMETRY_PX = {
   // still clips at the block's edge rather than growing the window.
   VOICE_CAPTION_MAX_HEIGHT: 210,
   // The one gap between anything the surface grows below the strip. The
-  // chips, the words, and the volume hint stack under the housing in the
-  // compact states and at the panel's foot when it opens, and each of them
-  // is this far from the strip above it, from the band before it, and from
-  // the shape's bottom edge below it — so a reply that draws all three reads
-  // as one evenly spaced column rather than three bands that each chose
-  // their own breathing room. It is also the gap the chips wrap at, which is
-  // what makes a two-row band as evenly spaced inside as it is at its edges.
+  // words and the volume hint stack under the housing in the compact states
+  // and at the panel's foot when it opens, and each of them is this far from
+  // the strip above it, from the band before it, and from the shape's bottom
+  // edge below it — so a reply that draws both reads as one evenly spaced
+  // column rather than two bands that each chose their own breathing room.
   VOICE_BAND_INSET: 6,
-  // One row of the notice band under the housing: a pressable chip naming a
-  // session the reply being spoken is about, plus the inset above it. The
-  // chips size to their names and wrap naturally, so the renderer measures
-  // the rows they made and grows the shape by that, the caption block's own
-  // pattern — and because the chips wrap at the inset too, that measurement
-  // lands on an exact multiple of this row. The compact window reserves
-  // `SESSION_NOTICE_MAX_ROWS` of them on top of the caption room, because
-  // captioned speech drops below the chips' band and a reply may name more
-  // sessions than one row holds.
-  SESSION_NOTICE_HEIGHT: 26,
   PANEL_WIDTH: 620,
   PANEL_MAX_HEIGHT: 520,
 };
-
-// How many chip rows the notice band may grow to before the chips scroll
-// inside it instead. A count, not pixels: the window reserves this many
-// `SESSION_NOTICE_HEIGHT` rows, and the band clamps its own growth to it.
-const SESSION_NOTICE_MAX_ROWS = 3;
 
 // ---------- Session display ----------
 // How the surface ranks a row, not what the provider observed. Keys are the
@@ -384,8 +367,6 @@ function motionTokensCss() {
   --bubble-lift: ${px(SURFACE_GEOMETRY_PX.BUBBLE_LIFT)};
   --caption-max: ${px(SURFACE_GEOMETRY_PX.VOICE_CAPTION_MAX_HEIGHT)};
   --voice-band-inset: ${px(SURFACE_GEOMETRY_PX.VOICE_BAND_INSET)};
-  --notice-size: ${px(SURFACE_GEOMETRY_PX.SESSION_NOTICE_HEIGHT)};
-  --notice-max-rows: ${SESSION_NOTICE_MAX_ROWS};
   --panel-width: ${px(SURFACE_GEOMETRY_PX.PANEL_WIDTH)};
   --panel-height-max: ${px(SURFACE_GEOMETRY_PX.PANEL_MAX_HEIGHT)};
 }
@@ -424,13 +405,6 @@ export const VOICE_CAPTION_MAX_HEIGHT = ${SURFACE_GEOMETRY_PX.VOICE_CAPTION_MAX_
 /** The one gap between the strip, each band grown below it, and the shape's
  * bottom edge. CSS: \`--voice-band-inset\`. */
 export const VOICE_BAND_INSET = ${SURFACE_GEOMETRY_PX.VOICE_BAND_INSET};
-
-/** One chip row of the session notice band, the inset above it included.
- * CSS: \`--notice-size\`. */
-export const SESSION_NOTICE_HEIGHT = ${SURFACE_GEOMETRY_PX.SESSION_NOTICE_HEIGHT};
-
-/** Chip rows the band may grow to before scrolling. CSS: \`--notice-max-rows\`. */
-export const SESSION_NOTICE_MAX_ROWS = ${SESSION_NOTICE_MAX_ROWS};
 
 /** Expanded panel width. CSS: \`--panel-width\`. */
 export const PANEL_WIDTH = ${SURFACE_GEOMETRY_PX.PANEL_WIDTH};

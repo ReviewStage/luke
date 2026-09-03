@@ -1,11 +1,9 @@
-import { ProviderMark } from "@sidecar/panel";
 import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   type ConversationEntryKind,
   conversationEntryKey,
 } from "@sidecar/realtime";
-import type { SessionIdentity } from "@sidecar/session";
 import { useEffect, useRef, useState } from "react";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
@@ -45,13 +43,9 @@ const ENTRY_TIME = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute:
 function HistoryEntryRow({
   entry,
   streaming,
-  openable,
-  onOpenSession,
 }: {
   entry: ConversationEntry;
   streaming?: boolean;
-  openable: (identity: SessionIdentity) => boolean;
-  onOpenSession: (identity: SessionIdentity) => void;
 }): React.JSX.Element {
   const presentation = historyEntryPresentation(entry.kind);
   const words = entry.words;
@@ -64,12 +58,6 @@ function HistoryEntryRow({
   }, [copied]);
 
   const recordedAt = entry.recordedAt === undefined ? undefined : new Date(entry.recordedAt);
-  // A chip per chat the line named, each the roster-validated identity and
-  // title the words were recorded beside, offered only while a press has
-  // somewhere to land: the session's current address, or — for a chat whose
-  // row has departed — the last one its provider reported, which the main
-  // process keeps and the press only ever names.
-  const mentions = (entry.mentions ?? []).filter((mention) => openable(mention));
 
   return (
     <li
@@ -78,8 +66,6 @@ function HistoryEntryRow({
       data-streaming={streaming ? "true" : undefined}
     >
       <small className="visually-hidden">{presentation.label}</small>
-      {/* The bubble anchors the copy control, so a chip row wrapping wider
-          below cannot pull the glyph away from the words it copies. */}
       <span className="history-bubble">
         <p>
           {words}
@@ -108,45 +94,6 @@ function HistoryEntryRow({
           </button>
         )}
       </span>
-      {mentions.length > 0 ? (
-        <span className="history-mentions">
-          {mentions.map((mention) => (
-            <button
-              key={`${mention.providerId}:${mention.providerSessionId}`}
-              type="button"
-              className="history-chip"
-              aria-label={`Open ${mention.title}`}
-              onClick={() =>
-                onOpenSession({
-                  providerId: mention.providerId,
-                  providerSessionId: mention.providerSessionId,
-                })
-              }
-            >
-              <ProviderMark providerId={mention.markId} />
-              <span className="history-chip-name">{mention.title}</span>
-              {/* The app marks the chat's row wore when the line was recorded,
-                  saying where it is also held. Bare marks, never presses of
-                  their own: the chip is one press, like the notice band's. */}
-              {mention.applications.length > 0 ? (
-                <span className="history-chip-applications">
-                  {mention.applications.map((application) => (
-                    <span
-                      key={application.id}
-                      className="history-chip-application"
-                      role="img"
-                      aria-label={`Also in ${application.name}`}
-                      title={application.name}
-                    >
-                      <ProviderMark providerId={application.id} />
-                    </span>
-                  ))}
-                </span>
-              ) : null}
-            </button>
-          ))}
-        </span>
-      ) : null}
     </li>
   );
 }
@@ -181,8 +128,6 @@ export function ConversationHistoryPanel({
   entries,
   live = [],
   onClear,
-  openable,
-  onOpenSession,
   ask,
   onAskEngaged,
   askShortcut,
@@ -194,10 +139,6 @@ export function ConversationHistoryPanel({
    */
   live?: readonly ConversationEntry[];
   onClear: () => void;
-  /** Whether a named chat still has an address a press could reach. */
-  openable: (identity: SessionIdentity) => boolean;
-  /** Hands a chip's roster-validated identity to the same open a row press takes. */
-  onOpenSession: (identity: SessionIdentity) => void;
   /** The same ask the sessions tab's composer carries: one conversation, reached from either tab. */
   ask: AskHandler;
   onAskEngaged: (engaged: boolean) => void;
@@ -274,12 +215,7 @@ export function ConversationHistoryPanel({
       ) : (
         <ol className="history-list" ref={list}>
           {keyedHistoryEntries(entries).map(({ entry, key }) => (
-            <HistoryEntryRow
-              key={key}
-              entry={entry}
-              openable={openable}
-              onOpenSession={onOpenSession}
-            />
+            <HistoryEntryRow key={key} entry={entry} />
           ))}
           {live.map((entry, index) => (
             <HistoryEntryRow
@@ -287,8 +223,6 @@ export function ConversationHistoryPanel({
               key={`live:${entry.kind}:${index}`}
               entry={entry}
               streaming
-              openable={openable}
-              onOpenSession={onOpenSession}
             />
           ))}
         </ol>

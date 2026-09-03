@@ -72,7 +72,6 @@ import {
   PROVIDER_ID,
   PROVIDER_ID_LIST,
   type ProviderId,
-  ReportedSessionLinks,
   SESSION_LOCATION,
   type Session,
   type SessionProviderAdapter,
@@ -255,9 +254,6 @@ const HOSTED_SERVICE_BASE_URL = ACCOUNT_BASE_URL.replace(/\/api\/auth\/?$/, "");
 const ACCOUNT_CLIENT_ID = "luke-desktop";
 const SESSION_REFRESH_INTERVAL_MS = 5_000;
 const sessionRegistry = new SessionRoster();
-// What lets a History line still open a chat whose roster row has departed —
-// archived in its provider — at the last address observation itself reported.
-const reportedSessionLinks = new ReportedSessionLinks();
 // Declared before the settings store because the store's snapshot asks it
 // what the latest pass learned about the Codex CLI's login. It observes only
 // inside the codex composite the provider registrations build; a fixture or
@@ -1547,8 +1543,8 @@ function performBrainAppAct(action: BrainAppActRequest["action"]): Promise<WireR
 /**
  * Hands one briefing the brain decided to the voice, or holds it while a
  * meeting or the pause stands. Voice gone means nothing to say it with, and
- * by the time a key returns the news is the panel's. Counted per observed
- * session it names, on the announcement's own event.
+ * by the time a key returns the news is the panel's. Counted once per
+ * briefing, with nothing observed about it.
  */
 async function deliverBriefing(delivery: BrainDelivery): Promise<void> {
   if (!voiceCapabilities.realtimeCredentials) return;
@@ -1558,19 +1554,8 @@ async function deliverBriefing(delivery: BrainDelivery): Promise<void> {
   }
   const host = panels.voiceHost();
   if (!host) return;
-  const payload: BriefingPayload = {
-    briefing: delivery.briefing,
-    sessionIds: delivery.sessionIds,
-    decidedAt: delivery.decidedAt,
-  };
-  for (const identity of delivery.sessionIds) {
-    const session = sessionRegistry.get(identity);
-    if (!session || !isProviderId(session.providerId)) continue;
-    productEvents.record(PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK, {
-      provider_id: session.providerId,
-      session_status: session.status,
-    });
-  }
+  const payload: BriefingPayload = { briefing: delivery.briefing, decidedAt: delivery.decidedAt };
+  productEvents.record(PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK, {});
   host.webContents.send(channels.onBriefing, payload);
   markFirstAnnouncementSpoken();
 }
@@ -1593,7 +1578,6 @@ function writeRememberedFacts(facts: readonly RememberedFact[]): boolean {
  */
 const sessionActPerformer = createSessionActPerformer({
   sessionRegistry,
-  lastReportedSessionLink: (identity) => reportedSessionLinks.lastReported(identity),
   openExternal: (url) => shell.openExternal(url),
   adapterFor,
   sendsNetwork: runMode.sendsNetwork,
@@ -2733,9 +2717,6 @@ function broadcastSessions(sessions: readonly Session[]): void {
 function startSessionObservation(): void {
   if (!runMode.observesProviders || !accountCapabilitiesActive() || unsubscribeSessions) return;
   unsubscribeSessions = sessionRegistry.subscribe((sessions) => {
-    // Remembered before anything else reads the pass: a History press may
-    // name any session an observation pass ever addressed.
-    reportedSessionLinks.remember(sessions);
     broadcastSessions(sessions);
     // A commit is also the earliest a created workspace can have arrived with
     // the address to open it by — whether on the refresh the creation itself

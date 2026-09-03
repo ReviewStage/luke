@@ -112,17 +112,6 @@ export {
   type SessionFilterAxis,
   sessionFilterAxis,
 } from "./session-filter.js";
-export { ReportedSessionLinks } from "./session-links.js";
-export {
-  firstWholeNameIndex,
-  MAXIMUM_MENTIONED_SESSIONS,
-  type MentionableSession,
-  MINIMUM_MENTION_TITLE_LENGTH,
-  mentionedSessions,
-  SESSION_MENTION_KIND,
-  type SessionMention,
-  type SessionMentionKind,
-} from "./session-mentions.js";
 export { SessionRoster, type SessionRosterListener } from "./session-registry.js";
 export {
   isListedWorkspaceAgentModel,

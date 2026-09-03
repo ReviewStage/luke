@@ -100,10 +100,6 @@ function deliveryRecord(delivery: BrainDelivery): WireRecord {
   return {
     briefing: delivery.briefing,
     decided_at: new Date(delivery.decidedAt).toISOString(),
-    session_ids: delivery.sessionIds.map((identity) => ({
-      provider_id: identity.providerId,
-      provider_session_id: identity.providerSessionId,
-    })),
   };
 }
 

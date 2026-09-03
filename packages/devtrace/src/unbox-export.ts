@@ -254,10 +254,7 @@ function brainOutputText(entry: WireRecord): string {
       `tool call: ${text(call.name) ?? "unknown"} -> ${text(call.outcomeStatus) ?? "unknown"}`,
   );
   const deliveries = recordItems(entry.deliveries).map(
-    (delivery) =>
-      `delivery: ${wholeNumber(delivery.briefingChars) ?? 0} chars about ${
-        wholeNumber(delivery.sessionCount) ?? 0
-      } sessions`,
+    (delivery) => `delivery: ${wholeNumber(delivery.briefingChars) ?? 0} chars`,
   );
   const outputText = text(entry.outputText);
   const error = text(entry.error);

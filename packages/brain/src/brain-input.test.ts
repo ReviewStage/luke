@@ -100,13 +100,12 @@ test("an ask item carries the question and the events that arrived since the las
   assert.equal(body.events_since_last_turn.length, 1);
 });
 
-test("a hold-released item lists the held briefings with their sessions", () => {
+test("a hold-released item lists the held briefings", () => {
   const body = itemBody(
     holdReleasedInputItem(
       [
         {
           briefing: "Checkout agent wants a decision.",
-          sessionIds: [{ providerId: claude.id, providerSessionId: "abc" }],
           decidedAt: NOW - 60_000,
           source: BRAIN_DELIVERY_SOURCE.WAKE,
         },
@@ -120,7 +119,6 @@ test("a hold-released item lists the held briefings with their sessions", () => 
       {
         briefing: "Checkout agent wants a decision.",
         decided_at: new Date(NOW - 60_000).toISOString(),
-        session_ids: [{ provider_id: "claude-code", provider_session_id: "abc" }],
       },
     ],
   });

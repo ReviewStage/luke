@@ -20,7 +20,6 @@ import {
 } from "@sidecar/analytics";
 import {
   ISSUE_ACTION_KIND,
-  type IssueIdentity,
   isIssueTrackerId,
   issueCommentText,
   type TrackedIssue,
@@ -63,8 +62,6 @@ import type { SettingsStore } from "../settings-store";
  */
 export interface SessionActPerformerDependencies {
   sessionRegistry: SessionRoster;
-  /** The last address an observation pass reported for a now-departed session. */
-  lastReportedSessionLink: (identity: SessionIdentity) => string | undefined;
   openExternal: (url: string) => Promise<void>;
   adapterFor: (providerId: string) => SessionProviderAdapter | undefined;
   sendsNetwork: boolean;
@@ -107,7 +104,6 @@ export interface SessionActPerformer {
     applicationId: SessionApplicationId,
   ): Promise<SessionOpenResult>;
   openSessionChange(identity: SessionIdentity): Promise<SessionOpenResult>;
-  openIssue(identity: IssueIdentity): Promise<SessionOpenResult>;
 }
 
 type MemoryWriter = (facts: readonly RememberedFact[]) => boolean;
@@ -148,11 +144,9 @@ const REFUSAL = {
   NO_ADDRESS: "That session has no address to open.",
   NO_APP_ADDRESS: "That session has no address to open in that app.",
   NO_CHANGE: "That session reports no pull request.",
-  NO_ISSUE_ADDRESS: "That issue has no address to open.",
   OPEN_FAILED: "The system could not open that session.",
   OPEN_APP_FAILED: "The system could not open that session in the selected app.",
   OPEN_CHANGE_FAILED: "The system could not open that pull request.",
-  OPEN_ISSUE_FAILED: "The system could not open that issue.",
 } as const;
 
 export function createSessionActPerformer(
@@ -160,7 +154,6 @@ export function createSessionActPerformer(
 ): SessionActPerformer {
   const {
     sessionRegistry,
-    lastReportedSessionLink,
     openExternal,
     adapterFor,
     sendsNetwork,
@@ -246,15 +239,9 @@ export function createSessionActPerformer(
     // go are different answers, and only the second says what to try instead.
     absentAddressReason: string,
     failureReason: string,
-    // The one open that outlives the roster row: a History chip's press. A
-    // session still reporting an address opens at its current one; the
-    // remembered address answers only where the roster has nothing better,
-    // so the offer the renderer computes from what it ever saw reported can
-    // never name a chat this refuses on this-run staleness alone.
-    rememberedAddress?: (identity: SessionIdentity) => string | undefined,
   ): Promise<SessionOpenResult> => {
     const observed = sessionRegistry.get(identity) !== undefined;
-    const url = (observed ? address(identity) : undefined) ?? rememberedAddress?.(identity);
+    const url = observed ? address(identity) : undefined;
     if (!url) {
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
@@ -276,11 +263,6 @@ export function createSessionActPerformer(
       (target) => pressedLink(sessionRegistry.get(target)?.detail.link),
       REFUSAL.NO_ADDRESS,
       REFUSAL.OPEN_FAILED,
-      // A History line keeps its press after the roster lets its session go —
-      // Conductor keeps an archived chat's deep link alive — at the last
-      // address an observation pass itself reported, never one the renderer
-      // carried over the bridge.
-      (target) => pressedLink(lastReportedSessionLink(target)),
     );
 
   const openSessionApplication = async (
@@ -319,39 +301,6 @@ export function createSessionActPerformer(
       REFUSAL.NO_CHANGE,
       REFUSAL.OPEN_CHANGE_FAILED,
     );
-
-  // Pressing an issue — the notice under the housing while Luke names it —
-  // hands its tracker's own address to the system, exactly as pressing a
-  // session's row does. The caller names an issue rather than an address, so
-  // the pages Luke can send you to are the issues currently observed: the
-  // URL is read back out of the roster, where normalization admitted nothing
-  // but a bounded https address, and nothing reaches the tracker. A fixture
-  // run observes no tracker and so opens nothing.
-  const openIssue = async (identity: IssueIdentity): Promise<SessionOpenResult> => {
-    const issue = trackedIssues()?.find(
-      (candidate) =>
-        candidate.trackerId === identity.trackerId && candidate.identifier === identity.identifier,
-    );
-    if (!issue) return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_ISSUE };
-    if (!issue.url) {
-      return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_ISSUE_ADDRESS };
-    }
-    try {
-      await openExternal(issue.url);
-    } catch {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: REFUSAL.OPEN_ISSUE_FAILED };
-    }
-    // A roster reports its tracker id as a string; only one this build's own
-    // vocabulary names has anything to be counted under, exactly as the
-    // session opens narrow their provider id.
-    if (isIssueTrackerId(identity.trackerId)) {
-      recordProductEvent(PRODUCT_EVENT.ISSUE_ACT_SEND, {
-        tracker_id: identity.trackerId,
-        issue_act: PRODUCT_ISSUE_ACT.ISSUE_OPEN,
-      });
-    }
-    return { status: ACT_RESULT_STATUS.ACCEPTED };
-  };
 
   // A message is handed to the session's own provider, through the adapter
   // that observed it — the one component that knows the documented way in.
@@ -796,13 +745,12 @@ export function createSessionActPerformer(
     openSession,
     openSessionApplication,
     openSessionChange,
-    openIssue,
   };
 }
 
 /**
- * The presses that need no brain: a row, an app mark, the pull-request chip,
- * and an issue chip each hand an address the roster reported to the system.
+ * The presses that need no brain: a row, an app mark, and the pull-request
+ * chip each hand an address the roster reported to the system.
  * Opening is not a write, so these stay on the bridge for the renderer to
  * call directly.
  */
@@ -827,10 +775,6 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
   registerAction<[SessionIdentity], SessionOpenResult>(BRIDGE.openSessionChange, {
     act: (identity) => performer.openSessionChange(identity),
     failure: failure(REFUSAL.OPEN_CHANGE_FAILED),
-  });
-  registerAction<[IssueIdentity], SessionOpenResult>(BRIDGE.openIssue, {
-    act: (identity) => performer.openIssue(identity),
-    failure: failure(REFUSAL.OPEN_ISSUE_FAILED),
   });
 }
 

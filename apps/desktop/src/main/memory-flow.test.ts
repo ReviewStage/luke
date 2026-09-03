@@ -76,14 +76,14 @@ test("window snapshots merge once and cannot restore a cleared thread", () => {
 
 test("window snapshots keep matching words about different sessions", () => {
   const first = {
-    kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
-    words: "Two chats changed.",
-    identities: [{ providerId: "claude-code", providerSessionId: "session-a" }],
+    kind: CONVERSATION_ENTRY_KIND.ACT,
+    words: "sent a message.",
+    identity: { providerId: "claude-code", providerSessionId: "session-a" },
     recordedAt: NOW,
   };
   const second = {
     ...first,
-    identities: [{ providerId: "codex", providerSessionId: "session-b" }],
+    identity: { providerId: "codex", providerSessionId: "session-b" },
   };
   const merged = mergeConversationHistory([first], [second], undefined, NOW);
 

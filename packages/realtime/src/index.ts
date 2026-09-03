@@ -12,8 +12,6 @@ export {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   type ConversationEntryKind,
-  type ConversationEntryMention,
-  type ConversationEntryMentionApplication,
   conversationEntryKey,
   conversationHistoryText,
   insertSpokenAskEntry,

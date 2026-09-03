@@ -96,7 +96,6 @@ test("a brain ask crosses the bridge as one string and answers a bounded result"
       askBrain: (_context, question) => ({
         status: ACT_RESULT_STATUS.ACCEPTED,
         briefing: `heard: ${question}`,
-        sessionIds: [],
       }),
     },
     fixture.host,
@@ -108,7 +107,6 @@ test("a brain ask crosses the bridge as one string and answers a bounded result"
   assert.deepEqual(await invoke?.(event, "what needs me?"), {
     status: ACT_RESULT_STATUS.ACCEPTED,
     briefing: "heard: what needs me?",
-    sessionIds: [],
   });
 });
 

@@ -1,5 +1,5 @@
 import { LUKE_PERSONA } from "@sidecar/guide";
-import { maximumSessionMessageLength, type SessionIdentity } from "@sidecar/session";
+import { maximumSessionMessageLength } from "@sidecar/session";
 import {
   isRecord,
   isWireString,
@@ -202,9 +202,6 @@ const REALTIME_INSTRUCTION_HEAD: readonly string[] = [
   "You are the voice.",
   `- For anything about the developer's agents, settings, issues, or anything to do, call ${ASK_BRAIN_TOOL.name}`,
   "  with their words, and say its answer whole in your own voice.",
-  '- Before calling it, say one short acknowledgement of five words or fewer, plain, like "Let me',
-  '  check", and nothing more: do not restate their question, guess at an answer, or add a word',
-  "  past those few. Then call the tool.",
   "- Small talk you may answer yourself.",
   "- Never invent an agent, a status, or an outcome: what you know about the developer's work is what",
   "  the brain told you this turn, and nothing else.",
@@ -468,15 +465,13 @@ export function outputSpeedUpdateEvents(speed: number): readonly WireRecord[] {
 export const BRIEFING_SPEECH_KIND = "briefing";
 
 /**
- * One briefing the brain handed the mouth: the words, the observed sessions
- * it is about (each validated against the roster at the decision, so the
- * notice band can point at them), and when it was decided, so a stale one
- * is dropped rather than read out as though it just happened.
+ * One briefing the brain handed the mouth: the words, and when it was
+ * decided, so a stale one is dropped rather than read out as though it just
+ * happened.
  */
 export interface BriefingSpeech {
   kind: typeof BRIEFING_SPEECH_KIND;
   briefing: string;
-  sessionIds: readonly SessionIdentity[];
   decidedAt: number;
 }
 

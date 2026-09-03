@@ -216,20 +216,14 @@
      stacked elements partitioning the reserved room, never one shared
      height. */
   --volume-hint-size: 0px;
-  /* The notice band under the housing — one row for the chips naming the
-     sessions the reply being spoken is about, the inset above them included —
-     arrives as `--notice-size` from the shared surface tokens, because the
-     compact window reserves its room on top of the caption's: the chips stand
-     directly under the housing, and captioned words drop below their band. */
-  /* The one width the caption block, the volume hint, and the notice band all
-     lay out at: the peek less one convex corner a side, so their last row ends
-     inside the shape's bottom curve. The open panel overrides it with its own
-     usable width, where these three stand at its foot; the compact value
-     keeps a name of its own because the panel measures its widen step
-     against it. */
+  /* The one width the caption block and the volume hint both lay out at: the
+     peek less one convex corner a side, so their last row ends inside the
+     shape's bottom curve. The open panel overrides it with its own usable
+     width, where both stand at its foot; the compact value keeps a name of
+     its own because the panel measures its widen step against it. */
   --voice-band-width-compact: calc(var(--peek-width) - var(--notch-convex-radius) * 2);
   --voice-band-width: var(--voice-band-width-compact);
-  /* Where the three of them measure their travel from. Each is positioned at
+  /* Where the two of them measure their travel from. Each is positioned at
      the strip's full height and then moved by this, because a bubble's shape
      is the strip inset by `--shape-top` on both edges: the strip a band hangs
      off ends that much higher than the element's own top, and the shape's
@@ -281,9 +275,9 @@
      that much below the element's top here, not above it — without the sign
      change a bubble's panel closed on a gap twice the lift too wide. */
   --voice-band-origin: var(--shape-top, 0px);
-  /* The panel hands the caption block, the volume hint, and the notice band
-     its usable width — the content column between the panel's insets, which
-     also clears the bottom corners' curve beside the band's last row. The
+  /* The panel hands the caption block and the volume hint its usable width —
+     the content column between the panel's insets, which also clears the
+     bottom corners' curve beside the band's last row. The
      width itself snaps, because animating a width re-wraps text on every
      frame; `--voice-band-widen`, the half-side step up from the compact
      width, is what the widen keyframe spends as a clip so the change rides
@@ -451,7 +445,6 @@ button:disabled {
    housing: a shape that has left the housing's footprint needs the depth, and
    one still inside it must stay indistinguishable from the hardware. */
 .app-stage[data-presentation="capsule"][data-caption="true"] .panel-surface,
-.app-stage[data-presentation="capsule"][data-notice="true"] .panel-surface,
 .app-stage[data-presentation="peek"] .panel-surface,
 .app-stage[data-presentation="slot"] .panel-surface,
 .app-stage[data-presentation="feedback"] .panel-surface,
@@ -1152,8 +1145,8 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   min-height: calc(var(--capsule-height) - var(--shape-top) * 2);
   /* Half the resting strip, stated as that number rather than an overlarge
      one: at rest the two draw the same pill, but an overlarge radius scales
-     with whatever box it is given, so a shape grown for captions or chips
-     curved its sides to half its new height — under bands laid out for the
+     with whatever box it is given, so a shape grown for captions curved its
+     sides to half its new height — under bands laid out for the
      resting corner, whose first line ran past the curve onto the desktop.
      Stated once here, the growth extends the pill downward with the corners
      it had, the same way the notch capsule keeps its convex radius. */
@@ -1458,8 +1451,8 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 /* The row's height mirrors VOLUME_HINT_HEIGHT in volume-hint.ts — the two
-   must agree — and is exactly what it draws: the pill a chip is, with the
-   sentence beside it. */
+   must agree — and is exactly what it draws: a small pill with the sentence
+   beside it. */
 .volume-hint {
   position: absolute;
   z-index: 5;
@@ -1515,10 +1508,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   white-space: nowrap;
 }
 
-/* The notice chip's pill exactly — same height, padding, and radius — because
-   the two are the pressable things that appear under the housing and a row of
-   one standing a pixel taller than a row of the other is a difference nobody
-   meant. */
+/* A small raised pill, the one pressable thing that appears under the housing. */
 .volume-hint-dismiss {
   display: flex;
   flex: 0 0 auto;
@@ -1538,60 +1528,14 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   background: var(--raised-strong);
 }
 
-/* Session notice ----------------------------------------------------------- */
-
-/* The sessions Luke is talking about, pressable while he says them: the
-   surface grows a band for the chips naming them — an announcement's one
-   subject, or the several a conversation reply mentions, wrapped into
-   centred rows — directly under the housing. `--notice-growth` arrives
-   measured, the caption block's own pattern: the chips size to their names
-   and wrap where they wrap, so only a measurement can say how tall the band
-   is, and the renderer clamps it to the `--notice-max-rows` rows the compact
-   window reserved on top of the caption room — drawing all of it costs no
-   IPC. Captioned words drop below the chips' band; with captions off it
-   stands alone, so the mentions are pressable either way. `--caption-rest`
-   is the caption block's own lift, the same variable the panel's foot
-   spends, so the words and the volume hint inside their block both take the
-   drop from one assignment — and it is the band's growth exactly, because
-   the growth ends where the chips do and the block below carries its own
-   inset. */
-.app-stage[data-presentation="capsule"][data-notice="true"],
-.app-stage[data-presentation="peek"][data-notice="true"] {
-  --caption-growth: calc(var(--notice-growth, var(--notice-size)) + var(--voice-band-inset));
-  --caption-rest: var(--notice-growth, var(--notice-size));
-}
-
-/* Both at once: the caption keeps its measured room and the notice band adds
-   its own below. Stated after the single-band rules so it wins their tie. */
-.app-stage[data-presentation="capsule"][data-caption="true"][data-notice="true"],
-.app-stage[data-presentation="peek"][data-caption="true"][data-notice="true"] {
-  --caption-growth: calc(
-    var(--caption-size, 20px) +
-    var(--volume-hint-size) +
-    var(--notice-growth, var(--notice-size)) +
-    var(--voice-band-inset)
-  );
-}
-
-/* While a notice stands, the capsule holds the peek's width, exactly as the
-   caption's states do: the chip lays out at one width in every state, so a
-   pointer arriving mid-notice morphs the wings and moves the name not at
-   all. Growing leads — the base rule's delay is for leaving. */
-.app-stage[data-presentation="capsule"][data-notice="true"] .panel-surface {
-  width: var(--peek-width);
-  transform: translate(-50%, var(--shape-top, 0px));
-  transition-duration: var(--duration-shape);
-  transition-delay: 0s;
-}
-
 /* Leaving the panel is the one way into the compact states by a shrink, and
    the grow-leads rules above would let the shape abandon its content: the
    panel's rows are still fading over `--duration-exit`, and the caption
-   block and the notice band wait out the same delay before riding down from
-   the panel's foot — a surface moving at once shrinks out from under all of
-   them. The renderer marks the collapse for the window's own collapse clock,
-   exit plus shape, so the shape waits here and nowhere else: a caption or a
-   band growing at rest keeps leading. */
+   block waits out the same delay before riding down from the panel's foot —
+   a surface moving at once shrinks out from under both. The renderer marks
+   the collapse for the window's own collapse clock, exit plus shape, so the
+   shape waits here and nowhere else: a caption growing at rest keeps
+   leading. */
 .app-stage[data-leaving-panel="true"][data-presentation="capsule"] .panel-surface,
 .app-stage[data-leaving-panel="true"][data-presentation="peek"] .panel-surface {
   transition-delay: var(--duration-exit);
@@ -1605,234 +1549,21 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transition-delay: calc(var(--duration-shape) - var(--duration-quick)), var(--duration-exit);
 }
 
-.app-stage[data-presentation="capsule"][data-notice="true"] .compact-hover-target {
-  width: var(--peek-width);
-  transform: translateX(-50%);
-}
-
-/* The press target covers the notice band as well as the strip, for the
-   caption's reason: the chip is drawn on the shape, and a shape the pointer
-   is over must keep taking the pointer. */
-.app-stage[data-presentation="capsule"][data-notice="true"] .compact-hover-target,
-.app-stage[data-presentation="peek"][data-notice="true"] .compact-hover-target {
-  height: calc(var(--capsule-height) + var(--caption-growth));
-}
-
-.app-stage[data-notch="false"][data-presentation="capsule"][data-notice="true"]
-  .compact-hover-target,
-.app-stage[data-notch="false"][data-presentation="peek"][data-notice="true"] .compact-hover-target {
-  height: calc(var(--capsule-height) - var(--shape-top) * 2 + var(--caption-growth));
-}
-
-/* The band the chips share: centred wrapped rows. In the compact states it
-   stands directly under the housing and the words are what move — the band
-   wants a fade crossing the last of the shape's travel, not a journey of its
-   own. `--notice-rest` is its one journey — the ride to the open panel's
-   foot, the caption's own travel — and the transform waits out
-   `--duration-exit` like the caption's does, so leaving a state the band
-   travels with the shape rather than ahead of it. It fades as one, however
-   many sessions the reply names, so a chip can never linger after the words
-   that earned it. The box is always every row the window reserved and the
-   clip is what tracks the chips — the caption block's own geometry: the rows
-   the chips wrapped into land in layout at once, and the clip springs to
-   `--notice-growth` on the surface's own clock, so a row the chips just
-   wrapped into is uncovered by the shape's travel instead of the box
-   snapping past an edge still springing toward it. Past `--notice-max-rows`
-   the chips scroll inside the band rather than the shape growing further,
-   because the window reserved exactly that many rows and anything taller
-   would be drawn on the desktop. Above the hover strip (z-index 4) because
-   the presses have to open the sessions. */
-.session-notices {
-  /* Named so the widen keyframe can hold it while animating the sides: an
-     animation owns the whole clip-path while it runs. */
-  --voice-band-clip-bottom: calc(
-    var(--notice-size) *
-    var(--notice-max-rows) -
-    var(--notice-growth, var(--notice-size))
-  );
-  position: absolute;
-  z-index: 5;
-  top: var(--capsule-height);
-  left: 50%;
-  overflow-y: auto;
-  /* The state's own band width, shared with the caption block: the band's
-     last row ends one inset above the shape's edge, where the bottom corners
-     curve in, and a chip wider than the state's width would poke past the
-     curve onto the desktop. A definite width, not a cap: `left: 50%` leaves
-     an absolutely positioned box only the right half of the stage as
-     available space, so a shrink-to-fit band resolves to half its intended
-     width and stacks one chip to a row — the translate recentres the box but
-     never gives the width back. */
-  width: var(--voice-band-width);
-  /* Every reserved row of chips and nothing else: each `--notice-size` is a
-     chip row plus the inset above it, and the band's own inset rides in the
-     transform below, so taking one off leaves exactly the rows. That is what
-     lets the clip measure rows rather than rows-plus-a-gap. */
-  height: calc(var(--notice-size) * var(--notice-max-rows) - var(--voice-band-inset));
-  clip-path: inset(0 0 var(--voice-band-clip-bottom));
-  opacity: 0;
-  pointer-events: none;
-  transform: translate(
-    -50%,
-    calc(var(--voice-band-inset) + var(--voice-band-origin) + var(--notice-rest, 0px))
-  );
-  transition:
-    opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-shape) var(--spring) var(--duration-exit),
-    clip-path var(--duration-shape) var(--spring) var(--duration-exit);
-}
-
-/* The rows inside the box: the chips wrap here, so this stack's natural
-   height — never the clipped box's — is what the renderer measures into
-   `--notice-growth`. They wrap at the band's own inset, which is what makes a
-   two-row band as evenly spaced inside as it is against the strip above and
-   the shape's edge below — and what makes each measured row land on an exact
-   `--notice-size`, the row the window reserved. */
-.session-notice-rows {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: var(--voice-band-inset);
-  width: 100%;
-}
-
-/* Arrives the way the caption's first words do — the fade crossing the last
-   of the shape's travel, and the clip alone taking no delay while the band
-   is up: it is the shape's twin, not content following it. Takes the pointer
-   only while it is drawn, because everything a hidden button covers is
-   desktop. */
-.app-stage[data-presentation="capsule"][data-notice="true"] .session-notices,
-.app-stage[data-presentation="peek"][data-notice="true"] .session-notices {
-  opacity: 1;
-  pointer-events: auto;
-  transition:
-    opacity var(--duration-quick) var(--motion-exit)
-    calc(var(--duration-shape) - var(--duration-quick)),
-    transform var(--duration-shape) var(--spring) var(--duration-exit),
-    clip-path var(--duration-shape) var(--spring);
-}
-
-/* The folds: a band with chips beyond an edge fades the chips into that
-   edge, which is what says there is more to scroll to — a fold with no edge
-   hides its lower rows silently. Each mask covers only the edge that has
-   more; a band whose chips all fit wears none, so nothing readable is ever
-   dimmed for decoration. */
-.session-notices[data-fold-below="true"] {
-  mask-image: linear-gradient(to bottom, black calc(100% - 14px), transparent);
-}
-
-.session-notices[data-fold-above="true"] {
-  mask-image: linear-gradient(to bottom, transparent, black 14px);
-}
-
-.session-notices[data-fold-above="true"][data-fold-below="true"] {
-  mask-image: linear-gradient(
-    to bottom,
-    transparent,
-    black 14px,
-    black calc(100% - 14px),
-    transparent
-  );
-}
-
-/* Each chip: a raised, pressable pill named like the session's row — its
-   provider's mark and its title, sized to the name and nothing more. The
-   chips wrap where they wrap; only a name too long for the whole band
-   ellipsizes rather than widening the chip past it. A chip joins the way
-   the options popover does — a mount fade on the shared tokens, which a
-   capture run and reduced motion have already zeroed — because mentions
-   accumulate as the words are said, and a pill simply appearing mid-reply
-   reads as a redraw rather than an arrival. The band's own opacity governs
-   the first chips: their mount fade has settled long before the band's
-   delayed arrival reveals them. */
-.session-notice {
-  display: flex;
-  min-width: 0;
-  max-width: 100%;
-  flex: 0 1 auto;
-  align-items: center;
-  gap: 5px;
-  height: 20px;
-  padding: 0 9px;
-  border-radius: 10px;
-  animation: notice-chip-enter var(--duration-quick) var(--motion-exit) both;
-  background: var(--raised);
-  color: var(--text-primary);
-  font-size: 10px;
-  font-weight: 640;
-  transition: background-color var(--duration-hover) ease;
-}
-
-@keyframes notice-chip-enter {
-  from {
-    opacity: 0;
-    transform: translateY(2px) scale(0.97);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-/* The open panel keeps the band at its foot, the way it keeps the caption's
-   words: the mentioned sessions' rows are up in the list, but the chips are
-   what say which of them Luke is talking about, and each press stays one
-   press either way. The band stands above the caption's block when one is
-   drawn — the compact order, chips first and words below. `--notice-rest` is
-   the travel from under the housing to the foot the panel's measured height
-   puts there, less the band's own measured growth, so however many rows the
-   chips wrapped into end just above the panel's edge. Expanding, the band
-   leads with the surface — no delay, the panel's own timing — and
-   collapsing, the compact rule above holds it back by `--duration-exit` so
-   it leaves with the shape. */
-.app-stage[data-presentation="panel"][data-notice="true"] {
-  --notice-rest: calc(
-    var(--panel-height, var(--panel-height-max)) -
-    var(--capsule-height) -
-    var(--notice-growth, var(--notice-size)) -
-    var(--voice-band-inset)
-  );
-}
-
-.app-stage[data-presentation="panel"][data-caption="true"][data-notice="true"] {
-  --notice-rest: calc(
-    var(--panel-height, var(--panel-height-max)) -
-    var(--capsule-height) -
-    var(--caption-size, 20px) -
-    var(--volume-hint-size) -
-    var(--notice-growth, var(--notice-size)) -
-    var(--voice-band-inset)
-  );
-}
-
-.app-stage[data-presentation="panel"][data-notice="true"] .session-notices {
-  opacity: 1;
-  pointer-events: auto;
-  transition:
-    opacity var(--duration-quick) var(--motion-exit)
-    calc(var(--duration-shape) - var(--duration-quick)),
-    transform var(--duration-shape) var(--spring),
-    clip-path var(--duration-shape) var(--spring);
-}
-
 /* Opening the panel is the one move that changes `--voice-band-width`, and
    the new width lands at once — a width that animated would re-wrap the words
-   and re-flow the chips on every frame. What must not land at once is the
-   reveal: on the flip the surface is still the peek's width, so the extra
-   width waits behind a side clip released on the surface's own duration and
-   spring — the shape's edge is what uncovers the wider rows, exactly as it
-   uncovers arriving content. Keyed to the presentation alone: all three
-   elements are always mounted, so the animation fires only at the flip and
-   never mid-panel, where the surface is already wide and the caption's and
-   the band's arriving content needs its clip transition live rather than
-   owned by a finished animation. One keyframe serves all three because each
-   element's `--voice-band-clip-bottom` — 0 for the hint's bare row — rides
-   through both frames unchanged, so the animation ends exactly on the clip
-   the element's own rule draws. Leaving the panel needs no twin: the compact
-   width snaps back on the flip, already inside every edge the collapse will
-   pass. */
+   on every frame. What must not land at once is the reveal: on the flip the
+   surface is still the peek's width, so the extra width waits behind a side
+   clip released on the surface's own duration and spring — the shape's edge
+   is what uncovers the wider rows, exactly as it uncovers arriving content.
+   Keyed to the presentation alone: both elements are always mounted, so the
+   animation fires only at the flip and never mid-panel, where the surface is
+   already wide and the caption's arriving content needs its clip transition
+   live rather than owned by a finished animation. One keyframe serves both
+   because each element's `--voice-band-clip-bottom` — 0 for the hint's bare
+   row — rides through both frames unchanged, so the animation ends exactly
+   on the clip the element's own rule draws. Leaving the panel needs no twin:
+   the compact width snaps back on the flip, already inside every edge the
+   collapse will pass. */
 @keyframes voice-band-widen {
   from {
     clip-path: inset(0 var(--voice-band-widen) var(--voice-band-clip-bottom, 0px));
@@ -1844,65 +1575,8 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 .app-stage[data-presentation="panel"] .voice-caption,
-.app-stage[data-presentation="panel"] .volume-hint,
-.app-stage[data-presentation="panel"] .session-notices {
+.app-stage[data-presentation="panel"] .volume-hint {
   animation: voice-band-widen var(--duration-shape) var(--spring);
-}
-
-/* The chips are drawn on the shape, not in the panel's flow, so the body
-   reserves their band under the same padding the caption block takes — and
-   both at once stack, the caption's room under the chips'. Reserved whenever
-   the notice stands rather than only while the panel is up, so the height
-   the panel reports is already right when an expand begins mid-announcement. */
-.app-stage[data-notice="true"] .expanded-panel {
-  padding-bottom: calc(18px + var(--notice-growth, var(--notice-size)) + var(--voice-band-inset));
-}
-
-.app-stage[data-caption="true"][data-notice="true"] .expanded-panel {
-  padding-bottom: calc(
-    18px +
-    var(--caption-size, 20px) +
-    var(--volume-hint-size) +
-    var(--notice-growth, var(--notice-size)) +
-    var(--voice-band-inset)
-  );
-}
-
-.session-notice:hover {
-  background: var(--raised-strong);
-}
-
-.session-notice .provider-mark {
-  flex: 0 0 auto;
-  width: 11px;
-  height: 11px;
-}
-
-/* App associations trail the name as bare marks, the way they trail the
-   title on the session's own row: the leading mark says which agent this
-   is, these say where the same chat is also held. Secondary ink keeps them
-   subordinate to the name inside a chip this small. */
-.session-notice-applications {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 4px;
-  color: var(--text-secondary);
-}
-
-.session-notice-application {
-  display: grid;
-  place-items: center;
-}
-
-.session-notice .provider-mark[data-mark="superset"] {
-  width: 19px;
-}
-
-.session-notice-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* Waveform --------------------------------------------------------------- */

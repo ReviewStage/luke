@@ -5,7 +5,6 @@ import {
   SESSION_APPLICATION_SCOPE,
   SESSION_LOCATION,
   type SessionApplicationId,
-  type SessionIdentity,
 } from "@sidecar/session";
 import { SESSION_URGENCY } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
@@ -524,10 +523,6 @@ export interface PanelBodyProps {
   liveConversationEntries: readonly ConversationEntry[];
   /** Clears that same thread from the view, Luke's next context, and the stored file. */
   onClearConversationHistory: () => void;
-  /** Whether a chat a history line named still has an address a press could reach. */
-  conversationSessionOpenable: (identity: SessionIdentity) => boolean;
-  /** Opens one chat a history line named, by identity alone. */
-  onOpenConversationSession: (identity: SessionIdentity) => void;
   /** Carries a typed ask to Luke's own conversation, answering why it could not go. */
   ask: AskHandler;
   /** Reports someone being part-way through an ask, so the panel holds for them. */
@@ -580,8 +575,6 @@ export function PanelBody({
   conversationHistory,
   liveConversationEntries,
   onClearConversationHistory,
-  conversationSessionOpenable,
-  onOpenConversationSession,
   ask,
   onAskEngaged,
   askShortcut,
@@ -699,8 +692,6 @@ export function PanelBody({
           entries={conversationHistory}
           live={liveConversationEntries}
           onClear={onClearConversationHistory}
-          openable={conversationSessionOpenable}
-          onOpenSession={onOpenConversationSession}
           ask={ask}
           onAskEngaged={onAskEngaged}
           {...(askShortcut ? { askShortcut } : undefined)}

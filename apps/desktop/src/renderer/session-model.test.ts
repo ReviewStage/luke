@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { FIXTURE_SPEAKING_CAPTION, fixtureSnapshot } from "@sidecar/fixtures";
+import { fixtureSnapshot } from "@sidecar/fixtures";
 import {
   HOSTED_AGENT_ID,
   normalizeSession,
@@ -18,9 +18,7 @@ import {
   arrangeSessions,
   DEFAULT_SESSION_VIEW,
   displaySessions,
-  fixtureMentionChips,
   lastActivityLabel,
-  MENTION_CHIP_KIND,
   matchRanges,
   SESSION_FILTER,
   SESSION_FILTER_AXIS,
@@ -1397,34 +1395,5 @@ test("a hosted chat carries its agent for the mark, the chips, and the search", 
   assert.deepEqual(
     tally.providers.map((provider) => provider.providerId),
     [PROVIDER_ID.CONDUCTOR, PROVIDER_ID.CODEX],
-  );
-});
-
-test("the fixture's own sentence earns chips for the rows it names", () => {
-  const fixture = fixtureSnapshot("smoke");
-  const chips = fixtureMentionChips(FIXTURE_SPEAKING_CAPTION, fixture.sessions);
-
-  // Named whole, in the order the sentence says them: two chats by title, the
-  // Conductor workspace by name, two more chats. The Codex row is named by a
-  // fragment of its long title rather than the whole of it, so it earns
-  // nothing — the same refusal a live reply would meet.
-  assert.deepEqual(
-    chips.map((chip) => chip.title),
-    ["Review trust constraints", "lisbon-v2", "Follow a cloud agent", "Watch a cloud session"],
-  );
-  // Every chip stands for a row the surface is drawing, and wears the mark of
-  // the agent having the conversation.
-  for (const chip of chips) {
-    assert.equal(chip.kind, MENTION_CHIP_KIND.SESSION);
-    const row = fixture.sessions.find((session) => session.id === chip.id);
-    assert.ok(row);
-    assert.equal(chip.markId, row.agentId ?? row.providerId);
-  }
-});
-
-test("a fixture sentence naming nothing on the roster earns no chips", () => {
-  assert.deepEqual(
-    fixtureMentionChips("Nothing here names a session.", fixtureSnapshot("smoke").sessions),
-    [],
   );
 });

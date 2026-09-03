@@ -77,14 +77,8 @@ export interface FixtureSnapshot {
  * opens a call, so there are no words to draw unless the fixture supplies
  * them — and it must, or the caption strip ships unphotographed. Synthetic,
  * like every fixture, and long enough to wrap: a one-line fixture would leave
- * the wrapped form of the strip unphotographed too.
- *
- * It lives here, beside the roster it talks about, because it names that
- * roster's own rows — three chats by title and one workspace by name — and a
- * reply's mentions are what the notice band draws chips for. Reworded apart
- * from the fixture, it would quietly stop naming anything and the band would
- * go unphotographed; the test beside this file is what holds the two
- * together.
+ * the wrapped form of the strip unphotographed too. It lives here, beside the
+ * roster it talks about, so the sentence stays true to the rows it names.
  */
 export const FIXTURE_SPEAKING_CAPTION =
   "Bootstrap the desktop shell and Review trust constraints are finished, lisbon-v2 is packaging the macOS build, and Follow a cloud agent and Watch a cloud session are waiting on you.";

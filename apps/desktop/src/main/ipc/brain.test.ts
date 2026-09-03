@@ -10,7 +10,7 @@ function brainAnswering(answer: { text: string } | undefined, asked: string[]): 
   return {
     ask: async (question: string) => {
       asked.push(question);
-      return answer ? { text: answer.text, sessionIds: [] } : undefined;
+      return answer ? { text: answer.text } : undefined;
     },
   } as unknown as BrainAgent;
 }
@@ -41,6 +41,5 @@ test("an answered ask is bounded like a typed one and carries the reply whole", 
   assert.deepEqual(answer, {
     status: ACT_RESULT_STATUS.ACCEPTED,
     briefing: "Two agents are waiting.",
-    sessionIds: [],
   });
 });
