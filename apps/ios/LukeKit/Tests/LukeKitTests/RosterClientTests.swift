@@ -56,12 +56,29 @@ final class RosterSessionTests: XCTestCase {
             "status": "waiting",
             "workspace": "my-repo",
             "branch": "main",
+            "change": "https://github.com/ReviewStage/luke/pull/642",
             "recap": "Waiting for approval",
         ])
         XCTAssertEqual(s?.workspace, "my-repo")
         XCTAssertEqual(s?.branch, "main")
+        XCTAssertEqual(s?.change, URL(string: "https://github.com/ReviewStage/luke/pull/642"))
         XCTAssertEqual(s?.recap, "Waiting for approval")
         XCTAssertNil(s?.error)
+    }
+
+    func testPublishedChangeMustBeAnHTTPSAddress() {
+        let base: [String: Any] = [
+            "providerId": "codex",
+            "sessionId": "sess-change",
+            "title": "Task",
+            "status": "complete",
+        ]
+
+        for invalid in ["/relative", "http://github.com/owner/repo/pull/1", "javascript:alert(1)"] {
+            var json = base
+            json["change"] = invalid
+            XCTAssertNil(RosterSession(json: json)?.change)
+        }
     }
 }
 

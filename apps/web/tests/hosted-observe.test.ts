@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { observeAnswerFromWire } from "@sidecar/hosted";
+import { SESSION_STATUS } from "@sidecar/session";
 import { encryptProviderKey } from "../server/hosted/encryption";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
-import { handleObserve, type VaultKeyRow } from "../server/hosted/observe";
+import {
+  handleObserve,
+  observedSessionForResponse,
+  type VaultKeyRow,
+} from "../server/hosted/observe";
 
 const SECRET = "a".repeat(64);
 
@@ -80,6 +85,32 @@ test("a provider that throws during observation does not fail the whole response
 
 // --- Wire contract ---
 
+test("the observe response carries only a validated published-work address", () => {
+  const observation = {
+    providerSessionId: "sess-change",
+    title: "Published work",
+    status: SESSION_STATUS.COMPLETE,
+    observedAt: Date.parse("2026-09-02T18:00:00.000Z"),
+  };
+
+  assert.deepEqual(
+    observedSessionForResponse("conductor", {
+      ...observation,
+      detail: {
+        change: "https://github.com/ReviewStage/luke/pull/642",
+      },
+    }).change,
+    "https://github.com/ReviewStage/luke/pull/642",
+  );
+  const invalid = observedSessionForResponse("conductor", {
+    ...observation,
+    detail: {
+      change: "javascript:alert(1)",
+    },
+  });
+  assert.equal(invalid.change, undefined);
+});
+
 test("observeAnswerFromWire accepts a valid answer", () => {
   const raw = {
     sessions: [
@@ -90,6 +121,7 @@ test("observeAnswerFromWire accepts a valid answer", () => {
         status: "working",
         workspace: "my-repo",
         branch: "main",
+        change: "https://github.com/ReviewStage/luke/pull/642",
         recap: "Working on tests",
       },
     ],
@@ -101,6 +133,23 @@ test("observeAnswerFromWire accepts a valid answer", () => {
   assert.equal(answer.sessions[0]?.title, "My PR");
   assert.equal(answer.sessions[0]?.status, "working");
   assert.equal(answer.sessions[0]?.workspace, "my-repo");
+  assert.equal(answer.sessions[0]?.change, "https://github.com/ReviewStage/luke/pull/642");
+});
+
+test("observeAnswerFromWire drops a published-work address that is not HTTPS", () => {
+  const answer = observeAnswerFromWire({
+    sessions: [
+      {
+        providerId: "conductor",
+        sessionId: "sess-change",
+        title: "Published work",
+        status: "complete",
+        change: "javascript:alert(1)",
+      },
+    ],
+  });
+
+  assert.equal(answer?.sessions[0]?.change, undefined);
 });
 
 test("observeAnswerFromWire skips malformed session entries rather than failing", () => {

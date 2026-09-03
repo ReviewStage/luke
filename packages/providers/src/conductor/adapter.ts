@@ -1686,11 +1686,12 @@ function workspaceFromRecord(record: WireRecord): ConductorWorkspace | undefined
   if (state && CONDUCTOR_RETIRED_WORKSPACE_STATUSES.has(state)) return undefined;
   const creatorId = textFromRecord(record, CONDUCTOR_FIELD.CREATOR_ID);
   const name = textFromRecord(record, CONDUCTOR_FIELD.NAME)?.slice(0, maximumSessionTitleLength);
+  const repoUrl = textFromRecord(record, CONDUCTOR_FIELD.REPO_URL);
   return {
     id,
     // The listing names each workspace's repository itself, so the label no
     // longer rides in from the project that grouped it.
-    repositoryLabel: repositoryLabel(textFromRecord(record, CONDUCTOR_FIELD.REPO_URL), undefined),
+    repositoryLabel: repositoryLabel(repoUrl, undefined),
     lastActivityAt,
     ...(name ? { name } : undefined),
     ...(creatorId ? { creatorId } : undefined),
