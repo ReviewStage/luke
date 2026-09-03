@@ -744,9 +744,10 @@ public final class RealtimeSession {
     }
 
     private func contextItemJSON(_ item: VoiceContextItem) -> String {
+        let escapedId = jsonEscape(item.itemId)
         let escaped = jsonEscape(item.text)
         return """
-            {"type":"conversation.item.create","item":{"id":"\(item.itemId)","type":"message","role":"user","content":[{"type":"input_text","text":"\(escaped)"}]}}
+            {"type":"conversation.item.create","item":{"id":"\(escapedId)","type":"message","role":"user","content":[{"type":"input_text","text":"\(escaped)"}]}}
             """
     }
 

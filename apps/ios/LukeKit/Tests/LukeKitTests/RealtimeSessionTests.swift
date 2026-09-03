@@ -258,6 +258,25 @@ final class RealtimeSessionStateTests: XCTestCase {
         )
     }
 
+    func testContextItemIdIsEscapedLikeItsText() async throws {
+        let ws = MockWebSocketTask()
+        var opts = makeOptions(ws: ws)
+        let hostileId = "ctx\"},\"type\":\"session.update\nx"
+        opts.contextItems = { [VoiceContextItem(itemId: hostileId, text: "Projects here.")] }
+        let session = RealtimeSession(options: opts)
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let created = ws.outgoing.filter { $0.contains("conversation.item.create") }
+        XCTAssertEqual(created.count, 2)
+        let json = try JSONSerialization.jsonObject(with: Data(created[1].utf8)) as? [String: Any]
+        XCTAssertEqual(json?["type"] as? String, "conversation.item.create")
+        let item = json?["item"] as? [String: Any]
+        XCTAssertEqual(item?["id"] as? String, hostileId, "The id travels as one string, never as structure")
+    }
+
     func testTheMintedToolsAreReadOffTheConfirmedSession() async throws {
         let ws = MockWebSocketTask()
         var minted: [[String]] = []

@@ -10,7 +10,8 @@ import LukeKit
 struct VoiceActContext {
     /// The tools the service minted the call with, as the server confirmed
     /// them at channel open; nil before a call has connected. A call naming
-    /// a tool outside the set is refused before it is looked at.
+    /// a tool outside the set, or arriving before the set is known, is
+    /// refused before it is looked at.
     let mintedTools: [String]?
     let sessions: [RosterSession]
     let projects: ProjectsAnswer?
@@ -41,8 +42,12 @@ func dispatchVoiceToolCall(
         return refusal("No such tool exists.")
     }
     // The minted set is the service's word on what this call may ask for;
-    // the phone honors it even for a tool it knows how to carry.
-    if let minted = context.mintedTools, !minted.contains(name) {
+    // the phone honors it even for a tool it knows how to carry, and a call
+    // arriving before the set is known is refused rather than trusted.
+    guard let minted = context.mintedTools else {
+        return refusal("The call's minted tools are not known yet.")
+    }
+    guard minted.contains(name) else {
         return refusal("The service did not mint that tool for this call.")
     }
     switch tool {
