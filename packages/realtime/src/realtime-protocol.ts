@@ -1,4 +1,4 @@
-import { LUKE_PERSONA } from "@sidecar/attention";
+import { LUKE_PERSONA } from "@sidecar/guide";
 import { maximumSessionMessageLength, type SessionIdentity } from "@sidecar/session";
 import {
   isRecord,

@@ -12,7 +12,6 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@sidecar/attention": "workspace:*",
     "@sidecar/guide": "workspace:*",
     "@sidecar/issues": "workspace:*",
     "@sidecar/session": "workspace:*",
