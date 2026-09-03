@@ -90,6 +90,7 @@ struct LukeApp: App {
             }
         case (.signedIn, .signedOut):
             SessionReplay.resetPerson()
+            conversation.clear()
         default:
             break
         }

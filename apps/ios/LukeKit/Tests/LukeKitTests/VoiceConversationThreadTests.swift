@@ -65,6 +65,17 @@ final class VoiceConversationThreadTests: XCTestCase {
         XCTAssertTrue(thread.messages.isEmpty)
     }
 
+    func testClearEmptiesTheThreadAndTheTurnState() {
+        let thread = VoiceConversationThread()
+        thread.beginTurn()
+        thread.recordSpokenAsk("Before sign-out")
+        thread.recordCaption("A reply")
+        thread.clear()
+        XCTAssertTrue(thread.messages.isEmpty)
+        thread.recordCaption("After")
+        XCTAssertEqual(thread.messages.map(\.words), ["After"])
+    }
+
     func testRetentionDropsTheOldestLines() {
         let thread = VoiceConversationThread()
         for index in 0 ..< (VoiceConversationThread.maximumRetainedMessages + 5) {

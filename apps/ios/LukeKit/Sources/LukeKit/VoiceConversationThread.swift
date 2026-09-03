@@ -107,6 +107,15 @@ public final class VoiceConversationThread {
         retainRecentMessages()
     }
 
+    /// Empties the thread at the developer's sign-out. The record is the
+    /// signed-in developer's own: on a shared phone the next account must not
+    /// inherit it, on screen or anywhere a later call could carry it.
+    public func clear() {
+        messages = []
+        activeTurnId = nil
+        activeResponseMessageId = nil
+    }
+
     private func currentTurnId() -> UUID {
         if let activeTurnId { return activeTurnId }
         let id = UUID()
