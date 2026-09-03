@@ -32,6 +32,82 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.5.0 — 2026-09-03
+
+### Spoken sessions on your iPhone
+
+Hold the button and talk to Luke from your phone. The iPhone app opens a
+realtime voice session on the same kind of short-lived credential the desktop
+mints, carrying your session roster with it, with running captions while you
+speak and while he answers. What he can carry from there is the six acts the
+phone's own endpoints serve — sending a session a message, pressing a control,
+adding an agent, creating a workspace, and renaming a workspace or a session —
+each re-validated on the server. A gear on the voice screen offers the same
+voice and speed the desktop does: a speed change reaches the session already
+open, a voice change reopens it in the new voice. Tapping a session opens its
+conversation, paged from Conductor's own messages endpoint and drawn as
+Markdown, and an info button holds that session's details beside the GitHub
+changes and pull requests its provider published.
+([#617](https://github.com/ReviewStage/luke/pull/617),
+[#616](https://github.com/ReviewStage/luke/pull/616),
+[#658](https://github.com/ReviewStage/luke/pull/658),
+[#654](https://github.com/ReviewStage/luke/pull/654),
+[#637](https://github.com/ReviewStage/luke/pull/637),
+[#640](https://github.com/ReviewStage/luke/pull/640),
+[#647](https://github.com/ReviewStage/luke/pull/647))
+
+### Announcements that say what an agent is working on
+
+No field a provider writes says what an agent is generally working on: a title
+is your first message, an activity is the tool running right now, and a recap is
+the last settled turn — so an announcement that named a session by its title
+named work it had stopped doing. Luke now derives one short phrase from a local
+session's own transcript and speaks that instead. The derivation runs only for a
+session about to be announced, at the moment the announcement is delivered, once
+per announcement and under a deadline past which the announcement speaks without
+it; the phrase lives in that one payload, is drawn nowhere, and reaches no act.
+`PRIVACY.md` says the read and the send in as many words.
+([#649](https://github.com/ReviewStage/luke/pull/649))
+
+### Improvements
+
+- Onboarding now ends at a calendar: from your first sign-in Luke stands a gate
+  offering this Mac's own Calendar or Google, because the quiet that keeps
+  announcements out of your meetings only works once he can see one
+  ([#561](https://github.com/ReviewStage/luke/pull/561))
+- A Pause announcements switch on the Voice page holds spoken announcements by
+  hand, over the same speech a meeting's quiet holds, while replies in a
+  conversation you opened still speak
+  ([#651](https://github.com/ReviewStage/luke/pull/651))
+- The Ask Luke composer now stands at the foot of the History tab too, so
+  reading the thread and continuing it no longer costs a tab change
+  ([#643](https://github.com/ReviewStage/luke/pull/643))
+- Luke names every workspace he creates — yours when you chose one out loud,
+  otherwise a short name composed for the work — instead of leaving Conductor to
+  fall back to a random city
+  ([#636](https://github.com/ReviewStage/luke/pull/636))
+
+### Fixes
+
+- Fixed History cutting off any ask or reply longer than 400 characters
+  ([#629](https://github.com/ReviewStage/luke/pull/629))
+- Fixed the Provider keys section reading "The vault answered with something
+  unexpected" for an account holding a key stored for a provider Luke no longer
+  carries ([#656](https://github.com/ReviewStage/luke/pull/656))
+- Fixed the spoken introduction ending on a question you had no chance to answer
+  ([#644](https://github.com/ReviewStage/luke/pull/644))
+
+### Miscellaneous
+
+- Updated the provider set to Conductor, Superset, Claude Code, Codex, and OMP,
+  with Cursor, OpenCode, Copilot, Gemini CLI, and Grok Build staying on as the
+  agents a Conductor or Superset workspace runs
+  ([#645](https://github.com/ReviewStage/luke/pull/645))
+- Added a LukeWatch watchOS companion target, carrying the Luke icon cut for the
+  watch's circular mask
+  ([#652](https://github.com/ReviewStage/luke/pull/652),
+  [#657](https://github.com/ReviewStage/luke/pull/657))
+
 ## 0.4.0 — 2026-09-02
 
 ### Synced provider keys
