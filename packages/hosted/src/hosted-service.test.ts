@@ -4,10 +4,12 @@ import {
   HOSTED_CALLS_URL,
   HOSTED_SERVICE_PATH,
   HOSTED_WS_BASE_URL,
+  hostedBrainRequestFromWire,
   hostedConversationAnswerFromWire,
   hostedMintAnswerFromWire,
   hostedSubjectAnswerFromWire,
   isVaultProviderId,
+  maximumHostedBrainInputItems,
   VAULT_KEY_MAX_LENGTH,
   VAULT_PROVIDER_ID,
   vaultKeyIsStorable,
@@ -231,4 +233,23 @@ test("a subject answer is a bounded phrase or an honest null, and nothing else",
   assert.equal(hostedSubjectAnswerFromWire({ subject: 7 }), undefined);
   assert.equal(hostedSubjectAnswerFromWire({}), undefined);
   assert.equal(HOSTED_SERVICE_PATH.SUBJECT_DERIVE, "/api/subject/derive");
+});
+
+test("a hosted brain request is an array of records and at most a budget", () => {
+  const input = [{ type: "message", role: "user", content: [] }];
+  assert.deepEqual(hostedBrainRequestFromWire({ input, max_output_tokens: 500 }), {
+    input,
+    max_output_tokens: 500,
+  });
+  assert.deepEqual(hostedBrainRequestFromWire({ input }), { input });
+  assert.equal(hostedBrainRequestFromWire({ input: [] }), undefined);
+  assert.equal(hostedBrainRequestFromWire({ input: ["text"] }), undefined);
+  assert.equal(hostedBrainRequestFromWire({ input, max_output_tokens: 0 }), undefined);
+  assert.equal(hostedBrainRequestFromWire({ input, max_output_tokens: 1.5 }), undefined);
+  assert.equal(
+    hostedBrainRequestFromWire({
+      input: Array.from({ length: maximumHostedBrainInputItems + 1 }, () => ({})),
+    }),
+    undefined,
+  );
 });
