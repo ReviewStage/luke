@@ -19,6 +19,7 @@ final class PhoneSessionRelay: NSObject, WCSessionDelegate {
 
     /// Pushes current tokens to the watch. Called after sign-in and after
     /// token refresh so the watch never works with a stale refresh token.
+    @MainActor
     func push() {
         guard WCSession.default.activationState == .activated,
               WCSession.default.isPaired,
@@ -29,6 +30,7 @@ final class PhoneSessionRelay: NSObject, WCSessionDelegate {
     }
 
     /// Notifies the watch that the user signed out on the phone.
+    @MainActor
     func pushSignOut() {
         guard WCSession.default.activationState == .activated,
               WCSession.default.isPaired,
@@ -45,7 +47,7 @@ final class PhoneSessionRelay: NSObject, WCSessionDelegate {
         error: (any Error)?
     ) {
         guard activationState == .activated else { return }
-        push()
+        Task { @MainActor [weak self] in self?.push() }
     }
 
     func session(
