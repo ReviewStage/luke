@@ -4,6 +4,8 @@ type Founder = {
   readonly name: string;
   readonly role: string;
   readonly photoSrc: string;
+  /** Edge of the square source, so the image reserves its box before it loads. */
+  readonly photoEdge: number;
   readonly bio: string;
   readonly socials: {
     readonly linkedin: string;
@@ -12,16 +14,20 @@ type Founder = {
 };
 
 /**
- * The portraits are 128px webp — twice the box they are drawn in, and no more.
- * The camera originals carried EXIF the site has no business publishing, GPS
- * among it, so what ships is re-encoded with its metadata dropped rather than
- * the file that came off the phone.
+ * The portraits ship at their full 450–500px edge so they stay sharp on any
+ * display density and any zoom. The camera originals carried EXIF the site has
+ * no business publishing, GPS among it, so what ships is the same JPEG cut
+ * losslessly rather than the file that came off the phone: the EXIF, XMP, and
+ * MPF segments are gone, and so is the HDR gain map the phone appended after
+ * the image with an XMP block of its own. Only the JFIF header, the colour
+ * profile, and the picture remain.
  */
 const FOUNDERS: readonly Founder[] = [
   {
     name: "Charles Pan",
     role: "Cofounder",
-    photoSrc: "/assets/charles-pan.webp",
+    photoSrc: "/assets/charles-pan.jpeg",
+    photoEdge: 500,
     bio: "Previously developer at Five Rings, early engineer at Yuzu Health.",
     socials: {
       linkedin: "https://www.linkedin.com/in/charleslpan/",
@@ -31,7 +37,8 @@ const FOUNDERS: readonly Founder[] = [
   {
     name: "Dean Stratakos",
     role: "Cofounder",
-    photoSrc: "/assets/dean-stratakos.webp",
+    photoSrc: "/assets/dean-stratakos.jpeg",
+    photoEdge: 450,
     bio: "Previously building coding agents at Five Rings.",
     socials: {
       linkedin: "https://www.linkedin.com/in/dean-stratakos/",
@@ -69,10 +76,10 @@ function FounderCard({ founder }: { readonly founder: Founder }): React.JSX.Elem
       <img
         alt={founder.name}
         className="size-16 shrink-0 rounded-full border border-border object-cover"
-        height={128}
+        height={founder.photoEdge}
         loading="lazy"
         src={founder.photoSrc}
-        width={128}
+        width={founder.photoEdge}
       />
       <div className="min-w-0">
         <h3 className="m-0 text-base font-semibold tracking-[-0.01em]">{founder.name}</h3>
