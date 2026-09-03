@@ -75,6 +75,7 @@ export {
   maximumSessionTitleLength,
   normalizeAttention,
   normalizeSession,
+  normalizeSessionDetail,
   normalizeSessionIdentity,
   OBSERVATION_WINDOW,
   type ProviderSessionObservation,

@@ -114,6 +114,10 @@ struct SessionDetailView: View {
     @Binding var thread: [OutgoingMessage]
     /// Runs after a delivered send so the roster refreshes behind this screen.
     let onDelivered: () async -> Void
+    /// The roster row's own advertised actions, redrawn in this screen's menu.
+    /// Supplying the send action from here lets that shared entry focus this
+    /// screen's composer instead of navigating to a screen already open.
+    let sessionActions: (@escaping () -> Void, @escaping () -> Void) -> AnyView
 
     @Environment(AccountSession.self) private var account
     @Environment(ProductEventSender.self) private var events
@@ -146,6 +150,10 @@ struct SessionDetailView: View {
     /// layout still sits at the top, where the sentinel would fire at once
     /// and drag the opened screen into history.
     @State private var openSettled = false
+    /// The repository and the rest of the session's stable context belong in
+    /// a place the chat cannot scroll away. The shared session menu opens the
+    /// sheet at the system's half-height detent.
+    @State private var infoShown = false
 
     private enum ScrollIntent: Equatable {
         /// The newest bubble, pending sends included: how a chat opens.
@@ -176,7 +184,6 @@ struct SessionDetailView: View {
                 // Lazy so the top sentinel appears — and fetches — only when
                 // the scroll actually reaches it.
                 LazyVStack(spacing: 14) {
-                    metaHeader
                     if hasOlder && openSettled {
                         // The sentinel: reaching it is the ask for the page
                         // before the one on screen. A failed page leaves it
@@ -317,22 +324,24 @@ struct SessionDetailView: View {
                         .lineLimit(1)
                 }
             }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) { inputBar }
-    }
-
-    /// The chat's own centered caption slot, where iMessage puts a timestamp:
-    /// the place the session runs. The provider now stands in the bar itself.
-    private var metaHeader: some View {
-        Group {
-            if let workspace = session.workspace {
-                Text(session.branch.map { "\(workspace) · \($0)" } ?? workspace)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(Color.inkTertiary)
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    sessionActions(
+                        { infoShown = true },
+                        { composing = true }
+                    )
+                } label: {
+                    Label("Session Actions", systemImage: "ellipsis")
+                }
+                .tint(Color.ink)
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.bottom, 4)
+        .sheet(isPresented: $infoShown) {
+            SessionInfoSheet(session: session)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) { inputBar }
     }
 
     /// A fetched message wears the anatomy the screen already draws: the
@@ -590,6 +599,112 @@ struct SessionDetailView: View {
             }
             if delivery == .sent { await onDelivered() }
         }
+    }
+}
+
+/// Session context that must remain reachable after the opening messages have
+/// scrolled away. The roster's act advertisements stay out: they decide which
+/// controls exist, while this sheet is the provider's descriptive report.
+private struct SessionInfoSheet: View {
+    let session: RosterSession
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    LabeledContent("Title", value: session.title)
+                    LabeledContent {
+                        HStack(spacing: 10) {
+                            RosterProviderMark(providerId: session.providerId)
+                            Text(VaultProviderID.displayLabel(forWireId: session.providerId))
+                        }
+                    } label: {
+                        Text("Provider")
+                    }
+                    LabeledContent {
+                        HStack(spacing: 10) {
+                            StatusMark(status: session.status)
+                            Text(session.status.capitalized)
+                        }
+                    } label: {
+                        Text("Status")
+                    }
+                }
+
+                if session.workspace != nil || session.branch != nil {
+                    Section("Location") {
+                        if let workspace = session.workspace {
+                            LabeledContent("Repository", value: workspace)
+                        }
+                        if let branch = session.branch {
+                            LabeledContent("Branch", value: branch)
+                        }
+                    }
+                }
+
+                if let observedAt = session.observedAt {
+                    Section {
+                        LabeledContent {
+                            Text(observedAt.formatted(date: .abbreviated, time: .shortened))
+                        } label: {
+                            Text("Last activity")
+                        }
+                    }
+                }
+
+                if let destination = changeDestination {
+                    Section {
+                        Button {
+                            openURL(destination.url)
+                        } label: {
+                            HStack(spacing: 12) {
+                                if destination.showsGitHubMark {
+                                    GitHubMark()
+                                        .frame(width: 20, height: 20)
+                                } else {
+                                    Image(systemName: "arrow.up.right.square")
+                                        .frame(width: 20, height: 20)
+                                }
+                                Text(destination.label)
+                            }
+                        }
+                        .tint(Color.ink)
+                    }
+                }
+            }
+            .navigationTitle("Session Info")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                        .tint(Color.ink)
+                }
+            }
+        }
+    }
+
+    private func changeButtonLabel(for url: URL) -> String {
+        url.host?.lowercased() == "github.com"
+            ? "View PR"
+            : "Open Published Change"
+    }
+
+    private var changeDestination: (url: URL, label: String, showsGitHubMark: Bool)? {
+        if let change = session.change {
+            return (
+                change,
+                changeButtonLabel(for: change),
+                change.host?.lowercased() == "github.com"
+            )
+        }
+        guard
+            let repository = session.repositoryLink,
+            repository.host?.lowercased() == "github.com"
+        else { return nil }
+        return (repository.appending(path: "pulls"), "View PRs", true)
     }
 }
 

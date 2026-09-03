@@ -1,6 +1,7 @@
 import type { CloudFetch } from "../../../../packages/providers/src/shared/cloud-session-adapter.js";
 import type { ProviderSessionObservation } from "../core.js";
 import {
+  normalizeSessionDetail,
   type ObservedSession,
   type ObservedSessionControl,
   VAULT_PROVIDER_ID,
@@ -109,14 +110,14 @@ export async function handleObserve(options: ObserveOptions): Promise<Response> 
     const result = results[i];
     if (result?.status !== "fulfilled") continue;
     for (const obs of result.value) {
-      sessions.push(toWireSession(providerId, obs));
+      sessions.push(observedSessionForResponse(providerId, obs));
     }
   }
 
   return jsonResponse(HOSTED_HTTP_STATUS.OK, { sessions });
 }
 
-function toWireSession(
+export function observedSessionForResponse(
   providerId: VaultProviderId,
   obs: ProviderSessionObservation,
 ): ObservedSession {
@@ -126,12 +127,17 @@ function toWireSession(
     title: obs.title,
     status: obs.status,
   };
-  const workspace = obs.detail?.repository;
+  const detail = normalizeSessionDetail(obs.detail);
+  const workspace = detail.repository;
   if (workspace) session.workspace = workspace;
-  const branch = obs.detail?.branch;
+  const repositoryLink = detail.repositoryLink;
+  if (repositoryLink) session.repositoryLink = repositoryLink;
+  const branch = detail.branch;
   if (branch) session.branch = branch;
+  const change = detail.change;
+  if (change) session.change = change;
   if (obs.recap) session.recap = obs.recap;
-  const error = obs.detail?.error;
+  const error = detail.error;
   if (error) session.error = error;
   session.observedAt = obs.observedAt;
   // The act advertisements, so a row can offer only what the observation

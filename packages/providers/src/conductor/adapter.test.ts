@@ -412,6 +412,7 @@ test("observes cloud sessions the signed-in user created, under their own names"
   assert.equal(observations[0]?.canReceiveMessage, true);
   assert.deepEqual(observations[0]?.detail, {
     repository: "luke",
+    repositoryLink: "https://github.com/reviewstage/luke",
     model: "claude-opus-5",
     link: "conductor://workspace?session=session-working",
   });

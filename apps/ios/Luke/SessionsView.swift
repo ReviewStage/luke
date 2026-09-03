@@ -64,15 +64,25 @@ struct SessionsView: View {
             // The freshest observation of the opened session wins, so a
             // refresh behind the screen updates the recap it draws; a session
             // the refresh no longer reports keeps its last observed word.
+            let current = sessions.first { $0.id == opened.id } ?? opened
             SessionDetailView(
-                session: sessions.first { $0.id == opened.id } ?? opened,
+                session: current,
                 actClient: actClient,
                 conversationClient: conversationClient,
                 thread: Binding(
                     get: { threads[opened.id] ?? [] },
                     set: { threads[opened.id] = $0 }
                 ),
-                onDelivered: { await refreshSessions() }
+                onDelivered: { await refreshSessions() },
+                sessionActions: { viewDetails, sendMessage in
+                    AnyView(
+                        rowMenu(
+                            current,
+                            viewDetails: viewDetails,
+                            sendMessage: sendMessage
+                        )
+                    )
+                }
             )
         }
         .sheet(item: $spawningSession) { s in
@@ -265,7 +275,7 @@ struct SessionsView: View {
         Group {
             if hasRowActs(s) {
                 core.contextMenu {
-                    rowMenu(s)
+                    rowMenu(s, viewDetails: nil) { openedSession = s }
                 } preview: {
                     SessionRowPreview(session: s)
                 }
@@ -302,12 +312,19 @@ struct SessionsView: View {
     /// the way Mail's does. Every entry is still only an advertised act, and
     /// each section holds only the kinds the adapters themselves declared.
     @ViewBuilder
-    private func rowMenu(_ s: RosterSession) -> some View {
+    private func rowMenu(
+        _ s: RosterSession,
+        viewDetails: (() -> Void)?,
+        sendMessage: @escaping () -> Void
+    ) -> some View {
         Section {
+            if let viewDetails {
+                Button(action: viewDetails) {
+                    Label("View Details", systemImage: "info.circle")
+                }
+            }
             if s.canReceiveMessage {
-                Button {
-                    openedSession = s
-                } label: {
+                Button(action: sendMessage) {
                     Label("Send Message…", systemImage: "arrow.up.message")
                 }
             }
@@ -368,13 +385,16 @@ struct SessionsView: View {
 
     private func runControl(_ s: RosterSession, _ control: RosterSessionControl) {
         Task {
-            await performAct(on: s, counting: .controlRun) { token in
+            let delivered = await performAct(on: s, counting: .controlRun) { token in
                 try await actClient.executeControl(
                     accessToken: token,
                     providerId: s.providerId,
                     providerSessionId: s.sessionId,
                     controlId: control.id
                 )
+            }
+            if delivered, control.kind == .archive, openedSession?.id == s.id {
+                openedSession = nil
             }
         }
     }
@@ -392,11 +412,12 @@ struct SessionsView: View {
     /// Runs one row act through the shared runner, then refreshes so the
     /// roster reflects what the act changed; a refusal is surfaced in the
     /// failure alert with the server's own reason.
+    @discardableResult
     private func performAct(
         on s: RosterSession,
         counting act: ProductSessionAct,
         _ call: (String) async throws -> ActMessageAnswer
-    ) async {
+    ) async -> Bool {
         let outcome = await session.performAct(
             counting: act,
             provider: s.providerId,
@@ -407,10 +428,12 @@ struct SessionsView: View {
         switch outcome {
         case .delivered:
             await refreshSessions()
+            return true
         case .refused(let reason):
             actFailure = reason
+            return false
         case .signedOut:
-            ()  // The state change redraws automatically.
+            return false  // The state change redraws automatically.
         }
     }
 
@@ -625,7 +648,7 @@ private struct AxisFilterPage: View {
 /// A status's own glyph in the row-mark's slot, colored the way the session
 /// rows already speak that status: waiting's orange, complete's green, an
 /// error's red, and the neutral inks for working and anything unknown.
-private struct StatusMark: View {
+struct StatusMark: View {
     let status: String
 
     var body: some View {

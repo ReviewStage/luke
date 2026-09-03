@@ -510,6 +510,7 @@ interface ConductorWorkspace {
   id: string;
   name?: string;
   repositoryLabel: string;
+  repositoryLink?: string;
   creatorId?: string;
   lastActivityAt: number;
 }
@@ -1371,6 +1372,9 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       ...(recap ? { recap } : undefined),
       detail: {
         repository: session.workspace.repositoryLabel,
+        ...(session.workspace.repositoryLink
+          ? { repositoryLink: session.workspace.repositoryLink }
+          : undefined),
         ...(model ? { model } : undefined),
         ...(activity ? { activity } : undefined),
         ...(error ? { error } : undefined),
@@ -1686,15 +1690,34 @@ function workspaceFromRecord(record: WireRecord): ConductorWorkspace | undefined
   if (state && CONDUCTOR_RETIRED_WORKSPACE_STATUSES.has(state)) return undefined;
   const creatorId = textFromRecord(record, CONDUCTOR_FIELD.CREATOR_ID);
   const name = textFromRecord(record, CONDUCTOR_FIELD.NAME)?.slice(0, maximumSessionTitleLength);
+  const repoUrl = textFromRecord(record, CONDUCTOR_FIELD.REPO_URL);
+  const repositoryLink = githubRepositoryLink(repoUrl);
   return {
     id,
     // The listing names each workspace's repository itself, so the label no
     // longer rides in from the project that grouped it.
-    repositoryLabel: repositoryLabel(textFromRecord(record, CONDUCTOR_FIELD.REPO_URL), undefined),
+    repositoryLabel: repositoryLabel(repoUrl, undefined),
+    ...(repositoryLink ? { repositoryLink } : undefined),
     lastActivityAt,
     ...(name ? { name } : undefined),
     ...(creatorId ? { creatorId } : undefined),
   };
+}
+
+/** A repository page is descriptive context, never a provider write target. */
+function githubRepositoryLink(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+  if (!normalized) return undefined;
+  try {
+    const url = new URL(normalized);
+    if (url.protocol !== "https:" || url.hostname.toLowerCase() !== "github.com") return undefined;
+    const path = url.pathname.replace(/\/+$/, "").replace(/\.git$/, "");
+    const segments = path.split("/").filter(Boolean);
+    if (segments.length !== 2) return undefined;
+    return `https://github.com/${segments[0]}/${segments[1]}`;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Conductor reports the model it resolved as well as the one that was asked for. */

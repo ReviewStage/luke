@@ -48,7 +48,11 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
     public let title: String
     public let status: String
     public let workspace: String?
+    /// HTTPS page for the session's repository, when its provider reported one.
+    public let repositoryLink: URL?
     public let branch: String?
+    /// HTTPS address of the work this session published, when it reported one.
+    public let change: URL?
     public let recap: String?
     public let error: String?
     /// Unix milliseconds of the last observed activity, when the endpoint reported one.
@@ -83,7 +87,9 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
         title: String,
         status: String,
         workspace: String? = nil,
+        repositoryLink: URL? = nil,
         branch: String? = nil,
+        change: URL? = nil,
         recap: String? = nil,
         error: String? = nil,
         observedAt: Date? = nil,
@@ -99,7 +105,9 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
         self.title = title
         self.status = status
         self.workspace = workspace
+        self.repositoryLink = repositoryLink
         self.branch = branch
+        self.change = change
         self.recap = recap
         self.error = error
         self.observedAt = observedAt
@@ -123,7 +131,9 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
         self.title = title
         self.status = status
         self.workspace = json["workspace"] as? String
+        self.repositoryLink = Self.httpsURL(json["repositoryLink"])
         self.branch = json["branch"] as? String
+        self.change = Self.httpsURL(json["change"])
         self.recap = json["recap"] as? String
         self.error = json["error"] as? String
         if let ms = json["observedAt"] as? Double {
@@ -139,5 +149,15 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
         self.canRename = json["canRename"] as? Bool ?? false
         self.canRenameWorkspace = json["canRenameWorkspace"] as? Bool ?? false
         self.canReadConversation = json["canReadConversation"] as? Bool ?? false
+    }
+
+    private static func httpsURL(_ value: Any?) -> URL? {
+        guard
+            let value = value as? String,
+            let url = URL(string: value),
+            url.scheme == "https",
+            url.host?.isEmpty == false
+        else { return nil }
+        return url
     }
 }

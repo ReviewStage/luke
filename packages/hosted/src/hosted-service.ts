@@ -3,6 +3,7 @@ import {
   attentionDecisionFromWire,
   CONVERSATION_MESSAGE_AUTHOR,
   type ConversationMessageAuthor,
+  normalizeSessionDetail,
   type ProviderId,
   SESSION_CONTROL_KIND,
   WORKSPACE_TASK_SUPPORT,
@@ -433,8 +434,12 @@ export interface ObservedSession {
   status: string;
   /** Repository label or workspace name, when the provider reported one. */
   workspace?: string;
+  /** HTTPS page for that repository, when the provider reported one. */
+  repositoryLink?: string;
   /** Current branch, when the provider reported one. */
   branch?: string;
+  /** HTTPS address of the work the session published, when it reported one. */
+  change?: string;
   /** Bounded recap of where the work stands, when the provider reported one. */
   recap?: string;
   /** Error description, when the session stopped on something it cannot pass. */
@@ -509,13 +514,21 @@ function observedSessionFromWire(value: UnparsedWireValue): ObservedSession | un
   const status = text(value.status);
   if (!status || !OBSERVED_SESSION_STATUS_SET.has(status)) return undefined;
   const workspace = text(value.workspace);
+  const repositoryLinkValue = text(value.repositoryLink);
+  const repositoryLink = repositoryLinkValue
+    ? normalizeSessionDetail({ repositoryLink: repositoryLinkValue }).repositoryLink
+    : undefined;
   const branch = text(value.branch);
+  const changeValue = text(value.change);
+  const change = changeValue ? normalizeSessionDetail({ change: changeValue }).change : undefined;
   const recap = text(value.recap);
   const error = text(value.error);
   const observedAt = wholeNumber(value.observedAt);
   const session: ObservedSession = { providerId, sessionId, title, status };
   if (workspace) session.workspace = workspace;
+  if (repositoryLink) session.repositoryLink = repositoryLink;
   if (branch) session.branch = branch;
+  if (change) session.change = change;
   if (recap) session.recap = recap;
   if (error) session.error = error;
   if (observedAt !== undefined) session.observedAt = observedAt;
