@@ -418,8 +418,6 @@ providers without credentials working as before.
 - Fixed macOS releases failing while electron-builder assembled the installer
   DMG ([#380](https://github.com/ReviewStage/luke/pull/380))
 
-![Luke's panel with consistent spacing beneath the strip](apps/web/public/changelog/0.3.8/fixes.png)
-
 ### Miscellaneous
 
 - Updated the macOS release pipeline to use electron-builder alone
