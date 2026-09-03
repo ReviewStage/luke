@@ -5,6 +5,7 @@ import {
   PROVIDER_ID,
   type ProviderSessionObservation,
   type ProviderTranscriptResult,
+  type ProviderTranscriptSinceResult,
   providerTranscriptResult,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
@@ -41,13 +42,14 @@ import {
   type SqliteModuleLoader,
   textFromRow,
 } from "../shared/local-sqlite.js";
+import { TranscriptPathCache } from "../shared/local-transcript.js";
 import {
   CODEX_HOOK_EVENT,
   type CodexHookEvent,
   type ObservedCodexHookEvent,
   readCodexHookEvent,
 } from "./hooks.js";
-import { readCodexSessionTranscript } from "./transcript.js";
+import { readCodexSessionTranscript, readCodexSessionTranscriptSince } from "./transcript.js";
 
 const CODEX_PROVIDER_ID = PROVIDER_ID.CODEX;
 const CODEX_PROVIDER_NAME = "Codex";
@@ -747,6 +749,7 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
   readonly #sqliteHome: string | undefined;
   readonly #sqlite: SqliteModuleLoader;
   readonly #transcriptMaximumRenderedLength: number | undefined;
+  readonly #transcriptPaths = new TranscriptPathCache();
   readonly #hookEventsDirectory: (() => string | undefined) | undefined;
 
   constructor(options: CodexAdapterOptions = {}) {
@@ -812,6 +815,20 @@ export class CodexSessionAdapter extends LocalSessionAdapter {
         maximumRenderedLength: this.#transcriptMaximumRenderedLength,
       }),
     );
+  }
+
+  override readTranscriptSince(
+    providerSessionId: string,
+    cursor?: string,
+  ): Promise<ProviderTranscriptSinceResult> {
+    return readCodexSessionTranscriptSince({
+      codexHome: this.#codexHome,
+      sqliteHome: this.#sqliteHome,
+      providerSessionId,
+      sqlite: this.#sqlite,
+      cursor,
+      pathCache: this.#transcriptPaths,
+    });
   }
 
   /**

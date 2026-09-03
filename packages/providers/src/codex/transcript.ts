@@ -1,3 +1,4 @@
+import { ACT_RESULT_STATUS, type ProviderTranscriptSinceResult } from "@sidecar/session";
 import {
   isRecord,
   isWireString,
@@ -16,7 +17,9 @@ import {
 } from "../shared/local-sqlite.js";
 import {
   boundedTranscript,
+  readRecordsSince,
   TRANSCRIPT_BOUNDS,
+  type TranscriptPathCache,
   transcriptLine,
 } from "../shared/local-transcript.js";
 import {
@@ -99,6 +102,13 @@ export interface CodexTranscriptRequest {
   sqlite?: SqliteModuleLoader;
   maximumRenderedLength?: number;
 }
+
+export interface CodexTranscriptSinceRequest extends CodexTranscriptRequest {
+  cursor?: string;
+  pathCache: TranscriptPathCache;
+}
+
+const CODEX_COMPRESSED_ROLLOUT_EXTENSION = ".zst";
 
 /** The words of one message's content blocks, whichever direction they face. */
 function messageWords(content: UnparsedWireValue): string | undefined {
@@ -242,8 +252,9 @@ function linesFromRecord(record: WireRecord): string[] {
 /**
  * Finds the session's rollout file the way observation does: named by the
  * thread's own row in the state database, read through a parameterized
- * lookup, never composed from the id. A compressed rollout is left unread —
- * a bounded tail cannot be cut from it — and answers as no transcript.
+ * lookup, never composed from the id. A compressed rollout is named as it
+ * stands, for each reader to refuse in its own words: a bounded window cannot
+ * be cut from one.
  */
 async function rolloutPathForThread(request: CodexTranscriptRequest): Promise<string | undefined> {
   const codexHome = request.codexHome ?? defaultCodexHome();
@@ -254,7 +265,7 @@ async function rolloutPathForThread(request: CodexTranscriptRequest): Promise<st
     try {
       const row = database.prepare(CODEX_THREAD_ROLLOUT_QUERY).all(request.providerSessionId)[0];
       const rolloutPath = isRecord(row) ? text(row.rollout_path) : undefined;
-      if (rolloutPath) return rolloutPath.endsWith(".zst") ? undefined : rolloutPath;
+      if (rolloutPath) return rolloutPath;
     } catch (error) {
       if (!(error instanceof Error) || !canIgnoreSqliteError(error)) throw error;
     } finally {
@@ -264,17 +275,54 @@ async function rolloutPathForThread(request: CodexTranscriptRequest): Promise<st
   return undefined;
 }
 
+function isCompressedRollout(rolloutPath: string): boolean {
+  return rolloutPath.endsWith(CODEX_COMPRESSED_ROLLOUT_EXTENSION);
+}
+
 /**
  * Reads one session's recent transcript into a bounded rendering, or nothing
- * when no rollout file exists for that id.
+ * when no rollout file exists for that id or the rollout is compressed.
  */
 export async function readCodexSessionTranscript(
   request: CodexTranscriptRequest,
 ): Promise<string | undefined> {
   const rolloutPath = await rolloutPathForThread(request);
-  if (!rolloutPath) return undefined;
+  if (!rolloutPath || isCompressedRollout(rolloutPath)) return undefined;
 
   const tail = await readTail(rolloutPath, CODEX_ROLLOUT_TAIL_BYTES);
   const lines = tailRecords(tail).flatMap(linesFromRecord);
   return boundedTranscript(lines, request.maximumRenderedLength);
+}
+
+/**
+ * Renders what the session's rollout has gained since `cursor`. A thread with
+ * no rollout file answers rejected, and a compressed rollout unsupported: it
+ * is a transcript this build cannot walk, not one that went missing.
+ */
+export async function readCodexSessionTranscriptSince(
+  request: CodexTranscriptSinceRequest,
+): Promise<ProviderTranscriptSinceResult> {
+  const rolloutPath = await request.pathCache.resolve(request.providerSessionId, () =>
+    rolloutPathForThread(request),
+  );
+  if (!rolloutPath) {
+    return {
+      status: ACT_RESULT_STATUS.REJECTED,
+      reason: "That session's transcript could not be found.",
+    };
+  }
+  if (isCompressedRollout(rolloutPath)) {
+    return {
+      status: ACT_RESULT_STATUS.UNSUPPORTED,
+      reason: "That session's rollout is compressed, which this build cannot read incrementally.",
+    };
+  }
+
+  const since = await readRecordsSince(rolloutPath, request.cursor, CODEX_ROLLOUT_TAIL_BYTES);
+  return {
+    status: ACT_RESULT_STATUS.ACCEPTED,
+    text: boundedTranscript(since.records.flatMap(linesFromRecord)) ?? "",
+    cursor: since.cursor,
+    truncated: since.truncated,
+  };
 }

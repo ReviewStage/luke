@@ -5,7 +5,9 @@ import {
   PROVIDER_ID,
   type ProviderSessionObservation,
   type ProviderTranscriptResult,
+  type ProviderTranscriptSinceResult,
   providerTranscriptResult,
+  providerTranscriptSinceResult,
   SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
@@ -37,6 +39,7 @@ import {
   tailRecords,
   workspaceLabel,
 } from "../shared/local-session-adapter.js";
+import { TranscriptPathCache } from "../shared/local-transcript.js";
 import {
   CLAUDE_HOOK_EVENT,
   type ClaudeHookEvent,
@@ -44,7 +47,7 @@ import {
   type ObservedClaudeHookEvent,
   readClaudeHookEvent,
 } from "./hooks.js";
-import { readClaudeSessionTranscript } from "./transcript.js";
+import { readClaudeSessionTranscript, readClaudeSessionTranscriptSince } from "./transcript.js";
 
 const CLAUDE_CODE_PROVIDER_ID = PROVIDER_ID.CLAUDE_CODE;
 const CLAUDE_CODE_PROVIDER_NAME = "Claude Code";
@@ -515,6 +518,7 @@ export class ClaudeCodeSessionAdapter extends LocalFileSessionAdapter<
   readonly #readHeadBytes: number;
   readonly #transcriptReadTailBytes: number | undefined;
   readonly #transcriptMaximumRenderedLength: number | undefined;
+  readonly #transcriptPaths = new TranscriptPathCache();
   readonly #hookEventsDirectory: (() => string | undefined) | undefined;
 
   constructor(options: ClaudeCodeAdapterOptions = {}) {
@@ -593,6 +597,21 @@ export class ClaudeCodeSessionAdapter extends LocalFileSessionAdapter<
         providerSessionId,
         readTailBytes: this.#transcriptReadTailBytes,
         maximumRenderedLength: this.#transcriptMaximumRenderedLength,
+      }),
+    );
+  }
+
+  override readTranscriptSince(
+    providerSessionId: string,
+    cursor?: string,
+  ): Promise<ProviderTranscriptSinceResult> {
+    return providerTranscriptSinceResult(
+      readClaudeSessionTranscriptSince({
+        claudeHome: this.#claudeHome,
+        providerSessionId,
+        cursor,
+        pathCache: this.#transcriptPaths,
+        readTailBytes: this.#transcriptReadTailBytes,
       }),
     );
   }

@@ -10,7 +10,8 @@
  */
 
 import { transcriptReadTailBytes } from "@sidecar/session";
-import { isRecord, isWireString, text, type WireRecord } from "@sidecar/wire";
+import { isRecord, isWireString, recordFromJsonLine, text, type WireRecord } from "@sidecar/wire";
+import { type FileWindow, fileStats, readRange, readTailWindow } from "./local-session-adapter.js";
 
 export const transcriptLine = {
   developer: (words: string) => `Developer: ${words}`,
@@ -82,4 +83,112 @@ export function boundedTranscript(
     rendered = `${OMISSION_MARKER}\n${firstWholeLine >= 0 ? kept.slice(firstWholeLine + 1) : kept}`;
   }
   return rendered;
+}
+
+/**
+ * The whole records a file has gained since a cursor, for a reader that walks
+ * a transcript incrementally rather than re-reading its tail. The cursor is a
+ * byte offset the previous read minted: the byte after the last newline it
+ * consumed, so a record still being appended is left for the next read to
+ * find whole. Without a cursor, or with one the file no longer reaches — a
+ * rotation, a rewrite, a cursor minted against another file — the read falls
+ * back to the tail and reports itself truncated, because whatever stood
+ * before the window is not what it gained since. A tail that begins mid-file
+ * drops its leading partial line; a window that begins at the cursor trusts
+ * that the cursor was minted at a line start.
+ */
+export interface RecordsSince {
+  records: WireRecord[];
+  cursor: string;
+  truncated: boolean;
+}
+
+const NEWLINE_BYTE = 0x0a;
+const CURSOR_PATTERN = /^(0|[1-9][0-9]*)$/;
+
+function cursorOffset(cursor: string | undefined): number | undefined {
+  if (cursor === undefined || !CURSOR_PATTERN.test(cursor)) return undefined;
+  const offset = Number(cursor);
+  return Number.isSafeInteger(offset) ? offset : undefined;
+}
+
+function recordsFromWindow(window: FileWindow, isTail: boolean): RecordsSince {
+  const { bytes, offset, fileSize } = window;
+  const dropsLeadingPartial = isTail && offset > 0;
+  const firstNewline = bytes.indexOf(NEWLINE_BYTE);
+  const lastNewline = bytes.lastIndexOf(NEWLINE_BYTE);
+  const parseFrom = dropsLeadingPartial ? (firstNewline >= 0 ? firstNewline + 1 : bytes.length) : 0;
+  const parseTo = lastNewline >= 0 ? lastNewline + 1 : 0;
+  const records =
+    parseTo > parseFrom
+      ? bytes
+          .subarray(parseFrom, parseTo)
+          .toString("utf8")
+          .split("\n")
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0)
+          .map(recordFromJsonLine)
+          .filter((record): record is WireRecord => record !== undefined)
+      : [];
+  const windowEnd = offset + bytes.length;
+  const reachedEnd = windowEnd >= fileSize;
+  // With no newline at all, the window is one line: unfinished when it
+  // reaches the end, so it is left for the next read, or wider than the
+  // window itself, which no read could ever consume and which is skipped
+  // rather than stalled on; a mid-file tail's first line can never be read
+  // whole either, so that one skips to the end.
+  const nextOffset =
+    lastNewline >= 0
+      ? offset + lastNewline + 1
+      : !reachedEnd || dropsLeadingPartial
+        ? windowEnd
+        : offset;
+  return {
+    records,
+    cursor: String(nextOffset),
+    truncated: isTail ? offset > 0 : !reachedEnd,
+  };
+}
+
+export async function readRecordsSince(
+  filePath: string,
+  cursor: string | undefined,
+  maximumBytes: number,
+): Promise<RecordsSince> {
+  const offset = cursorOffset(cursor);
+  if (offset !== undefined) {
+    const window = await readRange(filePath, offset, maximumBytes);
+    if (offset <= window.fileSize) return recordsFromWindow(window, false);
+  }
+  return recordsFromWindow(await readTailWindow(filePath, maximumBytes), true);
+}
+
+/**
+ * Remembers where a session's transcript file was found, so a read repeated
+ * on every wake does not walk the provider's directory tree each time. A
+ * remembered path is trusted only while a file still stands there; a file
+ * that moved is looked up again, and the map stays small however many
+ * sessions a day sees.
+ */
+export class TranscriptPathCache {
+  static readonly MAXIMUM_ENTRIES = 64;
+
+  readonly #paths = new Map<string, string>();
+
+  async resolve(
+    providerSessionId: string,
+    locate: () => Promise<string | undefined>,
+  ): Promise<string | undefined> {
+    const remembered = this.#paths.get(providerSessionId);
+    if (remembered !== undefined && (await fileStats(remembered))?.isFile()) return remembered;
+    this.#paths.delete(providerSessionId);
+    const located = await locate();
+    if (located === undefined) return undefined;
+    this.#paths.set(providerSessionId, located);
+    const oldest = this.#paths.keys().next();
+    if (this.#paths.size > TranscriptPathCache.MAXIMUM_ENTRIES && !oldest.done) {
+      this.#paths.delete(oldest.value);
+    }
+    return located;
+  }
 }
