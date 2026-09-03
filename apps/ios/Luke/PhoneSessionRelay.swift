@@ -62,6 +62,10 @@ final class PhoneSessionRelay: NSObject, WCSessionDelegate {
         }
     }
 
+    func sessionWatchStateDidChange(_ session: WCSession) {
+        Task { @MainActor [weak self] in self?.push() }
+    }
+
     func sessionReachabilityDidChange(_ session: WCSession) {
         guard session.isReachable else { return }
         Task { @MainActor [weak self] in self?.push() }
