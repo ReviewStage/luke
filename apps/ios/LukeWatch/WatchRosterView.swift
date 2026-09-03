@@ -222,6 +222,7 @@ struct WatchSessionDetailView: View {
                 .padding(.top, 6)
             }
             .defaultScrollAnchor(.bottom)
+            .contentMargins(.bottom, 0, for: .scrollContent)
             .overlay {
                 if centersConversationState {
                     conversationContent
