@@ -71,7 +71,7 @@ export interface SessionNotice {
   branch?: string;
   /** Whether the provider will take a reply for this session right now. */
   canReceiveMessage: boolean;
-  observedAt: number;
+  lastActivityAt: number;
 }
 
 /**
@@ -113,7 +113,7 @@ function sessionNotice(session: Session, previousStatus: SessionStatus): Session
     status,
     previousStatus,
     canReceiveMessage: session.canReceiveMessage,
-    observedAt: session.observedAt,
+    lastActivityAt: session.lastActivityAt,
   };
   if (session.workspace?.name) notice.workspace = session.workspace.name;
   if (status === SESSION_NOTICE_STATUS.WAITING) {

@@ -132,7 +132,7 @@ test("observes a settled OMP session and labels it by its project", async (t) =>
   assert.equal(observations[0]?.providerSessionId, SESSION_ID.SETTLED);
   assert.equal(observations[0]?.title, "Fix the flaky check");
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
-  assert.equal(observations[0]?.observedAt, Date.parse("2026-08-20T11:59:00.000Z"));
+  assert.equal(observations[0]?.lastActivityAt, Date.parse("2026-08-20T11:59:00.000Z"));
   assert.equal(observations[0]?.detail?.repository, "luke");
   assert.equal(observations[0]?.detail?.model, "grok-4.6");
   assert.equal(observations[0]?.controls, undefined);
@@ -225,7 +225,7 @@ test("reports an open tool call as working, named by what it is for", async (t) 
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.detail?.activity, "bash: Run the check suite");
   assert.equal(observations[0]?.recap, undefined);
-  assert.equal(observations[0]?.observedAt, Date.parse("2026-08-20T11:59:40.000Z"));
+  assert.equal(observations[0]?.lastActivityAt, Date.parse("2026-08-20T11:59:40.000Z"));
 });
 
 test("keeps a recap only for a turn that settled cleanly", async (t) => {

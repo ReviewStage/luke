@@ -482,7 +482,15 @@ export interface ObservedSession {
   recap?: string;
   /** Error description, when the session stopped on something it cannot pass. */
   error?: string;
-  /** Unix milliseconds of the last observed activity, when the provider reported one. */
+  /** Unix milliseconds of the provider's last write about the session, when it reported one. */
+  lastActivityAt?: number;
+  /**
+   * The name `lastActivityAt` traveled under before it was renamed. The
+   * service still writes it beside the new name, and a reader still accepts
+   * it, so an installed iOS build keeps its age chip and recency sort until
+   * it updates; it may go once the first iOS release that reads
+   * `lastActivityAt` has shipped. Nothing else reads or writes it.
+   */
   observedAt?: number;
   /** Whether the session's latest observation advertised taking a message. */
   canReceiveMessage?: boolean;
@@ -559,7 +567,7 @@ function observedSessionFromWire(value: UnparsedWireValue): ObservedSession | un
   const link = linkValue ? normalizeSessionDetail({ link: linkValue }).link : undefined;
   const recap = text(value.recap);
   const error = text(value.error);
-  const observedAt = wholeNumber(value.observedAt);
+  const lastActivityAt = wholeNumber(value.lastActivityAt) ?? wholeNumber(value.observedAt);
   const session: ObservedSession = { providerId, sessionId, title, status };
   if (workspace) session.workspace = workspace;
   if (branch) session.branch = branch;
@@ -567,7 +575,7 @@ function observedSessionFromWire(value: UnparsedWireValue): ObservedSession | un
   if (link) session.link = link;
   if (recap) session.recap = recap;
   if (error) session.error = error;
-  if (observedAt !== undefined) session.observedAt = observedAt;
+  if (lastActivityAt !== undefined) session.lastActivityAt = lastActivityAt;
   if (value.canReceiveMessage === true) session.canReceiveMessage = true;
   const controls = observedSessionControlsFromWire(value.controls);
   if (controls) session.controls = controls;

@@ -23,9 +23,9 @@ import {
   DEFAULT_SESSION_VIEW,
   displaySessions,
   fixtureMentionChips,
+  lastActivityLabel,
   MENTION_CHIP_KIND,
   matchRanges,
-  observedAgoLabel,
   SESSION_FILTER,
   SESSION_FILTER_AXIS,
   SESSION_SORT,
@@ -55,13 +55,13 @@ function liveSession(
   provider: SessionProvider,
   providerSessionId: string,
   status: (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS],
-  observedAt = 1_000,
+  lastActivityAt = 1_000,
 ) {
   return normalizeSession(provider, {
     providerSessionId,
     title: `Session ${providerSessionId}`,
     status,
-    observedAt,
+    lastActivityAt,
   });
 }
 
@@ -105,7 +105,7 @@ test("a row carries where its session runs, from either data source", () => {
       providerSessionId: "codex-cloud",
       title: "Session codex-cloud",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1_000,
+      lastActivityAt: 1_000,
       location: SESSION_LOCATION.CLOUD,
     }),
     liveSession(CLAUDE_PROVIDER, "claude-here", SESSION_STATUS.WORKING),
@@ -121,7 +121,7 @@ test("a row is a control only where its provider gave an address", () => {
       providerSessionId: "codex-addressed",
       title: "Session codex-addressed",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1_000,
+      lastActivityAt: 1_000,
       detail: { link: "codex://threads/codex-addressed" },
       applications: [
         {
@@ -172,7 +172,7 @@ test("the line under the title says the state when the provider said nothing", (
       providerSessionId: "codex-busy",
       title: "Session codex-busy",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1_000,
+      lastActivityAt: 1_000,
       detail: { activity: "Running tests" },
     }),
   ]);
@@ -189,14 +189,14 @@ test("a row carries the pull request's number when its address names one", () =>
       providerSessionId: "codex-published",
       title: "Session codex-published",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1_000,
+      lastActivityAt: 1_000,
       detail: { change: "https://github.com/reviewstage/luke/pull/245" },
     }),
     normalizeSession(CLAUDE_PROVIDER, {
       providerSessionId: "claude-unnumbered",
       title: "Session claude-unnumbered",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1_000,
+      lastActivityAt: 1_000,
       detail: { change: "https://github.com/reviewstage/luke/pulls" },
     }),
   ]);
@@ -224,7 +224,7 @@ test("a row carries the identifiers that tell it from its neighbours", () => {
       providerSessionId: "codex-checkout",
       title: "Session codex-checkout",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1_000,
+      lastActivityAt: 1_000,
       detail: { repository: "luke", branch: "dean/session-rows", model: "gpt-5.6-luna" },
     }),
   ]);
@@ -247,15 +247,15 @@ test("how long ago a session was seen is worded by the unit that has begun", () 
   const minute = 60_000;
   const now = 100 * 24 * 60 * minute;
 
-  assert.equal(observedAgoLabel(now, now), "Now");
-  assert.equal(observedAgoLabel(now - 59_000, now), "Now");
-  assert.equal(observedAgoLabel(now + minute, now), "Now");
-  assert.equal(observedAgoLabel(now - minute, now), "1m");
-  assert.equal(observedAgoLabel(now - 59 * minute, now), "59m");
-  assert.equal(observedAgoLabel(now - 60 * minute, now), "1h");
-  assert.equal(observedAgoLabel(now - 23 * 60 * minute, now), "23h");
-  assert.equal(observedAgoLabel(now - 24 * 60 * minute, now), "1d");
-  assert.equal(observedAgoLabel(now - 3 * 24 * 60 * minute, now), "3d");
+  assert.equal(lastActivityLabel(now, now), "Now");
+  assert.equal(lastActivityLabel(now - 59_000, now), "Now");
+  assert.equal(lastActivityLabel(now + minute, now), "Now");
+  assert.equal(lastActivityLabel(now - minute, now), "1m");
+  assert.equal(lastActivityLabel(now - 59 * minute, now), "59m");
+  assert.equal(lastActivityLabel(now - 60 * minute, now), "1h");
+  assert.equal(lastActivityLabel(now - 23 * 60 * minute, now), "23h");
+  assert.equal(lastActivityLabel(now - 24 * 60 * minute, now), "1d");
+  assert.equal(lastActivityLabel(now - 3 * 24 * 60 * minute, now), "3d");
 });
 
 test("a speaking disposition needs a person even while the session works", () => {
@@ -263,7 +263,7 @@ test("a speaking disposition needs a person even while the session works", () =>
     providerSessionId: "claude-speaking",
     title: "Speaking session",
     status: SESSION_STATUS.WORKING,
-    observedAt: 1_000,
+    lastActivityAt: 1_000,
   });
 
   const [session] = displaySessions(
@@ -437,7 +437,7 @@ test("the voice filter narrows to realtime voice chats and has a spoken name", (
       providerSessionId: "codex-voice",
       title: "Voice chat",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1_000,
+      lastActivityAt: 1_000,
       realtimeVoice: true,
     }),
     liveSession(CODEX_PROVIDER, "codex-typed", SESSION_STATUS.COMPLETE),
@@ -493,7 +493,7 @@ test("every agent this build knows can be narrowed down to", () => {
           providerSessionId: providerId,
           title: providerId,
           status: SESSION_STATUS.WORKING,
-          observedAt: 1_000 + index,
+          lastActivityAt: 1_000 + index,
         },
       ),
     ),
@@ -786,13 +786,13 @@ test("chats of one workspace sit together and read as one tray run", () => {
   const chatOf = (
     id: string,
     status: (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS],
-    observedAt: number,
+    lastActivityAt: number,
   ) =>
     normalizeSession(CONDUCTOR_PROVIDER, {
       providerSessionId: id,
       title: `Chat ${id}`,
       status,
-      observedAt,
+      lastActivityAt,
       detail: { repository: "luke" },
       workspace: { providerWorkspaceId: "workspace-lisbon", name: "lisbon-v2" },
     });
@@ -834,14 +834,14 @@ test("an orchestrator workspace groups sessions from different providers", () =>
       providerSessionId: "claude-chat",
       title: "Claude",
       status: SESSION_STATUS.WORKING,
-      observedAt: 2_000,
+      lastActivityAt: 2_000,
       workspace,
     }),
     normalizeSession(CODEX_PROVIDER, {
       providerSessionId: "codex-chat",
       title: "Codex",
       status: SESSION_STATUS.COMPLETE,
-      observedAt: 1_000,
+      lastActivityAt: 1_000,
       workspace,
     }),
   ]);
@@ -867,7 +867,7 @@ test("sessions Superset manages earn a chip and can be narrowed to", () => {
       providerSessionId: "claude-managed",
       title: "Claude",
       status: SESSION_STATUS.WORKING,
-      observedAt: 2_000,
+      lastActivityAt: 2_000,
       workspace,
     }),
     liveSession(CODEX_PROVIDER, "codex-loose", SESSION_STATUS.WORKING, 1_000),
@@ -924,7 +924,7 @@ test("an app filter matches annotations as well as a namesake provider", () => {
       providerSessionId: "codex-conductor",
       title: "A long Codex title that still keeps its application marks",
       status: SESSION_STATUS.WORKING,
-      observedAt: 3_000,
+      lastActivityAt: 3_000,
       applications: [
         {
           id: SESSION_APPLICATION_ID.CHATGPT,
@@ -986,7 +986,7 @@ test("a Superset chip counting every session is not offered", () => {
       providerSessionId: id,
       title: `Session ${id}`,
       status: SESSION_STATUS.WORKING,
-      observedAt: 1_000,
+      lastActivityAt: 1_000,
       workspace: { providerWorkspaceId: "workspace-superset", scopeId: "superset" },
     });
   const rows = displaySessions(bootstrap(false), [
@@ -1012,7 +1012,7 @@ test("a lone chat is a run of one, and namesake workspaces never join", () => {
       providerSessionId: id,
       title: `Chat ${id}`,
       status: SESSION_STATUS.WORKING,
-      observedAt: 1_000,
+      lastActivityAt: 1_000,
       workspace: { providerWorkspaceId: workspaceId, name: "lisbon-v2" },
     });
 
@@ -1050,7 +1050,7 @@ test("an act aimed at the workspace is the tray's, said once", () => {
       providerSessionId: id,
       title: `Chat ${id}`,
       status: SESSION_STATUS.COMPLETE,
-      observedAt: 1_000,
+      lastActivityAt: 1_000,
       controls,
       workspace: { providerWorkspaceId: "workspace-lisbon", name: "lisbon-v2" },
     });
@@ -1083,7 +1083,7 @@ test("an ungrouped session's acts never read as a workspace's", () => {
       providerSessionId: "chat-alone",
       title: "Chat alone",
       status: SESSION_STATUS.COMPLETE,
-      observedAt: 1_000,
+      lastActivityAt: 1_000,
       controls: [{ id: "archive-workspace", label: "Archive", target: "workspace-lisbon" }],
     }),
   ]);
@@ -1101,7 +1101,7 @@ test("a tray's shared pull request is said once, through the chat that reported 
       providerSessionId: id,
       title: `Chat ${id}`,
       status: SESSION_STATUS.COMPLETE,
-      observedAt: 1_000,
+      lastActivityAt: 1_000,
       ...(change ? { detail: { change } } : undefined),
       workspace: { providerWorkspaceId: "workspace-lisbon", name: "lisbon-v2" },
     });
@@ -1156,7 +1156,7 @@ test("a row carries its workspace by name, falling back to the id", () => {
       providerSessionId: "chat-named",
       title: "Chat named",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1_000,
+      lastActivityAt: 1_000,
       workspace: { providerWorkspaceId: "workspace-1", name: "lisbon-v2" },
     }),
   ]);
@@ -1167,7 +1167,7 @@ test("a row carries its workspace by name, falling back to the id", () => {
       providerSessionId: "chat-unnamed",
       title: "Chat unnamed",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1_000,
+      lastActivityAt: 1_000,
       workspace: { providerWorkspaceId: "workspace-2" },
     }),
   ]);
@@ -1185,7 +1185,7 @@ test("a row offers writes only where its provider promised them", () => {
     providerSessionId: "cloud",
     title: "Session cloud",
     status: SESSION_STATUS.WAITING,
-    observedAt: 1_000,
+    lastActivityAt: 1_000,
     canReceiveMessage: true,
     controls: [{ id: "approve-plan", label: "Approve the plan" }],
   });
@@ -1217,14 +1217,14 @@ test("a query keeps only rows saying every word, wherever each word lands", () =
       providerSessionId: "parser",
       title: "Rework the parser",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1_000,
+      lastActivityAt: 1_000,
       detail: { branch: "feat/LUKE-123-parser" },
     }),
     normalizeSession(CLAUDE_PROVIDER, {
       providerSessionId: "login",
       title: "Fix the login flow",
       status: SESSION_STATUS.WORKING,
-      observedAt: 2_000,
+      lastActivityAt: 2_000,
     }),
   ]);
 
@@ -1251,7 +1251,7 @@ test("a query is read against everything the row can say", () => {
       providerSessionId: "chat",
       title: "Chat chat",
       status: SESSION_STATUS.ERROR,
-      observedAt: 1_000,
+      lastActivityAt: 1_000,
       detail: { repository: "sidecar", model: "claude-opus-5", error: "The build broke" },
       workspace: { providerWorkspaceId: "workspace-1", name: "lisbon-v2" },
     }),
@@ -1276,14 +1276,14 @@ test("a query finds a session by its status word, even under a busy detail line"
       providerSessionId: "busy",
       title: "Rework the parser",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1_000,
+      lastActivityAt: 1_000,
       detail: { activity: "Running the tests" },
     }),
     normalizeSession(CODEX_PROVIDER, {
       providerSessionId: "stuck",
       title: "Fix the login flow",
       status: SESSION_STATUS.WAITING,
-      observedAt: 2_000,
+      lastActivityAt: 2_000,
       detail: { activity: "Holding for an approval" },
     }),
   ]);
@@ -1310,13 +1310,13 @@ test("a spoken search is told exactly what the list will show", () => {
       providerSessionId: "parser",
       title: "Rework the parser",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1_000,
+      lastActivityAt: 1_000,
     }),
     normalizeSession(CODEX_PROVIDER, {
       providerSessionId: "login",
       title: "Fix the login flow",
       status: SESSION_STATUS.WORKING,
-      observedAt: 2_000,
+      lastActivityAt: 2_000,
     }),
   ]);
 
@@ -1371,13 +1371,13 @@ test("a query reads within the filter and counts what the filter hides", () => {
       providerSessionId: "claude-alpha",
       title: "Alpha rework",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1_000,
+      lastActivityAt: 1_000,
     }),
     normalizeSession(CODEX_PROVIDER, {
       providerSessionId: "codex-alpha",
       title: "Alpha cleanup",
       status: SESSION_STATUS.WORKING,
-      observedAt: 2_000,
+      lastActivityAt: 2_000,
     }),
     liveSession(CODEX_PROVIDER, "codex-other", SESSION_STATUS.WORKING, 3_000),
   ]);
@@ -1512,7 +1512,7 @@ test("a hosted chat carries its agent for the mark, the chips, and the search", 
         providerSessionId: "conductor-claude",
         title: "amber-shoal",
         status: SESSION_STATUS.WORKING,
-        observedAt: 2_000,
+        lastActivityAt: 2_000,
         location: SESSION_LOCATION.CLOUD,
         agent: { id: PROVIDER_ID.CLAUDE_CODE, displayName: "Claude Code" },
       },

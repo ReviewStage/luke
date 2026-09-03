@@ -404,7 +404,7 @@ test("observes cloud sessions the signed-in user created, under their own names"
     managerName: "Conductor",
   });
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
-  assert.equal(observations[0]?.observedAt, TEST_TIME - 5_000);
+  assert.equal(observations[0]?.lastActivityAt, TEST_TIME - 5_000);
   // A working session can be stopped and can take a message, both documented.
   assert.deepEqual(observations[0]?.controls, [
     { id: "cancel-turn", label: "Stop this turn", kind: "stop" },
@@ -1108,7 +1108,7 @@ test("keeps reporting a long turn as working", async () => {
 
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
-  assert.equal(observations[0]?.observedAt, startedAt);
+  assert.equal(observations[0]?.lastActivityAt, startedAt);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -1177,7 +1177,7 @@ test("keeps a walked-away chat stale across the wake its own press caused", asyn
 
   const beforeWake = await adapter.observe();
   assert.equal(beforeWake[0]?.status, SESSION_STATUS.UNKNOWN);
-  assert.equal(beforeWake[0]?.observedAt, walkedAwayAt);
+  assert.equal(beforeWake[0]?.lastActivityAt, walkedAwayAt);
 
   now = TEST_TIME + 60_000;
   chat.statusUpdatedAt = now;
@@ -1185,7 +1185,7 @@ test("keeps a walked-away chat stale across the wake its own press caused", asyn
 
   const afterWake = await adapter.observe();
   assert.equal(afterWake[0]?.status, SESSION_STATUS.UNKNOWN);
-  assert.equal(afterWake[0]?.observedAt, walkedAwayAt);
+  assert.equal(afterWake[0]?.lastActivityAt, walkedAwayAt);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -1217,7 +1217,7 @@ test("adopts the provider's timestamp again the moment the chat's work moves", a
   workspace.lastActivityAt = now;
   const working = await adapter.observe();
   assert.equal(working[0]?.status, SESSION_STATUS.WORKING);
-  assert.equal(working[0]?.observedAt, now);
+  assert.equal(working[0]?.lastActivityAt, now);
 
   // The turn settles with new parting words: freshly waiting, on the
   // provider's own timestamp for the settle.
@@ -1228,7 +1228,7 @@ test("adopts the provider's timestamp again the moment the chat's work moves", a
   chat.transcriptTail = "## Assistant\n\nShipped; anything else?";
   const settled = await adapter.observe();
   assert.equal(settled[0]?.status, SESSION_STATUS.WAITING);
-  assert.equal(settled[0]?.observedAt, settledAt);
+  assert.equal(settled[0]?.lastActivityAt, settledAt);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -1261,7 +1261,7 @@ test("a whole turn between passes still reads as fresh through its parting words
   chat.transcriptTail = "## Assistant\n\nDone; want the follow-up too?";
   const settled = await adapter.observe();
   assert.equal(settled[0]?.status, SESSION_STATUS.WAITING);
-  assert.equal(settled[0]?.observedAt, settledAt);
+  assert.equal(settled[0]?.lastActivityAt, settledAt);
   assert.equal(settled[0]?.recap, "Done; want the follow-up too?");
 });
 
@@ -1296,7 +1296,7 @@ test("a failed read never counts as the chat's work moving", async () => {
   testApi.sqlHttpStatus = HTTP_STATUS.SERVER_ERROR;
   const unreadable = await adapter.observe();
   assert.equal(unreadable[0]?.status, SESSION_STATUS.UNKNOWN);
-  assert.equal(unreadable[0]?.observedAt, walkedAwayAt);
+  assert.equal(unreadable[0]?.lastActivityAt, walkedAwayAt);
 
   // The transcripts answer again with the same parting words: still nothing
   // moved, so the wake's timestamps stay a side effect.
@@ -1304,7 +1304,7 @@ test("a failed read never counts as the chat's work moving", async () => {
   delete testApi.sqlHttpStatus;
   const readable = await adapter.observe();
   assert.equal(readable[0]?.status, SESSION_STATUS.UNKNOWN);
-  assert.equal(readable[0]?.observedAt, walkedAwayAt);
+  assert.equal(readable[0]?.lastActivityAt, walkedAwayAt);
 
   // The status read failing likewise leaves the walked-away moment standing
   // rather than falling back to the workspace's wake-bumped activity.
@@ -1312,7 +1312,7 @@ test("a failed read never counts as the chat's work moving", async () => {
   chat.statusHttpStatus = HTTP_STATUS.SERVER_ERROR;
   const statusless = await adapter.observe();
   assert.equal(statusless[0]?.status, SESSION_STATUS.UNKNOWN);
-  assert.equal(statusless[0]?.observedAt, walkedAwayAt);
+  assert.equal(statusless[0]?.lastActivityAt, walkedAwayAt);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -1343,13 +1343,13 @@ test("a chat first seen through a failed status read is not pinned to the fallba
 
   const unreadable = await adapter.observe();
   assert.equal(unreadable[0]?.status, SESSION_STATUS.UNKNOWN);
-  assert.equal(unreadable[0]?.observedAt, workspace.lastActivityAt);
+  assert.equal(unreadable[0]?.lastActivityAt, workspace.lastActivityAt);
 
   now = TEST_TIME + 60_000;
   delete chat.statusHttpStatus;
   const readable = await adapter.observe();
   assert.equal(readable[0]?.status, SESSION_STATUS.UNKNOWN);
-  assert.equal(readable[0]?.observedAt, walkedAwayAt);
+  assert.equal(readable[0]?.lastActivityAt, walkedAwayAt);
 });
 
 test("ignores workspaces created by another user and workspaces without a creator", async () => {

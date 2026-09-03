@@ -16,7 +16,7 @@ function session(provider: SessionProvider, providerSessionId: string, link?: st
     providerSessionId,
     title: `Session ${providerSessionId}`,
     status: SESSION_STATUS.WORKING,
-    observedAt: 100,
+    lastActivityAt: 100,
     detail: link ? { link } : {},
   });
 }

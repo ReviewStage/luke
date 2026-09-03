@@ -285,7 +285,7 @@ export interface SessionView {
   location: SessionLocation;
   /** Whether this is a realtime voice/delegation chat. */
   realtimeVoice?: boolean;
-  observedAt: number;
+  lastActivityAt: number;
   /**
    * Whether the provider gave an address that opens this session, which is what
    * decides if the row is a control at all. The address itself stays in the
@@ -378,7 +378,7 @@ export function fixtureMentionChips(
     providerId: session.providerId,
     providerSessionId: session.id,
     title: session.title,
-    observedAt: session.observedAt,
+    lastActivityAt: session.lastActivityAt,
     ...(session.workspace
       ? {
           workspace: {
@@ -612,7 +612,7 @@ const byUrgency = compareSessionsByUrgency;
 
 /** What moved last, with urgency deciding sessions observed in the same tick. */
 function byRecency(first: SessionView, second: SessionView): number {
-  return second.observedAt - first.observedAt || byUrgency(first, second);
+  return second.lastActivityAt - first.lastActivityAt || byUrgency(first, second);
 }
 
 /** The comparator a sort names — one answer for the list and the wing's marks. */
@@ -658,7 +658,7 @@ export function displaySessions(
           ...observed,
           attention:
             decisions.get(`${observed.providerId}\0${observed.providerSessionId}`) ??
-            silentAttention(observed.observedAt),
+            silentAttention(observed.lastActivityAt),
         } satisfies SessionWithAttention;
         const urgency = sessionUrgency(session);
         const changeNumber = session.detail.change
@@ -689,7 +689,7 @@ export function displaySessions(
           urgency,
           label: urgencyLabel(urgency),
           location: session.location,
-          observedAt: session.observedAt,
+          lastActivityAt: session.lastActivityAt,
           openable: session.detail.link !== undefined,
           ...(openApplication ? { openApplication: openApplication.displayName } : undefined),
           canMessage: session.canReceiveMessage,
@@ -1199,4 +1199,4 @@ export function tallySummary(tally: SessionTally): string {
  * fixture rows are measured against the fixture's own epoch so the evidence
  * stays reproducible, and live rows against whatever render tick asked.
  */
-export { observedAgoLabel } from "@sidecar/panel";
+export { lastActivityLabel } from "@sidecar/panel";

@@ -24,14 +24,14 @@ const TEST_CONDUCTOR_LINK = "https://app.conductor.build/sessions/session-1";
 
 function observation(
   providerSessionId: string,
-  observedAt: number,
+  lastActivityAt: number,
   overrides: Partial<ProviderSessionObservation> = {},
 ): ProviderSessionObservation {
   return {
     providerSessionId,
     title: "Implement the shared session core",
     status: SESSION_STATUS.WORKING,
-    observedAt,
+    lastActivityAt,
     ...overrides,
   };
 }

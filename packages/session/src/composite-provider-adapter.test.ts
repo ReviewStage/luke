@@ -48,7 +48,7 @@ function observation(
     providerSessionId,
     title: "Cursor: luke",
     status: SESSION_STATUS.WORKING,
-    observedAt: 100,
+    lastActivityAt: 100,
     ...overrides,
   };
 }

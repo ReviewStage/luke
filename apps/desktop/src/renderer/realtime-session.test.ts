@@ -134,7 +134,7 @@ function observedSession(
       providerSessionId,
       title: "Claude Code: checkout-service",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1_800_000_000_000,
+      lastActivityAt: 1_800_000_000_000,
       ...overrides,
     },
   );
@@ -1909,7 +1909,7 @@ test("an unchanged session roster is not resent", async () => {
 test("a stale session aging across clock ticks does not resend the roster", async (t) => {
   const context = harness();
   await context.session.connect();
-  // Six minutes past the fixture's observedAt, inside the minutes bucket.
+  // Six minutes past the fixture's lastActivityAt, inside the minutes bucket.
   t.mock.timers.enable({ apis: ["Date"], now: 1_800_000_360_000 });
 
   context.session.updateSessions([observedSession("session-a")]);

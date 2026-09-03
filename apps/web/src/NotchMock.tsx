@@ -5,8 +5,8 @@ import {
 } from "@paper-design/shaders";
 import { FIXTURE_EPOCH_MS, fixtureSnapshot } from "@sidecar/fixtures";
 import {
+  lastActivityLabel,
   OptionsIcon,
-  observedAgoLabel,
   ProviderMark,
   SessionRow,
   WingFace,
@@ -108,7 +108,7 @@ const BACKDROP_SWIRL = 0.5;
 const BACKDROP_SPEED = 0.5;
 
 /**
- * `observedAgoLabel` in the renderer, read against the fixture's own epoch so
+ * `lastActivityLabel` in the renderer, read against the fixture's own epoch so
  * the page's labels match the product's evidence captures exactly.
  */
 const MOCK_LABEL = `Luke's notch capsule expanding into its session panel, listing ${MOCK_SESSIONS.map(
@@ -288,7 +288,7 @@ export function NotchMock(): React.JSX.Element {
                       complete={session.urgency === SESSION_URGENCY.COMPLETE}
                       place={session.branch ?? session.repository}
                       branch={Boolean(session.branch)}
-                      when={observedAgoLabel(session.observedAt, FIXTURE_EPOCH_MS)}
+                      when={lastActivityLabel(session.lastActivityAt, FIXTURE_EPOCH_MS)}
                     />
                   </article>
                 ))}

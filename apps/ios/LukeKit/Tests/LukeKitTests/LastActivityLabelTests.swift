@@ -7,12 +7,12 @@ import XCTest
 /// (`apps/desktop/src/renderer/session-model.test.ts`), so the two surfaces
 /// cannot drift apart silently: the label reports the coarsest unit that has
 /// begun, and a timestamp ahead of the clock is skew, not the future.
-final class ObservedAgoLabelTests: XCTestCase {
+final class LastActivityLabelTests: XCTestCase {
     func testWordedByTheUnitThatHasBegun() {
         let minute: TimeInterval = 60
         let now = Date(timeIntervalSince1970: 100 * 24 * 60 * minute)
-        func label(_ observedAt: Date) -> String {
-            observedAgoLabel(observedAt: observedAt, now: now)
+        func label(_ lastActivityAt: Date) -> String {
+            lastActivityLabel(lastActivityAt: lastActivityAt, now: now)
         }
 
         XCTAssertEqual(label(now), "Now")

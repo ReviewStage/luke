@@ -18,10 +18,10 @@ test("every display urgency has a label, and the priority list is a permutation 
 });
 
 test("urgency puts attention first, then working, complete, and idle", () => {
-  const idle = { urgency: SESSION_URGENCY.UNKNOWN, observedAt: 3 };
-  const working = { urgency: SESSION_URGENCY.WORKING, observedAt: 2 };
-  const attention = { urgency: SESSION_URGENCY.ATTENTION, observedAt: 1 };
-  const complete = { urgency: SESSION_URGENCY.COMPLETE, observedAt: 4 };
+  const idle = { urgency: SESSION_URGENCY.UNKNOWN, lastActivityAt: 3 };
+  const working = { urgency: SESSION_URGENCY.WORKING, lastActivityAt: 2 };
+  const attention = { urgency: SESSION_URGENCY.ATTENTION, lastActivityAt: 1 };
+  const complete = { urgency: SESSION_URGENCY.COMPLETE, lastActivityAt: 4 };
   assert.deepEqual(
     [idle, working, attention, complete]
       .toSorted(compareSessionsByUrgency)
@@ -36,8 +36,8 @@ test("urgency puts attention first, then working, complete, and idle", () => {
 });
 
 test("within one urgency, the session that moved most recently comes first", () => {
-  const older = { urgency: SESSION_URGENCY.WORKING, observedAt: 1 };
-  const newer = { urgency: SESSION_URGENCY.WORKING, observedAt: 2 };
+  const older = { urgency: SESSION_URGENCY.WORKING, lastActivityAt: 1 };
+  const newer = { urgency: SESSION_URGENCY.WORKING, lastActivityAt: 2 };
   assert.equal(compareSessionsByUrgency(newer, older), -1);
 });
 

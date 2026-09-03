@@ -45,5 +45,5 @@ export async function peekLocalSessions(
       }
     }),
   );
-  return observed.flat().sort((left, right) => right.observedAt - left.observedAt);
+  return observed.flat().sort((left, right) => right.lastActivityAt - left.lastActivityAt);
 }

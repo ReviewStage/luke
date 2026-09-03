@@ -14,10 +14,14 @@ import {
 const TEST_NOW = Date.parse("2026-08-16T12:00:00.000Z");
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function session(providerSessionId: string, status: SessionStatus, observedAt: number): Session {
+function session(
+  providerSessionId: string,
+  status: SessionStatus,
+  lastActivityAt: number,
+): Session {
   return normalizeSession(
     { id: "codex", displayName: "Codex" },
-    { providerSessionId, title: "Implement the shared session core", status, observedAt },
+    { providerSessionId, title: "Implement the shared session core", status, lastActivityAt },
   );
 }
 
@@ -56,7 +60,7 @@ test("a standing row never ages out, however old its own timestamp", () => {
       providerSessionId: "workspace-1",
       title: "power-vacation",
       status: SESSION_STATUS.COMPLETE,
-      observedAt: TEST_NOW - 100 * DAY_MS,
+      lastActivityAt: TEST_NOW - 100 * DAY_MS,
       standing: true,
     },
   );
@@ -92,7 +96,7 @@ test("the grouping manager's mark leads the row and the press follows it", () =>
       providerSessionId: "run:grouped",
       title: "Implement the shared session core",
       status: SESSION_STATUS.WORKING,
-      observedAt: TEST_NOW,
+      lastActivityAt: TEST_NOW,
       detail: { link: "codex://threads/run-grouped" },
       applications: [
         {
@@ -136,7 +140,7 @@ test("a manager without a linked mark cedes the press down the marks", () => {
       providerSessionId: "run:conductor",
       title: "Implement the shared session core",
       status: SESSION_STATUS.WORKING,
-      observedAt: TEST_NOW,
+      lastActivityAt: TEST_NOW,
       detail: { link: "codex://threads/run-conductor" },
       applications: [
         { id: "conductor", displayName: "Conductor", scope: "workspace" },
@@ -169,7 +173,7 @@ test("an ungrouped row keeps the fixed mark order and its provider's press", () 
       providerSessionId: "run:plain",
       title: "Implement the shared session core",
       status: SESSION_STATUS.WORKING,
-      observedAt: TEST_NOW,
+      lastActivityAt: TEST_NOW,
       detail: { link: "https://example.com/run-plain" },
       applications: [
         {
@@ -226,7 +230,7 @@ test("keeps a sound diff summary and drops a suspect or empty one whole", () => 
         providerSessionId: "task-1",
         title: "workspace",
         status: SESSION_STATUS.COMPLETE,
-        observedAt: TEST_NOW,
+        lastActivityAt: TEST_NOW,
         detail: diff,
       },
     ).detail.diff;
@@ -261,7 +265,7 @@ test("keeps the agent behind a hosted session, and drops one saying nothing", ()
         providerSessionId: "chat-1",
         title: "Hosted chat",
         status: SESSION_STATUS.WORKING,
-        observedAt: TEST_NOW,
+        lastActivityAt: TEST_NOW,
         agent,
       },
     ).agent;
@@ -288,7 +292,7 @@ test("a developer hold rides a waiting session and is dropped on any other statu
       providerSessionId: "held",
       title: "Held for permission",
       status: SESSION_STATUS.WAITING,
-      observedAt: TEST_NOW,
+      lastActivityAt: TEST_NOW,
       holdingForDeveloper: true,
     },
   );
@@ -300,7 +304,7 @@ test("a developer hold rides a waiting session and is dropped on any other statu
       providerSessionId: "held",
       title: "Held for permission",
       status: SESSION_STATUS.WORKING,
-      observedAt: TEST_NOW,
+      lastActivityAt: TEST_NOW,
       holdingForDeveloper: true,
     },
   );

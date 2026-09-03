@@ -184,7 +184,7 @@ test("annotates matching local observations and their spawned descendants", asyn
       providerSessionId: "local",
       title: "Local",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1,
+      lastActivityAt: 1,
       applications: [
         {
           id: SESSION_APPLICATION_ID.CHATGPT,
@@ -199,28 +199,28 @@ test("annotates matching local observations and their spawned descendants", asyn
       parentProviderSessionId: "local",
       title: "Child",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1,
+      lastActivityAt: 1,
     },
     {
       providerSessionId: "grandchild",
       parentProviderSessionId: "child",
       title: "Grandchild",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1,
+      lastActivityAt: 1,
     },
     {
       providerSessionId: "cloud",
       parentProviderSessionId: "local",
       title: "Cloud",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1,
+      lastActivityAt: 1,
       location: SESSION_LOCATION.CLOUD,
     },
     {
       providerSessionId: "other",
       title: "Other",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1,
+      lastActivityAt: 1,
     },
   ]);
 
@@ -264,21 +264,21 @@ test("a missing parent row and a cyclic parent graph remain bounded", async (t) 
       parentProviderSessionId: "local",
       title: "Orphaned child",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1,
+      lastActivityAt: 1,
     },
     {
       providerSessionId: "cycle-a",
       parentProviderSessionId: "cycle-b",
       title: "Cycle A",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1,
+      lastActivityAt: 1,
     },
     {
       providerSessionId: "cycle-b",
       parentProviderSessionId: "cycle-a",
       title: "Cycle B",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1,
+      lastActivityAt: 1,
     },
   ]);
 
@@ -297,7 +297,7 @@ const OBSERVED_CHAT = {
   providerSessionId: "local",
   title: "Local",
   status: SESSION_STATUS.WORKING,
-  observedAt: 1,
+  lastActivityAt: 1,
 } as const;
 
 test("groups a matched chat under its Conductor workspace like a manager", async (t) => {

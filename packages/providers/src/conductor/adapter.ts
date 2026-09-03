@@ -485,7 +485,7 @@ interface ConductorSessionMemory {
   errorMessage: string | undefined;
   recapKnown: boolean;
   recap: string | undefined;
-  observedAt: number;
+  lastActivityAt: number;
 }
 
 export const CONDUCTOR_PROVIDER: SessionProvider = {
@@ -1274,8 +1274,8 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     now: number,
   ): ProviderSessionObservation | undefined {
     const transcript = transcripts?.get(session.id);
-    const observedAt = this.#observedMoment(session, reported, transcripts);
-    const status = this.#statusFor(reported?.status, observedAt, now);
+    const lastActivityAt = this.#observedMoment(session, reported, transcripts);
+    const status = this.#statusFor(reported?.status, lastActivityAt, now);
     // The parting words are a recap only once the turn has actually parted:
     // read for an idle chat, they say where the agent left the work; read
     // mid-turn they are half a sentence posing as an outcome, and read beside
@@ -1319,7 +1319,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       // as a branch: a workspace name never was one.
       title: session.name ?? session.workspace.name ?? session.workspace.repositoryLabel,
       status,
-      observedAt,
+      lastActivityAt,
       // The workspace this chat is one voice of. Its name falls back to the
       // repository so an unnamed workspace still groups under something a
       // person can say out loud. Conductor manages the workspace the way
@@ -1417,28 +1417,30 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       remembered.recapKnown &&
       transcripts !== undefined &&
       transcript?.recap !== remembered.recap;
-    const observedAt =
-      remembered === undefined || statusMoved || recapMoved ? reportedAt : remembered.observedAt;
+    const lastActivityAt =
+      remembered === undefined || statusMoved || recapMoved
+        ? reportedAt
+        : remembered.lastActivityAt;
     this.#memories.set(session.id, {
       status: reported?.status ?? remembered?.status,
       errorMessage:
         reported?.status !== undefined ? reported.errorMessage : remembered?.errorMessage,
       recapKnown: transcripts !== undefined || remembered?.recapKnown === true,
       recap: transcripts !== undefined ? transcript?.recap : remembered?.recap,
-      observedAt,
+      lastActivityAt,
     });
-    return observedAt;
+    return lastActivityAt;
   }
 
   #statusFor(
     reportedStatus: ConductorSessionStatus | undefined,
-    observedAt: number,
+    lastActivityAt: number,
     now: number,
   ): SessionStatus {
     if (!reportedStatus) return SESSION_STATUS.UNKNOWN;
     return agedStatus(
       SESSION_STATUS_BY_CONDUCTOR_STATUS[reportedStatus],
-      observedAt,
+      lastActivityAt,
       now,
       OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
     );

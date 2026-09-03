@@ -28,7 +28,7 @@ function review(overrides: Partial<AttentionUpdate> = {}): AttentionReview {
     status: SESSION_STATUS.WAITING,
     holdingForDeveloper: true,
     context: { activity: "waiting on a checkout decision" },
-    observedAt: 1_000,
+    lastActivityAt: 1_000,
     ...overrides,
   };
   return {
@@ -57,7 +57,7 @@ function waitingNotice(holdingForDeveloper: boolean): SessionNotice {
     repository: "luke",
     branch: "charleslpan/jarvis-like-voice",
     canReceiveMessage: true,
-    observedAt: 1_000,
+    lastActivityAt: 1_000,
   };
 }
 

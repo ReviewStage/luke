@@ -90,7 +90,7 @@ test("the observe response carries only a validated published-work address", () 
     providerSessionId: "sess-change",
     title: "Published work",
     status: SESSION_STATUS.COMPLETE,
-    observedAt: Date.parse("2026-09-02T18:00:00.000Z"),
+    lastActivityAt: Date.parse("2026-09-02T18:00:00.000Z"),
   };
 
   assert.deepEqual(
@@ -116,7 +116,7 @@ test("the observe response carries only an openable session address", () => {
     providerSessionId: "sess-link",
     title: "Deep-linked chat",
     status: SESSION_STATUS.WORKING,
-    observedAt: Date.parse("2026-09-02T18:00:00.000Z"),
+    lastActivityAt: Date.parse("2026-09-02T18:00:00.000Z"),
   };
 
   assert.equal(
@@ -135,6 +135,40 @@ test("the observe response carries only an openable session address", () => {
     },
   });
   assert.equal(invalid.link, undefined);
+});
+
+test("the last activity travels under both its name and the legacy one, and is read from either", () => {
+  const lastActivityAt = Date.parse("2026-09-02T18:00:00.000Z");
+  const wire = observedSessionForResponse("conductor", {
+    providerSessionId: "sess-dated",
+    title: "Dated",
+    status: SESSION_STATUS.WORKING,
+    lastActivityAt,
+    detail: {},
+  });
+  assert.equal(wire.lastActivityAt, lastActivityAt);
+  assert.equal(wire.observedAt, lastActivityAt);
+
+  const renamed = observeAnswerFromWire({
+    sessions: [
+      {
+        providerId: "conductor",
+        sessionId: "s",
+        title: "T",
+        status: "working",
+        lastActivityAt: 2_000,
+        observedAt: 1_000,
+      },
+    ],
+  });
+  assert.equal(renamed?.sessions[0]?.lastActivityAt, 2_000);
+  // A service still sending only the old name dates the session the same way.
+  const legacy = observeAnswerFromWire({
+    sessions: [
+      { providerId: "conductor", sessionId: "s", title: "T", status: "working", observedAt: 1_000 },
+    ],
+  });
+  assert.equal(legacy?.sessions[0]?.lastActivityAt, 1_000);
 });
 
 test("observeAnswerFromWire accepts a valid answer", () => {

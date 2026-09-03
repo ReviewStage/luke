@@ -404,7 +404,7 @@ function titleFromHead(head: string): string | undefined {
  */
 function statusFromTail(
   parsed: ParsedClaudeSessionTail,
-  observedAt: number,
+  lastActivityAt: number,
   now: number,
   activeSessionFreshnessMs: number,
 ): ProviderSessionObservation["status"] {
@@ -416,7 +416,7 @@ function statusFromTail(
       : SESSION_STATUS.WORKING;
   // A transcript has no heartbeat, so an open turn that has gone quiet is
   // unknown rather than still working.
-  return localSessionStatus(status, observedAt, now, activeSessionFreshnessMs);
+  return localSessionStatus(status, lastActivityAt, now, activeSessionFreshnessMs);
 }
 
 /**
@@ -495,7 +495,8 @@ function observationFromSessionFile(
     refinement: CLAUDE_HOOK_STATUS_REFINEMENT,
     hookEvent,
     providerAtMs: transcriptAt,
-    statusAt: (observedAt) => statusFromTail(parsed, observedAt, now, activeSessionFreshnessMs),
+    statusAt: (lastActivityAt) =>
+      statusFromTail(parsed, lastActivityAt, now, activeSessionFreshnessMs),
     now,
     activeSessionFreshnessMs,
   });
@@ -512,7 +513,7 @@ function observationFromSessionFile(
     title: titleFromTail(parsed),
     status: refined.status,
     ...(completionCause ? { completionCause } : undefined),
-    observedAt: refined.observedAt,
+    lastActivityAt: refined.lastActivityAt,
     ...(parsed.awaySummary ? { recap: parsed.awaySummary } : undefined),
     detail: detailFromTail(parsed),
     ...(refined.holdingForDeveloper ? { holdingForDeveloper: true } : undefined),

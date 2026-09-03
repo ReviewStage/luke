@@ -585,7 +585,7 @@ test("session context carries only bounded, redacted fields", () => {
       providerSessionId: "session-a",
       title: "Claude Code: checkout-service",
       status: SESSION_STATUS.WAITING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
       recap: "Claude Code is waiting; transcript content is not retained.",
     },
   );
@@ -615,7 +615,7 @@ test("session context carries only bounded, redacted fields", () => {
       providerSessionId: "conductor-1",
       title: "Conductor: luke",
       status: SESSION_STATUS.WORKING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
       detail: { link: "https://app.conductor.build/sessions/conductor-1" },
     },
   );
@@ -631,7 +631,7 @@ test("a chat carries its workspace only as an internal reference", () => {
       providerSessionId: "chat-1",
       title: "Revamp the notch panel",
       status: SESSION_STATUS.WORKING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
       workspace: { providerWorkspaceId: "workspace-1", name: "lisbon-v2" },
     },
   );
@@ -649,7 +649,7 @@ test("a chat carries its workspace only as an internal reference", () => {
       providerSessionId: "chat-2",
       title: "Chase the memory leak",
       status: SESSION_STATUS.WORKING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
       workspace: { providerWorkspaceId: "workspace-internal-uuid" },
     },
   );
@@ -664,7 +664,7 @@ test("a chat carries its workspace only as an internal reference", () => {
       providerSessionId: "session-b",
       title: "checkout-service",
       status: SESSION_STATUS.WORKING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
     },
   );
   assert.doesNotMatch(sessionContextText([ungrouped]), /workspace/);
@@ -677,7 +677,7 @@ test("the roster identifies sessions managed by Superset", () => {
       providerSessionId: "chat-1",
       title: "Fix workspace creation",
       status: SESSION_STATUS.WORKING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
       workspace: {
         providerWorkspaceId: "workspace-1",
         name: "power-vacation",
@@ -697,7 +697,7 @@ test("the roster names a session's app associations, so 'my Superset Codex sessi
       providerSessionId: "codex-1",
       title: "Refit the settings drawer",
       status: SESSION_STATUS.WORKING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
       applications: [
         {
           id: SESSION_APPLICATION_ID.SUPERSET,
@@ -725,7 +725,7 @@ test("the roster names a session's app associations, so 'my Superset Codex sessi
       providerSessionId: "codex-2",
       title: "Chase the flaky test",
       status: SESSION_STATUS.WORKING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
     },
   );
   assert.doesNotMatch(sessionContextText([unclaimed]), /associated with/);
@@ -739,7 +739,7 @@ test("the roster names a session's app associations, so 'my Superset Codex sessi
       providerSessionId: "session-3",
       title: "Rework the roster",
       status: SESSION_STATUS.WORKING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
       applications: [
         {
           id: SESSION_APPLICATION_ID.CONDUCTOR,
@@ -761,7 +761,7 @@ test("the roster keeps a hosted chat's names as internal references", () => {
       providerSessionId: "chat-1",
       title: "amber-shoal",
       status: SESSION_STATUS.WORKING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
       agent: { id: "claude-code", displayName: "Claude Code" },
     },
   );
@@ -787,7 +787,7 @@ test("the roster carries how long ago each session was last seen, in coarse buck
         providerSessionId: "session-a",
         title: "Bootstrap the desktop shell",
         status: SESSION_STATUS.WORKING,
-        observedAt: now - elapsed,
+        lastActivityAt: now - elapsed,
       },
     );
     return sessionContextText([session], now);
@@ -800,20 +800,20 @@ test("the roster carries how long ago each session was last seen, in coarse buck
   assert.match(rosterAt(5 * hour), /updated hours ago/);
   assert.match(rosterAt(3 * 24 * hour), /updated a day or more ago/);
 
-  // Provider clock skew (observedAt ahead of now) also reads as "just now".
+  // Provider clock skew (lastActivityAt ahead of now) also reads as "just now".
   assert.match(rosterAt(-minute), /updated just now/);
 });
 
 test("the roster text holds still across clock ticks inside one age bucket and moves at its edge", () => {
   const minute = 60_000;
-  const observedAt = DECIDED_AT;
+  const lastActivityAt = DECIDED_AT;
   const session = normalizeSession(
     { id: "claude-code", displayName: "Claude Code" },
     {
       providerSessionId: "session-a",
       title: "Bootstrap the desktop shell",
       status: SESSION_STATUS.WORKING,
-      observedAt,
+      lastActivityAt,
     },
   );
 
@@ -821,12 +821,12 @@ test("the roster text holds still across clock ticks inside one age bucket and m
   // text changes, and text that moved with every minute tick would invalidate
   // the conversation's cached prefix with nothing new to say.
   assert.equal(
-    sessionContextText([session], observedAt + 10 * minute),
-    sessionContextText([session], observedAt + 45 * minute),
+    sessionContextText([session], lastActivityAt + 10 * minute),
+    sessionContextText([session], lastActivityAt + 45 * minute),
   );
   assert.notEqual(
-    sessionContextText([session], observedAt + 45 * minute),
-    sessionContextText([session], observedAt + 65 * minute),
+    sessionContextText([session], lastActivityAt + 45 * minute),
+    sessionContextText([session], lastActivityAt + 65 * minute),
   );
 });
 
@@ -837,7 +837,7 @@ test("the roster identifies the most recent session and most recent openable cha
       providerSessionId: "claude-newest",
       title: "Newest local Claude chat",
       status: SESSION_STATUS.WORKING,
-      observedAt: 300,
+      lastActivityAt: 300,
     },
   );
   const openableClaude = normalizeSession(
@@ -846,7 +846,7 @@ test("the roster identifies the most recent session and most recent openable cha
       providerSessionId: "claude-openable",
       title: "Older openable Claude chat",
       status: SESSION_STATUS.WAITING,
-      observedAt: 200,
+      lastActivityAt: 200,
       detail: { link: "https://claude.ai/session/claude-openable" },
     },
   );
@@ -856,7 +856,7 @@ test("the roster identifies the most recent session and most recent openable cha
       providerSessionId: "codex-newest",
       title: "Newest Codex chat",
       status: SESSION_STATUS.COMPLETE,
-      observedAt: 100,
+      lastActivityAt: 100,
       detail: { link: "https://chatgpt.com/codex/tasks/codex-newest" },
     },
   );
@@ -896,7 +896,7 @@ test("the roster says what a session is doing and where, in the attention update
       providerSessionId: "session-doing",
       title: "checkout-service",
       status: SESSION_STATUS.WORKING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
       detail: {
         repository: "luke",
         branch: "dean/desktop-shell",
@@ -920,7 +920,7 @@ test("the roster says what a session is doing and where, in the attention update
       providerSessionId: "session-bare",
       title: "checkout-service",
       status: SESSION_STATUS.WORKING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
       detail: { repository: "luke" },
     },
   );
@@ -938,7 +938,7 @@ test("the roster marks a recap as context for naming the work, not prose to reci
       providerSessionId: "session-with-recap",
       title: "Implement the plan",
       status: SESSION_STATUS.WORKING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
       recap: "Unifying spawning, invocation, the package graph, and the panel.",
     },
   );
@@ -956,7 +956,7 @@ test("the roster marks a recap as context for naming the work, not prose to reci
       providerSessionId: "session-with-long-recap",
       title: "Implement the plan",
       status: SESSION_STATUS.WORKING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
       recap: `The whole plan landed. ${"y".repeat(maximumSessionRecapExcerptLength + 200)}`,
     },
   );
@@ -973,7 +973,7 @@ test("the roster says which sessions keep a readable transcript and a pull reque
       providerSessionId: "thread-local",
       title: "luke",
       status: SESSION_STATUS.WAITING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
     },
   );
   assert.match(sessionContextText([local]), /transcript=true/);
@@ -984,7 +984,7 @@ test("the roster says which sessions keep a readable transcript and a pull reque
       providerSessionId: "conductor-1",
       title: "luke",
       status: SESSION_STATUS.WAITING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
       location: SESSION_LOCATION.CLOUD,
       detail: { change: "https://github.com/example/luke/pull/7" },
     },
@@ -1017,7 +1017,7 @@ test("session context stays bounded when many sessions are observed", () => {
         providerSessionId: `session-${index}`,
         title: `Codex: workspace-${index}`,
         status: SESSION_STATUS.WORKING,
-        observedAt: DECIDED_AT,
+        lastActivityAt: DECIDED_AT,
       },
     ),
   );
@@ -1044,7 +1044,7 @@ test("the bounded roster keeps every provider's most recent openable chat", () =
         providerSessionId: `codex-${index}`,
         title: `Codex chat ${index}`,
         status: SESSION_STATUS.WORKING,
-        observedAt: 1_000 - index,
+        lastActivityAt: 1_000 - index,
         detail: { link: `https://chatgpt.com/codex/tasks/${index}` },
       },
     ),
@@ -1055,7 +1055,7 @@ test("the bounded roster keeps every provider's most recent openable chat", () =
       providerSessionId: "claude-openable",
       title: "Claude chat",
       status: SESSION_STATUS.WAITING,
-      observedAt: 1,
+      lastActivityAt: 1,
       applications: [
         {
           id: SESSION_APPLICATION_ID.SUPERSET,
@@ -1378,7 +1378,7 @@ function actionableSession() {
       providerSessionId: "conductor-1",
       title: "Conductor: luke",
       status: SESSION_STATUS.WAITING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
       canReceiveMessage: true,
       controls: [{ id: "cancel-run", label: "Stop this run", kind: "stop" }],
       detail: { link: "https://app.conductor.build/sessions/conductor-1" },
@@ -1456,7 +1456,7 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
       providerSessionId: "thread-1",
       title: "Codex: luke",
       status: SESSION_STATUS.WORKING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
     },
   );
   const silentRefusal = sessionToolAction(
@@ -1482,7 +1482,7 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
       providerSessionId: "conductor-9",
       title: "Conductor: cloud",
       status: SESSION_STATUS.WAITING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
       location: SESSION_LOCATION.CLOUD,
     },
   );
@@ -1503,7 +1503,7 @@ test("an open ask can pick the app, held to the roster's own associations", () =
       providerSessionId: "thread-2",
       title: "Codex: luke",
       status: SESSION_STATUS.WAITING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
       detail: { link: "codex://thread/thread-2" },
       applications: [
         {
@@ -1739,7 +1739,7 @@ test("an added agent may carry a model, only of the asked-for kind", () => {
       providerSessionId: "chat-1",
       title: "bucharest-v1",
       status: SESSION_STATUS.WAITING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
       spawnableAgents: ["claude", "cursor"],
     },
   );
@@ -1934,7 +1934,7 @@ test("another agent can only be added as a kind the session's own entry lists", 
       providerSessionId: "chat-1",
       title: "bucharest-v1",
       status: SESSION_STATUS.WAITING,
-      observedAt: DECIDED_AT,
+      lastActivityAt: DECIDED_AT,
       spawnableAgents: ["claude", "codex", "cursor"],
     },
   );

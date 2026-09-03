@@ -21,7 +21,7 @@ function notice(
     status,
     previousStatus: SESSION_STATUS.WORKING,
     canReceiveMessage: false,
-    observedAt: 100,
+    lastActivityAt: 100,
   };
 }
 

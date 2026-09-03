@@ -23,7 +23,7 @@ private func urgencyRank(of session: RosterSession) -> Int {
 
 /// A session the endpoint never dated ranks as the least recently moved.
 private func lastMoved(_ session: RosterSession) -> Date {
-    session.observedAt ?? .distantPast
+    session.lastActivityAt ?? .distantPast
 }
 
 /// The roster in the order a sort names. `sorted(by:)` is documented stable,

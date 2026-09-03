@@ -3,14 +3,14 @@ import XCTest
 
 @testable import LukeKit
 
-private func makeSession(_ id: String, status: String, observedAt: Double? = nil) -> RosterSession {
+private func makeSession(_ id: String, status: String, lastActivityAt: Double? = nil) -> RosterSession {
     var json: [String: Any] = [
         "providerId": "conductor",
         "sessionId": id,
         "title": "Task",
         "status": status,
     ]
-    if let observedAt { json["observedAt"] = observedAt }
+    if let lastActivityAt { json["lastActivityAt"] = lastActivityAt }
     return RosterSession(json: json)!
 }
 
@@ -33,16 +33,16 @@ final class SessionSortTests: XCTestCase {
 
     func testUrgencyTiesBreakByRecency() {
         let sessions = [
-            makeSession("old", status: "working", observedAt: 1_000),
-            makeSession("new", status: "working", observedAt: 2_000),
+            makeSession("old", status: "working", lastActivityAt: 1_000),
+            makeSession("new", status: "working", lastActivityAt: 2_000),
         ]
         XCTAssertEqual(sortedSessions(sessions, by: .urgency).map(\.sessionId), ["new", "old"])
     }
 
     func testRecencyPutsLastMovedFirst() {
         let sessions = [
-            makeSession("old", status: "waiting", observedAt: 1_000),
-            makeSession("new", status: "complete", observedAt: 2_000),
+            makeSession("old", status: "waiting", lastActivityAt: 1_000),
+            makeSession("new", status: "complete", lastActivityAt: 2_000),
             makeSession("undated", status: "working"),
         ]
         XCTAssertEqual(
@@ -53,8 +53,8 @@ final class SessionSortTests: XCTestCase {
 
     func testRecencyTiesBreakByUrgency() {
         let sessions = [
-            makeSession("done", status: "complete", observedAt: 1_000),
-            makeSession("stuck", status: "error", observedAt: 1_000),
+            makeSession("done", status: "complete", lastActivityAt: 1_000),
+            makeSession("stuck", status: "error", lastActivityAt: 1_000),
         ]
         XCTAssertEqual(sortedSessions(sessions, by: .recency).map(\.sessionId), ["stuck", "done"])
     }

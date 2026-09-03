@@ -89,7 +89,7 @@ function firstSessionByProvider(
   for (const session of sessions) {
     if (!predicate(session)) continue;
     const current = newest.get(session.providerId);
-    if (!current || session.observedAt > current.observedAt)
+    if (!current || session.lastActivityAt > current.lastActivityAt)
       newest.set(session.providerId, session);
   }
   return newest;
@@ -107,10 +107,10 @@ function prioritizedContextSessions(sessions: readonly Session[]): readonly Sess
 }
 
 /**
- * How long ago Luke last observed this session, in coarse buckets. "Updated"
- * names what observedAt actually measures — when Luke last received fresh data
- * from the provider — without implying anything about the session's current
- * activity level, which the status field already covers.
+ * How long ago the provider last wrote about this session, in coarse buckets.
+ * "Updated" names what `lastActivityAt` measures — the provider's own last
+ * write — without implying anything about the session's current activity
+ * level, which the status field already covers.
  *
  * Coarse deliberately: the roster travels again only when its text changes,
  * and an unchanged item is what keeps the conversation's cached prefix warm —
@@ -133,8 +133,8 @@ const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 
-function sessionAgeText(observedAt: number, now: number): SessionAgeText {
-  const elapsed = now - observedAt;
+function sessionAgeText(lastActivityAt: number, now: number): SessionAgeText {
+  const elapsed = now - lastActivityAt;
   if (elapsed < 5 * MINUTE_MS) return SESSION_AGE_TEXT.JUST_NOW;
   if (elapsed < HOUR_MS) return SESSION_AGE_TEXT.MINUTES;
   if (elapsed < 2 * HOUR_MS) return SESSION_AGE_TEXT.ABOUT_AN_HOUR;
@@ -226,7 +226,7 @@ export function sessionContextText(sessions: readonly Session[], now: number = D
             ]
           : []),
         session.status,
-        sessionAgeText(session.observedAt, now),
+        sessionAgeText(session.lastActivityAt, now),
         ...sessionAboutText(session),
         // Stating an absence in context invites the voice to speak it, so a
         // session without a recap simply omits the segment. The excerpt, not

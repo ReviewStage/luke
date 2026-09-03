@@ -19,14 +19,14 @@ import { recordFromJsonLine, resolveOptions, type WireRecord } from "@sidecar/wi
 
 export function localSessionStatus(
   status: SessionStatus,
-  observedAt: number,
+  lastActivityAt: number,
   now: number,
   freshnessMs: number,
 ): SessionStatus {
-  if (status === SESSION_STATUS.WORKING && now - observedAt > freshnessMs) {
+  if (status === SESSION_STATUS.WORKING && now - lastActivityAt > freshnessMs) {
     return SESSION_STATUS.UNKNOWN;
   }
-  return agedStatus(status, observedAt, now, freshnessMs);
+  return agedStatus(status, lastActivityAt, now, freshnessMs);
 }
 
 export interface HookEventStatus<Event extends string> {
@@ -86,7 +86,7 @@ export interface HookRefinedStatus {
    * The clock the freshness decay runs on: the provider's own, or the
    * event's when it stands past it.
    */
-  observedAt: number;
+  lastActivityAt: number;
   /** The provider closed the session, on the hook's word. */
   sessionClosed: boolean;
   /** The session is holding on a question only the developer can answer. */
@@ -115,7 +115,7 @@ export function hookRefinedStatus<Event extends string>(options: {
   /** When the provider's own state last said the session moved. */
   providerAtMs: number;
   /** The provider's own verdict, given the clock the refinement settles on. */
-  statusAt: (observedAt: number) => SessionStatus;
+  statusAt: (lastActivityAt: number) => SessionStatus;
   now: number;
   activeSessionFreshnessMs: number;
 }): HookRefinedStatus {
@@ -125,15 +125,15 @@ export function hookRefinedStatus<Event extends string>(options: {
       ? 0
       : HOOK_EVENT_TOLERANCE_MS;
   const eventStands = hookEvent !== undefined && hookEvent.atMs + toleranceMs >= providerAtMs;
-  const observedAt = eventStands ? Math.max(providerAtMs, hookEvent.atMs) : providerAtMs;
-  let status = options.statusAt(observedAt);
+  const lastActivityAt = eventStands ? Math.max(providerAtMs, hookEvent.atMs) : providerAtMs;
+  let status = options.statusAt(lastActivityAt);
   if (eventStands) {
-    const isFresh = options.now - observedAt <= options.activeSessionFreshnessMs;
+    const isFresh = options.now - lastActivityAt <= options.activeSessionFreshnessMs;
     status = refineStatusWithHookEvent(status, hookEvent.event, isFresh, refinement);
   }
   return {
     status,
-    observedAt,
+    lastActivityAt,
     sessionClosed:
       status === SESSION_STATUS.COMPLETE &&
       eventStands &&

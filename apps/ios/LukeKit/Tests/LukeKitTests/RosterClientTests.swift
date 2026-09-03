@@ -68,6 +68,25 @@ final class RosterSessionTests: XCTestCase {
         XCTAssertNil(s?.error)
     }
 
+    func testLastActivityReadsTheNewNameAndFallsBackToTheOld() {
+        let base: [String: Any] = [
+            "providerId": "codex",
+            "sessionId": "sess-3",
+            "title": "Task",
+            "status": "working",
+        ]
+        var renamed = base
+        renamed["lastActivityAt"] = 2_000.0
+        renamed["observedAt"] = 1_000.0
+        XCTAssertEqual(RosterSession(json: renamed)?.lastActivityAt, Date(timeIntervalSince1970: 2))
+
+        var legacy = base
+        legacy["observedAt"] = 1_000.0
+        XCTAssertEqual(RosterSession(json: legacy)?.lastActivityAt, Date(timeIntervalSince1970: 1))
+
+        XCTAssertNil(RosterSession(json: base)?.lastActivityAt)
+    }
+
     func testPublishedChangeMustBeAnHTTPSAddress() {
         let base: [String: Any] = [
             "providerId": "codex",

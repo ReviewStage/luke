@@ -602,7 +602,7 @@ export class SupersetWorkspaceSnapshot {
         providerSessionId: context.workspaceId,
         title: context.workspaceName,
         status: SESSION_STATUS.COMPLETE,
-        observedAt: context.updatedAt,
+        lastActivityAt: context.updatedAt,
         standing: true,
         detail,
         applications: [

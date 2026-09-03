@@ -22,9 +22,9 @@ const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 
-function sessionAgeText(observedAt: number | undefined, now: number): string {
-  if (observedAt === undefined) return "updated at an unknown time";
-  const elapsed = now - observedAt;
+function sessionAgeText(lastActivityAt: number | undefined, now: number): string {
+  if (lastActivityAt === undefined) return "updated at an unknown time";
+  const elapsed = now - lastActivityAt;
   if (elapsed < 5 * MINUTE_MS) return "updated just now";
   if (elapsed < HOUR_MS) return "updated minutes ago";
   if (elapsed < 2 * HOUR_MS) return "updated about an hour ago";
@@ -40,17 +40,17 @@ function providerDisplayName(providerId: string): string {
 }
 
 /**
- * Which session within a provider was observed most recently. Used to label a
+ * Which session within a provider moved most recently. Used to label a
  * row `most_recent_for_provider=true`, the same signal `sessionContextText`
  * emits for the desktop.
  */
 function mostRecentByProvider(sessions: readonly ObservedSession[]): ReadonlyMap<string, string> {
-  const newest = new Map<string, { sessionId: string; observedAt: number }>();
+  const newest = new Map<string, { sessionId: string; lastActivityAt: number }>();
   for (const session of sessions) {
-    const at = session.observedAt ?? 0;
+    const at = session.lastActivityAt ?? 0;
     const current = newest.get(session.providerId);
-    if (!current || at > current.observedAt) {
-      newest.set(session.providerId, { sessionId: session.sessionId, observedAt: at });
+    if (!current || at > current.lastActivityAt) {
+      newest.set(session.providerId, { sessionId: session.sessionId, lastActivityAt: at });
     }
   }
   return new Map([...newest].map(([providerId, { sessionId }]) => [providerId, sessionId]));
@@ -131,7 +131,7 @@ export function remoteSessionContextText(
         `- ${providerDisplayName(session.providerId)}`,
         `internal session name — never use to refer to the work: ${session.title}`,
         session.status,
-        sessionAgeText(session.observedAt, now),
+        sessionAgeText(session.lastActivityAt, now),
         ...aboutParts,
         ...(session.recap
           ? [

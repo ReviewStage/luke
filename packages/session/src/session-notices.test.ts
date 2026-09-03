@@ -25,7 +25,7 @@ function session(
     error?: string;
     repository?: string;
     branch?: string;
-    observedAt?: number;
+    lastActivityAt?: number;
     recap?: string;
     workspace?: string;
     canReceiveMessage?: boolean;
@@ -38,7 +38,7 @@ function session(
     providerSessionId,
     title: `Session ${providerSessionId}`,
     status,
-    observedAt: overrides.observedAt ?? 100,
+    lastActivityAt: overrides.lastActivityAt ?? 100,
     detail: {},
   };
   if (overrides.completionCause) observation.completionCause = overrides.completionCause;
@@ -138,7 +138,7 @@ test("first sight seeds silently, and only a change of status is news", () => {
     status: SESSION_NOTICE_STATUS.COMPLETE,
     previousStatus: SESSION_STATUS.WAITING,
     canReceiveMessage: false,
-    observedAt: 100,
+    lastActivityAt: 100,
   });
 });
 
@@ -360,7 +360,7 @@ test("a flapping status is noticed once per repeat window, then again after it",
       [
         session(claude, "flap", SESSION_STATUS.WAITING, {
           holdingForDeveloper: true,
-          observedAt: 1_000 + SESSION_NOTICE_REPEAT_WINDOW_MS,
+          lastActivityAt: 1_000 + SESSION_NOTICE_REPEAT_WINDOW_MS,
         }),
       ],
       1_000 + SESSION_NOTICE_REPEAT_WINDOW_MS,
@@ -381,7 +381,7 @@ test("an edge is announced however old its timestamp, and only once", () => {
   const notices = tracker.notices(
     [
       session(claude, "asleep", SESSION_STATUS.COMPLETE, {
-        observedAt: 1_000 + slept - 2 * 60 * 60 * 1_000,
+        lastActivityAt: 1_000 + slept - 2 * 60 * 60 * 1_000,
       }),
     ],
     1_000 + slept,
@@ -395,7 +395,7 @@ test("an edge is announced however old its timestamp, and only once", () => {
     tracker.notices(
       [
         session(claude, "asleep", SESSION_STATUS.COMPLETE, {
-          observedAt: 1_000 + slept - 2 * 60 * 60 * 1_000,
+          lastActivityAt: 1_000 + slept - 2 * 60 * 60 * 1_000,
         }),
       ],
       2_000 + slept,
@@ -414,10 +414,10 @@ test("first sight of an old settled session is still not an edge", () => {
     tracker.notices(
       [
         session(claude, "yesterday", SESSION_STATUS.COMPLETE, {
-          observedAt: now - 20 * 60 * 60 * 1_000,
+          lastActivityAt: now - 20 * 60 * 60 * 1_000,
         }),
         session(claude, "earlier", SESSION_STATUS.WAITING, {
-          observedAt: now - 60 * 1_000,
+          lastActivityAt: now - 60 * 1_000,
         }),
       ],
       now,

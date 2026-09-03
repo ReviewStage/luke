@@ -37,7 +37,7 @@ const OBSERVED_AT = 1_800_000_000_000;
 function rosterSession(providerSessionId: string, title: string) {
   return normalizeSession(
     { id: "claude-code", displayName: "Claude Code" },
-    { providerSessionId, title, status: SESSION_STATUS.WORKING, observedAt: OBSERVED_AT },
+    { providerSessionId, title, status: SESSION_STATUS.WORKING, lastActivityAt: OBSERVED_AT },
   );
 }
 
@@ -187,7 +187,7 @@ test("an act's line records the ask in words, with the identity it named", () =>
       providerSessionId: "session-a",
       title: "checkout-service",
       status: SESSION_STATUS.WORKING,
-      observedAt: OBSERVED_AT,
+      lastActivityAt: OBSERVED_AT,
       applications: [
         {
           id: SESSION_APPLICATION_ID.SUPERSET,
@@ -633,7 +633,7 @@ test("a reply's subject is single when the identities are, not when the names we
       providerSessionId: "session-a",
       title: "checkout-service",
       status: SESSION_STATUS.WORKING,
-      observedAt: OBSERVED_AT,
+      lastActivityAt: OBSERVED_AT,
       workspace: { providerWorkspaceId: "ws-1", name: "hong-kong" },
     },
   );

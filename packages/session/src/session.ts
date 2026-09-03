@@ -39,12 +39,12 @@ export type SessionCompletionCause =
 
 /**
  * Only waiting decays; a failure does not heal by going stale. Providers
- * report live state, or a timestamp that marks when that state was entered,
- * rather than a heartbeat — so a long turn is still working and a completed
- * or failed session stays that way however long ago it finished. Once waiting
- * is stale, Luke cannot tell a turn that just asked for the user from one
- * they walked away from hours ago, and reporting the stale state would speak
- * at the wrong moment.
+ * report live state and when they last wrote about the session, never a
+ * heartbeat — so a long turn is still working and a completed or failed
+ * session stays that way however long ago it finished. A waiting session
+ * whose provider has written nothing for a while is one Luke cannot tell
+ * apart from a turn the user walked away from hours ago, and reporting the
+ * stale state would speak at the wrong moment.
  *
  * The decay is for asks that are inferences — a transcript's turn that ended,
  * a chat a provider reports as merely idle. An adapter whose provider asserts
@@ -56,12 +56,12 @@ export type SessionCompletionCause =
  */
 export function agedStatus(
   status: SessionStatus,
-  observedAt: number,
+  lastActivityAt: number,
   now: number,
   freshnessMs: number,
 ): SessionStatus {
   if (status !== SESSION_STATUS.WAITING) return status;
-  return now - observedAt <= freshnessMs ? status : SESSION_STATUS.UNKNOWN;
+  return now - lastActivityAt <= freshnessMs ? status : SESSION_STATUS.UNKNOWN;
 }
 
 /**
@@ -76,8 +76,8 @@ export const OBSERVATION_WINDOW = {
 } as const;
 
 /**
- * How long a status keeps its session on the roster, measured from the moment
- * the status was entered. This is the one bound on the roster — no adapter
+ * How long a status keeps its session on the roster, measured from the
+ * provider's last activity. This is the one bound on the roster — no adapter
  * ages out or caps its sessions: relevance follows what the status asks of the
  * user, never a blanket clock over every conversation. A failure does not heal
  * by going stale, but a rescue nobody made for days is a session the user has
@@ -102,7 +102,7 @@ export function sessionRosterRetentionMs(status: SessionStatus): number {
 
 /** Whether a session's status still earns it a place on the roster. */
 export function isRosterRelevant(
-  session: Pick<Session, "status" | "observedAt" | "standing">,
+  session: Pick<Session, "status" | "lastActivityAt" | "standing">,
   now: number,
 ): boolean {
   // Retention ages out history — settled chats whose files linger after the
@@ -110,7 +110,7 @@ export function isRosterRelevant(
   // while the thing it names still exists and stops the moment it is gone, so
   // there is nothing here to age out, however old its own timestamp grows.
   if (session.standing) return true;
-  return now - session.observedAt <= sessionRosterRetentionMs(session.status);
+  return now - session.lastActivityAt <= sessionRosterRetentionMs(session.status);
 }
 
 /** The sessions still worth a row, in the order they arrived. */
@@ -371,7 +371,20 @@ export interface ProviderSessionObservation {
   status: SessionStatus;
   /** Why a completed row became complete, when the provider can distinguish it. */
   completionCause?: SessionCompletionCause;
-  observedAt: number;
+  /**
+   * When the provider last wrote anything about this session, in Unix
+   * milliseconds: a record's own timestamp, a transcript file's mtime, a row's
+   * recency columns, an API `updatedAt`, or the observation hook's spool
+   * entry where it stands past the provider's clock. It is never composed by
+   * Luke — a pass adopts the provider's own moment, never the clock it ran
+   * at — and it is corrected in exactly one place, Conductor's adapter, which
+   * declines a workspace wake that moved none of the chat's own facts. No
+   * provider records when a status was entered, and nothing here pretends
+   * to: the sort, the age chip, roster retention, and the decay of a quiet
+   * waiting or working session to unknown all read this one moment for what
+   * it is.
+   */
+  lastActivityAt: number;
   /** Whether this session is a realtime voice/delegation chat. */
   realtimeVoice?: boolean;
   /**
@@ -385,7 +398,7 @@ export interface ProviderSessionObservation {
    * Whether this row reports a thing that currently stands rather than a
    * conversation that happened: the adapter re-reports it on every pass for as
    * long as it exists and drops it the pass after it is gone, so roster
-   * retention never ages it out. `observedAt` then carries the provider's own
+   * retention never ages it out. `lastActivityAt` then carries the provider's own
    * timestamp for the thing itself, however old, without costing the row its
    * place. Absent means the row is history like any other.
    */
@@ -481,7 +494,8 @@ export interface Session extends SessionIdentity {
   title: string;
   status: SessionStatus;
   completionCause?: SessionCompletionCause;
-  observedAt: number;
+  /** When the provider last wrote anything about this session; see `Session.lastActivityAt`. */
+  lastActivityAt: number;
   /** Whether this session is a realtime voice/delegation chat. */
   realtimeVoice?: boolean;
   /** Whether a realtime voice conversation is live over this session right now. */
@@ -847,10 +861,10 @@ export function normalizeSessionIdentity(identity: SessionIdentity): SessionIden
 }
 
 /** Creates the silent default used until an attention evaluator returns a decision. */
-export function silentAttention(observedAt: number): AttentionDecision {
+export function silentAttention(lastActivityAt: number): AttentionDecision {
   return {
     disposition: ATTENTION_DISPOSITION.SILENT,
-    decidedAt: timestamp(observedAt, "observedAt"),
+    decidedAt: timestamp(lastActivityAt, "lastActivityAt"),
   };
 }
 
@@ -879,7 +893,7 @@ export function normalizeSession(
     providerId: provider.id,
     providerSessionId: observation.providerSessionId,
   });
-  const observedAt = timestamp(observation.observedAt, "observedAt");
+  const lastActivityAt = timestamp(observation.lastActivityAt, "lastActivityAt");
   const status = normalizeStatus(observation.status);
   const completionCause = normalizeCompletionCause(observation.completionCause, status);
   const recap = observation.recap?.trim() || undefined;
@@ -913,7 +927,7 @@ export function normalizeSession(
     },
     title: boundedText(observation.title, maximumSessionTitleLength) ?? "Untitled session",
     status,
-    observedAt,
+    lastActivityAt,
     location: normalizeLocation(observation.location),
     detail,
     applications,

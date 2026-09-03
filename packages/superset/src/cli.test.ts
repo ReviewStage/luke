@@ -283,7 +283,7 @@ test("the workspace adapter reports the rows it was refreshed with", async (t) =
     providerSessionId: "workspace-1",
     title: "power-vacation",
     status: SESSION_STATUS.COMPLETE,
-    observedAt: 100,
+    lastActivityAt: 100,
     standing: true,
   };
 

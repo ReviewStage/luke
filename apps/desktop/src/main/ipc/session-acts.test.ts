@@ -45,7 +45,7 @@ test("main authorization revalidates a session against its latest roster", () =>
       providerSessionId: identity.providerSessionId,
       title: "Checkout service",
       status: SESSION_STATUS.WORKING,
-      observedAt: 1_800_000_000_000,
+      lastActivityAt: 1_800_000_000_000,
     },
   );
   assert.deepEqual(authorizeActEnvelope(openSession, authorization(registry)), {

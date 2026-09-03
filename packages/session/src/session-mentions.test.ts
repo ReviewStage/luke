@@ -19,7 +19,7 @@ function session(
   providerSessionId: string,
   title: string,
   overrides: {
-    observedAt?: number;
+    lastActivityAt?: number;
     workspace?: { providerWorkspaceId: string; name?: string };
   } = {},
 ): Session {
@@ -27,7 +27,7 @@ function session(
     providerSessionId,
     title,
     status: SESSION_STATUS.WORKING,
-    observedAt: overrides.observedAt ?? 100,
+    lastActivityAt: overrides.lastActivityAt ?? 100,
     detail: {},
   };
   if (overrides.workspace) observation.workspace = overrides.workspace;
@@ -92,11 +92,11 @@ test("a title shared by two observed sessions names neither", () => {
 test("a workspace named whole resolves to its most recently observed chat", () => {
   const roster = [
     session(conductor, "older-chat", "amber-shoal", {
-      observedAt: 100,
+      lastActivityAt: 100,
       workspace: { providerWorkspaceId: "ws-lisbon", name: "lisbon-v2" },
     }),
     session(conductor, "fresher-chat", "gentle-cove", {
-      observedAt: 200,
+      lastActivityAt: 200,
       workspace: { providerWorkspaceId: "ws-lisbon", name: "lisbon-v2" },
     }),
   ];
@@ -112,11 +112,11 @@ test("a workspace named whole resolves to its most recently observed chat", () =
 test("a workspace named beside its own chat is absorbed by the chat's mention", () => {
   const roster = [
     session(conductor, "older-chat", "amber-shoal", {
-      observedAt: 100,
+      lastActivityAt: 100,
       workspace: { providerWorkspaceId: "ws-lisbon", name: "lisbon-v2" },
     }),
     session(conductor, "fresher-chat", "gentle-cove", {
-      observedAt: 200,
+      lastActivityAt: 200,
       workspace: { providerWorkspaceId: "ws-lisbon", name: "lisbon-v2" },
     }),
   ];

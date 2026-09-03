@@ -21,7 +21,7 @@ export type PendingSessionAnnouncement =
       source: "review";
       announcement: SessionAnnouncement;
       observedStatus: SessionStatus;
-      observedAt: number;
+      lastActivityAt: number;
     };
 
 type Timer = ReturnType<typeof setTimeout>;
@@ -96,7 +96,7 @@ export function currentSessionAnnouncements(
     return (
       current !== undefined &&
       current.status === item.observedStatus &&
-      current.observedAt === item.observedAt
+      current.lastActivityAt === item.lastActivityAt
     );
   });
 }

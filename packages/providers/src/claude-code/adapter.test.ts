@@ -273,7 +273,7 @@ test("re-reads a transcript once it has been written to again", async (t) => {
   assert.equal(before?.status, SESSION_STATUS.WAITING);
   assert.equal(after?.status, SESSION_STATUS.COMPLETE);
   assert.equal(after?.completionCause, SESSION_COMPLETION_CAUSE.WORK_FINISHED);
-  assert.equal(after?.observedAt, TEST_TIME - 5_000);
+  assert.equal(after?.lastActivityAt, TEST_TIME - 5_000);
 });
 
 test("serves an untouched transcript from its previous parse", async (t) => {
@@ -850,7 +850,7 @@ test("dates a touched transcript by its own records rather than the touch", asyn
 
   // Three hours old by its own clock, so the row must say so — and a session
   // that old has left the freshness window however recently it was touched.
-  assert.equal(observation?.observedAt, Date.parse(lastRecordTime));
+  assert.equal(observation?.lastActivityAt, Date.parse(lastRecordTime));
   assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
 });
 
@@ -880,7 +880,7 @@ test("keeps a touch from making a long-settled session look recent", async (t) =
   // A session is never hidden for being old, but the touch must not stand in
   // for work: the row reports the transcript's own clock, weeks back, and a
   // wait that stale has long since decayed to unknown.
-  assert.equal(observation?.observedAt, Date.parse("2026-06-25T08:30:00.000Z"));
+  assert.equal(observation?.lastActivityAt, Date.parse("2026-06-25T08:30:00.000Z"));
   assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
 });
 
@@ -900,7 +900,7 @@ test("falls back to the file's date when the tail carries no timestamp", async (
   });
   const [observation] = await adapter.observe();
 
-  assert.equal(observation?.observedAt, TEST_TIME - 5_000);
+  assert.equal(observation?.lastActivityAt, TEST_TIME - 5_000);
 });
 
 test("reads past a tail of appended bookkeeping to the conversation's own clock", async (t) => {
@@ -942,13 +942,13 @@ test("reads past a tail of appended bookkeeping to the conversation's own clock"
   // finds the conversation's own clock months back, so the session reads as
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // settled history rather than as work happening right now.
-  assert.equal(observation?.observedAt, Date.parse(lastConversationTime));
+  assert.equal(observation?.lastActivityAt, Date.parse(lastConversationTime));
   assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
   assert.equal(observation?.title, "Old refactor");
   assert.equal(
     observation &&
       isRosterRelevant(
-        { status: observation.status, observedAt: observation.observedAt },
+        { status: observation.status, lastActivityAt: observation.lastActivityAt },
         TEST_TIME,
       ),
     false,
@@ -991,12 +991,12 @@ test("keeps a bookkeeping record's timestamp from re-dating the conversation", a
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // from months ago must not read as waiting for the developer today just
   // because the provider stamped a bookkeeping line beside it.
-  assert.equal(observation?.observedAt, Date.parse(lastConversationTime));
+  assert.equal(observation?.lastActivityAt, Date.parse(lastConversationTime));
   assert.equal(observation?.status, SESSION_STATUS.UNKNOWN);
   assert.equal(
     observation &&
       isRosterRelevant(
-        { status: observation.status, observedAt: observation.observedAt },
+        { status: observation.status, lastActivityAt: observation.lastActivityAt },
         TEST_TIME,
       ),
     false,
@@ -1069,7 +1069,7 @@ test("a permission prompt the transcript cannot show turns the row to waiting", 
   assert.equal(observation?.holdingForDeveloper, true);
   // The event also dates the session: the spool is written only by Luke's own
   // script, so its clock cannot suffer the transcripts' bulk-touch problem.
-  assert.equal(observation?.observedAt, TEST_TIME - 60_000);
+  assert.equal(observation?.lastActivityAt, TEST_TIME - 60_000);
 });
 
 test("a session-end event settles a row the tail would leave waiting", async (t) => {
@@ -1188,7 +1188,7 @@ test("an event the transcript has moved past refines nothing", async (t) => {
   const [observation] = await adapter.observe();
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
-  assert.equal(observation?.observedAt, Date.parse("2026-08-11T23:44:00.000Z"));
+  assert.equal(observation?.lastActivityAt, Date.parse("2026-08-11T23:44:00.000Z"));
 });
 
 test("a stop event does not unsay a result the transcript recorded", async (t) => {
@@ -1250,7 +1250,7 @@ test("a session-start event bumps the clock without deciding the status", async 
   // Freshened by the resume, the tail's own verdict — a turn that ended is
   // holding for the developer — stands again.
   assert.equal(observation?.status, SESSION_STATUS.WAITING);
-  assert.equal(observation?.observedAt, TEST_TIME - 60_000);
+  assert.equal(observation?.lastActivityAt, TEST_TIME - 60_000);
 });
 
 test("a spool that cannot be read costs only the refinement", async (t) => {

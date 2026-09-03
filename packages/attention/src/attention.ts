@@ -116,7 +116,7 @@ export interface AttentionUpdate extends SessionIdentity {
    */
   recap?: string;
   context?: AttentionContext;
-  observedAt: number;
+  lastActivityAt: number;
 }
 
 /** Narrows a session's observed detail to the fields an evaluator may receive. */
@@ -290,7 +290,7 @@ export function attentionUpdate(session: Session, previous?: Session): Attention
     providerName: session.provider.displayName,
     title: session.title,
     status: session.status,
-    observedAt: session.observedAt,
+    lastActivityAt: session.lastActivityAt,
   };
   if (workspace) update.workspace = workspace;
   if (session.holdingForDeveloper === true) update.holdingForDeveloper = true;
@@ -456,7 +456,7 @@ export class SessionAttentionReviewer {
     }
 
     const selected = candidates
-      .sort((first, second) => second.session.observedAt - first.session.observedAt)
+      .sort((first, second) => second.session.lastActivityAt - first.session.lastActivityAt)
       .slice(0, this.#maximumUpdatesPerReview);
 
     // Sessions left out of this pass keep their previous baseline so the same

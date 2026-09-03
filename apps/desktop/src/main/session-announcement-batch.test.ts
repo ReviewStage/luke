@@ -35,23 +35,23 @@ function announcement(id: string, subject = id): PendingSessionAnnouncement {
       previousStatus: SESSION_STATUS.WORKING,
       holdingForDeveloper: true,
       canReceiveMessage: true,
-      observedAt: 1_000,
+      lastActivityAt: 1_000,
     },
   };
 }
 
-function reviewed(id: string, observedAt = 1_000): PendingSessionAnnouncement {
+function reviewed(id: string, lastActivityAt = 1_000): PendingSessionAnnouncement {
   return {
     announcement: {
       providerId: "conductor",
       providerSessionId: id,
       subject: id,
       change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
-      decidedAt: observedAt,
+      decidedAt: lastActivityAt,
     },
     source: "review",
     observedStatus: SESSION_STATUS.COMPLETE,
-    observedAt,
+    lastActivityAt,
   };
 }
 
@@ -126,7 +126,7 @@ test("revalidates queued state and restores mixed sources to their meeting holds
         providerSessionId: "waiting",
         title: "waiting",
         status: SESSION_STATUS.WAITING,
-        observedAt: 1_100,
+        lastActivityAt: 1_100,
       },
     ),
     normalizeSession(
@@ -135,7 +135,7 @@ test("revalidates queued state and restores mixed sources to their meeting holds
         providerSessionId: "finished",
         title: "finished",
         status: SESSION_STATUS.COMPLETE,
-        observedAt: 1_000,
+        lastActivityAt: 1_000,
       },
     ),
     normalizeSession(
@@ -144,7 +144,7 @@ test("revalidates queued state and restores mixed sources to their meeting holds
         providerSessionId: "changed",
         title: "changed",
         status: SESSION_STATUS.WORKING,
-        observedAt: 1_000,
+        lastActivityAt: 1_000,
       },
     ),
   ];

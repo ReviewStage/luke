@@ -161,7 +161,7 @@ const sameSession = exhaustiveSame<Session>({
   title: (first, second) => first.title === second.title,
   status: (first, second) => first.status === second.status,
   completionCause: (first, second) => first.completionCause === second.completionCause,
-  observedAt: (first, second) => first.observedAt === second.observedAt,
+  lastActivityAt: (first, second) => first.lastActivityAt === second.lastActivityAt,
   realtimeVoice: (first, second) => first.realtimeVoice === second.realtimeVoice,
   realtimeVoiceLive: (first, second) => first.realtimeVoiceLive === second.realtimeVoiceLive,
   standing: (first, second) => first.standing === second.standing,
@@ -246,7 +246,7 @@ export class InMemorySessionRegistry {
       .flatMap((sessions) => [...sessions.values()])
       .sort(
         (first, second) =>
-          second.observedAt - first.observedAt ||
+          second.lastActivityAt - first.lastActivityAt ||
           first.providerId.localeCompare(second.providerId) ||
           first.providerSessionId.localeCompare(second.providerSessionId),
       )
