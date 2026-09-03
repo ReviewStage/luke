@@ -22,21 +22,19 @@ final class PhoneSessionRelay: NSObject, WCSessionDelegate {
     @MainActor
     func push() {
         let s = WCSession.default
-        print("[PhoneRelay] push — state:\(s.activationState.rawValue) paired:\(s.isPaired) watchInstalled:\(s.isWatchAppInstalled) reachable:\(s.isReachable) signedIn:\(accountSession.tokenPayload() != nil)")
-        guard s.activationState == .activated, s.isPaired, s.isWatchAppInstalled else { return }
+        // isWatchAppInstalled is unreliable in the simulator; isPaired is the
+        // meaningful gate. transferUserInfo queues the delivery gracefully.
+        guard s.activationState == .activated, s.isPaired else { return }
         guard let payload = accountSession.tokenPayload() else { return }
         s.transferUserInfo(payload)
-        print("[PhoneRelay] transferUserInfo sent")
     }
 
     /// Notifies the watch that the user signed out on the phone.
     @MainActor
     func pushSignOut() {
-        guard WCSession.default.activationState == .activated,
-              WCSession.default.isPaired,
-              WCSession.default.isWatchAppInstalled
-        else { return }
-        WCSession.default.transferUserInfo(["event": "signedOut"])
+        let s = WCSession.default
+        guard s.activationState == .activated, s.isPaired else { return }
+        s.transferUserInfo(["event": "signedOut"])
     }
 
     // MARK: WCSessionDelegate
