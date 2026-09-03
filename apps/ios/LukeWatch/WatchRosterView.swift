@@ -20,10 +20,14 @@ struct WatchRosterView: View {
                     NavigationLink(value: session) {
                         WatchSessionRow(session: session)
                     }
-                    .overlay {
+                    .listRowBackground(
                         RoundedRectangle(cornerRadius: 15)
-                            .strokeBorder(session.rowBorderColor, lineWidth: 1)
-                    }
+                            .fill(Color(white: 0.14))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 15)
+                                    .strokeBorder(session.rowBorderColor, lineWidth: 1)
+                            }
+                    )
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         if let archive = archiveControl(session) {
                             Button {
