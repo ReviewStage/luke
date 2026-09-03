@@ -471,6 +471,13 @@ export interface ObservedSession {
   branch?: string;
   /** HTTPS address of the work the session published, when it reported one. */
   change?: string;
+  /**
+   * Provider-owned address that opens this session where it lives, when the
+   * provider reported one. Bounded to the openable session-link schemes —
+   * this is the one observed field a surface acts on rather than draws, so
+   * an address outside the set never crosses the wire at all.
+   */
+  link?: string;
   /** Bounded recap of where the work stands, when the provider reported one. */
   recap?: string;
   /** Error description, when the session stopped on something it cannot pass. */
@@ -548,6 +555,8 @@ function observedSessionFromWire(value: UnparsedWireValue): ObservedSession | un
   const branch = text(value.branch);
   const changeValue = text(value.change);
   const change = changeValue ? normalizeSessionDetail({ change: changeValue }).change : undefined;
+  const linkValue = text(value.link);
+  const link = linkValue ? normalizeSessionDetail({ link: linkValue }).link : undefined;
   const recap = text(value.recap);
   const error = text(value.error);
   const observedAt = wholeNumber(value.observedAt);
@@ -555,6 +564,7 @@ function observedSessionFromWire(value: UnparsedWireValue): ObservedSession | un
   if (workspace) session.workspace = workspace;
   if (branch) session.branch = branch;
   if (change) session.change = change;
+  if (link) session.link = link;
   if (recap) session.recap = recap;
   if (error) session.error = error;
   if (observedAt !== undefined) session.observedAt = observedAt;

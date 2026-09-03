@@ -111,6 +111,32 @@ test("the observe response carries only a validated published-work address", () 
   assert.equal(invalid.change, undefined);
 });
 
+test("the observe response carries only an openable session address", () => {
+  const observation = {
+    providerSessionId: "sess-link",
+    title: "Deep-linked chat",
+    status: SESSION_STATUS.WORKING,
+    observedAt: Date.parse("2026-09-02T18:00:00.000Z"),
+  };
+
+  assert.equal(
+    observedSessionForResponse("conductor", {
+      ...observation,
+      detail: {
+        link: "conductor://workspace?id=ws-1&session=sess-link",
+      },
+    }).link,
+    "conductor://workspace?id=ws-1&session=sess-link",
+  );
+  const invalid = observedSessionForResponse("conductor", {
+    ...observation,
+    detail: {
+      link: "javascript:alert(1)",
+    },
+  });
+  assert.equal(invalid.link, undefined);
+});
+
 test("observeAnswerFromWire accepts a valid answer", () => {
   const raw = {
     sessions: [
@@ -122,6 +148,7 @@ test("observeAnswerFromWire accepts a valid answer", () => {
         workspace: "my-repo",
         branch: "main",
         change: "https://github.com/ReviewStage/luke/pull/642",
+        link: "conductor://workspace?id=ws-1&session=sess-1",
         recap: "Working on tests",
       },
     ],
@@ -134,6 +161,7 @@ test("observeAnswerFromWire accepts a valid answer", () => {
   assert.equal(answer.sessions[0]?.status, "working");
   assert.equal(answer.sessions[0]?.workspace, "my-repo");
   assert.equal(answer.sessions[0]?.change, "https://github.com/ReviewStage/luke/pull/642");
+  assert.equal(answer.sessions[0]?.link, "conductor://workspace?id=ws-1&session=sess-1");
 });
 
 test("observeAnswerFromWire drops a published-work address that is not HTTPS", () => {
@@ -150,6 +178,22 @@ test("observeAnswerFromWire drops a published-work address that is not HTTPS", (
   });
 
   assert.equal(answer?.sessions[0]?.change, undefined);
+});
+
+test("observeAnswerFromWire drops a session address outside the openable schemes", () => {
+  const answer = observeAnswerFromWire({
+    sessions: [
+      {
+        providerId: "conductor",
+        sessionId: "sess-link",
+        title: "Deep-linked chat",
+        status: "working",
+        link: "javascript:alert(1)",
+      },
+    ],
+  });
+
+  assert.equal(answer?.sessions[0]?.link, undefined);
 });
 
 test("observeAnswerFromWire skips malformed session entries rather than failing", () => {

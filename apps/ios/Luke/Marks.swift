@@ -157,6 +157,31 @@ struct ProviderMark: View {
         .scaleEffect(art.opticalScale)
     }
 
+    /// The mark rasterized for a menu row. A `Menu` builds a `UIMenu`, which
+    /// draws only an image beside each title and drops a custom label view,
+    /// so the Canvas above can never appear there. The template rendering
+    /// lets the menu ink it like an SF Symbol rather than in brand colour,
+    /// which is how a menu row's icon reads beside the system's own.
+    static func menuIcon(for provider: VaultProviderID) -> UIImage {
+        let art = art(for: provider)
+        let side: CGFloat = 20
+        let size = CGSize(width: side, height: side)
+        let image = UIGraphicsImageRenderer(size: size).image { rendererContext in
+            let ctx = rendererContext.cgContext
+            let scale = min(side / art.width, side / art.height) * art.opticalScale
+            ctx.translateBy(
+                x: (side - art.width * scale) / 2,
+                y: (side - art.height * scale) / 2
+            )
+            ctx.scaleBy(x: scale, y: scale)
+            for path in art.paths {
+                ctx.addPath(cgPath(fromSVG: path))
+            }
+            ctx.fillPath()
+        }
+        return image.withRenderingMode(.alwaysTemplate)
+    }
+
     private struct MarkArt {
         let width: CGFloat
         let height: CGFloat

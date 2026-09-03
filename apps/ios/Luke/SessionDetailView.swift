@@ -121,6 +121,7 @@ struct SessionDetailView: View {
 
     @Environment(AccountSession.self) private var account
     @Environment(ProductEventSender.self) private var events
+    @Environment(\.openURL) private var openURL
     @State private var text = ""
     @FocusState private var composing: Bool
     /// The fetched conversation, alive only while this screen is: state, not
@@ -326,6 +327,11 @@ struct SessionDetailView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    if let link = session.link {
+                        Section {
+                            openInProviderButton(link)
+                        }
+                    }
                     sessionActions { infoShown = true }
                 } label: {
                     Label("Session Actions", systemImage: "ellipsis")
@@ -334,11 +340,36 @@ struct SessionDetailView: View {
             }
         }
         .sheet(isPresented: $infoShown) {
-            SessionInfoSheet(session: session)
+            SessionInfoSheet(session: session, openLink: openSessionLink)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { inputBar }
+    }
+
+    /// Opening is not a write: the address the observation reported is handed
+    /// to the operating system, and nothing reaches the provider.
+    private func openSessionLink(_ link: URL) {
+        openURL(link)
+        if let provider = ProductProviderID(rawValue: session.providerId) {
+            events.record(.sessionActSend(provider: provider, act: .sessionOpen))
+        }
+    }
+
+    private func openInProviderButton(_ link: URL) -> some View {
+        Button {
+            openSessionLink(link)
+        } label: {
+            if let provider = VaultProviderID(rawValue: session.providerId) {
+                Label {
+                    Text("Open")
+                } icon: {
+                    Image(uiImage: ProviderMark.menuIcon(for: provider))
+                }
+            } else {
+                Label("Open", systemImage: "arrow.up.right.square")
+            }
+        }
     }
 
     /// A fetched message wears the anatomy the screen already draws: the
@@ -604,6 +635,9 @@ struct SessionDetailView: View {
 /// controls exist, while this sheet is the provider's descriptive report.
 private struct SessionInfoSheet: View {
     let session: RosterSession
+    /// The detail screen's own open press, so the sheet's row and the menu's
+    /// entry are one act — opened and counted in one place.
+    let openLink: (URL) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -649,6 +683,28 @@ private struct SessionInfoSheet: View {
                         } label: {
                             Text("Last activity")
                         }
+                    }
+                }
+
+                if let link = session.link {
+                    Section {
+                        Button {
+                            openLink(link)
+                        } label: {
+                            HStack(spacing: 12) {
+                                if let provider = VaultProviderID(rawValue: session.providerId) {
+                                    ProviderMark(provider: provider)
+                                        .frame(width: 20, height: 20)
+                                } else {
+                                    Image(systemName: "arrow.up.right.square")
+                                        .frame(width: 20, height: 20)
+                                }
+                                Text(
+                                    "Open in \(VaultProviderID.displayLabel(forWireId: session.providerId))"
+                                )
+                            }
+                        }
+                        .tint(Color.ink)
                     }
                 }
 
