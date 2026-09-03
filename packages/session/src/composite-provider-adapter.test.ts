@@ -7,6 +7,7 @@ import {
   type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionObservation,
+  type ProviderTranscriptSinceResult,
   type ProviderWorkspaceRenameRequest,
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
@@ -347,4 +348,51 @@ test("answers unsupported when no observer can rename a workspace", async () => 
       reason: "No provider adapter supports that act.",
     },
   );
+});
+
+class TranscriptObserver extends TestProviderAdapter {
+  readonly reads: (string | undefined)[] = [];
+  readonly #text: string | undefined;
+
+  constructor(provider: SessionProvider, text: string | undefined) {
+    super(provider, async () => []);
+    this.#text = text;
+  }
+
+  override async readTranscriptSince(
+    _providerSessionId: string,
+    cursor?: string,
+  ): Promise<ProviderTranscriptSinceResult> {
+    this.reads.push(cursor);
+    if (this.#text === undefined) {
+      return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: "never seen" };
+    }
+    return { status: ACT_RESULT_STATUS.ACCEPTED, text: this.#text, cursor: "7", truncated: false };
+  }
+}
+
+test("an incremental transcript read finds the observer holding the session", async () => {
+  const local = new TranscriptObserver(codex, undefined);
+  const cloud = new TranscriptObserver(codex, "Codex: done");
+  const adapter = new CompositeSessionProviderAdapter({
+    provider: codex,
+    adapters: [local, cloud],
+  });
+
+  const result = await adapter.readTranscriptSince("thread", "3");
+
+  assert.deepEqual(result, {
+    status: ACT_RESULT_STATUS.ACCEPTED,
+    text: "Codex: done",
+    cursor: "7",
+    truncated: false,
+  });
+  assert.deepEqual(local.reads, ["3"]);
+  assert.deepEqual(cloud.reads, ["3"]);
+
+  const nowhere = new CompositeSessionProviderAdapter({
+    provider: codex,
+    adapters: [new TranscriptObserver(codex, undefined)],
+  });
+  assert.equal((await nowhere.readTranscriptSince("thread")).status, ACT_RESULT_STATUS.UNSUPPORTED);
 });

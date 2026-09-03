@@ -11,6 +11,7 @@ import {
   type ProviderConversationRequest,
   type ProviderConversationResult,
   type ProviderSessionObservation,
+  type ProviderTranscriptSinceResult,
   type ProviderWorkspaceAgentRequest,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
@@ -24,7 +25,7 @@ import {
   type WorkspaceProject,
   workspaceAgentModels,
 } from "@sidecar/session";
-import { isRecord, text, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { isRecord, oneLine, text, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import {
   CLOUD_ADAPTER_DEFAULTS,
   CLOUD_FAILURE,
@@ -40,12 +41,16 @@ import {
   textFromRecord,
   timestampFromRecord,
 } from "../shared/cloud-session-adapter.js";
+import { TRANSCRIPT_BOUNDS, transcriptLine } from "../shared/local-transcript.js";
 import { CONDUCTOR_AGENT_BY_TYPE } from "./session-applications.js";
 
 // Shared with the credential registry so the key the user saves and the
 // provider Luke observes with it can never name different things.
 const CONDUCTOR_PROVIDER_ID = CREDENTIAL_PROVIDER_ID.CONDUCTOR;
 const CONDUCTOR_PROVIDER_NAME = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.CONDUCTOR].displayName;
+
+/** The speaker a chat's lines wear when the roster maps no agent kind for it. */
+const CONDUCTOR_AGENT_FALLBACK_NAME = "Agent";
 
 const CONDUCTOR_ENVIRONMENT = {
   API_URL: "CONDUCTOR_API_URL",
@@ -993,6 +998,41 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
       }
       throw error;
     }
+  }
+
+  /**
+   * The same documented read, rendered as transcript lines for a reader that
+   * walks a chat incrementally: without a cursor, the latest page; with one,
+   * only what is newer than the message it names. The cursor to continue
+   * from is the newest stored message the page consumed, and `truncated`
+   * says whether newer messages still stand beyond the page's bounds.
+   */
+  override async readTranscriptSince(
+    providerSessionId: string,
+    cursor?: string,
+  ): Promise<ProviderTranscriptSinceResult> {
+    const conversation = await this.readConversation({
+      providerSessionId,
+      ...(cursor !== undefined ? { afterMessageId: cursor } : undefined),
+    });
+    if (conversation.status !== ACT_RESULT_STATUS.ACCEPTED) return conversation;
+    const agentName =
+      this.latestObservation(providerSessionId)?.agent?.displayName ??
+      CONDUCTOR_AGENT_FALLBACK_NAME;
+    const lines = conversation.messages.flatMap((message) => {
+      const words = oneLine(message.text, TRANSCRIPT_BOUNDS.MAXIMUM_MESSAGE_LENGTH);
+      if (!words) return [];
+      return message.author === CONVERSATION_MESSAGE_AUTHOR.USER
+        ? [transcriptLine.developer(words)]
+        : [transcriptLine.agent(agentName, words)];
+    });
+    const nextCursor = conversation.lastMessageId ?? cursor;
+    return {
+      status: ACT_RESULT_STATUS.ACCEPTED,
+      text: lines.join("\n"),
+      ...(nextCursor !== undefined ? { cursor: nextCursor } : undefined),
+      truncated: conversation.hasMore,
+    };
   }
 
   /** One documented stored-messages read, with the query the mode composed. */

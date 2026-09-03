@@ -2566,6 +2566,43 @@ test("a poll walks the store's pages to the fixed bounds and answers hasMore hon
   assert.equal(reads[2]?.searchParams.get("after"), STORED_MESSAGE_UUIDS[6]);
 });
 
+test("an incremental transcript read rides the conversation read and its cursor", async () => {
+  const api = conversationApi();
+  const adapter = adapterFor(api.fetch);
+  const observed = (await adapter.observe()).find(
+    (observation) => observation.providerSessionId === IDLE_SESSION_UUID,
+  );
+  const agentName = observed?.agent?.displayName ?? "Agent";
+
+  const opening = await adapter.readTranscriptSince(IDLE_SESSION_UUID);
+
+  assert.equal(opening.status, "accepted");
+  if (opening.status !== "accepted") return;
+  assert.equal(
+    opening.text,
+    [
+      "Developer: Fix the flaky roster test",
+      `${agentName}: Looking at the test now. It races the clock.`,
+      `${agentName}: Fixed: the test now stubs the clock.`,
+    ].join("\n"),
+  );
+  assert.equal(opening.cursor, STORED_MESSAGE_UUIDS[7]);
+  assert.equal(opening.truncated, false);
+
+  const poll = await adapter.readTranscriptSince(IDLE_SESSION_UUID, STORED_MESSAGE_UUIDS[2]);
+
+  assert.equal(poll.status, "accepted");
+  if (poll.status !== "accepted") return;
+  assert.equal(poll.text, `${agentName}: Fixed: the test now stubs the clock.`);
+  assert.equal(poll.cursor, STORED_MESSAGE_UUIDS[7]);
+  assert.equal(api.requests.at(-1)?.searchParams.get("after"), STORED_MESSAGE_UUIDS[2]);
+
+  const badCursor = await adapter.readTranscriptSince(IDLE_SESSION_UUID, "not-a-message-id");
+  assert.equal(badCursor.status, "rejected");
+  const unobserved = await adapter.readTranscriptSince("99999999-9999-4999-8999-999999999999");
+  assert.equal(unobserved.status, "unsupported");
+});
+
 test("refuses a conversation read for anything the latest pass did not stand behind", async () => {
   const api = conversationApi();
   const adapter = adapterFor(api.fetch);

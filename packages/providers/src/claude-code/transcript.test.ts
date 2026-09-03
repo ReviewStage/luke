@@ -191,3 +191,57 @@ test("reads a tool's answer from the bookkeeping shape that has no blocks", asyn
 
   assert.equal(rendered, ["← 2 passed, 0 failed", "← plain string result"].join("\n"));
 });
+
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("reads what a session's transcript gained since the cursor an earlier read minted", async (t) => {
+  const claudeHome = await temporaryClaudeHome(t);
+  const adapter = new ClaudeCodeSessionAdapter({ claudeHome });
+  await writeTranscript(claudeHome, TEST_SESSION_ID, [
+    { type: "user", message: { role: "user", content: "Fix the flaky test" } },
+    {
+      type: "assistant",
+      message: { content: [{ type: "text", text: "Looking at the failure now." }] },
+    },
+  ]);
+
+  const first = await adapter.readTranscriptSince(TEST_SESSION_ID);
+  assert.equal(first.status, "accepted");
+  if (first.status !== "accepted") return;
+  assert.equal(
+    first.text,
+    ["Developer: Fix the flaky test", "Claude: Looking at the failure now."].join("\n"),
+  );
+  assert.equal(first.truncated, false);
+  assert.ok(first.cursor);
+
+  const transcriptPath = path.join(
+    claudeHome,
+    CLAUDE_PROJECTS_DIRECTORY,
+    "-Users-test-luke",
+    `${TEST_SESSION_ID}.jsonl`,
+  );
+  await fs.appendFile(
+    transcriptPath,
+    `${JSON.stringify({
+      type: "assistant",
+      message: { stop_reason: "end_turn", content: [{ type: "text", text: "Fixed and green." }] },
+    })}\n`,
+  );
+
+  const second = await adapter.readTranscriptSince(TEST_SESSION_ID, first.cursor);
+  assert.equal(second.status, "accepted");
+  if (second.status !== "accepted") return;
+  assert.equal(second.text, "Claude: Fixed and green.");
+  assert.notEqual(second.cursor, first.cursor);
+
+  const third = await adapter.readTranscriptSince(TEST_SESSION_ID, second.cursor);
+  assert.deepEqual(third, {
+    status: "accepted",
+    text: "",
+    cursor: second.cursor,
+    truncated: false,
+  });
+
+  const unknown = await adapter.readTranscriptSince("00000000-0000-4000-8000-000000000000");
+  assert.equal(unknown.status, "rejected");
+});
