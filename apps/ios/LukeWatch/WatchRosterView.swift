@@ -933,8 +933,7 @@ private struct WatchConversationBubble: View {
     }
 
     var body: some View {
-        WatchMarkdownText(message.text)
-            .font(.caption2)
+        MarkdownMessageView(message.text)
             .foregroundStyle(isUser ? Color.white : Color.primary)
             .multilineTextAlignment(isUser ? .trailing : .leading)
             .padding(.horizontal, 9)
@@ -966,8 +965,7 @@ private struct WatchOutgoingBubble: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 2) {
-            WatchMarkdownText(message.text)
-                .font(.caption2)
+            MarkdownMessageView(message.text)
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.trailing)
                 .padding(.horizontal, 9)
@@ -982,22 +980,6 @@ private struct WatchOutgoingBubble: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
-    }
-}
-
-private struct WatchMarkdownText: View {
-    let words: String
-
-    init(_ words: String) {
-        self.words = words
-    }
-
-    var body: some View {
-        if let attributed = try? AttributedString(markdown: words) {
-            Text(attributed)
-        } else {
-            Text(words)
-        }
     }
 }
 
