@@ -7,6 +7,8 @@ struct LukeApp: App {
     @State private var vault: VaultStore
     @State private var events: ProductEventSender
     @Environment(\.scenePhase) private var scenePhase
+    // Held for its lifetime — the WCSessionDelegate must not be deallocated.
+    private let phoneRelay: PhoneSessionRelay
 
     init() {
         let session = AccountSession(
@@ -16,6 +18,7 @@ struct LukeApp: App {
             )
         )
         _session = State(initialValue: session)
+        phoneRelay = PhoneSessionRelay(accountSession: session)
         _vault = State(initialValue: VaultStore(
             client: VaultClient(baseURL: AccountConstants.serviceURL),
             session: session
@@ -53,6 +56,10 @@ struct LukeApp: App {
                 .environment(events)
                 .onChange(of: session.state) { previous, current in
                     accountEdge(from: previous, to: current)
+                    switch current {
+                    case .signedIn: phoneRelay.push()
+                    case .signedOut: phoneRelay.pushSignOut()
+                    }
                 }
         }
         .onChange(of: scenePhase) { _, phase in

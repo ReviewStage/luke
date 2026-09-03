@@ -74,6 +74,25 @@ public final class AccountSession {
         return KeychainStore.get(.accessToken)
     }
 
+    /// Returns a credential payload suitable for WatchConnectivity transfer.
+    /// Nil when signed out or any required field is absent.
+    public func tokenPayload() -> [String: Any]? {
+        guard case .signedIn(let identity) = state,
+              let access = accessToken,
+              let refresh = refreshToken
+        else { return nil }
+        var payload: [String: Any] = [
+            "access_token": access,
+            "refresh_token": refresh,
+            "token_expiry": (accessTokenExpiry ?? Date()).timeIntervalSinceReferenceDate,
+            "email": identity.email,
+        ]
+        if let name = identity.name { payload["name"] = name }
+        if let id = identity.id { payload["account_id"] = id }
+        if let pic = identity.pictureURL { payload["picture_url"] = pic.absoluteString }
+        return payload
+    }
+
     public func signOut() async {
         generation += 1
         let tokenToRevoke = refreshToken

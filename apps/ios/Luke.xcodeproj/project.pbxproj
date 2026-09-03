@@ -29,6 +29,12 @@
 		AABBCC0000000000000000B5 /* LukeWatchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000B1 /* LukeWatchView.swift */; };
 		AABBCC0000000000000000B6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000B2 /* Assets.xcassets */; };
 		AABBCC0000000000000000B7 /* LukeKit in Frameworks */ = {isa = PBXBuildFile; productRef = AABBCC0000000000000000C0 /* LukeKit */; };
+		AABBCC0000000000000000C7 /* WatchTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000C1 /* WatchTokenStore.swift */; };
+		AABBCC0000000000000000C8 /* WatchAccountSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000C2 /* WatchAccountSession.swift */; };
+		AABBCC0000000000000000C9 /* WatchConnectivityReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000C3 /* WatchConnectivityReceiver.swift */; };
+		AABBCC0000000000000000CA /* PhoneSessionRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000C4 /* PhoneSessionRelay.swift */; };
+		AABBCC0000000000000000CB /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000C5 /* WatchConnectivity.framework */; };
+		AABBCC0000000000000000CC /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000C5 /* WatchConnectivity.framework */; };
 		AABBCC0000000000000000D4 /* VoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D0 /* VoiceView.swift */; };
 		AABBCC0000000000000000D5 /* VoiceAudioCapturer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D1 /* VoiceAudioCapturer.swift */; };
 		AABBCC0000000000000000D6 /* VoiceAudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D2 /* VoiceAudioPlayer.swift */; };
@@ -59,6 +65,11 @@
 		AABBCC0000000000000000B1 /* LukeWatchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LukeWatchView.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000B2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AABBCC0000000000000000B3 /* LukeWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LukeWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AABBCC0000000000000000C1 /* WatchTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchTokenStore.swift; sourceTree = "<group>"; };
+		AABBCC0000000000000000C2 /* WatchAccountSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchAccountSession.swift; sourceTree = "<group>"; };
+		AABBCC0000000000000000C3 /* WatchConnectivityReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchConnectivityReceiver.swift; sourceTree = "<group>"; };
+		AABBCC0000000000000000C4 /* PhoneSessionRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneSessionRelay.swift; sourceTree = "<group>"; };
+		AABBCC0000000000000000C5 /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = System/Library/Frameworks/WatchConnectivity.framework; sourceTree = SDKROOT; };
 		AABBCC0000000000000000D0 /* VoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceView.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000D1 /* VoiceAudioCapturer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceAudioCapturer.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000D2 /* VoiceAudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceAudioPlayer.swift; sourceTree = "<group>"; };
@@ -73,6 +84,7 @@
 			files = (
 				AABBCC000000000000000083 /* LukeKit in Frameworks */,
 				AABBCC000000000000000092 /* PostHog in Frameworks */,
+				AABBCC0000000000000000CC /* WatchConnectivity.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -89,6 +101,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AABBCC0000000000000000B7 /* LukeKit in Frameworks */,
+				AABBCC0000000000000000CB /* WatchConnectivity.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -101,6 +114,7 @@
 				AABBCC000000000000000004 /* Luke */,
 				AABBCC000000000000000005 /* LukeTests */,
 				AABBCC0000000000000000B8 /* LukeWatch */,
+				AABBCC0000000000000000D0 /* Frameworks */,
 				AABBCC000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -130,6 +144,7 @@
 				AABBCC00000000000000001F /* SessionReplay.swift */,
 				AABBCC0000000000000000A1 /* PresenceBinding.swift */,
 				AABBCC0000000000000000A3 /* MarkdownMessageView.swift */,
+				AABBCC0000000000000000C4 /* PhoneSessionRelay.swift */,
 				AABBCC0000000000000000D0 /* VoiceView.swift */,
 				AABBCC0000000000000000D1 /* VoiceAudioCapturer.swift */,
 				AABBCC0000000000000000D2 /* VoiceAudioPlayer.swift */,
@@ -155,9 +170,20 @@
 			children = (
 				AABBCC0000000000000000B0 /* LukeWatchApp.swift */,
 				AABBCC0000000000000000B1 /* LukeWatchView.swift */,
+				AABBCC0000000000000000C1 /* WatchTokenStore.swift */,
+				AABBCC0000000000000000C2 /* WatchAccountSession.swift */,
+				AABBCC0000000000000000C3 /* WatchConnectivityReceiver.swift */,
 				AABBCC0000000000000000B2 /* Assets.xcassets */,
 			);
 			path = LukeWatch;
+			sourceTree = "<group>";
+		};
+		AABBCC0000000000000000D0 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				AABBCC0000000000000000C5 /* WatchConnectivity.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -313,6 +339,7 @@
 				AABBCC00000000000000008E /* SessionReplay.swift in Sources */,
 				AABBCC0000000000000000A2 /* PresenceBinding.swift in Sources */,
 				AABBCC0000000000000000A4 /* MarkdownMessageView.swift in Sources */,
+				AABBCC0000000000000000CA /* PhoneSessionRelay.swift in Sources */,
 				AABBCC0000000000000000D4 /* VoiceView.swift in Sources */,
 				AABBCC0000000000000000D5 /* VoiceAudioCapturer.swift in Sources */,
 				AABBCC0000000000000000D6 /* VoiceAudioPlayer.swift in Sources */,
@@ -336,6 +363,9 @@
 			files = (
 				AABBCC0000000000000000B4 /* LukeWatchApp.swift in Sources */,
 				AABBCC0000000000000000B5 /* LukeWatchView.swift in Sources */,
+				AABBCC0000000000000000C7 /* WatchTokenStore.swift in Sources */,
+				AABBCC0000000000000000C8 /* WatchAccountSession.swift in Sources */,
+				AABBCC0000000000000000C9 /* WatchConnectivityReceiver.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
