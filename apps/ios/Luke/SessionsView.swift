@@ -8,10 +8,15 @@ struct SessionsView: View {
     @Environment(ProductEventSender.self) private var events
 
     @State private var sessions: [RosterSession] = []
-    /// Starts true because the list's first frame can paint before its
-    /// `.task` begins the fetch, and that frame must show the skeletons
-    /// rather than claim "No active sessions" nothing has checked yet.
-    @State private var isLoading = true
+    /// True until a fetched roster has actually landed, so every empty frame
+    /// before one — the first paint racing its `.task`, the first request in
+    /// flight, and a retry running after a failed first load — shows the
+    /// skeletons rather than claim "No active sessions" nothing has
+    /// confirmed. Only that unknown may show them: a refresh that finds the
+    /// list already empty (the last chat just archived) must not flash
+    /// skeletons over an emptiness that is real, and a standing fetch error
+    /// still outranks them.
+    @State private var awaitingFirstRoster = true
     @State private var fetchError: String?
     @State private var searchQuery = ""
     @State private var filters: Set<SessionFilter> = []
@@ -27,10 +32,22 @@ struct SessionsView: View {
     @State private var renameText = ""
     @State private var creatorShown = false
     @State private var actFailure: String?
-    /// Counts refresh passes so only the newest may write: a pull-to-refresh
-    /// overlapping a post-act refresh must not land its older roster after
-    /// the newer one — an archived row would come back from the dead.
+    /// Counts refresh passes so a stale answer cannot outrank a newer one:
+    /// a pass's roster lands only when no newer pass has landed one (an
+    /// older roster written after a newer would bring an archived row back
+    /// from the dead, but one written where a newer pass only failed still
+    /// beats an error over nothing), and only the newest pass may claim
+    /// failure, since an old outage says nothing about the request still
+    /// running.
     @State private var refreshPass = 0
+    /// The newest pass whose roster actually landed.
+    @State private var landedPass = 0
+    /// Sessions whose archive act is still in flight. The row leaves at the
+    /// press, so every roster write filters these ids: a refresh whose roster
+    /// was read before the archive landed would otherwise bring the row back.
+    /// Delivery lifts the hold after the post-act refresh; a refusal lifts it
+    /// and refreshes, restoring the row beside the alert saying why.
+    @State private var archivingIds: Set<String> = []
 
     /// Which advertised rename a menu press opened: the session itself, or
     /// the workspace it runs in. One alert serves both; the flag picks the
@@ -138,7 +155,7 @@ struct SessionsView: View {
             by: sort
         )
         return List {
-            if isLoading && sessions.isEmpty {
+            if awaitingFirstRoster && sessions.isEmpty && fetchError == nil {
                 ForEach(0 ..< 3, id: \.self) { _ in
                     SkeletonRow()
                         .listRowBackground(Color.clear)
@@ -384,6 +401,17 @@ struct SessionsView: View {
     }
 
     private func runControl(_ s: RosterSession, _ control: RosterSessionControl) {
+        // An archive's whole visible outcome is the row leaving, so the leave
+        // happens at the press — the row slides out and the screen it opened
+        // pops — with the act following behind rather than the press waiting
+        // on two round trips.
+        if control.kind == .archive {
+            archivingIds.insert(s.id)
+            if openedSession?.id == s.id {
+                openedSession = nil
+            }
+            withAnimation { sessions.removeAll { $0.id == s.id } }
+        }
         Task {
             let delivered = await performAct(on: s, counting: .controlRun) { token in
                 try await actClient.executeControl(
@@ -393,8 +421,20 @@ struct SessionsView: View {
                     controlId: control.id
                 )
             }
-            if delivered, control.kind == .archive, openedSession?.id == s.id {
-                openedSession = nil
+            if control.kind == .archive {
+                archivingIds.remove(s.id)
+                if !delivered {
+                    // Restored locally before the refresh converges, because
+                    // the outage that refused the act usually fails the
+                    // refresh too, and a chat the server never archived must
+                    // not stay gone on the refusal's word alone.
+                    withAnimation {
+                        if !sessions.contains(where: { $0.id == s.id }) {
+                            sessions.append(s)
+                        }
+                    }
+                    await refreshSessions()
+                }
             }
         }
     }
@@ -463,21 +503,25 @@ struct SessionsView: View {
     }
 
     private func refreshSessions() async {
-        isLoading = true
+        refreshPass += 1
+        let pass = refreshPass
         fetchError = nil
-        defer { isLoading = false }
         guard case .signedIn = session.state else { return }
         do {
             let fetched = try await session.authorized { token in
                 try await rosterClient.observe(bearerToken: token)
             }
-            // Animated so a row an act just removed — an archive above all —
-            // slides out the way a deleted Mail row does, instead of blinking.
-            withAnimation { sessions = fetched }
+            guard pass > landedPass else { return }
+            landedPass = pass
+            // Animated so a row an act just removed slides out the way a
+            // deleted Mail row does, instead of blinking.
+            withAnimation { sessions = fetched.filter { !archivingIds.contains($0.id) } }
+            awaitingFirstRoster = false
             recordObservation(fetched)
         } catch is AccountSessionError {
             ()  // Signed out — the state change redraws automatically.
         } catch {
+            guard pass == refreshPass else { return }
             fetchError = error.localizedDescription
         }
     }
