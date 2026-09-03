@@ -1581,7 +1581,9 @@ function registerIpc(): void {
         // The calendar is a capability like the rosters: nothing of it is
         // shown, or held quiet, before the account gate opens.
         calendars: accountCapabilitiesActive() ? observedCalendars : [],
-        announcementsHeld: accountCapabilitiesActive() && announcementsHeld,
+        // Computed rather than read from the cached flag: at launch nothing
+        // has recomputed it yet, so a persisted pause would draw a waking face.
+        announcementsHeld: accountCapabilitiesActive() && (await announcementsQuietNow(Date.now())),
         conversationHistory,
         rememberedFacts,
         calendarOnboardingOwed: calendarOnboardingGateOwed(),
