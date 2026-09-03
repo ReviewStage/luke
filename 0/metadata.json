@@ -1,0 +1,74 @@
+{
+  "cli_version": "0.10.2",
+  "checkpoint_id": "01M1MHVEK506Z5PF0QBC52Z2KB",
+  "session_id": "8fd0c5c8-6e70-46a0-90cb-71e328a3ef87",
+  "strategy": "manual-commit",
+  "created_at": "2026-09-03T21:12:32.789884Z",
+  "branch": "claude/code-app-chat-detection-3ab594",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [
+    "PRIVACY.md",
+    "apps/desktop/src/main/desktop-app.ts",
+    "apps/desktop/src/renderer/session-model.test.ts",
+    "apps/desktop/src/renderer/styles/base.css",
+    "apps/web/src/notch-mock.css",
+    "design/generate-surface-shared.mjs",
+    "packages/fixtures/src/fixtures.ts",
+    "packages/panel/src/provider-marks.tsx",
+    "packages/providers/AGENTS.md",
+    "packages/providers/src/claude-code/adapter.test.ts",
+    "packages/providers/src/claude-code/adapter.ts",
+    "packages/providers/src/claude-code/desktop-applications.test.ts",
+    "packages/providers/src/claude-code/desktop-applications.ts",
+    "packages/providers/src/index.ts",
+    "packages/providers/src/shared/workspace-hosts.test.ts",
+    "packages/providers/src/shared/workspace-hosts.ts",
+    "packages/session/src/session.test.ts",
+    "packages/session/src/session.ts",
+    "packages/surface/src/generated/provider-mark-paths.ts",
+    "packages/surface/src/index.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-fable-5-1",
+  "turn_id": "f82f41d0c078",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 16141,
+    "cache_creation_tokens": 299996,
+    "cache_read_tokens": 14094420,
+    "output_tokens": 93218,
+    "api_call_count": 63
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-09-03T21:12:32.658057Z",
+    "agent_lines": 812,
+    "agent_removed": 22,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 812,
+    "total_lines_changed": 834,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 812,
+      "agent_lines_removed": 22
+    }
+  ]
+}

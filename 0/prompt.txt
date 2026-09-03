@@ -1,0 +1,1 @@
+Look into adding support for detecting chats that are from the local Claude Code app. We want detection and also deep links if possible.

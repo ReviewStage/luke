@@ -1,0 +1,45 @@
+{
+  "cli_version": "0.10.2",
+  "checkpoint_id": "01M1MHVEK506Z5PF0QBC52Z2KB",
+  "strategy": "manual-commit",
+  "branch": "claude/code-app-chat-detection-3ab594",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "PRIVACY.md",
+    "apps/desktop/src/main/desktop-app.ts",
+    "apps/desktop/src/renderer/session-model.test.ts",
+    "apps/desktop/src/renderer/styles/base.css",
+    "apps/web/src/notch-mock.css",
+    "design/generate-surface-shared.mjs",
+    "packages/fixtures/src/fixtures.ts",
+    "packages/panel/src/provider-marks.tsx",
+    "packages/providers/AGENTS.md",
+    "packages/providers/src/claude-code/adapter.test.ts",
+    "packages/providers/src/claude-code/adapter.ts",
+    "packages/providers/src/claude-code/desktop-applications.test.ts",
+    "packages/providers/src/claude-code/desktop-applications.ts",
+    "packages/providers/src/index.ts",
+    "packages/providers/src/shared/workspace-hosts.test.ts",
+    "packages/providers/src/shared/workspace-hosts.ts",
+    "packages/session/src/session.test.ts",
+    "packages/session/src/session.ts",
+    "packages/surface/src/generated/provider-mark-paths.ts",
+    "packages/surface/src/index.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 16141,
+    "cache_creation_tokens": 299996,
+    "cache_read_tokens": 14094420,
+    "output_tokens": 93218,
+    "api_call_count": 63
+  }
+}
