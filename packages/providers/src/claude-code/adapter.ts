@@ -62,6 +62,13 @@ type ClaudeEventType = (typeof CLAUDE_EVENT_TYPE)[keyof typeof CLAUDE_EVENT_TYPE
 /** Records Claude Code writes alongside the conversation itself. */
 const CLAUDE_RECORD_TYPE = {
   AI_TITLE: "ai-title",
+  /**
+   * A name chosen for the session rather than generated from it: a rename in
+   * Claude Code's own UI, or the title the Claude desktop app gives a Code
+   * tab session. It is what the developer reads wherever that session is
+   * listed, so it outranks the generated title.
+   */
+  CUSTOM_TITLE: "custom-title",
   PR_LINK: "pr-link",
   SYSTEM: "system",
 } as const;
@@ -133,6 +140,7 @@ export interface ClaudeCodeAdapterOptions {
 interface ParsedClaudeSessionTail {
   activity?: string;
   aiTitle?: string;
+  customTitle?: string;
   apiError?: string;
   branch?: string;
   cwd?: string;
@@ -318,6 +326,11 @@ function readClaudeRecord(record: WireRecord, parsed: ParsedClaudeSessionTail): 
     parsed.aiTitle = oneLine(text(record.aiTitle), maximumSessionTitleLength) ?? parsed.aiTitle;
     return;
   }
+  if (record.type === CLAUDE_RECORD_TYPE.CUSTOM_TITLE) {
+    parsed.customTitle =
+      oneLine(text(record.customTitle), maximumSessionTitleLength) ?? parsed.customTitle;
+    return;
+  }
   if (record.type === CLAUDE_RECORD_TYPE.PR_LINK) {
     parsed.pullRequestUrl = text(record.prUrl) ?? parsed.pullRequestUrl;
     return;
@@ -368,16 +381,20 @@ function parseClaudeSessionTail(tail: string): ParsedClaudeSessionTail {
   return parsed;
 }
 
-/** Recovers only the generated title from a session too long to hold one in its tail. */
-function titleFromHead(head: string): string | undefined {
-  let title: string | undefined;
+/** Recovers only the titles from a session too long to hold one in its tail. */
+function titlesFromHead(head: string): Pick<ParsedClaudeSessionTail, "aiTitle" | "customTitle"> {
+  const titles: Pick<ParsedClaudeSessionTail, "aiTitle" | "customTitle"> = {};
   for (const line of head.split(/\r?\n/)) {
     const record = recordFromJsonLine(line);
     if (record?.type === CLAUDE_RECORD_TYPE.AI_TITLE) {
-      title = oneLine(text(record.aiTitle), maximumSessionTitleLength) ?? title;
+      titles.aiTitle = oneLine(text(record.aiTitle), maximumSessionTitleLength) ?? titles.aiTitle;
+    }
+    if (record?.type === CLAUDE_RECORD_TYPE.CUSTOM_TITLE) {
+      titles.customTitle =
+        oneLine(text(record.customTitle), maximumSessionTitleLength) ?? titles.customTitle;
     }
   }
-  return title;
+  return titles;
 }
 
 /**
@@ -433,11 +450,12 @@ const CLAUDE_HOOK_STATUS_REFINEMENT = {
 
 /**
  * Claude Code names its own sessions, and that name is what a developer is
- * looking for. The workspace is the fallback for a session too new to have been
- * named, which is also the only case where two rows can still read alike.
+ * looking for: the name somebody chose first, then the one it generated. The
+ * workspace is the fallback for a session too new to have been named, which
+ * is also the only case where two rows can still read alike.
  */
 function titleFromTail(parsed: ParsedClaudeSessionTail): string {
-  return parsed.aiTitle ?? workspaceLabel(parsed.cwd);
+  return parsed.customTitle ?? parsed.aiTitle ?? workspaceLabel(parsed.cwd);
 }
 
 /**
@@ -557,8 +575,11 @@ export class ClaudeCodeSessionAdapter extends LocalFileSessionAdapter<
       );
       if (rescued.timestampMs !== undefined) parsed = rescued;
     }
-    if (!parsed.aiTitle) {
-      parsed.aiTitle = titleFromHead(await readHead(candidate.filePath, this.#readHeadBytes));
+    if (!parsed.aiTitle && !parsed.customTitle) {
+      Object.assign(
+        parsed,
+        titlesFromHead(await readHead(candidate.filePath, this.#readHeadBytes)),
+      );
     }
     return parsed;
   }

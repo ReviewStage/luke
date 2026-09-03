@@ -14,6 +14,7 @@ import {
 import {
   APPLE_CALENDAR_MARK_LAYERS,
   CLAUDE_CODE_PATH,
+  CLAUDE_PATH,
   CLOUD_BADGE_PATH,
   CODEX_PATH,
   CONDUCTOR_MARK_PATHS,
@@ -48,7 +49,8 @@ void React;
  * the renderer stays asset-free and the marks scale with the surface.
  *
  * Each is the provider's own mark, reproduced rather than redrawn — Claude Code
- * via Simple Icons (CC0-1.0, sourced from code.claude.com), Codex via
+ * via Simple Icons (CC0-1.0, sourced from code.claude.com), the Claude app's
+ * own mark via Simple Icons (CC0-1.0, sourced from claude.ai), Codex via
  * @lobehub/icons (MIT), Conductor's letter mark verbatim from the published
  * brand kit at https://www.conductor.build/brandkit, Copilot via Simple Icons
  * (MIT, sourced from https://primer.style/foundations/icons/copilot-24),
@@ -92,6 +94,21 @@ function ClaudeCodeMark({ className }: MarkProps): React.JSX.Element {
       focusable="false"
     >
       <path fill="currentColor" d={CLAUDE_CODE_PATH} />
+    </svg>
+  );
+}
+
+/** The Claude desktop app, whose Code tab holds a Claude Code session. */
+function ClaudeMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg
+      className={className}
+      data-mark={SESSION_APPLICATION_ID.CLAUDE}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path fill="currentColor" d={CLAUDE_PATH} />
     </svg>
   );
 }
@@ -437,6 +454,7 @@ const PROVIDER_MARKS = {
   [APPLE_CALENDAR_ID]: AppleCalendarMark,
   [PROVIDER_ID.CLAUDE_CODE]: ClaudeCodeMark,
   [SESSION_APPLICATION_ID.CHATGPT]: ChatGptMark,
+  [SESSION_APPLICATION_ID.CLAUDE]: ClaudeMark,
   [PROVIDER_ID.CODEX]: CodexMark,
   [PROVIDER_ID.CONDUCTOR]: ConductorMark,
   // Local Conductor creation wears the same mark as the cloud provider: both

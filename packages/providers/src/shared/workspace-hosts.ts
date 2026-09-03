@@ -1,5 +1,9 @@
 import type { ProviderSessionObservation } from "@sidecar/session";
 import {
+  type ClaudeDesktopSessionApplicationReader,
+  ClaudeDesktopSessionApplicationSnapshot,
+} from "../claude-code/desktop-applications.js";
+import {
   type ConductorSessionApplicationReader,
   ConductorSessionApplicationSnapshot,
 } from "../conductor/session-applications.js";
@@ -30,6 +34,7 @@ export interface WorkspaceHostRegistrationOptions {
    */
   superset: WorkspaceHostRegistration;
   conductorApplications: ConductorSessionApplicationReader;
+  claudeDesktopApplications: ClaudeDesktopSessionApplicationReader;
 }
 
 function enrichmentFrom(snapshot: {
@@ -44,7 +49,10 @@ function enrichmentFrom(snapshot: {
 /**
  * The workspace managers of one observation pass, in claim order. Superset
  * claims its workspaces first and Conductor next: one chat is grouped by
- * exactly one manager however many of them hold it.
+ * exactly one manager however many of them hold it. The Claude desktop app
+ * comes last and claims no workspace at all — it only names the chats its
+ * Code tab holds — so its place in the order decides nothing but the order
+ * its mark is added in.
  */
 export function workspaceHostRegistrations(
   options: WorkspaceHostRegistrationOptions,
@@ -55,6 +63,11 @@ export function workspaceHostRegistrations(
       observationFailureLabel: "Conductor application observation",
       read: async () => enrichmentFrom(await options.conductorApplications.read()),
       emptyEnrichment: enrichmentFrom(new ConductorSessionApplicationSnapshot()),
+    },
+    {
+      observationFailureLabel: "Claude application observation",
+      read: async () => enrichmentFrom(await options.claudeDesktopApplications.read()),
+      emptyEnrichment: enrichmentFrom(new ClaudeDesktopSessionApplicationSnapshot()),
     },
   ];
 }

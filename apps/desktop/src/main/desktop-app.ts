@@ -41,6 +41,7 @@ import { normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
 import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticKind,
+  ClaudeDesktopSessionApplicationReader,
   CodexCloudSessionAdapter,
   ConductorLocalWorkspaceAdapter,
   ConductorSessionApplicationReader,
@@ -262,6 +263,10 @@ const codexCloudAdapter = new CodexCloudSessionAdapter({
   onDiagnostic: (kind, error) => reportAdapterDiagnostic(PROVIDER_ID.CODEX, kind, error),
 });
 const conductorSessionApplications = new ConductorSessionApplicationReader();
+// The Claude desktop app's Code tab runs Claude Code sessions of its own and
+// keeps a record per session under its own application data; reading it is
+// what lets those rows say which app holds them and open there.
+const claudeDesktopSessionApplications = new ClaudeDesktopSessionApplicationReader();
 // The local counterpart of the cloud Conductor adapter's creation path: it
 // reads the repositories Conductor holds and creates a workspace in one by
 // handing Conductor's own creation deep link to the operating system. It
@@ -290,6 +295,7 @@ const supersetWorkspaceHost: WorkspaceHostRegistration = {
 const workspaceHosts = workspaceHostRegistrations({
   superset: supersetWorkspaceHost,
   conductorApplications: conductorSessionApplications,
+  claudeDesktopApplications: claudeDesktopSessionApplications,
 });
 // `directory` and the cipher are read lazily so the store can be declared before
 // the Electron app is ready.
