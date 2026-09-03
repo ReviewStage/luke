@@ -172,96 +172,93 @@ struct WatchSessionDetailView: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            GeometryReader { geometry in
-                ScrollView {
-                    ZStack {
-                        LazyVStack(alignment: .leading, spacing: 8) {
-                            if session.canReadConversation {
-                                if hasOlder {
-                                    Button {
-                                        Task { await loadOlder() }
-                                    } label: {
-                                        if loadingOlder {
-                                            ProgressView()
-                                                .frame(maxWidth: .infinity)
-                                        } else {
-                                            Label("Earlier Messages", systemImage: "arrow.up")
-                                                .font(.caption2)
-                                                .frame(maxWidth: .infinity)
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-                                    .disabled(loadingOlder)
-                                    .padding(.vertical, 4)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    if session.canReadConversation {
+                        if hasOlder {
+                            Button {
+                                Task { await loadOlder() }
+                            } label: {
+                                if loadingOlder {
+                                    ProgressView()
+                                        .frame(maxWidth: .infinity)
+                                } else {
+                                    Label("Earlier Messages", systemImage: "arrow.up")
+                                        .font(.caption2)
+                                        .frame(maxWidth: .infinity)
                                 }
-
-                                if !centersConversationState {
-                                    conversationContent
-                                }
-
-                                ForEach(outgoing) { message in
-                                    WatchOutgoingBubble(message: message)
-                                        .id(message.id)
-                                }
-                            } else {
-                                Text("Conversation unavailable for this session.")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.vertical, 6)
                             }
-
-                            if session.canReceiveMessage {
-                                composer
-                                    .id(Self.composerId)
-                            }
-
-                            Color.clear
-                                .frame(height: 1)
-                                .id(Self.conversationEndId)
+                            .buttonStyle(.plain)
+                            .disabled(loadingOlder)
+                            .padding(.vertical, 4)
                         }
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 6)
-                        .frame(minHeight: geometry.size.height, alignment: .bottom)
 
-                        if centersConversationState {
+                        if !centersConversationState {
                             conversationContent
-                                .padding(.horizontal, 4)
                         }
+
+                        ForEach(outgoing) { message in
+                            WatchOutgoingBubble(message: message)
+                                .id(message.id)
+                        }
+                    } else {
+                        Text("Conversation unavailable for this session.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 6)
                     }
+
+                    if session.canReceiveMessage {
+                        composer
+                            .id(Self.composerId)
+                    }
+
+                    Color.clear
+                        .frame(height: 1)
+                        .id(Self.conversationEndId)
                 }
-                .refreshable { await refreshConversation() }
-                .onChange(of: scrollIntent) {
-                    guard let intent = scrollIntent else { return }
-                    scrollIntent = nil
-                    switch intent {
-                    case .end:
-                        let target = session.canReceiveMessage
+                .padding(.horizontal, 4)
+                .padding(.top, 6)
+            }
+            .defaultScrollAnchor(.bottom)
+            .overlay {
+                if centersConversationState {
+                    conversationContent
+                        .padding(.horizontal, 4)
+                }
+            }
+            .refreshable { await refreshConversation() }
+            .onChange(of: scrollIntent) {
+                guard let intent = scrollIntent else { return }
+                scrollIntent = nil
+                switch intent {
+                case .end:
+                    let target = session.canReceiveMessage
+                        ? Self.composerId
+                        : (outgoing.last?.id ?? conversation.last?.id ?? Self.conversationEndId)
+                    proxy.scrollTo(target, anchor: .bottom)
+                    Task {
+                        try? await Task.sleep(nanoseconds: Self.layoutSettleNanoseconds)
+                        guard !Task.isCancelled else { return }
+                        let settledTarget = session.canReceiveMessage
                             ? Self.composerId
                             : (outgoing.last?.id ?? conversation.last?.id ?? Self.conversationEndId)
-                        proxy.scrollTo(target, anchor: .bottom)
-                        Task {
-                            try? await Task.sleep(nanoseconds: Self.layoutSettleNanoseconds)
-                            guard !Task.isCancelled else { return }
-                            let settledTarget = session.canReceiveMessage
-                                ? Self.composerId
-                                : (outgoing.last?.id ?? conversation.last?.id ?? Self.conversationEndId)
-                            proxy.scrollTo(settledTarget, anchor: .bottom)
-                        }
-                    case .anchor(let id):
-                        proxy.scrollTo(id, anchor: .top)
+                        proxy.scrollTo(settledTarget, anchor: .bottom)
                     }
+                case .anchor(let id):
+                    proxy.scrollTo(id, anchor: .top)
                 }
-                .task(id: session.id) {
-                    guard session.canReadConversation else { return }
-                    while !Task.isCancelled {
-                        if forwardCursor == nil {
-                            await openConversation()
-                        } else {
-                            await pollNewer()
-                        }
-                        try? await Task.sleep(nanoseconds: Self.pollSeconds * 1_000_000_000)
+            }
+            .task(id: session.id) {
+                guard session.canReadConversation else { return }
+                while !Task.isCancelled {
+                    if forwardCursor == nil {
+                        await openConversation()
+                    } else {
+                        await pollNewer()
                     }
+                    try? await Task.sleep(nanoseconds: Self.pollSeconds * 1_000_000_000)
                 }
             }
         }
@@ -292,10 +289,8 @@ struct WatchSessionDetailView: View {
     private var conversationContent: some View {
         if conversation.isEmpty {
             if !openAttempted {
-                ProgressView("Loading Messages")
-                    .font(.caption2)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+                ProgressView()
+                    .accessibilityLabel("Loading Messages")
             } else if let loadError {
                 VStack(spacing: 6) {
                     Text(loadError)
