@@ -51,6 +51,11 @@ public final class AccountSession {
     // back after the user has already asked to leave (mirrors the desktop generation counter).
     private var generation = 0
 
+    /// Called on every token rotation so callers that hold a copy of the tokens
+    /// (e.g. a WatchConnectivity relay) can push the fresh pair. The server
+    /// rotates the refresh token on use, so a stale copy becomes invalid.
+    public var onTokensRefreshed: (() -> Void)?
+
     public init(client: AccountClient) {
         self.client = client
         restoreFromKeychain()
@@ -72,6 +77,25 @@ public final class AccountSession {
     public func currentAccessToken() -> String? {
         guard case .signedIn = state else { return nil }
         return KeychainStore.get(.accessToken)
+    }
+
+    /// Returns a credential payload suitable for WatchConnectivity transfer.
+    /// Nil when signed out or any required field is absent.
+    public func tokenPayload() -> [String: Any]? {
+        guard case .signedIn(let identity) = state,
+              let access = accessToken,
+              let refresh = refreshToken
+        else { return nil }
+        var payload: [String: Any] = [
+            "access_token": access,
+            "refresh_token": refresh,
+            "token_expiry": (accessTokenExpiry ?? Date()).timeIntervalSinceReferenceDate,
+            "email": identity.email,
+        ]
+        if let name = identity.name { payload["name"] = name }
+        if let id = identity.id { payload["account_id"] = id }
+        if let pic = identity.pictureURL { payload["picture_url"] = pic.absoluteString }
+        return payload
     }
 
     public func signOut() async {
@@ -223,6 +247,7 @@ public final class AccountSession {
             KeychainStore.set(String(tokens.expiry.timeIntervalSinceReferenceDate), for: .expiry),
         ]
         credentialsPersisted = persisted.allSatisfy { $0 }
+        onTokensRefreshed?()
     }
 
     private func storeIdentity(_ identity: AccountIdentity) {
