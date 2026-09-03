@@ -149,7 +149,6 @@ struct WatchSessionDetailView: View {
     @State private var loadError: String?
     @State private var scrollIntent: ScrollIntent?
     @State private var infoShown = false
-    @State private var text = ""
     @State private var outgoing: [WatchOutgoingMessage] = []
     @State private var claimedCopyIds: Set<String> = []
 
@@ -391,34 +390,22 @@ struct WatchSessionDetailView: View {
     }
 
     private var composer: some View {
-        HStack {
-            TextField("Message", text: $text)
-                .submitLabel(.send)
-                .onSubmit(send)
-            Button(action: send) {
-                Label("Send Message", systemImage: "arrow.up")
-                    .labelStyle(.iconOnly)
-            }
-            .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.circle)
-            .disabled(!canSend)
-            .accessibilityLabel("Send Message")
+        TextFieldLink(prompt: Text("Message")) {
+            Label("Message", systemImage: "message")
+        } onSubmit: { submittedText in
+            send(submittedText)
         }
-        .padding(.horizontal, 4)
+        .submitLabel(.send)
     }
 
-    private var canSend: Bool {
-        text.contains { !$0.isWhitespace }
-    }
-
-    private func send() {
-        guard canSend else { return }
+    private func send(_ submittedText: String) {
+        let text = submittedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
         let message = WatchOutgoingMessage(
-            text: text.trimmingCharacters(in: .whitespacesAndNewlines),
+            text: text,
             delivery: .sending
         )
         outgoing.append(message)
-        text = ""
         scrollIntent = .end
         Task {
             let delivery: WatchOutgoingMessage.Delivery
