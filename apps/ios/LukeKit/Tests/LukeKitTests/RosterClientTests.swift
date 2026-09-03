@@ -57,11 +57,13 @@ final class RosterSessionTests: XCTestCase {
             "workspace": "my-repo",
             "branch": "main",
             "change": "https://github.com/ReviewStage/luke/pull/642",
+            "link": "conductor://workspace?id=ws-1&session=sess-2",
             "recap": "Waiting for approval",
         ])
         XCTAssertEqual(s?.workspace, "my-repo")
         XCTAssertEqual(s?.branch, "main")
         XCTAssertEqual(s?.change, URL(string: "https://github.com/ReviewStage/luke/pull/642"))
+        XCTAssertEqual(s?.link, URL(string: "conductor://workspace?id=ws-1&session=sess-2"))
         XCTAssertEqual(s?.recap, "Waiting for approval")
         XCTAssertNil(s?.error)
     }
@@ -78,6 +80,30 @@ final class RosterSessionTests: XCTestCase {
             var json = base
             json["change"] = invalid
             XCTAssertNil(RosterSession(json: json)?.change)
+        }
+    }
+
+    func testSessionLinkMustWearAnOpenableScheme() {
+        let base: [String: Any] = [
+            "providerId": "conductor",
+            "sessionId": "sess-link",
+            "title": "Deep-linked chat",
+            "status": "working",
+        ]
+
+        for valid in [
+            "conductor://workspace?id=ws-1&session=sess-link",
+            "https://app.conductor.build/sessions/sess-link",
+        ] {
+            var json = base
+            json["link"] = valid
+            XCTAssertEqual(RosterSession(json: json)?.link, URL(string: valid))
+        }
+
+        for invalid in ["/relative", "javascript:alert(1)", "file:///etc/passwd"] {
+            var json = base
+            json["link"] = invalid
+            XCTAssertNil(RosterSession(json: json)?.link)
         }
     }
 }

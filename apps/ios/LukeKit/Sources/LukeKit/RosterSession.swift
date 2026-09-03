@@ -51,6 +51,9 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
     public let branch: String?
     /// HTTPS address of the work this session published, when it reported one.
     public let change: URL?
+    /// Provider-owned address that opens this session where it lives, when
+    /// the provider reported one — a deep link into the provider's own app.
+    public let link: URL?
     public let recap: String?
     public let error: String?
     /// Unix milliseconds of the last observed activity, when the endpoint reported one.
@@ -87,6 +90,7 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
         workspace: String? = nil,
         branch: String? = nil,
         change: URL? = nil,
+        link: URL? = nil,
         recap: String? = nil,
         error: String? = nil,
         observedAt: Date? = nil,
@@ -104,6 +108,7 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
         self.workspace = workspace
         self.branch = branch
         self.change = change
+        self.link = link
         self.recap = recap
         self.error = error
         self.observedAt = observedAt
@@ -129,6 +134,7 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
         self.workspace = json["workspace"] as? String
         self.branch = json["branch"] as? String
         self.change = Self.httpsURL(json["change"])
+        self.link = Self.openableURL(json["link"])
         self.recap = json["recap"] as? String
         self.error = json["error"] as? String
         if let ms = json["observedAt"] as? Double {
@@ -152,6 +158,25 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
             let url = URL(string: value),
             url.scheme == "https",
             url.host?.isEmpty == false
+        else { return nil }
+        return url
+    }
+
+    /// The schemes a session address may be handed to the operating system
+    /// with. Mirrors `SESSION_LINK_SCHEME` in `@sidecar/session`: the link is
+    /// the one observed field this app acts on rather than draws, so the set
+    /// is fixed by the build and applied here, where the wire is parsed — an
+    /// address outside it never becomes a button at all.
+    private static let openableLinkSchemes: Set<String> = [
+        "https", "codex", "conductor", "superset",
+    ]
+
+    private static func openableURL(_ value: Any?) -> URL? {
+        guard
+            let value = value as? String,
+            let url = URL(string: value),
+            let scheme = url.scheme?.lowercased(),
+            Self.openableLinkSchemes.contains(scheme)
         else { return nil }
         return url
     }
