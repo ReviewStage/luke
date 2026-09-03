@@ -236,6 +236,46 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertTrue(sent.contains(testContext.itemId))
     }
 
+    func testPhoneComposedContextItemsFollowTheRosterItemOnChannelOpen() async throws {
+        let ws = MockWebSocketTask()
+        var opts = makeOptions(ws: ws)
+        opts.contextItems = {
+            [VoiceContextItem(itemId: "luke_ctx_workspace-projects_0", text: "Projects here.")]
+        }
+        let session = RealtimeSession(options: opts)
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let created = ws.outgoing.filter { $0.contains("conversation.item.create") }
+        XCTAssertEqual(created.count, 2)
+        XCTAssertTrue(created[0].contains(testContext.itemId))
+        XCTAssertTrue(created[1].contains("luke_ctx_workspace-projects_0"))
+        XCTAssertFalse(
+            ws.outgoing.contains { $0.contains(#""type":"response.create""#) },
+            "Context is never a prompt"
+        )
+    }
+
+    func testTheMintedToolsAreReadOffTheConfirmedSession() async throws {
+        let ws = MockWebSocketTask()
+        var minted: [[String]] = []
+        var opts = makeOptions(ws: ws)
+        opts.onSessionTools = { minted.append($0) }
+        let session = RealtimeSession(options: opts)
+
+        Task {
+            ws.deliver(
+                #"{"type":"session.created","session":{"tools":[{"type":"function","name":"open_session"},{"type":"function","name":"show_panel"}]}}"#
+            )
+        }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(minted, [["open_session", "show_panel"]])
+    }
+
     func testBeginAndEndTurnSendsCommit() async throws {
         let ws = MockWebSocketTask()
         let opts = makeOptions(ws: ws)
@@ -574,6 +614,53 @@ final class RealtimeSessionStateTests: XCTestCase {
             1,
             "Only the new turn's original response request may exist"
         )
+    }
+
+    func testPrimaryAudioDrainingDuringAnActDoesNotReturnToReadyBeforeTheFollowUp() async throws {
+        let ws = MockWebSocketTask()
+        let player = ControlledDrainPlayer()
+        let dispatchStarted = AsyncGate()
+        let allowDispatchToFinish = AsyncGate()
+        var statuses: [RealtimeStatus] = []
+        let session = RealtimeSession(options: makeOptions(
+            ws: ws,
+            player: player,
+            onStatus: { statuses.append($0) },
+            dispatchToolCall: { _, _, _ in
+                await dispatchStarted.open()
+                await allowDispatchToFinish.wait()
+                return #"{"result":"accepted"}"#
+            }
+        ))
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        session.beginTurn()
+        session.endTurn()
+        // Only the turn's own transitions matter; the channel-open ready is not one.
+        statuses.removeAll()
+        ws.deliver(#"{"type":"response.created","response":{"id":"primary"}}"#)
+        ws.deliver(#"{"type":"response.output_audio.delta","response_id":"primary","delta":"AQABAA=="}"#)
+        ws.deliver(#"{"type":"response.output_audio.done","response_id":"primary"}"#)
+        ws.deliver(
+            #"{"type":"response.done","response":{"id":"primary","output":[{"type":"function_call","call_id":"open_call","name":"open_session","arguments":"{}"}]}}"#
+        )
+        await dispatchStarted.wait()
+
+        // The spoken words finish while the act is still being carried.
+        player.completeDrain()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertFalse(statuses.contains(.ready), "The follow-up has not spoken yet")
+        XCTAssertEqual(session.status, .speaking)
+
+        await allowDispatchToFinish.open()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertFalse(statuses.contains(.ready))
+        ws.deliver(#"{"type":"response.done","response":{"id":"follow_up","output":[]}}"#)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(session.status, .ready)
     }
 
     func testInterruptionDuringFollowUpRequestKeepsNewTurnArmed() async throws {

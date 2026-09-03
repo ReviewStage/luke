@@ -40,6 +40,7 @@
 		AABBCC0000000000000000D6 /* VoiceAudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D2 /* VoiceAudioPlayer.swift */; };
 		AABBCC0000000000000000D7 /* VoiceActDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D3 /* VoiceActDispatcher.swift */; };
 		AABBCC0000000000000000D9 /* VoiceSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D8 /* VoiceSettingsSheet.swift */; };
+		AABBCC0000000000000000E1 /* SessionsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000E0 /* SessionsStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -75,6 +76,7 @@
 		AABBCC0000000000000000D2 /* VoiceAudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceAudioPlayer.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000D3 /* VoiceActDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceActDispatcher.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000D8 /* VoiceSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSettingsSheet.swift; sourceTree = "<group>"; };
+		AABBCC0000000000000000E0 /* SessionsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -139,6 +141,7 @@
 				AABBCC000000000000000017 /* SVGPath.swift */,
 				AABBCC000000000000000018 /* VaultView.swift */,
 				AABBCC00000000000000001B /* SessionsView.swift */,
+				AABBCC0000000000000000E0 /* SessionsStore.swift */,
 				AABBCC00000000000000001D /* SessionDetailView.swift */,
 				AABBCC00000000000000001E /* WorkspaceCreatorSheet.swift */,
 				AABBCC00000000000000001F /* SessionReplay.swift */,
@@ -334,6 +337,7 @@
 				AABBCC000000000000000086 /* SVGPath.swift in Sources */,
 				AABBCC000000000000000087 /* VaultView.swift in Sources */,
 				AABBCC00000000000000008A /* SessionsView.swift in Sources */,
+				AABBCC0000000000000000E1 /* SessionsStore.swift in Sources */,
 				AABBCC00000000000000008C /* SessionDetailView.swift in Sources */,
 				AABBCC00000000000000008D /* WorkspaceCreatorSheet.swift in Sources */,
 				AABBCC00000000000000008E /* SessionReplay.swift in Sources */,

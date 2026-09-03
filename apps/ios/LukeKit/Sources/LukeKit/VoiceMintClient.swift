@@ -13,9 +13,14 @@ public struct VoiceConnection: Sendable {
 
 /// A context item from the mint — an opaque, pre-formatted block of text the
 /// session sends to the model at channel open so it knows the running sessions.
-public struct VoiceContextItem: Sendable {
+public struct VoiceContextItem: Sendable, Equatable {
     public let itemId: String
     public let text: String
+
+    public init(itemId: String, text: String) {
+        self.itemId = itemId
+        self.text = text
+    }
 }
 
 public enum VoiceMintClientError: Error, Equatable {

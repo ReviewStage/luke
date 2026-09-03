@@ -11,8 +11,11 @@ import {
  * sessions, no transcript reads, no desktop-app links. The output format
  * matches `sessionContextText` from `@sidecar/realtime` so the model's
  * instructions and this context share one vocabulary, with fields the server
- * does not have (open link, running tool, pull request, workspace display
- * name) simply omitted.
+ * does not have (running tool, pull request, workspace display name) simply
+ * omitted. Every row opens, because the phone draws a screen of its own for
+ * each session it lists: an open there lands in the app, never at a
+ * provider's address, so the recency labels the instructions read for "open
+ * the latest" name the same row as the plain recency label.
  */
 
 const MAXIMUM_REMOTE_VOICE_CONTEXT_SESSIONS = 25;
@@ -64,11 +67,12 @@ function remoteCapabilityText(
   const capabilities = [
     `provider_id=${session.providerId} provider_session_id=${session.sessionId}`,
     `messages=${Boolean(session.canReceiveMessage)}`,
-    // Cloud sessions have no remote-accessible open link or local transcript.
-    "open=false",
+    // The phone opens a session on its own screen; no cloud session has a
+    // transcript on the device to read.
+    "open=true",
     "transcript=false",
     ...(mostRecent.get(session.providerId) === session.sessionId
-      ? ["most_recent_for_provider=true"]
+      ? ["most_recent_for_provider=true", "most_recent_openable_for_provider=true"]
       : []),
     ...(controls.length > 0
       ? [

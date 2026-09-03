@@ -41,8 +41,9 @@ all.
 silently save a concise preference, personal fact, goal, or recurring constraint
 that looks useful later. He skips temporary details and uncertain guesses, never
 saves credentials, and saves sensitive facts only when you explicitly ask. At
-most 32 are stored on your Mac beside your settings and they do not expire. You
-can ask Luke what he remembers, correct something, or tell him to forget it.
+most 32 are stored on your Mac beside your settings and they do not expire. The
+iOS app keeps no such memory and does not read the Mac's. You can ask Luke what
+he remembers, correct something, or tell him to forget it.
 They are sent to OpenAI with the rest of a conversation's context so Luke can
 personalize replies; they are not sent to a coding-agent provider, a tracker, or
 our own service, and they are never used to decide anything on your behalf.
@@ -133,11 +134,12 @@ and email you signed it with, and any screenshots you attached.
   your own key if you entered one, otherwise through our service on our key —
   asks OpenAI not to store the request, and our service stores and logs none
   of it either. The phrase that comes back is spoken with that announcement
-  and kept nowhere. On the Mac app,
-  your conversation and Luke's durable memory are kept on your Mac and sent
-  with a call so the conversation carries across calls and across launches; on
-  iOS, the conversation is held in memory and discarded when the session
-  closes.
+  and kept nowhere. On the Mac app, your conversation and Luke's durable
+  memory are kept on your Mac and sent with a call so the conversation carries
+  across calls and across launches; on iOS, a call also carries the list of
+  projects your synced keys can create a workspace in, while the conversation
+  itself is held in memory and discarded when the session closes, and nothing
+  is remembered between calls.
   The one voice call that happens before you sign in is the spoken
   introduction on first launch of the Mac app: it sends its own fixed script,
   the titles of the coding agent sessions found on your Mac, and anything you

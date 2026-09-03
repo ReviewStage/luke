@@ -107,7 +107,8 @@ export function realtimeClientSecretRequest(options: RealtimeSessionOptions = {}
 /**
  * Builds the request body for a mobile Realtime mint. The session config
  * matches the desktop's — same instructions, audio format, and turn detection —
- * but the tool list is narrowed to the acts the mobile act endpoints serve.
+ * but the tool list is narrowed to the acts the phone carries, each in the
+ * shape the phone's own surface gives it.
  */
 export function remoteRealtimeClientSecretRequest(options: RealtimeSessionOptions = {}) {
   return { session: { ...realtimeSessionConfig(options), tools: remoteRealtimeToolDefinitions() } };
