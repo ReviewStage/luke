@@ -27,7 +27,6 @@ struct WatchRosterView: View {
                             } label: {
                                 Label(archive.label, systemImage: "archivebox")
                             }
-                            .tint(.indigo)
                         }
                     }
                 }
@@ -132,7 +131,6 @@ private struct WatchSessionRow: View {
                 }
             }
         }
-        .padding(.vertical, 2)
     }
 }
 
@@ -951,7 +949,7 @@ private struct WatchConversationBubble: View {
     var body: some View {
         MarkdownMessageView(message.text)
             .foregroundStyle(isUser ? Color.white : Color.primary)
-            .multilineTextAlignment(isUser ? .trailing : .leading)
+            .multilineTextAlignment(.leading)
             .padding(.horizontal, 9)
             .padding(.vertical, 7)
             .background {
@@ -983,14 +981,14 @@ private struct WatchOutgoingBubble: View {
         VStack(alignment: .trailing, spacing: 2) {
             MarkdownMessageView(message.text)
                 .foregroundStyle(.white)
-                .multilineTextAlignment(.trailing)
+                .multilineTextAlignment(.leading)
                 .padding(.horizontal, 9)
                 .padding(.vertical, 7)
                 .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 12))
                 .opacity(message.delivery == .sending ? 0.55 : 1)
             if case .failed(let reason) = message.delivery {
                 Text("Not Delivered — \(reason)")
-                    .font(.system(size: 8))
+                    .font(.caption2)
                     .foregroundStyle(.red)
                     .multilineTextAlignment(.trailing)
             }
