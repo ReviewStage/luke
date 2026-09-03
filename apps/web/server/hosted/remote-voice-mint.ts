@@ -174,7 +174,10 @@ async function observeCloudSessions(
       if (obs.detail?.branch) session.branch = obs.detail.branch;
       if (obs.recap) session.recap = obs.recap;
       if (obs.detail?.error) session.error = obs.detail.error;
-      if (obs.observedAt !== undefined) session.observedAt = obs.observedAt;
+      if (obs.lastActivityAt !== undefined) {
+        session.lastActivityAt = obs.lastActivityAt;
+        session.observedAt = obs.lastActivityAt;
+      }
       if (obs.canReceiveMessage) session.canReceiveMessage = true;
       const controls = obs.controls
         ?.map((c): ObservedSessionControl => {

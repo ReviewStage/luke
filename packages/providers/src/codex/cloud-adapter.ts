@@ -115,7 +115,7 @@ interface CodexCloudTask {
   id: string;
   repositoryLabel: string;
   status: SessionStatus;
-  observedAt: number;
+  lastActivityAt: number;
   link?: string;
   environmentId?: string;
   environmentLabel?: string;
@@ -140,8 +140,8 @@ function diffFromRecord(value: UnparsedWireValue): SessionDiffSummary | undefine
 
 function taskFromRecord(record: WireRecord): CodexCloudTask | undefined {
   const id = textFromRecord(record, CODEX_TASK_FIELD.ID);
-  const observedAt = timestampFromRecord(record, CODEX_TASK_FIELD.UPDATED_AT);
-  if (!id || observedAt === undefined) return undefined;
+  const lastActivityAt = timestampFromRecord(record, CODEX_TASK_FIELD.UPDATED_AT);
+  if (!id || lastActivityAt === undefined) return undefined;
 
   const status = knownValue(CODEX_TASK_STATUS, textFromRecord(record, CODEX_TASK_FIELD.STATUS));
   const link = textFromRecord(record, CODEX_TASK_FIELD.URL);
@@ -151,7 +151,7 @@ function taskFromRecord(record: WireRecord): CodexCloudTask | undefined {
 
   return {
     id,
-    observedAt,
+    lastActivityAt,
     // A task's `title` is generated from the prompt the user typed, so it is
     // transcript content that no observation may carry. The environment label
     // — the repository the environment was made for — is the label available.
@@ -277,7 +277,7 @@ export class CodexCloudSessionAdapter extends CliSessionAdapter {
     const tasks = recordsFromPage(body, CODEX_TASK_FIELD.TASKS)
       .map(taskFromRecord)
       .filter(isDefined)
-      .sort((first, second) => second.observedAt - first.observedAt);
+      .sort((first, second) => second.lastActivityAt - first.lastActivityAt);
 
     if (
       now - this.#lastEnvironmentSweepAt >=
@@ -382,7 +382,7 @@ function observationFor(task: CodexCloudTask): ProviderSessionObservation {
     // only what tells one Codex cloud task from another.
     title: task.repositoryLabel,
     status: task.status,
-    observedAt: task.observedAt,
+    lastActivityAt: task.lastActivityAt,
     detail: {
       repository: task.repositoryLabel,
       ...(task.link ? { link: task.link } : undefined),

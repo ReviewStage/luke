@@ -42,19 +42,6 @@ export const SESSION_NOTICE_REPEAT_WINDOW_MS = 5 * 60_000;
 export const MAXIMUM_NOTICES_PER_PASS = 6;
 
 /**
- * How recently a status must have been entered to be announced as news. The
- * tracker sees the edge between two readings, not the event itself, and the
- * two usually coincide only because passes run every few seconds: a Mac
- * waking from hours of sleep, or a provider back from an outage, delivers
- * edges whose events happened long ago. `observedAt` is the provider's own
- * timestamp for when the status was entered, so an edge older than this is
- * history arriving late — the panel's to show, not a banner's to announce as
- * though it just happened. Generous next to the refresh cadence, so a fresh
- * finish is never lost to one slow pass.
- */
-export const SESSION_NOTICE_FRESH_AGE_MS = 5 * 60_000;
-
-/**
  * One session arriving at a status the user may want to know about. Fields,
  * not sentences: the surface that shows a notice words it, the way it words a
  * row. Everything here is already bounded by `normalizeSession`.
@@ -84,7 +71,7 @@ export interface SessionNotice {
   branch?: string;
   /** Whether the provider will take a reply for this session right now. */
   canReceiveMessage: boolean;
-  observedAt: number;
+  lastActivityAt: number;
 }
 
 /**
@@ -126,7 +113,7 @@ function sessionNotice(session: Session, previousStatus: SessionStatus): Session
     status,
     previousStatus,
     canReceiveMessage: session.canReceiveMessage,
-    observedAt: session.observedAt,
+    lastActivityAt: session.lastActivityAt,
   };
   if (session.workspace?.name) notice.workspace = session.workspace.name;
   if (status === SESSION_NOTICE_STATUS.WAITING) {
@@ -144,12 +131,12 @@ function sessionNotice(session: Session, previousStatus: SessionStatus): Session
  * Derives notices from the edges between one observation pass and the next: a
  * session already waiting when Luke first sees it is the panel's to show, not
  * a banner's to announce, so only a change of status while watched is news.
- * A watched edge speaks only while its event is fresh — the status's own
- * timestamp within `SESSION_NOTICE_FRESH_AGE_MS` of now — so a wake from
- * sleep or a provider back from an outage never reads out the afternoon's
- * history as though it just happened. A waiting edge says whether the turn
- * merely finished or is holding for the developer, so the voice never turns
- * an ordinary finish into a false ask.
+ * The edge is the whole test: no provider records when a status was entered,
+ * only when it last wrote about the session, so the timestamp's age says
+ * nothing about whether the change is news, and an edge first seen after a
+ * long sleep is announced like any other. A waiting edge says whether the
+ * turn merely finished or is holding for the developer, so the voice never
+ * turns an ordinary finish into a false ask.
  * Deterministic by construction — nothing a model wrote can reach it — and
  * purely derived from the roster, so it can never act on a session, only
  * describe one.
@@ -196,8 +183,6 @@ export class SessionNoticeTracker {
       if (session.completionCause === SESSION_COMPLETION_CAUSE.SESSION_CLOSED) continue;
       const status = noticeStatus(session.status);
       if (!status) continue;
-      // The edge is still tracked above — it just is not news any more.
-      if (now - session.observedAt > SESSION_NOTICE_FRESH_AGE_MS) continue;
       const lastNoticed = state.noticedAt.get(status);
       if (lastNoticed !== undefined && now - lastNoticed < SESSION_NOTICE_REPEAT_WINDOW_MS) {
         continue;

@@ -23,7 +23,7 @@ import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import {
   type ArrangedSessions,
   actsOnWorkspace,
-  observedAgoLabel,
+  lastActivityLabel,
   type SessionAction,
   type SessionArrangement,
   type SessionFilter,
@@ -597,7 +597,7 @@ export function SessionRow({
       placeTitle={place ?? session.diff}
       branch={Boolean(session.branch)}
       diff={session.diff}
-      when={observedAgoLabel(session.observedAt, now)}
+      when={lastActivityLabel(session.lastActivityAt, now)}
       applications={applicationMarks}
     />
   );

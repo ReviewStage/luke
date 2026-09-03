@@ -181,7 +181,7 @@ test("observes cloud tasks as cloud sessions labelled by their environment's rep
   assert.equal(newest.title, "luke");
   assert.equal(newest.status, SESSION_STATUS.WORKING);
   assert.equal(newest.location, SESSION_LOCATION.CLOUD);
-  assert.equal(newest.observedAt, TEST_TIME - 5_000);
+  assert.equal(newest.lastActivityAt, TEST_TIME - 5_000);
   assert.equal(newest.detail?.repository, "luke");
   assert.equal(newest.detail?.link, "https://chatgpt.com/codex/tasks/task-new");
   assert.equal(newest.canReceiveMessage, undefined);

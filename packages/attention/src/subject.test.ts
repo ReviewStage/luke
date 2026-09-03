@@ -39,7 +39,7 @@ function session(
     providerSessionId,
     title: TITLE,
     status: SESSION_STATUS.WORKING,
-    observedAt: NOW,
+    lastActivityAt: NOW,
     location,
     ...overrides,
   };

@@ -12,7 +12,7 @@ const UPDATE: AttentionUpdate = {
   providerName: "Claude Code",
   title: "checkout-service",
   status: SESSION_STATUS.WAITING,
-  observedAt: 1_800_000_000_000,
+  lastActivityAt: 1_800_000_000_000,
 };
 
 const DECISION: AttentionDecision = {

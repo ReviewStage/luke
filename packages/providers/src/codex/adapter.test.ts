@@ -32,7 +32,7 @@ const TEST_CODEX_ENVIRONMENT = {
 interface TestThread {
   id: string;
   cwd: string;
-  observedAt: number;
+  lastActivityAt: number;
   source?: string;
   recencyAt?: number;
   updatedAt?: number;
@@ -86,8 +86,8 @@ function writeThread(database: DatabaseSync, thread: TestThread): void {
     .run(
       thread.id,
       thread.rolloutPath ?? "",
-      Math.floor(thread.observedAt / 1000),
-      Math.floor((thread.updatedAt ?? thread.observedAt) / 1000),
+      Math.floor(thread.lastActivityAt / 1000),
+      Math.floor((thread.updatedAt ?? thread.lastActivityAt) / 1000),
       thread.source ?? TEST_CODEX_SOURCE.CLI,
       TEST_CODEX_MODEL_PROVIDER.OPENAI_SSE,
       thread.cwd,
@@ -96,10 +96,10 @@ function writeThread(database: DatabaseSync, thread: TestThread): void {
       "never",
       thread.archived ?? 0,
       thread.firstUserMessage ?? "",
-      thread.observedAt,
-      thread.updatedAt ?? thread.observedAt,
+      thread.lastActivityAt,
+      thread.updatedAt ?? thread.lastActivityAt,
       thread.preview ?? "",
-      thread.recencyAt ?? thread.observedAt,
+      thread.recencyAt ?? thread.lastActivityAt,
       thread.gitBranch ?? null,
       thread.model ?? null,
       thread.reasoningEffort ?? null,
@@ -170,7 +170,7 @@ test("observes a Codex thread under the name Codex gave it", async (t) => {
     {
       id: "codex-active",
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
       title: "Release stage-cli to npm",
       gitBranch: "codex/bump-version",
       model: "gpt-5.6-luna",
@@ -212,7 +212,7 @@ test("falls back to the workspace for Codex delegation marker titles", async (t)
     {
       id: "codex-delegated",
       cwd: "/Users/test/delegated-repository",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
       title:
         "<codex_delegation>\n<source_thread_id>01a01c04-31e2-7be1-a478-0f321abcdef0</source_thread_id>\n</codex_delegation>",
     },
@@ -236,7 +236,7 @@ test("observes the exact parent of a Codex thread-spawn sub-agent", async (t) =>
     {
       id: "codex-sub-agent",
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
       title: "Inspect the Conductor relationship",
       source: JSON.stringify({
         subagent: {
@@ -268,7 +268,7 @@ test("resolves a Codex delegation marker through the source chat title index", a
     {
       id: "codex-delegated",
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
       title:
         "<codex_delegation>\n<source_thread_id>01a01c04-31e2-7be1-a478-0f321abcdef0</source_thread_id>\n<input>delegated work</input>\n</codex_delegation>",
     },
@@ -294,7 +294,7 @@ test("prefers a delegated session's own indexed title over its source chat", asy
     {
       id: "codex-delegated",
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
       title:
         "<codex_delegation> <source_thread_id>01a01c04-31e2-7be1-a478-0f321abcdef0</source_thread_id> <input>delegated work</input> </codex_delegation>",
     },
@@ -316,7 +316,7 @@ test("keeps a legitimate title that resembles a delegation marker", async (t) =>
     {
       id: "codex-named",
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
       title: "<codex_delegation> <source_thread_id>not-a-uuid",
     },
   ]);
@@ -342,7 +342,7 @@ test("keeps realtime delegation sessions suppressed after Codex names the chat",
     {
       id: "codex-realtime-delegation",
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
       title: "What sessions do we have open?",
       firstUserMessage: "<realtime_delegation> <input>What sessions do we have open</input>",
     },
@@ -366,13 +366,13 @@ test("labels a delegated chat by its source conversation's own title", async (t)
     {
       id: TEST_SOURCE_THREAD_ID,
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 2_000,
+      lastActivityAt: TEST_TIME - 2_000,
       title: "Fix Luke voice announcements",
     },
     {
       id: "codex-delegated",
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
       title: TEST_DELEGATION_TITLE,
     },
   ]);
@@ -397,7 +397,7 @@ test("a name the index has since cleared no longer resolves a delegation", async
     {
       id: "codex-delegated",
       cwd: "/Users/test/delegated-repository",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
       title: TEST_DELEGATION_TITLE,
     },
   ]);
@@ -423,7 +423,7 @@ test("a marker that leaked into the name index is still not a name", async (t) =
     {
       id: "codex-delegated",
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
       title: TEST_DELEGATION_TITLE,
     },
   ]);
@@ -443,7 +443,7 @@ test("a realtime delegation title with no source resolves to the workspace", asy
     {
       id: "codex-voice-born",
       cwd: "/Users/test/delegated-repository",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
       title: "<realtime_delegation>\n<input>run the tests</input>\n</realtime_delegation>",
     },
   ]);
@@ -463,7 +463,7 @@ test("observes a live realtime voice conversation over a Codex thread", async (t
   const codexHome = await temporaryCodexHome(t);
   const rolloutPath = path.join(codexHome, "rollout-realtime-open.jsonl");
   await writeCodexState(codexHome, [
-    { id: "codex-voice", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+    { id: "codex-voice", cwd: "/Users/test/luke", lastActivityAt: TEST_TIME - 1_000, rolloutPath },
   ]);
   await writeRollout(rolloutPath, [
     { type: "world_state", payload: { full: true, state: { realtime: { active: true } } } },
@@ -491,7 +491,12 @@ test("observes the realtime voice conversation closing on a later turn", async (
   const codexHome = await temporaryCodexHome(t);
   const rolloutPath = path.join(codexHome, "rollout-realtime-closed.jsonl");
   await writeCodexState(codexHome, [
-    { id: "codex-voice-done", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+    {
+      id: "codex-voice-done",
+      cwd: "/Users/test/luke",
+      lastActivityAt: TEST_TIME - 1_000,
+      rolloutPath,
+    },
   ]);
   await writeRollout(rolloutPath, [
     { type: "world_state", payload: { full: true, state: { realtime: { active: true } } } },
@@ -517,7 +522,12 @@ test("reads a delegation as the conversation being live when its snapshot left t
   const codexHome = await temporaryCodexHome(t);
   const rolloutPath = path.join(codexHome, "rollout-realtime-delegation.jsonl");
   await writeCodexState(codexHome, [
-    { id: "codex-delegated", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+    {
+      id: "codex-delegated",
+      cwd: "/Users/test/luke",
+      lastActivityAt: TEST_TIME - 1_000,
+      rolloutPath,
+    },
   ]);
   await writeRollout(rolloutPath, [
     { type: "event_msg", payload: { type: "task_started" } },
@@ -551,7 +561,7 @@ test("a typed user message never reads as a live voice conversation", async (t) 
   const codexHome = await temporaryCodexHome(t);
   const rolloutPath = path.join(codexHome, "rollout-typed-turn.jsonl");
   await writeCodexState(codexHome, [
-    { id: "codex-typed", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+    { id: "codex-typed", cwd: "/Users/test/luke", lastActivityAt: TEST_TIME - 1_000, rolloutPath },
   ]);
   await writeRollout(rolloutPath, [
     { type: "event_msg", payload: { type: "task_started" } },
@@ -583,14 +593,14 @@ test("a delegated chat holds announcements while its source conversation's voice
     {
       id: TEST_SOURCE_THREAD_ID,
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 2_000,
+      lastActivityAt: TEST_TIME - 2_000,
       title: "Fix Luke voice announcements",
       rolloutPath: sourceRollout,
     },
     {
       id: "codex-delegated",
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
       title: TEST_DELEGATION_TITLE,
       rolloutPath: delegatedRollout,
     },
@@ -627,7 +637,7 @@ test("the voice hold outlives Codex naming the delegated chat", async (t) => {
     {
       id: TEST_SOURCE_THREAD_ID,
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 2_000,
+      lastActivityAt: TEST_TIME - 2_000,
       title: "Fix Luke voice announcements",
       rolloutPath: sourceRollout,
     },
@@ -636,7 +646,7 @@ test("the voice hold outlives Codex naming the delegated chat", async (t) => {
       // the first user message is where the link has to survive.
       id: "codex-delegated-named",
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
       title: "What sessions are open?",
       firstUserMessage: TEST_DELEGATION_TITLE,
     },
@@ -667,7 +677,7 @@ test("addresses a Codex thread by the id Codex files it under", async (t) => {
       // rather than pasted in.
       id: "codex thread/one?two",
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
     },
   ]);
 
@@ -685,7 +695,7 @@ test("reports a finished Codex turn as waiting for its developer", async (t) => 
   const codexHome = await temporaryCodexHome(t);
   const rolloutPath = path.join(codexHome, "rollout-complete.jsonl");
   await writeCodexState(codexHome, [
-    { id: "codex-done", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+    { id: "codex-done", cwd: "/Users/test/luke", lastActivityAt: TEST_TIME - 1_000, rolloutPath },
   ]);
   await writeRollout(rolloutPath, [
     { type: "event_msg", payload: { type: "task_started" } },
@@ -719,7 +729,12 @@ test("reports a running Codex turn as working with the call it is making", async
   const codexHome = await temporaryCodexHome(t);
   const rolloutPath = path.join(codexHome, "rollout-running.jsonl");
   await writeCodexState(codexHome, [
-    { id: "codex-running", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+    {
+      id: "codex-running",
+      cwd: "/Users/test/luke",
+      lastActivityAt: TEST_TIME - 1_000,
+      rolloutPath,
+    },
   ]);
   await writeRollout(rolloutPath, [
     { type: "event_msg", payload: { type: "task_complete", last_agent_message: "Earlier turn." } },
@@ -750,7 +765,12 @@ test("names a call whose argument Codex passes as a list of tokens", async (t) =
   const codexHome = await temporaryCodexHome(t);
   const rolloutPath = path.join(codexHome, "rollout-list-argument.jsonl");
   await writeCodexState(codexHome, [
-    { id: "codex-list-arg", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+    {
+      id: "codex-list-arg",
+      cwd: "/Users/test/luke",
+      lastActivityAt: TEST_TIME - 1_000,
+      rolloutPath,
+    },
   ]);
   await writeRollout(rolloutPath, [
     { type: "event_msg", payload: { type: "task_started" } },
@@ -780,7 +800,12 @@ test("names a call by its tool alone when no argument reads as a phrase", async 
   const codexHome = await temporaryCodexHome(t);
   const rolloutPath = path.join(codexHome, "rollout-structured-argument.jsonl");
   await writeCodexState(codexHome, [
-    { id: "codex-structured", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+    {
+      id: "codex-structured",
+      cwd: "/Users/test/luke",
+      lastActivityAt: TEST_TIME - 1_000,
+      rolloutPath,
+    },
   ]);
   await writeRollout(rolloutPath, [
     { type: "event_msg", payload: { type: "task_started" } },
@@ -808,7 +833,12 @@ test("drops the previous turn's call when a new Codex turn starts", async (t) =>
   const codexHome = await temporaryCodexHome(t);
   const rolloutPath = path.join(codexHome, "rollout-new-turn.jsonl");
   await writeCodexState(codexHome, [
-    { id: "codex-new-turn", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+    {
+      id: "codex-new-turn",
+      cwd: "/Users/test/luke",
+      lastActivityAt: TEST_TIME - 1_000,
+      rolloutPath,
+    },
   ]);
   await writeRollout(rolloutPath, [
     { type: "event_msg", payload: { type: "task_started" } },
@@ -839,7 +869,12 @@ test("reports a Codex turn that stopped on an error", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   const rolloutPath = path.join(codexHome, "rollout-error-event.jsonl");
   await writeCodexState(codexHome, [
-    { id: "codex-errored", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+    {
+      id: "codex-errored",
+      cwd: "/Users/test/luke",
+      lastActivityAt: TEST_TIME - 1_000,
+      rolloutPath,
+    },
   ]);
   await writeRollout(rolloutPath, [
     { type: "event_msg", payload: { type: "task_started" } },
@@ -863,7 +898,7 @@ test("reports a failed turn's error instead of its parting words", async (t) => 
   const codexHome = await temporaryCodexHome(t);
   const rolloutPath = path.join(codexHome, "rollout-failed-complete.jsonl");
   await writeCodexState(codexHome, [
-    { id: "codex-failed", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+    { id: "codex-failed", cwd: "/Users/test/luke", lastActivityAt: TEST_TIME - 1_000, rolloutPath },
   ]);
   await writeRollout(rolloutPath, [
     { type: "event_msg", payload: { type: "task_started" } },
@@ -899,7 +934,7 @@ test("keeps a failed Codex turn at error past the freshness decay", async (t) =>
     {
       id: "codex-stale-error",
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 20 * 60 * 1000,
+      lastActivityAt: TEST_TIME - 20 * 60 * 1000,
       rolloutPath,
     },
   ]);
@@ -922,7 +957,12 @@ test("drops the previous turn's error when a new Codex turn starts", async (t) =
   const codexHome = await temporaryCodexHome(t);
   const rolloutPath = path.join(codexHome, "rollout-error-retried.jsonl");
   await writeCodexState(codexHome, [
-    { id: "codex-retried", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+    {
+      id: "codex-retried",
+      cwd: "/Users/test/luke",
+      lastActivityAt: TEST_TIME - 1_000,
+      rolloutPath,
+    },
   ]);
   await writeRollout(rolloutPath, [
     { type: "event_msg", payload: { type: "task_started" } },
@@ -944,7 +984,12 @@ test("bounds a Codex error to one row-sized line", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   const rolloutPath = path.join(codexHome, "rollout-long-error.jsonl");
   await writeCodexState(codexHome, [
-    { id: "codex-long-error", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+    {
+      id: "codex-long-error",
+      cwd: "/Users/test/luke",
+      lastActivityAt: TEST_TIME - 1_000,
+      rolloutPath,
+    },
   ]);
   await writeRollout(rolloutPath, [
     { type: "event_msg", payload: { type: "task_started" } },
@@ -967,7 +1012,7 @@ test("holds a long Codex turn at working however stale its row is", async (t) =>
     {
       id: "codex-long-turn",
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 30 * 60 * 1000,
+      lastActivityAt: TEST_TIME - 30 * 60 * 1000,
       rolloutPath,
     },
   ]);
@@ -990,7 +1035,7 @@ test("observes Codex sessions from an explicit SQLite home", async (t) => {
     {
       id: "codex-sqlite-home",
       cwd: "/Users/test/sqlite-home",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
     },
   ]);
 
@@ -1020,7 +1065,7 @@ test("observes Codex sessions from configured sqlite_home", async (t) => {
     {
       id: "codex-configured-home",
       cwd: "/Users/test/configured-home",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
     },
   ]);
 
@@ -1049,7 +1094,7 @@ test("observes Codex sessions from CODEX_SQLITE_HOME", async (t) => {
     {
       id: "codex-env-home",
       cwd: "/Users/test/env-home",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
     },
   ]);
 
@@ -1079,14 +1124,14 @@ test("prefers configured sqlite_home over CODEX_SQLITE_HOME", async (t) => {
     {
       id: "codex-env-home",
       cwd: "/Users/test/env-home",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
     },
   ]);
   await writeCodexState(path.join(codexHome, "configured-sqlite"), [
     {
       id: "codex-configured-home",
       cwd: "/Users/test/configured-home",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
     },
   ]);
 
@@ -1107,7 +1152,7 @@ test("observes Codex sessions from the default sqlite subdirectory", async (t) =
     {
       id: "codex-default-sqlite",
       cwd: "/Users/test/default-sqlite",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
     },
   ]);
 
@@ -1129,7 +1174,7 @@ test("falls back when a higher-priority Codex database has an unusable schema", 
     {
       id: "codex-legacy-valid",
       cwd: "/Users/test/legacy-valid",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
     },
   ]);
 
@@ -1150,7 +1195,7 @@ test("keeps stale unarchived Codex sessions unknown instead of inventing activit
     {
       id: "codex-stale",
       cwd: "/Users/test/stale",
-      observedAt: TEST_TIME - 20 * 60 * 1000,
+      lastActivityAt: TEST_TIME - 20 * 60 * 1000,
     },
   ]);
 
@@ -1174,12 +1219,12 @@ test("hides archived Codex threads however recently they were touched", async (t
     {
       id: "old-session",
       cwd: "/Users/test/old",
-      observedAt: TEST_TIME - 90_000,
+      lastActivityAt: TEST_TIME - 90_000,
     },
     {
       id: "just-archived-session",
       cwd: "/Users/test/archived",
-      observedAt: TEST_TIME - 3 * 24 * 60 * 60 * 1000,
+      lastActivityAt: TEST_TIME - 3 * 24 * 60 * 60 * 1000,
       recencyAt: TEST_TIME - 3 * 24 * 60 * 60 * 1000,
       updatedAt: TEST_TIME - 1_000,
       archived: 1,
@@ -1187,13 +1232,13 @@ test("hides archived Codex threads however recently they were touched", async (t
     {
       id: "long-archived-session",
       cwd: "/Users/test/long-archived",
-      observedAt: TEST_TIME - 3 * 24 * 60 * 60 * 1000,
+      lastActivityAt: TEST_TIME - 3 * 24 * 60 * 60 * 1000,
       archived: 1,
     },
     {
       id: "new-session",
       cwd: "/Users/test/new",
-      observedAt: TEST_TIME - 10_000,
+      lastActivityAt: TEST_TIME - 10_000,
     },
   ]);
 
@@ -1230,7 +1275,7 @@ test("a thread archived between passes leaves the roster and stays gone", async 
     {
       id: "codex-live",
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 10_000,
+      lastActivityAt: TEST_TIME - 10_000,
     },
   ]);
   const adapter = new CodexSessionAdapter({ codexHome, now: () => TEST_TIME });
@@ -1273,7 +1318,7 @@ test("returns an empty snapshot when node sqlite is unavailable", async (t) => {
     {
       id: "codex-active",
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 1_000,
+      lastActivityAt: TEST_TIME - 1_000,
     },
   ]);
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -1328,7 +1373,7 @@ test("a permission request the database cannot show turns the row to waiting", a
     {
       id: "codex-held",
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 5 * 60 * 1000,
+      lastActivityAt: TEST_TIME - 5 * 60 * 1000,
       rolloutPath,
     },
   ]);
@@ -1346,7 +1391,7 @@ test("a permission request the database cannot show turns the row to waiting", a
   assert.equal(observation?.holdingForDeveloper, true);
   // The event also dates the session: the spool is written only by Luke's own
   // script, so its clock is the moment the session actually moved.
-  assert.equal(observation?.observedAt, TEST_TIME - 60_000);
+  assert.equal(observation?.lastActivityAt, TEST_TIME - 60_000);
 });
 
 test("a session-end event settles a row the rollout would leave waiting", async (t) => {
@@ -1357,7 +1402,7 @@ test("a session-end event settles a row the rollout would leave waiting", async 
     {
       id: "codex-ended",
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 5 * 60 * 1000,
+      lastActivityAt: TEST_TIME - 5 * 60 * 1000,
       rolloutPath,
     },
   ]);
@@ -1386,7 +1431,7 @@ test("a stop event keeps a finished turn waiting past the freshness decay", asyn
     {
       id: "codex-still-waiting",
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 20 * 60 * 1000,
+      lastActivityAt: TEST_TIME - 20 * 60 * 1000,
       rolloutPath,
     },
   ]);
@@ -1414,7 +1459,7 @@ test("a stop event does not talk a failed turn out of its error", async (t) => {
     {
       id: "codex-stopped-error",
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 60_000,
+      lastActivityAt: TEST_TIME - 60_000,
       rolloutPath,
     },
   ]);
@@ -1446,7 +1491,12 @@ test("an event the thread has moved past refines nothing", async (t) => {
   const spool = await temporaryHookSpool(t);
   const rolloutPath = path.join(codexHome, "rollout-moved-on.jsonl");
   await writeCodexState(codexHome, [
-    { id: "codex-moved-on", cwd: "/Users/test/luke", observedAt: TEST_TIME - 60_000, rolloutPath },
+    {
+      id: "codex-moved-on",
+      cwd: "/Users/test/luke",
+      lastActivityAt: TEST_TIME - 60_000,
+      rolloutPath,
+    },
   ]);
   await writeRollout(rolloutPath, [{ type: "event_msg", payload: { type: "task_started" } }]);
   // A stop from a minute before the row's clock: hooks were off, or the write
@@ -1461,7 +1511,7 @@ test("an event the thread has moved past refines nothing", async (t) => {
   const [observation] = await adapter.observe();
 
   assert.equal(observation?.status, SESSION_STATUS.WORKING);
-  assert.equal(observation?.observedAt, TEST_TIME - 60_000);
+  assert.equal(observation?.lastActivityAt, TEST_TIME - 60_000);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
@@ -1470,7 +1520,12 @@ test("a prompt event reads a fresh turn as working before the rollout shows it",
   const spool = await temporaryHookSpool(t);
   const rolloutPath = path.join(codexHome, "rollout-prompted.jsonl");
   await writeCodexState(codexHome, [
-    { id: "codex-prompted", cwd: "/Users/test/luke", observedAt: TEST_TIME - 60_000, rolloutPath },
+    {
+      id: "codex-prompted",
+      cwd: "/Users/test/luke",
+      lastActivityAt: TEST_TIME - 60_000,
+      rolloutPath,
+    },
   ]);
   await writeRollout(rolloutPath, [
     { type: "event_msg", payload: { type: "task_complete", last_agent_message: "Earlier." } },
@@ -1494,7 +1549,12 @@ test("a notification the thread has answered stands down at once", async (t) => 
   // The approval was granted and the call ran: a row touched after the
   // notification, though within the tolerance the other events enjoy.
   await writeCodexState(codexHome, [
-    { id: "codex-approved", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000, rolloutPath },
+    {
+      id: "codex-approved",
+      cwd: "/Users/test/luke",
+      lastActivityAt: TEST_TIME - 1_000,
+      rolloutPath,
+    },
   ]);
   await writeRollout(rolloutPath, [{ type: "event_msg", payload: { type: "task_started" } }]);
   await writeHookEvent(spool, "codex-approved", "notification", TEST_TIME - 3_000);
@@ -1512,7 +1572,7 @@ test("a notification the thread has answered stands down at once", async (t) => 
 test("a spool that cannot be read costs only the refinement", async (t) => {
   const codexHome = await temporaryCodexHome(t);
   await writeCodexState(codexHome, [
-    { id: "codex-unrefined", cwd: "/Users/test/luke", observedAt: TEST_TIME - 1_000 },
+    { id: "codex-unrefined", cwd: "/Users/test/luke", lastActivityAt: TEST_TIME - 1_000 },
   ]);
 
   const adapter = new CodexSessionAdapter({
@@ -1538,7 +1598,7 @@ test("a permission hold that outlives the freshness window is still an ask", asy
     {
       id: "codex-long-hold",
       cwd: "/Users/test/luke",
-      observedAt: TEST_TIME - 30 * 60 * 1000,
+      lastActivityAt: TEST_TIME - 30 * 60 * 1000,
       rolloutPath,
     },
   ]);

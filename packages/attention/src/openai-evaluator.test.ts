@@ -24,7 +24,7 @@ function update(overrides: Partial<AttentionUpdate> = {}): AttentionUpdate {
     status: SESSION_STATUS.WAITING,
     previousStatus: SESSION_STATUS.WORKING,
     recap: "Claude Code waiting; transcript content is not retained.",
-    observedAt: DECIDED_AT,
+    lastActivityAt: DECIDED_AT,
     ...overrides,
   };
 }

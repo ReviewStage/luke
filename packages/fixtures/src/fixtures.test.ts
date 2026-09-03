@@ -27,7 +27,7 @@ test("the spoken sentence names rows of the roster it is captured beside", () =>
       providerId: session.providerId,
       providerSessionId: session.id,
       title: session.title,
-      observedAt: session.observedAt,
+      lastActivityAt: session.lastActivityAt,
       ...(session.workspace
         ? { workspace: { providerWorkspaceId: session.workspace.id, name: session.workspace.name } }
         : undefined),

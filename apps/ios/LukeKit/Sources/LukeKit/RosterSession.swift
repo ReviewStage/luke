@@ -56,8 +56,8 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
     public let link: URL?
     public let recap: String?
     public let error: String?
-    /// Unix milliseconds of the last observed activity, when the endpoint reported one.
-    public let observedAt: Date?
+    /// When the provider last wrote anything about the session, when the endpoint reported it.
+    public let lastActivityAt: Date?
     /// Whether the session's latest observation advertised taking a message.
     public let canReceiveMessage: Bool
     /// The controls the session's latest observation advertised.
@@ -93,7 +93,7 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
         link: URL? = nil,
         recap: String? = nil,
         error: String? = nil,
-        observedAt: Date? = nil,
+        lastActivityAt: Date? = nil,
         canReceiveMessage: Bool = false,
         controls: [RosterSessionControl] = [],
         spawnableAgents: [String] = [],
@@ -111,7 +111,7 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
         self.link = link
         self.recap = recap
         self.error = error
-        self.observedAt = observedAt
+        self.lastActivityAt = lastActivityAt
         self.canReceiveMessage = canReceiveMessage
         self.controls = controls
         self.spawnableAgents = spawnableAgents
@@ -137,10 +137,12 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
         self.link = Self.openableURL(json["link"])
         self.recap = json["recap"] as? String
         self.error = json["error"] as? String
-        if let ms = json["observedAt"] as? Double {
-            self.observedAt = Date(timeIntervalSince1970: ms / 1000)
+        // `observedAt` is the name this field traveled under before the rename;
+        // a service still sending only that name dates the session the same way.
+        if let ms = (json["lastActivityAt"] ?? json["observedAt"]) as? Double {
+            self.lastActivityAt = Date(timeIntervalSince1970: ms / 1000)
         } else {
-            self.observedAt = nil
+            self.lastActivityAt = nil
         }
         self.canReceiveMessage = json["canReceiveMessage"] as? Bool ?? false
         let controlsJSON = json["controls"] as? [[String: Any]] ?? []

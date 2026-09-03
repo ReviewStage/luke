@@ -22,7 +22,7 @@ const UPDATE: AttentionUpdate = {
   previousStatus: SESSION_STATUS.WORKING,
   recap: "Waiting on a permission decision.",
   context: { branch: "main" },
-  observedAt: NOW - 1_000,
+  lastActivityAt: NOW - 1_000,
 };
 
 const SPOKEN_ANSWER = {

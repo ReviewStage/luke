@@ -32,7 +32,7 @@ test("lines land in the named file, stamped, in the order they were recorded", a
       providerName: "Claude Code",
       title: "checkout-service",
       status: SESSION_STATUS.WAITING,
-      observedAt: 1_800_000_000_000,
+      lastActivityAt: 1_800_000_000_000,
     },
     decision: {
       disposition: ATTENTION_DISPOSITION.SILENT,

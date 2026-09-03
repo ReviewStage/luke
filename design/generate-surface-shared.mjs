@@ -556,12 +556,12 @@ ${priority}
 
 /** Most urgent first, and within one urgency the one that moved most recently. */
 export function compareSessionsByUrgency(
-  left: { urgency: SessionUrgency; observedAt: number },
-  right: { urgency: SessionUrgency; observedAt: number },
+  left: { urgency: SessionUrgency; lastActivityAt: number },
+  right: { urgency: SessionUrgency; lastActivityAt: number },
 ): number {
   return (
     URGENCY_PRIORITY.indexOf(left.urgency) - URGENCY_PRIORITY.indexOf(right.urgency) ||
-    right.observedAt - left.observedAt
+    right.lastActivityAt - left.lastActivityAt
   );
 }
 `;

@@ -43,7 +43,7 @@ export type SessionMentionKind = (typeof SESSION_MENTION_KIND)[keyof typeof SESS
  */
 export interface MentionableSession extends SessionIdentity {
   title: string;
-  observedAt: number;
+  lastActivityAt: number;
   workspace?: {
     providerWorkspaceId: string;
     scopeId?: string;
@@ -146,7 +146,7 @@ function mentionCandidates(sessions: readonly MentionableSession[]): Map<string,
       existing.ambiguous = true;
       continue;
     }
-    if (session.observedAt > existing.session.observedAt) existing.session = session;
+    if (session.lastActivityAt > existing.session.lastActivityAt) existing.session = session;
   }
   return candidates;
 }

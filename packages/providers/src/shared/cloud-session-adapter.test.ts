@@ -41,7 +41,7 @@ function observation(
     providerSessionId,
     title: `Stub: ${providerSessionId}`,
     status: SESSION_STATUS.WAITING,
-    observedAt: TEST_TIME,
+    lastActivityAt: TEST_TIME,
     ...overrides,
   };
 }
@@ -98,7 +98,7 @@ class StubCloudAdapter extends CloudSessionAdapter {
       ...candidate,
       status: agedStatus(
         candidate.status,
-        candidate.observedAt,
+        candidate.lastActivityAt,
         now,
         OBSERVATION_WINDOW.ACTIVE_SESSION_FRESHNESS_MS,
       ),
@@ -250,8 +250,8 @@ test("leaves a stopped session unknown once its timestamp goes stale", async () 
   const stub = stubFetch();
   const adapter = adapterFor(stub.fetch);
   adapter.collected = [
-    observation("session-recent", { observedAt: TEST_TIME - 60_000 }),
-    observation("session-stale", { observedAt: TEST_TIME - 60 * 60 * 1000 }),
+    observation("session-recent", { lastActivityAt: TEST_TIME - 60_000 }),
+    observation("session-stale", { lastActivityAt: TEST_TIME - 60 * 60 * 1000 }),
   ];
 
   const observations = await adapter.observe();

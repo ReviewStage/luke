@@ -56,7 +56,7 @@ export interface SessionSnapshot {
   urgency: SessionUrgency;
   location: SessionLocation;
   /** When the session was last seen, in the same units a live observation uses. */
-  observedAt: number;
+  lastActivityAt: number;
   /**
    * Drawn only: a fixture row can show the composer a live session would have,
    * but a fixture run refuses every write — its registry is empty, so nothing
@@ -153,7 +153,7 @@ const smokeFixture: FixtureSnapshot = {
       model: "gpt-5.6-luna",
       urgency: SESSION_URGENCY.WORKING,
       location: SESSION_LOCATION.LOCAL,
-      observedAt: minutesBeforeEpoch(4),
+      lastActivityAt: minutesBeforeEpoch(4),
     },
     {
       id: "claude-review",
@@ -166,7 +166,7 @@ const smokeFixture: FixtureSnapshot = {
       model: "claude-opus-5",
       urgency: SESSION_URGENCY.ATTENTION,
       location: SESSION_LOCATION.LOCAL,
-      observedAt: minutesBeforeEpoch(9),
+      lastActivityAt: minutesBeforeEpoch(9),
     },
     // Two Conductor chats of one workspace, titled by their own names and
     // grouped under the workspace's — the name the user knows the work by,
@@ -196,7 +196,7 @@ const smokeFixture: FixtureSnapshot = {
       model: "claude-opus-5",
       urgency: SESSION_URGENCY.WORKING,
       location: SESSION_LOCATION.CLOUD,
-      observedAt: minutesBeforeEpoch(6),
+      lastActivityAt: minutesBeforeEpoch(6),
       hasChange: true,
       changeNumber: 245,
       workspace: {
@@ -230,7 +230,7 @@ const smokeFixture: FixtureSnapshot = {
       model: "claude-opus-5",
       urgency: SESSION_URGENCY.COMPLETE,
       location: SESSION_LOCATION.CLOUD,
-      observedAt: minutesBeforeEpoch(1),
+      lastActivityAt: minutesBeforeEpoch(1),
       hasChange: true,
       changeNumber: 245,
       workspace: {
@@ -264,7 +264,7 @@ const smokeFixture: FixtureSnapshot = {
       model: "composer-2.5",
       urgency: SESSION_URGENCY.WORKING,
       location: SESSION_LOCATION.CLOUD,
-      observedAt: minutesBeforeEpoch(18),
+      lastActivityAt: minutesBeforeEpoch(18),
       // What a working Conductor chat advertises live, so the one screenshot
       // the evidence is reviewed from also proves the stop control is drawn —
       // and the pull-request chip beside it, on the row whose sentence names
@@ -303,7 +303,7 @@ const smokeFixture: FixtureSnapshot = {
       repository: "sidecar-native",
       urgency: SESSION_URGENCY.UNKNOWN,
       location: SESSION_LOCATION.CLOUD,
-      observedAt: minutesBeforeEpoch(41),
+      lastActivityAt: minutesBeforeEpoch(41),
       // A settled Conductor chat takes a message live, so this row is what
       // puts the composer in the evidence.
       canMessage: true,

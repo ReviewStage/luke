@@ -24,7 +24,7 @@ test("a newer roster push cannot be partially overwritten by an older bootstrap"
       providerSessionId: "task-1",
       title: "Repair session consolidation",
       status: SESSION_STATUS.WORKING,
-      observedAt: 2,
+      lastActivityAt: 2,
     },
   );
   const older: SessionRosterPayload = { sessions: [], attention: [] };

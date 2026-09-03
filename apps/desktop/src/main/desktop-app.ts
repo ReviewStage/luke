@@ -1936,7 +1936,7 @@ function registerIpc(): void {
     // wait forever, but an introduction that names last year's transcript
     // introduces a graveyard.
     return rosterRelevantSessions(sessions, now).filter(
-      (session) => now - session.observedAt <= INTRODUCTION_PEEK_FRESH_MS,
+      (session) => now - session.lastActivityAt <= INTRODUCTION_PEEK_FRESH_MS,
     );
   });
 
@@ -2256,7 +2256,7 @@ async function reviewSessionAttention(generation: number): Promise<void> {
             source: "review",
             announcement,
             observedStatus: review.update.status,
-            observedAt: review.update.observedAt,
+            lastActivityAt: review.update.lastActivityAt,
           } satisfies PendingSessionAnnouncement,
         ];
       }),

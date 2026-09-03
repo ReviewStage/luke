@@ -104,7 +104,7 @@ test("reads live host databases and enriches an exact provider session", async (
         providerSessionId: "session-1",
         title: "Implement integration",
         status: SESSION_STATUS.WORKING,
-        observedAt: 100,
+        lastActivityAt: 100,
         detail: { model: "gpt-5" },
       },
     ]),
@@ -113,7 +113,7 @@ test("reads live host databases and enriches an exact provider session", async (
         providerSessionId: "session-1",
         title: "Implement integration",
         status: SESSION_STATUS.WORKING,
-        observedAt: 100,
+        lastActivityAt: 100,
         detail: {
           model: "gpt-5",
           repository: "Luke",
@@ -147,7 +147,7 @@ test("reads live host databases and enriches an exact provider session", async (
         providerSessionId: "session-1",
         title: "Implement integration",
         status: SESSION_STATUS.WORKING,
-        observedAt: 100,
+        lastActivityAt: 100,
         detail: { link: "codex://threads/session-1" },
       },
     ])[0]?.detail?.link,
@@ -180,7 +180,7 @@ test("binds Cursor's agents CLI under Superset's own name for it", async (t) => 
         providerSessionId: "cli-session",
         title: "square-geometry",
         status: SESSION_STATUS.WORKING,
-        observedAt: 100,
+        lastActivityAt: 100,
       },
     ])[0]?.detail?.link,
     "superset://v2-workspace/workspace-1?terminalId=terminal-1",
@@ -211,7 +211,7 @@ test("matches a chat Superset recorded no session id for by its worktree", async
     providerSessionId: "ses_grok",
     title: "Add Grok Bot support",
     status: SESSION_STATUS.WAITING,
-    observedAt: 100,
+    lastActivityAt: 100,
     directory: "/Users/test/.superset/worktrees/repo-1/parallel-hippopotamus",
   };
 
@@ -293,7 +293,7 @@ test("carries directory matches into the next snapshot until enrichment re-decid
     providerSessionId: "ses_grok",
     title: "Add Grok Bot support",
     status: SESSION_STATUS.WAITING,
-    observedAt: 100,
+    lastActivityAt: 100,
     directory: "/Users/test/.superset/worktrees/repo-1/parallel-hippopotamus",
   };
   const first = await reader.read();
@@ -358,7 +358,7 @@ test("path matching claims only live worktrees, never the main checkout or an ar
           providerSessionId: `ses_${directory}`,
           title: "By hand",
           status: SESSION_STATUS.WAITING,
-          observedAt: 100,
+          lastActivityAt: 100,
           directory,
         },
       ],
@@ -431,7 +431,7 @@ test("advertises Superset actions only after the CLI is connected", async (t) =>
     providerSessionId: "session-1",
     title: "Implement integration",
     status: SESSION_STATUS.WAITING,
-    observedAt: 100,
+    lastActivityAt: 100,
   };
 
   const observed = snapshot.enrich(PROVIDER_ID.CODEX, [observation])[0];
@@ -529,7 +529,7 @@ test("reports a chatless workspace as its own standing, settled row", async (t) 
       providerSessionId: "workspace-idle",
       title: "grok-bot-support",
       status: SESSION_STATUS.COMPLETE,
-      observedAt: 300,
+      lastActivityAt: 300,
       standing: true,
       detail: {
         link: "superset://v2-workspace/workspace-idle",
@@ -690,7 +690,7 @@ test("prefers the live binding a resumed chat's terminal moved to", async (t) =>
         providerSessionId: "session-1",
         title: "Debug sign-in",
         status: SESSION_STATUS.WAITING,
-        observedAt: 100,
+        lastActivityAt: 100,
       },
     ])[0]?.detail?.link,
     "superset://v2-workspace/workspace-1?terminalId=terminal-live",
@@ -740,7 +740,7 @@ test("a chat whose every binding ended keeps its workspace and loses the termina
         providerSessionId: "session-1",
         title: "Review AGENTS.md",
         status: SESSION_STATUS.COMPLETE,
-        observedAt: 100,
+        lastActivityAt: 100,
       },
     ],
     "host-local",

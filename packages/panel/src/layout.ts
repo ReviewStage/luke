@@ -29,8 +29,8 @@ export function wingPileOffset(index: number): number {
   return -MARK_AND_GAP * index;
 }
 
-export function observedAgoLabel(observedAt: number, now: number): string {
-  const elapsedMinutes = Math.floor((now - observedAt) / 60_000);
+export function lastActivityLabel(lastActivityAt: number, now: number): string {
+  const elapsedMinutes = Math.floor((now - lastActivityAt) / 60_000);
   if (elapsedMinutes < 1) return "Now";
   if (elapsedMinutes < 60) return `${elapsedMinutes}m`;
   const elapsedHours = Math.floor(elapsedMinutes / 60);

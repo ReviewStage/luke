@@ -240,7 +240,7 @@ export function parseOmpSession(head: string, tail: string): ParsedOmpSession {
  */
 function statusFromParsed(
   parsed: ParsedOmpSession,
-  observedAt: number,
+  lastActivityAt: number,
   now: number,
   freshnessMs: number,
 ): SessionStatus {
@@ -251,7 +251,7 @@ function statusFromParsed(
     parsed.lastRole === OMP_MESSAGE_ROLE.USER ||
     (parsed.lastRole === OMP_MESSAGE_ROLE.TOOL_RESULT && parsed.turnAborted !== true);
   const status = working ? SESSION_STATUS.WORKING : SESSION_STATUS.WAITING;
-  return localSessionStatus(status, observedAt, now, freshnessMs);
+  return localSessionStatus(status, lastActivityAt, now, freshnessMs);
 }
 
 /**
@@ -353,7 +353,7 @@ export class OmpSessionAdapter extends LocalFileSessionAdapter<
       ...(status === SESSION_STATUS.COMPLETE && parsed.sessionClosed === true
         ? { completionCause: SESSION_COMPLETION_CAUSE.SESSION_CLOSED }
         : undefined),
-      observedAt: conversationAt,
+      lastActivityAt: conversationAt,
       ...(parsed.recap ? { recap: parsed.recap } : undefined),
       detail: detailFromParsed(parsed, workspace),
     };

@@ -486,7 +486,7 @@ function rosterSession(
     providerSessionId,
     title,
     status: SESSION_STATUS.WORKING,
-    observedAt: 100,
+    lastActivityAt: 100,
     detail: {},
   };
   if (workspace) {

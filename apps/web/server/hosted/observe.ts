@@ -139,7 +139,8 @@ export function observedSessionForResponse(
   if (obs.recap) session.recap = obs.recap;
   const error = detail.error;
   if (error) session.error = error;
-  session.observedAt = obs.observedAt;
+  session.lastActivityAt = obs.lastActivityAt;
+  session.observedAt = obs.lastActivityAt;
   // The act advertisements, so a row can offer only what the observation
   // promised. Each is presence-only where it can be: what a control targets,
   // or which workspace a rename lands on, never travels — the act endpoints

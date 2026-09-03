@@ -99,7 +99,7 @@ test("finds and normalizes local sessions, newest first", async (t) => {
   assert.equal(sessions.length, 2);
   assert.equal(sessions[0]?.providerSessionId, "session-newer");
   assert.equal(sessions[1]?.providerSessionId, "session-older");
-  assert.ok((sessions[0]?.observedAt ?? 0) >= (sessions[1]?.observedAt ?? 0));
+  assert.ok((sessions[0]?.lastActivityAt ?? 0) >= (sessions[1]?.lastActivityAt ?? 0));
   const session = sessions[0];
   assert.equal(session?.providerId, PROVIDER_ID.CLAUDE_CODE);
   assert.equal(session?.provider.displayName, "Claude Code");

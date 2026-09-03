@@ -626,7 +626,7 @@ function modelFromRow(row: CodexThreadRow): string | undefined {
 
 function statusFromRow(
   rollout: ParsedCodexRollout | undefined,
-  observedAt: number,
+  lastActivityAt: number,
   now: number,
   activeSessionFreshnessMs: number,
 ): ProviderSessionObservation["status"] {
@@ -635,7 +635,7 @@ function statusFromRow(
   // rescue looks like, and decaying it to unknown would hide the one row
   // that most needs a person.
   if (rollout?.error) return SESSION_STATUS.ERROR;
-  const isFresh = now - observedAt <= activeSessionFreshnessMs;
+  const isFresh = now - lastActivityAt <= activeSessionFreshnessMs;
   // A turn that ended is holding for the developer however the row's timestamp
   // reads, but once it is stale Luke cannot tell a turn that just finished from
   // a thread abandoned hours ago.
@@ -716,7 +716,8 @@ function observationFromThreadRow(
     refinement: CODEX_HOOK_STATUS_REFINEMENT,
     hookEvent,
     providerAtMs: rowAt,
-    statusAt: (observedAt) => statusFromRow(rollout, observedAt, now, activeSessionFreshnessMs),
+    statusAt: (lastActivityAt) =>
+      statusFromRow(rollout, lastActivityAt, now, activeSessionFreshnessMs),
     now,
     activeSessionFreshnessMs,
   });
@@ -731,7 +732,7 @@ function observationFromThreadRow(
     title: titleFromRow(row, names),
     status: refined.status,
     ...(completionCause ? { completionCause } : undefined),
-    observedAt: refined.observedAt,
+    lastActivityAt: refined.lastActivityAt,
     ...(rollout?.lastAgentMessage ? { recap: rollout.lastAgentMessage } : undefined),
     detail,
     ...(detail.link ? { applications: [chatGptApplication(detail.link)] } : undefined),

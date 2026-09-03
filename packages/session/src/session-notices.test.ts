@@ -11,11 +11,7 @@ import {
   type SessionProvider,
   type SessionStatus,
 } from "@sidecar/session";
-import {
-  MAXIMUM_NOTICES_PER_PASS,
-  SESSION_NOTICE_FRESH_AGE_MS,
-  SESSION_NOTICE_REPEAT_WINDOW_MS,
-} from "./session-notices.js";
+import { MAXIMUM_NOTICES_PER_PASS, SESSION_NOTICE_REPEAT_WINDOW_MS } from "./session-notices.js";
 
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
 const conductor: SessionProvider = { id: "conductor", displayName: "Conductor" };
@@ -29,7 +25,7 @@ function session(
     error?: string;
     repository?: string;
     branch?: string;
-    observedAt?: number;
+    lastActivityAt?: number;
     recap?: string;
     workspace?: string;
     canReceiveMessage?: boolean;
@@ -42,7 +38,7 @@ function session(
     providerSessionId,
     title: `Session ${providerSessionId}`,
     status,
-    observedAt: overrides.observedAt ?? 100,
+    lastActivityAt: overrides.lastActivityAt ?? 100,
     detail: {},
   };
   if (overrides.completionCause) observation.completionCause = overrides.completionCause;
@@ -142,7 +138,7 @@ test("first sight seeds silently, and only a change of status is news", () => {
     status: SESSION_NOTICE_STATUS.COMPLETE,
     previousStatus: SESSION_STATUS.WAITING,
     canReceiveMessage: false,
-    observedAt: 100,
+    lastActivityAt: 100,
   });
 });
 
@@ -364,7 +360,7 @@ test("a flapping status is noticed once per repeat window, then again after it",
       [
         session(claude, "flap", SESSION_STATUS.WAITING, {
           holdingForDeveloper: true,
-          observedAt: 1_000 + SESSION_NOTICE_REPEAT_WINDOW_MS,
+          lastActivityAt: 1_000 + SESSION_NOTICE_REPEAT_WINDOW_MS,
         }),
       ],
       1_000 + SESSION_NOTICE_REPEAT_WINDOW_MS,
@@ -373,58 +369,60 @@ test("a flapping status is noticed once per repeat window, then again after it",
   );
 });
 
-test("an edge whose event is old is tracked but never announced", () => {
+test("an edge is announced however old its timestamp, and only once", () => {
   const tracker = new SessionNoticeTracker();
   const slept = 4 * 60 * 60 * 1_000;
   tracker.notices([session(claude, "asleep", SESSION_STATUS.WORKING)], 1_000);
 
-  // The Mac slept for hours; the session finished minutes into the nap. The
-  // edge only becomes visible on the first pass after waking, but the event
-  // it describes is old news the panel has shown the whole time.
-  assert.deepEqual(
-    tracker.notices(
-      [session(claude, "asleep", SESSION_STATUS.COMPLETE, { observedAt: 10 * 60 * 1_000 })],
-      1_000 + slept,
-    ),
-    [],
+  // The Mac slept for hours and the session's file was last written two hours
+  // ago. The timestamp says when the provider last wrote, not when the status
+  // was entered, so it cannot tell late history from a finish that just landed:
+  // the edge seen while watched is the news, and it speaks.
+  const notices = tracker.notices(
+    [
+      session(claude, "asleep", SESSION_STATUS.COMPLETE, {
+        lastActivityAt: 1_000 + slept - 2 * 60 * 60 * 1_000,
+      }),
+    ],
+    1_000 + slept,
   );
-  // The suppressed edge was still recorded: the unchanged status is no edge,
-  // so the stale event does not resurface on a later pass either.
+  assert.deepEqual(
+    notices.map((notice) => [notice.providerSessionId, notice.status]),
+    [["asleep", SESSION_NOTICE_STATUS.COMPLETE]],
+  );
+  // The unchanged status is no edge, so the same finish never speaks again.
   assert.deepEqual(
     tracker.notices(
-      [session(claude, "asleep", SESSION_STATUS.COMPLETE, { observedAt: 10 * 60 * 1_000 })],
+      [
+        session(claude, "asleep", SESSION_STATUS.COMPLETE, {
+          lastActivityAt: 1_000 + slept - 2 * 60 * 60 * 1_000,
+        }),
+      ],
       2_000 + slept,
     ),
     [],
   );
 });
 
-test("a stale edge stays quiet while a fresh one in the same pass announces", () => {
+test("first sight of an old settled session is still not an edge", () => {
   const tracker = new SessionNoticeTracker();
-  const now = SESSION_NOTICE_FRESH_AGE_MS * 10;
-  tracker.notices(
-    [
-      session(claude, "stale", SESSION_STATUS.WORKING),
-      session(claude, "fresh", SESSION_STATUS.WORKING),
-    ],
-    1_000,
-  );
+  const now = 30 * 60 * 60 * 1_000;
 
-  const notices = tracker.notices(
-    [
-      session(claude, "stale", SESSION_STATUS.COMPLETE, {
-        observedAt: now - SESSION_NOTICE_FRESH_AGE_MS - 1,
-      }),
-      session(claude, "fresh", SESSION_STATUS.COMPLETE, {
-        observedAt: now - SESSION_NOTICE_FRESH_AGE_MS,
-      }),
-    ],
-    now,
-  );
-
+  // A launch reads yesterday's roster: every session is seen for the first
+  // time, so nothing is news, whatever its timestamp says.
   assert.deepEqual(
-    notices.map((notice) => [notice.providerSessionId, notice.status]),
-    [["fresh", SESSION_NOTICE_STATUS.COMPLETE]],
+    tracker.notices(
+      [
+        session(claude, "yesterday", SESSION_STATUS.COMPLETE, {
+          lastActivityAt: now - 20 * 60 * 60 * 1_000,
+        }),
+        session(claude, "earlier", SESSION_STATUS.WAITING, {
+          lastActivityAt: now - 60 * 1_000,
+        }),
+      ],
+      now,
+    ),
+    [],
   );
 });
 

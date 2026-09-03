@@ -45,7 +45,12 @@ test("registers the managers in the claim order the trays grew up with", async (
 test("a failed read's stand-in enriches with nothing", async (t) => {
   const hosts = registrations(await temporaryDirectory(t));
   const observations = [
-    { providerSessionId: "local", title: "Local", status: SESSION_STATUS.WORKING, observedAt: 1 },
+    {
+      providerSessionId: "local",
+      title: "Local",
+      status: SESSION_STATUS.WORKING,
+      lastActivityAt: 1,
+    },
   ];
   for (const host of hosts) {
     assert.equal(host.emptyEnrichment(PROVIDER_ID.CLAUDE_CODE, observations), observations);
@@ -55,7 +60,12 @@ test("a failed read's stand-in enriches with nothing", async (t) => {
 test("reads each manager's absent app as annotating nothing", async (t) => {
   const hosts = registrations(await temporaryDirectory(t));
   const observations = [
-    { providerSessionId: "local", title: "Local", status: SESSION_STATUS.WORKING, observedAt: 1 },
+    {
+      providerSessionId: "local",
+      title: "Local",
+      status: SESSION_STATUS.WORKING,
+      lastActivityAt: 1,
+    },
   ];
   for (const host of hosts) {
     const enrichment = await host.read();

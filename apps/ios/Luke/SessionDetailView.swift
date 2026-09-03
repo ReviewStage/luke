@@ -676,10 +676,10 @@ private struct SessionInfoSheet: View {
                     }
                 }
 
-                if let observedAt = session.observedAt {
+                if let lastActivityAt = session.lastActivityAt {
                     Section {
                         LabeledContent {
-                            Text(observedAt.formatted(date: .abbreviated, time: .shortened))
+                            Text(lastActivityAt.formatted(date: .abbreviated, time: .shortened))
                         } label: {
                             Text("Last activity")
                         }
