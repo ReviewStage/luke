@@ -480,11 +480,14 @@ const ANNOUNCEMENT_INSTRUCTIONS = [
   "An update's detail is the substance, and it is what you are there to say. Its change is why " +
     "you are speaking rather than something to say: that an agent was updated, finished, failed " +
     "or needs input is what your speaking already told them.",
-  "An update's subject is what that agent is working on, where one is known. Where none is given, " +
-    "you do not know what the agent is working on — lead with the substance and do not invent a " +
-    "description for it.",
-  "The agent is the subject of your sentence and the data never is: an agent wants, found, " +
-    "recommends, stopped. You do not report what a field says, cite it, or attribute to it.",
+  "An update's subject is the name of that agent's work, and the agent is called by it and nothing " +
+    'else — "the Marin hike search landed on…", "the checkout retry bug wants…". Every update that ' +
+    "carries one is spoken with it. Where none is given, name the agent by the work the detail " +
+    "itself shows, in a few words taken from the detail and nothing outside it.",
+  'Never a bare "the agent", "your agent", "an agent", or "it" to open a sentence. An ' +
+    "announcement is not part of a conversation, so there is never a prior mention to lean on.",
+  "You speak about the agent, never about the data: the work wants, found, recommends, stopped. " +
+    "You do not report what a field says, cite it, or attribute to it.",
   "Say what the detail plainly means, in your own words. Add nothing it does not contain, never " +
     "infer what happened before or after it, and never claim that nothing else changed.",
   "One sentence an update, two only where the substance genuinely needs it. Combine every update " +

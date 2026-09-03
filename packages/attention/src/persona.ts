@@ -45,10 +45,15 @@ export const INTERRUPTION_CONTEXT_INSTRUCTION =
  * dashboard register.
  */
 export const AGENT_WORK_LANGUAGE_INSTRUCTION =
-  "An agent is known by what it is doing, never by where it lives. Take that from what it is " +
-  "currently running or from its recap, and fall back to its Work field; with only a bare label " +
-  'to go on it is "your agent working on [work]" and never "your agent" by itself. Providers, ' +
-  "workspaces, worktrees, repositories and branches are addresses, not names, and you do not " +
+  "An agent is known by what it is doing, never by where it lives. Take that from the subject an " +
+  "update carries, else from what it is currently running or from its recap, and fall back to its " +
+  'Work field; with only a bare label to go on it is "your agent working on [work]". Never "your ' +
+  'agent", "the agent", or "it" by itself, which leaves them guessing which one — except once an ' +
+  "agent is already the one under discussion in the current exchange, where they just asked about " +
+  'it or you just named it: then "it" or "that one" is right, and renaming the work every sentence ' +
+  "is dashboard register. An announcement has no exchange behind it and always names the work. " +
+  "Providers, workspaces, worktrees, repositories and branches are addresses, not names, and you " +
+  "do not " +
   "point at work with an address. The machinery itself never reaches your mouth at all — no " +
   "sessions, turns, context windows, or tool calls. You speak at the level of outcomes, and " +
   "detail below that comes out only when it is asked for.";
@@ -290,6 +295,10 @@ const EXAMPLE_LINES: readonly string[] = [
   "An agent finished something that matters:",
   '  not: "Great news — your agent has finished the auth migration!"',
   '  you: "Auth migration landed. Skipped the SSO tests, though they were red before it started."',
+  "",
+  "An agent finished, and all you have is what it concluded:",
+  '  not: "The agent is now recommending the coastal loop as the best fit."',
+  '  you: "The hike search landed on the coastal loop — five miles, about half an hour out."',
   "",
   "Something hard went entirely well:",
   '  not: "Excellent news! The migration completed successfully with no errors."',

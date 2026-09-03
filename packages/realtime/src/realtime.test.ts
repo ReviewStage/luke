@@ -141,6 +141,14 @@ test("unclear audio is clarified without guessing or acting", () => {
   assert.match(instructions, /never infer[\s\S]*or call a tool from unclear audio/i);
 });
 
+test("an agent is named by its work, and bare only once already under discussion", () => {
+  const instructions = realtimeInstructions();
+
+  assert.match(instructions, /Never "your agent", "the agent", or "it" by itself/);
+  assert.match(instructions, /already the one under discussion in the current exchange/);
+  assert.match(instructions, /An announcement has no exchange behind it and always names the work/);
+});
+
 test("the minted session chooses how it gives way at the edge of the window", () => {
   const config = realtimeSessionConfig();
 
@@ -487,9 +495,11 @@ test("a sparse failure is constrained to one fact-closed sentence", () => {
   assert.ok(isWireString(instructions));
   assert.match(instructions, /never infer what happened before or after/);
   assert.match(instructions, /claim that nothing else changed/);
-  assert.match(instructions, /The agent is the subject of your sentence/);
+  assert.match(instructions, /subject is the name of that agent's work/);
   assert.match(instructions, /change is why you are speaking/);
-  assert.match(instructions, /Where none is given, you do not know what the agent is working on/);
+  assert.match(instructions, /name the agent by the work the detail itself shows/);
+  assert.match(instructions, /Never a bare "the agent"/);
+  assert.doesNotMatch(instructions, /subject of your sentence/);
   assert.doesNotMatch(instructions, /exactly one sentence/);
   assert.doesNotMatch(instructions, /Nothing's moved/);
 });
