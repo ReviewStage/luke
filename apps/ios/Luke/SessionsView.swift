@@ -31,6 +31,12 @@ struct SessionsView: View {
     /// overlapping a post-act refresh must not land its older roster after
     /// the newer one — an archived row would come back from the dead.
     @State private var refreshPass = 0
+    /// Sessions whose archive act is still in flight. The row leaves at the
+    /// press, so every roster write filters these ids: a refresh whose roster
+    /// was read before the archive landed would otherwise bring the row back.
+    /// Delivery lifts the hold after the post-act refresh; a refusal lifts it
+    /// and refreshes, restoring the row beside the alert saying why.
+    @State private var archivingIds: Set<String> = []
 
     /// Which advertised rename a menu press opened: the session itself, or
     /// the workspace it runs in. One alert serves both; the flag picks the
@@ -384,6 +390,17 @@ struct SessionsView: View {
     }
 
     private func runControl(_ s: RosterSession, _ control: RosterSessionControl) {
+        // An archive's whole visible outcome is the row leaving, so the leave
+        // happens at the press — the row slides out and the screen it opened
+        // pops — with the act following behind rather than the press waiting
+        // on two round trips.
+        if control.kind == .archive {
+            archivingIds.insert(s.id)
+            if openedSession?.id == s.id {
+                openedSession = nil
+            }
+            withAnimation { sessions.removeAll { $0.id == s.id } }
+        }
         Task {
             let delivered = await performAct(on: s, counting: .controlRun) { token in
                 try await actClient.executeControl(
@@ -393,8 +410,11 @@ struct SessionsView: View {
                     controlId: control.id
                 )
             }
-            if delivered, control.kind == .archive, openedSession?.id == s.id {
-                openedSession = nil
+            if control.kind == .archive {
+                archivingIds.remove(s.id)
+                if !delivered {
+                    await refreshSessions()
+                }
             }
         }
     }
@@ -463,6 +483,8 @@ struct SessionsView: View {
     }
 
     private func refreshSessions() async {
+        refreshPass += 1
+        let pass = refreshPass
         isLoading = true
         fetchError = nil
         defer { isLoading = false }
@@ -471,9 +493,10 @@ struct SessionsView: View {
             let fetched = try await session.authorized { token in
                 try await rosterClient.observe(bearerToken: token)
             }
-            // Animated so a row an act just removed — an archive above all —
-            // slides out the way a deleted Mail row does, instead of blinking.
-            withAnimation { sessions = fetched }
+            guard pass == refreshPass else { return }
+            // Animated so a row an act just removed slides out the way a
+            // deleted Mail row does, instead of blinking.
+            withAnimation { sessions = fetched.filter { !archivingIds.contains($0.id) } }
             recordObservation(fetched)
         } catch is AccountSessionError {
             ()  // Signed out — the state change redraws automatically.
