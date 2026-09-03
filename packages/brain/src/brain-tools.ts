@@ -32,12 +32,7 @@ export type BrainToolName = (typeof BRAIN_TOOL)[keyof typeof BRAIN_TOOL];
 /** The longest briefing the mouth is handed; a briefing is a breath, not a report. */
 export const maximumBriefingLength = 600;
 
-/**
- * The JSON Schema a brain tool's parameters are described in: the acts
- * table's own vocabulary, widened in one place — an array may hold objects —
- * because `announce` names sessions as a list of identity objects and the acts
- * schema lists strings alone.
- */
+/** The JSON Schema a brain tool's parameters are described in: the acts table's own vocabulary. */
 export type BrainSchemaProperty =
   | { type: "string"; description?: string; enum?: readonly string[] }
   | {
@@ -47,7 +42,11 @@ export type BrainSchemaProperty =
       required?: readonly string[];
       additionalProperties?: boolean;
     }
-  | { type: "array"; description?: string; items: BrainSchemaProperty };
+  | {
+      type: "array";
+      description?: string;
+      items: { type: "string"; description?: string; enum?: readonly string[] };
+    };
 
 export type BrainSchemaPropertyMap = { readonly [key: string]: BrainSchemaProperty };
 
@@ -96,8 +95,7 @@ const BRAIN_ONLY_TOOLS: readonly BrainToolWireDefinition[] = [
       "Hand the developer one spoken briefing about what changed. Call it at most once per " +
       "observed-events turn, covering every agent worth mentioning in one breath, or not at all " +
       "when nothing is worth interrupting for. Never call it in a developer-ask turn: there your " +
-      "final text is the reply. Name the sessions the briefing is about by roster identity so " +
-      "the panel can point at them.",
+      "final text is the reply.",
     parameters: {
       type: "object",
       properties: {
@@ -105,18 +103,8 @@ const BRAIN_ONLY_TOOLS: readonly BrainToolWireDefinition[] = [
           type: "string",
           description: `What Luke says aloud, in his own voice, under ${maximumBriefingLength} characters.`,
         },
-        session_ids: {
-          type: "array",
-          description: "The observed sessions the briefing is about, by roster identity.",
-          items: {
-            type: "object",
-            properties: SESSION_IDENTITY_PROPERTIES,
-            required: SESSION_IDENTITY_REQUIRED,
-            additionalProperties: false,
-          },
-        },
       },
-      required: ["briefing", "session_ids"],
+      required: ["briefing"],
     },
   },
 ];

@@ -266,18 +266,12 @@ test("wakes inside the window open one turn, with each session's delta read once
   assert.equal(h.traces[0]?.transcriptBytes, `${TRANSCRIPT_SECRET} for abc`.length * 2);
 });
 
-test("an announce is delivered with only observed sessions, and every output item is remembered", async () => {
+test("an announce is delivered trimmed, and every output item is remembered", async () => {
   const h = harness();
   h.client.answers.push(
     answered([
       reasoning("rs_1"),
-      call("call_1", BRAIN_TOOL.ANNOUNCE, {
-        briefing: "  Checkout agent wants a decision. ",
-        session_ids: [
-          { provider_id: ABC.providerId, provider_session_id: ABC.providerSessionId },
-          { provider_id: UNKNOWN.providerId, provider_session_id: UNKNOWN.providerSessionId },
-        ],
-      }),
+      call("call_1", BRAIN_TOOL.ANNOUNCE, { briefing: "  Checkout agent wants a decision. " }),
     ]),
     answered([reasoning("rs_2"), message("said it")]),
   );
@@ -288,7 +282,6 @@ test("an announce is delivered with only observed sessions, and every output ite
   assert.deepEqual(h.deliveries, [
     {
       briefing: "Checkout agent wants a decision.",
-      sessionIds: [ABC],
       decidedAt: NOW + 3_000,
       source: BRAIN_DELIVERY_SOURCE.WAKE,
     },
@@ -311,15 +304,15 @@ test("an announce is delivered with only observed sessions, and every output ite
       outcomeStatus: "accepted",
     },
   ]);
-  assert.deepEqual(h.traces[0]?.deliveries, [{ briefingChars: 32, sessionCount: 1 }]);
+  assert.deepEqual(h.traces[0]?.deliveries, [{ briefingChars: 32 }]);
 });
 
-test("an ask returns the final text, carries pending wakes, refuses announce, and names touched sessions", async () => {
+test("an ask returns the final text, carries pending wakes, and refuses announce", async () => {
   const h = harness();
   h.agent.wake([edge(DEF)]);
   h.client.answers.push(
     answered([
-      call("call_a", BRAIN_TOOL.ANNOUNCE, { briefing: "nope", session_ids: [] }),
+      call("call_a", BRAIN_TOOL.ANNOUNCE, { briefing: "nope" }),
       call("call_b", "send_session_message", {
         provider_id: ABC.providerId,
         provider_session_id: ABC.providerSessionId,
@@ -330,7 +323,7 @@ test("an ask returns the final text, carries pending wakes, refuses announce, an
   );
   const answer = await h.agent.ask("tell the checkout agent to run the tests");
 
-  assert.deepEqual(answer, { text: "Sent.", sessionIds: [ABC] });
+  assert.deepEqual(answer, { text: "Sent." });
   assert.deepEqual(h.deliveries, []);
   assert.deepEqual(h.performed, [
     {
@@ -534,21 +527,11 @@ test("restored memory opens the next turn, and held briefings are re-decided fro
     }),
   });
   h.client.answers.push(
-    answered([
-      call("call_1", BRAIN_TOOL.ANNOUNCE, {
-        briefing: "Still waiting on you.",
-        session_ids: [{ provider_id: ABC.providerId, provider_session_id: ABC.providerSessionId }],
-      }),
-    ]),
+    answered([call("call_1", BRAIN_TOOL.ANNOUNCE, { briefing: "Still waiting on you." })]),
     answered([message("")]),
   );
   h.agent.releaseHeld([
-    {
-      briefing: "Checkout wants a decision.",
-      sessionIds: [ABC],
-      decidedAt: NOW - 1,
-      source: "wake",
-    },
+    { briefing: "Checkout wants a decision.", decidedAt: NOW - 1, source: "wake" },
   ]);
   await settle();
   const input = h.client.inputs[0] ?? [];

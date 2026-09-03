@@ -64,7 +64,6 @@ test("only an arrival item reads as one", () => {
     isArrivalSpeech({
       kind: BRIEFING_SPEECH_KIND,
       briefing: "Codex on checkout finished.",
-      sessionIds: [{ providerId: "codex", providerSessionId: "s1" }],
       decidedAt: AT,
     }),
     false,

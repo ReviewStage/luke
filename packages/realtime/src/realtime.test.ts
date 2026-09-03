@@ -109,11 +109,8 @@ test("the voice knows nothing of the work itself and asks the brain for all of i
   const instructions = realtimeInstructions();
 
   assert.match(instructions, new RegExp(`call ${ASK_BRAIN_TOOL.name}`));
-  // The voice says a bounded acknowledgement before the ask, and nothing wider.
-  assert.match(instructions, /one short acknowledgement of five words or fewer/);
-  assert.match(instructions, /do not restate their question, guess at an answer/);
-  assert.match(instructions, /Then call the tool\./);
-  assert.doesNotMatch(instructions, /saying\s+nothing first/);
+  // Nothing tells the voice what to say, or not say, before the ask.
+  assert.doesNotMatch(instructions, /acknowledgement/);
   assert.match(instructions, /say its answer whole/);
   assert.match(instructions, /Never invent an agent, a status, or an outcome/);
   // The roster, the guide, and the history are the brain's, so the voice is
@@ -394,7 +391,6 @@ function briefingOf(words: string): BriefingSpeech {
   return {
     kind: BRIEFING_SPEECH_KIND,
     briefing: words,
-    sessionIds: [{ providerId: "claude-code", providerSessionId: "session-a" }],
     decidedAt: DECIDED_AT,
   };
 }

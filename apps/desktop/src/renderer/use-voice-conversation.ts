@@ -3,7 +3,6 @@ import { PRODUCT_EXCHANGE_KIND, type ProductExchangeKind } from "@sidecar/analyt
 import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import { FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import type { AppGuideSnapshot } from "@sidecar/guide";
-import { mentionedIssues, type TrackedIssue } from "@sidecar/issues";
 import {
   ARRIVAL_SPEECH_KIND,
   type ArrivalSpeech,
@@ -27,14 +26,11 @@ import {
   streamingConversationEntry,
 } from "@sidecar/realtime";
 import {
-  mentionedSessions,
   type ObservedWorkspaceProject,
-  SESSION_MENTION_KIND,
   SESSION_STATUS,
   type Session,
   type SessionApplicationId,
   type SessionIdentity,
-  type SessionMention,
 } from "@sidecar/session";
 import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyLabel } from "@sidecar/settings";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
@@ -48,7 +44,12 @@ import type {
 import { BriefingQueue } from "./briefing-queue";
 import { hostedVoiceUnavailableNote } from "./microphone-access";
 import { openPreferredMicrophone } from "./microphone-choice";
-import { type AppActionCarrier, REPLY_KIND, RealtimeVoiceSession } from "./realtime-session";
+import {
+  type AppActionCarrier,
+  REPLY_KIND,
+  RealtimeVoiceSession,
+  type ReplyKind,
+} from "./realtime-session";
 import { useStateWithRef } from "./use-state-with-ref";
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
 
@@ -332,14 +333,14 @@ const NO_SPOKEN_ASK_PREVIEWS: ReadonlyMap<string, string> = new Map();
  * the developer's spoken turns as the service transcribes them, then the
  * reply or announcement as its words are generated — the ask precedes its
  * answer. Presentation only, so each line mirrors exactly what its own
- * recording path will keep: an announcement carries its validated subject,
- * and the reply that is voicing a transcript reading draws nothing, because
- * the record keeps the act and never a word of the rendering.
+ * recording path will keep: a briefing settles as an announcement, and the
+ * reply that is voicing a transcript reading draws nothing, because the
+ * record keeps the act and never a word of the rendering.
  */
 export function liveConversationEntries(input: {
   spokenAskPreviews: ReadonlyMap<string, string>;
   captions: readonly string[] | undefined;
-  about: readonly SessionIdentity[] | undefined;
+  kind: ReplyKind | undefined;
   transcriptSpoken: boolean;
 }): readonly ConversationEntry[] {
   const lines: ConversationEntry[] = [];
@@ -347,12 +348,11 @@ export function liveConversationEntries(input: {
     const ask = streamingConversationEntry(CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words);
     if (ask) lines.push(ask);
   }
-  if (input.captions && (input.about || !input.transcriptSpoken)) {
+  const briefing = input.kind === REPLY_KIND.BRIEFING;
+  if (input.captions && (briefing || !input.transcriptSpoken)) {
     const speech = streamingConversationEntry(
-      input.about ? CONVERSATION_ENTRY_KIND.ANNOUNCEMENT : CONVERSATION_ENTRY_KIND.REPLY,
+      briefing ? CONVERSATION_ENTRY_KIND.ANNOUNCEMENT : CONVERSATION_ENTRY_KIND.REPLY,
       input.captions.join(" "),
-      input.about?.length === 1 ? input.about[0] : undefined,
-      input.about && input.about.length > 1 ? input.about : undefined,
     );
     if (speech) lines.push(speech);
   }
@@ -388,57 +388,6 @@ export async function authorizeConversationAct<T>(
 ): Promise<{ authorization: T; generation: number | undefined }> {
   const generation = activeReplyGeneration.current;
   return { authorization: await authorize(), generation };
-}
-
-/**
- * The sessions the replies being spoken are about, for the surface to draw
- * pressable previews of. An announcement carries its roster-validated
- * subjects, and those stay the whole answer: the update was about those
- * sessions, whatever else its sentence brushes past. A conversation
- * reply carries no subject, so its previews are read from the words
- * themselves — the roster sessions whose own titles appear whole in the
- * captions, and the workspaces whose names do, each resolved to its freshest
- * observed chat — which is how "what are we working on?" is answered with a
- * chip per thing named. Back-to-back replies stack their captions, and the
- * chips follow every caption still on screen, because all of it is what Luke
- * is currently telling the developer. The words select only among observed
- * sessions; the identities never come from the model. A capture run has no
- * reply, so its fixture words stand in for the captions — the chips the
- * fixture sentence earns are photographed like everything else the surface
- * draws.
- */
-export function replyMentions(input: {
-  fixtureSpeaking: boolean;
-  about: readonly SessionIdentity[] | undefined;
-  captions: readonly string[] | undefined;
-  sessions: readonly Session[];
-}): readonly SessionMention[] {
-  if (input.about) {
-    return input.about.map((identity) => ({ ...identity, kind: SESSION_MENTION_KIND.SESSION }));
-  }
-  const spoken = input.fixtureSpeaking ? FIXTURE_SPEAKING_CAPTION : input.captions?.join("\n");
-  return mentionedSessions(spoken, input.sessions);
-}
-
-/**
- * The issue half of {@link replyMentions}, on its rules exactly: the tracked
- * issues the replies being spoken name — by identifier like LUKE-123, or by
- * whole title — each resolved against the observed issue roster and never
- * from the model's words alone. An announcement's validated subjects are
- * sessions, and they stay the whole answer: identifiers riding along in its
- * sentence earn nothing, because the update was about those sessions. The
- * fixture sentence names no issues and a capture run observes no tracker, so
- * a capture run draws none.
- */
-export function replyIssueMentions(input: {
-  fixtureSpeaking: boolean;
-  about: readonly SessionIdentity[] | undefined;
-  captions: readonly string[] | undefined;
-  issues: readonly TrackedIssue[] | undefined;
-}): readonly TrackedIssue[] {
-  if (input.about) return [];
-  const spoken = input.fixtureSpeaking ? FIXTURE_SPEAKING_CAPTION : input.captions?.join("\n");
-  return mentionedIssues(spoken, input.issues);
 }
 
 export interface VoiceConversationOptions {
@@ -567,30 +516,11 @@ export interface VoiceConversation {
    * back-to-back keeps both on screen, stacked oldest first.
    */
   lukeCaptions: readonly string[] | undefined;
-  /**
-   * The sessions the reply being spoken is about: an announcement's one
-   * validated subject, or what a conversation reply names in its words — a
-   * chat by its title, or a workspace by name, resolved to its freshest
-   * chat. Present exactly as long as the reply is — it is what the surface
-   * anchors the pressable notices to — and independent of the captions
-   * preference, which only governs whether the words are drawn.
-   */
-  mentionedSessions: readonly SessionMention[];
-  /**
-   * The tracked issues the reply being spoken names — by identifier or by
-   * whole title — on the session mentions' own terms: resolved against the
-   * observed issue roster, present exactly as long as the reply, and empty
-   * for an announcement, whose validated subjects are sessions. The rows
-   * are the roster's own, because no panel surface holds the issue roster
-   * for the chips to resolve against.
-   */
-  mentionedIssues: readonly TrackedIssue[];
   remoteAudio: RefObject<HTMLAudioElement | null>;
   /** Escape out of an open turn: forget the press and the latch, and stop listening. */
   discardListening: () => void;
   stopSpeaking: () => boolean;
   syncGuide: (guide: AppGuideSnapshot) => void;
-  syncIssues: (issues: readonly TrackedIssue[] | undefined) => void;
 }
 
 /**
@@ -625,13 +555,12 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   >(undefined);
   const [localStream, setLocalStream] = useState<MediaStream>();
   const [remoteStream, setRemoteStream] = useState<MediaStream>();
-  // One state for the words and their subject, set together by the session so
-  // the notice the surface anchors to the subject can never draw against a
-  // caption from a different reply.
+  // One state for the words and their kind, set together by the session so
+  // the live History line can never file a caption under a different reply.
   const [voiceCaption, setVoiceCaption] = useState<{
     texts: readonly string[] | undefined;
-    about: readonly SessionIdentity[] | undefined;
-  }>({ texts: undefined, about: undefined });
+    kind: ReplyKind | undefined;
+  }>({ texts: undefined, kind: undefined });
   /**
    * Whether the reply under way answers an ask the developer typed. A typed
    * ask is read, not only heard, so its reply draws the caption whatever the
@@ -659,12 +588,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    */
   const typedExchange = useRef(false);
   const sessionsRef = useRef(options.sessions);
-  const issuesRef = useRef<readonly TrackedIssue[] | undefined>(undefined);
-  // The same roster as state, because the issue chips are derived from it and
-  // a derivation only reruns on what React can see change.
-  const [trackedIssues, setTrackedIssues] = useState<readonly TrackedIssue[] | undefined>(
-    undefined,
-  );
   /**
    * The conversation history, surviving here across calls: a call is a
    * transport that comes and goes — an announcement is often read out on
@@ -967,27 +890,17 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       onLocalStream: setLocalStream,
       onRemoteStream: setRemoteStream,
       onError: setVoiceError,
-      onCaption: (texts, about) => setVoiceCaption({ texts, about }),
-      onReplyEnded: (texts, about, kind) => {
+      onCaption: (texts, kind) => setVoiceCaption({ texts, kind }),
+      onReplyEnded: (texts, kind) => {
         if (kind === REPLY_KIND.BRIEFING) {
           const generation = activeAnnouncementGenerationRef.current;
           activeAnnouncementGenerationRef.current = undefined;
-          rememberConversationEntry(
-            announcementConversationEntry(texts.join(" "), about ?? [], sessionsRef.current),
-            generation,
-          );
+          rememberConversationEntry(announcementConversationEntry(texts.join(" ")), generation);
           return;
         }
         const generation = activeReplyGenerationRef.current;
         activeReplyGenerationRef.current = undefined;
-        // The chats the reply named ride along as chips, read from its words
-        // against the roster at this moment — the same rule the notice
-        // band's chips keep — so the line can offer a way back to the chats
-        // it answered about, even after one is archived away.
-        rememberConversationEntry(
-          replyConversationEntry(texts.join(" "), sessionsRef.current),
-          generation,
-        );
+        rememberConversationEntry(replyConversationEntry(texts.join(" ")), generation);
       },
       onSpokenAskCommitted: (itemId) => {
         const mark = pendingSpokenTurnMarksRef.current.shift();
@@ -1379,17 +1292,14 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
         setVoiceNotice(answer.reason);
         return answer.reason;
       }
-      if (connected && session.speakReply(answer.briefing, answer.sessionIds)) {
+      if (connected && session.speakReply(answer.briefing)) {
         activeReplyGenerationRef.current = generation;
         setTypedAsk(true);
         return undefined;
       }
       // Voice cannot say it, so the words stand on the strip and enter the
       // record as the reply they are.
-      rememberConversationEntry(
-        replyConversationEntry(answer.briefing, sessionsRef.current),
-        generation,
-      );
+      rememberConversationEntry(replyConversationEntry(answer.briefing), generation);
       setVoiceNotice(answer.briefing);
       return undefined;
     },
@@ -1409,14 +1319,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   // nothing about the app.
   const syncGuide = useCallback((guide: AppGuideSnapshot) => {
     window.sidecar.reportAppGuide(guide);
-  }, []);
-
-  const syncIssues = useCallback((issues: readonly TrackedIssue[] | undefined) => {
-    issuesRef.current = issues;
-    // Held as state beside the ref, because the issue chips derive from it:
-    // the state re-renders the band when an observation pass moves the board
-    // under a reply already speaking.
-    setTrackedIssues(issues);
   }, []);
 
   const heardSpeed = useRef<RealtimeVoiceSpeed | undefined>(undefined);
@@ -1595,7 +1497,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       ensureAnnouncer().enqueue({
         kind: BRIEFING_SPEECH_KIND,
         briefing: delivery.briefing,
-        sessionIds: delivery.sessionIds,
         decidedAt: delivery.decidedAt,
       });
     });
@@ -1701,41 +1602,15 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     [],
   );
 
-  // Derived, not queued: the subjects arrive with the captions and die with
-  // the reply, so a chip can never lag the words or stand for a session the
-  // reply is not talking about.
-  const mentioned = useMemo(
-    () =>
-      replyMentions({
-        fixtureSpeaking: options.fixtureSpeaking,
-        about: voiceCaption.about,
-        captions: voiceCaption.texts,
-        sessions: options.sessions,
-      }),
-    [options.fixtureSpeaking, options.sessions, voiceCaption],
-  );
-  // The issue half of the same derivation, against the tracker's roster
-  // instead of the sessions'.
-  const mentionedIssueRows = useMemo(
-    () =>
-      replyIssueMentions({
-        fixtureSpeaking: options.fixtureSpeaking,
-        about: voiceCaption.about,
-        captions: voiceCaption.texts,
-        issues: trackedIssues,
-      }),
-    [options.fixtureSpeaking, trackedIssues, voiceCaption],
-  );
-
-  // Derived like the mentions: the live lines arrive with the captions and
-  // the previews, and die with them, so History can never show words still
-  // arriving for a reply or a turn that has already settled or left.
+  // Derived, not queued: the live lines arrive with the captions and die with
+  // them, so History can never show words still arriving for a reply or a
+  // turn that has already settled or left.
   const live = useMemo(
     () =>
       liveConversationEntries({
         spokenAskPreviews,
         captions: voiceCaption.texts,
-        about: voiceCaption.about,
+        kind: voiceCaption.kind,
         transcriptSpoken,
       }),
     [spokenAskPreviews, transcriptSpoken, voiceCaption],
@@ -1772,12 +1647,9 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     seedConversationHistory,
     voiceTurn,
     lukeCaptions,
-    mentionedSessions: mentioned,
-    mentionedIssues: mentionedIssueRows,
     remoteAudio,
     discardListening,
     stopSpeaking,
     syncGuide,
-    syncIssues,
   };
 }

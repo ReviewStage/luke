@@ -160,7 +160,7 @@ test("a brain turn becomes its own generation, and junk lines cost only themselv
     transcriptBytes: 4_096,
     toolCalls: [{ name: BRAIN_TOOL.ANNOUNCE, argumentsChars: 120, outcomeStatus: "accepted" }],
     outputText: "Checkout is waiting on you.",
-    deliveries: [{ briefingChars: 96, sessionCount: 1 }],
+    deliveries: [{ briefingChars: 96 }],
     elapsedMs: 321,
     iterations: 1,
     compacted: false,
@@ -197,11 +197,9 @@ test("a brain turn becomes its own generation, and junk lines cost only themselv
   assert.equal(output?.role, "assistant");
   assert.equal(
     output?.content,
-    [
-      "Checkout is waiting on you.",
-      "tool call: announce -> accepted",
-      "delivery: 96 chars about 1 sessions",
-    ].join("\n"),
+    ["Checkout is waiting on you.", "tool call: announce -> accepted", "delivery: 96 chars"].join(
+      "\n",
+    ),
   );
 });
 

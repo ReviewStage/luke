@@ -31,7 +31,6 @@ import {
   realtimeSessionConfig,
   truncateResponseEvents,
 } from "@sidecar/realtime";
-import type { SessionIdentity } from "@sidecar/session";
 import {
   ACT_RESULT_STATUS,
   isRecord,
@@ -77,8 +76,7 @@ export const BRAIN_ASK_SETTLE_TIMEOUT_MS = 60_000;
 
 /**
  * Whose words the caption is showing: a briefing the brain decided to give,
- * or a reply to the developer. History records the two differently, and the
- * band under the housing draws its chips for both from the same subject.
+ * or a reply to the developer. History records the two differently.
  */
 export const REPLY_KIND = {
   BRIEFING: BRIEFING_SPEECH_KIND,
@@ -163,29 +161,20 @@ export interface RealtimeVoiceSessionCallbacks {
    * over both, oldest first, so the surface can stack them apart instead of
    * running two sentences together. The session owns the whole lifecycle —
    * the captions clear when the reply ends, is cut off, or the call closes —
-   * so the caller only ever draws what it is handed. `about` is the sessions
-   * the reply is about — a briefing's roster-validated subjects, or the ones
-   * the brain's answer named — living exactly as long as that reply; a reply
-   * the brain was not asked for carries none.
+   * so the caller only ever draws what it is handed. `kind` says whether the
+   * words are a briefing or a reply to the brain's answer, living exactly as
+   * long as that reply; a reply the brain was not asked for carries none.
    */
-  onCaption(
-    texts: readonly string[] | undefined,
-    about: readonly SessionIdentity[] | undefined,
-  ): void;
+  onCaption(texts: readonly string[] | undefined, kind: ReplyKind | undefined): void;
   /**
    * The words a reply leaves behind at the moment it ends — finished, talked
-   * over, or the call closing under it, whichever came. `about` is what the
-   * caption was about, and `kind` says whether the words were a briefing or a
-   * reply, so History records each as itself. The words were already spoken
-   * toward the room (the caption runs a little ahead of the audio, so a cut
-   * reply hands over slightly more than was heard); the caller records them
-   * so the thread survives the call.
+   * over, or the call closing under it, whichever came. `kind` says whether
+   * the words were a briefing or a reply, so History records each as itself.
+   * The words were already spoken toward the room (the caption runs a little
+   * ahead of the audio, so a cut reply hands over slightly more than was
+   * heard); the caller records them so the thread survives the call.
    */
-  onReplyEnded?(
-    texts: readonly string[],
-    about: readonly SessionIdentity[] | undefined,
-    kind: ReplyKind | undefined,
-  ): void;
+  onReplyEnded?(texts: readonly string[], kind: ReplyKind | undefined): void;
   /**
    * The developer's own spoken turn, as the voice service transcribed it. It
    * arrives on the transcription's clock — often after the reply to it has
@@ -511,14 +500,10 @@ export class RealtimeVoiceSession {
    */
   #captionSegments: { itemId: string | undefined; text: string }[] = [];
   /**
-   * The sessions the reply under way is about, or nothing. Set only from
-   * identities the main process validated against the roster — a briefing's
-   * subjects, or the ones the brain's answer named — and cleared wherever the
-   * caption is, so the pressable notice the surface draws for them can never
-   * outlive the reply, and nothing the voice said can choose what it points at.
+   * Whether the words under way are a briefing or a reply, for History to
+   * record as such. Set only when the words were decided by the brain and
+   * cleared wherever the caption is, so it can never outlive the reply.
    */
-  #captionAbout: readonly SessionIdentity[] | undefined;
-  /** Whether the words under way are a briefing or a reply, for History to record as such. */
   #captionKind: ReplyKind | undefined;
   /**
    * Whether this call has ever reported a reply's audio running out. Once it
@@ -768,7 +753,7 @@ export class RealtimeVoiceSession {
     ) {
       return;
     }
-    if (this.#captionAbout) this.#discardCaption();
+    if (this.#captionKind !== undefined) this.#discardCaption();
     this.#teardown();
     this.#setStatus(REALTIME_STATUS.IDLE);
   }
@@ -1280,26 +1265,20 @@ export class RealtimeVoiceSession {
    * Speaks the brain's reply to a typed ask, reporting whether it could. The
    * ask itself went to the brain over the bridge — the voice never saw it —
    * so what the call is handed is the finished reply, on the briefing's own
-   * out-of-band terms, with the sessions the brain named as the caption's
-   * subject. A reply arriving over another interrupts it: the developer's
-   * turn always wins, however it is taken.
+   * out-of-band terms. A reply arriving over another interrupts it: the
+   * developer's turn always wins, however it is taken.
    */
-  speakReply(briefing: string, sessionIds: readonly SessionIdentity[]): boolean {
+  speakReply(briefing: string): boolean {
     if (!this.isConnected || !this.#withMicrophone) return false;
     if (this.#status === REALTIME_STATUS.LISTENING) return false;
     const events = briefingSpeechEvents({
       kind: BRIEFING_SPEECH_KIND,
       briefing,
-      sessionIds,
       decidedAt: Date.now(),
     });
     if (events.length === 0) return false;
     if (this.#status === REALTIME_STATUS.RESPONDING) this.#interruptReply();
     this.#startResponse(events);
-    this.#captionAbout = sessionIds.map(({ providerId, providerSessionId }) => ({
-      providerId,
-      providerSessionId,
-    }));
     this.#captionKind = REPLY_KIND.REPLY;
     this.#emitCaption();
     return true;
@@ -1407,21 +1386,15 @@ export class RealtimeVoiceSession {
     }
     if (isCalendarOnboardingSpeech(speech)) {
       if (!this.isConnected || this.#turnBusy) return false;
-      // About no session, on the arrival's own terms: no caption subject and
-      // no notice under the housing.
+      // On the arrival's own terms: words with no kind, recorded as none.
       this.#startResponse(calendarOnboardingSpeechEvents());
       return true;
     }
     const events = briefingSpeechEvents(speech);
     if (events.length === 0 || !this.isConnected || this.#turnBusy) return false;
     this.#startResponse(events);
-    // After the start, which clears the last reply's caption and subject: the
-    // briefing's reply is the one now under way, and everything it captions
-    // is about these sessions until the reply ends.
-    this.#captionAbout = speech.sessionIds.map(({ providerId, providerSessionId }) => ({
-      providerId,
-      providerSessionId,
-    }));
+    // After the start, which clears the last reply's caption and kind: the
+    // briefing's reply is the one now under way until it ends.
     this.#captionKind = REPLY_KIND.BRIEFING;
     this.#emitCaption();
     return true;
@@ -1702,26 +1675,23 @@ export class RealtimeVoiceSession {
   }
 
   #clearCaption(): void {
-    // The subject is of the reply, so the reply ending takes it too: every
-    // path that ends one clears the caption through here.
-    if (this.#captionSegments.length === 0 && this.#captionAbout === undefined) return;
+    // The kind is of the reply, so the reply ending takes it too: every path
+    // that ends one clears the caption through here.
+    if (this.#captionSegments.length === 0 && this.#captionKind === undefined) return;
     // Every path that ends a reply passes here, so this is where its words
     // are handed over before they are let go: the one moment they are both
     // final and still known.
     const texts = this.#captionTexts();
-    const about = this.#captionAbout;
     const kind = this.#captionKind;
     this.#captionSegments = [];
-    this.#captionAbout = undefined;
     this.#captionKind = undefined;
-    if (texts) this.#options.onReplyEnded?.(texts, about, kind);
+    if (texts) this.#options.onReplyEnded?.(texts, kind);
     this.#options.onCaption(undefined, undefined);
   }
 
   /** Clears an undelivered briefing without admitting it to History. */
   #discardCaption(): void {
     this.#captionSegments = [];
-    this.#captionAbout = undefined;
     this.#captionKind = undefined;
     this.#options.onCaption(undefined, undefined);
   }
@@ -1733,7 +1703,7 @@ export class RealtimeVoiceSession {
   }
 
   #emitCaption(): void {
-    this.#options.onCaption(this.#captionTexts(), this.#captionAbout);
+    this.#options.onCaption(this.#captionTexts(), this.#captionKind);
   }
 
   /**
@@ -2214,17 +2184,12 @@ export class RealtimeVoiceSession {
       return { status: answer.status, reason: answer.reason };
     }
     // The follow-up that says the answer is the reply now under way, and its
-    // caption is about the sessions the brain named — set here, before the
-    // follow-up opens with the caption kept, so the chips stand with the words.
-    // Unless the developer stopped or took the turn while the ask was out: the
-    // follow-up stands down on that edge, and a late answer must not leave its
-    // sessions standing under the housing with no words to answer for. The
-    // answer itself still travels, because the brain did what it says it did.
+    // words are the brain's — marked here, before the follow-up opens with the
+    // caption kept. Unless the developer stopped or took the turn while the
+    // ask was out: the follow-up stands down on that edge, and a late answer
+    // must not mark words that will never be said. The answer itself still
+    // travels, because the brain did what it says it did.
     if (epoch === this.#turnEpoch) {
-      this.#captionAbout = answer.sessionIds.map(({ providerId, providerSessionId }) => ({
-        providerId,
-        providerSessionId,
-      }));
       this.#captionKind = REPLY_KIND.REPLY;
       this.#emitCaption();
     }
@@ -2240,7 +2205,7 @@ export class RealtimeVoiceSession {
   #fail(message: string): boolean {
     // Release the device before reporting. `FAILED` offers "Start voice" again,
     // and retrying must not stack a second call on top of a live microphone.
-    if (this.#captionAbout) this.#discardCaption();
+    if (this.#captionKind !== undefined) this.#discardCaption();
     this.#teardown();
     this.#options.onError(message);
     this.#setStatus(REALTIME_STATUS.FAILED);

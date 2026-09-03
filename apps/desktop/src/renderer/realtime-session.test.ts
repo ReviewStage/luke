@@ -59,7 +59,6 @@ const CONNECTION: RealtimeConnection = {
 
 interface ReplyEnding {
   texts: readonly string[];
-  about: readonly string[] | undefined;
   kind: ReplyKind | undefined;
 }
 
@@ -69,9 +68,7 @@ interface Harness {
   errors: (string | undefined)[];
   /** Each caption emission: one text per stacked response, or a clear. */
   captions: (readonly string[] | undefined)[];
-  /** The sessions each caption emission was about, by session id. */
-  captionSubjects: (readonly string[] | undefined)[];
-  /** The words each ended reply left behind, with its subject and its kind. */
+  /** The words each ended reply left behind, with its kind. */
   replyEndings: ReplyEnding[];
   /** The questions the voice asked the brain, in order. */
   asked: string[];
@@ -115,13 +112,9 @@ interface Harness {
   ungateMicrophone: () => void;
 }
 
-/** An answer the brain accepted: words to say, about the sessions named. */
-function brainAnswer(briefing: string, ...sessionIds: readonly string[]): BrainAskResult {
-  return {
-    status: ACT_RESULT_STATUS.ACCEPTED,
-    briefing,
-    sessionIds: sessionIds.map((id) => ({ providerId: "claude-code", providerSessionId: id })),
-  };
+/** An answer the brain accepted: words to say. */
+function brainAnswer(briefing: string): BrainAskResult {
+  return { status: ACT_RESULT_STATUS.ACCEPTED, briefing };
 }
 
 function harness(
@@ -152,7 +145,6 @@ function harness(
   const sent: ParsedJsonObject[] = [];
   const errors: (string | undefined)[] = [];
   const captions: (readonly string[] | undefined)[] = [];
-  const captionSubjects: (readonly string[] | undefined)[] = [];
   const replyEndings: ReplyEnding[] = [];
   const asked: string[] = [];
   const spokenAsks: string[] = [];
@@ -347,16 +339,11 @@ function harness(
     onLocalStream: () => undefined,
     onRemoteStream: (stream) => options.onRemoteStream?.(stream),
     onError: (message) => errors.push(message),
-    onCaption: (texts, about) => {
+    onCaption: (texts) => {
       captions.push(texts);
-      captionSubjects.push(about?.map(({ providerSessionId }) => providerSessionId));
     },
-    onReplyEnded: (texts, about, kind) => {
-      replyEndings.push({
-        texts,
-        about: about?.map(({ providerSessionId }) => providerSessionId),
-        kind,
-      });
+    onReplyEnded: (texts, kind) => {
+      replyEndings.push({ texts, kind });
     },
     onSpokenAsk: (transcript) => {
       spokenAsks.push(transcript);
@@ -395,7 +382,6 @@ function harness(
     sent,
     errors,
     captions,
-    captionSubjects,
     replyEndings,
     asked,
     spokenAsks,
@@ -483,14 +469,9 @@ function settleReply(context: Harness): void {
   context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
 }
 
-/** One briefing the brain decided about one session, decided a moment ago. */
+/** One briefing the brain decided, worded about one session, decided a moment ago. */
 function briefingAbout(id: string, briefing = `Claude Code finished ${id}.`): BriefingSpeech {
-  return {
-    kind: BRIEFING_SPEECH_KIND,
-    briefing,
-    sessionIds: [{ providerId: "claude-code", providerSessionId: id }],
-    decidedAt: Date.now(),
-  };
+  return { kind: BRIEFING_SPEECH_KIND, briefing, decidedAt: Date.now() };
 }
 
 /** One `ask_brain` call as it sits inside a finished response's output. */
@@ -1771,9 +1752,7 @@ test("a reply ending at teardown still hands its words over, once", async () => 
   // history keeps them — and the retired call keeps nothing pending, so the
   // next call starts clean.
   context.closeChannel();
-  assert.deepEqual(context.replyEndings, [
-    { texts: ["Half a sentence."], about: undefined, kind: undefined },
-  ]);
+  assert.deepEqual(context.replyEndings, [{ texts: ["Half a sentence."], kind: undefined }]);
   assert.equal(context.captions.at(-1), undefined);
 
   await context.session.connect();
@@ -1912,14 +1891,14 @@ test("a reply hands its words back as it ends, whole and once", async () => {
   // known, so the caller can record them for the next call to remember.
   context.session.stopSpeaking();
 
-  // A reply the brain was not asked for is about no session and is neither a
-  // briefing nor an answer: History records it as plain words.
+  // A reply the brain was not asked for is neither a briefing nor an answer:
+  // History records it as plain words.
   assert.deepEqual(context.replyEndings, [
-    { texts: ["The checkout work is done."], about: undefined, kind: undefined },
+    { texts: ["The checkout work is done."], kind: undefined },
   ]);
 });
 
-test("a briefing's reply hands its subject and its kind back with the words", async () => {
+test("a briefing's reply hands its kind back with the words", async () => {
   const context = harness();
   await context.session.connect({ microphone: false });
 
@@ -1935,19 +1914,17 @@ test("a briefing's reply hands its subject and its kind back with the words", as
   });
   context.session.stopSpeaking();
 
-  // The subject rides along so the caller can store the spoken transcript
-  // with the identity the brain's decision carried, and the kind says it was
-  // a briefing rather than an answer.
+  // The kind rides along so the caller can record the spoken transcript as a
+  // briefing rather than an answer.
   assert.deepEqual(context.replyEndings, [
     {
       texts: ["Claude Code finished checkout-service."],
-      about: ["session-a"],
       kind: REPLY_KIND.BRIEFING,
     },
   ]);
 });
 
-test("an onboarding beat is about no session and hands its words back as plain words", async () => {
+test("an onboarding beat hands its words back as plain words", async () => {
   const context = harness();
   await context.session.connect({ microphone: false });
 
@@ -1960,21 +1937,16 @@ test("an onboarding beat is about no session and hands its words back as plain w
     }),
     true,
   );
-  // The beat's turn is opened with no tools, and no notice may stand under the
-  // housing claiming it is about an observed session.
+  // The beat's turn is opened with no tools.
   const response = context.sent.at(-1)?.response;
   assert.ok(isRecord(response));
   assert.equal(response.tool_choice, "none");
-  assert.deepEqual(context.captionSubjects, []);
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
     delta: "You're all set.",
   });
-  assert.deepEqual(context.captionSubjects, [undefined]);
   settleReply(context);
-  assert.deepEqual(context.replyEndings, [
-    { texts: ["You're all set."], about: undefined, kind: undefined },
-  ]);
+  assert.deepEqual(context.replyEndings, [{ texts: ["You're all set."], kind: undefined }]);
 
   // The calendar beat keeps the same terms.
   assert.equal(
@@ -1988,7 +1960,6 @@ test("an onboarding beat is about no session and hands its words back as plain w
   settleReply(context);
   assert.deepEqual(context.replyEndings.at(-1), {
     texts: ["Your calendar can quiet me."],
-    about: undefined,
     kind: undefined,
   });
 });
@@ -2548,7 +2519,7 @@ test("a stale drain from the spoken half does not skip the follow-up's trim", as
   let clock = 1_000;
   const context = harness({
     now: () => clock,
-    askBrain: async () => brainAnswer("Sent.", "session-a"),
+    askBrain: async () => brainAnswer("Sent."),
   });
   await context.session.connect();
   context.deliverRemoteTrack();
@@ -2704,7 +2675,7 @@ test("a stopped reply's brain follow-up stands down instead of speaking over the
   // The developer asks for quiet while the brain is still thinking.
   assert.equal(context.session.stopSpeaking(), true);
   const before = context.sent.length;
-  answer?.(brainAnswer("Sent.", "session-a"));
+  answer?.(brainAnswer("Sent."));
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   // The answer is still delivered as an item, so the model is not left
@@ -2765,7 +2736,7 @@ test("a typed ask opens a developer turn and asks for the reply to it", async ()
 });
 
 test("a typed ask's reply can ask the brain, exactly as a spoken one's can", async () => {
-  const context = harness({ askBrain: async () => brainAnswer("Asked.", "session-a") });
+  const context = harness({ askBrain: async () => brainAnswer("Asked.") });
   await context.session.connect();
   // The turn is opened by typing rather than by the talk key: both are the
   // developer's own ask, and the voice's one tool answers in either.
@@ -2777,7 +2748,6 @@ test("a typed ask's reply can ask the brain, exactly as a spoken one's can", asy
   assert.deepEqual(context.asked, ["ask claude code to add tests"]);
   // The answer is voiced, exactly as a spoken ask's would be.
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
-  assert.deepEqual(context.captionSubjects.at(-1), ["session-a"]);
 });
 
 test("a typed ask interrupts the reply it arrives over", async () => {
@@ -2904,9 +2874,9 @@ test("a typed ask before the call is open reports it could not go", () => {
   assert.deepEqual<ParsedJsonObject[]>(context.sent, []);
 });
 
-test("a spoken ask goes to the brain and its answer is voiced about the sessions it named", async () => {
+test("a spoken ask goes to the brain and its answer is voiced", async () => {
   const context = harness({
-    askBrain: async () => brainAnswer("Claude Code is on the tests now.", "session-a"),
+    askBrain: async () => brainAnswer("Claude Code is on the tests now."),
   });
   await context.session.connect();
   // The call arrives inside a turn the developer opened by speaking.
@@ -2928,10 +2898,8 @@ test("a spoken ask goes to the brain and its answer is voiced about the sessions
     { type: REALTIME_CLIENT_EVENT.RESPONSE_CREATE, response: { tools: [], tool_choice: "none" } },
   ]);
   assert.equal(context.sent.at(-1)?.type, REALTIME_CLIENT_EVENT.RESPONSE_CREATE);
-  // The turn never ended: the reply resumes over the answer, about the
-  // sessions the brain named.
+  // The turn never ended: the reply resumes over the answer.
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
-  assert.deepEqual(context.captionSubjects.at(-1), ["session-a"]);
 
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
@@ -2942,18 +2910,15 @@ test("a spoken ask goes to the brain and its answer is voiced about the sessions
     item_id: "item-answer",
     delta: "Claude Code is on the tests now.",
   });
-  assert.deepEqual(context.captionSubjects.at(-1), ["session-a"]);
   settleReply(context);
 
-  // History records the words as a reply, about the sessions the answer named.
+  // History records the words as a reply.
   assert.deepEqual(context.replyEndings, [
     {
       texts: ["Claude Code is on the tests now."],
-      about: ["session-a"],
       kind: REPLY_KIND.REPLY,
     },
   ]);
-  assert.equal(context.captionSubjects.at(-1), undefined);
 });
 
 test("a rejected answer's reason is the tool's output, and the follow-up still speaks", async () => {
@@ -2973,11 +2938,9 @@ test("a rejected answer's reason is the tool's output, and the follow-up still s
   assert.deepEqual(toolOutputs(context, sentBefore), [
     { status: ACT_RESULT_STATUS.REJECTED, reason: "That session is no longer observed." },
   ]);
-  // The refusal is voiced like any answer, but about no session: nothing the
-  // brain refused may put a notice under the housing.
+  // The refusal is voiced like any answer.
   assert.equal(responseCreates(context, sentBefore).length, 1);
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
-  assert.equal(context.captionSubjects.at(-1), undefined);
 });
 
 test("a call with no brain behind it is refused, and the refusal is voiced", async () => {
@@ -3108,28 +3071,20 @@ test("a brain that throws is refused with a bounded reason", async () => {
   ]);
 });
 
-test("the brain's reply to a typed ask is spoken about the sessions it named", async () => {
+test("the brain's reply to a typed ask is spoken on the briefing's own terms", async () => {
   const context = harness();
   await context.session.connect();
   const sentBefore = context.sent.length;
 
-  assert.equal(
-    context.session.speakReply("Two sessions need you.", [
-      { providerId: "claude-code", providerSessionId: "session-a" },
-      { providerId: "codex", providerSessionId: "session-b" },
-    ]),
-    true,
-  );
+  assert.equal(context.session.speakReply("Two sessions need you."), true);
 
   // The reply travels on the briefing's own out-of-band terms — no tools, no
-  // conversation — and the caption is about the sessions the brain named from
-  // the moment it is asked for.
+  // conversation.
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
   const [request] = responseCreates(context, sentBefore);
   assert.ok(isRecord(request?.response));
   assert.equal(request.response.conversation, "none");
   assert.deepEqual(request.response.tools, []);
-  assert.deepEqual(context.captionSubjects.at(-1), ["session-a", "session-b"]);
 
   context.emit({
     type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
@@ -3139,12 +3094,11 @@ test("the brain's reply to a typed ask is spoken about the sessions it named", a
   assert.deepEqual(context.replyEndings, [
     {
       texts: ["Two sessions need you."],
-      about: ["session-a", "session-b"],
       kind: REPLY_KIND.REPLY,
     },
   ]);
   // A reply with nothing to say opens nothing.
-  assert.equal(context.session.speakReply("   ", []), false);
+  assert.equal(context.session.speakReply("   "), false);
 });
 
 test("the brain's reply interrupts the reply it arrives over, never the developer's microphone", async () => {
@@ -3155,7 +3109,7 @@ test("the brain's reply interrupts the reply it arrives over, never the develope
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
   const sentBefore = context.sent.length;
 
-  assert.equal(context.session.speakReply("Here is the answer.", []), true);
+  assert.equal(context.session.speakReply("Here is the answer."), true);
   assert.equal(context.lukeAudible(), false);
   assert.deepEqual(
     context.sent.slice(sentBefore).map((event) => event.type),
@@ -3169,7 +3123,7 @@ test("the brain's reply interrupts the reply it arrives over, never the develope
 
   // Half a spoken question is still the developer's.
   await holdTurn(context);
-  assert.equal(context.session.speakReply("Here is the answer.", []), false);
+  assert.equal(context.session.speakReply("Here is the answer."), false);
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
 });
 
@@ -3191,7 +3145,7 @@ test("the brain's answer is not spoken over a turn the developer has taken", asy
   // The developer takes the turn while the ask is still out.
   context.session.beginTurn();
   await deviceArrives();
-  answer?.(brainAnswer("Sent.", "session-a"));
+  answer?.(brainAnswer("Sent."));
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   // The answer was still delivered as an item, so the model is not left
@@ -3224,7 +3178,7 @@ test("a drained reply that asked the brain holds the turn for the follow-up it o
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
   assert.equal(context.session.speak(briefingAbout("session-b")), false);
 
-  answer?.(brainAnswer("Sent.", "session-a"));
+  answer?.(brainAnswer("Sent."));
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   // The follow-up opened: the answer is voiced rather than abandoned.
@@ -3286,7 +3240,7 @@ test("audio draining while the ask is out holds the turn the same way", async ()
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
   assert.equal(context.session.speak(briefingAbout("session-b")), false);
 
-  answer?.(brainAnswer("Sent.", "session-a"));
+  answer?.(brainAnswer("Sent."));
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   // The follow-up opened: the answer is voiced rather than abandoned.
@@ -3317,7 +3271,7 @@ test("an answer that outlives the backstop cannot speak out of the spent turn", 
   t.mock.timers.reset();
 
   const sentBefore = context.sent.length;
-  answer?.(brainAnswer("Sent.", "session-a"));
+  answer?.(brainAnswer("Sent."));
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   // The answer is still delivered as an item, so the model is not left
@@ -3450,7 +3404,7 @@ test("back-to-back responses stack as two captions instead of running together",
 });
 
 test("a brain follow-up keeps the words said before the ask and stacks the answer", async () => {
-  const context = harness({ askBrain: async () => brainAnswer("Sent.", "session-a") });
+  const context = harness({ askBrain: async () => brainAnswer("Sent.") });
   await context.session.connect();
   await armDeveloperTurn(context);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
@@ -3500,20 +3454,13 @@ test("the caption leaves when the reply does", async () => {
   assert.deepEqual(context.captions, [["All quiet."], undefined]);
 });
 
-test("a briefing's caption names its sessions; a conversation's names none", async () => {
+test("a briefing's caption clears with the reply, and a conversation's stands on its own", async () => {
   const context = harness();
   await context.session.connect();
 
-  // The subject stands from the moment the briefing's reply is asked for —
-  // the pressable notice may precede the first word — and every caption of
-  // that reply carries it.
   context.session.speak({
     kind: BRIEFING_SPEECH_KIND,
     briefing: "Checkout just finished, and billing wants the migration approved.",
-    sessionIds: [
-      { providerId: "claude-code", providerSessionId: "session-a" },
-      { providerId: "codex", providerSessionId: "session-b" },
-    ],
     decidedAt: Date.now(),
   });
   context.emit({
@@ -3521,17 +3468,11 @@ test("a briefing's caption names its sessions; a conversation's names none", asy
     delta: "Checkout just finished.",
   });
   assert.deepEqual(context.captions, [undefined, ["Checkout just finished."]]);
-  assert.deepEqual(context.captionSubjects, [
-    ["session-a", "session-b"],
-    ["session-a", "session-b"],
-  ]);
 
-  // The reply ending takes the subject with the words: the notice can never
-  // outlive the briefing it stands for.
+  // The reply ending takes the words with it.
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_DONE });
   context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
   assert.equal(context.captions.at(-1), undefined);
-  assert.equal(context.captionSubjects.at(-1), undefined);
 
   // A conversation reply is nobody's briefing, whatever was said before.
   await holdTurn(context);
@@ -3541,7 +3482,6 @@ test("a briefing's caption names its sessions; a conversation's names none", asy
     delta: "Two sessions need review.",
   });
   assert.deepEqual(context.captions.at(-1), ["Two sessions need review."]);
-  assert.equal(context.captionSubjects.at(-1), undefined);
 });
 
 test("taking the turn cuts the caption with the audio", async () => {
@@ -3651,7 +3591,7 @@ test("a speak-only call reads a briefing out but refuses a typed ask and its rep
   // stands the call down and opens the developer's own. The brain's reply to
   // a typed ask is refused on the same terms.
   assert.equal(context.session.sendText("stop the deploy"), false);
-  assert.equal(context.session.speakReply("Stopped.", []), false);
+  assert.equal(context.session.speakReply("Stopped."), false);
 });
 
 test("an idle call stays open until the provider closes it", async (t) => {

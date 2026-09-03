@@ -2,20 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { PRODUCT_EXCHANGE_KIND } from "@sidecar/analytics";
 import { FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
-import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
 import {
   CONVERSATION_ENTRY_KIND,
   REALTIME_STATUS,
   REALTIME_VOICE,
   REALTIME_VOICE_SPEED,
 } from "@sidecar/realtime";
-import {
-  normalizeSession,
-  type ProviderSessionObservation,
-  SESSION_MENTION_KIND,
-  SESSION_STATUS,
-  type Session,
-} from "@sidecar/session";
+import { REPLY_KIND } from "./realtime-session";
 import {
   activeVoiceStream,
   authorizeConversationAct,
@@ -25,8 +18,6 @@ import {
   liveSpeedApplies,
   lukeCaptionsToShow,
   rebaseSpokenTurnMarks,
-  replyIssueMentions,
-  replyMentions,
   spokenAskBelongsToConversation,
   spokenAskPreviewSurvives,
   talkKeyPress,
@@ -62,7 +53,7 @@ test("the live lines mirror exactly what their recording paths will keep", () =>
       ["item-2", "and the deploy?"],
     ]),
     captions: ["Checkout is", "nearly done."],
-    about: undefined,
+    kind: undefined,
     transcriptSpoken: false,
   });
 
@@ -80,43 +71,21 @@ test("the live lines mirror exactly what their recording paths will keep", () =>
   assert.ok(lines.every((line) => line.recordedAt === undefined));
 });
 
-test("an announcement's live line carries its validated subject", () => {
-  const about = { providerId: "claude-code", providerSessionId: "session-a" };
-  const lines = liveConversationEntries({
-    spokenAskPreviews: new Map(),
-    captions: ["Claude Code finished checkout-service."],
-    about: [about],
-    transcriptSpoken: false,
-  });
-
-  assert.deepEqual(lines, [
-    {
-      kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
-      words: "Claude Code finished checkout-service.",
-      identity: about,
-    },
-  ]);
-});
-
-test("a batched announcement's live line carries every validated subject", () => {
-  const about = [
-    { providerId: "claude-code", providerSessionId: "session-a" },
-    { providerId: "codex", providerSessionId: "session-b" },
-  ];
-  const lines = liveConversationEntries({
-    spokenAskPreviews: new Map(),
-    captions: ["Checkout finished and billing needs approval."],
-    about,
-    transcriptSpoken: false,
-  });
-
-  assert.deepEqual(lines, [
-    {
-      kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
-      words: "Checkout finished and billing needs approval.",
-      identities: about,
-    },
-  ]);
+test("a briefing's live line settles as an announcement, a transcript reading notwithstanding", () => {
+  assert.deepEqual(
+    liveConversationEntries({
+      spokenAskPreviews: new Map(),
+      captions: ["Claude Code finished checkout-service."],
+      kind: REPLY_KIND.BRIEFING,
+      transcriptSpoken: true,
+    }),
+    [
+      {
+        kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+        words: "Claude Code finished checkout-service.",
+      },
+    ],
+  );
 });
 
 test("a transcript reading's reply previews nothing it may never record", () => {
@@ -126,7 +95,7 @@ test("a transcript reading's reply previews nothing it may never record", () => 
     liveConversationEntries({
       spokenAskPreviews: new Map(),
       captions: ["The session said the tests pass."],
-      about: undefined,
+      kind: undefined,
       transcriptSpoken: true,
     }),
     [],
@@ -474,175 +443,5 @@ test("a connecting call counts as one to reopen: its credential may already be t
       status: REALTIME_STATUS.CONNECTING,
     }),
     { due: true, action: VOICE_RESTART.WAIT },
-  );
-});
-
-function rosterSession(
-  providerSessionId: string,
-  title: string,
-  workspace?: { providerWorkspaceId: string; name?: string },
-): Session {
-  const session: ProviderSessionObservation = {
-    providerSessionId,
-    title,
-    status: SESSION_STATUS.WORKING,
-    lastActivityAt: 100,
-    detail: {},
-  };
-  if (workspace) {
-    session.workspace = workspace;
-  }
-  return normalizeSession({ id: "conductor", displayName: "Conductor" }, session);
-}
-
-test("an announcement's validated subjects are the whole answer", () => {
-  const roster = [rosterSession("a", "Checkout service"), rosterSession("b", "Payments schema")];
-  assert.deepEqual(
-    replyMentions({
-      fixtureSpeaking: false,
-      about: [
-        { providerId: "conductor", providerSessionId: "b" },
-        { providerId: "conductor", providerSessionId: "a" },
-      ],
-      captions: ["Payments schema finished, right after Checkout service did."],
-      sessions: roster,
-    }),
-    [
-      {
-        kind: SESSION_MENTION_KIND.SESSION,
-        providerId: "conductor",
-        providerSessionId: "b",
-      },
-      {
-        kind: SESSION_MENTION_KIND.SESSION,
-        providerId: "conductor",
-        providerSessionId: "a",
-      },
-    ],
-  );
-});
-
-test("a conversation reply's previews are what its words name off the roster", () => {
-  const roster = [
-    rosterSession("a", "Checkout service"),
-    rosterSession("b", "Payments schema"),
-    rosterSession("c", "amber-shoal", { providerWorkspaceId: "ws-lisbon", name: "lisbon-v2" }),
-  ];
-  // Back-to-back replies stack their captions, and every caption still on
-  // screen feeds the chips: the first names one session, the second another.
-  assert.deepEqual(
-    replyMentions({
-      fixtureSpeaking: false,
-      about: undefined,
-      captions: ["Payments schema is migrating.", "And lisbon-v2 is waiting on you."],
-      sessions: roster,
-    }),
-    [
-      { kind: SESSION_MENTION_KIND.SESSION, providerId: "conductor", providerSessionId: "b" },
-      { kind: SESSION_MENTION_KIND.WORKSPACE, providerId: "conductor", providerSessionId: "c" },
-    ],
-  );
-  assert.deepEqual(
-    replyMentions({
-      fixtureSpeaking: false,
-      about: undefined,
-      captions: undefined,
-      sessions: roster,
-    }),
-    [],
-  );
-});
-
-test("a capture run's chips are earned by the fixture's own words", () => {
-  // The fixture sentence names this title and this workspace on purpose: the
-  // chips they earn are what the speaking evidence photographs.
-  const roster = [
-    rosterSession("fixture", "Bootstrap the desktop shell"),
-    rosterSession("chat", "gentle-cove", { providerWorkspaceId: "ws-lisbon", name: "lisbon-v2" }),
-  ];
-  assert.deepEqual(
-    replyMentions({
-      fixtureSpeaking: true,
-      about: undefined,
-      captions: undefined,
-      sessions: roster,
-    }),
-    [
-      {
-        kind: SESSION_MENTION_KIND.SESSION,
-        providerId: "conductor",
-        providerSessionId: "fixture",
-      },
-      {
-        kind: SESSION_MENTION_KIND.WORKSPACE,
-        providerId: "conductor",
-        providerSessionId: "chat",
-      },
-    ],
-  );
-});
-
-function trackedIssue(identifier: string, title: string): TrackedIssue {
-  const issue = normalizeTrackedIssue(
-    { id: ISSUE_TRACKER_ID.LINEAR, displayName: "Linear" },
-    {
-      trackerIssueId: `issue-uuid-${identifier}`,
-      identifier,
-      title,
-      stateName: "Todo",
-      observedAt: 1_800_000_000_000,
-    },
-  );
-  assert.ok(issue);
-  return issue;
-}
-
-test("a conversation reply's issue previews are what its words name off the tracker", () => {
-  const board = [trackedIssue("LUKE-1", "Fix login"), trackedIssue("LUKE-2", "Ship captions")];
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // Back-to-back replies stack their captions, exactly as the session
-  // mentions read them: everything still on screen feeds the chips.
-  assert.deepEqual(
-    replyIssueMentions({
-      fixtureSpeaking: false,
-      about: undefined,
-      captions: ["LUKE-2 is nearly done.", "And Fix login is still waiting."],
-      issues: board,
-    }),
-    [board[1], board[0]],
-  );
-  assert.deepEqual(
-    replyIssueMentions({
-      fixtureSpeaking: false,
-      about: undefined,
-      captions: undefined,
-      issues: board,
-    }),
-    [],
-  );
-});
-
-test("an announcement's session subject leaves issue identifiers unclaimed", () => {
-  const board = [trackedIssue("LUKE-1", "Fix login")];
-  assert.deepEqual(
-    replyIssueMentions({
-      fixtureSpeaking: false,
-      about: [{ providerId: "conductor", providerSessionId: "b" }],
-      captions: ["Checkout service finished LUKE-1."],
-      issues: board,
-    }),
-    [],
-  );
-});
-
-test("a capture run observes no tracker, so its fixture words draw no issue chips", () => {
-  assert.deepEqual(
-    replyIssueMentions({
-      fixtureSpeaking: true,
-      about: undefined,
-      captions: undefined,
-      issues: undefined,
-    }),
-    [],
   );
 });

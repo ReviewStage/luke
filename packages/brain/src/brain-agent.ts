@@ -117,8 +117,6 @@ export interface BrainActPerformer {
 export interface BrainAskAnswer {
   /** The reply, as the voice speaks it. */
   text: string;
-  /** Every observed session the turn named, for the notice band. */
-  sessionIds: readonly SessionIdentity[];
 }
 
 export interface BrainToolCallTrace {
@@ -140,7 +138,7 @@ export interface BrainTurnTraceRecord {
   transcriptBytes: number;
   toolCalls: readonly BrainToolCallTrace[];
   outputText?: string;
-  deliveries: readonly { briefingChars: number; sessionCount: number }[];
+  deliveries: readonly { briefingChars: number }[];
   model?: string;
   elapsedMs: number;
   iterations: number;
@@ -183,7 +181,7 @@ const TURN_OUTCOME = {
 } as const;
 
 type TurnResult =
-  | { outcome: typeof TURN_OUTCOME.DONE; text: string; sessionIds: readonly SessionIdentity[] }
+  | { outcome: typeof TURN_OUTCOME.DONE; text: string }
   | { outcome: typeof TURN_OUTCOME.QUIET; until: number }
   | { outcome: typeof TURN_OUTCOME.FAILED };
 
@@ -345,7 +343,7 @@ export class BrainAgent {
     const result = await Promise.race([turn, timedOut]);
     if (deadline !== undefined) this.#cancel(deadline);
     if (result?.outcome !== TURN_OUTCOME.DONE) return undefined;
-    return { text: result.text, sessionIds: result.sessionIds };
+    return { text: result.text };
   }
 
   /**
@@ -509,7 +507,6 @@ export class BrainAgent {
     const appendedKinds: string[] = [];
     const toolCalls: BrainToolCallTrace[] = [];
     const deliveries: BrainDelivery[] = [];
-    const touched = new IdentitySet();
     let iterations = 0;
     let compacted = false;
     let inputTokens: number | undefined;
@@ -594,7 +591,7 @@ export class BrainAgent {
 
       const outcomes = await Promise.all(
         output.functionCalls.map((call) =>
-          this.#dispatch(call, roster, plan, touched, deliveries).then((outcome) => {
+          this.#dispatch(call, roster, plan, deliveries).then((outcome) => {
             toolCalls.push({
               name: call.name,
               argumentsChars: call.argumentsJson.length,
@@ -641,10 +638,7 @@ export class BrainAgent {
       transcriptBytes,
       toolCalls,
       ...(outputText ? { outputText } : undefined),
-      deliveries: deliveries.map((delivery) => ({
-        briefingChars: delivery.briefing.length,
-        sessionCount: delivery.sessionIds.length,
-      })),
+      deliveries: deliveries.map((delivery) => ({ briefingChars: delivery.briefing.length })),
       ...(this.#options.client.model ? { model: this.#options.client.model } : undefined),
       elapsedMs: this.#now() - startedAt,
       iterations,
@@ -652,7 +646,7 @@ export class BrainAgent {
       ...(error ? { error } : undefined),
     });
 
-    return failure ?? { outcome: TURN_OUTCOME.DONE, text: outputText, sessionIds: touched.list() };
+    return failure ?? { outcome: TURN_OUTCOME.DONE, text: outputText };
   }
 
   /**
@@ -703,14 +697,12 @@ export class BrainAgent {
     call: BrainFunctionCall,
     roster: BrainRoster,
     plan: TurnPlan,
-    touched: IdentitySet,
     deliveries: BrainDelivery[],
   ): Promise<DispatchOutcome> {
     const args = parsedArguments(call.argumentsJson);
     const observed = (identity: SessionIdentity) =>
       roster.identities.some((listed) => sameIdentity(listed, identity));
     const named = identityFromRecord(args);
-    if (named && observed(named)) touched.add(named);
 
     if (!isBrainOnlyTool(call.name)) {
       let output: WireRecord;
@@ -742,24 +734,8 @@ export class BrainAgent {
         if (!briefing) {
           return { callId: call.callId, output: rejection(REFUSAL_REASON.EMPTY_BRIEFING) };
         }
-        const sessionIds = new IdentitySet();
-        if (Array.isArray(args.session_ids)) {
-          for (const entry of args.session_ids) {
-            const identity = identityFromRecord(entry);
-            if (identity && observed(identity)) sessionIds.add(identity);
-          }
-        }
-        for (const identity of sessionIds.list()) touched.add(identity);
-        deliveries.push({
-          briefing,
-          sessionIds: sessionIds.list(),
-          decidedAt: this.#now(),
-          source: plan.deliverySource,
-        });
-        return {
-          callId: call.callId,
-          output: { status: ACT_RESULT_STATUS.ACCEPTED, sessions: sessionIds.list().length },
-        };
+        deliveries.push({ briefing, decidedAt: this.#now(), source: plan.deliverySource });
+        return { callId: call.callId, output: { status: ACT_RESULT_STATUS.ACCEPTED } };
       }
     }
   }

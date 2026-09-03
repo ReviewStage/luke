@@ -12,13 +12,12 @@ import {
 } from "@sidecar/credentials/vocabulary";
 import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
-import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
+import { FIXTURE_EPOCH_MS } from "@sidecar/fixtures";
 import { APP_UPDATE_ACT, FEEDBACK_COMPOSER_KIND } from "@sidecar/guide";
-import { WingFace as LukeFace, ProviderMark } from "@sidecar/panel";
+import { WingFace as LukeFace } from "@sidecar/panel";
 import { REALTIME_STATUS } from "@sidecar/realtime";
 import {
   type ObservedWorkspaceProject,
-  SESSION_MENTION_KIND,
   type SessionApplicationId,
   type SessionIdentity,
   workspaceProjectSelectionId,
@@ -29,13 +28,7 @@ import {
   voiceHotkeyLabel,
   voiceHotkeyToShow,
 } from "@sidecar/settings";
-import {
-  MOTION_DURATION_MS,
-  SESSION_NOTICE_HEIGHT,
-  SESSION_NOTICE_MAX_ROWS,
-  VOICE_BAND_INSET,
-  VOICE_CAPTION_MAX_HEIGHT,
-} from "@sidecar/surface";
+import { MOTION_DURATION_MS, VOICE_CAPTION_MAX_HEIGHT } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import {
@@ -124,9 +117,6 @@ import {
   arrangeSessions,
   DEFAULT_SESSION_VIEW,
   displaySessions,
-  fixtureMentionChips,
-  MENTION_CHIP_KIND,
-  type MentionChip,
   type SessionArrangement,
   type SessionFilter,
   type SessionView,
@@ -277,31 +267,6 @@ function captionBlockSize(textHeight: number, volumeHint: boolean, padding: numb
   return Math.min(VOICE_CAPTION_MAX_HEIGHT - hintBand, textHeight + padding);
 }
 
-/**
- * Sizes the notice band's growth to the chips it currently holds — the
- * caption block's own pattern. The chips size to their names and wrap where
- * they wrap, so only a measurement can say how many rows they made. Measured
- * off the rows inside the band rather than the band itself: the band's box
- * holds every reserved row so the growth can be revealed by its clip, which
- * means only the inner stack's height says how many rows the chips actually
- * made. The clamp is the rows the window reserved — past it the chips scroll
- * inside the band instead of growing the shape. The inset added to the
- * measured chips is the band's own stand-off from the strip above it, the
- * same one every band under the strip carries; the gap below the last row is
- * the next band's, or the shape's. Because the chips wrap at that inset too,
- * the sum lands on an exact multiple of `--notice-size` — the reserved row —
- * however many rows they made. Unmeasured falls back to `--notice-size`, one
- * row, in the stylesheet.
- */
-function noticeGrowthStyle(rowsHeight: number | undefined): CSSProperties {
-  if (!rowsHeight) return {};
-  const growth = Math.min(
-    SESSION_NOTICE_HEIGHT * SESSION_NOTICE_MAX_ROWS,
-    rowsHeight + VOICE_BAND_INSET,
-  );
-  return cssCustomProperties({ "--notice-growth": `${growth}px` });
-}
-
 function notchStyle(display: DisplayDiagnostic): CSSProperties {
   return cssCustomProperties({
     "--notch-top-inset": `${display.notch.topInset}px`,
@@ -327,8 +292,8 @@ const COLLAPSE_ANIMATION_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SURFA
  * True from the render that leaves the panel for a compact shape until the
  * collapse has settled — the window's own collapse clock, exit plus shape.
  * The stylesheet spends it to hold the surface behind the content it is
- * still carrying: the panel's rows fading out, and a caption block or
- * notice band riding down from the panel's foot. Derived during render
+ * still carrying: the panel's rows fading out, and a caption block riding
+ * down from the panel's foot. Derived during render
  * rather than in an effect, because the surface's transition reads its
  * delay on the same style change that retargets it — an attribute landing
  * one commit later finds the shape already moving.
@@ -2055,13 +2020,10 @@ export function App(): React.JSX.Element {
     seedConversationHistory,
     voiceTurn,
     lukeCaptions,
-    mentionedSessions,
-    mentionedIssues,
     remoteAudio,
     discardListening,
     stopSpeaking,
     syncGuide,
-    syncIssues,
   } = useVoiceConversation({
     preferBuiltInMicrophone: (settings ?? bootstrapSettings)?.preferBuiltInMicrophone ?? true,
     agentTraceEnabled: bootstrap?.agentTraceEnabled === true,
@@ -2108,10 +2070,8 @@ export function App(): React.JSX.Element {
   const liveStripText = voiceErrorNotice ?? voiceNoticeShown;
   const liveCaptionTexts =
     lukeCaptions ?? (liveStripText === undefined ? undefined : [liveStripText]);
-  // Words is the resting tone, kept even when nothing is drawn: a chips-only
-  // frame still snapshots into the strip hold, and one that defaulted to a
-  // coloured tone would paint the empty caption as a status line under a
-  // pointer that is only holding chips.
+  // Words is the resting tone, kept even when nothing is drawn, so a frame
+  // with no words never snapshots a coloured tone into the strip hold.
   const captionLiveTone: CaptionTone =
     lukeCaptions !== undefined || liveStripText === undefined
       ? CAPTION_TONE.WORDS
@@ -2119,122 +2079,44 @@ export function App(): React.JSX.Element {
         ? CAPTION_TONE.ERROR
         : CAPTION_TONE.NOTICE;
 
-  // The notices: the pressable faces of what the reply being spoken is about
-  // — an announcement's one subject, or the several a conversation reply
-  // names when "what are we working on?" is answered with a walk through the
-  // roster: a chat by its title, a whole workspace by name fronted by its
-  // freshest chat, or a tracked issue by identifier or title. Derived, not
-  // queued — the subjects arrive with the captions and die with the reply,
-  // outliving it only under the strip hold's pointer, so a chip can never
-  // lag the words or stand for news Luke is not saying —
-  // and each draws only for a session the roster still titles or an issue
-  // the tracker still lists, because a press is a row press at one remove
-  // and needs a row to stand for. A workspace chip wears the workspace's
-  // name, read off the same roster row, so the chip says what the words
-  // said; an issue chip wears its identifier and title, because the
-  // identifier is what was mentioned. The issues follow the sessions rather
-  // than interleaving, because each half keeps its own first-heard order and
-  // one band cannot honestly claim an order across the two rosters. The
-  // resting shapes draw the band under the housing, and the open panel keeps
-  // it at its foot: the rows are up in the list, but the chips are what say
-  // which of them Luke is talking about. Only the slot and the composer go
-  // without — those are shapes someone asked for.
-  //
-  // A fixture run's own sentence is matched against the rows the fixture
-  // draws, because it observes no provider and both halves below resolve
-  // against a roster it never fills.
-  const spokenOf: readonly MentionChip[] = [
-    ...(fixtureSpeaking && bootstrap.fixtureMode
-      ? fixtureMentionChips(FIXTURE_SPEAKING_CAPTION, bootstrap.fixture.sessions)
-      : []),
-    ...mentionedSessions.flatMap((mention): readonly MentionChip[] => {
-      const session = sessions.find(
-        (candidate) =>
-          candidate.providerId === mention.providerId &&
-          candidate.providerSessionId === mention.providerSessionId,
-      );
-      if (!session) return [];
-      const title =
-        mention.kind === SESSION_MENTION_KIND.WORKSPACE && session.workspace?.name !== undefined
-          ? session.workspace.name
-          : session.title;
-      // The chip's mark is the agent having the conversation, the same
-      // identity the session's own row leads with.
-      const markId = session.agent?.id ?? session.providerId;
-      return [
-        {
-          kind: MENTION_CHIP_KIND.SESSION,
-          id: session.providerSessionId,
-          markId,
-          title,
-          identity: {
-            providerId: session.providerId,
-            providerSessionId: session.providerSessionId,
-          },
-          applications: session.applications.flatMap((application) =>
-            // An app the leading mark already stands for — a provider that is
-            // itself the app, standing in where no agent was reported — would
-            // draw the same mark twice on one chip.
-            application.id === markId
-              ? []
-              : [{ id: application.id, name: application.displayName }],
-          ),
-        },
-      ];
-    }),
-    ...mentionedIssues.map(
-      (issue): MentionChip => ({
-        kind: MENTION_CHIP_KIND.ISSUE,
-        id: issue.identifier,
-        markId: issue.trackerId,
-        title: `${issue.identifier} — ${issue.title}`,
-        identity: { trackerId: issue.trackerId, identifier: issue.identifier },
-      }),
-    ),
-  ];
-  const chipsDrawn = spokenOf.length > 0;
-
   /**
-   * The pointer's hold on the strip. The words and the chips leave with the
-   * reply that earned them, and a failure leaves on its own clock — but never
-   * out from under a pointer resting on them, which is someone mid-read or
-   * mid-press on a chip. The hold snapshots exactly what the strip was
-   * showing and keeps it drawn until the pointer moves away; it can start
-   * nothing, so nothing dismissed before the hover began is ever resurrected.
+   * The pointer's hold on the strip. The words leave with the reply that
+   * earned them, and a failure leaves on its own clock — but never out from
+   * under a pointer resting on them, which is someone mid-read. The hold
+   * snapshots exactly what the strip was showing and keeps it drawn until the
+   * pointer moves away; it can start nothing, so nothing dismissed before the
+   * hover began is ever resurrected.
    */
   const [stripHovered, setStripHovered] = useState(false);
   // Derived in the render, never advanced after paint: the frame that brings
   // a new reply's content composes the hold against that same content, so a
   // held snapshot can never paint one frame beside live words it should have
-  // yielded to. The ref carries the previous frame's answer, the way
-  // `lastMentioned` carries the band's.
+  // yielded to. The ref carries the previous frame's answer.
   const stripHoldRef = useRef<SpokenStripContent | undefined>(undefined);
   const stripHold = stripHoldNext({
     hovered: stripHovered,
     drawn:
-      liveCaptionTexts === undefined && !chipsDrawn
+      liveCaptionTexts === undefined
         ? undefined
-        : { texts: liveCaptionTexts, tone: captionLiveTone, chips: chipsDrawn },
+        : { texts: liveCaptionTexts, tone: captionLiveTone },
     held: stripHoldRef.current,
   });
   stripHoldRef.current = stripHold;
 
   /**
-   * The strip's hoverable boxes, kept current for the window's move listener:
+   * The strip's hoverable box, kept current for the window's move listener:
    * the caption block's visible height — zero while no words are drawn, so an
-   * invisible block holds nothing — and whether the chip band is drawn, on
-   * the same terms. Refs rather than state, because the listener reads them
-   * at each move and re-subscribing per frame would be work for nobody.
+   * invisible block holds nothing. A ref rather than state, because the
+   * listener reads it at each move and re-subscribing per frame would be work
+   * for nobody.
    */
   const captionHoverHeight = useRef(0);
-  const noticeHoverable = useRef(false);
   useEffect(() => {
     // Forwarded moves arrive even while the window is click-through, which is
     // what lets a pointer resting on words that take no pointer be seen here
     // at all.
     const handleMove = (event: MouseEvent) => {
       const caption = captionElement.current;
-      const band = noticeBand.current;
       setStripHovered(
         pointOverStrip({
           x: event.clientX,
@@ -2246,7 +2128,6 @@ export function App(): React.JSX.Element {
                   visibleHeight: captionHoverHeight.current,
                 }
               : undefined,
-          band: band && noticeHoverable.current ? band.getBoundingClientRect() : undefined,
         }),
       );
     };
@@ -2259,163 +2140,21 @@ export function App(): React.JSX.Element {
     };
   }, []);
 
-  const noticeShown =
-    (chipsDrawn || stripHold?.chips === true) &&
-    (presentation === PANEL_PRESENTATION.CAPSULE ||
-      presentation === PANEL_PRESENTATION.PEEK ||
-      presentation === PANEL_PRESENTATION.PANEL);
-  // The last mentioned fields, held so the notices fade out still worded
-  // rather than emptying on the frame the reply ends.
-  const lastMentioned = useRef<readonly MentionChip[]>([]);
-  if (spokenOf.length > 0) {
-    lastMentioned.current = spokenOf;
-  }
-  const noticeChipCount = lastMentioned.current.length;
-
   /**
-   * Which of the band's folds have chips beyond them. A band that scrolls
-   * with no edge to say so hides its lower rows silently — the fades these
-   * drive are what tell the developer there is more to see. Measured, not
-   * derived from the count: the scroll position is the band's own, and only
-   * the element can say where it stands. The rows' height is measured
-   * beside it, because naturally wrapped chips make however many rows their
-   * names need and the shape has to grow to the rows actually made.
+   * The measured caption height the shape spends, held through a collapse
+   * out of the panel. The compact width lands at the flip and re-wraps the
+   * words while they are still riding down at the panel's foot, and a
+   * re-measure landing mid-ride would open the clip and retarget the surface
+   * past room nothing has made yet. The collapse travels on the panel's
+   * numbers; the compact re-measure lands when the shape has settled, and
+   * grows it there the way words arriving at rest do.
    */
-  const noticeBand = useRef<HTMLSpanElement | null>(null);
-  // The growth is measured off the rows stack inside the band, not the band:
-  // the band's box holds every reserved row in every state so its clip can
-  // reveal the growth on the shape's own spring, which leaves the inner
-  // stack's wrapped height as the only box that says how many rows the chips
-  // made.
-  const [noticeRowsElement, noticeBandHeight] = useMeasuredHeight();
-  /**
-   * The measured caption and band heights the shape spends, held through a
-   * collapse out of the panel. The compact width lands at the flip and
-   * re-wraps the words and the chips while they are still riding down at the
-   * panel's foot, and a re-measure landing mid-ride would open the clips and
-   * retarget the surface past room nothing has made yet. The collapse
-   * travels on the panel's numbers; the compact re-measure lands when the
-   * shape has settled, and grows it there the way words arriving at rest do.
-   */
-  const heldSurfaceSizes = useRef<{ caption?: number; band?: number }>({});
+  const heldCaptionHeight = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (leavingPanel) return;
-    heldSurfaceSizes.current = { caption: captionTextHeight, band: noticeBandHeight };
+    heldCaptionHeight.current = captionTextHeight;
   });
-  const shownCaptionHeight = leavingPanel ? heldSurfaceSizes.current.caption : captionTextHeight;
-  const shownBandHeight = leavingPanel ? heldSurfaceSizes.current.band : noticeBandHeight;
-  const [noticeFold, setNoticeFold] = useState({ above: false, below: false });
-  const measureNoticeFold = useCallback(() => {
-    const band = noticeBand.current;
-    if (!band) return;
-    // Folds only on a band that genuinely scrolls. Subpixel rounding can
-    // leave scrollHeight a pixel or two past clientHeight on a band whose
-    // chips all fit, and a fold drawn for that fades a chip nobody can
-    // scroll to. Real overflow is at least a row of chips; half of one
-    // tells the two apart at any display scale.
-    const scrollable = band.scrollHeight - band.clientHeight > SESSION_NOTICE_HEIGHT / 2;
-    const above = scrollable && band.scrollTop > 1;
-    const below = scrollable && band.scrollTop + band.clientHeight < band.scrollHeight - 1;
-    setNoticeFold((held) =>
-      held.above === above && held.below === below ? held : { above, below },
-    );
-  }, []);
-  // Re-measured when the chips change, when their wrapped height moves, and
-  // when the band comes or goes — a scroll left behind by one reply must not
-  // start the next mid-list, so a band standing down rewinds to its first
-  // row.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the chip count and band height are not read here — either changing is the signal the fold moved, because content grows without any scroll event firing.
-  useEffect(() => {
-    const band = noticeBand.current;
-    if (band && !noticeShown) band.scrollTop = 0;
-    measureNoticeFold();
-  }, [noticeShown, noticeChipCount, noticeBandHeight, measureNoticeFold]);
-
-  /**
-   * A notice's press: a row press at one remove. A session its provider
-   * gave an address goes to the system, exactly as pressing the row would;
-   * one with no address — a local session — has the panel opened instead,
-   * where its row is already sorted near the top. Luke keeps talking: the
-   * press acts on the session, not on the sentence. Resolved against the
-   * roster at the press, because the chip may be one of several and only a
-   * session still observed has anywhere to go.
-   */
-  const openMentionedSession = useCallback(
-    (identity: SessionIdentity) => {
-      const session = sessions.find(
-        (candidate) =>
-          candidate.providerId === identity.providerId &&
-          candidate.providerSessionId === identity.providerSessionId,
-      );
-      if (!session) return;
-      if (session.detail.link !== undefined) {
-        void window.sidecar.openSession(identity);
-        return;
-      }
-      expand();
-    },
-    [sessions, expand],
-  );
-
-  /**
-   * Every session this launch reported an address for, kept so a History
-   * line's chips can outlive their roster rows: the words stay on the panel
-   * after a chat is archived away, and the main process remembers the
-   * departed session's last reported address on the same run lifetime. Grown
-   * from the same broadcast roster the rows draw, which every address the
-   * main process remembers also crossed, so a chip offered from here is one
-   * the press can honor.
-   */
-  const addressedSessionsRef = useRef<Map<string, Set<string>>>(new Map());
-  useEffect(() => {
-    for (const session of sessions) {
-      if (session.detail.link === undefined) continue;
-      let provider = addressedSessionsRef.current.get(session.providerId);
-      if (!provider) {
-        provider = new Set();
-        addressedSessionsRef.current.set(session.providerId, provider);
-      }
-      provider.add(session.providerSessionId);
-    }
-  }, [sessions]);
-
-  // Openable at the chip is exactly what the main process will open: the
-  // session's current address, or the last one this launch saw reported —
-  // the same order the open itself resolves in, so the offer and the act
-  // cannot disagree about a session the roster filtered or that withdrew
-  // its address while the memory still holds one.
-  const conversationSessionOpenable = useCallback(
-    (identity: SessionIdentity): boolean => {
-      const session = sessions.find(
-        (candidate) =>
-          candidate.providerId === identity.providerId &&
-          candidate.providerSessionId === identity.providerSessionId,
-      );
-      return (
-        session?.detail.link !== undefined ||
-        (addressedSessionsRef.current.get(identity.providerId)?.has(identity.providerSessionId) ??
-          false)
-      );
-    },
-    [sessions],
-  );
-
-  /**
-   * A History chip's press: the row press at one remove, on the identity the
-   * line's words were recorded beside. Only the identity crosses the bridge;
-   * the main process answers with the session's current address, or its last
-   * reported one for a chat whose row has since departed. The panel stands
-   * down for the same reason a row press stands it down: the chat is being
-   * brought forward underneath it.
-   */
-  const openConversationSession = useCallback(
-    (identity: SessionIdentity) => {
-      void window.sidecar.openSession(identity);
-      cancelHover();
-      void changeMode(false);
-    },
-    [cancelHover, changeMode],
-  );
+  const shownCaptionHeight = leavingPanel ? heldCaptionHeight.current : captionTextHeight;
 
   /**
    * A live push beats a bootstrap snapshot still in flight. The main process
@@ -2438,12 +2177,6 @@ export function App(): React.JSX.Element {
         onChange(pushed);
       }),
     setSessionRoster,
-  );
-  // Straight to the conversation rather than through state: no panel
-  // surface draws the issue roster, so a re-render would be work for nobody.
-  const acceptIssuesBootstrap = useBootstrapRacedChannel(
-    (onChange) => window.sidecar.onIssuesChanged(onChange),
-    syncIssues,
   );
   // Another window's settings change: this window's rows and guide redraw
   // from the same snapshot its reply carried, so no window describes a
@@ -2563,7 +2296,6 @@ export function App(): React.JSX.Element {
       // older than any change that raced past it, and the main process will
       // not repeat a list it believes it already announced.
       acceptProjectsBootstrap(value.workspaceProjects);
-      acceptIssuesBootstrap(value.issues);
       acceptCalendarsBootstrap(value.calendars);
       acceptAnnouncementsHeldBootstrap(value.announcementsHeld);
       // The shared thread's seed guards itself: the conversation hook already
@@ -2663,7 +2395,6 @@ export function App(): React.JSX.Element {
     acceptAccountBootstrap,
     acceptCalendarOnboardingBootstrap,
     acceptCalendarsBootstrap,
-    acceptIssuesBootstrap,
     acceptAnnouncementsHeldBootstrap,
     acceptOutputAudioBootstrap,
     acceptProjectsBootstrap,
@@ -3026,7 +2757,6 @@ export function App(): React.JSX.Element {
     captionTexts === undefined || captionTextHeight === undefined
       ? 0
       : captionBlockSize(captionTextHeight, volumeHint, captionPadding);
-  noticeHoverable.current = noticeShown;
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
   const slotOpen = presentation === PANEL_PRESENTATION.SLOT;
   const feedbackOpen = presentation === PANEL_PRESENTATION.FEEDBACK;
@@ -3132,10 +2862,6 @@ export function App(): React.JSX.Element {
       // Whether those words need the volume hint under them, which stands in
       // a band of its own below the caption block.
       data-volume-hint={String(volumeHint)}
-      // Whether the reply being spoken has its pressable notices under the
-      // housing, and how many chip rows they need. Captioned words drop below
-      // them; with captions off the band stands alone.
-      data-notice={String(noticeShown)}
       data-presentation={presentation}
       // Whether the shape is still on its way down from the panel, so the
       // surface waits for the content it is carrying instead of leading it.
@@ -3157,7 +2883,6 @@ export function App(): React.JSX.Element {
           feedbackHeight,
         ),
         ...captionSizeStyle(shownCaptionHeight, volumeHint, captionPadding),
-        ...noticeGrowthStyle(shownBandHeight),
       }}
     >
       {/* Capsule, peek, slot and panel are all this one shape at different
@@ -3187,8 +2912,6 @@ export function App(): React.JSX.Element {
             conversationHistory={conversationHistory}
             liveConversationEntries={liveConversationEntries}
             onClearConversationHistory={clearConversationHistory}
-            conversationSessionOpenable={conversationSessionOpenable}
-            onOpenConversationSession={openConversationSession}
             ask={askLuke}
             onAskEngaged={changeAskEngagement}
             {...(shownAskHotkey ? { askShortcut: shownAskHotkey } : undefined)}
@@ -3463,75 +3186,6 @@ export function App(): React.JSX.Element {
         <button type="button" className="volume-hint-dismiss" onClick={dismissVolumeHint}>
           Got it
         </button>
-      </span>
-
-      {/* The sessions Luke is talking about, pressable while he says them: an
-          announcement names one, and a conversation reply walking the roster
-          names several, each with a chip of its own on the same band. One
-          press, and it is a row press at one remove — the session opens where
-          its provider keeps it, or the panel comes forward for one with no
-          page of its own. The band is always mounted, like the caption, so
-          both edges of its fade can run, and holds the last mentioned fields
-          through its exit so the names leave in place. Inert while away so
-          nothing hidden can be pressed or tabbed to; each chip's own hit
-          region keeps the pointer resting on it from reading as leaving the
-          shape. */}
-      <span
-        className="session-notices"
-        ref={noticeBand}
-        inert={!noticeShown}
-        // The folds: which edges have chips beyond them, driving the fades
-        // that say the band scrolls. Both settle to false while everything
-        // fits, so a band of few chips wears no mask at all.
-        data-fold-above={String(noticeFold.above)}
-        data-fold-below={String(noticeFold.below)}
-        onScroll={measureNoticeFold}
-      >
-        <span className="session-notice-rows" ref={noticeRowsElement}>
-          {lastMentioned.current.map((mention) => (
-            <button
-              key={mention.id}
-              type="button"
-              className="session-notice"
-              data-hit-region={HIT_REGION.CAPSULE}
-              aria-label={`Open "${mention.title}"`}
-              // Keeps the press from moving focus here, like the capsule strip's
-              // own button, so a focused settings field keeps the caret.
-              onMouseDown={(event) => event.preventDefault()}
-              // An issue chip is the same press one roster over: the identity
-              // goes to the main process, which reads the tracker's own address
-              // back out of its observation and hands it to the system — and an
-              // issue that reported none is taken nowhere, because no panel
-              // surface holds a row to fall back to.
-              onClick={() =>
-                mention.kind === MENTION_CHIP_KIND.SESSION
-                  ? openMentionedSession(mention.identity)
-                  : void window.sidecar.openIssue(mention.identity)
-              }
-            >
-              <ProviderMark providerId={mention.markId} />
-              <span className="session-notice-name">{mention.title}</span>
-              {/* The app marks the session's row already wears, saying where
-                  the chat is also held. Bare marks, never presses of their
-                  own: the chip is one press, and it stays the row press. */}
-              {mention.kind === MENTION_CHIP_KIND.SESSION && mention.applications.length > 0 ? (
-                <span className="session-notice-applications">
-                  {mention.applications.map((application) => (
-                    <span
-                      key={application.id}
-                      className="session-notice-application"
-                      role="img"
-                      aria-label={`Also in ${application.name}`}
-                      title={application.name}
-                    >
-                      <ProviderMark providerId={application.id} />
-                    </span>
-                  ))}
-                </span>
-              ) : null}
-            </button>
-          ))}
-        </span>
       </span>
 
       <div className="compact-stage">

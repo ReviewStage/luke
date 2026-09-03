@@ -17,14 +17,11 @@ test("the brain gets every act but the spoken transcript reading, plus its own t
   assert.equal(names.length, realtimeToolDefinitions().length - 1 + 3);
 });
 
-test("announce names sessions as identity objects and every definition is a function tool", () => {
+test("announce takes the briefing alone and every definition is a function tool", () => {
   const announce = brainToolDefinitions().find((tool) => tool.name === BRAIN_TOOL.ANNOUNCE);
   assert.ok(announce);
-  assert.deepEqual(announce.parameters.required, ["briefing", "session_ids"]);
-  const sessionIds = announce.parameters.properties.session_ids;
-  assert.ok(sessionIds?.type === "array");
-  assert.ok(sessionIds.items.type === "object");
-  assert.deepEqual(sessionIds.items.required, ["provider_id", "provider_session_id"]);
+  assert.deepEqual(announce.parameters.required, ["briefing"]);
+  assert.deepEqual(Object.keys(announce.parameters.properties), ["briefing"]);
   for (const tool of brainToolDefinitions()) assert.equal(tool.type, "function");
   assert.ok(isBrainOnlyTool(BRAIN_TOOL.READ_TRANSCRIPT));
   assert.ok(!isBrainOnlyTool(REALTIME_TOOL.SEND_SESSION_MESSAGE));

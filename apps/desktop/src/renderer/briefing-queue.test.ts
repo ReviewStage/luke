@@ -27,14 +27,13 @@ function speech(id: string, decidedAt = 1_000): BriefingSpeech {
   return {
     kind: BRIEFING_SPEECH_KIND,
     briefing: `Claude Code finished ${id}.`,
-    sessionIds: [{ providerId: "claude-code", providerSessionId: id }],
     decidedAt,
   };
 }
 
-/** The sessions the spoken briefings were about, in the order they were said. */
+/** The ids the spoken briefings were worded about, in the order they were said. */
 function spokenIds(session: FakeSession): string[] {
-  return session.spoken.map((item) => item.sessionIds[0]?.providerSessionId ?? "");
+  return session.spoken.map((item) => /finished (.+)\.$/.exec(item.briefing)?.[1] ?? "");
 }
 
 interface FakeSession extends BriefingQueueSession {

@@ -414,11 +414,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "recent entries into a call. The view is blocked from panel recordings, is not " +
         "exportable, and can be cleared by hand from that tab. Luke's own composer stands at " +
         "its foot too, the same typed ask the sessions list offers, so a reply is asked for " +
-        "where it will land. A line draws a pressable chip " +
-        "for each chat it named, going to that chat by hand; a chip keeps working for a chat " +
-        "archived since — opened at the last address its provider reported this launch — and " +
-        "a chat with no address draws none. A spoken open still reaches only sessions " +
-        "currently observed.",
+        "where it will land. A spoken open still reaches only sessions currently observed.",
     },
     {
       label: "Account",

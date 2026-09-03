@@ -79,8 +79,7 @@
   flex-direction: column;
 }
 
-/* The bubble is the copy control's anchor: a chip row wrapping wider below
-   must not pull the glyph off the words it copies. */
+/* The bubble is the copy control's anchor. */
 .history-bubble {
   position: relative;
   display: flex;
@@ -132,75 +131,6 @@
   color: var(--text-primary);
 }
 
-/* A chip per chat the line named, in the notice band's own vocabulary: the
-   words above are the record, the chips are the way back to the chats they
-   name. Always visible, unlike the copy glyph, because which chats a line
-   was about is content rather than chrome. */
-.history-mentions {
-  display: flex;
-  max-width: 100%;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 4px;
-}
-
-.history-entry[data-speaker="event"] .history-mentions {
-  justify-content: center;
-}
-
-.history-chip {
-  display: inline-flex;
-  min-width: 0;
-  max-width: 100%;
-  align-items: center;
-  gap: 5px;
-  height: 20px;
-  padding: 0 9px;
-  border-radius: 10px;
-  background: var(--raised);
-  color: var(--text-primary);
-  font-size: 10px;
-  font-weight: 640;
-  transition: background-color var(--duration-hover) ease;
-}
-
-.history-chip:hover {
-  background: var(--raised-strong);
-}
-
-.history-chip .provider-mark {
-  flex: 0 0 auto;
-  width: 11px;
-  height: 11px;
-}
-
-.history-chip .provider-mark[data-mark="superset"] {
-  width: 19px;
-}
-
-.history-chip-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* App associations trail the name as bare marks, the way they trail it on the
-   notice band's chips: the leading mark says which agent this is, these say
-   where the same chat is also held, in secondary ink to stay subordinate to
-   the name inside a chip this small. */
-.history-chip-applications {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 4px;
-  color: var(--text-secondary);
-}
-
-.history-chip-application {
-  display: grid;
-  place-items: center;
-}
-
 .history-entry p {
   margin: 0;
   padding: 7px 10px 8px;
@@ -237,8 +167,7 @@
 
 .history-entry[data-speaker="luke"] {
   align-self: flex-start;
-  /* Shrink-wrapped, not stretched: the bubble is the copy control's anchor,
-     and a chip row wrapping wider than the words must not widen it. */
+  /* Shrink-wrapped, not stretched: the bubble is the copy control's anchor. */
   align-items: flex-start;
 }
 

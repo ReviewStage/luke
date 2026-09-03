@@ -5,13 +5,12 @@ import { CAPTION_TONE, pointOverStrip, type SpokenStripContent, stripHoldNext } 
 const WORDS: SpokenStripContent = {
   texts: ["Bootstrap the desktop shell is finished."],
   tone: CAPTION_TONE.WORDS,
-  chips: true,
 };
 
 test("content leaves on its own terms while nobody is over it", () => {
   // The hold exists for a pointer already resting on the strip; without one,
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // the words and chips keep dying with the reply exactly as they always did.
+  // the words keep dying with the reply exactly as they always did.
   assert.equal(stripHoldNext({ hovered: false, drawn: WORDS, held: undefined }), undefined);
   assert.equal(stripHoldNext({ hovered: false, drawn: undefined, held: WORDS }), undefined);
 });
@@ -30,11 +29,7 @@ test("a hover that began after the dismissal resurrects nothing", () => {
 });
 
 test("a new reply's content replaces whatever was held", () => {
-  const older: SpokenStripContent = {
-    texts: ["An older reply."],
-    tone: CAPTION_TONE.WORDS,
-    chips: false,
-  };
+  const older: SpokenStripContent = { texts: ["An older reply."], tone: CAPTION_TONE.WORDS };
   assert.equal(stripHoldNext({ hovered: true, drawn: WORDS, held: older }), WORDS);
 });
 
@@ -44,10 +39,8 @@ test("an unchanged sentence keeps the hold's identity", () => {
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // churns per render: a rebuilt-but-equal snapshot returning as a new object
   // would re-render an unchanged strip every frame the pointer rests on it.
-  const rebuilt: SpokenStripContent = { ...WORDS, texts: [...(WORDS.texts ?? [])] };
+  const rebuilt: SpokenStripContent = { ...WORDS, texts: [...WORDS.texts] };
   assert.equal(stripHoldNext({ hovered: true, drawn: rebuilt, held: WORDS }), WORDS);
-  const chipless: SpokenStripContent = { texts: undefined, tone: CAPTION_TONE.WORDS, chips: true };
-  assert.equal(stripHoldNext({ hovered: true, drawn: { ...chipless }, held: chipless }), chipless);
 });
 
 test("a tone change is a content change", () => {
@@ -57,20 +50,13 @@ test("a tone change is a content change", () => {
   assert.equal(stripHoldNext({ hovered: true, drawn: notice, held: WORDS }), notice);
 });
 
-test("the caption counts only to its visible height", () => {
+test("the caption counts only to its visible height, and an absent box never matches", () => {
   // The element's box runs to the reserved maximum and the clip ends it at
   // the words, so the remainder is desktop: resting there holds nothing.
   const caption = { box: { left: 0, top: 0, right: 100, bottom: 70 }, visibleHeight: 28 };
-  assert.equal(pointOverStrip({ x: 50, y: 20, caption, band: undefined }), true);
-  assert.equal(pointOverStrip({ x: 50, y: 40, caption, band: undefined }), false);
-});
-
-test("the band counts whole, and absent boxes never match", () => {
-  const band = { left: 0, top: 30, right: 100, bottom: 60 };
-  assert.equal(pointOverStrip({ x: 50, y: 45, caption: undefined, band }), true);
-  assert.equal(pointOverStrip({ x: 50, y: 65, caption: undefined, band }), false);
+  assert.equal(pointOverStrip({ x: 50, y: 20, caption }), true);
+  assert.equal(pointOverStrip({ x: 50, y: 40, caption }), false);
   // An undrawn element still has a box; the caller withholds it, and a strip
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // offering neither can never read as hovered.
-  assert.equal(pointOverStrip({ x: 50, y: 45, caption: undefined, band: undefined }), false);
+  // offering none can never read as hovered.
+  assert.equal(pointOverStrip({ x: 50, y: 20, caption: undefined }), false);
 });

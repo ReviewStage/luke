@@ -38,7 +38,7 @@ test("lines land in the named file, stamped, in the order they were recorded", a
     inputTokens: 1_500,
     transcriptBytes: 4_096,
     toolCalls: [{ name: "announce", argumentsChars: 120, outcomeStatus: "accepted" }],
-    deliveries: [{ briefingChars: 96, sessionCount: 1 }],
+    deliveries: [{ briefingChars: 96 }],
     elapsedMs: 1_250,
     iterations: 1,
     compacted: false,

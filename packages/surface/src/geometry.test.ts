@@ -8,8 +8,6 @@ import {
   PEEK_MIN_WIDTH,
   PEEK_SIDE_GROWTH,
   positionNotchWindow,
-  SESSION_NOTICE_HEIGHT,
-  SESSION_NOTICE_MAX_ROWS,
   VOICE_BAND_INSET,
   VOICE_CAPTION_MAX_HEIGHT,
 } from "@sidecar/surface";
@@ -39,11 +37,10 @@ test("anchors the compact window to the physical top edge", () => {
     x: 406,
     y: 0,
     width: PANEL_WIDTH + SURFACE_MARGIN * 2,
-    // The top inset, the caption block Luke's words wrap into below it, every
-    // chip row the notice band can grow to under those words, the inset that
-    // closes the stack against the shape's bottom edge, and the margin the
-    // overshoot and the shadow fall in: 38 + 210 + 26 × 3 + 6 + 40.
-    height: 372,
+    // The top inset, the caption block Luke's words wrap into below it, the
+    // inset that closes the stack against the shape's bottom edge, and the
+    // margin the overshoot and the shadow fall in: 38 + 210 + 6 + 40.
+    height: 294,
     notch: {
       topInset: 38,
       housingWidth: 210,
@@ -91,14 +88,7 @@ test("uses a top-center fallback without inventing a notch", () => {
   assert.equal(result.x, -1310);
   assert.equal(result.y, -200);
   assert.equal(result.width, PANEL_WIDTH + SURFACE_MARGIN * 2);
-  assert.equal(
-    result.height,
-    32 +
-      VOICE_CAPTION_MAX_HEIGHT +
-      SESSION_NOTICE_HEIGHT * SESSION_NOTICE_MAX_ROWS +
-      VOICE_BAND_INSET +
-      SURFACE_MARGIN,
-  );
+  assert.equal(result.height, 32 + VOICE_CAPTION_MAX_HEIGHT + VOICE_BAND_INSET + SURFACE_MARGIN);
   assert.equal(result.notch.hasNotch, false);
   assert.equal(result.notch.topInset, 25);
   assert.equal(result.notch.source, "work-area");
@@ -126,14 +116,7 @@ test("the notch form gives a display without a housing the simulated one", () =>
   // The window holds the peek around the simulated housing, exactly as it
   // would around a real one of the same width.
   assert.ok(result.width >= peekWidth(SIMULATED_HOUSING_WIDTH) + SURFACE_MARGIN * 2);
-  assert.equal(
-    result.height,
-    32 +
-      VOICE_CAPTION_MAX_HEIGHT +
-      SESSION_NOTICE_HEIGHT * SESSION_NOTICE_MAX_ROWS +
-      VOICE_BAND_INSET +
-      SURFACE_MARGIN,
-  );
+  assert.equal(result.height, 32 + VOICE_CAPTION_MAX_HEIGHT + VOICE_BAND_INSET + SURFACE_MARGIN);
 });
 
 test("the notch form never argues with a real housing", () => {
@@ -259,11 +242,7 @@ test("uses the painted menu bar when it is deeper than the safe area", () => {
   assert.equal(reportingMachine.notch.topInset, 34);
   assert.equal(
     reportingMachine.height,
-    34 +
-      VOICE_CAPTION_MAX_HEIGHT +
-      SESSION_NOTICE_HEIGHT * SESSION_NOTICE_MAX_ROWS +
-      VOICE_BAND_INSET +
-      SURFACE_MARGIN,
+    34 + VOICE_CAPTION_MAX_HEIGHT + VOICE_BAND_INSET + SURFACE_MARGIN,
   );
   assert.equal(macBookPro14.notch.topInset, 37);
 });
@@ -297,12 +276,5 @@ test("snaps fractional depths to device pixels and ceils the window height", () 
   });
 
   assert.equal(result.notch.topInset, 33.5);
-  assert.equal(
-    result.height,
-    34 +
-      VOICE_CAPTION_MAX_HEIGHT +
-      SESSION_NOTICE_HEIGHT * SESSION_NOTICE_MAX_ROWS +
-      VOICE_BAND_INSET +
-      SURFACE_MARGIN,
-  );
+  assert.equal(result.height, 34 + VOICE_CAPTION_MAX_HEIGHT + VOICE_BAND_INSET + SURFACE_MARGIN);
 });
