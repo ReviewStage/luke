@@ -24,7 +24,7 @@ function speech(id: string, decidedAt = 1_000): SessionAnnouncement {
   return {
     providerId: "claude-code",
     providerSessionId: id,
-    work: id,
+    subject: id,
     change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
     decidedAt,
   };

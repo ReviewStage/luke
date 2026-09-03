@@ -10,8 +10,17 @@ we collect, who we send it to, and how to turn it off.
 
 **On your Mac.** Luke reads the session files your coding agents already write,
 using the session title, status, repository, branch, model, current tool,
-errors, and the summary the agent wrote. It does not read message history, file
-contents, or command output, and it writes none of this to disk. If you run
+errors, and the summary the agent wrote. It writes none of this to disk. For a
+session running on your Mac, Luke also reads a bounded rendering of that
+session's own conversation — the end of the transcript file its agent already
+writes (up to the last 256 KB), with each message and tool result cut short —
+to write himself a one-line phrase saying what the agent is working on,
+because a session's title is only its first message and the work usually
+moves on. That rendering is read only when Luke is about to speak about that
+session, once per announcement, sent to derive the phrase (see below), and
+kept nowhere: the phrase travels inside that one announcement and is used to
+name the session as Luke speaks about it, then discarded. Nothing else reads
+message history, file contents, or command output. If you run
 agents inside the Herdr terminal manager, Luke also asks Herdr's own
 command-line tool which of those sessions it holds, so their rows can say so;
 that read never starts Herdr, reads no terminal output, and sends nothing
@@ -117,10 +126,18 @@ and email you signed it with, and any screenshots you attached.
   cloud observation your vault keys already allow (titles, status, repository,
   branch, and summaries of your cloud sessions, as described under Provider API
   keys above). We do not send message history, file contents, or command
-  output, and we ask OpenAI not to store the request. On the Mac app, your
-  conversation and Luke's durable memory are kept on your Mac and sent with a
-  call so the conversation carries across calls and across launches; on iOS,
-  the conversation is held in memory and discarded when the session closes.
+  output, and we ask OpenAI not to store the request. The one exception is the
+  subject phrase above: to derive it, only when Luke is about to announce a
+  local session and once per announcement, Luke sends the bounded transcript
+  slice of that session, its title, and its summary — directly to OpenAI on
+  your own key if you entered one, otherwise through our service on our key —
+  asks OpenAI not to store the request, and our service stores and logs none
+  of it either. The phrase that comes back is spoken with that announcement
+  and kept nowhere. On the Mac app,
+  your conversation and Luke's durable memory are kept on your Mac and sent
+  with a call so the conversation carries across calls and across launches; on
+  iOS, the conversation is held in memory and discarded when the session
+  closes.
   The one voice call that happens before you sign in is the spoken
   introduction on first launch of the Mac app: it sends its own fixed script,
   the titles of the coding agent sessions found on your Mac, and anything you

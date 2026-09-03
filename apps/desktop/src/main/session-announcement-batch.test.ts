@@ -15,12 +15,12 @@ import {
   SessionAnnouncementBatch,
 } from "./session-announcement-batch";
 
-function announcement(id: string, work = id): PendingSessionAnnouncement {
+function announcement(id: string, subject = id): PendingSessionAnnouncement {
   return {
     announcement: {
       providerId: "conductor",
       providerSessionId: id,
-      work,
+      subject,
       change: SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT,
       detail: "Approve the command?",
       decidedAt: 1_000,
@@ -30,7 +30,7 @@ function announcement(id: string, work = id): PendingSessionAnnouncement {
       providerId: "conductor",
       providerSessionId: id,
       providerName: "Conductor",
-      title: work,
+      title: subject,
       status: SESSION_NOTICE_STATUS.WAITING,
       previousStatus: SESSION_STATUS.WORKING,
       holdingForDeveloper: true,
@@ -45,7 +45,7 @@ function reviewed(id: string, observedAt = 1_000): PendingSessionAnnouncement {
     announcement: {
       providerId: "conductor",
       providerSessionId: id,
-      work: id,
+      subject: id,
       change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
       decidedAt: observedAt,
     },
@@ -87,7 +87,7 @@ test("collects one fixed window, coalesces by session, and clears pending work",
     delivered[0]?.map(({ source, announcement }) => [
       announcement.providerSessionId,
       source,
-      announcement.work,
+      announcement.subject,
     ]),
     [
       ["b", "notice", "b"],

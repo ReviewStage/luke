@@ -94,11 +94,17 @@ test("a concrete question is announced with the decision itself", () => {
   assert.deepEqual(speech, {
     providerId: "conductor",
     providerSessionId: "agent-1",
-    work: "Notification fix",
     change: SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT,
     detail: "Should session replay capture screenshots?",
     decidedAt: 2_000,
   });
+});
+
+test("the title never reaches an announcement", () => {
+  const notice = { ...waitingNotice(true), recap: "Should session replay capture screenshots?" };
+  const unnamed = sessionNoticeAnnouncement(notice, 2_000);
+  assert.equal(unnamed?.subject, undefined);
+  assert.doesNotMatch(JSON.stringify(unnamed), /Notification fix/);
 });
 
 test("a permission hold is announced with the action awaiting approval", () => {
@@ -169,4 +175,12 @@ test("only a developer hold with concrete input becomes needs-input", () => {
   assert.equal(speech?.change, SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT);
   assert.equal(speech?.detail, "Should I run the migration?");
   assert.equal(urlOnlyQuestion, undefined);
+});
+
+test("a review's announcement never carries the title", () => {
+  const speech = sessionAnnouncementFromReview(
+    review({ recap: "Should I run the migration?", context: undefined }),
+  );
+  assert.equal(speech?.subject, undefined);
+  assert.doesNotMatch(JSON.stringify(speech), /Notification fix/);
 });

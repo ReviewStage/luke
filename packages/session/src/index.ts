@@ -72,6 +72,7 @@ export {
   maximumSessionDetailLength,
   maximumSessionMessageLength,
   maximumSessionRecapExcerptLength,
+  maximumSessionSubjectLength,
   maximumSessionTitleLength,
   normalizeAttention,
   normalizeSession,
@@ -107,6 +108,7 @@ export {
   sessionRosterRetentionMs,
   silentAttention,
   supportsSessionControl,
+  transcriptReadTailBytes,
   UNKNOWN_WORKSPACE_LABEL,
 } from "./session.js";
 export {

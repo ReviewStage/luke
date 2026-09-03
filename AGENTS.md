@@ -199,6 +199,39 @@ Trust constraints:
   with its provider and is never fetched. The read renders only what the
   provider actually wrote down, and a provider whose stored shape this build
   cannot render faithfully keeps the honest refusal instead.
+- A session's subject is the one place transcript content reaches a model
+  unbidden, and it is bounded on every side. No observed field says what an
+  agent is generally working on — a title is the first message, an activity
+  is the tool running now, a recap is the latest settled turn — so an
+  announcement that named the agent by its title named work it had stopped
+  doing. Luke therefore derives one short phrase per local session from the
+  same bounded transcript rendering the conversation-tab ask already reads,
+  through the same adapter method, bounded only by the file tail the adapter
+  reads and its per-line cuts, together with the title as the developer's
+  first ask and the bounded recap. The
+  derivation runs only for a session about to be announced, at the moment the
+  announcement is delivered, once per announcement, never in a fixture run,
+  under a fixed deadline past which the announcement speaks without it, so
+  the transcript it reads is the one holding the turn the announcement is
+  about; a cloud session, a provider with no transcript this build reads, a
+  closed session, and a session inside a live voice exchange derive nothing. It travels the way an
+  attention review travels: directly to OpenAI
+  on the developer's own key, or through Luke's own service on the hosted
+  tier, where the service validates it against the same bounds, spends the
+  attention meter, asks OpenAI not to store it, and keeps and logs none of it.
+  The model is offered no tools, the transcript enters as data behind a
+  marker, and the answer is a bounded phrase or an honest null, refused when
+  it merely echoes the title. The phrase lives only inside the announcement
+  payload that carries it and is kept nowhere: it reaches one place, the
+  payload's `subject`, in the slot the title no longer travels in. It is not
+  drawn on the panel, reaches no write path, never reaches the attention
+  evaluator, and never reaches a provider file. It counts no product event,
+  because no developer asked. The development trace records each
+  derivation's about-fields, answer, and timing, and the transcript's byte
+  count, never its text. Widening what it
+  reads, where it travels, or where it is shown is a product decision, not an
+  implementation detail, and `PRIVACY.md` says the read and the send in as
+  many words.
 - Counting is three streams with three different guarantees, and the
   difference is the thing to keep straight. Only the first carries the
   guarantee, and the other two must never be described as though they

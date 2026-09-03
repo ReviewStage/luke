@@ -1,8 +1,10 @@
 import {
   type AttentionDecision,
   attentionDecisionFromWire,
+  boundedText,
   CONVERSATION_MESSAGE_AUTHOR,
   type ConversationMessageAuthor,
+  maximumSessionSubjectLength,
   normalizeSessionDetail,
   type ProviderId,
   SESSION_CONTROL_KIND,
@@ -68,6 +70,12 @@ export const HOSTED_SERVICE_PATH = {
    */
   INTRODUCTION_MINT: "/api/voice/introduction-mint",
   ATTENTION_REVIEW: "/api/attention/review",
+  /**
+   * Derive one local session's subject from its bounded transcript rendering (POST),
+   * on Luke's key, for a developer with none of their own. The slice is read
+   * for the one phrase and stored nowhere.
+   */
+  SUBJECT_DERIVE: "/api/subject/derive",
   ACCOUNT_DELETE: "/api/account/delete",
   USAGE: "/api/usage",
   EVENTS: "/api/events",
@@ -288,6 +296,31 @@ export function remoteMintAnswerFromWire(
     ...base,
     context: { sessions: { itemId, text: itemText } },
   };
+}
+
+export interface HostedSubjectAnswer {
+  /** The derived phrase, or null when the transcript supported none. */
+  subject: string | null;
+  quota?: HostedQuota;
+}
+
+/**
+ * Validates a hosted subject answer: a bounded string or an honest null, and
+ * nothing else, cut to the same bound the registry keeps a subject at.
+ */
+export function hostedSubjectAnswerFromWire(
+  value: UnparsedWireValue,
+): HostedSubjectAnswer | undefined {
+  if (!isRecord(value)) return undefined;
+  if (value.subject !== null && !isWireString(value.subject)) return undefined;
+  const subject =
+    value.subject === null
+      ? null
+      : (boundedText(value.subject.replace(/\s+/g, " "), maximumSessionSubjectLength) ?? null);
+  const quota = hostedQuotaFromWire(value.quota);
+  const answer: HostedSubjectAnswer = { subject };
+  if (quota !== undefined) answer.quota = quota;
+  return answer;
 }
 
 export interface HostedReviewAnswer {

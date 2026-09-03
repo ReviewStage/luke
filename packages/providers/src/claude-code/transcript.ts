@@ -176,8 +176,5 @@ export async function readClaudeSessionTranscript(
 
   const tail = await readTail(filePath, request.readTailBytes ?? TRANSCRIPT_BOUNDS.READ_TAIL_BYTES);
   const lines = tailRecords(tail).flatMap(linesFromRecord);
-  return boundedTranscript(
-    lines,
-    request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
-  );
+  return boundedTranscript(lines, request.maximumRenderedLength);
 }

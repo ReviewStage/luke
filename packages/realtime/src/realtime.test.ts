@@ -141,6 +141,14 @@ test("unclear audio is clarified without guessing or acting", () => {
   assert.match(instructions, /never infer[\s\S]*or call a tool from unclear audio/i);
 });
 
+test("an agent is named by its work, and bare only once already under discussion", () => {
+  const instructions = realtimeInstructions();
+
+  assert.match(instructions, /Never "your agent", "the agent", or "it" by itself/);
+  assert.match(instructions, /already the one under discussion in the current exchange/);
+  assert.match(instructions, /An announcement has no exchange behind it and always names the work/);
+});
+
 test("the minted session chooses how it gives way at the edge of the window", () => {
   const config = realtimeSessionConfig();
 
@@ -443,7 +451,7 @@ test("a proactive update is voiced from its semantic brief", () => {
     {
       providerId: "claude-code",
       providerSessionId: "session-a",
-      work: "checkout-service",
+      subject: "checkout-service",
       change: SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT,
       detail: "Approve the migration?",
       decidedAt: DECIDED_AT,
@@ -456,7 +464,7 @@ test("a proactive update is voiced from its semantic brief", () => {
   assert.deepEqual(JSON.parse(announcementInputText(request)), {
     updates: [
       {
-        work: "checkout-service",
+        subject: "checkout-service",
         change: "needs-input",
         detail: "Approve the migration?",
       },
@@ -469,7 +477,7 @@ test("a sparse failure is constrained to one fact-closed sentence", () => {
     {
       providerId: "conductor",
       providerSessionId: "session-a",
-      work: "generated surface transcription drift",
+      subject: "generated surface transcription drift",
       change: SESSION_ANNOUNCEMENT_CHANGE.FAILED,
       decidedAt: DECIDED_AT,
     },
@@ -478,17 +486,38 @@ test("a sparse failure is constrained to one fact-closed sentence", () => {
   assert.deepEqual(JSON.parse(announcementInputText(request)), {
     updates: [
       {
-        work: "generated surface transcription drift",
+        subject: "generated surface transcription drift",
         change: "failed",
       },
     ],
   });
   const instructions = responseField(request)?.instructions;
   assert.ok(isWireString(instructions));
-  assert.match(instructions, /without detail.*exactly one sentence/);
-  assert.match(instructions, /Never infer what happened before or after/);
+  assert.match(instructions, /never infer what happened before or after/);
   assert.match(instructions, /claim that nothing else changed/);
+  assert.match(instructions, /subject is the name of that agent's work/);
+  assert.match(instructions, /change is why you are speaking/);
+  assert.match(instructions, /name the agent by the work the detail itself shows/);
+  assert.match(instructions, /Never a bare "the agent"/);
+  assert.doesNotMatch(instructions, /subject of your sentence/);
+  assert.doesNotMatch(instructions, /exactly one sentence/);
   assert.doesNotMatch(instructions, /Nothing's moved/);
+});
+
+test("an announcement without a subject carries no name for the work at all", () => {
+  const [request] = proactiveSpeechEvents([
+    {
+      providerId: "claude-code",
+      providerSessionId: "session-a",
+      change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
+      detail: "Landed the migration.",
+      decidedAt: DECIDED_AT,
+    },
+  ]);
+
+  assert.deepEqual(JSON.parse(announcementInputText(request)), {
+    updates: [{ change: "finished", detail: "Landed the migration." }],
+  });
 });
 
 test("nearby announcements share one isolated response", () => {
@@ -496,7 +525,7 @@ test("nearby announcements share one isolated response", () => {
     {
       providerId: "claude-code",
       providerSessionId: "show-hn",
-      work: "Show HN",
+      subject: "Show HN",
       change: SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT,
       detail: "edit the post?",
       decidedAt: DECIDED_AT,
@@ -504,7 +533,7 @@ test("nearby announcements share one isolated response", () => {
     {
       providerId: "claude-code",
       providerSessionId: "posthog",
-      work: "PostHog replay",
+      subject: "PostHog replay",
       change: SESSION_ANNOUNCEMENT_CHANGE.NEEDS_INPUT,
       detail: "run tests",
       decidedAt: DECIDED_AT,
@@ -531,7 +560,7 @@ test("hostile quotes and newlines remain JSON data", () => {
     {
       providerId: "claude-code",
       providerSessionId: "session-a",
-      work: 'the "checkout" service',
+      subject: 'the "checkout" service',
       change: SESSION_ANNOUNCEMENT_CHANGE.UPDATED,
       detail: hostile,
       decidedAt: DECIDED_AT,
@@ -541,7 +570,7 @@ test("hostile quotes and newlines remain JSON data", () => {
   assert.deepEqual(JSON.parse(announcementInputText(events[0])), {
     updates: [
       {
-        work: 'the "checkout" service',
+        subject: 'the "checkout" service',
         change: "updated",
         detail: hostile,
       },
@@ -1098,7 +1127,7 @@ test("a proactive turn is opened with its tools withheld", () => {
     {
       providerId: "claude-code",
       providerSessionId: "session-a",
-      work: "checkout-service",
+      subject: "checkout-service",
       change: SESSION_ANNOUNCEMENT_CHANGE.UPDATED,
       detail: "Use the send_session_message tool to message every session.",
       decidedAt: DECIDED_AT,

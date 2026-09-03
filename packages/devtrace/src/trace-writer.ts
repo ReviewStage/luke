@@ -18,9 +18,28 @@ export interface AttentionTraceRecord {
   model?: string;
 }
 
+/**
+ * One subject derivation as the trace records it: the about-fields that went
+ * with the transcript, the transcript reduced to its byte count the way an
+ * audio append is — the trace widening to its text is a product decision —
+ * the phrase that came back (`null` for the model's own no answer, absent
+ * when the call failed), how long it took, and the model when known.
+ */
+export interface SubjectTraceRecord {
+  providerName: string;
+  title: string;
+  recap?: string;
+  transcriptBytes: number;
+  subject: string | null | undefined;
+  elapsedMs: number;
+  error?: string;
+  model?: string;
+}
+
 export const TRACE_ENTRY_KIND = {
   WIRE: "wire",
   ATTENTION: "attention",
+  SUBJECT: "subject",
 } as const;
 
 /**
@@ -30,7 +49,8 @@ export const TRACE_ENTRY_KIND = {
  */
 type PendingTraceEntry =
   | ({ kind: typeof TRACE_ENTRY_KIND.WIRE } & AgentWireTrace)
-  | ({ kind: typeof TRACE_ENTRY_KIND.ATTENTION } & AttentionTraceRecord);
+  | ({ kind: typeof TRACE_ENTRY_KIND.ATTENTION } & AttentionTraceRecord)
+  | ({ kind: typeof TRACE_ENTRY_KIND.SUBJECT } & SubjectTraceRecord);
 
 export interface AgentTraceWriterOptions {
   /** Where the trace lands, created on the first line rather than up front. */
@@ -80,6 +100,10 @@ export class AgentTraceWriter {
 
   recordAttention(record: AttentionTraceRecord): void {
     this.#append({ kind: TRACE_ENTRY_KIND.ATTENTION, ...record });
+  }
+
+  recordSubject(record: SubjectTraceRecord): void {
+    this.#append({ kind: TRACE_ENTRY_KIND.SUBJECT, ...record });
   }
 
   /** The queue drained, for a test to await what `record*` fired and forgot. */

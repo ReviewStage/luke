@@ -276,8 +276,5 @@ export async function readCodexSessionTranscript(
 
   const tail = await readTail(rolloutPath, CODEX_ROLLOUT_TAIL_BYTES);
   const lines = tailRecords(tail).flatMap(linesFromRecord);
-  return boundedTranscript(
-    lines,
-    request.maximumRenderedLength ?? TRANSCRIPT_BOUNDS.MAXIMUM_RENDERED_LENGTH,
-  );
+  return boundedTranscript(lines, request.maximumRenderedLength);
 }

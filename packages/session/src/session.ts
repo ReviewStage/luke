@@ -538,6 +538,19 @@ export const maximumSpawnableAgents = 8;
 export const maximumSessionRecapExcerptLength = 500;
 /** One line of context beside a title, not a paragraph. */
 export const maximumSessionDetailLength = 120;
+/**
+ * The one line Luke derives about what a local session is working on, read
+ * from the rendering of its own transcript. A phrase, never a sentence: it
+ * names the work in an announcement in place of a title that only ever said
+ * where the conversation began.
+ */
+export const maximumSessionSubjectLength = 80;
+/**
+ * How much of a transcript file's end one read may load. It is the one bound
+ * on how much of a session a rendering can carry, so it is also the most a
+ * rendering could measure when it is validated on the wire.
+ */
+export const transcriptReadTailBytes = 256 * 1024;
 /** Long enough for any provider's session address without becoming a payload. */
 export const maximumSessionLinkLength = 300;
 /** A reply typed into a row, not a document pasted through one. */

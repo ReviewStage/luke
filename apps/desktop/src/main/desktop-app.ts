@@ -30,7 +30,11 @@ import {
   nextMeetingBoundary,
 } from "@sidecar/calendar";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
-import { AgentTraceWriter, tracedAttentionEvaluator } from "@sidecar/devtrace";
+import {
+  AgentTraceWriter,
+  tracedAttentionEvaluator,
+  tracedSubjectEvaluator,
+} from "@sidecar/devtrace";
 import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
 import { fixtureSnapshot } from "@sidecar/fixtures";
 import { normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
@@ -64,7 +68,9 @@ import {
   type ProviderId,
   ReportedSessionLinks,
   rosterRelevantSessions,
+  SESSION_LOCATION,
   type Session,
+  type SessionIdentity,
   type SessionNotice,
   SessionNoticeHold,
   SessionNoticeTracker,
@@ -90,6 +96,7 @@ import {
   sessionAnnouncementFromReview,
   sessionNoticeAnnouncement,
   VoiceCapabilityAssembler,
+  withSubjects,
 } from "@sidecar/voice";
 import { ACT_RESULT_STATUS, isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
 import {
@@ -182,6 +189,7 @@ import {
   heldSessionAnnouncements,
   type PendingSessionAnnouncement,
   SessionAnnouncementBatch,
+  SUBJECT_DERIVATION_DEADLINE_MS,
 } from "./session-announcement-batch";
 import { createSettingsHandler } from "./settings-handler";
 import { SettingsStore } from "./settings-store";
@@ -510,10 +518,13 @@ const voiceCapabilities = new VoiceCapabilityAssembler({
   hostedServiceBaseUrl: HOSTED_SERVICE_BASE_URL,
   refreshAccount: accountSession.refreshOnce,
   currentSession: (identity) => sessionRegistry.get(identity),
+  readTranscript: readLocalTranscriptRendering,
   ...(agentTrace
     ? {
         wrapEvaluator: (evaluator) =>
           tracedAttentionEvaluator(evaluator, (record) => agentTrace.recordAttention(record)),
+        wrapSubjectEvaluator: (evaluator) =>
+          tracedSubjectEvaluator(evaluator, (record) => agentTrace.recordSubject(record)),
       }
     : undefined),
 });
@@ -1393,6 +1404,24 @@ async function applyVoiceCredential(): Promise<void> {
   if (!voiceCapabilities.realtimeCredentials) sessionAnnouncementBatch.clear();
 }
 
+/**
+ * The subject deriver's read of one local session's transcript: the same
+ * adapter read the conversation tab's ask runs, bounded by the same rendering,
+ * for a session the registry still holds on this machine. It counts no
+ * developer act, because no developer asked; a cloud session, an unknown
+ * provider, or a provider with no transcript this build reads answers nothing.
+ */
+async function readLocalTranscriptRendering(
+  identity: SessionIdentity,
+): Promise<string | undefined> {
+  const session = sessionRegistry.get(identity);
+  if (!session || session.location !== SESSION_LOCATION.LOCAL) return undefined;
+  const adapter = adapterFor(identity.providerId);
+  if (!adapter) return undefined;
+  const result = await adapter.readTranscript(identity.providerSessionId);
+  return result.status === ACT_RESULT_STATUS.ACCEPTED ? result.transcript : undefined;
+}
+
 function adapterFor(providerId: string) {
   if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return supersetWorkspaceAdapter;
   if (providerId === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID) return conductorLocalWorkspaceAdapter;
@@ -2152,14 +2181,27 @@ async function deliverSessionAnnouncementBatch(
     heldEvaluatorSpeech.hold(held.reviews);
     return;
   }
+  if (!panels.voiceHost()) return;
+  // The subject is derived here, for the sessions about to be spoken of, from
+  // each transcript as it stands now: this is the moment it holds the settled
+  // turn worth naming. The deadline is the most speech waits for a name.
+  const subjectDeriver = voiceCapabilities.subjectDeriver;
+  const announcements = await withSubjects(
+    current.map((item) => item.announcement),
+    (identity) => {
+      const session = sessionRegistry.get(identity);
+      return session && subjectDeriver
+        ? subjectDeriver.deriveFor(session)
+        : Promise.resolve(undefined);
+    },
+    SUBJECT_DERIVATION_DEADLINE_MS,
+  );
+  // The window can close while the derivations run.
   const host = panels.voiceHost();
   if (!host) return;
   const notices = current.flatMap((item) => (item.source === "notice" ? [item.notice] : []));
   countSpokenAnnouncements(notices);
-  host.webContents.send(
-    channels.onSessionAnnouncements,
-    current.map((item) => item.announcement),
-  );
+  host.webContents.send(channels.onSessionAnnouncements, announcements);
   markFirstAnnouncementSpoken();
 }
 

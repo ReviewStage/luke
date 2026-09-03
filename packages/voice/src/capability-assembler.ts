@@ -1,7 +1,10 @@
 import {
   type AttentionEvaluator,
   openAiAttentionEvaluator,
+  openAiSubjectDeriver,
   SessionAttentionReviewer,
+  SessionSubjectDeriver,
+  type SubjectEvaluator,
 } from "@sidecar/attention";
 import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
@@ -16,6 +19,7 @@ import {
 } from "@sidecar/settings";
 import { HostedAttentionEvaluator } from "./hosted-attention-evaluator.js";
 import { HostedRealtimeCredentialMinter } from "./hosted-credentials.js";
+import { HostedSubjectDeriver } from "./hosted-subject-deriver.js";
 import type { RealtimeCredentialMinter } from "./minter.js";
 import { openAiRealtimeCredentials, unavailableRealtimeDiagnostics } from "./openai-credentials.js";
 
@@ -69,6 +73,13 @@ export interface VoiceCapabilityAssemblerOptions {
   hostedServiceBaseUrl: string;
   refreshAccount: () => Promise<void>;
   currentSession: (identity: SessionIdentity) => Session | undefined;
+  /**
+   * Reads one local session's bounded transcript rendering for the subject
+   * deriver, or nothing. Only the main process reaches the adapters, so it
+   * is injected here the way `currentSession` is; absent means no subjects
+   * are derived at all.
+   */
+  readTranscript?: (identity: SessionIdentity) => Promise<string | undefined>;
   fetch?: typeof fetch;
   report?: (message: string) => void;
   /**
@@ -78,11 +89,14 @@ export interface VoiceCapabilityAssemblerOptions {
    * `AttentionEvaluator`, and absence means the evaluator is used as built.
    */
   wrapEvaluator?: (evaluator: AttentionEvaluator) => AttentionEvaluator;
+  /** The same decoration for the subject evaluator, under the same terms. */
+  wrapSubjectEvaluator?: (evaluator: SubjectEvaluator) => SubjectEvaluator;
 }
 
 export class VoiceCapabilityAssembler {
   readonly #options: VoiceCapabilityAssemblerOptions;
   #attentionReviewer: SessionAttentionReviewer | undefined;
+  #subjectDeriver: SessionSubjectDeriver | undefined;
   #realtimeCredentials: RealtimeCredentialMinter | undefined;
   #unavailableDiagnostics: RealtimeDiagnostics;
   #voiceSource: VoiceSource = VOICE_SOURCE.ACCOUNT;
@@ -97,6 +111,16 @@ export class VoiceCapabilityAssembler {
 
   get attentionReviewer(): SessionAttentionReviewer | undefined {
     return this.#attentionReviewer;
+  }
+
+  /**
+   * Built beside the reviewer on the same policy, so a subject can be derived
+   * exactly when an attention review could be: never in a fixture run, and
+   * on the key or the account the reviews travel on. It is asked only at an
+   * announcement, for the session being announced.
+   */
+  get subjectDeriver(): SessionSubjectDeriver | undefined {
+    return this.#subjectDeriver;
   }
 
   get realtimeCredentials(): RealtimeCredentialMinter | undefined {
@@ -146,6 +170,22 @@ export class VoiceCapabilityAssembler {
           currentSession: this.#options.currentSession,
         })
       : undefined;
+    const readTranscript = this.#options.readTranscript;
+    const builtSubjectEvaluator = readTranscript
+      ? apiKey
+        ? openAiSubjectDeriver(apiKey)
+        : policy.useHosted
+          ? new HostedSubjectDeriver(seams)
+          : undefined
+      : undefined;
+    const subjectEvaluator =
+      builtSubjectEvaluator && this.#options.wrapSubjectEvaluator
+        ? this.#options.wrapSubjectEvaluator(builtSubjectEvaluator)
+        : builtSubjectEvaluator;
+    this.#subjectDeriver =
+      subjectEvaluator && readTranscript
+        ? new SessionSubjectDeriver({ evaluator: subjectEvaluator, readTranscript })
+        : undefined;
     const [voice, speed] = await Promise.all([
       this.#options.settings.get(APP_SETTING_SCHEMA.voice.field).catch(() => undefined),
       this.#options.settings.get(APP_SETTING_SCHEMA.voiceSpeed.field).catch(() => undefined),

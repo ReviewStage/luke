@@ -40,7 +40,6 @@ function containsConcreteQuestion(value: string | undefined): value is string {
 }
 
 interface AnnouncementSource extends SessionIdentity {
-  title: string;
   activity?: string;
   error?: string;
   recap?: string;
@@ -80,7 +79,6 @@ function announcement(
   const base = {
     providerId: source.providerId,
     providerSessionId: source.providerSessionId,
-    work: source.title,
     decidedAt,
   };
   if (
@@ -132,7 +130,6 @@ export function sessionAnnouncementFromReview(
     {
       providerId: review.providerId,
       providerSessionId: review.providerSessionId,
-      title: update.title,
       ...(update.context?.activity ? { activity: update.context.activity } : undefined),
       ...(update.context?.error ? { error: update.context.error } : undefined),
       ...(update.recap ? { recap: update.recap } : undefined),

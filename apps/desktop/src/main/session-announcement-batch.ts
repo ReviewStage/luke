@@ -8,6 +8,8 @@ import {
 } from "@sidecar/session";
 
 export const SESSION_ANNOUNCEMENT_BATCH_WINDOW_MS = 5_000;
+/** The most a batch waits for its sessions' subjects before speaking without them. */
+export const SUBJECT_DERIVATION_DEADLINE_MS = 6_000;
 
 export type PendingSessionAnnouncement =
   | {

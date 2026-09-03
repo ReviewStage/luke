@@ -1,3 +1,4 @@
+export { withSubjects } from "./announcement-subjects.js";
 export {
   resolveVoiceCapability,
   VoiceCapabilityAssembler,
@@ -14,6 +15,10 @@ export {
   HostedRealtimeCredentialMinter,
   type HostedRealtimeCredentialOptions,
 } from "./hosted-credentials.js";
+export {
+  HostedSubjectDeriver,
+  type HostedSubjectDeriverOptions,
+} from "./hosted-subject-deriver.js";
 export {
   IntroductionRealtimeCredentialMinter,
   type IntroductionRealtimeCredentialOptions,
