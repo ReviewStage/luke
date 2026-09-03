@@ -212,8 +212,6 @@ struct SessionsView: View {
                     .foregroundStyle(Color.ink)
                     .frame(width: 22, height: 20)
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
             .accessibilityLabel("Talk to Luke")
         } else {
             NavigationLink(value: "voice") {
