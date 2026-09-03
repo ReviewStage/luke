@@ -74,12 +74,12 @@ struct SessionsView: View {
                     set: { threads[opened.id] = $0 }
                 ),
                 onDelivered: { await refreshSessions() },
-                sessionActions: { viewDetails, sendMessage in
+                sessionActions: { viewDetails in
                     AnyView(
                         rowMenu(
                             current,
                             viewDetails: viewDetails,
-                            sendMessage: sendMessage
+                            sendMessage: nil
                         )
                     )
                 }
@@ -275,7 +275,7 @@ struct SessionsView: View {
         Group {
             if hasRowActs(s) {
                 core.contextMenu {
-                    rowMenu(s, viewDetails: nil) { openedSession = s }
+                    rowMenu(s, viewDetails: nil, sendMessage: { openedSession = s })
                 } preview: {
                     SessionRowPreview(session: s)
                 }
@@ -315,7 +315,7 @@ struct SessionsView: View {
     private func rowMenu(
         _ s: RosterSession,
         viewDetails: (() -> Void)?,
-        sendMessage: @escaping () -> Void
+        sendMessage: (() -> Void)?
     ) -> some View {
         Section {
             if let viewDetails {
@@ -323,7 +323,7 @@ struct SessionsView: View {
                     Label("View Details", systemImage: "info.circle")
                 }
             }
-            if s.canReceiveMessage {
+            if s.canReceiveMessage, let sendMessage {
                 Button(action: sendMessage) {
                     Label("Send Message…", systemImage: "arrow.up.message")
                 }

@@ -115,9 +115,9 @@ struct SessionDetailView: View {
     /// Runs after a delivered send so the roster refreshes behind this screen.
     let onDelivered: () async -> Void
     /// The roster row's own advertised actions, redrawn in this screen's menu.
-    /// Supplying the send action from here lets that shared entry focus this
-    /// screen's composer instead of navigating to a screen already open.
-    let sessionActions: (@escaping () -> Void, @escaping () -> Void) -> AnyView
+    /// Messaging is already present as the composer, so the shared menu omits
+    /// that roster-only navigation entry here.
+    let sessionActions: (@escaping () -> Void) -> AnyView
 
     @Environment(AccountSession.self) private var account
     @Environment(ProductEventSender.self) private var events
@@ -326,10 +326,7 @@ struct SessionDetailView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    sessionActions(
-                        { infoShown = true },
-                        { composing = true }
-                    )
+                    sessionActions { infoShown = true }
                 } label: {
                     Label("Session Actions", systemImage: "ellipsis")
                 }
