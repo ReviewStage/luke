@@ -22,7 +22,7 @@ struct VoiceSettingsSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    Picker("Voice", selection: $voice) {
+                    Picker("Voice", selection: voiceChoice) {
                         ForEach(RealtimeVoice.allCases) { candidate in
                             Text(candidate.displayName).tag(candidate)
                         }
@@ -69,12 +69,24 @@ struct VoiceSettingsSheet: View {
                 }
             }
         }
-        .onChange(of: voice) { events.record(.settingUpdate(setting: .voice, value: .set)) }
-        .onChange(of: speed) { events.record(.settingUpdate(setting: .voiceSpeed, value: .set)) }
     }
 
     private var isChanged: Bool {
         voice != RealtimeVoice.default || speed != RealtimeVoiceSpeed.default
+    }
+
+    // Each control counts its own change, so a reset counts once as a reset
+    // rather than once more per field it moved, the way the desktop counts.
+
+    private var voiceChoice: Binding<RealtimeVoice> {
+        Binding(
+            get: { voice },
+            set: { chosen in
+                guard chosen != voice else { return }
+                voice = chosen
+                events.record(.settingUpdate(setting: .voice, value: .set))
+            }
+        )
     }
 
     /// The slider's steps are the vocabulary's multiples and nothing between,
@@ -84,7 +96,9 @@ struct VoiceSettingsSheet: View {
         Binding(
             get: { speed.multiplier },
             set: { value in
-                if let step = RealtimeVoiceSpeed(multiplier: value) { speed = step }
+                guard let step = RealtimeVoiceSpeed(multiplier: value), step != speed else { return }
+                speed = step
+                events.record(.settingUpdate(setting: .voiceSpeed, value: .set))
             }
         )
     }
