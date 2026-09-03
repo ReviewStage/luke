@@ -222,8 +222,6 @@ struct WatchSessionDetailView: View {
                 .padding(.top, 6)
             }
             .defaultScrollAnchor(.bottom)
-            .contentMargins(.bottom, 0, for: .scrollContent)
-            .ignoresSafeArea(.container, edges: .bottom)
             .overlay {
                 if centersConversationState {
                     conversationContent
@@ -335,7 +333,6 @@ struct WatchSessionDetailView: View {
             hasOlder = answer.hasOlder
             loadError = nil
             handOverDeliveredSends()
-            scrollIntent = .end
         } catch is AccountSessionError {
             loadError = nil
         } catch {
