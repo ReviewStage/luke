@@ -1278,6 +1278,9 @@ for (const [mode, tile] of Object.entries(TILES)) {
 // tile, which full-bleed is the whole canvas. The third appearance is the
 // system tint: iOS maps the icon's luminance onto the user's accent color,
 // so it is cut grayscale, pure white on true black.
+// The dark cut also serves the Apple Watch app, which masks its icon to a
+// circle and takes one appearance, so the watch's icon is a second PNG cut
+// from it rather than a second drawing.
 const iosGlyphScale = (240 * 0.58) / bbox.w;
 const iosGx = 120 - bbox.cx * iosGlyphScale;
 const iosGy = 120 - bbox.cy * iosGlyphScale;
