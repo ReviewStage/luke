@@ -223,7 +223,6 @@ struct VoiceView: View {
         .background(Color.ground.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .principal) { statusLabel }
             ToolbarItem(placement: .topBarTrailing) { settingsButton }
         }
         .sheet(isPresented: $settingsShown) {
@@ -296,7 +295,7 @@ struct VoiceView: View {
                         // The controls float above the thread. Empty space at
                         // its tail lets the newest bubble clear them while the
                         // bubbles themselves can still scroll behind the glass.
-                        .padding(.bottom, 132)
+                        .padding(.bottom, 160)
                     }
                     .onChange(of: model.messages) {
                         guard let last = model.messages.last else { return }
@@ -326,6 +325,7 @@ struct VoiceView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             talkButton
+            statusLabel
         }
         .padding(.bottom, 10)
         .animation(.easeInOut(duration: 0.2), value: model.errorMessage)
