@@ -49,14 +49,18 @@ final class WatchConnectivityReceiver: NSObject, WCSessionDelegate {
 
     private func requestTokensIfNeeded() {
         Task { @MainActor [weak self] in
-            guard let self, case .signedOut = watchSession.state else { return }
-            guard WCSession.default.isReachable else { return }
-            WCSession.default.sendMessage(
+            guard let self else { return }
+            let s = WCSession.default
+            print("[WatchReceiver] requestTokensIfNeeded — reachable:\(s.isReachable) state:\(watchSession.state)")
+            guard case .signedOut = watchSession.state else { return }
+            guard s.isReachable else { return }
+            s.sendMessage(
                 ["event": "requestTokens"],
                 replyHandler: { [weak self] reply in
+                    print("[WatchReceiver] got reply: \(reply.keys.sorted())")
                     Task { @MainActor [weak self] in self?.watchSession.receive(payload: reply) }
                 },
-                errorHandler: nil
+                errorHandler: { error in print("[WatchReceiver] sendMessage error: \(error)") }
             )
         }
     }

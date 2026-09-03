@@ -21,12 +21,12 @@ final class PhoneSessionRelay: NSObject, WCSessionDelegate {
     /// token refresh so the watch never works with a stale refresh token.
     @MainActor
     func push() {
-        guard WCSession.default.activationState == .activated,
-              WCSession.default.isPaired,
-              WCSession.default.isWatchAppInstalled
-        else { return }
+        let s = WCSession.default
+        print("[PhoneRelay] push — state:\(s.activationState.rawValue) paired:\(s.isPaired) watchInstalled:\(s.isWatchAppInstalled) reachable:\(s.isReachable) signedIn:\(accountSession.tokenPayload() != nil)")
+        guard s.activationState == .activated, s.isPaired, s.isWatchAppInstalled else { return }
         guard let payload = accountSession.tokenPayload() else { return }
-        WCSession.default.transferUserInfo(payload)
+        s.transferUserInfo(payload)
+        print("[PhoneRelay] transferUserInfo sent")
     }
 
     /// Notifies the watch that the user signed out on the phone.
