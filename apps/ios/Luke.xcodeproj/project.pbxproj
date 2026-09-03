@@ -25,6 +25,10 @@
 		AABBCC0000000000000000A2 /* PresenceBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000A1 /* PresenceBinding.swift */; };
 		AABBCC0000000000000000A4 /* MarkdownMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000A3 /* MarkdownMessageView.swift */; };
 		AABBCC000000000000000092 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = AABBCC000000000000000091 /* PostHog */; };
+		AABBCC0000000000000000B4 /* LukeWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000B0 /* LukeWatchApp.swift */; };
+		AABBCC0000000000000000B5 /* LukeWatchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000B1 /* LukeWatchView.swift */; };
+		AABBCC0000000000000000B6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000B2 /* Assets.xcassets */; };
+		AABBCC0000000000000000B7 /* LukeKit in Frameworks */ = {isa = PBXBuildFile; productRef = AABBCC0000000000000000C0 /* LukeKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -46,6 +50,10 @@
 		AABBCC0000000000000000A1 /* PresenceBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresenceBinding.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000A3 /* MarkdownMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownMessageView.swift; sourceTree = "<group>"; };
 		AABBCC00000000000000001C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AABBCC0000000000000000B0 /* LukeWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LukeWatchApp.swift; sourceTree = "<group>"; };
+		AABBCC0000000000000000B1 /* LukeWatchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LukeWatchView.swift; sourceTree = "<group>"; };
+		AABBCC0000000000000000B2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AABBCC0000000000000000B3 /* LukeWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LukeWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -66,6 +74,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AABBCC0000000000000000BC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AABBCC0000000000000000B7 /* LukeKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -74,6 +90,7 @@
 			children = (
 				AABBCC000000000000000004 /* Luke */,
 				AABBCC000000000000000005 /* LukeTests */,
+				AABBCC0000000000000000B8 /* LukeWatch */,
 				AABBCC000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -83,6 +100,7 @@
 			children = (
 				AABBCC000000000000000010 /* Luke.app */,
 				AABBCC000000000000000011 /* LukeTests.xctest */,
+				AABBCC0000000000000000B3 /* LukeWatch.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -115,6 +133,16 @@
 				AABBCC000000000000000015 /* LukeTests.swift */,
 			);
 			path = LukeTests;
+			sourceTree = "<group>";
+		};
+		AABBCC0000000000000000B8 /* LukeWatch */ = {
+			isa = PBXGroup;
+			children = (
+				AABBCC0000000000000000B0 /* LukeWatchApp.swift */,
+				AABBCC0000000000000000B1 /* LukeWatchView.swift */,
+				AABBCC0000000000000000B2 /* Assets.xcassets */,
+			);
+			path = LukeWatch;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -161,6 +189,26 @@
 			productReference = AABBCC000000000000000011 /* LukeTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		AABBCC0000000000000000B9 /* LukeWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AABBCC0000000000000000BF /* Build configuration list for PBXNativeTarget "LukeWatch" */;
+			buildPhases = (
+				AABBCC0000000000000000BA /* Sources */,
+				AABBCC0000000000000000BB /* Resources */,
+				AABBCC0000000000000000BC /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LukeWatch;
+			packageProductDependencies = (
+				AABBCC0000000000000000C0 /* LukeKit */,
+			);
+			productName = LukeWatch;
+			productReference = AABBCC0000000000000000B3 /* LukeWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -177,6 +225,9 @@
 					AABBCC000000000000000031 = {
 						CreatedOnToolsVersion = 16.0;
 						TestTargetID = AABBCC000000000000000030;
+					};
+					AABBCC0000000000000000B9 = {
+						CreatedOnToolsVersion = 16.0;
 					};
 				};
 			};
@@ -199,6 +250,7 @@
 			targets = (
 				AABBCC000000000000000030 /* Luke */,
 				AABBCC000000000000000031 /* LukeTests */,
+				AABBCC0000000000000000B9 /* LukeWatch */,
 			);
 		};
 /* End PBXProject section */
@@ -216,6 +268,14 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AABBCC0000000000000000BB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AABBCC0000000000000000B6 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -247,6 +307,15 @@
 			files = (
 				AABBCC000000000000000089 /* CanvasInkTests.swift in Sources */,
 				AABBCC000000000000000023 /* LukeTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AABBCC0000000000000000BA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AABBCC0000000000000000B4 /* LukeWatchApp.swift in Sources */,
+				AABBCC0000000000000000B5 /* LukeWatchView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -464,6 +533,56 @@
 			};
 			name = Release;
 		};
+		AABBCC0000000000000000BD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "dev.tryluke.ios";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.tryluke.ios.watchkitapp";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.0;
+			};
+			name = Debug;
+		};
+		AABBCC0000000000000000BE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "dev.tryluke.ios";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.tryluke.ios.watchkitapp";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -490,6 +609,15 @@
 			buildConfigurations = (
 				AABBCC000000000000000074 /* Debug */,
 				AABBCC000000000000000075 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AABBCC0000000000000000BF /* Build configuration list for PBXNativeTarget "LukeWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AABBCC0000000000000000BD /* Debug */,
+				AABBCC0000000000000000BE /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -529,6 +657,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = AABBCC000000000000000090 /* XCRemoteSwiftPackageReference "posthog-ios" */;
 			productName = PostHog;
+		};
+		AABBCC0000000000000000C0 /* LukeKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AABBCC000000000000000080 /* XCLocalSwiftPackageReference "LukeKit" */;
+			productName = LukeKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 
