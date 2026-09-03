@@ -20,19 +20,6 @@ struct WatchRosterView: View {
                     NavigationLink(value: session) {
                         WatchSessionRow(session: session)
                     }
-                    .listRowBackground(
-                        RoundedRectangle(cornerRadius: 15)
-                            .fill(Color(white: 0.14))
-                            .overlay {
-                                if session.status == "waiting" {
-                                    RoundedRectangle(cornerRadius: 15)
-                                        .strokeBorder(
-                                            Color(red: 1.0, green: 0.627, blue: 0.286, opacity: 0.3),
-                                            lineWidth: 1
-                                        )
-                                }
-                            }
-                    )
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         if let archive = archiveControl(session) {
                             Button {
@@ -117,9 +104,18 @@ private struct WatchSessionRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(session.title)
-                .font(.headline)
-                .lineLimit(2)
+            HStack(alignment: .top, spacing: 6) {
+                Text(session.title)
+                    .font(.headline)
+                    .lineLimit(2)
+                Spacer(minLength: 0)
+                if session.status == "waiting" {
+                    Circle()
+                        .fill(.orange)
+                        .frame(width: 8, height: 8)
+                        .padding(.top, 4)
+                }
+            }
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(session.error ?? session.status.capitalized)
                     .font(.caption2)
