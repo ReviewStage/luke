@@ -10,6 +10,7 @@ import WatchConnectivity
 final class PhoneSessionRelay: NSObject, WCSessionDelegate {
     private let accountSession: AccountSession
 
+    @MainActor
     init(accountSession: AccountSession) {
         self.accountSession = accountSession
         super.init()
