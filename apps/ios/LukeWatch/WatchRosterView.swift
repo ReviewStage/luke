@@ -20,6 +20,10 @@ struct WatchRosterView: View {
                     NavigationLink(value: session) {
                         WatchSessionRow(session: session)
                     }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 15)
+                            .strokeBorder(session.rowBorderColor, lineWidth: 1)
+                    }
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         if let archive = archiveControl(session) {
                             Button {
@@ -103,30 +107,24 @@ private struct WatchSessionRow: View {
     let session: RosterSession
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Circle()
-                .fill(session.statusColor)
-                .frame(width: 8, height: 8)
-                .padding(.top, 4)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(session.title)
-                        .font(.headline)
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                    if let date = session.lastActivityAt {
-                        TimelineView(.periodic(from: .distantPast, by: 30)) { context in
-                            Text(lastActivityLabel(lastActivityAt: date, now: context.date))
-                        }
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    }
-                }
+        VStack(alignment: .leading, spacing: 2) {
+            Text(session.title)
+                .font(.headline)
+                .lineLimit(2)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(session.error ?? session.status.capitalized)
                     .font(.caption2)
                     .foregroundStyle(session.error == nil ? Color.secondary : Color.red)
                     .lineLimit(1)
+                Spacer(minLength: 0)
+                if let date = session.lastActivityAt {
+                    TimelineView(.periodic(from: .distantPast, by: 30)) { context in
+                        Text(lastActivityLabel(lastActivityAt: date, now: context.date))
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                }
             }
         }
         .padding(.vertical, 2)
@@ -1001,14 +999,10 @@ private struct WatchMarkdownText: View {
 // MARK: - Helpers
 
 private extension RosterSession {
-    var statusColor: Color {
-        switch status {
-        case "working": .accentColor
-        case "waiting": .orange
-        case "error": .red
-        case "complete": .green
-        default: Color(white: 0.5)
-        }
+    var rowBorderColor: Color {
+        status == "waiting"
+            ? Color(red: 1.0, green: 0.627, blue: 0.286, opacity: 0.3)
+            : Color(white: 1, opacity: 0.08)
     }
 
     static let placeholder = RosterSession(
