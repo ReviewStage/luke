@@ -69,14 +69,23 @@ final class WatchVoiceSessionModel {
                 // Fetched beside the mint rather than after it: the projects
                 // item is sent at channel open, and the ephemeral key's
                 // minute is not to be spent waiting on a second round trip.
-                async let projects = try? ProjectsClient(serviceURL: AccountConstants.serviceURL)
-                    .projects(bearerToken: token)
-                let connection = try await VoiceMintClient(baseURL: AccountConstants.serviceURL)
+                async let projects = try? ProjectsClient(
+                    serviceURL: AccountConstants.serviceURL, http: WatchNetwork.session
+                )
+                .projects(bearerToken: token)
+                let connection: VoiceConnection
+                do {
+                    connection = try await VoiceMintClient(
+                        baseURL: AccountConstants.serviceURL, http: WatchNetwork.session
+                    )
                     .mint(
                         accessToken: token,
                         voice: RealtimeVoice.default.rawValue,
                         speed: RealtimeVoiceSpeed.default.multiplier
                     )
+                } catch let error as URLError {
+                    throw WatchNetworkFailure(error)
+                }
                 if let answer = await projects {
                     await MainActor.run { [weak self] in self?.projects = answer }
                 }
