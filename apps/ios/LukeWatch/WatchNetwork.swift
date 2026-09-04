@@ -2,14 +2,15 @@ import Foundation
 
 /// The one URLSession every hosted read and act on the watch travels on.
 ///
-/// watchOS brings its network path up on demand and chooses it itself: the
-/// paired iPhone's connection, tunneled over Bluetooth, whenever the phone is
-/// in range; this watch's own Wi-Fi or cellular only when it is not. Nothing
-/// an app does changes that order. What an app does decide is what happens
-/// in the moment before a path is up: `URLSession.shared` fails the request
-/// at once, which on the wrist reads as "The Internet connection appears to
-/// be offline" with the iPhone in the same pocket. This session waits for a
-/// path instead, bounded so a watch that truly has none still answers.
+/// HTTP through URLSession is the networking watchOS opens to every app; the
+/// Realtime socket is the exception, and `WatchVoiceAudioSession` says on
+/// what terms. watchOS brings the path up on demand and chooses it itself:
+/// the paired iPhone's connection, tunneled over Bluetooth, whenever the
+/// phone is in range; this watch's own Wi-Fi or cellular only when it is not.
+/// What an app decides is the moment before a path is up: `URLSession.shared`
+/// fails the request at once, which reads as offline with the iPhone in the
+/// same pocket. This session waits for a path instead, bounded so a watch
+/// that truly has none still answers.
 enum WatchNetwork {
     /// The bound on one whole request, the wait for a path and the transfer
     /// that follows it together: URLSession offers no bound on the wait

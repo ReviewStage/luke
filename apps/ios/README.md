@@ -121,12 +121,18 @@ nothing else; the sessions list, a session's conversation, the messages and
 controls sent from the wrist, and the voice call's mint and Realtime socket
 all leave the watch itself. watchOS chooses the path and prefers the phone:
 the paired iPhone's connection tunneled over Bluetooth whenever the phone is
-in range, the watch's own Wi-Fi or cellular only when it is not, so the
-phone's connection is already what carries the watch's traffic whenever it
-can. Every request goes through `WatchNetwork.session`, which waits for that
-path to come up instead of failing the instant no path is up the way
-`URLSession.shared` does, because on a wrist that instant failure reads as
-being offline with the iPhone in the same pocket. The wait and the transfer
-after it share one fixed bound, since URLSession offers no bound on the wait
-alone, and a request that runs out of it is worded as one the wearer can act
-on: keep the iPhone nearby, or join Wi-Fi.
+in range, the watch's own Wi-Fi or cellular only when it is not.
+
+watchOS draws one line through that traffic. HTTP over `URLSession` is open
+to every app, and every hosted read and act on the watch travels that way,
+through `WatchNetwork.session`, which waits for a path to come up instead of
+failing the instant none is up. A WebSocket is low-level networking, which
+watchOS grants only to an audio streaming app while its audio session is
+active (Apple's TN3135 and WWDC 2019 session 716), and tells anything else
+that opens one that the Internet connection appears to be offline, with the
+phone in the same pocket. Luke's voice call is a streamed spoken exchange, so
+the watch app declares the `audio` background mode in `LukeWatch/Info.plist`
+and holds its audio session active from before the Realtime socket opens
+until the call closes, in `WatchVoiceAudioSession`. The call still opens only
+at the developer's press and closes on the same idle timer as before; the
+mode changes what watchOS lets the socket do, not when Luke listens.

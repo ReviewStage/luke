@@ -61,6 +61,13 @@ final class WatchVoiceSessionModel {
     private func connect(startWithTurn: Bool) async {
         guard session == nil, let accountSession else { return }
         errorMessage = nil
+        do {
+            try WatchVoiceAudioSession.activate()
+        } catch {
+            errorMessage = "Couldn't start audio on the watch."
+            status = .idle
+            return
+        }
 
         let opts = RealtimeSessionOptions(
             requestConnection: { [weak accountSession, weak self] in
@@ -95,7 +102,10 @@ final class WatchVoiceSessionModel {
                 self?.status = newStatus
                 // An idle timeout releases the socket so the next button press
                 // remints rather than sending on a stale connection.
-                if newStatus == .idle { self?.session = nil }
+                if newStatus == .idle {
+                    self?.session = nil
+                    WatchVoiceAudioSession.deactivate()
+                }
             },
             onCaption: { [weak self] text in self?.thread?.recordCaption(text) },
             onSpokenAsk: { [weak self] text in self?.thread?.recordSpokenAsk(text) },
@@ -163,6 +173,7 @@ final class WatchVoiceSessionModel {
         // so. Only a new press supersedes it.
         session?.close()
         session = nil
+        WatchVoiceAudioSession.deactivate()
     }
 
     func beginTurn() {

@@ -18,9 +18,7 @@ final class WatchAudioCapturer: AudioCapturer, @unchecked Sendable {
             throw CocoaError(.fileReadUnknown)
         }
 
-        let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.playAndRecord, mode: .default)
-        try audioSession.setActive(true)
+        try WatchVoiceAudioSession.activate()
 
         let inputNode = engine.inputNode
         let hwFormat = inputNode.outputFormat(forBus: 0)
@@ -89,6 +87,5 @@ final class WatchAudioCapturer: AudioCapturer, @unchecked Sendable {
             hasTap = false
         }
         engine.stop()
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 }

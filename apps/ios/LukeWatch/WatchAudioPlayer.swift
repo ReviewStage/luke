@@ -10,9 +10,7 @@ final class WatchAudioPlayer: AudioPlayer, @unchecked Sendable {
     private let format: AVAudioFormat
 
     init() {
-        let audioSession = AVAudioSession.sharedInstance()
-        try? audioSession.setCategory(.playAndRecord, mode: .default)
-        try? audioSession.setActive(true)
+        try? WatchVoiceAudioSession.activate()
         format = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: Double(PressAudioBuffer.sampleRate),
@@ -55,6 +53,5 @@ final class WatchAudioPlayer: AudioPlayer, @unchecked Sendable {
     func stop() {
         playerNode.stop()
         engine.stop()
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 }
