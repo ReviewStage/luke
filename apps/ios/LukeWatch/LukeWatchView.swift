@@ -6,7 +6,6 @@ struct LukeWatchView: View {
     @Environment(WatchRosterStore.self) private var rosterStore
     @Environment(WatchNavigation.self) private var navigation
     @Environment(VoiceConversationThread.self) private var conversation
-    @Environment(ProductEventSender.self) private var events
 
     var body: some View {
         Group {
@@ -23,7 +22,6 @@ struct LukeWatchView: View {
             rosterStore.reset()
             conversation.clear()
             navigation.reset()
-            events.reset()
         }
     }
 

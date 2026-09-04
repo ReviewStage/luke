@@ -42,6 +42,8 @@ public final class ProductEventSender {
     private struct QueuedEvent {
         let event: ProductEvent
         let at: Date
+        /// Who was signed in when it was recorded; nil waits for whoever signs in.
+        let account: String?
     }
 
     private let endpoint: URL
@@ -89,7 +91,7 @@ public final class ProductEventSender {
     /// sit on any path without ordering itself around it.
     public func record(_ event: ProductEvent) {
         guard allowed else { return }
-        queue.append(QueuedEvent(event: event, at: now()))
+        queue.append(QueuedEvent(event: event, at: now(), account: session.accountEmail))
         if queue.count > queueLimit {
             queue.removeFirst(queue.count - queueLimit)
         }
@@ -139,13 +141,6 @@ public final class ProductEventSender {
         queue.removeAll()
     }
 
-    /// Drops what is queued and the day markers at an account change, so a
-    /// count recorded under one account never posts as the next.
-    public func reset() {
-        queue.removeAll()
-        recordedDays.removeAll()
-    }
-
     /// Sends what is queued, at most one request at a time. Never throws: a
     /// failure is a count nobody has, which is the trade this whole pipeline
     /// makes. A flush called mid-request chains behind it rather than
@@ -177,6 +172,11 @@ public final class ProductEventSender {
         // Signed out is temporary and nobody's fault, so the queue waits
         // rather than being spent against a request that cannot authenticate.
         guard let token = try? await session.validAccessToken() else { return }
+        // A count recorded under one account never posts as another: what a
+        // sign-out left waiting is dropped once a different account signs in.
+        let account = session.accountEmail
+        queue.removeAll { $0.account != nil && $0.account != account }
+        guard !queue.isEmpty else { return }
         // Taken only once a request will actually be made, and gone whatever
         // becomes of it.
         let events = Array(queue.prefix(Defaults.batchLimit))

@@ -405,23 +405,29 @@ final class ProductEventSenderTests: XCTestCase {
         XCTAssertEqual(peak, 1)
     }
 
-    func testResettingDropsTheQueueAndLetsTheDayBeMarkedAgain() async {
-        let (sender, log) = makeSender()
+    func testCountsRecordedUnderOneAccountNeverPostAsAnother() async {
+        let tokens = StubTokens(valid: nil)
+        tokens.accountEmail = nil
+        let (sender, log) = makeSender(tokens: tokens)
         sender.arm()
         sender.record(.appLaunch)
-        sender.markDayActive()
-        sender.reset()
+        tokens.accountEmail = "dev@example.com"
+        tokens.valid = "at-1"
+        sender.record(.accountSignIn)
+        tokens.accountEmail = nil
+        tokens.valid = nil
         await sender.flush().value
         var requests = await log.requests
         XCTAssertTrue(requests.isEmpty)
 
-        sender.markDayActive()
+        // A different account signs in: only the count recorded signed out,
+        // which belongs to nobody yet, may travel.
+        tokens.accountEmail = "other@example.com"
+        tokens.valid = "at-2"
         await sender.flush().value
         requests = await log.requests
-        XCTAssertEqual(
-            sentEvents(requests[0]).map { $0["name"] as? String },
-            ["app:day_active"]
-        )
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(sentEvents(requests[0]).map { $0["name"] as? String }, ["app:launch"])
     }
 
     func testStoppingDropsWhatWasQueuedRatherThanHoldingTheQuitOpen() async {
