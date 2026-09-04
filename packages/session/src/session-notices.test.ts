@@ -10,6 +10,7 @@ import {
   SessionNoticeTracker,
   type SessionProvider,
   type SessionStatus,
+  sessionNoticeMemoryFromWire,
 } from "@sidecar/session";
 import { MAXIMUM_NOTICES_PER_PASS, SESSION_NOTICE_REPEAT_WINDOW_MS } from "./session-notices.js";
 
@@ -444,4 +445,144 @@ test("a burst is trimmed to the cap with the most urgent notices kept", () => {
     notices.slice(1).map((notice) => notice.providerSessionId),
     ids.slice(0, MAXIMUM_NOTICES_PER_PASS - 1),
   );
+});
+
+test("a fresh tracker's snapshot is empty, and a pass fills it with status alone", () => {
+  const tracker = new SessionNoticeTracker();
+  assert.deepEqual(tracker.snapshot(), []);
+
+  tracker.notices(
+    [session(claude, "a", SESSION_STATUS.WORKING), session(conductor, "b", SESSION_STATUS.WAITING)],
+    1_000,
+  );
+
+  assert.deepEqual(tracker.snapshot(), [
+    { providerId: "claude-code", providerSessionId: "a", status: "working", noticedAt: [] },
+    { providerId: "conductor", providerSessionId: "b", status: "waiting", noticedAt: [] },
+  ]);
+});
+
+test("a snapshot records when each notice was spoken, and nothing a session said", () => {
+  const tracker = new SessionNoticeTracker();
+  tracker.notices([session(claude, "a", SESSION_STATUS.WORKING)], 1_000);
+  tracker.notices(
+    [session(claude, "a", SESSION_STATUS.WAITING, { activity: "Edit file", error: "boom" })],
+    2_000,
+  );
+
+  assert.deepEqual(tracker.snapshot(), [
+    {
+      providerId: "claude-code",
+      providerSessionId: "a",
+      status: "waiting",
+      noticedAt: [{ status: "waiting", at: 2_000 }],
+    },
+  ]);
+});
+
+test("a restored tracker diffs against the memory rather than seeding afresh", () => {
+  const before = new SessionNoticeTracker();
+  before.notices([session(claude, "a", SESSION_STATUS.WORKING)], 1_000);
+
+  const after = SessionNoticeTracker.restore(before.snapshot());
+  const notices = after.notices([session(claude, "a", SESSION_STATUS.COMPLETE)], 2_000);
+
+  assert.equal(notices.length, 1);
+  assert.equal(notices[0]?.status, SESSION_NOTICE_STATUS.COMPLETE);
+  assert.equal(notices[0]?.previousStatus, SESSION_STATUS.WORKING);
+});
+
+test("a restored tracker never replays a status the memory already held", () => {
+  const before = new SessionNoticeTracker();
+  before.notices([session(claude, "a", SESSION_STATUS.WAITING)], 1_000);
+
+  const after = SessionNoticeTracker.restore(before.snapshot());
+  assert.deepEqual(after.notices([session(claude, "a", SESSION_STATUS.WAITING)], 2_000), []);
+});
+
+test("the repeat window survives a restore", () => {
+  const before = new SessionNoticeTracker();
+  before.notices([session(claude, "a", SESSION_STATUS.WORKING)], 1_000);
+  assert.equal(before.notices([session(claude, "a", SESSION_STATUS.ERROR)], 2_000).length, 1);
+
+  const after = SessionNoticeTracker.restore(before.snapshot());
+  const inside = 2_000 + SESSION_NOTICE_REPEAT_WINDOW_MS - 1;
+  after.notices([session(claude, "a", SESSION_STATUS.WORKING)], inside);
+  assert.deepEqual(after.notices([session(claude, "a", SESSION_STATUS.ERROR)], inside), []);
+
+  const outside = 2_000 + SESSION_NOTICE_REPEAT_WINDOW_MS;
+  after.notices([session(claude, "a", SESSION_STATUS.WORKING)], outside);
+  assert.equal(after.notices([session(claude, "a", SESSION_STATUS.ERROR)], outside).length, 1);
+});
+
+test("a memory round-trips through JSON and the wire reader unchanged", () => {
+  const tracker = new SessionNoticeTracker();
+  tracker.notices(
+    [session(claude, "a", SESSION_STATUS.WORKING), session(conductor, "a", SESSION_STATUS.WORKING)],
+    1_000,
+  );
+  tracker.notices(
+    [session(claude, "a", SESSION_STATUS.ERROR), session(conductor, "a", SESSION_STATUS.WAITING)],
+    2_000,
+  );
+
+  const memory = tracker.snapshot();
+  const restored = sessionNoticeMemoryFromWire(JSON.parse(JSON.stringify(memory)));
+  assert.deepEqual(restored, memory);
+  assert.deepEqual(SessionNoticeTracker.restore(restored).snapshot(), memory);
+});
+
+test("the wire reader drops what it cannot place and keeps the rest", () => {
+  const memory = sessionNoticeMemoryFromWire([
+    { providerId: "claude-code", providerSessionId: "a", status: "working", noticedAt: [] },
+    { providerId: "claude-code", providerSessionId: "b", status: "paused", noticedAt: [] },
+    { providerId: "claude-code", providerSessionId: 3, status: "working", noticedAt: [] },
+    { providerId: "", providerSessionId: "d", status: "working", noticedAt: [] },
+    "not a record",
+    {
+      providerId: "conductor",
+      providerSessionId: "e",
+      status: "error",
+      noticedAt: [
+        { status: "error", at: 5_000 },
+        { status: "working", at: 1 },
+        { status: "waiting", at: "soon" },
+        { status: "complete", at: Number.NaN },
+        "later",
+      ],
+    },
+    { providerId: "conductor", providerSessionId: "f", status: "complete", noticedAt: "never" },
+  ]);
+
+  assert.deepEqual(memory, [
+    { providerId: "claude-code", providerSessionId: "a", status: "working", noticedAt: [] },
+    {
+      providerId: "conductor",
+      providerSessionId: "e",
+      status: "error",
+      noticedAt: [{ status: "error", at: 5_000 }],
+    },
+    { providerId: "conductor", providerSessionId: "f", status: "complete", noticedAt: [] },
+  ]);
+  assert.deepEqual(sessionNoticeMemoryFromWire({ providerId: "claude-code" }), []);
+  assert.deepEqual(sessionNoticeMemoryFromWire(undefined), []);
+});
+
+test("a memory naming one session twice keeps the later record", () => {
+  const tracker = SessionNoticeTracker.restore([
+    {
+      providerId: "claude-code",
+      providerSessionId: "a",
+      status: SESSION_STATUS.WORKING,
+      noticedAt: [],
+    },
+    {
+      providerId: "claude-code",
+      providerSessionId: "a",
+      status: SESSION_STATUS.WAITING,
+      noticedAt: [],
+    },
+  ]);
+
+  assert.deepEqual(tracker.notices([session(claude, "a", SESSION_STATUS.WAITING)], 2_000), []);
 });
