@@ -19,7 +19,7 @@ final class WatchAudioCapturer: AudioCapturer, @unchecked Sendable {
         }
 
         let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
+        try audioSession.setCategory(.playAndRecord, mode: .default)
         try audioSession.setActive(true)
 
         let inputNode = engine.inputNode

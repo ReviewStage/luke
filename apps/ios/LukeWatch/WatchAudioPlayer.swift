@@ -11,7 +11,7 @@ final class WatchAudioPlayer: AudioPlayer, @unchecked Sendable {
 
     init() {
         let audioSession = AVAudioSession.sharedInstance()
-        try? audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
+        try? audioSession.setCategory(.playAndRecord, mode: .default)
         try? audioSession.setActive(true)
         format = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
