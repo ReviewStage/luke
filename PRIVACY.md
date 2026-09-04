@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 2 September 2026
+Last updated: 4 September 2026
 
 Luke is a macOS app that watches your coding agent sessions, with a companion
 iOS app for the cloud sessions your account can see. This policy explains what
@@ -11,15 +11,22 @@ we collect, who we send it to, and how to turn it off.
 **On your Mac.** Luke reads the session files your coding agents already write,
 using the session title, status, repository, branch, model, current tool,
 errors, and the tool it is running. It writes none of this to disk. For a
-session running on your Mac, Luke also reads a bounded rendering of that
-session's own conversation — the end of the transcript file its agent already
-writes (up to the last 256 KB), with each message and tool result cut short —
-to write himself a one-line phrase saying what the agent is working on,
-because a session's title is only its first message and the work usually
-moves on. That rendering is read only when Luke is about to speak about that
-session, once per announcement, sent to derive the phrase (see below), and
-kept nowhere: the phrase travels inside that one announcement and is used to
-name the session as Luke speaks about it, then discarded. Nothing else reads
+session running on your Mac, Luke also reads the new part of that session's
+own transcript — the end of the file its agent already writes, with each
+message and tool result cut short, and at most the last 20,000 characters of
+what was added since he last looked. That new part goes once to a small OpenAI
+model, which fills a short fixed form: what you last asked that agent, what it
+did since, where it stopped, and what it is waiting on. The form, and never the
+transcript, is then given to the model that acts as Luke's judgment, together
+with the list of your sessions and its own memory of earlier turns; that memory
+is kept in a file on your Mac and nowhere else. The form is filled when one of
+your agents stops or asks something, and every 60 seconds Luke also checks each
+active local session and, if its transcript grew, summarizes the new part the
+same way; a session with nothing new is not sent anywhere. Luke's judgment may
+also read one local session's recent transcript in full (up to 60,000
+characters) when it decides it needs to or when you ask him about that agent;
+that reading is sent to the same model, kept in Luke's memory file on your Mac,
+and never written back to any agent. Nothing else reads
 message history, file contents, or command output. If you run
 agents inside the Herdr terminal manager, Luke also asks Herdr's own
 command-line tool which of those sessions it holds, so their rows can say so;
@@ -49,7 +56,8 @@ our own service, and they are never used to decide anything on your behalf.
 
 **Your account.** Signing in with Google or GitHub gives us your name, email
 address, and which of the two you used. We also keep the records that keep you
-signed in, and a daily count of how much voice and review you have used.
+signed in, and a daily count of how much voice and session summarizing you
+have used through our service.
 
 **Usage data.** We count how Luke's features are used, on the Mac and in the
 iOS app, and attach your name and email to that record. The counts are event
@@ -125,15 +133,17 @@ and email you signed it with, and any screenshots you attached.
   on the Mac app, read locally from your machine; on iOS, drawn from the same
   cloud observation your vault keys already allow (titles, status, repository,
   and branch of your cloud sessions, as described under Provider API
-  keys above). We do not send message history, file contents, or command
-  output, and we ask OpenAI not to store the request. The one exception is the
-  subject phrase above: to derive it, only when Luke is about to announce a
-  local session and once per announcement, Luke sends the bounded transcript
-  slice of that session and its title — directly to OpenAI on
-  your own key if you entered one, otherwise through our service on our key —
-  asks OpenAI not to store the request, and our service stores and logs none
-  of it either. The phrase that comes back is spoken with that announcement
-  and kept nowhere. On the Mac app,
+  keys above). We ask OpenAI not to store the request. On the Mac app, the
+  transcript reads described above travel the same way: the new part of a
+  local session's transcript goes to a small OpenAI model to fill the fixed
+  form, and the form, the session list, and Luke's memory go to the model that
+  acts as his judgment, which may in turn ask for one session's recent
+  transcript in full. Each of those goes directly to OpenAI on your own key if
+  you entered one, otherwise through our service on our key, where our service
+  checks the request stays within the bounds above, counts it against your
+  daily allowance, asks OpenAI not to store it, and stores and logs none of it.
+  What comes back is a form or a spoken briefing, kept in Luke's memory file on
+  your Mac and never sent to a coding-agent provider. On the Mac app,
   your conversation and Luke's durable memory are kept on your Mac and sent
   with a call so the conversation carries across calls and across launches; on
   iOS, the conversation is held in memory and discarded when the session
