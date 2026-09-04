@@ -51,6 +51,17 @@ test("the iPhone app embeds and depends on the Watch app", () => {
   assert.match(project, /PBXTargetDependency[\s\S]*?target = [^;]+ \/\* LukeWatch \*\//);
 });
 
+test("the Watch app is shown on the watch as Luke", () => {
+  const watchConfigurations = project.match(
+    /PRODUCT_BUNDLE_IDENTIFIER = dev\.tryluke\.ios\.watchkitapp;/g,
+  );
+  assert.equal(watchConfigurations?.length, 2);
+  assert.equal(
+    project.match(/INFOPLIST_KEY_CFBundleDisplayName = Luke;[\s\S]*?SDKROOT = watchos;/g)?.length,
+    2,
+  );
+});
+
 test("the Watch scheme builds the companion and runs the Watch app", () => {
   assert.match(watchScheme, /BuildableName = "Luke\.app"[\s\S]*?BuildableName = "LukeWatch\.app"/);
   assert.match(
