@@ -8,6 +8,7 @@ import {
   type SessionProvider,
 } from "@sidecar/session";
 import { isRecord, isWireString, unparsedWire, type WireRecord, wireRecord } from "@sidecar/wire";
+import { DIGEST_SOURCE, DIGEST_STOP_STATE } from "./brain-digest.js";
 import { BRAIN_DELIVERY_SOURCE, BRAIN_WAKE_KIND, type BrainWakeEvent } from "./brain-events.js";
 import {
   askInputItem,
@@ -48,13 +49,23 @@ function itemBody(item: ResponsesInputItem, marker: string): WireRecord {
   return parsed;
 }
 
-test("a wake item carries each event's observed fields and transcript delta as data", () => {
+test("a wake item carries each event's observed fields and transcript digest as data", () => {
   const event: BrainWakeEvent = {
     kind: BRAIN_WAKE_KIND.HOOK,
     hookEvent: "Stop",
     identity: { providerId: claude.id, providerSessionId: "abc" },
     session: session(),
-    transcriptDelta: { text: "assistant: done", truncated: false, status: "accepted" },
+    digest: {
+      status: "accepted",
+      truncated: false,
+      source: DIGEST_SOURCE.MODEL,
+      digest: {
+        stopState: DIGEST_STOP_STATE.WAITING_FOR_DEVELOPER,
+        lastAsk: "fix the checkout tests",
+        didSince: "ran the suite and found one failure",
+        waitingOn: "which fixture to use",
+      },
+    },
     atMs: NOW,
   };
   const body = itemBody(wakeInputItem([event], NOW), BRAIN_INPUT_MARKER.OBSERVED_EVENTS);
@@ -74,10 +85,59 @@ test("a wake item carries each event's observed fields and transcript delta as d
           activity: "Running tests",
           updated_at: new Date(NOW - 1_000).toISOString(),
         },
-        transcript_delta: { status: "accepted", truncated: false, text: "assistant: done" },
+        transcript_digest: {
+          status: "accepted",
+          truncated: false,
+          source: "model",
+          stop_state: "waiting-for-developer",
+          last_ask: "fix the checkout tests",
+          did_since: "ran the suite and found one failure",
+          waiting_on: "which fixture to use",
+        },
       },
     ],
   });
+});
+
+test("a fallback digest carries the stop state alone, and an event without one carries no digest key", () => {
+  const identity = { providerId: claude.id, providerSessionId: "abc" };
+  const withFallback = itemBody(
+    wakeInputItem(
+      [
+        {
+          kind: BRAIN_WAKE_KIND.HOOK,
+          identity,
+          digest: {
+            status: "accepted",
+            truncated: true,
+            source: DIGEST_SOURCE.FALLBACK,
+            digest: { stopState: DIGEST_STOP_STATE.ERRORED, waitingOn: "exit 1" },
+          },
+          atMs: NOW,
+        },
+      ],
+      NOW,
+    ),
+    BRAIN_INPUT_MARKER.OBSERVED_EVENTS,
+  );
+  assert.ok(Array.isArray(withFallback.events));
+  const [event] = withFallback.events;
+  assert.ok(isRecord(event));
+  assert.deepEqual(event.transcript_digest, {
+    status: "accepted",
+    truncated: true,
+    source: "fallback",
+    stop_state: "errored",
+    waiting_on: "exit 1",
+  });
+
+  const without = itemBody(
+    wakeInputItem([{ kind: BRAIN_WAKE_KIND.ROSTER, identity, atMs: NOW }], NOW),
+    BRAIN_INPUT_MARKER.OBSERVED_EVENTS,
+  );
+  assert.ok(Array.isArray(without.events) && isRecord(without.events[0]));
+  assert.ok(!("transcript_digest" in without.events[0]));
+  assert.ok(!("transcript_delta" in without.events[0]));
 });
 
 test("an ask item carries the question and the events that arrived since the last turn", () => {
