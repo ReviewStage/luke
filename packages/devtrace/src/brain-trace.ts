@@ -3,10 +3,14 @@ import {
   type BrainClient,
   type BrainClientAnswer,
   type BrainRespondOptions,
+  type DigestClient,
+  type DigestClientAnswer,
+  type DigestInput,
+  digestChars,
   type ResponsesInputItem,
 } from "@sidecar/brain";
 import { isRecord, text, type UnparsedWireValue, wholeNumber } from "@sidecar/wire";
-import type { BrainRequestTraceRecord } from "./trace-writer.js";
+import type { BrainDigestTraceRecord, BrainRequestTraceRecord } from "./trace-writer.js";
 
 interface AnsweredPayloadSummary {
   outputItemKinds: readonly string[];
@@ -86,6 +90,62 @@ export function tracedBrainClient(
         elapsedMs: now() - started,
         ...(answer.outcome === BRAIN_CLIENT_OUTCOME.ANSWERED
           ? answeredPayloadSummary(answer.payload)
+          : undefined),
+        ...(answer.outcome === BRAIN_CLIENT_OUTCOME.FAILED ? { error: answer.reason } : undefined),
+      });
+      return answer;
+    },
+    quietUntil: () => client.quietUntil(),
+    ...(client.model ? { model: client.model } : undefined),
+  };
+}
+
+/**
+ * Wraps a digest client the way `tracedBrainClient` wraps the brain's: the
+ * tap observes and never steers, a thrown call still throws, and a failing
+ * recorder is swallowed. The slice reaches the record as its character count
+ * and cut flag alone, and an answered digest as its stop state and size —
+ * never a word of either.
+ */
+export function tracedDigestClient(
+  client: DigestClient,
+  record: (record: BrainDigestTraceRecord) => void,
+  now: () => number = Date.now,
+): DigestClient {
+  const recordQuietly = (entry: BrainDigestTraceRecord): void => {
+    try {
+      record(entry);
+    } catch {
+      // The trace is the instrument; the digest is the point.
+    }
+  };
+  return {
+    summarize: async (input: DigestInput) => {
+      const started = now();
+      const model = client.model;
+      const about = {
+        transcriptChars: input.transcript.length,
+        truncated: input.truncated,
+        ...(model ? { model } : undefined),
+      };
+      let answer: DigestClientAnswer;
+      try {
+        answer = await client.summarize(input);
+      } catch (error) {
+        recordQuietly({
+          ...about,
+          outcome: BRAIN_CLIENT_OUTCOME.FAILED,
+          elapsedMs: now() - started,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+      recordQuietly({
+        ...about,
+        outcome: answer.outcome,
+        elapsedMs: now() - started,
+        ...(answer.outcome === BRAIN_CLIENT_OUTCOME.ANSWERED
+          ? { stopState: answer.digest.stopState, digestChars: digestChars(answer.digest) }
           : undefined),
         ...(answer.outcome === BRAIN_CLIENT_OUTCOME.FAILED ? { error: answer.reason } : undefined),
       });

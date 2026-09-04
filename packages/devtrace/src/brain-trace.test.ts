@@ -4,11 +4,15 @@ import {
   BRAIN_CLIENT_OUTCOME,
   type BrainClient,
   type BrainClientAnswer,
+  DIGEST_STOP_STATE,
+  type DigestClient,
+  type DigestClientAnswer,
+  type DigestInput,
   type ResponsesInputItem,
   userMessageItem,
 } from "@sidecar/brain";
-import { tracedBrainClient } from "./brain-trace.js";
-import type { BrainRequestTraceRecord } from "./trace-writer.js";
+import { tracedBrainClient, tracedDigestClient } from "./brain-trace.js";
+import type { BrainDigestTraceRecord, BrainRequestTraceRecord } from "./trace-writer.js";
 
 const INPUT: readonly ResponsesInputItem[] = [
   userMessageItem("checkout-service is waiting on you"),
@@ -169,4 +173,101 @@ test("quietUntil answers with the wrapped client's own reading", () => {
     () => undefined,
   );
   assert.equal(client.quietUntil(), 42);
+});
+
+const DIGEST_INPUT: DigestInput = {
+  providerName: "Claude Code",
+  title: "checkout-service",
+  truncated: true,
+  transcript: "user: SECRET_TRANSCRIPT_TEXT\nassistant: done",
+};
+
+const DIGESTED: DigestClientAnswer = {
+  outcome: BRAIN_CLIENT_OUTCOME.ANSWERED,
+  digest: {
+    stopState: DIGEST_STOP_STATE.FINISHED,
+    lastAsk: "SECRET_ASK",
+    didSince: "SECRET_DID",
+  },
+};
+
+function digestClientAnswering(answer: DigestClientAnswer, model?: string): DigestClient {
+  return {
+    summarize: async () => answer,
+    quietUntil: () => undefined,
+    ...(model ? { model } : undefined),
+  };
+}
+
+test("an answered digest returns unchanged and records counts, the stop state, and the model", async () => {
+  const records: BrainDigestTraceRecord[] = [];
+  const client = tracedDigestClient(
+    digestClientAnswering(DIGESTED, "gpt-5.6-luna"),
+    (record) => records.push(record),
+    steppingClock(25),
+  );
+  assert.equal(client.model, "gpt-5.6-luna");
+  const answer = await client.summarize(DIGEST_INPUT);
+  assert.equal(answer, DIGESTED);
+  assert.deepEqual(records, [
+    {
+      transcriptChars: DIGEST_INPUT.transcript.length,
+      truncated: true,
+      model: "gpt-5.6-luna",
+      outcome: BRAIN_CLIENT_OUTCOME.ANSWERED,
+      elapsedMs: 25,
+      stopState: DIGEST_STOP_STATE.FINISHED,
+      digestChars: JSON.stringify(DIGESTED.digest).length,
+    },
+  ]);
+  assert.doesNotMatch(JSON.stringify(records), /SECRET_/u);
+  assert.doesNotMatch(JSON.stringify(records), /checkout-service/u);
+});
+
+test("a quiet, failed, or thrown digest records its outcome and never the slice", async () => {
+  const records: BrainDigestTraceRecord[] = [];
+  const quiet = tracedDigestClient(
+    digestClientAnswering({ outcome: BRAIN_CLIENT_OUTCOME.QUIET, until: 5_000 }),
+    (record) => records.push(record),
+    () => 7,
+  );
+  await quiet.summarize(DIGEST_INPUT);
+  const failed = tracedDigestClient(
+    digestClientAnswering({ outcome: BRAIN_CLIENT_OUTCOME.FAILED, reason: "status 500" }),
+    (record) => records.push(record),
+    () => 7,
+  );
+  await failed.summarize(DIGEST_INPUT);
+  const thrown = tracedDigestClient(
+    {
+      summarize: async () => {
+        throw new Error("rate limited");
+      },
+      quietUntil: () => 42,
+    },
+    (record) => records.push(record),
+    () => 7,
+  );
+  await assert.rejects(() => thrown.summarize(DIGEST_INPUT), /rate limited/u);
+  assert.equal(thrown.quietUntil(), 42);
+  assert.deepEqual(
+    records.map((record) => [record.outcome, record.error]),
+    [
+      [BRAIN_CLIENT_OUTCOME.QUIET, undefined],
+      [BRAIN_CLIENT_OUTCOME.FAILED, "status 500"],
+      [BRAIN_CLIENT_OUTCOME.FAILED, "rate limited"],
+    ],
+  );
+  for (const record of records) {
+    assert.equal(record.transcriptChars, DIGEST_INPUT.transcript.length);
+    assert.ok(!("stopState" in record) && !("model" in record));
+  }
+  assert.doesNotMatch(JSON.stringify(records), /SECRET_/u);
+});
+
+test("a digest recorder that throws costs the trace line, never the digest", async () => {
+  const client = tracedDigestClient(digestClientAnswering(DIGESTED), () => {
+    throw new Error("disk full");
+  });
+  assert.equal(await client.summarize(DIGEST_INPUT), DIGESTED);
 });

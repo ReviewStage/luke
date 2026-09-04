@@ -42,6 +42,9 @@ const BRAIN_GENERATION_NAME = "brain-turn";
  * rather than a blank, since the viewer requires a model on every generation.
  */
 const UNKNOWN_BRAIN_MODEL = "gpt-5.6-terra";
+const BRAIN_DIGEST_GENERATION_NAME = "brain-digest";
+/** The same stand-in for a digest a hosted client wrote, whose model the desktop never learns. */
+const UNKNOWN_DIGEST_MODEL = "gpt-5.6-luna";
 
 function recordItems(value: WireValue | undefined): readonly WireRecord[] {
   return Array.isArray(value) ? value.filter(isRecord) : [];
@@ -289,6 +292,46 @@ function applyBrainEntry(state: ExportState, entry: WireRecord): void {
   state.totalInput += inputTokens;
 }
 
+/**
+ * A digest as the trace kept it: the slice as a count and a cut flag on the
+ * input side, and on the output side the outcome, the stop state, and the
+ * form's size — never a word of the slice or the form, because neither was
+ * recorded.
+ */
+function applyBrainDigestEntry(state: ExportState, entry: WireRecord): void {
+  const stopState = text(entry.stopState);
+  const digestChars = wholeNumber(entry.digestChars);
+  const error = text(entry.error);
+  const outputLines = [
+    `outcome: ${text(entry.outcome) ?? "unknown"}`,
+    ...(stopState ? [`stop state: ${stopState}`] : []),
+    ...(digestChars !== undefined ? [`digest chars: ${digestChars}`] : []),
+    ...(error ? [`error: ${error}`] : []),
+  ];
+  state.events.push({
+    type: "generation",
+    name: BRAIN_DIGEST_GENERATION_NAME,
+    model: text(entry.model) ?? UNKNOWN_DIGEST_MODEL,
+    provider: "openai",
+    metrics: {
+      latency: (wholeNumber(entry.elapsedMs) ?? 0) / 1_000,
+      tokens: { input: 0, output: 0 },
+      cost: 0,
+    },
+    available_tools: [],
+    messages: [
+      {
+        role: "user",
+        content: [
+          `transcript chars: ${wholeNumber(entry.transcriptChars) ?? 0}`,
+          `front cut: ${entry.truncated === true ? "yes" : "no"}`,
+        ].join("\n"),
+      },
+      { role: "assistant", content: outputLines.join("\n") },
+    ],
+  });
+}
+
 /** Reads one trace, already split into lines, into unbox-ai's gateway document. */
 export function unboxTraceFromLines(
   lines: readonly string[],
@@ -316,6 +359,7 @@ export function unboxTraceFromLines(
     // A brain-request entry is the raw JSONL's own record of one model call;
     // the turn entry already stands for it in the viewer.
     if (entry.kind === TRACE_ENTRY_KIND.BRAIN) applyBrainEntry(state, entry);
+    if (entry.kind === TRACE_ENTRY_KIND.BRAIN_DIGEST) applyBrainDigestEntry(state, entry);
   }
   const name = options.name ?? DEFAULT_TRACE_NAME;
   return {

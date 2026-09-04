@@ -228,6 +228,47 @@ test("a failed brain turn shows its error, and a keyed turn its model", () => {
   assert.equal(output?.content, "error: request failed with status 500");
 });
 
+test("a brain digest entry becomes its own tool-free generation, counts and fixed values only", () => {
+  const digest = JSON.stringify({
+    at: "2026-08-25T10:04:59.000Z",
+    kind: TRACE_ENTRY_KIND.BRAIN_DIGEST,
+    transcriptChars: 4_096,
+    truncated: true,
+    outcome: "answered",
+    elapsedMs: 700,
+    stopState: "finished",
+    digestChars: 180,
+  });
+  const [generation] = generations(unboxTraceFromLines([digest]));
+  assert.ok(generation);
+  assert.equal(generation.name, "brain-digest");
+  assert.equal(generation.model, "gpt-5.6-luna");
+  assert.deepEqual(toolsOf(generation), []);
+  const [input, output] = messagesOf(generation);
+  assert.equal(input?.content, ["transcript chars: 4096", "front cut: yes"].join("\n"));
+  assert.equal(
+    output?.content,
+    ["outcome: answered", "stop state: finished", "digest chars: 180"].join("\n"),
+  );
+
+  const failed = JSON.stringify({
+    at: "2026-08-25T10:05:00.000Z",
+    kind: TRACE_ENTRY_KIND.BRAIN_DIGEST,
+    transcriptChars: 12,
+    truncated: false,
+    outcome: "failed",
+    elapsedMs: 50,
+    model: "gpt-other",
+    error: "request failed with status 500",
+  });
+  const [failedGeneration] = generations(unboxTraceFromLines([failed]));
+  assert.equal(failedGeneration?.model, "gpt-other");
+  assert.equal(
+    messagesOf(failedGeneration)[1]?.content,
+    ["outcome: failed", "error: request failed with status 500"].join("\n"),
+  );
+});
+
 test("a brain request entry stays in the raw trace and draws no generation", () => {
   const request = JSON.stringify({
     at: "2026-08-25T10:05:00.000Z",

@@ -1,6 +1,6 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import type { BrainTurnTraceRecord } from "@sidecar/brain";
+import type { BrainTurnTraceRecord, DigestStopState } from "@sidecar/brain";
 import { type AgentWireTrace, sanitizedTraceEvent } from "./vocabulary.js";
 
 /**
@@ -24,10 +24,31 @@ export interface BrainRequestTraceRecord {
   error?: string;
 }
 
+/**
+ * One digest a wake asked for, as the trace records it. The slice travels as
+ * its character count and whether its front was cut, never its text; the
+ * answer side keeps the outcome, the stop state (a value from a fixed set),
+ * how much the form said as a count, the timing, and the model when the
+ * client knows one. A digest's words are never recorded: they are a model's
+ * rendering of a transcript, and the trace widening to them is a product
+ * decision.
+ */
+export interface BrainDigestTraceRecord {
+  transcriptChars: number;
+  truncated: boolean;
+  outcome: string;
+  elapsedMs: number;
+  stopState?: DigestStopState;
+  digestChars?: number;
+  model?: string;
+  error?: string;
+}
+
 export const TRACE_ENTRY_KIND = {
   WIRE: "wire",
   BRAIN: "brain",
   BRAIN_REQUEST: "brain-request",
+  BRAIN_DIGEST: "brain-digest",
 } as const;
 
 export type TraceEntryKind = (typeof TRACE_ENTRY_KIND)[keyof typeof TRACE_ENTRY_KIND];
@@ -40,7 +61,8 @@ export type TraceEntryKind = (typeof TRACE_ENTRY_KIND)[keyof typeof TRACE_ENTRY_
 type PendingTraceEntry =
   | ({ kind: typeof TRACE_ENTRY_KIND.WIRE } & AgentWireTrace)
   | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN } & BrainTurnTraceRecord)
-  | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN_REQUEST } & BrainRequestTraceRecord);
+  | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN_REQUEST } & BrainRequestTraceRecord)
+  | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN_DIGEST } & BrainDigestTraceRecord);
 
 export interface AgentTraceWriterOptions {
   /** Where the trace lands, created on the first line rather than up front. */
@@ -94,6 +116,10 @@ export class AgentTraceWriter {
 
   recordBrainRequest(record: BrainRequestTraceRecord): void {
     this.#append({ kind: TRACE_ENTRY_KIND.BRAIN_REQUEST, ...record });
+  }
+
+  recordBrainDigest(record: BrainDigestTraceRecord): void {
+    this.#append({ kind: TRACE_ENTRY_KIND.BRAIN_DIGEST, ...record });
   }
 
   /** The queue drained, for a test to await what `record*` fired and forgot. */
