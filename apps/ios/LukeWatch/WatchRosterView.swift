@@ -389,10 +389,12 @@ struct WatchSessionDetailView: View {
 
     private func loadOlder() async {
         guard !loadingOlder, hasOlder, let offset = oldestOffset, offset > 0 else { return }
+        let generation = conversationGeneration
         loadingOlder = true
         defer { loadingOlder = false }
         do {
             let answer = try await read(.before(offset))
+            guard generation == conversationGeneration else { return }
             let anchor = conversation.first?.id
             let known = Set(conversation.map(\.id))
             conversation.insert(contentsOf: answer.messages.filter { !known.contains($0.id) }, at: 0)
@@ -404,6 +406,7 @@ struct WatchSessionDetailView: View {
                 scrollIntent = .anchor(anchor)
             }
         } catch {
+            guard generation == conversationGeneration else { return }
             loadError = error.localizedDescription
         }
     }
