@@ -12,9 +12,7 @@ import type {
 import {
   CONNECTION_ID,
   CREDENTIAL_PROVIDER_LIST,
-  CREDENTIAL_PROVIDERS,
   connectionDeclaration,
-  isCredentialProviderId,
 } from "@sidecar/credentials/vocabulary";
 import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
@@ -72,7 +70,7 @@ import type {
 import {
   INTERACTIVE_SIGN_IN_STAGE,
   isWorkspaceProviderId,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
+  workspaceProviderDisplayName,
 } from "#shared/wire/session";
 import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "#shared/wire/settings";
 import { appSettingsView } from "#shared/wire/settings";
@@ -148,12 +146,7 @@ import { parsePixels } from "./session-motion";
 import { SESSION_OPTIONS_CONTROL_ID, SESSION_OPTIONS_ID } from "./session-parts";
 import { applySessionReplay } from "./session-replay";
 import { focusSearchField, SESSION_SEARCH_INPUT_ID } from "./session-search";
-import type {
-  MicrophoneControl,
-  ShortcutControl,
-  SupersetAgentControl,
-  UpdateControl,
-} from "./settings-panel";
+import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings-panel";
 import { SETTINGS_SEARCH_INPUT_ID } from "./settings-search";
 import {
   credentialSettingsPage,
@@ -1275,18 +1268,6 @@ export function App(): React.JSX.Element {
     if (presentationOf() === PANEL_PRESENTATION.SLOT) expand();
   }, [expand, presentationOf, setSignInWait, signInWaitNow]);
 
-  const changeSupersetAgentDefault = useCallback(
-    async (agent: string | undefined) =>
-      applySettingsReply(
-        await window.sidecar.updateSettingEntry(
-          APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-          SUPERSET_WORKSPACE_PROVIDER_ID,
-          agent === undefined ? undefined : { agent },
-        ),
-      ),
-    [applySettingsReply],
-  );
-
   /**
    * The providers the default-workspace rows can offer: every provider
    * currently offering projects, named the way its adapter names itself, plus
@@ -1302,10 +1283,7 @@ export function App(): React.JSX.Element {
   const storedWorkspaceProvider = settings?.defaultWorkspaceProvider;
   const storedWorkspaceProjects = settings?.workspaceProjectDefaults;
   const workspaceProviderOptions = useMemo(() => {
-    const fallbackName = (providerId: WorkspaceProviderId) =>
-      isCredentialProviderId(providerId)
-        ? CREDENTIAL_PROVIDERS[providerId].displayName
-        : providerId;
+    const fallbackName = workspaceProviderDisplayName;
     const names = new Map<WorkspaceProviderId, string>();
     for (const project of workspaceProjects) {
       if (isWorkspaceProviderId(project.providerId)) {
@@ -1328,7 +1306,16 @@ export function App(): React.JSX.Element {
             ? `${project.repository} on ${project.targetName}`
             : project.repository,
         }));
-      return { id, name, projects: offered };
+      // The agent kinds the provider's workspaces list, for a provider whose
+      // new sessions run one of them: every kind any observed project offers.
+      const agents = [
+        ...new Set(
+          workspaceProjects
+            .filter((project) => project.providerId === id)
+            .flatMap((project) => project.spawnableAgents ?? []),
+        ),
+      ];
+      return { id, name, projects: offered, agents };
     });
   }, [workspaceProjects, storedWorkspaceProvider, storedWorkspaceProjects]);
 
@@ -3337,27 +3324,6 @@ export function App(): React.JSX.Element {
                 onConnect: beginInteractiveSignIn,
                 onDisconnect: disconnectProvider,
               },
-              superset: (() => {
-                const supersetAgentDefault = (
-                  settings ??
-                  bootstrapSettings ??
-                  appSettingsView(bootstrap.settings)
-                ).workspaceAgentDefaults?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
-                const superset: SupersetAgentControl = {
-                  agents: [
-                    ...new Set(
-                      workspaceProjects
-                        .filter((project) => project.providerId === SUPERSET_WORKSPACE_PROVIDER_ID)
-                        .flatMap((project) => project.spawnableAgents ?? []),
-                    ),
-                  ],
-                  onDefaultAgentChange: changeSupersetAgentDefault,
-                };
-                if (supersetAgentDefault) {
-                  superset.defaultAgent = supersetAgentDefault;
-                }
-                return superset;
-              })(),
               onQuit: () => window.sidecar.quit(),
               shortcuts,
               searchOpen: settingsSearchOpen,

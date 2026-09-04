@@ -5,6 +5,7 @@ import {
   type SessionControl,
   type SessionProvider,
 } from "./session.js";
+import type { KindsWorkspaceProviderId, ModelsWorkspaceProviderId } from "./workspace-agents.js";
 
 export const PROVIDER_LOCATION_KIND = {
   LOCAL: "local",
@@ -142,6 +143,34 @@ export const WORKSPACE_PROVIDER_ID_LIST: readonly WorkspaceProviderId[] = [
 ];
 
 const WORKSPACE_PROVIDER_IDS: ReadonlySet<string> = new Set(WORKSPACE_PROVIDER_ID_LIST);
+
+/** The stable id and display name of every workspace provider. */
+export interface WorkspaceProviderIdentity {
+  id: WorkspaceProviderId;
+  displayName: string;
+}
+
+/**
+ * The identity of every workspace provider: the observed providers' own, and
+ * the two workspace-only providers named the way their rows are drawn — local
+ * Conductor apart from the cloud adapter that owns Conductor's plain name.
+ */
+export const WORKSPACE_PROVIDER_IDENTITY_BY_ID = {
+  [PROVIDER_ID.CLAUDE_CODE]: PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.CLAUDE_CODE],
+  [PROVIDER_ID.CODEX]: PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.CODEX],
+  [PROVIDER_ID.CONDUCTOR]: PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.CONDUCTOR],
+  [PROVIDER_ID.OMP]: PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.OMP],
+  [SUPERSET_WORKSPACE_PROVIDER_ID]: { id: SUPERSET_WORKSPACE_PROVIDER_ID, displayName: "Superset" },
+  [CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID]: {
+    id: CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
+    displayName: `${PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.CONDUCTOR].displayName} (local)`,
+  },
+} as const satisfies Readonly<Record<WorkspaceProviderId, WorkspaceProviderIdentity>>;
+
+/** The name a person reads for a workspace provider. */
+export function workspaceProviderDisplayName(providerId: WorkspaceProviderId): string {
+  return WORKSPACE_PROVIDER_IDENTITY_BY_ID[providerId].displayName;
+}
 
 export function isWorkspaceProviderId(value: string): value is WorkspaceProviderId {
   return WORKSPACE_PROVIDER_IDS.has(value);
@@ -600,14 +629,15 @@ export interface WorkspaceAgentKindSelection {
 
 /**
  * The chosen defaults for new workspaces, one entry per workspace provider
- * that documents an agent choice at all: a provider with a build-fixed models
- * table holds a full selection, and Superset holds the kind alone. Local
- * Conductor's creation link documents no agent, model, or name, so it can
- * hold no entry.
+ * that documents an agent choice at all, typed from `WORKSPACE_AGENT_CHOICE`:
+ * a provider with a build-fixed models table holds a full selection, and a
+ * provider whose agent kinds are observed presets holds the kind alone. A
+ * provider that documents no choice (local Conductor's creation link names
+ * no agent, model, or name) can hold no entry.
  */
 export type WorkspaceAgentDefaults = Readonly<
-  Partial<Record<ProviderId, WorkspaceAgentSelection>> &
-    Partial<Record<typeof SUPERSET_WORKSPACE_PROVIDER_ID, WorkspaceAgentKindSelection>>
+  Partial<Record<ModelsWorkspaceProviderId, WorkspaceAgentSelection>> &
+    Partial<Record<KindsWorkspaceProviderId, WorkspaceAgentKindSelection>>
 >;
 
 /** A user-asked request for a new workspace in one reported project. */

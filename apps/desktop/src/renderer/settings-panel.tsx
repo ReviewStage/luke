@@ -2,14 +2,18 @@ import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "@sidecar/calendar/vocabulary";
 import type { CredentialProvider } from "@sidecar/credentials/vocabulary";
 import {
-  CLOUD_AGENT_PROVIDER_LIST,
+  CLI_ABSENCE,
   type CliLoginConnectionId,
-  CONNECTION_ID,
+  CONNECTION_KIND,
+  CONNECTION_LIST,
+  CONNECTION_SECTION,
   CONSENT_CONNECTION_IDS,
+  type ConnectionDeclaration,
   type ConsentConnectionId,
   CREDENTIAL_CONNECTION,
   CREDENTIAL_PROVIDERS,
   credentialSessionsInCloud,
+  isCliLoginConnectionId,
   VOICE_CREDENTIAL_PROVIDER,
 } from "@sidecar/credentials/vocabulary";
 import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@sidecar/guide";
@@ -22,10 +26,11 @@ import {
   type RealtimeVoiceSpeed,
 } from "@sidecar/realtime";
 import {
-  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-  isProviderId,
-  PROVIDER_ID,
-  type ProviderId,
+  isKindsWorkspaceProviderId,
+  isModelsWorkspaceProviderId,
+  isWorkspaceProviderId,
+  type KindsWorkspaceProviderId,
+  type ModelsWorkspaceProviderId,
   type WorkspaceAgentSelection,
   workspaceAgentModels,
 } from "@sidecar/session";
@@ -36,6 +41,7 @@ import {
   DEFAULT_STOP_HOTKEYS,
   DEFAULT_VOICE_HOTKEYS,
   isAppSettingId,
+  providerDefaultChoice,
   SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
   settingFieldForGuideId,
   settingGuideEntries,
@@ -44,6 +50,7 @@ import {
   VOICE_HOTKEY_CAPTURE,
   VOICE_HOTKEY_NONE,
   voiceHotkeyLabel,
+  WORKSPACE_AGENT_SETTING_ID,
 } from "@sidecar/settings";
 import {
   DEFAULT_PANEL_FORM_FACTOR,
@@ -69,7 +76,6 @@ import type {
   ObservedAccountCalendars,
 } from "#shared/wire/calendar";
 import type { WorkspaceProviderId } from "#shared/wire/session";
-import { SUPERSET_WORKSPACE_PROVIDER_ID } from "#shared/wire/session";
 import type {
   AppSettingField,
   AppSettings,
@@ -166,6 +172,11 @@ import { UPDATE_ROW_ACTION, type UpdateRowAction, updateRow } from "./update-row
 export interface WorkspaceProviderOption {
   id: WorkspaceProviderId;
   name: string;
+  /**
+   * The agent kinds this provider's observed workspaces list, for a provider
+   * whose new sessions run one of them; empty for every other provider.
+   */
+  agents: readonly string[];
   /**
    * The projects this provider's default-project row can offer: everything
    * currently observed for it, and nothing else. A stored default the provider
@@ -351,8 +362,6 @@ export interface SettingsPanelProps {
   consent: ConsentControl;
   /** Everything a CLI-login block with a sign-in button can do, asked by connection id. */
   interactiveSignIn: InteractiveSignInControl;
-  /** The agent kinds Superset's workspaces offer; the login only gates actions. */
-  superset: SupersetAgentControl;
   onQuit: () => void;
   shortcuts: ShortcutControl;
   /**
@@ -1159,16 +1168,16 @@ const STORAGE_UNAVAILABLE_NOTE =
  * chosen, so nothing offers a level nowhere can honour.
  */
 function WorkspaceAgentRow({
-  provider,
+  name,
   providerId,
   selection,
   onChange,
 }: {
-  provider: CredentialProvider;
-  providerId: ProviderId;
+  name: string;
+  providerId: ModelsWorkspaceProviderId;
   selection?: WorkspaceAgentSelection;
   onChange: (
-    providerId: ProviderId,
+    providerId: ModelsWorkspaceProviderId,
     selection: WorkspaceAgentSelection | undefined,
   ) => Promise<ActResult>;
 }): React.JSX.Element {
@@ -1187,22 +1196,20 @@ function WorkspaceAgentRow({
     (choice) => choice.agent === selection?.agent && choice.model === selection?.model,
   );
   const chosen = chosenIndex >= 0 ? choices[chosenIndex] : undefined;
-  const providerDefault = `${provider.displayName}'s default`;
+  const providerDefault = providerDefaultChoice(name);
+  const anchors = WORKSPACE_AGENT_SETTING_ID[providerId];
   // One rest for both pop-ups: they write the same stored pairing, so a model
   // change in flight must still the effort row and the other way around —
   // otherwise two saves can finish out of order and keep whichever answered last.
   const write = useSettingWrite((next: WorkspaceAgentSelection | undefined) =>
     onChange(providerId, next),
   );
-  // Only Conductor's rows are searchable today — the one provider the build
-  // documents a table for — so only its rows wear the anchors.
-  const conductor = providerId === PROVIDER_ID.CONDUCTOR;
   return (
     <>
       <SelectRow
         label="New agents run"
-        {...(conductor ? { anchor: APP_SETTING_ID.WORKSPACE_AGENT_MODEL } : undefined)}
-        ariaLabel={`The model new ${provider.displayName} workspaces run`}
+        anchor={anchors.model}
+        ariaLabel={`The model new ${name} workspaces run`}
         value={chosenIndex >= 0 ? String(chosenIndex) : PROVIDER_DEFAULT_VALUE}
         options={[
           { value: PROVIDER_DEFAULT_VALUE, label: providerDefault },
@@ -1245,8 +1252,8 @@ function WorkspaceAgentRow({
       {chosen && chosen.efforts.length > 0 ? (
         <SelectRow
           label="Effort"
-          {...(conductor ? { anchor: APP_SETTING_ID.WORKSPACE_AGENT_EFFORT } : undefined)}
-          ariaLabel={`The effort new ${provider.displayName} agents think at`}
+          anchor={anchors.effort}
+          ariaLabel={`The effort new ${name} agents think at`}
           value={
             selection?.effort && chosen.efforts.includes(selection.effort)
               ? selection.effort
@@ -1284,73 +1291,193 @@ function WorkspaceAgentRow({
 }
 
 /**
- * What each answer the Codex CLI can give reads as on its row. Every state
+ * What each answer a provider's CLI can give reads as on its row. Every state
  * has words — unlike a key row, whose check needs none — because the check
  * alone could not say the connection is a CLI login rather than a key, and
  * the disconnected states are exactly where the next step must be named.
  * The step is a command, so it is drawn as one.
  */
-const CODEX_CLOUD_STATUS = {
-  [CLI_CONNECTION.CONNECTED]: "Via the Codex CLI login",
-  [CLI_CONNECTION.SIGNED_OUT]: (
-    <>
-      Run <code>codex login</code> on your Mac
-    </>
-  ),
-  [CLI_CONNECTION.CLI_MISSING]: "Codex CLI not installed",
-  [CLI_CONNECTION.UNKNOWN]: "Not checked yet",
-};
+function cliLoginStatus(
+  declaration: ConnectionDeclaration,
+  connection: CliConnection,
+): React.ReactNode {
+  const command = declaration.cliLogin?.loginCommand ?? "";
+  switch (connection) {
+    case CLI_CONNECTION.CONNECTED:
+      return `Via the ${declaration.displayName} CLI login`;
+    case CLI_CONNECTION.SIGNED_OUT:
+      return (
+        <>
+          Run <code>{command}</code> on your Mac
+        </>
+      );
+    case CLI_CONNECTION.CLI_MISSING:
+      return `${declaration.displayName} CLI not installed`;
+    case CLI_CONNECTION.UNKNOWN:
+      return "Not checked yet";
+  }
+}
 
 /**
- * The one provider observed through its own CLI's login rather than a key.
- * The row reports what the latest pass learned and offers nothing to enter
- * or delete: connecting is `codex login` in the user's own terminal, and
- * signing that CLI out is what disconnects — so the words name that step
- * exactly when it is the missing one, and no control pretends otherwise.
+ * The sub-rows every connected workspace provider hangs under its line, by
+ * what its declaration says it takes: a model row for a provider whose new
+ * agents run a model from this build's table, a kind row for one whose new
+ * sessions run one of its own observed agent kinds, and the default-project
+ * row for any provider currently offering projects. Nothing is drawn while
+ * the line above is disconnected: there is nothing the choice could apply to,
+ * and the line already says what to do first.
  */
-function CodexCloudConnection({
-  connection,
+function WorkspaceSubRows({
+  providerId,
+  name,
+  connected,
   settings,
   writes,
   workspaceProvider,
 }: {
-  connection: CliConnection;
+  providerId: WorkspaceProviderId;
+  name: string;
+  connected: boolean;
   settings: AppSettingsView;
   writes: SettingsWrites;
-  /**
-   * Codex's own projects, absent until an observation pass reports any. Codex
-   * connects by CLI login rather than by key, so it has no credential row to
-   * hang its creation defaults under and carries them here instead.
-   */
   workspaceProvider?: WorkspaceProviderOption;
+}): React.JSX.Element | null {
+  if (!connected) return null;
+  return (
+    <>
+      {isModelsWorkspaceProviderId(providerId) && workspaceAgentModels(providerId).length > 0 ? (
+        <WorkspaceAgentRow
+          name={name}
+          providerId={providerId}
+          {...(settings.workspaceAgentDefaults?.[providerId]
+            ? { selection: settings.workspaceAgentDefaults[providerId] }
+            : undefined)}
+          onChange={(id, selection) =>
+            writes.entry(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, id, selection)
+          }
+        />
+      ) : null}
+      {isKindsWorkspaceProviderId(providerId) &&
+      workspaceProvider &&
+      workspaceProvider.agents.length > 0 ? (
+        <WorkspaceAgentKindRow
+          name={name}
+          providerId={providerId}
+          agents={workspaceProvider.agents}
+          {...(settings.workspaceAgentDefaults?.[providerId]?.agent
+            ? { defaultAgent: settings.workspaceAgentDefaults[providerId].agent }
+            : undefined)}
+          onChange={(agent) =>
+            writes.entry(
+              APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
+              providerId,
+              agent === undefined ? undefined : { agent },
+            )
+          }
+        />
+      ) : null}
+      {workspaceProvider ? (
+        <WorkspaceProjectRow provider={workspaceProvider} settings={settings} writes={writes} />
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * Which of a provider's own configured agent kinds a new session starts as,
+ * for a provider whose kinds are observed per workspace rather than tabled by
+ * this build. The first choice is none at all, which is when Luke asks.
+ */
+function WorkspaceAgentKindRow({
+  name,
+  providerId,
+  agents,
+  defaultAgent,
+  onChange,
+}: {
+  name: string;
+  providerId: KindsWorkspaceProviderId;
+  agents: readonly string[];
+  defaultAgent?: string;
+  onChange: (agent: string | undefined) => Promise<ActResult>;
 }): React.JSX.Element {
   return (
-    <div className="credential" {...searchAnchorProps(SETTINGS_SEARCH_ROW.CODEX_CLOUD)}>
+    <SelectRow
+      label={`New ${name} sessions run`}
+      anchor={WORKSPACE_AGENT_SETTING_ID[providerId].kind}
+      ariaLabel={`Default agent for new ${name} sessions`}
+      changed={defaultAgent !== undefined}
+      value={defaultAgent ?? PROVIDER_DEFAULT_VALUE}
+      options={[
+        { value: PROVIDER_DEFAULT_VALUE, label: "Ask each time" },
+        ...agents.map((agent) => ({ value: agent, label: agent })),
+      ]}
+      parse={(raw) => (raw === PROVIDER_DEFAULT_VALUE || agents.includes(raw) ? raw : undefined)}
+      onChange={(agent) => onChange(agent === PROVIDER_DEFAULT_VALUE ? undefined : agent)}
+    />
+  );
+}
+
+/**
+ * A provider observed through its own CLI's login rather than a key, drawn
+ * as prose: the row reports what the latest pass learned and offers nothing
+ * to enter or delete. Connecting is the login command in the user's own
+ * terminal, and signing that CLI out is what disconnects — so the words name
+ * that step exactly when it is the missing one, and no control pretends
+ * otherwise.
+ */
+function CliLoginProseRow({
+  connection,
+  state,
+  settings,
+  writes,
+  workspaceProvider,
+}: {
+  connection: ConnectionDeclaration;
+  state: CliConnection;
+  settings: AppSettingsView;
+  writes: SettingsWrites;
+  workspaceProvider?: WorkspaceProviderOption;
+}): React.JSX.Element {
+  const connected = state === CLI_CONNECTION.CONNECTED;
+  return (
+    <div className="credential" {...searchAnchorProps(connection.id)}>
       <div className="credential-row">
         <span className="credential-identity">
-          {/* The same mark and cloud badge the codex session rows carry: the
-              login buys the observation of cloud tasks, and the same mark
+          {/* The same mark and cloud badge the provider's session rows carry:
+              the login buys the observation of cloud tasks, and the same mark
               cannot differ between the row and the sessions it stands for. */}
           <span className="credential-mark">
-            <ProviderMark providerId={PROVIDER_ID.CODEX} />
-            <CloudBadge />
+            <ProviderMark providerId={connection.id} />
+            {connection.sessionsInCloud ? <CloudBadge /> : null}
           </span>
-          <span className="credential-name">Codex</span>
-          {connection === CLI_CONNECTION.CONNECTED ? <CheckIcon /> : null}
+          <span className="credential-name">{connection.displayName}</span>
+          {connected ? <CheckIcon /> : null}
         </span>
-        <span className="credential-status">{CODEX_CLOUD_STATUS[connection]}</span>
+        <span className="credential-status">{cliLoginStatus(connection, state)}</span>
       </div>
-      {connection === CLI_CONNECTION.CONNECTED && workspaceProvider ? (
-        <WorkspaceProjectRow provider={workspaceProvider} settings={settings} writes={writes} />
+      {isWorkspaceProviderId(connection.id) ? (
+        <WorkspaceSubRows
+          providerId={connection.id}
+          name={connection.displayName}
+          connected={connected}
+          settings={settings}
+          writes={writes}
+          {...(workspaceProvider ? { workspaceProvider } : undefined)}
+        />
       ) : null}
     </div>
   );
 }
 
 /**
- * Every agent provider that can hold a key, one line each. A provider is
- * listed whether or not it has one, because the list is how you learn which
- * services Luke can watch at all.
+ * Every provider connection, one line each, in the order the connection list
+ * declares them and nested where a declaration says so. A provider is listed
+ * whether or not it is connected, because the list is how you learn which
+ * services Luke can watch at all. Each line is drawn by the kind of connection
+ * it is — a key to paste, a CLI login to run, an app on this Mac recognized
+ * with no key — and hangs the same workspace sub-rows under itself once
+ * connected.
  */
 function CredentialsSection({
   settings,
@@ -1358,7 +1485,6 @@ function CredentialsSection({
   panelOpen,
   writes,
   interactiveSignIn,
-  superset,
   workspaceProviders,
 }: {
   settings: AppSettingsView;
@@ -1366,19 +1492,27 @@ function CredentialsSection({
   panelOpen: boolean;
   writes: SettingsWrites;
   interactiveSignIn: InteractiveSignInControl;
-  superset: SupersetAgentControl;
   workspaceProviders: readonly WorkspaceProviderOption[];
 }): React.JSX.Element {
   // Only a system Luke has actually asked, and been refused by, is reported as
   // one that cannot hold a key. Until then the rows stand as usual: a warning
   // about storage nobody has tried to use yet would be a guess.
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
-  const codexWorkspace = workspaceProviders.find((option) => option.id === PROVIDER_ID.CODEX);
-  const supersetWorkspace = workspaceProviders.find(
-    (option) => option.id === SUPERSET_WORKSPACE_PROVIDER_ID,
+  const rows = CONNECTION_LIST.filter(
+    (connection) => connection.section === CONNECTION_SECTION.PROVIDERS,
   );
-  const conductorLocalWorkspace = workspaceProviders.find(
-    (option) => option.id === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
+  const row = (connection: ConnectionDeclaration) => (
+    <ConnectionRow
+      key={connection.id}
+      connection={connection}
+      settings={settings}
+      control={control}
+      panelOpen={panelOpen}
+      writes={writes}
+      storageUnavailable={storageUnavailable}
+      interactiveSignIn={interactiveSignIn}
+      workspaceProviders={workspaceProviders}
+    />
   );
   return (
     <section className="settings-section" style={cssCustomProperties({ "--row-index": 3 })}>
@@ -1386,86 +1520,111 @@ function CredentialsSection({
         <KeyIcon />
         Providers
       </h2>
-      {/* First because the list reads alphabetically, like the key rows below. */}
-      <CodexCloudConnection
-        connection={settings.cliConnections[CONNECTION_ID.CODEX]}
-        settings={settings}
-        writes={writes}
-        {...(codexWorkspace ? { workspaceProvider: codexWorkspace } : {})}
-      />
-      {CLOUD_AGENT_PROVIDER_LIST.map((provider) => {
-        // The agent row belongs to providers the build documents a table for,
-        // and only while connected: disconnected, there is nothing the choice
-        // could apply to, and the line above already says what to do first.
-        const agentRow =
-          isProviderId(provider.id) &&
-          settings.credentialSources[provider.id] !== CREDENTIAL_SOURCE.NONE &&
-          workspaceAgentModels(provider.id).length > 0
-            ? provider.id
-            : undefined;
-        const workspaceProvider = workspaceProviders.find((option) => option.id === provider.id);
-        return (
-          <Fragment key={provider.id}>
-            <ProviderCredential
-              provider={provider}
-              source={settings.credentialSources[provider.id]}
-              storageUnavailable={storageUnavailable}
-              control={control}
-              panelOpen={panelOpen}
-            >
-              {agentRow ? (
-                <WorkspaceAgentRow
-                  provider={provider}
-                  providerId={agentRow}
-                  {...(settings.workspaceAgentDefaults?.[agentRow]
-                    ? { selection: settings.workspaceAgentDefaults[agentRow] }
-                    : undefined)}
-                  onChange={(providerId, selection) =>
-                    writes.entry(
-                      APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-                      providerId,
-                      selection,
-                    )
-                  }
-                />
-              ) : null}
-              {workspaceProvider ? (
-                <WorkspaceProjectRow
-                  provider={workspaceProvider}
-                  settings={settings}
-                  writes={writes}
-                />
-              ) : null}
-            </ProviderCredential>
-            {/* Right below the cloud Conductor key row: the local app on this
-                Mac, recognized with no key. Its own block so the two Conductors
-                read as the different places they are — a repository here versus
-                a cloud project behind a key — rather than one name twice. */}
-            {provider.id === PROVIDER_ID.CONDUCTOR && conductorLocalWorkspace ? (
-              <ConductorLocalIntegration
-                workspaceProvider={conductorLocalWorkspace}
-                settings={settings}
-                writes={writes}
-              />
-            ) : null}
+      {rows
+        .filter((connection) => connection.nestsUnder === undefined)
+        .map((connection) => (
+          <Fragment key={connection.id}>
+            {row(connection)}
+            {/* A nested row stands right below the row it hangs under, as its
+                own block: local Conductor beside the cloud Conductor key row,
+                so the two read as the different places they are — a
+                repository here versus a cloud project behind a key — rather
+                than one name twice. */}
+            {rows.filter((nested) => nested.nestsUnder === connection.id).map(row)}
           </Fragment>
-        );
-      })}
-      {/* Last because the list reads alphabetically. Superset is the other
-          agent surface connected through its own CLI's login rather than a
-          key, so it stands as its own block the way the Codex row does. */}
-      <SupersetIntegration
-        signIn={interactiveSignIn}
-        control={superset}
-        settings={settings}
-        writes={writes}
-        {...(supersetWorkspace ? { workspaceProvider: supersetWorkspace } : {})}
-      />
+        ))}
       {/* The same refusal the trackers' section explains: a Connect stilled by
           missing storage needs its why in this section too. */}
       {storageUnavailable ? <p className="settings-note">{STORAGE_UNAVAILABLE_NOTE}</p> : null}
     </section>
   );
+}
+
+/** One connection's line, drawn by the kind of connection its declaration says it is. */
+function ConnectionRow({
+  connection,
+  settings,
+  control,
+  panelOpen,
+  writes,
+  storageUnavailable,
+  interactiveSignIn,
+  workspaceProviders,
+}: {
+  connection: ConnectionDeclaration;
+  settings: AppSettingsView;
+  control: CredentialEntryControl;
+  panelOpen: boolean;
+  writes: SettingsWrites;
+  storageUnavailable: boolean;
+  interactiveSignIn: InteractiveSignInControl;
+  workspaceProviders: readonly WorkspaceProviderOption[];
+}): React.JSX.Element | null {
+  const workspaceProvider = workspaceProviders.find((option) => option.id === connection.id);
+  const workspaceProviderProps = workspaceProvider ? { workspaceProvider } : undefined;
+  switch (connection.kind) {
+    case CONNECTION_KIND.KEY: {
+      const provider = connection.credential;
+      if (!provider) return null;
+      return (
+        <ProviderCredential
+          provider={provider}
+          source={settings.credentialSources[provider.id]}
+          storageUnavailable={storageUnavailable}
+          control={control}
+          panelOpen={panelOpen}
+        >
+          {isWorkspaceProviderId(connection.id) ? (
+            <WorkspaceSubRows
+              providerId={connection.id}
+              name={connection.displayName}
+              connected={settings.credentialSources[provider.id] !== CREDENTIAL_SOURCE.NONE}
+              settings={settings}
+              writes={writes}
+              {...workspaceProviderProps}
+            />
+          ) : null}
+        </ProviderCredential>
+      );
+    }
+    case CONNECTION_KIND.CLI_LOGIN: {
+      if (!isCliLoginConnectionId(connection.id)) return null;
+      const state = settings.cliConnections[connection.id];
+      return connection.cliLogin?.interactiveSignIn ? (
+        <CliLoginButtonRow
+          connection={connection}
+          id={connection.id}
+          state={state}
+          signIn={interactiveSignIn}
+          settings={settings}
+          writes={writes}
+          {...workspaceProviderProps}
+        />
+      ) : (
+        <CliLoginProseRow
+          connection={connection}
+          state={state}
+          settings={settings}
+          writes={writes}
+          {...workspaceProviderProps}
+        />
+      );
+    }
+    case CONNECTION_KIND.LOCAL:
+      // A local app is recognized read-only from its own index, so its block
+      // stands only while repositories are actually detected.
+      return workspaceProvider ? (
+        <LocalRow
+          connection={connection}
+          workspaceProvider={workspaceProvider}
+          settings={settings}
+          writes={writes}
+        />
+      ) : null;
+    case CONNECTION_KIND.CONSENT:
+      // Consent rows are drawn under Integrations.
+      return null;
+  }
 }
 
 /**
@@ -1977,36 +2136,31 @@ export interface InteractiveSignInControl {
   onDisconnect: (id: CliLoginConnectionId) => Promise<ActResult>;
 }
 
-export interface SupersetAgentControl {
-  agents: readonly string[];
-  defaultAgent?: string;
-  onDefaultAgentChange: (agent: string | undefined) => Promise<ActResult>;
-}
-
 /**
- * Local Conductor: the app on this Mac, recognized read-only from its own
- * index with no key and nothing to connect, so the block has no Connect and no
- * disconnect — it stands only while repositories are actually detected, and its
- * whole control is the default-project row every workspace creator draws. It
- * is deliberately its own block beside the cloud Conductor key row, so the two
- * Conductors are told apart by where they are rather than sharing one name.
+ * A local connection (local Conductor today): the app on this Mac, recognized
+ * read-only from its own index with no key and nothing to connect, so the
+ * block has no Connect and no disconnect — it stands only while repositories
+ * are actually detected, and its whole control is the default-project row
+ * every workspace creator draws.
  */
-function ConductorLocalIntegration({
+function LocalRow({
+  connection,
   workspaceProvider,
   settings,
   writes,
 }: {
-  /** Local Conductor's repositories, present only once a read reported any. */
+  connection: ConnectionDeclaration;
+  /** The app's repositories, present only once a read reported any. */
   workspaceProvider: WorkspaceProviderOption;
   settings: AppSettingsView;
   writes: SettingsWrites;
 }): React.JSX.Element {
   return (
-    <div className="credential" {...searchAnchorProps(CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID)}>
+    <div className="credential" {...searchAnchorProps(connection.id)}>
       <div className="credential-row">
         <span className="credential-identity">
           <span className="credential-mark">
-            <ProviderMark providerId={CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID} />
+            <ProviderMark providerId={connection.id} />
           </span>
           <span className="credential-name">{workspaceProvider.name}</span>
           <CheckIcon />
@@ -2017,20 +2171,30 @@ function ConductorLocalIntegration({
   );
 }
 
-function SupersetIntegration({
+/**
+ * A provider observed through its own CLI's login, whose sign-in Luke runs
+ * from a button (Superset today). Connecting stands the panel down to the
+ * sign-in code; disconnecting runs the CLI's own documented sign-out.
+ */
+function CliLoginButtonRow({
+  connection,
+  id,
+  state,
   signIn,
-  control,
   settings,
   writes,
   workspaceProvider,
 }: {
+  connection: ConnectionDeclaration;
+  id: CliLoginConnectionId;
+  state: CliConnection;
   signIn: InteractiveSignInControl;
-  control: SupersetAgentControl;
   settings: AppSettingsView;
   writes: SettingsWrites;
-  /** Superset's own projects, absent until an observation pass reports any. */
+  /** The provider's own projects, absent until an observation pass reports any. */
   workspaceProvider?: WorkspaceProviderOption;
 }): React.JSX.Element | null {
+  const name = connection.displayName;
   // Disconnecting asks first, exactly like deleting a key: the sign-out
   // clears the CLI's stored login, so a disconnect taken on the first press
   // would cost a whole new sign-in to undo.
@@ -2038,31 +2202,30 @@ function SupersetIntegration({
   const [busy, setBusy] = useState(false);
   const [rejection, setRejection] = useState<string>();
 
-  const connection = settings.cliConnections[CONNECTION_ID.SUPERSET];
-  // The row stands only once the CLI is known to be on this Mac: Superset's
-  // bundled CLI arrives with the app it connects, so a missing binary is a
-  // Mac with no Superset, not a step to name.
-  const installed =
-    connection === CLI_CONNECTION.CONNECTED || connection === CLI_CONNECTION.SIGNED_OUT;
-  const connected = connection === CLI_CONNECTION.CONNECTED;
-  const connecting = signIn.connecting(CONNECTION_ID.SUPERSET);
-  if (!installed) return null;
+  // A row declared hidden in the CLI's absence stands only once the CLI is
+  // known to be on this Mac: Superset's bundled CLI arrives with the app it
+  // connects, so a missing binary is a Mac with no Superset, not a step to
+  // name.
+  const installed = state === CLI_CONNECTION.CONNECTED || state === CLI_CONNECTION.SIGNED_OUT;
+  const connected = state === CLI_CONNECTION.CONNECTED;
+  const connecting = signIn.connecting(id);
+  if (connection.cliLogin?.absence === CLI_ABSENCE.HIDDEN && !installed) return null;
 
   const disconnect = async () => {
     setBusy(true);
-    setRejection(actRejection(await signIn.onDisconnect(CONNECTION_ID.SUPERSET)));
+    setRejection(actRejection(await signIn.onDisconnect(id)));
     setBusy(false);
     setAsking(false);
   };
 
   return (
-    <div className="credential" {...searchAnchorProps(SUPERSET_WORKSPACE_PROVIDER_ID)}>
+    <div className="credential" {...searchAnchorProps(id)}>
       <div className="credential-row">
         <span className="credential-identity">
           <span className="credential-mark">
-            <ProviderMark providerId={SUPERSET_WORKSPACE_PROVIDER_ID} />
+            <ProviderMark providerId={id} />
           </span>
-          <span className="credential-name">Superset</span>
+          <span className="credential-name">{name}</span>
           {connected ? <CheckIcon /> : null}
         </span>
         {connected ? (
@@ -2081,7 +2244,7 @@ function SupersetIntegration({
                 type="button"
                 className="icon-button credential-remove"
                 disabled={busy}
-                aria-label="Disconnect Superset"
+                aria-label={`Disconnect ${name}`}
                 /* The ellipsis is the promise that it asks first. */
                 title="Disconnect…"
                 onClick={() => {
@@ -2100,11 +2263,11 @@ function SupersetIntegration({
                 type="button"
                 className="icon-button"
                 disabled={busy || signIn.held || connecting}
-                aria-label="Sign in to Superset again"
+                aria-label={`Sign in to ${name} again`}
                 title={signIn.held ? HELD_TITLE : "Sign in again"}
                 onClick={() => {
                   setRejection(undefined);
-                  signIn.onConnect(CONNECTION_ID.SUPERSET);
+                  signIn.onConnect(id);
                 }}
               >
                 <PencilIcon />
@@ -2112,7 +2275,7 @@ function SupersetIntegration({
             </span>
             <fieldset
               className="settings-actions credential-confirm"
-              aria-label="Disconnect Superset?"
+              aria-label={`Disconnect ${name}?`}
               data-drawn={String(asking)}
               aria-hidden={!asking}
               inert={!asking}
@@ -2146,7 +2309,7 @@ function SupersetIntegration({
               type="button"
               className="quiet-button"
               disabled={signIn.held || connecting}
-              onClick={() => signIn.onConnect(CONNECTION_ID.SUPERSET)}
+              onClick={() => signIn.onConnect(id)}
             >
               {connecting ? "Connecting…" : "Connect"}
             </button>
@@ -2158,27 +2321,15 @@ function SupersetIntegration({
           {rejection}
         </p>
       ) : null}
-      {connected && control.agents.length > 0 ? (
-        <SelectRow
-          label="New Superset sessions run"
-          anchor={APP_SETTING_ID.SUPERSET_AGENT}
-          ariaLabel="Default agent for new Superset sessions"
-          changed={control.defaultAgent !== undefined}
-          value={control.defaultAgent ?? PROVIDER_DEFAULT_VALUE}
-          options={[
-            { value: PROVIDER_DEFAULT_VALUE, label: "Ask each time" },
-            ...control.agents.map((agent) => ({ value: agent, label: agent })),
-          ]}
-          parse={(raw) =>
-            raw === PROVIDER_DEFAULT_VALUE || control.agents.includes(raw) ? raw : undefined
-          }
-          onChange={(agent) =>
-            control.onDefaultAgentChange(agent === PROVIDER_DEFAULT_VALUE ? undefined : agent)
-          }
+      {isWorkspaceProviderId(id) ? (
+        <WorkspaceSubRows
+          providerId={id}
+          name={name}
+          connected={connected}
+          settings={settings}
+          writes={writes}
+          {...(workspaceProvider ? { workspaceProvider } : undefined)}
         />
-      ) : null}
-      {connected && workspaceProvider ? (
-        <WorkspaceProjectRow provider={workspaceProvider} settings={settings} writes={writes} />
       ) : null}
     </div>
   );
@@ -3592,7 +3743,6 @@ export function SettingsPanel({
   appleCalendar,
   consent,
   interactiveSignIn,
-  superset,
   onQuit,
   shortcuts,
   searchOpen,
@@ -3628,10 +3778,13 @@ export function SettingsPanel({
               status: microphone.status,
             }).ready,
             accountDrawn: account.status === ACCOUNT_STATUS.SIGNED_IN,
-            superset: { agentsOffered: superset.agents.length > 0 },
             workspaceProjects: workspaceProviders
               .filter((option) => option.projects.length > 0)
-              .map((option) => ({ id: option.id, name: option.name })),
+              .map((option) => ({
+                id: option.id,
+                name: option.name,
+                agentsOffered: option.agents.length > 0,
+              })),
           }),
           searchQuery,
         )
@@ -3776,7 +3929,6 @@ export function SettingsPanel({
             panelOpen={panelOpen}
             writes={writes}
             interactiveSignIn={interactiveSignIn}
-            superset={superset}
             workspaceProviders={workspaceProviders}
           />
           <IntegrationsSection

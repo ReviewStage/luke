@@ -22,6 +22,7 @@ export {
   isWorkspaceProviderId,
   SUPERSET_WORKSPACE_PROVIDER_ID,
   type WorkspaceProviderId,
+  workspaceProviderDisplayName,
 } from "@sidecar/session";
 
 /** One CLI login flow's state, named by the connection it belongs to. */

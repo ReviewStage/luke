@@ -57,6 +57,8 @@ import type { ConversationEntry, SessionAnnouncement } from "@sidecar/realtime";
 import {
   CreatedWorkspaceOpenTracker,
   InMemorySessionRegistry,
+  isKindsWorkspaceProviderId,
+  isModelsWorkspaceProviderId,
   isProviderId,
   isWorkspaceProviderId,
   normalizeObservedWorkspaceProjects,
@@ -1498,16 +1500,17 @@ async function rememberWorkspaceDefaults(
       );
       panels.broadcast(channels.onSettingsChanged, saved.settings);
     }
+    // A provider whose new agents are chosen among its own observed kinds
+    // remembers the kind this creation named, on the same first-choice terms.
     if (
-      providerId === SUPERSET_WORKSPACE_PROVIDER_ID &&
+      isKindsWorkspaceProviderId(providerId) &&
       agent !== undefined &&
-      (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
-        SUPERSET_WORKSPACE_PROVIDER_ID
-      ] === undefined
+      (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId] ===
+        undefined
     ) {
       const saved = await settingsStore.setEntry(
         APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-        SUPERSET_WORKSPACE_PROVIDER_ID,
+        providerId,
         { agent },
       );
       panels.broadcast(channels.onSettingsChanged, saved.settings);
@@ -1538,7 +1541,7 @@ async function rememberWorkspaceDefaults(
     // choice made by hand while the provider was answering is already
     // held, and must not lose to the request it overlapped.
     if (
-      isProviderId(providerId) &&
+      isModelsWorkspaceProviderId(providerId) &&
       namedSelection !== undefined &&
       (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId] ===
         undefined

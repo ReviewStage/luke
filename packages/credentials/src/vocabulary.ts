@@ -19,7 +19,9 @@ export {
   connectionDeclaration,
   credentialSessionsInCloud,
   INTEGRATION_PROVIDER_LIST,
+  isCliLoginConnectionId,
   isConnectionId,
+  isConsentConnectionId,
 } from "./connections.js";
 export {
   CREDENTIAL_CONNECTION,

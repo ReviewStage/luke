@@ -1,5 +1,5 @@
 import { PRODUCT_SETTING_VALUE, type ProductSettingValue } from "@sidecar/analytics";
-import { CREDENTIAL_PROVIDERS, isCredentialProviderId } from "@sidecar/credentials/vocabulary";
+import { CONNECTION_LIST } from "@sidecar/credentials/vocabulary";
 import {
   APP_SETTING_ID,
   APP_SETTING_KIND,
@@ -19,23 +19,27 @@ import {
   type RealtimeVoiceSpeed,
 } from "@sidecar/realtime";
 import {
-  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-  isProviderId,
+  AGENT_CHOICE,
+  isKindsWorkspaceProviderId,
+  isModelsWorkspaceProviderId,
   isSessionFilter,
   isWorkspaceProviderId,
+  type KindsWorkspaceProviderId,
+  type ModelsWorkspaceProviderId,
   PROVIDER_ID,
-  PROVIDER_IDENTITY_BY_ID,
-  type ProviderId,
   parseWorkspaceAgentKindSelection,
   parseWorkspaceAgentSelection,
   type SessionFilter,
   SUPERSET_WORKSPACE_PROVIDER_ID,
+  WORKSPACE_AGENT_CHOICE_PROVIDERS,
   type WorkspaceAgentDefaults,
   type WorkspaceAgentKindSelection,
   type WorkspaceAgentSelection,
   type WorkspaceProviderId,
+  workspaceAgentChoice,
   workspaceAgentModelLabel,
   workspaceAgentModels,
+  workspaceProviderDisplayName,
 } from "@sidecar/session";
 import {
   DEFAULT_PANEL_FORM_FACTOR,
@@ -138,9 +142,60 @@ const VOICE_PAGE = `${SETTINGS_TAB}, on its Voice page`;
 const VOICE_SOURCE_SECTION = `${VOICE_PAGE}, in the Provider section after Permissions`;
 const APPEARANCE_PAGE = `${SETTINGS_TAB}, on its Appearance page`;
 const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
-const CONDUCTOR_ROW_PATH = `the Conductor row under Providers, in ${CONNECTIONS_PAGE} — drawn once Conductor is connected`;
-const CONDUCTOR_DEFAULT_CHOICE = "Conductor's default";
 const ASK_EACH_TIME_CHOICE = "ask each time";
+
+/** The by-hand path to a provider's own row, where its agent choice is drawn. */
+function providerRowPath(name: string): string {
+  return `the ${name} row under Providers, in ${CONNECTIONS_PAGE} — drawn once ${name} is connected`;
+}
+
+/** The choice that is no choice at all: the provider's own default. */
+export function providerDefaultChoice(name: string): string {
+  return `${name}'s default`;
+}
+
+/**
+ * The setting ids each agent-choosing provider's rows answer to. The ids are
+ * literal members of `APP_SETTING_ID` because that set is the analytics
+ * `setting_id` allowlist: a provider that gains a model choice fails to build
+ * here until its ids are added there, which is the allowlist decision it is.
+ */
+export const WORKSPACE_AGENT_SETTING_ID = {
+  [PROVIDER_ID.CONDUCTOR]: {
+    model: APP_SETTING_ID.WORKSPACE_AGENT_MODEL,
+    effort: APP_SETTING_ID.WORKSPACE_AGENT_EFFORT,
+  },
+  [SUPERSET_WORKSPACE_PROVIDER_ID]: { kind: APP_SETTING_ID.SUPERSET_AGENT },
+} as const satisfies Readonly<
+  Record<ModelsWorkspaceProviderId, { model: AppSettingId; effort: AppSettingId }> &
+    Record<KindsWorkspaceProviderId, { kind: AppSettingId }>
+>;
+
+export type WorkspaceAgentSettingProvider =
+  | {
+      providerId: ModelsWorkspaceProviderId;
+      choice: typeof AGENT_CHOICE.MODELS;
+      half: "model" | "effort";
+    }
+  | { providerId: KindsWorkspaceProviderId; choice: typeof AGENT_CHOICE.KINDS };
+
+/** The provider, and which half of its choice, a setting id belongs to. */
+export function workspaceAgentSettingProvider(
+  settingId: string,
+): WorkspaceAgentSettingProvider | undefined {
+  for (const providerId of WORKSPACE_AGENT_CHOICE_PROVIDERS[AGENT_CHOICE.MODELS]) {
+    const ids = WORKSPACE_AGENT_SETTING_ID[providerId];
+    if (settingId === ids.model) return { providerId, choice: AGENT_CHOICE.MODELS, half: "model" };
+    if (settingId === ids.effort)
+      return { providerId, choice: AGENT_CHOICE.MODELS, half: "effort" };
+  }
+  for (const providerId of WORKSPACE_AGENT_CHOICE_PROVIDERS[AGENT_CHOICE.KINDS]) {
+    if (settingId === WORKSPACE_AGENT_SETTING_ID[providerId].kind) {
+      return { providerId, choice: AGENT_CHOICE.KINDS };
+    }
+  }
+  return undefined;
+}
 
 const VOICE_SOURCE_CHOICE = {
   [VOICE_SOURCE.ACCOUNT]: "your Luke account",
@@ -180,16 +235,14 @@ function voiceSpeedWord(speed: RealtimeVoiceSpeed | undefined): string {
   );
 }
 
-function workspaceProviderName(providerId: WorkspaceProviderId): string {
-  if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return "Superset";
-  if (providerId === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID) {
-    return `${PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.CONDUCTOR].displayName} (local)`;
-  }
-  if (isCredentialProviderId(providerId)) return CREDENTIAL_PROVIDERS[providerId].displayName;
-  // The one workspace-capable provider with no credential row to take a
-  // display name from.
-  return isProviderId(providerId) ? PROVIDER_IDENTITY_BY_ID[providerId].displayName : providerId;
-}
+/**
+ * The workspace providers a default may name, in the order Settings draws
+ * their rows: every connection declared to offer projects.
+ */
+const WORKSPACE_PROVIDER_CHOICES: readonly WorkspaceProviderId[] = CONNECTION_LIST.flatMap(
+  (connection) =>
+    connection.offersProjects && isWorkspaceProviderId(connection.id) ? [connection.id] : [],
+);
 
 function settingGuideEntry<Field extends string>(
   _field: Field,
@@ -248,6 +301,91 @@ function hotkey(value: UnparsedWireValue): SettingGuardResult<string | undefined
 const hotkeyAnalytics = (value: StoredSettingValue): ProductSettingValue =>
   value === VOICE_HOTKEY_NONE ? PRODUCT_SETTING_VALUE.OFF : choiceAnalytics(value);
 
+/**
+ * The guide's rows for a provider whose new agents run a model from this
+ * build's table: the model, and — only while a chosen model's agent documents
+ * effort levels — the effort. Every word naming the provider is read from its
+ * identity, so a second such provider draws the same rows under its own name.
+ */
+function workspaceAgentModelGuideRows(
+  providerId: ModelsWorkspaceProviderId,
+  chosen: WorkspaceAgentSelection | undefined,
+): readonly AppGuideSetting[] {
+  const name = workspaceProviderDisplayName(providerId);
+  const ids = WORKSPACE_AGENT_SETTING_ID[providerId];
+  const defaultChoice = providerDefaultChoice(name);
+  const rowPath = providerRowPath(name);
+  const chosenAgent = chosen
+    ? workspaceAgentModels(providerId).find((entry) => entry.agent === chosen.agent)
+    : undefined;
+  return [
+    {
+      id: ids.model,
+      label: `New ${name} agents run`,
+      description:
+        `Which model a ${name} workspace or agent created through Luke starts with. Unset, ` +
+        `${name}'s own defaults decide. An effort the model's agent documents may be named ` +
+        "in the same change.",
+      kind: APP_SETTING_KIND.CHOICE,
+      value: chosen ? workspaceAgentModelLabel(providerId, chosen) : defaultChoice,
+      choices: [
+        defaultChoice,
+        ...workspaceAgentModels(providerId).flatMap((entry) =>
+          entry.models.map((model) => model.label),
+        ),
+      ],
+      efforts: Object.fromEntries(
+        workspaceAgentModels(providerId).flatMap((entry) =>
+          entry.efforts.length > 0
+            ? entry.models.map((model) => [model.label, entry.efforts] as const)
+            : [],
+        ),
+      ),
+      defaultValue: defaultChoice,
+      adjustable: true,
+      manual: rowPath,
+    },
+    ...(chosen && chosenAgent && chosenAgent.efforts.length > 0
+      ? [
+          {
+            id: ids.effort,
+            label: `New ${name} agents' effort`,
+            description: `How hard the chosen model thinks. Unset, ${name}'s own default decides.`,
+            kind: APP_SETTING_KIND.CHOICE,
+            value: chosen.effort ?? defaultChoice,
+            choices: [defaultChoice, ...chosenAgent.efforts],
+            defaultValue: defaultChoice,
+            adjustable: true,
+            manual: rowPath,
+          },
+        ]
+      : []),
+  ];
+}
+
+/**
+ * The guide's row for a provider whose new sessions run one of the agent
+ * kinds its own configuration lists. The kinds are observed per workspace, so
+ * the row can name only the one already chosen.
+ */
+function workspaceAgentKindGuideRow(
+  providerId: KindsWorkspaceProviderId,
+  chosenAgent: string | undefined,
+): AppGuideSetting {
+  const name = workspaceProviderDisplayName(providerId);
+  return {
+    id: WORKSPACE_AGENT_SETTING_ID[providerId].kind,
+    label: `New ${name} sessions run`,
+    description: `Which configured ${name} agent starts when a creation ask names none. Unset, Luke asks which agent to use.`,
+    kind: APP_SETTING_KIND.CHOICE,
+    value: chosenAgent ?? ASK_EACH_TIME_CHOICE,
+    choices: [ASK_EACH_TIME_CHOICE, ...(chosenAgent ? [chosenAgent] : [])],
+    defaultValue: ASK_EACH_TIME_CHOICE,
+    adjustable: false,
+    manual: `${CONNECTIONS_PAGE}, under ${name}`,
+  };
+}
+
 function workspaceAgentDefaults(
   value: UnparsedWireValue,
 ): SettingGuardResult<WorkspaceAgentDefaults | undefined> {
@@ -255,17 +393,17 @@ function workspaceAgentDefaults(
   if (!isRecord(value)) {
     return invalid(undefined);
   }
-  const defaults: Partial<Record<ProviderId, WorkspaceAgentSelection>> &
-    Partial<Record<typeof SUPERSET_WORKSPACE_PROVIDER_ID, WorkspaceAgentKindSelection>> = {};
+  const defaults: Partial<Record<ModelsWorkspaceProviderId, WorkspaceAgentSelection>> &
+    Partial<Record<KindsWorkspaceProviderId, WorkspaceAgentKindSelection>> = {};
   for (const [providerId, selection] of Object.entries(value)) {
-    if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) {
+    if (isKindsWorkspaceProviderId(providerId)) {
       const parsed = parseWorkspaceAgentKindSelection(selection);
-      if (parsed) defaults[SUPERSET_WORKSPACE_PROVIDER_ID] = parsed;
+      if (parsed) defaults[providerId] = parsed;
       continue;
     }
+    if (!isModelsWorkspaceProviderId(providerId)) continue;
     const parsed = parseWorkspaceAgentSelection(providerId, selection);
-    if (!isProviderId(providerId) || !parsed) continue;
-    defaults[providerId] = parsed;
+    if (parsed) defaults[providerId] = parsed;
   }
   return valid(Object.keys(defaults).length > 0 ? defaults : undefined);
 }
@@ -752,18 +890,16 @@ export const APP_SETTING_SCHEMA = {
           "workspace created saves its provider as the default.",
         kind: APP_SETTING_KIND.CHOICE,
         value: guideValue<WorkspaceProviderId | undefined>(settings, "defaultWorkspaceProvider")
-          ? workspaceProviderName(
+          ? workspaceProviderDisplayName(
               guideValue<WorkspaceProviderId>(settings, "defaultWorkspaceProvider"),
             )
           : ASK_EACH_TIME_CHOICE,
+        // Every provider by its own name, both Conductors among them, or the
+        // guide would read the stored cloud default's plain "Conductor" as
+        // the only Conductor there is.
         choices: [
           ASK_EACH_TIME_CHOICE,
-          workspaceProviderName(PROVIDER_ID.CODEX),
-          // Both Conductors, or the guide would read the stored cloud
-          // default's plain "Conductor" as the only Conductor there is.
-          workspaceProviderName(PROVIDER_ID.CONDUCTOR),
-          workspaceProviderName(CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID),
-          "Superset",
+          ...WORKSPACE_PROVIDER_CHOICES.map(workspaceProviderDisplayName),
         ],
         defaultValue: ASK_EACH_TIME_CHOICE,
         adjustable: false,
@@ -778,12 +914,12 @@ export const APP_SETTING_SCHEMA = {
     default: undefined,
     guard: workspaceAgentDefaults,
     entry: {
-      // Local Conductor is deliberately not a key: its creation link
-      // documents no agent choice, so no entry could ever steer one.
+      // A provider declaring no agent choice (local Conductor's creation link
+      // documents none) is not a key: no entry could ever steer one.
       isKey: (
         value: UnparsedWireValue,
-      ): value is ProviderId | typeof SUPERSET_WORKSPACE_PROVIDER_ID =>
-        isWireString(value) && (value === SUPERSET_WORKSPACE_PROVIDER_ID || isProviderId(value)),
+      ): value is ModelsWorkspaceProviderId | KindsWorkspaceProviderId =>
+        isWireString(value) && workspaceAgentChoice(value) !== AGENT_CHOICE.NONE,
       same: (
         current: WorkspaceAgentSelection | WorkspaceAgentKindSelection | undefined,
         next: WorkspaceAgentSelection | WorkspaceAgentKindSelection | undefined,
@@ -805,70 +941,13 @@ export const APP_SETTING_SCHEMA = {
           settings,
           "workspaceAgentDefaults",
         );
-        const chosen = defaults?.[PROVIDER_ID.CONDUCTOR];
-        const supersetAgent = defaults?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
-        const chosenAgent = chosen
-          ? workspaceAgentModels(PROVIDER_ID.CONDUCTOR).find(
-              (entry) => entry.agent === chosen.agent,
-            )
-          : undefined;
         return [
-          {
-            id: APP_SETTING_ID.WORKSPACE_AGENT_MODEL,
-            label: "New Conductor agents run",
-            description:
-              "Which model a Conductor workspace or agent created through Luke starts with. Unset, " +
-              "Conductor's own defaults decide. An effort the model's agent documents may be named " +
-              "in the same change.",
-            kind: APP_SETTING_KIND.CHOICE,
-            value: chosen
-              ? workspaceAgentModelLabel(PROVIDER_ID.CONDUCTOR, chosen)
-              : CONDUCTOR_DEFAULT_CHOICE,
-            choices: [
-              CONDUCTOR_DEFAULT_CHOICE,
-              ...workspaceAgentModels(PROVIDER_ID.CONDUCTOR).flatMap((entry) =>
-                entry.models.map((model) => model.label),
-              ),
-            ],
-            efforts: Object.fromEntries(
-              workspaceAgentModels(PROVIDER_ID.CONDUCTOR).flatMap((entry) =>
-                entry.efforts.length > 0
-                  ? entry.models.map((model) => [model.label, entry.efforts] as const)
-                  : [],
-              ),
-            ),
-            defaultValue: CONDUCTOR_DEFAULT_CHOICE,
-            adjustable: true,
-            manual: CONDUCTOR_ROW_PATH,
-          },
-          ...(chosen && chosenAgent && chosenAgent.efforts.length > 0
-            ? [
-                {
-                  id: APP_SETTING_ID.WORKSPACE_AGENT_EFFORT,
-                  label: "New Conductor agents' effort",
-                  description:
-                    "How hard the chosen model thinks. Unset, Conductor's own default decides.",
-                  kind: APP_SETTING_KIND.CHOICE,
-                  value: chosen.effort ?? CONDUCTOR_DEFAULT_CHOICE,
-                  choices: [CONDUCTOR_DEFAULT_CHOICE, ...chosenAgent.efforts],
-                  defaultValue: CONDUCTOR_DEFAULT_CHOICE,
-                  adjustable: true,
-                  manual: CONDUCTOR_ROW_PATH,
-                },
-              ]
-            : []),
-          {
-            id: APP_SETTING_ID.SUPERSET_AGENT,
-            label: "New Superset sessions run",
-            description:
-              "Which configured Superset agent starts when a creation ask names none. Unset, Luke asks which agent to use.",
-            kind: APP_SETTING_KIND.CHOICE,
-            value: supersetAgent ?? ASK_EACH_TIME_CHOICE,
-            choices: [ASK_EACH_TIME_CHOICE, ...(supersetAgent ? [supersetAgent] : [])],
-            defaultValue: ASK_EACH_TIME_CHOICE,
-            adjustable: false,
-            manual: `${CONNECTIONS_PAGE}, under Superset`,
-          },
+          ...WORKSPACE_AGENT_CHOICE_PROVIDERS[AGENT_CHOICE.MODELS].flatMap((providerId) =>
+            workspaceAgentModelGuideRows(providerId, defaults?.[providerId]),
+          ),
+          ...WORKSPACE_AGENT_CHOICE_PROVIDERS[AGENT_CHOICE.KINDS].map((providerId) =>
+            workspaceAgentKindGuideRow(providerId, defaults?.[providerId]?.agent),
+          ),
         ];
       },
     ),

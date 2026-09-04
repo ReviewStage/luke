@@ -60,7 +60,6 @@ function searchInput(overrides: Partial<SettingsSearchInput> = {}): SettingsSear
     settings: settings(),
     voiceControlsDrawn: true,
     accountDrawn: true,
-    superset: { agentsOffered: false },
     workspaceProjects: [],
     ...overrides,
   };
@@ -85,10 +84,9 @@ function everythingDrawn(): SettingsSearchInput {
       },
       calendarAccounts: [{ id: "dev@example.com", selectedCalendarIds: [] }],
     }),
-    superset: { agentsOffered: true },
     workspaceProjects: [
       { id: CREDENTIAL_PROVIDER_ID.CONDUCTOR, name: "Conductor" },
-      { id: "superset", name: "Superset" },
+      { id: "superset", name: "Superset", agentsOffered: true },
     ],
   });
 }

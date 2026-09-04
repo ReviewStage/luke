@@ -33,6 +33,7 @@ import type { WorkspaceHostRegistration, WorkspaceHostSessionActs } from "@sidec
 import {
   type InMemorySessionRegistry,
   isListedWorkspaceAgentModel,
+  isModelsWorkspaceProviderId,
   isProviderId,
   type ProviderActResult,
   type ProviderControlResult,
@@ -706,7 +707,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       // are held to the build's documented table — the named one just above,
       // the stored one when it was written — and the adapter holds whichever
       // rides to its own table again before anything reaches the network.
-      const stored = isProviderId(providerId)
+      const stored = isModelsWorkspaceProviderId(providerId)
         ? (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId]
         : undefined;
       const agentSelection = parsedSelection ?? stored;
@@ -916,7 +917,9 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
         );
       }
       return performSessionAct(identity, PRODUCT_SESSION_ACT.AGENT_ADD, async (adapter) => {
-        const stored: WorkspaceAgentSelection | undefined = isProviderId(identity.providerId)
+        const stored: WorkspaceAgentSelection | undefined = isModelsWorkspaceProviderId(
+          identity.providerId,
+        )
           ? (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
               identity.providerId
             ]

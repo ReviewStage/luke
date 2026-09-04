@@ -2,8 +2,8 @@ import { ISSUE_TRACKER_ID } from "@sidecar/issues";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   PROVIDER_ID,
-  PROVIDER_IDENTITY_BY_ID,
   SUPERSET_WORKSPACE_PROVIDER_ID,
+  workspaceProviderDisplayName,
 } from "@sidecar/session";
 import {
   CREDENTIAL_CONNECTION,
@@ -105,7 +105,7 @@ export const CONNECTIONS = {
     id: CONNECTION_ID.CODEX,
     kind: CONNECTION_KIND.CLI_LOGIN,
     section: CONNECTION_SECTION.PROVIDERS,
-    displayName: PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.CODEX].displayName,
+    displayName: workspaceProviderDisplayName(PROVIDER_ID.CODEX),
     cliLogin: {
       loginCommand: "codex login",
       absence: CLI_ABSENCE.REPORTED,
@@ -118,7 +118,7 @@ export const CONNECTIONS = {
     id: CONNECTION_ID.CONDUCTOR,
     kind: CONNECTION_KIND.KEY,
     section: CONNECTION_SECTION.PROVIDERS,
-    displayName: PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.CONDUCTOR].displayName,
+    displayName: workspaceProviderDisplayName(PROVIDER_ID.CONDUCTOR),
     credential: CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.CONDUCTOR],
     offersProjects: true,
     sessionsInCloud: true,
@@ -127,7 +127,7 @@ export const CONNECTIONS = {
     id: CONNECTION_ID.CONDUCTOR_LOCAL,
     kind: CONNECTION_KIND.LOCAL,
     section: CONNECTION_SECTION.PROVIDERS,
-    displayName: "Conductor (local)",
+    displayName: workspaceProviderDisplayName(CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID),
     nestsUnder: CONNECTION_ID.CONDUCTOR,
     offersProjects: true,
     sessionsInCloud: false,
@@ -136,7 +136,7 @@ export const CONNECTIONS = {
     id: CONNECTION_ID.SUPERSET,
     kind: CONNECTION_KIND.CLI_LOGIN,
     section: CONNECTION_SECTION.PROVIDERS,
-    displayName: "Superset",
+    displayName: workspaceProviderDisplayName(SUPERSET_WORKSPACE_PROVIDER_ID),
     cliLogin: {
       loginCommand: "superset auth login",
       absence: CLI_ABSENCE.HIDDEN,
@@ -200,6 +200,14 @@ export const CONSENT_CONNECTION_IDS: readonly ConsentConnectionId[] = [CONNECTIO
 
 export function isConnectionId(value: string): value is ConnectionId {
   return Object.hasOwn(CONNECTIONS, value);
+}
+
+export function isCliLoginConnectionId(value: string): value is CliLoginConnectionId {
+  return CLI_LOGIN_CONNECTION_IDS.some((id) => id === value);
+}
+
+export function isConsentConnectionId(value: string): value is ConsentConnectionId {
+  return CONSENT_CONNECTION_IDS.some((id) => id === value);
 }
 
 function credentialsIn(section: ConnectionSection): readonly CredentialProvider[] {

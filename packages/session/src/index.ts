@@ -49,6 +49,7 @@ export {
   SUPERSET_WORKSPACE_PROVIDER_ID,
   staleWorkspaceProjectDefaults,
   WORKSPACE_PROVIDER_ID_LIST,
+  WORKSPACE_PROVIDER_IDENTITY_BY_ID,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentDefaults,
   type WorkspaceAgentKindSelection,
@@ -56,9 +57,11 @@ export {
   type WorkspaceAgentSelection,
   type WorkspaceProject,
   type WorkspaceProviderId,
+  type WorkspaceProviderIdentity,
   type WorkspaceTaskSupport,
   workspaceNameText,
   workspaceProjectSelectionId,
+  workspaceProviderDisplayName,
 } from "./providers.js";
 export {
   ATTENTION_DISPOSITION,
@@ -152,11 +155,21 @@ export {
   type SessionRegistrySnapshot,
 } from "./session-registry.js";
 export {
+  AGENT_CHOICE,
+  type AgentChoice,
+  isKindsWorkspaceProviderId,
   isListedWorkspaceAgentModel,
+  isModelsWorkspaceProviderId,
   isWorkspaceAgentSelection,
+  type KindsWorkspaceProviderId,
+  type ModelsWorkspaceProviderId,
   parseWorkspaceAgentKindSelection,
   parseWorkspaceAgentSelection,
+  WORKSPACE_AGENT_CHOICE,
+  WORKSPACE_AGENT_CHOICE_PROVIDERS,
   WORKSPACE_AGENT_MODELS,
+  type WorkspaceAgentChoiceProviders,
+  workspaceAgentChoice,
   workspaceAgentModelLabel,
   workspaceAgentModels,
 } from "./workspace-agents.js";

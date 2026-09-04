@@ -1,15 +1,22 @@
 import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "@sidecar/calendar/vocabulary";
 import {
-  CLOUD_AGENT_PROVIDER_LIST,
-  CONNECTION_ID,
-  CREDENTIAL_PROVIDER_ID,
+  CLI_ABSENCE,
+  CONNECTION_KIND,
+  CONNECTION_LIST,
+  CONNECTION_SECTION,
+  CONSENT_CONNECTION_IDS,
+  type ConnectionDeclaration,
+  type ConnectionKind,
+  isConnectionId,
   VOICE_CREDENTIAL_PROVIDER,
 } from "@sidecar/credentials/vocabulary";
 import { ProviderMark } from "@sidecar/panel";
 import {
+  AGENT_CHOICE,
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   PROVIDER_ID,
   SUPERSET_WORKSPACE_PROVIDER_ID,
+  WORKSPACE_AGENT_CHOICE_PROVIDERS,
   type WorkspaceProviderId,
   workspaceAgentModels,
 } from "@sidecar/session";
@@ -20,6 +27,7 @@ import {
   isAppSettingId,
   settingFieldForGuideId,
   settingGuideEntries,
+  WORKSPACE_AGENT_SETTING_ID,
 } from "@sidecar/settings";
 import { Fragment, useRef } from "react";
 import { APPLE_CALENDAR_ID, APPLE_CALENDAR_NAME } from "#shared/apple-calendar";
@@ -35,7 +43,6 @@ import {
   CloseIcon,
   DownloadIcon,
   MegaphoneIcon,
-  PlugIcon,
   PowerIcon,
   SearchIcon,
   UserIcon,
@@ -111,35 +118,27 @@ export const SETTINGS_SEARCH_ROW = {
   TALK_KEY: "talk-key",
   ASK_KEY: "ask-key",
   STOP_KEY: "stop-key",
-  CODEX_CLOUD: "codex-cloud",
 } as const;
 
 /**
  * Each provider's Default project row, by the provider it belongs to: several
  * providers draw one, so a shared id would land a press on whichever row
- * happens to stand first. A literal table rather than a composed string, and
- * deliberately only the providers that create workspaces today — a provider
- * it does not name draws its row unfound rather than mislanding a press, and
- * widening it is one line beside the capability that widened.
+ * happens to stand first. A literal table rather than a composed string,
+ * total over the workspace providers so a provider that starts offering
+ * projects already has a row to land on.
  */
-type DefaultProjectProviderId =
-  | typeof PROVIDER_ID.CONDUCTOR
-  | typeof CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID
-  | typeof PROVIDER_ID.CODEX
-  | typeof SUPERSET_WORKSPACE_PROVIDER_ID;
-
 const DEFAULT_PROJECT_ROW_ID = {
-  [PROVIDER_ID.CONDUCTOR]: "default-project-conductor",
-  [CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID]: "default-project-conductor-local",
+  [PROVIDER_ID.CLAUDE_CODE]: "default-project-claude-code",
   [PROVIDER_ID.CODEX]: "default-project-codex",
+  [PROVIDER_ID.CONDUCTOR]: "default-project-conductor",
+  [PROVIDER_ID.OMP]: "default-project-omp",
   [SUPERSET_WORKSPACE_PROVIDER_ID]: "default-project-superset",
-} as const satisfies Readonly<Record<DefaultProjectProviderId, string>>;
+  [CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID]: "default-project-conductor-local",
+} as const satisfies Readonly<Record<WorkspaceProviderId, string>>;
 
-/** The anchor a provider's Default project row wears, if the table names it. */
-export function defaultProjectRowId(providerId: WorkspaceProviderId): string | undefined {
-  if (!Object.hasOwn(DEFAULT_PROJECT_ROW_ID, providerId)) return undefined;
-  // SAFETY: hasOwn narrows the id to the table's own keys.
-  return DEFAULT_PROJECT_ROW_ID[providerId as keyof typeof DEFAULT_PROJECT_ROW_ID];
+/** The anchor a provider's Default project row wears. */
+export function defaultProjectRowId(providerId: WorkspaceProviderId): string {
+  return DEFAULT_PROJECT_ROW_ID[providerId];
 }
 
 /** One row a query can find, and where pressing it leads. */
@@ -161,8 +160,52 @@ export interface SettingsSearchEntry {
 }
 
 /** A CLI row whose binary the latest answer found on this Mac, whatever its login. */
-function cliInstalled(connection: CliConnection): boolean {
+function cliInstalled(connection: CliConnection | undefined): boolean {
   return connection === CLI_CONNECTION.CONNECTED || connection === CLI_CONNECTION.SIGNED_OUT;
+}
+
+/**
+ * Whether a Connections-page row is drawn right now, by the kind of
+ * connection it is — the same conditions the page itself branches on.
+ */
+function connectionRowDrawn(
+  connection: ConnectionDeclaration,
+  input: SettingsSearchInput,
+): boolean {
+  switch (connection.kind) {
+    case CONNECTION_KIND.KEY:
+      return true;
+    case CONNECTION_KIND.CLI_LOGIN:
+      return connection.cliLogin?.absence === CLI_ABSENCE.REPORTED
+        ? true
+        : cliInstalled(cliConnectionOf(input, connection.id));
+    case CONNECTION_KIND.LOCAL:
+      return input.workspaceProjects.some((provider) => provider.id === connection.id);
+    case CONNECTION_KIND.CONSENT:
+      return CONSENT_CONNECTION_IDS.some(
+        (id) => id === connection.id && input.settings.consentSignInAvailable[id],
+      );
+  }
+}
+
+function connectionSearchEntry(
+  connection: ConnectionDeclaration,
+  input: SettingsSearchInput,
+): SettingsSearchEntry | undefined {
+  // The voice key's row is drawn on the Voice page, found through its own entries.
+  if (connection.section === CONNECTION_SECTION.VOICE) return undefined;
+  if (!connectionRowDrawn(connection, input)) return undefined;
+  return {
+    id: connection.id,
+    label: connection.displayName,
+    page: SETTINGS_VIEW.CONNECTIONS,
+    icon: <ProviderMark providerId={connection.id} />,
+    haystack: [
+      connection.displayName,
+      CONNECTION_KIND_WORDS[connection.kind],
+      ...(connection.credential?.keyFormat ? [connection.credential.keyFormat.label] : []),
+    ],
+  };
 }
 
 /** What the pages must answer before the corpus can say what they hold. */
@@ -175,10 +218,11 @@ export interface SettingsSearchInput {
   voiceControlsDrawn: boolean;
   /** Whether the Account section stands at the foot of the front page. */
   accountDrawn: boolean;
-  /** Whether the Superset row's agent row has kinds to offer. */
-  superset: { agentsOffered: boolean };
-  /** The providers currently offering projects, each drawing a Default project row. */
-  workspaceProjects: readonly { id: WorkspaceProviderId; name: string }[];
+  /**
+   * The providers currently offering projects, each drawing a Default project
+   * row, and whether each also offers agent kinds for its agent row.
+   */
+  workspaceProjects: readonly { id: WorkspaceProviderId; name: string; agentsOffered?: boolean }[];
 }
 
 /**
@@ -188,9 +232,50 @@ export interface SettingsSearchInput {
  * this module accepts, stated per setting so a changed condition has one line
  * to change here.
  */
-const conductorAgentRowDrawn = (input: SettingsSearchInput): boolean =>
-  input.settings.credentialSources[CREDENTIAL_PROVIDER_ID.CONDUCTOR] !== CREDENTIAL_SOURCE.NONE &&
-  workspaceAgentModels(PROVIDER_ID.CONDUCTOR).length > 0;
+/**
+ * Whether a connection's row currently reads connected, by the kind of
+ * connection it is: a key stored, or a CLI signed in. A local connection has
+ * nothing to connect and never draws an agent row.
+ */
+function connectionConnected(input: SettingsSearchInput, providerId: WorkspaceProviderId): boolean {
+  if (!isConnectionId(providerId)) return false;
+  const connection = CONNECTION_LIST.find((candidate) => candidate.id === providerId);
+  if (!connection) return false;
+  if (connection.kind === CONNECTION_KIND.KEY && connection.credential) {
+    return input.settings.credentialSources[connection.credential.id] !== CREDENTIAL_SOURCE.NONE;
+  }
+  if (connection.kind === CONNECTION_KIND.CLI_LOGIN) {
+    return cliConnectionOf(input, providerId) === CLI_CONNECTION.CONNECTED;
+  }
+  return false;
+}
+
+function cliConnectionOf(
+  input: SettingsSearchInput,
+  providerId: string,
+): CliConnection | undefined {
+  return Object.hasOwn(input.settings.cliConnections, providerId)
+    ? // SAFETY: hasOwn narrows the id to the record's own keys.
+      input.settings.cliConnections[providerId as keyof typeof input.settings.cliConnections]
+    : undefined;
+}
+
+/**
+ * Whether a provider's agent row is drawn: under a connected provider, with a
+ * models table for a provider choosing models, or with observed kinds for one
+ * choosing kinds.
+ */
+const agentRowDrawn =
+  (providerId: WorkspaceProviderId) =>
+  (input: SettingsSearchInput): boolean => {
+    if (!connectionConnected(input, providerId)) return false;
+    if (WORKSPACE_AGENT_CHOICE_PROVIDERS[AGENT_CHOICE.MODELS].some((id) => id === providerId)) {
+      return workspaceAgentModels(providerId).length > 0;
+    }
+    return input.workspaceProjects.some(
+      (provider) => provider.id === providerId && provider.agentsOffered === true,
+    );
+  };
 
 const voiceControlRowDrawn = (input: SettingsSearchInput): boolean => input.voiceControlsDrawn;
 
@@ -209,14 +294,20 @@ const SETTING_ROW_DRAWN = {
   [APP_SETTING_ID.QUIET_DURING_MEETINGS]: (input) =>
     (input.settings.calendarSignInAvailable && input.settings.calendarAccounts.length > 0) ||
     input.settings.appleCalendar !== undefined,
-  // The Conductor agent rows belong to a connected provider the build
-  // documents a model table for.
-  [APP_SETTING_ID.WORKSPACE_AGENT_MODEL]: conductorAgentRowDrawn,
-  [APP_SETTING_ID.WORKSPACE_AGENT_EFFORT]: conductorAgentRowDrawn,
-  // The Superset agent row stands under a connected Superset with agents.
-  [APP_SETTING_ID.SUPERSET_AGENT]: (input: SettingsSearchInput) =>
-    input.settings.cliConnections[CONNECTION_ID.SUPERSET] === CLI_CONNECTION.CONNECTED &&
-    input.superset.agentsOffered,
+  // Each agent-choosing provider's rows stand under its connected row: a
+  // models provider's model and effort, a kinds provider's kind.
+  ...Object.fromEntries(
+    WORKSPACE_AGENT_CHOICE_PROVIDERS[AGENT_CHOICE.MODELS].flatMap((providerId) => [
+      [WORKSPACE_AGENT_SETTING_ID[providerId].model, agentRowDrawn(providerId)],
+      [WORKSPACE_AGENT_SETTING_ID[providerId].effort, agentRowDrawn(providerId)],
+    ]),
+  ),
+  ...Object.fromEntries(
+    WORKSPACE_AGENT_CHOICE_PROVIDERS[AGENT_CHOICE.KINDS].map((providerId) => [
+      WORKSPACE_AGENT_SETTING_ID[providerId].kind,
+      agentRowDrawn(providerId),
+    ]),
+  ),
 } satisfies Partial<Record<AppSettingId, (input: SettingsSearchInput) => boolean>>;
 
 /** Whether a setting's row is drawn; a setting the table leaves out always is. */
@@ -249,6 +340,14 @@ const SHORTCUT_WORDS = "keyboard shortcut hotkey key chord record remove delete 
 
 /** The words every key row can be found by, beside its provider's name. */
 const KEY_WORDS = "API key credential connect cloud agent sync synced";
+
+/** The words a connection row is found by beyond its name, by the kind of connection it is. */
+const CONNECTION_KIND_WORDS = {
+  [CONNECTION_KIND.KEY]: KEY_WORDS,
+  [CONNECTION_KIND.CLI_LOGIN]: "cloud tasks CLI login connect workspaces sign in integration",
+  [CONNECTION_KIND.LOCAL]: "workspaces create this Mac no key integration",
+  [CONNECTION_KIND.CONSENT]: "issues issue tracker sign in connect integration",
+} as const satisfies Readonly<Record<ConnectionKind, string>>;
 
 /**
  * The rows that are not stored settings, each gated by the condition that
@@ -348,59 +447,17 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       page: SETTINGS_VIEW.SHORTCUTS,
       haystack: ["Stop Luke", SHORTCUT_WORDS, "stop interrupt quiet cut off a reply"],
     },
-    // Every agent key row, whether or not a key is stored: the list is how
-    // you learn which services Luke can watch at all, and so how you find one.
-    ...CLOUD_AGENT_PROVIDER_LIST.map((provider) => ({
-      id: provider.id,
-      label: provider.displayName,
-      page: SETTINGS_VIEW.CONNECTIONS,
-      icon: <ProviderMark providerId={provider.id} />,
-      haystack: [
-        provider.displayName,
-        KEY_WORDS,
-        ...(provider.keyFormat ? [provider.keyFormat.label] : []),
-      ],
-    })),
-    // The one provider observed through its own CLI's login rather than a key.
-    {
-      id: SETTINGS_SEARCH_ROW.CODEX_CLOUD,
-      label: "Codex",
-      page: SETTINGS_VIEW.CONNECTIONS,
-      icon: <ProviderMark providerId={PROVIDER_ID.CODEX} />,
-      haystack: ["Codex", "cloud tasks CLI login connect"],
-    },
-    input.settings.consentSignInAvailable[CONNECTION_ID.LINEAR]
-      ? {
-          id: CREDENTIAL_PROVIDER_ID.LINEAR,
-          label: "Linear",
-          page: SETTINGS_VIEW.CONNECTIONS,
-          icon: <ProviderMark providerId={CREDENTIAL_PROVIDER_ID.LINEAR} />,
-          haystack: ["Linear", "issues issue tracker sign in connect integration"],
-        }
-      : undefined,
-    cliInstalled(input.settings.cliConnections[CONNECTION_ID.SUPERSET])
-      ? {
-          id: SUPERSET_WORKSPACE_PROVIDER_ID,
-          label: "Superset",
-          page: SETTINGS_VIEW.CONNECTIONS,
-          icon: <PlugIcon />,
-          haystack: ["Superset", "workspaces sign in connect integration"],
-        }
-      : undefined,
-    // Drawn only while local Conductor is actually detected — the block stands
-    // on the same repositories its row offers, so it is searchable exactly when
-    // it is on screen.
-    input.workspaceProjects.some(
-      (provider) => provider.id === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-    )
-      ? {
-          id: CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-          label: "Conductor (local)",
-          page: SETTINGS_VIEW.CONNECTIONS,
-          icon: <ProviderMark providerId={CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID} />,
-          haystack: ["Conductor local", "workspaces create this Mac no key integration"],
-        }
-      : undefined,
+    // Every connection row the Connections page draws, one entry per row in
+    // the order the page draws them, each offered on the condition that draws
+    // it: a key row always, because the list is how you learn which services
+    // Luke can watch at all; a CLI row while its binary is on this Mac (or,
+    // for a row that reports its absence, always); a local row while its
+    // repositories are detected; a consent row while this build carries its
+    // OAuth client.
+    ...CONNECTION_LIST.flatMap((connection) => {
+      const entry = connectionSearchEntry(connection, input);
+      return entry ? [entry] : [];
+    }),
     input.settings.appleCalendarAvailable
       ? {
           id: APPLE_CALENDAR_ID,
@@ -421,18 +478,14 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       : undefined,
     // One entry per provider drawing a Default project row, named for its
     // provider so the results can be told apart, each landing on its own row.
-    ...input.workspaceProjects.flatMap((provider): SettingsSearchEntry[] => {
-      const id = defaultProjectRowId(provider.id);
-      if (!id) return [];
-      return [
-        {
-          id,
-          label: `${provider.name} default project`,
-          page: SETTINGS_VIEW.CONNECTIONS,
-          haystack: [`${provider.name} default project`, "workspace creation ask each time"],
-        },
-      ];
-    }),
+    ...input.workspaceProjects.map(
+      (provider): SettingsSearchEntry => ({
+        id: defaultProjectRowId(provider.id),
+        label: `${provider.name} default project`,
+        page: SETTINGS_VIEW.CONNECTIONS,
+        haystack: [`${provider.name} default project`, "workspace creation ask each time"],
+      }),
+    ),
   ];
   return entries.filter((entry): entry is SettingsSearchEntry => entry !== undefined);
 }

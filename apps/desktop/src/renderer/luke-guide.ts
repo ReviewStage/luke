@@ -37,14 +37,21 @@ import {
   type AppGuideUpdate,
   type AppUpdateButton,
 } from "@sidecar/guide";
-import { PROVIDER_ID, type WorkspaceAgentSelection, workspaceAgentModels } from "@sidecar/session";
 import {
-  APP_SETTING_ID,
+  AGENT_CHOICE,
+  type ModelsWorkspaceProviderId,
+  type WorkspaceAgentSelection,
+  workspaceAgentModels,
+  workspaceProviderDisplayName,
+} from "@sidecar/session";
+import {
   APP_SETTING_SCHEMA,
   isAppSettingId,
+  providerDefaultChoice,
   settingFieldForGuideId,
   settingGuideEntries,
   spokenSettingValue,
+  workspaceAgentSettingProvider,
 } from "@sidecar/settings";
 import { ACT_RESULT_STATUS, type ActResult } from "@sidecar/wire";
 import type { AppBridge } from "#shared/bridge";
@@ -77,13 +84,6 @@ const SHORTCUTS_PAGE = `${SETTINGS_TAB}, on its Keyboard shortcuts page`;
 const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
 /* Where the Updates section stands, for the fact about it. */
 const FRONT_PAGE = `${SETTINGS_TAB}, on its front page`;
-
-/**
- * The word both Conductor agent entries use for no choice at all. It is a
- * member of their choices on purpose: saying it is how a spoken ask returns a
- * half to Conductor's own default.
- */
-const CONDUCTOR_DEFAULT_CHOICE = "Conductor's default";
 
 /** What the guide needs from the app to describe the current state of it. */
 export interface LukeGuideInput {
@@ -633,28 +633,31 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
 }
 
 /**
- * Composes the stored Conductor selection a spoken model or effort change
- * asks for. A model is named by its label; an effort named beside it rides
+ * Composes the stored selection a spoken model or effort change asks for, on
+ * the provider whose row the setting id belongs to. A model is named by its label; an effort named beside it rides
  * that same change, and one left unsaid carries the current effort forward
  * only where the new model's agent documents it. An effort change alone
  * rides the model already chosen, which is why the effort entry only exists
- * while one is. Naming the default returns that half to Conductor: the whole
- * selection for a model, the effort alone otherwise.
+ * while one is. Naming the default returns that half to the provider: the
+ * whole selection for a model, the effort alone otherwise.
  */
 function spokenWorkspaceAgentSelection(
-  settingId: string,
+  providerId: ModelsWorkspaceProviderId,
+  half: "model" | "effort",
   value: string,
   namedEffort: string | undefined,
   current: WorkspaceAgentSelection | undefined,
 ): { selection: WorkspaceAgentSelection | undefined } | { refusal: string } {
-  if (settingId === APP_SETTING_ID.WORKSPACE_AGENT_MODEL) {
-    if (value === CONDUCTOR_DEFAULT_CHOICE) {
+  const name = workspaceProviderDisplayName(providerId);
+  const defaultChoice = providerDefaultChoice(name);
+  if (half === "model") {
+    if (value === defaultChoice) {
       if (namedEffort !== undefined) {
-        return { refusal: "Conductor's own default takes no effort level." };
+        return { refusal: `${name}'s own default takes no effort level.` };
       }
       return { selection: undefined };
     }
-    const named = workspaceAgentModels(PROVIDER_ID.CONDUCTOR)
+    const named = workspaceAgentModels(providerId)
       .flatMap((entry) =>
         entry.models.map((model) => ({
           agent: entry.agent,
@@ -664,7 +667,7 @@ function spokenWorkspaceAgentSelection(
         })),
       )
       .find((candidate) => candidate.label === value);
-    if (!named) return { refusal: "No documented Conductor model goes by that name." };
+    if (!named) return { refusal: `No documented ${name} model goes by that name.` };
     if (namedEffort !== undefined) {
       // Composed against the table itself, not the guide the call was
       // validated against: this half answers to what an endpoint takes.
@@ -688,10 +691,10 @@ function spokenWorkspaceAgentSelection(
   // without one is a guide ahead of the state; refuse honestly.
   if (!current) {
     return {
-      refusal: "No model is chosen for new Conductor agents, so there is no effort to set.",
+      refusal: `No model is chosen for new ${name} agents, so there is no effort to set.`,
     };
   }
-  if (value === CONDUCTOR_DEFAULT_CHOICE) {
+  if (value === defaultChoice) {
     return { selection: { agent: current.agent, model: current.model } };
   }
   return { selection: { agent: current.agent, model: current.model, effort: value } };
@@ -713,22 +716,29 @@ export async function applySpokenSetting(
   current?: AppSettingsView,
 ): Promise<ActResult> {
   let result: SettingsUpdateResult;
-  if (
-    action.setting.id === APP_SETTING_ID.WORKSPACE_AGENT_MODEL ||
-    action.setting.id === APP_SETTING_ID.WORKSPACE_AGENT_EFFORT
-  ) {
+  const agentSetting = workspaceAgentSettingProvider(action.setting.id);
+  if (agentSetting?.choice === AGENT_CHOICE.KINDS) {
+    // A provider whose agent kinds are observed presets takes its choice by
+    // hand: its row is the only place the kinds on offer are drawn.
+    return {
+      status: ACT_RESULT_STATUS.REJECTED,
+      reason: `Which agent new ${workspaceProviderDisplayName(agentSetting.providerId)} sessions run is chosen by hand in Settings.`,
+    };
+  }
+  if (agentSetting) {
     const composed = spokenWorkspaceAgentSelection(
-      action.setting.id,
+      agentSetting.providerId,
+      agentSetting.half,
       action.value,
       action.effort,
-      current?.workspaceAgentDefaults?.[PROVIDER_ID.CONDUCTOR],
+      current?.workspaceAgentDefaults?.[agentSetting.providerId],
     );
     if ("refusal" in composed) {
       return { status: ACT_RESULT_STATUS.REJECTED, reason: composed.refusal };
     }
     result = await bridge.updateSettingEntry(
       APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-      PROVIDER_ID.CONDUCTOR,
+      agentSetting.providerId,
       composed.selection,
     );
   } else {

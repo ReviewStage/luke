@@ -16,6 +16,7 @@ import {
 import { PROVIDER_ID, type WorkspaceAgentSelection } from "@sidecar/session";
 import { VOICE_SOURCE } from "@sidecar/settings";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
+import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import {
   ACCOUNT_PROVIDER,
   ACCOUNT_STATUS,
@@ -392,6 +393,21 @@ test("the facts describe renaming workspaces and chats, so Luke does not deny th
   // conversation applies is the one the guide teaches.
   assert.match(rendered, /Superset-managed workspace, or a Conductor chat/);
   assert.match(rendered, /one about the chat renames the chat/);
+});
+
+test("a spoken change to a provider whose agents are observed kinds is refused by name", async () => {
+  const kind = guideSetting(APP_SETTING_ID.SUPERSET_AGENT);
+  assert.equal(kind.adjustable, false);
+  // A fixture carrying no bridge call: the refusal must land before any write.
+  const result = await applySpokenSetting(
+    spokenSettingBridge({}),
+    { setting: kind, value: "claude" },
+    () => undefined,
+  );
+  assert.deepEqual(result, {
+    status: ACT_RESULT_STATUS.REJECTED,
+    reason: "Which agent new Superset sessions run is chosen by hand in Settings.",
+  });
 });
 
 test("the guide offers what a new Conductor agent runs, by the names people know", () => {

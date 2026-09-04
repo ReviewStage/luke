@@ -15,6 +15,7 @@ import {
 import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import {
   CLI_CONNECTION,
+  type ModelsWorkspaceProviderId,
   PROVIDER_ID,
   type ProviderId,
   SESSION_FILTER,
@@ -239,7 +240,10 @@ test("a failed first load is retried before a later write", async (t) => {
   assert.equal(await reopened.get(APP_SETTING_SCHEMA.duckOtherMedia.field), false);
 });
 
-async function readWorkspaceAgentDefault(store: SettingsStore, providerId: ProviderId) {
+async function readWorkspaceAgentDefault(
+  store: SettingsStore,
+  providerId: ModelsWorkspaceProviderId,
+) {
   return (await store.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId];
 }
 
