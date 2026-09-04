@@ -203,3 +203,29 @@ same kill switch as the OpenAI endpoints — so a Preview deployment with no
 secret simply has no working vault, and no plaintext key can be stored
 accidentally. Set this variable in the Vercel project environment (production
 and any Preview that needs a working vault) alongside `DATABASE_URL`.
+
+# Phone push tokens
+
+`api/devices/token.ts` registers (POST) and forgets (DELETE) the push token of
+a phone signed into Luke. A token names one app installation and nothing else:
+it is not a credential, and the row moves to whichever account the phone last
+signed in under, so a notification for one account can never reach a phone now
+signed in as another. Rows go with the account, at sign-out, and when Apple
+answers that the token is gone.
+
+`server/hosted/apns.ts` is the sender behind those rows. It needs the
+deployment's Apple push credential, an APNs auth key from the developer
+account, as four variables:
+
+| Variable | Value |
+| --- | --- |
+| `APNS_TEAM_ID` | The Apple Developer team id |
+| `APNS_KEY_ID` | The auth key's id |
+| `APNS_PRIVATE_KEY` | The `.p8` file's PEM contents; escaped `\n` line breaks are accepted |
+| `APNS_BUNDLE_ID` | The iOS app's bundle id, sent as the `apns-topic` |
+
+Any one absent or blank means no sender is constructed, the same kill switch
+the OpenAI and vault endpoints keep: a Preview deployment without the
+credential stores registrations and sends nothing. Each token records which
+of Apple's two gateways issued it, so a build run from Xcode and one from
+TestFlight are addressed at the right host.

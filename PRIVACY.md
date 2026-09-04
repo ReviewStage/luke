@@ -120,6 +120,14 @@ explicitly request through that provider. The server-side use of these keys
 ships as a separate feature; this describes only the storage. Every synced key
 is deleted alongside your account if you delete that.
 
+**Phone push tokens.** When you sign into the iOS app, it registers the push
+token Apple issued to that installation with our service, so we can address
+notifications to it. The token names the installation and nothing else, and
+it is not a credential. We store it with your account and delete it when you
+sign out on that phone, when Apple reports it gone, and alongside your account
+if you delete that. Sending notifications ships as a separate feature; this
+describes only the registration.
+
 **Feedback.** If you use the feedback form, we receive what you typed, the name
 and email you signed it with, and any screenshots you attached.
 

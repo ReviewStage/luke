@@ -1,13 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  DEVICE_PLATFORM,
+  deviceTokenDeleteAnswerFromWire,
+  deviceTokenIsStorable,
+  deviceTokenStoreAnswerFromWire,
   HOSTED_CALLS_URL,
   HOSTED_SERVICE_PATH,
   HOSTED_WS_BASE_URL,
   hostedConversationAnswerFromWire,
   hostedMintAnswerFromWire,
   hostedSubjectAnswerFromWire,
+  isDevicePlatform,
+  isPushEnvironment,
   isVaultProviderId,
+  PUSH_ENVIRONMENT,
   VAULT_KEY_MAX_LENGTH,
   VAULT_PROVIDER_ID,
   vaultKeyIsStorable,
@@ -231,4 +238,26 @@ test("a subject answer is a bounded phrase or an honest null, and nothing else",
   assert.equal(hostedSubjectAnswerFromWire({ subject: 7 }), undefined);
   assert.equal(hostedSubjectAnswerFromWire({}), undefined);
   assert.equal(HOSTED_SERVICE_PATH.SUBJECT_DERIVE, "/api/subject/derive");
+});
+
+test("a device token is stored only as bounded hex, whichever gateway issued it", () => {
+  assert.equal(HOSTED_SERVICE_PATH.DEVICE_TOKEN, "/api/devices/token");
+  assert.equal(deviceTokenIsStorable("ab".repeat(32)), true);
+  assert.equal(deviceTokenIsStorable("ab".repeat(15)), false);
+  assert.equal(deviceTokenIsStorable("ab".repeat(257)), false);
+  assert.equal(deviceTokenIsStorable("AB".repeat(32)), false);
+  assert.equal(deviceTokenIsStorable(`${"ab".repeat(31)}g1`), false);
+  assert.equal(isDevicePlatform(DEVICE_PLATFORM.IOS), true);
+  assert.equal(isDevicePlatform("android"), false);
+  assert.equal(isPushEnvironment(PUSH_ENVIRONMENT.SANDBOX), true);
+  assert.equal(isPushEnvironment(PUSH_ENVIRONMENT.PRODUCTION), true);
+  assert.equal(isPushEnvironment("staging"), false);
+});
+
+test("device registration answers read only their documented shapes", () => {
+  assert.deepEqual(deviceTokenStoreAnswerFromWire({ stored: true }), { stored: true });
+  assert.equal(deviceTokenStoreAnswerFromWire({ stored: false }), undefined);
+  assert.equal(deviceTokenStoreAnswerFromWire("stored"), undefined);
+  assert.deepEqual(deviceTokenDeleteAnswerFromWire({ deleted: false }), { deleted: false });
+  assert.equal(deviceTokenDeleteAnswerFromWire({ deleted: "yes" }), undefined);
 });
