@@ -300,9 +300,9 @@ struct VoiceView: View {
                 performPendingNavigation()
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) {
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) {
             _ in
-            guard composerShown else { return }
+            guard composerShown, composing else { return }
             composing = false
             hideComposer()
         }
