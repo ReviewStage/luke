@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SESSION_STATUS } from "@sidecar/session";
+import { HOOK_EVENT, SESSION_STATUS } from "@sidecar/session";
 import { isRecord } from "@sidecar/wire";
 import {
   DIGEST_SCHEMA,
@@ -8,7 +8,6 @@ import {
   digestChars,
   digestFromModel,
   fallbackDigest,
-  mapWithLimit,
 } from "./brain-digest.js";
 import {
   DIGEST_INPUT_MARKER,
@@ -16,7 +15,6 @@ import {
   digestInputText,
   digestResponsesRequest,
 } from "./brain-digest-openai.js";
-import { BRAIN_WAKE_HOOK } from "./brain-events.js";
 import { BRAIN_REASONING_EFFORT } from "./brain-openai.js";
 
 const TRANSCRIPT_SECRET = "SECRET_TRANSCRIPT_TEXT";
@@ -59,14 +57,14 @@ test("the reader refuses anything off the schema rather than repairing it", () =
 });
 
 test("the fallback reads the hook first, then the roster status, and carries only the roster's error", () => {
-  assert.deepEqual(fallbackDigest({ hookEvent: BRAIN_WAKE_HOOK.STOP_FAILURE }), {
+  assert.deepEqual(fallbackDigest({ hookEvent: HOOK_EVENT.STOP_FAILURE }), {
     stopState: DIGEST_STOP_STATE.ERRORED,
   });
   assert.deepEqual(
-    fallbackDigest({ hookEvent: BRAIN_WAKE_HOOK.NOTIFICATION, status: SESSION_STATUS.WORKING }),
+    fallbackDigest({ hookEvent: HOOK_EVENT.NOTIFICATION, status: SESSION_STATUS.WORKING }),
     { stopState: DIGEST_STOP_STATE.WAITING_FOR_PERMISSION },
   );
-  assert.deepEqual(fallbackDigest({ hookEvent: BRAIN_WAKE_HOOK.SESSION_END }), {
+  assert.deepEqual(fallbackDigest({ hookEvent: HOOK_EVENT.SESSION_END }), {
     stopState: DIGEST_STOP_STATE.FINISHED,
   });
   assert.deepEqual(fallbackDigest({ hookEvent: "stop", status: SESSION_STATUS.WORKING }), {
@@ -166,24 +164,4 @@ test("the payload reader takes the output text through the same schema gate", ()
   assert.equal(digestFromResponsesPayload(payload('{"stop_state":"nope"}')), undefined);
   assert.equal(digestFromResponsesPayload({ output: [] }), undefined);
   assert.equal(digestFromResponsesPayload("text"), undefined);
-});
-
-test("mapWithLimit keeps order and never runs more than the limit at once", async () => {
-  let inFlight = 0;
-  let peak = 0;
-  const releases: (() => void)[] = [];
-  const pending = mapWithLimit([1, 2, 3, 4, 5], 2, async (item) => {
-    inFlight += 1;
-    peak = Math.max(peak, inFlight);
-    await new Promise<void>((resolve) => releases.push(resolve));
-    inFlight -= 1;
-    return item * 10;
-  });
-  for (let index = 0; index < 5; index += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
-    releases.shift()?.();
-  }
-  assert.deepEqual(await pending, [10, 20, 30, 40, 50]);
-  assert.equal(peak, 2);
-  assert.deepEqual(await mapWithLimit([], 3, async (item: number) => item), []);
 });

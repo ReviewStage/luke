@@ -66,7 +66,7 @@ function session(id: string, overrides: Partial<ProviderSessionObservation> = {}
 function edge(identity: SessionIdentity, atMs = NOW): BrainWakeEvent {
   return {
     kind: BRAIN_WAKE_KIND.HOOK,
-    hookEvent: "Stop",
+    hookEvent: "stop",
     identity,
     session: session(identity.providerSessionId),
     atMs,
@@ -345,7 +345,7 @@ test("wakes inside the window open one turn, with each session read and digested
     providerName: "Claude Code",
     title: "Claude Code: abc",
     status: SESSION_STATUS.WAITING,
-    hookEvent: "Stop",
+    hookEvent: "stop",
     truncated: false,
     transcript: `${TRANSCRIPT_SECRET} for abc`,
   });
@@ -444,26 +444,30 @@ test("a summarizer that fails, throws, or is quiet leaves the fallback digest, w
   assert.ok(!JSON.stringify(h.client.inputs).includes(TRANSCRIPT_SECRET));
 });
 
-test("a digest past its deadline yields the fallback, and the late answer changes nothing", async () => {
-  const h = harness({ digestDeadlineMs: 1_000 });
+test("a summarizer that gives up on its own timeout yields the fallback, and the turn waits for it", async () => {
+  const h = harness();
   h.digest.hold = true;
+  h.digest.answers.push({
+    outcome: BRAIN_CLIENT_OUTCOME.FAILED,
+    reason: "request did not complete",
+  });
   h.agent.wake([edge(ABC)]);
   await h.clock.advance(NOW + 3_000);
   assert.equal(h.digest.inputs.length, 1);
   assert.equal(h.client.inputs.length, 0);
-
-  await h.clock.advance(NOW + 4_000);
-  assert.equal(h.client.inputs.length, 1);
-  const events = eventRecords(openingBody(h.client.inputs[0]?.[0]));
-  assert.ok(isRecord(events[0]?.transcript_digest));
-  assert.equal(events[0].transcript_digest.source, "fallback");
-  assert.equal(h.persisted.length, 1);
   assert.equal(h.clock.timers.size, 0);
 
   h.digest.release();
   await settle();
   assert.equal(h.client.inputs.length, 1);
+  const events = eventRecords(openingBody(h.client.inputs[0]?.[0]));
+  assert.ok(isRecord(events[0]?.transcript_digest));
+  assert.equal(events[0].transcript_digest.source, "fallback");
   assert.equal(h.persisted.length, 1);
+  assert.deepEqual(
+    h.traces[0]?.digests.map((digest) => [digest.source, digest.outcome, digest.error]),
+    [[DIGEST_SOURCE.FALLBACK, BRAIN_CLIENT_OUTCOME.FAILED, "request did not complete"]],
+  );
   assert.ok(!JSON.stringify(h.persisted).includes("the developer's ask"));
 });
 
@@ -529,9 +533,12 @@ test("a brain built without a summarizer attaches fallback digests to every wake
   assert.deepEqual(h.traces[0]?.digests, [
     {
       source: DIGEST_SOURCE.FALLBACK,
+      outcome: BRAIN_CLIENT_OUTCOME.FAILED,
+      stopState: DIGEST_STOP_STATE.WAITING_FOR_DEVELOPER,
       elapsedMs: 0,
       digestChars: JSON.stringify({ stopState: "waiting-for-developer" }).length,
       transcriptChars: `${TRANSCRIPT_SECRET} for abc`.length,
+      error: "no summarizer",
     },
   ]);
 });

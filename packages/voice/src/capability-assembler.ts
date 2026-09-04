@@ -76,8 +76,6 @@ export interface VoiceCapabilityAssemblerOptions {
    * `BrainClient`, and absence means the client is used as built.
    */
   wrapBrainClient?: (client: BrainClient) => BrainClient;
-  /** The same decoration for the digest client the brain's wakes summarize through. */
-  wrapDigestClient?: (client: DigestClient) => DigestClient;
 }
 
 export class VoiceCapabilityAssembler {
@@ -152,11 +150,7 @@ export class VoiceCapabilityAssembler {
       builtBrainClient && this.#options.wrapBrainClient
         ? this.#options.wrapBrainClient(builtBrainClient)
         : builtBrainClient;
-    const builtDigestClient = openAiDigestClient(apiKey);
-    this.#digestClient =
-      builtDigestClient && this.#options.wrapDigestClient
-        ? this.#options.wrapDigestClient(builtDigestClient)
-        : builtDigestClient;
+    this.#digestClient = openAiDigestClient(apiKey);
     const [voice, speed] = await Promise.all([
       this.#options.settings.get(APP_SETTING_SCHEMA.voice.field).catch(() => undefined),
       this.#options.settings.get(APP_SETTING_SCHEMA.voiceSpeed.field).catch(() => undefined),

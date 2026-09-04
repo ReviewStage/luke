@@ -1,6 +1,6 @@
 import os from "node:os";
 import path from "node:path";
-import { HOOK_EVENT } from "../shared/hook-events.js";
+import { HOOK_EVENT } from "@sidecar/session";
 import {
   HOOK_ENTRY_NESTING,
   type ObservationHookSpec,

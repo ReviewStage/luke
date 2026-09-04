@@ -1,12 +1,9 @@
 import {
   CONVERSATION_MESSAGE_AUTHOR,
   type ConversationMessageAuthor,
-  maximumSessionTitleLength,
   normalizeSessionDetail,
   type ProviderId,
   SESSION_CONTROL_KIND,
-  SESSION_STATUS,
-  type SessionStatus,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentModels,
   type WorkspaceTaskSupport,
@@ -77,14 +74,6 @@ export const HOSTED_SERVICE_PATH = {
    * Responses payload for the desktop to append and act on.
    */
   BRAIN_RESPOND: "/api/brain/respond",
-  /**
-   * Digest one local session's transcript slice on Luke's key (POST), for a
-   * developer with none of their own. The desktop sends the bounded slice and
-   * the observed fields beside it; the service holds the instructions, the
-   * strict schema, and the model fixed by its own build, and answers with the
-   * digest record for the desktop to validate again before the brain sees it.
-   */
-  BRAIN_DIGEST: "/api/brain/digest",
   ACCOUNT_DELETE: "/api/account/delete",
   USAGE: "/api/usage",
   EVENTS: "/api/events",
@@ -337,91 +326,6 @@ export function hostedBrainRequestFromWire(
     request.max_output_tokens = budget;
   }
   return request;
-}
-
-/**
- * What one hosted digest carries up: the observed fields the roster gave the
- * wake and the bounded transcript slice. No provider or session id travels —
- * the digest names no session, and the desktop attaches it to the identity it
- * asked about — so the answer can never address a session the roster did not.
- */
-export interface HostedDigestRequest {
-  provider_name: string;
-  title?: string;
-  status?: SessionStatus;
-  hook?: string;
-  truncated: boolean;
-  transcript: string;
-}
-
-/** The longest hook token a digest request may carry; the spool's own are a fraction of it. */
-export const maximumHostedDigestHookLength = 32;
-
-const SESSION_STATUS_LIST: readonly string[] = Object.values(SESSION_STATUS);
-
-function isSessionStatus(value: string): value is SessionStatus {
-  return SESSION_STATUS_LIST.includes(value);
-}
-
-/**
- * Validates a digest request arriving as untrusted JSON, or nothing. The
- * transcript bound is the caller's because the bound belongs to the brain,
- * which sits above this package; the title and provider bounds are the
- * session vocabulary's own.
- */
-export function hostedDigestRequestFromWire(
-  value: UnparsedWireValue,
-  maximumTranscriptChars: number,
-): HostedDigestRequest | undefined {
-  if (!isRecord(value)) return undefined;
-  const providerName = text(value.provider_name);
-  if (!providerName || providerName.length > maximumSessionTitleLength) return undefined;
-  if (!isWireBoolean(value.truncated)) return undefined;
-  if (!isWireString(value.transcript)) return undefined;
-  const transcript = value.transcript;
-  if (transcript.trim().length === 0 || transcript.length > maximumTranscriptChars) {
-    return undefined;
-  }
-  const request: HostedDigestRequest = {
-    provider_name: providerName,
-    truncated: value.truncated,
-    transcript,
-  };
-  if (value.title !== undefined) {
-    const title = text(value.title);
-    if (!title || title.length > maximumSessionTitleLength) return undefined;
-    request.title = title;
-  }
-  if (value.status !== undefined) {
-    const status = text(value.status);
-    if (!status || !isSessionStatus(status)) return undefined;
-    request.status = status;
-  }
-  if (value.hook !== undefined) {
-    const hook = text(value.hook);
-    if (!hook || hook.length > maximumHostedDigestHookLength) return undefined;
-    request.hook = hook;
-  }
-  return request;
-}
-
-/**
- * What the digest endpoint answers with: the digest as the model wrote it,
- * carried as a record for the desktop's own schema reader to validate, and
- * where the day's allowance stands.
- */
-export interface HostedDigestAnswer {
-  digest: WireRecord;
-  quota?: HostedQuota;
-}
-
-/** Reads a digest answer; one without a digest record reads as no answer at all. */
-export function hostedDigestAnswerFromWire(
-  value: UnparsedWireValue,
-): HostedDigestAnswer | undefined {
-  if (!isRecord(value) || !isRecord(value.digest)) return undefined;
-  const quota = hostedQuotaFromWire(value.quota);
-  return { digest: value.digest, ...(quota ? { quota } : undefined) };
 }
 
 /**

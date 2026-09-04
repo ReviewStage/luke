@@ -16,7 +16,6 @@ export {
   type AdapterDiagnosticCallback,
   type AdapterDiagnosticKind,
 } from "./shared/adapter-diagnostics.js";
-export { HOOK_EVENT } from "./shared/hook-events.js";
 export { canIgnoreFilesystemError, readDirectory } from "./shared/local-session-adapter.js";
 export {
   canIgnoreSqliteError,

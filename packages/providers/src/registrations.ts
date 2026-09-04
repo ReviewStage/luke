@@ -6,6 +6,7 @@ import {
 } from "@sidecar/credentials/vocabulary";
 import {
   CompositeSessionProviderAdapter,
+  type HookEvent,
   PROVIDER_ID,
   type ProviderId,
   type SessionProviderAdapter,
@@ -33,7 +34,7 @@ import {
  */
 export interface ProviderObservationSpool {
   directory: () => string;
-  events: readonly string[];
+  events: readonly HookEvent[];
 }
 
 export interface ProviderRegistration {

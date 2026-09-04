@@ -20,10 +20,8 @@ export {
   type BrainClientAnswer,
   type BrainClientOutcome,
   type BrainRespondOptions,
-  type FetchLike,
   HostedBrainClient,
   type HostedBrainClientOptions,
-  OPENAI_ENVIRONMENT,
   OpenAiBrainClient,
   type OpenAiBrainClientOptions,
   type OpenAiBrainOptions,
@@ -31,9 +29,6 @@ export {
 } from "./brain-client.js";
 export {
   type BrainSessionDigest,
-  DIGEST_FIELD,
-  DIGEST_SCHEMA,
-  DIGEST_SCHEMA_NAME,
   DIGEST_SOURCE,
   DIGEST_STOP_STATE,
   type DigestInput,
@@ -41,33 +36,20 @@ export {
   type DigestStopState,
   digestChars,
   digestFromModel,
-  type FallbackDigestAbout,
   fallbackDigest,
-  mapWithLimit,
 } from "./brain-digest.js";
 export {
   DIGEST_OPENAI_DEFAULTS,
   type DigestClient,
   type DigestClientAnswer,
-  HostedDigestClient,
-  type HostedDigestClientOptions,
   OpenAiDigestClient,
   type OpenAiDigestClientOptions,
   type OpenAiDigestOptions,
   openAiDigestClient,
 } from "./brain-digest-client.js";
-export {
-  DIGEST_INPUT_MARKER,
-  type DigestResponsesOptions,
-  type DigestResponsesRequest,
-  digestFromResponsesPayload,
-  digestInputText,
-  digestInstructions,
-  digestResponsesRequest,
-} from "./brain-digest-openai.js";
+export { type DigestResponsesOptions, digestFromResponsesPayload } from "./brain-digest-openai.js";
 export {
   BRAIN_DELIVERY_SOURCE,
-  BRAIN_WAKE_HOOK,
   BRAIN_WAKE_KIND,
   type BrainDelivery,
   type BrainDeliverySource,

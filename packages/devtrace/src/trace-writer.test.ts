@@ -32,21 +32,21 @@ test("lines land in the named file, stamped, in the order they were recorded", a
     inputTokens: 1_500,
     outputTokens: 60,
   });
-  writer.recordBrainDigest({
-    transcriptChars: 4_096,
-    truncated: false,
-    outcome: BRAIN_CLIENT_OUTCOME.ANSWERED,
-    elapsedMs: 700,
-    stopState: DIGEST_STOP_STATE.FINISHED,
-    digestChars: 180,
-    model: "gpt-5.6-luna",
-  });
   writer.recordBrainTurn({
     trigger: BRAIN_TURN_TRIGGER.WAKE,
     inputItemKinds: ["message", "message"],
     inputTokens: 1_500,
     transcriptBytes: 4_096,
-    digests: [{ source: "model", elapsedMs: 700, digestChars: 180, transcriptChars: 4_096 }],
+    digests: [
+      {
+        source: "model",
+        outcome: BRAIN_CLIENT_OUTCOME.ANSWERED,
+        stopState: DIGEST_STOP_STATE.FINISHED,
+        elapsedMs: 700,
+        digestChars: 180,
+        transcriptChars: 4_096,
+      },
+    ],
     toolCalls: [{ name: "announce", argumentsChars: 120, outcomeStatus: "accepted" }],
     deliveries: [{ briefingChars: 96 }],
     elapsedMs: 1_250,
@@ -56,21 +56,18 @@ test("lines land in the named file, stamped, in the order they were recorded", a
   await writer.settled();
   const lines = (await readFile(writer.file, "utf8")).split("\n").filter((line) => line.length > 0);
   const entries = lines.map(recordFromJsonLine);
-  assert.equal(entries.length, 4);
+  assert.equal(entries.length, 3);
   assert.equal(entries[0]?.kind, TRACE_ENTRY_KIND.WIRE);
   assert.equal(entries[0]?.direction, TRACE_DIRECTION.CLIENT);
   assert.equal(entries[1]?.kind, TRACE_ENTRY_KIND.BRAIN_REQUEST);
   assert.equal(entries[1]?.outcome, BRAIN_CLIENT_OUTCOME.ANSWERED);
   assert.equal(entries[1]?.inputChars, 2_048);
   assert.ok(entries[1] && !("model" in entries[1]));
-  assert.equal(entries[2]?.kind, TRACE_ENTRY_KIND.BRAIN_DIGEST);
-  assert.equal(entries[2]?.stopState, DIGEST_STOP_STATE.FINISHED);
-  assert.equal(entries[2]?.transcriptChars, 4_096);
-  assert.equal(entries[3]?.kind, TRACE_ENTRY_KIND.BRAIN);
-  assert.equal(entries[3]?.trigger, BRAIN_TURN_TRIGGER.WAKE);
-  assert.equal(entries[3]?.elapsedMs, 1_250);
-  assert.ok(Array.isArray(entries[3]?.digests) && isRecord(entries[3]?.digests[0]));
-  const toolCalls = entries[3]?.toolCalls;
+  assert.equal(entries[2]?.kind, TRACE_ENTRY_KIND.BRAIN);
+  assert.equal(entries[2]?.trigger, BRAIN_TURN_TRIGGER.WAKE);
+  assert.equal(entries[2]?.elapsedMs, 1_250);
+  assert.ok(Array.isArray(entries[2]?.digests) && isRecord(entries[2]?.digests[0]));
+  const toolCalls = entries[2]?.toolCalls;
   assert.ok(Array.isArray(toolCalls) && isRecord(toolCalls[0]));
   for (const entry of entries) {
     assert.ok(isWireString(entry?.at));

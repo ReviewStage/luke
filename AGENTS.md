@@ -211,21 +211,22 @@ Trust constraints:
   stop state from a fixed set, the developer's last ask, what the agent did
   since, what it waits on. The brain receives the form, never the slice; a
   session whose read came back empty makes no summarizer call and draws no
-  event; and a summarizer that is absent, quiet, late past a fixed deadline,
-  or off-schema falls to a deterministic digest built from the hook and the
-  roster status alone, so no failure path lets raw text ride into the memory
-  under a digest's name. The form's reader refuses rather than repairs, and
+  event; and a summarizer that is absent, quiet, timed out on its own fixed
+  request deadline, or off-schema falls to a deterministic digest built from
+  the hook and the roster status alone, so no failure path lets raw text ride
+  into the memory under a digest's name. The form's reader refuses rather than repairs, and
   the form names no session: identity is the roster's, attached by Luke to
   the wake it read for, never read out of a model's words. Raw transcript
   text reaches the brain through one door only, its own `read_transcript`
   tool, validated against the observed roster, and its output stays in the
-  memory as any tool result does. The slice travels the way a brain turn
-  travels: directly to OpenAI on the developer's own key, or through Luke's
-  own service on the hosted tier, where the service validates it against the
-  same bounds, spends the review meter, asks OpenAI not to store it, and
-  keeps and logs none of it. Nothing runs in a fixture or evidence run. The
-  development trace records each digest's outcome, stop state, timing, and
-  the slice's and form's character counts, never the text of either. Widening
+  memory as any tool result does. The slice travels one way only: directly
+  to OpenAI on the developer's own key, over the same keyed transport a brain
+  turn takes, asked not to store it. There is no hosted digest path: a
+  developer with no key has a brain told only where each agent stopped, from
+  the hook and the roster. Nothing runs in a fixture or evidence run. The
+  development trace records each digest inside its turn's record as outcome,
+  stop state, timing, and the slice's and form's character counts, never the
+  text of either. Widening
   what the summarizer reads, what the form may say, how much a slice may
   carry, or what the roster look sends is a product decision, not an
   implementation detail, and `PRIVACY.md` says the read and the send in as

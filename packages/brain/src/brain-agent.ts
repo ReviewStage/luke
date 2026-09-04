@@ -16,15 +16,15 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import { BRAIN_CLIENT_OUTCOME, type BrainClient } from "./brain-client.js";
+import { BRAIN_CLIENT_OUTCOME, type BrainClient, type BrainClientOutcome } from "./brain-client.js";
 import {
   type BrainSessionDigest,
   DIGEST_SOURCE,
   type DigestInput,
   type DigestSource,
+  type DigestStopState,
   digestChars,
   fallbackDigest,
-  mapWithLimit,
 } from "./brain-digest.js";
 import type { DigestClient } from "./brain-digest-client.js";
 import {
@@ -81,8 +81,6 @@ export const BRAIN_DEFAULTS = {
   DELTA_PER_SESSION_CHARS: 20_000,
   /** The most of a whole transcript one read answers with, cut from the front. */
   FULL_TRANSCRIPT_CHARS: 60_000,
-  /** How long a wake waits for one digest before the fallback stands in and a late answer is dropped. */
-  DIGEST_DEADLINE_MS: 8_000,
   /** How many digests one turn asks for at once. */
   DIGEST_PARALLELISM: 3,
 } as const;
@@ -135,12 +133,21 @@ export interface BrainToolCallTrace {
   outcomeStatus: string;
 }
 
-/** One digest a turn attached, as the trace counts it: who wrote it, how long it took, and two sizes. */
+/**
+ * One digest a turn attached, as the trace counts it: who wrote it, how the
+ * summarizer call came out, the stop state (a value from a fixed set), how
+ * long it took, two sizes, and the model when the client names one. Never
+ * the slice's text and never the form's words.
+ */
 export interface BrainDigestTurnTrace {
   source: DigestSource;
+  outcome: BrainClientOutcome;
+  stopState: DigestStopState;
   elapsedMs: number;
   digestChars: number;
   transcriptChars: number;
+  model?: string;
+  error?: string;
 }
 
 /**
@@ -193,7 +200,6 @@ export interface BrainAgentOptions {
   askDeadlineMs?: number;
   deltaPerSessionChars?: number;
   fullTranscriptChars?: number;
-  digestDeadlineMs?: number;
   digestParallelism?: number;
 }
 
@@ -214,7 +220,7 @@ interface TurnPlan {
   open: (events: readonly BrainWakeEvent[], now: number) => readonly ResponsesInputItem[];
   deliverySource?: BrainDeliverySource;
   /** Whether a roster look's events whose read returned no text are left out, before any digest is asked for. */
-  dropEmptyRosterDeltas?: boolean;
+  dropEmptyRosterReads?: boolean;
 }
 
 interface DispatchOutcome {
@@ -245,13 +251,50 @@ interface WokenSession {
 interface DigestOutcome {
   digest: BrainSessionDigest;
   source: DigestSource;
+  outcome: BrainClientOutcome;
   elapsedMs: number;
+  error?: string;
 }
+
+/** Why a digest fell back without a summarizer call, as the trace names it. */
+const DIGEST_FALLBACK_REASON = {
+  NO_SUMMARIZER: "no summarizer",
+  NOTHING_TO_READ: "nothing to read",
+  SUMMARIZER_QUIET: "summarizer quiet",
+  SUMMARIZER_THREW: "summarizer threw",
+} as const;
 
 interface AttachedDigests {
   events: readonly BrainWakeEvent[];
   transcriptBytes: number;
   digests: readonly BrainDigestTurnTrace[];
+}
+
+/**
+ * Maps every item through `work` with at most `limit` in flight, answering in
+ * the items' order. A rejected item rejects the whole map, so the digest work
+ * wraps its own failures.
+ */
+async function mapWithLimit<Item, Result>(
+  items: readonly Item[],
+  limit: number,
+  work: (item: Item) => Promise<Result>,
+): Promise<Result[]> {
+  const results: Result[] = [];
+  let next = 0;
+  const lanes = Math.max(1, Math.min(Math.floor(limit), items.length));
+  const lane = async (): Promise<void> => {
+    for (;;) {
+      const index = next;
+      if (index >= items.length) return;
+      next += 1;
+      const item = items[index];
+      // SAFETY: `index` stayed below `items.length`, so the slot is populated.
+      results[index] = await work(item as Item);
+    }
+  };
+  await Promise.all(Array.from({ length: lanes }, lane));
+  return results;
 }
 
 function cutFront(value: string, maximumChars: number): FrontCut {
@@ -314,7 +357,6 @@ export class BrainAgent {
   readonly #askDeadlineMs: number;
   readonly #deltaPerSessionChars: number;
   readonly #fullTranscriptChars: number;
-  readonly #digestDeadlineMs: number;
   readonly #digestParallelism: number;
   #memory = new BrainMemory();
   #turnInFlight = false;
@@ -343,7 +385,6 @@ export class BrainAgent {
     this.#deltaPerSessionChars =
       options.deltaPerSessionChars ?? BRAIN_DEFAULTS.DELTA_PER_SESSION_CHARS;
     this.#fullTranscriptChars = options.fullTranscriptChars ?? BRAIN_DEFAULTS.FULL_TRANSCRIPT_CHARS;
-    this.#digestDeadlineMs = options.digestDeadlineMs ?? BRAIN_DEFAULTS.DIGEST_DEADLINE_MS;
     this.#digestParallelism = options.digestParallelism ?? BRAIN_DEFAULTS.DIGEST_PARALLELISM;
   }
 
@@ -455,7 +496,7 @@ export class BrainAgent {
         events,
         open: (attached, openedAt) => [wakeInputItem(attached, openedAt, roster.text)],
         deliverySource: BRAIN_DELIVERY_SOURCE.WAKE,
-        dropEmptyRosterDeltas: true,
+        dropEmptyRosterReads: true,
       }),
     );
   }
@@ -553,7 +594,7 @@ export class BrainAgent {
       for (const item of items) appendedKinds.push(text(item.type) ?? "unknown");
     };
 
-    const attached = await this.#attachDigests(plan.events, plan.dropEmptyRosterDeltas === true);
+    const attached = await this.#attachDigests(plan.events, plan.dropEmptyRosterReads === true);
     const transcriptBytes = attached.transcriptBytes;
     append(plan.open(attached.events, startedAt));
 
@@ -690,7 +731,7 @@ export class BrainAgent {
    */
   async #attachDigests(
     events: readonly BrainWakeEvent[],
-    dropEmptyRosterDeltas: boolean,
+    dropEmptyRosterReads: boolean,
   ): Promise<AttachedDigests> {
     const identities = new IdentitySet();
     for (const event of events) identities.add(event.identity);
@@ -702,7 +743,7 @@ export class BrainAgent {
       const named = events.filter(
         (event) =>
           sameIdentity(event.identity, identity) &&
-          !(dropEmptyRosterDeltas && event.kind === BRAIN_WAKE_KIND.ROSTER && !read.text),
+          !(dropEmptyRosterReads && event.kind === BRAIN_WAKE_KIND.ROSTER && !read.text),
       );
       if (named.length > 0) woken.push({ identity, read, events: named });
     }
@@ -728,42 +769,45 @@ export class BrainAgent {
       transcriptBytes,
       digests: digested.map(({ session, outcome }) => ({
         source: outcome.source,
+        outcome: outcome.outcome,
+        stopState: outcome.digest.stopState,
         elapsedMs: outcome.elapsedMs,
         digestChars: digestChars(outcome.digest),
         transcriptChars: session.read.text.length,
+        ...(this.#options.digest?.model ? { model: this.#options.digest.model } : undefined),
+        ...(outcome.error ? { error: outcome.error } : undefined),
       })),
     };
   }
 
   /**
    * One session's digest: the summarizer's answer when there is a summarizer,
-   * the read accepted with text, the client is not quiet, and the answer
-   * lands inside the deadline; the deterministic fallback otherwise, built
-   * from the hook and the roster alone. A summarizer that answers late
-   * answers into nothing.
+   * the read accepted with text, the client is not quiet, and the client
+   * answered; the deterministic fallback otherwise, built from the hook and
+   * the roster alone. The client settles within its own request timeout,
+   * which is the whole deadline: a client that gave up answers `FAILED`.
    */
   async #digestFor(session: WokenSession): Promise<DigestOutcome> {
     const startedAt = this.#now();
     const observed = session.events.find((event) => event.session)?.session;
     const hookEvent = [...session.events].reverse().find((event) => event.hookEvent)?.hookEvent;
-    const fallback = (): DigestOutcome => ({
+    const fallback = (error: string): DigestOutcome => ({
       digest: fallbackDigest({
         ...(observed ? { status: observed.status } : undefined),
         ...(hookEvent ? { hookEvent } : undefined),
         ...(observed?.detail.error ? { error: observed.detail.error } : undefined),
       }),
       source: DIGEST_SOURCE.FALLBACK,
+      outcome: BRAIN_CLIENT_OUTCOME.FAILED,
       elapsedMs: this.#now() - startedAt,
+      error,
     });
     const client = this.#options.digest;
-    if (
-      !client ||
-      session.read.status !== ACT_RESULT_STATUS.ACCEPTED ||
-      !session.read.text ||
-      client.quietUntil() !== undefined
-    ) {
-      return fallback();
+    if (!client) return fallback(DIGEST_FALLBACK_REASON.NO_SUMMARIZER);
+    if (session.read.status !== ACT_RESULT_STATUS.ACCEPTED || !session.read.text) {
+      return fallback(DIGEST_FALLBACK_REASON.NOTHING_TO_READ);
     }
+    if (client.quietUntil() !== undefined) return fallback(DIGEST_FALLBACK_REASON.SUMMARIZER_QUIET);
     const input: DigestInput = {
       providerName: observed?.provider.displayName ?? session.identity.providerId,
       ...(observed ? { title: observed.title, status: observed.status } : undefined),
@@ -771,21 +815,18 @@ export class BrainAgent {
       truncated: session.read.truncated,
       transcript: session.read.text,
     };
-    let deadline: ScheduledTimer | undefined;
-    const timedOut = new Promise<undefined>((resolve) => {
-      deadline = this.#schedule(() => resolve(undefined), this.#digestDeadlineMs);
-    });
-    try {
-      const answer = await Promise.race([client.summarize(input).catch(() => undefined), timedOut]);
-      if (answer?.outcome !== BRAIN_CLIENT_OUTCOME.ANSWERED) return fallback();
-      return {
-        digest: answer.digest,
-        source: DIGEST_SOURCE.MODEL,
-        elapsedMs: this.#now() - startedAt,
-      };
-    } finally {
-      if (deadline !== undefined) this.#cancel(deadline);
+    const answer = await client.summarize(input).catch(() => undefined);
+    if (answer === undefined) return fallback(DIGEST_FALLBACK_REASON.SUMMARIZER_THREW);
+    if (answer.outcome === BRAIN_CLIENT_OUTCOME.FAILED) return fallback(answer.reason);
+    if (answer.outcome === BRAIN_CLIENT_OUTCOME.QUIET) {
+      return fallback(DIGEST_FALLBACK_REASON.SUMMARIZER_QUIET);
     }
+    return {
+      digest: answer.digest,
+      source: DIGEST_SOURCE.MODEL,
+      outcome: BRAIN_CLIENT_OUTCOME.ANSWERED,
+      elapsedMs: this.#now() - startedAt,
+    };
   }
 
   async #readDelta(identity: SessionIdentity): Promise<DeltaRead> {

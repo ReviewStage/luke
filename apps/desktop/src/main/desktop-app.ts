@@ -31,7 +31,7 @@ import {
   nextMeetingBoundary,
 } from "@sidecar/calendar";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
-import { AgentTraceWriter, tracedBrainClient, tracedDigestClient } from "@sidecar/devtrace";
+import { AgentTraceWriter, tracedBrainClient } from "@sidecar/devtrace";
 import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
 import { fixtureSnapshot } from "@sidecar/fixtures";
 import { type AppGuideSnapshot, appGuideContextText, EMPTY_APP_GUIDE } from "@sidecar/guide";
@@ -540,8 +540,6 @@ const voiceCapabilities = new VoiceCapabilityAssembler({
     ? {
         wrapBrainClient: (client) =>
           tracedBrainClient(client, (record) => agentTrace.recordBrainRequest(record)),
-        wrapDigestClient: (client) =>
-          tracedDigestClient(client, (record) => agentTrace.recordBrainDigest(record)),
       }
     : undefined),
 });

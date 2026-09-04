@@ -52,7 +52,7 @@ function itemBody(item: ResponsesInputItem, marker: string): WireRecord {
 test("a wake item carries each event's observed fields and transcript digest as data", () => {
   const event: BrainWakeEvent = {
     kind: BRAIN_WAKE_KIND.HOOK,
-    hookEvent: "Stop",
+    hookEvent: "stop",
     identity: { providerId: claude.id, providerSessionId: "abc" },
     session: session(),
     digest: {
@@ -74,7 +74,7 @@ test("a wake item carries each event's observed fields and transcript digest as 
       {
         kind: "hook",
         at: new Date(NOW).toISOString(),
-        hook: "Stop",
+        hook: "stop",
         provider_id: "claude-code",
         provider_session_id: "abc",
         session: {

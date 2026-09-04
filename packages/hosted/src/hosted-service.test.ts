@@ -6,12 +6,9 @@ import {
   HOSTED_WS_BASE_URL,
   hostedBrainRequestFromWire,
   hostedConversationAnswerFromWire,
-  hostedDigestAnswerFromWire,
-  hostedDigestRequestFromWire,
   hostedMintAnswerFromWire,
   isVaultProviderId,
   maximumHostedBrainInputItems,
-  maximumHostedDigestHookLength,
   VAULT_KEY_MAX_LENGTH,
   VAULT_PROVIDER_ID,
   vaultKeyIsStorable,
@@ -242,51 +239,4 @@ test("a hosted brain request is an array of records and at most a budget", () =>
     }),
     undefined,
   );
-});
-
-test("a hosted digest request is the observed fields and a bounded, non-empty transcript", () => {
-  const whole = {
-    provider_name: "Claude Code",
-    title: "Fix the checkout tests",
-    status: "waiting",
-    hook: "stop",
-    truncated: false,
-    transcript: "user: fix it\nassistant: done",
-  };
-  assert.deepEqual(hostedDigestRequestFromWire(whole, 1_000), whole);
-  assert.deepEqual(
-    hostedDigestRequestFromWire({ provider_name: "OMP", truncated: true, transcript: "x" }, 10),
-    { provider_name: "OMP", truncated: true, transcript: "x" },
-  );
-  assert.equal(hostedDigestRequestFromWire({ ...whole, transcript: "   " }, 1_000), undefined);
-  assert.equal(
-    hostedDigestRequestFromWire({ ...whole, transcript: "x".repeat(11) }, 10),
-    undefined,
-  );
-  assert.equal(hostedDigestRequestFromWire({ ...whole, transcript: 7 }, 1_000), undefined);
-  assert.equal(hostedDigestRequestFromWire({ ...whole, truncated: "no" }, 1_000), undefined);
-  assert.equal(hostedDigestRequestFromWire({ ...whole, provider_name: "" }, 1_000), undefined);
-  assert.equal(
-    hostedDigestRequestFromWire({ ...whole, provider_name: "p".repeat(161) }, 1_000),
-    undefined,
-  );
-  assert.equal(hostedDigestRequestFromWire({ ...whole, title: "t".repeat(161) }, 1_000), undefined);
-  assert.equal(hostedDigestRequestFromWire({ ...whole, status: "napping" }, 1_000), undefined);
-  assert.equal(
-    hostedDigestRequestFromWire(
-      { ...whole, hook: "h".repeat(maximumHostedDigestHookLength + 1) },
-      1_000,
-    ),
-    undefined,
-  );
-  assert.equal(hostedDigestRequestFromWire("text", 1_000), undefined);
-});
-
-test("a hosted digest answer is a digest record and at most a quota", () => {
-  const digest = { stop_state: "finished", last_ask: null, did_since: "ran", waiting_on: null };
-  const quota = { used: 1, limit: 9, remaining: 8, resetsAt: NOW };
-  assert.deepEqual(hostedDigestAnswerFromWire({ digest, quota }), { digest, quota });
-  assert.deepEqual(hostedDigestAnswerFromWire({ digest, quota: { used: 1 } }), { digest });
-  assert.equal(hostedDigestAnswerFromWire({ digest: "finished" }), undefined);
-  assert.equal(hostedDigestAnswerFromWire({ quota }), undefined);
 });

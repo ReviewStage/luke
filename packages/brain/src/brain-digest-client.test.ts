@@ -1,15 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { SESSION_STATUS } from "@sidecar/session";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { BRAIN_CLIENT_OUTCOME, BRAIN_RATE_LIMIT_COOLDOWN_MS } from "./brain-client.js";
 import { DIGEST_STOP_STATE, type DigestInput } from "./brain-digest.js";
-import {
-  HostedDigestClient,
-  OpenAiDigestClient,
-  openAiDigestClient,
-} from "./brain-digest-client.js";
+import { OpenAiDigestClient, openAiDigestClient } from "./brain-digest-client.js";
 
 const NOW = 1_800_000_000_000;
 const TRANSCRIPT_SECRET = "SECRET_TRANSCRIPT_TEXT";
@@ -156,52 +151,4 @@ test("the factory builds nothing without a key and honors the model option", () 
   assert.equal(openAiDigestClient("   "), undefined);
   assert.equal(openAiDigestClient("sk", { model: "gpt-other" })?.model, "gpt-other");
   assert.equal(openAiDigestClient("sk")?.model, "gpt-5.6-luna");
-});
-
-test("the hosted client sends the bounded input, retries once on 401, re-validates, and quiets on quota", async () => {
-  const { fetch, calls } = fakeFetch([
-    new Response("", { status: 401 }),
-    Response.json({ digest: WRITTEN, quota: { used: 1, limit: 9, remaining: 8, resetsAt: NOW } }),
-    Response.json({ digest: { ...WRITTEN, stop_state: "done" } }),
-    Response.json(
-      { quota: { used: 9, limit: 9, remaining: 0, resetsAt: NOW + 90_000 } },
-      { status: 429 },
-    ),
-  ]);
-  let token = "stale";
-  const client = new HostedDigestClient({
-    serviceBaseUrl: "https://luke.test/",
-    readAccessToken: async () => token,
-    refreshAccount: async () => {
-      token = "fresh";
-    },
-    fetch,
-    now: () => NOW,
-    report: () => {},
-  });
-  const answer = await client.summarize(INPUT);
-  assert.equal(answer.outcome, BRAIN_CLIENT_OUTCOME.ANSWERED);
-  assert.ok(answer.outcome === BRAIN_CLIENT_OUTCOME.ANSWERED);
-  assert.equal(answer.digest.stopState, DIGEST_STOP_STATE.WAITING_FOR_DEVELOPER);
-  assert.equal(calls.length, 2);
-  assert.equal(calls[0]?.url, `https://luke.test${HOSTED_SERVICE_PATH.BRAIN_DIGEST}`);
-  assert.equal(header(calls[0]?.init ?? {}, "authorization"), "Bearer stale");
-  assert.equal(header(calls[1]?.init ?? {}, "authorization"), "Bearer fresh");
-  assert.deepEqual(calls[1]?.body, {
-    provider_name: "Claude Code",
-    title: "Fix the checkout tests",
-    status: "waiting",
-    hook: "stop",
-    truncated: false,
-    transcript: INPUT.transcript,
-  });
-
-  const offSchema = await client.summarize(INPUT);
-  assert.equal(offSchema.outcome, BRAIN_CLIENT_OUTCOME.FAILED);
-
-  const quiet = await client.summarize(INPUT);
-  assert.deepEqual(quiet, { outcome: BRAIN_CLIENT_OUTCOME.QUIET, until: NOW + 90_000 });
-  assert.equal(client.quietUntil(), NOW + 90_000);
-  assert.equal((await client.summarize(INPUT)).outcome, BRAIN_CLIENT_OUTCOME.QUIET);
-  assert.equal(calls.length, 4);
 });

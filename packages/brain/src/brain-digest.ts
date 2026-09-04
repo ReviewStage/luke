@@ -1,6 +1,5 @@
-import { SESSION_STATUS, type SessionStatus } from "@sidecar/session";
+import { HOOK_EVENT, type HookEvent, SESSION_STATUS, type SessionStatus } from "@sidecar/session";
 import { isRecord, isWireString, text, type UnparsedWireValue } from "@sidecar/wire";
-import { BRAIN_WAKE_HOOK } from "./brain-events.js";
 
 /**
  * The digest: the one shape transcript text is reduced to before the brain
@@ -53,7 +52,7 @@ export interface DigestInput {
   providerName: string;
   title?: string;
   status?: SessionStatus;
-  hookEvent?: string;
+  hookEvent?: HookEvent;
   /** Whether the front of the slice was cut to the per-session bound. */
   truncated: boolean;
   transcript: string;
@@ -145,7 +144,7 @@ export function digestFromModel(value: UnparsedWireValue): BrainSessionDigest | 
 
 export interface FallbackDigestAbout {
   status?: SessionStatus;
-  hookEvent?: string;
+  hookEvent?: HookEvent;
   /** The roster's own error line for the session, when it reported one. */
   error?: string;
 }
@@ -167,11 +166,11 @@ function stopStateFromStatus(status: SessionStatus | undefined): DigestStopState
 
 function stopStateFromAbout(about: FallbackDigestAbout): DigestStopState {
   switch (about.hookEvent) {
-    case BRAIN_WAKE_HOOK.STOP_FAILURE:
+    case HOOK_EVENT.STOP_FAILURE:
       return DIGEST_STOP_STATE.ERRORED;
-    case BRAIN_WAKE_HOOK.NOTIFICATION:
+    case HOOK_EVENT.NOTIFICATION:
       return DIGEST_STOP_STATE.WAITING_FOR_PERMISSION;
-    case BRAIN_WAKE_HOOK.SESSION_END:
+    case HOOK_EVENT.SESSION_END:
       return DIGEST_STOP_STATE.FINISHED;
     default:
       return stopStateFromStatus(about.status);
@@ -198,31 +197,4 @@ export function fallbackDigest(about: FallbackDigestAbout): BrainSessionDigest {
 /** How much a digest says, for the trace to count without carrying its words. */
 export function digestChars(digest: BrainSessionDigest): number {
   return JSON.stringify(digest).length;
-}
-
-/**
- * Maps every item through `work` with at most `limit` in flight, answering in
- * the items' order. A rejected item rejects the whole map, so callers that
- * must not fail wrap their own work.
- */
-export async function mapWithLimit<Item, Result>(
-  items: readonly Item[],
-  limit: number,
-  work: (item: Item) => Promise<Result>,
-): Promise<Result[]> {
-  const results: Result[] = [];
-  let next = 0;
-  const lanes = Math.max(1, Math.min(Math.floor(limit), items.length));
-  const lane = async (): Promise<void> => {
-    for (;;) {
-      const index = next;
-      if (index >= items.length) return;
-      next += 1;
-      const item = items[index];
-      // SAFETY: `index` stayed below `items.length`, so the slot is populated.
-      results[index] = await work(item as Item);
-    }
-  };
-  await Promise.all(Array.from({ length: lanes }, lane));
-  return results;
 }

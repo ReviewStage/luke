@@ -158,6 +158,26 @@ test("a brain turn becomes its own generation, and junk lines cost only themselv
     inputItemKinds: ["message", "function_call_output"],
     inputTokens: 1_500,
     transcriptBytes: 4_096,
+    digests: [
+      {
+        source: "model",
+        outcome: "answered",
+        stopState: "finished",
+        elapsedMs: 700,
+        digestChars: 180,
+        transcriptChars: 4_096,
+        model: "gpt-5.6-luna",
+      },
+      {
+        source: "fallback",
+        outcome: "failed",
+        stopState: "errored",
+        elapsedMs: 50,
+        digestChars: 40,
+        transcriptChars: 12,
+        error: "request failed with status 500",
+      },
+    ],
     toolCalls: [{ name: BRAIN_TOOL.ANNOUNCE, argumentsChars: 120, outcomeStatus: "accepted" }],
     outputText: "Checkout is waiting on you.",
     deliveries: [{ briefingChars: 96 }],
@@ -190,9 +210,13 @@ test("a brain turn becomes its own generation, and junk lines cost only themselv
   assert.equal(input?.role, "user");
   assert.equal(
     input?.content,
-    ["trigger: wake", "input items: message, function_call_output", "transcript bytes: 4096"].join(
-      "\n",
-    ),
+    [
+      "trigger: wake",
+      "input items: message, function_call_output",
+      "transcript bytes: 4096",
+      "digest: model, answered, stop state finished, 4096 -> 180 chars",
+      "digest: fallback, failed, stop state errored, 12 -> 40 chars, error: request failed with status 500",
+    ].join("\n"),
   );
   assert.equal(output?.role, "assistant");
   assert.equal(
@@ -226,47 +250,6 @@ test("a failed brain turn shows its error, and a keyed turn its model", () => {
     ["trigger: ask", "input items: none", "transcript bytes: 0"].join("\n"),
   );
   assert.equal(output?.content, "error: request failed with status 500");
-});
-
-test("a brain digest entry becomes its own tool-free generation, counts and fixed values only", () => {
-  const digest = JSON.stringify({
-    at: "2026-08-25T10:04:59.000Z",
-    kind: TRACE_ENTRY_KIND.BRAIN_DIGEST,
-    transcriptChars: 4_096,
-    truncated: true,
-    outcome: "answered",
-    elapsedMs: 700,
-    stopState: "finished",
-    digestChars: 180,
-  });
-  const [generation] = generations(unboxTraceFromLines([digest]));
-  assert.ok(generation);
-  assert.equal(generation.name, "brain-digest");
-  assert.equal(generation.model, "gpt-5.6-luna");
-  assert.deepEqual(toolsOf(generation), []);
-  const [input, output] = messagesOf(generation);
-  assert.equal(input?.content, ["transcript chars: 4096", "front cut: yes"].join("\n"));
-  assert.equal(
-    output?.content,
-    ["outcome: answered", "stop state: finished", "digest chars: 180"].join("\n"),
-  );
-
-  const failed = JSON.stringify({
-    at: "2026-08-25T10:05:00.000Z",
-    kind: TRACE_ENTRY_KIND.BRAIN_DIGEST,
-    transcriptChars: 12,
-    truncated: false,
-    outcome: "failed",
-    elapsedMs: 50,
-    model: "gpt-other",
-    error: "request failed with status 500",
-  });
-  const [failedGeneration] = generations(unboxTraceFromLines([failed]));
-  assert.equal(failedGeneration?.model, "gpt-other");
-  assert.equal(
-    messagesOf(failedGeneration)[1]?.content,
-    ["outcome: failed", "error: request failed with status 500"].join("\n"),
-  );
 });
 
 test("a brain request entry stays in the raw trace and draws no generation", () => {

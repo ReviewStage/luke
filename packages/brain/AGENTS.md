@@ -29,21 +29,26 @@ look — reads what each woken local session's transcript gained since the last
 look, cut from the front to `BRAIN_DEFAULTS.DELTA_PER_SESSION_CHARS`, and
 hands the slice to a `DigestClient` (`brain-digest-client.ts`), never to the
 brain. The client runs the request `brain-digest-openai.ts` builds — no tools,
-`store: false`, a strict JSON schema — on the developer's key or through the
-hosted service, and the answer comes back through `digestFromModel`, which
-refuses anything off-schema rather than repairing it. Whatever the client
-cannot answer (absent, quiet, late past `DIGEST_DEADLINE_MS`, failed, thrown,
-refused) falls to `fallbackDigest`, built from the hook token and the roster
-status alone; a late answer is discarded. The fallback reads no transcript,
-so no failure path can carry raw text into the memory under a digest's name.
+`store: false`, a strict JSON schema — on the developer's own key, over the
+same keyed transport the brain's turns use (`postKeyedResponses` in
+`brain-client.ts`), and the answer comes back through `digestFromModel`, which
+refuses anything off-schema rather than repairing it. There is no hosted
+digest path: without a key the brain runs on fallback digests alone. The
+client's request timeout (`DIGEST_OPENAI_DEFAULTS.REQUEST_TIMEOUT_MS`) is the
+whole deadline — `summarize` settles within it and never hangs, so the agent
+awaits it with no race of its own. Whatever the client cannot answer (absent,
+quiet, timed out, failed, thrown, refused) falls to `fallbackDigest`, built
+from the hook token and the roster status alone. The fallback reads no
+transcript, so no failure path can carry raw text into the memory under a
+digest's name.
 
 The digest names no session. `DigestInput` carries no provider or session id;
 the agent attaches the answer to the identity the roster gave the wake. A
 roster event whose read came back empty is dropped before any summarizer
 call, so a look on which nothing grew costs nothing and carries no event.
-`BRAIN_WAKE_HOOK` repeats the three spool tokens the fallback reads because
-this package does not import the providers package; the parity test in
-`apps/desktop/src/main/brain-flow.test.ts` pins them to `HOOK_EVENT`.
+The hook tokens the fallback reads are `HOOK_EVENT` from `@sidecar/session`,
+the same constant the providers' hooks write into the spool, so a renamed
+token cannot drift between the two.
 
 ## Tools are validated against the roster, never against words
 
@@ -56,10 +61,11 @@ text is the speech.
 
 ## What the trace may keep
 
-`BrainTurnTraceRecord` and the devtrace's digest record carry counts, timings,
-outcomes, and values from fixed sets: item kinds, transcript and digest
-character counts, a stop state, a model name. Never a transcript's text and
-never a digest's words, which are a model's rendering of a transcript.
+`BrainTurnTraceRecord` is the one record a turn leaves, and its `digests` list
+is the one place a digest is traced: counts, timings, outcomes, and values
+from fixed sets — item kinds, transcript and digest character counts, a stop
+state, a model name. Never a transcript's text and never a digest's words,
+which are a model's rendering of a transcript.
 
 ## The `PRIVACY.md` obligation
 

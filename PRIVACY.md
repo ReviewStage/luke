@@ -138,12 +138,16 @@ and email you signed it with, and any screenshots you attached.
   local session's transcript goes to a small OpenAI model to fill the fixed
   form, and the form, the session list, and Luke's memory go to the model that
   acts as his judgment, which may in turn ask for one session's recent
-  transcript in full. Each of those goes directly to OpenAI on your own key if
-  you entered one, otherwise through our service on our key, where our service
-  checks the request stays within the bounds above, counts it against your
-  daily allowance, asks OpenAI not to store it, and stores and logs none of it.
-  What comes back is a form or a spoken briefing, kept in Luke's memory file on
-  your Mac and never sent to a coding-agent provider. On the Mac app,
+  transcript in full. The transcript form goes directly to OpenAI on your own
+  key, and only if you entered one: without a key, no part of any transcript
+  is sent anywhere, and Luke's judgment is told only where each agent stopped,
+  read from its status and the hook that fired. The judgment's own turns go
+  directly to OpenAI on your own key if you entered one, otherwise through our
+  service on our key, where our service checks the request stays within the
+  bounds above, counts it against your daily allowance, asks OpenAI not to
+  store it, and stores and logs none of it. What comes back is a form or a
+  spoken briefing, kept in Luke's memory file on your Mac and never sent to a
+  coding-agent provider. On the Mac app,
   your conversation and Luke's durable memory are kept on your Mac and sent
   with a call so the conversation carries across calls and across launches; on
   iOS, the conversation is held in memory and discarded when the session

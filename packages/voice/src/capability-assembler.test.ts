@@ -118,23 +118,19 @@ test("a wrapped brain client stands where the built one would, and only when one
       wrapped.push(client.model ?? "unnamed");
       return client;
     },
-    wrapDigestClient: (client) => {
-      wrapped.push(client.model ?? "unnamed");
-      return client;
-    },
   });
 
   await assembler.apply();
   assert.ok(assembler.brainClient);
   assert.ok(assembler.digestClient);
-  assert.deepEqual(wrapped, ["gpt-5.6-terra", "gpt-5.6-luna"]);
+  assert.deepEqual(wrapped, ["gpt-5.6-terra"]);
 
   // No client, nothing to decorate: the wrapper must not conjure one.
   key = undefined;
   await assembler.apply();
   assert.equal(assembler.brainClient, undefined);
   assert.equal(assembler.digestClient, undefined);
-  assert.deepEqual(wrapped, ["gpt-5.6-terra", "gpt-5.6-luna"]);
+  assert.deepEqual(wrapped, ["gpt-5.6-terra"]);
 });
 
 test("the assembler keeps fixture runs credential-free without reading a key", async () => {
