@@ -26,6 +26,14 @@ const watchRoster = fs.readFileSync(
   path.join(repoRoot, "apps", "ios", "LukeWatch", "WatchRosterView.swift"),
   "utf8",
 );
+const watchAccount = fs.readFileSync(
+  path.join(repoRoot, "apps", "ios", "LukeWatch", "WatchAccountSession.swift"),
+  "utf8",
+);
+const watchRoot = fs.readFileSync(
+  path.join(repoRoot, "apps", "ios", "LukeWatch", "LukeWatchView.swift"),
+  "utf8",
+);
 
 test("the iPhone app embeds and depends on the Watch app", () => {
   assert.match(project, /LukeWatch\.app in Embed Watch Content/);
@@ -48,4 +56,12 @@ test("iPhone and Watch messages use the same Markdown renderer", () => {
   assert.equal(project.match(/MarkdownMessageView\.swift in Sources/g)?.length, 4);
   assert.match(watchRoster, /MarkdownMessageView\(message\.text\)/);
   assert.doesNotMatch(watchRoster, /AttributedString\(markdown:/);
+});
+
+test("the Watch tears down account-scoped UI when the paired account changes", () => {
+  assert.match(watchAccount, /private\(set\) var accountScope: String\?/);
+  assert.match(watchAccount, /accountID\.map[\s\S]*?\?\? "email:/);
+  assert.match(watchAccount, /func signOut\(\)[\s\S]*?accountScope = nil/);
+  assert.match(watchRoot, /NavigationStack[\s\S]*?\.id\(watchSession\.accountScope\)/);
+  assert.match(watchRoot, /\.onChange\(of: watchSession\.accountScope\)/);
 });

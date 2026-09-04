@@ -13,9 +13,10 @@ struct LukeWatchView: View {
                 NavigationStack {
                     WatchRosterView()
                 }
+                .id(watchSession.accountScope)
             }
         }
-        .onChange(of: watchSession.state) {
+        .onChange(of: watchSession.accountScope) {
             rosterStore.reset()
         }
     }

@@ -21,6 +21,9 @@ final class WatchAccountSession {
     }
 
     private(set) var state: State = .signedOut
+    /// Stable across token rotations, different across signed-in accounts.
+    /// Views use this to tear down account-scoped navigation and message state.
+    private(set) var accountScope: String?
 
     private var accessToken: String?
     private var tokenExpiry: Date?
@@ -55,12 +58,14 @@ final class WatchAccountSession {
         WatchTokenStore.save(stored)
         self.accessToken = accessToken
         self.tokenExpiry = stored.expiry
+        accountScope = Self.scope(accountID: stored.accountID, email: stored.email)
         state = .signedIn(email: email, name: stored.name)
     }
 
     func signOut() {
         accessToken = nil
         tokenExpiry = nil
+        accountScope = nil
         WatchTokenStore.clear()
         state = .signedOut
     }
@@ -94,7 +99,12 @@ final class WatchAccountSession {
         guard let stored = WatchTokenStore.load() else { return }
         accessToken = stored.accessToken
         tokenExpiry = stored.expiry
+        accountScope = Self.scope(accountID: stored.accountID, email: stored.email)
         state = .signedIn(email: stored.email, name: stored.name)
+    }
+
+    private static func scope(accountID: String?, email: String) -> String {
+        accountID.map { "id:\($0)" } ?? "email:\(email.lowercased())"
     }
 
     private func nonEmpty(_ value: String?) -> String? {
