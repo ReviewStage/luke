@@ -170,38 +170,88 @@ struct ContentView: View {
 /// sign-in starts with the sheet closed rather than inheriting a stale true.
 private struct SignedInView: View {
     @Environment(AccountSession.self) private var session
+    @Environment(ProductEventSender.self) private var events
     let identity: AccountIdentity
     @State private var profileShown = false
-    /// The list's state and the stack above it, owned here so the voice
-    /// screen can drive the same presses the list offers by hand, and torn
-    /// down with the signed-in hierarchy like the profile flag.
+    @State private var creatorShown = false
+    /// The list's state, the stack above it, and the tab selection, owned
+    /// here so the voice screen can drive the same presses the list offers
+    /// by hand, and torn down with the signed-in hierarchy like the profile
+    /// flag.
     @State private var store = SessionsStore(
         rosterClient: RosterClient(serviceURL: AccountConstants.serviceURL)
     )
 
+    private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
+    private let projectsClient = ProjectsClient(serviceURL: AccountConstants.serviceURL)
+
     var body: some View {
         @Bindable var store = store
-        return NavigationStack(path: $store.path) {
-            SessionsView()
-                .toolbar {
-                    if #available(iOS 26.0, *) {
-                        ToolbarItem(placement: .topBarLeading) {
-                            profileButton
-                        }
-                        // Separated from the bar's shared glass, which hugs an
-                        // item as a capsule: the avatar's own circle is the
-                        // whole control.
-                        .sharedBackgroundVisibility(.hidden)
-                    } else {
-                        ToolbarItem(placement: .topBarLeading) {
-                            profileButton
-                        }
-                    }
-                }
+        return TabView(selection: tabSelection) {
+            NavigationStack(path: $store.path) {
+                SessionsView()
+                    .toolbar { profileToolbar }
+            }
+            .tabItem { Label("Sessions", systemImage: "list.bullet") }
+            .tag(AppTab.sessions)
+
+            NavigationStack {
+                VoiceView()
+                    .toolbar { profileToolbar }
+            }
+            .tabItem { Label("Luke", systemImage: "waveform") }
+            .tag(AppTab.luke)
+
+            // Never shown: selecting this tab presents the creator sheet
+            // instead of changing the selection.
+            Color.ground
+                .ignoresSafeArea()
+                .tabItem { Label("New", systemImage: "plus") }
+                .tag(AppTab.create)
         }
         .environment(store)
         .sheet(isPresented: $profileShown) {
             ProfileSheet(identity: identity)
+        }
+        .sheet(isPresented: $creatorShown) {
+            WorkspaceCreatorSheet(actClient: actClient, projectsClient: projectsClient) {
+                creatorShown = false
+                store.tab = .sessions
+                Task { await store.refresh(account: session, events: events) }
+            }
+        }
+    }
+
+    /// The New tab is a button in the bar: its selection opens the creator
+    /// sheet and the selection stays where it was, so dismissing the sheet
+    /// leaves the developer on the screen they were reading.
+    private var tabSelection: Binding<AppTab> {
+        Binding(
+            get: { store.tab },
+            set: { selected in
+                if selected == .create {
+                    creatorShown = true
+                } else {
+                    store.tab = selected
+                }
+            }
+        )
+    }
+
+    @ToolbarContentBuilder
+    private var profileToolbar: some ToolbarContent {
+        if #available(iOS 26.0, *) {
+            ToolbarItem(placement: .topBarLeading) {
+                profileButton
+            }
+            // Separated from the bar's shared glass, which hugs an
+            // item as a capsule: the avatar's own circle is the
+            // whole control.
+            .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .topBarLeading) {
+                profileButton
+            }
         }
     }
 
