@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { RealtimeFunctionCall } from "@sidecar/acts";
-import type { ScheduledTimer } from "@sidecar/realtime";
+import { REALTIME_TOOL, type RealtimeFunctionCall } from "@sidecar/acts";
 import {
   normalizeSession,
+  OMISSION_MARKER,
   type ProviderSessionObservation,
   type ProviderTranscriptResult,
   type ProviderTranscriptSinceResult,
@@ -24,21 +24,11 @@ import {
   BRAIN_TURN_TRIGGER,
   BrainAgent,
   type BrainAgentOptions,
+  type BrainRoster,
   type BrainTurnTraceRecord,
-  OMISSION_MARKER,
 } from "./brain-agent.js";
-import {
-  BRAIN_CLIENT_OUTCOME,
-  type BrainClient,
-  type BrainClientAnswer,
-  type BrainRespondOptions,
-} from "./brain-client.js";
-import {
-  BRAIN_DELIVERY_SOURCE,
-  BRAIN_WAKE_KIND,
-  type BrainDelivery,
-  type BrainWakeEvent,
-} from "./brain-events.js";
+import { BRAIN_CLIENT_OUTCOME, type BrainClient, type BrainClientAnswer } from "./brain-client.js";
+import type { BrainDelivery, BrainWakeEvent } from "./brain-events.js";
 import { BRAIN_INPUT_MARKER } from "./brain-input.js";
 import type { BrainPersistedState } from "./brain-memory.js";
 import { RESPONSES_ITEM_TYPE, type ResponsesInputItem } from "./brain-openai.js";
@@ -61,15 +51,22 @@ function session(id: string, overrides: Partial<ProviderSessionObservation> = {}
   });
 }
 
-function edge(identity: SessionIdentity, atMs = NOW): BrainWakeEvent {
+function hook(identity: SessionIdentity, atMs = NOW): BrainWakeEvent {
+  return { hookEvent: "Stop", identity, atMs };
+}
+
+function rosterOf(...sessions: Session[]): BrainRoster {
   return {
-    kind: BRAIN_WAKE_KIND.HOOK,
-    hookEvent: "Stop",
-    identity,
-    session: session(identity.providerSessionId),
-    atMs,
+    text: `Currently observed sessions:\n${sessions.map((s) => `- ${s.providerSessionId}`).join("\n")}`,
+    identities: sessions.map(({ providerId, providerSessionId }) => ({
+      providerId,
+      providerSessionId,
+    })),
+    sessions,
   };
 }
+
+const DEFAULT_ROSTER = rosterOf(session("abc"), session("def"));
 
 function message(text: string): WireRecord {
   return {
@@ -92,6 +89,13 @@ function call(callId: string, name: string, args: WireRecord): WireRecord {
   };
 }
 
+function readCall(callId: string, identity: SessionIdentity): WireRecord {
+  return call(callId, BRAIN_TOOL.READ_TRANSCRIPT, {
+    provider_id: identity.providerId,
+    provider_session_id: identity.providerSessionId,
+  });
+}
+
 function compaction(id: string): WireRecord {
   return { type: RESPONSES_ITEM_TYPE.COMPACTION, id, encrypted_content: "folded" };
 }
@@ -106,47 +110,19 @@ function answered(output: readonly WireRecord[], inputTokens = 100): BrainClient
 class FakeClient implements BrainClient {
   readonly model = "fake-model";
   readonly inputs: ResponsesInputItem[][] = [];
+  readonly toolNames: string[][] = [];
   readonly answers: BrainClientAnswer[] = [];
   quiet: number | undefined;
   fallback: BrainClientAnswer = answered([message("")]);
 
-  respond(input: readonly ResponsesInputItem[], _options: BrainRespondOptions) {
+  respond(input: readonly ResponsesInputItem[], tools: readonly { name: string }[]) {
     this.inputs.push([...input]);
+    this.toolNames.push(tools.map((tool) => tool.name));
     return Promise.resolve(this.answers.shift() ?? this.fallback);
   }
 
   quietUntil(): number | undefined {
     return this.quiet;
-  }
-}
-
-class FakeClock {
-  now = NOW;
-  readonly timers = new Map<ScheduledTimer, { callback: () => void; at: number }>();
-
-  schedule = (callback: () => void, delayMs: number): ScheduledTimer => {
-    const handle: ScheduledTimer = {};
-    this.timers.set(handle, { callback, at: this.now + delayMs });
-    return handle;
-  };
-
-  cancel = (timer: ScheduledTimer): void => {
-    this.timers.delete(timer);
-  };
-
-  /** Fires every timer due by `until`, advancing the clock to each in order. */
-  async advance(untilMs: number): Promise<void> {
-    for (;;) {
-      const due = [...this.timers.entries()]
-        .filter(([, timer]) => timer.at <= untilMs)
-        .sort((a, b) => a[1].at - b[1].at)[0];
-      if (!due) break;
-      this.timers.delete(due[0]);
-      this.now = Math.max(this.now, due[1].at);
-      due[1].callback();
-      await settle();
-    }
-    this.now = Math.max(this.now, untilMs);
   }
 }
 
@@ -157,7 +133,6 @@ async function settle(): Promise<void> {
 interface Harness {
   agent: BrainAgent;
   client: FakeClient;
-  clock: FakeClock;
   deliveries: BrainDelivery[];
   persisted: BrainPersistedState[];
   performed: RealtimeFunctionCall[];
@@ -168,7 +143,6 @@ interface Harness {
 
 function harness(overrides: Partial<BrainAgentOptions> = {}): Harness {
   const client = new FakeClient();
-  const clock = new FakeClock();
   const deliveries: BrainDelivery[] = [];
   const persisted: BrainPersistedState[] = [];
   const performed: RealtimeFunctionCall[] = [];
@@ -183,7 +157,7 @@ function harness(overrides: Partial<BrainAgentOptions> = {}): Harness {
         return { status: ACT_RESULT_STATUS.ACCEPTED };
       },
     },
-    roster: () => ({ text: "Currently observed sessions:\n- abc\n- def", identities: [ABC, DEF] }),
+    roster: () => DEFAULT_ROSTER,
     standingContext: () => "Durable facts: none.",
     readTranscriptSince: async (identity, cursor): Promise<ProviderTranscriptSinceResult> => {
       sinceReads.push({ identity, cursor });
@@ -209,13 +183,10 @@ function harness(overrides: Partial<BrainAgentOptions> = {}): Harness {
       traces.push(record);
     },
     report: () => {},
-    now: () => clock.now,
-    schedule: clock.schedule,
-    cancel: clock.cancel,
-    wakeCoalesceMs: 3_000,
+    now: () => NOW,
     ...overrides,
   });
-  return { agent, client, clock, deliveries, persisted, performed, traces, sinceReads, wholeReads };
+  return { agent, client, deliveries, persisted, performed, traces, sinceReads, wholeReads };
 }
 
 function itemText(item: ResponsesInputItem | undefined): string {
@@ -229,20 +200,34 @@ function itemsOfType(items: readonly ResponsesInputItem[], type: string) {
   return items.filter((item) => item.type === type);
 }
 
-test("wakes inside the window open one turn, with each session's delta read once and the context last", async () => {
+/** The latest observed-events opening in one request's input, behind the remembered turns. */
+function openingBody(input: readonly ResponsesInputItem[]): WireRecord {
+  const openings = itemsOfType(input, RESPONSES_ITEM_TYPE.MESSAGE)
+    .map(itemText)
+    .filter((text) => text.startsWith(`${BRAIN_INPUT_MARKER.OBSERVED_EVENTS} `));
+  const opening = openings.at(-1);
+  assert.ok(opening);
+  const body = wireRecord(unparsedWire(JSON.parse(opening.slice(opening.indexOf("\n") + 1))));
+  assert.ok(body);
+  return body;
+}
+
+test("a roster look reads each session's delta once, carries the hooks, and puts the context last", async () => {
   const h = harness();
-  h.agent.wake([edge(ABC)]);
-  h.agent.wake([edge(ABC, NOW + 500), edge(DEF, NOW + 1_000)]);
-  assert.equal(h.client.inputs.length, 0);
-  await h.clock.advance(NOW + 3_000);
+  h.agent.rosterLook([hook(ABC), hook(ABC, NOW + 500), hook(DEF, NOW + 1_000)]);
+  await settle();
 
   assert.equal(h.client.inputs.length, 1);
   const input = h.client.inputs[0] ?? [];
   assert.equal(input.length, 2);
-  const wake = itemText(input[0]);
-  assert.ok(wake.startsWith(`${BRAIN_INPUT_MARKER.OBSERVED_EVENTS} `));
-  assert.equal(wake.split(`${TRANSCRIPT_SECRET} for abc`).length - 1, 1);
-  assert.equal(wake.split(`${TRANSCRIPT_SECRET} for def`).length - 1, 1);
+  const body = openingBody(input);
+  assert.equal(body.scheduled_roster_look, true);
+  assert.ok(Array.isArray(body.events));
+  assert.equal(body.events.length, 2);
+  const opening = itemText(input[0]);
+  assert.equal(opening.split(`${TRANSCRIPT_SECRET} for abc`).length - 1, 1);
+  assert.equal(opening.split(`${TRANSCRIPT_SECRET} for def`).length - 1, 1);
+  assert.equal(opening.split('"hook":"Stop"').length - 1, 2);
   assert.ok(itemText(input[1]).startsWith(`${BRAIN_INPUT_MARKER.STANDING_CONTEXT} `));
   assert.ok(itemText(input[1]).includes("Durable facts: none."));
   assert.deepEqual(h.sinceReads, [
@@ -259,7 +244,8 @@ test("wakes inside the window open one turn, with each session's delta read once
   assert.ok(
     !remembered.some((item) => itemText(item).startsWith(BRAIN_INPUT_MARKER.STANDING_CONTEXT)),
   );
-  assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.WAKE);
+  assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.ROSTER);
+  assert.deepEqual(h.traces[0]?.hooks, ["Stop", "Stop"]);
   assert.equal(h.traces[0]?.inputTokens, 100);
   assert.ok(!JSON.stringify(h.traces).includes(TRANSCRIPT_SECRET));
   assert.equal(h.traces[0]?.transcriptBytes, `${TRANSCRIPT_SECRET} for abc`.length * 2);
@@ -274,16 +260,12 @@ test("an announce is delivered trimmed, and every output item is remembered", as
     ]),
     answered([reasoning("rs_2"), message("said it")]),
   );
-  h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
+  h.agent.rosterLook([hook(ABC)]);
+  await settle();
 
   assert.equal(h.client.inputs.length, 2);
   assert.deepEqual(h.deliveries, [
-    {
-      briefing: "Checkout agent wants a decision.",
-      decidedAt: NOW + 3_000,
-      source: BRAIN_DELIVERY_SOURCE.WAKE,
-    },
+    { briefing: "Checkout agent wants a decision.", decidedAt: NOW },
   ]);
   const second = h.client.inputs[1] ?? [];
   const outputs = itemsOfType(second, RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT);
@@ -306,13 +288,37 @@ test("an announce is delivered trimmed, and every output item is remembered", as
   assert.deepEqual(h.traces[0]?.deliveries, [{ briefingChars: 32 }]);
 });
 
-test("an ask returns the final text, carries pending wakes, and refuses announce", async () => {
+test("a roster turn is offered no act tool and refuses one before the performer runs", async () => {
   const h = harness();
-  h.agent.wake([edge(DEF)]);
+  h.client.answers.push(
+    answered([
+      call("call_b", REALTIME_TOOL.SEND_SESSION_MESSAGE, {
+        provider_id: ABC.providerId,
+        provider_session_id: ABC.providerSessionId,
+        text: "run the tests",
+      }),
+    ]),
+    answered([message("")]),
+  );
+  h.agent.rosterLook([hook(ABC)]);
+  await settle();
+
+  assert.deepEqual(h.performed, []);
+  assert.deepEqual(h.client.toolNames[0], [BRAIN_TOOL.READ_TRANSCRIPT, BRAIN_TOOL.ANNOUNCE]);
+  const outputs = itemsOfType(h.client.inputs[1] ?? [], RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT);
+  const refusal = outputs.find((item) => item.call_id === "call_b");
+  assert.ok(
+    refusal && isWireString(refusal.output) && refusal.output.includes("developer-ask turn"),
+  );
+  assert.equal(h.traces[0]?.toolCalls[0]?.outcomeStatus, ACT_RESULT_STATUS.REJECTED);
+});
+
+test("an ask returns the final text, is offered the acts, performs one, and refuses announce", async () => {
+  const h = harness();
   h.client.answers.push(
     answered([
       call("call_a", BRAIN_TOOL.ANNOUNCE, { briefing: "nope" }),
-      call("call_b", "send_session_message", {
+      call("call_b", REALTIME_TOOL.SEND_SESSION_MESSAGE, {
         provider_id: ABC.providerId,
         provider_session_id: ABC.providerSessionId,
         text: "run the tests",
@@ -326,7 +332,7 @@ test("an ask returns the final text, carries pending wakes, and refuses announce
   assert.deepEqual(h.deliveries, []);
   assert.deepEqual(h.performed, [
     {
-      name: "send_session_message",
+      name: REALTIME_TOOL.SEND_SESSION_MESSAGE,
       argumentsJson: JSON.stringify({
         provider_id: ABC.providerId,
         provider_session_id: ABC.providerSessionId,
@@ -334,13 +340,12 @@ test("an ask returns the final text, carries pending wakes, and refuses announce
       }),
     },
   ]);
+  assert.ok(h.client.toolNames[0]?.includes(REALTIME_TOOL.SEND_SESSION_MESSAGE));
   const first = h.client.inputs[0] ?? [];
   const ask = itemText(first[0]);
   assert.ok(ask.startsWith(`${BRAIN_INPUT_MARKER.DEVELOPER_ASK} `));
   assert.ok(ask.includes("tell the checkout agent to run the tests"));
-  assert.ok(ask.includes(`${TRANSCRIPT_SECRET} for def`));
-  assert.equal(h.agent.pendingWakes(), 0);
-  assert.equal(h.clock.timers.size, 0);
+  assert.equal(h.sinceReads.length, 0);
   const outputs = itemsOfType(h.client.inputs[1] ?? [], RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT);
   const refusal = outputs.find((item) => item.call_id === "call_a");
   assert.ok(refusal && isWireString(refusal.output) && refusal.output.includes("reply in text"));
@@ -349,33 +354,30 @@ test("an ask returns the final text, carries pending wakes, and refuses announce
 });
 
 test("an ask past its deadline answers nothing while the turn still finishes and persists", async () => {
-  const h = harness({ askDeadlineMs: 1_000 });
   let release: (() => void) | undefined;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
+  const inner = new FakeClient();
   const slow: BrainClient = {
-    respond: async (input, options) => {
+    respond: async (input, tools) => {
       await gate;
-      return h.client.respond(input, options);
+      return inner.respond(input, tools);
     },
     quietUntil: () => undefined,
   };
-  const slowHarness = harness({ client: slow, askDeadlineMs: 1_000 });
-  const pending = slowHarness.agent.ask("anything?");
-  await settle();
-  await slowHarness.clock.advance(NOW + 1_000);
-  assert.equal(await pending, undefined);
+  const h = harness({ client: slow, askDeadlineMs: 5 });
+  assert.equal(await h.agent.ask("anything?"), undefined);
   release?.();
   await settle();
-  assert.equal(slowHarness.persisted.length, 1);
+  assert.equal(h.persisted.length, 1);
 });
 
 test("the tool loop stops at its cap with every call answered, so no function_call dangles", async () => {
   const h = harness({ maxToolIterations: 2 });
-  h.client.fallback = answered([call("loop", BRAIN_TOOL.LIST_SESSIONS, {})]);
-  h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
+  h.client.fallback = answered([readCall("loop", ABC)]);
+  h.agent.rosterLook([hook(ABC)]);
+  await settle();
 
   assert.equal(h.client.inputs.length, 3);
   const remembered = h.persisted[0]?.items ?? [];
@@ -392,13 +394,13 @@ test("the tool loop stops at its cap with every call answered, so no function_ca
 test("a compaction item drops everything before it from the remembered array", async () => {
   const h = harness();
   h.client.answers.push(answered([message("first turn")]));
-  h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
+  h.agent.rosterLook([hook(ABC)]);
+  await settle();
   assert.equal(h.persisted[0]?.items.length, 2);
 
   h.client.answers.push(answered([compaction("cmp_1"), reasoning("rs"), message("folded")]));
-  h.agent.wake([edge(DEF)]);
-  await h.clock.advance(NOW + 6_000);
+  h.agent.rosterLook([hook(DEF)]);
+  await settle();
   const remembered = h.persisted[1]?.items ?? [];
   assert.deepEqual(
     remembered.map((item) => item.type),
@@ -411,51 +413,57 @@ test("a compaction item drops everything before it from the remembered array", a
 test("a failed turn rolls the memory and cursors back and persists nothing", async () => {
   const h = harness();
   h.client.answers.push({ outcome: BRAIN_CLIENT_OUTCOME.FAILED, reason: "boom" });
-  h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
+  h.agent.rosterLook([hook(ABC)]);
+  await settle();
   assert.equal(h.persisted.length, 0);
   assert.equal(h.traces[0]?.error, "boom");
 
-  h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 6_000);
+  h.agent.rosterLook([hook(ABC)]);
+  await settle();
   assert.equal(h.client.inputs[1]?.length, 2);
   assert.deepEqual(
     h.sinceReads.map((read) => read.cursor),
-    [undefined, undefined],
+    [undefined, undefined, undefined, undefined],
   );
   assert.equal(h.persisted.length, 1);
 });
 
 test("a call that fails mid-loop rolls back the whole turn, calls and all", async () => {
   const h = harness();
-  h.client.answers.push(answered([call("call_1", BRAIN_TOOL.LIST_SESSIONS, {})]), {
+  h.client.answers.push(answered([readCall("call_1", ABC)]), {
     outcome: BRAIN_CLIENT_OUTCOME.FAILED,
     reason: "network",
   });
-  h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
+  h.agent.rosterLook([hook(ABC)]);
+  await settle();
   assert.equal(h.persisted.length, 0);
-  h.agent.wake([edge(DEF)]);
-  await h.clock.advance(NOW + 6_000);
+  h.agent.rosterLook([hook(DEF)]);
+  await settle();
   assert.equal(itemsOfType(h.client.inputs[2] ?? [], RESPONSES_ITEM_TYPE.FUNCTION_CALL).length, 0);
 });
 
-test("a quiet client keeps the wakes pending and retries once the quiet ends", async () => {
+test("a quiet turn rolls back so the next look reads the same deltas again", async () => {
   const h = harness();
   h.client.answers.push({ outcome: BRAIN_CLIENT_OUTCOME.QUIET, until: NOW + 60_000 });
-  h.agent.wake([edge(ABC), edge(DEF)]);
-  await h.clock.advance(NOW + 3_000);
+  h.agent.rosterLook([hook(ABC), hook(DEF)]);
+  await settle();
   assert.equal(h.client.inputs.length, 1);
-  assert.equal(h.agent.pendingWakes(), 2);
   assert.equal(h.persisted.length, 0);
 
   h.client.quiet = NOW + 60_000;
-  await h.clock.advance(NOW + 30_000);
+  h.agent.rosterLook([hook(ABC)]);
+  await settle();
   assert.equal(h.client.inputs.length, 1);
+  assert.equal(h.sinceReads.length, 2);
+
   h.client.quiet = undefined;
-  await h.clock.advance(NOW + 70_000);
+  h.agent.rosterLook();
+  await settle();
   assert.equal(h.client.inputs.length, 2);
-  assert.equal(h.agent.pendingWakes(), 0);
+  assert.deepEqual(
+    h.sinceReads.map((read) => read.cursor),
+    [undefined, undefined, undefined, undefined],
+  );
   assert.equal(h.persisted.length, 1);
 });
 
@@ -468,20 +476,11 @@ test("read_transcript answers a bounded tail for an observed session and refuses
     }),
   });
   h.client.answers.push(
-    answered([
-      call("call_1", BRAIN_TOOL.READ_TRANSCRIPT, {
-        provider_id: ABC.providerId,
-        provider_session_id: ABC.providerSessionId,
-      }),
-      call("call_2", BRAIN_TOOL.READ_TRANSCRIPT, {
-        provider_id: UNKNOWN.providerId,
-        provider_session_id: UNKNOWN.providerSessionId,
-      }),
-    ]),
+    answered([readCall("call_1", ABC), readCall("call_2", UNKNOWN)]),
     answered([message("")]),
   );
-  h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
+  h.agent.rosterLook([hook(ABC)]);
+  await settle();
   const outputs = itemsOfType(h.client.inputs[1] ?? [], RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT);
   const read = outputs.find((item) => item.call_id === "call_1");
   assert.ok(read && isWireString(read.output));
@@ -506,17 +505,17 @@ test("a delta longer than its bound is cut from the front and marked truncated",
       truncated: false,
     }),
   });
-  h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
-  const wake = itemText(h.client.inputs[0]?.[0]);
-  assert.ok(wake.includes(OMISSION_MARKER));
-  assert.ok(wake.includes('"truncated":true'));
-  assert.ok(wake.includes("TAIL"));
-  assert.ok(!wake.includes("y".repeat(60)));
+  h.agent.rosterLook([hook(ABC)]);
+  await settle();
+  const opening = itemText(h.client.inputs[0]?.[0]);
+  assert.ok(opening.includes(OMISSION_MARKER));
+  assert.ok(opening.includes('"truncated":true'));
+  assert.ok(opening.includes("TAIL"));
+  assert.ok(!opening.includes("y".repeat(60)));
   assert.deepEqual(h.persisted[0]?.cursors, {});
 });
 
-test("restored memory opens the next turn, and held briefings are re-decided from their own item", async () => {
+test("restored memory opens the next turn, and held briefings are re-decided without acts", async () => {
   const prior = [compaction("cmp_0"), message("earlier")];
   const h = harness({
     restore: () => ({
@@ -529,30 +528,27 @@ test("restored memory opens the next turn, and held briefings are re-decided fro
     answered([call("call_1", BRAIN_TOOL.ANNOUNCE, { briefing: "Still waiting on you." })]),
     answered([message("")]),
   );
-  h.agent.releaseHeld([
-    { briefing: "Checkout wants a decision.", decidedAt: NOW - 1, source: "wake" },
-  ]);
+  h.agent.releaseHeld([{ briefing: "Checkout wants a decision.", decidedAt: NOW - 1 }]);
   await settle();
   const input = h.client.inputs[0] ?? [];
   assert.deepEqual(input.slice(0, 2), prior);
   assert.ok(itemText(input[2]).startsWith(`${BRAIN_INPUT_MARKER.HOLD_RELEASED} `));
-  assert.equal(h.deliveries[0]?.source, BRAIN_DELIVERY_SOURCE.HOLD_RELEASED);
-  assert.equal(h.deliveries[0]?.briefing, "Still waiting on you.");
+  assert.deepEqual(h.client.toolNames[0], [BRAIN_TOOL.READ_TRANSCRIPT, BRAIN_TOOL.ANNOUNCE]);
+  assert.deepEqual(h.deliveries, [{ briefing: "Still waiting on you.", decidedAt: NOW }]);
   assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.HOLD_RELEASED);
   assert.equal(h.sinceReads.length, 0);
 });
 
-test("stop drops pending wakes and takes nothing more", async () => {
+test("stop takes nothing more", async () => {
   const h = harness();
-  h.agent.wake([edge(ABC)]);
   await h.agent.stop();
-  assert.equal(h.agent.pendingWakes(), 0);
-  await h.clock.advance(NOW + 10_000);
+  h.agent.rosterLook([hook(ABC)]);
+  await settle();
   assert.equal(h.client.inputs.length, 0);
   assert.equal(await h.agent.ask("hello?"), undefined);
 });
 
-test("a roster look carries the roster and only the transcripts that grew", async () => {
+test("a roster look carries only the transcripts that grew, and hears a hook for an unseen session", async () => {
   const working = session("abc", { status: SESSION_STATUS.WORKING });
   const settled = session("def", { status: SESSION_STATUS.COMPLETE, lastActivityAt: NOW - 60_000 });
   const cloud = normalizeSession(
@@ -567,11 +563,7 @@ test("a roster look carries the roster and only the transcripts that grew", asyn
   );
   const read: string[] = [];
   const h = harness({
-    roster: () => ({
-      text: "Currently observed sessions:\n- abc\n- def\n- cloud-1",
-      identities: [ABC, DEF, { providerId: "conductor", providerSessionId: "cloud-1" }],
-      sessions: [working, settled, cloud],
-    }),
+    roster: () => rosterOf(working, settled, cloud),
     readTranscriptSince: async (identity): Promise<ProviderTranscriptSinceResult> => {
       read.push(identity.providerSessionId);
       return {
@@ -586,71 +578,68 @@ test("a roster look carries the roster and only the transcripts that grew", asyn
   await settle();
 
   assert.equal(h.client.inputs.length, 1);
-  const input = h.client.inputs[0] ?? [];
-  const opening = itemText(itemsOfType(input, RESPONSES_ITEM_TYPE.MESSAGE)[0]);
-  assert.ok(opening.startsWith(`${BRAIN_INPUT_MARKER.OBSERVED_EVENTS} `));
-  const body = wireRecord(unparsedWire(JSON.parse(opening.slice(opening.indexOf("\n") + 1))));
-  assert.ok(body);
+  const body = openingBody(h.client.inputs[0] ?? []);
   assert.equal(body.scheduled_roster_look, true);
-  assert.match(String(body.roster), /cloud-1/);
   // Only the working local session's transcript is carried: the settled one
   // had no cursor and nothing live, the cloud one is not read on a look, and
   // a delta that came back empty is left out rather than reported as news.
   assert.ok(Array.isArray(body.events));
   assert.equal(body.events.length, 1);
-  const only = wireRecord(unparsedWire(body.events[0]));
-  assert.equal(only?.kind, BRAIN_WAKE_KIND.ROSTER);
-  assert.equal(only?.provider_session_id, "abc");
+  assert.equal(wireRecord(unparsedWire(body.events[0]))?.provider_session_id, "abc");
   assert.deepEqual(read, ["abc"]);
   assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.ROSTER);
 
-  // The look can be triggered again by the host.
-  h.agent.rosterLook();
+  // A hook for a session the roster does not hold is still carried, and one
+  // for a settled session reads it even with nothing live.
+  h.agent.rosterLook([hook(UNKNOWN), hook(DEF)]);
   await settle();
-  assert.equal(h.client.inputs.length, 2);
+  const second = openingBody(h.client.inputs[1] ?? []);
+  assert.ok(Array.isArray(second.events));
+  assert.deepEqual(
+    second.events.map((event) => wireRecord(unparsedWire(event))?.provider_session_id),
+    ["abc", "def", "nope"],
+  );
+  assert.deepEqual(read, ["abc", "abc", "def", "nope"]);
   await h.agent.stop();
 });
 
-test("a roster look is skipped while the client is quiet or a turn is in flight", async () => {
+test("a roster look is skipped while the client is quiet, and yields to a turn in flight unless a hook waits", async () => {
   const h = harness({
-    roster: () => ({
-      text: "roster",
-      identities: [ABC],
-      sessions: [session("abc", { status: SESSION_STATUS.WORKING })],
-    }),
+    roster: () => rosterOf(session("abc", { status: SESSION_STATUS.WORKING })),
   });
 
-  // Quiet: the look is skipped.
   h.client.quiet = NOW + 30_000;
   h.agent.rosterLook();
   await settle();
   assert.equal(h.client.inputs.length, 0);
+  assert.equal(h.sinceReads.length, 0);
 
-  // Quiet over, but a turn is under way: the look yields.
   h.client.quiet = undefined;
   let release: (() => void) | undefined;
   const slow = new Promise<void>((resolve) => {
     release = resolve;
   });
   const respond = h.client.respond.bind(h.client);
-  h.client.respond = async (input, options) => {
+  h.client.respond = async (input, tools) => {
     await slow;
-    return respond(input, options);
+    return respond(input, tools);
   };
   const ask = h.agent.ask("what's up?");
   await settle();
   h.agent.rosterLook();
   await settle();
   assert.equal(h.client.inputs.length, 0);
+  h.agent.rosterLook([hook(ABC)]);
+  await settle();
   release?.();
   await ask;
   await settle();
-  assert.equal(h.client.inputs.length, 1);
-
-  // After the turn completes, the look proceeds.
-  h.agent.rosterLook();
-  await settle();
+  // The ask ran, then the hooked look queued behind it; the bare look was dropped.
   assert.equal(h.client.inputs.length, 2);
-  assert.equal(h.traces.at(-1)?.trigger, BRAIN_TURN_TRIGGER.ROSTER);
+  assert.deepEqual(
+    h.traces.map((trace) => trace.trigger),
+    [BRAIN_TURN_TRIGGER.ASK, BRAIN_TURN_TRIGGER.ROSTER],
+  );
+  assert.deepEqual(h.traces[1]?.hooks, ["Stop"]);
   await h.agent.stop();
 });

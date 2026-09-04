@@ -1,4 +1,4 @@
-import type { SessionIdentity } from "@sidecar/session";
+import { type SessionIdentity, sameSessionIdentity } from "@sidecar/session";
 import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { isCompactionItem, type ResponsesInputItem } from "./brain-openai.js";
 
@@ -93,11 +93,11 @@ export class BrainMemory {
   }
 
   mark(): BrainMemoryMark {
-    return { items: [...this.#items], cursors: cursorRecord(this.#cursors) };
+    return structuredClone({ items: this.#items, cursors: cursorRecord(this.#cursors) });
   }
 
   rollback(mark: BrainMemoryMark): void {
-    this.#items = [...mark.items];
+    this.#items = structuredClone([...mark.items]);
     this.#cursors = cursorMap(mark.cursors);
   }
 
@@ -124,19 +124,12 @@ export class BrainMemory {
 
   /** Forgets the cursors of sessions the roster no longer holds, so the map cannot grow forever. */
   retainCursors(identities: readonly SessionIdentity[]): void {
-    const kept = new Map<string, Set<string>>();
-    for (const identity of identities) {
-      let provider = kept.get(identity.providerId);
-      if (!provider) {
-        provider = new Set();
-        kept.set(identity.providerId, provider);
-      }
-      provider.add(identity.providerSessionId);
-    }
     for (const [providerId, sessions] of this.#cursors) {
-      const keptSessions = kept.get(providerId);
       for (const providerSessionId of sessions.keys()) {
-        if (!keptSessions?.has(providerSessionId)) sessions.delete(providerSessionId);
+        const held = { providerId, providerSessionId };
+        if (!identities.some((identity) => sameSessionIdentity(identity, held))) {
+          sessions.delete(providerSessionId);
+        }
       }
       if (sessions.size === 0) this.#cursors.delete(providerId);
     }

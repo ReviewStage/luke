@@ -1,15 +1,11 @@
 import assert from "node:assert/strict";
+import type nodeFs from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { HOOK_EVENT } from "./hook-events.js";
-import {
-  type ObservedSpoolEvent,
-  type SpoolWatch,
-  type SpoolWatchHandle,
-  watchObservationSpool,
-} from "./spool-watcher.js";
+import { type ObservedSpoolEvent, SpoolWatcher } from "./spool-watcher.js";
 
 type SpoolEvent = (typeof HOOK_EVENT)[keyof typeof HOOK_EVENT];
 
@@ -74,7 +70,7 @@ async function waitFor(condition: () => boolean): Promise<void> {
 }
 
 interface FakeWatcher {
-  watch: SpoolWatch;
+  watch: typeof nodeFs.watch;
   directories: string[];
   emit: (eventType: string, fileName: string | null) => void;
   fail: (error: Error) => void;
@@ -83,22 +79,26 @@ interface FakeWatcher {
   refuse: (...errors: Error[]) => void;
 }
 
+type Listener = (eventType: string, fileName: string | null) => void;
+
 function fakeWatcher(): FakeWatcher {
   const directories: string[] = [];
   const refusals: Error[] = [];
   let closed = 0;
-  let listener: ((eventType: string, fileName: string | null) => void) | undefined;
+  let listener: Listener | undefined;
   let errorListener: ((error: Error) => void) | undefined;
   return {
     directories,
-    watch: (directory, options, onChange) => {
+    // SAFETY: the watcher reaches only `on("error")` and `close()` of the
+    // handle `fs.watch` returns, and this fake stands in for exactly those.
+    watch: ((directory: string, options: { persistent: boolean }, onChange: Listener) => {
       assert.equal(options.persistent, false);
       const refusal = refusals.shift();
       if (refusal) throw refusal;
       directories.push(directory);
       listener = onChange;
-      const handle: SpoolWatchHandle = {
-        on: (_event, onError) => {
+      return {
+        on: (_event: string, onError: (error: Error) => void) => {
           errorListener = onError;
         },
         close: () => {
@@ -106,8 +106,7 @@ function fakeWatcher(): FakeWatcher {
           if (listener === onChange) listener = undefined;
         },
       };
-      return handle;
-    },
+    }) as unknown as typeof nodeFs.watch,
     emit: (eventType, fileName) => listener?.(eventType, fileName),
     fail: (error) => errorListener?.(error),
     closedCount: () => closed,
@@ -142,7 +141,7 @@ function standWatcher(
   clock: FakeClock,
 ) {
   const batches: (readonly ObservedSpoolEvent<SpoolEvent>[])[] = [];
-  const handle = watchObservationSpool({
+  const handle = new SpoolWatcher({
     spoolDirectory,
     events: EVENTS,
     onEvents: (events) => {
@@ -329,7 +328,7 @@ test("a batch read after close is not reported", async (t) => {
   const clock = fakeClock();
   let closeDuringRead: () => void = () => undefined;
   const batches: (readonly ObservedSpoolEvent<SpoolEvent>[])[] = [];
-  const handle = watchObservationSpool({
+  const handle = new SpoolWatcher({
     spoolDirectory,
     events: EVENTS,
     onEvents: (events) => {

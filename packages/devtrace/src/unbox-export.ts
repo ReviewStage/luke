@@ -36,11 +36,7 @@ export interface UnboxExportOptions {
 const DEFAULT_TRACE_NAME = "luke-agent-trace";
 const UNKNOWN_MODEL = "gpt-realtime";
 const BRAIN_GENERATION_NAME = "brain-turn";
-/**
- * A hosted brain turn records no model, because the service's build owns that
- * choice and the desktop never learns it; the export shows the keyed default
- * rather than a blank, since the viewer requires a model on every generation.
- */
+/** The viewer requires a model on every generation; a turn recorded without one shows the default. */
 const UNKNOWN_BRAIN_MODEL = "gpt-5.6-terra";
 
 function recordItems(value: WireValue | undefined): readonly WireRecord[] {
@@ -228,16 +224,20 @@ function brainAvailableTools(): readonly WireRecord[] {
 }
 
 /**
- * The turn's input as the trace kept it: what woke it, the kinds of items it
- * carried, and how many transcript bytes it read. The items' text was never
- * recorded, so none is shown.
+ * The turn's input as the trace kept it: what opened it, the hooks it carried,
+ * the kinds of items it appended, and how many transcript bytes it read. The
+ * items' text was never recorded, so none is shown.
  */
 function brainInputText(entry: WireRecord): string {
-  const itemKinds = Array.isArray(entry.inputItemKinds)
-    ? entry.inputItemKinds.map((kind) => text(kind)).filter((kind) => kind !== undefined)
-    : [];
+  const names = (value: WireValue | undefined) =>
+    Array.isArray(value)
+      ? value.map((item) => text(item)).filter((item) => item !== undefined)
+      : [];
+  const itemKinds = names(entry.inputItemKinds);
+  const hooks = names(entry.hooks);
   return [
     `trigger: ${text(entry.trigger) ?? "unknown"}`,
+    `hooks: ${hooks.length > 0 ? hooks.join(", ") : "none"}`,
     `input items: ${itemKinds.length > 0 ? itemKinds.join(", ") : "none"}`,
     `transcript bytes: ${wholeNumber(entry.transcriptBytes) ?? 0}`,
   ].join("\n");
@@ -313,8 +313,6 @@ export function unboxTraceFromLines(
     const parsedAt = at !== undefined ? Date.parse(at) : Number.NaN;
     const atMs = Number.isFinite(parsedAt) ? parsedAt : undefined;
     if (entry.kind === TRACE_ENTRY_KIND.WIRE) applyWireEntry(state, entry, atMs);
-    // A brain-request entry is the raw JSONL's own record of one model call;
-    // the turn entry already stands for it in the viewer.
     if (entry.kind === TRACE_ENTRY_KIND.BRAIN) applyBrainEntry(state, entry);
   }
   const name = options.name ?? DEFAULT_TRACE_NAME;

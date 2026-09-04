@@ -59,6 +59,7 @@ import {
   type SessionApplicationId,
   type SessionControl,
   type SessionIdentity,
+  sameSessionIdentity,
   sessionMessageText,
   supportsSessionControl,
   WORKSPACE_TASK_SUPPORT,
@@ -486,10 +487,12 @@ function sessionFromArguments(
 ): { session: Session; identity: SessionIdentity } | ActRejection {
   const providerId = textArgument(parsed, "provider_id");
   const providerSessionId = textArgument(parsed, "provider_session_id");
-  const session = sessions.find(
-    (candidate) =>
-      candidate.providerId === providerId && candidate.providerSessionId === providerSessionId,
-  );
+  const session =
+    providerId !== undefined && providerSessionId !== undefined
+      ? sessions.find((candidate) =>
+          sameSessionIdentity(candidate, { providerId, providerSessionId }),
+        )
+      : undefined;
   if (!session) {
     return {
       status: ACT_RESULT_STATUS.REJECTED,
@@ -1263,11 +1266,7 @@ function validateForgetFact(parsed: WireRecord, context: AppToolContext): AppToo
 }
 
 function observedSessionName(identity: SessionIdentity, sessions: readonly Session[]): string {
-  const session = sessions.find(
-    (candidate) =>
-      candidate.providerId === identity.providerId &&
-      candidate.providerSessionId === identity.providerSessionId,
-  );
+  const session = sessions.find((candidate) => sameSessionIdentity(candidate, identity));
   return session ? `"${session.title}"` : "a session";
 }
 
@@ -1276,11 +1275,7 @@ function observedApplicationName(
   applicationId: SessionApplicationId,
   sessions: readonly Session[],
 ): string {
-  const session = sessions.find(
-    (candidate) =>
-      candidate.providerId === identity.providerId &&
-      candidate.providerSessionId === identity.providerSessionId,
-  );
+  const session = sessions.find((candidate) => sameSessionIdentity(candidate, identity));
   return (
     session?.applications.find((application) => application.id === applicationId)?.displayName ??
     applicationId

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  BRAIN_REASONING_EFFORT,
   brainResponsesOutput,
   brainResponsesRequest,
   functionCallOutputItem,
@@ -15,8 +14,6 @@ test("the request asks for compaction on the API's default, stores nothing, and 
     model: "gpt-test",
     instructions: "be Luke",
     tools: brainToolDefinitions(),
-    maximumOutputTokens: 1234,
-    reasoningEffort: BRAIN_REASONING_EFFORT.MEDIUM,
   });
   assert.equal(request.model, "gpt-test");
   assert.equal(request.instructions, "be Luke");
@@ -26,7 +23,7 @@ test("the request asks for compaction on the API's default, stores nothing, and 
   assert.deepEqual(request.reasoning, { effort: "medium" });
   assert.equal(request.tool_choice, "auto");
   assert.equal(request.parallel_tool_calls, true);
-  assert.equal(request.max_output_tokens, 1234);
+  assert.equal(request.max_output_tokens, 16_000);
   assert.deepEqual(request.input, [
     { type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] },
   ]);

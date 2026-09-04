@@ -1,3 +1,4 @@
+import type { RealtimeToolWireDefinition } from "@sidecar/acts";
 import { LUKE_PERSONA } from "@sidecar/guide";
 import { maximumSessionMessageLength } from "@sidecar/session";
 import {
@@ -153,17 +154,8 @@ export const SESSION_NO_LONGER_OBSERVED_NOTE = "this session is no longer observ
  * developer's own words, so the brain hears the ask as it was made rather than
  * the voice's paraphrase of it.
  */
-/** A function tool as the desktop's Realtime session is configured with one. */
-export interface MouthToolDefinition {
-  type: "function";
-  name: string;
-  description: string;
-  parameters: {
-    type: "object";
-    properties: Readonly<Record<string, { type: "string"; description?: string }>>;
-    required: readonly string[];
-  };
-}
+/** A function tool as the desktop's Realtime session is configured with one: the acts table's own shape. */
+export type MouthToolDefinition = RealtimeToolWireDefinition;
 
 export const ASK_BRAIN_TOOL = {
   type: "function",

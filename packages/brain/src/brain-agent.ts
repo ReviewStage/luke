@@ -1,12 +1,13 @@
 import type { RealtimeFunctionCall } from "@sidecar/acts";
-import type { ScheduledTimer } from "@sidecar/realtime";
 import {
+  cutFront,
   type ProviderTranscriptResult,
   type ProviderTranscriptSinceResult,
   SESSION_LOCATION,
   SESSION_STATUS,
   type Session,
   type SessionIdentity,
+  sameSessionIdentity,
 } from "@sidecar/session";
 import {
   ACT_RESULT_STATUS,
@@ -16,19 +17,12 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { BRAIN_CLIENT_OUTCOME, type BrainClient } from "./brain-client.js";
-import {
-  BRAIN_DELIVERY_SOURCE,
-  BRAIN_WAKE_KIND,
-  type BrainDelivery,
-  type BrainDeliverySource,
-  type BrainTranscriptDelta,
-  type BrainWakeEvent,
-} from "./brain-events.js";
+import type { BrainDelivery, BrainTranscriptDelta, BrainWakeEvent } from "./brain-events.js";
 import {
   askInputItem,
   holdReleasedInputItem,
+  observedEventsItem,
   standingContextItem,
-  wakeInputItem,
 } from "./brain-input.js";
 import { BrainMemory, type BrainPersistedState } from "./brain-memory.js";
 import {
@@ -37,42 +31,42 @@ import {
   functionCallOutputItem,
   type ResponsesInputItem,
 } from "./brain-openai.js";
-import { BRAIN_TOOL, isBrainOnlyTool, maximumBriefingLength } from "./brain-tools.js";
+import {
+  BRAIN_TOOL,
+  brainToolDefinitions,
+  isBrainOnlyTool,
+  maximumBriefingLength,
+} from "./brain-tools.js";
 
 /**
- * The brain: one long-lived agent that is woken by the agents' hooks and by
- * its own scheduled look at the roster, asked things by the developer, and
- * answers with briefings for the voice to speak and acts for the host to
- * carry. Nothing detects a change on its behalf: the roster look carries
- * what stands and what each transcript gained, and the brain notices what is
- * new against its own memory. It is transport- and storage-agnostic on
- * purpose — the client, the roster rendering, the transcript reads, the
- * delivery, and the persistence are all handed in — so the same agent runs in
- * the desktop's main process and, later, behind a service request.
+ * The brain: one long-lived agent that looks at the roster on the host's
+ * observation cadence — the agents' hooks riding along on the look that
+ * follows them — is asked things by the developer, and answers with briefings
+ * for the voice to speak and acts for the host to carry. Nothing detects a
+ * change on its behalf: the look carries what stands and what each transcript
+ * gained, and the brain notices what is new against its own memory. It is
+ * transport- and storage-agnostic on purpose — the client, the roster
+ * rendering, the transcript reads, the delivery, and the persistence are all
+ * handed in.
  *
- * Every write it can cause still runs the host's own validation: an act tool
- * call goes to the performer as a function call and nothing more, and the host
- * validates it against what it observed exactly as it would a spoken one.
+ * What a turn may do is fixed by what opened it, at the API and again at
+ * dispatch: an observed-events or hold-released turn is offered no act tool
+ * and refuses one, so nothing a transcript says can become an act, and a
+ * developer-ask turn — the one kind the developer opened — may act, each act
+ * still running the host's own validation as a function call and nothing more.
  */
 
 export const BRAIN_DEFAULTS = {
-  MAXIMUM_OUTPUT_TOKENS: 16_000,
   MAX_TOOL_ITERATIONS: 8,
-  /** Wakes inside this window open one turn together: a hook and the poll's edge for the same stop. */
-  WAKE_COALESCE_MS: 3_000,
   /** How long an ask waits for its reply before the voice is told there is none. */
   ASK_DEADLINE_MS: 45_000,
-  /** The most of one session's new transcript one wake carries, cut from the front. */
+  /** The most of one session's new transcript one look carries, cut from the front. */
   DELTA_PER_SESSION_CHARS: 20_000,
   /** The most of a whole transcript one read answers with, cut from the front. */
   FULL_TRANSCRIPT_CHARS: 60_000,
 } as const;
 
-/** Stands where the front of a transcript was cut, so the model knows it is reading a tail. */
-export const OMISSION_MARKER = "[… earlier transcript omitted …]";
-
 export const BRAIN_TURN_TRIGGER = {
-  WAKE: "wake",
   ROSTER: "roster",
   ASK: "ask",
   HOLD_RELEASED: "hold-released",
@@ -80,9 +74,25 @@ export const BRAIN_TURN_TRIGGER = {
 
 export type BrainTurnTrigger = (typeof BRAIN_TURN_TRIGGER)[keyof typeof BRAIN_TURN_TRIGGER];
 
+/** What each kind of turn may do; the ask is the only one the developer opened. */
+const TURN_RULES = {
+  [BRAIN_TURN_TRIGGER.ROSTER]: { allowsActs: false, allowsAnnounce: true, dropsEmptyDeltas: true },
+  [BRAIN_TURN_TRIGGER.ASK]: { allowsActs: true, allowsAnnounce: false, dropsEmptyDeltas: false },
+  [BRAIN_TURN_TRIGGER.HOLD_RELEASED]: {
+    allowsActs: false,
+    allowsAnnounce: true,
+    dropsEmptyDeltas: false,
+  },
+} as const satisfies Record<
+  BrainTurnTrigger,
+  { allowsActs: boolean; allowsAnnounce: boolean; dropsEmptyDeltas: boolean }
+>;
+
 const REFUSAL_REASON = {
   UNOBSERVED_SESSION: "not an observed session",
-  ANNOUNCE_IN_ASK: "reply in text: this is a developer ask, and your final text is the speech",
+  ACT_OUTSIDE_ASK: "not run: an act runs only in a developer-ask turn",
+  ANNOUNCE_OUTSIDE_OBSERVED:
+    "reply in text: this is a developer ask, and your final text is the speech",
   EMPTY_BRIEFING: "a briefing needs words",
   BUDGET_SPENT: "not run: this turn's tool budget is spent",
   ACT_FAILED: "the act did not complete",
@@ -91,8 +101,8 @@ const REFUSAL_REASON = {
 
 /**
  * The roster as the host renders it, with the identities every tool argument
- * is validated against, and the sessions themselves for the scheduled look to
- * choose which transcripts to read.
+ * is validated against, and the sessions themselves for the look to choose
+ * which transcripts to read.
  */
 export interface BrainRoster {
   text: string;
@@ -117,13 +127,14 @@ export interface BrainToolCallTrace {
 }
 
 /**
- * One turn as the development trace records it: what woke it, the kinds of
- * item it appended, the input size the API counted, how many transcript
- * characters it read, each tool call by name and outcome, the text and
- * briefings it produced, and how it ran — never a transcript's text.
+ * One turn as the development trace records it: what opened it, the hooks it
+ * carried, the kinds of item it appended, the input size the API counted, how
+ * many transcript characters it read, each tool call by name and outcome, the
+ * text and briefings it produced, and how it ran — never a transcript's text.
  */
 export interface BrainTurnTraceRecord {
   trigger: BrainTurnTrigger;
+  hooks: readonly string[];
   inputItemKinds: readonly string[];
   inputTokens?: number;
   transcriptBytes: number;
@@ -154,11 +165,7 @@ export interface BrainAgentOptions {
   trace?: (record: BrainTurnTraceRecord) => void;
   report?: (message: string) => void;
   now?: () => number;
-  schedule?: (callback: () => void, delayMs: number) => ScheduledTimer;
-  cancel?: (timer: ScheduledTimer) => void;
-  maximumOutputTokens?: number;
   maxToolIterations?: number;
-  wakeCoalesceMs?: number;
   askDeadlineMs?: number;
   deltaPerSessionChars?: number;
   fullTranscriptChars?: number;
@@ -178,27 +185,14 @@ type TurnResult =
 interface TurnPlan {
   trigger: BrainTurnTrigger;
   events: readonly BrainWakeEvent[];
+  /** The roster as it stood when the turn was planned, read once for the whole turn. */
+  roster: BrainRoster;
   open: (events: readonly BrainWakeEvent[], now: number) => readonly ResponsesInputItem[];
-  deliverySource?: BrainDeliverySource;
-  /** Whether a roster look's events with nothing new in their transcript are left out. */
-  dropEmptyRosterDeltas?: boolean;
 }
 
 interface DispatchOutcome {
   callId: string;
   output: WireRecord;
-}
-
-/** A transcript held to a bound from the front, and whether anything was cut. */
-interface FrontCut {
-  text: string;
-  cut: boolean;
-}
-
-function cutFront(value: string, maximumChars: number): FrontCut {
-  if (value.length <= maximumChars) return { text: value, cut: false };
-  const keep = Math.max(0, maximumChars - OMISSION_MARKER.length - 1);
-  return { text: `${OMISSION_MARKER}\n${value.slice(value.length - keep)}`, cut: true };
 }
 
 function parsedArguments(argumentsJson: string): WireRecord {
@@ -218,40 +212,15 @@ function identityFromRecord(value: UnparsedWireValue): SessionIdentity | undefin
   return providerId && providerSessionId ? { providerId, providerSessionId } : undefined;
 }
 
-function sameIdentity(first: SessionIdentity, second: SessionIdentity): boolean {
-  return (
-    first.providerId === second.providerId && first.providerSessionId === second.providerSessionId
-  );
-}
-
 function rejection(reason: string): WireRecord {
   return { status: ACT_RESULT_STATUS.REJECTED, reason };
-}
-
-/** Identities collected without a composite key: one list, membership by both fields. */
-class IdentitySet {
-  readonly #identities: SessionIdentity[] = [];
-
-  add(identity: SessionIdentity): void {
-    if (!this.#identities.some((held) => sameIdentity(held, identity))) {
-      this.#identities.push({ ...identity });
-    }
-  }
-
-  list(): readonly SessionIdentity[] {
-    return [...this.#identities];
-  }
 }
 
 export class BrainAgent {
   readonly #options: BrainAgentOptions;
   readonly #now: () => number;
-  readonly #schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
-  readonly #cancel: (timer: ScheduledTimer) => void;
   readonly #report: (message: string) => void;
-  readonly #maximumOutputTokens: number;
   readonly #maxToolIterations: number;
-  readonly #wakeCoalesceMs: number;
   readonly #askDeadlineMs: number;
   readonly #deltaPerSessionChars: number;
   readonly #fullTranscriptChars: number;
@@ -259,186 +228,114 @@ export class BrainAgent {
   #turnInFlight = false;
   #restored: Promise<void> | undefined;
   #queue: Promise<unknown> = Promise.resolve();
-  #pending: BrainWakeEvent[] = [];
-  #flushTimer: ScheduledTimer | undefined;
   #stopped = false;
 
   constructor(options: BrainAgentOptions) {
     this.#options = options;
     this.#now = options.now ?? Date.now;
-    this.#schedule =
-      options.schedule ?? ((callback, delayMs) => globalThis.setTimeout(callback, delayMs));
-    this.#cancel =
-      options.cancel ??
-      ((timer) => {
-        // SAFETY: a timer this agent scheduled itself came from setTimeout above.
-        globalThis.clearTimeout(timer as ReturnType<typeof setTimeout>);
-      });
     this.#report = options.report ?? ((message) => process.stderr.write(`${message}\n`));
-    this.#maximumOutputTokens = options.maximumOutputTokens ?? BRAIN_DEFAULTS.MAXIMUM_OUTPUT_TOKENS;
     this.#maxToolIterations = options.maxToolIterations ?? BRAIN_DEFAULTS.MAX_TOOL_ITERATIONS;
-    this.#wakeCoalesceMs = options.wakeCoalesceMs ?? BRAIN_DEFAULTS.WAKE_COALESCE_MS;
     this.#askDeadlineMs = options.askDeadlineMs ?? BRAIN_DEFAULTS.ASK_DEADLINE_MS;
     this.#deltaPerSessionChars =
       options.deltaPerSessionChars ?? BRAIN_DEFAULTS.DELTA_PER_SESSION_CHARS;
     this.#fullTranscriptChars = options.fullTranscriptChars ?? BRAIN_DEFAULTS.FULL_TRANSCRIPT_CHARS;
   }
 
-  /** How many wakes are waiting for their turn to open. */
-  pendingWakes(): number {
-    return this.#pending.length;
-  }
-
   /**
-   * Queues wake events. Nothing is sent yet: wakes inside the coalescing
-   * window open one turn together, and wakes during a client's quiet wait for
-   * it to end rather than being dropped.
-   */
-  wake(events: readonly BrainWakeEvent[]): void {
-    if (this.#stopped || events.length === 0) return;
-    this.#pending.push(...events);
-    this.#scheduleFlush(this.#wakeCoalesceMs);
-  }
-
-  /**
-   * Asks the brain on the developer's behalf. Pending wakes ride in the same
-   * turn so the reply knows what just changed. Resolves with nothing when the
+   * Asks the brain on the developer's behalf. Resolves with nothing when the
    * turn failed or the deadline passed; the turn itself still runs to its end
    * so the memory never holds half of one.
    */
   async ask(question: string): Promise<BrainAskAnswer | undefined> {
     if (this.#stopped) return undefined;
-    this.#cancelFlush();
-    const events = this.#takePending();
     const turn = this.#enqueue(() =>
       this.#turn({
         trigger: BRAIN_TURN_TRIGGER.ASK,
-        events,
-        open: (attached, now) => [askInputItem(question, attached, now)],
+        events: [],
+        roster: this.#options.roster(),
+        open: (_events, now) => [askInputItem(question, now)],
       }),
     );
-    let deadline: ScheduledTimer | undefined;
+    let deadline: ReturnType<typeof setTimeout> | undefined;
     const timedOut = new Promise<undefined>((resolve) => {
-      deadline = this.#schedule(() => resolve(undefined), this.#askDeadlineMs);
+      deadline = setTimeout(() => resolve(undefined), this.#askDeadlineMs);
     });
     const result = await Promise.race([turn, timedOut]);
-    if (deadline !== undefined) this.#cancel(deadline);
+    clearTimeout(deadline);
     if (result?.outcome !== TURN_OUTCOME.DONE) return undefined;
     return { text: result.text };
   }
 
   /**
    * Hands back briefings the host held while a meeting or a pause stood, for
-   * one re-decision against the roster as it now stands. Pending wakes open
-   * in the same turn, ahead of the held briefings, so the decision is made
-   * knowing everything that happened during the hold.
+   * one re-decision against the roster as it now stands.
    */
   releaseHeld(held: readonly BrainDelivery[]): void {
     if (this.#stopped || held.length === 0) return;
-    this.#cancelFlush();
-    const events = this.#takePending();
     void this.#enqueue(() =>
       this.#turn({
         trigger: BRAIN_TURN_TRIGGER.HOLD_RELEASED,
-        events,
-        open: (attached, now) => [
-          ...(attached.length > 0 ? [wakeInputItem(attached, now)] : []),
-          holdReleasedInputItem(held, now),
-        ],
-        deliverySource: BRAIN_DELIVERY_SOURCE.HOLD_RELEASED,
+        events: [],
+        roster: this.#options.roster(),
+        open: (_events, now) => [holdReleasedInputItem(held, now)],
       }),
     );
   }
 
-  /** Drops pending wakes, lets the running turn finish, and takes nothing more. */
+  /** Lets the running turn finish and takes nothing more. */
   async stop(): Promise<void> {
     this.#stopped = true;
-    this.#cancelFlush();
-    this.#pending = [];
     await this.#queue;
   }
 
   /**
    * One look at the whole roster, driven by the host's observation pass rather
-   * than an internal timer. Carries the roster as `list_sessions` renders it
-   * and, for every local session the brain has read before or that is working
-   * or waiting now, what its transcript gained since — sessions with nothing
-   * new are left out. Skipped while a turn is in flight or the client is
-   * quiet, because the next look reads the same deltas; pending hook wakes
-   * ride along rather than waiting for their own.
+   * than an internal timer, with the hooks that fired since the last one
+   * riding along. Carries, for every local session the brain has read before,
+   * that is working or waiting now, or that a hook named, what its transcript
+   * gained since; sessions with nothing new and no hook are left out. A hook
+   * for a session the roster does not hold is still heard. Skipped while the
+   * client is quiet, because the next look reads the same deltas; skipped
+   * while a turn is in flight only when no hook is waiting, since a hook
+   * should not wait a whole cadence behind an ask.
    */
-  rosterLook(): void {
-    if (this.#stopped || this.#turnInFlight) return;
+  rosterLook(hooks: readonly BrainWakeEvent[] = []): void {
+    if (this.#stopped) return;
     if (this.#options.client.quietUntil() !== undefined) return;
+    if (this.#turnInFlight && hooks.length === 0) return;
     const roster = this.#options.roster();
+    const sessions = roster.sessions ?? [];
     const now = this.#now();
-    const looks: BrainWakeEvent[] = (roster.sessions ?? []).flatMap((session) => {
+    const looks: BrainWakeEvent[] = sessions.flatMap((session) => {
       const identity: SessionIdentity = {
         providerId: session.providerId,
         providerSessionId: session.providerSessionId,
       };
+      const hook = hooks.find((event) => sameSessionIdentity(event.identity, identity));
       const readBefore = this.#memory.cursor(identity) !== undefined;
       const live =
         session.status === SESSION_STATUS.WORKING || session.status === SESSION_STATUS.WAITING;
-      if (session.location !== SESSION_LOCATION.LOCAL || !(readBefore || live)) return [];
-      return [{ kind: BRAIN_WAKE_KIND.ROSTER, identity, session, atMs: now }];
+      if (session.location !== SESSION_LOCATION.LOCAL || !(readBefore || live || hook)) return [];
+      return [
+        {
+          identity,
+          session,
+          atMs: now,
+          ...(hook?.hookEvent ? { hookEvent: hook.hookEvent } : undefined),
+        },
+      ];
     });
-    this.#cancelFlush();
-    const events = [...this.#takePending(), ...looks];
+    const unseen = hooks.filter(
+      (event) => !sessions.some((session) => sameSessionIdentity(session, event.identity)),
+    );
     void this.#enqueue(() =>
       this.#turn({
         trigger: BRAIN_TURN_TRIGGER.ROSTER,
-        events,
-        open: (attached, openedAt) => [wakeInputItem(attached, openedAt, roster.text)],
-        deliverySource: BRAIN_DELIVERY_SOURCE.WAKE,
-        dropEmptyRosterDeltas: true,
+        events: [...looks, ...unseen],
+        roster,
+        open: (events, openedAt) => [observedEventsItem(events, openedAt)],
       }),
     );
-  }
-
-  #scheduleFlush(delayMs: number): void {
-    if (this.#flushTimer !== undefined) return;
-    this.#flushTimer = this.#schedule(() => {
-      this.#flushTimer = undefined;
-      this.#flush();
-    }, delayMs);
-  }
-
-  #cancelFlush(): void {
-    if (this.#flushTimer === undefined) return;
-    this.#cancel(this.#flushTimer);
-    this.#flushTimer = undefined;
-  }
-
-  #flush(): void {
-    if (this.#stopped) return;
-    const quietUntil = this.#options.client.quietUntil();
-    if (quietUntil !== undefined) {
-      this.#scheduleFlush(Math.max(quietUntil - this.#now(), this.#wakeCoalesceMs));
-      return;
-    }
-    const events = this.#takePending();
-    if (events.length === 0) return;
-    void this.#enqueue(async () => {
-      const result = await this.#turn({
-        trigger: BRAIN_TURN_TRIGGER.WAKE,
-        events,
-        open: (attached, now) => [wakeInputItem(attached, now)],
-        deliverySource: BRAIN_DELIVERY_SOURCE.WAKE,
-      });
-      if (result.outcome === TURN_OUTCOME.QUIET && !this.#stopped) {
-        // The turn sent nothing, so the wakes are still news: they go back
-        // to the front of the queue and open together once the quiet ends.
-        this.#pending.unshift(...events);
-        this.#scheduleFlush(Math.max(result.until - this.#now(), this.#wakeCoalesceMs));
-      }
-    });
-  }
-
-  #takePending(): readonly BrainWakeEvent[] {
-    const events = this.#pending;
-    this.#pending = [];
-    return events;
   }
 
   #enqueue<T>(work: () => Promise<T>): Promise<T> {
@@ -472,6 +369,8 @@ export class BrainAgent {
 
   async #runTurn(plan: TurnPlan): Promise<TurnResult> {
     await this.#ready();
+    const rules = TURN_RULES[plan.trigger];
+    const tools = brainToolDefinitions(rules.allowsActs);
     const startedAt = this.#now();
     const mark = this.#memory.mark();
     const appendedKinds: string[] = [];
@@ -491,23 +390,20 @@ export class BrainAgent {
 
     const attachedDeltas = await this.#attachDeltas(plan.events);
     const transcriptBytes = attachedDeltas.transcriptBytes;
-    const events = plan.dropEmptyRosterDeltas
+    const events = rules.dropsEmptyDeltas
       ? attachedDeltas.events.filter(
-          (event) => event.kind !== BRAIN_WAKE_KIND.ROSTER || Boolean(event.transcriptDelta?.text),
+          (event) => event.hookEvent !== undefined || Boolean(event.transcriptDelta?.text),
         )
       : attachedDeltas.events;
     append(plan.open(events, startedAt));
 
     for (;;) {
-      const roster = this.#options.roster();
       const context = standingContextItem(
-        roster.text,
+        plan.roster.text,
         this.#options.standingContext(),
         this.#now(),
       );
-      const answer = await this.#options.client.respond([...this.#memory.items(), context], {
-        maximumOutputTokens: this.#maximumOutputTokens,
-      });
+      const answer = await this.#options.client.respond([...this.#memory.items(), context], tools);
       if (answer.outcome === BRAIN_CLIENT_OUTCOME.QUIET) {
         failure = { outcome: TURN_OUTCOME.QUIET, until: answer.until };
         error = "quiet";
@@ -561,7 +457,7 @@ export class BrainAgent {
 
       const outcomes = await Promise.all(
         output.functionCalls.map((call) =>
-          this.#dispatch(call, roster, plan, deliveries).then((outcome) => {
+          this.#dispatch(call, plan, deliveries).then((outcome) => {
             toolCalls.push({
               name: call.name,
               argumentsChars: call.argumentsJson.length,
@@ -582,7 +478,7 @@ export class BrainAgent {
       this.#memory.rollback(mark);
       this.#report(`Brain ${plan.trigger} turn did not complete: ${error}`);
     } else {
-      this.#memory.retainCursors(this.#options.roster().identities);
+      this.#memory.retainCursors(plan.roster.identities);
       try {
         await this.#options.persist(this.#memory.persisted());
       } catch (persistError) {
@@ -603,6 +499,7 @@ export class BrainAgent {
 
     this.#options.trace?.({
       trigger: plan.trigger,
+      hooks: plan.events.flatMap((event) => (event.hookEvent ? [event.hookEvent] : [])),
       inputItemKinds: appendedKinds,
       ...(inputTokens !== undefined ? { inputTokens } : undefined),
       transcriptBytes,
@@ -620,23 +517,23 @@ export class BrainAgent {
   }
 
   /**
-   * Reads what each woken session's transcript gained since the brain last
-   * looked, once per session however many events name it, and moves the
-   * cursor. The cursor moves with the memory: a turn that fails rolls both
-   * back, so the same delta is read again rather than skipped.
+   * Reads what each session's transcript gained since the brain last looked,
+   * once per session however many events name it, and moves the cursor. The
+   * cursor moves with the memory: a turn that fails rolls both back, so the
+   * same delta is read again rather than skipped.
    */
   async #attachDeltas(
     events: readonly BrainWakeEvent[],
   ): Promise<{ events: readonly BrainWakeEvent[]; transcriptBytes: number }> {
-    const read = new IdentitySet();
+    const read: SessionIdentity[] = [];
     let transcriptBytes = 0;
     const attached: BrainWakeEvent[] = [];
     for (const event of events) {
-      if (read.list().some((identity) => sameIdentity(identity, event.identity))) {
+      if (read.some((identity) => sameSessionIdentity(identity, event.identity))) {
         attached.push({ ...event });
         continue;
       }
-      read.add(event.identity);
+      read.push(event.identity);
       const delta = await this.#readDelta(event.identity);
       transcriptBytes += delta.text.length;
       attached.push({ ...event, transcriptDelta: delta });
@@ -665,16 +562,21 @@ export class BrainAgent {
 
   async #dispatch(
     call: BrainFunctionCall,
-    roster: BrainRoster,
     plan: TurnPlan,
     deliveries: BrainDelivery[],
   ): Promise<DispatchOutcome> {
+    const rules = TURN_RULES[plan.trigger];
     const args = parsedArguments(call.argumentsJson);
     const observed = (identity: SessionIdentity) =>
-      roster.identities.some((listed) => sameIdentity(listed, identity));
+      plan.roster.identities.some((listed) => sameSessionIdentity(listed, identity));
     const named = identityFromRecord(args);
 
     if (!isBrainOnlyTool(call.name)) {
+      // The API was offered no act in this turn; a call that names one anyway
+      // is refused here before the performer ever sees it.
+      if (!rules.allowsActs) {
+        return { callId: call.callId, output: rejection(REFUSAL_REASON.ACT_OUTSIDE_ASK) };
+      }
       let output: WireRecord;
       try {
         output = await this.#options.acts.perform({
@@ -688,8 +590,6 @@ export class BrainAgent {
     }
 
     switch (call.name) {
-      case BRAIN_TOOL.LIST_SESSIONS:
-        return { callId: call.callId, output: { roster: this.#options.roster().text } };
       case BRAIN_TOOL.READ_TRANSCRIPT: {
         if (!named || !observed(named)) {
           return { callId: call.callId, output: rejection(REFUSAL_REASON.UNOBSERVED_SESSION) };
@@ -697,14 +597,17 @@ export class BrainAgent {
         return { callId: call.callId, output: await this.#readWhole(named) };
       }
       case BRAIN_TOOL.ANNOUNCE: {
-        if (plan.deliverySource === undefined) {
-          return { callId: call.callId, output: rejection(REFUSAL_REASON.ANNOUNCE_IN_ASK) };
+        if (!rules.allowsAnnounce) {
+          return {
+            callId: call.callId,
+            output: rejection(REFUSAL_REASON.ANNOUNCE_OUTSIDE_OBSERVED),
+          };
         }
         const briefing = text(args.briefing)?.slice(0, maximumBriefingLength);
         if (!briefing) {
           return { callId: call.callId, output: rejection(REFUSAL_REASON.EMPTY_BRIEFING) };
         }
-        deliveries.push({ briefing, decidedAt: this.#now(), source: plan.deliverySource });
+        deliveries.push({ briefing, decidedAt: this.#now() });
         return { callId: call.callId, output: { status: ACT_RESULT_STATUS.ACCEPTED } };
       }
     }

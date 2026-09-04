@@ -9,7 +9,7 @@
  * a reader sees the whole rendering the tail it read produces.
  */
 
-import { transcriptReadTailBytes } from "@sidecar/session";
+import { cutFront, transcriptReadTailBytes } from "@sidecar/session";
 import { isRecord, isWireString, recordFromJsonLine, text, type WireRecord } from "@sidecar/wire";
 import { type FileWindow, fileStats, readRange, readTailWindow } from "./local-session-adapter.js";
 
@@ -29,8 +29,6 @@ export const TRANSCRIPT_BOUNDS = {
   /** A rendered tool call or its result: the gist, never the payload. */
   MAXIMUM_TOOL_LENGTH: 200,
 } as const;
-
-export const OMISSION_MARKER = "[earlier turns omitted]";
 
 export function transcriptContentBlocks(
   record: WireRecord,
@@ -76,13 +74,8 @@ export function boundedTranscript(
   maximumLength?: number,
 ): string | undefined {
   if (lines.length === 0) return undefined;
-  let rendered = lines.join("\n");
-  if (maximumLength !== undefined && rendered.length > maximumLength) {
-    const kept = rendered.slice(rendered.length - maximumLength);
-    const firstWholeLine = kept.indexOf("\n");
-    rendered = `${OMISSION_MARKER}\n${firstWholeLine >= 0 ? kept.slice(firstWholeLine + 1) : kept}`;
-  }
-  return rendered;
+  const rendered = lines.join("\n");
+  return maximumLength === undefined ? rendered : cutFront(rendered, maximumLength).text;
 }
 
 /**

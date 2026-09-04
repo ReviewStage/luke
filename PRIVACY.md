@@ -126,14 +126,14 @@ and email you signed it with, and any screenshots you attached.
   cloud observation your vault keys already allow (titles, status, repository,
   and branch of your cloud sessions, as described under Provider API
   keys above). We do not send message history, file contents, or command
-  output, and we ask OpenAI not to store the request. The one exception is the
-  subject phrase above: to derive it, only when Luke is about to announce a
-  local session and once per announcement, Luke sends the bounded transcript
-  slice of that session and its title — directly to OpenAI on
-  your own key if you entered one, otherwise through our service on our key —
-  asks OpenAI not to store the request, and our service stores and logs none
-  of it either. The phrase that comes back is spoken with that announcement
-  and kept nowhere. On the Mac app,
+  output, and we ask OpenAI not to store the request. The one exception is
+  Luke's brain on the Mac app, which runs only on an OpenAI key you entered
+  yourself and never through our service: on each observation pass, and when a
+  coding agent's own hook fires, it sends OpenAI the roster fields above and
+  what each local session's transcript gained since the last look, bounded, so
+  it can decide what to tell you. Its memory of those turns is kept on your
+  Mac, in Luke's own data, and deleted when you clear History; without a key
+  there is no brain and none of this is sent. On the Mac app,
   your conversation and Luke's durable memory are kept on your Mac and sent
   with a call so the conversation carries across calls and across launches; on
   iOS, the conversation is held in memory and discarded when the session

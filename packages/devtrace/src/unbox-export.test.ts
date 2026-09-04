@@ -154,7 +154,8 @@ test("a brain turn becomes its own generation, and junk lines cost only themselv
   const turn = JSON.stringify({
     at: "2026-08-25T10:05:00.000Z",
     kind: TRACE_ENTRY_KIND.BRAIN,
-    trigger: BRAIN_TURN_TRIGGER.WAKE,
+    trigger: BRAIN_TURN_TRIGGER.ROSTER,
+    hooks: ["Stop"],
     inputItemKinds: ["message", "function_call_output"],
     inputTokens: 1_500,
     transcriptBytes: 4_096,
@@ -170,8 +171,7 @@ test("a brain turn becomes its own generation, and junk lines cost only themselv
   const [generation] = generations(trace);
   assert.ok(generation);
   assert.equal(generation.name, "brain-turn");
-  // A record carrying no model — a hosted turn — shows the keyed default
-  // rather than a blank.
+  // A record carrying no model shows the default rather than a blank.
   assert.equal(generation.model, "gpt-5.6-terra");
   assert.deepEqual(generation.metrics, {
     latency: 0.321,
@@ -190,9 +190,12 @@ test("a brain turn becomes its own generation, and junk lines cost only themselv
   assert.equal(input?.role, "user");
   assert.equal(
     input?.content,
-    ["trigger: wake", "input items: message, function_call_output", "transcript bytes: 4096"].join(
-      "\n",
-    ),
+    [
+      "trigger: roster",
+      "hooks: Stop",
+      "input items: message, function_call_output",
+      "transcript bytes: 4096",
+    ].join("\n"),
   );
   assert.equal(output?.role, "assistant");
   assert.equal(
@@ -223,21 +226,7 @@ test("a failed brain turn shows its error, and a keyed turn its model", () => {
   const [input, output] = messagesOf(generation);
   assert.equal(
     input?.content,
-    ["trigger: ask", "input items: none", "transcript bytes: 0"].join("\n"),
+    ["trigger: ask", "hooks: none", "input items: none", "transcript bytes: 0"].join("\n"),
   );
   assert.equal(output?.content, "error: request failed with status 500");
-});
-
-test("a brain request entry stays in the raw trace and draws no generation", () => {
-  const request = JSON.stringify({
-    at: "2026-08-25T10:05:00.000Z",
-    kind: TRACE_ENTRY_KIND.BRAIN_REQUEST,
-    inputItems: 3,
-    inputChars: 2_048,
-    outcome: "answered",
-    elapsedMs: 900,
-  });
-  const trace = unboxTraceFromLines([request]);
-  assert.equal(trace.timestamp, "2026-08-25T10:05:00.000Z");
-  assert.deepEqual(generations(trace), []);
 });

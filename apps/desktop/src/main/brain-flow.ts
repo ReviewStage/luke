@@ -1,18 +1,16 @@
 import {
-  BRAIN_WAKE_KIND,
   type BrainPersistedState,
   type BrainWakeEvent,
   brainPersistedStateFromWire,
 } from "@sidecar/brain";
 import type { ObservedSpoolEvent } from "@sidecar/providers";
-import type { Session, SessionIdentity } from "@sidecar/session";
 import type { UnparsedWireValue } from "@sidecar/wire";
 
 /**
  * What the brain keeps across launches, and how a hook's spool event becomes
- * a wake. The decisions are pure so they can be tested without Electron, on
- * the memory flow's own pattern; the wiring that reads and writes the file and
- * watches the spools lives in desktop-app.
+ * an event for the next roster look. The decisions are pure so they can be
+ * tested without Electron, on the memory flow's own pattern; the wiring that
+ * reads and writes the file and watches the spools lives in brain-host.
  *
  * The state file is the brain's memory: the Responses input array from the
  * latest compaction item onward, and the transcript cursor each session was
@@ -47,30 +45,20 @@ export function brainStateRecord(state: BrainPersistedState): string {
 }
 
 /**
- * Turns one provider's batch of spool events into wakes. Every hook event
- * wakes the brain — the brain decides what matters, so nothing is filtered
- * here — and each wake carries the session as the registry holds it at that
- * moment, when it holds it at all: a hook can land for a session the poll has
- * not yet seen, and the brain still hears that it moved.
+ * Turns one provider's batch of spool events into events for the next roster
+ * look. Every hook rides — the brain decides what matters, so nothing is
+ * filtered here — and the look attaches the session as the roster then holds
+ * it, when it holds it at all: a hook can land for a session the poll has not
+ * yet seen, and the brain still hears that it moved.
  */
 export function wakeEventsFromHooks(
   providerId: string,
   hookEvents: readonly ObservedSpoolEvent<string>[],
-  registry: { get(identity: SessionIdentity): Session | undefined },
   now: number,
 ): readonly BrainWakeEvent[] {
-  return hookEvents.map((hookEvent) => {
-    const identity: SessionIdentity = {
-      providerId,
-      providerSessionId: hookEvent.providerSessionId,
-    };
-    const session = registry.get(identity);
-    return {
-      kind: BRAIN_WAKE_KIND.HOOK,
-      identity,
-      hookEvent: hookEvent.event,
-      ...(session ? { session } : undefined),
-      atMs: Number.isFinite(hookEvent.atMs) ? hookEvent.atMs : now,
-    };
-  });
+  return hookEvents.map((hookEvent) => ({
+    identity: { providerId, providerSessionId: hookEvent.providerSessionId },
+    hookEvent: hookEvent.event,
+    atMs: Number.isFinite(hookEvent.atMs) ? hookEvent.atMs : now,
+  }));
 }

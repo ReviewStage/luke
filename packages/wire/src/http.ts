@@ -12,3 +12,8 @@ export const HTTP_STATUS = {
 } as const;
 
 export type CloudFetch = (url: string, init: RequestInit) => Promise<Response>;
+
+/** A base URL as a path is joined to it: one slash between, never two. */
+export function withoutTrailingSlash(value: string): string {
+  return value.endsWith("/") ? value.slice(0, -1) : value;
+}

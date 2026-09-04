@@ -14,8 +14,6 @@
   "dependencies": {
     "@sidecar/acts": "workspace:*",
     "@sidecar/guide": "workspace:*",
-    "@sidecar/hosted": "workspace:*",
-    "@sidecar/realtime": "workspace:*",
     "@sidecar/session": "workspace:*",
     "@sidecar/wire": "workspace:*"
   },

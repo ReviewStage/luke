@@ -7,6 +7,7 @@ export {
 export {
   type CloudFetch,
   HTTP_STATUS,
+  withoutTrailingSlash,
 } from "./http.js";
 export {
   isRecord,

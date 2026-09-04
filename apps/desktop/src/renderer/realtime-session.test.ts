@@ -1946,7 +1946,9 @@ test("an onboarding beat hands its words back as plain words", async () => {
     delta: "You're all set.",
   });
   settleReply(context);
-  assert.deepEqual(context.replyEndings, [{ texts: ["You're all set."], kind: undefined }]);
+  assert.deepEqual(context.replyEndings, [
+    { texts: ["You're all set."], kind: REPLY_KIND.ONBOARDING },
+  ]);
 
   // The calendar beat keeps the same terms.
   assert.equal(
@@ -1960,7 +1962,7 @@ test("an onboarding beat hands its words back as plain words", async () => {
   settleReply(context);
   assert.deepEqual(context.replyEndings.at(-1), {
     texts: ["Your calendar can quiet me."],
-    kind: undefined,
+    kind: REPLY_KIND.ONBOARDING,
   });
 });
 

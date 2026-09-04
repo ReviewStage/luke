@@ -4,11 +4,9 @@ import {
   HOSTED_CALLS_URL,
   HOSTED_SERVICE_PATH,
   HOSTED_WS_BASE_URL,
-  hostedBrainRequestFromWire,
   hostedConversationAnswerFromWire,
   hostedMintAnswerFromWire,
   isVaultProviderId,
-  maximumHostedBrainInputItems,
   VAULT_KEY_MAX_LENGTH,
   VAULT_PROVIDER_ID,
   vaultKeyIsStorable,
@@ -220,23 +218,4 @@ test("a conversation answer carries its history positions when the read reported
   // Positions that are not what a read reports are dropped, not repaired.
   assert.equal(malformed.firstOffset, undefined);
   assert.equal(malformed.hasOlder, undefined);
-});
-
-test("a hosted brain request is an array of records and at most a budget", () => {
-  const input = [{ type: "message", role: "user", content: [] }];
-  assert.deepEqual(hostedBrainRequestFromWire({ input, max_output_tokens: 500 }), {
-    input,
-    max_output_tokens: 500,
-  });
-  assert.deepEqual(hostedBrainRequestFromWire({ input }), { input });
-  assert.equal(hostedBrainRequestFromWire({ input: [] }), undefined);
-  assert.equal(hostedBrainRequestFromWire({ input: ["text"] }), undefined);
-  assert.equal(hostedBrainRequestFromWire({ input, max_output_tokens: 0 }), undefined);
-  assert.equal(hostedBrainRequestFromWire({ input, max_output_tokens: 1.5 }), undefined);
-  assert.equal(
-    hostedBrainRequestFromWire({
-      input: Array.from({ length: maximumHostedBrainInputItems + 1 }, () => ({})),
-    }),
-    undefined,
-  );
 });
