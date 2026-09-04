@@ -48,6 +48,15 @@ struct WatchRosterView: View {
             }
         }
         .navigationTitle("Sessions")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
+                    WatchVoiceView()
+                } label: {
+                    Label("Talk to Luke", systemImage: "mic.fill")
+                }
+            }
+        }
         .navigationDestination(for: RosterSession.self) { session in
             WatchSessionDetailView(session: session)
         }
