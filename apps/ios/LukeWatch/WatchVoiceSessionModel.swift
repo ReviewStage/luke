@@ -28,6 +28,9 @@ final class WatchVoiceSessionModel {
     private var connectingForTurn = false
     private var endTurnAfterConnect = false
     private var connectTask: Task<Void, Never>?
+    // Tracks whether we are mid-caption-segment for the current luke reply.
+    // nil from onCaption closes the segment so the next text starts a new bubble.
+    private var lukeReplyOpen = false
 
     func prepare(accountSession: WatchAccountSession) {
         self.accountSession = accountSession
@@ -55,16 +58,28 @@ final class WatchVoiceSessionModel {
                 if newStatus == .idle { self?.session = nil }
             },
             onCaption: { [weak self] text in
-                guard let self, let text else { return }
-                if let lastIndex = self.messages.indices.last,
-                   self.messages[lastIndex].speaker == .luke
-                {
-                    self.messages[lastIndex].text = text
+                guard let self else { return }
+                if let text {
+                    // Mid-segment: grow the current luke bubble.
+                    // New segment (lukeReplyOpen == false): always append a fresh bubble
+                    // so a multi-segment reply does not overwrite its own earlier segments.
+                    if self.lukeReplyOpen,
+                       let lastIndex = self.messages.indices.last,
+                       self.messages[lastIndex].speaker == .luke
+                    {
+                        self.messages[lastIndex].text = text
+                    } else {
+                        self.messages.append(WatchVoiceMessage(speaker: .luke, text: text))
+                        self.lukeReplyOpen = true
+                    }
                 } else {
-                    self.messages.append(WatchVoiceMessage(speaker: .luke, text: text))
+                    // nil signals segment end — the next caption begins a new bubble.
+                    self.lukeReplyOpen = false
                 }
             },
             onSpokenAsk: { [weak self] text in
+                // A new developer turn always closes the current luke segment.
+                self?.lukeReplyOpen = false
                 self?.messages.append(WatchVoiceMessage(speaker: .user, text: text))
             },
             onError: { [weak self, weak accountSession] message in
@@ -98,6 +113,7 @@ final class WatchVoiceSessionModel {
         connectTask = nil
         connectingForTurn = false
         endTurnAfterConnect = false
+        lukeReplyOpen = false
         accountSession = nil
         session?.close()
         session = nil
@@ -109,8 +125,14 @@ final class WatchVoiceSessionModel {
             session.beginTurn()
             return
         }
+        if connectingForTurn {
+            // A re-press while the mint is in flight retracts the earlier release
+            // so the turn is not immediately ended when the connection lands.
+            endTurnAfterConnect = false
+            return
+        }
         // No existing session: mint a new one and begin the turn once connected.
-        guard accountSession != nil, !connectingForTurn else { return }
+        guard accountSession != nil else { return }
         connectingForTurn = true
         endTurnAfterConnect = false
         status = .connecting
