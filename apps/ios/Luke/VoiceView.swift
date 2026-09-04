@@ -107,14 +107,24 @@ private final class VoiceSessionModel {
                 )
             },
             contextItems: { [weak self] in
-                guard let self, let projects = self.projects else { return [] }
-                return [
-                    WorkspaceProjectsContext.item(
-                        answer: projects,
-                        defaultProviderId: self.defaults.lastProviderId,
-                        defaultProjectIds: self.defaults.lastProjectIds
+                guard let self else { return [] }
+                var items: [VoiceContextItem] = []
+                // Conversation before projects, the desktop's flush order.
+                if let thread = self.thread,
+                   let conversation = ConversationContext.item(messages: thread.messages)
+                {
+                    items.append(conversation)
+                }
+                if let projects = self.projects {
+                    items.append(
+                        WorkspaceProjectsContext.item(
+                            answer: projects,
+                            defaultProviderId: self.defaults.lastProviderId,
+                            defaultProjectIds: self.defaults.lastProjectIds
+                        )
                     )
-                ]
+                }
+                return items
             },
             makeAudioCapturer: { VoiceAudioCapturer() },
             makeAudioPlayer: { VoiceAudioPlayer() }
