@@ -27,11 +27,14 @@ final class WatchRosterStore {
         reloadRequested = true
         guard !isLoading else { return }
         let generation = loadGeneration
+        var completedRequest = false
         isLoading = true
         defer {
             if generation == loadGeneration {
                 isLoading = false
-                hasLoaded = true
+                if completedRequest {
+                    hasLoaded = true
+                }
             }
         }
 
@@ -44,13 +47,16 @@ final class WatchRosterStore {
                 }
                 guard generation == loadGeneration else { return }
                 sessions = fetched
+                completedRequest = true
             } catch is AccountSessionError {
                 guard generation == loadGeneration else { return }
                 session.signOut()
                 return
             } catch {
                 guard generation == loadGeneration else { return }
+                guard !Task.isCancelled else { return }
                 loadError = error.localizedDescription
+                completedRequest = true
             }
         }
     }

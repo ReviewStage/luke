@@ -34,6 +34,10 @@ const watchRoot = fs.readFileSync(
   path.join(repoRoot, "apps", "ios", "LukeWatch", "LukeWatchView.swift"),
   "utf8",
 );
+const watchRosterStore = fs.readFileSync(
+  path.join(repoRoot, "apps", "ios", "LukeWatch", "WatchRosterStore.swift"),
+  "utf8",
+);
 
 test("the iPhone app embeds and depends on the Watch app", () => {
   assert.match(project, /LukeWatch\.app in Embed Watch Content/);
@@ -60,8 +64,15 @@ test("iPhone and Watch messages use the same Markdown renderer", () => {
 
 test("the Watch tears down account-scoped UI when the paired account changes", () => {
   assert.match(watchAccount, /private\(set\) var accountScope: String\?/);
-  assert.match(watchAccount, /accountID\.map[\s\S]*?\?\? "email:/);
+  assert.match(watchAccount, /private static func scope\(email: String\)/);
+  assert.match(watchAccount, /email\.trimmingCharacters[\s\S]*?\.lowercased\(\)/);
   assert.match(watchAccount, /func signOut\(\)[\s\S]*?accountScope = nil/);
   assert.match(watchRoot, /NavigationStack[\s\S]*?\.id\(watchSession\.accountScope\)/);
   assert.match(watchRoot, /\.onChange\(of: watchSession\.accountScope\)/);
+});
+
+test("cancelled Watch roster reads do not become completed empty states", () => {
+  assert.match(watchRosterStore, /var completedRequest = false/);
+  assert.match(watchRosterStore, /if completedRequest \{[\s\S]*?hasLoaded = true[\s\S]*?\}/);
+  assert.match(watchRosterStore, /guard !Task\.isCancelled else \{ return \}/);
 });

@@ -58,7 +58,7 @@ final class WatchAccountSession {
         WatchTokenStore.save(stored)
         self.accessToken = accessToken
         self.tokenExpiry = stored.expiry
-        accountScope = Self.scope(accountID: stored.accountID, email: stored.email)
+        accountScope = Self.scope(email: stored.email)
         state = .signedIn(email: email, name: stored.name)
     }
 
@@ -99,12 +99,15 @@ final class WatchAccountSession {
         guard let stored = WatchTokenStore.load() else { return }
         accessToken = stored.accessToken
         tokenExpiry = stored.expiry
-        accountScope = Self.scope(accountID: stored.accountID, email: stored.email)
+        accountScope = Self.scope(email: stored.email)
         state = .signedIn(email: stored.email, name: stored.name)
     }
 
-    private static func scope(accountID: String?, email: String) -> String {
-        accountID.map { "id:\($0)" } ?? "email:\(email.lowercased())"
+    private static func scope(email: String) -> String {
+        // User emails are unique in Luke's account store. Using that stable
+        // identity avoids remounting the Watch UI when an older phone payload
+        // is later enriched with the account id for the same signed-in user.
+        "email:\(email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
     }
 
     private func nonEmpty(_ value: String?) -> String? {
