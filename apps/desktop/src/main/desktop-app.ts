@@ -53,7 +53,10 @@ import {
   workspaceHostRegistrations,
 } from "@sidecar/providers";
 import {
+  ARRIVAL_SPEECH_KIND,
   appendConversationThreadEntry,
+  BRIEFING_SPEECH_KIND,
+  CALENDAR_ONBOARDING_SPEECH_KIND,
   type ConversationEntry,
   conversationHistoryText,
   recentConversationEntries,
@@ -121,7 +124,6 @@ import {
   type AccountSnapshot,
   type AppBootstrap,
   type BrainAppActRequest,
-  type BriefingPayload,
   type ConversationHistoryPayload,
   type MicrophoneRoute,
   type MicrophoneStatus,
@@ -134,6 +136,7 @@ import {
   WINDOW_ROLE,
 } from "#shared/contracts";
 import { VOICE_SOURCE_COUNTED_AS } from "#shared/product-vocabulary";
+import { SPEECH_OUTCOME, type SpeechOutcome } from "#shared/wire/speech";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { AppleCalendarReader } from "./apple-calendar";
 import {
@@ -151,7 +154,6 @@ import {
   brainStateRecord,
   wakeEventsFromHooks,
 } from "./brain-flow";
-import { BriefingHold } from "./briefing-hold";
 import {
   CALENDAR_ONBOARDING_STATE_FILE,
   type CalendarOnboardingState,
@@ -197,6 +199,7 @@ import { type BridgeContext, registerBridge, registerBridgeEntry } from "./regis
 import { runModeFor, sentryReportingEnabled } from "./run-mode";
 import { createSettingsHandler } from "./settings-handler";
 import { SettingsStore } from "./settings-store";
+import { type OnboardingBeatKind, SpeechArbiter } from "./speech-arbiter";
 import { createElectronUpdaterEngine } from "./update-installer";
 import { UPDATE_ENDPOINT, UpdateService } from "./update-service";
 import { DockPresence } from "./window/dock-presence";
@@ -461,12 +464,6 @@ const APPLE_ACCESS_POLL_INTERVAL_MS = 10_000;
 let appleAccessPollTimer: NodeJS.Timeout | undefined;
 /** Whether the last access probe failed, so only the edges reach the log. */
 let appleAccessProbeFailing = false;
-// Briefings the brain decided while a meeting or the pause held wait here, in
-// the main process: the hold has to outlive any renderer, and this is the one
-// place a briefing passes on its way to the voice. What releases them is the
-// clock against observed intervals — deterministic, like the edges that woke
-// the brain — and the release is a re-decision, never a replay.
-const briefingHold = new BriefingHold();
 /**
  * Whether announcements are held right now, as last computed — what the
  * renderer draws Luke's sleeping face from. Kept and broadcast on change so
@@ -526,6 +523,18 @@ const agentTrace = agentTraceDirectory
   ? new AgentTraceWriter({ directory: agentTraceDirectory })
   : undefined;
 if (agentTrace) process.stderr.write(`Agent trace: ${agentTrace.file}\n`);
+// Everything Luke says unprompted — the brain's briefings and the two
+// onboarding beats — is decided here, in the main process, which has to
+// outlive any renderer: what stands, in what order, whether now, and what
+// became of each. The mouth in the renderer holds one offer at a time and
+// reports by id. What releases a held briefing is the clock against observed
+// intervals — deterministic, like the edges that woke the brain — and the
+// release is a re-decision, never a replay.
+const speechArbiter = new SpeechArbiter({
+  now: Date.now,
+  nextId: randomUUID,
+  ...(agentTrace ? { trace: (record) => agentTrace.recordSpeechDecision(record) } : undefined),
+});
 const voiceCapabilities = new VoiceCapabilityAssembler({
   settings: settingsStore,
   credentialsUsable: () => runMode.sendsNetwork && accountCapabilitiesActive(),
@@ -855,6 +864,9 @@ function writeArrivalState(state: ArrivalState): void {
       `Could not persist the arrival record: ${error instanceof Error ? error.message : String(error)}\n`,
     );
   }
+  // A settled record has nothing left to greet: a beat still waiting to be
+  // said about it is taken back rather than spoken over a settle it raced.
+  if (state.settledAt !== undefined) withdrawBeat(ARRIVAL_SPEECH_KIND);
 }
 
 /**
@@ -944,7 +956,13 @@ function writeCalendarOnboardingState(state: CalendarOnboardingState): void {
       `Could not persist the calendar onboarding record: ${error instanceof Error ? error.message : String(error)}\n`,
     );
   }
-  panels.broadcast(channels.onCalendarOnboardingChanged, calendarOnboardingGateOwed());
+  const owed = calendarOnboardingGateOwed();
+  // The gate standing down outruns a beat still waiting about it: a fast Done
+  // or skip must not be answered by the ask it just settled, so the beat is
+  // taken back the moment the record says the step is over, before the
+  // arrival it was holding is requested.
+  if (!owed) withdrawBeat(CALENDAR_ONBOARDING_SPEECH_KIND);
+  panels.broadcast(channels.onCalendarOnboardingChanged, owed);
 }
 
 /**
@@ -971,26 +989,6 @@ async function settleCalendarOnboardingIfConnected(): Promise<void> {
   });
 }
 
-/** Whether an attempt to speak the arrival beat is already under way. */
-let arrivalBeatSpeaking = false;
-
-/**
- * Whether this run has already sent the trigger. One per run, however many
- * capability starts a run has: the record only settles when the reply
- * begins, so a second trigger while the first still sits queued would stack
- * two beats in the announcer's queue and speak the arrival twice. A trigger
- * that went nowhere is the next launch's to retry.
- */
-let arrivalBeatTriggered = false;
-
-/**
- * Whether this run has already sent the calendar onboarding beat's trigger.
- * Per run rather than per install: the gate is the durable prompt, and a
- * launch that still finds it standing may say so again, but one run says it
- * once however many capability starts it has.
- */
-let calendarOnboardingBeatTriggered = false;
-
 /**
  * Whether the calendar gate is actually being offered: owed by the record,
  * and with at least one source this build can connect — the same two facts
@@ -1009,53 +1007,39 @@ async function calendarGateOfferable(): Promise<boolean> {
 }
 
 /**
- * Speaks the one-time arrival beat, if it is owed and this moment can carry
- * it. The trigger is deterministic on every side — the record the sign-in
- * edge wrote, never anything a model decided — and what is sent is only the
- * fact of the beat: the script is fixed by the build in the realtime
- * vocabulary, and its observed values are the renderer's own to read from
- * the roster it already draws. Sending settles nothing: the trigger can be
- * lost — a renderer still loading, the announcer's own quiet or age-out
- * dropping the beat unspoken — so the record settles only when the voice
- * window reports the reply actually began, and everything short of that
- * leaves the beat owed for the next signed-in launch, because a moment
- * nobody heard was not the one moment this plays. The first observation
- * pass is awaited first, so the beat's suggestion can name a session the
- * developer actually has running.
+ * Asks the speech arbiter for the one onboarding beat this moment owes, if
+ * any. The trigger is deterministic on every side — the record the sign-in
+ * edge wrote, never anything a model decided — and what is requested is only
+ * the kind: the script is fixed by the build in the realtime vocabulary, and
+ * its observed values are the renderer's own to read from the roster it
+ * already draws. Requesting settles nothing: the record settles only when
+ * the mouth reports the reply actually began, and everything short of that
+ * — the quiet, a call that would not open, news gone stale — leaves the beat
+ * owed for the next signed-in launch, because a moment nobody heard was not
+ * the one moment this plays. The arbiter says each beat once per run however
+ * many capability starts a run has, and holds one through a meeting's quiet
+ * for the release rather than dropping it. The first observation pass is
+ * awaited first, so the beat's suggestion can name a session the developer
+ * actually has running.
  *
  * While the calendar gate stands, the calendar onboarding beat speaks in the
  * arrival's place — "you're all set" over a panel still asking for something
  * would be false — and the arrival waits for the step to settle, whose Done
  * and skip both call back here.
  */
-async function speakArrivalBeat(): Promise<void> {
-  if (arrivalBeatSpeaking) return;
+async function requestOnboardingBeat(): Promise<void> {
   if (!runMode.requiresAccount || account.status !== ACCOUNT_STATUS.SIGNED_IN) return;
   if (!voiceCapabilities.realtimeCredentials) return;
-  arrivalBeatSpeaking = true;
-  try {
-    if (await calendarGateOfferable()) {
-      if (calendarOnboardingBeatTriggered) return;
-      const host = panels.voiceHost();
-      if (!host) return;
-      host.webContents.send(channels.onCalendarOnboardingSpeech, undefined);
-      calendarOnboardingBeatTriggered = true;
-      return;
-    }
-    if (arrivalBeatTriggered || !arrivalBeatOwed(arrivalState)) return;
-    await sessionObservationLoop.refresh().catch(() => undefined);
-    if (account.status !== ACCOUNT_STATUS.SIGNED_IN || !arrivalBeatOwed(arrivalState)) return;
-    // The calendar may not have been read yet this early, so this check can
-    // miss a meeting; the announcer's own quiet still holds the beat there,
-    // and a beat it drops stays owed rather than lost.
-    if (await announcementsQuietNow(Date.now())) return;
-    const host = panels.voiceHost();
-    if (!host) return;
-    host.webContents.send(channels.onArrivalSpeech, undefined);
-    arrivalBeatTriggered = true;
-  } finally {
-    arrivalBeatSpeaking = false;
+  if (await calendarGateOfferable()) {
+    speechArbiter.request({ kind: CALENDAR_ONBOARDING_SPEECH_KIND });
+    void reconcileSpeech();
+    return;
   }
+  if (!arrivalBeatOwed(arrivalState)) return;
+  await sessionObservationLoop.refresh().catch(() => undefined);
+  if (account.status !== ACCOUNT_STATUS.SIGNED_IN || !arrivalBeatOwed(arrivalState)) return;
+  speechArbiter.request({ kind: ARRIVAL_SPEECH_KIND });
+  void reconcileSpeech();
 }
 
 /**
@@ -1394,7 +1378,7 @@ async function startAccountCapabilities(): Promise<void> {
   // After the credential and the observation it wants to name a session
   // from; unawaited because the sign-in that started these capabilities must
   // not wait on an observation pass to land.
-  void speakArrivalBeat();
+  void requestOnboardingBeat();
   // The sync switch is a standing state, not a one-shot act: while it is on,
   // the vault holds what this Mac's encrypted store holds, reconciled at the
   // sign-in for the account the keys were last synced for. The launch that
@@ -1407,6 +1391,10 @@ async function stopAccountCapabilities(): Promise<void> {
   stopSessionObservation();
   stopIssueObservation();
   stopCalendarObservation();
+  // A beat greets the account that just left; neither may speak into the
+  // signed-out panel, and neither is spent by being taken back.
+  withdrawBeat(ARRIVAL_SPEECH_KIND);
+  withdrawBeat(CALENDAR_ONBOARDING_SPEECH_KIND);
   await applyVoiceCredential();
   await hotkeys.reapply(HOTKEY_RANK.TALK);
 }
@@ -1541,23 +1529,16 @@ function performBrainAppAct(action: BrainAppActRequest["action"]): Promise<WireR
 }
 
 /**
- * Hands one briefing the brain decided to the voice, or holds it while a
- * meeting or the pause stands. Voice gone means nothing to say it with, and
- * by the time a key returns the news is the panel's. Counted once per
- * briefing, with nothing observed about it.
+ * Hands one briefing the brain decided to the speech arbiter, which offers it
+ * to the voice or holds it while a meeting or the pause stands. Voice gone
+ * means nothing to say it with, and by the time a key returns the news is
+ * the panel's. It is counted when the mouth reports the reply began, never
+ * here, and with nothing observed about it.
  */
 async function deliverBriefing(delivery: BrainDelivery): Promise<void> {
   if (!voiceCapabilities.realtimeCredentials) return;
-  if (await announcementsQuietNow(Date.now())) {
-    briefingHold.hold(delivery);
-    return;
-  }
-  const host = panels.voiceHost();
-  if (!host) return;
-  const payload: BriefingPayload = { briefing: delivery.briefing, decidedAt: delivery.decidedAt };
-  productEvents.record(PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK, {});
-  host.webContents.send(channels.onBriefing, payload);
-  markFirstAnnouncementSpoken();
+  speechArbiter.request({ kind: BRIEFING_SPEECH_KIND, delivery });
+  await reconcileSpeech();
 }
 
 /** The remembered entries' write back, returning whether the list persisted. */
@@ -1639,7 +1620,7 @@ async function rebuildBrain(): Promise<void> {
     !runMode.sendsNetwork ||
     !accountCapabilitiesActive()
   ) {
-    briefingHold.release();
+    speechArbiter.dropBriefings();
     return;
   }
   brain = new BrainAgent({
@@ -1921,10 +1902,22 @@ function registerIpc(): void {
     },
     { ipcMain, trustedSender },
   );
-  registerHandler(BRIDGE.completeArrivalBeat, () => {
-    // A report that raced a settle already on file overwrites nothing.
-    if (!arrivalBeatOwed(arrivalState)) return;
-    writeArrivalState({ ...(arrivalState ?? {}), settledAt: new Date().toISOString() });
+  registerHandler(BRIDGE.settleSpeech, (id: string, outcome: SpeechOutcome) => {
+    const settled = speechArbiter.settle(id, outcome);
+    if (!settled) return;
+    if (settled.outcome === SPEECH_OUTCOME.SPOKEN) {
+      if (settled.kind === BRIEFING_SPEECH_KIND) {
+        productEvents.record(PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK, {});
+        markFirstAnnouncementSpoken();
+      }
+      // The reply has actually begun, which is the one moment the owed record
+      // may settle. A report that raced a settle already on file overwrites
+      // nothing.
+      if (settled.kind === ARRIVAL_SPEECH_KIND && arrivalBeatOwed(arrivalState)) {
+        writeArrivalState({ ...(arrivalState ?? {}), settledAt: new Date().toISOString() });
+      }
+    }
+    void reconcileSpeech();
   });
   registerHandler(BRIDGE.skipCalendarOnboarding, () => {
     // A skip that raced the step already settling overwrites nothing: it was
@@ -1935,7 +1928,7 @@ function registerIpc(): void {
       skippedAt: new Date().toISOString(),
     });
     // The step is over, so the arrival beat it was holding may speak now.
-    void speakArrivalBeat();
+    void requestOnboardingBeat();
   });
   registerHandler(BRIDGE.completeCalendarOnboarding, () => {
     // Done is what settles the step, not the connect before it: the gate
@@ -1947,7 +1940,7 @@ function registerIpc(): void {
       ...(calendarOnboardingState ?? {}),
       settledAt: new Date().toISOString(),
     });
-    void speakArrivalBeat();
+    void requestOnboardingBeat();
   });
   registerHandler(BRIDGE.beginSupersetSignIn, async () => {
     recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
@@ -2019,8 +2012,7 @@ function registerIpc(): void {
     realtimeCredentials: () => voiceCapabilities.realtimeCredentials,
     mediaDuck,
     workspaceProjectOffered,
-    refreshAnnouncementHold: () => void refreshAnnouncementHold(),
-    releaseHeldBriefings: () => void releaseHeldBriefings(),
+    reconcileSpeech: () => void reconcileSpeech(),
     recordProductEvent,
     vaultSync: providerKeyVaultSync,
   });
@@ -2487,9 +2479,9 @@ async function announcementsQuietNow(now: number): Promise<boolean> {
 /**
  * Recomputes whether announcements are held — the face sleeps beside the
  * housing for exactly as long as they are. The recompute itself broadcasts
- * any change; this name is for the callers with nothing to say and only the
- * face to keep current: the boundary timer, the ticks, and either setting's
- * toggle.
+ * any change; this name is for the caller with nothing to offer and only the
+ * face to keep current: the calendar's stop, after the backlog it held is
+ * gone.
  */
 async function refreshAnnouncementHold(): Promise<void> {
   await announcementsQuietNow(Date.now());
@@ -2515,8 +2507,7 @@ function armQuietBoundaryTimer(): void {
   quietBoundaryTimer = setTimeout(
     () => {
       quietBoundaryTimer = undefined;
-      void refreshAnnouncementHold();
-      void releaseHeldBriefings();
+      void reconcileSpeech();
       armQuietBoundaryTimer();
     },
     boundary - now + 1,
@@ -2525,18 +2516,50 @@ function armQuietBoundaryTimer(): void {
 }
 
 /**
- * Hands the briefings held through a meeting or a pause back to the brain once
- * the hold has ended, for one re-decision against the roster as it now stands:
- * a session that moved on while the meeting ran is no longer news, and the
- * brain, not a replay, is what knows. Voice gone while the backlog waited means
- * nothing to say it with, and by the time a key returns the news is the panel's.
+ * Brings the speech arbiter up to date with the quiet and lets it offer what
+ * it may. Runs wherever the quiet can have moved — the meeting edges, the
+ * ticks, either setting's toggle, a calendar pass — and whenever something
+ * new is requested or settled. When the quiet ends, the briefings held
+ * through it go back to the brain for one re-decision against the roster as
+ * it now stands: a session that moved on while the meeting ran is no longer
+ * news, and the brain, not a replay, is what knows. Voice gone while the
+ * backlog waited means nothing to say it with, and by the time a key returns
+ * the news is the panel's; a brain mid-rebuild under a standing credential
+ * keeps them for the next tick.
  */
-async function releaseHeldBriefings(): Promise<void> {
-  if (briefingHold.count === 0) return;
-  if (await announcementsQuietNow(Date.now())) return;
-  const held = briefingHold.release();
-  if (!brain || !voiceCapabilities.realtimeCredentials) return;
-  brain.releaseHeld(held);
+async function reconcileSpeech(): Promise<void> {
+  const quiet = await announcementsQuietNow(Date.now());
+  speechArbiter.setQuiet(quiet);
+  if (!quiet && speechArbiter.heldBriefingCount > 0) {
+    if (brain && voiceCapabilities.realtimeCredentials) {
+      brain.releaseHeld(speechArbiter.takeHeldBriefings());
+    } else if (!voiceCapabilities.realtimeCredentials) {
+      speechArbiter.dropBriefings();
+    }
+  }
+  offerNextSpeech();
+}
+
+/**
+ * Hands the mouth the arbiter's head request, if one may be offered now.
+ * Synchronous past the quiet's await, so two reconciles landing together
+ * cannot each offer: the arbiter marks the offer outstanding in the same
+ * tick it is sent.
+ */
+function offerNextSpeech(): void {
+  const host = panels.voiceHost();
+  if (!host || !voiceCapabilities.realtimeCredentials) return;
+  const offer = speechArbiter.next();
+  if (offer) host.webContents.send(channels.onSpeechOffered, offer);
+}
+
+/**
+ * Takes a pending beat back from the arbiter and, when the mouth already
+ * holds it unspoken, from the mouth as well. A reply already begun finishes.
+ */
+function withdrawBeat(kind: OnboardingBeatKind): void {
+  const id = speechArbiter.retract(kind);
+  if (id) panels.voiceHost()?.webContents.send(channels.onSpeechWithdrawn, { id });
 }
 
 /**
@@ -2586,8 +2609,7 @@ async function refreshCalendarMeetings(generation: number): Promise<void> {
     process.stderr.write(`Calendar observation failed: ${message}\n`);
   }
   if (!calendarObservationLoop.isCurrent(generation)) return;
-  void refreshAnnouncementHold();
-  void releaseHeldBriefings();
+  void reconcileSpeech();
   armQuietBoundaryTimer();
 }
 
@@ -2663,8 +2685,7 @@ function startCalendarObservation(): void {
   heldNoticeReleaseTimer = setInterval(() => {
     // The boundary timer answers the meeting edges on time; this tick is the
     // net under it, re-asking on a cadence no missed timer can silence.
-    void refreshAnnouncementHold();
-    void releaseHeldBriefings();
+    void reconcileSpeech();
   }, HELD_NOTICE_RELEASE_INTERVAL_MS);
   heldNoticeReleaseTimer.unref();
   if (process.platform === "darwin" && runMode.observesProviders) {
@@ -2697,7 +2718,7 @@ function stopCalendarObservation(): void {
   // signing back in starts from nothing, not from an era this stop ended.
   googleCalendar.forget();
   appleCalendar.forget();
-  briefingHold.release();
+  speechArbiter.dropBriefings();
   panels.broadcast(channels.onCalendarsChanged, observedCalendars);
   void refreshAnnouncementHold();
 }
@@ -3043,7 +3064,7 @@ export function startDesktopApp(): void {
       // A beat a previous launch could not speak — signed in, but voiceless
       // or quieted at the moment — is still owed, and this launch may be the
       // one that can say it.
-      void speakArrivalBeat();
+      void requestOnboardingBeat();
       // Reconcile in the background. Only an explicit invalid_grant removes the
       // stored account; network failures and service outages leave it active.
       void accountSession.refreshOnce();

@@ -41,8 +41,8 @@ export interface SettingsRowsIpcDependencies {
   realtimeCredentials: () => RealtimeCredentialMinter | undefined;
   mediaDuck: MediaDuckController;
   workspaceProjectOffered: (providerId: string, providerProjectId: string) => boolean;
-  refreshAnnouncementHold: () => void;
-  releaseHeldBriefings: () => void;
+  /** Re-reads the announcement hold and lets the speech arbiter offer what it may. */
+  reconcileSpeech: () => void;
   recordProductEvent: RecordProductEvent;
   /** Mirrors local provider keys into the account vault, main-process only. */
   vaultSync: ProviderKeyVaultSync;
@@ -63,8 +63,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     realtimeCredentials,
     mediaDuck,
     workspaceProjectOffered,
-    refreshAnnouncementHold,
-    releaseHeldBriefings,
+    reconcileSpeech,
     recordProductEvent,
     vaultSync,
   } = dependencies;
@@ -176,8 +175,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
         void applyVoiceCredential();
         break;
       case SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD:
-        refreshAnnouncementHold();
-        releaseHeldBriefings();
+        reconcileSpeech();
         break;
       case SETTING_SIDE_EFFECT.VAULT_SYNC:
         // The flip is a hand on the switch, so an on claims the keys for the

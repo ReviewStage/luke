@@ -4,13 +4,10 @@ import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import { FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import type { AppGuideSnapshot } from "@sidecar/guide";
 import {
-  ARRIVAL_SPEECH_KIND,
   type ArrivalSpeech,
   adoptConversationThread,
   announcementConversationEntry,
   appendConversationThreadEntry,
-  BRIEFING_SPEECH_KIND,
-  CALENDAR_ONBOARDING_SPEECH_KIND,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   insertSpokenAskThreadEntry,
@@ -41,7 +38,6 @@ import type {
   SessionOpenResult,
   WorkspaceProviderId,
 } from "#shared/wire/session";
-import { BriefingQueue } from "./briefing-queue";
 import { hostedVoiceUnavailableNote } from "./microphone-access";
 import { openPreferredMicrophone } from "./microphone-choice";
 import {
@@ -50,6 +46,7 @@ import {
   RealtimeVoiceSession,
   type ReplyKind,
 } from "./realtime-session";
+import { SpeechMouth } from "./speech-mouth";
 import { useStateWithRef } from "./use-state-with-ref";
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
 
@@ -427,7 +424,7 @@ export interface VoiceConversationOptions {
   /**
    * Whether announcements are held — the developer's pause switch is on, or a
    * meeting on the connected calendar covers now under the meeting quiet.
-   * True silences the announcer at once, the announcement mid-sentence on
+   * True silences the mouth at once, the announcement mid-sentence on
    * Luke's own call included.
    */
   announcementsHeld: boolean;
@@ -525,7 +522,7 @@ export interface VoiceConversation {
 
 /**
  * The spoken conversation: talk key, quiet timer, meter, captions, a changed
- * voice or pace on a live call, and the announcer that lets Luke speak into
+ * voice or pace on a live call, and the mouth that lets Luke speak into
  * silence. One cluster, so the rules it is made of can be tested apart from
  * the panel that draws around them.
  */
@@ -549,7 +546,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
    */
   const [talkOpening, setTalkOpening] = useState(false);
   // With a ref beside it, because the arrival beat is worded at the moment it
-  // is spoken — inside the announcer's own closures — not at a render.
+  // is spoken — inside the mouth's own closures — not at a render.
   const [voiceHotkey, setVoiceHotkey, voiceHotkeyNow] = useStateWithRef<
     VoiceHotkeyState | undefined
   >(undefined);
@@ -573,7 +570,7 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   const audioContext = useRef<AudioContext | undefined>(undefined);
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
   const voiceSession = useRef<RealtimeVoiceSession | undefined>(undefined);
-  const announcer = useRef<BriefingQueue | undefined>(undefined);
+  const mouth = useRef<SpeechMouth | undefined>(undefined);
   /** When the talk key went down, which is what tells a hold from a tap. */
   const talkPressedAt = useRef<number | undefined>(undefined);
   /** Whether a tap has left a turn open for a later press to end. */
@@ -979,15 +976,18 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
   );
 
   /**
-   * The queue that lets Luke speak into silence: it holds the briefings the
-   * brain decided and the onboarding beats and, when no conversation is open,
-   * opens a speak-only call of Luke's own to say them through — then closes
-   * it. Built beside the session because it drives nothing else. The session
-   * it drives is wrapped once, so an arrival beat leaving the queue is worded
-   * at the moment of speaking; every other member forwards untouched.
+   * The mouth that lets Luke speak into silence: it takes the one turn the
+   * main process's speech arbiter offers — a briefing the brain decided or an
+   * onboarding beat — and, when no conversation is open, opens a speak-only
+   * call of Luke's own to say it through, then closes it; what became of the
+   * offer goes back by id, and only then is the next offered. Built beside
+   * the session because it drives nothing else. The session it drives is
+   * wrapped once, so an arrival beat is worded at the moment of speaking;
+   * every other member forwards untouched.
    */
-  const ensureAnnouncer = useCallback((): BriefingQueue => {
-    announcer.current ??= new BriefingQueue({
+  const ensureMouth = useCallback((): SpeechMouth => {
+    mouth.current ??= new SpeechMouth({
+      settle: (id, outcome) => void window.sidecar.settleSpeech(id, outcome),
       session: () => {
         const session = ensureVoiceSession();
         return {
@@ -1012,20 +1012,14 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
               }
               return spoke;
             }
-            const spoke = session.speak(wordedArrival(item));
-            // The reply has actually begun, which is the one moment the owed
-            // record may settle: a beat dropped anywhere earlier — a trigger
-            // this renderer never heard, the quiet, an age-out — reports
-            // nothing, and the next signed-in launch speaks it instead.
-            if (spoke) void window.sidecar.completeArrivalBeat();
-            return spoke;
+            return session.speak(wordedArrival(item));
           },
           stopSpeaking: () => session.stopSpeaking(),
           close: () => session.close(),
         };
       },
     });
-    return announcer.current;
+    return mouth.current;
   }, [ensureVoiceSession, wordedArrival]);
 
   const stopMicrophone = useCallback(async () => {
@@ -1489,18 +1483,25 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     sessionsRef.current = options.sessions;
   }, [options.sessions]);
 
-  // A briefing the brain decided, on its way to be spoken: queued like every
-  // beat, riding an open call or opening Luke's own, held by the quiet, and
-  // aged out rather than spoken stale.
+  // One proactive turn the main process decided to voice now — a briefing
+  // the brain decided, or an onboarding beat whose observed values (a
+  // working session's title, the talk key) are read at the moment it is
+  // spoken. The mouth rides an open call or opens Luke's own, hands it back
+  // held under the quiet, and settles it stale rather than speaking it past
+  // its deadline; every outcome is reported by id so the next can be offered.
   useEffect(() => {
-    return window.sidecar.onBriefing((delivery) => {
-      ensureAnnouncer().enqueue({
-        kind: BRIEFING_SPEECH_KIND,
-        briefing: delivery.briefing,
-        decidedAt: delivery.decidedAt,
-      });
+    return window.sidecar.onSpeechOffered((offer) => {
+      ensureMouth().offer(offer);
     });
-  }, [ensureAnnouncer]);
+  }, [ensureMouth]);
+
+  // The main process taking an offer back — the gate a beat explained stood
+  // down, the account it greeted signed out — before it is spoken.
+  useEffect(() => {
+    return window.sidecar.onSpeechWithdrawn(({ id }) => {
+      mouth.current?.withdraw(id);
+    });
+  }, []);
 
   // An app act the brain decided that only this renderer can perform. It was
   // validated against the guide in the main process; the carrier performs it
@@ -1518,53 +1519,23 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     });
   }, []);
 
-  // The one-time arrival beat, decided in the main process at the sign-in
-  // edge. What is queued is only the fact of it: the beat's observed values —
-  // a working session's title, the talk key — are read at the moment it is
-  // spoken, and the announcer gives it the announcement's whole lifecycle,
-  // riding an open call or opening Luke's own, held by the meeting quiet,
-  // and aged out rather than spoken stale.
-  useEffect(() => {
-    return window.sidecar.onArrivalSpeech(() => {
-      ensureAnnouncer().enqueue({ kind: ARRIVAL_SPEECH_KIND, decidedAt: Date.now() });
-    });
-  }, [ensureAnnouncer]);
-
-  // The calendar onboarding beat rides the same queue on the same terms; it
-  // settles no record, because the gate it speaks about is the durable prompt.
-  useEffect(() => {
-    return window.sidecar.onCalendarOnboardingSpeech(() => {
-      ensureAnnouncer().enqueue({ kind: CALENDAR_ONBOARDING_SPEECH_KIND, decidedAt: Date.now() });
-    });
-  }, [ensureAnnouncer]);
-
-  // The gate standing down outruns a beat still queued about it: a fast Done
-  // or skip must not be answered by the ask it just settled, so the queued
-  // beat is dropped the moment the record says the step is over. The main
-  // process settles before it triggers the arrival, so the drop lands first.
-  useEffect(() => {
-    return window.sidecar.onCalendarOnboardingChanged((owed) => {
-      if (!owed) announcer.current?.dropCalendarOnboardingSpeech();
-    });
-  }, []);
-
-  // The announcer paces itself by the session's status: READY is when a queued
-  // sentence can speak and when an empty queue starts the walk toward closing
+  // The mouth paces itself by the session's status: READY is when the offer
+  // in hand can speak and when an empty hand starts the walk toward closing
   // the call Luke opened for himself. Built through ensure so the status
-  // history is already standing when the first notice arrives — the grace
+  // history is already standing when the first offer arrives — the grace
   // window after a reply needs to know one just ended.
   useEffect(() => {
-    ensureAnnouncer().onStatus(voiceStatus);
-  }, [ensureAnnouncer, voiceStatus]);
+    ensureMouth().onStatus(voiceStatus);
+  }, [ensureMouth, voiceStatus]);
 
-  // The hold reaching the announcer. A hold beginning is built through
-  // ensure, so it stands even before the first notice would have built the
-  // announcer; a hold ending has no announcer to wake, because the main
-  // process re-sends what it held as a fresh backlog.
+  // The hold reaching the mouth. A hold beginning is built through ensure, so
+  // it stands even before the first offer would have built the mouth; a hold
+  // ending has nothing here to wake, because the main process offers what it
+  // held once the quiet ends.
   useEffect(() => {
-    if (options.announcementsHeld) ensureAnnouncer().setHeld(true);
-    else announcer.current?.setHeld(false);
-  }, [ensureAnnouncer, options.announcementsHeld]);
+    if (options.announcementsHeld) ensureMouth().setHeld(true);
+    else mouth.current?.setHeld(false);
+  }, [ensureMouth, options.announcementsHeld]);
 
   // The talk key is registered by the main process so it answers from any app,
   // which is the whole point: no window to find, nothing to focus first. Both
