@@ -7,7 +7,11 @@ export {
   type SupersetQueryRunner,
   SupersetWorkspaceAdapter,
 } from "./cli.js";
-export { SupersetWorkspaceHost, type SupersetWorkspaceHostOptions } from "./host.js";
+export {
+  SUPERSET_HOST_ACTS,
+  SupersetWorkspaceHost,
+  type SupersetWorkspaceHostOptions,
+} from "./host.js";
 export {
   SupersetSignIn,
   type SupersetSignInOptions,

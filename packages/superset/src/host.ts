@@ -1,7 +1,9 @@
-import type {
-  WorkspaceHostEnrichment,
-  WorkspaceHostRegistration,
-  WorkspaceHostSessionActs,
+import {
+  PROVIDER_ACT,
+  type ProviderAct,
+  type WorkspaceHostEnrichment,
+  type WorkspaceHostRegistration,
+  type WorkspaceHostSessionActs,
 } from "@sidecar/providers";
 import { CLI_CONNECTION, type CliConnection, type SessionIdentity } from "@sidecar/session";
 import { isSupersetControlId, type SupersetCli, SupersetWorkspaceAdapter } from "./cli.js";
@@ -24,6 +26,19 @@ export interface SupersetWorkspaceHostOptions {
 }
 
 const OBSERVATION_FAILURE_LABEL = "Superset observation";
+
+/**
+ * The acts the host delivers for a claimed session, one per method of
+ * `WorkspaceHostSessionActs`: the four CLI commands the agent guide
+ * authorizes on a managed row. Stated so the capability declaration can be
+ * checked against them the way an adapter's seams are checked.
+ */
+export const SUPERSET_HOST_ACTS: readonly ProviderAct[] = [
+  PROVIDER_ACT.MESSAGE,
+  PROVIDER_ACT.CONTROL,
+  PROVIDER_ACT.ADD_AGENT,
+  PROVIDER_ACT.RENAME_WORKSPACE,
+];
 
 /**
  * Superset's entry in the workspace-host registry, carrying the whole

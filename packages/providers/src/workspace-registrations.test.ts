@@ -8,7 +8,7 @@ import {
   SUPERSET_WORKSPACE_PROVIDER_ID,
   WORKSPACE_PROVIDER_ID_LIST,
 } from "@sidecar/session";
-import { PROVIDER_ACT } from "./capabilities.js";
+import { workspaceProviderCapabilities } from "./capabilities.js";
 import { CodexCloudSessionAdapter } from "./codex/cloud-adapter.js";
 import {
   providerRegistrations,
@@ -79,9 +79,9 @@ test("Superset's rows arrive decorated and the observed providers host-enriched"
   }
 });
 
-test("local Conductor's adapter implements creation alone", () => {
+test("local Conductor's adapter implements exactly the acts its declaration lists", () => {
   assert.deepEqual(
     implementedActs(registrations[CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID].adapter),
-    new Set([PROVIDER_ACT.CREATE_WORKSPACE]),
+    new Set(workspaceProviderCapabilities(CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID).acts),
   );
 });

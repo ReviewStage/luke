@@ -1,10 +1,14 @@
 import { CONNECTION_KIND, type ConnectionKind } from "@sidecar/credentials/connections";
 import {
+  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   PROVIDER_ID,
   PROVIDER_ID_LIST,
   PROVIDER_LOCATION_KIND,
   type ProviderId,
   type ProviderLocationKind,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
+  WORKSPACE_PROVIDER_ID_LIST,
+  type WorkspaceProviderId,
 } from "@sidecar/session";
 
 /**
@@ -89,9 +93,53 @@ export function providerCapabilities(providerId: ProviderId): ProviderCapabiliti
   return PROVIDER_CAPABILITIES[providerId];
 }
 
-/** The providers declaring one act, in registry order. */
+/** The observed providers declaring one act, in registry order. */
 export function providersWithAct(act: ProviderAct): readonly ProviderId[] {
   return PROVIDER_ID_LIST.filter((providerId) =>
     providerCapabilities(providerId).acts.includes(act),
+  );
+}
+
+/**
+ * The same declaration over every workspace provider, adding the two that
+ * observe no sessions of their own. Superset's acts are the four its host
+ * delivers for the rows it manages plus the creation its workspace adapter
+ * carries, all through the Superset CLI under the login the user gave it;
+ * local Conductor's one act is the creation deep link.
+ */
+export const WORKSPACE_PROVIDER_CAPABILITIES = {
+  ...PROVIDER_CAPABILITIES,
+  [SUPERSET_WORKSPACE_PROVIDER_ID]: {
+    location: PROVIDER_LOCATION_KIND.LOCAL,
+    observationHook: false,
+    credential: CONNECTION_KIND.CLI_LOGIN,
+    acts: [
+      PROVIDER_ACT.MESSAGE,
+      PROVIDER_ACT.CONTROL,
+      PROVIDER_ACT.ADD_AGENT,
+      PROVIDER_ACT.RENAME_WORKSPACE,
+      PROVIDER_ACT.CREATE_WORKSPACE,
+    ],
+    hostsAgents: true,
+  },
+  [CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID]: {
+    location: PROVIDER_LOCATION_KIND.LOCAL,
+    observationHook: false,
+    credential: CONNECTION_KIND.LOCAL,
+    acts: [PROVIDER_ACT.CREATE_WORKSPACE],
+    hostsAgents: false,
+  },
+} as const satisfies Readonly<Record<WorkspaceProviderId, ProviderCapabilities>>;
+
+export function workspaceProviderCapabilities(
+  providerId: WorkspaceProviderId,
+): ProviderCapabilities {
+  return WORKSPACE_PROVIDER_CAPABILITIES[providerId];
+}
+
+/** The workspace providers declaring one act, in `WORKSPACE_PROVIDER_ID_LIST` order. */
+export function workspaceProvidersWithAct(act: ProviderAct): readonly WorkspaceProviderId[] {
+  return WORKSPACE_PROVIDER_ID_LIST.filter((providerId) =>
+    workspaceProviderCapabilities(providerId).acts.includes(act),
   );
 }

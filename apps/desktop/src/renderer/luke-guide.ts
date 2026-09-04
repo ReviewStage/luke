@@ -24,8 +24,11 @@
 import {
   CLOUD_AGENT_PROVIDER_LIST,
   CONNECTION_ID,
+  CONNECTION_KIND,
+  CONNECTION_LIST,
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDERS,
+  isCliLoginConnectionId,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials/vocabulary";
 import {
@@ -38,8 +41,17 @@ import {
   type AppUpdateButton,
 } from "@sidecar/guide";
 import {
+  PROVIDER_ACT,
+  type ProviderAct,
+  providerCapabilities,
+  workspaceProvidersWithAct,
+} from "@sidecar/providers/vocabulary";
+import {
   AGENT_CHOICE,
   type ModelsWorkspaceProviderId,
+  PROVIDER_ID_LIST,
+  SESSION_APPLICATION_ID_LIST,
+  SESSION_APPLICATION_NAME,
   type WorkspaceAgentSelection,
   workspaceAgentModels,
   workspaceProviderDisplayName,
@@ -188,13 +200,56 @@ function connectionWord(source: CredentialSource): string {
       : "connected";
 }
 
-/** The row's answer about the Codex CLI login, in words a fact can carry. */
-const CODEX_CLOUD_CONNECTION_WORD = {
+/** Joins names the way a sentence lists them: "A", "A and B", "A, B, and C". */
+export function oxfordJoin(names: readonly string[], conjunction = "and"): string {
+  if (names.length <= 1) return names.join("");
+  if (names.length === 2) return `${names[0]} ${conjunction} ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, ${conjunction} ${names[names.length - 1]}`;
+}
+
+/** The workspace providers declaring an act, named for a sentence. */
+export function providersWith(act: ProviderAct, conjunction = "and"): string {
+  return oxfordJoin(workspaceProvidersWithAct(act).map(workspaceProviderDisplayName), conjunction);
+}
+
+/** The observed providers needing no credential at all, named for a sentence. */
+function keylessLocalProviders(): string {
+  return oxfordJoin(
+    PROVIDER_ID_LIST.filter(
+      (providerId) => providerCapabilities(providerId).credential === CONNECTION_KIND.LOCAL,
+    ).map(workspaceProviderDisplayName),
+  );
+}
+
+/** The row's answer about a CLI login, in words a fact can carry. */
+const CLI_CONNECTION_WORD = {
   [CLI_CONNECTION.CONNECTED]: "connected",
   [CLI_CONNECTION.SIGNED_OUT]: "not connected; the CLI is signed out",
   [CLI_CONNECTION.CLI_MISSING]: "not connected; the CLI is not installed",
   [CLI_CONNECTION.UNKNOWN]: "not checked yet",
 };
+
+/**
+ * One sentence per provider whose cloud sessions follow its own CLI's login,
+ * read from the connection declarations: the login command, and what the
+ * CLI's latest answer says.
+ */
+function cliLoginSentences(settings: AppSettingsView): string {
+  return CONNECTION_LIST.filter(
+    (connection) => connection.kind === CONNECTION_KIND.CLI_LOGIN && connection.sessionsInCloud,
+  )
+    .map((connection) => {
+      const word = isCliLoginConnectionId(connection.id)
+        ? CLI_CONNECTION_WORD[settings.cliConnections[connection.id]]
+        : CLI_CONNECTION_WORD[CLI_CONNECTION.UNKNOWN];
+      const command = connection.cliLogin?.loginCommand ?? "";
+      return (
+        `${connection.displayName} cloud tasks (${word}) follow the ${connection.displayName} ` +
+        `CLI's own login: ${command} connects them, and signing that CLI out stops them. `
+      );
+    })
+    .join("");
+}
 
 function providersFact(settings: AppSettingsView): AppGuideFact {
   const roster = CLOUD_AGENT_PROVIDER_LIST.map(
@@ -206,9 +261,8 @@ function providersFact(settings: AppSettingsView): AppGuideFact {
     detail:
       `${roster.join(", ")}. Connecting one takes the key its row names, typed by hand into ` +
       `${CONNECTIONS_PAGE}, under Providers — never spoken, and never repeated back. Local ` +
-      "providers such as Claude Code need no key and are observed on their own. Codex cloud " +
-      `tasks (${CODEX_CLOUD_CONNECTION_WORD[settings.cliConnections[CONNECTION_ID.CODEX]]}) follow the ` +
-      "Codex CLI's own login: codex login connects them, and signing that CLI out stops them. " +
+      `providers such as ${keylessLocalProviders()} need no key and are observed on their own. ` +
+      `${cliLoginSentences(settings)}` +
       "While the Sync provider keys switch in the Sync section is on, a key saved while signed in " +
       "is also stored encrypted with Luke's own service, which never sends one back; the " +
       "switch is changed only by hand, and its own entry says what turning it moves.",
@@ -386,7 +440,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Apps beside a session",
       detail:
-        "A chat held by several apps — Conductor, ChatGPT, Superset — wears their marks on " +
+        `A chat held by several apps — ${SESSION_APPLICATION_ID_LIST.map((id) => SESSION_APPLICATION_NAME[id]).join(", ")} — wears their marks on ` +
         "its row. A mark with an exact address opens the chat in that app, and an ask can " +
         "name which app it comes forward in.",
     },
@@ -442,14 +496,14 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "Reading a session's transcript",
       detail:
         "Asked what a local session did, said, or is stuck on, Luke can read that session's " +
-        "own recent transcript — Claude Code, Codex, and OMP on this machine today — and " +
+        `own recent transcript — ${providersWith(PROVIDER_ACT.READ_TRANSCRIPT)} on this machine today — and ` +
         "answer from it; the reading is kept nowhere. A cloud session's conversation stays " +
         "with its provider, answered from roster fields alone.",
     },
     {
       label: "Creating workspaces",
       detail:
-        "Where a connected provider documents a creation endpoint — Conductor and Superset " +
+        `Where a connected provider documents a creation endpoint — ${providersWith(PROVIDER_ACT.CREATE_WORKSPACE)} ` +
         "today — an ask in conversation, spoken or typed, can create a new " +
         "workspace in a project that provider reports, with an opening task in the " +
         "developer's own words where the project takes one, named as the developer chose or, " +
@@ -477,7 +531,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Adding agents to a workspace",
       detail:
-        "Where a session's provider documents it — Conductor and Superset today — the same kind of ask " +
+        `Where a session's provider documents it — ${providersWith(PROVIDER_ACT.ADD_AGENT)} today — the same kind of ask ` +
         "can start another agent in an observed session's workspace, as one of the agent " +
         "kinds its roster entry lists; a session whose entry lists none takes no such ask. " +
         "The ask must name the workspace or session — a bare ask for a new agent creates a " +
@@ -486,8 +540,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Renaming workspaces and chats",
       detail:
-        "Where a provider documents it — a Conductor or Superset-managed workspace, or a " +
-        "Conductor chat on its own — an ask can rename what is observed to a name in the " +
+        `Where a provider documents it — a workspace ${providersWith(PROVIDER_ACT.RENAME_WORKSPACE, "or")} manages, or a ` +
+        `${providersWith(PROVIDER_ACT.RENAME_SESSION, "or")} chat on its own — an ask can rename what is observed to a name in the ` +
         "developer's own words. An ask naming the workspace renames the workspace, one " +
         "about the chat renames the chat, and a session whose roster entry allows neither " +
         "takes no such ask.",

@@ -6,6 +6,9 @@ export {
   type ProviderCapabilities,
   providerCapabilities,
   providersWithAct,
+  WORKSPACE_PROVIDER_CAPABILITIES,
+  workspaceProviderCapabilities,
+  workspaceProvidersWithAct,
 } from "./capabilities.js";
 export { ClaudeDesktopSessionApplicationReader } from "./claude-code/desktop-applications.js";
 export { CodexCloudSessionAdapter } from "./codex/cloud-adapter.js";

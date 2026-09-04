@@ -147,27 +147,8 @@ function assertNamesExactly(slice: string, providers: readonly ProviderId[], lab
   }
 }
 
-const LUKE_GUIDE = "apps/desktop/src/renderer/luke-guide.ts";
 const ROOT_GUIDE = "AGENTS.md";
 const PRIVACY = "PRIVACY.md";
-
-test("Luke's guide names the transcript-reading providers the declaration lists", () => {
-  const guide = repositoryFile(LUKE_GUIDE);
-  assertNamesExactly(
-    sliceBetween(guide, "own recent transcript — ", " on this machine today"),
-    providersWithAct(PROVIDER_ACT.READ_TRANSCRIPT),
-    LUKE_GUIDE,
-  );
-});
-
-test("Luke's guide names the agent-adding providers the declaration lists", () => {
-  const guide = repositoryFile(LUKE_GUIDE);
-  assertNamesExactly(
-    sliceBetween(guide, "provider documents it — ", " today — the same kind of ask"),
-    providersWithAct(PROVIDER_ACT.ADD_AGENT),
-    LUKE_GUIDE,
-  );
-});
 
 test("the root agent guide names the transcript-reading and hooked providers the declaration lists", () => {
   const prose = repositoryFile(ROOT_GUIDE).replace(/\n\s+/gu, " ");
