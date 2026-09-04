@@ -86,6 +86,14 @@ import {
   type WindowRole,
 } from "./wire/session";
 import type { AppSettings, SettingsUpdateResult } from "./wire/settings";
+import {
+  isSpeechOffer,
+  isSpeechOutcome,
+  isSpeechWithdrawal,
+  type SpeechOffer,
+  type SpeechOutcome,
+  type SpeechWithdrawal,
+} from "./wire/speech";
 import type { UpdateSnapshot } from "./wire/update";
 
 export interface WireGuard<Value> {
@@ -521,6 +529,20 @@ export const BRIDGE = {
     result: result<void>(),
   }),
   /**
+   * The mouth reporting what became of one speech offer, by the id the offer
+   * carried: spoken, refused, held, or stale. The arbiter offers the next turn
+   * only once this lands, and an id it no longer knows — withdrawn, or past
+   * its deadline — is ignored rather than acted on.
+   */
+  settleSpeech: entry({
+    kind: "invoke",
+    channel: "app:settle-speech",
+    args: args<[string, SpeechOutcome]>(
+      (v) => v.length === 2 && isWireString(v[0]) && isSpeechOutcome(v[1]),
+    ),
+    result: result<void>(),
+  }),
+  /**
    * One window's copy of the conversation history, reported whole after each
    * line it appends. The main process holds the launch's thread and mirrors
    * the report to every other panel window, so the History tab reads the same
@@ -823,6 +845,25 @@ export const BRIDGE = {
     channel: "app:briefing",
     args: noArgs,
     result: result<BriefingPayload>(),
+  }),
+  /**
+   * One proactive turn the speech arbiter decided to voice now — a briefing
+   * or an onboarding beat — with its id and the deadline past which it is
+   * stale. At most one is outstanding: the next is offered only after the
+   * mouth settles this one.
+   */
+  onSpeechOffered: entry({
+    kind: "subscribe",
+    channel: "app:speech-offered",
+    args: noArgs,
+    result: result<SpeechOffer>(isSpeechOffer),
+  }),
+  /** The arbiter taking back an offer the mouth has not yet begun to speak. */
+  onSpeechWithdrawn: entry({
+    kind: "subscribe",
+    channel: "app:speech-withdrawn",
+    args: noArgs,
+    result: result<SpeechWithdrawal>(isSpeechWithdrawal),
   }),
   /**
    * An app act the brain decided that only the renderer can perform, already

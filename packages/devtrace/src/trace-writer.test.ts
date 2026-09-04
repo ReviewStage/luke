@@ -43,10 +43,11 @@ test("lines land in the named file, stamped, in the order they were recorded", a
     iterations: 1,
     compacted: false,
   });
+  writer.recordSpeechDecision({ kind: "briefing", decision: "offered", pendingCount: 2 });
   await writer.settled();
   const lines = (await readFile(writer.file, "utf8")).split("\n").filter((line) => line.length > 0);
   const entries = lines.map(recordFromJsonLine);
-  assert.equal(entries.length, 3);
+  assert.equal(entries.length, 4);
   assert.equal(entries[0]?.kind, TRACE_ENTRY_KIND.WIRE);
   assert.equal(entries[0]?.direction, TRACE_DIRECTION.CLIENT);
   assert.equal(entries[1]?.kind, TRACE_ENTRY_KIND.BRAIN_REQUEST);
@@ -58,6 +59,8 @@ test("lines land in the named file, stamped, in the order they were recorded", a
   assert.equal(entries[2]?.elapsedMs, 1_250);
   const toolCalls = entries[2]?.toolCalls;
   assert.ok(Array.isArray(toolCalls) && isRecord(toolCalls[0]));
+  assert.equal(entries[3]?.kind, TRACE_ENTRY_KIND.SPEECH);
+  assert.deepEqual(entries[3]?.speech, { kind: "briefing", decision: "offered", pendingCount: 2 });
   for (const entry of entries) {
     assert.ok(isWireString(entry?.at));
   }
