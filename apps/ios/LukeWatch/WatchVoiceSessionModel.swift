@@ -40,7 +40,11 @@ final class WatchVoiceSessionModel {
                 self?.status = newStatus
                 if newStatus == .idle { self?.session = nil }
             },
-            onCaption: { [weak self] text in self?.captionText = text },
+            onCaption: { [weak self] text in
+                // nil signals segment end or drain — preserve the last caption
+                // so it stays visible until the next spoken ask clears it.
+                if let text { self?.captionText = text }
+            },
             onSpokenAsk: { [weak self] text in
                 // A new developer turn began — clear the previous response caption
                 // so the screen shows the question before Luke replies.
