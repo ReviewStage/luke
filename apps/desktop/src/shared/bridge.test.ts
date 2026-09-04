@@ -115,3 +115,63 @@ test("an app act pushed to the renderer never carries a memory write", () => {
   assert.equal(guard({ requestId: "r1", action: { kind: "forget", id: "f" } }), false);
   assert.equal(guard({ action: { kind: "panel", tab: "sessions" } }), false);
 });
+
+test("a speech offer carries an id, a deadline, and one well-formed turn", () => {
+  const guard = BRIDGE.onSpeechOffered.result;
+  assert.ok(guard);
+  const briefing = { kind: "briefing", briefing: "Claude Code finished checkout.", decidedAt: 1 };
+  assert.equal(guard({ id: "one", speakBy: 120_001, turn: briefing }), true);
+  assert.equal(guard({ id: "two", speakBy: 5, turn: { kind: "arrival", decidedAt: 2 } }), true);
+  assert.equal(
+    guard({
+      id: "three",
+      speakBy: 5,
+      turn: { kind: "arrival", decidedAt: 2, sessionTitle: "checkout", talkKeyLabel: "F5" },
+    }),
+    true,
+  );
+  assert.equal(
+    guard({ id: "four", speakBy: 5, turn: { kind: "calendar-onboarding", decidedAt: 3 } }),
+    true,
+  );
+  assert.equal(guard({ speakBy: 5, turn: briefing }), false);
+  assert.equal(guard({ id: "", speakBy: 5, turn: briefing }), false);
+  assert.equal(guard({ id: "five", turn: briefing }), false);
+  assert.equal(guard({ id: "five", speakBy: "soon", turn: briefing }), false);
+  assert.equal(guard({ id: "six", speakBy: 5, turn: { kind: "edge", decidedAt: 1 } }), false);
+  assert.equal(
+    guard({ id: "seven", speakBy: 5, turn: { kind: "briefing", briefing: 3, decidedAt: 1 } }),
+    false,
+  );
+  assert.equal(
+    guard({ id: "eight", speakBy: 5, turn: { kind: "briefing", briefing: "x", decidedAt: "1" } }),
+    false,
+  );
+  assert.equal(
+    guard({ id: "nine", speakBy: 5, turn: { kind: "arrival", decidedAt: 1, sessionTitle: 4 } }),
+    false,
+  );
+  assert.equal(guard({ id: "ten", speakBy: 5 }), false);
+});
+
+test("a speech withdrawal names the offer by a string id", () => {
+  const guard = BRIDGE.onSpeechWithdrawn.result;
+  assert.ok(guard);
+  assert.equal(guard({ id: "one" }), true);
+  assert.equal(guard({ id: "" }), false);
+  assert.equal(guard({ id: 1 }), false);
+  assert.equal(guard({}), false);
+  assert.equal(guard("one"), false);
+});
+
+test("settling speech takes an id and one of the four outcomes", () => {
+  assert.equal(BRIDGE.settleSpeech.kind, "invoke");
+  const guard = BRIDGE.settleSpeech.args;
+  for (const outcome of ["spoken", "refused", "held", "stale"]) {
+    assert.equal(guard(["one", outcome]), true);
+  }
+  assert.equal(guard(["one"]), false);
+  assert.equal(guard(["one", "dropped"]), false);
+  assert.equal(guard([1, "spoken"]), false);
+  assert.equal(guard(["one", "spoken", "extra"]), false);
+});

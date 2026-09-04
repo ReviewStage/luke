@@ -24,10 +24,23 @@ export interface BrainRequestTraceRecord {
   error?: string;
 }
 
+/**
+ * One decision the speech arbiter took about a proactive turn: which kind of
+ * turn, what was decided of it, and how many requests stood pending after.
+ * Nothing worded travels — a briefing's text is transcript-derived, and the
+ * trace widening to it is a product decision.
+ */
+export interface SpeechTraceRecord {
+  kind: string;
+  decision: string;
+  pendingCount: number;
+}
+
 export const TRACE_ENTRY_KIND = {
   WIRE: "wire",
   BRAIN: "brain",
   BRAIN_REQUEST: "brain-request",
+  SPEECH: "speech",
 } as const;
 
 export type TraceEntryKind = (typeof TRACE_ENTRY_KIND)[keyof typeof TRACE_ENTRY_KIND];
@@ -40,7 +53,8 @@ export type TraceEntryKind = (typeof TRACE_ENTRY_KIND)[keyof typeof TRACE_ENTRY_
 type PendingTraceEntry =
   | ({ kind: typeof TRACE_ENTRY_KIND.WIRE } & AgentWireTrace)
   | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN } & BrainTurnTraceRecord)
-  | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN_REQUEST } & BrainRequestTraceRecord);
+  | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN_REQUEST } & BrainRequestTraceRecord)
+  | { kind: typeof TRACE_ENTRY_KIND.SPEECH; speech: SpeechTraceRecord };
 
 export interface AgentTraceWriterOptions {
   /** Where the trace lands, created on the first line rather than up front. */
@@ -94,6 +108,14 @@ export class AgentTraceWriter {
 
   recordBrainRequest(record: BrainRequestTraceRecord): void {
     this.#append({ kind: TRACE_ENTRY_KIND.BRAIN_REQUEST, ...record });
+  }
+
+  /**
+   * Nested rather than spread: the record's own `kind` names the speech turn,
+   * and the line's `kind` names the entry, and the two must not collide.
+   */
+  recordSpeechDecision(record: SpeechTraceRecord): void {
+    this.#append({ kind: TRACE_ENTRY_KIND.SPEECH, speech: record });
   }
 
   /** The queue drained, for a test to await what `record*` fired and forgot. */

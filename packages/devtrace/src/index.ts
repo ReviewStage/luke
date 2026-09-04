@@ -6,6 +6,7 @@ export {
   AgentTraceWriter,
   type AgentTraceWriterOptions,
   type BrainRequestTraceRecord,
+  type SpeechTraceRecord,
   TRACE_ENTRY_KIND,
   type TraceEntryKind,
 } from "./trace-writer.js";
