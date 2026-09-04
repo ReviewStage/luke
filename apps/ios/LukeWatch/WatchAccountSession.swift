@@ -76,7 +76,10 @@ final class WatchAccountSession {
         guard case .signedIn = state, let accessToken else {
             throw AccountSessionError.signedOut
         }
-        guard !tokenNearExpiry else { throw AccountSessionError.signedOut }
+        guard !tokenNearExpiry else {
+            signOut()
+            throw AccountSessionError.signedOut
+        }
         return accessToken
     }
 
@@ -112,6 +115,7 @@ extension WatchAccountSession: AccountTokenProviding {
     /// expiry token is surfaced as `.signedOut` so the caller waits for the phone
     /// to push a fresh pair rather than attempting a refresh.
     func refreshAccessToken() async throws -> String {
+        signOut()
         throw AccountSessionError.signedOut
     }
 }

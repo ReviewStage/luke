@@ -11,31 +11,59 @@ import Observation
 final class WatchRosterStore {
     private(set) var sessions: [RosterSession] = []
     private(set) var isLoading = false
+    private(set) var hasLoaded = false
     private(set) var loadError: String?
 
     private let session: WatchAccountSession
     private let client = RosterClient(serviceURL: AccountConstants.serviceURL)
+    private var reloadRequested = true
+    private var loadGeneration = 0
 
     init(session: WatchAccountSession) {
         self.session = session
     }
 
     func load() async {
+        reloadRequested = true
         guard !isLoading else { return }
+        let generation = loadGeneration
         isLoading = true
-        loadError = nil
-        defer { isLoading = false }
-        do {
-            let fetched = try await session.authorized { [client] token in
-                try await client.observe(bearerToken: token)
+        defer {
+            if generation == loadGeneration {
+                isLoading = false
+                hasLoaded = true
             }
-            sessions = fetched
-        } catch is AccountSessionError {
-            // Token expired or signed out — WatchAccountSession.state change
-            // already drives the signed-out screen; nothing to do here.
-        } catch {
-            loadError = error.localizedDescription
         }
+
+        while reloadRequested, !Task.isCancelled, generation == loadGeneration {
+            reloadRequested = false
+            loadError = nil
+            do {
+                let fetched = try await session.authorized { [client] token in
+                    try await client.observe(bearerToken: token)
+                }
+                guard generation == loadGeneration else { return }
+                sessions = fetched
+            } catch is AccountSessionError {
+                guard generation == loadGeneration else { return }
+                session.signOut()
+                return
+            } catch {
+                guard generation == loadGeneration else { return }
+                loadError = error.localizedDescription
+            }
+        }
+    }
+
+    /// Removes account-scoped data before a new account can draw the roster.
+    /// The next signed-in view starts with placeholders until its first read.
+    func reset() {
+        loadGeneration += 1
+        sessions = []
+        loadError = nil
+        reloadRequested = true
+        hasLoaded = false
+        isLoading = false
     }
 
     /// Polls every 15 seconds. Called from `.task` on `WatchRosterView` so

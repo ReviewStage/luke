@@ -2,15 +2,21 @@ import SwiftUI
 
 struct LukeWatchView: View {
     @Environment(WatchAccountSession.self) private var watchSession
+    @Environment(WatchRosterStore.self) private var rosterStore
 
     var body: some View {
-        switch watchSession.state {
-        case .signedOut:
-            SignedOutView()
-        case .signedIn:
-            NavigationStack {
-                WatchRosterView()
+        Group {
+            switch watchSession.state {
+            case .signedOut:
+                SignedOutView()
+            case .signedIn:
+                NavigationStack {
+                    WatchRosterView()
+                }
             }
+        }
+        .onChange(of: watchSession.state) {
+            rosterStore.reset()
         }
     }
 }

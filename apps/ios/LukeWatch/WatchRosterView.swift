@@ -10,7 +10,7 @@ struct WatchRosterView: View {
 
     var body: some View {
         List {
-            if store.isLoading && store.sessions.isEmpty {
+            if !store.hasLoaded && store.sessions.isEmpty {
                 ForEach(0 ..< 3, id: \.self) { _ in
                     WatchSessionRow(session: .placeholder)
                         .redacted(reason: .placeholder)
@@ -39,7 +39,7 @@ struct WatchRosterView: View {
             }
         }
         .overlay {
-            if !store.isLoading && store.sessions.isEmpty {
+            if store.hasLoaded && store.sessions.isEmpty {
                 ContentUnavailableView(
                     "No Active Sessions",
                     systemImage: "checkmark.circle",
@@ -137,9 +137,10 @@ private struct WatchSessionRow: View {
 // MARK: - Session detail
 
 struct WatchSessionDetailView: View {
-    let session: RosterSession
+    private let openedSession: RosterSession
 
     @Environment(WatchAccountSession.self) private var account
+    @Environment(WatchRosterStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var conversation: [ConversationMessage] = []
     @State private var forwardCursor: String?
@@ -152,6 +153,7 @@ struct WatchSessionDetailView: View {
     @State private var infoShown = false
     @State private var outgoing: [WatchOutgoingMessage] = []
     @State private var claimedCopyIds: Set<String> = []
+    @State private var conversationGeneration = 0
 
     private let conversationClient = ConversationClient(serviceURL: AccountConstants.serviceURL)
     private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
@@ -169,6 +171,14 @@ struct WatchSessionDetailView: View {
     // Markdown layout is noticeably slower on the Watch than on iPhone. Give
     // the newest bubble a full render pass before pinning the end again.
     private static let layoutSettleNanoseconds: UInt64 = 1_000_000_000
+
+    init(session: RosterSession) {
+        openedSession = session
+    }
+
+    private var session: RosterSession {
+        store.sessions.first { $0.id == openedSession.id } ?? openedSession
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -324,9 +334,15 @@ struct WatchSessionDetailView: View {
     }
 
     private func openConversation() async {
-        defer { openAttempted = true }
+        let generation = conversationGeneration
+        defer {
+            if generation == conversationGeneration {
+                openAttempted = true
+            }
+        }
         do {
             let answer = try await read(.latest)
+            guard generation == conversationGeneration else { return }
             conversation = answer.messages
             forwardCursor = answer.lastMessageId
             oldestOffset = answer.firstOffset
@@ -334,24 +350,29 @@ struct WatchSessionDetailView: View {
             loadError = nil
             handOverDeliveredSends()
         } catch is AccountSessionError {
-            loadError = nil
+            guard !Task.isCancelled, generation == conversationGeneration else { return }
+            account.signOut()
         } catch {
+            guard generation == conversationGeneration else { return }
             loadError = error.localizedDescription
         }
     }
 
     private func refreshConversation() async {
         guard session.canReadConversation else { return }
+        conversationGeneration += 1
         forwardCursor = nil
         openAttempted = false
         await openConversation()
     }
 
     private func pollNewer() async {
+        let generation = conversationGeneration
         for _ in 0 ..< Self.maximumPollReads {
             guard !Task.isCancelled, let cursor = forwardCursor else { return }
             do {
                 let answer = try await read(.after(cursor))
+                guard generation == conversationGeneration else { return }
                 let known = Set(conversation.map(\.id))
                 conversation.append(contentsOf: answer.messages.filter { !known.contains($0.id) })
                 if let last = answer.lastMessageId {
