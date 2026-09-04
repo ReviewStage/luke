@@ -132,26 +132,16 @@ struct SessionsView: View {
             matched.filter { matchesFilterSelection(store.filters, session: $0) },
             by: store.sort
         )
+        let awaitingSkeleton =
+            store.awaitingFirstRoster && store.sessions.isEmpty && store.fetchError == nil
         return List {
-            if store.awaitingFirstRoster && store.sessions.isEmpty && store.fetchError == nil {
+            if awaitingSkeleton {
                 ForEach(0 ..< 3, id: \.self) { _ in
                     SkeletonRow()
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                         .listRowInsets(rowInsets)
                 }
-            } else if store.sessions.isEmpty {
-                emptyRow
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-            } else if matched.isEmpty {
-                ContentUnavailableView.search(text: store.searchQuery)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-            } else if visible.isEmpty {
-                filteredOutRow(hiddenCount: matched.count)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
             } else {
                 ForEach(visible) { s in
                     sessionItem(s)
@@ -164,6 +154,20 @@ struct SessionsView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Color.ground.ignoresSafeArea())
+        // Over the list rather than in it: a row sits at the top of an
+        // otherwise empty list, while an overlay centers in the whole area,
+        // and the list beneath keeps its pull-to-refresh.
+        .overlay {
+            if !awaitingSkeleton {
+                if store.sessions.isEmpty {
+                    emptyState
+                } else if matched.isEmpty {
+                    ContentUnavailableView.search(text: store.searchQuery)
+                } else if visible.isEmpty {
+                    filteredOutState(hiddenCount: matched.count)
+                }
+            }
+        }
         .searchable(text: $store.searchQuery, isPresented: $store.searchPresented, prompt: "Search sessions")
         .toolbar {
             // Search and list options flank the primary voice action. Keeping
@@ -237,7 +241,7 @@ struct SessionsView: View {
         .tint(Color.ink)
     }
 
-    private func filteredOutRow(hiddenCount: Int) -> some View {
+    private func filteredOutState(hiddenCount: Int) -> some View {
         ContentUnavailableView {
             Label("No matching sessions", systemImage: "line.3.horizontal.decrease")
         } description: {
@@ -246,7 +250,6 @@ struct SessionsView: View {
             Button("Clear Filters") { store.filters.removeAll() }
                 .tint(Color.ink)
         }
-        .padding(.top, 40)
     }
 
     private let rowInsets = EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16)
@@ -439,28 +442,25 @@ struct SessionsView: View {
     }
 
     @ViewBuilder
-    private var emptyRow: some View {
-        Group {
-            if let error = store.fetchError {
-                ContentUnavailableView {
-                    Label("Couldn't Load Sessions", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(error)
-                } actions: {
-                    Button("Try Again") {
-                        Task { await refreshSessions() }
-                    }
-                    .tint(Color.ink)
+    private var emptyState: some View {
+        if let error = store.fetchError {
+            ContentUnavailableView {
+                Label("Couldn't Load Sessions", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(error)
+            } actions: {
+                Button("Try Again") {
+                    Task { await refreshSessions() }
                 }
-            } else {
-                ContentUnavailableView {
-                    Label("No Active Sessions", systemImage: "tray")
-                } description: {
-                    Text("Sessions from providers with stored keys appear here.")
-                }
+                .tint(Color.ink)
+            }
+        } else {
+            ContentUnavailableView {
+                Label("No Active Sessions", systemImage: "tray")
+            } description: {
+                Text("Sessions from providers with stored keys appear here.")
             }
         }
-        .padding(.top, 40)
     }
 
     private func refreshSessions() async {
