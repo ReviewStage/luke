@@ -1,3 +1,12 @@
+export {
+  PROVIDER_ACT,
+  PROVIDER_ACT_LIST,
+  PROVIDER_CAPABILITIES,
+  type ProviderAct,
+  type ProviderCapabilities,
+  providerCapabilities,
+  providersWithAct,
+} from "./capabilities.js";
 export { ClaudeDesktopSessionApplicationReader } from "./claude-code/desktop-applications.js";
 export { CodexCloudSessionAdapter } from "./codex/cloud-adapter.js";
 export {
@@ -5,7 +14,11 @@ export {
   ConductorRepositoryReader,
 } from "./conductor/local-workspace-adapter.js";
 export { ConductorSessionApplicationReader } from "./conductor/session-applications.js";
-export { ObservationHookRegistry } from "./hook-registry.js";
+export {
+  OBSERVATION_HOOK_PROVIDER_IDS,
+  type ObservationHookProviderId,
+  ObservationHookRegistry,
+} from "./hook-registry.js";
 export { type LocalPeekOptions, peekLocalSessions } from "./local-peek.js";
 export { type ProviderRegistration, providerRegistrations } from "./registrations.js";
 export {

@@ -8,6 +8,7 @@ import {
   type ProductEvent,
 } from "@sidecar/analytics";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
+import { PROVIDER_ID_LIST } from "@sidecar/session";
 import {
   HTTP_STATUS,
   type RecordedRequest,
@@ -192,7 +193,7 @@ test("signed out the queue waits rather than being spent", async () => {
 
 test("past the queue limit the oldest go and the newest stay", async () => {
   const { sender, requests } = sharingSender({ queueLimit: 3 });
-  for (const providerId of ["claude-code", "codex", "conductor", "omp"] as const) {
+  for (const providerId of PROVIDER_ID_LIST) {
     sender.record(PRODUCT_EVENT.SESSION_ACT_SEND, {
       provider_id: providerId,
       session_act: "message_send",
