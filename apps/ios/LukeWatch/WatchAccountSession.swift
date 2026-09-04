@@ -21,6 +21,11 @@ final class WatchAccountSession {
     }
 
     private(set) var state: State = .signedOut
+    /// Stable across token rotations, different across signed-in accounts.
+    /// Views use this to tear down account-scoped navigation and message state.
+    private(set) var accountScope: String?
+
+    @ObservationIgnored var onCredentialsNeeded: (() -> Void)?
 
     private var accessToken: String?
     private var tokenExpiry: Date?
@@ -55,12 +60,14 @@ final class WatchAccountSession {
         WatchTokenStore.save(stored)
         self.accessToken = accessToken
         self.tokenExpiry = stored.expiry
+        accountScope = Self.scope(email: stored.email)
         state = .signedIn(email: email, name: stored.name)
     }
 
     func signOut() {
         accessToken = nil
         tokenExpiry = nil
+        accountScope = nil
         WatchTokenStore.clear()
         state = .signedOut
     }
@@ -76,7 +83,10 @@ final class WatchAccountSession {
         guard case .signedIn = state, let accessToken else {
             throw AccountSessionError.signedOut
         }
-        guard !tokenNearExpiry else { throw AccountSessionError.signedOut }
+        guard !tokenNearExpiry else {
+            invalidateCredentialsAndRequestReplacement()
+            throw AccountSessionError.signedOut
+        }
         return accessToken
     }
 
@@ -91,10 +101,41 @@ final class WatchAccountSession {
         guard let stored = WatchTokenStore.load() else { return }
         accessToken = stored.accessToken
         tokenExpiry = stored.expiry
+        accountScope = Self.scope(email: stored.email)
         state = .signedIn(email: stored.email, name: stored.name)
+    }
+
+    private static func scope(email: String) -> String {
+        // User emails are unique in Luke's account store. Using that stable
+        // identity avoids remounting the Watch UI when an older phone payload
+        // is later enriched with the account id for the same signed-in user.
+        "email:\(email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
+    }
+
+    private func invalidateCredentialsAndRequestReplacement() {
+        signOut()
+        onCredentialsNeeded?()
     }
 
     private func nonEmpty(_ value: String?) -> String? {
         value.flatMap { $0.isEmpty ? nil : $0 }
+    }
+}
+
+// MARK: - AccountTokenProviding
+
+extension WatchAccountSession: AccountTokenProviding {
+    var accountEmail: String? {
+        guard case .signedIn(let email, _) = state else { return nil }
+        return email
+    }
+
+    /// The watch never refreshes tokens independently — spending the phone's
+    /// rotating refresh token would invalidate the phone's own session. A near-
+    /// expiry token is surfaced as `.signedOut` so the caller waits for the phone
+    /// to push a fresh pair rather than attempting a refresh.
+    func refreshAccessToken() async throws -> String {
+        invalidateCredentialsAndRequestReplacement()
+        throw AccountSessionError.signedOut
     }
 }

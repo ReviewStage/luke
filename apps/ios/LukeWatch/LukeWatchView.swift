@@ -2,13 +2,22 @@ import SwiftUI
 
 struct LukeWatchView: View {
     @Environment(WatchAccountSession.self) private var watchSession
+    @Environment(WatchRosterStore.self) private var rosterStore
 
     var body: some View {
-        switch watchSession.state {
-        case .signedOut:
-            SignedOutView()
-        case .signedIn:
-            SignedInPlaceholderView()
+        Group {
+            switch watchSession.state {
+            case .signedOut:
+                SignedOutView()
+            case .signedIn:
+                NavigationStack {
+                    WatchRosterView()
+                }
+                .id(watchSession.accountScope)
+            }
+        }
+        .onChange(of: watchSession.accountScope) {
+            rosterStore.reset()
         }
     }
 }
@@ -17,7 +26,7 @@ private struct SignedOutView: View {
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: "iphone")
-                .font(.system(size: 28, weight: .semibold))
+                .font(.title2)
                 .foregroundStyle(Color.accentColor)
             Text("Open Luke on your iPhone")
                 .font(.caption2)
@@ -25,17 +34,5 @@ private struct SignedOutView: View {
                 .foregroundStyle(.secondary)
         }
         .padding()
-    }
-}
-
-private struct SignedInPlaceholderView: View {
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "bolt.fill")
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-            Text("Luke")
-                .font(.headline)
-        }
     }
 }

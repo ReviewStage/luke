@@ -126,7 +126,7 @@ private struct MarkdownBlockView: View {
         }
         .scrollIndicators(.hidden)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.pressedFill, in: RoundedRectangle(cornerRadius: 10))
+        .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func table(

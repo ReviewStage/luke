@@ -5,9 +5,13 @@ import WatchConnectivity
 final class WatchConnectivityReceiver: NSObject, WCSessionDelegate {
     private let watchSession: WatchAccountSession
 
+    @MainActor
     init(watchSession: WatchAccountSession) {
         self.watchSession = watchSession
         super.init()
+        watchSession.onCredentialsNeeded = { [weak self] in
+            self?.requestTokensIfNeeded()
+        }
         guard WCSession.isSupported() else { return }
         WCSession.default.delegate = self
         WCSession.default.activate()
