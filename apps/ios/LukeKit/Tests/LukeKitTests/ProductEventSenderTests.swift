@@ -100,6 +100,7 @@ final class ProductEventSenderTests: XCTestCase {
     private let serviceURL = URL(string: "https://luke.test")!
 
     private func makeSender(
+        client: ProductEventClient = .iOS,
         sends: Bool = true,
         tokens: StubTokens = StubTokens(),
         clock: Clock = Clock(),
@@ -116,6 +117,7 @@ final class ProductEventSenderTests: XCTestCase {
         let sender = ProductEventSender(
             serviceURL: serviceURL,
             appVersion: "0.1.1",
+            client: client,
             sends: sends,
             session: tokens,
             http: http,
@@ -172,6 +174,18 @@ final class ProductEventSenderTests: XCTestCase {
         await sender.flush().value
         requests = await log.requests
         XCTAssertEqual(requests.count, 1)
+    }
+
+    /// The header only ever carries a member of the client set, so a watch
+    /// batch is stamped as the watch's and never mistaken for the phone's.
+    func testTheClientHeaderNamesTheAppThatPosted() async {
+        let (sender, log) = makeSender(client: .watchOS)
+        sender.arm()
+        sender.record(.appLaunch)
+        await sender.flush().value
+        let requests = await log.requests
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests[0].value(forHTTPHeaderField: "x-luke-client"), "watchos")
     }
 
     func testA401RefreshesAndRetriesOnceAndTheSameTokenTwiceDoesNot() async {

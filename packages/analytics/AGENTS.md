@@ -15,17 +15,19 @@ second time there; everything in the section below reaches the project without
 passing it. So the guarantee is "nothing observed can travel in a counted
 event", never "nothing observed reaches the project".
 
-The endpoint has two clients, and the second is a transcription. The iOS app
-emits through its own Swift sender (`apps/ios/LukeKit/Sources/LukeKit/
-ProductEvents.swift` and `ProductEventSender.swift`), a hand-kept subset of
-this vocabulary whose enums make free text unrepresentable the way the `as
-const` sets do here. This file stays the source of truth: the service reads
-every batch against this allowlist regardless of who posted it, so a
+The endpoint has three clients, and the other two share a transcription. The
+iOS and watchOS apps emit through one Swift sender (`apps/ios/LukeKit/Sources/
+LukeKit/ProductEvents.swift` and `ProductEventSender.swift`), a hand-kept
+subset of this vocabulary whose enums make free text unrepresentable the way
+the `as const` sets do here. This file stays the source of truth: the service
+reads every batch against this allowlist regardless of who posted it, so a
 transcription that drifts shows up as a refused batch, never as a value that
 traveled. Which app posted travels as `PRODUCT_EVENT_CLIENT_HEADER`, a header
 whose value only selects between the fixed `$lib` tags in
 `PRODUCT_EVENT_CLIENT_LIB` — absent or unrecognized means the desktop, because
-desktop builds from before the header already post without one.
+desktop builds from before the header already post without one. The Swift
+sender takes its member of that set at construction, so each app names itself
+once and no call site can mislabel a batch.
 
 That construction is the guard, not a document that lists the events. Widening
 the event list or a property's value set is still a product decision rather
@@ -49,7 +51,10 @@ compromised renderer reaches none of the acts.
 the desktop runs, and `apps/ios/Luke/SessionReplay.swift` its iOS
 counterpart — each on its library's own configuration, and nothing in this
 package governs a byte of either. Do not let this file's promise be read as
-covering them. Three things leave that way and none is validated here:
+covering them. The watch app has no such client: the SDK's replay and crash
+autocapture do not build for watchOS, so the counted stream is the whole of
+what leaves it. Three things leave the other two that way and none is
+validated here:
 
 - The recording itself, which is the rendered panel except for the History
   tab's explicitly blocked `ph-no-capture` subtree — a session's title, branch,

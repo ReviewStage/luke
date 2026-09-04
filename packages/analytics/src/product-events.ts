@@ -582,6 +582,7 @@ export const PRODUCT_EVENT_CLIENT_HEADER = "x-luke-client";
 export const PRODUCT_EVENT_CLIENT = {
   DESKTOP: "desktop",
   IOS: "ios",
+  WATCHOS: "watchos",
 } as const;
 
 export type ProductEventClient = (typeof PRODUCT_EVENT_CLIENT)[keyof typeof PRODUCT_EVENT_CLIENT];
@@ -590,6 +591,7 @@ export type ProductEventClient = (typeof PRODUCT_EVENT_CLIENT)[keyof typeof PROD
 export const PRODUCT_EVENT_CLIENT_LIB = {
   [PRODUCT_EVENT_CLIENT.DESKTOP]: "luke-desktop",
   [PRODUCT_EVENT_CLIENT.IOS]: "luke-ios",
+  [PRODUCT_EVENT_CLIENT.WATCHOS]: "luke-watchos",
 } as const satisfies Record<ProductEventClient, string>;
 
 const PRODUCT_EVENT_CLIENTS: ReadonlySet<string> = new Set(Object.values(PRODUCT_EVENT_CLIENT));

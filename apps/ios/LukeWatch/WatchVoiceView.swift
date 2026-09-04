@@ -11,6 +11,7 @@ struct WatchVoiceView: View {
     @Environment(WatchRosterStore.self) private var store
     @Environment(WatchNavigation.self) private var navigation
     @Environment(VoiceConversationThread.self) private var conversation
+    @Environment(ProductEventSender.self) private var events
     @State private var model = WatchVoiceSessionModel()
     @State private var isPressing = false
     private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
@@ -51,10 +52,12 @@ struct WatchVoiceView: View {
             defaults: model.defaults,
             actClient: actClient,
             accessToken: { [accountSession] in try await accountSession.validAccessToken() },
-            // The watch posts no product events — none of the acts its own
-            // screens carry count either — so a spoken act counts nothing
-            // here rather than posting under another app's tag.
-            count: { _, _ in },
+            count: { [events] act, providerId in
+                // A provider id the shared vocabulary has not answered for is
+                // left uncounted rather than sent to be refused.
+                guard let provider = ProductProviderID(rawValue: providerId) else { return }
+                events.record(.sessionActSend(provider: provider, act: act))
+            },
             refreshRoster: { [store] in await store.load() },
             // One page, so the last open a reply names is the one taken.
             open: { [model] session in model.pendingNavigation = .open(session) },

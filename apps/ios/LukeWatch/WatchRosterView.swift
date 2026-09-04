@@ -4,6 +4,7 @@ import SwiftUI
 struct WatchRosterView: View {
     @Environment(WatchRosterStore.self) private var store
     @Environment(WatchAccountSession.self) private var account
+    @Environment(ProductEventSender.self) private var events
     @State private var archiveFailure: String?
 
     private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
@@ -115,25 +116,26 @@ struct WatchRosterView: View {
 
     private func archiveSession(_ session: RosterSession, control: RosterSessionControl) {
         Task {
-            do {
-                let answer = try await account.authorized { token in
-                    try await actClient.executeControl(
-                        accessToken: token,
-                        providerId: session.providerId,
-                        providerSessionId: session.sessionId,
-                        controlId: control.id
-                    )
-                }
-                switch answer.result {
-                case .accepted:
-                    await store.load()
-                case .rejected, .unsupported:
-                    archiveFailure = answer.reason ?? "The session was not archived."
-                }
-            } catch is AccountSessionError {
-                ()
-            } catch {
-                archiveFailure = error.localizedDescription
+            let outcome = await account.performAct(
+                counting: .controlRun,
+                provider: session.providerId,
+                events: events,
+                fallbackReason: "The session was not archived."
+            ) { token in
+                try await actClient.executeControl(
+                    accessToken: token,
+                    providerId: session.providerId,
+                    providerSessionId: session.sessionId,
+                    controlId: control.id
+                )
+            }
+            switch outcome {
+            case .delivered:
+                await store.load()
+            case .refused(let reason):
+                archiveFailure = reason
+            case .signedOut:
+                break
             }
         }
     }
@@ -184,6 +186,7 @@ struct WatchSessionDetailView: View {
 
     @Environment(WatchAccountSession.self) private var account
     @Environment(WatchRosterStore.self) private var store
+    @Environment(ProductEventSender.self) private var events
     @Environment(\.dismiss) private var dismiss
     @State private var conversation: [ConversationMessage] = []
     @State private var forwardCursor: String?
@@ -505,23 +508,24 @@ struct WatchSessionDetailView: View {
         outgoing.append(message)
         scrollIntent = .end
         Task {
+            let outcome = await account.performAct(
+                counting: .messageSend,
+                provider: session.providerId,
+                events: events,
+                fallbackReason: "The message was not delivered."
+            ) { token in
+                try await actClient.sendMessage(
+                    accessToken: token,
+                    providerId: session.providerId,
+                    providerSessionId: session.sessionId,
+                    text: message.text
+                )
+            }
             let delivery: WatchOutgoingMessage.Delivery
-            do {
-                let answer = try await account.authorized { token in
-                    try await actClient.sendMessage(
-                        accessToken: token,
-                        providerId: session.providerId,
-                        providerSessionId: session.sessionId,
-                        text: message.text
-                    )
-                }
-                delivery = answer.result == .accepted
-                    ? .sent
-                    : .failed(reason: answer.reason ?? "The message was not delivered.")
-            } catch is AccountSessionError {
-                delivery = .failed(reason: "Signed out.")
-            } catch {
-                delivery = .failed(reason: error.localizedDescription)
+            switch outcome {
+            case .delivered: delivery = .sent
+            case .refused(let reason): delivery = .failed(reason: reason)
+            case .signedOut: delivery = .failed(reason: "Signed out.")
             }
 
             guard let index = outgoing.firstIndex(where: { $0.id == message.id }) else { return }
@@ -573,6 +577,7 @@ private struct WatchSessionInfoView: View {
 
     @Environment(WatchAccountSession.self) private var account
     @Environment(WatchRosterStore.self) private var store
+    @Environment(ProductEventSender.self) private var events
     @Environment(\.openURL) private var openURL
     @State private var runningControl: String?
     @State private var renameTarget: RenameTarget?
@@ -794,7 +799,7 @@ private struct WatchSessionInfoView: View {
         let name = renameText
         renameTarget = nil
         Task {
-            await performAct {
+            await performAct(counting: target == .session ? .sessionRename : .workspaceRename) {
                 switch target {
                 case .session:
                     try await actClient.renameSession(
@@ -818,7 +823,7 @@ private struct WatchSessionInfoView: View {
     private func runControl(_ control: RosterSessionControl) {
         runningControl = control.id
         Task {
-            let delivered = await performAct {
+            let delivered = await performAct(counting: .controlRun) {
                 try await actClient.executeControl(
                     accessToken: $0,
                     providerId: session.providerId,
@@ -834,23 +839,25 @@ private struct WatchSessionInfoView: View {
     }
 
     @discardableResult
-    private func performAct(
-        _ call: (String) async throws -> ActMessageAnswer
+    private func performAct<Answer: ActAnswer>(
+        counting act: ProductSessionAct,
+        _ call: (String) async throws -> Answer
     ) async -> Bool {
-        do {
-            let answer = try await account.authorized(call)
-            switch answer.result {
-            case .accepted:
-                await store.load()
-                return true
-            case .rejected, .unsupported:
-                actFailure = answer.reason ?? "The action was not delivered."
-                return false
-            }
-        } catch is AccountSessionError {
+        let outcome = await account.performAct(
+            counting: act,
+            provider: session.providerId,
+            events: events,
+            fallbackReason: "The action was not delivered.",
+            call
+        )
+        switch outcome {
+        case .delivered:
+            await store.load()
+            return true
+        case .refused(let reason):
+            actFailure = reason
             return false
-        } catch {
-            actFailure = error.localizedDescription
+        case .signedOut:
             return false
         }
     }
@@ -862,6 +869,7 @@ private struct WatchAgentSpawnerView: View {
     let onDone: () async -> Void
 
     @Environment(WatchAccountSession.self) private var account
+    @Environment(ProductEventSender.self) private var events
     @Environment(\.dismiss) private var dismiss
     @State private var agent: String
     @State private var name = ""
@@ -923,28 +931,29 @@ private struct WatchAgentSpawnerView: View {
         spawning = true
         Task {
             defer { spawning = false }
-            do {
-                let answer = try await account.authorized { token in
-                    try await actClient.spawnAgent(
-                        accessToken: token,
-                        providerId: session.providerId,
-                        providerSessionId: session.sessionId,
-                        agent: agentKind,
-                        name: nameValue.isEmpty ? nil : nameValue,
-                        task: taskValue.isEmpty ? nil : taskValue
-                    )
-                }
-                switch answer.result {
-                case .accepted:
-                    await onDone()
-                    dismiss()
-                case .rejected, .unsupported:
-                    failure = answer.reason ?? "The agent was not started."
-                }
-            } catch is AccountSessionError {
+            let outcome = await account.performAct(
+                counting: .agentAdd,
+                provider: session.providerId,
+                events: events,
+                fallbackReason: "The agent was not started."
+            ) { token in
+                try await actClient.spawnAgent(
+                    accessToken: token,
+                    providerId: session.providerId,
+                    providerSessionId: session.sessionId,
+                    agent: agentKind,
+                    name: nameValue.isEmpty ? nil : nameValue,
+                    task: taskValue.isEmpty ? nil : taskValue
+                )
+            }
+            switch outcome {
+            case .delivered:
+                await onDone()
                 dismiss()
-            } catch {
-                failure = error.localizedDescription
+            case .refused(let reason):
+                failure = reason
+            case .signedOut:
+                dismiss()
             }
         }
     }
