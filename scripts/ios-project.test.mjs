@@ -38,6 +38,10 @@ const watchRosterStore = fs.readFileSync(
   path.join(repoRoot, "apps", "ios", "LukeWatch", "WatchRosterStore.swift"),
   "utf8",
 );
+const watchConnectivity = fs.readFileSync(
+  path.join(repoRoot, "apps", "ios", "LukeWatch", "WatchConnectivityReceiver.swift"),
+  "utf8",
+);
 
 test("the iPhone app embeds and depends on the Watch app", () => {
   assert.match(project, /LukeWatch\.app in Embed Watch Content/);
@@ -75,4 +79,24 @@ test("cancelled Watch roster reads do not become completed empty states", () => 
   assert.match(watchRosterStore, /var completedRequest = false/);
   assert.match(watchRosterStore, /if completedRequest \{[\s\S]*?hasLoaded = true[\s\S]*?\}/);
   assert.match(watchRosterStore, /guard !Task\.isCancelled else \{ return \}/);
+});
+
+test("the Watch requests replacement credentials after an expired token", () => {
+  assert.match(watchAccount, /@ObservationIgnored var onCredentialsNeeded/);
+  assert.match(
+    watchAccount,
+    /private func invalidateCredentialsAndRequestReplacement\(\)[\s\S]*?signOut\(\)[\s\S]*?onCredentialsNeeded\?\(\)/,
+  );
+  assert.equal(watchAccount.match(/invalidateCredentialsAndRequestReplacement\(\)/g)?.length, 3);
+  assert.match(
+    watchConnectivity,
+    /watchSession\.onCredentialsNeeded = \{[\s\S]*?requestTokensIfNeeded\(\)/,
+  );
+});
+
+test("empty Watch conversations leave the native composer interactive", () => {
+  assert.match(
+    watchRoster,
+    /if centersConversationState \{[\s\S]*?conversationContent[\s\S]*?\.allowsHitTesting\(loadError != nil\)/,
+  );
 });

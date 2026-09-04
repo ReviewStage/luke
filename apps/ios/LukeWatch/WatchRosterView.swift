@@ -236,6 +236,10 @@ struct WatchSessionDetailView: View {
                 if centersConversationState {
                     conversationContent
                         .padding(.horizontal, 4)
+                        // Empty/loading states are visual only, so they must not
+                        // intercept the native composer beneath them. An error
+                        // keeps hit testing for its compact Retry button.
+                        .allowsHitTesting(loadError != nil)
                 }
             }
             .refreshable { await refreshConversation() }

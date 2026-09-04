@@ -25,6 +25,8 @@ final class WatchAccountSession {
     /// Views use this to tear down account-scoped navigation and message state.
     private(set) var accountScope: String?
 
+    @ObservationIgnored var onCredentialsNeeded: (() -> Void)?
+
     private var accessToken: String?
     private var tokenExpiry: Date?
 
@@ -82,7 +84,7 @@ final class WatchAccountSession {
             throw AccountSessionError.signedOut
         }
         guard !tokenNearExpiry else {
-            signOut()
+            invalidateCredentialsAndRequestReplacement()
             throw AccountSessionError.signedOut
         }
         return accessToken
@@ -110,6 +112,11 @@ final class WatchAccountSession {
         "email:\(email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
     }
 
+    private func invalidateCredentialsAndRequestReplacement() {
+        signOut()
+        onCredentialsNeeded?()
+    }
+
     private func nonEmpty(_ value: String?) -> String? {
         value.flatMap { $0.isEmpty ? nil : $0 }
     }
@@ -128,7 +135,7 @@ extension WatchAccountSession: AccountTokenProviding {
     /// expiry token is surfaced as `.signedOut` so the caller waits for the phone
     /// to push a fresh pair rather than attempting a refresh.
     func refreshAccessToken() async throws -> String {
-        signOut()
+        invalidateCredentialsAndRequestReplacement()
         throw AccountSessionError.signedOut
     }
 }
