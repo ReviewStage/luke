@@ -477,7 +477,7 @@ struct VoiceView: View {
         withAnimation(.smooth(duration: 0.25)) { composerShown = false }
     }
 
-    /// The typed way in: a quiet glass circle at the controls' bottom right
+    /// The typed way in: a quiet glass circle at the controls' bottom left
     /// that stands the composer up. Hidden while the microphone is open,
     /// because a typed ask is refused there — typing must not cut off what is
     /// being said — and an absent control is honest where a refusing one is not.
