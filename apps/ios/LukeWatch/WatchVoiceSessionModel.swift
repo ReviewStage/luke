@@ -101,8 +101,14 @@ final class WatchVoiceSessionModel {
             onStatus: { [weak self] newStatus in
                 self?.status = newStatus
                 // An idle timeout releases the socket so the next button press
-                // remints rather than sending on a stale connection.
+                // remints rather than sending on a stale connection. A mint
+                // that failed publishes idle without closing, leaving the
+                // capturer the press started still running, so the session is
+                // closed here first: closing one already closed changes
+                // nothing, and the audio session goes down only once the
+                // engines have stopped.
                 if newStatus == .idle {
+                    self?.session?.close()
                     self?.session = nil
                     WatchVoiceAudioSession.deactivate()
                 }
