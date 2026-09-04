@@ -49,6 +49,7 @@
 		AABBCC0000000000000000E8 /* WatchVoiceSessionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000E7 /* WatchVoiceSessionModel.swift */; };
 		AABBCC0000000000000000EA /* WatchAudioCapturer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000E9 /* WatchAudioCapturer.swift */; };
 		AABBCC0000000000000000EC /* WatchAudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000EB /* WatchAudioPlayer.swift */; };
+		AABBCC0000000000000000EE /* WatchLukeMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000ED /* WatchLukeMark.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -115,6 +116,7 @@
 		AABBCC0000000000000000E7 /* WatchVoiceSessionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchVoiceSessionModel.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000E9 /* WatchAudioCapturer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchAudioCapturer.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000EB /* WatchAudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchAudioPlayer.swift; sourceTree = "<group>"; };
+		AABBCC0000000000000000ED /* WatchLukeMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchLukeMark.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -220,6 +222,7 @@
 				AABBCC0000000000000000E7 /* WatchVoiceSessionModel.swift */,
 				AABBCC0000000000000000E9 /* WatchAudioCapturer.swift */,
 				AABBCC0000000000000000EB /* WatchAudioPlayer.swift */,
+				AABBCC0000000000000000ED /* WatchLukeMark.swift */,
 				AABBCC0000000000000000B2 /* Assets.xcassets */,
 			);
 			path = LukeWatch;
@@ -422,6 +425,7 @@
 				AABBCC0000000000000000E8 /* WatchVoiceSessionModel.swift in Sources */,
 				AABBCC0000000000000000EA /* WatchAudioCapturer.swift in Sources */,
 				AABBCC0000000000000000EC /* WatchAudioPlayer.swift in Sources */,
+				AABBCC0000000000000000EE /* WatchLukeMark.swift in Sources */,
 				AABBCC0000000000000000F4 /* MarkdownMessageView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

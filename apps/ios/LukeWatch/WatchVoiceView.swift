@@ -32,11 +32,11 @@ struct WatchVoiceView: View {
             ScrollView {
                 VStack(spacing: 6) {
                     if model.messages.isEmpty {
-                        Text(model.status == .connecting ? "" : "Hold the button and speak")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.tertiary)
-                            .multilineTextAlignment(.center)
+                        WatchLukeMark()
+                            .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 40)
                             .frame(maxWidth: .infinity, minHeight: 80, alignment: .center)
+                            .opacity(model.status == .connecting ? 0.4 : 1)
                     } else {
                         ForEach(model.messages) { message in
                             WatchVoiceBubble(message: message)
