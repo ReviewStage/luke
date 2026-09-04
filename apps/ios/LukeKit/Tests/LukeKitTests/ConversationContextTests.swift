@@ -23,6 +23,15 @@ final class ConversationContextTests: XCTestCase {
         )
     }
 
+    func testTypedAskLeadsWithTyped() {
+        let typed = VoiceConversationMessage(
+            turnId: UUID(), speaker: .developer, words: "Open the Codex session", typed: true
+        )
+        let rendered = ConversationContext.text(messages: [typed]) ?? ""
+        XCTAssertTrue(rendered.contains("- the developer typed: \"Open the Codex session\""))
+        XCTAssertFalse(rendered.contains("the developer said"))
+    }
+
     func testNothingSaidYetIsNoItemAtAll() {
         XCTAssertNil(ConversationContext.text(messages: []))
         XCTAssertNil(ConversationContext.item(messages: []))

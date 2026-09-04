@@ -4,8 +4,8 @@ import Observation
 // MARK: - One line of the thread
 
 /// One line of the conversation Luke holds with the developer on this phone:
-/// the developer's spoken ask as the voice service transcribed it, or the
-/// words Luke spoke back.
+/// the developer's ask — spoken and transcribed by the voice service, or
+/// typed into the composer — or the words Luke spoke back.
 public struct VoiceConversationMessage: Identifiable, Equatable, Sendable {
     public enum Speaker: Equatable, Sendable {
         case developer
@@ -16,12 +16,17 @@ public struct VoiceConversationMessage: Identifiable, Equatable, Sendable {
     public let turnId: UUID
     public let speaker: Speaker
     public var words: String
+    /// Whether the developer typed these words rather than speaking them, so
+    /// the context re-feed can lead with the same distinction the desktop's
+    /// history keeps.
+    public let typed: Bool
 
-    public init(turnId: UUID, speaker: Speaker, words: String) {
+    public init(turnId: UUID, speaker: Speaker, words: String, typed: Bool = false) {
         id = UUID()
         self.turnId = turnId
         self.speaker = speaker
         self.words = words
+        self.typed = typed
     }
 }
 
@@ -70,7 +75,10 @@ public final class VoiceConversationThread {
         if let index = messages.firstIndex(where: {
             $0.turnId == turnId && $0.speaker == .developer
         }) {
-            messages[index].words = words
+            // A typed ask is already its author's whole words: a transcript
+            // landing on its turn is a spoken turn's late arrival, not a
+            // fuller version of what was typed.
+            if !messages[index].typed { messages[index].words = words }
             return
         }
         let message = VoiceConversationMessage(turnId: turnId, speaker: .developer, words: words)
@@ -81,6 +89,22 @@ public final class VoiceConversationThread {
         } else {
             messages.append(message)
         }
+        retainRecentMessages()
+    }
+
+    /// Records the developer's typed ask and opens its turn in one move:
+    /// unlike a spoken ask, the words arrive whole at the moment of the send,
+    /// on no service clock, so the turn and its ask land together and no
+    /// fuller version ever follows to replace them.
+    public func recordTypedAsk(_ text: String) {
+        let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !words.isEmpty else { return }
+        beginTurn()
+        messages.append(
+            VoiceConversationMessage(
+                turnId: currentTurnId(), speaker: .developer, words: words, typed: true
+            )
+        )
         retainRecentMessages()
     }
 

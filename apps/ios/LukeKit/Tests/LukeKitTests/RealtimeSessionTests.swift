@@ -873,6 +873,211 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertTrue(sent.contains(#""call_id":"c1""#), "Should address the correct call_id")
     }
 
+    // MARK: - Typed asks
+
+    func testTypedAskSendsTheDeveloperWordsAndRequestsAnArmedResponse() async throws {
+        let ws = MockWebSocketTask()
+        var dispatchedNames: [String] = []
+        let opts = makeOptions(ws: ws, dispatchToolCall: { name, _, _ in
+            dispatchedNames.append(name)
+            return #"{"result":"sent"}"#
+        })
+        let session = RealtimeSession(options: opts)
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertTrue(session.sendTypedAsk("  Open the Codex session  "))
+        XCTAssertEqual(session.status, .thinking)
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let items = ws.outgoing.filter { $0.contains(#""type":"conversation.item.create""#) }
+        XCTAssertEqual(items.count, 2, "The channel-open context item, then the typed ask")
+        let json = try JSONSerialization.jsonObject(with: Data(items[1].utf8)) as? [String: Any]
+        let item = (json?["item"] as? [String: Any])
+        XCTAssertEqual(item?["role"] as? String, "user")
+        let content = (item?["content"] as? [[String: Any]])?.first
+        XCTAssertEqual(content?["type"] as? String, "input_text")
+        XCTAssertEqual(content?["text"] as? String, "Open the Codex session")
+        XCTAssertTrue(ws.outgoing.contains { $0.contains(#""type":"response.create""#) })
+        XCTAssertFalse(
+            ws.outgoing.contains { $0.contains("input_audio_buffer.commit") },
+            "A typed turn commits no audio"
+        )
+
+        ws.deliver(
+            #"{"type":"response.done","response":{"output":[{"type":"function_call","call_id":"c1","name":"open_session","arguments":"{}"}]}}"#
+        )
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(dispatchedNames, ["open_session"])
+    }
+
+    func testTypedAskIsRefusedWhileTheMicrophoneIsOpen() async throws {
+        let ws = MockWebSocketTask()
+        let session = RealtimeSession(options: makeOptions(ws: ws))
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        session.beginTurn()
+        XCTAssertEqual(session.status, .listening)
+        XCTAssertFalse(session.sendTypedAsk("Typed over the open microphone"))
+        try await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertEqual(session.status, .listening)
+        XCTAssertFalse(ws.outgoing.contains { $0.contains("Typed over the open microphone") })
+    }
+
+    func testEmptyAndIdleTypedAsksAreRefused() async throws {
+        let ws = MockWebSocketTask()
+        let session = RealtimeSession(options: makeOptions(ws: ws))
+        XCTAssertFalse(session.sendTypedAsk("Typed before any call"), "Idle takes no ask")
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertFalse(session.sendTypedAsk("   \n "))
+        try await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertEqual(session.status, .ready)
+        XCTAssertFalse(ws.outgoing.contains { $0.contains(#""type":"response.create""#) })
+    }
+
+    func testTypedAskIsCutAtTheSessionMessageBound() async throws {
+        let ws = MockWebSocketTask()
+        let session = RealtimeSession(options: makeOptions(ws: ws))
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let overlong = String(repeating: "a", count: VoiceAsks.maximumMessageLength) + "z"
+        XCTAssertTrue(session.sendTypedAsk(overlong))
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let sent = ws.outgoing.joined(separator: "\n")
+        XCTAssertTrue(sent.contains(String(repeating: "a", count: VoiceAsks.maximumMessageLength)))
+        XCTAssertFalse(sent.contains("z"))
+    }
+
+    func testTypedAskWhileSpeakingInterruptsTheReply() async throws {
+        let ws = MockWebSocketTask()
+        let player = RecordingPlayer()
+        let clock = TestClock(10.0)
+        var dispatchedNames: [String] = []
+        let session = RealtimeSession(options: makeOptions(
+            ws: ws,
+            player: player,
+            dispatchToolCall: { name, _, _ in
+                dispatchedNames.append(name)
+                return #"{"result":"sent"}"#
+            },
+            now: { clock.read() }
+        ))
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        session.beginTurn()
+        session.endTurn()
+        ws.deliver(#"{"type":"response.created","response":{"id":"response_old"}}"#)
+        ws.deliver(
+            #"{"type":"response.output_item.added","response_id":"response_old","item":{"id":"item_old","type":"message","role":"assistant"}}"#
+        )
+        let audio = [Int16](repeating: 1, count: 2_400)
+            .withUnsafeBytes { Data($0).base64EncodedString() }
+        ws.deliver(
+            #"{"type":"response.output_audio.delta","response_id":"response_old","delta":"\#(audio)"}"#
+        )
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(session.status, .speaking)
+
+        clock.set(11.0)
+        XCTAssertTrue(session.sendTypedAsk("Actually, open the Codex session"))
+        XCTAssertEqual(session.status, .thinking)
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(player.stopCount, 1)
+        let sent = ws.outgoing.joined(separator: "\n")
+        XCTAssertTrue(sent.contains(#""type":"response.cancel""#))
+        XCTAssertTrue(sent.contains(#""type":"conversation.item.truncate""#))
+        XCTAssertTrue(sent.contains("Actually, open the Codex session"))
+        XCTAssertTrue(sent.contains(#""ios_interruption_sequence":"1""#))
+
+        // The interrupted response's late arrivals cannot act under the
+        // typed turn's arming.
+        ws.deliver(
+            #"{"type":"response.done","response":{"id":"response_old","output":[{"type":"function_call","call_id":"old_call","name":"send_session_message","arguments":"{}"}]}}"#
+        )
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertTrue(dispatchedNames.isEmpty)
+        XCTAssertEqual(session.status, .thinking)
+    }
+
+    func testTypedAskHeldWhileConnectingIsSentAtChannelOpen() async throws {
+        let ws = MockWebSocketTask()
+        let mintStarted = AsyncGate()
+        let allowMint = AsyncGate()
+        let session = RealtimeSession(
+            options: makeOptions(
+                ws: ws,
+                requestConnection: {
+                    await mintStarted.open()
+                    await allowMint.wait()
+                    return testConnection
+                }
+            )
+        )
+
+        let connecting = Task { await session.connect() }
+        await mintStarted.wait()
+        XCTAssertEqual(session.status, .connecting)
+        XCTAssertTrue(session.sendTypedAsk("Open the Codex session"))
+        XCTAssertFalse(session.sendTypedAsk("A second held ask"), "One held ask is enough")
+
+        await allowMint.open()
+        ws.deliver(#"{"type":"session.created"}"#)
+        await connecting.value
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(session.status, .thinking)
+        let contextIndex = ws.outgoing.firstIndex { $0.contains(testContext.itemId) }
+        let askIndex = ws.outgoing.firstIndex { $0.contains("Open the Codex session") }
+        let createIndex = ws.outgoing.firstIndex { $0.contains(#""type":"response.create""#) }
+        XCTAssertNotNil(contextIndex)
+        XCTAssertNotNil(askIndex)
+        XCTAssertNotNil(createIndex)
+        XCTAssertLessThan(contextIndex!, askIndex!)
+        XCTAssertLessThan(askIndex!, createIndex!)
+        XCTAssertFalse(ws.outgoing.contains { $0.contains("A second held ask") })
+        XCTAssertFalse(ws.outgoing.contains { $0.contains("input_audio_buffer.commit") })
+    }
+
+    func testPressedTurnWhileConnectingOwnsTheResponseOverAHeldTypedAsk() async throws {
+        let ws = MockWebSocketTask()
+        let session = RealtimeSession(options: makeOptions(ws: ws))
+
+        await session.connect()
+        XCTAssertTrue(session.sendTypedAsk("Open the Codex session"))
+        session.beginTurn()
+        XCTAssertFalse(session.sendTypedAsk("Typed behind the press"))
+
+        ws.deliver(#"{"type":"session.created"}"#)
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(session.status, .listening)
+        XCTAssertTrue(
+            ws.outgoing.contains { $0.contains("Open the Codex session") },
+            "The held ask's words still travel, ahead of the pressed turn"
+        )
+        XCTAssertFalse(
+            ws.outgoing.contains { $0.contains(#""type":"response.create""#) },
+            "The open microphone's turn requests its own response"
+        )
+    }
+
     func testCloseResetsToIdle() async throws {
         let ws = MockWebSocketTask()
         let opts = makeOptions(ws: ws)

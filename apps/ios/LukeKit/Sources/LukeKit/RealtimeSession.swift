@@ -186,6 +186,9 @@ public final class RealtimeSession {
     // Set when the developer releases while still connecting, so we commit
     // and request a response the moment the channel opens.
     private var pendingCommit = false
+    // A typed ask taken while still connecting, held for the channel the way
+    // a press's audio is held in PressAudioBuffer.
+    private var pendingTypedAsk: String?
 
     private var receiveTask: Task<Void, Never>?
     private var captureTask: Task<Void, Never>?
@@ -273,6 +276,47 @@ public final class RealtimeSession {
         }
     }
 
+    /// Sends the developer's typed ask: the same explicitly opened turn a
+    /// press is, arming tool calls for the one response it requests, with no
+    /// microphone anywhere in it. Mirrors the desktop's typed path — refused
+    /// while the microphone is open, because typing must not cut off what is
+    /// being said; interrupting a reply still in flight, because a new ask
+    /// supersedes the answer to the last; and held for the channel while it
+    /// is still connecting. Returns whether the ask was taken.
+    public func sendTypedAsk(_ text: String) -> Bool {
+        // The desktop's bound on a typed ask: trimmed, then cut at the same
+        // length a session message carries.
+        let ask = String(
+            text.trimmingCharacters(in: .whitespacesAndNewlines)
+                .prefix(VoiceAsks.maximumMessageLength)
+        )
+        guard !ask.isEmpty else { return false }
+        switch status {
+        case .idle, .listening:
+            return false
+        case .connecting:
+            // A turn already opened by press keeps the floor, and one held
+            // typed ask is enough: the composer waits for its answer.
+            guard !isArmed, !pendingCommit, pendingTypedAsk == nil else { return false }
+            pendingTypedAsk = ask
+            return true
+        case .ready, .thinking, .speaking:
+            guard let channel else { return false }
+            if status != .ready { interruptResponse() }
+            isArmed = true
+            idleTask?.cancel(); idleTask = nil
+            responseStarted = false
+            status = .thinking
+            let item = typedAskItemJSON(ask)
+            let request = responseCreateJSON(sequence: interruptionSequence)
+            Task {
+                try? await channel.sendText(item)
+                try? await channel.sendText(request)
+            }
+            return true
+        }
+    }
+
     /// The API applies a speed between model turns, so it is heard from the
     /// next reply. An idle session sends nothing: the caller mints the next
     /// connection at the speed it holds.
@@ -307,6 +351,7 @@ public final class RealtimeSession {
         responseStarted = false
         pendingDrains = 0
         pendingCommit = false
+        pendingTypedAsk = nil
         pendingSpeed = nil
         pendingCalls.removeAll()
         captionBuffer = ""
@@ -396,6 +441,15 @@ public final class RealtimeSession {
         for item in options.contextItems() {
             try? await ws.sendText(contextItemJSON(item))
         }
+        // A held typed ask travels whichever turn owns the response: its words
+        // go in ahead of any press audio, and it requests a response only when
+        // no pressed turn is standing to request its own.
+        var typedAskSent = false
+        if let ask = pendingTypedAsk {
+            pendingTypedAsk = nil
+            typedAskSent = true
+            try? await ws.sendText(typedAskItemJSON(ask))
+        }
         for chunk in pressBuffer.drain() {
             try? await ws.sendText(audioAppendJSON(chunk))
         }
@@ -406,6 +460,11 @@ public final class RealtimeSession {
         } else if isArmed {
             // Capture already running; status tracks listening once the first chunk arrives.
             status = .listening
+        } else if typedAskSent {
+            isArmed = true
+            responseStarted = false
+            status = .thinking
+            try? await ws.sendText(responseCreateJSON(sequence: interruptionSequence))
         } else {
             status = .ready
             resetIdleTimer()
@@ -748,6 +807,13 @@ public final class RealtimeSession {
         let escaped = jsonEscape(item.text)
         return """
             {"type":"conversation.item.create","item":{"id":"\(escapedId)","type":"message","role":"user","content":[{"type":"input_text","text":"\(escaped)"}]}}
+            """
+    }
+
+    private func typedAskItemJSON(_ text: String) -> String {
+        let escaped = jsonEscape(text)
+        return """
+            {"type":"conversation.item.create","item":{"type":"message","role":"user","content":[{"type":"input_text","text":"\(escaped)"}]}}
             """
     }
 
