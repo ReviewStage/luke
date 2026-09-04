@@ -170,6 +170,8 @@ struct ContentView: View {
 /// sign-in starts with the sheet closed rather than inheriting a stale true.
 private struct SignedInView: View {
     @Environment(AccountSession.self) private var session
+    @Environment(ProductEventSender.self) private var events
+    @Environment(PushCoordinator.self) private var push
     let identity: AccountIdentity
     @State private var profileShown = false
     /// The list's state and the stack above it, owned here so the voice
@@ -203,6 +205,30 @@ private struct SignedInView: View {
         .sheet(isPresented: $profileShown) {
             ProfileSheet(identity: identity)
         }
+        .onChange(of: push.pendingOpen, initial: true) { _, open in
+            guard let open else { return }
+            Task { await answer(open) }
+        }
+    }
+
+    /// A tapped notification opens the session it named, the same press its
+    /// row takes, and only a session the roster reports: the tap carries an
+    /// identity, never an address, so a session the roster no longer lists
+    /// opens nothing. The roster is refreshed once first when the row is not
+    /// yet on screen, since the notification usually arrives before the list
+    /// has caught up.
+    private func answer(_ open: PushOpen) async {
+        defer { if push.pendingOpen == open { push.pendingOpen = nil } }
+        if let found = session(matching: open) {
+            store.openLeavingConversation(found)
+            return
+        }
+        await store.refresh(account: session, events: events)
+        if let found = session(matching: open) { store.openLeavingConversation(found) }
+    }
+
+    private func session(matching open: PushOpen) -> RosterSession? {
+        store.sessions.first { $0.providerId == open.providerId && $0.sessionId == open.sessionId }
     }
 
     private var profileButton: some View {
@@ -250,6 +276,7 @@ private struct ProfileSheet: View {
     @Environment(AccountSession.self) private var session
     @Environment(VaultStore.self) private var vault
     @Environment(ProductEventSender.self) private var events
+    @Environment(PushRegistrar.self) private var pushRegistrar
     @Environment(\.dismiss) private var dismiss
     let identity: AccountIdentity
     @State private var editingProvider: VaultProviderID?
@@ -291,6 +318,9 @@ private struct ProfileSheet: View {
                             // or the act would wait for a sign-in to report.
                             events.record(.accountAct(.signOut))
                             await events.flush().value
+                            // Forgotten on the service while this account's
+                            // bearer still stands; the sign-out clears it.
+                            await pushRegistrar.unregister()
                             await session.signOut()
                         }
                     }
