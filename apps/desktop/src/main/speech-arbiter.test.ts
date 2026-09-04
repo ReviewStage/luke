@@ -282,6 +282,23 @@ test("settle HELD returns the request to the head, held, unspent", () => {
   assert.equal(arbiter.pendingCount, 2);
 });
 
+test("settle HELD while no quiet stands returns the request to the head unheld", () => {
+  // The mouth read a hold the panel still drew after the quiet had ended
+  // here; the request must not wait for a release that can never come.
+  const { arbiter, traces } = harness();
+  arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
+  const offer = arbiter.next();
+  assert.ok(offer);
+  assert.equal(arbiter.quiet, false);
+  assert.equal(arbiter.settle(offer.id, SPEECH_OUTCOME.HELD)?.outcome, SPEECH_OUTCOME.HELD);
+  assert.equal(traces.at(-1)?.decision, SPEECH_OUTCOME.HELD);
+
+  const again = arbiter.next();
+  assert.ok(again);
+  assert.equal(again.id, offer.id);
+  assert.equal(again.turn.kind, ARRIVAL_SPEECH_KIND);
+});
+
 test("settle STALE ends the request and spends a beat", () => {
   const { arbiter } = harness();
   arbiter.request({ kind: CALENDAR_ONBOARDING_SPEECH_KIND });

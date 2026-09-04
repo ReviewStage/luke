@@ -455,7 +455,9 @@ test("quiet beginning cuts the reply mid-sentence, closes Luke's own call, and h
   assert.deepEqual(spokenIds(session), ["a", "c"]);
 });
 
-test("an offer arriving under the quiet never opens a call and is handed back HELD", async () => {
+test("an offer arriving under a hold the panel still draws is spoken, not handed back", async () => {
+  // The arbiter offers only once the quiet has ended; the panel's copy of
+  // the hold lands a render later. The offer is the fresher word.
   const session = fakeSession();
   const timers = fakeTimers();
   const { subject, settled } = mouth(session, timers);
@@ -464,10 +466,25 @@ test("an offer arriving under the quiet never opens a call and is handed back HE
   subject.offer(offer("a"));
   await Promise.resolve();
 
-  assert.equal(session.connects, 0);
-  assert.deepEqual(spokenIds(session), []);
-  assert.equal(timers.armed(), 0);
+  assert.equal(session.connects, 1);
+  assert.deepEqual(spokenIds(session), ["a"]);
+  assert.deepEqual(settled, [{ id: "a", outcome: SPEECH_OUTCOME.SPOKEN }]);
+});
+
+test("a hold beginning over an unspoken offer settles it HELD and opens no call", async () => {
+  const session = fakeSession();
+  const timers = fakeTimers();
+  const { subject, settled } = mouth(session, timers);
+
+  session.connectOpens = false;
+  subject.offer(offer("a"));
+  await Promise.resolve();
+  assert.equal(timers.armed(), 1, "the refused call left a retry clock");
+
+  subject.setHeld(true);
   assert.deepEqual(settled, [{ id: "a", outcome: SPEECH_OUTCOME.HELD }]);
+  assert.equal(timers.armed(), 0);
+  assert.deepEqual(spokenIds(session), []);
 });
 
 test("quiet beginning never touches the developer's own call", () => {
