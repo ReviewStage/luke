@@ -18,7 +18,6 @@ struct SessionsView: View {
     @State private var spawningSession: RosterSession?
     @State private var renaming: RenameTarget?
     @State private var renameText = ""
-    @State private var creatorShown = false
     @State private var actFailure: String?
 
     /// Which advertised rename a menu press opened: the session itself, or
@@ -34,24 +33,12 @@ struct SessionsView: View {
     }
 
     private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
-    private let projectsClient = ProjectsClient(serviceURL: AccountConstants.serviceURL)
     private let conversationClient = ConversationClient(serviceURL: AccountConstants.serviceURL)
 
     var body: some View {
-        Group {
-            if #available(iOS 26.0, *) {
-                // Minimized, the search is the magnifier button in the bar until
-                // pressed; earlier systems keep the field the bar draws for a
-                // searchable list.
-                searchableList.searchToolbarBehavior(.minimize)
-            } else {
-                searchableList
-            }
-        }
+        searchableList
         .navigationDestination(for: SessionsRoute.self) { route in
             switch route {
-            case .voice:
-                VoiceView()
             case .session(let opened):
                 // The freshest observation of the opened session wins, so a
                 // refresh behind the screen updates the words it draws; a
@@ -82,12 +69,6 @@ struct SessionsView: View {
         .sheet(item: $spawningSession) { s in
             AgentSpawnerSheet(session: s, actClient: actClient) {
                 spawningSession = nil
-                Task { await refreshSessions() }
-            }
-        }
-        .sheet(isPresented: $creatorShown) {
-            WorkspaceCreatorSheet(actClient: actClient, projectsClient: projectsClient) {
-                creatorShown = false
                 Task { await refreshSessions() }
             }
         }
@@ -168,31 +149,19 @@ struct SessionsView: View {
                 }
             }
         }
-        .searchable(text: $store.searchQuery, isPresented: $store.searchPresented, prompt: "Search sessions")
+        // The drawer keeps the field at the top of the list, summoned by the
+        // bar's own search button, rather than iOS 26's bottom-edge default,
+        // which would crowd the tab bar.
+        .searchable(
+            text: $store.searchQuery,
+            isPresented: $store.searchPresented,
+            placement: .navigationBarDrawer(displayMode: .automatic),
+            prompt: "Search sessions"
+        )
         .toolbar {
-            // Search and list options flank the primary voice action. Keeping
-            // all three in the system bar gives each control native Liquid
-            // Glass while Luke remains centered and easy to reach.
-            if #available(iOS 26.0, *) {
-                DefaultToolbarItem(kind: .search, placement: .bottomBar)
-                ToolbarSpacer(.flexible, placement: .bottomBar)
-                ToolbarItem(placement: .bottomBar) {
-                    voiceButton
-                }
-                ToolbarSpacer(.flexible, placement: .bottomBar)
-                ToolbarItem(placement: .bottomBar) {
-                    optionsButton
-                }
-            } else {
-                ToolbarItem(placement: .topBarTrailing) {
-                    voiceButton
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    optionsButton
-                }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                newWorkspaceButton
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                searchButton
+                optionsButton
             }
         }
         .sheet(isPresented: $optionsShown) {
@@ -213,30 +182,11 @@ struct SessionsView: View {
         .tint(Color.ink)
     }
 
-    @ViewBuilder
-    private var voiceButton: some View {
-        if #available(iOS 26.0, *) {
-            NavigationLink(value: SessionsRoute.voice) {
-                LukeMark()
-                    .foregroundStyle(Color.ink)
-                    .frame(width: 22, height: 20)
-            }
-            .accessibilityLabel("Talk to Luke")
-        } else {
-            NavigationLink(value: SessionsRoute.voice) {
-                LukeMark()
-                    .foregroundStyle(Color.ink)
-                    .frame(width: 22, height: 20)
-            }
-            .accessibilityLabel("Talk to Luke")
-        }
-    }
-
-    private var newWorkspaceButton: some View {
+    private var searchButton: some View {
         Button {
-            creatorShown = true
+            store.searchPresented = true
         } label: {
-            Label("New Workspace", systemImage: "plus")
+            Label("Search", systemImage: "magnifyingglass")
         }
         .tint(Color.ink)
     }
@@ -486,7 +436,7 @@ private func optionTitle(_ filter: SessionFilter) -> String {
     }
 }
 
-/// The half sheet the search bar's filter button opens, in the system's own
+/// The half sheet the top bar's filter button opens, in the system's own
 /// grouped-sheet vocabulary (the profile sheet's): the sort as a checkmark
 /// list, one drill-in page per filter axis with the selection named on its
 /// row, and a clear action only while something is selected. The list behind

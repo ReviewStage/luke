@@ -2,12 +2,20 @@ import LukeKit
 import Observation
 import SwiftUI
 
-/// Where the signed-in hierarchy can stand beyond the list: on the voice
-/// screen, or on one session's own screen. A route carries the observed row
-/// it was opened from, so a screen whose session a later refresh no longer
-/// reports keeps its last observed word rather than going blank.
+/// The signed-in tab bar's destinations. `create` is a button wearing a
+/// tab's clothes: selecting it presents the New Workspace sheet while the
+/// selection stays on the tab already showing.
+enum AppTab: Hashable {
+    case sessions
+    case luke
+    case create
+}
+
+/// Where the sessions tab can stand beyond the list: on one session's own
+/// screen. A route carries the observed row it was opened from, so a screen
+/// whose session a later refresh no longer reports keeps its last observed
+/// word rather than going blank.
 enum SessionsRoute: Hashable {
-    case voice
     case session(RosterSession)
 }
 
@@ -36,6 +44,9 @@ final class SessionsStore {
     var searchPresented = false
     var filters: Set<SessionFilter> = []
     var sort: SessionSort = .urgency
+    /// Which tab the signed-in hierarchy shows; the conversation with Luke is
+    /// where a launch lands.
+    var tab: AppTab = .luke
     var path: [SessionsRoute] = []
 
     /// Counts refresh passes so a stale answer cannot outrank a newer one:
@@ -65,12 +76,11 @@ final class SessionsStore {
     }
 
     /// Opens a session's screen in the conversation's place: an open asked of
-    /// Luke leaves the conversation the way the desktop's open leaves the
-    /// panel for the provider's app. Covering the voice screen instead would
-    /// close its call and then mint another the moment the developer swiped
-    /// back, spending a voice session nobody asked for.
+    /// Luke leaves the Luke tab for the sessions tab the way the desktop's
+    /// open leaves the panel for the provider's app, and the voice screen
+    /// disappearing is what closes its call.
     func openLeavingConversation(_ session: RosterSession) {
-        path.removeAll { $0 == .voice }
+        tab = .sessions
         path.append(.session(session))
     }
 
@@ -104,7 +114,7 @@ final class SessionsStore {
 
     /// Shows the list as a spoken ask narrowed, ordered, or searched it, the
     /// way the filter sheet and the search field would have. The ask arrives
-    /// validated against the roster; this only applies it and pops to the list.
+    /// validated against the roster; this only applies it and shows the list.
     func showList(_ ask: VoiceAsks.SessionListAsk) {
         if let filters = ask.filters { self.filters = filters }
         if let sort = ask.sort { self.sort = sort }
@@ -112,6 +122,7 @@ final class SessionsStore {
             searchQuery = query
             searchPresented = true
         }
+        tab = .sessions
         path.removeAll()
     }
 

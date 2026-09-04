@@ -81,6 +81,38 @@ struct LukeMark: View {
         }
         .aspectRatio(FaceArt.markBox.width / FaceArt.markBox.height, contentMode: .fit)
     }
+
+    /// The face rasterized for the tab bar, which — like a `UIMenu` row —
+    /// draws only an image beside each title and drops a custom label view,
+    /// so the Canvas above can never appear there. The template rendering
+    /// lets the bar ink the face selected and unselected the way it inks an
+    /// SF Symbol.
+    static let tabIcon: UIImage = {
+        let box = FaceArt.markBox
+        let height: CGFloat = 24
+        let size = CGSize(width: height * box.width / box.height, height: height)
+        let scale = height / box.height
+        let placement = CGAffineTransform(scaleX: scale, y: scale)
+            .translatedBy(x: -box.minX, y: -box.minY)
+        let image = UIGraphicsImageRenderer(size: size).image { rendererContext in
+            let ctx = rendererContext.cgContext
+            // The CTM carries the tilt and placement, so the stroke width and
+            // eye rects stay in the artwork's own canvas coordinates.
+            ctx.concatenate(FaceArt.tilt.concatenating(placement))
+            ctx.setLineWidth(FaceArt.strokeWidth)
+            ctx.setLineCap(.round)
+            ctx.setLineJoin(.round)
+            ctx.addPath(FaceArt.smile.cgPath)
+            ctx.strokePath()
+            for eyeX in FaceArt.eyeXs {
+                ctx.fillEllipse(in: CGRect(
+                    x: eyeX - FaceArt.eyeRadius, y: FaceArt.eyeY - FaceArt.eyeRadius,
+                    width: FaceArt.eyeRadius * 2, height: FaceArt.eyeRadius * 2
+                ))
+            }
+        }
+        return image.withRenderingMode(.alwaysTemplate)
+    }()
 }
 
 // MARK: - Google G mark (official brand geometry, viewBox 0 0 18 18)

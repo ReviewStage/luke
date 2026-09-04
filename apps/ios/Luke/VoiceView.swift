@@ -260,6 +260,7 @@ struct VoiceView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.ground.ignoresSafeArea())
+        .navigationTitle("Luke")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) { settingsButton }
@@ -329,7 +330,7 @@ struct VoiceView: View {
     }
 
     /// Takes the developer where the settled reply said they were going. The
-    /// voice screen leaves the stack either way, and this screen's
+    /// selection leaves the Luke tab either way, and this screen's
     /// `onDisappear` closes the call behind it.
     private func performPendingNavigation() {
         guard let pending = model.pendingNavigation else { return }

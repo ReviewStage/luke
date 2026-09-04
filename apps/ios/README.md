@@ -51,8 +51,8 @@ roster and projects the conversation was shown before anything is sent:
 | Tool | What happens on the phone |
 | --- | --- |
 | `send_session_message`, `run_session_control`, `add_workspace_agent`, `rename_session`, `rename_workspace`, `create_workspace` | Validated against the observed roster or projects answer, then sent to the hosted act endpoint, which re-observes and validates again |
-| `open_session` | Pushes the session's own screen once Luke's reply has finished |
-| `show_panel` | Pops to the list and applies the filters, sort, or search the ask named, as the filter sheet and search field would |
+| `open_session` | Switches to the Sessions tab and pushes the session's own screen once Luke's reply has finished |
+| `show_panel` | Switches to the Sessions tab and applies the filters, sort, or search the ask named, as the filter sheet and search field would |
 
 The voice settings sheet ends in a Debug section listing every tool the
 desktop's conversation carries, marked available or not, with the reason:
