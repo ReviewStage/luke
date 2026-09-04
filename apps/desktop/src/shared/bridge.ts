@@ -61,6 +61,7 @@ import {
   isWireNumber,
   isWireString,
   type UnparsedWireValue,
+  type WireRecord,
 } from "@sidecar/wire";
 import type { AppleCalendarAccess } from "./apple-calendar";
 import type {
@@ -69,12 +70,7 @@ import type {
   OutputAudioState,
   VoiceHotkeyState,
 } from "./wire/audio";
-import type {
-  BrainAppActAnswer,
-  BrainAppActRequest,
-  BrainAskResult,
-  BriefingPayload,
-} from "./wire/brain";
+import type { BrainAppActRequest, BrainAskResult, BriefingPayload } from "./wire/brain";
 import {
   type AppBootstrap,
   type ConversationHistoryPayload,
@@ -489,7 +485,7 @@ export const BRIDGE = {
   answerBrainAppAct: entry({
     kind: "send",
     channel: "app:answer-brain-app-act",
-    args: args<[string, BrainAppActAnswer]>(
+    args: args<[string, WireRecord]>(
       (v) => v.length === 2 && isWireString(v[0]) && isRecord(v[1]) && isWireValue(v[1]),
     ),
   }),

@@ -1,3 +1,4 @@
+import type { RealtimeToolWireDefinition } from "@sidecar/acts";
 import {
   isRecord,
   isWireString,
@@ -6,13 +7,12 @@ import {
   type WireRecord,
   wholeNumber,
 } from "@sidecar/wire";
-import type { BrainToolWireDefinition } from "./brain-tools.js";
 
 /**
  * The one OpenAI Responses request a brain turn may be, and the one reading of
- * its answer. Built here once so the keyed client and the hosted service send
- * the same shape: instructions, tools, the refusal to store, and server-side
- * compaction are fixed by the build, and only the input array varies.
+ * its answer. Instructions, the refusal to store, the output ceiling, and
+ * server-side compaction are fixed by the build; only the input array and the
+ * tools the turn's kind allows vary.
  *
  * Item shapes follow the Responses API reference as it stands today. A
  * `function_call` output carries `call_id`, `name`, and `arguments` (a JSON
@@ -56,21 +56,14 @@ const RESPONSES_TOOL_CHOICE_AUTO = "auto";
 const RESPONSES_CONTEXT_MANAGEMENT_COMPACTION = "compaction";
 const RESPONSES_INCLUDE_ENCRYPTED_REASONING = "reasoning.encrypted_content";
 
-export const BRAIN_REASONING_EFFORT = {
-  LOW: "low",
-  MEDIUM: "medium",
-  HIGH: "high",
-} as const;
-
-export type BrainReasoningEffort =
-  (typeof BRAIN_REASONING_EFFORT)[keyof typeof BRAIN_REASONING_EFFORT];
+/** A turn may read a transcript, reason over it, and act; the ceiling is for a runaway, not a budget. */
+const MAXIMUM_OUTPUT_TOKENS = 16_000;
+const REASONING_EFFORT = "medium";
 
 export interface BrainResponsesOptions {
   model: string;
   instructions: string;
-  tools: readonly BrainToolWireDefinition[];
-  maximumOutputTokens: number;
-  reasoningEffort: BrainReasoningEffort;
+  tools: readonly RealtimeToolWireDefinition[];
 }
 
 /**
@@ -92,9 +85,9 @@ export function brainResponsesRequest(
     parallel_tool_calls: true,
     store: false,
     include: [RESPONSES_INCLUDE_ENCRYPTED_REASONING],
-    reasoning: { effort: options.reasoningEffort },
+    reasoning: { effort: REASONING_EFFORT },
     context_management: [{ type: RESPONSES_CONTEXT_MANAGEMENT_COMPACTION }],
-    max_output_tokens: options.maximumOutputTokens,
+    max_output_tokens: MAXIMUM_OUTPUT_TOKENS,
   };
 }
 

@@ -8,13 +8,13 @@ import {
   type SessionProvider,
 } from "@sidecar/session";
 import { isRecord, isWireString, unparsedWire, type WireRecord, wireRecord } from "@sidecar/wire";
-import { BRAIN_DELIVERY_SOURCE, BRAIN_WAKE_KIND, type BrainWakeEvent } from "./brain-events.js";
+import type { BrainWakeEvent } from "./brain-events.js";
 import {
   askInputItem,
   BRAIN_INPUT_MARKER,
   holdReleasedInputItem,
+  observedEventsItem,
   standingContextItem,
-  wakeInputItem,
 } from "./brain-input.js";
 import type { ResponsesInputItem } from "./brain-openai.js";
 
@@ -48,20 +48,19 @@ function itemBody(item: ResponsesInputItem, marker: string): WireRecord {
   return parsed;
 }
 
-test("a wake item carries each event's observed fields and transcript delta as data", () => {
+test("an observed-events item carries each event's fields and transcript delta as data", () => {
   const event: BrainWakeEvent = {
-    kind: BRAIN_WAKE_KIND.HOOK,
     hookEvent: "Stop",
     identity: { providerId: claude.id, providerSessionId: "abc" },
     session: session(),
     transcriptDelta: { text: "assistant: done", truncated: false, status: "accepted" },
     atMs: NOW,
   };
-  const body = itemBody(wakeInputItem([event], NOW), BRAIN_INPUT_MARKER.OBSERVED_EVENTS);
+  const body = itemBody(observedEventsItem([event], NOW), BRAIN_INPUT_MARKER.OBSERVED_EVENTS);
   assert.deepEqual(body, {
+    scheduled_roster_look: true,
     events: [
       {
-        kind: "hook",
         at: new Date(NOW).toISOString(),
         hook: "Stop",
         provider_id: "claude-code",
@@ -80,24 +79,9 @@ test("a wake item carries each event's observed fields and transcript delta as d
   });
 });
 
-test("an ask item carries the question and the events that arrived since the last turn", () => {
-  const body = itemBody(
-    askInputItem(
-      "what's running?",
-      [
-        {
-          kind: BRAIN_WAKE_KIND.HOOK,
-          identity: { providerId: claude.id, providerSessionId: "abc" },
-          atMs: NOW,
-        },
-      ],
-      NOW,
-    ),
-    BRAIN_INPUT_MARKER.DEVELOPER_ASK,
-  );
-  assert.equal(body.question, "what's running?");
-  assert.ok(Array.isArray(body.events_since_last_turn));
-  assert.equal(body.events_since_last_turn.length, 1);
+test("an ask item carries the question alone", () => {
+  const body = itemBody(askInputItem("what's running?", NOW), BRAIN_INPUT_MARKER.DEVELOPER_ASK);
+  assert.deepEqual(body, { question: "what's running?" });
 });
 
 test("a hold-released item lists the held briefings", () => {
@@ -107,7 +91,6 @@ test("a hold-released item lists the held briefings", () => {
         {
           briefing: "Checkout agent wants a decision.",
           decidedAt: NOW - 60_000,
-          source: BRAIN_DELIVERY_SOURCE.WAKE,
         },
       ],
       NOW,

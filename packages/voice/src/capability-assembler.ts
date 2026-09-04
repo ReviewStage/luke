@@ -64,13 +64,6 @@ export interface VoiceCapabilityAssemblerOptions {
   refreshAccount: () => Promise<void>;
   fetch?: typeof fetch;
   report?: (message: string) => void;
-  /**
-   * Decorates the brain client the policy builds, so a traced development
-   * run records every turn's request without the client learning it is being
-   * watched. The decoration may only observe: the agent still sees a
-   * `BrainClient`, and absence means the client is used as built.
-   */
-  wrapBrainClient?: (client: BrainClient) => BrainClient;
 }
 
 export class VoiceCapabilityAssembler {
@@ -130,11 +123,7 @@ export class VoiceCapabilityAssembler {
       refreshAccount: this.#options.refreshAccount,
       ...(this.#options.fetch ? { fetch: this.#options.fetch } : undefined),
     };
-    const builtBrainClient = openAiBrainClient(apiKey);
-    this.#brainClient =
-      builtBrainClient && this.#options.wrapBrainClient
-        ? this.#options.wrapBrainClient(builtBrainClient)
-        : builtBrainClient;
+    this.#brainClient = openAiBrainClient(apiKey);
     const [voice, speed] = await Promise.all([
       this.#options.settings.get(APP_SETTING_SCHEMA.voice.field).catch(() => undefined),
       this.#options.settings.get(APP_SETTING_SCHEMA.voiceSpeed.field).catch(() => undefined),

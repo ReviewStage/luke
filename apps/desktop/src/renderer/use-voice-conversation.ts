@@ -891,16 +891,25 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
       onRemoteStream: setRemoteStream,
       onError: setVoiceError,
       onCaption: (texts, kind) => setVoiceCaption({ texts, kind }),
+      // What History records when a reply's words end, by whose they were: a
+      // briefing as an announcement, a reply (or plain words the brain was
+      // not asked for) as a reply, and an onboarding beat as nothing, since a
+      // script fixed by the build is not a thing Luke said to the developer.
       onReplyEnded: (texts, kind) => {
-        if (kind === REPLY_KIND.BRIEFING) {
-          const generation = activeAnnouncementGenerationRef.current;
-          activeAnnouncementGenerationRef.current = undefined;
-          rememberConversationEntry(announcementConversationEntry(texts.join(" ")), generation);
-          return;
-        }
-        const generation = activeReplyGenerationRef.current;
-        activeReplyGenerationRef.current = undefined;
-        rememberConversationEntry(replyConversationEntry(texts.join(" ")), generation);
+        const recorders = {
+          [REPLY_KIND.BRIEFING]: () => {
+            const generation = activeAnnouncementGenerationRef.current;
+            activeAnnouncementGenerationRef.current = undefined;
+            rememberConversationEntry(announcementConversationEntry(texts.join(" ")), generation);
+          },
+          [REPLY_KIND.REPLY]: () => {
+            const generation = activeReplyGenerationRef.current;
+            activeReplyGenerationRef.current = undefined;
+            rememberConversationEntry(replyConversationEntry(texts.join(" ")), generation);
+          },
+          [REPLY_KIND.ONBOARDING]: () => undefined,
+        } satisfies Record<ReplyKind, () => void>;
+        recorders[kind ?? REPLY_KIND.REPLY]();
       },
       onSpokenAskCommitted: (itemId) => {
         const mark = pendingSpokenTurnMarksRef.current.shift();

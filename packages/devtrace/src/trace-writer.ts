@@ -3,31 +3,9 @@ import path from "node:path";
 import type { BrainTurnTraceRecord } from "@sidecar/brain";
 import { type AgentWireTrace, sanitizedTraceEvent } from "./vocabulary.js";
 
-/**
- * One model request a brain turn made, as the trace records it. The input
- * travels as counts alone — how many items, how many JSON characters — the
- * way an audio append travels as its byte count: a turn's input carries
- * transcript text, and the trace widening to it is a product decision. The
- * answer side keeps the outcome, the kinds of items that came back, and the
- * token counts the payload reported; the model when the client knows one,
- * absent through the hosted service, whose model the desktop never learns.
- */
-export interface BrainRequestTraceRecord {
-  inputItems: number;
-  inputChars: number;
-  outcome: string;
-  elapsedMs: number;
-  model?: string;
-  outputItemKinds?: readonly string[];
-  inputTokens?: number;
-  outputTokens?: number;
-  error?: string;
-}
-
 export const TRACE_ENTRY_KIND = {
   WIRE: "wire",
   BRAIN: "brain",
-  BRAIN_REQUEST: "brain-request",
 } as const;
 
 export type TraceEntryKind = (typeof TRACE_ENTRY_KIND)[keyof typeof TRACE_ENTRY_KIND];
@@ -39,8 +17,7 @@ export type TraceEntryKind = (typeof TRACE_ENTRY_KIND)[keyof typeof TRACE_ENTRY_
  */
 type PendingTraceEntry =
   | ({ kind: typeof TRACE_ENTRY_KIND.WIRE } & AgentWireTrace)
-  | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN } & BrainTurnTraceRecord)
-  | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN_REQUEST } & BrainRequestTraceRecord);
+  | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN } & BrainTurnTraceRecord);
 
 export interface AgentTraceWriterOptions {
   /** Where the trace lands, created on the first line rather than up front. */
@@ -90,10 +67,6 @@ export class AgentTraceWriter {
 
   recordBrainTurn(record: BrainTurnTraceRecord): void {
     this.#append({ kind: TRACE_ENTRY_KIND.BRAIN, ...record });
-  }
-
-  recordBrainRequest(record: BrainRequestTraceRecord): void {
-    this.#append({ kind: TRACE_ENTRY_KIND.BRAIN_REQUEST, ...record });
   }
 
   /** The queue drained, for a test to await what `record*` fired and forgot. */

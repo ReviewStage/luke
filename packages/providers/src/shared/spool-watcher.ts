@@ -35,22 +35,6 @@ const DEFAULT_REARM_INTERVAL_MS = 5000;
 
 type Timer = ReturnType<typeof setTimeout>;
 
-/** The narrow slice of `fs.watch` the watcher relies on, so a test can stand in. */
-export interface SpoolWatchHandle {
-  on(event: "error", listener: (error: Error) => void): void;
-  close(): void;
-}
-
-/**
- * The listener's file name is a string or nothing: `fs.watch` hands back a
- * `Buffer` only under the buffer encoding, which this watcher never asks for.
- */
-export type SpoolWatch = (
-  directory: string,
-  options: { persistent: false },
-  listener: (eventType: string, fileName: string | null) => void,
-) => SpoolWatchHandle;
-
 /** One hook event as the spool reported it, named by the session it belongs to. */
 export interface ObservedSpoolEvent<Event extends string> extends ObservedHookEvent<Event> {
   providerSessionId: string;
@@ -63,13 +47,9 @@ export interface ObservationSpoolWatcherOptions<Event extends string> {
   onEvents: (events: readonly ObservedSpoolEvent<Event>[]) => void;
   debounceMs?: number;
   rearmIntervalMs?: number;
-  watch?: SpoolWatch;
+  watch?: typeof fs.watch;
   schedule?: (callback: () => void, delayMs: number) => Timer;
   cancel?: (timer: Timer) => void;
-}
-
-export interface ObservationSpoolWatcher {
-  close(): void;
 }
 
 function spoolSessionId(fileName: string | null): string | undefined {
@@ -77,20 +57,20 @@ function spoolSessionId(fileName: string | null): string | undefined {
   return SPOOL_FILE_NAME_PATTERN.exec(fileName)?.[1];
 }
 
-class SpoolWatcher<Event extends string> implements ObservationSpoolWatcher {
+export class SpoolWatcher<Event extends string> {
   readonly #spoolDirectory: string;
   readonly #events: readonly Event[];
   readonly #onEvents: (events: readonly ObservedSpoolEvent<Event>[]) => void;
   readonly #debounceMs: number;
   readonly #rearmIntervalMs: number;
-  readonly #watch: SpoolWatch;
+  readonly #watch: typeof fs.watch;
   readonly #schedule: (callback: () => void, delayMs: number) => Timer;
   readonly #cancel: (timer: Timer) => void;
 
   readonly #pendingIds = new Set<string>();
   #debounceTimer: Timer | undefined;
   #rearmTimer: Timer | undefined;
-  #handle: SpoolWatchHandle | undefined;
+  #handle: fs.FSWatcher | undefined;
   #reads: Promise<void> = Promise.resolve();
   #closed = false;
 
@@ -124,12 +104,16 @@ class SpoolWatcher<Event extends string> implements ObservationSpoolWatcher {
    */
   #arm(): void {
     if (this.#closed) return;
-    let handle: SpoolWatchHandle;
+    let handle: fs.FSWatcher;
     try {
-      handle = this.#watch(this.#spoolDirectory, { persistent: false }, (_eventType, fileName) => {
-        if (handle !== this.#handle) return;
-        this.#collect(fileName);
-      });
+      handle = this.#watch(
+        this.#spoolDirectory,
+        { persistent: false, encoding: "utf8" },
+        (_eventType, fileName) => {
+          if (handle !== this.#handle) return;
+          this.#collect(fileName);
+        },
+      );
     } catch {
       this.#scheduleRearm();
       return;
@@ -193,16 +177,4 @@ class SpoolWatcher<Event extends string> implements ObservationSpoolWatcher {
     if (this.#closed || observed.length === 0) return;
     this.#onEvents(observed);
   }
-}
-
-/**
- * Stands a watch on one provider's spool and reports each batch of hook
- * events it sees, until closed. A directory that does not exist yet, or a
- * watch that fails later, is retried on a fixed interval rather than
- * reported: the watcher is additive to the adapters' own spool reads.
- */
-export function watchObservationSpool<Event extends string>(
-  options: ObservationSpoolWatcherOptions<Event>,
-): ObservationSpoolWatcher {
-  return new SpoolWatcher(options);
 }

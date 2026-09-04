@@ -15,7 +15,6 @@ import {
   isWireString,
   text,
   type UnparsedWireValue,
-  type WireRecord,
   wholeNumber,
 } from "@sidecar/wire";
 import {
@@ -65,15 +64,6 @@ export const HOSTED_SERVICE_PATH = {
    * ordinary endpoint does, so `hostedMintAnswerFromWire` validates both.
    */
   INTRODUCTION_MINT: "/api/voice/introduction-mint",
-  /**
-   * Run one turn of Luke's brain on Luke's key (POST), for a developer with
-   * none of their own. The desktop sends the brain's own input array — its
-   * memory from the latest compaction item onward, the standing context, and
-   * the turn's new items — and the service holds the instructions, the tool
-   * schemas, and the model fixed by its own build, answering with the raw
-   * Responses payload for the desktop to append and act on.
-   */
-  BRAIN_RESPOND: "/api/brain/respond",
   ACCOUNT_DELETE: "/api/account/delete",
   USAGE: "/api/usage",
   EVENTS: "/api/events",
@@ -290,42 +280,6 @@ export function remoteMintAnswerFromWire(
     ...base,
     context: { sessions: { itemId, text: itemText } },
   };
-}
-
-/**
- * What one hosted brain turn carries up: the input array as the desktop holds
- * it, every item a record the Responses API shaped or the desktop built, and
- * at most the output budget. Instructions, tools, and model never travel —
- * the service's build fixes them — so a request cannot widen what the brain
- * may do, only what it is shown.
- */
-export interface HostedBrainRequest {
-  input: readonly WireRecord[];
-  max_output_tokens?: number;
-}
-
-/** How many input items one hosted brain turn may carry; a longer memory has compacted by then. */
-export const maximumHostedBrainInputItems = 2_000;
-
-/** Validates a brain turn request arriving as untrusted JSON, or nothing. */
-export function hostedBrainRequestFromWire(
-  value: UnparsedWireValue,
-): HostedBrainRequest | undefined {
-  if (!isRecord(value) || !Array.isArray(value.input)) return undefined;
-  if (value.input.length === 0 || value.input.length > maximumHostedBrainInputItems)
-    return undefined;
-  const input: WireRecord[] = [];
-  for (const item of value.input) {
-    if (!isRecord(item)) return undefined;
-    input.push(item);
-  }
-  const request: HostedBrainRequest = { input };
-  if (value.max_output_tokens !== undefined) {
-    const budget = wholeNumber(value.max_output_tokens);
-    if (budget === undefined || budget <= 0 || !Number.isInteger(budget)) return undefined;
-    request.max_output_tokens = budget;
-  }
-  return request;
 }
 
 /**

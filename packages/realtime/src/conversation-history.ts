@@ -31,7 +31,7 @@
  */
 
 import { actNarration, type CarriedSessionAction } from "@sidecar/acts";
-import type { Session, SessionIdentity } from "@sidecar/session";
+import { type Session, type SessionIdentity, sameSessionIdentity } from "@sidecar/session";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { SESSION_NO_LONGER_OBSERVED_NOTE } from "./realtime-protocol.js";
 
@@ -329,11 +329,7 @@ export function conversationHistoryText(
         entry.kind === CONVERSATION_ENTRY_KIND.ACT ? `- ${lead} ${words}` : `- ${lead}: "${words}"`;
       const identity = entry.identity;
       if (!identity) return line;
-      const observed = sessions.some(
-        (candidate) =>
-          candidate.providerId === identity.providerId &&
-          candidate.providerSessionId === identity.providerSessionId,
-      );
+      const observed = sessions.some((candidate) => sameSessionIdentity(candidate, identity));
       return observed
         ? `${line} [provider_id=${identity.providerId} provider_session_id=${identity.providerSessionId}]`
         : `${line} [${SESSION_NO_LONGER_OBSERVED_NOTE}]`;

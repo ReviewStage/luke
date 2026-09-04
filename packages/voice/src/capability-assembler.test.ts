@@ -97,37 +97,6 @@ test("the assembler builds and clears the keyed voice capabilities as one unit",
   assert.match(reports.at(-1) ?? "", /Luke brain: absent/);
 });
 
-test("a wrapped brain client stands where the built one would, and only when one was built", async () => {
-  const wrapped: string[] = [];
-  let key: string | undefined = "test-key";
-  const assembler = new VoiceCapabilityAssembler({
-    settings: {
-      ...settingsFor({ source: VOICE_SOURCE.KEY }),
-      readApiKey: async () => key,
-    },
-    credentialsUsable: () => true,
-    fixtureRun: () => false,
-    accountSignedIn: () => false,
-    hostedServiceBaseUrl: "https://example.test",
-    refreshAccount: async () => undefined,
-    report: () => undefined,
-    wrapBrainClient: (client) => {
-      wrapped.push(client.model ?? "unnamed");
-      return client;
-    },
-  });
-
-  await assembler.apply();
-  assert.ok(assembler.brainClient);
-  assert.deepEqual(wrapped, ["gpt-5.6-terra"]);
-
-  // No client, nothing to decorate: the wrapper must not conjure one.
-  key = undefined;
-  await assembler.apply();
-  assert.equal(assembler.brainClient, undefined);
-  assert.deepEqual(wrapped, ["gpt-5.6-terra"]);
-});
-
 test("the assembler keeps fixture runs credential-free without reading a key", async () => {
   let keyReads = 0;
   const assembler = new VoiceCapabilityAssembler({

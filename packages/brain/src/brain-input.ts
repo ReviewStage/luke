@@ -38,7 +38,6 @@ function sessionSummary(session: Session): WireRecord {
 
 function eventRecord(event: BrainWakeEvent): WireRecord {
   return {
-    kind: event.kind,
     at: new Date(event.atMs).toISOString(),
     ...(event.hookEvent ? { hook: event.hookEvent } : undefined),
     provider_id: event.identity.providerId,
@@ -57,43 +56,24 @@ function eventRecord(event: BrainWakeEvent): WireRecord {
 }
 
 /**
- * The item an observed-events turn opens with. A scheduled roster wake also
- * carries the whole roster as `list_sessions` would answer it, so the look is
- * at everything observed, not only the sessions whose transcripts grew.
+ * The item an observed-events turn opens with: the roster look, every session
+ * it carries, and what each transcript gained. Marked as a scheduled look
+ * because nothing detected a change: the hook names ride on the events.
  */
-export function wakeInputItem(
+export function observedEventsItem(
   events: readonly BrainWakeEvent[],
   now: number,
-  roster?: string,
 ): ResponsesInputItem {
   return markedItem(
     BRAIN_INPUT_MARKER.OBSERVED_EVENTS,
     now,
-    JSON.stringify({
-      ...(roster !== undefined ? { scheduled_roster_look: true, roster } : undefined),
-      events: events.map(eventRecord),
-    }),
+    JSON.stringify({ scheduled_roster_look: true, events: events.map(eventRecord) }),
   );
 }
 
-/**
- * The item a developer-ask turn opens with. Events that arrived since the
- * last turn ride along rather than waiting for their own, so the reply is
- * given knowing what just changed and the memory never skips them.
- */
-export function askInputItem(
-  question: string,
-  eventsSinceLastTurn: readonly BrainWakeEvent[],
-  now: number,
-): ResponsesInputItem {
-  return markedItem(
-    BRAIN_INPUT_MARKER.DEVELOPER_ASK,
-    now,
-    JSON.stringify({
-      question,
-      events_since_last_turn: eventsSinceLastTurn.map(eventRecord),
-    }),
-  );
+/** The item a developer-ask turn opens with: the question, in the developer's own words. */
+export function askInputItem(question: string, now: number): ResponsesInputItem {
+  return markedItem(BRAIN_INPUT_MARKER.DEVELOPER_ASK, now, JSON.stringify({ question }));
 }
 
 function deliveryRecord(delivery: BrainDelivery): WireRecord {

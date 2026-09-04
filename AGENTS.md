@@ -128,10 +128,12 @@ Trust constraints:
   build, and nothing enters that document's text but identifiers the same
   pass reported, each validated against the shape its provider documents.
   Nothing that decides on the user's behalf may reach a write path: the
-  attention evaluator above all, and every turn Luke opens himself (a
-  proactive readout, the reply that voices a tool's outcome) which carries no
-  tools, at the API and again at a runtime gate, so a session summary or a tool
-  output that reads like an instruction can never become an act. A tool call
+  brain above all, whose observed-events and hold-released turns are offered
+  no act tool at the API and refuse one at dispatch, and every turn Luke opens
+  himself (a proactive readout, the reply that voices a tool's outcome) which
+  carries no tools, at the API and again at a runtime gate, so a session
+  summary or a tool output that reads like an instruction can never become an
+  act. A tool call
   in that conversation runs only in a turn the developer opened themselves, by
   speaking or by typing; a write is the direct product of a turn the developer
   opened, never of anything Luke read or was told. The one act not aimed at an
@@ -199,39 +201,6 @@ Trust constraints:
   with its provider and is never fetched. The read renders only what the
   provider actually wrote down, and a provider whose stored shape this build
   cannot render faithfully keeps the honest refusal instead.
-- A session's subject is the one place transcript content reaches a model
-  unbidden, and it is bounded on every side. No observed field says what an
-  agent is generally working on — a title is the first message, an activity
-  is the tool running now — so an
-  announcement that named the agent by its title named work it had stopped
-  doing. Luke therefore derives one short phrase per local session from the
-  same bounded transcript rendering the conversation-tab ask already reads,
-  through the same adapter method, bounded only by the file tail the adapter
-  reads and its per-line cuts, together with the title as the developer's
-  first ask. The
-  derivation runs only for a session about to be announced, at the moment the
-  announcement is delivered, once per announcement, never in a fixture run,
-  under a fixed deadline past which the announcement speaks without it, so
-  the transcript it reads is the one holding the turn the announcement is
-  about; a cloud session, a provider with no transcript this build reads, a
-  closed session, and a session inside a live voice exchange derive nothing. It travels the way an
-  attention review travels: directly to OpenAI
-  on the developer's own key, or through Luke's own service on the hosted
-  tier, where the service validates it against the same bounds, spends the
-  attention meter, asks OpenAI not to store it, and keeps and logs none of it.
-  The model is offered no tools, the transcript enters as data behind a
-  marker, and the answer is a bounded phrase or an honest null, refused when
-  it merely echoes the title. The phrase lives only inside the announcement
-  payload that carries it and is kept nowhere: it reaches one place, the
-  payload's `subject`, in the slot the title no longer travels in. It is not
-  drawn on the panel, reaches no write path, never reaches the attention
-  evaluator, and never reaches a provider file. It counts no product event,
-  because no developer asked. The development trace records each
-  derivation's about-fields, answer, and timing, and the transcript's byte
-  count, never its text. Widening what it
-  reads, where it travels, or where it is shown is a product decision, not an
-  implementation detail, and `PRIVACY.md` says the read and the send in as
-  many words.
 - Counting is three streams with three different guarantees, and the
   difference is the thing to keep straight. Only the first carries the
   guarantee, and the other two must never be described as though they
@@ -365,8 +334,8 @@ Trust constraints:
   to forget names one of the ids the conversation received. At most 32 bounded
   facts stand in Luke's own application data and the complete list enters each
   conversation as reply context. It is never drawn, never reaches a provider
-  file, never reaches a write path, and never reaches the attention evaluator,
-  whose input stays what a provider wrote about a session. Widening either —
+  file, and never reaches a write path; it reaches the brain only as standing
+  context, never as an instruction. Widening either —
   what may be stored, how long it stands, or where it may travel — is a
   product decision, not an implementation detail.
 - The development trace is the one place Luke's own agent traffic may reach a
@@ -380,9 +349,10 @@ Trust constraints:
   whether anything is recorded. What it records is the
   desktop's own view of its own conversation — the realtime events already
   crossing the data channel, with an audio append reduced to its byte count
-  before it leaves the renderer, and the attention evaluator's update,
-  decision, and reviewing model when the desktop knows one — appended as
-  JSONL under the developer's chosen directory and
+  before it leaves the renderer, and each brain turn's trigger, hook names,
+  item kinds, tool names and outcomes, token counts, and model, never a
+  transcript's text — appended as JSONL under the developer's chosen
+  directory and
   sent nowhere; `pnpm trace:export` turns one file into a document a local
   viewer opens. The tap only observes: nothing reads its result, and the
   main process drops the renderer's tapped events whenever no writer stands.
@@ -601,78 +571,52 @@ What Luke may show:
   of its own; widening this read to another provider, another caller, an unattributed
   message kind, or anything stored is a product decision, not an
   implementation detail.
-- Session material leaves the machine unbidden in exactly two places, each
-  with its own narrower rule. An evaluator receives `AttentionContext`, what
-  a provider wrote *about* a session, and never the transcript behind it: no
-  message history, file contents, or command output. A
-  spoken announcement (a session that started waiting, stopped on an error,
-  or finished, or an evaluator sentence approved for speech) reaches the
-  voice service so it can be said aloud. Two onboarding beats are
-  the members of that set about no session, and each keeps the same terms:
-  worded from a script fixed by the build, speak-only and tool-free like an
-  edge announcement, drawing no notice band and claiming none. The arrival
-  beat is spoken once per install at the deterministic edge of the account's
-  first sign-in, remembered in Luke's own state file, and carrying as
-  observed values only one working session's title, read from the same roster
-  the rows draw and sent as data behind a marker, and the talk key's own
-  name. While the calendar onboarding gate stands, the arrival beat waits —
+- Session material leaves the machine unbidden in exactly one place, the
+  brain, and it is bounded on every side. On each observation pass, and on the
+  pass a provider's own hook asks for, the brain is handed the roster fields
+  the panel draws and, for each local session it has read before, that is
+  working or waiting, or that a hook named, what its transcript gained since
+  the last look, cut to a fixed bound from the front. It travels directly to
+  OpenAI on the developer's own key and never through Luke's service: with no
+  key there is no brain. Its memory — the input array from the latest
+  compaction item onward and each session's transcript cursor — lives in
+  `brain-state.json` under Luke's own application data, never a provider's
+  file, and is deleted with History. Those turns may only read a transcript
+  and announce: no act tool is declared at the API and one named anyway is
+  refused at dispatch. An act runs only in a developer-ask turn, the one kind
+  the developer opened, and still passes the main process's own validators
+  against the observed roster, issue board, projects, and guide. A briefing
+  reaches the voice speak-only, with no notice band drawn for it, and one
+  decided while a meeting or the pause holds waits in the main process for a
+  re-decision against the roster as it then stands, never a replay. Two
+  onboarding beats are the members of that set about no session, and each
+  keeps the same terms: worded from a script fixed by the build, speak-only
+  and tool-free like a briefing, drawing no notice band and claiming none. The
+  arrival beat is spoken once per install at the deterministic edge of the
+  account's first sign-in, remembered in Luke's own state file, and carrying
+  as observed values only one working session's title, read from the same
+  roster the rows draw and sent as data behind a marker, and the talk key's
+  own name. While the calendar onboarding gate stands, the arrival beat waits —
   "you're all set" over a panel still asking for something would be false —
   and the calendar onboarding beat speaks in its place: triggered by the
   gate's own deterministic standing, once per run, carrying no observed value
   at all, and gone with the gate, whose Done or skip is what lets the waiting
-  arrival speak. A moment
-  that cannot speak the arrival — no credential, a meeting's quiet, a beat
-  dropped before its reply began — leaves it owed for the next signed-in
-  launch rather than improvising a substitute; only the voice window
-  reporting the reply actually begun settles it. An edge announcement
-  sends that update's *about* fields, the same ones the evaluator may see,
-  and the voice words the
-  sentence said aloud, so it can say what the session is waiting on rather
-  than only that it waits. When no conversation is open, Luke opens a call of
-  his own to say it, and that call is speak-only by construction: it offers
-  no microphone track, carries no tools, and is sent the one update's fields,
-  or the one evaluator sentence, alone: never the roster, the guide, or a
-  transcript rendering, which travel only on conversations the developer
-  opens, and the rendering only in the turn that asked for it. A
+  arrival speak. A moment that cannot speak the arrival — no credential, a
+  meeting's quiet, a beat dropped before its reply began — leaves it owed for
+  the next signed-in launch rather than improvising a substitute; only the
+  voice window reporting the reply actually begun settles it. A
   developer-opened conversation also carries a bounded history of the recent
   exchange itself (the developer's own asks, typed or spoken and handed back
   as text by the same service that heard them, the words Luke already spoke
   or announced, and the acts he carried at the developer's ask) so the one
-  conversation survives the calls that transport it: an announcement read out
-  on Luke's own call, or a call retired idle, is still remembered by the next
-  one. Every history line already traveled to the same service once, on the
-  call that said it; a transcript reading enters the history only as the fact
-  that one was read, never a word of the rendering; each line's identity is
-  the roster-validated one the words traveled with, offered only while that
-  session is still observed; and the history is stored only where the constraint
-  above puts it, on this machine and under its retention policy, and is never
-  sent on Luke's speak-only call. Its
-  trigger is a deterministic status edge, an onboarding beat's own
-  deterministic trigger (the recorded sign-in edge, or the calendar gate
-  standing), or the evaluator finding an update worth speaking. The edge
-  announcements and approved evaluator sentences speak whenever voice can.
-  Widening either set is a product decision, not an implementation detail;
-  make it deliberately. While an announcement is being spoken, a notice on
-  Luke's own surface under the housing names the session it is about,
-  drawn on this machine from the roster and the same roster-validated
-  identity the voice was handed, leaving it never, and living exactly as
-  long as the spoken reply, so it can never stand for news nobody is
-  telling. The notice's press is a row press at one remove: the session's
-  reported address goes to the operating system, or Luke's own panel opens
-  for a session that reported none. The same band previews tracked issues
-  while a spoken reply names them: the reply's own words are matched against
-  the identifiers and whole titles the latest tracker observation listed,
-  arithmetic against observed state, under the session mentions' own
-  minimum-length and ambiguity rules, so nothing a model said can conjure an
-  issue the tracker does not track, and each named issue draws a chip
-  beside the session chips, its identifier and title read on this machine
-  from that roster, living exactly as long as the words, with an
-  announcement's one session subject still the whole answer. An issue chip's
-  press hands the issue's tracker-reported address to the operating system
-  exactly as a session's would, validated against the observed roster again
-  in the main process; it reaches none of the tracker's write paths, and an
-  issue that reported none is taken nowhere, because no panel surface holds
-  a row to fall back to.
+  conversation survives the calls that transport it. Every history line
+  already traveled to the same service once, on the call that said it; each
+  line's identity is the roster-validated one the words traveled with, offered
+  only while that session is still observed; and the history is stored only
+  where the constraint above puts it, on this machine and under its retention
+  policy. Widening what the brain reads, where it travels, or what a turn may
+  do is a product decision, not an implementation detail; make it
+  deliberately.
 
 Before handoff, run `./scripts/check.sh` for portable-only changes. For any
 macOS or UI change, `./scripts/verify.sh` is the completion invariant. Report

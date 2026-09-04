@@ -758,6 +758,38 @@ export function normalizeSessionIdentity(identity: SessionIdentity): SessionIden
   };
 }
 
+/** Whether two identities name the same session: both fields, never a composed key. */
+export function sameSessionIdentity(first: SessionIdentity, second: SessionIdentity): boolean {
+  return (
+    first.providerId === second.providerId && first.providerSessionId === second.providerSessionId
+  );
+}
+
+/** Stands where the front of a transcript was cut, so a reader knows it holds a tail. */
+export const OMISSION_MARKER = "[earlier turns omitted]";
+
+/** A transcript held to a bound from the front, and whether anything was cut. */
+export interface FrontCut {
+  text: string;
+  cut: boolean;
+}
+
+/**
+ * Cuts a rendering from the front to at most `maximumChars`, marker included,
+ * at a line: the newest turns win the space, and no half line poses as a
+ * whole one.
+ */
+export function cutFront(value: string, maximumChars: number): FrontCut {
+  if (value.length <= maximumChars) return { text: value, cut: false };
+  const keep = Math.max(0, maximumChars - OMISSION_MARKER.length - 1);
+  const tail = value.slice(value.length - keep);
+  const firstWholeLine = tail.indexOf("\n");
+  return {
+    text: `${OMISSION_MARKER}\n${firstWholeLine >= 0 ? tail.slice(firstWholeLine + 1) : tail}`,
+    cut: true,
+  };
+}
+
 /** Normalizes a provider observation without retaining provider-specific shapes. */
 export function normalizeSession(
   provider: SessionProvider,

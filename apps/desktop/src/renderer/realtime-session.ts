@@ -75,12 +75,14 @@ export const REALTIME_SETTLE_TIMEOUT_MS = 20_000;
 export const BRAIN_ASK_SETTLE_TIMEOUT_MS = 60_000;
 
 /**
- * Whose words the caption is showing: a briefing the brain decided to give,
- * or a reply to the developer. History records the two differently.
+ * Whose words the caption is showing: a briefing the brain decided to give, a
+ * reply to the developer, or an onboarding beat scripted by the build. History
+ * records the first two differently and the third not at all.
  */
 export const REPLY_KIND = {
   BRIEFING: BRIEFING_SPEECH_KIND,
   REPLY: "reply",
+  ONBOARDING: "onboarding",
 } as const;
 
 export type ReplyKind = (typeof REPLY_KIND)[keyof typeof REPLY_KIND];
@@ -1378,16 +1380,18 @@ export class RealtimeVoiceSession {
     if (isArrivalSpeech(speech)) {
       const arrivalEvents = arrivalSpeechEvents(speech);
       if (arrivalEvents.length === 0 || !this.isConnected || this.#turnBusy) return false;
-      // No caption subject: the arrival speaks about no one observed session,
+      // No caption is drawn: the arrival speaks about no one observed session,
       // like an introduction beat, so no notice may stand under the housing
-      // claiming it does.
+      // claiming it does. The kind is set so History records the beat as none.
       this.#startResponse(arrivalEvents);
+      this.#captionKind = REPLY_KIND.ONBOARDING;
       return true;
     }
     if (isCalendarOnboardingSpeech(speech)) {
       if (!this.isConnected || this.#turnBusy) return false;
-      // On the arrival's own terms: words with no kind, recorded as none.
+      // On the arrival's own terms: no caption drawn, and recorded as none.
       this.#startResponse(calendarOnboardingSpeechEvents());
+      this.#captionKind = REPLY_KIND.ONBOARDING;
       return true;
     }
     const events = briefingSpeechEvents(speech);

@@ -1,5 +1,5 @@
-import type { CarriedAppAction } from "@sidecar/acts";
-import type { ACT_RESULT_STATUS, WireRecord } from "@sidecar/wire";
+import type { APP_TOOL_KIND, CarriedAppAction } from "@sidecar/acts";
+import type { ACT_RESULT_STATUS } from "@sidecar/wire";
 
 /**
  * What crosses the bridge between the brain in the main process and the voice
@@ -35,8 +35,8 @@ export type BrainAskResult =
  */
 export interface BrainAppActRequest {
   requestId: string;
-  action: Exclude<CarriedAppAction, { kind: "remember" | "forget" }>;
+  action: Exclude<
+    CarriedAppAction,
+    { kind: typeof APP_TOOL_KIND.REMEMBER | typeof APP_TOOL_KIND.FORGET }
+  >;
 }
-
-/** The renderer's answer to one app act: what became of it, as the brain reads outcomes. */
-export type BrainAppActAnswer = WireRecord;
