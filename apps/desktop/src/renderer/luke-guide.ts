@@ -476,7 +476,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Adding agents to a workspace",
       detail:
-        "Where a session's provider documents it — Conductor today — the same kind of ask " +
+        "Where a session's provider documents it — Conductor and Superset today — the same kind of ask " +
         "can start another agent in an observed session's workspace, as one of the agent " +
         "kinds its roster entry lists; a session whose entry lists none takes no such ask. " +
         "The ask must name the workspace or session — a bare ask for a new agent creates a " +

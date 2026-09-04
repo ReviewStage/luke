@@ -76,3 +76,11 @@ test("reads each manager's absent app as annotating nothing", async (t) => {
     assert.equal(enrichment(PROVIDER_ID.CLAUDE_CODE, observations), observations);
   }
 });
+
+test("the application readers group chats but carry no acts of their own", async (t) => {
+  const hosts = registrations(await temporaryDirectory(t));
+  for (const host of hosts.slice(1)) {
+    assert.equal(host.claim, undefined, host.observationFailureLabel);
+    assert.equal(host.ownsControl, undefined, host.observationFailureLabel);
+  }
+});

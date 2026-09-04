@@ -160,6 +160,15 @@ test("Luke's guide names the transcript-reading providers the declaration lists"
   );
 });
 
+test("Luke's guide names the agent-adding providers the declaration lists", () => {
+  const guide = repositoryFile(LUKE_GUIDE);
+  assertNamesExactly(
+    sliceBetween(guide, "provider documents it — ", " today — the same kind of ask"),
+    providersWithAct(PROVIDER_ACT.ADD_AGENT),
+    LUKE_GUIDE,
+  );
+});
+
 test("the root agent guide names the transcript-reading and hooked providers the declaration lists", () => {
   const prose = repositoryFile(ROOT_GUIDE).replace(/\n\s+/gu, " ");
   assertNamesExactly(

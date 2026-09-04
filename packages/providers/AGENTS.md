@@ -20,6 +20,32 @@ unsupported. A provider gains an act only by overriding the matching protected
 route or delivery seam and preserving every trust constraint in root
 `CLAUDE.md`. Transcript reading belongs inside the adapter.
 
+`PROVIDER_CAPABILITIES` in `src/capabilities.ts` states, per observed
+provider, what those seams amount to: location, observation hook, credential
+kind, and acts. It declares nothing on its own authority. The conformance test
+in `capabilities.test.ts` reads each adapter's overridden seams through
+`implementedActs` (exported from `@sidecar/providers/testing`) and fails when
+the declaration and the adapter disagree in either direction, and the same
+test anchors the hand-written provider lists in Luke's guide, the root agent
+guide, and `PRIVACY.md` to the declaration. Change the adapter and the row
+together; a row is never the place a capability is granted.
+
+Registration is two tables built from one. `providerRegistrations` holds the
+observed providers with their credentials and hook installers;
+`workspaceProviderRegistrations` adds the two workspace-only providers —
+local Conductor, built here, and Superset's workspace adapter, handed in from
+above because `@sidecar/superset` sits over this package — each with a
+declared observation mode (`REGISTRATION_OBSERVATION`) and an optional
+per-pass refresh. The desktop iterates those rows for the act router, the
+project offer, and the observation loop, and names no provider of its own.
+
+A workspace host that also carries acts declares `claim` on its
+`WorkspaceHostRegistration`: the acts for a session its latest read resolved,
+bound to that session's context, or nothing. A host delivers an act only for a
+capability its own enrichment advertised on the row — the performer re-checks
+the roster first, and `ownsControl` keeps a provider's own control on a
+managed row with the provider. Superset's host lives in `@sidecar/superset`.
+
 Capabilities stay with their owning package in explicit, exhaustive maps:
 credentials in `@sidecar/credentials`, analytics connections in
 `@sidecar/analytics` and the desktop bridge, hooks and adapter registration in

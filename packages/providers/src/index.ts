@@ -49,5 +49,6 @@ export {
   type WorkspaceHostEnrichment,
   type WorkspaceHostRegistration,
   type WorkspaceHostRegistrationOptions,
+  type WorkspaceHostSessionActs,
   workspaceHostRegistrations,
 } from "./shared/workspace-hosts.js";

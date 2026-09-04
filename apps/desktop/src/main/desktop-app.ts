@@ -51,7 +51,6 @@ import {
   REGISTRATION_OBSERVATION,
   registrationObservation,
   type WorkspaceHostEnrichment,
-  type WorkspaceHostRegistration,
   workspaceHostRegistrations,
   workspaceProviderRegistrations,
 } from "@sidecar/providers";
@@ -87,9 +86,7 @@ import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import {
   SupersetCli,
   SupersetSignIn,
-  SupersetWorkspaceAdapter,
-  SupersetWorkspaceReader,
-  SupersetWorkspaceSnapshot,
+  SupersetWorkspaceHost,
   supersetPressedLink,
 } from "@sidecar/superset";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
@@ -271,23 +268,22 @@ const conductorSessionApplications = new ConductorSessionApplicationReader();
 const claudeDesktopSessionApplications = new ClaudeDesktopSessionApplicationReader();
 const supersetHomeDirectory =
   process.env.SUPERSET_HOME_DIR ?? path.join(app.getPath("home"), ".superset");
-const supersetWorkspaces = new SupersetWorkspaceReader({
-  homeDirectory: supersetHomeDirectory,
-});
 const supersetCli = new SupersetCli({ homeDirectory: supersetHomeDirectory });
-const supersetWorkspaceAdapter = new SupersetWorkspaceAdapter(supersetCli);
-let observedSupersetWorkspaces = new SupersetWorkspaceSnapshot([]);
-let observedSupersetOrganization: string | undefined;
-const supersetWorkspaceHost: WorkspaceHostRegistration = {
-  observationFailureLabel: "Superset observation",
-  read: readSupersetWorkspaceHost,
-  // The read absorbs its own failures into an empty snapshot so the act
-  // contexts and the workspace rows move with it; a rejection would be a
-  // bug, and it costs only the enrichment rather than the pass.
-  emptyEnrichment: (_providerId, observations) => observations,
-};
+// The Superset entry of the workspace-host registry carries the whole Superset
+// pass: the host-state read, the acts a drawn row advertises, and the chatless
+// workspace rows, all moving together. The CLI is constructed here because the
+// sign-in flow and the settings rows read the same binary.
+const supersetHost = new SupersetWorkspaceHost({
+  cli: supersetCli,
+  homeDirectory: supersetHomeDirectory,
+  agentDefault: async () =>
+    (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
+      SUPERSET_WORKSPACE_PROVIDER_ID
+    ]?.agent,
+  report: (message) => process.stderr.write(message),
+});
 const workspaceHosts = workspaceHostRegistrations({
-  superset: supersetWorkspaceHost,
+  superset: supersetHost,
   conductorApplications: conductorSessionApplications,
   claudeDesktopApplications: claudeDesktopSessionApplications,
 });
@@ -370,7 +366,7 @@ const orderedRegistrations: readonly ProviderRegistration[] = PROVIDER_ID_LIST.m
 // belong to the observed providers alone.
 const workspaceRegistry = workspaceProviderRegistrations({
   registrations: providerRegistry,
-  supersetWorkspace: supersetWorkspaceAdapter,
+  supersetWorkspace: supersetHost.adapter,
   openExternal: (url) => shell.openExternal(url),
 });
 const orderedWorkspaceRegistrations: readonly ProviderRegistration[] =
@@ -1881,13 +1877,7 @@ function registerIpc(): void {
     trackedIssues: () => trackedIssues,
     issueTrackers,
     refreshIssues: () => void issueObservationLoop.refresh(),
-    supersetContext: (identity) =>
-      observedSupersetWorkspaces.actableContext(
-        identity.providerId,
-        identity.providerSessionId,
-        observedSupersetOrganization,
-      ),
-    supersetCli,
+    workspaceHosts,
     recordProductEvent,
     rememberedFacts: () => rememberedFacts,
     writeRememberedFacts: (facts) => {
@@ -2054,53 +2044,8 @@ async function applyLocalSessionHooks(): Promise<void> {
   );
 }
 
-/**
- * The Superset entry of the workspace-host registry carries the whole
- * Superset pass, not only the enrichment: the acts a drawn row still
- * advertises resolve against this module's latest snapshot, and the chatless
- * workspace rows ride the same read, so all of it moves together.
- */
-async function readSupersetWorkspaceHost(): Promise<WorkspaceHostEnrichment> {
-  let supersetSnapshot = new SupersetWorkspaceSnapshot([]);
-  let supersetOrganization: string | undefined;
-  let supersetAgentDefault: string | undefined;
-  try {
-    supersetAgentDefault = (
-      await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field)
-    )?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
-    [supersetSnapshot, supersetOrganization] = await Promise.all([
-      supersetWorkspaces.read(),
-      supersetCli.activeOrganization(),
-    ]);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Superset observation failed: ${message}\n`);
-  }
-  // The fresh snapshot answers acts the drawn rows still advertise from
-  // before this pass's enrichment runs, so the directory matches enrichment
-  // made carry over, re-anchored to the worktrees just read.
-  supersetSnapshot.adoptDirectoryMatches(observedSupersetWorkspaces);
-  observedSupersetWorkspaces = supersetSnapshot;
-  observedSupersetOrganization = supersetOrganization;
-  // Refreshed outside the read's own try so a failed pass hands the adapter
-  // the same emptiness the act contexts just took: rows the router would
-  // refuse to act on must not keep standing on a snapshot that is gone.
-  try {
-    await supersetWorkspaceAdapter.refresh(
-      supersetAgentDefault,
-      supersetOrganization !== undefined,
-      supersetSnapshot.workspaceRowObservations(supersetOrganization),
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Superset observation failed: ${message}\n`);
-  }
-  return (providerId, observations) =>
-    supersetSnapshot.enrich(providerId, observations, supersetOrganization);
-}
-
 async function refreshProviderSessions(generation: number): Promise<void> {
-  const actionsWereEnabled = observedSupersetOrganization !== undefined;
+  const actionsWereEnabled = supersetHost.connected();
   // Each row's own per-pass read — local Conductor re-reading the repositories
   // it holds so the create offer tracks its index — runs beside the host
   // reads. A failed read is the row's to absorb (Conductor's empties its
@@ -2126,7 +2071,7 @@ async function refreshProviderSessions(generation: number): Promise<void> {
     ),
   );
   await rowRefreshes;
-  const supersetActionsEnabled = observedSupersetOrganization !== undefined;
+  const supersetActionsEnabled = supersetHost.connected();
   if (actionsWereEnabled !== supersetActionsEnabled) {
     if (supersetActionsEnabled) {
       panels.broadcast(channels.onSupersetSignInChanged, {
