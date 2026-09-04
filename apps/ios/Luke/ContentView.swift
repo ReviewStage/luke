@@ -222,7 +222,10 @@ private struct SignedInView: View {
         .sheet(isPresented: $creatorShown) {
             WorkspaceCreatorSheet(actClient: actClient, projectsClient: projectsClient) {
                 creatorShown = false
+                // The list is the one place the new workspace appears, so a
+                // session screen still stacked above it pops as well.
                 store.tab = .sessions
+                store.path.removeAll()
                 Task { await store.refresh(account: session, events: events) }
             }
         }
