@@ -14,6 +14,7 @@ import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing
 import { ADAPTER_DIAGNOSTIC_KIND, type AdapterDiagnosticCallback } from "./adapter-diagnostics.js";
 import {
   CLOUD_ADAPTER_DEFAULTS,
+  CLOUD_FAILURE,
   type CloudAdapterOptions,
   type CloudFetch,
   type CloudRequest,
@@ -719,4 +720,39 @@ test("runs an advertised control through its documented route, sending no body",
     reason: "That act is not supported by the latest observation.",
   });
   assert.equal(stub.requests.length, observationRequests + 1);
+});
+
+test("names why the latest pass could not read, and clears it once one can", async () => {
+  let status: number = HTTP_STATUS.OK;
+  const stub = stubFetch(() => status);
+  const adapter = adapterFor(stub.fetch);
+  adapter.collected = [observation("session-one")];
+
+  await adapter.observe();
+  assert.equal(adapter.lastObserveFailure(), undefined);
+
+  status = HTTP_STATUS.SERVER_ERROR;
+  assert.equal((await adapter.observe()).length, 1);
+  assert.equal(adapter.lastObserveFailure(), CLOUD_FAILURE.TRANSIENT);
+
+  status = HTTP_STATUS.UNAUTHORIZED;
+  assert.deepEqual(await adapter.observe(), []);
+  assert.equal(adapter.lastObserveFailure(), CLOUD_FAILURE.UNAUTHORIZED);
+
+  status = HTTP_STATUS.OK;
+  assert.equal((await adapter.observe()).length, 1);
+  assert.equal(adapter.lastObserveFailure(), undefined);
+});
+
+test("a pass built fresh answers nothing to a refusal, and says so", async () => {
+  const stub = stubFetch(() => HTTP_STATUS.SERVER_ERROR);
+  const adapter = adapterFor(stub.fetch);
+  adapter.collected = [observation("session-one")];
+
+  assert.deepEqual(await adapter.observe(), []);
+  assert.equal(adapter.lastObserveFailure(), CLOUD_FAILURE.TRANSIENT);
+
+  const keyless = adapterFor(stub.fetch, { apiKey: undefined });
+  assert.deepEqual(await keyless.observe(), []);
+  assert.equal(keyless.lastObserveFailure(), undefined);
 });

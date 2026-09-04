@@ -1,6 +1,9 @@
 import { ConductorSessionAdapter } from "../../../../packages/providers/src/conductor/adapter.js";
-import type { CloudFetch } from "../../../../packages/providers/src/shared/cloud-session-adapter.js";
-import type { SessionProviderAdapter, VaultProviderId } from "../core.js";
+import type {
+  CloudFetch,
+  CloudSessionAdapter,
+} from "../../../../packages/providers/src/shared/cloud-session-adapter.js";
+import type { VaultProviderId } from "../core.js";
 import { VAULT_PROVIDER_ID } from "../core.js";
 
 /**
@@ -16,7 +19,7 @@ export interface CloudAdapterSeams {
   now?: () => number;
 }
 
-type AdapterBuilder = (seams: CloudAdapterSeams) => SessionProviderAdapter;
+type AdapterBuilder = (seams: CloudAdapterSeams) => CloudSessionAdapter;
 
 function baseOptions(seams: CloudAdapterSeams) {
   return {
@@ -35,6 +38,6 @@ const ADAPTER_BUILDERS = {
 export function cloudSessionAdapterFor(
   providerId: VaultProviderId,
   seams: CloudAdapterSeams,
-): SessionProviderAdapter {
+): CloudSessionAdapter {
   return ADAPTER_BUILDERS[providerId](seams);
 }

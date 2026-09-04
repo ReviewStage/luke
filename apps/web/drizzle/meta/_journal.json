@@ -57,6 +57,13 @@
       "when": 1788481578762,
       "tag": "0007_open_wrecking_crew",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788482062148,
+      "tag": "0008_stale_killraven",
+      "breakpoints": true
     }
   ]
 }
