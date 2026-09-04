@@ -31,6 +31,10 @@ final class WatchVoiceSessionModel {
     // Tracks whether we are mid-caption-segment for the current luke reply.
     // nil from onCaption closes the segment so the next text starts a new bubble.
     private var lukeReplyOpen = false
+    // Index into messages[] where the current turn began. onSpokenAsk inserts the
+    // user bubble here rather than appending, because the realtime service delivers
+    // the transcript after captions have already started arriving.
+    private var turnStartIndex = 0
 
     func prepare(accountSession: WatchAccountSession) {
         self.accountSession = accountSession
@@ -78,9 +82,14 @@ final class WatchVoiceSessionModel {
                 }
             },
             onSpokenAsk: { [weak self] text in
-                // A new developer turn always closes the current luke segment.
-                self?.lukeReplyOpen = false
-                self?.messages.append(WatchVoiceMessage(speaker: .user, text: text))
+                guard let self else { return }
+                // Insert at turnStartIndex, not at the end: captions typically
+                // arrive before the transcript, so the user bubble must be placed
+                // before Luke's reply rather than after it.
+                let insertAt = min(self.turnStartIndex, self.messages.count)
+                self.messages.insert(WatchVoiceMessage(speaker: .user, text: text), at: insertAt)
+                // Leave lukeReplyOpen as-is: the reply segment that started before
+                // the transcript arrived should keep growing from the last bubble.
             },
             onError: { [weak self, weak accountSession] message in
                 guard let self else { return }
@@ -114,6 +123,7 @@ final class WatchVoiceSessionModel {
         connectingForTurn = false
         endTurnAfterConnect = false
         lukeReplyOpen = false
+        turnStartIndex = 0
         accountSession = nil
         session?.close()
         session = nil
@@ -121,6 +131,7 @@ final class WatchVoiceSessionModel {
 
     func beginTurn() {
         errorMessage = nil
+        turnStartIndex = messages.count
         if let session {
             session.beginTurn()
             return
