@@ -155,11 +155,20 @@ const smokeFixture: FixtureSnapshot = {
       location: SESSION_LOCATION.LOCAL,
       lastActivityAt: minutesBeforeEpoch(4),
     },
+    // A Claude Code chat held by the Claude desktop app's Code tab, trailed by
+    // the app's mark the way a Codex chat is trailed by ChatGPT's.
     {
       id: "claude-review",
       title: "Review trust constraints",
       providerId: PROVIDER_ID.CLAUDE_CODE,
       provider: providerName(PROVIDER_ID.CLAUDE_CODE),
+      applications: [
+        {
+          id: SESSION_APPLICATION_ID.CLAUDE,
+          name: "Claude",
+          scope: SESSION_APPLICATION_SCOPE.SESSION,
+        },
+      ],
       detail: "Both adapters observe read-only; next, say whether to ship it.",
       repository: "luke",
       branch: "dean/trust-constraints",

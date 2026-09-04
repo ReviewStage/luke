@@ -5,32 +5,44 @@ import SwiftUI
 
 // MARK: - Observable session state
 
-private struct VoiceTranscriptMessage: Identifiable, Equatable {
-    enum Speaker: Equatable {
-        case developer
-        case luke
-    }
-
-    let id = UUID()
-    let turnId: UUID
-    let speaker: Speaker
-    var words: String
+/// Where a spoken act asked to take the developer once Luke has finished
+/// saying so: a session's own screen, or the list narrowed as asked. Held
+/// until the reply settles, because moving the screen mid-sentence would
+/// close the call that is still speaking.
+private enum PendingNavigation {
+    case open(RosterSession)
+    case list(VoiceAsks.SessionListAsk)
 }
 
-/// Holds all observable voice session state. Lives on the main actor so the
-/// session's @MainActor callbacks can update it without hopping actors.
+/// Holds the observable state of one visit to the voice screen. Lives on the
+/// main actor so the session's @MainActor callbacks can update it without
+/// hopping actors. The conversation itself is not here: it lives in the
+/// app-scoped VoiceConversationThread this model records into, so the words
+/// survive the screen being popped while the call and its status do not.
 @Observable
 @MainActor
 private final class VoiceSessionModel {
     var status: RealtimeStatus = .idle
-    var messages: [VoiceTranscriptMessage] = []
     var errorMessage: String?
     // Read at each start, so a reconnect mints with the latest choice.
     var voice = RealtimeVoice.default
     var speed = RealtimeVoiceSpeed.default
+    var pendingNavigation: PendingNavigation?
+    /// The tools the service minted the latest call with, as the server
+    /// confirmed them at channel open; nil until a call has connected.
+    private(set) var mintedTools: [String]?
+    /// Where a workspace can be created, fetched beside the mint so the
+    /// conversation is told it at channel open and a creation ask can be
+    /// validated against it. Nil until an answer lands, and left nil when
+    /// the fetch fails, so the conversation is told nothing rather than
+    /// told there is nowhere.
+    private(set) var projects: ProjectsAnswer?
+    /// The New Workspace choices this device remembers, read at the moment a
+    /// call opens or an act lands.
+    let defaults = WorkspaceCreationDefaults()
+    var thread: VoiceConversationThread?
     private var session: RealtimeSession?
-    private var activeTurnId: UUID?
-    private var activeResponseMessageId: UUID?
+    private var makeActContext: (@MainActor () -> VoiceActContext)?
     // Kept while this screen is alive so a direct press can reopen a socket
     // after the three-minute idle close. An idle edge itself never remints.
     private var reconnectCallback: (@MainActor (_ startWithTurn: Bool) async -> Void)?
@@ -38,20 +50,33 @@ private final class VoiceSessionModel {
     private var reconnectingForTurn = false
     private var endTurnAfterReconnect = false
 
-    func start(accountSession: AccountSession, startWithTurn: Bool = false) async {
+    func start(
+        accountSession: AccountSession,
+        actContext: @escaping @MainActor () -> VoiceActContext,
+        startWithTurn: Bool = false
+    ) async {
         guard session == nil else { return }
         errorMessage = nil
+        makeActContext = actContext
 
         let mintVoice = voice.rawValue
         let mintSpeed = speed.multiplier
         let opts = RealtimeSessionOptions(
-            requestConnection: { [weak accountSession] in
+            requestConnection: { [weak accountSession, weak self] in
                 guard let accountSession else {
                     throw AccountSessionError.signedOut
                 }
                 let token = try await accountSession.validAccessToken()
+                // Fetched beside the mint rather than after it: the projects
+                // item is sent at channel open, and the ephemeral key's
+                // minute is not to be spent waiting on a second round trip.
+                async let projects = try? ProjectsClient(serviceURL: AccountConstants.serviceURL)
+                    .projects(bearerToken: token)
                 let connection = try await VoiceMintClient(baseURL: AccountConstants.serviceURL)
                     .mint(accessToken: token, voice: mintVoice, speed: mintSpeed)
+                if let answer = await projects {
+                    await MainActor.run { [weak self] in self?.projects = answer }
+                }
                 return connection
             },
             onStatus: { [weak self] newStatus in
@@ -62,30 +87,43 @@ private final class VoiceSessionModel {
                     self?.session = nil
                 }
             },
-            onCaption: { [weak self] text in self?.receiveCaption(text) },
-            onSpokenAsk: { [weak self] text in self?.receiveSpokenAsk(text) },
+            onCaption: { [weak self] text in self?.thread?.recordCaption(text) },
+            onSpokenAsk: { [weak self] text in self?.thread?.recordSpokenAsk(text) },
             onError: { [weak self] message in
                 self?.errorMessage = message ?? "Connection error"
             },
             onRecoverableError: { [weak self] message in
                 self?.errorMessage = message
             },
-            dispatchToolCall: { [weak accountSession] name, arguments, callId in
-                let token = (try? await accountSession?.validAccessToken()) ?? ""
+            onSessionTools: { [weak self] names in self?.mintedTools = names },
+            dispatchToolCall: { [weak self] name, arguments, _ in
+                guard let self, let makeActContext = self.makeActContext else {
+                    return #"{"error":"not authorized"}"#
+                }
                 return await dispatchVoiceToolCall(
                     name: name,
                     arguments: arguments,
-                    callId: callId,
-                    accessToken: token,
-                    serviceURL: AccountConstants.serviceURL
+                    context: makeActContext()
                 )
+            },
+            contextItems: { [weak self] in
+                guard let self, let projects = self.projects else { return [] }
+                return [
+                    WorkspaceProjectsContext.item(
+                        answer: projects,
+                        defaultProviderId: self.defaults.lastProviderId,
+                        defaultProjectIds: self.defaults.lastProjectIds
+                    )
+                ]
             },
             makeAudioCapturer: { VoiceAudioCapturer() },
             makeAudioPlayer: { VoiceAudioPlayer() }
         )
         reconnectCallback = { [weak self, weak accountSession] startWithTurn in
             guard let accountSession else { return }
-            await self?.start(accountSession: accountSession, startWithTurn: startWithTurn)
+            await self?.start(
+                accountSession: accountSession, actContext: actContext, startWithTurn: startWithTurn
+            )
         }
         let s = RealtimeSession(options: opts)
         session = s
@@ -104,8 +142,10 @@ private final class VoiceSessionModel {
 
     func beginTurn() {
         errorMessage = nil
-        activeTurnId = UUID()
-        activeResponseMessageId = nil
+        // A new press supersedes what the last reply was about to do: an open
+        // the developer talked over is an open they no longer want taken.
+        pendingNavigation = nil
+        thread?.beginTurn()
         if let session {
             session.beginTurn()
             return
@@ -130,9 +170,9 @@ private final class VoiceSessionModel {
     func changeVoice(_ newVoice: RealtimeVoice, accountSession: AccountSession) async {
         guard newVoice != voice else { return }
         voice = newVoice
-        guard session != nil else { return }
+        guard session != nil, let makeActContext else { return }
         stop()
-        await start(accountSession: accountSession)
+        await start(accountSession: accountSession, actContext: makeActContext)
     }
 
     func changeSpeed(_ newSpeed: RealtimeVoiceSpeed) {
@@ -152,52 +192,6 @@ private final class VoiceSessionModel {
         }
     }
 
-    private func receiveSpokenAsk(_ text: String) {
-        let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !words.isEmpty else { return }
-        let turnId = currentTurnId()
-        if let index = messages.firstIndex(where: {
-            $0.turnId == turnId && $0.speaker == .developer
-        }) {
-            messages[index].words = words
-            return
-        }
-        let message = VoiceTranscriptMessage(turnId: turnId, speaker: .developer, words: words)
-        if let responseIndex = messages.firstIndex(where: {
-            $0.turnId == turnId && $0.speaker == .luke
-        }) {
-            messages.insert(message, at: responseIndex)
-        } else {
-            messages.append(message)
-        }
-    }
-
-    private func receiveCaption(_ text: String?) {
-        guard let text, !text.isEmpty else {
-            activeResponseMessageId = nil
-            return
-        }
-        if let id = activeResponseMessageId,
-           let index = messages.firstIndex(where: { $0.id == id })
-        {
-            messages[index].words = text
-            return
-        }
-        let message = VoiceTranscriptMessage(
-            turnId: currentTurnId(),
-            speaker: .luke,
-            words: text
-        )
-        messages.append(message)
-        activeResponseMessageId = message.id
-    }
-
-    private func currentTurnId() -> UUID {
-        if let activeTurnId { return activeTurnId }
-        let id = UUID()
-        activeTurnId = id
-        return id
-    }
 }
 
 // MARK: - VoiceView
@@ -206,9 +200,13 @@ private final class VoiceSessionModel {
 /// once to leave the microphone open and tap again to send.
 struct VoiceView: View {
     @Environment(AccountSession.self) private var accountSession
+    @Environment(VoiceConversationThread.self) private var conversation
     @AppStorage(VoiceSettingsKey.voice) private var voice = RealtimeVoice.default
     @AppStorage(VoiceSettingsKey.speed) private var speed = RealtimeVoiceSpeed.default
+    @Environment(ProductEventSender.self) private var events
+    @Environment(SessionsStore.self) private var store
     @State private var model = VoiceSessionModel()
+    private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
     @State private var isPressing = false
     @State private var isLatched = false
     @State private var pressBeganAt: TimeInterval?
@@ -226,14 +224,26 @@ struct VoiceView: View {
             ToolbarItem(placement: .topBarTrailing) { settingsButton }
         }
         .sheet(isPresented: $settingsShown) {
-            VoiceSettingsSheet()
+            VoiceSettingsSheet(
+                toolReport: VoiceToolAvailability.report(
+                    mintedTools: model.mintedTools,
+                    sessions: store.sessions,
+                    projects: model.projects
+                )
+            )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
         .task {
+            model.thread = conversation
             model.voice = voice
             model.speed = speed
-            await model.start(accountSession: accountSession)
+            // The roster the acts are validated against is the list's own,
+            // refreshed as the call opens so a session archived since the
+            // list last drew is not offered as somewhere to act.
+            async let roster: Void = store.refresh(account: accountSession, events: events)
+            await model.start(accountSession: accountSession, actContext: makeActContext)
+            await roster
         }
         .onChange(of: voice) { _, newVoice in
             Task { await model.changeVoice(newVoice, accountSession: accountSession) }
@@ -242,9 +252,51 @@ struct VoiceView: View {
         .onChange(of: model.status) { _, newStatus in
             // Connecting is part of an idle tap's active turn. Clearing here
             // would make VoiceOver lose the second-tap-to-send affordance.
-            if newStatus == .ready || newStatus == .idle { isLatched = false }
+            if newStatus == .ready || newStatus == .idle {
+                isLatched = false
+                performPendingNavigation()
+            }
         }
         .onDisappear { model.stop() }
+    }
+
+    /// What a tool call is carried against, read at the moment of the call.
+    /// An open or a list ask is held for the reply to finish rather than
+    /// performed at once: the screen moving mid-sentence would close the call
+    /// still speaking the words that announce it.
+    private func makeActContext() -> VoiceActContext {
+        VoiceActContext(
+            mintedTools: model.mintedTools,
+            sessions: store.sessions,
+            projects: model.projects,
+            defaults: model.defaults,
+            actClient: actClient,
+            accessToken: { [accountSession] in try await accountSession.validAccessToken() },
+            count: { [events] act, providerId in
+                // A provider id the shared vocabulary has not answered for is
+                // left uncounted rather than sent to be refused.
+                guard let provider = ProductProviderID(rawValue: providerId) else { return }
+                events.record(.sessionActSend(provider: provider, act: act))
+            },
+            refreshRoster: { [store, accountSession, events] in
+                await store.refresh(account: accountSession, events: events)
+            },
+            // One screen, so the last open a reply names is the one taken.
+            open: { [model] session in model.pendingNavigation = .open(session) },
+            showList: { [model] ask in model.pendingNavigation = .list(ask) }
+        )
+    }
+
+    /// Takes the developer where the settled reply said they were going. The
+    /// voice screen leaves the stack either way, and this screen's
+    /// `onDisappear` closes the call behind it.
+    private func performPendingNavigation() {
+        guard let pending = model.pendingNavigation else { return }
+        model.pendingNavigation = nil
+        switch pending {
+        case .open(let session): store.openLeavingConversation(session)
+        case .list(let ask): store.showList(ask)
+        }
     }
 
     // MARK: - Sub-views
@@ -267,7 +319,7 @@ struct VoiceView: View {
 
     private var conversationHistory: some View {
         ZStack {
-            if model.messages.isEmpty {
+            if conversation.messages.isEmpty {
                 Text(placeholderText)
                     .font(.system(size: 17))
                     .foregroundStyle(Color.inkTertiary)
@@ -277,7 +329,7 @@ struct VoiceView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(spacing: 14) {
-                            ForEach(model.messages) { message in
+                            ForEach(conversation.messages) { message in
                                 Group {
                                     switch message.speaker {
                                     case .developer:
@@ -297,12 +349,12 @@ struct VoiceView: View {
                         // bubbles themselves can still scroll behind the glass.
                         .padding(.bottom, 160)
                     }
-                    .onChange(of: model.messages) {
-                        guard let last = model.messages.last else { return }
+                    .onChange(of: conversation.messages) {
+                        guard let last = conversation.messages.last else { return }
                         withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
                     }
                     .onAppear {
-                        if let last = model.messages.last {
+                        if let last = conversation.messages.last {
                             proxy.scrollTo(last.id, anchor: .bottom)
                         }
                     }
@@ -310,7 +362,7 @@ struct VoiceView: View {
             }
         }
         .frame(maxHeight: .infinity)
-        .animation(.easeInOut(duration: 0.15), value: model.messages.isEmpty)
+        .animation(.easeInOut(duration: 0.15), value: conversation.messages.isEmpty)
     }
 
     private var bottomControls: some View {

@@ -221,6 +221,7 @@ export interface SessionProvider {
  */
 export const SESSION_APPLICATION_ID = {
   CHATGPT: "chatgpt",
+  CLAUDE: "claude",
   CONDUCTOR: "conductor",
   SUPERSET: "superset",
 } as const;
@@ -275,6 +276,7 @@ export interface SessionIdentity {
  */
 export const SESSION_LINK_SCHEME = {
   HTTPS: "https:",
+  CLAUDE: "claude:",
   CODEX: "codex:",
   CONDUCTOR: "conductor:",
   SUPERSET: "superset:",

@@ -3,21 +3,14 @@ import SwiftUI
 import UIKit
 
 /// Shows the signed-in user's active cloud sessions with pull-to-refresh.
+/// The roster, the narrowing, and the stack above the list live in the
+/// shared store, because the voice screen can be asked for the same presses.
 struct SessionsView: View {
     @Environment(AccountSession.self) private var session
     @Environment(ProductEventSender.self) private var events
+    @Environment(SessionsStore.self) private var store
 
-    @State private var sessions: [RosterSession] = []
-    /// Starts true because the list's first frame can paint before its
-    /// `.task` begins the fetch, and that frame must show the skeletons
-    /// rather than claim "No active sessions" nothing has checked yet.
-    @State private var isLoading = true
-    @State private var fetchError: String?
-    @State private var searchQuery = ""
-    @State private var filters: Set<SessionFilter> = []
-    @State private var sort: SessionSort = .urgency
     @State private var optionsShown = false
-    @State private var openedSession: RosterSession?
     /// Sent bubbles per session, in memory alone for the app run — the
     /// developer's own words, never written to disk, surviving push and pop
     /// so a chat reopened mid-run still shows what was just sent.
@@ -27,10 +20,6 @@ struct SessionsView: View {
     @State private var renameText = ""
     @State private var creatorShown = false
     @State private var actFailure: String?
-    /// Counts refresh passes so only the newest may write: a pull-to-refresh
-    /// overlapping a post-act refresh must not land its older roster after
-    /// the newer one — an archived row would come back from the dead.
-    @State private var refreshPass = 0
 
     /// Which advertised rename a menu press opened: the session itself, or
     /// the workspace it runs in. One alert serves both; the flag picks the
@@ -44,7 +33,6 @@ struct SessionsView: View {
         var act: ProductSessionAct { isWorkspace ? .workspaceRename : .sessionRename }
     }
 
-    private let rosterClient = RosterClient(serviceURL: AccountConstants.serviceURL)
     private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
     private let projectsClient = ProjectsClient(serviceURL: AccountConstants.serviceURL)
     private let conversationClient = ConversationClient(serviceURL: AccountConstants.serviceURL)
@@ -60,30 +48,36 @@ struct SessionsView: View {
                 searchableList
             }
         }
-        .navigationDestination(item: $openedSession) { opened in
-            // The freshest observation of the opened session wins, so a
-            // refresh behind the screen updates the words it draws; a session
-            // the refresh no longer reports keeps its last observed word.
-            let current = sessions.first { $0.id == opened.id } ?? opened
-            SessionDetailView(
-                session: current,
-                actClient: actClient,
-                conversationClient: conversationClient,
-                thread: Binding(
-                    get: { threads[opened.id] ?? [] },
-                    set: { threads[opened.id] = $0 }
-                ),
-                onDelivered: { await refreshSessions() },
-                sessionActions: { viewDetails in
-                    AnyView(
-                        rowMenu(
-                            current,
-                            viewDetails: viewDetails,
-                            sendMessage: nil
+        .navigationDestination(for: SessionsRoute.self) { route in
+            switch route {
+            case .voice:
+                VoiceView()
+            case .session(let opened):
+                // The freshest observation of the opened session wins, so a
+                // refresh behind the screen updates the words it draws; a
+                // session the refresh no longer reports keeps its last
+                // observed word.
+                let current = store.sessions.first { $0.id == opened.id } ?? opened
+                SessionDetailView(
+                    session: current,
+                    actClient: actClient,
+                    conversationClient: conversationClient,
+                    thread: Binding(
+                        get: { threads[opened.id] ?? [] },
+                        set: { threads[opened.id] = $0 }
+                    ),
+                    onDelivered: { await refreshSessions() },
+                    sessionActions: { viewDetails in
+                        AnyView(
+                            rowMenu(
+                                current,
+                                viewDetails: viewDetails,
+                                sendMessage: nil
+                            )
                         )
-                    )
-                }
-            )
+                    }
+                )
+            }
         }
         .sheet(item: $spawningSession) { s in
             AgentSpawnerSheet(session: s, actClient: actClient) {
@@ -123,34 +117,35 @@ struct SessionsView: View {
     /// The rows the query leaves: matched with the desktop's own search
     /// semantics, and everything when the query is blank.
     private var searchMatchedSessions: [RosterSession] {
-        let tokens = SessionSearch.tokens(from: searchQuery)
-        if tokens.isEmpty { return sessions }
-        return sessions.filter { SessionSearch.matches($0, tokens: tokens) }
+        let tokens = SessionSearch.tokens(from: store.searchQuery)
+        if tokens.isEmpty { return store.sessions }
+        return store.sessions.filter { SessionSearch.matches($0, tokens: tokens) }
     }
 
     private var searchableList: some View {
+        @Bindable var store = store
         // Matched once per build: the empty check, the visible rows, and the
         // filtered-out count all read the same pass instead of re-running the
         // tokenized scan.
         let matched = searchMatchedSessions
         let visible = sortedSessions(
-            matched.filter { matchesFilterSelection(filters, session: $0) },
-            by: sort
+            matched.filter { matchesFilterSelection(store.filters, session: $0) },
+            by: store.sort
         )
         return List {
-            if isLoading && sessions.isEmpty {
+            if store.awaitingFirstRoster && store.sessions.isEmpty && store.fetchError == nil {
                 ForEach(0 ..< 3, id: \.self) { _ in
                     SkeletonRow()
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                         .listRowInsets(rowInsets)
                 }
-            } else if sessions.isEmpty {
+            } else if store.sessions.isEmpty {
                 emptyRow
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
             } else if matched.isEmpty {
-                ContentUnavailableView.search(text: searchQuery)
+                ContentUnavailableView.search(text: store.searchQuery)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
             } else if visible.isEmpty {
@@ -169,7 +164,7 @@ struct SessionsView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Color.ground.ignoresSafeArea())
-        .searchable(text: $searchQuery, prompt: "Search sessions")
+        .searchable(text: $store.searchQuery, isPresented: $store.searchPresented, prompt: "Search sessions")
         .toolbar {
             // Search and list options flank the primary voice action. Keeping
             // all three in the system bar gives each control native Liquid
@@ -197,7 +192,7 @@ struct SessionsView: View {
             }
         }
         .sheet(isPresented: $optionsShown) {
-            SessionOptionsSheet(sessions: sessions, filters: $filters, sort: $sort)
+            SessionOptionsSheet(sessions: store.sessions, filters: $store.filters, sort: $store.sort)
                 .presentationDetents([.medium, .large])
         }
         .refreshable { await refreshSessions() }
@@ -209,7 +204,7 @@ struct SessionsView: View {
             optionsShown = true
         } label: {
             Label("Filter & Sort", systemImage: "line.3.horizontal.decrease")
-                .symbolVariant(filters.isEmpty ? .none : .circle.fill)
+                .symbolVariant(store.filters.isEmpty ? .none : .circle.fill)
         }
         .tint(Color.ink)
     }
@@ -217,14 +212,14 @@ struct SessionsView: View {
     @ViewBuilder
     private var voiceButton: some View {
         if #available(iOS 26.0, *) {
-            NavigationLink(value: "voice") {
+            NavigationLink(value: SessionsRoute.voice) {
                 LukeMark()
                     .foregroundStyle(Color.ink)
                     .frame(width: 22, height: 20)
             }
             .accessibilityLabel("Talk to Luke")
         } else {
-            NavigationLink(value: "voice") {
+            NavigationLink(value: SessionsRoute.voice) {
                 LukeMark()
                     .foregroundStyle(Color.ink)
                     .frame(width: 22, height: 20)
@@ -248,7 +243,7 @@ struct SessionsView: View {
         } description: {
             Text("Filters hide ^[\(hiddenCount) sessions](inflect: true).")
         } actions: {
-            Button("Clear Filters") { filters.removeAll() }
+            Button("Clear Filters") { store.filters.removeAll() }
                 .tint(Color.ink)
         }
         .padding(.top, 40)
@@ -275,7 +270,7 @@ struct SessionsView: View {
         Group {
             if hasRowActs(s) {
                 core.contextMenu {
-                    rowMenu(s, viewDetails: nil, sendMessage: { openedSession = s })
+                    rowMenu(s, viewDetails: nil, sendMessage: { store.open(s) })
                 } preview: {
                     SessionRowPreview(session: s)
                 }
@@ -300,7 +295,7 @@ struct SessionsView: View {
         // Every row opens the session's own screen; whether that screen takes
         // a message is the observation's word, said there rather than by
         // making some rows dead to the touch.
-        Button { openedSession = s } label: {
+        Button { store.open(s) } label: {
             SessionRow(session: s)
         }
         .buttonStyle(.plain)
@@ -384,6 +379,11 @@ struct SessionsView: View {
     }
 
     private func runControl(_ s: RosterSession, _ control: RosterSessionControl) {
+        // An archive's whole visible outcome is the row leaving, so the leave
+        // happens at the press — the row slides out and the screen it opened
+        // pops — with the act following behind rather than the press waiting
+        // on two round trips.
+        if control.kind == .archive { store.beginArchiving(s) }
         Task {
             let delivered = await performAct(on: s, counting: .controlRun) { token in
                 try await actClient.executeControl(
@@ -393,8 +393,9 @@ struct SessionsView: View {
                     controlId: control.id
                 )
             }
-            if delivered, control.kind == .archive, openedSession?.id == s.id {
-                openedSession = nil
+            if control.kind == .archive {
+                store.endArchiving(s, delivered: delivered)
+                if !delivered { await refreshSessions() }
             }
         }
     }
@@ -440,7 +441,7 @@ struct SessionsView: View {
     @ViewBuilder
     private var emptyRow: some View {
         Group {
-            if let error = fetchError {
+            if let error = store.fetchError {
                 ContentUnavailableView {
                     Label("Couldn't Load Sessions", systemImage: "exclamationmark.triangle")
                 } description: {
@@ -463,37 +464,7 @@ struct SessionsView: View {
     }
 
     private func refreshSessions() async {
-        isLoading = true
-        fetchError = nil
-        defer { isLoading = false }
-        guard case .signedIn = session.state else { return }
-        do {
-            let fetched = try await session.authorized { token in
-                try await rosterClient.observe(bearerToken: token)
-            }
-            // Animated so a row an act just removed — an archive above all —
-            // slides out the way a deleted Mail row does, instead of blinking.
-            withAnimation { sessions = fetched }
-            recordObservation(fetched)
-        } catch is AccountSessionError {
-            ()  // Signed out — the state change redraws automatically.
-        } catch {
-            fetchError = error.localizedDescription
-        }
-    }
-
-    /// One count per provider per day, in buckets — refreshing is not using.
-    /// A provider id the shared vocabulary has not answered for is left
-    /// uncounted rather than sent to be refused.
-    private func recordObservation(_ sessions: [RosterSession]) {
-        let rowsByProvider = Dictionary(grouping: sessions, by: \.providerId)
-        for (providerId, rows) in rowsByProvider {
-            guard let provider = ProductProviderID(rawValue: providerId) else { continue }
-            events.recordOncePerDay(
-                .sessionObserve(provider: provider, sessions: .bucket(for: rows.count)),
-                discriminator: providerId
-            )
-        }
+        await store.refresh(account: session, events: events)
     }
 }
 

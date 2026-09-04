@@ -528,21 +528,23 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               `shortcut removed, in ${SHORTCUTS_PAGE}.`,
           },
           {
-            // A behavior rather than a setting: stated here so Luke neither
-            // denies announcing nor offers to turn it off.
+            // A behavior rather than a setting: stated here so Luke does not
+            // deny announcing; the switch that turns it off is the schema
+            // entry's to describe.
             label: "Announcements",
             detail:
               "Luke says it out loud when an observed session is holding for you, stops on " +
               "an error, or finishes — a hold is a question, a permission, or an approval, " +
               "not a turn that merely ended — naming the session and what it needs. No " +
-              "conversation needs to be open, the microphone stays off, and it is always on " +
-              "while voice is available. Luke waits five seconds for nearby updates and says " +
+              "conversation needs to be open, the microphone stays off, and it is on by " +
+              "default while voice is available. Luke waits five seconds for nearby updates and says " +
               "them together in one announcement. A session in a live voice conversation " +
               "with its own provider announces nothing until that conversation closes. " +
-              "Announcements can be paused by hand — the Pause announcements switch on the " +
-              "Voice page, or by asking Luke — and held ones are read out once the pause " +
-              "ends, the still-true ones only; conversations the developer opens still " +
-              "answer aloud while paused.",
+              "The Announce when sessions need you switch on the Voice page — on by " +
+              "default, and also flippable by asking Luke — turns them off: Luke sleeps " +
+              "while it is off, and held ones are read out once it is switched back on, " +
+              "the still-true ones only; conversations the developer opens still answer " +
+              "aloud while it is off.",
           },
           {
             // A behavior rather than a setting, for the announcements' own

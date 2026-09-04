@@ -571,22 +571,22 @@ export const APP_SETTING_SCHEMA = {
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
     analytics: { id: APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE, value: toggleAnalytics },
   },
-  pauseAnnouncements: {
-    field: "pauseAnnouncements",
-    default: false,
-    guard: boolean(false),
+  announceSessions: {
+    field: "announceSessions",
+    default: true,
+    guard: boolean(true),
     settingsPage: SETTINGS_PAGE.VOICE,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
     guideEntry: settingGuideEntry(
-      "pauseAnnouncements",
-      [APP_SETTING_ID.PAUSE_ANNOUNCEMENTS],
+      "announceSessions",
+      [APP_SETTING_ID.ANNOUNCE_SESSIONS],
       (settings, defaultValue) => ({
-        id: APP_SETTING_ID.PAUSE_ANNOUNCEMENTS,
-        label: "Pause announcements",
+        id: APP_SETTING_ID.ANNOUNCE_SESSIONS,
+        label: "Announce when sessions need you",
         description:
-          "Whether spoken announcements — a session waiting, stopping on an error, or finishing, and Luke's other unprompted remarks — are held while this is on, then read out together, the still-true ones only, once it is switched off. Conversations you open still answer aloud. Luke's face sleeps for as long as the pause holds.",
+          "Whether announcements — a session waiting, stopping on an error, or finishing, and Luke's other unprompted remarks — are spoken as they happen. Switched off, Luke sleeps: announcements are held, then read out together, the still-true ones only, once it is switched back on. Conversations you open still answer aloud either way. Luke's face sleeps for as long as the switch is off.",
         kind: APP_SETTING_KIND.TOGGLE,
-        value: appToggleText(guideValue<boolean>(settings, "pauseAnnouncements")),
+        value: appToggleText(guideValue<boolean>(settings, "announceSessions")),
         defaultValue: appToggleText(defaultValue),
         adjustable: true,
         manual: VOICE_PAGE,
@@ -594,7 +594,7 @@ export const APP_SETTING_SCHEMA = {
     ),
     mainProcessSideEffect: SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD,
     spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
-    analytics: { id: APP_SETTING_ID.PAUSE_ANNOUNCEMENTS, value: toggleAnalytics },
+    analytics: { id: APP_SETTING_ID.ANNOUNCE_SESSIONS, value: toggleAnalytics },
   },
   quietDuringMeetings: {
     field: "quietDuringMeetings",
