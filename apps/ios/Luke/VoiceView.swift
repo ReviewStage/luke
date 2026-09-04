@@ -426,11 +426,6 @@ struct VoiceView: View {
         }
         .padding(.bottom, 10)
         .animation(.easeInOut(duration: 0.2), value: model.errorMessage)
-        .onChange(of: composing) { _, isFocused in
-            // The keyboard going away is the composer's dismissal; the draft
-            // stays for the next press of the keyboard button.
-            if !isFocused { hideComposer() }
-        }
     }
 
     /// Every glass shape in one container so SwiftUI can morph the keyboard
@@ -597,6 +592,7 @@ struct VoiceView: View {
             if accepted {
                 draft = ""
                 composing = false
+                hideComposer()
             }
         }
     }

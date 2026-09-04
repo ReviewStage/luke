@@ -124,6 +124,12 @@ private actor AsyncGate {
 private actor ResponseCreateCounter {
     private var count = 0
 
+    func isFirst(_ text: String) -> Bool {
+        guard text.contains(#""type":"response.create""#) else { return false }
+        count += 1
+        return count == 1
+    }
+
     func isSecond(_ text: String) -> Bool {
         guard text.contains(#""type":"response.create""#) else { return false }
         count += 1
@@ -1014,6 +1020,43 @@ final class RealtimeSessionStateTests: XCTestCase {
         try await Task.sleep(nanoseconds: 50_000_000)
         XCTAssertTrue(dispatchedNames.isEmpty)
         XCTAssertEqual(session.status, .thinking)
+    }
+
+    func testTypedAskWhileThinkingCancelsThePendingResponseBeforeStartingAnother() async throws {
+        let firstCreateStarted = AsyncGate()
+        let allowFirstCreate = AsyncGate()
+        let createCounter = ResponseCreateCounter()
+        let ws = MockWebSocketTask(onSend: { text in
+            if await createCounter.isFirst(text) {
+                await firstCreateStarted.open()
+                await allowFirstCreate.wait()
+            }
+        })
+        let session = RealtimeSession(options: makeOptions(ws: ws))
+
+        Task { ws.deliver(#"{"type":"session.created"}"#) }
+        await session.connect()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        session.beginTurn()
+        session.endTurn()
+        await firstCreateStarted.wait()
+
+        XCTAssertTrue(session.sendTypedAsk("Use the newer request"))
+        await allowFirstCreate.open()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let oldCreate = ws.outgoing.firstIndex { $0.contains(#""type":"response.create""#) }
+        let cancel = ws.outgoing.firstIndex { $0.contains(#""type":"response.cancel""#) }
+        let item = ws.outgoing.firstIndex { $0.contains("Use the newer request") }
+        let newCreate = ws.outgoing.lastIndex { $0.contains(#""type":"response.create""#) }
+        XCTAssertNotNil(oldCreate)
+        XCTAssertNotNil(cancel)
+        XCTAssertNotNil(item)
+        XCTAssertNotNil(newCreate)
+        XCTAssertLessThan(oldCreate!, cancel!)
+        XCTAssertLessThan(cancel!, item!)
+        XCTAssertLessThan(item!, newCreate!)
     }
 
     func testTypedAskHeldWhileConnectingIsSentAtChannelOpen() async throws {
