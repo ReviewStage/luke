@@ -249,12 +249,9 @@ struct VoiceView: View {
     // send button alone cannot, because a disabled state lands a render late.
     @State private var typedAskInFlight = false
     @FocusState private var composing: Bool
-    // One glass identity per morphing pair: the keyboard button becomes the
-    // composer's capsule, and the talk button becomes the microphone at the
-    // composer's side.
+    // The keyboard button and composer are the two shapes of one control.
     @Namespace private var glassNamespace
     private static let composerGlassID = "composer"
-    private static let talkGlassID = "talk"
 
     var body: some View {
         ZStack {
@@ -436,11 +433,9 @@ struct VoiceView: View {
         }
     }
 
-    /// Every glass shape of both states in one container, one identity per
-    /// pair: the keyboard button becomes the composer's capsule, and the talk
-    /// button becomes the microphone at the capsule's side, so each pair
-    /// reads as one piece of glass changing shape. Earlier systems keep the
-    /// plain swap, having no glass to morph.
+    /// Every glass shape in one container so SwiftUI can morph the keyboard
+    /// button into the composer. Earlier systems keep the same standard view
+    /// transition without Liquid Glass.
     @ViewBuilder
     private var controlsStage: some View {
         if #available(iOS 26.0, *) {
@@ -449,47 +444,42 @@ struct VoiceView: View {
             }
         } else {
             controlsContent
-                .animation(.easeInOut(duration: 0.2), value: composerShown)
         }
     }
 
     private var controlsContent: some View {
         VStack(spacing: 10) {
             if !composerShown {
-                talkButton
                 statusLabel
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            composerRow
-        }
-    }
-
-    /// The controls' last row: the keyboard button waiting at the bottom
-    /// left, or the composer with the microphone at its side — iMessage's
-    /// own anatomy.
-    private var composerRow: some View {
-        HStack(spacing: 8) {
-            if composerShown {
-                composer
-                micButton
-                    .padding(.trailing, 12)
-            } else {
-                keyboardButton
-                    .padding(.leading, 12)
-                Spacer()
+            ZStack(alignment: .bottom) {
+                if composerShown {
+                    composer
+                        .frame(maxWidth: .infinity)
+                        .padding(.trailing, 52)
+                } else {
+                    keyboardButton
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                talkButton
+                    .frame(
+                        maxWidth: .infinity,
+                        alignment: composerShown ? .trailing : .center
+                    )
             }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 12)
         }
+        .animation(.smooth(duration: 0.25), value: composerShown)
     }
 
     private func showComposer() {
-        withAnimation { composerShown = true }
-        // Focus set beside the reveal is the framework's own pattern: the
-        // keyboard rise is deferred until the field exists, so the box and
-        // the keyboard arrive together.
-        composing = true
+        withAnimation(.smooth(duration: 0.25)) { composerShown = true }
     }
 
     private func hideComposer() {
-        withAnimation { composerShown = false }
+        withAnimation(.smooth(duration: 0.25)) { composerShown = false }
     }
 
     /// The typed way in: a quiet glass circle at the controls' bottom right
@@ -506,6 +496,7 @@ struct VoiceView: View {
                     .buttonStyle(.plain)
                     .glassEffect(.regular.interactive(), in: Circle())
                     .glassEffectID(Self.composerGlassID, in: glassNamespace)
+                    .glassEffectTransition(.matchedGeometry)
                     .accessibilityLabel("Type to Luke")
                     .accessibilityHint("Opens the keyboard to type your ask")
             } else {
@@ -513,6 +504,7 @@ struct VoiceView: View {
                     .buttonStyle(.plain)
                     .background(Color.cardFill, in: Circle())
                     .overlay(Circle().strokeBorder(Color.controlStroke, lineWidth: 1))
+                    .matchedGeometryEffect(id: Self.composerGlassID, in: glassNamespace)
                     .accessibilityLabel("Type to Luke")
                     .accessibilityHint("Opens the keyboard to type your ask")
             }
@@ -536,7 +528,7 @@ struct VoiceView: View {
             composerField
                 .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22))
                 .glassEffectID(Self.composerGlassID, in: glassNamespace)
-                .padding(.leading, 12)
+                .glassEffectTransition(.matchedGeometry)
         } else {
             composerField
                 .background(
@@ -544,7 +536,7 @@ struct VoiceView: View {
                         .fill(Color.cardFill)
                         .strokeBorder(Color.controlStroke, lineWidth: 1)
                 )
-                .padding(.leading, 12)
+                .matchedGeometryEffect(id: Self.composerGlassID, in: glassNamespace)
         }
     }
 
@@ -572,6 +564,16 @@ struct VoiceView: View {
                 }
             }
             .animation(.spring(duration: 0.25), value: canSendTypedAsk)
+            // The field must exist before FocusState can make it first
+            // responder. Scheduling the assignment from onAppear keeps the
+            // keyboard presentation on SwiftUI's normal focus path.
+            .onAppear {
+                Task { @MainActor in
+                    await Task.yield()
+                    guard composerShown else { return }
+                    composing = true
+                }
+            }
     }
 
     /// An open microphone keeps the floor: the send appears again once the
@@ -614,13 +616,9 @@ struct VoiceView: View {
     @ViewBuilder
     private var talkButton: some View {
         if #available(iOS 26.0, *) {
-            // Explicit tinted glass rather than the prominent button style:
-            // only a glassEffect can carry the glassEffectID the morph into
-            // the composer-side microphone pairs on.
             Button(action: {}) { talkButtonLabel }
                 .buttonStyle(.plain)
                 .glassEffect(.regular.tint(talkButtonColor).interactive(), in: Circle())
-                .glassEffectID(Self.talkGlassID, in: glassNamespace)
                 .simultaneousGesture(talkGesture)
                 .disabled(!canTalk)
                 .accessibilityLabel(isLatched ? "Tap to send" : "Talk to Luke")
@@ -644,50 +642,6 @@ struct VoiceView: View {
                 )
                 .accessibilityAction { activateTalkButton() }
         }
-    }
-
-    /// The talk button at iMessage scale while the composer is up: the same
-    /// glass identity as the big circle, so the microphone morphs to the
-    /// field's side rather than vanishing, and the same gesture, so a hold
-    /// or a latched tap works mid-compose.
-    @ViewBuilder
-    private var micButton: some View {
-        if #available(iOS 26.0, *) {
-            Button(action: {}) { micButtonLabel }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.tint(talkButtonColor).interactive(), in: Circle())
-                .glassEffectID(Self.talkGlassID, in: glassNamespace)
-                .simultaneousGesture(talkGesture)
-                .disabled(!canTalk)
-                .accessibilityLabel(isLatched ? "Tap to send" : "Talk to Luke")
-                .accessibilityHint(
-                    isLatched
-                        ? "Stops listening and sends your message"
-                        : "Tap to keep listening, or hold to talk"
-                )
-                .accessibilityAction { activateTalkButton() }
-        } else {
-            Button(action: {}) { micButtonLabel }
-                .buttonStyle(.plain)
-                .background(talkButtonColor, in: Circle())
-                .simultaneousGesture(talkGesture)
-                .disabled(!canTalk)
-                .accessibilityLabel(isLatched ? "Tap to send" : "Talk to Luke")
-                .accessibilityHint(
-                    isLatched
-                        ? "Stops listening and sends your message"
-                        : "Tap to keep listening, or hold to talk"
-                )
-                .accessibilityAction { activateTalkButton() }
-        }
-    }
-
-    private var micButtonLabel: some View {
-        Image(systemName: isPressing || isLatched ? "waveform" : "mic.fill")
-            .font(.system(size: 18, weight: .semibold))
-            .foregroundStyle(Color.white)
-            .frame(width: 44, height: 44)
-            .contentTransition(.symbolEffect(.replace))
     }
 
     /// VoiceOver invokes the control's default accessibility action rather
@@ -705,9 +659,12 @@ struct VoiceView: View {
 
     private var talkButtonLabel: some View {
         Image(systemName: isPressing || isLatched ? "waveform" : "mic.fill")
-            .font(.system(size: 27, weight: .semibold))
+            .font(.system(size: composerShown ? 18 : 27, weight: .semibold))
             .foregroundStyle(Color.white)
-            .frame(width: 58, height: 58)
+            .frame(
+                width: composerShown ? 44 : 58,
+                height: composerShown ? 44 : 58
+            )
             .contentTransition(.symbolEffect(.replace))
     }
 
