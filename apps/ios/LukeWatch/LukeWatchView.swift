@@ -14,7 +14,6 @@ struct LukeWatchView: View {
                 SignedOutView()
             case .signedIn:
                 signedInPages
-                    .id(watchSession.accountScope)
             }
         }
         .onChange(of: watchSession.accountScope) {
@@ -37,6 +36,9 @@ struct LukeWatchView: View {
             .tag(WatchPage.sessions)
         }
         .tabViewStyle(.page)
+        // The pages and the stack above the list are the signed-in
+        // developer's own: a changed account rebuilds them from nothing.
+        .id(watchSession.accountScope)
     }
 }
 
