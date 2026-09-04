@@ -109,8 +109,10 @@ test("the voice knows nothing of the work itself and asks the brain for all of i
   const instructions = realtimeInstructions();
 
   assert.match(instructions, new RegExp(`call ${ASK_BRAIN_TOOL.name}`));
-  // Nothing tells the voice what to say, or not say, before the ask.
-  assert.doesNotMatch(instructions, /acknowledgement/);
+  assert.match(
+    instructions,
+    /a brief acknowledgement of about five words[\s\S]*varying the wording/,
+  );
   assert.match(instructions, /say its answer whole/);
   assert.match(instructions, /Never invent an agent, a status, or an outcome/);
   // The roster, the guide, and the history are the brain's, so the voice is
