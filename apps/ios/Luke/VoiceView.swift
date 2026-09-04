@@ -49,6 +49,7 @@ private final class VoiceSessionModel {
     private var reconnectTurnTask: Task<Void, Never>?
     private var reconnectingForTurn = false
     private var endTurnAfterReconnect = false
+    private var audioSessionConfigured = false
 
     func start(
         accountSession: AccountSession,
@@ -58,6 +59,25 @@ private final class VoiceSessionModel {
         guard session == nil else { return }
         errorMessage = nil
         makeActContext = actContext
+        reconnectCallback = { [weak self, weak accountSession] startWithTurn in
+            guard let accountSession else { return }
+            await self?.start(
+                accountSession: accountSession, actContext: actContext, startWithTurn: startWithTurn
+            )
+        }
+
+        do {
+            if audioSessionConfigured {
+                try VoiceAudioSession.reactivate()
+            } else {
+                try VoiceAudioSession.activate()
+                audioSessionConfigured = true
+            }
+        } catch {
+            status = .idle
+            errorMessage = error.localizedDescription
+            return
+        }
 
         let mintVoice = voice.rawValue
         let mintSpeed = speed.multiplier
@@ -129,12 +149,6 @@ private final class VoiceSessionModel {
             makeAudioCapturer: { VoiceAudioCapturer() },
             makeAudioPlayer: { VoiceAudioPlayer() }
         )
-        reconnectCallback = { [weak self, weak accountSession] startWithTurn in
-            guard let accountSession else { return }
-            await self?.start(
-                accountSession: accountSession, actContext: actContext, startWithTurn: startWithTurn
-            )
-        }
         let s = RealtimeSession(options: opts)
         session = s
         await s.connect(startWithTurn: startWithTurn)
@@ -148,6 +162,8 @@ private final class VoiceSessionModel {
         reconnectCallback = nil
         session?.close()
         session = nil
+        VoiceAudioSession.deactivate()
+        audioSessionConfigured = false
     }
 
     func beginTurn() {

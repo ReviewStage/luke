@@ -1,6 +1,29 @@
 import AVFoundation
 import LukeKit
 
+/// Owns the voice screen's audio route. The session is activated before the
+/// realtime connection opens and stays active between microphone and speaker
+/// use, giving a Bluetooth HFP route time to settle before the first press.
+enum VoiceAudioSession {
+    static func activate() throws {
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(
+            .playAndRecord,
+            mode: .voiceChat,
+            options: [.defaultToSpeaker, .allowBluetoothHFP]
+        )
+        try session.setActive(true)
+    }
+
+    static func reactivate() throws {
+        try AVAudioSession.sharedInstance().setActive(true)
+    }
+
+    static func deactivate() {
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+}
+
 /// Captures 24 kHz PCM16 mono audio from the microphone using AVAudioEngine.
 /// Taps the input node at its hardware format, converts each frame to 24 kHz
 /// Float32 via AVAudioConverter, then yields Int16 samples to the stream.
@@ -9,9 +32,10 @@ final class VoiceAudioCapturer: AudioCapturer, @unchecked Sendable {
     private var hasTap = false
 
     func start() throws -> AsyncStream<[Int16]> {
-        let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
-        try audioSession.setActive(true)
+        // An interruption may have deactivated the configured session while
+        // the screen remained open. Reassert activation without rebuilding
+        // the Bluetooth route by setting its category again.
+        try VoiceAudioSession.reactivate()
 
         let inputNode = engine.inputNode
         let hwFormat = inputNode.outputFormat(forBus: 0)
@@ -84,6 +108,5 @@ final class VoiceAudioCapturer: AudioCapturer, @unchecked Sendable {
             hasTap = false
         }
         engine.stop()
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 }
