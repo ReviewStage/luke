@@ -855,7 +855,7 @@ test("the roster identifies the most recent session and most recent openable cha
       title: "Newest Codex chat",
       status: SESSION_STATUS.COMPLETE,
       lastActivityAt: 100,
-      detail: { link: "https://chatgpt.com/codex/tasks/codex-newest" },
+      detail: { link: "codex://threads/codex-newest" },
     },
   );
 
@@ -1007,7 +1007,7 @@ test("the bounded roster keeps every provider's most recent openable chat", () =
         title: `Codex chat ${index}`,
         status: SESSION_STATUS.WORKING,
         lastActivityAt: 1_000 - index,
-        detail: { link: `https://chatgpt.com/codex/tasks/${index}` },
+        detail: { link: `codex://threads/${index}` },
       },
     ),
   );

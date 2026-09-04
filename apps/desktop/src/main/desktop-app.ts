@@ -42,7 +42,6 @@ import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticKind,
   ClaudeDesktopSessionApplicationReader,
-  CodexCloudSessionAdapter,
   ConductorLocalWorkspaceAdapter,
   ConductorSessionApplicationReader,
   ObservationHookRegistry,
@@ -64,7 +63,6 @@ import {
   ObservationLoop,
   ObservationSupervisor,
   type ObservedWorkspaceProject,
-  PROVIDER_ID,
   PROVIDER_ID_LIST,
   type ProviderId,
   ReportedSessionLinks,
@@ -254,14 +252,6 @@ const sessionRegistry = new InMemorySessionRegistry();
 // What lets a History line still open a chat whose roster row has departed —
 // archived in its provider — at the last address observation itself reported.
 const reportedSessionLinks = new ReportedSessionLinks();
-// Declared before the settings store because the store's snapshot asks it
-// what the latest pass learned about the Codex CLI's login. It observes only
-// inside the codex composite the provider registrations build; a fixture or
-// evidence run never refreshes it, so there its answer stays the honest
-// "unknown".
-const codexCloudAdapter = new CodexCloudSessionAdapter({
-  onDiagnostic: (kind, error) => reportAdapterDiagnostic(PROVIDER_ID.CODEX, kind, error),
-});
 const conductorSessionApplications = new ConductorSessionApplicationReader();
 // The Claude desktop app's Code tab runs Claude Code sessions of its own and
 // keeps a record per session under its own application data; reading it is
@@ -309,7 +299,6 @@ const settingsStore = new SettingsStore({
     encrypt: (plainText) => safeStorage.encryptString(plainText),
     decrypt: (cipherText) => safeStorage.decryptString(cipherText),
   },
-  codexCloudConnection: () => codexCloudAdapter.connection(),
 });
 const accountClient = new AccountClient({ baseUrl: ACCOUNT_BASE_URL, clientId: ACCOUNT_CLIENT_ID });
 let account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
@@ -361,7 +350,6 @@ const observationHooks = new ObservationHookRegistry(() => app.getPath("userData
 const providerRegistry = providerRegistrations({
   readApiKey: (providerId) => settingsStore.readApiKey(providerId),
   observationHookInstallation: (providerId) => observationHooks.installation(providerId),
-  codexCloudAdapter,
   onDiagnostic: reportAdapterDiagnostic,
 });
 // The record enforces completeness; the shared list preserves provider order.
@@ -1357,22 +1345,6 @@ async function broadcastSessionReplay(): Promise<void> {
   const replay = await sessionReplayBootstrap();
   if (generation !== sessionReplayBroadcastGeneration) return;
   panels.broadcast(channels.onSessionReplayChanged, replay);
-}
-
-/**
- * What the settings last told the panels about the Codex CLI login. The
- * connection is not a setting anyone writes, so no save ever announces it
- * moving: the observation loop is where it changes — the user ran codex
- * login or logout in their own terminal — and without this the panels keep
- * drawing the words of whatever snapshot they loaded.
- */
-let announcedCodexCloudConnection = codexCloudAdapter.connection();
-
-async function broadcastCodexCloudConnection(): Promise<void> {
-  const connection = codexCloudAdapter.connection();
-  if (connection === announcedCodexCloudConnection) return;
-  announcedCodexCloudConnection = connection;
-  panels.broadcast(channels.onSettingsChanged, await settingsStore.snapshot());
 }
 
 async function startAccountCapabilities(): Promise<void> {
@@ -2507,12 +2479,7 @@ const sessionObservationLoop = new ObservationLoop({
   gate: observationGate,
   intervalMs: SESSION_REFRESH_INTERVAL_MS,
   run: refreshProviderSessions,
-  // A pass is also when the Codex CLI login can have changed hands, and no
-  // settings save stands behind that to announce it.
-  afterRun: () => {
-    broadcastRelevantSessions();
-    void broadcastCodexCloudConnection();
-  },
+  afterRun: broadcastRelevantSessions,
 });
 const attentionObservationLoop = new ObservationLoop({
   gate: () => observationGate() && voiceCapabilities.attentionReviewer !== undefined,

@@ -42,6 +42,7 @@ import {
 
 const CLAUDE_PROVIDER = { id: PROVIDER_ID.CLAUDE_CODE, displayName: "Claude Code" };
 const CODEX_PROVIDER = { id: PROVIDER_ID.CODEX, displayName: "Codex" };
+const CONDUCTOR_PROVIDER = { id: PROVIDER_ID.CONDUCTOR, displayName: "Conductor" };
 
 function bootstrap(fixtureMode: boolean): AppBootstrap {
   // SAFETY: Smoke fixture bootstrap carries only fixtureMode and snapshot for tests.
@@ -101,9 +102,9 @@ test("a row carries where its session runs, from either data source", () => {
   assert.equal(fixture.get("codex-bootstrap"), SESSION_LOCATION.LOCAL);
 
   const live = displaySessions(bootstrap(false), [
-    normalizeSession(CODEX_PROVIDER, {
-      providerSessionId: "codex-cloud",
-      title: "Session codex-cloud",
+    normalizeSession(CONDUCTOR_PROVIDER, {
+      providerSessionId: "conductor-cloud",
+      title: "Session conductor-cloud",
       status: SESSION_STATUS.WORKING,
       lastActivityAt: 1_000,
       location: SESSION_LOCATION.CLOUD,
@@ -788,8 +789,6 @@ test("sessions of one state are ordered by which moved most recently", () => {
     ["fresh", "stale"],
   );
 });
-
-const CONDUCTOR_PROVIDER = { id: PROVIDER_ID.CONDUCTOR, displayName: "Conductor" };
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("chats of one workspace sit together and read as one tray run", () => {

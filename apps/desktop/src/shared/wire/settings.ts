@@ -1,11 +1,9 @@
 import type { CredentialProviderId } from "@sidecar/credentials/vocabulary";
-import type { CliConnection } from "@sidecar/session";
 import { APP_SETTING_DEFAULTS, type StoredAppSettings, VOICE_SOURCE } from "@sidecar/settings";
 import type { ActResult } from "@sidecar/wire";
 import type { CredentialSource, SecretStorage } from "./account";
 import type { CalendarAccount } from "./calendar";
 
-export { CLI_CONNECTION, type CliConnection } from "@sidecar/session";
 export type {
   AppSettingField,
   AppSettingValue,
@@ -25,7 +23,6 @@ export {
 /** Runtime facts that travel beside, but never masquerade as, stored choices. */
 export interface RuntimeStatus {
   credentialSources: Readonly<Record<CredentialProviderId, CredentialSource>>;
-  codexCloudConnection: CliConnection;
   secretStorage: SecretStorage;
   voiceAvailable: boolean;
   calendarSignInAvailable: boolean;

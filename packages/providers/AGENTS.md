@@ -6,8 +6,8 @@ The README platform table is generated from that identity catalog.
 
 The adapters this package ships are Claude Code (plus the Claude desktop
 app's session-application reader, which names the Code-tab chats that app
-holds and their `claude://` addresses), Codex (local and cloud), Conductor
-(cloud, plus the local workspace creator and the session-application reader),
+holds and their `claude://` addresses), Codex (local), Conductor (cloud, plus
+the local workspace creator and the session-application reader),
 and OMP; Superset's lives in `@sidecar/superset`. The agents a
 Conductor or Superset workspace can run beyond those — Cursor, OpenCode,
 Copilot, Gemini CLI, Grok Build — are hosted-agent identities in

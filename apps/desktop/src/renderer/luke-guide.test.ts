@@ -23,7 +23,7 @@ import {
   SECRET_STORAGE,
 } from "#shared/wire/account";
 import type { AppSettingsView, SettingsUpdateResult } from "#shared/wire/settings";
-import { APP_SETTING_DEFAULTS, appSettingsView, CLI_CONNECTION } from "#shared/wire/settings";
+import { APP_SETTING_DEFAULTS, appSettingsView } from "#shared/wire/settings";
 import type { UpdateSnapshot } from "#shared/wire/update";
 import { UPDATE_STATUS } from "#shared/wire/update";
 import { appSettingsWire, spokenSettingBridge } from "#testing/spoken-setting-bridge";
@@ -46,7 +46,6 @@ function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
         [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
       },
       secretStorage: SECRET_STORAGE.UNKNOWN,
-      codexCloudConnection: CLI_CONNECTION.UNKNOWN,
       showInDock: false,
       voice: REALTIME_VOICE.CEDAR,
       voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,

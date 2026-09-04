@@ -9,7 +9,6 @@ import {
 export const PROVIDER_LOCATION_KIND = {
   LOCAL: "local",
   CLOUD: "cloud",
-  LOCAL_AND_CLOUD: "local-and-cloud",
 } as const;
 
 export type ProviderLocationKind =
@@ -48,7 +47,7 @@ export const PROVIDER_IDENTITY_BY_ID = {
   [PROVIDER_ID.CODEX]: {
     id: PROVIDER_ID.CODEX,
     displayName: "Codex",
-    location: PROVIDER_LOCATION_KIND.LOCAL_AND_CLOUD,
+    location: PROVIDER_LOCATION_KIND.LOCAL,
   },
   [PROVIDER_ID.CONDUCTOR]: {
     id: PROVIDER_ID.CONDUCTOR,
@@ -760,18 +759,3 @@ export abstract class SessionProviderAdapterBase implements SessionProviderAdapt
     };
   }
 }
-
-/**
- * Whether a CLI-observed provider can be observed right now, without ever
- * exposing the login behind it — the CLI analogue of the credential sources a keyed provider reports.
- * Unknown is the state before the first pass has asked; the other three are
- * what the latest pass learned from the provider's own CLI.
- */
-export const CLI_CONNECTION = {
-  UNKNOWN: "unknown",
-  CONNECTED: "connected",
-  SIGNED_OUT: "signed-out",
-  CLI_MISSING: "cli-missing",
-} as const;
-
-export type CliConnection = (typeof CLI_CONNECTION)[keyof typeof CLI_CONNECTION];

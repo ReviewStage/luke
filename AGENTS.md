@@ -70,32 +70,6 @@ Trust constraints:
   credentials, or live sessions. A provider whose sessions exist only in a cloud
   service may read a user-supplied API key, but it must observe nothing until
   the user supplies one and must leave every other provider working without it.
-- A cloud surface that documents no key-scoped API and answers only its own
-  CLI (Codex cloud today) is observed through that CLI instead, and the rule
-  keeps its shape at one remove. Observation runs the provider's own binary
-  with a read invocation fixed by the build, under the login the user already
-  gave that CLI for its own sake: the credential never passes through Luke,
-  no token is read, stored, or forwarded, and the CLI answers exactly as it
-  would in the user's own terminal. No shell stands between Luke and the
-  binary, nothing enters an invocation's arguments beyond values the build
-  fixed (or, for a paged read, the bounded page cursor the same read's
-  previous page handed back, as a single token), and a machine whose CLI is
-  absent or signed out is observed as having nothing, the same answer a
-  key-observed provider gives with no key. The
-  login is the consent, given by the user's own hands to the provider itself,
-  and signing the CLI out withdraws it on the next pass. Writes keep the shape
-  every provider write has, at one remove: the one write Luke makes through a
-  provider CLI is a new Codex cloud task the user just asked for, through the
-  CLI's own documented creation command, in an environment the latest
-  observation pass reported. The ask carries the developer's own task text as
-  a single argument behind an end-of-options separator, never through a
-  shell, under the same login, probed again at the moment of the act, and
-  the one thing read out of the answer is the created task's id, for the next
-  pass to report on its own. Codex documents no way to message or steer a
-  task already running, so its cloud sessions advertise none, and the honest
-  absence stands rather than an improvised control. Widening the invocation
-  set further, or observing another provider this way, is a product decision,
-  not an implementation detail.
 - One registration is the exception the previous rule's word "require" leaves
   room for, and it is bounded on every side: Luke may join an observation
   hook to a provider's own user-level hook surface (today the `settings.json`

@@ -73,6 +73,9 @@ announcements wait out your meetings; skip it and Luke carries on without.
 
 ### Miscellaneous
 
+- Updated Codex to a local-only provider: Luke no longer observes Codex cloud
+  tasks through the Codex CLI's login, creates none, and draws no Codex row
+  under Providers; sessions on your Mac are observed as before
 - Updated the provider set to Conductor, Superset, Claude Code, Codex, and OMP;
   Cursor, OpenCode, Copilot, Gemini CLI, and Grok Build stay on as the agents a
   Conductor or Superset workspace runs

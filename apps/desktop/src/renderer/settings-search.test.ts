@@ -6,7 +6,7 @@ import { APP_SETTING_SCHEMA, settingFieldForGuideId, settingGuideEntries } from 
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/wire/account";
 import type { AppSettingsView } from "#shared/wire/settings";
-import { APP_SETTING_DEFAULTS, CLI_CONNECTION, VOICE_SOURCE } from "#shared/wire/settings";
+import { APP_SETTING_DEFAULTS, VOICE_SOURCE } from "#shared/wire/settings";
 import {
   type SettingsSearchEntry,
   type SettingsSearchInput,
@@ -26,7 +26,6 @@ function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
         [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
       },
       secretStorage: SECRET_STORAGE.UNKNOWN,
-      codexCloudConnection: CLI_CONNECTION.UNKNOWN,
       voiceAvailable: true,
       voiceSource: VOICE_SOURCE.ACCOUNT,
       showInDock: false,

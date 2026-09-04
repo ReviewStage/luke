@@ -3869,9 +3869,9 @@ test("a project that names its own workspaces refuses a name and takes the rest"
   await context.session.connect();
   context.session.updateWorkspaceProjects([
     {
-      providerId: "codex",
-      providerName: "Codex cloud",
-      providerProjectId: "env-1",
+      providerId: "conductor-local",
+      providerName: "Conductor",
+      providerProjectId: "repo-1",
       repository: "luke",
       taskSupport: "required",
       namesItself: true,
@@ -3888,13 +3888,14 @@ test("a project that names its own workspaces refuses a name and takes the rest"
           name: "create_workspace",
           call_id: "call-named",
           arguments:
-            '{"provider_id":"codex","project_id":"env-1","name":"Panel fix","task":"Fix the panel"}',
+            '{"provider_id":"conductor-local","project_id":"repo-1","name":"Panel fix","task":"Fix the panel"}',
         },
         {
           type: "function_call",
           name: "create_workspace",
           call_id: "call-unnamed",
-          arguments: '{"provider_id":"codex","project_id":"env-1","task":"Fix the panel"}',
+          arguments:
+            '{"provider_id":"conductor-local","project_id":"repo-1","task":"Fix the panel"}',
         },
       ],
     },
@@ -3907,8 +3908,8 @@ test("a project that names its own workspaces refuses a name and takes the rest"
   assert.deepEqual(carried, [
     {
       kind: "create-workspace",
-      providerId: "codex",
-      providerProjectId: "env-1",
+      providerId: "conductor-local",
+      providerProjectId: "repo-1",
       task: "Fix the panel",
     },
   ]);
