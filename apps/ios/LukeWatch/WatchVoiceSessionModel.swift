@@ -12,6 +12,10 @@ struct WatchVoiceMessage: Identifiable {
 /// Observable session state for the watch voice screen. Drives one RealtimeSession
 /// with a tool-free configuration — the watch carries no armed-act infrastructure,
 /// so dispatchToolCall always refuses and contextItems is always empty.
+///
+/// The session is not minted until the developer presses the talk button
+/// (beginTurn). prepare(accountSession:) is called on view appear to store the
+/// credential reference without opening any connection.
 @Observable
 @MainActor
 final class WatchVoiceSessionModel {
@@ -19,14 +23,18 @@ final class WatchVoiceSessionModel {
     var status: RealtimeStatus = .idle
     var errorMessage: String?
 
+    private var accountSession: WatchAccountSession?
     private var session: RealtimeSession?
-    private var reconnectCallback: (@MainActor (_ startWithTurn: Bool) async -> Void)?
-    private var reconnectTurnTask: Task<Void, Never>?
-    private var reconnectingForTurn = false
-    private var endTurnAfterReconnect = false
+    private var connectingForTurn = false
+    private var endTurnAfterConnect = false
+    private var connectTask: Task<Void, Never>?
 
-    func start(accountSession: WatchAccountSession, startWithTurn: Bool = false) async {
-        guard session == nil else { return }
+    func prepare(accountSession: WatchAccountSession) {
+        self.accountSession = accountSession
+    }
+
+    private func connect(startWithTurn: Bool) async {
+        guard session == nil, let accountSession else { return }
         errorMessage = nil
 
         let opts = RealtimeSessionOptions(
@@ -42,6 +50,8 @@ final class WatchVoiceSessionModel {
             },
             onStatus: { [weak self] newStatus in
                 self?.status = newStatus
+                // An idle timeout releases the socket so the next button press
+                // remints rather than sending on a stale connection.
                 if newStatus == .idle { self?.session = nil }
             },
             onCaption: { [weak self] text in
@@ -78,21 +88,17 @@ final class WatchVoiceSessionModel {
             makeAudioCapturer: { WatchAudioCapturer() },
             makeAudioPlayer: { WatchAudioPlayer() }
         )
-        reconnectCallback = { [weak self, weak accountSession] startWithTurn in
-            guard let accountSession else { return }
-            await self?.start(accountSession: accountSession, startWithTurn: startWithTurn)
-        }
         let s = RealtimeSession(options: opts)
         session = s
         await s.connect(startWithTurn: startWithTurn)
     }
 
     func stop() {
-        reconnectTurnTask?.cancel()
-        reconnectTurnTask = nil
-        reconnectingForTurn = false
-        endTurnAfterReconnect = false
-        reconnectCallback = nil
+        connectTask?.cancel()
+        connectTask = nil
+        connectingForTurn = false
+        endTurnAfterConnect = false
+        accountSession = nil
         session?.close()
         session = nil
     }
@@ -103,25 +109,26 @@ final class WatchVoiceSessionModel {
             session.beginTurn()
             return
         }
-        guard let reconnect = reconnectCallback, !reconnectingForTurn else { return }
-        reconnectingForTurn = true
-        endTurnAfterReconnect = false
+        // No existing session: mint a new one and begin the turn once connected.
+        guard accountSession != nil, !connectingForTurn else { return }
+        connectingForTurn = true
+        endTurnAfterConnect = false
         status = .connecting
-        reconnectTurnTask = Task { [weak self] in
-            await reconnect(true)
-            guard let self, !Task.isCancelled, self.reconnectingForTurn else { return }
-            self.reconnectingForTurn = false
-            self.reconnectTurnTask = nil
-            if self.endTurnAfterReconnect {
-                self.endTurnAfterReconnect = false
+        connectTask = Task { [weak self] in
+            await self?.connect(startWithTurn: true)
+            guard let self, !Task.isCancelled, self.connectingForTurn else { return }
+            self.connectingForTurn = false
+            self.connectTask = nil
+            if self.endTurnAfterConnect {
+                self.endTurnAfterConnect = false
                 self.session?.endTurn()
             }
         }
     }
 
     func endTurn() {
-        if reconnectingForTurn {
-            endTurnAfterReconnect = true
+        if connectingForTurn {
+            endTurnAfterConnect = true
             session?.endTurn()
         } else {
             session?.endTurn()

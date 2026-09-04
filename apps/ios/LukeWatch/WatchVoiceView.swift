@@ -18,7 +18,7 @@ struct WatchVoiceView: View {
             floatingControls
         }
         .task {
-            await model.start(accountSession: accountSession)
+            model.prepare(accountSession: accountSession)
         }
         .onDisappear {
             model.stop()
