@@ -330,11 +330,10 @@ struct VoiceView: View {
     private var conversationHistory: some View {
         ZStack {
             if conversation.messages.isEmpty {
-                Text(placeholderText)
-                    .font(.system(size: 17))
+                LukeMark()
                     .foregroundStyle(Color.inkTertiary)
-                    .multilineTextAlignment(.center)
-                    .padding(20)
+                    .frame(width: 96)
+                    .accessibilityHidden(true)
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -503,11 +502,5 @@ struct VoiceView: View {
         case .thinking: return "Thinking…"
         case .speaking: return "Speaking…"
         }
-    }
-
-    private var placeholderText: String {
-        model.status == .ready || model.status == .idle
-            ? "Tap once, or hold the button and speak."
-            : ""
     }
 }
