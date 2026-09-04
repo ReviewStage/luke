@@ -142,8 +142,8 @@ and email you signed it with, and any screenshots you attached.
   memory are kept on your Mac and sent with a call so the conversation carries
   across calls and across launches; on iOS, a call also carries the list of
   projects your synced keys can create a workspace in, while the conversation
-  itself is held in memory and discarded when the session closes, and nothing
-  is remembered between calls.
+  itself is held in memory until the app quits or you sign out, is never
+  stored on the phone, and each call starts without it.
   The one voice call that happens before you sign in is the spoken
   introduction on first launch of the Mac app: it sends its own fixed script,
   the titles of the coding agent sessions found on your Mac, and anything you

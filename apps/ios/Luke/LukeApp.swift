@@ -6,6 +6,7 @@ struct LukeApp: App {
     @State private var session: AccountSession
     @State private var vault: VaultStore
     @State private var events: ProductEventSender
+    @State private var conversation = VoiceConversationThread()
     @Environment(\.scenePhase) private var scenePhase
     // Held for its lifetime — the WCSessionDelegate must not be deallocated.
     private let phoneRelay: PhoneSessionRelay
@@ -54,6 +55,7 @@ struct LukeApp: App {
                 .environment(session)
                 .environment(vault)
                 .environment(events)
+                .environment(conversation)
                 .onChange(of: session.state) { previous, current in
                     accountEdge(from: previous, to: current)
                     switch current {
@@ -88,6 +90,7 @@ struct LukeApp: App {
             }
         case (.signedIn, .signedOut):
             SessionReplay.resetPerson()
+            conversation.clear()
         default:
             break
         }
