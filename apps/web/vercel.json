@@ -1,7 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "pnpm db:migrate && pnpm auth:seed && pnpm build",
+  "crons": [{ "path": "/api/watch/tick", "schedule": "* * * * *" }],
   "functions": {
+    "api/watch/tick.ts": { "maxDuration": 60 },
     "api/brain/respond.ts": { "maxDuration": 120 },
     "api/brain/v2/respond.ts": { "maxDuration": 120 },
     "api/brain/v2/compact.ts": { "maxDuration": 120 },

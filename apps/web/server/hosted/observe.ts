@@ -4,12 +4,10 @@ import {
   normalizeSessionDetail,
   type ObservedSession,
   type ObservedSessionControl,
-  VAULT_PROVIDER_ID,
   type VaultProviderId,
 } from "../core.js";
 import { providerReadsConversation } from "./act-execute.js";
-import { cloudSessionAdapterFor } from "./cloud-adapters.js";
-import { decryptProviderKey } from "./encryption.js";
+import { observeCloudProviders, type VaultKeyRow } from "./cloud-observe.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { createRateBrake } from "./rate-brake.js";
 
@@ -25,11 +23,7 @@ const observeRateLimited = createRateBrake({
   maxTrackedUsers: OBSERVE_RATE_LIMIT.MAX_TRACKED_USERS,
 });
 
-/** Stored vault key row as the API route supplies it. */
-export interface VaultKeyRow {
-  providerId: string;
-  ciphertext: string;
-}
+export type { VaultKeyRow } from "./cloud-observe.js";
 
 export interface ObserveOptions {
   request: Request;
@@ -73,43 +67,14 @@ export async function handleObserve(options: ObserveOptions): Promise<Response> 
     return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   }
 
-  const rows = await readVaultKeys(userId);
-  const ciphertextByProviderId = new Map<string, string>(
-    rows.map((row) => [row.providerId, row.ciphertext]),
-  );
-
-  function readApiKeyFor(providerId: string): () => Promise<string | undefined> {
-    return async () => {
-      const ciphertext = ciphertextByProviderId.get(providerId);
-      if (!ciphertext) return undefined;
-      try {
-        return decryptProviderKey(ciphertext, secret);
-      } catch {
-        return undefined;
-      }
-    };
-  }
-
-  const providers: Array<{
-    providerId: VaultProviderId;
-    observe: () => Promise<readonly ProviderSessionObservation[]>;
-  }> = Object.values(VAULT_PROVIDER_ID).map((providerId) => ({
-    providerId,
-    observe: () =>
-      cloudSessionAdapterFor(providerId, {
-        readApiKey: readApiKeyFor(providerId),
-        ...(options.fetch ? { fetch: options.fetch } : undefined),
-        ...(options.now ? { now: options.now } : undefined),
-      }).observe(),
-  }));
-
-  const results = await Promise.allSettled(providers.map(({ observe }) => observe()));
+  const observed = await observeCloudProviders(await readVaultKeys(userId), secret, {
+    ...(options.fetch ? { fetch: options.fetch } : undefined),
+    ...(options.now ? { now: options.now } : undefined),
+  });
 
   const sessions: ObservedSession[] = [];
-  for (const [i, { providerId }] of providers.entries()) {
-    const result = results[i];
-    if (result?.status !== "fulfilled") continue;
-    for (const obs of result.value) {
+  for (const { providerId, observations } of observed) {
+    for (const obs of observations) {
       sessions.push(observedSessionForResponse(providerId, obs));
     }
   }

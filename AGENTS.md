@@ -70,6 +70,18 @@ Trust constraints:
   credentials, or live sessions. A provider whose sessions exist only in a cloud
   service may read a user-supplied API key, but it must observe nothing until
   the user supplies one and must leave every other provider working without it.
+  The one observation that runs on a timer of Luke's own is the service's
+  scheduled watch, and it is bounded on every side: it runs only for an
+  account that is signed in on a phone and has synced a key, under that same
+  key, once a minute, as the same read-only pass the on-demand endpoint
+  runs; what it keeps between passes is the account's own memory of where
+  each cloud session stood (identifiers, statuses, and when each was last
+  spoken of, never a title, activity, or error); and it keeps nothing at all
+  for an account with no phone or no key, dropping that memory on the next
+  tick. Signing the phone out or deleting the key ends the watch. It exists
+  for exactly one act, the phone notification the announcement rule below
+  names, and widening what it observes, keeps, or does is a product
+  decision, not an implementation detail.
 - A cloud surface that documents no key-scoped API and answers only its own
   CLI (Codex cloud today) is observed through that CLI instead, and the rule
   keeps its shape at one remove. Observation runs the provider's own binary
@@ -842,7 +854,8 @@ What Luke may show:
   message kind, or anything stored is a product decision, not an
   implementation detail.
 - On the brain and speech paths, session material leaves the machine
-  unbidden in exactly two places, each with its own narrower rule; the
+  unbidden in exactly two places, and the service in a third, each with its
+  own narrower rule; the
   analytics, replay, and crash streams above are disclosed on their own terms
   and are not counted here. The brain's own turns are the first, under the
   transcript-read rule above: what a local session's transcript gained since
@@ -852,9 +865,20 @@ What Luke may show:
   bound — which reaches the voice service so it can be said aloud, as the one
   input of a call that carries no tools and no conversation, behind a marker
   that says it is data, so nothing in a briefing can become an act or inherit
-  an earlier question. Nothing decides an announcement deterministically any
-  more: no status edge speaks on its own, and no evaluator sentence stands
-  between the transcript and the voice. The hosted service still answers an
+  an earlier question. On the Mac nothing decides an announcement
+  deterministically any more: no status edge speaks on its own, and no
+  evaluator sentence stands between the transcript and the voice. The third
+  place is the phone notification, and it is the one status edge that still
+  speaks on its own, from the service rather than the machine: on the
+  scheduled watch, a cloud session that started holding for the developer or
+  stopped on an error, judged by the deterministic notice tracker the service
+  keeps for exactly this and by nothing else (no brain and no evaluator runs
+  on that pass, so nothing a model wrote can reach it), is handed to Apple's
+  push service to show on the account's registered phones, carrying the
+  session's title, its workspace, the one line the provider wrote about what
+  it holds on or why it stopped, and its identity for the tap. A finish and a
+  waiting turn the provider did not mark as holding are the phone's roster's
+  to show, never a notification's. The hosted service still answers an
   older installed desktop's attention review and subject derivation under the
   frozen released persona; the current desktop calls neither. Two onboarding
   beats are
