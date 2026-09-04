@@ -199,7 +199,13 @@ private struct SignedInView: View {
                 VoiceView()
                     .toolbar { profileToolbar }
             }
-            .tabItem { Label("Luke", systemImage: "waveform") }
+            .tabItem {
+                Label {
+                    Text("Luke")
+                } icon: {
+                    Image(uiImage: LukeMark.tabIcon)
+                }
+            }
             .tag(AppTab.luke)
 
             // Never shown: selecting this tab presents the creator sheet
