@@ -84,6 +84,12 @@ export const HOSTED_SERVICE_PATH = {
   /** List stored provider keys — ids and timestamps, never keys. */
   VAULT_KEYS: "/api/vault/keys",
   /**
+   * Register the signed-in phone's push token (POST) or forget it at sign-out
+   * (DELETE). The token addresses one app installation and moves to whichever
+   * account the phone last signed in under.
+   */
+  DEVICE_TOKEN: "/api/devices/token",
+  /**
    * Observe cloud sessions on demand for the signed-in user. GET: decrypts the
    * caller's vault keys, runs each provider's cloud adapter once, and returns a
    * bounded roster. Stateless: no session state is stored between requests.
@@ -142,6 +148,57 @@ export const VAULT_KEY_MAX_LENGTH = 512;
  */
 export function vaultKeyIsStorable(key: string): boolean {
   return key.length > 0 && key.length <= VAULT_KEY_MAX_LENGTH && !/\s/u.test(key);
+}
+
+/** The platforms whose push tokens the service registers. */
+export const DEVICE_PLATFORM = {
+  IOS: "ios",
+} as const;
+
+export type DevicePlatform = (typeof DEVICE_PLATFORM)[keyof typeof DEVICE_PLATFORM];
+
+const DEVICE_PLATFORM_SET: ReadonlySet<string> = new Set(Object.values(DEVICE_PLATFORM));
+
+export function isDevicePlatform(value: UnparsedWireValue): value is DevicePlatform {
+  return isWireString(value) && DEVICE_PLATFORM_SET.has(value);
+}
+
+/**
+ * Which of Apple's two push gateways a token belongs to. A build run from
+ * Xcode registers with the sandbox gateway and one from TestFlight or the App
+ * Store with production; the phone knows which it is, and a token sent to the
+ * wrong gateway is refused, so the registration says.
+ */
+export const PUSH_ENVIRONMENT = {
+  SANDBOX: "sandbox",
+  PRODUCTION: "production",
+} as const;
+
+export type PushEnvironment = (typeof PUSH_ENVIRONMENT)[keyof typeof PUSH_ENVIRONMENT];
+
+const PUSH_ENVIRONMENT_SET: ReadonlySet<string> = new Set(Object.values(PUSH_ENVIRONMENT));
+
+export function isPushEnvironment(value: UnparsedWireValue): value is PushEnvironment {
+  return isWireString(value) && PUSH_ENVIRONMENT_SET.has(value);
+}
+
+/**
+ * The bounds a device token must sit inside before the service stores it.
+ * Apple hands the app the token as bytes, and the phone sends its hex; Apple
+ * documents no fixed length, so the bound is generous on both sides and the
+ * check is only that it is hex at all.
+ */
+export const DEVICE_TOKEN_BOUNDS = {
+  MIN_LENGTH: 32,
+  MAX_LENGTH: 512,
+} as const;
+
+export function deviceTokenIsStorable(token: string): boolean {
+  return (
+    token.length >= DEVICE_TOKEN_BOUNDS.MIN_LENGTH &&
+    token.length <= DEVICE_TOKEN_BOUNDS.MAX_LENGTH &&
+    /^[0-9a-f]+$/u.test(token)
+  );
 }
 
 /** Every refusal a hosted endpoint answers with, by its reason. */
@@ -428,6 +485,32 @@ export interface VaultKeyDeleteAnswer {
 export function vaultKeyDeleteAnswerFromWire(
   value: UnparsedWireValue,
 ): VaultKeyDeleteAnswer | undefined {
+  if (!isRecord(value) || !isWireBoolean(value.deleted)) return undefined;
+  return { deleted: value.deleted };
+}
+
+// --- Device wire contract ---
+
+/** Confirms that a push registration landed. */
+export interface DeviceTokenStoreAnswer {
+  stored: true;
+}
+
+export function deviceTokenStoreAnswerFromWire(
+  value: UnparsedWireValue,
+): DeviceTokenStoreAnswer | undefined {
+  if (!isRecord(value) || value.stored !== true) return undefined;
+  return { stored: true };
+}
+
+/** Confirms whether a sign-out found and removed the phone's registration. */
+export interface DeviceTokenDeleteAnswer {
+  deleted: boolean;
+}
+
+export function deviceTokenDeleteAnswerFromWire(
+  value: UnparsedWireValue,
+): DeviceTokenDeleteAnswer | undefined {
   if (!isRecord(value) || !isWireBoolean(value.deleted)) return undefined;
   return { deleted: value.deleted };
 }
