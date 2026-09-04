@@ -21,7 +21,6 @@ import {
   wireRecord,
 } from "@sidecar/wire";
 import {
-  BRAIN_ROSTER_WAKE_INTERVAL_MS,
   BRAIN_TURN_TRIGGER,
   BrainAgent,
   type BrainAgentOptions,
@@ -553,7 +552,7 @@ test("stop drops pending wakes and takes nothing more", async () => {
   assert.equal(await h.agent.ask("hello?"), undefined);
 });
 
-test("a scheduled roster look carries the roster and only the transcripts that grew", async () => {
+test("a roster look carries the roster and only the transcripts that grew", async () => {
   const working = session("abc", { status: SESSION_STATUS.WORKING });
   const settled = session("def", { status: SESSION_STATUS.COMPLETE, lastActivityAt: NOW - 60_000 });
   const cloud = normalizeSession(
@@ -583,9 +582,8 @@ test("a scheduled roster look carries the roster and only the transcripts that g
       };
     },
   });
-  h.agent.start();
-  assert.equal(h.client.inputs.length, 0);
-  await h.clock.advance(NOW + BRAIN_ROSTER_WAKE_INTERVAL_MS);
+  h.agent.rosterLook();
+  await settle();
 
   assert.equal(h.client.inputs.length, 1);
   const input = h.client.inputs[0] ?? [];
@@ -606,8 +604,9 @@ test("a scheduled roster look carries the roster and only the transcripts that g
   assert.deepEqual(read, ["abc"]);
   assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.ROSTER);
 
-  // The look repeats on its own clock.
-  await h.clock.advance(NOW + 2 * BRAIN_ROSTER_WAKE_INTERVAL_MS);
+  // The look can be triggered again by the host.
+  h.agent.rosterLook();
+  await settle();
   assert.equal(h.client.inputs.length, 2);
   await h.agent.stop();
 });
@@ -620,12 +619,14 @@ test("a roster look is skipped while the client is quiet or a turn is in flight"
       sessions: [session("abc", { status: SESSION_STATUS.WORKING })],
     }),
   });
-  h.agent.start();
-  h.client.quiet = NOW + BRAIN_ROSTER_WAKE_INTERVAL_MS + 30_000;
-  await h.clock.advance(NOW + BRAIN_ROSTER_WAKE_INTERVAL_MS);
+
+  // Quiet: the look is skipped.
+  h.client.quiet = NOW + 30_000;
+  h.agent.rosterLook();
+  await settle();
   assert.equal(h.client.inputs.length, 0);
 
-  // Quiet over, but a turn is under way: the look yields and the next one catches up.
+  // Quiet over, but a turn is under way: the look yields.
   h.client.quiet = undefined;
   let release: (() => void) | undefined;
   const slow = new Promise<void>((resolve) => {
@@ -638,13 +639,17 @@ test("a roster look is skipped while the client is quiet or a turn is in flight"
   };
   const ask = h.agent.ask("what's up?");
   await settle();
-  await h.clock.advance(NOW + 2 * BRAIN_ROSTER_WAKE_INTERVAL_MS);
+  h.agent.rosterLook();
+  await settle();
   assert.equal(h.client.inputs.length, 0);
   release?.();
   await ask;
   await settle();
   assert.equal(h.client.inputs.length, 1);
-  await h.clock.advance(NOW + 3 * BRAIN_ROSTER_WAKE_INTERVAL_MS);
+
+  // After the turn completes, the look proceeds.
+  h.agent.rosterLook();
+  await settle();
   assert.equal(h.client.inputs.length, 2);
   assert.equal(h.traces.at(-1)?.trigger, BRAIN_TURN_TRIGGER.ROSTER);
   await h.agent.stop();

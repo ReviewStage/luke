@@ -9,7 +9,7 @@ import type { Session, SessionIdentity } from "./session.js";
  * read as the answer to the ask that created it, so the entry lapses and the
  * workspace stays where every other session starts: on its row, unopened.
  */
-export const CREATED_WORKSPACE_OPEN_WINDOW_MS = 2 * 60_000;
+export const CREATED_WORKSPACE_OPEN_WINDOW_MS = 5 * 60_000;
 
 /**
  * The created workspaces still waiting to be opened on the developer's screen.

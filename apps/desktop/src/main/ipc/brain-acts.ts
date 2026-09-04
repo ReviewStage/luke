@@ -36,6 +36,11 @@ export interface BrainActPerformerDependencies {
   sessionActs: SessionActPerformer;
   /** The roster as the brain was shown it: every observed session still worth a row. */
   sessions: () => readonly Session[];
+  /**
+   * Triggers a fresh observation pass so the session registry is current before
+   * validation and perform. Called before every session act.
+   */
+  refreshSessions: () => Promise<void>;
   workspaceProjects: () => readonly ObservedWorkspaceProject[];
   workspaceDefaults: () => Promise<WorkspaceCreationDefaults>;
   trackedIssues: () => readonly TrackedIssue[] | undefined;
@@ -75,6 +80,7 @@ export function createBrainActPerformer(
   dependencies: BrainActPerformerDependencies,
 ): BrainActPerformer {
   const performSession = async (call: RealtimeFunctionCall): Promise<WireRecord> => {
+    await dependencies.refreshSessions();
     const sessions = dependencies.sessions();
     const defaults = await dependencies.workspaceDefaults();
     const action = sessionToolAction(
