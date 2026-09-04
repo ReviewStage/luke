@@ -405,6 +405,25 @@ final class ProductEventSenderTests: XCTestCase {
         XCTAssertEqual(peak, 1)
     }
 
+    func testResettingDropsTheQueueAndLetsTheDayBeMarkedAgain() async {
+        let (sender, log) = makeSender()
+        sender.arm()
+        sender.record(.appLaunch)
+        sender.markDayActive()
+        sender.reset()
+        await sender.flush().value
+        var requests = await log.requests
+        XCTAssertTrue(requests.isEmpty)
+
+        sender.markDayActive()
+        await sender.flush().value
+        requests = await log.requests
+        XCTAssertEqual(
+            sentEvents(requests[0]).map { $0["name"] as? String },
+            ["app:day_active"]
+        )
+    }
+
     func testStoppingDropsWhatWasQueuedRatherThanHoldingTheQuitOpen() async {
         let (sender, log) = makeSender()
         sender.arm()

@@ -139,6 +139,13 @@ public final class ProductEventSender {
         queue.removeAll()
     }
 
+    /// Drops what is queued and the day markers at an account change, so a
+    /// count recorded under one account never posts as the next.
+    public func reset() {
+        queue.removeAll()
+        recordedDays.removeAll()
+    }
+
     /// Sends what is queued, at most one request at a time. Never throws: a
     /// failure is a count nobody has, which is the trade this whole pipeline
     /// makes. A flush called mid-request chains behind it rather than
