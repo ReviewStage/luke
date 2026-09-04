@@ -98,7 +98,7 @@ extension MarkdownBlock {
             node.text.append(inlinePiece(String(parsed[run.range].characters), run: run))
         }
         let blocks = root.children.flatMap { $0.blocks() }
-        return (blocks.isEmpty ? fallback(text) : blocks).map { $0.withoutLinks() }
+        return (blocks.isEmpty ? fallback(text) : blocks).map { $0.withSafeLinks() }
     }
 
     private static func fallback(_ text: String) -> [MarkdownBlock] {
@@ -108,9 +108,8 @@ extension MarkdownBlock {
 
     /// A run's words carrying the inline styles `Text` draws. Links remain
     /// briefly so structural reads can distinguish a linked `[x]` from a task
-    /// box, then `parse` removes every destination before exposing its blocks:
-    /// messages come from observed agent output, so their Markdown must never
-    /// become an outbound control. The block intent is now the enum case
+    /// box. `parse` later keeps only HTTP and HTTPS destinations; custom URL
+    /// schemes never become controls. The block intent is now the enum case
     /// around the words, and the parser's other bookkeeping (a list item's
     /// delimiter) is nothing a bubble draws. A line break in the source is
     /// kept as one line break: a message is a chat's words, where a new line
@@ -125,16 +124,16 @@ extension MarkdownBlock {
         return piece
     }
 
-    private func withoutLinks() -> MarkdownBlock {
+    private func withSafeLinks() -> MarkdownBlock {
         switch self {
         case .paragraph(let words):
-            return .paragraph(Self.inert(words))
+            return .paragraph(Self.safeLinks(in: words))
         case .heading(let level, let words):
-            return .heading(level: level, Self.inert(words))
+            return .heading(level: level, Self.safeLinks(in: words))
         case .code, .rule:
             return self
         case .quote(let blocks):
-            return .quote(blocks.map { $0.withoutLinks() })
+            return .quote(blocks.map { $0.withSafeLinks() })
         case .list(let ordered, let items):
             return .list(
                 ordered: ordered,
@@ -142,23 +141,31 @@ extension MarkdownBlock {
                     MarkdownListItem(
                         ordinal: item.ordinal,
                         checked: item.checked,
-                        blocks: item.blocks.map { $0.withoutLinks() }
+                        blocks: item.blocks.map { $0.withSafeLinks() }
                     )
                 }
             )
         case .table(let header, let alignments, let rows):
             return .table(
-                header: header.map(Self.inert),
+                header: header.map { Self.safeLinks(in: $0) },
                 alignments: alignments,
-                rows: rows.map { $0.map(Self.inert) }
+                rows: rows.map { $0.map { Self.safeLinks(in: $0) } }
             )
         }
     }
 
-    private static func inert(_ words: AttributedString) -> AttributedString {
-        var inert = words
-        inert.link = nil
-        return inert
+    private static func safeLinks(in words: AttributedString) -> AttributedString {
+        var safe = words
+        let links = words.runs.compactMap { run in
+            run.link.map { (run.range, $0) }
+        }
+        for (range, destination) in links {
+            guard let scheme = destination.scheme?.lowercased(), ["http", "https"].contains(scheme) else {
+                safe[range].link = nil
+                continue
+            }
+        }
+        return safe
     }
 }
 

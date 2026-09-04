@@ -28,7 +28,7 @@ final class MarkdownBlockTests: XCTestCase {
         XCTAssertEqual(paragraphWords(blocks[1]), "Second paragraph")
     }
 
-    func testInlineStylesSurviveWithoutBlockIntentAndLinksStayInert() throws {
+    func testInlineStylesSurviveWithoutBlockIntent() throws {
         let blocks = MarkdownBlock.parse("Ran **all** tests with `pnpm test` at [the repo](https://example.com).")
         guard case .paragraph(let text) = try XCTUnwrap(blocks.first) else {
             return XCTFail("expected a paragraph, got \(blocks)")
@@ -40,10 +40,10 @@ final class MarkdownBlockTests: XCTestCase {
         XCTAssertTrue(styles.allSatisfy { $0.3 == nil })
         XCTAssertEqual(styles.first { $0.0 == "all" }?.1, .stronglyEmphasized)
         XCTAssertEqual(styles.first { $0.0 == "pnpm test" }?.1, .code)
-        XCTAssertNil(styles.first { $0.0 == "the repo" }?.2)
+        XCTAssertEqual(styles.first { $0.0 == "the repo" }?.2, URL(string: "https://example.com"))
     }
 
-    func testAgentControlledLinkDestinationsNeverBecomeControls() throws {
+    func testCustomSchemeLinkDestinationsNeverBecomeControls() throws {
         let blocks = MarkdownBlock.parse("[review this](custom-scheme://run-action)")
         guard case .paragraph(let text) = try XCTUnwrap(blocks.first) else {
             return XCTFail("expected a paragraph, got \(blocks)")
@@ -52,11 +52,35 @@ final class MarkdownBlockTests: XCTestCase {
         XCTAssertTrue(text.runs.allSatisfy { $0.link == nil })
     }
 
-    func testHeadingsCarryTheirLevel() {
-        let blocks = MarkdownBlock.parse("# Summary\n\n### Details")
+    func testWebLinkFormsRetainSafeDestinations() throws {
+        let source = """
+        [Inline](https://example.com)
+        [Title](https://example.com "Example")
+        <https://example.com>
+        [Reference][example]
+
+        [example]: https://example.com
+        """
+        let blocks = MarkdownBlock.parse(source)
+        guard case .paragraph(let text) = try XCTUnwrap(blocks.first) else {
+            return XCTFail("expected a paragraph, got \(blocks)")
+        }
+        XCTAssertEqual(words(text), "Inline\nTitle\nhttps://example.com\nReference")
+        XCTAssertEqual(
+            text.runs.compactMap(\.link),
+            Array(repeating: URL(string: "https://example.com")!, count: 4)
+        )
+    }
+
+    func testHeadingsCarryAllSixLevels() {
+        let blocks = MarkdownBlock.parse("# One\n\n## Two\n\n### Three\n\n#### Four\n\n##### Five\n\n###### Six")
         XCTAssertEqual(blocks, [
-            .heading(level: 1, AttributedString("Summary")),
-            .heading(level: 3, AttributedString("Details")),
+            .heading(level: 1, AttributedString("One")),
+            .heading(level: 2, AttributedString("Two")),
+            .heading(level: 3, AttributedString("Three")),
+            .heading(level: 4, AttributedString("Four")),
+            .heading(level: 5, AttributedString("Five")),
+            .heading(level: 6, AttributedString("Six")),
         ])
     }
 
@@ -67,6 +91,13 @@ final class MarkdownBlockTests: XCTestCase {
 
     func testFencedCodeWithoutLanguageHasNone() {
         XCTAssertEqual(MarkdownBlock.parse("```\nls -la\n```"), [.code(language: nil, "ls -la")])
+    }
+
+    func testIndentedCodeBecomesACodeBlock() {
+        XCTAssertEqual(
+            MarkdownBlock.parse("    let value = 1\n    print(value)"),
+            [.code(language: nil, "let value = 1\nprint(value)")]
+        )
     }
 
     func testUnorderedListNestsAnOrderedList() throws {
@@ -146,6 +177,46 @@ final class MarkdownBlockTests: XCTestCase {
                 rows: [[AttributedString("a"), AttributedString("b"), AttributedString("c")]]
             ),
         ])
+    }
+
+    func testTableKeepsAnEscapedPipeInsideCode() throws {
+        let blocks = MarkdownBlock.parse("| Expression | Result |\n|---|---|\n| `a \\| b` | pipe |")
+        guard case .table(_, _, let rows) = try XCTUnwrap(blocks.first) else {
+            return XCTFail("expected a table, got \(blocks)")
+        }
+        XCTAssertEqual(rows.map { $0.map(words) }, [["a | b", "pipe"]])
+        XCTAssertEqual(rows[0][0].runs.first?.inlinePresentationIntent, .code)
+    }
+
+    func testUnsupportedExtensionsStayReadableWithoutCustomRenderers() {
+        XCTAssertEqual(
+            MarkdownBlock.parse("![Image unavailable](https://example.com/image.png)"),
+            [.paragraph(AttributedString("Image unavailable"))]
+        )
+        XCTAssertEqual(
+            MarkdownBlock.parse("Here is a note[^1].\n\n[^1]: Footnote body.").compactMap(paragraphWords),
+            ["Here is a note[^1].", "[^1]: Footnote body."]
+        )
+        XCTAssertEqual(
+            MarkdownBlock.parse("Term\n: Definition").compactMap(paragraphWords),
+            ["Term\n: Definition"]
+        )
+        XCTAssertEqual(
+            MarkdownBlock.parse("<kbd>Ctrl</kbd> <mark>highlighted</mark>").compactMap(paragraphWords),
+            ["<kbd>Ctrl</kbd> <mark>highlighted</mark>"]
+        )
+        XCTAssertEqual(
+            MarkdownBlock.parse("Inline $E = mc^2$\n\n$$x^2$$").compactMap(paragraphWords),
+            ["Inline $E = mc^2$", "$$x^2$$"]
+        )
+        XCTAssertEqual(
+            MarkdownBlock.parse("H~2~O and X^2^").compactMap(paragraphWords),
+            ["H2O and X^2^"]
+        )
+        XCTAssertEqual(
+            MarkdownBlock.parse("```mermaid\ngraph TD\nA --> B\n```"),
+            [.code(language: "mermaid", "graph TD\nA --> B")]
+        )
     }
 
     func testThematicBreakIsARule() {

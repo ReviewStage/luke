@@ -4,7 +4,7 @@ import SwiftUI
 /// A message's words drawn as the Markdown they were written in, the way
 /// Notes and Messages draw rich text: system text styles that follow Dynamic
 /// Type, `Text`'s own inline rendering for emphasis, code, strikethrough, and
-/// tappable links, and the blocks `Text` cannot draw by itself — lists,
+/// safe web links, and the blocks `Text` cannot draw by itself — lists,
 /// quotes, fenced code, tables, rules — composed from system parts around it.
 /// Every colour is hierarchical off the bubble's foreground, so the same view
 /// reads on the agent's card fill and on the developer's accent bubble.
@@ -90,6 +90,9 @@ private struct MarkdownBlockView: View {
     private func inlineText(_ text: AttributedString, font: Font) -> some View {
         var styled = text
         for run in text.runs {
+            if run.link != nil {
+                styled[run.range].underlineStyle = .single
+            }
             guard let intent = run.inlinePresentationIntent,
                   intent.contains(.stronglyEmphasized), intent.contains(.emphasized)
             else { continue }
@@ -100,14 +103,17 @@ private struct MarkdownBlockView: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    /// The three sizes a message can afford under a chat title: the top
-    /// level a small title, the second a headline, anything deeper the body's
-    /// own size given weight alone.
+    /// Each Markdown level maps directly to a compact system text style. This
+    /// keeps all six levels distinct while still following Dynamic Type on a
+    /// phone and the much narrower watch face.
     private func headingFont(_ level: Int) -> Font {
         switch level {
         case 1: .title3.weight(.semibold)
         case 2: .headline
-        default: .subheadline.weight(.semibold)
+        case 3: .subheadline.weight(.semibold)
+        case 4: .footnote.weight(.semibold)
+        case 5: .caption.weight(.semibold)
+        default: .caption2.weight(.semibold)
         }
     }
 
@@ -134,26 +140,30 @@ private struct MarkdownBlockView: View {
         alignments: [MarkdownTableAlignment],
         rows: [[AttributedString]]
     ) -> some View {
-        Grid(alignment: .topLeading, horizontalSpacing: 14, verticalSpacing: 6) {
-            if !header.isEmpty {
-                GridRow {
-                    ForEach(Array(header.enumerated()), id: \.offset) { column, cell in
-                        inlineText(cell, font: .subheadline.weight(.semibold))
-                            .multilineTextAlignment(textAlignment(for: alignments, column: column))
-                            .gridColumnAlignment(columnAlignment(for: alignments, column: column))
+        ScrollView(.horizontal) {
+            Grid(alignment: .topLeading, horizontalSpacing: 14, verticalSpacing: 6) {
+                if !header.isEmpty {
+                    GridRow {
+                        ForEach(Array(header.enumerated()), id: \.offset) { column, cell in
+                            inlineText(cell, font: .subheadline.weight(.semibold))
+                                .multilineTextAlignment(textAlignment(for: alignments, column: column))
+                                .gridColumnAlignment(columnAlignment(for: alignments, column: column))
+                        }
                     }
+                    Divider()
                 }
-                Divider()
-            }
-            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                GridRow {
-                    ForEach(Array(row.enumerated()), id: \.offset) { column, cell in
-                        inlineText(cell, font: .subheadline)
-                            .multilineTextAlignment(textAlignment(for: alignments, column: column))
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    GridRow {
+                        ForEach(Array(row.enumerated()), id: \.offset) { column, cell in
+                            inlineText(cell, font: .subheadline)
+                                .multilineTextAlignment(textAlignment(for: alignments, column: column))
+                        }
                     }
                 }
             }
         }
+        .scrollIndicators(.hidden)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func columnAlignment(
