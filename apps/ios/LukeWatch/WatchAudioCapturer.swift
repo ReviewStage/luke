@@ -14,7 +14,7 @@ final class WatchAudioCapturer: AudioCapturer, @unchecked Sendable {
     private var hasTap = false
 
     func start() throws -> AsyncStream<[Int16]> {
-        guard AVAudioSession.sharedInstance().recordPermission != .denied else {
+        guard AVAudioApplication.shared.recordPermission != .denied else {
             throw CocoaError(.fileReadUnknown)
         }
 
