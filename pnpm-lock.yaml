@@ -551,9 +551,6 @@ importers:
       '@sidecar/credentials':
         specifier: workspace:*
         version: link:../credentials
-      '@sidecar/process':
-        specifier: workspace:*
-        version: link:../process
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session

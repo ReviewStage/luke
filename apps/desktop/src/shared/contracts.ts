@@ -8,8 +8,6 @@ export {
 } from "@sidecar/account/snapshot";
 export type { AccountCalendar, ObservedAccountCalendars } from "@sidecar/calendar/observation";
 export {
-  CLI_CONNECTION,
-  type CliConnection,
   isWorkspaceProviderId,
   SUPERSET_WORKSPACE_PROVIDER_ID,
   type WorkspaceProviderId,

@@ -62,7 +62,6 @@ export function appSettingsWire(settings: AppSettingsView): AppSettings {
   const stored = storedEntries as StoredAppSettings;
   const status: RuntimeStatus = {
     credentialSources: settings.credentialSources,
-    codexCloudConnection: settings.codexCloudConnection,
     secretStorage: settings.secretStorage,
     voiceAvailable: settings.voiceAvailable,
     calendarSignInAvailable: settings.calendarSignInAvailable,

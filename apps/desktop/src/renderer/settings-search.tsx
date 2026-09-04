@@ -110,7 +110,6 @@ export const SETTINGS_SEARCH_ROW = {
   TALK_KEY: "talk-key",
   ASK_KEY: "ask-key",
   STOP_KEY: "stop-key",
-  CODEX_CLOUD: "codex-cloud",
 } as const;
 
 /**
@@ -124,13 +123,11 @@ export const SETTINGS_SEARCH_ROW = {
 type DefaultProjectProviderId =
   | typeof PROVIDER_ID.CONDUCTOR
   | typeof CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID
-  | typeof PROVIDER_ID.CODEX
   | typeof SUPERSET_WORKSPACE_PROVIDER_ID;
 
 const DEFAULT_PROJECT_ROW_ID = {
   [PROVIDER_ID.CONDUCTOR]: "default-project-conductor",
   [CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID]: "default-project-conductor-local",
-  [PROVIDER_ID.CODEX]: "default-project-codex",
   [SUPERSET_WORKSPACE_PROVIDER_ID]: "default-project-superset",
 } as const satisfies Readonly<Record<DefaultProjectProviderId, string>>;
 
@@ -354,14 +351,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
         ...(provider.keyFormat ? [provider.keyFormat.label] : []),
       ],
     })),
-    // The one provider observed through its own CLI's login rather than a key.
-    {
-      id: SETTINGS_SEARCH_ROW.CODEX_CLOUD,
-      label: "Codex",
-      page: SETTINGS_VIEW.CONNECTIONS,
-      icon: <ProviderMark providerId={PROVIDER_ID.CODEX} />,
-      haystack: ["Codex", "cloud tasks CLI login connect"],
-    },
     input.settings.linearSignInAvailable
       ? {
           id: CREDENTIAL_PROVIDER_ID.LINEAR,

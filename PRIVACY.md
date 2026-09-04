@@ -159,10 +159,9 @@ and email you signed it with, and any screenshots you attached.
   service issues its credential without an account — keeping only a hash of
   your network address for that day's rate limit, tied to nobody.
 - Coding agent providers you connect (Conductor) and Linear, using the key or
-  account access you supply. For Codex cloud tasks, that access is the sign-in
-  you already gave the provider's own command-line tool, which Luke runs and
-  never reads. The synced-key vault holds Conductor keys only. Luke reads your sessions or issues, and sends something back
-  only when you ask it to, such as a message you wrote or an issue you moved.
+  account access you supply. The synced-key vault holds Conductor keys only.
+  Luke reads your sessions or issues, and sends something back only when you
+  ask it to, such as a message you wrote or an issue you moved.
   If you open a Conductor session's screen in the iOS app, our service also
   reads that session's conversation from Conductor — your own messages and the
   agent's replies, not its tool activity — using the key you synced, and

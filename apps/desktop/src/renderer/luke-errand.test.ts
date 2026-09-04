@@ -11,7 +11,7 @@ import { REALTIME_VOICE, REALTIME_VOICE_SPEED, SESSION_LIST_ALL } from "@sidecar
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/wire/account";
 import type { AppSettingsView } from "#shared/wire/settings";
-import { APP_SETTING_DEFAULTS, CLI_CONNECTION, VOICE_SOURCE } from "#shared/wire/settings";
+import { APP_SETTING_DEFAULTS, VOICE_SOURCE } from "#shared/wire/settings";
 import { UPDATE_STATUS } from "#shared/wire/update";
 import {
   captionRoom,
@@ -41,7 +41,6 @@ function settings(): AppSettingsView {
       [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
     },
     secretStorage: SECRET_STORAGE.UNKNOWN,
-    codexCloudConnection: CLI_CONNECTION.UNKNOWN,
     showInDock: false,
     voice: REALTIME_VOICE.CEDAR,
     voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,

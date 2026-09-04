@@ -1,14 +1,11 @@
 export { ACT_RESULT_STATUS } from "@sidecar/wire";
 export { AGENT_IDENTITY, agentIdentityFor } from "./agent-identities.js";
-export { CompositeSessionProviderAdapter } from "./composite-provider-adapter.js";
 export {
   ObservationLoop,
   type ObservationLoopOptions,
   ObservationSupervisor,
 } from "./observation-loop.js";
 export {
-  CLI_CONNECTION,
-  type CliConnection,
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   CONVERSATION_MESSAGE_AUTHOR,
   type ConversationMessageAuthor,

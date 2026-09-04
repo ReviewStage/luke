@@ -76,13 +76,7 @@ import type {
   SettingEntryValue,
   SettingsResetScope,
 } from "#shared/wire/settings";
-import {
-  CLI_CONNECTION,
-  type CliConnection,
-  SETTINGS_RESET_SCOPE,
-  VOICE_SOURCE,
-  type VoiceSource,
-} from "#shared/wire/settings";
+import { SETTINGS_RESET_SCOPE, VOICE_SOURCE, type VoiceSource } from "#shared/wire/settings";
 import type { UpdateSnapshot } from "#shared/wire/update";
 import {
   CREDENTIAL_PLACEHOLDER,
@@ -1279,70 +1273,6 @@ function WorkspaceAgentRow({
 }
 
 /**
- * What each answer the Codex CLI can give reads as on its row. Every state
- * has words — unlike a key row, whose check needs none — because the check
- * alone could not say the connection is a CLI login rather than a key, and
- * the disconnected states are exactly where the next step must be named.
- * The step is a command, so it is drawn as one.
- */
-const CODEX_CLOUD_STATUS = {
-  [CLI_CONNECTION.CONNECTED]: "Via the Codex CLI login",
-  [CLI_CONNECTION.SIGNED_OUT]: (
-    <>
-      Run <code>codex login</code> on your Mac
-    </>
-  ),
-  [CLI_CONNECTION.CLI_MISSING]: "Codex CLI not installed",
-  [CLI_CONNECTION.UNKNOWN]: "Not checked yet",
-};
-
-/**
- * The one provider observed through its own CLI's login rather than a key.
- * The row reports what the latest pass learned and offers nothing to enter
- * or delete: connecting is `codex login` in the user's own terminal, and
- * signing that CLI out is what disconnects — so the words name that step
- * exactly when it is the missing one, and no control pretends otherwise.
- */
-function CodexCloudConnection({
-  connection,
-  settings,
-  writes,
-  workspaceProvider,
-}: {
-  connection: CliConnection;
-  settings: AppSettingsView;
-  writes: SettingsWrites;
-  /**
-   * Codex's own projects, absent until an observation pass reports any. Codex
-   * connects by CLI login rather than by key, so it has no credential row to
-   * hang its creation defaults under and carries them here instead.
-   */
-  workspaceProvider?: WorkspaceProviderOption;
-}): React.JSX.Element {
-  return (
-    <div className="credential" {...searchAnchorProps(SETTINGS_SEARCH_ROW.CODEX_CLOUD)}>
-      <div className="credential-row">
-        <span className="credential-identity">
-          {/* The same mark and cloud badge the codex session rows carry: the
-              login buys the observation of cloud tasks, and the same mark
-              cannot differ between the row and the sessions it stands for. */}
-          <span className="credential-mark">
-            <ProviderMark providerId={PROVIDER_ID.CODEX} />
-            <CloudBadge />
-          </span>
-          <span className="credential-name">Codex</span>
-          {connection === CLI_CONNECTION.CONNECTED ? <CheckIcon /> : null}
-        </span>
-        <span className="credential-status">{CODEX_CLOUD_STATUS[connection]}</span>
-      </div>
-      {connection === CLI_CONNECTION.CONNECTED && workspaceProvider ? (
-        <WorkspaceProjectRow provider={workspaceProvider} settings={settings} writes={writes} />
-      ) : null}
-    </div>
-  );
-}
-
-/**
  * Every agent provider that can hold a key, one line each. A provider is
  * listed whether or not it has one, because the list is how you learn which
  * services Luke can watch at all.
@@ -1366,7 +1296,6 @@ function CredentialsSection({
   // one that cannot hold a key. Until then the rows stand as usual: a warning
   // about storage nobody has tried to use yet would be a guess.
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
-  const codexWorkspace = workspaceProviders.find((option) => option.id === PROVIDER_ID.CODEX);
   const supersetWorkspace = workspaceProviders.find(
     (option) => option.id === SUPERSET_WORKSPACE_PROVIDER_ID,
   );
@@ -1379,13 +1308,6 @@ function CredentialsSection({
         <KeyIcon />
         Providers
       </h2>
-      {/* First because the list reads alphabetically, like the key rows below. */}
-      <CodexCloudConnection
-        connection={settings.codexCloudConnection}
-        settings={settings}
-        writes={writes}
-        {...(codexWorkspace ? { workspaceProvider: codexWorkspace } : {})}
-      />
       {CLOUD_AGENT_PROVIDER_LIST.map((provider) => {
         // The agent row belongs to providers the build documents a table for,
         // and only while connected: disconnected, there is nothing the choice
