@@ -7,32 +7,16 @@ import SwiftUI
 /// The watch ships tool-free: dispatchToolCall always refuses since the armed-act
 /// infrastructure (roster validation, ActClient, ProjectsAnswer) lives on the
 /// phone. The PR notes this explicitly; a future PR may add a bounded act set.
-///
-/// Captions are drawn as plain text — the watch has no session recording to mask
-/// them from, unlike the iPhone's SessionReplay.
 struct WatchVoiceView: View {
     @Environment(WatchAccountSession.self) private var accountSession
     @State private var model = WatchVoiceSessionModel()
     @State private var isPressing = false
 
     var body: some View {
-        VStack(spacing: 4) {
-            captionArea
-            Spacer(minLength: 0)
-            statusLabel
-            if let error = model.errorMessage {
-                Text(error)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.red)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-            }
-            talkButton
+        ZStack(alignment: .bottom) {
+            messageThread
+            floatingControls
         }
-        .padding(.horizontal, 8)
-        .padding(.bottom, 4)
-        .navigationTitle("Luke")
-        .navigationBarTitleDisplayMode(.inline)
         .task {
             await model.start(accountSession: accountSession)
         }
@@ -41,51 +25,60 @@ struct WatchVoiceView: View {
         }
     }
 
-    // MARK: - Caption area
+    // MARK: - Message thread
 
-    private var captionArea: some View {
+    private var messageThread: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 4) {
-                    if !model.spokenAsk.isEmpty {
-                        Text(model.spokenAsk)
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .id("ask")
-                    }
-                    if !model.captionText.isEmpty {
-                        Text(model.captionText)
-                            .font(.system(size: 13))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .id("caption")
-                    }
-                    if model.spokenAsk.isEmpty && model.captionText.isEmpty {
-                        Text(placeholderText)
+                VStack(spacing: 6) {
+                    if model.messages.isEmpty {
+                        Text(model.status == .connecting ? "" : "Hold the button and speak")
                             .font(.system(size: 13))
                             .foregroundStyle(.tertiary)
-                            .frame(maxWidth: .infinity, alignment: .center)
                             .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity, minHeight: 80, alignment: .center)
+                    } else {
+                        ForEach(model.messages) { message in
+                            WatchVoiceBubble(message: message)
+                                .id(message.id)
+                        }
                     }
                 }
-                .padding(.top, 4)
+                .padding(.horizontal, 4)
+                .padding(.top, 8)
+                // Bottom padding so the newest bubble clears the floating controls
+                // while still being reachable by scroll.
+                .padding(.bottom, 88)
+                .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity)
-            .onChange(of: model.captionText) {
-                withAnimation { proxy.scrollTo("caption", anchor: .bottom) }
+            .onChange(of: model.messages.count) {
+                guard let last = model.messages.last else { return }
+                withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
             }
-            .onChange(of: model.spokenAsk) {
-                withAnimation { proxy.scrollTo("ask", anchor: .top) }
+            .onChange(of: model.messages.last?.text) {
+                guard let last = model.messages.last else { return }
+                proxy.scrollTo(last.id, anchor: .bottom)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var placeholderText: String {
-        switch model.status {
-        case .idle, .ready: "Hold the button and speak"
-        case .connecting: ""
-        case .listening, .thinking, .speaking: ""
+    // MARK: - Floating controls
+
+    private var floatingControls: some View {
+        VStack(spacing: 4) {
+            if let error = model.errorMessage {
+                Text(error)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .padding(.horizontal, 8)
+            }
+            statusLabel
+            talkButton
         }
+        .padding(.bottom, 4)
     }
 
     // MARK: - Status label
@@ -183,5 +176,29 @@ struct WatchVoiceView: View {
         case .speaking: return Color(red: 0.2, green: 0.8, blue: 0.5)
         default: return Color.accentColor
         }
+    }
+}
+
+// MARK: - Message bubble
+
+private struct WatchVoiceBubble: View {
+    let message: WatchVoiceMessage
+
+    var body: some View {
+        Text(message.text)
+            .font(.system(size: 13))
+            .foregroundStyle(message.speaker == .user ? Color.white : Color.primary)
+            .multilineTextAlignment(.leading)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 7)
+            .background {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(
+                        message.speaker == .user
+                            ? Color.accentColor
+                            : Color.secondary.opacity(0.18)
+                    )
+            }
+            .frame(maxWidth: .infinity, alignment: message.speaker == .user ? .trailing : .leading)
     }
 }

@@ -3,6 +3,7 @@ import SwiftUI
 struct LukeWatchView: View {
     @Environment(WatchAccountSession.self) private var watchSession
     @Environment(WatchRosterStore.self) private var rosterStore
+    @State private var selectedTab = 0
 
     var body: some View {
         Group {
@@ -10,9 +11,15 @@ struct LukeWatchView: View {
             case .signedOut:
                 SignedOutView()
             case .signedIn:
-                NavigationStack {
-                    WatchRosterView()
+                TabView(selection: $selectedTab) {
+                    WatchVoiceView()
+                        .tag(0)
+                    NavigationStack {
+                        WatchRosterView()
+                    }
+                    .tag(1)
                 }
+                .tabViewStyle(.page)
                 .id(watchSession.accountScope)
             }
         }

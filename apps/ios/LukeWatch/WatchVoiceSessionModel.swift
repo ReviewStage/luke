@@ -2,17 +2,21 @@ import Foundation
 import LukeKit
 import Observation
 
+struct WatchVoiceMessage: Identifiable {
+    enum Speaker { case user, luke }
+    let id = UUID()
+    let speaker: Speaker
+    var text: String
+}
+
 /// Observable session state for the watch voice screen. Drives one RealtimeSession
 /// with a tool-free configuration — the watch carries no armed-act infrastructure,
 /// so dispatchToolCall always refuses and contextItems is always empty.
 @Observable
 @MainActor
 final class WatchVoiceSessionModel {
+    var messages: [WatchVoiceMessage] = []
     var status: RealtimeStatus = .idle
-    /// The developer's transcribed speech for the current exchange.
-    var spokenAsk: String = ""
-    /// Luke's streaming response caption.
-    var captionText: String = ""
     var errorMessage: String?
 
     private var session: RealtimeSession?
@@ -41,15 +45,17 @@ final class WatchVoiceSessionModel {
                 if newStatus == .idle { self?.session = nil }
             },
             onCaption: { [weak self] text in
-                // nil signals segment end or drain — preserve the last caption
-                // so it stays visible until the next spoken ask clears it.
-                if let text { self?.captionText = text }
+                guard let self, let text else { return }
+                if let lastIndex = self.messages.indices.last,
+                   self.messages[lastIndex].speaker == .luke
+                {
+                    self.messages[lastIndex].text = text
+                } else {
+                    self.messages.append(WatchVoiceMessage(speaker: .luke, text: text))
+                }
             },
             onSpokenAsk: { [weak self] text in
-                // A new developer turn began — clear the previous response caption
-                // so the screen shows the question before Luke replies.
-                self?.spokenAsk = text
-                self?.captionText = ""
+                self?.messages.append(WatchVoiceMessage(speaker: .user, text: text))
             },
             onError: { [weak self, weak accountSession] message in
                 guard let self else { return }
@@ -93,8 +99,6 @@ final class WatchVoiceSessionModel {
 
     func beginTurn() {
         errorMessage = nil
-        spokenAsk = ""
-        captionText = ""
         if let session {
             session.beginTurn()
             return
