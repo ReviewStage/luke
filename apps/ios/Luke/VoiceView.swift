@@ -2,6 +2,7 @@ import Foundation
 import LukeKit
 import Observation
 import SwiftUI
+import UIKit
 
 // MARK: - Observable session state
 
@@ -298,6 +299,12 @@ struct VoiceView: View {
                 isLatched = false
                 performPendingNavigation()
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) {
+            _ in
+            guard composerShown else { return }
+            composing = false
+            hideComposer()
         }
         .onDisappear { model.stop() }
     }
