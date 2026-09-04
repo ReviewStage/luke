@@ -120,19 +120,32 @@ explicitly request through that provider. The server-side use of these keys
 ships as a separate feature; this describes only the storage. Every synced key
 is deleted alongside your account if you delete that.
 
-**Phone push tokens.** When you sign into the iOS app, it registers the push
+**Phone notifications.** When you sign into the iOS app, it registers the push
 token Apple issued to that installation with our service, so we can address
 notifications to it. The token names the installation and nothing else, and
 it is not a credential. We store it with your account and delete it when you
 sign out on that phone, when Apple reports it gone, and alongside your account
-if you delete that. Sending notifications ships as a separate feature; this
-describes only the registration.
+if you delete that. While a phone is registered and you have synced a
+provider API key, our service checks your cloud sessions about once a minute
+using that key, the same read it makes when you open the app, and sends a
+notification when a session starts waiting on you or stops on an error. To
+tell a change from what it already saw, the service keeps one record per
+account of which sessions it last saw, their status, and when it last
+notified you about each, and nothing else about them; the record is deleted
+when no phone is registered, when no key is synced, and with your account.
+The notification carries the session's title, its workspace, the one line
+its provider wrote about what it is waiting on or why it stopped, and its id
+so a tap opens it. Nothing a model wrote decides or words a notification.
 
 **Feedback.** If you use the feedback form, we receive what you typed, the name
 and email you signed it with, and any screenshots you attached.
 
 ## Who we send it to
 
+- Apple, for iPhone notifications. Each one carries the session fields named
+  under Phone notifications above and travels through Apple's push service to
+  the phones registered to your account. Apple's handling of it is described
+  in Apple's own privacy policy.
 - OpenAI, for voice and session summaries. A spoken turn sends its audio, a
   typed turn sends your words, and both send the session fields listed above —
   on the Mac app, read locally from your machine; on iOS, drawn from the same
@@ -197,8 +210,10 @@ Your settings, your conversation with Luke, the things he remembers about you,
 local provider API keys, and calendar access stay on your Mac.
 Local keys and calendar access are encrypted in the macOS Keychain. Provider
 API keys you sync to the hosted service are stored encrypted in our own
-database, as described above. Your account information is held by our own
-service, usage counts and recordings by PostHog, and crash reports by Sentry.
+database, as described above, and so are your phones' push tokens and the
+record of which cloud sessions our service last saw for them. Your account
+information is held by our own service, usage counts and recordings by
+PostHog, and crash reports by Sentry.
 
 ## Your choices
 
@@ -206,6 +221,9 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 - Delete your OpenAI key to turn voice off.
 - Delete any synced provider API key from that provider's row in Settings. Keys
   are also deleted when you delete your account.
+- Sign out of the iOS app to stop notifications to that phone; its token is
+  deleted at once and the service's record of your sessions on the next
+  check if no phone remains.
 - Clear the History tab to delete your stored conversation from your Mac.
 - Ask Luke what he remembers, correct a memory, or tell him to forget one.
 - Luke does not use your microphone until you start a turn.

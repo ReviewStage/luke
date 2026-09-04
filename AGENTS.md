@@ -70,6 +70,18 @@ Trust constraints:
   credentials, or live sessions. A provider whose sessions exist only in a cloud
   service may read a user-supplied API key, but it must observe nothing until
   the user supplies one and must leave every other provider working without it.
+  The one observation that runs on a timer of Luke's own is the service's
+  scheduled watch, and it is bounded on every side: it runs only for an
+  account that is signed in on a phone and has synced a key, under that same
+  key, once a minute, as the same read-only pass the on-demand endpoint
+  runs; what it keeps between passes is the account's own memory of where
+  each cloud session stood (identifiers, statuses, and when each was last
+  spoken of, never a title, activity, or error); and it keeps nothing at all
+  for an account with no phone or no key, dropping that memory on the next
+  tick. Signing the phone out or deleting the key ends the watch. It exists
+  for exactly one act, the phone notification the next rule names, and
+  widening what it observes, keeps, or does is a product decision, not an
+  implementation detail.
 - A cloud surface that documents no key-scoped API and answers only its own
   CLI (Codex cloud today) is observed through that CLI instead, and the rule
   keeps its shape at one remove. Observation runs the provider's own binary
@@ -601,13 +613,23 @@ What Luke may show:
   of its own; widening this read to another provider, another caller, an unattributed
   message kind, or anything stored is a product decision, not an
   implementation detail.
-- Session material leaves the machine unbidden in exactly two places, each
+- Session material leaves the machine unbidden in exactly three places, each
   with its own narrower rule. An evaluator receives `AttentionContext`, what
   a provider wrote *about* a session, and never the transcript behind it: no
   message history, file contents, or command output. A
   spoken announcement (a session that started waiting, stopped on an error,
   or finished, or an evaluator sentence approved for speech) reaches the
-  voice service so it can be said aloud. Two onboarding beats are
+  voice service so it can be said aloud. A phone notification is the third,
+  and it leaves the service rather than the machine: on the scheduled watch,
+  a cloud session that started holding for the developer or stopped on an
+  error, judged by the same deterministic notice tracker the desktop runs
+  and by nothing else (no evaluator runs on that pass, so nothing a model
+  wrote can reach it), is handed to Apple's push service to show on the
+  account's registered phones, carrying the session's title, its workspace,
+  the one line the provider wrote about what it holds on or why it stopped,
+  and its identity for the tap. A finish and a waiting turn the provider did
+  not mark as holding are the phone's roster's to show, never a
+  notification's. Two onboarding beats are
   the members of that set about no session, and each keeps the same terms:
   worded from a script fixed by the build, speak-only and tool-free like an
   edge announcement, drawing no notice band and claiming none. The arrival

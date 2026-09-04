@@ -229,3 +229,23 @@ the OpenAI and vault endpoints keep: a Preview deployment without the
 credential stores registrations and sends nothing. Each token records which
 of Apple's two gateways issued it, so a build run from Xcode and one from
 TestFlight are addressed at the right host.
+
+# Scheduled watch
+
+`api/watch/tick.ts` is called by Vercel's cron every minute, on the schedule
+`vercel.json` fixes, and is the one observation the service runs on a timer of
+its own. For each account that has a registered phone and a synced key, oldest
+pass first, it observes the account's cloud sessions exactly as `/api/observe`
+does, diffs the pass against the account's row in `watch_memory` with the same
+notice tracker the desktop runs, writes the new memory, and sends a phone
+notification for a session that started holding for the developer or stopped
+on an error. The memory is identifiers, statuses, and timestamps alone; it is
+dropped for an account that no longer has a phone or a key.
+
+The route requires `CRON_SECRET`, which Vercel sends as the bearer on every
+scheduled call once the variable is set, and the four `APNS_*` variables above.
+Either absent means the tick answers 503 and observes nothing, so a Preview
+deployment (where crons do not run anyway) can never start a watch by accident.
+One tick spends at most 45 seconds inside a 60-second function cap and answers
+how many accounts it reached, so a backlog shows as `exhausted: true` in the
+cron logs rather than as a timeout.

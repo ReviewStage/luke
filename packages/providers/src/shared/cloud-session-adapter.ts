@@ -301,6 +301,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
   #observations: readonly ProviderSessionObservation[] = [];
   #lastAttemptAt = Number.NEGATIVE_INFINITY;
   #collectPass = 0;
+  #lastObserveFailure: CloudFailure | undefined;
 
   constructor(profile: CloudAdapterProfile, options: CloudAdapterOptions) {
     super();
@@ -327,6 +328,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     if (!apiKey) {
       this.#credential = undefined;
       this.#forgetObservedState();
+      this.#lastObserveFailure = undefined;
       return this.#observations;
     }
 
@@ -348,7 +350,10 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     const pass = ++this.#collectPass;
     try {
       const collected = await this.collect(this.#requestForPass(pass, apiKey), now);
-      if (pass === this.#collectPass) this.#observations = cloudObservations(collected);
+      if (pass === this.#collectPass) {
+        this.#observations = cloudObservations(collected);
+        this.#lastObserveFailure = undefined;
+      }
     } catch (error) {
       // A rejected credential clears observed state; a transient network or
       // server failure keeps the previous snapshot until the next attempt. A
@@ -359,8 +364,10 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
       }
       if (error instanceof CloudRequestError) {
         if (error.failure === CLOUD_FAILURE.UNAUTHORIZED) this.#forgetObservedState();
+        this.#lastObserveFailure = error.failure;
         return this.#observations;
       }
+      this.#lastObserveFailure = CLOUD_FAILURE.TRANSIENT;
       // Anything else is a bug in this pass — a TypeError thrown by a
       // subclass's parsing is not a network blip, and must not keep serving
       // the stale snapshot with no log, counter, or hook.
@@ -377,6 +384,16 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
    * A subclass's way onto the same diagnostic channel, for a problem worth
    * surfacing from a pass that otherwise succeeded.
    */
+  /**
+   * Why the latest pass could not read, or undefined when it read (or had no
+   * key to read with, which is an honest nothing rather than a failure). The
+   * pass itself answers with the previous snapshot either way, so a caller
+   * that must tell an empty roster from an unreadable one asks here.
+   */
+  lastObserveFailure(): CloudFailure | undefined {
+    return this.#lastObserveFailure;
+  }
+
   protected reportDiagnostic(kind: AdapterDiagnosticKind, error: Error): void {
     this.#onDiagnostic?.(kind, error);
   }

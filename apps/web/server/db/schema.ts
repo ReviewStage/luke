@@ -5,3 +5,4 @@ export * from "./device-schema.js";
 export * from "./favorite-schema.js";
 export * from "./usage-schema.js";
 export * from "./vault-schema.js";
+export * from "./watch-schema.js";
