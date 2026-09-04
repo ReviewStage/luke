@@ -124,8 +124,9 @@ the paired iPhone's connection tunneled over Bluetooth whenever the phone is
 in range, the watch's own Wi-Fi or cellular only when it is not, so the
 phone's connection is already what carries the watch's traffic whenever it
 can. Every request goes through `WatchNetwork.session`, which waits for that
-path to come up, bounded to a fixed number of seconds, instead of failing the
-instant no path is up the way `URLSession.shared` does, because on a wrist
-that instant failure reads as being offline with the iPhone in the same
-pocket. A request that finds no path in time is worded as one the wearer can
-act on: keep the iPhone nearby, or join Wi-Fi.
+path to come up instead of failing the instant no path is up the way
+`URLSession.shared` does, because on a wrist that instant failure reads as
+being offline with the iPhone in the same pocket. The wait and the transfer
+after it share one fixed bound, since URLSession offers no bound on the wait
+alone, and a request that runs out of it is worded as one the wearer can act
+on: keep the iPhone nearby, or join Wi-Fi.
