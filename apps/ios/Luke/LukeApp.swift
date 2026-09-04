@@ -7,6 +7,8 @@ struct LukeApp: App {
     @State private var vault: VaultStore
     @State private var events: ProductEventSender
     @State private var conversation = VoiceConversationThread()
+    @State private var pushRegistrar: PushRegistrar
+    @UIApplicationDelegateAdaptor(PushCoordinator.self) private var push
     @Environment(\.scenePhase) private var scenePhase
     // Held for its lifetime — the WCSessionDelegate must not be deallocated.
     private let phoneRelay: PhoneSessionRelay
@@ -22,6 +24,10 @@ struct LukeApp: App {
         phoneRelay = PhoneSessionRelay(accountSession: session)
         _vault = State(initialValue: VaultStore(
             client: VaultClient(baseURL: AccountConstants.serviceURL),
+            session: session
+        ))
+        _pushRegistrar = State(initialValue: PushRegistrar(
+            client: DeviceClient(baseURL: AccountConstants.serviceURL),
             session: session
         ))
         // XCTest launches this app as its suites' host, and a test run's
@@ -56,11 +62,24 @@ struct LukeApp: App {
                 .environment(vault)
                 .environment(events)
                 .environment(conversation)
+                .environment(pushRegistrar)
+                .environment(push)
+                .task {
+                    // Being signed in on this phone is what asks for
+                    // notifications: a launch already signed in asks now, and
+                    // a sign-in below asks at its edge.
+                    push.registrar = pushRegistrar
+                    if case .signedIn = session.state { push.enable() }
+                }
                 .onChange(of: session.state) { previous, current in
                     accountEdge(from: previous, to: current)
                     switch current {
-                    case .signedIn: phoneRelay.push()
-                    case .signedOut: phoneRelay.pushSignOut()
+                    case .signedIn:
+                        phoneRelay.push()
+                        push.enable()
+                        Task { await pushRegistrar.accountSignedIn() }
+                    case .signedOut:
+                        phoneRelay.pushSignOut()
                     }
                 }
         }
