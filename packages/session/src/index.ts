@@ -135,10 +135,14 @@ export {
   SessionNoticeHold,
 } from "./session-notice-hold.js";
 export {
+  type NoticedAtMemory,
   SESSION_NOTICE_STATUS,
   type SessionNotice,
+  type SessionNoticeMemory,
   type SessionNoticeStatus,
   SessionNoticeTracker,
+  sessionNoticeMemoryFromWire,
+  type TrackedSessionMemory,
 } from "./session-notices.js";
 export {
   InMemorySessionRegistry,
