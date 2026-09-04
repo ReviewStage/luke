@@ -58,6 +58,39 @@ final class VoiceConversationThreadTests: XCTestCase {
         )
     }
 
+    func testTypedAskOpensItsOwnTurn() {
+        let thread = VoiceConversationThread()
+        thread.beginTurn()
+        thread.recordSpokenAsk("First ask")
+        thread.recordCaption("First reply")
+        thread.recordCaption(nil)
+        thread.recordTypedAsk("  Open the Codex session  ")
+        thread.recordCaption("Opening it.")
+        XCTAssertEqual(
+            thread.messages.map(\.words),
+            ["First ask", "First reply", "Open the Codex session", "Opening it."]
+        )
+        XCTAssertEqual(
+            thread.messages.map(\.typed),
+            [false, false, true, false]
+        )
+        XCTAssertEqual(thread.messages[2].speaker, .developer)
+        XCTAssertEqual(thread.messages[2].turnId, thread.messages[3].turnId)
+    }
+
+    func testLateTranscriptNeverReplacesATypedAsk() {
+        let thread = VoiceConversationThread()
+        thread.recordTypedAsk("Open the Codex session")
+        thread.recordSpokenAsk("A spoken turn's late transcript")
+        XCTAssertEqual(thread.messages.map(\.words), ["Open the Codex session"])
+    }
+
+    func testEmptyTypedAskRecordsNothing() {
+        let thread = VoiceConversationThread()
+        thread.recordTypedAsk("   \n")
+        XCTAssertTrue(thread.messages.isEmpty)
+    }
+
     func testEmptySpokenAskRecordsNothing() {
         let thread = VoiceConversationThread()
         thread.beginTurn()

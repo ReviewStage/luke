@@ -176,6 +176,26 @@ private final class VoiceSessionModel {
         }
     }
 
+    /// Sends a typed ask: the same explicit developer turn a press opens,
+    /// minus the microphone. When the idle timeout has released the socket,
+    /// typing reopens the call the way a press does, and the session holds
+    /// the ask until the channel opens. Returns whether the ask was taken;
+    /// a refused ask stays in the composer, because it is still the
+    /// developer's words.
+    func sendTypedAsk(_ text: String) async -> Bool {
+        errorMessage = nil
+        // A typed ask supersedes what the last reply was about to do, the
+        // same way a new press does.
+        pendingNavigation = nil
+        if session == nil, let reconnect = reconnectCallback, !reconnectingForTurn {
+            status = .connecting
+            await reconnect(false)
+        }
+        guard let session, session.sendTypedAsk(text) else { return false }
+        thread?.recordTypedAsk(text)
+        return true
+    }
+
     /// The voice is fixed at mint time, so an open connection is reopened.
     func changeVoice(_ newVoice: RealtimeVoice, accountSession: AccountSession) async {
         guard newVoice != voice else { return }
@@ -221,6 +241,17 @@ struct VoiceView: View {
     @State private var isLatched = false
     @State private var pressBeganAt: TimeInterval?
     @State private var settingsShown = false
+    @State private var draft = ""
+    // Whether the keyboard button has stood the composer up in the talk
+    // controls' place; the focus edge below stands it back down.
+    @State private var composerShown = false
+    // Guards the double-send window while an ask is reopening the call; the
+    // send button alone cannot, because a disabled state lands a render late.
+    @State private var typedAskInFlight = false
+    @FocusState private var composing: Bool
+    // The keyboard button and composer are the two shapes of one control.
+    @Namespace private var glassNamespace
+    private static let composerGlassID = "composer"
 
     var body: some View {
         ZStack {
@@ -328,46 +359,52 @@ struct VoiceView: View {
     }
 
     private var conversationHistory: some View {
-        ZStack {
+        // The scroll view stands even before anything is said: it is what
+        // carries the keyboard's interactive swipe-down, and an empty state
+        // that replaced it would leave the composer with no way to swipe.
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 14) {
+                    ForEach(conversation.messages) { message in
+                        Group {
+                            switch message.speaker {
+                            case .developer:
+                                DeveloperMessageBubble(words: message.words)
+                            case .luke:
+                                AgentMessageBubble(words: message.words)
+                            }
+                        }
+                        .id(message.id)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .top)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                // The controls float above the thread. Empty space at
+                // its tail lets the newest bubble clear them while the
+                // bubbles themselves can still scroll behind the glass.
+                .padding(.bottom, 200)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: conversation.messages) {
+                guard let last = conversation.messages.last else { return }
+                withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+            }
+            .onAppear {
+                if let last = conversation.messages.last {
+                    proxy.scrollTo(last.id, anchor: .bottom)
+                }
+            }
+        }
+        .overlay {
             if conversation.messages.isEmpty {
                 LukeMark()
                     .foregroundStyle(Color.inkTertiary)
                     .frame(width: 96)
                     .accessibilityHidden(true)
-            } else {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(spacing: 14) {
-                            ForEach(conversation.messages) { message in
-                                Group {
-                                    switch message.speaker {
-                                    case .developer:
-                                        DeveloperMessageBubble(words: message.words)
-                                    case .luke:
-                                        AgentMessageBubble(words: message.words)
-                                    }
-                                }
-                                .id(message.id)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .top)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        // The controls float above the thread. Empty space at
-                        // its tail lets the newest bubble clear them while the
-                        // bubbles themselves can still scroll behind the glass.
-                        .padding(.bottom, 160)
-                    }
-                    .onChange(of: conversation.messages) {
-                        guard let last = conversation.messages.last else { return }
-                        withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
-                    }
-                    .onAppear {
-                        if let last = conversation.messages.last {
-                            proxy.scrollTo(last.id, anchor: .bottom)
-                        }
-                    }
-                }
+                    // Artwork, not a control: a swipe over the face belongs
+                    // to the scroll view beneath.
+                    .allowsHitTesting(false)
             }
         }
         .frame(maxHeight: .infinity)
@@ -385,29 +422,199 @@ struct VoiceView: View {
                     .padding(.horizontal, 24)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            talkButton
-            statusLabel
+            controlsStage
         }
         .padding(.bottom, 10)
         .animation(.easeInOut(duration: 0.2), value: model.errorMessage)
     }
 
+    /// Every glass shape in one container so SwiftUI can morph the keyboard
+    /// button into the composer. Earlier systems keep the same standard view
+    /// transition without Liquid Glass.
     @ViewBuilder
-    private var talkButton: some View {
-        // Keep the view enabled while the user is actively pressing — disabling
-        // during .listening would cancel the in-flight DragGesture and fire
-        // onEnded immediately, collapsing every hold into an instant tap.
-        let canTalk = model.status == .ready
+    private var controlsStage: some View {
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer {
+                controlsContent
+            }
+        } else {
+            controlsContent
+        }
+    }
+
+    private var controlsContent: some View {
+        VStack(spacing: 10) {
+            if !composerShown {
+                statusLabel
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            ZStack(alignment: .bottom) {
+                if composerShown {
+                    composer
+                        .frame(maxWidth: .infinity)
+                        .padding(.trailing, 52)
+                } else {
+                    keyboardButton
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                talkButton
+                    .frame(
+                        maxWidth: .infinity,
+                        alignment: composerShown ? .trailing : .center
+                    )
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 12)
+        }
+        .animation(.smooth(duration: 0.25), value: composerShown)
+    }
+
+    private func showComposer() {
+        withAnimation(.smooth(duration: 0.25)) { composerShown = true }
+    }
+
+    private func hideComposer() {
+        withAnimation(.smooth(duration: 0.25)) { composerShown = false }
+    }
+
+    /// The typed way in: a quiet glass circle at the controls' bottom left
+    /// that stands the composer up. Hidden while the microphone is open,
+    /// because a typed ask is refused there — typing must not cut off what is
+    /// being said — and an absent control is honest where a refusing one is not.
+    @ViewBuilder
+    private var keyboardButton: some View {
+        if !isPressing, !isLatched, model.status != .listening {
+            if #available(iOS 26.0, *) {
+                // Explicit glass rather than the glass button style: only a
+                // glassEffect can carry the glassEffectID the morph pairs on.
+                Button(action: showComposer) { keyboardButtonLabel }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: Circle())
+                    .glassEffectID(Self.composerGlassID, in: glassNamespace)
+                    .glassEffectTransition(.matchedGeometry)
+                    .accessibilityLabel("Type to Luke")
+                    .accessibilityHint("Opens the keyboard to type your ask")
+            } else {
+                Button(action: showComposer) { keyboardButtonLabel }
+                    .buttonStyle(.plain)
+                    .background(Color.cardFill, in: Circle())
+                    .overlay(Circle().strokeBorder(Color.controlStroke, lineWidth: 1))
+                    .matchedGeometryEffect(id: Self.composerGlassID, in: glassNamespace)
+                    .accessibilityLabel("Type to Luke")
+                    .accessibilityHint("Opens the keyboard to type your ask")
+            }
+        }
+    }
+
+    private var keyboardButtonLabel: some View {
+        Image(systemName: "keyboard")
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundStyle(Color.ink)
+            .frame(width: 44, height: 44)
+    }
+
+    /// The desktop composer's iOS shape: the same capsule anatomy the session
+    /// screen's input keeps, sending a turn instead of a session message.
+    /// What is typed here stays masked from session replay by the recording
+    /// library's own input masking.
+    @ViewBuilder
+    private var composer: some View {
+        if #available(iOS 26.0, *) {
+            composerField
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22))
+                .glassEffectID(Self.composerGlassID, in: glassNamespace)
+                .glassEffectTransition(.matchedGeometry)
+        } else {
+            composerField
+                .background(
+                    RoundedRectangle(cornerRadius: 22)
+                        .fill(Color.cardFill)
+                        .strokeBorder(Color.controlStroke, lineWidth: 1)
+                )
+                .matchedGeometryEffect(id: Self.composerGlassID, in: glassNamespace)
+        }
+    }
+
+    private var composerField: some View {
+        TextField("Ask Luke…", text: $draft, axis: .vertical)
+            .focused($composing)
+            .lineLimit(1 ... 5)
+            .font(.body)
+            .foregroundStyle(Color.ink)
+            .padding(.leading, 14)
+            .padding(.trailing, 42)
+            .padding(.vertical, 9)
+            .overlay(alignment: .bottomTrailing) {
+                if canSendTypedAsk {
+                    Button(action: submitTypedAsk) {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 30, height: 30)
+                            .background(Color.accentColor, in: Circle())
+                    }
+                    .padding(5)
+                    .accessibilityLabel("Send to Luke")
+                    .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .animation(.spring(duration: 0.25), value: canSendTypedAsk)
+            // The field must exist before FocusState can make it first
+            // responder. Scheduling the assignment from onAppear keeps the
+            // keyboard presentation on SwiftUI's normal focus path.
+            .onAppear {
+                Task { @MainActor in
+                    await Task.yield()
+                    guard composerShown else { return }
+                    composing = true
+                }
+            }
+    }
+
+    /// An open microphone keeps the floor: the send appears again once the
+    /// held or latched turn is released.
+    private var canSendTypedAsk: Bool {
+        !typedAskInFlight
+            && model.status != .listening
+            && draft.contains { !$0.isWhitespace }
+    }
+
+    private func submitTypedAsk() {
+        guard canSendTypedAsk else { return }
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        typedAskInFlight = true
+        Task {
+            let accepted = await model.sendTypedAsk(text)
+            typedAskInFlight = false
+            // A refused ask keeps the draft — it is still the developer's
+            // words. A taken one lowers the keyboard so the reply's captions
+            // have the screen.
+            if accepted {
+                draft = ""
+                composing = false
+                hideComposer()
+            }
+        }
+    }
+
+    // Keep the buttons enabled while the user is actively pressing — disabling
+    // during .listening would cancel the in-flight DragGesture and fire
+    // onEnded immediately, collapsing every hold into an instant tap.
+    private var canTalk: Bool {
+        model.status == .ready
             || model.status == .idle
             || model.status == .connecting
             || model.status == .listening
             || model.status == .speaking
             || isPressing
+    }
+
+    @ViewBuilder
+    private var talkButton: some View {
         if #available(iOS 26.0, *) {
             Button(action: {}) { talkButtonLabel }
-                .buttonStyle(.glassProminent)
-                .buttonBorderShape(.circle)
-                .tint(talkButtonColor)
+                .buttonStyle(.plain)
+                .glassEffect(.regular.tint(talkButtonColor).interactive(), in: Circle())
                 .simultaneousGesture(talkGesture)
                 .disabled(!canTalk)
                 .accessibilityLabel(isLatched ? "Tap to send" : "Talk to Luke")
@@ -448,9 +655,12 @@ struct VoiceView: View {
 
     private var talkButtonLabel: some View {
         Image(systemName: isPressing || isLatched ? "waveform" : "mic.fill")
-            .font(.system(size: 27, weight: .semibold))
+            .font(.system(size: composerShown ? 18 : 27, weight: .semibold))
             .foregroundStyle(Color.white)
-            .frame(width: 58, height: 58)
+            .frame(
+                width: composerShown ? 44 : 58,
+                height: composerShown ? 44 : 58
+            )
             .contentTransition(.symbolEffect(.replace))
     }
 

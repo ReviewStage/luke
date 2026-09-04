@@ -35,7 +35,8 @@ public enum ConversationContext {
         let lines = messages.suffix(maximumRecentMessages).map { message in
             let words = String(message.words.prefix(maximumRenderedMessageLength))
             switch message.speaker {
-            case .developer: return "- the developer said: \"\(words)\""
+            case .developer:
+                return "- the developer \(message.typed ? "typed" : "said"): \"\(words)\""
             case .luke: return "- Luke said: \"\(words)\""
             }
         }

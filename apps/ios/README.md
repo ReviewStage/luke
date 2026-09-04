@@ -39,7 +39,11 @@ simulator run does not deliver.
 ## Voice acts
 
 The voice screen carries the same acts the desktop's conversation does,
-minus the ones that have no surface on a phone. The tool list is minted
+minus the ones that have no surface on a phone. A turn is opened by the talk
+button or by the keyboard button beside it, which stands a composer up in the
+controls' place: a typed ask is the same explicitly opened, tool-armed turn a
+press is, with no microphone anywhere in it, mirroring the desktop's Ask Luke
+field. The tool list is minted
 server-side from `remoteRealtimeToolDefinitions()` in `packages/acts`, and
 each call is validated on the phone in `LukeKit`'s `VoiceAsks` against the
 roster and projects the conversation was shown before anything is sent:

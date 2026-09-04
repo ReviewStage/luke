@@ -186,10 +186,16 @@ public final class RealtimeSession {
     // Set when the developer releases while still connecting, so we commit
     // and request a response the moment the channel opens.
     private var pendingCommit = false
+    // A typed ask taken while still connecting, held for the channel the way
+    // a press's audio is held in PressAudioBuffer.
+    private var pendingTypedAsk: String?
 
     private var receiveTask: Task<Void, Never>?
     private var captureTask: Task<Void, Never>?
     private var idleTask: Task<Void, Never>?
+    // All user-turn control events share one queue. A cancellation must reach
+    // the server before the item and response.create that supersede it.
+    private var sendTask: Task<Void, Never>?
 
     private var pendingCalls: [String: (name: String, args: String)] = [:]
     private var captionBuffer = ""
@@ -273,6 +279,46 @@ public final class RealtimeSession {
         }
     }
 
+    /// Sends the developer's typed ask: the same explicitly opened turn a
+    /// press is, arming tool calls for the one response it requests, with no
+    /// microphone anywhere in it. Mirrors the desktop's typed path — refused
+    /// while the microphone is open, because typing must not cut off what is
+    /// being said; interrupting a reply still in flight, because a new ask
+    /// supersedes the answer to the last; and held for the channel while it
+    /// is still connecting. Returns whether the ask was taken.
+    public func sendTypedAsk(_ text: String) -> Bool {
+        // The desktop's bound on a typed ask: trimmed, then cut at the same
+        // length a session message carries.
+        let ask = String(
+            text.trimmingCharacters(in: .whitespacesAndNewlines)
+                .prefix(VoiceAsks.maximumMessageLength)
+        )
+        guard !ask.isEmpty else { return false }
+        switch status {
+        case .idle, .listening:
+            return false
+        case .connecting:
+            // A turn already opened by press keeps the floor, and one held
+            // typed ask is enough: the composer waits for its answer.
+            guard !isArmed, !pendingCommit, pendingTypedAsk == nil else { return false }
+            pendingTypedAsk = ask
+            return true
+        case .ready, .thinking, .speaking:
+            guard let channel else { return false }
+            let interruptionEvents = status == .ready
+                ? []
+                : interruptResponse(sendEvents: false)
+            isArmed = true
+            idleTask?.cancel(); idleTask = nil
+            responseStarted = false
+            status = .thinking
+            let item = typedAskItemJSON(ask)
+            let request = responseCreateJSON(sequence: interruptionSequence)
+            enqueueSend(interruptionEvents + [item, request], on: channel)
+            return true
+        }
+    }
+
     /// The API applies a speed between model turns, so it is heard from the
     /// next reply. An idle session sends nothing: the caller mints the next
     /// connection at the speed it holds.
@@ -295,6 +341,7 @@ public final class RealtimeSession {
     public func close() {
         idleTask?.cancel(); idleTask = nil
         receiveTask?.cancel(); receiveTask = nil
+        sendTask?.cancel(); sendTask = nil
         stopCapturing()
         player?.stop(); player = nil
         for drainingPlayer in drainingPlayers.values { drainingPlayer.stop() }
@@ -307,6 +354,7 @@ public final class RealtimeSession {
         responseStarted = false
         pendingDrains = 0
         pendingCommit = false
+        pendingTypedAsk = nil
         pendingSpeed = nil
         pendingCalls.removeAll()
         captionBuffer = ""
@@ -355,8 +403,11 @@ public final class RealtimeSession {
     private func commitAndRequestResponse() async {
         guard let ws = channel else { return }
         responseStarted = false
-        try? await ws.sendText(#"{"type":"input_audio_buffer.commit"}"#)
-        try? await ws.sendText(responseCreateJSON(sequence: interruptionSequence))
+        let task = enqueueSend([
+            #"{"type":"input_audio_buffer.commit"}"#,
+            responseCreateJSON(sequence: interruptionSequence),
+        ], on: ws)
+        await task.value
     }
 
     // MARK: - Receive loop
@@ -396,6 +447,15 @@ public final class RealtimeSession {
         for item in options.contextItems() {
             try? await ws.sendText(contextItemJSON(item))
         }
+        // A held typed ask travels whichever turn owns the response: its words
+        // go in ahead of any press audio, and it requests a response only when
+        // no pressed turn is standing to request its own.
+        var typedAskSent = false
+        if let ask = pendingTypedAsk {
+            pendingTypedAsk = nil
+            typedAskSent = true
+            try? await ws.sendText(typedAskItemJSON(ask))
+        }
         for chunk in pressBuffer.drain() {
             try? await ws.sendText(audioAppendJSON(chunk))
         }
@@ -406,6 +466,15 @@ public final class RealtimeSession {
         } else if isArmed {
             // Capture already running; status tracks listening once the first chunk arrives.
             status = .listening
+        } else if typedAskSent {
+            isArmed = true
+            responseStarted = false
+            status = .thinking
+            let task = enqueueSend(
+                [responseCreateJSON(sequence: interruptionSequence)],
+                on: ws
+            )
+            await task.value
         } else {
             status = .ready
             resetIdleTimer()
@@ -552,7 +621,11 @@ public final class RealtimeSession {
             // Follow-up response requested; the session stays in .thinking or
             // .speaking until the model's follow-up speaks and settles.
             responseStarted = false
-            try? await ws.sendText(responseCreateJSON(sequence: responseInterruptionSequence))
+            let task = enqueueSend(
+                [responseCreateJSON(sequence: responseInterruptionSequence)],
+                on: ws
+            )
+            await task.value
             // A barge-in can land while the socket send is suspended. Its new
             // turn is already armed and must not be cleared by this old turn.
             guard interruptionSequence == responseInterruptionSequence else { return }
@@ -618,11 +691,15 @@ public final class RealtimeSession {
     /// playing. WebSocket sessions own their playback buffer locally, so the
     /// player is stopped here; the server is separately told to stop making
     /// more audio and to forget the generated tail nobody heard.
-    private func interruptResponse() {
+    @discardableResult
+    private func interruptResponse(sendEvents: Bool = true) -> [String] {
         let responseId = activeResponseId
         let responseItemId = activeResponseItemId
         let audioEndMs = heardAudioMilliseconds()
-        let shouldCancel = responseStarted
+        // In .thinking, response.create may be queued or accepted even before
+        // response.created arrives. Queue its cancel behind that request so a
+        // superseding typed turn never creates two live responses.
+        let shouldCancel = responseStarted || status == .thinking || followUpPending
 
         player?.stop()
         player = nil
@@ -664,16 +741,33 @@ public final class RealtimeSession {
             pendingInterruptionEventIds.remove(pendingInterruptionEventIds.first!)
         }
 
-        if let channel, !events.isEmpty {
-            Task {
-                for event in events { try? await channel.sendText(event) }
-            }
+        if sendEvents, let channel, !events.isEmpty {
+            enqueueSend(events, on: channel)
         }
 
         responseStarted = false
         followUpPending = false
         pendingCalls.removeAll()
         clearActiveResponse()
+        return events
+    }
+
+    @discardableResult
+    private func enqueueSend(
+        _ events: [String],
+        on channel: any WebSocketTask
+    ) -> Task<Void, Never> {
+        let precedingTask = sendTask
+        let task = Task {
+            await precedingTask?.value
+            guard !Task.isCancelled else { return }
+            for event in events {
+                guard !Task.isCancelled else { return }
+                try? await channel.sendText(event)
+            }
+        }
+        sendTask = task
+        return task
     }
 
     private func heardAudioMilliseconds() -> Int {
@@ -748,6 +842,13 @@ public final class RealtimeSession {
         let escaped = jsonEscape(item.text)
         return """
             {"type":"conversation.item.create","item":{"id":"\(escapedId)","type":"message","role":"user","content":[{"type":"input_text","text":"\(escaped)"}]}}
+            """
+    }
+
+    private func typedAskItemJSON(_ text: String) -> String {
+        let escaped = jsonEscape(text)
+        return """
+            {"type":"conversation.item.create","item":{"type":"message","role":"user","content":[{"type":"input_text","text":"\(escaped)"}]}}
             """
     }
 
