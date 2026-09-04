@@ -43,19 +43,20 @@ import {
   type AdapterDiagnosticKind,
   ClaudeDesktopSessionApplicationReader,
   CodexCloudSessionAdapter,
-  ConductorLocalWorkspaceAdapter,
   ConductorSessionApplicationReader,
   ObservationHookRegistry,
   type ProviderRegistration,
   peekLocalSessions,
   providerRegistrations,
+  REGISTRATION_OBSERVATION,
+  registrationObservation,
   type WorkspaceHostEnrichment,
   type WorkspaceHostRegistration,
   workspaceHostRegistrations,
+  workspaceProviderRegistrations,
 } from "@sidecar/providers";
 import type { ConversationEntry, SessionAnnouncement } from "@sidecar/realtime";
 import {
-  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   CreatedWorkspaceOpenTracker,
   InMemorySessionRegistry,
   isProviderId,
@@ -78,6 +79,7 @@ import {
   type SessionProviderAdapter,
   type SessionRegistrySnapshot,
   staleWorkspaceProjectDefaults,
+  WORKSPACE_PROVIDER_ID_LIST,
   type WorkspaceAgentSelection,
   workspaceProjectSelectionId,
 } from "@sidecar/session";
@@ -267,14 +269,6 @@ const conductorSessionApplications = new ConductorSessionApplicationReader();
 // keeps a record per session under its own application data; reading it is
 // what lets those rows say which app holds them and open there.
 const claudeDesktopSessionApplications = new ClaudeDesktopSessionApplicationReader();
-// The local counterpart of the cloud Conductor adapter's creation path: it
-// reads the repositories Conductor holds and creates a workspace in one by
-// handing Conductor's own creation deep link to the operating system. It
-// observes no sessions of its own, so it joins the workspace-project offer and
-// the act router rather than the observation registry.
-const conductorLocalWorkspaceAdapter = new ConductorLocalWorkspaceAdapter({
-  openExternal: (url) => shell.openExternal(url),
-});
 const supersetHomeDirectory =
   process.env.SUPERSET_HOME_DIR ?? path.join(app.getPath("home"), ".superset");
 const supersetWorkspaces = new SupersetWorkspaceReader({
@@ -368,6 +362,19 @@ const providerRegistry = providerRegistrations({
 const orderedRegistrations: readonly ProviderRegistration[] = PROVIDER_ID_LIST.map(
   (providerId) => providerRegistry[providerId],
 );
+// Every provider a workspace can be created through: the observed providers
+// above and the two workspace-only providers, Superset's (whose rows the
+// Superset host read decorates) and local Conductor's (which observes no
+// sessions and joins the pass only through its repository refresh). The act
+// router and the project offer read this table; hooks, spools, and credentials
+// belong to the observed providers alone.
+const workspaceRegistry = workspaceProviderRegistrations({
+  registrations: providerRegistry,
+  supersetWorkspace: supersetWorkspaceAdapter,
+  openExternal: (url) => shell.openExternal(url),
+});
+const orderedWorkspaceRegistrations: readonly ProviderRegistration[] =
+  WORKSPACE_PROVIDER_ID_LIST.map((providerId) => workspaceRegistry[providerId]);
 // The issue tracker is not a session provider: its issues feed the voice
 // roster rather than the registry, so it stands beside the adapters rather
 // than among them.
@@ -1429,9 +1436,7 @@ async function readLocalTranscriptRendering(
 }
 
 function adapterFor(providerId: string) {
-  if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return supersetWorkspaceAdapter;
-  if (providerId === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID) return conductorLocalWorkspaceAdapter;
-  return isProviderId(providerId) ? providerRegistry[providerId].adapter : undefined;
+  return isWorkspaceProviderId(providerId) ? workspaceRegistry[providerId].adapter : undefined;
 }
 
 function adapterForCredential(providerId: CredentialProviderId) {
@@ -2009,11 +2014,7 @@ function registerIpc(): void {
  */
 function offeredWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
   if (!runMode.observesProviders) return [];
-  return [
-    ...orderedRegistrations.map(({ adapter }) => adapter),
-    supersetWorkspaceAdapter,
-    conductorLocalWorkspaceAdapter,
-  ].flatMap((adapter) =>
+  return orderedWorkspaceRegistrations.flatMap(({ adapter }) =>
     adapter.workspaceProjects().map((project) => ({
       ...project,
       providerId: adapter.provider.id,
@@ -2100,13 +2101,21 @@ async function readSupersetWorkspaceHost(): Promise<WorkspaceHostEnrichment> {
 
 async function refreshProviderSessions(generation: number): Promise<void> {
   const actionsWereEnabled = observedSupersetOrganization !== undefined;
-  // Re-reads the repositories Conductor holds so the local create offer tracks
-  // its index. A failed read empties the offer inside the adapter, so a create
-  // is never validated against repositories a later read could no longer see.
-  const conductorRepositoriesPromise = conductorLocalWorkspaceAdapter.refresh().catch((error) => {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Conductor repository observation failed: ${message}\n`);
-  });
+  // Each row's own per-pass read — local Conductor re-reading the repositories
+  // it holds so the create offer tracks its index — runs beside the host
+  // reads. A failed read is the row's to absorb (Conductor's empties its
+  // offer) and is only reported here.
+  const rowRefreshes = Promise.all(
+    orderedWorkspaceRegistrations.map(async ({ refresh }) => {
+      if (!refresh) return;
+      try {
+        await refresh.run();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        process.stderr.write(`${refresh.failureLabel} failed: ${message}\n`);
+      }
+    }),
+  );
   const hostEnrichments = await Promise.all(
     workspaceHosts.map((host) =>
       host.read().catch((error) => {
@@ -2116,7 +2125,7 @@ async function refreshProviderSessions(generation: number): Promise<void> {
       }),
     ),
   );
-  await conductorRepositoriesPromise;
+  await rowRefreshes;
   const supersetActionsEnabled = observedSupersetOrganization !== undefined;
   if (actionsWereEnabled !== supersetActionsEnabled) {
     if (supersetActionsEnabled) {
@@ -2134,38 +2143,33 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   // registry commits each provider atomically, so one that is slow or failing
   // can neither delay nor cancel the others. A network provider would
   // otherwise hold up the local ones for as long as its requests take.
-  await Promise.all([
-    ...orderedRegistrations.map(async ({ adapter }) => {
+  // The fold applies the managers in registry order, which is what makes the
+  // registry's declared claim order the enrichment precedence: the first
+  // registration annotates first, and each later one sees what the earlier
+  // ones already claimed. A row whose observations arrive decorated takes no
+  // fold — the host read that produced them annotated them already — and a
+  // row that observes nothing is left out of the pass entirely.
+  const hostFold: WorkspaceHostEnrichment = (providerId, observations) =>
+    hostEnrichments.reduce(
+      (enriched, enrichment) => enrichment(providerId, enriched),
+      observations,
+    );
+  await Promise.all(
+    orderedWorkspaceRegistrations.map(async (registration) => {
+      const observation = registrationObservation(registration);
+      if (observation === REGISTRATION_OBSERVATION.NONE) return;
+      const { adapter } = registration;
       try {
-        // The fold applies the managers in registry order, which is what
-        // makes the registry's declared claim order the enrichment
-        // precedence: the first registration annotates first, and each later
-        // one sees what the earlier ones already claimed.
-        await sessionRegistry.refresh(adapter, (providerId, observations) =>
-          hostEnrichments.reduce(
-            (enriched, enrichment) => enrichment(providerId, enriched),
-            observations,
-          ),
+        await sessionRegistry.refresh(
+          adapter,
+          observation === REGISTRATION_OBSERVATION.HOST_ENRICHED ? hostFold : undefined,
         );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         process.stderr.write(`Session observation failed (${adapter.provider.id}): ${message}\n`);
       }
     }),
-    // The chatless Superset workspaces, as rows of the workspace provider.
-    // No transform rides this refresh: the snapshot decorated them already,
-    // so an act path's plain refresh commits exactly this shape.
-    (async () => {
-      try {
-        await sessionRegistry.refresh(supersetWorkspaceAdapter);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        process.stderr.write(
-          `Session observation failed (${supersetWorkspaceAdapter.provider.id}): ${message}\n`,
-        );
-      }
-    })(),
-  ]);
+  );
   if (!sessionObservationLoop.isCurrent(generation)) return;
   // The registry only spoke if the sessions themselves changed, and a pass can
   // change the project list while leaving them exactly as they were.

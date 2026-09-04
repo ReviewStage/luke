@@ -130,12 +130,21 @@ export function isProviderId(value: string): value is ProviderId {
   return PROVIDER_IDS.has(value);
 }
 
+/**
+ * Every workspace provider in the order their projects are offered: the
+ * observed providers first, in registry order, then the two workspace-only
+ * providers that observe no sessions of their own.
+ */
+export const WORKSPACE_PROVIDER_ID_LIST: readonly WorkspaceProviderId[] = [
+  ...PROVIDER_ID_LIST,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
+  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
+];
+
+const WORKSPACE_PROVIDER_IDS: ReadonlySet<string> = new Set(WORKSPACE_PROVIDER_ID_LIST);
+
 export function isWorkspaceProviderId(value: string): value is WorkspaceProviderId {
-  return (
-    isProviderId(value) ||
-    value === SUPERSET_WORKSPACE_PROVIDER_ID ||
-    value === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID
-  );
+  return WORKSPACE_PROVIDER_IDS.has(value);
 }
 
 /**

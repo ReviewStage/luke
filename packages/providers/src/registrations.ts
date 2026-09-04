@@ -5,16 +5,20 @@ import {
   type CredentialProviderId,
 } from "@sidecar/credentials/vocabulary";
 import {
+  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   CompositeSessionProviderAdapter,
   PROVIDER_ID,
   type ProviderId,
   type SessionProviderAdapter,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
+  type WorkspaceProviderId,
 } from "@sidecar/session";
 import { installClaudeCodeObservationHooks } from "./claude-code/hooks.js";
 import { CODEX_PROVIDER } from "./codex/adapter.js";
 import type { CodexCloudSessionAdapter } from "./codex/cloud-adapter.js";
 import { installCodexObservationHooks } from "./codex/hooks.js";
 import { ConductorSessionAdapter } from "./conductor/adapter.js";
+import { ConductorLocalWorkspaceAdapter } from "./conductor/local-workspace-adapter.js";
 import type { ObservationHookProviderId } from "./hook-registry.js";
 import { localSessionAdapters } from "./local-adapters.js";
 import type {
@@ -27,10 +31,44 @@ import {
   pruneObservationHookSpool,
 } from "./shared/hook-merge.js";
 
+/**
+ * How a registration's adapter joins the observation pass. Most adapters
+ * report sessions the workspace hosts then annotate. A decorated adapter's
+ * rows were already annotated by the host read that produced them, so
+ * folding the hosts over them again would decorate them twice (Superset's
+ * chatless workspace rows already carry their delete control). An adapter
+ * that observes nothing is left out of the pass entirely: refreshing an
+ * empty snapshot every pass would announce an unchanged roster.
+ */
+export const REGISTRATION_OBSERVATION = {
+  HOST_ENRICHED: "host-enriched",
+  DECORATED: "decorated",
+  NONE: "none",
+} as const;
+
+export type RegistrationObservation =
+  (typeof REGISTRATION_OBSERVATION)[keyof typeof REGISTRATION_OBSERVATION];
+
+/** A per-pass read an adapter needs before its projects are current. */
+export interface ProviderRefresh {
+  run(): Promise<void>;
+  /** Opens the stderr line a failed run is reported under. */
+  failureLabel: string;
+}
+
 export interface ProviderRegistration {
   adapter: SessionProviderAdapter;
   credential?: CredentialProvider;
   registerObservationHook?: () => Promise<void>;
+  /** Absent means `REGISTRATION_OBSERVATION.HOST_ENRICHED`. */
+  observation?: RegistrationObservation;
+  refresh?: ProviderRefresh;
+}
+
+export function registrationObservation(
+  registration: ProviderRegistration,
+): RegistrationObservation {
+  return registration.observation ?? REGISTRATION_OBSERVATION.HOST_ENRICHED;
 }
 
 export interface ProviderRegistrationOptions {
@@ -129,4 +167,43 @@ export function providerRegistrations(options: ProviderRegistrationOptions) {
     // unmatched tool_execution_start, and session_exit. No observation hook.
     [PROVIDER_ID.OMP]: { adapter: locals.omp },
   } satisfies Readonly<Record<ProviderId, ProviderRegistration>>;
+}
+
+export interface WorkspaceProviderRegistrationOptions {
+  registrations: Readonly<Record<ProviderId, ProviderRegistration>>;
+  /**
+   * Superset's package sits above this one in the graph, so its workspace
+   * adapter — whose rows the Superset host read decorates — is handed in
+   * rather than built here.
+   */
+  supersetWorkspace: SessionProviderAdapter;
+  openExternal: (url: string) => Promise<void>;
+}
+
+/**
+ * Every provider a workspace can be created through, keyed the way
+ * `WORKSPACE_PROVIDER_ID_LIST` orders them: the observed providers, then the
+ * two workspace-only providers. Local Conductor observes no sessions — a
+ * local Conductor chat is already observed by the agent that runs it — so it
+ * joins the pass only through its repository refresh.
+ */
+export function workspaceProviderRegistrations(options: WorkspaceProviderRegistrationOptions) {
+  const conductorLocal = new ConductorLocalWorkspaceAdapter({
+    openExternal: options.openExternal,
+  });
+  return {
+    ...options.registrations,
+    [SUPERSET_WORKSPACE_PROVIDER_ID]: {
+      adapter: options.supersetWorkspace,
+      observation: REGISTRATION_OBSERVATION.DECORATED,
+    },
+    [CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID]: {
+      adapter: conductorLocal,
+      observation: REGISTRATION_OBSERVATION.NONE,
+      refresh: {
+        run: () => conductorLocal.refresh(),
+        failureLabel: "Conductor repository observation",
+      },
+    },
+  } satisfies Readonly<Record<WorkspaceProviderId, ProviderRegistration>>;
 }

@@ -48,6 +48,7 @@ export {
   SessionProviderAdapterBase,
   SUPERSET_WORKSPACE_PROVIDER_ID,
   staleWorkspaceProjectDefaults,
+  WORKSPACE_PROVIDER_ID_LIST,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentDefaults,
   type WorkspaceAgentKindSelection,

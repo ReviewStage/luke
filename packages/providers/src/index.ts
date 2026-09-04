@@ -20,7 +20,16 @@ export {
   ObservationHookRegistry,
 } from "./hook-registry.js";
 export { type LocalPeekOptions, peekLocalSessions } from "./local-peek.js";
-export { type ProviderRegistration, providerRegistrations } from "./registrations.js";
+export {
+  type ProviderRefresh,
+  type ProviderRegistration,
+  providerRegistrations,
+  REGISTRATION_OBSERVATION,
+  type RegistrationObservation,
+  registrationObservation,
+  type WorkspaceProviderRegistrationOptions,
+  workspaceProviderRegistrations,
+} from "./registrations.js";
 export {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticCallback,

@@ -3,6 +3,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
+import { PROVIDER_ACT } from "@sidecar/providers";
+import { implementedActs } from "@sidecar/providers/testing";
 import { ACT_RESULT_STATUS, PROVIDER_ID, SESSION_STATUS } from "@sidecar/session";
 import { isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
 import {
@@ -50,6 +52,14 @@ const CONTEXT: SupersetSessionContext = {
   updatedAt: 100,
   spawnableAgents: [],
 };
+
+test("the workspace adapter implements creation alone; every other act is the CLI's, host-claimed", () => {
+  const cli = new SupersetCli({ homeDirectory: "/missing" });
+  assert.deepEqual(
+    implementedActs(new SupersetWorkspaceAdapter(cli)),
+    new Set([PROVIDER_ACT.CREATE_WORKSPACE]),
+  );
+});
 
 test("recognizes only controls owned by Superset", () => {
   assert.equal(isSupersetControlId(SUPERSET_CONTROL_ID.DELETE_WORKSPACE), true);
