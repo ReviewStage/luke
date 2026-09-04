@@ -31,7 +31,7 @@ import {
   nextMeetingBoundary,
 } from "@sidecar/calendar";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
-import { AgentTraceWriter, tracedBrainClient } from "@sidecar/devtrace";
+import { AgentTraceWriter, tracedBrainClient, tracedDigestClient } from "@sidecar/devtrace";
 import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
 import { fixtureSnapshot } from "@sidecar/fixtures";
 import { type AppGuideSnapshot, appGuideContextText, EMPTY_APP_GUIDE } from "@sidecar/guide";
@@ -489,7 +489,10 @@ let conversationClearedAt: number | undefined;
  * notices changes itself, against its own memory. Built by `rebuildBrain`
  * whenever the credential policy is applied, and only on the developer's own
  * OpenAI key in this build: with no key there is no brain, nothing is
- * announced, and an ask is answered with the honest refusal.
+ * announced, and an ask is answered with the honest refusal. What a wake
+ * carries is a digest of each session's new transcript, written by the
+ * smaller model behind the digest client on the same key; raw transcript
+ * text reaches it only through its own read_transcript tool.
  */
 let brain: BrainAgent | undefined;
 /** The spool watchers standing on each hooked provider's spool, closed at quit. */
@@ -537,6 +540,8 @@ const voiceCapabilities = new VoiceCapabilityAssembler({
     ? {
         wrapBrainClient: (client) =>
           tracedBrainClient(client, (record) => agentTrace.recordBrainRequest(record)),
+        wrapDigestClient: (client) =>
+          tracedDigestClient(client, (record) => agentTrace.recordBrainDigest(record)),
       }
     : undefined),
 });
@@ -1642,8 +1647,10 @@ async function rebuildBrain(): Promise<void> {
     briefingHold.release();
     return;
   }
+  const digest = voiceCapabilities.digestClient;
   brain = new BrainAgent({
     client,
+    ...(digest ? { digest } : undefined),
     acts: brainActPerformer,
     roster: brainRoster,
     standingContext: brainStandingContext,

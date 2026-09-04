@@ -1,4 +1,9 @@
-import { type BrainClient, openAiBrainClient } from "@sidecar/brain";
+import {
+  type BrainClient,
+  type DigestClient,
+  openAiBrainClient,
+  openAiDigestClient,
+} from "@sidecar/brain";
 import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { type RealtimeDiagnostics, realtimeMintExplanation } from "@sidecar/realtime";
@@ -71,11 +76,14 @@ export interface VoiceCapabilityAssemblerOptions {
    * `BrainClient`, and absence means the client is used as built.
    */
   wrapBrainClient?: (client: BrainClient) => BrainClient;
+  /** The same decoration for the digest client the brain's wakes summarize through. */
+  wrapDigestClient?: (client: DigestClient) => DigestClient;
 }
 
 export class VoiceCapabilityAssembler {
   readonly #options: VoiceCapabilityAssemblerOptions;
   #brainClient: BrainClient | undefined;
+  #digestClient: DigestClient | undefined;
   #realtimeCredentials: RealtimeCredentialMinter | undefined;
   #unavailableDiagnostics: RealtimeDiagnostics;
   #voiceSource: VoiceSource = VOICE_SOURCE.ACCOUNT;
@@ -96,6 +104,15 @@ export class VoiceCapabilityAssembler {
    */
   get brainClient(): BrainClient | undefined {
     return this.#brainClient;
+  }
+
+  /**
+   * The client each wake's transcript slice is summarized through before the
+   * brain sees it, built beside the brain on the same key and standing down
+   * with it. Without one the brain still runs, on fallback digests alone.
+   */
+  get digestClient(): DigestClient | undefined {
+    return this.#digestClient;
   }
 
   get realtimeCredentials(): RealtimeCredentialMinter | undefined {
@@ -135,6 +152,11 @@ export class VoiceCapabilityAssembler {
       builtBrainClient && this.#options.wrapBrainClient
         ? this.#options.wrapBrainClient(builtBrainClient)
         : builtBrainClient;
+    const builtDigestClient = openAiDigestClient(apiKey);
+    this.#digestClient =
+      builtDigestClient && this.#options.wrapDigestClient
+        ? this.#options.wrapDigestClient(builtDigestClient)
+        : builtDigestClient;
     const [voice, speed] = await Promise.all([
       this.#options.settings.get(APP_SETTING_SCHEMA.voice.field).catch(() => undefined),
       this.#options.settings.get(APP_SETTING_SCHEMA.voiceSpeed.field).catch(() => undefined),
@@ -177,6 +199,11 @@ export class VoiceCapabilityAssembler {
     }
     if (this.#brainClient) {
       write(`Luke brain: enabled (${this.#brainClient.model ?? "model chosen by the service"})\n`);
+      write(
+        this.#digestClient
+          ? `Luke brain digest: enabled (${this.#digestClient.model ?? "model chosen by the service"})\n`
+          : "Luke brain digest: absent — wakes carry fallback digests\n",
+      );
     } else if (apiKeyConfigured) {
       write("Luke brain: unavailable — the key was found but no client was built\n");
     } else {

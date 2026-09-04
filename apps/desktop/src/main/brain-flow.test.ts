@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BRAIN_STATE_VERSION, BRAIN_WAKE_KIND } from "@sidecar/brain";
+import { BRAIN_STATE_VERSION, BRAIN_WAKE_HOOK, BRAIN_WAKE_KIND } from "@sidecar/brain";
+import { HOOK_EVENT } from "@sidecar/providers";
 import { normalizeSession, SESSION_STATUS, type Session } from "@sidecar/session";
 import { brainStateFromStored, brainStateRecord, wakeEventsFromHooks } from "./brain-flow";
 
@@ -67,4 +68,14 @@ test("every hook event wakes the brain, carrying the session when the roster hol
     hookEvent: "prompt",
     atMs: NOW,
   });
+});
+
+test("the hook tokens the fallback digest reads are the ones the spool writes", () => {
+  assert.equal(BRAIN_WAKE_HOOK.STOP_FAILURE, HOOK_EVENT.STOP_FAILURE);
+  assert.equal(BRAIN_WAKE_HOOK.NOTIFICATION, HOOK_EVENT.NOTIFICATION);
+  assert.equal(BRAIN_WAKE_HOOK.SESSION_END, HOOK_EVENT.SESSION_END);
+  const spoolTokens: readonly string[] = Object.values(HOOK_EVENT);
+  for (const token of Object.values(BRAIN_WAKE_HOOK)) {
+    assert.ok(spoolTokens.includes(token), `${token} is a spool token`);
+  }
 });
