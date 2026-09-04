@@ -5,7 +5,6 @@ import { BRIDGE } from "./bridge";
 test("act bridge entries reject legacy and malformed outcomes", () => {
   for (const entry of [
     BRIDGE.authorizeAct,
-    BRIDGE.disconnectSuperset,
     BRIDGE.renameSessionWorkspace,
     BRIDGE.renameSession,
     BRIDGE.executeIssueAction,

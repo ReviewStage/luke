@@ -1,6 +1,8 @@
 import type { AccountSnapshot } from "@sidecar/account/snapshot";
 import type { RememberedFact } from "@sidecar/acts";
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
+import type { InteractiveSignInSnapshot } from "@sidecar/credentials/interactive-sign-in";
+import type { ConnectionId } from "@sidecar/credentials/vocabulary";
 import type { FixtureSnapshot } from "@sidecar/fixtures";
 import type { TrackedIssue } from "@sidecar/issues";
 import type { ConversationEntry, IssueToolAction } from "@sidecar/realtime";
@@ -12,15 +14,29 @@ import type { AppSettings } from "./settings";
 import type { UpdateSnapshot } from "./update";
 
 export {
+  INTERACTIVE_SIGN_IN_STAGE,
+  type InteractiveSignInScope,
+  type InteractiveSignInSnapshot,
+} from "@sidecar/credentials/interactive-sign-in";
+export {
   isWorkspaceProviderId,
   SUPERSET_WORKSPACE_PROVIDER_ID,
   type WorkspaceProviderId,
 } from "@sidecar/session";
-export {
-  SUPERSET_SIGN_IN_STAGE,
-  type SupersetOrganizationChoice,
-  type SupersetSignInSnapshot,
-} from "@sidecar/superset/sign-in-stage";
+
+/** One CLI login flow's state, named by the connection it belongs to. */
+export interface ProviderSignInChange {
+  providerId: ConnectionId;
+  state: InteractiveSignInSnapshot;
+}
+
+/**
+ * What became of a press on an interactive sign-in: the flow's new state, or
+ * unsupported for a connection that has no such sign-in to run.
+ */
+export type ProviderSignInResult =
+  | { status: typeof ACT_RESULT_STATUS.ACCEPTED; snapshot: InteractiveSignInSnapshot }
+  | { status: typeof ACT_RESULT_STATUS.UNSUPPORTED; reason: string };
 export type { WindowMode } from "@sidecar/surface";
 
 /**
@@ -137,10 +153,6 @@ export interface AppBootstrap {
    * every packaged run by construction.
    */
   agentTraceEnabled: boolean;
-  /** Whether Superset's bundled CLI exists on this Mac. */
-  supersetInstalled: boolean;
-  /** Whether that CLI also has its own login configuration. */
-  supersetConnected: boolean;
   /** False for fixture and capture runs, which must stay deterministic. */
   accountRequired: boolean;
   account: AccountSnapshot;

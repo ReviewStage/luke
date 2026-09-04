@@ -3,7 +3,7 @@ import type {
   WorkspaceHostRegistration,
   WorkspaceHostSessionActs,
 } from "@sidecar/providers";
-import type { SessionIdentity } from "@sidecar/session";
+import { CLI_CONNECTION, type CliConnection, type SessionIdentity } from "@sidecar/session";
 import { isSupersetControlId, type SupersetCli, SupersetWorkspaceAdapter } from "./cli.js";
 import { SupersetWorkspaceReader, SupersetWorkspaceSnapshot } from "./workspaces.js";
 
@@ -98,6 +98,16 @@ export class SupersetWorkspaceHost implements WorkspaceHostRegistration {
   /** Whether the latest read found the CLI signed into an organization. */
   connected(): boolean {
     return this.#organization !== undefined;
+  }
+
+  /**
+   * What the CLI says about its login right now, asked of the binary rather
+   * than remembered from the last pass, so the settings row a sign-in or
+   * sign-out just changed reads true before the next pass runs.
+   */
+  async cliConnection(): Promise<CliConnection> {
+    if (!(await this.cli.installed())) return CLI_CONNECTION.CLI_MISSING;
+    return (await this.cli.connected()) ? CLI_CONNECTION.CONNECTED : CLI_CONNECTION.SIGNED_OUT;
   }
 
   claim(identity: SessionIdentity): WorkspaceHostSessionActs | undefined {

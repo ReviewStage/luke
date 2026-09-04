@@ -4,10 +4,16 @@ import {
   PRODUCT_SEARCH_SURFACE,
   PRODUCT_SURFACE_EVENT,
 } from "@sidecar/analytics";
-import type { CredentialProviderId } from "@sidecar/credentials/vocabulary";
+import type {
+  CliLoginConnectionId,
+  ConnectionId,
+  CredentialProviderId,
+} from "@sidecar/credentials/vocabulary";
 import {
+  CONNECTION_ID,
   CREDENTIAL_PROVIDER_LIST,
   CREDENTIAL_PROVIDERS,
+  connectionDeclaration,
   isCredentialProviderId,
 } from "@sidecar/credentials/vocabulary";
 import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
@@ -56,15 +62,16 @@ import type { ObservedAccountCalendars } from "#shared/wire/calendar";
 import type {
   AppBootstrap,
   DisplayDiagnostic,
+  InteractiveSignInSnapshot,
+  ProviderSignInResult,
   SessionOpenResult,
   SessionReplayBootstrap,
   SessionRosterPayload,
-  SupersetSignInSnapshot,
   WorkspaceProviderId,
 } from "#shared/wire/session";
 import {
+  INTERACTIVE_SIGN_IN_STAGE,
   isWorkspaceProviderId,
-  SUPERSET_SIGN_IN_STAGE,
   SUPERSET_WORKSPACE_PROVIDER_ID,
 } from "#shared/wire/session";
 import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "#shared/wire/settings";
@@ -106,6 +113,7 @@ import {
 } from "./feedback-entry";
 import { encodeFeedbackImage } from "./feedback-images";
 import { FeedbackSlot } from "./feedback-slot";
+import { InteractiveSignInSlot } from "./interactive-sign-in-slot";
 import { KeySlot } from "./key-slot";
 import { type Errand, errandTargets, LukeErrand } from "./luke-errand";
 import { usePrefersReducedMotion } from "./luke-face-mood";
@@ -143,7 +151,7 @@ import { focusSearchField, SESSION_SEARCH_INPUT_ID } from "./session-search";
 import type {
   MicrophoneControl,
   ShortcutControl,
-  SupersetControl,
+  SupersetAgentControl,
   UpdateControl,
 } from "./settings-panel";
 import { SETTINGS_SEARCH_INPUT_ID } from "./settings-search";
@@ -165,7 +173,6 @@ import {
   type SpokenStripContent,
   stripHoldNext,
 } from "./strip-hold";
-import { SupersetSignInSlot } from "./superset-sign-in-slot";
 import { UPDATE_ROW_ACTION, updateRow } from "./update-row";
 import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
 import { useMeasuredHeight } from "./use-measured-height";
@@ -218,9 +225,9 @@ const CONSENT_ACTS = {
     reopen: () => window.sidecar.reopenGoogleCalendarSignIn(),
   },
   [CONSENT_SERVICE_ID.LINEAR]: {
-    connect: () => window.sidecar.connectLinear(),
-    cancel: () => window.sidecar.cancelLinearSignIn(),
-    reopen: () => window.sidecar.reopenLinearSignIn(),
+    connect: () => window.sidecar.connectProvider(CONNECTION_ID.LINEAR),
+    cancel: () => window.sidecar.cancelProviderSignIn(CONNECTION_ID.LINEAR),
+    reopen: () => window.sidecar.reopenProviderSignIn(CONNECTION_ID.LINEAR),
   },
 } as const satisfies Readonly<
   Record<
@@ -354,11 +361,14 @@ export function App(): React.JSX.Element {
     () => (bootstrap ? appSettingsView(bootstrap.settings) : undefined),
     [bootstrap],
   );
-  const [supersetConnected, setSupersetConnected] = useState<boolean>();
-  const [supersetSignIn, setSupersetSignIn] = useState<SupersetSignInSnapshot>({
-    stage: SUPERSET_SIGN_IN_STAGE.IDLE,
-    organizations: [],
-  });
+  /**
+   * The one CLI sign-in the slot may be standing in for: which connection's,
+   * and where its flow has got to. Absent while none is running.
+   */
+  const [interactiveSignIn, setInteractiveSignIn] = useState<{
+    providerId: CliLoginConnectionId;
+    snapshot: InteractiveSignInSnapshot;
+  }>();
   // Readable from a callback as well as rendered: opening the feedback
   // composer signs a fresh note from the account without re-wiring the
   // lifecycle subscription to every sign-in change.
@@ -481,7 +491,7 @@ export function App(): React.JSX.Element {
   const feedbackHeld = useRef(false);
   /** Whether a calendar sign-in holds the slot, mirrored like the other two. */
   const consentConnectHeld = useRef(false);
-  const supersetSignInHeld = useRef(false);
+  const interactiveSignInHeld = useRef(false);
   /**
    * Which entry the slot shape is drawn around — a key being pasted or either
    * sign-in being waited out. One shape, three occupants, never together.
@@ -727,7 +737,7 @@ export function App(): React.JSX.Element {
       credentialHeld.current ||
       feedbackHeld.current ||
       consentConnectHeld.current ||
-      supersetSignInHeld.current,
+      interactiveSignInHeld.current,
     onNotPanel: () => {
       setOptionsOpen(false);
       // The settings search closes with the shape it was opened on, taking
@@ -950,8 +960,10 @@ export function App(): React.JSX.Element {
     [applySettingsReply],
   );
 
-  const disconnectLinear = useCallback(
-    async () => applySettingsReply(await window.sidecar.disconnectLinear()),
+  /** One disconnect for every connection row, named by the row that asked. */
+  const disconnectProvider = useCallback(
+    async (providerId: ConnectionId) =>
+      applySettingsReply(await window.sidecar.disconnectProvider(providerId)),
     [applySettingsReply],
   );
 
@@ -1046,39 +1058,55 @@ export function App(): React.JSX.Element {
     consentConnect.cancel();
   }, [consentConnect.cancel, consentConnect.latest]);
 
-  const beginSupersetSignIn = useCallback(() => {
-    if (supersetSignInHeld.current) {
-      if (supersetSignIn.stage === SUPERSET_SIGN_IN_STAGE.FAILURE) {
-        setSupersetSignIn({ stage: SUPERSET_SIGN_IN_STAGE.BROWSER_CODE, organizations: [] });
-        void window.sidecar.beginSupersetSignIn().then(setSupersetSignIn);
+  /** The flow's answer to a press, kept only while it is the flow on screen. */
+  const applySignInResult = useCallback(
+    (providerId: CliLoginConnectionId, result: ProviderSignInResult) => {
+      if (result.status !== ACT_RESULT_STATUS.ACCEPTED) return;
+      setInteractiveSignIn((current) =>
+        current?.providerId === providerId ? { providerId, snapshot: result.snapshot } : current,
+      );
+    },
+    [],
+  );
+
+  const beginInteractiveSignIn = useCallback(
+    (providerId: CliLoginConnectionId) => {
+      const waiting = { stage: INTERACTIVE_SIGN_IN_STAGE.BROWSER_CODE, scopes: [] };
+      if (interactiveSignInHeld.current) {
+        if (
+          interactiveSignIn?.providerId === providerId &&
+          interactiveSignIn.snapshot.stage === INTERACTIVE_SIGN_IN_STAGE.FAILURE
+        ) {
+          setInteractiveSignIn({ providerId, snapshot: waiting });
+          void window.sidecar
+            .beginProviderSignIn(providerId)
+            .then((result) => applySignInResult(providerId, result));
+        }
+        return;
       }
-      return;
-    }
-    if (credentialHeld.current || consentConnectHeld.current) return;
-    supersetSignInHeld.current = true;
-    slotOccupant.current = PANEL_STAND_DOWN.SUPERSET;
-    standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.SUPERSET });
-    setSupersetSignIn({ stage: SUPERSET_SIGN_IN_STAGE.BROWSER_CODE, organizations: [] });
-    cancelHover();
-    applyPresentation(PANEL_PRESENTATION.SLOT);
-    void window.sidecar.beginSupersetSignIn().then(setSupersetSignIn);
-  }, [applyPresentation, cancelHover, supersetSignIn.stage]);
+      if (credentialHeld.current || consentConnectHeld.current) return;
+      interactiveSignInHeld.current = true;
+      slotOccupant.current = PANEL_STAND_DOWN.INTERACTIVE_SIGN_IN;
+      standDownPage.current = standDownReturnPage({
+        kind: PANEL_STAND_DOWN.INTERACTIVE_SIGN_IN,
+      });
+      setInteractiveSignIn({ providerId, snapshot: waiting });
+      cancelHover();
+      applyPresentation(PANEL_PRESENTATION.SLOT);
+      void window.sidecar
+        .beginProviderSignIn(providerId)
+        .then((result) => applySignInResult(providerId, result));
+    },
+    [applyPresentation, applySignInResult, cancelHover, interactiveSignIn],
+  );
 
-  const cancelSupersetSignIn = useCallback(() => {
-    if (!supersetSignInHeld.current) return;
-    window.sidecar.cancelSupersetSignIn();
-    supersetSignInHeld.current = false;
-    setSupersetSignIn({ stage: SUPERSET_SIGN_IN_STAGE.IDLE, organizations: [] });
+  const cancelInteractiveSignIn = useCallback(() => {
+    if (!interactiveSignInHeld.current) return;
+    if (interactiveSignIn) window.sidecar.cancelProviderSignIn(interactiveSignIn.providerId);
+    interactiveSignInHeld.current = false;
+    setInteractiveSignIn(undefined);
     if (presentationOf() === PANEL_PRESENTATION.SLOT) restorePanel();
-  }, [presentationOf, restorePanel]);
-
-  const disconnectSuperset = useCallback(async () => {
-    const result = await window.sidecar.disconnectSuperset();
-    // The idle broadcast the sign-out fires says the same thing to every other
-    // window; this window should not wait a round trip to agree with itself.
-    if (result.status === ACT_RESULT_STATUS.ACCEPTED) setSupersetConnected(false);
-    return result;
-  }, []);
+  }, [interactiveSignIn, presentationOf, restorePanel]);
 
   /**
    * Asking to write a key is asking for one thing, so the panel gets out of the
@@ -2681,20 +2709,22 @@ export function App(): React.JSX.Element {
       }
     });
     const removeDisplay = window.sidecar.onDisplayChanged(setDisplay);
-    const removeSupersetSignIn = window.sidecar.onSupersetSignInChanged((next) => {
-      setSupersetConnected(next.stage === SUPERSET_SIGN_IN_STAGE.CONNECTED);
-      if (!supersetSignInHeld.current) return;
-      setSupersetSignIn(next);
-      if (next.stage !== SUPERSET_SIGN_IN_STAGE.CONNECTED) return;
-      supersetSignInHeld.current = false;
-      setSupersetConnected(true);
+    const removeProviderSignIn = window.sidecar.onProviderSignInChanged(({ providerId, state }) => {
+      if (!interactiveSignInHeld.current) return;
+      // Only the flow the slot is standing in for moves the slot; the rows
+      // read every connection's login from the settings snapshot instead.
+      setInteractiveSignIn((current) =>
+        current?.providerId === providerId ? { providerId, snapshot: state } : current,
+      );
+      if (state.stage !== INTERACTIVE_SIGN_IN_STAGE.CONNECTED) return;
+      interactiveSignInHeld.current = false;
       if (presentationOf() === PANEL_PRESENTATION.SLOT) restorePanel();
     });
     return () => {
       cancelHover();
       removeLifecycle();
       removeDisplay();
-      removeSupersetSignIn();
+      removeProviderSignIn();
       void stopMicrophone();
     };
   }, [
@@ -3189,7 +3219,7 @@ export function App(): React.JSX.Element {
           signInWait !== undefined
             ? signInSlotHeight
             : slotOccupant.current === PANEL_STAND_DOWN.CONSENT ||
-                slotOccupant.current === PANEL_STAND_DOWN.SUPERSET
+                slotOccupant.current === PANEL_STAND_DOWN.INTERACTIVE_SIGN_IN
               ? connectHeight
               : slotHeight,
           feedbackHeight,
@@ -3292,11 +3322,20 @@ export function App(): React.JSX.Element {
                 onToggleCalendar: toggleAppleCalendarSelected,
                 revoked: appleCalendarObserved?.revoked === true,
               },
-              linear: {
-                held: slotHeldExcept(CONSENT_SERVICE_ID.LINEAR),
-                connecting: consentConnect.entry?.serviceId === CONSENT_SERVICE_ID.LINEAR,
-                onSignIn: () => beginConsentSignIn(CONSENT_SERVICE_ID.LINEAR),
-                onDisconnect: disconnectLinear,
+              // A consent connection's id is also its consent service's id,
+              // so the slot's wait and the row's button name one service.
+              consent: {
+                held: (id) => slotHeldExcept(id),
+                connecting: (id) => consentConnect.entry?.serviceId === id,
+                onSignIn: (id) => beginConsentSignIn(id),
+                onDisconnect: disconnectProvider,
+              },
+              interactiveSignIn: {
+                held: credentialHeld.current || consentConnectHeld.current,
+                connecting: (id) =>
+                  interactiveSignInHeld.current && interactiveSignIn?.providerId === id,
+                onConnect: beginInteractiveSignIn,
+                onDisconnect: disconnectProvider,
               },
               superset: (() => {
                 const supersetAgentDefault = (
@@ -3304,13 +3343,7 @@ export function App(): React.JSX.Element {
                   bootstrapSettings ??
                   appSettingsView(bootstrap.settings)
                 ).workspaceAgentDefaults?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
-                const superset: SupersetControl = {
-                  installed: bootstrap.supersetInstalled,
-                  connected: supersetConnected ?? bootstrap.supersetConnected,
-                  held: credentialHeld.current || consentConnectHeld.current,
-                  connecting: supersetSignInHeld.current,
-                  onConnect: beginSupersetSignIn,
-                  onDisconnect: disconnectSuperset,
+                const superset: SupersetAgentControl = {
                   agents: [
                     ...new Set(
                       workspaceProjects
@@ -3372,15 +3405,24 @@ export function App(): React.JSX.Element {
             onOpenSystemSettings={() => window.sidecar.openCalendarSettings()}
             measure={connectElement}
           />
-          {supersetSignInHeld.current ? (
-            <SupersetSignInSlot
-              state={supersetSignIn}
-              drawn={slotOpen && slotOccupant.current === PANEL_STAND_DOWN.SUPERSET}
-              onSubmit={(code) => void window.sidecar.submitSupersetSignInCode(code)}
-              onReopen={() => window.sidecar.reopenSupersetSignIn()}
-              onCancel={cancelSupersetSignIn}
-              onRetry={beginSupersetSignIn}
-              onChooseOrganization={(slug) => void window.sidecar.chooseSupersetOrganization(slug)}
+          {interactiveSignInHeld.current && interactiveSignIn ? (
+            <InteractiveSignInSlot
+              declaration={connectionDeclaration(interactiveSignIn.providerId)}
+              state={interactiveSignIn.snapshot}
+              drawn={slotOpen && slotOccupant.current === PANEL_STAND_DOWN.INTERACTIVE_SIGN_IN}
+              onSubmit={(code) =>
+                void window.sidecar
+                  .submitProviderSignInCode(interactiveSignIn.providerId, code)
+                  .then((result) => applySignInResult(interactiveSignIn.providerId, result))
+              }
+              onReopen={() => window.sidecar.reopenProviderSignIn(interactiveSignIn.providerId)}
+              onCancel={cancelInteractiveSignIn}
+              onRetry={() => beginInteractiveSignIn(interactiveSignIn.providerId)}
+              onChooseScope={(slug) =>
+                void window.sidecar
+                  .chooseProviderSignInScope(interactiveSignIn.providerId, slug)
+                  .then((result) => applySignInResult(interactiveSignIn.providerId, result))
+              }
               measure={connectElement}
             />
           ) : null}

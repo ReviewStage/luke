@@ -23,6 +23,7 @@
 
 import {
   CLOUD_AGENT_PROVIDER_LIST,
+  CONNECTION_ID,
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDERS,
   VOICE_CREDENTIAL_PROVIDER_ID,
@@ -206,7 +207,7 @@ function providersFact(settings: AppSettingsView): AppGuideFact {
       `${roster.join(", ")}. Connecting one takes the key its row names, typed by hand into ` +
       `${CONNECTIONS_PAGE}, under Providers — never spoken, and never repeated back. Local ` +
       "providers such as Claude Code need no key and are observed on their own. Codex cloud " +
-      `tasks (${CODEX_CLOUD_CONNECTION_WORD[settings.codexCloudConnection]}) follow the ` +
+      `tasks (${CODEX_CLOUD_CONNECTION_WORD[settings.cliConnections[CONNECTION_ID.CODEX]]}) follow the ` +
       "Codex CLI's own login: codex login connects them, and signing that CLI out stops them. " +
       "While the Sync provider keys switch in the Sync section is on, a key saved while signed in " +
       "is also stored encrypted with Luke's own service, which never sends one back; the " +
@@ -222,7 +223,7 @@ function providersFact(settings: AppSettingsView): AppGuideFact {
 function integrationFacts(settings: AppSettingsView): AppGuideFact[] {
   const facts: AppGuideFact[] = [];
   const linearProvider = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.LINEAR];
-  if (settings.linearSignInAvailable) {
+  if (settings.consentSignInAvailable[CONNECTION_ID.LINEAR]) {
     facts.push({
       label: "Linear",
       detail:

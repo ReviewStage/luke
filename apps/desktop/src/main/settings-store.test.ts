@@ -4,6 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 import {
+  CLI_LOGIN_CONNECTION_IDS,
+  CONSENT_CONNECTION_IDS,
+  type ConsentConnectionId,
   CREDENTIAL_CONNECTION,
   CREDENTIAL_PROVIDER_ID,
   type CredentialProvider,
@@ -11,6 +14,7 @@ import {
 } from "@sidecar/credentials";
 import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import {
+  CLI_CONNECTION,
   PROVIDER_ID,
   type ProviderId,
   SESSION_FILTER,
@@ -2390,4 +2394,41 @@ test("a key left by a build that asked for one is dropped, never carried", async
   const file = JSON.parse(await readSettingsFile(directory));
   assert.equal(file.apiKeys[CONSENT_SERVICE], undefined);
   assert.ok(file.apiKeys[FIRST_CLOUD]);
+});
+
+test("a store with no app around it reports every CLI login unknown and every consent sign-in unavailable", async (t) => {
+  const store = storeIn(await temporaryDirectory(t));
+  const { status } = await store.snapshot();
+  for (const id of CLI_LOGIN_CONNECTION_IDS) {
+    assert.equal(status.cliConnections[id], CLI_CONNECTION.UNKNOWN, id);
+  }
+  for (const id of CONSENT_CONNECTION_IDS) {
+    assert.equal(status.consentSignInAvailable[id], false, id);
+  }
+});
+
+test("consent sign-ins the rows offer are reported only where this run would use the grant", async () => {
+  const offered = () =>
+    // SAFETY: every consent id is mapped exactly once.
+    Object.fromEntries(CONSENT_CONNECTION_IDS.map((id) => [id, true])) as Record<
+      ConsentConnectionId,
+      boolean
+    >;
+  const usable = new SettingsStore({
+    directory: () => "/missing",
+    cipher: testCipher(),
+    environment: {},
+    consentSignInAvailable: offered,
+  });
+  const fixture = new SettingsStore({
+    directory: () => "/missing",
+    cipher: testCipher(),
+    environment: {},
+    credentialsUsable: false,
+    consentSignInAvailable: offered,
+  });
+  for (const id of CONSENT_CONNECTION_IDS) {
+    assert.equal((await usable.snapshot()).status.consentSignInAvailable[id], true, id);
+    assert.equal((await fixture.snapshot()).status.consentSignInAvailable[id], false, id);
+  }
 });

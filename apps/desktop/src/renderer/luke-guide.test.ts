@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
+import { CONNECTION_ID, CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import {
   APP_SETTING_KIND,
   APP_UPDATE_ACT,
@@ -46,7 +46,10 @@ function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
         [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
       },
       secretStorage: SECRET_STORAGE.UNKNOWN,
-      codexCloudConnection: CLI_CONNECTION.UNKNOWN,
+      cliConnections: {
+        [CONNECTION_ID.CODEX]: CLI_CONNECTION.UNKNOWN,
+        [CONNECTION_ID.SUPERSET]: CLI_CONNECTION.UNKNOWN,
+      },
       showInDock: false,
       voice: REALTIME_VOICE.CEDAR,
       voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
@@ -56,7 +59,7 @@ function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
       announceSessions: true,
       calendarSignInAvailable: false,
       appleCalendarAvailable: false,
-      linearSignInAvailable: false,
+      consentSignInAvailable: { [CONNECTION_ID.LINEAR]: false },
       calendarAccounts: [],
       showOnAllDisplays: false,
       formFactor: PANEL_FORM_FACTOR.BUBBLE,
@@ -215,7 +218,11 @@ test("the facts say what is connected, never what connects it", () => {
   // A build carrying the Linear registration describes the tracker: that it
   // is signed into rather than typed into, and what connecting it allows.
   const tracker = JSON.stringify(
-    buildLukeGuide(guideInput({ settings: settings({ linearSignInAvailable: true }) })).facts,
+    buildLukeGuide(
+      guideInput({
+        settings: settings({ consentSignInAvailable: { [CONNECTION_ID.LINEAR]: true } }),
+      }),
+    ).facts,
   );
   assert.match(tracker, /"label":"Linear"/);
   assert.match(tracker, /Linear \(not connected\)/);

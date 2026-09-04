@@ -3,10 +3,13 @@ import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "@sidecar/calendar/voca
 import type { CredentialProvider } from "@sidecar/credentials/vocabulary";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
+  type CliLoginConnectionId,
+  CONNECTION_ID,
+  CONSENT_CONNECTION_IDS,
+  type ConsentConnectionId,
   CREDENTIAL_CONNECTION,
-  CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDERS,
-  providerRunsSessionsInCloud,
+  credentialSessionsInCloud,
   VOICE_CREDENTIAL_PROVIDER,
 } from "@sidecar/credentials/vocabulary";
 import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@sidecar/guide";
@@ -344,10 +347,12 @@ export interface SettingsPanelProps {
   calendar: CalendarControl;
   /** Everything the Apple Calendar block can do. */
   appleCalendar: AppleCalendarControl;
-  /** Everything the Linear block can do. */
-  linear: LinearControl;
-  /** Superset is observed locally; its CLI login only gates actions. */
-  superset: SupersetControl;
+  /** Everything a consent-connected block can do, asked by connection id. */
+  consent: ConsentControl;
+  /** Everything a CLI-login block with a sign-in button can do, asked by connection id. */
+  interactiveSignIn: InteractiveSignInControl;
+  /** The agent kinds Superset's workspaces offer; the login only gates actions. */
+  superset: SupersetAgentControl;
   onQuit: () => void;
   shortcuts: ShortcutControl;
   /**
@@ -572,7 +577,7 @@ function ProviderCredential({
               their marks stand alone. */}
           <span className="credential-mark">
             <ProviderMark providerId={provider.id} />
-            {providerRunsSessionsInCloud(provider.id) ? <CloudBadge /> : null}
+            {credentialSessionsInCloud(provider.id) ? <CloudBadge /> : null}
           </span>
           <span className="credential-name">{provider.displayName}</span>
           {connected ? <CheckIcon /> : null}
@@ -1352,6 +1357,7 @@ function CredentialsSection({
   control,
   panelOpen,
   writes,
+  interactiveSignIn,
   superset,
   workspaceProviders,
 }: {
@@ -1359,7 +1365,8 @@ function CredentialsSection({
   control: CredentialEntryControl;
   panelOpen: boolean;
   writes: SettingsWrites;
-  superset: SupersetControl;
+  interactiveSignIn: InteractiveSignInControl;
+  superset: SupersetAgentControl;
   workspaceProviders: readonly WorkspaceProviderOption[];
 }): React.JSX.Element {
   // Only a system Luke has actually asked, and been refused by, is reported as
@@ -1381,7 +1388,7 @@ function CredentialsSection({
       </h2>
       {/* First because the list reads alphabetically, like the key rows below. */}
       <CodexCloudConnection
-        connection={settings.codexCloudConnection}
+        connection={settings.cliConnections[CONNECTION_ID.CODEX]}
         settings={settings}
         writes={writes}
         {...(codexWorkspace ? { workspaceProvider: codexWorkspace } : {})}
@@ -1448,6 +1455,7 @@ function CredentialsSection({
           agent surface connected through its own CLI's login rather than a
           key, so it stands as its own block the way the Codex row does. */}
       <SupersetIntegration
+        signIn={interactiveSignIn}
         control={superset}
         settings={settings}
         writes={writes}
@@ -1949,24 +1957,27 @@ export function CalendarIntegrations({
 }
 
 /** What the Linear row can be asked for, which is connecting and ending it. */
-export interface LinearControl {
+export interface ConsentControl {
   /** True while another entry holds the slot, which refuses a second act. */
-  held: boolean;
-  /** True while a sign-in is waiting on the browser. */
-  connecting: boolean;
-  /** Stands the panel down and opens Linear's consent page. */
-  onSignIn: () => void;
-  onDisconnect: () => Promise<ActResult>;
+  held: (id: ConsentConnectionId) => boolean;
+  /** True while this connection's sign-in is waiting on the browser. */
+  connecting: (id: ConsentConnectionId) => boolean;
+  /** Stands the panel down and opens the connection's consent page. */
+  onSignIn: (id: ConsentConnectionId) => void;
+  onDisconnect: (id: ConsentConnectionId) => Promise<ActResult>;
 }
 
-export interface SupersetControl {
-  installed: boolean;
-  connected: boolean;
+export interface InteractiveSignInControl {
+  /** True while another entry holds the slot, which refuses a second act. */
   held: boolean;
-  connecting: boolean;
-  onConnect: () => void;
+  /** True while this connection's sign-in is waiting on its code. */
+  connecting: (id: CliLoginConnectionId) => boolean;
+  onConnect: (id: CliLoginConnectionId) => void;
   /** Runs the CLI's own documented sign-out, withdrawing the stored login. */
-  onDisconnect: () => Promise<ActResult>;
+  onDisconnect: (id: CliLoginConnectionId) => Promise<ActResult>;
+}
+
+export interface SupersetAgentControl {
   agents: readonly string[];
   defaultAgent?: string;
   onDefaultAgentChange: (agent: string | undefined) => Promise<ActResult>;
@@ -2007,12 +2018,14 @@ function ConductorLocalIntegration({
 }
 
 function SupersetIntegration({
+  signIn,
   control,
   settings,
   writes,
   workspaceProvider,
 }: {
-  control: SupersetControl;
+  signIn: InteractiveSignInControl;
+  control: SupersetAgentControl;
   settings: AppSettingsView;
   writes: SettingsWrites;
   /** Superset's own projects, absent until an observation pass reports any. */
@@ -2025,11 +2038,19 @@ function SupersetIntegration({
   const [busy, setBusy] = useState(false);
   const [rejection, setRejection] = useState<string>();
 
-  if (!control.installed) return null;
+  const connection = settings.cliConnections[CONNECTION_ID.SUPERSET];
+  // The row stands only once the CLI is known to be on this Mac: Superset's
+  // bundled CLI arrives with the app it connects, so a missing binary is a
+  // Mac with no Superset, not a step to name.
+  const installed =
+    connection === CLI_CONNECTION.CONNECTED || connection === CLI_CONNECTION.SIGNED_OUT;
+  const connected = connection === CLI_CONNECTION.CONNECTED;
+  const connecting = signIn.connecting(CONNECTION_ID.SUPERSET);
+  if (!installed) return null;
 
   const disconnect = async () => {
     setBusy(true);
-    setRejection(actRejection(await control.onDisconnect()));
+    setRejection(actRejection(await signIn.onDisconnect(CONNECTION_ID.SUPERSET)));
     setBusy(false);
     setAsking(false);
   };
@@ -2042,9 +2063,9 @@ function SupersetIntegration({
             <ProviderMark providerId={SUPERSET_WORKSPACE_PROVIDER_ID} />
           </span>
           <span className="credential-name">Superset</span>
-          {control.connected ? <CheckIcon /> : null}
+          {connected ? <CheckIcon /> : null}
         </span>
-        {control.connected ? (
+        {connected ? (
           /* The trash and the confirm that stands in for it share one grid
              cell, exactly as the credential rows' do: the cell is as wide and
              as tall as the larger of the two whichever is showing, so asking
@@ -2078,12 +2099,12 @@ function SupersetIntegration({
               <button
                 type="button"
                 className="icon-button"
-                disabled={busy || control.held || control.connecting}
+                disabled={busy || signIn.held || connecting}
                 aria-label="Sign in to Superset again"
-                title={control.held ? HELD_TITLE : "Sign in again"}
+                title={signIn.held ? HELD_TITLE : "Sign in again"}
                 onClick={() => {
                   setRejection(undefined);
-                  control.onConnect();
+                  signIn.onConnect(CONNECTION_ID.SUPERSET);
                 }}
               >
                 <PencilIcon />
@@ -2124,10 +2145,10 @@ function SupersetIntegration({
             <button
               type="button"
               className="quiet-button"
-              disabled={control.held || control.connecting}
-              onClick={control.onConnect}
+              disabled={signIn.held || connecting}
+              onClick={() => signIn.onConnect(CONNECTION_ID.SUPERSET)}
             >
-              {control.connecting ? "Connecting…" : "Connect"}
+              {connecting ? "Connecting…" : "Connect"}
             </button>
           </span>
         )}
@@ -2137,7 +2158,7 @@ function SupersetIntegration({
           {rejection}
         </p>
       ) : null}
-      {control.connected && control.agents.length > 0 ? (
+      {connected && control.agents.length > 0 ? (
         <SelectRow
           label="New Superset sessions run"
           anchor={APP_SETTING_ID.SUPERSET_AGENT}
@@ -2156,7 +2177,7 @@ function SupersetIntegration({
           }
         />
       ) : null}
-      {control.connected && workspaceProvider ? (
+      {connected && workspaceProvider ? (
         <WorkspaceProjectRow provider={workspaceProvider} settings={settings} writes={writes} />
       ) : null}
     </div>
@@ -2164,18 +2185,21 @@ function SupersetIntegration({
 }
 
 /**
- * The issue tracker: connected by signing in with Linear, never by a pasted
- * credential, and drawn at all only in a build that carries the OAuth client
- * the sign-in runs on — a row whose one act cannot run is not a row.
+ * A consent-connected integration (the issue tracker today): connected by
+ * signing in with the service, never by a pasted credential, and drawn at all
+ * only in a build that carries the OAuth client the sign-in runs on — a row
+ * whose one act cannot run is not a row.
  */
-function LinearIntegration({
+function ConsentIntegration({
+  id,
   settings,
-  linear,
+  consent,
 }: {
+  id: ConsentConnectionId;
   settings: AppSettingsView;
-  linear: LinearControl;
+  consent: ConsentControl;
 }): React.JSX.Element | null {
-  const provider = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.LINEAR];
+  const provider = CREDENTIAL_PROVIDERS[id];
   // Disconnecting asks first, exactly like deleting a key: nothing here can
   // hand the grant back, so a disconnect taken on the first press would cost
   // a trip through Linear's consent to undo.
@@ -2183,12 +2207,14 @@ function LinearIntegration({
   const [busy, setBusy] = useState(false);
   const [rejection, setRejection] = useState<string>();
 
-  if (!settings.linearSignInAvailable) return null;
+  if (!settings.consentSignInAvailable[id]) return null;
   const connected = settings.credentialSources[provider.id] !== CREDENTIAL_SOURCE.NONE;
+  const held = consent.held(id);
+  const connecting = consent.connecting(id);
 
   const disconnect = async () => {
     setBusy(true);
-    setRejection(actRejection(await linear.onDisconnect()));
+    setRejection(actRejection(await consent.onDisconnect(id)));
     setBusy(false);
     setAsking(false);
   };
@@ -2267,12 +2293,12 @@ function LinearIntegration({
             <button
               type="button"
               className="quiet-button"
-              disabled={linear.held || linear.connecting}
+              disabled={held || connecting}
               aria-label={`Connect ${provider.displayName} by signing in`}
-              title={linear.held ? HELD_TITLE : undefined}
-              onClick={linear.onSignIn}
+              title={held ? HELD_TITLE : undefined}
+              onClick={() => consent.onSignIn(id)}
             >
-              {linear.connecting ? "Waiting for Linear…" : "Connect"}
+              {connecting ? `Waiting for ${provider.displayName}…` : "Connect"}
             </button>
           </span>
         )}
@@ -2298,13 +2324,13 @@ function IntegrationsSection({
   writes,
   calendar,
   appleCalendar,
-  linear,
+  consent,
 }: {
   settings: AppSettingsView;
   writes: SettingsWrites;
   calendar: CalendarControl;
   appleCalendar: AppleCalendarControl;
-  linear: LinearControl;
+  consent: ConsentControl;
 }): React.JSX.Element {
   const storageUnavailable = settings.secretStorage === SECRET_STORAGE.UNAVAILABLE;
   return (
@@ -2313,7 +2339,9 @@ function IntegrationsSection({
         <PlugIcon />
         Integrations
       </h2>
-      <LinearIntegration settings={settings} linear={linear} />
+      {CONSENT_CONNECTION_IDS.map((id) => (
+        <ConsentIntegration key={id} id={id} settings={settings} consent={consent} />
+      ))}
       <CalendarIntegrations
         settings={settings}
         calendar={calendar}
@@ -3562,7 +3590,8 @@ export function SettingsPanel({
   workspaceProviders,
   calendar,
   appleCalendar,
-  linear,
+  consent,
+  interactiveSignIn,
   superset,
   onQuit,
   shortcuts,
@@ -3599,11 +3628,7 @@ export function SettingsPanel({
               status: microphone.status,
             }).ready,
             accountDrawn: account.status === ACCOUNT_STATUS.SIGNED_IN,
-            superset: {
-              installed: superset.installed,
-              connected: superset.connected,
-              agentsOffered: superset.agents.length > 0,
-            },
+            superset: { agentsOffered: superset.agents.length > 0 },
             workspaceProjects: workspaceProviders
               .filter((option) => option.projects.length > 0)
               .map((option) => ({ id: option.id, name: option.name })),
@@ -3750,6 +3775,7 @@ export function SettingsPanel({
             control={credentials}
             panelOpen={panelOpen}
             writes={writes}
+            interactiveSignIn={interactiveSignIn}
             superset={superset}
             workspaceProviders={workspaceProviders}
           />
@@ -3758,7 +3784,7 @@ export function SettingsPanel({
             writes={writes}
             calendar={calendar}
             appleCalendar={appleCalendar}
-            linear={linear}
+            consent={consent}
           />
           <SchemaSettingRows
             page={SCHEMA_SETTINGS_PAGE.CONNECTIONS}

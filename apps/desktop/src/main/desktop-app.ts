@@ -14,7 +14,6 @@ import {
   PRODUCT_CREDENTIAL_SOURCE,
   PRODUCT_DIAGNOSTIC_KIND,
   PRODUCT_EVENT,
-  PRODUCT_SUPERSET_ACT,
   PRODUCT_UPDATE_ACT,
   type ProductDiagnosticKind,
   ProductEventSender,
@@ -29,7 +28,7 @@ import {
   type MeetingInterval,
   nextMeetingBoundary,
 } from "@sidecar/calendar";
-import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
+import { CONNECTION_ID, SIGN_IN_EDGE } from "@sidecar/credentials";
 import {
   AgentTraceWriter,
   tracedAttentionEvaluator,
@@ -37,7 +36,7 @@ import {
 } from "@sidecar/devtrace";
 import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
 import { fixtureSnapshot } from "@sidecar/fixtures";
-import { normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
+import { ISSUE_TRACKER_ID_LIST, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
 import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticKind,
@@ -90,7 +89,7 @@ import {
   supersetPressedLink,
 } from "@sidecar/superset";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
-import { LinearCredentials, LinearIssueTracker, LinearSignIn } from "@sidecar/trackers";
+import { issueTrackerRegistrations } from "@sidecar/trackers";
 import {
   IntroductionRealtimeCredentialMinter,
   sessionAnnouncementFromReview,
@@ -121,13 +120,13 @@ import {
   type AccountSnapshot,
   type AppBootstrap,
   type ConversationHistoryPayload,
+  INTERACTIVE_SIGN_IN_STAGE,
   type MicrophoneRoute,
   type MicrophoneStatus,
   type ObservedAccountCalendars,
   type OutputAudioState,
   type SessionReplayBootstrap,
   type SessionRosterPayload,
-  SUPERSET_SIGN_IN_STAGE,
   SUPERSET_WORKSPACE_PROVIDER_ID,
   WINDOW_ROLE,
 } from "#shared/contracts";
@@ -151,6 +150,7 @@ import {
   calendarOnboardingStateFromStored,
   shouldBackfillCalendarOnboardingSettled,
 } from "./calendar-onboarding-flow";
+import { connectionRegistrations } from "./connections";
 import {
   INTRODUCTION_FADE_MS,
   INTRODUCTION_HANDOFF_READY_MS,
@@ -164,9 +164,9 @@ import {
 } from "./introduction-flow";
 import { registerAccountSessionIpc } from "./ipc/account-session";
 import { registerCalendarConnectionIpc } from "./ipc/calendar-connection";
+import { registerConnectionIpc } from "./ipc/connections";
 import { registerSessionActsIpc } from "./ipc/session-acts";
 import { registerSettingsRowsIpc } from "./ipc/settings-rows";
-import { registerTrackerConnectionIpc } from "./ipc/tracker-connection";
 import { registerVoiceRuntimeIpc } from "./ipc/voice-runtime";
 import { registerWindowSurfaceIpc } from "./ipc/window-surface";
 import {
@@ -299,7 +299,15 @@ const settingsStore = new SettingsStore({
     encrypt: (plainText) => safeStorage.encryptString(plainText),
     decrypt: (cipherText) => safeStorage.decryptString(cipherText),
   },
-  codexCloudConnection: () => codexCloudAdapter.connection(),
+  // Both answered by the connection rows themselves, resolved at snapshot
+  // time like the key sources beside them, so the store names no provider.
+  cliConnections: async () => ({
+    [CONNECTION_ID.CODEX]: await connections[CONNECTION_ID.CODEX].cliConnection(),
+    [CONNECTION_ID.SUPERSET]: await connections[CONNECTION_ID.SUPERSET].cliConnection(),
+  }),
+  consentSignInAvailable: () => ({
+    [CONNECTION_ID.LINEAR]: connections[CONNECTION_ID.LINEAR].signInAvailable(),
+  }),
 });
 const accountClient = new AccountClient({ baseUrl: ACCOUNT_BASE_URL, clientId: ACCOUNT_CLIENT_ID });
 let account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
@@ -371,35 +379,28 @@ const workspaceRegistry = workspaceProviderRegistrations({
 });
 const orderedWorkspaceRegistrations: readonly ProviderRegistration[] =
   WORKSPACE_PROVIDER_ID_LIST.map((providerId) => workspaceRegistry[providerId]);
-// The issue tracker is not a session provider: its issues feed the voice
-// roster rather than the registry, so it stands beside the adapters rather
-// than among them.
-// What authorizes a read is minted rather than stored ready to send: Linear's
-// access tokens last a day, so the grant behind the row is renewed here, and
-// only Linear refusing that renewal disconnects anything.
-const linearCredentials = new LinearCredentials({
-  readGrant: () => settingsStore.readGrant(CREDENTIAL_PROVIDER_ID.LINEAR),
-  writeGrant: async (grant) => {
-    await settingsStore.setGrant(CREDENTIAL_PROVIDER_ID.LINEAR, grant);
+// The issue trackers are not session providers: their issues feed the voice
+// roster rather than the registry, so they stand beside the adapters rather
+// than among them. Each tracker's grant is stored encrypted like a key and
+// renewed by the tracker's own credentials, which forget it only when the
+// tracker itself refuses a renewal.
+const issueTrackers = issueTrackerRegistrations({
+  readGrant: (trackerId) => settingsStore.readGrant(trackerId),
+  writeGrant: async (trackerId, grant) => {
+    await settingsStore.setGrant(trackerId, grant);
   },
-  forgetGrant: async () => {
-    const cleared = await settingsStore.clearGrant(CREDENTIAL_PROVIDER_ID.LINEAR);
-    // Nobody pressed anything to end this connection — Linear refused the
-    // renewal — so no settings reply is on its way to say so. A row left
+  forgetGrant: async (trackerId) => {
+    const cleared = await settingsStore.clearGrant(trackerId);
+    // Nobody pressed anything to end this connection — the tracker refused
+    // the renewal — so no settings reply is on its way to say so. A row left
     // saying connected would be a row about a grant that no longer exists.
     panels.broadcast(channels.onSettingsChanged, cleared.settings);
   },
-});
-const linearTracker = new LinearIssueTracker({
-  readAccessToken: () => linearCredentials.accessToken(),
-});
-// The sign-in behind the Linear row: it opens Linear's own consent page in the
-// user's browser and hands back one grant, which the connect handler stores.
-// Offered only when this build carries an OAuth client.
-const linearSignIn = new LinearSignIn({
   openExternal: (url) => void shell.openExternal(url),
 });
-const issueTrackers = [linearTracker] as const;
+const issueTrackerAdapters = ISSUE_TRACKER_ID_LIST.map(
+  (trackerId) => issueTrackers[trackerId].adapter,
+);
 /** A board changes at the pace of hands, not of models; a minute is current. */
 const ISSUE_REFRESH_INTERVAL_MS = 60_000;
 /** The latest roster, which is also what every spoken act is validated against. */
@@ -1141,17 +1142,43 @@ const supersetSignIn = new SupersetSignIn({
   cli: supersetCli,
   openExternal: (url) => shell.openExternal(url),
   onChange: (state) => {
-    panels.broadcast(channels.onSupersetSignInChanged, state);
-    if (state.stage !== SUPERSET_SIGN_IN_STAGE.CONNECTED) return;
+    panels.broadcast(channels.onProviderSignInChanged, {
+      providerId: CONNECTION_ID.SUPERSET,
+      state,
+    });
+    // The settings rows draw the login from the CLI's own answer, which a
+    // stage landing on connected or returning to idle has just moved.
+    void broadcastCliConnections();
+    if (state.stage !== INTERACTIVE_SIGN_IN_STAGE.CONNECTED) return;
     void sessionObservationLoop.refresh();
     // The edge into connected, which is where a sign-in actually lands: the
     // code submission only reaches `exchanging`, and the CLI answers on its
     // own time. Counted here so a sign-in that failed after the code counts
     // nothing at all.
-    recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
-      superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_COMPLETE,
-    });
+    connections[CONNECTION_ID.SUPERSET].countSignInEdge(SIGN_IN_EDGE.COMPLETE);
   },
+});
+// Every connection's row, assembled once from the pieces above; the handlers
+// and the settings store iterate it and name no provider themselves.
+const connections = connectionRegistrations({
+  workspaceRegistry,
+  refreshAdapter: async (adapter) => {
+    await sessionRegistry.refresh(adapter);
+  },
+  codexCloudConnection: () => codexCloudAdapter.connection(),
+  superset: {
+    host: supersetHost,
+    signIn: supersetSignIn,
+    refreshSessions: () => void sessionObservationLoop.refresh(),
+  },
+  trackers: issueTrackers,
+  settingsStore,
+  refreshIssues: () => void issueObservationLoop.refresh(),
+  voiceCredentialChanged: async () => {
+    await applyVoiceCredential();
+    await hotkeys.reapply(HOTKEY_RANK.TALK);
+  },
+  recordProductEvent,
 });
 const hotkeys = new HotkeyRegistrar({
   registersGlobalKeys: runMode.registersGlobalKeys,
@@ -1363,19 +1390,21 @@ async function broadcastSessionReplay(): Promise<void> {
 }
 
 /**
- * What the settings last told the panels about the Codex CLI login. The
- * connection is not a setting anyone writes, so no save ever announces it
- * moving: the observation loop is where it changes — the user ran codex
- * login or logout in their own terminal — and without this the panels keep
- * drawing the words of whatever snapshot they loaded.
+ * What the settings last told the panels about each CLI login. A connection
+ * is not a setting anyone writes, so no save ever announces it moving: the
+ * observation loop and the sign-in flow are where it changes — the user ran
+ * a login or logout in their own terminal, or finished one from the row —
+ * and without this the panels keep drawing the words of whatever snapshot
+ * they loaded.
  */
-let announcedCodexCloudConnection = codexCloudAdapter.connection();
+let announcedCliConnections: string | undefined;
 
-async function broadcastCodexCloudConnection(): Promise<void> {
-  const connection = codexCloudAdapter.connection();
-  if (connection === announcedCodexCloudConnection) return;
-  announcedCodexCloudConnection = connection;
-  panels.broadcast(channels.onSettingsChanged, await settingsStore.snapshot());
+async function broadcastCliConnections(): Promise<void> {
+  const snapshot = await settingsStore.snapshot();
+  const connections = JSON.stringify(snapshot.status.cliConnections);
+  if (connections === announcedCliConnections) return;
+  announcedCliConnections = connections;
+  panels.broadcast(channels.onSettingsChanged, snapshot);
 }
 
 async function startAccountCapabilities(): Promise<void> {
@@ -1433,10 +1462,6 @@ async function readLocalTranscriptRendering(
 
 function adapterFor(providerId: string) {
   return isWorkspaceProviderId(providerId) ? workspaceRegistry[providerId].adapter : undefined;
-}
-
-function adapterForCredential(providerId: CredentialProviderId) {
-  return orderedRegistrations.find((entry) => entry.credential?.id === providerId)?.adapter;
 }
 
 /** Whether a provider is currently offering the project a default would name. */
@@ -1559,10 +1584,6 @@ function registerIpc(): void {
       const display =
         (displayId !== undefined ? panels.display(displayId) : undefined) ??
         screen.getPrimaryDisplay();
-      const [supersetInstalled, supersetConnected] = await Promise.all([
-        supersetCli.installed(),
-        supersetCli.connected(),
-      ]);
       return {
         mode: displayId !== undefined ? panels.modeFor(displayId) : panels.initialMode,
         startPeeked,
@@ -1572,8 +1593,6 @@ function registerIpc(): void {
         captureMode,
         fixtureMode,
         agentTraceEnabled: agentTrace !== undefined,
-        supersetInstalled,
-        supersetConnected,
         accountRequired: runMode.requiresAccount,
         account,
         packaged: app.isPackaged,
@@ -1694,39 +1713,6 @@ function registerIpc(): void {
     });
     void speakArrivalBeat();
   });
-  registerHandler(BRIDGE.beginSupersetSignIn, async () => {
-    recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
-      superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_START,
-    });
-    return supersetSignIn.begin();
-  });
-  registerHandler(BRIDGE.submitSupersetSignInCode, (code: string) => {
-    return supersetSignIn.submitCode(code);
-  });
-  registerHandler(BRIDGE.chooseSupersetOrganization, async (slug: string) => {
-    return supersetSignIn.chooseOrganization(slug);
-  });
-  registerHandler(BRIDGE.reopenSupersetSignIn, supersetSignIn.reopen.bind(supersetSignIn));
-  registerHandler(BRIDGE.cancelSupersetSignIn, () => {
-    supersetSignIn.cancel();
-    recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
-      superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_CANCEL,
-    });
-  });
-  registerHandler(BRIDGE.disconnectSuperset, async () => {
-    if (!(await supersetCli.signOut())) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: "Superset could not sign out." };
-    }
-    // The sign-in machine returning to idle is what tells every renderer the
-    // login is gone; the refreshed pass retires the rows the login was buying.
-    supersetSignIn.cancel();
-    void sessionObservationLoop.refresh();
-    recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
-      superset_act: PRODUCT_SUPERSET_ACT.DISCONNECT,
-    });
-    return { status: ACT_RESULT_STATUS.ACCEPTED };
-  });
-
   registerAccountSessionIpc({
     ipcMain,
     trustedSender,
@@ -1751,11 +1737,7 @@ function registerIpc(): void {
   registerSettingsRowsIpc({
     registerSettingHandler,
     settingsStore,
-    adapterForCredential,
-    refreshAdapter: async (adapter) => {
-      await sessionRegistry.refresh(adapter);
-    },
-    refreshIssues: () => void issueObservationLoop.refresh(),
+    connections,
     applyVoiceCredential,
     hotkeys,
     dock,
@@ -1784,15 +1766,12 @@ function registerIpc(): void {
     recordProductEvent,
   });
 
-  registerTrackerConnectionIpc({
+  registerConnectionIpc({
     ipcMain,
     trustedSender,
     registerSetting: registerSettingHandler,
     settingsStore,
-    credentials: linearCredentials,
-    signIn: linearSignIn,
-    refresh: () => void issueObservationLoop.refresh(),
-    recordProductEvent,
+    connections,
   });
 
   // The row's button. Answered rather than fire-and-forget so the row that
@@ -1875,7 +1854,7 @@ function registerIpc(): void {
     expectCreatedWorkspace: (identity, now) => createdWorkspaceOpens.expect(identity, now),
     openCreatedWorkspaces: () => openCreatedWorkspaces(sessionRegistry.list()),
     trackedIssues: () => trackedIssues,
-    issueTrackers,
+    issueTrackers: issueTrackerAdapters,
     refreshIssues: () => void issueObservationLoop.refresh(),
     workspaceHosts,
     recordProductEvent,
@@ -2074,8 +2053,9 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   const supersetActionsEnabled = supersetHost.connected();
   if (actionsWereEnabled !== supersetActionsEnabled) {
     if (supersetActionsEnabled) {
-      panels.broadcast(channels.onSupersetSignInChanged, {
-        stage: SUPERSET_SIGN_IN_STAGE.CONNECTED,
+      panels.broadcast(channels.onProviderSignInChanged, {
+        providerId: CONNECTION_ID.SUPERSET,
+        state: { stage: INTERACTIVE_SIGN_IN_STAGE.CONNECTED, scopes: [] },
       });
     } else {
       // The CLI withdrawing its login is also what makes a later Connect a
@@ -2460,7 +2440,7 @@ const sessionObservationLoop = new ObservationLoop({
   // settings save stands behind that to announce it.
   afterRun: () => {
     broadcastRelevantSessions();
-    void broadcastCodexCloudConnection();
+    void broadcastCliConnections();
   },
 });
 const attentionObservationLoop = new ObservationLoop({
@@ -2679,7 +2659,7 @@ async function refreshTrackedIssues(generation: number): Promise<void> {
   try {
     const collected: TrackedIssue[] = [];
     let connected = false;
-    for (const tracker of issueTrackers) {
+    for (const tracker of issueTrackerAdapters) {
       const observations = await tracker.observe();
       if (!observations) continue;
       connected = true;

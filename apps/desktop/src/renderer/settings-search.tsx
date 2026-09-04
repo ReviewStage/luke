@@ -1,6 +1,7 @@
 import { GOOGLE_CALENDAR_ID, GOOGLE_CALENDAR_NAME } from "@sidecar/calendar/vocabulary";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
+  CONNECTION_ID,
   CREDENTIAL_PROVIDER_ID,
   VOICE_CREDENTIAL_PROVIDER,
 } from "@sidecar/credentials/vocabulary";
@@ -23,8 +24,8 @@ import {
 import { Fragment, useRef } from "react";
 import { APPLE_CALENDAR_ID, APPLE_CALENDAR_NAME } from "#shared/apple-calendar";
 import { CREDENTIAL_SOURCE } from "#shared/wire/account";
-import type { AppSettingsView } from "#shared/wire/settings";
-import { VOICE_SOURCE } from "#shared/wire/settings";
+import type { AppSettingsView, CliConnection } from "#shared/wire/settings";
+import { CLI_CONNECTION, VOICE_SOURCE } from "#shared/wire/settings";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
 import { ERRAND_TARGET_ATTRIBUTE } from "./luke-errand";
 import { searchTokens } from "./session-model";
@@ -159,6 +160,11 @@ export interface SettingsSearchEntry {
   haystack: readonly string[];
 }
 
+/** A CLI row whose binary the latest answer found on this Mac, whatever its login. */
+function cliInstalled(connection: CliConnection): boolean {
+  return connection === CLI_CONNECTION.CONNECTED || connection === CLI_CONNECTION.SIGNED_OUT;
+}
+
 /** What the pages must answer before the corpus can say what they hold. */
 export interface SettingsSearchInput {
   settings: AppSettingsView;
@@ -169,8 +175,8 @@ export interface SettingsSearchInput {
   voiceControlsDrawn: boolean;
   /** Whether the Account section stands at the foot of the front page. */
   accountDrawn: boolean;
-  /** The Superset row is drawn while installed; its agent row needs more. */
-  superset: { installed: boolean; connected: boolean; agentsOffered: boolean };
+  /** Whether the Superset row's agent row has kinds to offer. */
+  superset: { agentsOffered: boolean };
   /** The providers currently offering projects, each drawing a Default project row. */
   workspaceProjects: readonly { id: WorkspaceProviderId; name: string }[];
 }
@@ -209,7 +215,8 @@ const SETTING_ROW_DRAWN = {
   [APP_SETTING_ID.WORKSPACE_AGENT_EFFORT]: conductorAgentRowDrawn,
   // The Superset agent row stands under a connected Superset with agents.
   [APP_SETTING_ID.SUPERSET_AGENT]: (input: SettingsSearchInput) =>
-    input.superset.connected && input.superset.agentsOffered,
+    input.settings.cliConnections[CONNECTION_ID.SUPERSET] === CLI_CONNECTION.CONNECTED &&
+    input.superset.agentsOffered,
 } satisfies Partial<Record<AppSettingId, (input: SettingsSearchInput) => boolean>>;
 
 /** Whether a setting's row is drawn; a setting the table leaves out always is. */
@@ -362,7 +369,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       icon: <ProviderMark providerId={PROVIDER_ID.CODEX} />,
       haystack: ["Codex", "cloud tasks CLI login connect"],
     },
-    input.settings.linearSignInAvailable
+    input.settings.consentSignInAvailable[CONNECTION_ID.LINEAR]
       ? {
           id: CREDENTIAL_PROVIDER_ID.LINEAR,
           label: "Linear",
@@ -371,7 +378,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Linear", "issues issue tracker sign in connect integration"],
         }
       : undefined,
-    input.superset.installed
+    cliInstalled(input.settings.cliConnections[CONNECTION_ID.SUPERSET])
       ? {
           id: SUPERSET_WORKSPACE_PROVIDER_ID,
           label: "Superset",
