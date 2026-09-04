@@ -1,3 +1,4 @@
+import { isRecord, text, type UnparsedWireValue, wholeNumber } from "@sidecar/wire";
 import type { Session, SessionStatus } from "./session.js";
 import { SESSION_COMPLETION_CAUSE, SESSION_STATUS } from "./session.js";
 
@@ -84,8 +85,69 @@ interface TrackedSessionState {
   noticedAt: Map<SessionNoticeStatus, number>;
 }
 
+/**
+ * One session's place in the tracker's memory, in values that survive a
+ * process: what the tracker needs to tell an edge from a first sight is where
+ * a session stood and when it was last spoken of, never its title, activity,
+ * or error, so a memory that stands in a row carries identifiers and
+ * timestamps alone.
+ */
+export interface TrackedSessionMemory {
+  providerId: string;
+  providerSessionId: string;
+  status: SessionStatus;
+  /** When each notice-worthy status was last noticed, one entry per status. */
+  noticedAt: readonly NoticedAtMemory[];
+}
+
+export interface NoticedAtMemory {
+  status: SessionNoticeStatus;
+  at: number;
+}
+
+export type SessionNoticeMemory = readonly TrackedSessionMemory[];
+
 function noticeStatus(status: SessionStatus): SessionNoticeStatus | undefined {
   return Object.values(SESSION_NOTICE_STATUS).find((candidate) => candidate === status);
+}
+
+function sessionStatus(value: UnparsedWireValue): SessionStatus | undefined {
+  const candidate = text(value);
+  return Object.values(SESSION_STATUS).find((status) => status === candidate);
+}
+
+/**
+ * Reads a memory back from wherever it was kept. A record the reader cannot
+ * place — an unknown status, an identifier that is not text — is dropped
+ * rather than trusted, and a dropped session is merely seen for the first
+ * time again on the next pass, which is the tracker's own answer to a session
+ * it has never met. A timestamp under a status that is not notice-worthy is
+ * dropped the same way; the statuses the repeat window guards are the only
+ * ones it could ever have recorded.
+ */
+export function sessionNoticeMemoryFromWire(value: UnparsedWireValue): SessionNoticeMemory {
+  if (!Array.isArray(value)) return [];
+  const memory: TrackedSessionMemory[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) continue;
+    const providerId = text(entry.providerId);
+    const providerSessionId = text(entry.providerSessionId);
+    const status = sessionStatus(entry.status);
+    if (!providerId || !providerSessionId || !status) continue;
+    const noticedAt: NoticedAtMemory[] = [];
+    if (Array.isArray(entry.noticedAt)) {
+      for (const noticed of entry.noticedAt) {
+        if (!isRecord(noticed)) continue;
+        const noticedStatus = sessionStatus(noticed.status);
+        const candidate = noticedStatus === undefined ? undefined : noticeStatus(noticedStatus);
+        const at = wholeNumber(noticed.at);
+        if (candidate === undefined || at === undefined) continue;
+        noticedAt.push({ status: candidate, at });
+      }
+    }
+    memory.push({ providerId, providerSessionId, status, noticedAt });
+  }
+  return memory;
 }
 
 function sessionNotice(session: Session, previousStatus: SessionStatus): SessionNotice {
@@ -133,6 +195,44 @@ function sessionNotice(session: Session, previousStatus: SessionStatus): Session
 export class SessionNoticeTracker {
   /** Keyed by the original identifiers, never a composite string. */
   readonly #sessions = new Map<string, Map<string, TrackedSessionState>>();
+
+  /**
+   * A tracker standing where a previous one left off, so the pass after a
+   * restart diffs against the last reading rather than seeding afresh: a
+   * memory kept between processes is what lets a watcher with no resident
+   * process tell an edge from a first sight. A session named twice keeps the
+   * later record.
+   */
+  static restore(memory: SessionNoticeMemory): SessionNoticeTracker {
+    const tracker = new SessionNoticeTracker();
+    for (const record of memory) {
+      let provider = tracker.#sessions.get(record.providerId);
+      if (!provider) {
+        provider = new Map();
+        tracker.#sessions.set(record.providerId, provider);
+      }
+      const noticedAt = new Map<SessionNoticeStatus, number>();
+      for (const noticed of record.noticedAt) noticedAt.set(noticed.status, noticed.at);
+      provider.set(record.providerSessionId, { status: record.status, noticedAt });
+    }
+    return tracker;
+  }
+
+  /**
+   * The tracker's memory as plain values: everything a later `restore` needs
+   * to continue this tracker's picture, and nothing else.
+   */
+  snapshot(): SessionNoticeMemory {
+    const memory: TrackedSessionMemory[] = [];
+    for (const [providerId, provider] of this.#sessions) {
+      for (const [providerSessionId, state] of provider) {
+        const noticedAt: NoticedAtMemory[] = [];
+        for (const [status, at] of state.noticedAt) noticedAt.push({ status, at });
+        memory.push({ providerId, providerSessionId, status: state.status, noticedAt });
+      }
+    }
+    return memory;
+  }
 
   /**
    * Consumes one full observation pass and returns the notices it produced.
