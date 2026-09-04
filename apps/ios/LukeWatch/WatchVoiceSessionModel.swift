@@ -145,10 +145,13 @@ final class WatchVoiceSessionModel {
         connectTask = nil
         connectingForTurn = false
         endTurnAfterConnect = false
-        pendingNavigation = nil
         accountSession = nil
         thread = nil
         makeActContext = nil
+        // The pending navigation is left standing: closing publishes the idle
+        // edge the screen performs it on, so an open accepted mid-reply still
+        // lands when the developer swipes away before Luke finishes saying
+        // so. Only a new press supersedes it.
         session?.close()
         session = nil
     }
