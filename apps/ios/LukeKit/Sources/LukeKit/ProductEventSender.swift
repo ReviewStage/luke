@@ -61,6 +61,8 @@ public final class ProductEventSender {
     private var queue: [QueuedEvent] = []
     /// Nested rather than an interpolated key: the name and the discriminator stay apart.
     private var recordedDays: [String: [String: String]] = [:]
+    /// Whose days those are; a different account signing in starts its own.
+    private var recordedDaysAccount: String?
     private var armed = false
     private var timer: Timer?
     private var inFlight: Task<Void, Never>?
@@ -107,6 +109,12 @@ public final class ProductEventSender {
     /// provider per day is the fact worth having, not a count of refreshes.
     public func recordOncePerDay(_ event: ProductEvent, discriminator: String) {
         guard allowed else { return }
+        if let account = session.accountEmail {
+            if let recordedFor = recordedDaysAccount, recordedFor != account {
+                recordedDays.removeAll()
+            }
+            recordedDaysAccount = account
+        }
         let today = Self.dayFormatter.string(from: now())
         if recordedDays[event.name]?[discriminator] == today { return }
         recordedDays[event.name, default: [:]][discriminator] = today

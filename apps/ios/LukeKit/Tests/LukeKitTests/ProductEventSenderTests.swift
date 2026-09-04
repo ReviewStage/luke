@@ -405,6 +405,29 @@ final class ProductEventSenderTests: XCTestCase {
         XCTAssertEqual(peak, 1)
     }
 
+    func testADifferentAccountGetsItsOwnDayMarkerAndTheSameOneDoesNot() async {
+        let tokens = StubTokens()
+        let (sender, log) = makeSender(tokens: tokens)
+        sender.arm()
+        sender.markDayActive()
+        await sender.flush().value
+
+        tokens.accountEmail = "other@example.com"
+        sender.markDayActive()
+        await sender.flush().value
+
+        tokens.accountEmail = nil
+        tokens.valid = nil
+        sender.markDayActive()
+        tokens.accountEmail = "other@example.com"
+        tokens.valid = "at-1"
+        sender.markDayActive()
+        await sender.flush().value
+
+        let requests = await log.requests
+        XCTAssertEqual(requests.count, 2)
+    }
+
     func testCountsRecordedUnderOneAccountNeverPostAsAnother() async {
         let tokens = StubTokens(valid: nil)
         tokens.accountEmail = nil
