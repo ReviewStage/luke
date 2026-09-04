@@ -38,6 +38,7 @@
 		AABBCC0000000000000000C8 /* WatchAccountSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000C2 /* WatchAccountSession.swift */; };
 		AABBCC0000000000000000C9 /* WatchConnectivityReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000C3 /* WatchConnectivityReceiver.swift */; };
 		AABBCC0000000000000000CA /* PhoneSessionRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000C4 /* PhoneSessionRelay.swift */; };
+		AABBCC000000000000000111 /* PushNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000110 /* PushNotifications.swift */; };
 		AABBCC0000000000000000CB /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000C5 /* WatchConnectivity.framework */; };
 		AABBCC0000000000000000CC /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000C5 /* WatchConnectivity.framework */; };
 		AABBCC0000000000000000E2 /* WatchRosterStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000E1 /* WatchRosterStore.swift */; };
@@ -117,6 +118,8 @@
 		AABBCC0000000000000000E1 /* WatchRosterStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchRosterStore.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000E3 /* WatchRosterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchRosterView.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000C4 /* PhoneSessionRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneSessionRelay.swift; sourceTree = "<group>"; };
+		AABBCC000000000000000110 /* PushNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushNotifications.swift; sourceTree = "<group>"; };
+		AABBCC000000000000000112 /* Luke.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Luke.entitlements; sourceTree = "<group>"; };
 		AABBCC0000000000000000C5 /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = System/Library/Frameworks/WatchConnectivity.framework; sourceTree = SDKROOT; };
 		AABBCC0000000000000000D0 /* VoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceView.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000D1 /* VoiceAudioCapturer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceAudioCapturer.swift; sourceTree = "<group>"; };
@@ -201,6 +204,7 @@
 				AABBCC0000000000000000A1 /* PresenceBinding.swift */,
 				AABBCC0000000000000000A3 /* MarkdownMessageView.swift */,
 				AABBCC0000000000000000C4 /* PhoneSessionRelay.swift */,
+				AABBCC000000000000000110 /* PushNotifications.swift */,
 				AABBCC0000000000000000D0 /* VoiceView.swift */,
 				AABBCC0000000000000000D1 /* VoiceAudioCapturer.swift */,
 				AABBCC0000000000000000D2 /* VoiceAudioPlayer.swift */,
@@ -208,6 +212,7 @@
 				AABBCC000000000000000014 /* Assets.xcassets */,
 				AABBCC00000000000000001C /* Info.plist */,
 				AABBCC000000000000000104 /* PrivacyInfo.xcprivacy */,
+				AABBCC000000000000000112 /* Luke.entitlements */,
 			);
 			path = Luke;
 			sourceTree = "<group>";
@@ -415,6 +420,7 @@
 				AABBCC0000000000000000A2 /* PresenceBinding.swift in Sources */,
 				AABBCC0000000000000000A4 /* MarkdownMessageView.swift in Sources */,
 				AABBCC0000000000000000CA /* PhoneSessionRelay.swift in Sources */,
+				AABBCC000000000000000111 /* PushNotifications.swift in Sources */,
 				AABBCC0000000000000000D4 /* VoiceView.swift in Sources */,
 				AABBCC0000000000000000D5 /* VoiceAudioCapturer.swift in Sources */,
 				AABBCC0000000000000000D6 /* VoiceAudioPlayer.swift in Sources */,
@@ -595,6 +601,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Luke/Luke.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 7UHHCDBUK2;
@@ -627,6 +634,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Luke/Luke.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 7UHHCDBUK2;

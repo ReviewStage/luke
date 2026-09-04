@@ -225,3 +225,22 @@ in `WatchWebSocketChannel`, because URLSession on watchOS does its work in a
 system process that never inherits the grant. The call still opens only at
 the developer's press and closes on the same idle timer as before; the mode
 changes what watchOS lets the socket do, not when Luke listens.
+
+## Notifications
+
+Signing in on this phone is what asks for notifications; there is no switch.
+At a signed-in launch and at the sign-in edge the app requests notification
+permission, registers for a push token, and hands the token Apple issues to
+`LukeKit`'s `PushRegistrar`, which registers it under the signed-in account
+through the service's `/api/devices/token` endpoint. Signing out forgets the
+token on the service first, while the account's bearer still stands, and a
+later sign-in moves the same token to the new account. A tapped notification
+opens the session it named, and only a session the roster reports.
+
+`Luke/Luke.entitlements` carries the push and time-sensitive entitlements. The
+`aps-environment` value there is `development`; a distribution build's
+provisioning profile rewrites it to `production`, and the app reads the
+embedded profile at launch to register the token with the gateway that issued
+it, so a build from Xcode and one from TestFlight each reach the right one.
+The words a notification shows are composed by the service from what a
+provider wrote about the session; nothing here decides or words one.
