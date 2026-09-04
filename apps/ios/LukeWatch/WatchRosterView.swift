@@ -16,7 +16,10 @@ struct WatchRosterView: View {
                         .redacted(reason: .placeholder)
                 }
             } else {
-                ForEach(store.sessions) { session in
+                if store.isNarrowed {
+                    narrowingRow
+                }
+                ForEach(store.visibleSessions) { session in
                     NavigationLink(value: session) {
                         WatchSessionRow(session: session)
                     }
@@ -64,6 +67,46 @@ struct WatchRosterView: View {
         } message: {
             Text(archiveFailure ?? "")
         }
+    }
+
+    /// The narrowing a list ask left standing, said in the words the rows
+    /// draw, with the one press that lifts it. Drawn above the rows it leaves
+    /// so a list Luke narrowed never hides a session without saying so.
+    private var narrowingRow: some View {
+        Button {
+            store.showAll()
+        } label: {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(narrowingLabel)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                Label("Show All", systemImage: "line.3.horizontal.decrease.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(Color.accentColor)
+                if store.visibleSessions.isEmpty {
+                    Text("No sessions match.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .accessibilityLabel("Show all sessions")
+        .accessibilityHint("Filtered to \(narrowingLabel)")
+    }
+
+    private var narrowingLabel: String {
+        var parts = store.filters
+            .map { filter -> String in
+                switch filter {
+                case .provider(let providerId): VaultProviderID.displayLabel(forWireId: providerId)
+                case .status(let status): status.capitalized
+                }
+            }
+            .sorted()
+        let query = store.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !query.isEmpty { parts.append("\u{201C}\(query)\u{201D}") }
+        return parts.joined(separator: " \u{00B7} ")
     }
 
     private func archiveControl(_ session: RosterSession) -> RosterSessionControl? {

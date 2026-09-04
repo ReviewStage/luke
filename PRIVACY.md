@@ -1,10 +1,10 @@
 # Privacy
 
-Last updated: 3 September 2026
+Last updated: 4 September 2026
 
-Luke is a macOS app that watches your coding agent sessions, with a companion
-iOS app for the cloud sessions your account can see. This policy explains what
-we collect, who we send it to, and how to turn it off.
+Luke is a macOS app that watches your coding agent sessions, with companion
+iOS and Apple Watch apps for the cloud sessions your account can see. This
+policy explains what we collect, who we send it to, and how to turn it off.
 
 ## What we collect
 
@@ -135,10 +135,10 @@ and email you signed it with, and any screenshots you attached.
 
 - OpenAI, for voice and session summaries. A spoken turn sends its audio, a
   typed turn sends your words, and both send the session fields listed above —
-  on the Mac app, read locally from your machine; on iOS, drawn from the same
-  cloud observation your vault keys already allow (titles, status, repository,
-  and branch of your cloud sessions, as described under Provider API
-  keys above). We do not send message history, file contents, or command
+  on the Mac app, read locally from your machine; on iOS and Apple Watch,
+  drawn from the same cloud observation your vault keys already allow
+  (titles, status, repository, and branch of your cloud sessions, as
+  described under Provider API keys above). We do not send message history, file contents, or command
   output, and we ask OpenAI not to store the request. The one exception is the
   subject phrase above: to derive it, only when Luke is about to announce a
   local session and once per announcement, Luke sends the bounded transcript
@@ -148,10 +148,11 @@ and email you signed it with, and any screenshots you attached.
   of it either. The phrase that comes back is spoken with that announcement
   and kept nowhere. On the Mac app, your conversation and Luke's durable
   memory are kept on your Mac and sent with a call so the conversation carries
-  across calls and across launches; on iOS, a call also carries the list of
-  projects your synced keys can create a workspace in, while the conversation
-  itself is held in memory until the app quits or you sign out, sent with a
-  call so it carries across calls, and never stored on the phone.
+  across calls and across launches; on iOS and Apple Watch, a call also
+  carries the list of projects your synced keys can create a workspace in,
+  while the conversation itself is held in memory until the app quits or you
+  sign out, sent with a call so it carries across calls, and never stored on
+  the phone or the watch.
   The one voice call that happens before you sign in is the spoken
   introduction on first launch of the Mac app: it sends its own fixed script,
   the titles of the coding agent sessions found on your Mac, and anything you

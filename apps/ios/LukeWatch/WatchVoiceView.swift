@@ -2,15 +2,18 @@ import LukeKit
 import SwiftUI
 
 /// Hold-to-talk voice screen for Apple Watch. Drives WatchVoiceSessionModel,
-/// which in turn drives a RealtimeSession.
-///
-/// The watch ships tool-free: dispatchToolCall always refuses since the armed-act
-/// infrastructure (roster validation, ActClient, ProjectsAnswer) lives on the
-/// phone. The PR notes this explicitly; a future PR may add a bounded act set.
+/// which in turn drives a RealtimeSession carrying the same tools the phone's
+/// conversation does: each call is validated through LukeKit's shared
+/// dispatcher against the roster the sessions page draws, and an open or a
+/// list ask lands on that page once Luke has finished speaking.
 struct WatchVoiceView: View {
     @Environment(WatchAccountSession.self) private var accountSession
+    @Environment(WatchRosterStore.self) private var store
+    @Environment(WatchNavigation.self) private var navigation
+    @Environment(VoiceConversationThread.self) private var conversation
     @State private var model = WatchVoiceSessionModel()
     @State private var isPressing = false
+    private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -18,10 +21,59 @@ struct WatchVoiceView: View {
             floatingControls
         }
         .task {
-            model.prepare(accountSession: accountSession)
+            model.prepare(
+                accountSession: accountSession, thread: conversation, actContext: makeActContext
+            )
+            // The roster the acts are validated against is the list's own,
+            // refreshed as this page opens so a session archived since the
+            // list last polled is not offered as somewhere to act.
+            await store.load()
+        }
+        .onChange(of: model.status) { _, newStatus in
+            if newStatus == .ready || newStatus == .idle {
+                performPendingNavigation()
+            }
         }
         .onDisappear {
             model.stop()
+        }
+    }
+
+    /// What a tool call is carried against, read at the moment of the call.
+    /// An open or a list ask is held for the reply to finish rather than
+    /// performed at once: the page moving mid-sentence would close the call
+    /// still speaking the words that announce it.
+    private func makeActContext() -> VoiceActContext {
+        VoiceActContext(
+            mintedTools: model.mintedTools,
+            sessions: store.sessions,
+            projects: model.projects,
+            defaults: model.defaults,
+            actClient: actClient,
+            accessToken: { [accountSession] in try await accountSession.validAccessToken() },
+            // The watch posts no product events — none of the acts its own
+            // screens carry count either — so a spoken act counts nothing
+            // here rather than posting under another app's tag.
+            count: { _, _ in },
+            refreshRoster: { [store] in await store.load() },
+            // One page, so the last open a reply names is the one taken.
+            open: { [model] session in model.pendingNavigation = .open(session) },
+            showList: { [model] ask in model.pendingNavigation = .list(ask) }
+        )
+    }
+
+    /// Takes the developer where the settled reply said they were going. The
+    /// page changes either way, and this view's `onDisappear` closes the
+    /// call behind it.
+    private func performPendingNavigation() {
+        guard let pending = model.pendingNavigation else { return }
+        model.pendingNavigation = nil
+        switch pending {
+        case .open(let session):
+            navigation.open(session)
+        case .list(let ask):
+            store.showList(ask)
+            navigation.showList()
         }
     }
 
@@ -31,14 +83,14 @@ struct WatchVoiceView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 6) {
-                    if model.messages.isEmpty {
+                    if conversation.messages.isEmpty {
                         WatchLukeMark()
                             .foregroundStyle(.secondary)
                             .frame(width: 44, height: 40)
                             .frame(maxWidth: .infinity, minHeight: 80, alignment: .center)
                             .opacity(model.status == .connecting ? 0.4 : 1)
                     } else {
-                        ForEach(model.messages) { message in
+                        ForEach(conversation.messages) { message in
                             WatchVoiceBubble(message: message)
                                 .id(message.id)
                         }
@@ -51,13 +103,14 @@ struct WatchVoiceView: View {
                 .padding(.bottom, 88)
                 .frame(maxWidth: .infinity)
             }
-            .onChange(of: model.messages.count) {
-                guard let last = model.messages.last else { return }
+            .onChange(of: conversation.messages) {
+                guard let last = conversation.messages.last else { return }
                 withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
             }
-            .onChange(of: model.messages.last?.text) {
-                guard let last = model.messages.last else { return }
-                proxy.scrollTo(last.id, anchor: .bottom)
+            .onAppear {
+                if let last = conversation.messages.last {
+                    proxy.scrollTo(last.id, anchor: .bottom)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -182,23 +235,21 @@ struct WatchVoiceView: View {
 // MARK: - Message bubble
 
 private struct WatchVoiceBubble: View {
-    let message: WatchVoiceMessage
+    let message: VoiceConversationMessage
+
+    private var isDeveloper: Bool { message.speaker == .developer }
 
     var body: some View {
-        Text(message.text)
+        Text(message.words)
             .font(.system(size: 13))
-            .foregroundStyle(message.speaker == .user ? Color.white : Color.primary)
+            .foregroundStyle(isDeveloper ? Color.white : Color.primary)
             .multilineTextAlignment(.leading)
             .padding(.horizontal, 9)
             .padding(.vertical, 7)
             .background {
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(
-                        message.speaker == .user
-                            ? Color.accentColor
-                            : Color.secondary.opacity(0.18)
-                    )
+                    .fill(isDeveloper ? Color.accentColor : Color.secondary.opacity(0.18))
             }
-            .frame(maxWidth: .infinity, alignment: message.speaker == .user ? .trailing : .leading)
+            .frame(maxWidth: .infinity, alignment: isDeveloper ? .trailing : .leading)
     }
 }

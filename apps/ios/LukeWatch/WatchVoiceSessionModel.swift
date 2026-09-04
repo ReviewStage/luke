@@ -2,42 +2,60 @@ import Foundation
 import LukeKit
 import Observation
 
-struct WatchVoiceMessage: Identifiable {
-    enum Speaker { case user, luke }
-    let id = UUID()
-    let speaker: Speaker
-    var text: String
+/// Where a spoken act asked to take the developer once Luke has finished
+/// saying so: a session's own screen, or the list narrowed as asked. Held
+/// until the reply settles, because moving the page mid-sentence would close
+/// the call that is still speaking.
+enum WatchPendingNavigation {
+    case open(RosterSession)
+    case list(VoiceAsks.SessionListAsk)
 }
 
-/// Observable session state for the watch voice screen. Drives one RealtimeSession
-/// with a tool-free configuration — the watch carries no armed-act infrastructure,
-/// so dispatchToolCall always refuses and contextItems is always empty.
+/// Observable session state for the watch voice screen. Drives one
+/// RealtimeSession carrying the same tools the phone's conversation does,
+/// each call dispatched through the shared gauntlet in LukeKit against the
+/// roster the watch list draws. The conversation itself is not here: it lives
+/// in the app-scoped VoiceConversationThread this model records into, so the
+/// words survive a swipe to the sessions page while the call does not.
 ///
 /// The session is not minted until the developer presses the talk button
-/// (beginTurn). prepare(accountSession:) is called on view appear to store the
-/// credential reference without opening any connection.
+/// (beginTurn). prepare is called on view appear to store the credential
+/// reference and the act context without opening any connection.
 @Observable
 @MainActor
 final class WatchVoiceSessionModel {
-    var messages: [WatchVoiceMessage] = []
     var status: RealtimeStatus = .idle
     var errorMessage: String?
+    var pendingNavigation: WatchPendingNavigation?
+    /// The tools the service minted the latest call with, as the server
+    /// confirmed them at channel open; nil until a call has connected.
+    private(set) var mintedTools: [String]?
+    /// Where a workspace can be created, fetched beside the mint so the
+    /// conversation is told it at channel open and a creation ask can be
+    /// validated against it. Nil until an answer lands, and left nil when
+    /// the fetch fails, so the conversation is told nothing rather than
+    /// told there is nowhere.
+    private(set) var projects: ProjectsAnswer?
+    /// The New Workspace choices this watch remembers, read at the moment a
+    /// call opens or an act lands.
+    let defaults = WorkspaceCreationDefaults()
 
     private var accountSession: WatchAccountSession?
+    private var thread: VoiceConversationThread?
+    private var makeActContext: (@MainActor () -> VoiceActContext)?
     private var session: RealtimeSession?
     private var connectingForTurn = false
     private var endTurnAfterConnect = false
     private var connectTask: Task<Void, Never>?
-    // Tracks whether we are mid-caption-segment for the current luke reply.
-    // nil from onCaption closes the segment so the next text starts a new bubble.
-    private var lukeReplyOpen = false
-    // Index into messages[] where the current turn began. onSpokenAsk inserts the
-    // user bubble here rather than appending, because the realtime service delivers
-    // the transcript after captions have already started arriving.
-    private var turnStartIndex = 0
 
-    func prepare(accountSession: WatchAccountSession) {
+    func prepare(
+        accountSession: WatchAccountSession,
+        thread: VoiceConversationThread,
+        actContext: @escaping @MainActor () -> VoiceActContext
+    ) {
         self.accountSession = accountSession
+        self.thread = thread
+        makeActContext = actContext
     }
 
     private func connect(startWithTurn: Bool) async {
@@ -45,15 +63,24 @@ final class WatchVoiceSessionModel {
         errorMessage = nil
 
         let opts = RealtimeSessionOptions(
-            requestConnection: { [weak accountSession] in
+            requestConnection: { [weak accountSession, weak self] in
                 guard let accountSession else { throw AccountSessionError.signedOut }
                 let token = try await accountSession.validAccessToken()
-                return try await VoiceMintClient(baseURL: AccountConstants.serviceURL)
+                // Fetched beside the mint rather than after it: the projects
+                // item is sent at channel open, and the ephemeral key's
+                // minute is not to be spent waiting on a second round trip.
+                async let projects = try? ProjectsClient(serviceURL: AccountConstants.serviceURL)
+                    .projects(bearerToken: token)
+                let connection = try await VoiceMintClient(baseURL: AccountConstants.serviceURL)
                     .mint(
                         accessToken: token,
                         voice: RealtimeVoice.default.rawValue,
                         speed: RealtimeVoiceSpeed.default.multiplier
                     )
+                if let answer = await projects {
+                    await MainActor.run { [weak self] in self?.projects = answer }
+                }
+                return connection
             },
             onStatus: { [weak self] newStatus in
                 self?.status = newStatus
@@ -61,36 +88,8 @@ final class WatchVoiceSessionModel {
                 // remints rather than sending on a stale connection.
                 if newStatus == .idle { self?.session = nil }
             },
-            onCaption: { [weak self] text in
-                guard let self else { return }
-                if let text {
-                    // Mid-segment: grow the current luke bubble.
-                    // New segment (lukeReplyOpen == false): always append a fresh bubble
-                    // so a multi-segment reply does not overwrite its own earlier segments.
-                    if self.lukeReplyOpen,
-                       let lastIndex = self.messages.indices.last,
-                       self.messages[lastIndex].speaker == .luke
-                    {
-                        self.messages[lastIndex].text = text
-                    } else {
-                        self.messages.append(WatchVoiceMessage(speaker: .luke, text: text))
-                        self.lukeReplyOpen = true
-                    }
-                } else {
-                    // nil signals segment end — the next caption begins a new bubble.
-                    self.lukeReplyOpen = false
-                }
-            },
-            onSpokenAsk: { [weak self] text in
-                guard let self else { return }
-                // Insert at turnStartIndex, not at the end: captions typically
-                // arrive before the transcript, so the user bubble must be placed
-                // before Luke's reply rather than after it.
-                let insertAt = min(self.turnStartIndex, self.messages.count)
-                self.messages.insert(WatchVoiceMessage(speaker: .user, text: text), at: insertAt)
-                // Leave lukeReplyOpen as-is: the reply segment that started before
-                // the transcript arrived should keep growing from the last bubble.
-            },
+            onCaption: { [weak self] text in self?.thread?.recordCaption(text) },
+            onSpokenAsk: { [weak self] text in self?.thread?.recordSpokenAsk(text) },
             onError: { [weak self, weak accountSession] message in
                 guard let self else { return }
                 // Surface a credential failure as an actionable prompt rather
@@ -102,13 +101,37 @@ final class WatchVoiceSessionModel {
                 }
             },
             onRecoverableError: { [weak self] message in self?.errorMessage = message },
-            onSessionTools: { _ in },
-            dispatchToolCall: { _, _, _ in
-                // The watch carries no armed-act infrastructure. Tool calls are
-                // refused here rather than implementing a partial gate.
-                #"{"error":"not authorized"}"#
+            onSessionTools: { [weak self] names in self?.mintedTools = names },
+            dispatchToolCall: { [weak self] name, arguments, _ in
+                guard let self, let makeActContext = self.makeActContext else {
+                    return #"{"error":"not authorized"}"#
+                }
+                return await dispatchVoiceToolCall(
+                    name: name,
+                    arguments: arguments,
+                    context: makeActContext()
+                )
             },
-            contextItems: { [] },
+            contextItems: { [weak self] in
+                guard let self else { return [] }
+                var items: [VoiceContextItem] = []
+                // Conversation before projects, the desktop's flush order.
+                if let thread = self.thread,
+                   let conversation = ConversationContext.item(messages: thread.messages)
+                {
+                    items.append(conversation)
+                }
+                if let projects = self.projects {
+                    items.append(
+                        WorkspaceProjectsContext.item(
+                            answer: projects,
+                            defaultProviderId: self.defaults.lastProviderId,
+                            defaultProjectIds: self.defaults.lastProjectIds
+                        )
+                    )
+                }
+                return items
+            },
             makeAudioCapturer: { WatchAudioCapturer() },
             makeAudioPlayer: { WatchAudioPlayer() }
         )
@@ -122,16 +145,20 @@ final class WatchVoiceSessionModel {
         connectTask = nil
         connectingForTurn = false
         endTurnAfterConnect = false
-        lukeReplyOpen = false
-        turnStartIndex = 0
+        pendingNavigation = nil
         accountSession = nil
+        thread = nil
+        makeActContext = nil
         session?.close()
         session = nil
     }
 
     func beginTurn() {
         errorMessage = nil
-        turnStartIndex = messages.count
+        // A new press supersedes what the last reply was about to do: an open
+        // the developer talked over is an open they no longer want taken.
+        pendingNavigation = nil
+        thread?.beginTurn()
         if let session {
             session.beginTurn()
             return
