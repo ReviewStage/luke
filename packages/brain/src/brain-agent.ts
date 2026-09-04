@@ -68,15 +68,6 @@ export const BRAIN_DEFAULTS = {
   FULL_TRANSCRIPT_CHARS: 60_000,
 } as const;
 
-/**
- * How often the brain looks at the whole roster on its own clock, for the
- * providers no hook covers and for whatever a hook did not report. A look is
- * skipped while a turn is in flight or the client is quiet; the next one
- * catches up, because the look reads what each transcript gained since the
- * brain last saw it rather than what happened in the interval.
- */
-export const BRAIN_ROSTER_WAKE_INTERVAL_MS = 60_000;
-
 /** Stands where the front of a transcript was cut, so the model knows it is reading a tail. */
 export const OMISSION_MARKER = "[… earlier transcript omitted …]";
 
@@ -171,7 +162,6 @@ export interface BrainAgentOptions {
   askDeadlineMs?: number;
   deltaPerSessionChars?: number;
   fullTranscriptChars?: number;
-  rosterWakeIntervalMs?: number;
 }
 
 const TURN_OUTCOME = {
@@ -265,9 +255,7 @@ export class BrainAgent {
   readonly #askDeadlineMs: number;
   readonly #deltaPerSessionChars: number;
   readonly #fullTranscriptChars: number;
-  readonly #rosterWakeIntervalMs: number;
   #memory = new BrainMemory();
-  #rosterTimer: ScheduledTimer | undefined;
   #turnInFlight = false;
   #restored: Promise<void> | undefined;
   #queue: Promise<unknown> = Promise.resolve();
@@ -294,13 +282,6 @@ export class BrainAgent {
     this.#deltaPerSessionChars =
       options.deltaPerSessionChars ?? BRAIN_DEFAULTS.DELTA_PER_SESSION_CHARS;
     this.#fullTranscriptChars = options.fullTranscriptChars ?? BRAIN_DEFAULTS.FULL_TRANSCRIPT_CHARS;
-    this.#rosterWakeIntervalMs = options.rosterWakeIntervalMs ?? BRAIN_ROSTER_WAKE_INTERVAL_MS;
-  }
-
-  /** Starts the scheduled roster looks; nothing is sent until the first interval has passed. */
-  start(): void {
-    if (this.#stopped || this.#rosterTimer !== undefined) return;
-    this.#scheduleRosterLook();
   }
 
   /** How many wakes are waiting for their turn to open. */
@@ -373,31 +354,20 @@ export class BrainAgent {
   async stop(): Promise<void> {
     this.#stopped = true;
     this.#cancelFlush();
-    if (this.#rosterTimer !== undefined) {
-      this.#cancel(this.#rosterTimer);
-      this.#rosterTimer = undefined;
-    }
     this.#pending = [];
     await this.#queue;
   }
 
-  #scheduleRosterLook(): void {
-    this.#rosterTimer = this.#schedule(() => {
-      this.#rosterTimer = undefined;
-      this.#rosterLook();
-      if (!this.#stopped) this.#scheduleRosterLook();
-    }, this.#rosterWakeIntervalMs);
-  }
-
   /**
-   * The scheduled look at the whole roster: one turn carrying the roster as
-   * `list_sessions` renders it and, for every local session the brain has
-   * read before or that is working or waiting now, what its transcript gained
-   * since — sessions with nothing new are left out. Skipped while a turn is in
-   * flight or the client is quiet, because the next look reads the same
-   * deltas; pending hook wakes ride along rather than waiting for their own.
+   * One look at the whole roster, driven by the host's observation pass rather
+   * than an internal timer. Carries the roster as `list_sessions` renders it
+   * and, for every local session the brain has read before or that is working
+   * or waiting now, what its transcript gained since — sessions with nothing
+   * new are left out. Skipped while a turn is in flight or the client is
+   * quiet, because the next look reads the same deltas; pending hook wakes
+   * ride along rather than waiting for their own.
    */
-  #rosterLook(): void {
+  rosterLook(): void {
     if (this.#stopped || this.#turnInFlight) return;
     if (this.#options.client.quietUntil() !== undefined) return;
     const roster = this.#options.roster();

@@ -42,6 +42,7 @@ function performer(overrides: Partial<BrainActPerformerDependencies> = {}) {
       openSessionChange: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }),
     },
     sessions: (): readonly Session[] => [observed],
+    refreshSessions: async () => {},
     workspaceProjects: () => [],
     workspaceDefaults: async () => ({}),
     trackedIssues: () => undefined,

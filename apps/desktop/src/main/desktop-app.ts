@@ -252,7 +252,7 @@ const ACCOUNT_BASE_URL =
 // at a local account service mints against it too.
 const HOSTED_SERVICE_BASE_URL = ACCOUNT_BASE_URL.replace(/\/api\/auth\/?$/, "");
 const ACCOUNT_CLIENT_ID = "luke-desktop";
-const SESSION_REFRESH_INTERVAL_MS = 5_000;
+const SESSION_REFRESH_INTERVAL_MS = 60_000;
 const sessionRegistry = new SessionRoster();
 // Declared before the settings store because the store's snapshot asks it
 // what the latest pass learned about the Codex CLI's login. It observes only
@@ -1607,6 +1607,10 @@ const sessionActPerformer = createSessionActPerformer({
 const brainActPerformer = createBrainActPerformer({
   sessionActs: sessionActPerformer,
   sessions: brainActableSessions,
+  // A fresh pass before every session act keeps validation against the
+  // observed roster current. At 60s intervals the registry could otherwise
+  // be almost a minute stale when the act's validation and perform run.
+  refreshSessions: () => sessionObservationLoop.refresh(),
   workspaceProjects: brainWorkspaceProjects,
   workspaceDefaults: readWorkspaceDefaults,
   trackedIssues: () => trackedIssues,
@@ -1678,7 +1682,6 @@ async function rebuildBrain(): Promise<void> {
     ...(agentTrace ? { trace: (record) => agentTrace.recordBrainTurn(record) } : undefined),
     report: (message) => process.stderr.write(`${message}\n`),
   });
-  brain.start();
 }
 
 function adapterFor(providerId: string) {
@@ -2594,9 +2597,13 @@ const sessionObservationLoop = new ObservationLoop({
   intervalMs: SESSION_REFRESH_INTERVAL_MS,
   run: refreshProviderSessions,
   // A pass is also when the Codex CLI login can have changed hands, and no
-  // settings save stands behind that to announce it.
+  // settings save stands behind that to announce it. The brain's roster look
+  // is driven here rather than on its own timer so the two reads stay in sync:
+  // the look always follows a fresh observation, and never runs when the gate
+  // is closed (observesProviders && accountCapabilitiesActive()).
   afterRun: () => {
     void broadcastCodexCloudConnection();
+    brain?.rosterLook();
   },
 });
 const issueObservationLoop = new ObservationLoop({
