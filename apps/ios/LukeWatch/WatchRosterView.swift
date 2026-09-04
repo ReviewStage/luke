@@ -207,16 +207,17 @@ struct WatchSessionDetailView: View {
                             conversationContent
                         }
 
-                        ForEach(outgoing) { message in
-                            WatchOutgoingBubble(message: message)
-                                .id(message.id)
-                        }
                     } else {
                         Text("Conversation unavailable for this session.")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.vertical, 6)
+                    }
+
+                    ForEach(outgoing) { message in
+                        WatchOutgoingBubble(message: message)
+                            .id(message.id)
                     }
 
                     if session.canReceiveMessage {

@@ -100,3 +100,10 @@ test("empty Watch conversations leave the native composer interactive", () => {
     /if centersConversationState \{[\s\S]*?conversationContent[\s\S]*?\.allowsHitTesting\(loadError != nil\)/,
   );
 });
+
+test("outgoing Watch messages remain visible without a readable transcript", () => {
+  assert.match(
+    watchRoster,
+    /Conversation unavailable for this session\.[\s\S]*?ForEach\(outgoing\)[\s\S]*?if session\.canReceiveMessage/,
+  );
+});
