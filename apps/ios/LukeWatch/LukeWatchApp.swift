@@ -1,9 +1,12 @@
+import LukeKit
 import SwiftUI
 
 @main
 struct LukeWatchApp: App {
     @State private var watchSession: WatchAccountSession
     @State private var rosterStore: WatchRosterStore
+    @State private var navigation = WatchNavigation()
+    @State private var conversation = VoiceConversationThread()
     // Held for its lifetime — the delegate must not be deallocated.
     private let connectivity: WatchConnectivityReceiver
 
@@ -19,6 +22,8 @@ struct LukeWatchApp: App {
             LukeWatchView()
                 .environment(watchSession)
                 .environment(rosterStore)
+                .environment(navigation)
+                .environment(conversation)
         }
     }
 }

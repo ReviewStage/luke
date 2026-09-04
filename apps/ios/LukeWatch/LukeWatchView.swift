@@ -1,9 +1,11 @@
+import LukeKit
 import SwiftUI
 
 struct LukeWatchView: View {
     @Environment(WatchAccountSession.self) private var watchSession
     @Environment(WatchRosterStore.self) private var rosterStore
-    @State private var selectedTab = 0
+    @Environment(WatchNavigation.self) private var navigation
+    @Environment(VoiceConversationThread.self) private var conversation
 
     var body: some View {
         Group {
@@ -11,21 +13,32 @@ struct LukeWatchView: View {
             case .signedOut:
                 SignedOutView()
             case .signedIn:
-                TabView(selection: $selectedTab) {
-                    WatchVoiceView()
-                        .tag(0)
-                    NavigationStack {
-                        WatchRosterView()
-                    }
-                    .tag(1)
-                }
-                .tabViewStyle(.page)
-                .id(watchSession.accountScope)
+                signedInPages
             }
         }
         .onChange(of: watchSession.accountScope) {
+            // The roster, the conversation, and where the watch stood are
+            // the signed-in developer's own: the next account starts clean.
             rosterStore.reset()
+            conversation.clear()
+            navigation.reset()
         }
+    }
+
+    private var signedInPages: some View {
+        @Bindable var navigation = navigation
+        return TabView(selection: $navigation.page) {
+            WatchVoiceView()
+                .tag(WatchPage.voice)
+            NavigationStack(path: $navigation.path) {
+                WatchRosterView()
+            }
+            .tag(WatchPage.sessions)
+        }
+        .tabViewStyle(.page)
+        // The pages and the stack above the list are the signed-in
+        // developer's own: a changed account rebuilds them from nothing.
+        .id(watchSession.accountScope)
     }
 }
 

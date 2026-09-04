@@ -42,7 +42,6 @@
 		AABBCC0000000000000000D4 /* VoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D0 /* VoiceView.swift */; };
 		AABBCC0000000000000000D5 /* VoiceAudioCapturer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D1 /* VoiceAudioCapturer.swift */; };
 		AABBCC0000000000000000D6 /* VoiceAudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D2 /* VoiceAudioPlayer.swift */; };
-		AABBCC0000000000000000D7 /* VoiceActDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D3 /* VoiceActDispatcher.swift */; };
 		AABBCC0000000000000000D9 /* VoiceSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D8 /* VoiceSettingsSheet.swift */; };
 		AABBCC0000000000000000F9 /* SessionsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000F8 /* SessionsStore.swift */; };
 		AABBCC0000000000000000E6 /* WatchVoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000E5 /* WatchVoiceView.swift */; };
@@ -50,6 +49,7 @@
 		AABBCC0000000000000000EA /* WatchAudioCapturer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000E9 /* WatchAudioCapturer.swift */; };
 		AABBCC0000000000000000EC /* WatchAudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000EB /* WatchAudioPlayer.swift */; };
 		AABBCC0000000000000000EE /* WatchLukeMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000ED /* WatchLukeMark.swift */; };
+		AABBCC0000000000000000F6 /* WatchNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000F5 /* WatchNavigation.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -109,7 +109,6 @@
 		AABBCC0000000000000000D0 /* VoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceView.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000D1 /* VoiceAudioCapturer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceAudioCapturer.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000D2 /* VoiceAudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceAudioPlayer.swift; sourceTree = "<group>"; };
-		AABBCC0000000000000000D3 /* VoiceActDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceActDispatcher.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000D8 /* VoiceSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSettingsSheet.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000F8 /* SessionsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsStore.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000E5 /* WatchVoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchVoiceView.swift; sourceTree = "<group>"; };
@@ -117,6 +116,7 @@
 		AABBCC0000000000000000E9 /* WatchAudioCapturer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchAudioCapturer.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000EB /* WatchAudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchAudioPlayer.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000ED /* WatchLukeMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchLukeMark.swift; sourceTree = "<group>"; };
+		AABBCC0000000000000000F5 /* WatchNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchNavigation.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -191,7 +191,6 @@
 				AABBCC0000000000000000D0 /* VoiceView.swift */,
 				AABBCC0000000000000000D1 /* VoiceAudioCapturer.swift */,
 				AABBCC0000000000000000D2 /* VoiceAudioPlayer.swift */,
-				AABBCC0000000000000000D3 /* VoiceActDispatcher.swift */,
 				AABBCC0000000000000000D8 /* VoiceSettingsSheet.swift */,
 				AABBCC000000000000000014 /* Assets.xcassets */,
 				AABBCC00000000000000001C /* Info.plist */,
@@ -223,6 +222,7 @@
 				AABBCC0000000000000000E9 /* WatchAudioCapturer.swift */,
 				AABBCC0000000000000000EB /* WatchAudioPlayer.swift */,
 				AABBCC0000000000000000ED /* WatchLukeMark.swift */,
+				AABBCC0000000000000000F5 /* WatchNavigation.swift */,
 				AABBCC0000000000000000B2 /* Assets.xcassets */,
 			);
 			path = LukeWatch;
@@ -396,7 +396,6 @@
 				AABBCC0000000000000000D4 /* VoiceView.swift in Sources */,
 				AABBCC0000000000000000D5 /* VoiceAudioCapturer.swift in Sources */,
 				AABBCC0000000000000000D6 /* VoiceAudioPlayer.swift in Sources */,
-				AABBCC0000000000000000D7 /* VoiceActDispatcher.swift in Sources */,
 				AABBCC0000000000000000D9 /* VoiceSettingsSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -426,6 +425,7 @@
 				AABBCC0000000000000000EA /* WatchAudioCapturer.swift in Sources */,
 				AABBCC0000000000000000EC /* WatchAudioPlayer.swift in Sources */,
 				AABBCC0000000000000000EE /* WatchLukeMark.swift in Sources */,
+				AABBCC0000000000000000F6 /* WatchNavigation.swift in Sources */,
 				AABBCC0000000000000000F4 /* MarkdownMessageView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

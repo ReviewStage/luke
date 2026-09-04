@@ -64,6 +64,19 @@ the issue acts (no tracker is connected here), `remember_fact` and
 `forget_fact` (the phone keeps no memory; Luke's durable facts live on the
 Mac), `change_app_setting`, the feedback composer, and the Updates row.
 
+The watch app's hold-to-talk screen carries the same eight tools. The
+dispatcher they run through, `dispatchVoiceToolCall` in `LukeKit`, is shared
+with the phone, so a call is validated the same way — against the roster the
+watch's sessions page draws and the projects answer fetched beside the mint —
+and sent to the same hosted act endpoints. The two that land on a screen land
+on the watch's own: `open_session` swipes to the sessions page and pushes the
+session's screen once Luke's reply has finished, and `show_panel` narrows,
+sorts, or searches the watch list the same way, drawing a Show All row above
+the rows a narrowing leaves so a list Luke narrowed never hides a session
+without saying so. The watch posts no product events, so a spoken act counts
+nothing there, and it draws no settings sheet, so the Debug tool list is the
+phone's alone.
+
 ## Analytics
 
 The app runs the desktop's two analytics streams on this platform's terms,
