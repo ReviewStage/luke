@@ -2325,7 +2325,10 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   max-height: var(--panel-height-max);
   flex-direction: column;
   gap: 8px;
-  padding: calc(max(var(--notch-top-inset), 32px) + 12px) 16px 15px;
+  /* The strip above the first row is the pill's own height, as the key slot
+     measures it, so a bubble's composer opens no taller above its words than
+     one beside a housing does. */
+  padding: calc(var(--capsule-height) - var(--shape-top, 0px) * 2 + 12px) 16px 15px;
   border-radius: 0 0 var(--slot-radius) var(--slot-radius);
 }
 
@@ -2771,7 +2774,13 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   width: var(--slot-width);
   flex-direction: column;
   gap: 7px;
-  padding: calc(max(var(--notch-top-inset), 32px) + 12px) 16px 15px;
+  /* The room above the first row is the strip the wings are drawn in plus one
+     gap, and the strip is the pill's own height: the full capsule beside a
+     housing, the capsule less the lift on both edges on a display without one,
+     the same height the wings and the hover target take there. Measured off
+     the capsule alone, a bubble's slot opened on twice the lift of empty black
+     above its words. */
+  padding: calc(var(--capsule-height) - var(--shape-top, 0px) * 2 + 12px) 16px 15px;
   border-radius: 0 0 var(--slot-radius) var(--slot-radius);
 }
 
