@@ -69,12 +69,7 @@ import type {
   OutputAudioState,
   VoiceHotkeyState,
 } from "./wire/audio";
-import type {
-  BrainAppActAnswer,
-  BrainAppActRequest,
-  BrainAskResult,
-  BriefingPayload,
-} from "./wire/brain";
+import type { BrainAppActAnswer, BrainAppActRequest, BrainAskResult } from "./wire/brain";
 import {
   type AppBootstrap,
   type ConversationHistoryPayload,
@@ -516,19 +511,6 @@ export const BRIDGE = {
     result: result<void>(),
   }),
   /**
-   * The voice window reporting that the arrival beat's reply actually began,
-   * which is the one thing that settles the owed record. A trigger the
-   * renderer never heard, or a beat the announcer dropped unspoken — a
-   * meeting's quiet, a call that would not open, news gone stale — settles
-   * nothing, so the next signed-in launch speaks it instead.
-   */
-  completeArrivalBeat: entry({
-    kind: "invoke",
-    channel: "app:complete-arrival-beat",
-    args: noArgs,
-    result: result<void>(),
-  }),
-  /**
    * The mouth reporting what became of one speech offer, by the id the offer
    * carried: spoken, refused, held, or stale. The arbiter offers the next turn
    * only once this lands, and an id it no longer knows — withdrawn, or past
@@ -738,29 +720,6 @@ export const BRIDGE = {
     args: noArgs,
     result: result<SessionRosterPayload>(),
   }),
-  /**
-   * The one-time arrival beat, decided in the main process at the sign-in
-   * edge. It carries nothing: the trigger is the whole message, and the
-   * beat's observed values are the renderer's own to read from the roster it
-   * already draws.
-   */
-  onArrivalSpeech: entry({
-    kind: "subscribe",
-    channel: "app:arrival-speech",
-    args: noArgs,
-    result: result<void>((v) => v === undefined),
-  }),
-  /**
-   * The calendar onboarding beat, decided in the main process while the
-   * gate stands after the first sign-in. It carries nothing: the words are a
-   * script fixed by the build, about the gate alone.
-   */
-  onCalendarOnboardingSpeech: entry({
-    kind: "subscribe",
-    channel: "app:calendar-onboarding-speech",
-    args: noArgs,
-    result: result<void>((v) => v === undefined),
-  }),
   onWorkspaceProjectsChanged: entry({
     kind: "subscribe",
     channel: "app:workspace-projects-changed",
@@ -838,13 +797,6 @@ export const BRIDGE = {
     channel: "app:superset-sign-in-changed",
     args: noArgs,
     result: result<SupersetSignInSnapshot>(),
-  }),
-  /** One briefing the brain decided to give, for the voice to speak as written. */
-  onBriefing: entry({
-    kind: "subscribe",
-    channel: "app:briefing",
-    args: noArgs,
-    result: result<BriefingPayload>(),
   }),
   /**
    * One proactive turn the speech arbiter decided to voice now — a briefing

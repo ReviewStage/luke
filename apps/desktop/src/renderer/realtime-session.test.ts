@@ -29,7 +29,6 @@ import {
   type MockTrackEvent,
 } from "#testing/realtime-fixtures";
 import type { SdkRealtimeTransport, SdkTransportFactoryOptions } from "./agents-realtime-transport";
-import { BriefingQueue } from "./briefing-queue";
 import {
   BRAIN_ASK_SETTLE_TIMEOUT_MS,
   quietIsLukesOwn,
@@ -39,6 +38,7 @@ import {
   RealtimeVoiceSession,
   type ReplyKind,
 } from "./realtime-session";
+import { SpeechMouth } from "./speech-mouth";
 
 function sessionField(event: ParsedJsonObject | undefined): ParsedJsonObject | undefined {
   if (!event) return undefined;
@@ -1250,16 +1250,18 @@ test("a drain's backstop restarts when the audio resumes", async (t) => {
   assert.equal(context.session.status, REALTIME_STATUS.READY);
 });
 
-test("a briefing queued mid-reply waits out the server's own ending", async () => {
+test("a briefing offered mid-reply waits out the server's own ending", async () => {
   // The reported shape of the fault, whole: Luke is reading one briefing out
   // on his own call when another agent finishes. The second briefing must
   // wait for the server to conclude the first reply — not for the audio
   // alone — or its create collides with the active response.
-  let queue: BriefingQueue | undefined;
-  const context = harness({ onStatus: (status) => queue?.onStatus(status) });
+  let mouth: SpeechMouth | undefined;
+  const context = harness({ onStatus: (status) => mouth?.onStatus(status) });
   const timers: (() => void)[] = [];
-  queue = new BriefingQueue({
+  const settled: string[] = [];
+  mouth = new SpeechMouth({
     session: () => context.session,
+    settle: (id, outcome) => settled.push(`${id}:${outcome}`),
     schedule: (callback) => {
       timers.push(callback);
       return timers.length - 1;
@@ -1267,19 +1269,29 @@ test("a briefing queued mid-reply waits out the server's own ending", async () =
     cancel: () => undefined,
   });
 
-  queue.enqueue(briefingAbout("session-a"));
-  // The call the queue opens for itself is a handshake away.
+  mouth.offer({
+    id: "offer-a",
+    speakBy: Number.MAX_SAFE_INTEGER,
+    turn: briefingAbout("session-a"),
+  });
+  // The call the mouth opens for itself is a handshake away.
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+  assert.deepEqual(settled, ["offer-a:spoken"]);
   context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-1" } });
 
-  // The second agent finishes mid-reply, and then the first reply's audio
-  // drains before its done arrives.
-  queue.enqueue(briefingAbout("session-b"));
+  // The second agent finishes mid-reply — the arbiter offers the next once
+  // the first is settled — and then the first reply's audio drains before
+  // its done arrives.
+  mouth.offer({
+    id: "offer-b",
+    speakBy: Number.MAX_SAFE_INTEGER,
+    turn: briefingAbout("session-b"),
+  });
   context.emit({ type: REALTIME_SERVER_EVENT.OUTPUT_AUDIO_BUFFER_STOPPED });
 
   // One reply asked for so far: the drain freed nothing, so the READY edge
-  // the queue rides has not fired into the server's open response.
+  // the mouth rides has not fired into the server's open response.
   assert.equal(
     context.sent.filter((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE).length,
     1,
@@ -1292,6 +1304,7 @@ test("a briefing queued mid-reply waits out the server's own ending", async () =
     context.sent.filter((event) => event.type === REALTIME_CLIENT_EVENT.RESPONSE_CREATE).length,
     2,
   );
+  assert.deepEqual(settled, ["offer-a:spoken", "offer-b:spoken"]);
   assert.deepEqual(reportedErrors(context), []);
 });
 

@@ -276,7 +276,11 @@ export class SpeechArbiter {
    * Takes the mouth's report on the offer it holds. An id no longer known —
    * withdrawn, or reclaimed at its deadline — is a late report and is
    * ignored. SPOKEN and STALE end the request and spend a beat's kind. HELD
-   * keeps it at the head for the release. REFUSED is a call that could not
+   * keeps it at the head for the release — or, reported while no quiet
+   * stands here, unheld, so the next reconcile offers it again: the mouth
+   * read a hold the panel still drew after it had ended, and a request
+   * marked held against a quiet already gone would wait for a release that
+   * can never come. REFUSED is a call that could not
    * be opened within its attempts, which ends every pending request: each is
    * still standing in the panel, and a fresh request starts a fresh backlog.
    */
@@ -287,7 +291,7 @@ export class SpeechArbiter {
     if (!request) return undefined;
     switch (outcome) {
       case SPEECH_OUTCOME.HELD:
-        request.held = true;
+        request.held = this.#quiet;
         this.#trace(request.kind, SPEECH_OUTCOME.HELD);
         break;
       case SPEECH_OUTCOME.SPOKEN:

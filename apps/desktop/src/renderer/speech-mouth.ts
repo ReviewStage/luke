@@ -109,7 +109,14 @@ export class SpeechMouth {
   /** How many times the offer now in hand has tried to open Luke's own call. */
   #connectAttempts = 0;
   #retryTimer: unknown;
-  /** Whether the meeting quiet is holding, which silences this mouth. */
+  /**
+   * Whether the hold, as the panel last drew it, is standing. Read by nothing
+   * that decides whether to speak: the main process is the authority on the
+   * quiet and never offers under it, and the panel's copy reaches here a
+   * render behind, so gating an offer on it would hand a released beat back
+   * held against a quiet that had already ended. It stands only so a hold
+   * beginning can cut a reply and settle the unspoken offer.
+   */
   #quiet = false;
 
   constructor(options: SpeechMouthOptions) {
@@ -146,15 +153,12 @@ export class SpeechMouth {
   /**
    * Takes the one turn the arbiter decided to voice, and starts saying it. The
    * same offer again is the same offer; the arbiter never sends a second while
-   * one is outstanding, so there is no displacement to decide. Under quiet
-   * the offer is handed straight back as held.
+   * one is outstanding, so there is no displacement to decide. An offer is
+   * never refused for a quiet the panel still draws: the arbiter offers only
+   * once the quiet has ended, and its word outranks the render behind.
    */
   offer(offer: SpeechOffer): void {
     if (this.#current?.id === offer.id) return;
-    if (this.#quiet) {
-      this.#options.settle(offer.id, SPEECH_OUTCOME.HELD);
-      return;
-    }
     this.#current = offer;
     this.#connectAttempts = 0;
     this.#cancelLinger();
@@ -239,9 +243,6 @@ export class SpeechMouth {
   }
 
   #flush(): void {
-    // Quiet holds everything: nothing may speak, and an empty hand must not
-    // start the linger toward closing a call the quiet already closed.
-    if (this.#quiet) return;
     const now = this.#options.now?.() ?? Date.now();
     // The deadline is read at the last moment, so news that waited out a long
     // reply is settled stale rather than read as though it just happened.
