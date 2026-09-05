@@ -73,9 +73,9 @@ on the watch's own: `open_session` swipes to the sessions page and pushes the
 session's screen once Luke's reply has finished, and `show_panel` narrows,
 sorts, or searches the watch list the same way, drawing a Show All row above
 the rows a narrowing leaves so a list Luke narrowed never hides a session
-without saying so. The watch posts no product events, so a spoken act counts
-nothing there, and it draws no settings sheet, so the Debug tool list is the
-phone's alone.
+without saying so. The watch voice page also has the phone's Settings pattern:
+a gear button opens voice and speed controls, plus the Debug tool list read
+from the watch call and roster.
 
 ## Analytics
 
