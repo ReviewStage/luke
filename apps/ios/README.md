@@ -133,6 +133,12 @@ that opens one that the Internet connection appears to be offline, with the
 phone in the same pocket. Luke's voice call is a streamed spoken exchange, so
 the watch app declares the `audio` background mode in `LukeWatch/Info.plist`
 and holds its audio session active from before the Realtime socket opens
-until the call closes, in `WatchVoiceAudioSession`. The call still opens only
-at the developer's press and closes on the same idle timer as before; the
-mode changes what watchOS lets the socket do, not when Luke listens.
+until the call closes, in `WatchVoiceAudioSession`. Two details of that grant
+are watchOS's own and are easy to miss: the session must be activated with
+the asynchronous `activate(options:)` call, because the synchronous
+`setActive(true)` returns without error on a watch and earns nothing, and the
+socket must be opened from the app's own process through Network framework,
+in `WatchWebSocketChannel`, because URLSession on watchOS does its work in a
+system process that never inherits the grant. The call still opens only at
+the developer's press and closes on the same idle timer as before; the mode
+changes what watchOS lets the socket do, not when Luke listens.

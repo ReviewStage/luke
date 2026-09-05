@@ -62,12 +62,13 @@ final class WatchVoiceSessionModel {
         guard session == nil, let accountSession else { return }
         errorMessage = nil
         do {
-            try WatchVoiceAudioSession.activate()
+            try await WatchVoiceAudioSession.activate()
         } catch {
             errorMessage = "Couldn't start audio on the watch."
             status = .idle
             return
         }
+        guard session == nil else { return }
 
         let opts = RealtimeSessionOptions(
             requestConnection: { [weak accountSession, weak self] in
@@ -156,6 +157,9 @@ final class WatchVoiceSessionModel {
                     )
                 }
                 return items
+            },
+            makeWebSocket: { url, ephemeralKey in
+                WatchWebSocketChannel(url: url, ephemeralKey: ephemeralKey)
             },
             makeAudioCapturer: { WatchAudioCapturer() },
             makeAudioPlayer: { WatchAudioPlayer() }

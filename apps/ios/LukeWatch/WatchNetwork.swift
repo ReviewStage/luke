@@ -1,4 +1,5 @@
 import Foundation
+import Network
 
 /// The one URLSession every hosted read and act on the watch travels on.
 ///
@@ -32,23 +33,36 @@ enum WatchNetwork {
     /// says only what both have in common: Luke was not reached, and the
     /// phone or Wi-Fi is where a path comes from.
     static func describe(_ error: any Error) -> String {
-        guard let urlError = error as? URLError else { return error.localizedDescription }
-        switch urlError.code {
-        case .notConnectedToInternet, .networkConnectionLost, .timedOut,
-             .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed:
-            return "Couldn't reach Luke. Keep your iPhone nearby, or join Wi-Fi."
-        default:
-            return urlError.localizedDescription
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet, .networkConnectionLost, .timedOut,
+                 .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed:
+                return unreachable
+            default:
+                return urlError.localizedDescription
+            }
         }
+        if let nwError = error as? NWError {
+            switch nwError {
+            case .posix(.ENETDOWN), .posix(.ENETUNREACH), .posix(.EHOSTUNREACH),
+                 .posix(.ETIMEDOUT), .posix(.ECONNREFUSED), .posix(.ECONNRESET), .dns:
+                return unreachable
+            default:
+                return nwError.localizedDescription
+            }
+        }
+        return error.localizedDescription
     }
+
+    private static let unreachable = "Couldn't reach Luke. Keep your iPhone nearby, or join Wi-Fi."
 }
 
-/// A connection failure carrying the wrist's own wording, for the one caller
-/// that receives words rather than the error: the voice session's `onError`.
+/// A connection failure carrying the wrist's own wording, for the callers
+/// that receive words rather than the error: the voice session's `onError`.
 struct WatchNetworkFailure: LocalizedError {
     let errorDescription: String?
 
-    init(_ error: URLError) {
+    init(_ error: any Error) {
         errorDescription = WatchNetwork.describe(error)
     }
 }

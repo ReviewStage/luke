@@ -3,14 +3,15 @@ import LukeKit
 
 /// Plays 24 kHz PCM16 mono audio through the speaker using AVAudioPlayerNode.
 /// Mirror of VoiceAudioPlayer without allowBluetoothHFP, which is unnecessary
-/// on watchOS where the watch owns its own Bluetooth audio routing.
+/// on watchOS where the watch owns its own Bluetooth audio routing. The audio
+/// session is `WatchVoiceAudioSession`'s, active for the whole call before
+/// this exists; nothing here activates or deactivates it.
 final class WatchAudioPlayer: AudioPlayer, @unchecked Sendable {
     private let engine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
     private let format: AVAudioFormat
 
     init() {
-        try? WatchVoiceAudioSession.activate()
         format = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: Double(PressAudioBuffer.sampleRate),

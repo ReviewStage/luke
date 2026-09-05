@@ -32,6 +32,7 @@
 		AABBCC0000000000000000C7 /* WatchTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000C1 /* WatchTokenStore.swift */; };
 		AABBCC0000000000000000FB /* WatchNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000FA /* WatchNetwork.swift */; };
 		AABBCC0000000000000000FD /* WatchVoiceAudioSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000FC /* WatchVoiceAudioSession.swift */; };
+		AABBCC0000000000000000F7 /* WatchWebSocketChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000FF /* WatchWebSocketChannel.swift */; };
 		AABBCC0000000000000000C8 /* WatchAccountSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000C2 /* WatchAccountSession.swift */; };
 		AABBCC0000000000000000C9 /* WatchConnectivityReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000C3 /* WatchConnectivityReceiver.swift */; };
 		AABBCC0000000000000000CA /* PhoneSessionRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000C4 /* PhoneSessionRelay.swift */; };
@@ -104,6 +105,7 @@
 		AABBCC0000000000000000C1 /* WatchTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchTokenStore.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000FA /* WatchNetwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchNetwork.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000FC /* WatchVoiceAudioSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchVoiceAudioSession.swift; sourceTree = "<group>"; };
+		AABBCC0000000000000000FF /* WatchWebSocketChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchWebSocketChannel.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000FE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AABBCC0000000000000000C2 /* WatchAccountSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchAccountSession.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000C3 /* WatchConnectivityReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchConnectivityReceiver.swift; sourceTree = "<group>"; };
@@ -220,6 +222,7 @@
 				AABBCC0000000000000000C1 /* WatchTokenStore.swift */,
 				AABBCC0000000000000000FA /* WatchNetwork.swift */,
 				AABBCC0000000000000000FC /* WatchVoiceAudioSession.swift */,
+				AABBCC0000000000000000FF /* WatchWebSocketChannel.swift */,
 				AABBCC0000000000000000FE /* Info.plist */,
 				AABBCC0000000000000000C2 /* WatchAccountSession.swift */,
 				AABBCC0000000000000000C3 /* WatchConnectivityReceiver.swift */,
@@ -426,6 +429,7 @@
 				AABBCC0000000000000000C7 /* WatchTokenStore.swift in Sources */,
 				AABBCC0000000000000000FB /* WatchNetwork.swift in Sources */,
 				AABBCC0000000000000000FD /* WatchVoiceAudioSession.swift in Sources */,
+				AABBCC0000000000000000F7 /* WatchWebSocketChannel.swift in Sources */,
 				AABBCC0000000000000000C8 /* WatchAccountSession.swift in Sources */,
 				AABBCC0000000000000000C9 /* WatchConnectivityReceiver.swift in Sources */,
 				AABBCC0000000000000000E2 /* WatchRosterStore.swift in Sources */,

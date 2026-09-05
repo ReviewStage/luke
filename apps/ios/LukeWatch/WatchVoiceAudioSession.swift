@@ -9,11 +9,16 @@ import AVFoundation
 /// this is the other half: the session goes active before the Realtime
 /// socket opens and stays active until the call closes. A capturer or player
 /// that deactivated it between turns would cut the socket under the call.
+///
+/// Activation is the asynchronous call watchOS added for itself. The
+/// synchronous `setActive(true)` returns without error on a watch and does
+/// not earn the grant; the asynchronous one does (Apple DTS, developer forum
+/// thread 773362, confirmed on watchOS 26).
 enum WatchVoiceAudioSession {
-    static func activate() throws {
+    static func activate() async throws {
         let audioSession = AVAudioSession.sharedInstance()
         try audioSession.setCategory(.playAndRecord, mode: .default)
-        try audioSession.setActive(true)
+        _ = try await audioSession.activate(options: [])
     }
 
     static func deactivate() {
