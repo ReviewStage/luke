@@ -12,7 +12,7 @@ import {
 } from "@sidecar/credentials/vocabulary";
 import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
-import { FIXTURE_EPOCH_MS } from "@sidecar/fixtures";
+import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import { APP_UPDATE_ACT, FEEDBACK_COMPOSER_KIND } from "@sidecar/guide";
 import { WingFace as LukeFace } from "@sidecar/panel";
 import { REALTIME_STATUS } from "@sidecar/realtime";
@@ -110,7 +110,6 @@ import {
   type PanelPresentation,
 } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
-import type { AppActionCarrier } from "./realtime-session";
 import {
   arrangeSessions,
   DEFAULT_SESSION_VIEW,
@@ -160,11 +159,8 @@ import { useMeasuredHeight } from "./use-measured-height";
 import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
 import { usePanelPresentation } from "./use-panel-presentation";
 import { useStateWithRef } from "./use-state-with-ref";
-import {
-  useVoiceConversation,
-  voiceErrorToShow,
-  voiceNoticeToShow,
-} from "./use-voice-conversation";
+import { useVoiceView, voiceErrorToShow, voiceNoticeToShow } from "./use-voice-view";
+import type { AppActionCarrier } from "./voice/realtime-session";
 import {
   outputSilent,
   VOLUME_HINT_BAND_HEIGHT,
@@ -1532,6 +1528,9 @@ export function App(): React.JSX.Element {
   const shortcutCapture = useRef(false);
   const changeShortcutCapture = useCallback((capturing: boolean) => {
     shortcutCapture.current = capturing;
+    // The talk and stop keys are routed by the main process to a window that
+    // is not this one, so the recording is reported there to be honored.
+    window.sidecar.setShortcutCapturing(capturing);
   }, []);
 
   /**
@@ -1946,49 +1945,50 @@ export function App(): React.JSX.Element {
     ],
   );
 
+  // An app act the brain decided that only a panel can perform. It was
+  // validated against the guide in the main process, which sends it to the
+  // primary panel alone; the carrier performs it and the answer goes back by
+  // the request's id, so the brain's turn can say what happened.
+  const carryAppActionRef = useRef(carryAppAction);
+  carryAppActionRef.current = carryAppAction;
+  useEffect(
+    () =>
+      window.sidecar.onBrainAppAct((request) => {
+        void carryAppActionRef
+          .current(request.action)
+          .catch((error: Error) => ({
+            status: ACT_RESULT_STATUS.REJECTED,
+            reason: error instanceof Error ? error.message : "The change could not be made.",
+          }))
+          .then((answer) => window.sidecar.answerBrainAppAct(request.requestId, answer));
+      }),
+    [],
+  );
+
   // The muted evidence run is the speaking run with the hint drawn over it: a
   // capture has no system output to read, so the state is asked for directly.
   const fixtureMuted = bootstrap?.profile === "muted";
   const fixtureSpeaking = bootstrap?.profile === "speaking" || fixtureMuted;
   const {
-    analyser,
-    microphoneStatus,
-    setMicrophoneStatus,
-    voiceError,
-    voiceNotice,
-    voiceStatus,
-    talkOpening,
-    voiceHotkey,
-    handleVoiceActivity,
-    requestMicrophoneAccess,
-    startMicrophone,
-    stopMicrophone,
-    askLuke,
-    conversationHistory,
-    clearConversationHistory,
-    liveConversationEntries,
-    seedConversationHistory,
+    view: voiceView,
+    speaking,
     voiceTurn,
-    lukeCaptions,
-    remoteAudio,
+    level: voiceLevel,
+    voiceActive,
+    microphoneStatus,
+    voiceHotkey,
+    conversationHistory,
+    acceptBootstrap: acceptVoiceBootstrap,
+    askLuke,
     discardListening,
     stopSpeaking,
-  } = useVoiceConversation({
-    preferBuiltInMicrophone: (settings ?? bootstrapSettings)?.preferBuiltInMicrophone ?? true,
-    agentTraceEnabled: bootstrap?.agentTraceEnabled === true,
-    sessions,
-    voice: settings?.voice,
-    voiceSpeed: settings?.voiceSpeed,
-    voiceCaptions: settings?.voiceCaptions === true,
-    voiceAvailable: settings?.voiceAvailable,
-    bootstrapVoiceHotkey: bootstrap?.voiceHotkey,
-    outputSilent: outputSilent(outputAudio),
-    announcementsHeld,
-    fixtureSpeaking,
-    capturingShortcut: () => shortcutCapture.current,
-    carryAppAction,
-    conversationContextReady: bootstrap !== undefined,
-  });
+    requestMicrophoneAccess,
+    clearConversationHistory,
+  } = useVoiceView();
+  const { voiceError, voiceNotice, talkOpening, liveConversationEntries } = voiceView;
+  // A capture run always draws the fixture's words: the voice window that
+  // otherwise decides the captions does not stand in one.
+  const lukeCaptions = fixtureSpeaking ? [FIXTURE_SPEAKING_CAPTION] : voiceView.lukeCaptions;
 
   // A failed call is reported where its reply would have landed: on the
   // caption strip, under the field or the key press that asked. It yields to
@@ -2236,10 +2236,9 @@ export function App(): React.JSX.Element {
       acceptProjectsBootstrap(value.workspaceProjects);
       acceptCalendarsBootstrap(value.calendars);
       acceptAnnouncementsHeldBootstrap(value.announcementsHeld);
-      // The shared thread's seed guards itself: the conversation hook already
-      // holds the live pushes, and a thread this window has touched is always
-      // the newer word than the snapshot.
-      seedConversationHistory(value.conversationHistory);
+      // The voice snapshots ride the same rule: the voice window's pushes
+      // beat a bootstrap still in flight.
+      acceptVoiceBootstrap(value);
       acceptCalendarOnboardingBootstrap(value.calendarOnboardingOwed);
       acceptSessionReplayBootstrap(value.sessionReplay);
       acceptSettingsBootstrap(value.settings);
@@ -2282,13 +2281,9 @@ export function App(): React.JSX.Element {
           beginEntry(firstProvider.id);
         }
       }
-      setMicrophoneStatus(value.microphoneStatus);
       // Only fill in what no push has said yet, like the issue roster: the
       // bootstrap snapshot is older than any change that raced past it.
       if (value.outputAudio) acceptOutputAudioBootstrap(value.outputAudio);
-      if (value.profile === "microphone") {
-        window.setTimeout(() => void startMicrophone(), 500);
-      }
       window.sidecar.notifyReady();
     });
     const removeLifecycle = window.sidecar.onLifecycle((eventName) => {
@@ -2327,7 +2322,6 @@ export function App(): React.JSX.Element {
       removeLifecycle();
       removeDisplay();
       removeSupersetSignIn();
-      void stopMicrophone();
     };
   }, [
     acceptAccountBootstrap,
@@ -2340,17 +2334,14 @@ export function App(): React.JSX.Element {
     acceptSessionsBootstrap,
     acceptSettingsBootstrap,
     acceptUpdateBootstrap,
+    acceptVoiceBootstrap,
     applyAuthoritativeMode,
     applyPresentation,
     beginEntry,
     beginFeedback,
     cancelHover,
     changeTab,
-    seedConversationHistory,
-    setMicrophoneStatus,
     setSettingsView,
-    startMicrophone,
-    stopMicrophone,
     summonAsk,
     modeGenerationOf,
     presentationOf,
@@ -2467,7 +2458,7 @@ export function App(): React.JSX.Element {
       if (event.key !== "Escape") return;
       // Discarding an open turn comes before any of it. Closing the panel
       // or a sheet mid-sentence would strand the microphone open.
-      if (voiceStatus === REALTIME_STATUS.LISTENING) {
+      if (voiceView.voiceStatus === REALTIME_STATUS.LISTENING) {
         // The key may still be down. Forgetting the press as well as the latch
         // means its release lands on a turn that is already gone rather than
         // sending the one Escape just discarded.
@@ -2476,11 +2467,18 @@ export function App(): React.JSX.Element {
       }
       // Stopping Luke mid-sentence is the same shape one layer on: a reply
       // being spoken is the most open thing there is, and Escape asks for
-      // quiet without opening a turn in its place. The session itself answers
-      // whether there was a reply to stop, so a press that found none falls
-      // through to the layers below rather than being swallowed by a reply
-      // that had already ended.
-      if (stopSpeaking()) return;
+      // quiet without opening a turn in its place. The session that knows
+      // whether a reply is playing lives in the voice window, so the panel
+      // predicts from the snapshot it was last handed. That snapshot can be
+      // one frame stale — a reply that ended, or began, since the last report
+      // — and the cost is the press doing what it would have done a frame
+      // earlier: a stop asked of a reply just over is a no-op there, and a
+      // fall-through past a reply just begun closes the layer below instead.
+      // Neither is worth a round trip on every Escape.
+      if (speaking) {
+        stopSpeaking();
+        return;
+      }
       // Escape out of the slot is the entry's own way out, wherever the caret
       // happens to be: the slot is the only thing on screen, so there is nothing
       // else it could mean. The sign-in wait and the consent connect borrow
@@ -2538,9 +2536,10 @@ export function App(): React.JSX.Element {
     setSettingsView,
     settingsView,
     signInWaitNow,
+    speaking,
     stopSpeaking,
     tab,
-    voiceStatus,
+    voiceView.voiceStatus,
   ]);
 
   // A broadcast with no accelerator is still a change — the key was deleted
@@ -2662,7 +2661,7 @@ export function App(): React.JSX.Element {
   const shownHotkey = voiceHotkeyToShow(bootstrap, voiceHotkey);
   const shownAskHotkey = askHotkeyChange ? askHotkeyChange.accelerator : bootstrap.askHotkey;
   const shownStopHotkey = stopHotkeyChange ? stopHotkeyChange.accelerator : bootstrap.stopHotkey;
-  const hasAudioSignal = fixtureSpeaking || analyser !== undefined;
+  const hasAudioSignal = fixtureSpeaking || voiceTurn !== undefined;
   const outputIsSilent = outputSilent(outputAudio);
   // Live words win; the held snapshot only ever finishes being read. A held
   // caption is drawn exactly as it was, its tone included.
@@ -2702,7 +2701,7 @@ export function App(): React.JSX.Element {
     status: microphoneStatus,
     voiceAvailable: (settings ?? bootstrapSettings ?? appSettingsView(bootstrap.settings))
       .voiceAvailable,
-    onRequest: () => void requestMicrophoneAccess(),
+    onRequest: requestMicrophoneAccess,
     onOpenSettings: () => window.sidecar.openMicrophoneSettings(),
   };
   const updates: UpdateControl = {
@@ -3019,16 +3018,10 @@ export function App(): React.JSX.Element {
         confirming={feedbackConfirming}
         still={stillMotion}
       />
-      {/* Luke's own voice. Muted playback would defeat the point, so this is
-          the one element allowed to make sound. */}
-      <audio ref={remoteAudio} autoPlay hidden>
-        <track kind="captions" />
-      </audio>
-
       <NotchWings
         tally={tally}
-        analyser={analyser}
-        onVoiceActivity={handleVoiceActivity}
+        level={voiceLevel}
+        voiceActive={voiceActive}
         {...(voiceTurn ? { voice: voiceTurn } : undefined)}
         fixtureSpeaking={fixtureSpeaking}
         hasAudioSignal={hasAudioSignal}

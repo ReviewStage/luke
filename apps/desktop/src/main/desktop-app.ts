@@ -116,6 +116,7 @@ import {
   session,
   shell,
   systemPreferences,
+  type WebContents,
 } from "electron";
 import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "#shared/apple-calendar";
 import { BRIDGE, channels } from "#shared/bridge";
@@ -137,6 +138,7 @@ import {
 } from "#shared/contracts";
 import { VOICE_SOURCE_COUNTED_AS } from "#shared/product-vocabulary";
 import { SPEECH_OUTCOME, type SpeechOutcome } from "#shared/wire/speech";
+import type { VoiceView } from "#shared/wire/voice-view";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { AppleCalendarReader } from "./apple-calendar";
 import {
@@ -383,7 +385,7 @@ const linearCredentials = new LinearCredentials({
     // Nobody pressed anything to end this connection — Linear refused the
     // renewal — so no settings reply is on its way to say so. A row left
     // saying connected would be a row about a grant that no longer exists.
-    panels.broadcast(channels.onSettingsChanged, cleared.settings);
+    broadcast(channels.onSettingsChanged, cleared.settings);
   },
 });
 const linearTracker = new LinearIssueTracker({
@@ -567,7 +569,7 @@ const feedbackDelivery = feedbackDeliveryFromEnvironment();
 const lastRunVersionPath = () => path.join(app.getPath("userData"), "last-run-version.json");
 const updateService = new UpdateService({
   currentVersion: app.getVersion(),
-  onChange: (update) => panels.broadcast(channels.onUpdateChanged, update),
+  onChange: (update) => broadcast(channels.onUpdateChanged, update),
   engine:
     app.isPackaged && runMode.sendsNetwork && process.platform === "darwin"
       ? createElectronUpdaterEngine()
@@ -723,7 +725,7 @@ async function sessionReplayBootstrap(): Promise<SessionReplayBootstrap> {
  */
 function haltSessionReplay(): void {
   sessionReplayBroadcastGeneration += 1;
-  panels.broadcast(channels.onSessionReplayChanged, {
+  broadcast(channels.onSessionReplayChanged, {
     permitted: false,
     appVersion: app.getVersion(),
   });
@@ -822,6 +824,11 @@ const voiceWindow = new VoiceWindow({
   rendererUrl: rendererUrl(),
   onGone: (reason) => {
     process.stderr.write(`Voice window replaced: ${reason}\n`);
+    // Whatever the dead renderer last reported is no longer true: no exchange
+    // is live, and a panel opening now should not bootstrap into one. The
+    // replacement reports its own idle view the moment it mounts.
+    latestVoiceView = undefined;
+    panels.setVoiceExchange(false);
   },
   onGaveUp: (reason) => {
     process.stderr.write(`Voice window abandoned: ${reason}\n`);
@@ -843,6 +850,23 @@ function raiseVoiceWindow(): void {
 function quitUnlessPanelStands(): void {
   if (panels.standing === 0) app.quit();
 }
+
+/**
+ * Hands a payload to every panel and to the voice window, which reads the
+ * same settings, roster, and hold the panels do. A channel the voice window
+ * never subscribes to costs it nothing; the sender a reply already answered
+ * is skipped exactly as `PanelManager.broadcast` skips it.
+ */
+function broadcast<Payload>(channel: string, payload: Payload, except?: WebContents): void {
+  panels.broadcast(channel, payload, except);
+  const voice = voiceWindow.current();
+  if (!voice || voice.webContents === except) return;
+  // SAFETY: Main-process broadcasts carry structured-clone snapshots produced for channels fixed by this build.
+  voice.webContents.send(channel, payload as UnparsedWireValue);
+}
+
+/** The voice window's latest snapshot, for a panel that opens mid-exchange. */
+let latestVoiceView: VoiceView | undefined;
 /**
  * Whether the takeover's renderer ever reported mounting. A takeover that
  * never draws is a fullscreen window swallowing every click with nothing on
@@ -1002,7 +1026,7 @@ function writeCalendarOnboardingState(state: CalendarOnboardingState): void {
   // taken back the moment the record says the step is over, before the
   // arrival it was holding is requested.
   if (!owed) withdrawBeat(CALENDAR_ONBOARDING_SPEECH_KIND);
-  panels.broadcast(channels.onCalendarOnboardingChanged, owed);
+  broadcast(channels.onCalendarOnboardingChanged, owed);
 }
 
 /**
@@ -1170,7 +1194,7 @@ const supersetSignIn = new SupersetSignIn({
   cli: supersetCli,
   openExternal: (url) => shell.openExternal(url),
   onChange: (state) => {
-    panels.broadcast(channels.onSupersetSignInChanged, state);
+    broadcast(channels.onSupersetSignInChanged, state);
     if (state.stage !== SUPERSET_SIGN_IN_STAGE.CONNECTED) return;
     void sessionObservationLoop.refresh();
     // The edge into connected, which is where a sign-in actually lands: the
@@ -1194,13 +1218,17 @@ const hotkeys = new HotkeyRegistrar({
     (rank === HOTKEY_RANK.TALK && introductionWindow.active),
   recordProductEvent,
   host: {
-    voiceHost: () => introductionWindow.current() ?? panels.voiceHost(),
+    // The talk and stop keys go to whichever window holds a voice: the
+    // takeover while it stands, else the hidden voice window. A panel is never
+    // a voice host; it is only where the ask key summons the composer.
+    voiceHost: () => introductionWindow.current() ?? voiceWindow.current(),
+    primaryPanel: () => panels.primaryPanel(),
     displayIdFor: (sender) => panels.displayIdFor(sender),
     modeFor: (displayId) => panels.modeFor(displayId),
     setMode: (displayId, mode, requestFocus) => {
       panels.setMode(displayId, mode, requestFocus);
     },
-    broadcast: (channel, payload) => panels.broadcast(channel, payload),
+    broadcast: (channel, payload) => broadcast(channel, payload),
   },
 });
 const dock = new DockPresence({
@@ -1229,7 +1257,7 @@ function startOutputVolumeWatch(): void {
   const send = (state: OutputAudioState | undefined) => {
     outputAudio = state;
     // Every display's panel captions the same voice, so every one is told.
-    panels.broadcast(channels.onOutputAudioChanged, state);
+    broadcast(channels.onOutputAudioChanged, state);
   };
   outputVolumeWatcher = new OutputVolumeWatcher({
     onState: send,
@@ -1289,7 +1317,7 @@ async function broadcastWorkspaceProjects(): Promise<void> {
   const serialized = JSON.stringify(projects);
   if (serialized === lastWorkspaceProjects) return;
   lastWorkspaceProjects = serialized;
-  panels.broadcast(channels.onWorkspaceProjectsChanged, projects);
+  broadcast(channels.onWorkspaceProjectsChanged, projects);
 }
 
 /**
@@ -1316,7 +1344,7 @@ async function pruneWorkspaceProjectDefaults(
       );
       if (!saved.cleared) continue;
       if (!isCurrent()) return;
-      panels.broadcast(channels.onSettingsChanged, saved.settings);
+      broadcast(channels.onSettingsChanged, saved.settings);
     }
   } catch {
     return;
@@ -1334,12 +1362,19 @@ function microphoneStatus(): MicrophoneStatus {
   return systemPreferences.getMediaAccessStatus("microphone") as MicrophoneStatus;
 }
 
+/**
+ * Asks the system for the microphone where it has not yet answered, and tells
+ * every window the answer: the status is the main process's to know, and no
+ * panel holds a microphone to learn it from.
+ */
 async function requestMicrophone(): Promise<MicrophoneStatus> {
   if (process.platform !== "darwin") return "granted";
   if (microphoneStatus() === "not-determined") {
     await systemPreferences.askForMediaAccess("microphone");
   }
-  return microphoneStatus();
+  const status = microphoneStatus();
+  broadcast(channels.onMicrophoneStatusChanged, status);
+  return status;
 }
 
 function trustedSender(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
@@ -1352,7 +1387,7 @@ function accountCapabilitiesActive(): boolean {
 }
 
 function broadcastAccount(): void {
-  panels.broadcast(channels.onAccountChanged, account);
+  broadcast(channels.onAccountChanged, account);
 }
 
 /**
@@ -1363,7 +1398,7 @@ function broadcastAccount(): void {
  * renderer keeps drawing the voice state of the account it no longer has.
  */
 async function broadcastVoiceAvailability(): Promise<void> {
-  panels.broadcast(channels.onSettingsChanged, await settingsStore.snapshot());
+  broadcast(channels.onSettingsChanged, await settingsStore.snapshot());
 }
 
 /**
@@ -1388,7 +1423,7 @@ async function broadcastSessionReplay(): Promise<void> {
   const generation = ++sessionReplayBroadcastGeneration;
   const replay = await sessionReplayBootstrap();
   if (generation !== sessionReplayBroadcastGeneration) return;
-  panels.broadcast(channels.onSessionReplayChanged, replay);
+  broadcast(channels.onSessionReplayChanged, replay);
 }
 
 /**
@@ -1404,7 +1439,7 @@ async function broadcastCodexCloudConnection(): Promise<void> {
   const connection = codexCloudAdapter.connection();
   if (connection === announcedCodexCloudConnection) return;
   announcedCodexCloudConnection = connection;
-  panels.broadcast(channels.onSettingsChanged, await settingsStore.snapshot());
+  broadcast(channels.onSettingsChanged, await settingsStore.snapshot());
 }
 
 async function startAccountCapabilities(): Promise<void> {
@@ -1536,7 +1571,24 @@ function recordMainConversationEntry(entry: ConversationEntry): void {
   }
   conversationHistory = merged;
   const payload: ConversationHistoryPayload = { entries: merged, cleared: false };
-  panels.broadcast(channels.onConversationHistoryChanged, payload);
+  broadcast(channels.onConversationHistoryChanged, payload);
+}
+
+/**
+ * The History Clear a panel pressed: the stored thread deleted, the relay
+ * emptied for every panel, and the moment remembered so a report still in
+ * flight from before it cannot stand the old lines back up. The voice window
+ * retires its own turns on the command that follows this.
+ */
+function clearConversationHistory(): void {
+  if (runMode.observesProviders) {
+    const clearedAt = Date.now();
+    if (!removeStoredState(conversationPath(), "the conversation")) return;
+    conversationClearedAt = clearedAt;
+  }
+  conversationHistory = [];
+  const payload: ConversationHistoryPayload = { entries: [], cleared: true };
+  broadcast(channels.onConversationHistoryChanged, payload);
 }
 
 /**
@@ -1590,7 +1642,7 @@ function writeRememberedFacts(facts: readonly RememberedFact[]): boolean {
     return false;
   }
   rememberedFacts = facts;
-  panels.broadcast(channels.onRememberedFactsChanged, facts);
+  broadcast(channels.onRememberedFactsChanged, facts);
   return true;
 }
 
@@ -1749,7 +1801,7 @@ async function rememberWorkspaceDefaults(
         APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
         providerId,
       );
-      panels.broadcast(channels.onSettingsChanged, saved.settings);
+      broadcast(channels.onSettingsChanged, saved.settings);
     }
     if (
       providerId === SUPERSET_WORKSPACE_PROVIDER_ID &&
@@ -1763,7 +1815,7 @@ async function rememberWorkspaceDefaults(
         SUPERSET_WORKSPACE_PROVIDER_ID,
         { agent },
       );
-      panels.broadcast(channels.onSettingsChanged, saved.settings);
+      broadcast(channels.onSettingsChanged, saved.settings);
     }
     // The project the workspace landed in becomes that provider's default on
     // the same first-choice terms, read again for the same overlap reason as
@@ -1781,7 +1833,7 @@ async function rememberWorkspaceDefaults(
           providerTargetId ? { providerProjectId, providerTargetId } : { providerProjectId },
         ),
       );
-      panels.broadcast(channels.onSettingsChanged, saved.settings);
+      broadcast(channels.onSettingsChanged, saved.settings);
     }
     // A model named for this creation becomes the default on the same
     // first-choice terms as the provider: only while nothing is chosen.
@@ -1801,7 +1853,7 @@ async function rememberWorkspaceDefaults(
         providerId,
         namedSelection,
       );
-      panels.broadcast(channels.onSettingsChanged, saved.settings);
+      broadcast(channels.onSettingsChanged, saved.settings);
     }
   } catch {
     // The reply is the creation's; a failed remember has no line in it.
@@ -1826,7 +1878,7 @@ function registerIpc(): void {
     ipcMain,
     trustedSender,
     snapshot: () => settingsStore.snapshot(),
-    broadcast: (settings, except) => panels.broadcast(channels.onSettingsChanged, settings, except),
+    broadcast: (settings, except) => broadcast(channels.onSettingsChanged, settings, except),
   });
   registerContextHandler(
     BRIDGE.getBootstrap,
@@ -1902,6 +1954,7 @@ function registerIpc(): void {
         // has recomputed it yet, so a persisted pause would draw a waking face.
         announcementsHeld: accountCapabilitiesActive() && (await announcementsQuietNow(Date.now())),
         conversationHistory,
+        voiceView: latestVoiceView,
         rememberedFacts,
         calendarOnboardingOwed: calendarOnboardingGateOwed(),
         sessionReplay: await sessionReplayBootstrap(),
@@ -1909,7 +1962,8 @@ function registerIpc(): void {
       };
     },
   );
-  // The conversation history's relay between windows and durable store.
+  // The conversation history's relay from its one writer, the voice window,
+  // to its durable store here and to every panel's History.
   registerBridge(
     BRIDGE,
     {
@@ -1931,39 +1985,20 @@ function registerIpc(): void {
         }
         conversationHistory = merged;
         const payload: ConversationHistoryPayload = { entries: merged, cleared: false };
-        panels.broadcast(channels.onConversationHistoryChanged, payload, context.sender);
-      },
-      clearConversationHistory(context) {
-        if (runMode.observesProviders) {
-          const clearedAt = Date.now();
-          if (!removeStoredState(conversationPath(), "the conversation")) return false;
-          conversationClearedAt = clearedAt;
-        }
-        conversationHistory = [];
-        const payload: ConversationHistoryPayload = { entries: [], cleared: true };
-        panels.broadcast(channels.onConversationHistoryChanged, payload, context.sender);
-        return true;
+        broadcast(channels.onConversationHistoryChanged, payload, context.sender);
       },
     },
     { ipcMain, trustedSender },
   );
-  registerHandler(BRIDGE.settleSpeech, (id: string, outcome: SpeechOutcome) => {
-    const settled = speechArbiter.settle(id, outcome);
-    if (!settled) return;
-    if (settled.outcome === SPEECH_OUTCOME.SPOKEN) {
-      if (settled.kind === BRIEFING_SPEECH_KIND) {
-        productEvents.record(PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK, {});
-        markFirstAnnouncementSpoken();
-      }
-      // The reply has actually begun, which is the one moment the owed record
-      // may settle. A report that raced a settle already on file overwrites
-      // nothing.
-      if (settled.kind === ARRIVAL_SPEECH_KIND && arrivalBeatOwed(arrivalState)) {
-        writeArrivalState({ ...(arrivalState ?? {}), settledAt: new Date().toISOString() });
-      }
-    }
-    void reconcileSpeech();
-  });
+  // Only the voice window's mouth may settle an offer: the offer went to it
+  // alone, and a report from anywhere else names an id it was never handed.
+  registerContextHandler(
+    BRIDGE.settleSpeech,
+    (context: BridgeContext, id: string, outcome: SpeechOutcome) => {
+      if (!voiceWindow.owns(context.sender)) return;
+      settleSpeech(id, outcome);
+    },
+  );
   registerHandler(BRIDGE.skipCalendarOnboarding, () => {
     // A skip that raced the step already settling overwrites nothing: it was
     // answered, and a confirmed calendar answered it better than the decline.
@@ -2127,6 +2162,13 @@ function registerIpc(): void {
     ipcMain,
     trustedSender,
     panels,
+    voiceWindow,
+    broadcast,
+    storeVoiceView: (view) => {
+      latestVoiceView = view;
+    },
+    clearConversation: clearConversationHistory,
+    setShortcutCapturing: (capturing) => hotkeys.setShortcutCapturing(capturing),
     openExternal: (url) => shell.openExternal(url),
     // While the takeover stands and no account credential exists yet, the
     // introduction's bounded mint answers; the moment the account lands, the
@@ -2420,7 +2462,7 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   const supersetActionsEnabled = observedSupersetOrganization !== undefined;
   if (actionsWereEnabled !== supersetActionsEnabled) {
     if (supersetActionsEnabled) {
-      panels.broadcast(channels.onSupersetSignInChanged, {
+      broadcast(channels.onSupersetSignInChanged, {
         stage: SUPERSET_SIGN_IN_STAGE.CONNECTED,
       });
     } else {
@@ -2520,7 +2562,7 @@ async function announcementsQuietNow(now: number): Promise<boolean> {
     (inMeeting && (await settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field)));
   if (holding !== announcementsHeld) {
     announcementsHeld = holding;
-    panels.broadcast(channels.onAnnouncementsHeldChanged, holding);
+    broadcast(channels.onAnnouncementsHeldChanged, holding);
   }
   return holding;
 }
@@ -2590,13 +2632,36 @@ async function reconcileSpeech(): Promise<void> {
 }
 
 /**
+ * What became of one speech offer, by id. A reply that actually began is the
+ * one moment the briefing count and the owed arrival record may settle; a
+ * report that raced a settle already on file overwrites nothing.
+ */
+function settleSpeech(id: string, outcome: SpeechOutcome): void {
+  const settled = speechArbiter.settle(id, outcome);
+  if (!settled) return;
+  if (settled.outcome === SPEECH_OUTCOME.SPOKEN) {
+    if (settled.kind === BRIEFING_SPEECH_KIND) {
+      productEvents.record(PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK, {});
+      markFirstAnnouncementSpoken();
+    }
+    // The reply has actually begun, which is the one moment the owed record
+    // may settle. A report that raced a settle already on file overwrites
+    // nothing.
+    if (settled.kind === ARRIVAL_SPEECH_KIND && arrivalBeatOwed(arrivalState)) {
+      writeArrivalState({ ...(arrivalState ?? {}), settledAt: new Date().toISOString() });
+    }
+  }
+  void reconcileSpeech();
+}
+
+/**
  * Hands the mouth the arbiter's head request, if one may be offered now.
  * Synchronous past the quiet's await, so two reconciles landing together
  * cannot each offer: the arbiter marks the offer outstanding in the same
  * tick it is sent.
  */
 function offerNextSpeech(): void {
-  const host = panels.voiceHost();
+  const host = voiceWindow.current();
   if (!host || !voiceCapabilities.realtimeCredentials) return;
   const offer = speechArbiter.next();
   if (offer) host.webContents.send(channels.onSpeechOffered, offer);
@@ -2608,7 +2673,7 @@ function offerNextSpeech(): void {
  */
 function withdrawBeat(kind: OnboardingBeatKind): void {
   const id = speechArbiter.retract(kind);
-  if (id) panels.voiceHost()?.webContents.send(channels.onSpeechWithdrawn, { id });
+  if (id) voiceWindow.current()?.webContents.send(channels.onSpeechWithdrawn, { id });
 }
 
 /**
@@ -2645,7 +2710,7 @@ async function refreshCalendarMeetings(generation: number): Promise<void> {
       ...(failure ? { failure } : undefined),
       ...(revoked ? { revoked } : undefined),
     }));
-    panels.broadcast(channels.onCalendarsChanged, observedCalendars);
+    broadcast(channels.onCalendarsChanged, observedCalendars);
     for (const account of accounts) {
       if (account.failure) {
         process.stderr.write(`Calendar observation failed: ${account.failure}\n`);
@@ -2768,7 +2833,7 @@ function stopCalendarObservation(): void {
   googleCalendar.forget();
   appleCalendar.forget();
   speechArbiter.dropBriefings();
-  panels.broadcast(channels.onCalendarsChanged, observedCalendars);
+  broadcast(channels.onCalendarsChanged, observedCalendars);
   void refreshAnnouncementHold();
 }
 
@@ -2788,7 +2853,7 @@ let rosterBroadcast = false;
 function broadcastSessions(sessions: readonly Session[]): void {
   rosterBroadcast = true;
   const roster: SessionRosterPayload = { sessions };
-  panels.broadcast(channels.onSessionsChanged, roster);
+  broadcast(channels.onSessionsChanged, roster);
 }
 
 function startSessionObservation(): void {
@@ -2833,8 +2898,8 @@ function stopSessionObservation(): void {
   for (const { adapter } of orderedRegistrations) {
     sessionRegistry.replaceProvider(adapter.provider, []);
   }
-  panels.broadcast(channels.onSessionsChanged, { sessions: [] });
-  panels.broadcast(channels.onWorkspaceProjectsChanged, []);
+  broadcast(channels.onSessionsChanged, { sessions: [] });
+  broadcast(channels.onWorkspaceProjectsChanged, []);
   lastWorkspaceProjects = undefined;
 }
 
@@ -2859,7 +2924,7 @@ async function refreshTrackedIssues(generation: number): Promise<void> {
     }
     if (issueObservationLoop.isCurrent(generation)) {
       trackedIssues = connected ? collected : undefined;
-      panels.broadcast(channels.onIssuesChanged, trackedIssues);
+      broadcast(channels.onIssuesChanged, trackedIssues);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -2869,7 +2934,7 @@ async function refreshTrackedIssues(generation: number): Promise<void> {
 
 function stopIssueObservation(): void {
   trackedIssues = undefined;
-  panels.broadcast(channels.onIssuesChanged, undefined);
+  broadcast(channels.onIssuesChanged, undefined);
 }
 
 function configurePermissions(): void {
@@ -3157,7 +3222,7 @@ export function startDesktopApp(): void {
       for (const eventName of ["resume", "unlock-screen", "user-did-become-active"] as const) {
         const handlePowerEvent = () => {
           handleDisplayChange();
-          panels.broadcast(channels.onLifecycle, eventName);
+          broadcast(channels.onLifecycle, eventName);
         };
         if (eventName === "resume") powerMonitor.on("resume", handlePowerEvent);
         if (eventName === "unlock-screen") {

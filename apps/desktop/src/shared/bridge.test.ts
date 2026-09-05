@@ -48,13 +48,6 @@ test("a conversation history report carries only well-formed history lines", () 
   assert.equal(guard([[{ ...ask, recordedAt: Number.POSITIVE_INFINITY }]]), false);
 });
 
-test("clearing conversation history is acknowledged", () => {
-  assert.equal(BRIDGE.clearConversationHistory.kind, "invoke");
-  assert.equal(BRIDGE.clearConversationHistory.result?.(true), true);
-  assert.equal(BRIDGE.clearConversationHistory.result?.(false), true);
-  assert.equal(BRIDGE.clearConversationHistory.result?.(undefined), false);
-});
-
 test("remembered-fact pushes enforce their complete bounded shape", () => {
   const guard = BRIDGE.onRememberedFactsChanged.result;
   assert.equal(guard?.([{ id: "one", words: "kept" }]), true);
@@ -206,9 +199,26 @@ test("a voice view carries its six fields and nothing malformed", () => {
   assert.equal(guard({ ...VOICE_VIEW, lukeCaptions: [1] }), false);
   assert.equal(guard({ ...VOICE_VIEW, liveConversationEntries: [{ kind: "reply" }] }), false);
   assert.equal(guard({ ...VOICE_VIEW, liveConversationEntries: undefined }), false);
-  assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW]), true);
+  assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, undefined]), true);
+  assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW]), false);
   assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, VOICE_VIEW]), false);
-  assert.equal(BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, voiceStatus: 1 }]), false);
+  assert.equal(BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, voiceStatus: 1 }, undefined]), false);
+});
+
+test("an exchange kind rides a voice view only on an edge that opened one", () => {
+  assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, "spoken"]), true);
+  assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, "typed"]), true);
+  assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, "announcement"]), true);
+  assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, "shouted"]), false);
+  // A settled call opened nothing, so nothing may be counted against it.
+  assert.equal(
+    BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, voiceStatus: "ready" }, "spoken"]),
+    false,
+  );
+  assert.equal(
+    BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, voiceStatus: "ready" }, undefined]),
+    true,
+  );
 });
 
 test("a voice level is one finite number in the unit interval", () => {

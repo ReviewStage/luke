@@ -35,11 +35,14 @@ export interface TalkKeyHandle {
 }
 
 /**
- * The panel surface the keys talk to: the voice host answers a press, and
- * every window is told which chord to teach when one of them moves.
+ * The windows the keys talk to: the voice host answers a talk or stop press,
+ * the primary panel is what the ask key summons, and every window is told
+ * which chord to teach when one of them moves.
  */
 export interface HotkeyHost {
   voiceHost(): BrowserWindow | undefined;
+  /** The one drawn panel an ask press summons; the voice host draws nothing. */
+  primaryPanel(): BrowserWindow | undefined;
   displayIdFor(sender: WebContents): number | undefined;
   /** How the panel stands now, so a key that summons into an open one knows. */
   modeFor(displayId: number): WindowMode;
@@ -95,6 +98,15 @@ export class HotkeyRegistrar {
   #chosenAsk: string | undefined;
   #stop: string | undefined;
   #chosenStop: string | undefined;
+  /**
+   * True while a settings row is recording a chord. Both Luke keys stay
+   * registered through a recording — the recording is how one gets replaced —
+   * so a press of a current chord landing then is held here rather than
+   * opening the microphone, or stopping a reply, under the field being typed
+   * into. Only presses defer: a release always lands, so a hold opened before
+   * the recording began still ends when the key comes up.
+   */
+  #shortcutCapturing = false;
 
   constructor(options: HotkeyRegistrarOptions) {
     this.#host = options.host;
@@ -120,6 +132,10 @@ export class HotkeyRegistrar {
 
   get stop(): string | undefined {
     return this.#stop;
+  }
+
+  setShortcutCapturing(capturing: boolean): void {
+    this.#shortcutCapturing = capturing;
   }
 
   /**
@@ -193,6 +209,12 @@ export class HotkeyRegistrar {
     return this.#host.voiceHost()?.webContents;
   }
 
+  /** A press the recording row is owed rather than the voice host. */
+  #sendPress(channel: string): void {
+    if (this.#shortcutCapturing) return;
+    this.#send(this.#voiceHostContents(), channel);
+  }
+
   /**
    * Registers the talk key with the system so it answers from whatever app is
    * frontmost. Electron reports only the press and never the release, so the key
@@ -211,7 +233,7 @@ export class HotkeyRegistrar {
     // The helper first, because it is the only one of the two that reports the
     // key being let go of, and a key you hold is the whole point.
     this.#talkKeyWatcher = this.#createTalkKeyWatcher({
-      onPress: () => this.#send(this.#voiceHostContents(), channels.onVoiceHotkeyPress),
+      onPress: () => this.#sendPress(channels.onVoiceHotkeyPress),
       onRelease: () => this.#send(this.#voiceHostContents(), channels.onVoiceHotkeyRelease),
       onRegistered: (accelerator) => {
         this.#talk = accelerator;
@@ -237,7 +259,7 @@ export class HotkeyRegistrar {
   #registerToggle(): void {
     for (const accelerator of voiceHotkeyCandidates(this.#chosenTalk)) {
       const registered = this.#shortcut.register(accelerator, () => {
-        this.#send(this.#voiceHostContents(), channels.onVoiceHotkeyPress);
+        this.#sendPress(channels.onVoiceHotkeyPress);
         // A toggle has only the one edge, so it reports a release immediately and
         // one short enough to read as a tap. Every press then latches or ends a
         // turn.
@@ -261,7 +283,7 @@ export class HotkeyRegistrar {
    * the renderer to put the caret in the field — or, when the caret is already
    * there, the renderer reads the same press as the dismissal, so one key
    * summons and puts away like every launcher does. The panel that answers is
-   * the voice host's, the same window every other app-level ask lands in.
+   * the primary one, the same window every other app-level act lands in.
    */
   #registerAsk(): void {
     // Re-runnable: moving the talk key lets everything go and registers afresh,
@@ -278,7 +300,7 @@ export class HotkeyRegistrar {
       this.#talk,
     ])) {
       const registered = this.#shortcut.register(accelerator, () => {
-        const host = this.#host.voiceHost();
+        const host = this.#host.primaryPanel();
         const displayId = host ? this.#host.displayIdFor(host.webContents) : undefined;
         if (displayId === undefined) return;
         const opening = this.#host.modeFor(displayId) !== "expanded";
@@ -324,7 +346,7 @@ export class HotkeyRegistrar {
       this.#ask,
     ])) {
       const registered = this.#shortcut.register(accelerator, () => {
-        this.#send(this.#voiceHostContents(), channels.onStopHotkeyPress);
+        this.#sendPress(channels.onStopHotkeyPress);
       });
       if (!registered) continue;
       this.#stop = accelerator;
