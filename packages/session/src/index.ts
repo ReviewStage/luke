@@ -1,6 +1,7 @@
 export { ACT_RESULT_STATUS } from "@sidecar/wire";
 export { AGENT_IDENTITY, agentIdentityFor } from "./agent-identities.js";
 export { CompositeSessionProviderAdapter } from "./composite-provider-adapter.js";
+export { HOOK_EVENT, type HookEvent } from "./hook-events.js";
 export {
   ObservationLoop,
   type ObservationLoopOptions,

@@ -486,7 +486,10 @@ let conversationClearedAt: number | undefined;
  * notices changes itself, against its own memory. Built by `rebuildBrain`
  * whenever the credential policy is applied, and only on the developer's own
  * OpenAI key in this build: with no key there is no brain, nothing is
- * announced, and an ask is answered with the honest refusal.
+ * announced, and an ask is answered with the honest refusal. What a wake
+ * carries is a digest of each session's new transcript, written by the
+ * smaller model behind the digest client on the same key; raw transcript
+ * text reaches it only through its own read_transcript tool.
  */
 let brain: BrainAgent | undefined;
 /** The spool watchers standing on each hooked provider's spool, closed at quit. */
@@ -1623,8 +1626,10 @@ async function rebuildBrain(): Promise<void> {
     speechArbiter.dropBriefings();
     return;
   }
+  const digest = voiceCapabilities.digestClient;
   brain = new BrainAgent({
     client,
+    ...(digest ? { digest } : undefined),
     acts: brainActPerformer,
     roster: brainRoster,
     standingContext: brainStandingContext,

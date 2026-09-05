@@ -128,7 +128,7 @@ Trust constraints:
   build, and nothing enters that document's text but identifiers the same
   pass reported, each validated against the shape its provider documents.
   Nothing that decides on the user's behalf may reach a write path: the
-  attention evaluator above all, and every turn Luke opens himself (a
+  transcript summarizer above all, and every turn Luke opens himself (a
   proactive readout, the reply that voices a tool's outcome) which carries no
   tools, at the API and again at a runtime gate, so a session summary or a tool
   output that reads like an instruction can never become an act. A tool call
@@ -199,37 +199,36 @@ Trust constraints:
   with its provider and is never fetched. The read renders only what the
   provider actually wrote down, and a provider whose stored shape this build
   cannot render faithfully keeps the honest refusal instead.
-- A session's subject is the one place transcript content reaches a model
-  unbidden, and it is bounded on every side. No observed field says what an
-  agent is generally working on — a title is the first message, an activity
-  is the tool running now — so an
-  announcement that named the agent by its title named work it had stopped
-  doing. Luke therefore derives one short phrase per local session from the
-  same bounded transcript rendering the conversation-tab ask already reads,
-  through the same adapter method, bounded only by the file tail the adapter
-  reads and its per-line cuts, together with the title as the developer's
-  first ask. The
-  derivation runs only for a session about to be announced, at the moment the
-  announcement is delivered, once per announcement, never in a fixture run,
-  under a fixed deadline past which the announcement speaks without it, so
-  the transcript it reads is the one holding the turn the announcement is
-  about; a cloud session, a provider with no transcript this build reads, a
-  closed session, and a session inside a live voice exchange derive nothing. It travels the way an
-  attention review travels: directly to OpenAI
-  on the developer's own key, or through Luke's own service on the hosted
-  tier, where the service validates it against the same bounds, spends the
-  attention meter, asks OpenAI not to store it, and keeps and logs none of it.
-  The model is offered no tools, the transcript enters as data behind a
-  marker, and the answer is a bounded phrase or an honest null, refused when
-  it merely echoes the title. The phrase lives only inside the announcement
-  payload that carries it and is kept nowhere: it reaches one place, the
-  payload's `subject`, in the slot the title no longer travels in. It is not
-  drawn on the panel, reaches no write path, never reaches the attention
-  evaluator, and never reaches a provider file. It counts no product event,
-  because no developer asked. The development trace records each
-  derivation's about-fields, answer, and timing, and the transcript's byte
-  count, never its text. Widening what it
-  reads, where it travels, or where it is shown is a product decision, not an
+- A session's transcript reaches a model unbidden in one place, the brain's
+  wake, and the shape is bounded on every side. The brain (`packages/brain`)
+  is one long-lived agent whose whole memory is re-sent every turn, so what a
+  wake carries decides what that memory fills with. It never carries the
+  transcript. When a provider's hook fires, or on the brain's own 60-second
+  look at the roster, Luke reads what each woken local session's transcript
+  gained since the last look — the same bounded rendering the transcript tool
+  reads, cut from the front to a fixed bound — and hands the slice to a
+  smaller model that is offered no tools and answers a strict fixed form: a
+  stop state from a fixed set, the developer's last ask, what the agent did
+  since, what it waits on. The brain receives the form, never the slice; a
+  session whose read came back empty makes no summarizer call and draws no
+  event; and a summarizer that is absent, quiet, timed out on its own fixed
+  request deadline, or off-schema falls to a deterministic digest built from
+  the hook and the roster status alone, so no failure path lets raw text ride
+  into the memory under a digest's name. The form's reader refuses rather than repairs, and
+  the form names no session: identity is the roster's, attached by Luke to
+  the wake it read for, never read out of a model's words. Raw transcript
+  text reaches the brain through one door only, its own `read_transcript`
+  tool, validated against the observed roster, and its output stays in the
+  memory as any tool result does. The slice travels one way only: directly
+  to OpenAI on the developer's own key, over the same keyed transport a brain
+  turn takes, asked not to store it. There is no hosted digest path: a
+  developer with no key has a brain told only where each agent stopped, from
+  the hook and the roster. Nothing runs in a fixture or evidence run. The
+  development trace records each digest inside its turn's record as outcome,
+  stop state, timing, and the slice's and form's character counts, never the
+  text of either. Widening
+  what the summarizer reads, what the form may say, how much a slice may
+  carry, or what the roster look sends is a product decision, not an
   implementation detail, and `PRIVACY.md` says the read and the send in as
   many words.
 - Counting is three streams with three different guarantees, and the
@@ -365,8 +364,9 @@ Trust constraints:
   to forget names one of the ids the conversation received. At most 32 bounded
   facts stand in Luke's own application data and the complete list enters each
   conversation as reply context. It is never drawn, never reaches a provider
-  file, never reaches a write path, and never reaches the attention evaluator,
-  whose input stays what a provider wrote about a session. Widening either —
+  file, never reaches a write path, and never reaches the transcript
+  summarizer, whose input stays the slice and the roster fields beside it.
+  Widening either —
   what may be stored, how long it stands, or where it may travel — is a
   product decision, not an implementation detail.
 - The development trace is the one place Luke's own agent traffic may reach a
@@ -380,8 +380,8 @@ Trust constraints:
   whether anything is recorded. What it records is the
   desktop's own view of its own conversation — the realtime events already
   crossing the data channel, with an audio append reduced to its byte count
-  before it leaves the renderer, and the attention evaluator's update,
-  decision, and reviewing model when the desktop knows one — appended as
+  before it leaves the renderer, and the brain's turns, requests, and digests
+  as counts, outcomes, and the model when the desktop knows one — appended as
   JSONL under the developer's chosen directory and
   sent nowhere; `pnpm trace:export` turns one file into a document a local
   viewer opens. The tap only observes: nothing reads its result, and the
@@ -602,11 +602,13 @@ What Luke may show:
   message kind, or anything stored is a product decision, not an
   implementation detail.
 - Session material leaves the machine unbidden in exactly two places, each
-  with its own narrower rule. An evaluator receives `AttentionContext`, what
-  a provider wrote *about* a session, and never the transcript behind it: no
-  message history, file contents, or command output. A
+  with its own narrower rule. The brain receives what a provider wrote
+  *about* a session — the roster — and, per wake, the digest a smaller model
+  wrote from the bounded slice a local session's transcript gained, under the
+  constraint above; only that summarizer is handed the slice, and the brain
+  reads a transcript itself only through its own tool. A
   spoken announcement (a session that started waiting, stopped on an error,
-  or finished, or an evaluator sentence approved for speech) reaches the
+  or finished, or a briefing the brain decided to give) reaches the
   voice service so it can be said aloud. Two onboarding beats are
   the members of that set about no session, and each keeps the same terms:
   worded from a script fixed by the build, speak-only and tool-free like an
@@ -625,13 +627,13 @@ What Luke may show:
   dropped before its reply began — leaves it owed for the next signed-in
   launch rather than improvising a substitute; only the voice window
   reporting the reply actually begun settles it. An edge announcement
-  sends that update's *about* fields, the same ones the evaluator may see,
+  sends that update's *about* fields, the same ones the brain may see,
   and the voice words the
   sentence said aloud, so it can say what the session is waiting on rather
   than only that it waits. When no conversation is open, Luke opens a call of
   his own to say it, and that call is speak-only by construction: it offers
   no microphone track, carries no tools, and is sent the one update's fields,
-  or the one evaluator sentence, alone: never the roster, the guide, or a
+  or the one briefing, alone: never the roster, the guide, or a
   transcript rendering, which travel only on conversations the developer
   opens, and the rendering only in the turn that asked for it. A
   developer-opened conversation also carries a bounded history of the recent
@@ -649,8 +651,8 @@ What Luke may show:
   sent on Luke's speak-only call. Its
   trigger is a deterministic status edge, an onboarding beat's own
   deterministic trigger (the recorded sign-in edge, or the calendar gate
-  standing), or the evaluator finding an update worth speaking. The edge
-  announcements and approved evaluator sentences speak whenever voice can.
+  standing), or the brain finding an update worth speaking. The edge
+  announcements and the brain's briefings speak whenever voice can.
   Widening either set is a product decision, not an implementation detail;
   make it deliberately. While an announcement is being spoken, a notice on
   Luke's own surface under the housing names the session it is about,
@@ -711,6 +713,7 @@ works in that subtree:
 | `packages/providers/AGENTS.md` | Keeping `PRIVACY.md` and the README's agent table true to the adapters |
 | `packages/surface/AGENTS.md` | The shared surface vocabulary and its generated outputs |
 | `packages/realtime/AGENTS.md` | Why `protocol` and `tools` ship together |
+| `packages/brain/AGENTS.md` | The brain's shape, the marker-then-data rule, the digest boundary, and its `PRIVACY.md` obligation |
 | `packages/analytics/AGENTS.md` | The product-event allowlist and its `PRIVACY.md` obligation |
 | `packages/hosted/AGENTS.md` | The hosted wire boundary and its dependency direction |
 

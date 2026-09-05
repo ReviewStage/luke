@@ -3,7 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { BRAIN_CLIENT_OUTCOME, BRAIN_TURN_TRIGGER } from "@sidecar/brain";
+import { BRAIN_CLIENT_OUTCOME, BRAIN_TURN_TRIGGER, DIGEST_STOP_STATE } from "@sidecar/brain";
 import { isRecord, isWireString, recordFromJsonLine } from "@sidecar/wire";
 import { AgentTraceWriter, TRACE_ENTRY_KIND } from "./trace-writer.js";
 import { TRACE_DIRECTION } from "./vocabulary.js";
@@ -37,6 +37,16 @@ test("lines land in the named file, stamped, in the order they were recorded", a
     inputItemKinds: ["message", "message"],
     inputTokens: 1_500,
     transcriptBytes: 4_096,
+    digests: [
+      {
+        source: "model",
+        outcome: BRAIN_CLIENT_OUTCOME.ANSWERED,
+        stopState: DIGEST_STOP_STATE.FINISHED,
+        elapsedMs: 700,
+        digestChars: 180,
+        transcriptChars: 4_096,
+      },
+    ],
     toolCalls: [{ name: "announce", argumentsChars: 120, outcomeStatus: "accepted" }],
     deliveries: [{ briefingChars: 96 }],
     elapsedMs: 1_250,
@@ -57,6 +67,7 @@ test("lines land in the named file, stamped, in the order they were recorded", a
   assert.equal(entries[2]?.kind, TRACE_ENTRY_KIND.BRAIN);
   assert.equal(entries[2]?.trigger, BRAIN_TURN_TRIGGER.WAKE);
   assert.equal(entries[2]?.elapsedMs, 1_250);
+  assert.ok(Array.isArray(entries[2]?.digests) && isRecord(entries[2]?.digests[0]));
   const toolCalls = entries[2]?.toolCalls;
   assert.ok(Array.isArray(toolCalls) && isRecord(toolCalls[0]));
   assert.equal(entries[3]?.kind, TRACE_ENTRY_KIND.SPEECH);

@@ -240,7 +240,26 @@ function brainInputText(entry: WireRecord): string {
     `trigger: ${text(entry.trigger) ?? "unknown"}`,
     `input items: ${itemKinds.length > 0 ? itemKinds.join(", ") : "none"}`,
     `transcript bytes: ${wholeNumber(entry.transcriptBytes) ?? 0}`,
+    ...brainDigestLines(entry),
   ].join("\n");
+}
+
+/**
+ * One line per digest the turn attached: who wrote it, how the call came out,
+ * the stop state, and the slice's and form's sizes as counts. Neither the
+ * slice nor the form was recorded, so none is shown.
+ */
+function brainDigestLines(entry: WireRecord): readonly string[] {
+  return recordItems(entry.digests).map((digest) => {
+    const error = text(digest.error);
+    return [
+      `digest: ${text(digest.source) ?? "unknown"}`,
+      `${text(digest.outcome) ?? "unknown"}`,
+      `stop state ${text(digest.stopState) ?? "unknown"}`,
+      `${wholeNumber(digest.transcriptChars) ?? 0} -> ${wholeNumber(digest.digestChars) ?? 0} chars`,
+      ...(error ? [`error: ${error}`] : []),
+    ].join(", ");
+  });
 }
 
 /**

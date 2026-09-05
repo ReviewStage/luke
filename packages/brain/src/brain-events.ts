@@ -1,5 +1,6 @@
-import type { Session, SessionIdentity } from "@sidecar/session";
+import type { HookEvent, Session, SessionIdentity } from "@sidecar/session";
 import type { ActResultStatus } from "@sidecar/wire";
+import type { BrainSessionDigest, DigestSource } from "./brain-digest.js";
 
 /**
  * What wakes the brain, and what it hands back. A wake is a provider's hook
@@ -17,25 +18,28 @@ export const BRAIN_WAKE_KIND = {
 export type BrainWakeKind = (typeof BRAIN_WAKE_KIND)[keyof typeof BRAIN_WAKE_KIND];
 
 /**
- * The transcript written since the brain last looked at a session, as the
- * turn carries it: the text, whether the front was cut to the per-session
- * bound, and the read's own status, so an unsupported provider reads as
- * nothing to show rather than nothing happening.
+ * What the turn carries about a session's transcript since the brain last
+ * looked: never the text, only a digest of it — the read's own status, so an
+ * unsupported provider reads as nothing to show rather than nothing
+ * happening; whether the front of the slice the summarizer saw was cut to the
+ * per-session bound; whether a model wrote the digest or the deterministic
+ * fallback did; and the digest itself.
  */
-export interface BrainTranscriptDelta {
-  text: string;
-  truncated: boolean;
+export interface BrainTranscriptDigest {
   status: ActResultStatus;
+  truncated: boolean;
+  source: DigestSource;
+  digest: BrainSessionDigest;
 }
 
 export interface BrainWakeEvent {
   kind: BrainWakeKind;
   identity: SessionIdentity;
-  /** The provider's own name for the hook that fired, when the wake is one. */
-  hookEvent?: string;
+  /** The spool token the provider's hook wrote, when the wake is one. */
+  hookEvent?: HookEvent;
   /** The session as the roster held it at the wake, when it still held it. */
   session?: Session;
-  transcriptDelta?: BrainTranscriptDelta;
+  digest?: BrainTranscriptDigest;
   atMs: number;
 }
 

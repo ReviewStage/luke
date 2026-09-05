@@ -158,6 +158,26 @@ test("a brain turn becomes its own generation, and junk lines cost only themselv
     inputItemKinds: ["message", "function_call_output"],
     inputTokens: 1_500,
     transcriptBytes: 4_096,
+    digests: [
+      {
+        source: "model",
+        outcome: "answered",
+        stopState: "finished",
+        elapsedMs: 700,
+        digestChars: 180,
+        transcriptChars: 4_096,
+        model: "gpt-5.6-luna",
+      },
+      {
+        source: "fallback",
+        outcome: "failed",
+        stopState: "errored",
+        elapsedMs: 50,
+        digestChars: 40,
+        transcriptChars: 12,
+        error: "request failed with status 500",
+      },
+    ],
     toolCalls: [{ name: BRAIN_TOOL.ANNOUNCE, argumentsChars: 120, outcomeStatus: "accepted" }],
     outputText: "Checkout is waiting on you.",
     deliveries: [{ briefingChars: 96 }],
@@ -190,9 +210,13 @@ test("a brain turn becomes its own generation, and junk lines cost only themselv
   assert.equal(input?.role, "user");
   assert.equal(
     input?.content,
-    ["trigger: wake", "input items: message, function_call_output", "transcript bytes: 4096"].join(
-      "\n",
-    ),
+    [
+      "trigger: wake",
+      "input items: message, function_call_output",
+      "transcript bytes: 4096",
+      "digest: model, answered, stop state finished, 4096 -> 180 chars",
+      "digest: fallback, failed, stop state errored, 12 -> 40 chars, error: request failed with status 500",
+    ].join("\n"),
   );
   assert.equal(output?.role, "assistant");
   assert.equal(

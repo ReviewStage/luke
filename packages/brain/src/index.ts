@@ -5,6 +5,7 @@ export {
   BrainAgent,
   type BrainAgentOptions,
   type BrainAskAnswer,
+  type BrainDigestTurnTrace,
   type BrainRoster,
   type BrainToolCallTrace,
   type BrainTurnTraceRecord,
@@ -27,11 +28,32 @@ export {
   openAiBrainClient,
 } from "./brain-client.js";
 export {
+  type BrainSessionDigest,
+  DIGEST_SOURCE,
+  DIGEST_STOP_STATE,
+  type DigestInput,
+  type DigestSource,
+  type DigestStopState,
+  digestChars,
+  digestFromModel,
+  fallbackDigest,
+} from "./brain-digest.js";
+export {
+  DIGEST_OPENAI_DEFAULTS,
+  type DigestClient,
+  type DigestClientAnswer,
+  OpenAiDigestClient,
+  type OpenAiDigestClientOptions,
+  type OpenAiDigestOptions,
+  openAiDigestClient,
+} from "./brain-digest-client.js";
+export { type DigestResponsesOptions, digestFromResponsesPayload } from "./brain-digest-openai.js";
+export {
   BRAIN_DELIVERY_SOURCE,
   BRAIN_WAKE_KIND,
   type BrainDelivery,
   type BrainDeliverySource,
-  type BrainTranscriptDelta,
+  type BrainTranscriptDigest,
   type BrainWakeEvent,
   type BrainWakeKind,
 } from "./brain-events.js";

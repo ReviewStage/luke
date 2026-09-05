@@ -1,13 +1,13 @@
 import type { Session } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import type { BrainDelivery, BrainWakeEvent } from "./brain-events.js";
+import type { BrainDelivery, BrainTranscriptDigest, BrainWakeEvent } from "./brain-events.js";
 import { type ResponsesInputItem, userMessageItem } from "./brain-openai.js";
 
 /**
  * The items a turn opens with, each a marker naming what kind of turn it is
  * and then the observed values as JSON behind it. The marker is the whole of
  * the instruction; everything after it is data the instructions tell the
- * model to read as data, however a title, a hook, or a transcript is phrased.
+ * model to read as data, however a title, a hook, or a digest is phrased.
  */
 
 export const BRAIN_INPUT_MARKER = {
@@ -44,15 +44,24 @@ function eventRecord(event: BrainWakeEvent): WireRecord {
     provider_id: event.identity.providerId,
     provider_session_id: event.identity.providerSessionId,
     ...(event.session ? { session: sessionSummary(event.session) } : undefined),
-    ...(event.transcriptDelta
-      ? {
-          transcript_delta: {
-            status: event.transcriptDelta.status,
-            truncated: event.transcriptDelta.truncated,
-            text: event.transcriptDelta.text,
-          },
-        }
-      : undefined),
+    ...(event.digest ? { transcript_digest: digestRecord(event.digest) } : undefined),
+  };
+}
+
+/**
+ * The digest as the brain reads it: the read's status and cut beside the
+ * form's fields, each field present only when the digest carries it. No
+ * transcript text has a slot here, which is the whole point of the digest.
+ */
+function digestRecord(digest: BrainTranscriptDigest): WireRecord {
+  return {
+    status: digest.status,
+    truncated: digest.truncated,
+    source: digest.source,
+    stop_state: digest.digest.stopState,
+    ...(digest.digest.lastAsk ? { last_ask: digest.digest.lastAsk } : undefined),
+    ...(digest.digest.didSince ? { did_since: digest.digest.didSince } : undefined),
+    ...(digest.digest.waitingOn ? { waiting_on: digest.digest.waitingOn } : undefined),
   };
 }
 

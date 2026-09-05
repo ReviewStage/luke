@@ -10,18 +10,29 @@ import {
 } from "@sidecar/session";
 import {
   ACT_RESULT_STATUS,
+  type ActResultStatus,
   isRecord,
   text,
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import { BRAIN_CLIENT_OUTCOME, type BrainClient } from "./brain-client.js";
+import { BRAIN_CLIENT_OUTCOME, type BrainClient, type BrainClientOutcome } from "./brain-client.js";
+import {
+  type BrainSessionDigest,
+  DIGEST_SOURCE,
+  type DigestInput,
+  type DigestSource,
+  type DigestStopState,
+  digestChars,
+  fallbackDigest,
+} from "./brain-digest.js";
+import type { DigestClient } from "./brain-digest-client.js";
 import {
   BRAIN_DELIVERY_SOURCE,
   BRAIN_WAKE_KIND,
   type BrainDelivery,
   type BrainDeliverySource,
-  type BrainTranscriptDelta,
+  type BrainTranscriptDigest,
   type BrainWakeEvent,
 } from "./brain-events.js";
 import {
@@ -44,11 +55,15 @@ import { BRAIN_TOOL, isBrainOnlyTool, maximumBriefingLength } from "./brain-tool
  * its own scheduled look at the roster, asked things by the developer, and
  * answers with briefings for the voice to speak and acts for the host to
  * carry. Nothing detects a change on its behalf: the roster look carries
- * what stands and what each transcript gained, and the brain notices what is
- * new against its own memory. It is transport- and storage-agnostic on
- * purpose — the client, the roster rendering, the transcript reads, the
- * delivery, and the persistence are all handed in — so the same agent runs in
- * the desktop's main process and, later, behind a service request.
+ * what stands and a digest of what each transcript gained, and the brain
+ * notices what is new against its own memory. Raw transcript text reaches the
+ * brain through one door only, its own `read_transcript` tool: what a wake
+ * carries is a digest a smaller model wrote from the slice, or the
+ * deterministic fallback when none could. It is transport- and
+ * storage-agnostic on purpose — the clients, the roster rendering, the
+ * transcript reads, the delivery, and the persistence are all handed in — so
+ * the same agent runs in the desktop's main process and, later, behind a
+ * service request.
  *
  * Every write it can cause still runs the host's own validation: an act tool
  * call goes to the performer as a function call and nothing more, and the host
@@ -62,10 +77,12 @@ export const BRAIN_DEFAULTS = {
   WAKE_COALESCE_MS: 3_000,
   /** How long an ask waits for its reply before the voice is told there is none. */
   ASK_DEADLINE_MS: 45_000,
-  /** The most of one session's new transcript one wake carries, cut from the front. */
+  /** The most of one session's new transcript the summarizer is handed per wake, cut from the front. */
   DELTA_PER_SESSION_CHARS: 20_000,
   /** The most of a whole transcript one read answers with, cut from the front. */
   FULL_TRANSCRIPT_CHARS: 60_000,
+  /** How many digests one turn asks for at once. */
+  DIGEST_PARALLELISM: 3,
 } as const;
 
 /** Stands where the front of a transcript was cut, so the model knows it is reading a tail. */
@@ -117,16 +134,35 @@ export interface BrainToolCallTrace {
 }
 
 /**
+ * One digest a turn attached, as the trace counts it: who wrote it, how the
+ * summarizer call came out, the stop state (a value from a fixed set), how
+ * long it took, two sizes, and the model when the client names one. Never
+ * the slice's text and never the form's words.
+ */
+export interface BrainDigestTurnTrace {
+  source: DigestSource;
+  outcome: BrainClientOutcome;
+  stopState: DigestStopState;
+  elapsedMs: number;
+  digestChars: number;
+  transcriptChars: number;
+  model?: string;
+  error?: string;
+}
+
+/**
  * One turn as the development trace records it: what woke it, the kinds of
  * item it appended, the input size the API counted, how many transcript
- * characters it read, each tool call by name and outcome, the text and
- * briefings it produced, and how it ran — never a transcript's text.
+ * characters it read and each digest it attached as counts, each tool call by
+ * name and outcome, the text and briefings it produced, and how it ran —
+ * never a transcript's text and never a digest's words.
  */
 export interface BrainTurnTraceRecord {
   trigger: BrainTurnTrigger;
   inputItemKinds: readonly string[];
   inputTokens?: number;
   transcriptBytes: number;
+  digests: readonly BrainDigestTurnTrace[];
   toolCalls: readonly BrainToolCallTrace[];
   outputText?: string;
   deliveries: readonly { briefingChars: number }[];
@@ -139,6 +175,8 @@ export interface BrainTurnTraceRecord {
 
 export interface BrainAgentOptions {
   client: BrainClient;
+  /** The summarizer each wake's transcript slice goes to; absent, every digest is the fallback. */
+  digest?: DigestClient;
   acts: BrainActPerformer;
   roster: () => BrainRoster;
   /** Everything the host renders beside the roster: projects, facts, recent conversation, guide. */
@@ -162,6 +200,7 @@ export interface BrainAgentOptions {
   askDeadlineMs?: number;
   deltaPerSessionChars?: number;
   fullTranscriptChars?: number;
+  digestParallelism?: number;
 }
 
 const TURN_OUTCOME = {
@@ -180,8 +219,8 @@ interface TurnPlan {
   events: readonly BrainWakeEvent[];
   open: (events: readonly BrainWakeEvent[], now: number) => readonly ResponsesInputItem[];
   deliverySource?: BrainDeliverySource;
-  /** Whether a roster look's events with nothing new in their transcript are left out. */
-  dropEmptyRosterDeltas?: boolean;
+  /** Whether a roster look's events whose read returned no text are left out, before any digest is asked for. */
+  dropEmptyRosterReads?: boolean;
 }
 
 interface DispatchOutcome {
@@ -193,6 +232,69 @@ interface DispatchOutcome {
 interface FrontCut {
   text: string;
   cut: boolean;
+}
+
+/** What one since-read answered: the bounded text, whether its front was cut, and the read's status. */
+interface DeltaRead {
+  text: string;
+  truncated: boolean;
+  status: ActResultStatus;
+}
+
+/** One woken session on its way to a digest: its read, and every event of the turn that names it. */
+interface WokenSession {
+  identity: SessionIdentity;
+  read: DeltaRead;
+  events: readonly BrainWakeEvent[];
+}
+
+interface DigestOutcome {
+  digest: BrainSessionDigest;
+  source: DigestSource;
+  outcome: BrainClientOutcome;
+  elapsedMs: number;
+  error?: string;
+}
+
+/** Why a digest fell back without a summarizer call, as the trace names it. */
+const DIGEST_FALLBACK_REASON = {
+  NO_SUMMARIZER: "no summarizer",
+  NOTHING_TO_READ: "nothing to read",
+  SUMMARIZER_QUIET: "summarizer quiet",
+  SUMMARIZER_THREW: "summarizer threw",
+} as const;
+
+interface AttachedDigests {
+  events: readonly BrainWakeEvent[];
+  transcriptBytes: number;
+  digests: readonly BrainDigestTurnTrace[];
+}
+
+/**
+ * Maps every item through `work` with at most `limit` in flight, answering in
+ * the items' order. A rejected item rejects the whole map, so the digest work
+ * wraps its own failures.
+ */
+async function mapWithLimit<Item, Result>(
+  items: readonly Item[],
+  limit: number,
+  work: (item: Item) => Promise<Result>,
+): Promise<Result[]> {
+  const results: Result[] = [];
+  let next = 0;
+  const lanes = Math.max(1, Math.min(Math.floor(limit), items.length));
+  const lane = async (): Promise<void> => {
+    for (;;) {
+      const index = next;
+      if (index >= items.length) return;
+      next += 1;
+      const item = items[index];
+      // SAFETY: `index` stayed below `items.length`, so the slot is populated.
+      results[index] = await work(item as Item);
+    }
+  };
+  await Promise.all(Array.from({ length: lanes }, lane));
+  return results;
 }
 
 function cutFront(value: string, maximumChars: number): FrontCut {
@@ -255,6 +357,7 @@ export class BrainAgent {
   readonly #askDeadlineMs: number;
   readonly #deltaPerSessionChars: number;
   readonly #fullTranscriptChars: number;
+  readonly #digestParallelism: number;
   #memory = new BrainMemory();
   #turnInFlight = false;
   #restored: Promise<void> | undefined;
@@ -282,6 +385,7 @@ export class BrainAgent {
     this.#deltaPerSessionChars =
       options.deltaPerSessionChars ?? BRAIN_DEFAULTS.DELTA_PER_SESSION_CHARS;
     this.#fullTranscriptChars = options.fullTranscriptChars ?? BRAIN_DEFAULTS.FULL_TRANSCRIPT_CHARS;
+    this.#digestParallelism = options.digestParallelism ?? BRAIN_DEFAULTS.DIGEST_PARALLELISM;
   }
 
   /** How many wakes are waiting for their turn to open. */
@@ -362,10 +466,11 @@ export class BrainAgent {
    * One look at the whole roster, driven by the host's observation pass rather
    * than an internal timer. Carries the roster as `list_sessions` renders it
    * and, for every local session the brain has read before or that is working
-   * or waiting now, what its transcript gained since — sessions with nothing
-   * new are left out. Skipped while a turn is in flight or the client is
-   * quiet, because the next look reads the same deltas; pending hook wakes
-   * ride along rather than waiting for their own.
+   * or waiting now, a digest of what its transcript gained since — a session
+   * with nothing new makes no summarizer call and is left out. Skipped while a
+   * turn is in flight or the client is quiet, because the next look reads the
+   * same deltas; pending hook wakes ride along rather than waiting for their
+   * own.
    */
   rosterLook(): void {
     if (this.#stopped || this.#turnInFlight) return;
@@ -391,7 +496,7 @@ export class BrainAgent {
         events,
         open: (attached, openedAt) => [wakeInputItem(attached, openedAt, roster.text)],
         deliverySource: BRAIN_DELIVERY_SOURCE.WAKE,
-        dropEmptyRosterDeltas: true,
+        dropEmptyRosterReads: true,
       }),
     );
   }
@@ -489,14 +594,9 @@ export class BrainAgent {
       for (const item of items) appendedKinds.push(text(item.type) ?? "unknown");
     };
 
-    const attachedDeltas = await this.#attachDeltas(plan.events);
-    const transcriptBytes = attachedDeltas.transcriptBytes;
-    const events = plan.dropEmptyRosterDeltas
-      ? attachedDeltas.events.filter(
-          (event) => event.kind !== BRAIN_WAKE_KIND.ROSTER || Boolean(event.transcriptDelta?.text),
-        )
-      : attachedDeltas.events;
-    append(plan.open(events, startedAt));
+    const attached = await this.#attachDigests(plan.events, plan.dropEmptyRosterReads === true);
+    const transcriptBytes = attached.transcriptBytes;
+    append(plan.open(attached.events, startedAt));
 
     for (;;) {
       const roster = this.#options.roster();
@@ -606,6 +706,7 @@ export class BrainAgent {
       inputItemKinds: appendedKinds,
       ...(inputTokens !== undefined ? { inputTokens } : undefined),
       transcriptBytes,
+      digests: attached.digests,
       toolCalls,
       ...(outputText ? { outputText } : undefined),
       deliveries: deliveries.map((delivery) => ({ briefingChars: delivery.briefing.length })),
@@ -621,30 +722,114 @@ export class BrainAgent {
 
   /**
    * Reads what each woken session's transcript gained since the brain last
-   * looked, once per session however many events name it, and moves the
-   * cursor. The cursor moves with the memory: a turn that fails rolls both
-   * back, so the same delta is read again rather than skipped.
+   * looked, once per session however many events name it, moves the cursor,
+   * and turns the slice into a digest — never handing the slice on. The
+   * cursor moves with the memory: a turn that fails rolls both back, so the
+   * same delta is read and summarized again rather than skipped. On a roster
+   * look, a session whose read came back empty is dropped here, before any
+   * summarizer call, so nothing new costs nothing.
    */
-  async #attachDeltas(
+  async #attachDigests(
     events: readonly BrainWakeEvent[],
-  ): Promise<{ events: readonly BrainWakeEvent[]; transcriptBytes: number }> {
-    const read = new IdentitySet();
+    dropEmptyRosterReads: boolean,
+  ): Promise<AttachedDigests> {
+    const identities = new IdentitySet();
+    for (const event of events) identities.add(event.identity);
+    const woken: WokenSession[] = [];
     let transcriptBytes = 0;
-    const attached: BrainWakeEvent[] = [];
-    for (const event of events) {
-      if (read.list().some((identity) => sameIdentity(identity, event.identity))) {
-        attached.push({ ...event });
-        continue;
-      }
-      read.add(event.identity);
-      const delta = await this.#readDelta(event.identity);
-      transcriptBytes += delta.text.length;
-      attached.push({ ...event, transcriptDelta: delta });
+    for (const identity of identities.list()) {
+      const read = await this.#readDelta(identity);
+      transcriptBytes += read.text.length;
+      const named = events.filter(
+        (event) =>
+          sameIdentity(event.identity, identity) &&
+          !(dropEmptyRosterReads && event.kind === BRAIN_WAKE_KIND.ROSTER && !read.text),
+      );
+      if (named.length > 0) woken.push({ identity, read, events: named });
     }
-    return { events: attached, transcriptBytes };
+    const digested = await mapWithLimit(woken, this.#digestParallelism, async (session) => ({
+      session,
+      outcome: await this.#digestFor(session),
+    }));
+    const digestByEvent = new Map<BrainWakeEvent, BrainTranscriptDigest>();
+    for (const { session, outcome } of digested) {
+      const digest: BrainTranscriptDigest = {
+        status: session.read.status,
+        truncated: session.read.truncated,
+        source: outcome.source,
+        digest: outcome.digest,
+      };
+      for (const event of session.events) digestByEvent.set(event, digest);
+    }
+    return {
+      events: events.flatMap((event) => {
+        const digest = digestByEvent.get(event);
+        return digest ? [{ ...event, digest }] : [];
+      }),
+      transcriptBytes,
+      digests: digested.map(({ session, outcome }) => ({
+        source: outcome.source,
+        outcome: outcome.outcome,
+        stopState: outcome.digest.stopState,
+        elapsedMs: outcome.elapsedMs,
+        digestChars: digestChars(outcome.digest),
+        transcriptChars: session.read.text.length,
+        ...(this.#options.digest?.model ? { model: this.#options.digest.model } : undefined),
+        ...(outcome.error ? { error: outcome.error } : undefined),
+      })),
+    };
   }
 
-  async #readDelta(identity: SessionIdentity): Promise<BrainTranscriptDelta> {
+  /**
+   * One session's digest: the summarizer's answer when there is a summarizer,
+   * the read accepted with text, the client is not quiet, and the client
+   * answered; the deterministic fallback otherwise, built from the hook and
+   * the roster alone. The client settles within its own request timeout,
+   * which is the whole deadline: a client that gave up answers `FAILED`.
+   */
+  async #digestFor(session: WokenSession): Promise<DigestOutcome> {
+    const startedAt = this.#now();
+    const observed = session.events.find((event) => event.session)?.session;
+    const hookEvent = [...session.events].reverse().find((event) => event.hookEvent)?.hookEvent;
+    const fallback = (error: string): DigestOutcome => ({
+      digest: fallbackDigest({
+        ...(observed ? { status: observed.status } : undefined),
+        ...(hookEvent ? { hookEvent } : undefined),
+        ...(observed?.detail.error ? { error: observed.detail.error } : undefined),
+      }),
+      source: DIGEST_SOURCE.FALLBACK,
+      outcome: BRAIN_CLIENT_OUTCOME.FAILED,
+      elapsedMs: this.#now() - startedAt,
+      error,
+    });
+    const client = this.#options.digest;
+    if (!client) return fallback(DIGEST_FALLBACK_REASON.NO_SUMMARIZER);
+    if (session.read.status !== ACT_RESULT_STATUS.ACCEPTED || !session.read.text) {
+      return fallback(DIGEST_FALLBACK_REASON.NOTHING_TO_READ);
+    }
+    if (client.quietUntil() !== undefined) return fallback(DIGEST_FALLBACK_REASON.SUMMARIZER_QUIET);
+    const input: DigestInput = {
+      providerName: observed?.provider.displayName ?? session.identity.providerId,
+      ...(observed ? { title: observed.title, status: observed.status } : undefined),
+      ...(hookEvent ? { hookEvent } : undefined),
+      truncated: session.read.truncated,
+      transcript: session.read.text,
+    };
+    const answer = await client.summarize(input).catch(() => undefined);
+    if (answer === undefined) return fallback(DIGEST_FALLBACK_REASON.SUMMARIZER_THREW);
+    if (answer.outcome === BRAIN_CLIENT_OUTCOME.FAILED) return fallback(answer.reason);
+    if (answer.outcome === BRAIN_CLIENT_OUTCOME.QUIET) {
+      return fallback(DIGEST_FALLBACK_REASON.SUMMARIZER_QUIET);
+    }
+    return {
+      digest: answer.digest,
+      source: DIGEST_SOURCE.MODEL,
+      outcome: BRAIN_CLIENT_OUTCOME.ANSWERED,
+      elapsedMs: this.#now() - startedAt,
+    };
+  }
+
+  async #readDelta(identity: SessionIdentity): Promise<DeltaRead> {
     let result: ProviderTranscriptSinceResult;
     try {
       result = await this.#options.readTranscriptSince(identity, this.#memory.cursor(identity));

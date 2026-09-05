@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { HOOK_EVENT } from "./hook-events.js";
+import { HOOK_EVENT } from "@sidecar/session";
 import {
   type ObservedSpoolEvent,
   type SpoolWatch,

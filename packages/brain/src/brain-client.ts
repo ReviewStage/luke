@@ -55,9 +55,10 @@ export interface BrainClient {
 
 /* The key is not read here: it is the stored credential the settings store
    resolves, which reads `OPENAI_API_KEY` as its own fallback. */
-const OPENAI_ENVIRONMENT = {
+export const OPENAI_ENVIRONMENT = {
   BASE_URL: "OPENAI_BASE_URL",
   MODEL: "LUKE_BRAIN_MODEL",
+  DIGEST_MODEL: "LUKE_DIGEST_MODEL",
 } as const;
 
 export const BRAIN_OPENAI_DEFAULTS = {
@@ -79,13 +80,19 @@ const RATE_LIMIT_STATUS = 429;
 const UNAUTHORIZED_STATUS = 401;
 const RETRY_AFTER_HEADER = "retry-after";
 
-type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
+export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
 function withoutTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
-function failed(reason: string): BrainClientAnswer {
+/** The failed variant both client answer shapes share, so one helper serves the brain and the digest. */
+export interface FailedClientAnswer {
+  outcome: typeof BRAIN_CLIENT_OUTCOME.FAILED;
+  reason: string;
+}
+
+export function failedAnswer(reason: string): FailedClientAnswer {
   return { outcome: BRAIN_CLIENT_OUTCOME.FAILED, reason };
 }
 
@@ -94,8 +101,91 @@ async function answered(response: Response): Promise<BrainClientAnswer> {
     const payload: UnparsedWireValue = await response.json();
     return { outcome: BRAIN_CLIENT_OUTCOME.ANSWERED, payload };
   } catch {
-    return failed("response was not JSON");
+    return failedAnswer("response was not JSON");
   }
+}
+
+export const KEYED_RESPONSES_RESULT = {
+  RESPONSE: "response",
+  FAILED: "failed",
+} as const;
+
+export type KeyedResponsesResult =
+  | { kind: typeof KEYED_RESPONSES_RESULT.RESPONSE; response: Response }
+  | { kind: typeof KEYED_RESPONSES_RESULT.FAILED; reason: string };
+
+export interface KeyedResponsesPost {
+  apiKey: string;
+  baseUrl: string;
+  fetch: FetchLike;
+  timeoutMs: number;
+  body: unknown;
+}
+
+/**
+ * The one way a keyed client reaches the Responses API, shared by the brain
+ * and the digest so the two send the same headers and give up on the same
+ * terms. A request that did not complete names only the error's kind: the
+ * request, the key, and any session material stay out of the reason.
+ */
+export async function postKeyedResponses(post: KeyedResponsesPost): Promise<KeyedResponsesResult> {
+  try {
+    const response = await post.fetch(`${post.baseUrl}${BRAIN_RESPONSES_PATH}`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${post.apiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(post.body),
+      signal: AbortSignal.timeout(post.timeoutMs),
+    });
+    return { kind: KEYED_RESPONSES_RESULT.RESPONSE, response };
+  } catch (error) {
+    return {
+      kind: KEYED_RESPONSES_RESULT.FAILED,
+      reason: `request did not complete: ${error instanceof Error ? error.name : "unknown error"}`,
+    };
+  }
+}
+
+/** Whether a response is the rate limit that quiets a keyed client. */
+export function isRateLimited(response: Response): boolean {
+  return response.status === RATE_LIMIT_STATUS;
+}
+
+/** When a rate-limited keyed client may send again: the retry-after it names, or the fixed cooldown. */
+export function rateLimitQuietUntil(response: Response, now: number): number {
+  const retryAfterSeconds = Number(response.headers.get(RETRY_AFTER_HEADER));
+  const waitMs =
+    Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+      ? retryAfterSeconds * 1000
+      : BRAIN_RATE_LIMIT_COOLDOWN_MS;
+  return now + waitMs;
+}
+
+/** A keyed client's base URL: the option when given, else the default, without a trailing slash. */
+export function keyedBaseUrl(option: string | undefined): string {
+  return withoutTrailingSlash(text(option) ?? BRAIN_OPENAI_DEFAULTS.BASE_URL);
+}
+
+/** What a keyed client factory may override from the environment. */
+export interface KeyedClientOverrides {
+  model?: string;
+  baseUrl?: string;
+}
+
+/**
+ * The environment's overrides for a keyed client factory: the model from the
+ * variable the caller names, and the base URL from `OPENAI_BASE_URL`, each
+ * only when the option itself is silent.
+ */
+export function keyedClientOverrides(
+  options: KeyedClientOverrides,
+  modelVariable: string,
+): KeyedClientOverrides {
+  const model = text(options.model) ?? text(process.env[modelVariable]);
+  const baseUrl = text(options.baseUrl) ?? text(process.env[OPENAI_ENVIRONMENT.BASE_URL]);
+  return { ...(model ? { model } : undefined), ...(baseUrl ? { baseUrl } : undefined) };
 }
 
 export interface OpenAiBrainClientOptions {
@@ -132,7 +222,7 @@ export class OpenAiBrainClient implements BrainClient {
     if (!apiKey) throw new Error("OpenAI API key must not be empty");
     this.#apiKey = apiKey;
     this.model = text(options.model) ?? BRAIN_OPENAI_DEFAULTS.MODEL;
-    this.#baseUrl = withoutTrailingSlash(text(options.baseUrl) ?? BRAIN_OPENAI_DEFAULTS.BASE_URL);
+    this.#baseUrl = keyedBaseUrl(options.baseUrl);
     this.#reasoningEffort = options.reasoningEffort ?? BRAIN_OPENAI_DEFAULTS.REASONING_EFFORT;
     this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
     this.#now = options.now ?? Date.now;
@@ -154,45 +244,31 @@ export class OpenAiBrainClient implements BrainClient {
     const quietUntil = this.quietUntil();
     if (quietUntil !== undefined) return { outcome: BRAIN_CLIENT_OUTCOME.QUIET, until: quietUntil };
 
-    let response: Response;
-    try {
-      response = await this.#fetch(`${this.#baseUrl}${BRAIN_RESPONSES_PATH}`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${this.#apiKey}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(
-          brainResponsesRequest(input, {
-            model: this.model,
-            instructions: brainInstructions(),
-            tools: brainToolDefinitions(),
-            maximumOutputTokens: options.maximumOutputTokens,
-            reasoningEffort: this.#reasoningEffort,
-          }),
-        ),
-        signal: AbortSignal.timeout(this.#requestTimeoutMs),
-      });
-    } catch (error) {
-      return failed(
-        `request did not complete: ${error instanceof Error ? error.name : "unknown error"}`,
-      );
-    }
-
-    if (response.status === RATE_LIMIT_STATUS) return this.#quiet(response);
+    const posted = await postKeyedResponses({
+      apiKey: this.#apiKey,
+      baseUrl: this.#baseUrl,
+      fetch: this.#fetch,
+      timeoutMs: this.#requestTimeoutMs,
+      body: brainResponsesRequest(input, {
+        model: this.model,
+        instructions: brainInstructions(),
+        tools: brainToolDefinitions(),
+        maximumOutputTokens: options.maximumOutputTokens,
+        reasoningEffort: this.#reasoningEffort,
+      }),
+    });
+    if (posted.kind === KEYED_RESPONSES_RESULT.FAILED) return failedAnswer(posted.reason);
+    const { response } = posted;
+    if (isRateLimited(response)) return this.#quiet(response);
     // Status alone diagnoses credentials or an outage without writing the
     // request, the key, or any session material to the log.
-    if (!response.ok) return failed(`request failed with status ${response.status}`);
+    if (!response.ok) return failedAnswer(`request failed with status ${response.status}`);
     return answered(response);
   }
 
   #quiet(response: Response): BrainClientAnswer {
-    const retryAfterSeconds = Number(response.headers.get(RETRY_AFTER_HEADER));
-    const waitMs =
-      Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
-        ? retryAfterSeconds * 1000
-        : BRAIN_RATE_LIMIT_COOLDOWN_MS;
-    this.#quietUntil = this.#now() + waitMs;
+    this.#quietUntil = rateLimitQuietUntil(response, this.#now());
+    const waitMs = this.#quietUntil - this.#now();
     this.#report(`OpenAI brain turns are rate limited; pausing for ${Math.round(waitMs / 1000)}s`);
     return { outcome: BRAIN_CLIENT_OUTCOME.QUIET, until: this.#quietUntil };
   }
@@ -209,13 +285,10 @@ export function openAiBrainClient(
 ): OpenAiBrainClient | undefined {
   const resolved = text(apiKey);
   if (!resolved) return undefined;
-  const model = text(options.model) ?? text(process.env[OPENAI_ENVIRONMENT.MODEL]);
-  const baseUrl = text(options.baseUrl) ?? text(process.env[OPENAI_ENVIRONMENT.BASE_URL]);
   return new OpenAiBrainClient({
     ...options,
     apiKey: resolved,
-    ...(model ? { model } : undefined),
-    ...(baseUrl ? { baseUrl } : undefined),
+    ...keyedClientOverrides(options, OPENAI_ENVIRONMENT.MODEL),
   });
 }
 
@@ -274,7 +347,7 @@ export class HostedBrainClient implements BrainClient {
     if (quietUntil !== undefined) return { outcome: BRAIN_CLIENT_OUTCOME.QUIET, until: quietUntil };
 
     const token = await this.#readAccessToken();
-    if (!token) return failed("no account token");
+    if (!token) return failedAnswer("no account token");
 
     const request: HostedBrainRequest = {
       input,
@@ -288,9 +361,10 @@ export class HostedBrainClient implements BrainClient {
       const refreshed = await this.#readAccessToken();
       if (refreshed && refreshed !== token) response = await this.#request(refreshed, request);
     }
-    if (!response) return failed("request did not complete");
-    if (response.status === RATE_LIMIT_STATUS) return this.#quiet(response);
-    if (!response.ok) return failed(`hosted brain turn failed with status ${response.status}`);
+    if (!response) return failedAnswer("request did not complete");
+    if (isRateLimited(response)) return this.#quiet(response);
+    if (!response.ok)
+      return failedAnswer(`hosted brain turn failed with status ${response.status}`);
     return answered(response);
   }
 

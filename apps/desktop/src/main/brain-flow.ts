@@ -5,7 +5,7 @@ import {
   brainPersistedStateFromWire,
 } from "@sidecar/brain";
 import type { ObservedSpoolEvent } from "@sidecar/providers";
-import type { Session, SessionIdentity } from "@sidecar/session";
+import type { HookEvent, Session, SessionIdentity } from "@sidecar/session";
 import type { UnparsedWireValue } from "@sidecar/wire";
 
 /**
@@ -55,7 +55,7 @@ export function brainStateRecord(state: BrainPersistedState): string {
  */
 export function wakeEventsFromHooks(
   providerId: string,
-  hookEvents: readonly ObservedSpoolEvent<string>[],
+  hookEvents: readonly ObservedSpoolEvent<HookEvent>[],
   registry: { get(identity: SessionIdentity): Session | undefined },
   now: number,
 ): readonly BrainWakeEvent[] {
