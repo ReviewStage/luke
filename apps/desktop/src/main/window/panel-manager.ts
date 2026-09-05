@@ -31,6 +31,12 @@ export interface PanelManagerOptions {
   rendererHtmlPath: string;
   rendererUrl: string;
   argv?: readonly string[];
+  /**
+   * The last panel window went down on its own. All panels closed is how
+   * this process decides it is done, and `window-all-closed` can no longer
+   * say so once a hidden window of Luke's own stands beside them.
+   */
+  onAllClosed?: () => void;
 }
 
 /**
@@ -61,6 +67,7 @@ export class PanelManager {
   readonly #preloadPath: string;
   readonly #rendererHtmlPath: string;
   readonly #rendererUrl: string;
+  readonly #onAllClosed: (() => void) | undefined;
   readonly initialMode: WindowMode;
   /**
    * One panel window per display Luke stands on, keyed by the display's id, each
@@ -95,6 +102,7 @@ export class PanelManager {
     this.#preloadPath = options.preloadPath;
     this.#rendererHtmlPath = options.rendererHtmlPath;
     this.#rendererUrl = options.rendererUrl;
+    this.#onAllClosed = options.onAllClosed;
     this.initialMode = initialWindowMode(options.runMode, options.argv ?? process.argv);
   }
 
@@ -298,6 +306,13 @@ export class PanelManager {
     this.#applyVoiceExchanges();
   }
 
+  /** How many panel windows stand — the count the process's lifetime is decided by. */
+  get standing(): number {
+    let count = 0;
+    for (const window of this.#windows.values()) if (!window.isDestroyed()) count += 1;
+    return count;
+  }
+
   /** Whether some panel window's renderer is asking, whichever display it is on. */
   owns(webContents: WebContents): boolean {
     for (const window of this.#windows.values()) {
@@ -491,6 +506,7 @@ export class PanelManager {
         this.#voiceExchanges.delete(id);
         this.#applyVoiceExchanges();
       }
+      if (this.#windows.size === 0) this.#onAllClosed?.();
     });
     void window.loadFile(this.#rendererHtmlPath);
   }

@@ -26,6 +26,7 @@ import { type AppGuideSnapshot, isAppGuideSnapshot } from "@sidecar/guide";
 import type { TrackedIssue } from "@sidecar/issues";
 import {
   type ConversationEntry,
+  maximumTypedAskLength,
   type RealtimeConnection,
   type RealtimeDiagnostics,
   storedConversationEntry,
@@ -90,6 +91,13 @@ import {
   type SpeechWithdrawal,
 } from "./wire/speech";
 import type { UpdateSnapshot } from "./wire/update";
+import {
+  isVoiceCommand,
+  isVoiceView,
+  VOICE_COMMAND,
+  type VoiceCommand,
+  type VoiceView,
+} from "./wire/voice-view";
 
 export interface WireGuard<Value> {
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A bridge guard is the parser at the IPC boundary.
@@ -161,8 +169,26 @@ function isAccountProvider(value: UnparsedWireValue): value is AccountProvider {
   return value === ACCOUNT_PROVIDER.GOOGLE || value === ACCOUNT_PROVIDER.GITHUB;
 }
 
+function isUnitLevel(value: UnparsedWireValue): value is number {
+  return isWireNumber(value) && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+const MICROPHONE_STATUSES: ReadonlySet<string> = new Set<MicrophoneStatus>([
+  "not-determined",
+  "granted",
+  "denied",
+  "restricted",
+  "unknown",
+]);
+
+function isMicrophoneStatus(value: UnparsedWireValue): value is MicrophoneStatus {
+  return isWireString(value) && MICROPHONE_STATUSES.has(value);
+}
+
 function isWindowRole(value: UnparsedWireValue): value is WindowRole {
-  return value === WINDOW_ROLE.PANEL || value === WINDOW_ROLE.INTRODUCTION;
+  return (
+    value === WINDOW_ROLE.PANEL || value === WINDOW_ROLE.INTRODUCTION || value === WINDOW_ROLE.VOICE
+  );
 }
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This function parses an IPC field into a domain identity.
@@ -525,6 +551,55 @@ export const BRIDGE = {
     result: result<void>(),
   }),
   /**
+   * A panel's ask of the voice window, carried through the main process, which
+   * validates it and forwards it on `onVoiceCommand`. Only a typed ask carries
+   * a payload — the words themselves, bounded by the same limit the session
+   * applies — and every other command carries none.
+   */
+  voiceCommand: entry({
+    kind: "invoke",
+    channel: "app:voice-command",
+    args: args<[VoiceCommand, string | undefined]>(
+      (v) =>
+        v.length === 2 &&
+        isVoiceCommand(v[0]) &&
+        (v[0] === VOICE_COMMAND.ASK_TEXT
+          ? isWireString(v[1]) && v[1].length <= maximumTypedAskLength
+          : v[1] === undefined),
+    ),
+    result: result<void>(),
+  }),
+  /**
+   * The voice window's whole snapshot of the live conversation, reported on
+   * every edge. The main process keeps only the latest, to hand a panel that
+   * opens later, and forwards each one to every panel on `onVoiceViewChanged`.
+   */
+  reportVoiceView: entry({
+    kind: "send",
+    channel: "app:report-voice-view",
+    args: args<[VoiceView]>((v) => v.length === 1 && isVoiceView(v[0])),
+  }),
+  /**
+   * How loud whoever is talking is right now, in the unit interval, reported
+   * by the voice window at a bounded rate only while a turn is listening or
+   * responding. It rides its own channel so the snapshot stays edge-driven.
+   */
+  reportVoiceLevel: entry({
+    kind: "send",
+    channel: "app:report-voice-level",
+    args: args<[number]>((v) => v.length === 1 && isUnitLevel(v[0])),
+  }),
+  /**
+   * Whether a panel is recording a new shortcut, during which the talk key it
+   * is capturing must not open a turn. Panel state gating a global key the
+   * main process routes, so the main process is told rather than the window.
+   */
+  setShortcutCapturing: entry({
+    kind: "send",
+    channel: "app:set-shortcut-capturing",
+    args: oneBoolean,
+  }),
+  /**
    * One window's copy of the conversation history, reported whole after each
    * line it appends. The main process holds the launch's thread and mirrors
    * the report to every other panel window, so the History tab reads the same
@@ -816,6 +891,48 @@ export const BRIDGE = {
     channel: "app:speech-withdrawn",
     args: noArgs,
     result: result<SpeechWithdrawal>(isSpeechWithdrawal),
+  }),
+  /** The latest voice snapshot, forwarded by the main process to every panel. */
+  onVoiceViewChanged: entry({
+    kind: "subscribe",
+    channel: "app:voice-view-changed",
+    args: noArgs,
+    result: result<VoiceView>(isVoiceView),
+  }),
+  /** The current loudness of whoever is talking, relayed to every panel. */
+  onVoiceLevelChanged: entry({
+    kind: "subscribe",
+    channel: "app:voice-level-changed",
+    args: noArgs,
+    result: result<number>(isUnitLevel),
+  }),
+  /**
+   * The system's answer on microphone access, which the main process owns and
+   * broadcasts so no panel has to hold a microphone to know it.
+   */
+  onMicrophoneStatusChanged: entry({
+    kind: "subscribe",
+    channel: "app:microphone-status-changed",
+    args: noArgs,
+    result: result<MicrophoneStatus>(isMicrophoneStatus),
+  }),
+  /**
+   * A panel's validated command, forwarded by the main process to the voice
+   * window alone; a typed ask arrives with its words, every other command with
+   * none.
+   */
+  onVoiceCommand: entry({
+    kind: "subscribe",
+    channel: "app:voice-command-forwarded",
+    args: noArgs,
+    result: result<{ command: VoiceCommand; text: string | undefined }>(
+      (value) =>
+        isRecord(value) &&
+        isVoiceCommand(value.command) &&
+        (value.command === VOICE_COMMAND.ASK_TEXT
+          ? isWireString(value.text) && value.text.length <= maximumTypedAskLength
+          : value.text === undefined),
+    ),
   }),
   /**
    * An app act the brain decided that only the renderer can perform, already

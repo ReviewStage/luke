@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { maximumTypedAskLength } from "@sidecar/realtime";
 import { BRIDGE } from "./bridge";
 
 test("act bridge entries reject legacy and malformed outcomes", () => {
@@ -174,4 +175,97 @@ test("settling speech takes an id and one of the four outcomes", () => {
   assert.equal(guard(["one", "dropped"]), false);
   assert.equal(guard([1, "spoken"]), false);
   assert.equal(guard(["one", "spoken", "extra"]), false);
+});
+
+test("the window role guard admits the hidden voice role beside the drawn two", () => {
+  const guard = BRIDGE.getWindowRole.result;
+  assert.ok(guard);
+  assert.equal(guard("panel"), true);
+  assert.equal(guard("introduction"), true);
+  assert.equal(guard("voice"), true);
+  assert.equal(guard("takeover"), false);
+});
+
+const VOICE_VIEW = {
+  voiceStatus: "responding",
+  voiceError: undefined,
+  voiceNotice: "Listening on the built-in microphone.",
+  talkOpening: false,
+  lukeCaptions: ["Claude Code finished checkout."],
+  liveConversationEntries: [{ kind: "reply", words: "Checkout is green.", recordedAt: 12 }],
+};
+
+test("a voice view carries its six fields and nothing malformed", () => {
+  const guard = BRIDGE.onVoiceViewChanged.result;
+  assert.ok(guard);
+  assert.equal(guard(VOICE_VIEW), true);
+  assert.equal(guard({ ...VOICE_VIEW, lukeCaptions: undefined, voiceNotice: undefined }), true);
+  assert.equal(guard({ ...VOICE_VIEW, voiceStatus: "shouting" }), false);
+  assert.equal(guard({ ...VOICE_VIEW, talkOpening: "yes" }), false);
+  assert.equal(guard({ ...VOICE_VIEW, voiceError: 4 }), false);
+  assert.equal(guard({ ...VOICE_VIEW, lukeCaptions: [1] }), false);
+  assert.equal(guard({ ...VOICE_VIEW, liveConversationEntries: [{ kind: "reply" }] }), false);
+  assert.equal(guard({ ...VOICE_VIEW, liveConversationEntries: undefined }), false);
+  assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW]), true);
+  assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, VOICE_VIEW]), false);
+  assert.equal(BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, voiceStatus: 1 }]), false);
+});
+
+test("a voice level is one finite number in the unit interval", () => {
+  const guard = BRIDGE.onVoiceLevelChanged.result;
+  assert.ok(guard);
+  assert.equal(guard(0), true);
+  assert.equal(guard(0.5), true);
+  assert.equal(guard(1), true);
+  assert.equal(guard(1.5), false);
+  assert.equal(guard(-0.1), false);
+  assert.equal(guard(Number.NaN), false);
+  assert.equal(guard("loud"), false);
+  assert.equal(BRIDGE.reportVoiceLevel.args([0.25]), true);
+  assert.equal(BRIDGE.reportVoiceLevel.args([]), false);
+  assert.equal(BRIDGE.reportVoiceLevel.args([0.25, 0.5]), false);
+});
+
+test("a microphone status broadcast is one of the system's five answers", () => {
+  const guard = BRIDGE.onMicrophoneStatusChanged.result;
+  assert.ok(guard);
+  for (const status of ["not-determined", "granted", "denied", "restricted", "unknown"]) {
+    assert.equal(guard(status), true);
+  }
+  assert.equal(guard("allowed"), false);
+  assert.equal(guard(undefined), false);
+});
+
+test("a voice command carries words only for a typed ask, bounded", () => {
+  assert.equal(BRIDGE.voiceCommand.kind, "invoke");
+  const guard = BRIDGE.voiceCommand.args;
+  assert.equal(guard(["ask-text", "what is checkout doing"]), true);
+  assert.equal(guard(["ask-text", "x".repeat(maximumTypedAskLength)]), true);
+  assert.equal(guard(["ask-text", "x".repeat(maximumTypedAskLength + 1)]), false);
+  assert.equal(guard(["ask-text", undefined]), false);
+  for (const command of [
+    "discard-listening",
+    "stop-speaking",
+    "request-microphone-access",
+    "clear-conversation",
+  ]) {
+    assert.equal(guard([command, undefined]), true);
+    assert.equal(guard([command, "words"]), false);
+  }
+  assert.equal(guard(["stop-microphone", undefined]), false);
+  assert.equal(guard(["stop-speaking"]), false);
+  const forwarded = BRIDGE.onVoiceCommand.result;
+  assert.ok(forwarded);
+  assert.equal(forwarded({ command: "ask-text", text: "hello" }), true);
+  assert.equal(forwarded({ command: "stop-speaking", text: undefined }), true);
+  assert.equal(forwarded({ command: "stop-speaking", text: "hello" }), false);
+  assert.equal(forwarded({ command: "ask-text", text: undefined }), false);
+  assert.equal(forwarded({ command: "dance" }), false);
+});
+
+test("shortcut capture is reported as one boolean", () => {
+  assert.equal(BRIDGE.setShortcutCapturing.kind, "send");
+  assert.equal(BRIDGE.setShortcutCapturing.args([true]), true);
+  assert.equal(BRIDGE.setShortcutCapturing.args(["true"]), false);
+  assert.equal(BRIDGE.setShortcutCapturing.args([]), false);
 });

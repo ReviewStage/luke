@@ -8,6 +8,7 @@ import {
   REALTIME_VOICE,
   REALTIME_VOICE_SPEED,
 } from "@sidecar/realtime";
+import { voiceExchangeActive, voiceExchangeKind } from "#shared/wire/voice-view";
 import { REPLY_KIND } from "./realtime-session";
 import {
   activeVoiceStream,
@@ -25,8 +26,6 @@ import {
   typedAskHolds,
   VOICE_RESTART,
   voiceErrorToShow,
-  voiceExchangeActive,
-  voiceExchangeKind,
   voiceNoticeToShow,
   voiceRestartAction,
   waitForConversationContext,
