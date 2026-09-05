@@ -6,6 +6,7 @@ export {
 export {
   ISSUE_ACTION_KIND,
   ISSUE_TRACKER_ID,
+  ISSUE_TRACKER_ID_LIST,
   type IssueIdentity,
   type IssueTracker,
   type IssueTrackerAdapter,

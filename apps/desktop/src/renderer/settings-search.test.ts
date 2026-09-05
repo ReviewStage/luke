@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CLOUD_AGENT_PROVIDER_LIST, CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
+import {
+  CLOUD_AGENT_PROVIDER_LIST,
+  CONNECTION_ID,
+  CREDENTIAL_PROVIDER_ID,
+} from "@sidecar/credentials/vocabulary";
 import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import { APP_SETTING_SCHEMA, settingFieldForGuideId, settingGuideEntries } from "@sidecar/settings";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
@@ -26,7 +30,10 @@ function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
         [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
       },
       secretStorage: SECRET_STORAGE.UNKNOWN,
-      codexCloudConnection: CLI_CONNECTION.UNKNOWN,
+      cliConnections: {
+        [CONNECTION_ID.CODEX]: CLI_CONNECTION.UNKNOWN,
+        [CONNECTION_ID.SUPERSET]: CLI_CONNECTION.UNKNOWN,
+      },
       voiceAvailable: true,
       voiceSource: VOICE_SOURCE.ACCOUNT,
       showInDock: false,
@@ -39,7 +46,7 @@ function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
       announceSessions: true,
       calendarSignInAvailable: false,
       appleCalendarAvailable: false,
-      linearSignInAvailable: false,
+      consentSignInAvailable: { [CONNECTION_ID.LINEAR]: false },
       calendarAccounts: [],
       showOnAllDisplays: false,
       formFactor: PANEL_FORM_FACTOR.BUBBLE,
@@ -53,7 +60,6 @@ function searchInput(overrides: Partial<SettingsSearchInput> = {}): SettingsSear
     settings: settings(),
     voiceControlsDrawn: true,
     accountDrawn: true,
-    superset: { installed: false, connected: false, agentsOffered: false },
     workspaceProjects: [],
     ...overrides,
   };
@@ -71,13 +77,16 @@ function everythingDrawn(): SettingsSearchInput {
       // The key half live is what draws the OpenAI row on the front page.
       voiceSource: VOICE_SOURCE.KEY,
       calendarSignInAvailable: true,
-      linearSignInAvailable: true,
+      consentSignInAvailable: { [CONNECTION_ID.LINEAR]: true },
+      cliConnections: {
+        [CONNECTION_ID.CODEX]: CLI_CONNECTION.CONNECTED,
+        [CONNECTION_ID.SUPERSET]: CLI_CONNECTION.CONNECTED,
+      },
       calendarAccounts: [{ id: "dev@example.com", selectedCalendarIds: [] }],
     }),
-    superset: { installed: true, connected: true, agentsOffered: true },
     workspaceProjects: [
       { id: CREDENTIAL_PROVIDER_ID.CONDUCTOR, name: "Conductor" },
-      { id: "superset", name: "Superset" },
+      { id: "superset", name: "Superset", agentsOffered: true },
     ],
   });
 }

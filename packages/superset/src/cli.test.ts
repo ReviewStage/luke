@@ -3,7 +3,14 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { ACT_RESULT_STATUS, PROVIDER_ID, SESSION_STATUS } from "@sidecar/session";
+import { PROVIDER_ACT, workspaceProviderCapabilities } from "@sidecar/providers";
+import { implementedActs } from "@sidecar/providers/testing";
+import {
+  ACT_RESULT_STATUS,
+  PROVIDER_ID,
+  SESSION_STATUS,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
+} from "@sidecar/session";
 import { isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
 import {
   isSupersetControlId,
@@ -11,6 +18,7 @@ import {
   SupersetCli,
   SupersetWorkspaceAdapter,
 } from "./cli.js";
+import { SUPERSET_HOST_ACTS } from "./host.js";
 import type { SupersetSessionContext } from "./workspaces.js";
 
 async function connectedHome(t: TestContext): Promise<string> {
@@ -50,6 +58,16 @@ const CONTEXT: SupersetSessionContext = {
   updatedAt: 100,
   spawnableAgents: [],
 };
+
+test("the workspace adapter and the host together implement exactly the declared acts", () => {
+  const cli = new SupersetCli({ homeDirectory: "/missing" });
+  const adapterActs = implementedActs(new SupersetWorkspaceAdapter(cli));
+  assert.deepEqual(adapterActs, new Set([PROVIDER_ACT.CREATE_WORKSPACE]));
+  assert.deepEqual(
+    new Set([...adapterActs, ...SUPERSET_HOST_ACTS]),
+    new Set(workspaceProviderCapabilities(SUPERSET_WORKSPACE_PROVIDER_ID).acts),
+  );
+});
 
 test("recognizes only controls owned by Superset", () => {
   assert.equal(isSupersetControlId(SUPERSET_CONTROL_ID.DELETE_WORKSPACE), true);

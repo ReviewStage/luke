@@ -1,3 +1,15 @@
+export {
+  PROVIDER_ACT,
+  PROVIDER_ACT_LIST,
+  PROVIDER_CAPABILITIES,
+  type ProviderAct,
+  type ProviderCapabilities,
+  providerCapabilities,
+  providersWithAct,
+  WORKSPACE_PROVIDER_CAPABILITIES,
+  workspaceProviderCapabilities,
+  workspaceProvidersWithAct,
+} from "./capabilities.js";
 export { ClaudeDesktopSessionApplicationReader } from "./claude-code/desktop-applications.js";
 export { CodexCloudSessionAdapter } from "./codex/cloud-adapter.js";
 export {
@@ -5,9 +17,22 @@ export {
   ConductorRepositoryReader,
 } from "./conductor/local-workspace-adapter.js";
 export { ConductorSessionApplicationReader } from "./conductor/session-applications.js";
-export { ObservationHookRegistry } from "./hook-registry.js";
+export {
+  OBSERVATION_HOOK_PROVIDER_IDS,
+  type ObservationHookProviderId,
+  ObservationHookRegistry,
+} from "./hook-registry.js";
 export { type LocalPeekOptions, peekLocalSessions } from "./local-peek.js";
-export { type ProviderRegistration, providerRegistrations } from "./registrations.js";
+export {
+  type ProviderRefresh,
+  type ProviderRegistration,
+  providerRegistrations,
+  REGISTRATION_OBSERVATION,
+  type RegistrationObservation,
+  registrationObservation,
+  type WorkspaceProviderRegistrationOptions,
+  workspaceProviderRegistrations,
+} from "./registrations.js";
 export {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticCallback,
@@ -27,5 +52,6 @@ export {
   type WorkspaceHostEnrichment,
   type WorkspaceHostRegistration,
   type WorkspaceHostRegistrationOptions,
+  type WorkspaceHostSessionActs,
   workspaceHostRegistrations,
 } from "./shared/workspace-hosts.js";

@@ -1,19 +1,16 @@
+export type { ConnectionRegistration, ConsentConnect } from "./connection-registration.js";
 export {
-  CLOUD_AGENT_PROVIDER_LIST,
-  CREDENTIAL_CONNECTION,
-  CREDENTIAL_PROVIDER_ID,
-  CREDENTIAL_PROVIDER_LIST,
-  CREDENTIAL_PROVIDERS,
-  type CredentialConnection,
-  type CredentialFormat,
-  type CredentialProvider,
-  type CredentialProviderId,
-  INTEGRATION_PROVIDER_LIST,
-  isCredentialProviderId,
-  providerRunsSessionsInCloud,
-  VOICE_CREDENTIAL_PROVIDER,
-  VOICE_CREDENTIAL_PROVIDER_ID,
-} from "./credential-providers.js";
+  type ConsentGrant,
+  type ConsentSignIn,
+  type ConsentSignInRefusal,
+  INTERACTIVE_SIGN_IN_STAGE,
+  type InteractiveSignIn,
+  type InteractiveSignInScope,
+  type InteractiveSignInSnapshot,
+  type InteractiveSignInStage,
+  SIGN_IN_EDGE,
+  type SignInEdge,
+} from "./interactive-sign-in.js";
 export {
   accountLoopbackPage,
   LOOPBACK_CONNECTION_SOURCE,
@@ -24,3 +21,4 @@ export {
 } from "./loopback-page.js";
 export { codeChallenge, createCodeVerifier } from "./pkce.js";
 export { singleFlight } from "./single-flight.js";
+export * from "./vocabulary.js";

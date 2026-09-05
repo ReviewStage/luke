@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
+import { CONNECTION_ID, CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import {
   APP_SETTING_KIND,
   APP_UPDATE_ACT,
@@ -8,14 +8,24 @@ import {
   type AppGuideSetting,
 } from "@sidecar/guide";
 import {
+  PROVIDER_ACT,
+  type ProviderAct,
+  workspaceProvidersWithAct,
+} from "@sidecar/providers/vocabulary";
+import {
   REALTIME_DEFAULTS,
   REALTIME_VOICE,
   REALTIME_VOICE_LIST,
   REALTIME_VOICE_SPEED,
 } from "@sidecar/realtime";
-import { PROVIDER_ID, type WorkspaceAgentSelection } from "@sidecar/session";
+import {
+  PROVIDER_ID,
+  type WorkspaceAgentSelection,
+  workspaceProviderDisplayName,
+} from "@sidecar/session";
 import { VOICE_SOURCE } from "@sidecar/settings";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
+import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import {
   ACCOUNT_PROVIDER,
   ACCOUNT_STATUS,
@@ -32,6 +42,7 @@ import {
   applySpokenSetting,
   buildLukeGuide,
   type LukeGuideInput,
+  oxfordJoin,
 } from "./luke-guide";
 
 function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
@@ -46,7 +57,10 @@ function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
         [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
       },
       secretStorage: SECRET_STORAGE.UNKNOWN,
-      codexCloudConnection: CLI_CONNECTION.UNKNOWN,
+      cliConnections: {
+        [CONNECTION_ID.CODEX]: CLI_CONNECTION.UNKNOWN,
+        [CONNECTION_ID.SUPERSET]: CLI_CONNECTION.UNKNOWN,
+      },
       showInDock: false,
       voice: REALTIME_VOICE.CEDAR,
       voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
@@ -56,7 +70,7 @@ function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
       announceSessions: true,
       calendarSignInAvailable: false,
       appleCalendarAvailable: false,
-      linearSignInAvailable: false,
+      consentSignInAvailable: { [CONNECTION_ID.LINEAR]: false },
       calendarAccounts: [],
       showOnAllDisplays: false,
       formFactor: PANEL_FORM_FACTOR.BUBBLE,
@@ -215,7 +229,11 @@ test("the facts say what is connected, never what connects it", () => {
   // A build carrying the Linear registration describes the tracker: that it
   // is signed into rather than typed into, and what connecting it allows.
   const tracker = JSON.stringify(
-    buildLukeGuide(guideInput({ settings: settings({ linearSignInAvailable: true }) })).facts,
+    buildLukeGuide(
+      guideInput({
+        settings: settings({ consentSignInAvailable: { [CONNECTION_ID.LINEAR]: true } }),
+      }),
+    ).facts,
   );
   assert.match(tracker, /"label":"Linear"/);
   assert.match(tracker, /Linear \(not connected\)/);
@@ -374,6 +392,53 @@ test("the facts describe creating a workspace, so Luke does not deny the capabil
   assert.match(rendered, /permanent, never filed away/);
 });
 
+test("the facts name providers from the capability declaration, never from a hand-kept list", () => {
+  const rendered = JSON.stringify(buildLukeGuide(guideInput()).facts);
+  const escapeRegExp = (words: string) => words.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const names = (act: ProviderAct, conjunction?: string) =>
+    oxfordJoin(workspaceProvidersWithAct(act).map(workspaceProviderDisplayName), conjunction);
+
+  assert.equal(names(PROVIDER_ACT.READ_TRANSCRIPT), "Claude Code, Codex, and OMP");
+  assert.match(
+    rendered,
+    new RegExp(
+      `own recent transcript — ${escapeRegExp(names(PROVIDER_ACT.READ_TRANSCRIPT))} on this machine today`,
+      "u",
+    ),
+  );
+  assert.equal(
+    names(PROVIDER_ACT.CREATE_WORKSPACE),
+    "Codex, Conductor, Superset, and Conductor (local)",
+  );
+  assert.match(
+    rendered,
+    new RegExp(
+      `creation endpoint — ${escapeRegExp(names(PROVIDER_ACT.CREATE_WORKSPACE))} today`,
+      "u",
+    ),
+  );
+  assert.equal(names(PROVIDER_ACT.ADD_AGENT), "Conductor and Superset");
+  assert.match(
+    rendered,
+    new RegExp(
+      `documents it — ${escapeRegExp(names(PROVIDER_ACT.ADD_AGENT))} today — the same kind of ask`,
+      "u",
+    ),
+  );
+  assert.equal(names(PROVIDER_ACT.RENAME_WORKSPACE, "or"), "Conductor or Superset");
+  assert.equal(names(PROVIDER_ACT.RENAME_SESSION, "or"), "Conductor");
+  // The keyless local providers and the CLI-login sentence come from the same
+  // declarations the rows draw from.
+  assert.match(rendered, /Local providers such as Claude Code and OMP need no key/);
+  assert.match(
+    rendered,
+    /Codex cloud tasks \(not checked yet\) follow the Codex CLI's own login: codex login connects them/,
+  );
+  assert.doesNotMatch(rendered, /Superset cloud tasks/);
+  // Every app that can hold a chat is named where the marks are explained.
+  assert.match(rendered, /several apps — ChatGPT, Claude, Conductor, Superset — wears their marks/);
+});
+
 test("the facts describe renaming workspaces and chats, so Luke does not deny the capability", () => {
   const rendered = JSON.stringify(buildLukeGuide(guideInput()).facts);
 
@@ -383,8 +448,23 @@ test("the facts describe renaming workspaces and chats, so Luke does not deny th
   assert.match(rendered, /roster entry allows neither takes no such ask/);
   // Both surfaces that can rename are named, and the disambiguation the
   // conversation applies is the one the guide teaches.
-  assert.match(rendered, /Superset-managed workspace, or a Conductor chat/);
+  assert.match(rendered, /a workspace Conductor or Superset manages, or a Conductor chat/);
   assert.match(rendered, /one about the chat renames the chat/);
+});
+
+test("a spoken change to a provider whose agents are observed kinds is refused by name", async () => {
+  const kind = guideSetting(APP_SETTING_ID.SUPERSET_AGENT);
+  assert.equal(kind.adjustable, false);
+  // A fixture carrying no bridge call: the refusal must land before any write.
+  const result = await applySpokenSetting(
+    spokenSettingBridge({}),
+    { setting: kind, value: "claude" },
+    () => undefined,
+  );
+  assert.deepEqual(result, {
+    status: ACT_RESULT_STATUS.REJECTED,
+    reason: "Which agent new Superset sessions run is chosen by hand in Settings.",
+  });
 });
 
 test("the guide offers what a new Conductor agent runs, by the names people know", () => {

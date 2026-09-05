@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import http from "node:http";
+import type { ConsentGrant } from "@sidecar/credentials";
 // The same landing page the Luke account sign-in leaves the browser on, and the
 // same RFC 7636 arithmetic every other flow here uses: no two of Luke's consent
 // trips dress their tabs differently, and none can drift into a weaker verifier
@@ -137,12 +138,7 @@ function signInPage(granted: boolean): string {
  * registrations — and a grant without one is simply reconnected when its
  * access token finally expires.
  */
-export interface LinearGrant {
-  accessToken: string;
-  refreshToken?: string;
-  /** When the access token stops being honoured, as epoch milliseconds. */
-  expiresAt: number;
-}
+export type LinearGrant = ConsentGrant;
 
 export type LinearSignInOutcome = LinearGrant | { reason: string };
 

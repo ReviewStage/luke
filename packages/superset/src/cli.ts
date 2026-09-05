@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import type { InteractiveSignInScope } from "@sidecar/credentials/interactive-sign-in";
 import { boundedInvocation, INVOCATION_FAILURE, InvocationError } from "@sidecar/process";
 import { canIgnoreFilesystemError } from "@sidecar/providers";
 import {
@@ -23,7 +24,6 @@ import {
   type WireRecord,
   wireRecord,
 } from "@sidecar/wire";
-import type { SupersetOrganizationChoice } from "./sign-in-stage.js";
 import type { SupersetSessionContext } from "./workspaces.js";
 
 export const SUPERSET_CONTROL_ID = {
@@ -203,7 +203,7 @@ export class SupersetCli {
     }
   }
 
-  async organizations(): Promise<readonly SupersetOrganizationChoice[]> {
+  async organizations(): Promise<readonly InteractiveSignInScope[]> {
     try {
       const output = await this.#query(this.executable, ["organization", "list", "--json"], 30_000);
       const parsed = unparsedWire(JSON.parse(output));

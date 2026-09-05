@@ -1,27 +1,29 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { CONNECTION_ID, connectionDeclaration } from "@sidecar/credentials/vocabulary";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { SUPERSET_SIGN_IN_STAGE, type SupersetSignInSnapshot } from "#shared/wire/session";
-import { SupersetSignInSlot } from "./superset-sign-in-slot";
+import { INTERACTIVE_SIGN_IN_STAGE, type InteractiveSignInSnapshot } from "#shared/wire/session";
+import { InteractiveSignInSlot } from "./interactive-sign-in-slot";
 
-function render(state: SupersetSignInSnapshot): string {
+function render(state: InteractiveSignInSnapshot): string {
   return renderToStaticMarkup(
-    createElement(SupersetSignInSlot, {
+    createElement(InteractiveSignInSlot, {
+      declaration: connectionDeclaration(CONNECTION_ID.SUPERSET),
       state,
       drawn: true,
       onSubmit: () => undefined,
       onReopen: () => undefined,
       onCancel: () => undefined,
       onRetry: () => undefined,
-      onChooseOrganization: () => undefined,
+      onChooseScope: () => undefined,
       measure: () => undefined,
     }),
   );
 }
 
 test("the browser stage speaks the key popups' own language", () => {
-  const markup = render({ stage: SUPERSET_SIGN_IN_STAGE.BROWSER_CODE, organizations: [] });
+  const markup = render({ stage: INTERACTIVE_SIGN_IN_STAGE.BROWSER_CODE, scopes: [] });
   assert.match(markup, /key-slot-label[^>]*>Sign-in code/);
   assert.match(markup, /key-slot-foot/);
   assert.match(markup, /type="password"/);
@@ -33,21 +35,21 @@ test("the browser stage speaks the key popups' own language", () => {
 });
 
 test("the slot introduces itself the way every other slot does", () => {
-  const markup = render({ stage: SUPERSET_SIGN_IN_STAGE.BROWSER_CODE, organizations: [] });
+  const markup = render({ stage: INTERACTIVE_SIGN_IN_STAGE.BROWSER_CODE, scopes: [] });
   assert.match(markup, /class="key-slot sign-in-slot"/);
   assert.match(markup, /data-mark="superset"/);
 });
 
 test("the exchange disables the code field and says it is connecting", () => {
-  const markup = render({ stage: SUPERSET_SIGN_IN_STAGE.EXCHANGING, organizations: [] });
+  const markup = render({ stage: INTERACTIVE_SIGN_IN_STAGE.EXCHANGING, scopes: [] });
   assert.match(markup, /disabled=""/);
   assert.match(markup, /Connecting…/);
 });
 
 test("the organization stage draws only the returned identities", () => {
   const markup = render({
-    stage: SUPERSET_SIGN_IN_STAGE.ORGANIZATION,
-    organizations: [
+    stage: INTERACTIVE_SIGN_IN_STAGE.SCOPE,
+    scopes: [
       { id: "one", name: "Acme", slug: "acme" },
       { id: "two", name: "Luke", slug: "luke" },
     ],
@@ -59,7 +61,7 @@ test("the organization stage draws only the returned identities", () => {
 });
 
 test("the organization switch keeps the one-line dress and asks for no code", () => {
-  const markup = render({ stage: SUPERSET_SIGN_IN_STAGE.SWITCHING, organizations: [] });
+  const markup = render({ stage: INTERACTIVE_SIGN_IN_STAGE.SWITCHING, scopes: [] });
   assert.match(markup, /Connecting…/);
   assert.match(markup, /Cancel/);
   assert.doesNotMatch(markup, /Sign-in code/);
@@ -69,9 +71,9 @@ test("the organization switch keeps the one-line dress and asks for no code", ()
 
 test("a bounded failure offers both another sign-in and close", () => {
   const markup = render({
-    stage: SUPERSET_SIGN_IN_STAGE.FAILURE,
+    stage: INTERACTIVE_SIGN_IN_STAGE.FAILURE,
     failure: "Superset sign-in did not finish.",
-    organizations: [],
+    scopes: [],
   });
   assert.match(markup, /Not connected/);
   assert.match(markup, /Sign in again/);

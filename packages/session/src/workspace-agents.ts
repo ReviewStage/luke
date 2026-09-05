@@ -1,12 +1,71 @@
 import { isWireString, type UnparsedWireValue, wireRecord } from "@sidecar/wire";
 import {
-  isProviderId,
+  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
+  isWorkspaceProviderId,
   PROVIDER_ID,
-  type ProviderId,
+  SUPERSET_WORKSPACE_PROVIDER_ID,
+  WORKSPACE_PROVIDER_ID_LIST,
   type WorkspaceAgentKindSelection,
   type WorkspaceAgentModels,
   type WorkspaceAgentSelection,
+  type WorkspaceProviderId,
 } from "./providers.js";
+
+/**
+ * What kind of agent choice a workspace provider's creation endpoints take:
+ * none at all, one of the agent kinds its own configuration lists (observed
+ * per workspace, so no table here can name them), or a model from a table
+ * this build documents. Every settings row, stored default, and spoken change
+ * about a new agent branches on this declaration rather than on a name.
+ */
+export const AGENT_CHOICE = {
+  NONE: "none",
+  KINDS: "kinds",
+  MODELS: "models",
+} as const;
+
+export type AgentChoice = (typeof AGENT_CHOICE)[keyof typeof AGENT_CHOICE];
+
+export const WORKSPACE_AGENT_CHOICE = {
+  [PROVIDER_ID.CLAUDE_CODE]: AGENT_CHOICE.NONE,
+  [PROVIDER_ID.CODEX]: AGENT_CHOICE.NONE,
+  [PROVIDER_ID.CONDUCTOR]: AGENT_CHOICE.MODELS,
+  [PROVIDER_ID.OMP]: AGENT_CHOICE.NONE,
+  [SUPERSET_WORKSPACE_PROVIDER_ID]: AGENT_CHOICE.KINDS,
+  [CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID]: AGENT_CHOICE.NONE,
+} as const satisfies Readonly<Record<WorkspaceProviderId, AgentChoice>>;
+
+type ProvidersChoosing<Choice extends AgentChoice> = {
+  [Id in WorkspaceProviderId]: (typeof WORKSPACE_AGENT_CHOICE)[Id] extends Choice ? Id : never;
+}[WorkspaceProviderId];
+
+export type ModelsWorkspaceProviderId = ProvidersChoosing<typeof AGENT_CHOICE.MODELS>;
+export type KindsWorkspaceProviderId = ProvidersChoosing<typeof AGENT_CHOICE.KINDS>;
+
+/** The agent choice a provider declares, or none for an id this build does not know. */
+export function workspaceAgentChoice(providerId: string): AgentChoice {
+  return isWorkspaceProviderId(providerId) ? WORKSPACE_AGENT_CHOICE[providerId] : AGENT_CHOICE.NONE;
+}
+
+export function isModelsWorkspaceProviderId(value: string): value is ModelsWorkspaceProviderId {
+  return workspaceAgentChoice(value) === AGENT_CHOICE.MODELS;
+}
+
+export function isKindsWorkspaceProviderId(value: string): value is KindsWorkspaceProviderId {
+  return workspaceAgentChoice(value) === AGENT_CHOICE.KINDS;
+}
+
+/** The providers declaring each of the two real choices, in list order. */
+export interface WorkspaceAgentChoiceProviders {
+  readonly [AGENT_CHOICE.MODELS]: readonly ModelsWorkspaceProviderId[];
+  readonly [AGENT_CHOICE.KINDS]: readonly KindsWorkspaceProviderId[];
+}
+
+/** The providers declaring each choice, in `WORKSPACE_PROVIDER_ID_LIST` order. */
+export const WORKSPACE_AGENT_CHOICE_PROVIDERS = {
+  [AGENT_CHOICE.MODELS]: WORKSPACE_PROVIDER_ID_LIST.filter(isModelsWorkspaceProviderId),
+  [AGENT_CHOICE.KINDS]: WORKSPACE_PROVIDER_ID_LIST.filter(isKindsWorkspaceProviderId),
+} satisfies WorkspaceAgentChoiceProviders;
 
 /**
  * The agent kinds, models, and effort levels each provider's creation
@@ -77,15 +136,11 @@ export const WORKSPACE_AGENT_MODELS = {
       efforts: [],
     },
   ],
-} as const satisfies Readonly<Partial<Record<ProviderId, readonly WorkspaceAgentModels[]>>>;
+} as const satisfies Readonly<Record<ModelsWorkspaceProviderId, readonly WorkspaceAgentModels[]>>;
 
 /** The table for one provider, or nothing where none is documented. */
 export function workspaceAgentModels(providerId: string): readonly WorkspaceAgentModels[] {
-  if (!isProviderId(providerId) || !Object.hasOwn(WORKSPACE_AGENT_MODELS, providerId)) {
-    return [];
-  }
-  // SAFETY: Object.hasOwn narrows providerId to a key this table documents.
-  return WORKSPACE_AGENT_MODELS[providerId as keyof typeof WORKSPACE_AGENT_MODELS] ?? [];
+  return isModelsWorkspaceProviderId(providerId) ? WORKSPACE_AGENT_MODELS[providerId] : [];
 }
 
 /**
