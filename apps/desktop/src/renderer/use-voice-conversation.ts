@@ -1,8 +1,6 @@
-import type { RememberedFact } from "@sidecar/acts";
 import { PRODUCT_EXCHANGE_KIND, type ProductExchangeKind } from "@sidecar/analytics";
 import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import { FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
-import type { AppGuideSnapshot } from "@sidecar/guide";
 import {
   type ArrivalSpeech,
   adoptConversationThread,
@@ -22,22 +20,12 @@ import {
   storedConversationMaximumAgeMs,
   streamingConversationEntry,
 } from "@sidecar/realtime";
-import {
-  type ObservedWorkspaceProject,
-  SESSION_STATUS,
-  type Session,
-  type SessionApplicationId,
-  type SessionIdentity,
-} from "@sidecar/session";
+import { SESSION_STATUS, type Session } from "@sidecar/session";
 import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyLabel } from "@sidecar/settings";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MicrophoneStatus, VoiceHotkeyState } from "#shared/wire/audio";
-import type {
-  ConversationHistoryPayload,
-  SessionOpenResult,
-  WorkspaceProviderId,
-} from "#shared/wire/session";
+import type { ConversationHistoryPayload } from "#shared/wire/session";
 import { hostedVoiceUnavailableNote } from "./microphone-access";
 import { openPreferredMicrophone } from "./microphone-choice";
 import {
@@ -401,10 +389,6 @@ export interface VoiceConversationOptions {
    */
   agentTraceEnabled: boolean;
   sessions: readonly Session[];
-  workspaceProjects: readonly ObservedWorkspaceProject[];
-  defaultWorkspaceProvider: WorkspaceProviderId | undefined;
-  /** The per-provider default projects, riding the projects context they steer. */
-  workspaceProjectDefaults: Readonly<Partial<Record<WorkspaceProviderId, string>>> | undefined;
   voice: RealtimeVoice | undefined;
   voiceSpeed: RealtimeVoiceSpeed | undefined;
   voiceCaptions: boolean;
@@ -437,28 +421,13 @@ export interface VoiceConversationOptions {
    */
   capturingShortcut: () => boolean;
   /**
-   * The spoken form of pressing a row. Passed in rather than reached through a
-   * ref: this hook is called after the handler exists, so there is no
+   * The spoken asks about Luke himself. Passed in rather than reached through
+   * a ref: this hook is called after the handler exists, so there is no
    * declaration-order cycle to break.
-   */
-  openSession: (identity: SessionIdentity) => Promise<SessionOpenResult>;
-  /**
-   * The spoken form of pressing one app mark on a row, for an open that named
-   * the app. Passed in on the same terms as {@link openSession}.
-   */
-  openSessionApplication: (
-    identity: SessionIdentity,
-    applicationId: SessionApplicationId,
-  ) => Promise<SessionOpenResult>;
-  /**
-   * The spoken asks about Luke himself. Passed in on the same terms as
-   * {@link openSession}.
    */
   carryAppAction: AppActionCarrier;
   /** Whether restored history and personal memory are ready for the first turn. */
   conversationContextReady: boolean;
-  /** Durable personal memory supplied at bootstrap and kept current by pushes. */
-  rememberedFacts: readonly RememberedFact[];
 }
 
 export interface VoiceConversation {
@@ -474,7 +443,6 @@ export interface VoiceConversation {
   /** A temporary state shown on the caption strip in its quieter notice tone. */
   voiceNotice: string | undefined;
   voiceStatus: RealtimeStatus;
-  setVoiceStatus: (status: RealtimeStatus) => void;
   talkOpening: boolean;
   voiceHotkey: VoiceHotkeyState | undefined;
   handleVoiceActivity: (active: boolean) => void;
@@ -517,7 +485,6 @@ export interface VoiceConversation {
   /** Escape out of an open turn: forget the press and the latch, and stop listening. */
   discardListening: () => void;
   stopSpeaking: () => boolean;
-  syncGuide: (guide: AppGuideSnapshot) => void;
 }
 
 /**
@@ -1308,13 +1275,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
 
   const stopSpeaking = useCallback(() => voiceSession.current?.stopSpeaking() === true, []);
 
-  // The guide goes to the main process, where the brain reads it and an app
-  // act the brain asks for is validated against it; the voice itself is told
-  // nothing about the app.
-  const syncGuide = useCallback((guide: AppGuideSnapshot) => {
-    window.sidecar.reportAppGuide(guide);
-  }, []);
-
   const heardSpeed = useRef<RealtimeVoiceSpeed | undefined>(undefined);
   useEffect(() => {
     const speed = options.voiceSpeed;
@@ -1604,7 +1564,6 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     voiceError,
     voiceNotice,
     voiceStatus,
-    setVoiceStatus,
     talkOpening,
     voiceHotkey,
     handleVoiceActivity,
@@ -1621,6 +1580,5 @@ export function useVoiceConversation(options: VoiceConversationOptions): VoiceCo
     remoteAudio,
     discardListening,
     stopSpeaking,
-    syncGuide,
   };
 }

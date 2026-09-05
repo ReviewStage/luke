@@ -1499,13 +1499,13 @@ function recordMainConversationEntry(entry: ConversationEntry): void {
 
 /**
  * Carries an app act only a renderer can perform — a settings change, the
- * panel shown, the feedback composer, the Updates row's button — to the voice
- * host, already validated here against the guide it reported, and waits for
+ * panel shown, the feedback composer, the Updates row's button — to the
+ * primary panel, already validated here against the guide it reported, and waits for
  * its answer. A panel that does not answer within the round trip refuses the
  * act on a clock rather than holding the brain's turn open.
  */
 function performBrainAppAct(action: BrainAppActRequest["action"]): Promise<WireRecord> {
-  const host = panels.voiceHost();
+  const host = panels.primaryPanel();
   if (!host) {
     return Promise.resolve({
       status: ACT_RESULT_STATUS.REJECTED,
@@ -3087,7 +3087,7 @@ export function startDesktopApp(): void {
             return;
           }
           if (argv.includes("--expanded")) {
-            const host = panels.voiceHost();
+            const host = panels.primaryPanel();
             const displayId = host ? panels.displayIdFor(host.webContents) : undefined;
             if (displayId !== undefined) panels.setMode(displayId, "expanded", true);
             return;

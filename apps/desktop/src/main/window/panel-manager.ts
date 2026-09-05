@@ -192,21 +192,32 @@ export class PanelManager {
   }
 
   /**
-   * The one window a spoken conversation lives in. Voice is a single thing —
-   * one microphone, one reply, one face speaking — so the talk key and the
-   * briefings go to a single renderer rather than opening one
-   * conversation per display: the main display's window when Luke stands there,
-   * else the first window standing anywhere. The thread the exchange leaves
-   * behind is not the host's alone: each appended line comes back through the
-   * conversation history relay, so every display's History reads the same.
+   * The one panel an act aimed at the panel itself lands on — a settings
+   * change the brain asks for, the panel expanded from a second launch: the
+   * main display's window when Luke stands there, else the first window
+   * standing anywhere, so an act about the app has one drawn surface to
+   * answer from rather than one per display.
    */
-  voiceHost(): BrowserWindow | undefined {
+  primaryPanel(): BrowserWindow | undefined {
     const primary = this.#windows.get(screen.getPrimaryDisplay().id);
     if (primary && !primary.isDestroyed()) return primary;
     for (const window of this.#windows.values()) {
       if (!window.isDestroyed()) return window;
     }
     return undefined;
+  }
+
+  /**
+   * The one window a spoken conversation lives in. Voice is a single thing —
+   * one microphone, one reply, one face speaking — so the talk key and the
+   * briefings go to a single renderer rather than opening one
+   * conversation per display. Today that is the primary panel; the thread the
+   * exchange leaves behind is not the host's alone, since each appended line
+   * comes back through the conversation history relay, so every display's
+   * History reads the same.
+   */
+  voiceHost(): BrowserWindow | undefined {
+    return this.primaryPanel();
   }
 
   /** The display a renderer message came from, so each window answers for itself. */

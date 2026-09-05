@@ -1,4 +1,4 @@
-import { APP_TOOL_KIND, dispatchByKind, type RememberedFact } from "@sidecar/acts";
+import { APP_TOOL_KIND, dispatchByKind } from "@sidecar/acts";
 import {
   PRODUCT_PANEL_SOURCE,
   PRODUCT_SEARCH_SURFACE,
@@ -19,7 +19,6 @@ import { REALTIME_STATUS } from "@sidecar/realtime";
 import {
   type ObservedWorkspaceProject,
   type SessionApplicationId,
-  type SessionIdentity,
   workspaceProjectSelectionId,
 } from "@sidecar/session";
 import {
@@ -49,7 +48,6 @@ import type { ObservedAccountCalendars } from "#shared/wire/calendar";
 import type {
   AppBootstrap,
   DisplayDiagnostic,
-  SessionOpenResult,
   SessionReplayBootstrap,
   SessionRosterPayload,
   SupersetSignInSnapshot,
@@ -337,8 +335,6 @@ export function App(): React.JSX.Element {
   // so a bootstrap replying "not yet" after a push raced past it clobbers
   // nothing, and the wing stops saying "loading" the moment either arrives.
   const [sessionsSettled, setSessionsSettled] = useState(false);
-  /** The main process's durable memory, mirrored here only to update conversation context. */
-  const [rememberedFacts, setRememberedFacts] = useState<readonly RememberedFact[]>([]);
   const [workspaceProjects, setWorkspaceProjects] = useState<readonly ObservedWorkspaceProject[]>(
     [],
   );
@@ -1579,50 +1575,6 @@ export function App(): React.JSX.Element {
   );
 
   /**
-   * The same press asked for out loud. It stands the panel down for the same
-   * reason the pressed row does — Luke floats above the very chat he was asked
-   * to bring forward — but only once something actually opened, and only if the
-   * panel is up at all: a spoken ask usually arrives with the panel away.
-   */
-  const openSessionAloud = useCallback(
-    async (identity: SessionIdentity): Promise<SessionOpenResult> => {
-      const result = await window.sidecar.openSession(identity);
-      if (
-        result.status === ACT_RESULT_STATUS.ACCEPTED &&
-        presentationOf() === PANEL_PRESENTATION.PANEL
-      ) {
-        cancelHover();
-        void changeMode(false);
-      }
-      return result;
-    },
-    [cancelHover, changeMode, presentationOf],
-  );
-
-  /**
-   * The same spoken press aimed at one app mark, for an open ask that named
-   * the app: the same bridge call the mark's own button makes, standing the
-   * panel down on the same terms as {@link openSessionAloud}.
-   */
-  const openSessionApplicationAloud = useCallback(
-    async (
-      identity: SessionIdentity,
-      applicationId: SessionApplicationId,
-    ): Promise<SessionOpenResult> => {
-      const result = await window.sidecar.openSessionApplication(identity, applicationId);
-      if (
-        result.status === ACT_RESULT_STATUS.ACCEPTED &&
-        presentationOf() === PANEL_PRESENTATION.PANEL
-      ) {
-        cancelHover();
-        void changeMode(false);
-      }
-      return result;
-    },
-    [cancelHover, changeMode, presentationOf],
-  );
-
-  /**
    * The ask key, pressed anywhere on the system. The main process has already
    * stood the panel up focused; what is left is the caret — or the dismissal,
    * because a summons repeated over its own open field is someone asking the
@@ -1994,8 +1946,6 @@ export function App(): React.JSX.Element {
     ],
   );
 
-  const defaultWorkspaceProvider = (settings ?? bootstrapSettings)?.defaultWorkspaceProvider;
-  const workspaceProjectDefaults = (settings ?? bootstrapSettings)?.workspaceProjectDefaults;
   // The muted evidence run is the speaking run with the hint drawn over it: a
   // capture has no system output to read, so the state is asked for directly.
   const fixtureMuted = bootstrap?.profile === "muted";
@@ -2023,14 +1973,10 @@ export function App(): React.JSX.Element {
     remoteAudio,
     discardListening,
     stopSpeaking,
-    syncGuide,
   } = useVoiceConversation({
     preferBuiltInMicrophone: (settings ?? bootstrapSettings)?.preferBuiltInMicrophone ?? true,
     agentTraceEnabled: bootstrap?.agentTraceEnabled === true,
     sessions,
-    workspaceProjects,
-    defaultWorkspaceProvider,
-    workspaceProjectDefaults,
     voice: settings?.voice,
     voiceSpeed: settings?.voiceSpeed,
     voiceCaptions: settings?.voiceCaptions === true,
@@ -2040,11 +1986,8 @@ export function App(): React.JSX.Element {
     announcementsHeld,
     fixtureSpeaking,
     capturingShortcut: () => shortcutCapture.current,
-    openSession: openSessionAloud,
-    openSessionApplication: openSessionApplicationAloud,
     carryAppAction,
     conversationContextReady: bootstrap !== undefined,
-    rememberedFacts,
   });
 
   // A failed call is reported where its reply would have landed: on the
@@ -2192,10 +2135,6 @@ export function App(): React.JSX.Element {
       }),
     applySettings,
   );
-  const acceptRememberedFactsBootstrap = useBootstrapRacedChannel(
-    (onChange) => window.sidecar.onRememberedFactsChanged(onChange),
-    setRememberedFacts,
-  );
   const acceptAccountBootstrap = useBootstrapRacedChannel(
     (onChange) => window.sidecar.onAccountChanged(onChange),
     setAccount,
@@ -2291,7 +2230,6 @@ export function App(): React.JSX.Element {
       setBootstrap(value);
       acceptSessionsBootstrap(value.sessionRoster);
       if (value.sessionsSettled) setSessionsSettled(true);
-      acceptRememberedFactsBootstrap(value.rememberedFacts);
       // Only fill in what no push has said yet: the bootstrap snapshot is
       // older than any change that raced past it, and the main process will
       // not repeat a list it believes it already announced.
@@ -2398,7 +2336,6 @@ export function App(): React.JSX.Element {
     acceptAnnouncementsHeldBootstrap,
     acceptOutputAudioBootstrap,
     acceptProjectsBootstrap,
-    acceptRememberedFactsBootstrap,
     acceptSessionReplayBootstrap,
     acceptSessionsBootstrap,
     acceptSettingsBootstrap,
@@ -2484,18 +2421,12 @@ export function App(): React.JSX.Element {
         ...(stopAccelerator ? { stopKey: voiceHotkeyLabel(stopAccelerator) } : undefined),
         stopKeyRemoved: current.stopHotkey === VOICE_HOTKEY_NONE,
       });
-      syncGuide(guide);
+      // The guide goes to the main process, where the brain reads it and an
+      // app act the brain asks for is validated against it; the voice itself
+      // is told nothing about the app.
+      window.sidecar.reportAppGuide(guide);
     },
-    [
-      bootstrap,
-      account,
-      update,
-      microphoneStatus,
-      voiceHotkey,
-      askHotkeyChange,
-      stopHotkeyChange,
-      syncGuide,
-    ],
+    [bootstrap, account, update, microphoneStatus, voiceHotkey, askHotkeyChange, stopHotkeyChange],
   );
   useEffect(() => {
     if (!bootstrap) return;
