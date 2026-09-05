@@ -1,4 +1,3 @@
-import { PRODUCT_ASK_OUTCOME, PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import {
   type ArrivalSpeech,
@@ -28,6 +27,8 @@ import type { AppBootstrap } from "#shared/wire/session";
 import { type AppSettingsView, appSettingsView } from "#shared/wire/settings";
 import {
   VOICE_COMMAND,
+  VOICE_COMMAND_OUTCOME,
+  type VoiceCommandOutcome,
   type VoiceView,
   voiceExchangeActive,
   voiceExchangeKind,
@@ -342,6 +343,12 @@ const INITIAL_SURROUNDINGS: VoiceSurroundings = {
 export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>): void {
   const [surroundings, setSurroundings, surroundingsNow] =
     useStateWithRef<VoiceSurroundings>(INITIAL_SURROUNDINGS);
+  /**
+   * Whether the hold has been pushed at all. A push is newer than any
+   * bootstrap still in flight, so once one has landed the bootstrap's answer
+   * is not read: merged, a false push would be overwritten back to held.
+   */
+  const announcementsHeldPushed = useRef(false);
   const amend = useCallback(
     (change: Partial<VoiceSurroundings>) => {
       setSurroundings({ ...surroundingsNow(), ...change });
@@ -1041,11 +1048,12 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
    * typing opens no capture device, and the reply arrives on the call's
    * receiving half. A refusal lands on the strip; where voice cannot speak
    * the reply, the words stand on the strip instead, so an ask is never
-   * answered with silence. Whether the ask reached a conversation is counted
-   * here, where the answer is known, and never what it carried.
+   * answered with silence. Whether the ask reached a conversation is answered
+   * back to the panel that typed it, so a refused draft stays in its composer
+   * and the composer counts the outcome once, as it always has.
    */
   const askLuke = useCallback(
-    async (text: string): Promise<void> => {
+    async (text: string): Promise<VoiceCommandOutcome> => {
       const generation = conversationGenerationRef.current;
       const session = ensureVoiceSession();
       typedExchange.current = true;
@@ -1066,25 +1074,20 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           ? startConversation()
           : Promise.resolve(true);
       const [connected, answer] = await Promise.all([connecting, window.sidecar.askBrain(text)]);
-      window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.ASK_SUBMIT, {
-        ask_outcome:
-          answer.status === ACT_RESULT_STATUS.ACCEPTED
-            ? PRODUCT_ASK_OUTCOME.SENT
-            : PRODUCT_ASK_OUTCOME.REFUSED,
-      });
       if (answer.status !== ACT_RESULT_STATUS.ACCEPTED) {
         setVoiceNotice(answer.reason);
-        return;
+        return VOICE_COMMAND_OUTCOME.REFUSED;
       }
       if (connected && session.speakReply(answer.briefing)) {
         activeReplyGenerationRef.current = generation;
         setTypedAsk(true);
-        return;
+        return VOICE_COMMAND_OUTCOME.ACCEPTED;
       }
       // Voice cannot say it, so the words stand on the strip and enter the
       // record as the reply they are.
       rememberConversationEntry(replyConversationEntry(answer.briefing), generation);
       setVoiceNotice(answer.briefing);
+      return VOICE_COMMAND_OUTCOME.ACCEPTED;
     },
     [rememberConversationEntry, ensureVoiceSession, startConversation],
   );
@@ -1114,7 +1117,9 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
         sessions: current.sessions.length > 0 ? current.sessions : value.sessionRoster.sessions,
         bootstrapVoiceHotkey: value.voiceHotkey,
         outputAudio: current.outputAudio ?? value.outputAudio,
-        announcementsHeld: current.announcementsHeld || value.announcementsHeld,
+        announcementsHeld: announcementsHeldPushed.current
+          ? current.announcementsHeld
+          : value.announcementsHeld,
         conversationContextReady: true,
       });
     });
@@ -1133,7 +1138,11 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     [amend],
   );
   useEffect(
-    () => window.sidecar.onAnnouncementsHeldChanged((held) => amend({ announcementsHeld: held })),
+    () =>
+      window.sidecar.onAnnouncementsHeldChanged((held) => {
+        announcementsHeldPushed.current = true;
+        amend({ announcementsHeld: held });
+      }),
     [amend],
   );
   useEffect(
@@ -1157,9 +1166,14 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   // a turn the developer did not.
   useEffect(
     () =>
-      window.sidecar.onVoiceCommand(({ command, text }) => {
+      window.sidecar.onVoiceCommand(({ command, text, requestId }) => {
         if (command === VOICE_COMMAND.ASK_TEXT) {
-          if (text !== undefined) void askLuke(text);
+          if (text === undefined || requestId === undefined) return;
+          // Answered under the forward's id however the ask ends, so the
+          // composer never waits on a throw for a draft it is owed back.
+          void askLuke(text)
+            .catch((): VoiceCommandOutcome => VOICE_COMMAND_OUTCOME.REFUSED)
+            .then((outcome) => window.sidecar.answerVoiceAsk(requestId, outcome));
         } else if (command === VOICE_COMMAND.DISCARD_LISTENING) discardListening();
         else if (command === VOICE_COMMAND.STOP_SPEAKING) voiceSession.current?.stopSpeaking();
         else if (command === VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS)

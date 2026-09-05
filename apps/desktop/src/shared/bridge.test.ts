@@ -266,11 +266,32 @@ test("a voice command carries words only for a typed ask, bounded", () => {
   assert.equal(guard(["stop-speaking"]), false);
   const forwarded = BRIDGE.onVoiceCommand.result;
   assert.ok(forwarded);
-  assert.equal(forwarded({ command: "ask-text", text: "hello" }), true);
-  assert.equal(forwarded({ command: "stop-speaking", text: undefined }), true);
-  assert.equal(forwarded({ command: "stop-speaking", text: "hello" }), false);
-  assert.equal(forwarded({ command: "ask-text", text: undefined }), false);
+  assert.equal(forwarded({ command: "ask-text", text: "hello", requestId: "ask-1" }), true);
+  assert.equal(forwarded({ command: "ask-text", text: "hello", requestId: undefined }), false);
+  assert.equal(
+    forwarded({ command: "stop-speaking", text: undefined, requestId: undefined }),
+    true,
+  );
+  assert.equal(forwarded({ command: "stop-speaking", text: "hello", requestId: undefined }), false);
+  assert.equal(forwarded({ command: "stop-speaking", text: undefined, requestId: "ask-1" }), false);
+  assert.equal(forwarded({ command: "ask-text", text: undefined, requestId: "ask-1" }), false);
   assert.equal(forwarded({ command: "dance" }), false);
+});
+
+test("a typed ask or a Clear is answered with its outcome, and nothing else is", () => {
+  const outcome = BRIDGE.voiceCommand.result;
+  assert.ok(outcome);
+  assert.equal(outcome("accepted"), true);
+  assert.equal(outcome("refused"), true);
+  assert.equal(outcome(undefined), true);
+  assert.equal(outcome("sent"), false);
+  assert.equal(outcome(true), false);
+  assert.equal(BRIDGE.answerVoiceAsk.kind, "send");
+  assert.equal(BRIDGE.answerVoiceAsk.args(["ask-1", "accepted"]), true);
+  assert.equal(BRIDGE.answerVoiceAsk.args(["ask-1", "refused"]), true);
+  assert.equal(BRIDGE.answerVoiceAsk.args(["ask-1", "maybe"]), false);
+  assert.equal(BRIDGE.answerVoiceAsk.args([1, "accepted"]), false);
+  assert.equal(BRIDGE.answerVoiceAsk.args(["ask-1"]), false);
 });
 
 test("shortcut capture is reported as one boolean", () => {

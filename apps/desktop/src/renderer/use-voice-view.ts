@@ -1,21 +1,52 @@
 import { type ConversationEntry, REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { MicrophoneStatus, VoiceHotkeyState } from "#shared/wire/audio";
 import type { AppBootstrap } from "#shared/wire/session";
-import { VOICE_COMMAND, type VoiceView } from "#shared/wire/voice-view";
+import {
+  IDLE_VOICE_VIEW,
+  VOICE_COMMAND,
+  VOICE_COMMAND_OUTCOME,
+  type VoiceCommandOutcome,
+  type VoiceView,
+} from "#shared/wire/voice-view";
 import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
+import { VOICE_ERROR_NOTICE_MS } from "./voice/use-voice-session";
 import { VOICE_ACTIVITY_HANGOVER_MS, VOICE_ACTIVITY_THRESHOLD } from "./voice/voice-level-meter";
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
 
-/** What a panel draws before the voice window has reported anything. */
-export const IDLE_VOICE_VIEW: VoiceView = {
-  voiceStatus: REALTIME_STATUS.IDLE,
-  voiceError: undefined,
-  voiceNotice: undefined,
-  talkOpening: false,
-  lukeCaptions: undefined,
-  liveConversationEntries: [],
-};
+/**
+ * What the composer hears back from a typed ask: nothing when the ask reached
+ * a conversation, so the draft clears, and a reason when it did not, so the
+ * developer's words stay theirs to retry. An ask nobody answered — the voice
+ * window gone, the wait run out — is refused too: words lost on a silence
+ * would be the one outcome nobody chose. The strip already carries the
+ * specific refusal through the view, so this only has to be true.
+ */
+export const ASK_UNSENT_REASON = "Luke could not take that ask. Try again.";
+
+export function askDraftReason(outcome: VoiceCommandOutcome | undefined): string | undefined {
+  return outcome === VOICE_COMMAND_OUTCOME.ACCEPTED ? undefined : ASK_UNSENT_REASON;
+}
+
+/** What the strip says when the stored thread could not be deleted. */
+export const CLEAR_FAILED_REASON = "Could not clear history. Try again.";
+
+/**
+ * How long a voice has been active, read off the relayed levels with the
+ * meter's own hangover: a loud report starts it, a quiet one lets it run out
+ * from the last loud report rather than from itself, so the panel's edge
+ * lands where the voice window's did.
+ */
+export function voiceActiveFor(input: {
+  level: number;
+  now: number;
+  lastLoudAt: number | undefined;
+}) {
+  const lastLoudAt = input.level > VOICE_ACTIVITY_THRESHOLD ? input.now : input.lastLoudAt;
+  const remainingMs =
+    lastLoudAt === undefined ? 0 : Math.max(0, lastLoudAt + VOICE_ACTIVITY_HANGOVER_MS - input.now);
+  return { lastLoudAt, remainingMs };
+}
 
 /**
  * Whose voice the meter is drawing. The waveform follows whoever is actually
@@ -87,9 +118,10 @@ export interface VoiceViewState {
   /** The bootstrap's snapshots, applied only where no push has spoken yet. */
   acceptBootstrap: (bootstrap: AppBootstrap) => void;
   /**
-   * A typed ask to Luke, forwarded to the voice window. It answers once the
-   * ask is on its way; the reply, or the refusal, lands back on the strip
-   * through the view rather than through this promise.
+   * A typed ask to Luke, forwarded to the voice window and answered with
+   * whether it reached a conversation: nothing when it did, a reason when it
+   * did not, so the composer keeps a refused draft. The specific refusal
+   * lands on the strip through the view.
    */
   askLuke: (text: string) => Promise<string | undefined>;
   /** Escape out of an open turn: forget the press and the latch, and stop listening. */
@@ -148,10 +180,20 @@ export function useVoiceView(): VoiceViewState {
     [],
   );
   const [voiceActive, setVoiceActive] = useState(false);
+  const lastLoudAt = useRef<number | undefined>(undefined);
   useEffect(() => {
-    if (levelReport.level <= VOICE_ACTIVITY_THRESHOLD) return;
+    const decided = voiceActiveFor({
+      level: levelReport.level,
+      now: performance.now(),
+      lastLoudAt: lastLoudAt.current,
+    });
+    lastLoudAt.current = decided.lastLoudAt;
+    if (decided.remainingMs === 0) {
+      setVoiceActive(false);
+      return;
+    }
     setVoiceActive(true);
-    const timer = window.setTimeout(() => setVoiceActive(false), VOICE_ACTIVITY_HANGOVER_MS);
+    const timer = window.setTimeout(() => setVoiceActive(false), decided.remainingMs);
     return () => window.clearTimeout(timer);
   }, [levelReport]);
   // A turn ending takes the voice with it, whatever the last level said.
@@ -164,10 +206,15 @@ export function useVoiceView(): VoiceViewState {
   // or bootstrap's old chord would keep winning for the rest of the session.
   useEffect(() => window.sidecar.onVoiceHotkeyChanged(setVoiceHotkey), []);
 
-  const askLuke = useCallback(async (text: string): Promise<string | undefined> => {
-    await window.sidecar.voiceCommand(VOICE_COMMAND.ASK_TEXT, text);
-    return undefined;
-  }, []);
+  const askLuke = useCallback(
+    async (text: string): Promise<string | undefined> =>
+      askDraftReason(
+        await window.sidecar
+          .voiceCommand(VOICE_COMMAND.ASK_TEXT, text)
+          .catch((): VoiceCommandOutcome => VOICE_COMMAND_OUTCOME.REFUSED),
+      ),
+    [],
+  );
   const discardListening = useCallback(() => {
     void window.sidecar.voiceCommand(VOICE_COMMAND.DISCARD_LISTENING, undefined);
   }, []);
@@ -177,12 +224,26 @@ export function useVoiceView(): VoiceViewState {
   const requestMicrophoneAccess = useCallback(() => {
     void window.sidecar.voiceCommand(VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS, undefined);
   }, []);
+  // The one failure the panel reports itself: the stored thread refusing to
+  // go is the main process's answer to this press, not anything the voice
+  // window saw, so it borrows the strip here on the strip's own clock.
+  const [localError, setLocalError] = useState<string>();
+  useEffect(() => {
+    if (localError === undefined) return;
+    const timer = window.setTimeout(() => setLocalError(undefined), VOICE_ERROR_NOTICE_MS);
+    return () => window.clearTimeout(timer);
+  }, [localError]);
   const clearConversationHistory = useCallback(() => {
-    void window.sidecar.voiceCommand(VOICE_COMMAND.CLEAR_CONVERSATION, undefined);
+    void window.sidecar
+      .voiceCommand(VOICE_COMMAND.CLEAR_CONVERSATION, undefined)
+      .catch((): VoiceCommandOutcome => VOICE_COMMAND_OUTCOME.REFUSED)
+      .then((outcome) => {
+        if (outcome === VOICE_COMMAND_OUTCOME.REFUSED) setLocalError(CLEAR_FAILED_REASON);
+      });
   }, []);
 
   return {
-    view,
+    view: localError === undefined ? view : { ...view, voiceError: localError },
     speaking: view.voiceStatus === REALTIME_STATUS.RESPONDING,
     voiceTurn: waveformVoice(view.voiceStatus),
     level,

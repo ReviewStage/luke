@@ -138,7 +138,7 @@ import {
 } from "#shared/contracts";
 import { VOICE_SOURCE_COUNTED_AS } from "#shared/product-vocabulary";
 import { SPEECH_OUTCOME, type SpeechOutcome } from "#shared/wire/speech";
-import type { VoiceView } from "#shared/wire/voice-view";
+import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/wire/voice-view";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { AppleCalendarReader } from "./apple-calendar";
 import {
@@ -825,10 +825,13 @@ const voiceWindow = new VoiceWindow({
   onGone: (reason) => {
     process.stderr.write(`Voice window replaced: ${reason}\n`);
     // Whatever the dead renderer last reported is no longer true: no exchange
-    // is live, and a panel opening now should not bootstrap into one. The
-    // replacement reports its own idle view the moment it mounts.
+    // is live, no panel opening now should bootstrap into one, and every
+    // panel drawing the last snapshot is told the voice is at rest, or Escape
+    // would keep asking a window that is gone to stop. The replacement
+    // reports its own view the moment it mounts.
     latestVoiceView = undefined;
     panels.setVoiceExchange(false);
+    broadcast(channels.onVoiceViewChanged, IDLE_VOICE_VIEW);
   },
   onGaveUp: (reason) => {
     process.stderr.write(`Voice window abandoned: ${reason}\n`);
@@ -1577,18 +1580,20 @@ function recordMainConversationEntry(entry: ConversationEntry): void {
 /**
  * The History Clear a panel pressed: the stored thread deleted, the relay
  * emptied for every panel, and the moment remembered so a report still in
- * flight from before it cannot stand the old lines back up. The voice window
- * retires its own turns on the command that follows this.
+ * flight from before it cannot stand the old lines back up. Answers whether
+ * the file went; only then is the voice window told to retire its own turns,
+ * so a thread that could not be deleted is not half-forgotten.
  */
-function clearConversationHistory(): void {
+function clearConversationHistory(): boolean {
   if (runMode.observesProviders) {
     const clearedAt = Date.now();
-    if (!removeStoredState(conversationPath(), "the conversation")) return;
+    if (!removeStoredState(conversationPath(), "the conversation")) return false;
     conversationClearedAt = clearedAt;
   }
   conversationHistory = [];
   const payload: ConversationHistoryPayload = { entries: [], cleared: true };
   broadcast(channels.onConversationHistoryChanged, payload);
+  return true;
 }
 
 /**

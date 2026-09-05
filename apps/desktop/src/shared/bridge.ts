@@ -93,9 +93,11 @@ import {
 import type { UpdateSnapshot } from "./wire/update";
 import {
   isVoiceCommand,
+  isVoiceCommandOutcome,
   isVoiceView,
   VOICE_COMMAND,
   type VoiceCommand,
+  type VoiceCommandOutcome,
   type VoiceView,
   voiceExchangeActive,
 } from "./wire/voice-view";
@@ -540,7 +542,10 @@ export const BRIDGE = {
    * A panel's ask of the voice window, carried through the main process, which
    * validates it and forwards it on `onVoiceCommand`. Only a typed ask carries
    * a payload — the words themselves, bounded by the same limit the session
-   * applies — and every other command carries none.
+   * applies — and every other command carries none. A typed ask is answered
+   * with whether it reached a conversation, so the composer can keep a refused
+   * draft, and a Clear with whether the stored thread was deleted; the other
+   * commands resolve with nothing.
    */
   voiceCommand: entry({
     kind: "invoke",
@@ -553,7 +558,20 @@ export const BRIDGE = {
           ? isWireString(v[1]) && v[1].length <= maximumTypedAskLength
           : v[1] === undefined),
     ),
-    result: result<void>(),
+    result: result<VoiceCommandOutcome | undefined>(
+      (v) => v === undefined || isVoiceCommandOutcome(v),
+    ),
+  }),
+  /**
+   * The voice window's answer to one forwarded typed ask, by the request id
+   * the forward carried, so the main process can resolve the panel's invoke.
+   */
+  answerVoiceAsk: entry({
+    kind: "send",
+    channel: "app:answer-voice-ask",
+    args: args<[string, VoiceCommandOutcome]>(
+      (v) => v.length === 2 && isWireString(v[0]) && isVoiceCommandOutcome(v[1]),
+    ),
   }),
   /**
    * The voice window's whole snapshot of the live conversation, reported on
@@ -907,20 +925,26 @@ export const BRIDGE = {
   }),
   /**
    * A panel's validated command, forwarded by the main process to the voice
-   * window alone; a typed ask arrives with its words, every other command with
-   * none.
+   * window alone; a typed ask arrives with its words and the request id its
+   * outcome is answered under, every other command with neither.
    */
   onVoiceCommand: entry({
     kind: "subscribe",
     channel: "app:voice-command-forwarded",
     args: noArgs,
-    result: result<{ command: VoiceCommand; text: string | undefined }>(
+    result: result<{
+      command: VoiceCommand;
+      text: string | undefined;
+      requestId: string | undefined;
+    }>(
       (value) =>
         isRecord(value) &&
         isVoiceCommand(value.command) &&
         (value.command === VOICE_COMMAND.ASK_TEXT
-          ? isWireString(value.text) && value.text.length <= maximumTypedAskLength
-          : value.text === undefined),
+          ? isWireString(value.text) &&
+            value.text.length <= maximumTypedAskLength &&
+            isWireString(value.requestId)
+          : value.text === undefined && value.requestId === undefined),
     ),
   }),
   /**
