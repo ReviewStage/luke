@@ -206,6 +206,7 @@ import { DockPresence } from "./window/dock-presence";
 import { HOTKEY_RANK, HotkeyRegistrar } from "./window/hotkey-registrar";
 import { IntroductionWindow } from "./window/introduction-window";
 import { PanelManager } from "./window/panel-manager";
+import { VoiceWindow } from "./window/voice-window";
 
 // Which Luke this process is decides where its state lives and which Keychain
 // entry protects its credentials; see app-identity.ts for why a development
@@ -783,6 +784,9 @@ const panels = new PanelManager({
   preloadPath: path.join(__dirname, "preload.js"),
   rendererHtmlPath: path.join(__dirname, "renderer", "index.html"),
   rendererUrl: rendererUrl(),
+  // The hidden voice window outlives the panels, so the panels say for
+  // themselves when the last of them is gone.
+  onAllClosed: () => app.quit(),
 });
 // The one-time spoken introduction: a fullscreen takeover on the first
 // interactive launch, before any account exists. Its voice runs on the hosted
@@ -803,6 +807,30 @@ const introductionWindow = new IntroductionWindow({
     void abandonIntroduction();
   },
 });
+/**
+ * The hidden window that will hold the live conversation, so that no panel
+ * does. It stands for the whole run on any launch that could speak — an
+ * interactive one, or one that reaches the network — and never in a fixture or
+ * capture run, where nothing would. A renderer that dies is stood up again by
+ * the main process; nothing drawn depends on it.
+ */
+const voiceWindow = new VoiceWindow({
+  runMode,
+  preloadPath: path.join(__dirname, "preload.js"),
+  rendererHtmlPath: path.join(__dirname, "renderer", "index.html"),
+  rendererUrl: rendererUrl(),
+  onGone: (reason) => {
+    process.stderr.write(`Voice window replaced: ${reason}\n`);
+    voiceWindow.close();
+    if (!quitting) voiceWindow.open();
+  },
+});
+const voiceWindowWanted = runMode.registersGlobalKeys || runMode.sendsNetwork;
+/**
+ * Set at the first quit signal so a voice renderer going down during the quit
+ * itself is not stood up again behind the app's back.
+ */
+let quitting = false;
 /**
  * Whether the takeover's renderer ever reported mounting. A takeover that
  * never draws is a fullscreen window swallowing every click with nothing on
@@ -1792,9 +1820,12 @@ function registerIpc(): void {
       // Each window bootstraps as itself: its own display, its own mode. The
       // roster and the settings are the same everywhere.
       const displayId = panels.displayIdFor(context.sender);
-      const display =
-        (displayId !== undefined ? panels.display(displayId) : undefined) ??
-        screen.getPrimaryDisplay();
+      // The voice window stands on no display and ignores the panel-only
+      // fields; everything else is fabricated a display as before.
+      const display = voiceWindow.owns(context.sender)
+        ? undefined
+        : ((displayId !== undefined ? panels.display(displayId) : undefined) ??
+          screen.getPrimaryDisplay());
       const [supersetInstalled, supersetConnected] = await Promise.all([
         supersetCli.installed(),
         supersetCli.connected(),
@@ -1826,7 +1857,7 @@ function registerIpc(): void {
         ...(hotkeys.ask ? { askHotkey: hotkeys.ask } : undefined),
         ...(hotkeys.stop ? { stopHotkey: hotkeys.stop } : undefined),
         ...(outputAudio ? { outputAudio } : undefined),
-        display: panels.diagnostic(display),
+        display: display ? panels.diagnostic(display) : undefined,
         update: updateService.snapshot(),
         // Bootstrapped through the same relevance gate every broadcast passes:
         // a panel that opens late must not learn of rows the roster has already
@@ -2148,7 +2179,11 @@ function registerIpc(): void {
   // Which surface a window draws, decided by which window asked — never by
   // anything the renderer could claim about itself.
   registerContextHandler(BRIDGE.getWindowRole, (context: BridgeContext) =>
-    introductionWindow.owns(context.sender) ? WINDOW_ROLE.INTRODUCTION : WINDOW_ROLE.PANEL,
+    introductionWindow.owns(context.sender)
+      ? WINDOW_ROLE.INTRODUCTION
+      : voiceWindow.owns(context.sender)
+        ? WINDOW_ROLE.VOICE
+        : WINDOW_ROLE.PANEL,
   );
 
   // The introduction's one-shot keyless read of this machine's local
@@ -2824,11 +2859,13 @@ function stopIssueObservation(): void {
 }
 
 function configurePermissions(): void {
-  // The takeover is a window of Luke's own under the same hardening as the
-  // panels, and its practice beat is a real spoken turn, so it is owed the
-  // same audio-only answer.
+  // The takeover and the voice window are windows of Luke's own under the
+  // same hardening as the panels, and each speaks a real spoken turn, so they
+  // are owed the same audio-only answer.
   const ownWindow = (webContents: Electron.WebContents) =>
-    panels.owns(webContents) || introductionWindow.owns(webContents);
+    panels.owns(webContents) ||
+    introductionWindow.owns(webContents) ||
+    voiceWindow.owns(webContents);
   session.defaultSession.setPermissionCheckHandler(
     (webContents, permission, _origin, details) =>
       webContents !== null &&
@@ -3052,6 +3089,10 @@ export function startDesktopApp(): void {
       // The introduction owns the screen alone until it completes or is
       // abandoned; both of its endings reconcile the panels themselves.
       if (!introductionWindow.active) panels.reconcile();
+      // Raised after the panels, so it is never the only window standing: the
+      // panels closing is how this process decides it is done, and a hidden
+      // window that stood alone would keep an app nobody can see alive.
+      if (voiceWindowWanted) voiceWindow.open();
       configurePermissions();
       startSessionObservation();
       startCalendarObservation();
@@ -3134,6 +3175,10 @@ export function startDesktopApp(): void {
   });
 
   app.on("before-quit", () => {
+    quitting = true;
+    // Closed by the main process, never waited on: the panels closing is what
+    // decides the app is done, and this window was never one of them.
+    voiceWindow.close();
     observationSupervisor.setEnabled(false);
     stopCalendarObservation();
     for (const watcher of spoolWatchers) watcher.close();
@@ -3146,5 +3191,8 @@ export function startDesktopApp(): void {
     panels.clearCollapseTimers();
   });
 
+  // Fires only once every BrowserWindow is gone, the hidden voice window
+  // included, so the panels report their own last closing above; this stays
+  // for a run that never raised a voice window.
   app.on("window-all-closed", () => app.quit());
 }

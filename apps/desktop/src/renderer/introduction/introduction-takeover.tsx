@@ -13,7 +13,7 @@ import {
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
-import type { AppBootstrap } from "#shared/wire/session";
+import type { AppBootstrap, DisplayDiagnostic } from "#shared/wire/session";
 import { Keycaps } from "../keycaps";
 import { usePrefersReducedMotion } from "../luke-face-mood";
 import { openPreferredMicrophone } from "../microphone-choice";
@@ -181,7 +181,7 @@ const STANDING_DOWN_BEATS: ReadonlySet<IntroductionBeat> = new Set([
 export function IntroductionTakeover({
   bootstrap,
 }: {
-  bootstrap: AppBootstrap;
+  bootstrap: AppBootstrap & { display: DisplayDiagnostic };
 }): React.JSX.Element {
   const [beat, setBeat] = useState<IntroductionBeat>(INTRODUCTION_BEAT.DARK);
   const beatRef = useRef<IntroductionBeat>(beat);

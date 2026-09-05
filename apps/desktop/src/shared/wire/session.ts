@@ -36,12 +36,15 @@ export type SessionOpenResult = ActResult;
 /**
  * Which surface a window exists to draw. Every window loads the same renderer
  * bundle, so the role is what tells the one fullscreen introduction takeover
- * apart from the panel windows — decided in the main process by which window
- * asked, never by anything the renderer could claim about itself.
+ * and the hidden voice window apart from the panel windows — decided in the
+ * main process by which window asked, never by anything the renderer could
+ * claim about itself.
  */
 export const WINDOW_ROLE = {
   PANEL: "panel",
   INTRODUCTION: "introduction",
+  /** The one hidden window that will hold the live conversation; it draws nothing. */
+  VOICE: "voice",
 } as const;
 
 export type WindowRole = (typeof WINDOW_ROLE)[keyof typeof WINDOW_ROLE];
@@ -170,7 +173,11 @@ export interface AppBootstrap {
    * arrives — or forever, where there is no helper to ask.
    */
   outputAudio?: OutputAudioState;
-  display: DisplayDiagnostic;
+  /**
+   * The display this window stands on. Absent for the hidden voice window,
+   * which stands on none and draws nothing that would need one.
+   */
+  display: DisplayDiagnostic | undefined;
   /** Where the app stands against the latest release, as last learned. */
   update: UpdateSnapshot;
   sessionRoster: SessionRosterPayload;

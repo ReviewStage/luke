@@ -1,4 +1,3 @@
-import { PRODUCT_EXCHANGE_KIND, type ProductExchangeKind } from "@sidecar/analytics";
 import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import { FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import {
@@ -26,6 +25,7 @@ import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MicrophoneStatus, VoiceHotkeyState } from "#shared/wire/audio";
 import type { ConversationHistoryPayload } from "#shared/wire/session";
+import { voiceExchangeActive, voiceExchangeKind } from "#shared/wire/voice-view";
 import { hostedVoiceUnavailableNote } from "./microphone-access";
 import { openPreferredMicrophone } from "./microphone-choice";
 import {
@@ -80,32 +80,6 @@ export function activeVoiceStream<T>(input: {
   if (input.status === REALTIME_STATUS.RESPONDING) return input.remote;
   if (input.status === REALTIME_STATUS.LISTENING) return input.local;
   return undefined;
-}
-
-/**
- * The exchange is live from the press to the end of the reply — the call
- * coming up, a turn being held, Luke speaking — and the media duck follows it.
- */
-export function voiceExchangeActive(status: RealtimeStatus): boolean {
-  return (
-    status === REALTIME_STATUS.CONNECTING ||
-    status === REALTIME_STATUS.LISTENING ||
-    status === REALTIME_STATUS.RESPONDING
-  );
-}
-
-/**
- * Who opened the exchange the count is about. Luke's own speak-only call has
- * no microphone to offer, which is the whole of what tells his announcement
- * from a turn the developer took; between the developer's own two ways in,
- * only the composer says so in advance, so the talk key is what is left.
- */
-export function voiceExchangeKind(input: {
-  microphoneCall: boolean;
-  typedAsk: boolean;
-}): ProductExchangeKind {
-  if (!input.microphoneCall) return PRODUCT_EXCHANGE_KIND.ANNOUNCEMENT;
-  return input.typedAsk ? PRODUCT_EXCHANGE_KIND.TYPED : PRODUCT_EXCHANGE_KIND.SPOKEN;
 }
 
 /**
