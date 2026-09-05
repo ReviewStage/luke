@@ -5,6 +5,9 @@ import LukeKit
 /// Mirror of VoiceAudioCapturer without allowBluetoothHFP, which is unnecessary
 /// on watchOS where the watch owns its own Bluetooth audio routing.
 ///
+/// The audio session is `WatchVoiceAudioSession`'s, active for the whole call
+/// before this starts; nothing here activates or deactivates it.
+///
 /// Callers should request microphone permission before this is instantiated;
 /// on watchOS 10 the system presents the permission sheet when the engine tap
 /// begins if permission is undetermined, and engine.start() raises an error
@@ -17,10 +20,6 @@ final class WatchAudioCapturer: AudioCapturer, @unchecked Sendable {
         guard AVAudioApplication.shared.recordPermission != .denied else {
             throw CocoaError(.fileReadUnknown)
         }
-
-        let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.playAndRecord, mode: .default)
-        try audioSession.setActive(true)
 
         let inputNode = engine.inputNode
         let hwFormat = inputNode.outputFormat(forBus: 0)
@@ -89,6 +88,5 @@ final class WatchAudioCapturer: AudioCapturer, @unchecked Sendable {
             hasTap = false
         }
         engine.stop()
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 }

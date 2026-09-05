@@ -929,6 +929,8 @@ private final class URLSessionWebSocketChannel: WebSocketTask, @unchecked Sendab
     }
 }
 
-func realtimeWebSocketProtocols(ephemeralKey: String) -> [String] {
+/// The subprotocols that carry the ephemeral key on the Realtime handshake,
+/// for every channel implementation the session may be handed.
+public func realtimeWebSocketProtocols(ephemeralKey: String) -> [String] {
     ["realtime", "openai-insecure-api-key.\(ephemeralKey)"]
 }

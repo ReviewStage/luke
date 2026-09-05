@@ -61,6 +61,24 @@ final class WatchVoiceSessionModel {
     private func connect(startWithTurn: Bool) async {
         guard session == nil, let accountSession else { return }
         errorMessage = nil
+        do {
+            try await WatchVoiceAudioSession.activate()
+        } catch {
+            errorMessage = "Couldn't start audio on the watch."
+            status = .idle
+            return
+        }
+        // stop() may have run while activation was in flight: it has already
+        // cleared the account and deactivated, and the activation that just
+        // landed put the session back up. It goes down again here only if no
+        // newer press is holding or opening a call, since the audio session
+        // is shared and taking it down would refuse that call's socket.
+        guard !Task.isCancelled, self.accountSession != nil, session == nil else {
+            if session == nil, !connectingForTurn {
+                WatchVoiceAudioSession.deactivate()
+            }
+            return
+        }
 
         let opts = RealtimeSessionOptions(
             requestConnection: { [weak accountSession, weak self] in
@@ -69,14 +87,23 @@ final class WatchVoiceSessionModel {
                 // Fetched beside the mint rather than after it: the projects
                 // item is sent at channel open, and the ephemeral key's
                 // minute is not to be spent waiting on a second round trip.
-                async let projects = try? ProjectsClient(serviceURL: AccountConstants.serviceURL)
-                    .projects(bearerToken: token)
-                let connection = try await VoiceMintClient(baseURL: AccountConstants.serviceURL)
+                async let projects = try? ProjectsClient(
+                    serviceURL: AccountConstants.serviceURL, http: WatchNetwork.session
+                )
+                .projects(bearerToken: token)
+                let connection: VoiceConnection
+                do {
+                    connection = try await VoiceMintClient(
+                        baseURL: AccountConstants.serviceURL, http: WatchNetwork.session
+                    )
                     .mint(
                         accessToken: token,
                         voice: RealtimeVoice.default.rawValue,
                         speed: RealtimeVoiceSpeed.default.multiplier
                     )
+                } catch let error as URLError {
+                    throw WatchNetworkFailure(error)
+                }
                 if let answer = await projects {
                     await MainActor.run { [weak self] in self?.projects = answer }
                 }
@@ -85,8 +112,17 @@ final class WatchVoiceSessionModel {
             onStatus: { [weak self] newStatus in
                 self?.status = newStatus
                 // An idle timeout releases the socket so the next button press
-                // remints rather than sending on a stale connection.
-                if newStatus == .idle { self?.session = nil }
+                // remints rather than sending on a stale connection. A mint
+                // that failed publishes idle without closing, leaving the
+                // capturer the press started still running, so the session is
+                // closed here first: closing one already closed changes
+                // nothing, and the audio session goes down only once the
+                // engines have stopped.
+                if newStatus == .idle {
+                    self?.session?.close()
+                    self?.session = nil
+                    WatchVoiceAudioSession.deactivate()
+                }
             },
             onCaption: { [weak self] text in self?.thread?.recordCaption(text) },
             onSpokenAsk: { [weak self] text in self?.thread?.recordSpokenAsk(text) },
@@ -132,6 +168,9 @@ final class WatchVoiceSessionModel {
                 }
                 return items
             },
+            makeWebSocket: { url, ephemeralKey in
+                WatchWebSocketChannel(url: url, ephemeralKey: ephemeralKey)
+            },
             makeAudioCapturer: { WatchAudioCapturer() },
             makeAudioPlayer: { WatchAudioPlayer() }
         )
@@ -154,6 +193,7 @@ final class WatchVoiceSessionModel {
         // so. Only a new press supersedes it.
         session?.close()
         session = nil
+        WatchVoiceAudioSession.deactivate()
     }
 
     func beginTurn() {

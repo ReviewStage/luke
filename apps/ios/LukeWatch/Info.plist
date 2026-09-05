@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Merged into the generated Info.plist. watchOS grants a WebSocket, which
+	     it counts as low-level networking, only to an audio streaming app while
+	     its audio session is active (TN3135; WWDC 2019 session 716). Luke's
+	     voice call is a streamed spoken exchange over the Realtime socket, and
+	     this mode is what lets the watch open it. -->
+	<key>WKBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
+</dict>
+</plist>

@@ -112,3 +112,33 @@ A DEBUG run may set `LUKE_POSTHOG_PROJECT_API_KEY` in the scheme's environment
 instead, the same door the service address overrides use. XCTest runs neither
 record nor count: the app detects its launch as a test host and stands both
 streams down.
+
+## Watch
+
+`LukeWatch` is its own client of the hosted service, not a view the iPhone
+feeds. The phone hands it the account's tokens over WatchConnectivity and
+nothing else; the sessions list, a session's conversation, the messages and
+controls sent from the wrist, and the voice call's mint and Realtime socket
+all leave the watch itself. watchOS chooses the path and prefers the phone:
+the paired iPhone's connection tunneled over Bluetooth whenever the phone is
+in range, the watch's own Wi-Fi or cellular only when it is not.
+
+watchOS draws one line through that traffic. HTTP over `URLSession` is open
+to every app, and every hosted read and act on the watch travels that way,
+through `WatchNetwork.session`, which waits for a path to come up instead of
+failing the instant none is up. A WebSocket is low-level networking, which
+watchOS grants only to an audio streaming app while its audio session is
+active (Apple's TN3135 and WWDC 2019 session 716), and tells anything else
+that opens one that the Internet connection appears to be offline, with the
+phone in the same pocket. Luke's voice call is a streamed spoken exchange, so
+the watch app declares the `audio` background mode in `LukeWatch/Info.plist`
+and holds its audio session active from before the Realtime socket opens
+until the call closes, in `WatchVoiceAudioSession`. Two details of that grant
+are watchOS's own and are easy to miss: the session must be activated with
+the asynchronous `activate(options:)` call, because the synchronous
+`setActive(true)` returns without error on a watch and earns nothing, and the
+socket must be opened from the app's own process through Network framework,
+in `WatchWebSocketChannel`, because URLSession on watchOS does its work in a
+system process that never inherits the grant. The call still opens only at
+the developer's press and closes on the same idle timer as before; the mode
+changes what watchOS lets the socket do, not when Luke listens.

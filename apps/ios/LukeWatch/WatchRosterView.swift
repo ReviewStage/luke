@@ -7,7 +7,9 @@ struct WatchRosterView: View {
     @Environment(ProductEventSender.self) private var events
     @State private var archiveFailure: String?
 
-    private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
+    private let actClient = ActClient(
+        baseURL: AccountConstants.serviceURL, http: WatchNetwork.session
+    )
 
     var body: some View {
         List {
@@ -201,8 +203,12 @@ struct WatchSessionDetailView: View {
     @State private var claimedCopyIds: Set<String> = []
     @State private var conversationGeneration = 0
 
-    private let conversationClient = ConversationClient(serviceURL: AccountConstants.serviceURL)
-    private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
+    private let conversationClient = ConversationClient(
+        serviceURL: AccountConstants.serviceURL, http: WatchNetwork.session
+    )
+    private let actClient = ActClient(
+        baseURL: AccountConstants.serviceURL, http: WatchNetwork.session
+    )
 
     private enum ScrollIntent: Equatable {
         case end
@@ -405,7 +411,7 @@ struct WatchSessionDetailView: View {
             account.signOut()
         } catch {
             guard generation == conversationGeneration else { return }
-            loadError = error.localizedDescription
+            loadError = WatchNetwork.describe(error)
         }
     }
 
@@ -458,7 +464,7 @@ struct WatchSessionDetailView: View {
             }
         } catch {
             guard generation == conversationGeneration else { return }
-            loadError = error.localizedDescription
+            loadError = WatchNetwork.describe(error)
         }
     }
 
@@ -585,7 +591,9 @@ private struct WatchSessionInfoView: View {
     @State private var agentShown = false
     @State private var actFailure: String?
 
-    private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
+    private let actClient = ActClient(
+        baseURL: AccountConstants.serviceURL, http: WatchNetwork.session
+    )
 
     private enum RenameTarget: String, Identifiable {
         case session

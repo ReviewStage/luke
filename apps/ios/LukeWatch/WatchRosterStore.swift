@@ -23,7 +23,9 @@ final class WatchRosterStore {
 
     private let session: WatchAccountSession
     private let events: ProductEventSender
-    private let client = RosterClient(serviceURL: AccountConstants.serviceURL)
+    private let client = RosterClient(
+        serviceURL: AccountConstants.serviceURL, http: WatchNetwork.session
+    )
     private var reloadRequested = true
     private var loadGeneration = 0
 
@@ -97,7 +99,7 @@ final class WatchRosterStore {
             } catch {
                 guard generation == loadGeneration else { return }
                 guard !Task.isCancelled else { return }
-                loadError = error.localizedDescription
+                loadError = WatchNetwork.describe(error)
                 completedRequest = true
             }
         }
