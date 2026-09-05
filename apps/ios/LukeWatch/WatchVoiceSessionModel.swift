@@ -70,10 +70,13 @@ final class WatchVoiceSessionModel {
         }
         // stop() may have run while activation was in flight: it has already
         // cleared the account and deactivated, and the activation that just
-        // landed put the session back up, so it goes down again here rather
-        // than opening a call nobody is holding.
+        // landed put the session back up. It goes down again here only if no
+        // newer press is holding or opening a call, since the audio session
+        // is shared and taking it down would refuse that call's socket.
         guard !Task.isCancelled, self.accountSession != nil, session == nil else {
-            WatchVoiceAudioSession.deactivate()
+            if session == nil, !connectingForTurn {
+                WatchVoiceAudioSession.deactivate()
+            }
             return
         }
 

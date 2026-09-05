@@ -85,15 +85,24 @@ final class WatchWebSocketChannel: WebSocketTask, @unchecked Sendable {
     }
 
     func close() {
-        let metadata = NWProtocolWebSocket.Metadata(opcode: .close)
-        metadata.closeCode = .protocolCode(.normalClosure)
-        let context = NWConnection.ContentContext(identifier: "close", metadata: [metadata])
-        connection.send(
-            content: nil,
-            contentContext: context,
-            isComplete: true,
-            completion: .contentProcessed { [connection] _ in connection.cancel() }
-        )
+        queue.async { [self] in
+            // A close frame is owed only to a peer that was reached. A socket
+            // still waiting or refused has nothing to send it to, and a send
+            // queued on it would never complete, so it is cancelled outright.
+            guard isReady else {
+                connection.cancel()
+                return
+            }
+            let metadata = NWProtocolWebSocket.Metadata(opcode: .close)
+            metadata.closeCode = .protocolCode(.normalClosure)
+            let context = NWConnection.ContentContext(identifier: "close", metadata: [metadata])
+            connection.send(
+                content: nil,
+                contentContext: context,
+                isComplete: true,
+                completion: .contentProcessed { [connection] _ in connection.cancel() }
+            )
+        }
     }
 
     // MARK: - Private
