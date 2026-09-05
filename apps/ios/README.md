@@ -89,6 +89,13 @@ batch against the TypeScript vocabulary, so the transcription must stay a
 subset of it. Session replay posts to PostHog directly from
 `Luke/SessionReplay.swift` under the `PostHog` SwiftPM package.
 
+The watch app runs the counted stream alone, through the same sender with
+client `watchos` (stamped `luke-watchos` by the service). It does not link the
+PostHog SDK: `posthog-ios` builds session replay only for iOS and crash
+autocapture only for iOS, macOS, and tvOS, so there is no watch recording and
+no watch crash reporting. Account edges are not counted on the watch, because
+a sign-in there is the phone's relay and the phone already counted it.
+
 The PostHog project key rides the `POSTHOG_PROJECT_API_KEY` build setting into
 `Info.plist`, empty by default — and empty means the recording client is never
 configured. A distributing build injects it:

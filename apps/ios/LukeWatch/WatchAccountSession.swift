@@ -90,6 +90,12 @@ final class WatchAccountSession {
         return accessToken
     }
 
+    /// The token while signed in and not near expiry; never signs out.
+    var standingAccessToken: String? {
+        guard case .signedIn = state, let accessToken, !tokenNearExpiry else { return nil }
+        return accessToken
+    }
+
     // MARK: - Private
 
     private var tokenNearExpiry: Bool {
@@ -136,6 +142,32 @@ extension WatchAccountSession: AccountTokenProviding {
     /// to push a fresh pair rather than attempting a refresh.
     func refreshAccessToken() async throws -> String {
         invalidateCredentialsAndRequestReplacement()
+        throw AccountSessionError.signedOut
+    }
+}
+
+// MARK: - Counting
+
+/// Tokens for the product-event sender. `validAccessToken()` on the session
+/// signs the watch out at near-expiry to summon fresh tokens from the phone;
+/// a timed or background flush of counts must not do that, so the counts
+/// wait for a standing token instead, and a 401 drops the batch.
+@MainActor
+final class WatchCountingTokens: AccountTokenProviding {
+    private let session: WatchAccountSession
+
+    init(session: WatchAccountSession) {
+        self.session = session
+    }
+
+    var accountEmail: String? { session.accountEmail }
+
+    func validAccessToken() async throws -> String {
+        guard let token = session.standingAccessToken else { throw AccountSessionError.signedOut }
+        return token
+    }
+
+    func refreshAccessToken() async throws -> String {
         throw AccountSessionError.signedOut
     }
 }

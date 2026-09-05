@@ -31,6 +31,7 @@ struct LukeApp: App {
         let events = ProductEventSender(
             serviceURL: AccountConstants.serviceURL,
             appVersion: Self.appVersion,
+            client: .iOS,
             sends: !testing,
             session: session
         )

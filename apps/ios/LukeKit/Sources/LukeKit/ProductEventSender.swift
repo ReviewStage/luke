@@ -3,10 +3,10 @@ import Observation
 
 /// Counts how Luke's own features are used, and sends nothing else — the
 /// desktop's `ProductEventSender` (`packages/analytics/src/sender.ts`)
-/// rebuilt on this platform, keeping every posture it keeps. Events go to
-/// Luke's own `/api/events`, never to an analytics provider, and the batch
-/// carries no identity: the service resolves the account from the same
-/// bearer token every other hosted call rides, and the one thing named
+/// rebuilt for the iOS and watchOS apps, keeping every posture it keeps.
+/// Events go to Luke's own `/api/events`, never to an analytics provider, and
+/// the batch carries no identity: the service resolves the account from the
+/// same bearer token every other hosted call rides, and the one thing named
 /// beyond the events is which of Luke's own apps is posting, as a fixed
 /// header value the service maps onto an equally fixed `$lib` tag.
 ///
@@ -33,9 +33,8 @@ public final class ProductEventSender {
         static let batchLimit = 50
     }
 
-    /// Mirrors `PRODUCT_EVENT_CLIENT_HEADER` and `PRODUCT_EVENT_CLIENT.IOS`.
+    /// Mirrors `PRODUCT_EVENT_CLIENT_HEADER`.
     static let clientHeader = "x-luke-client"
-    static let clientName = "ios"
 
     /// The one discriminator the day marker dedups on.
     private static let dayActiveKey = "day"
@@ -47,6 +46,7 @@ public final class ProductEventSender {
 
     private let endpoint: URL
     private let appVersion: String
+    private let client: ProductEventClient
     /// False makes every record a no-op — the test-run and capture gate, the
     /// desktop's `runMode.sendsNetwork` at this app's one seam.
     private let sends: Bool
@@ -59,6 +59,8 @@ public final class ProductEventSender {
     private var queue: [QueuedEvent] = []
     /// Nested rather than an interpolated key: the name and the discriminator stay apart.
     private var recordedDays: [String: [String: String]] = [:]
+    /// Whose queue and day marks these are, once anyone has signed in.
+    private var recordedFor: String?
     private var armed = false
     private var timer: Timer?
     private var inFlight: Task<Void, Never>?
@@ -66,6 +68,7 @@ public final class ProductEventSender {
     public init(
         serviceURL: URL,
         appVersion: String,
+        client: ProductEventClient,
         sends: Bool,
         session: any AccountTokenProviding,
         http: HTTPClient = URLSession.shared,
@@ -75,6 +78,7 @@ public final class ProductEventSender {
     ) {
         endpoint = serviceURL.appendingPathComponent("api/events")
         self.appVersion = appVersion
+        self.client = client
         self.sends = sends
         self.session = session
         self.http = http
@@ -87,6 +91,7 @@ public final class ProductEventSender {
     /// sit on any path without ordering itself around it.
     public func record(_ event: ProductEvent) {
         guard allowed else { return }
+        adoptAccount()
         queue.append(QueuedEvent(event: event, at: now()))
         if queue.count > queueLimit {
             queue.removeFirst(queue.count - queueLimit)
@@ -103,6 +108,7 @@ public final class ProductEventSender {
     /// provider per day is the fact worth having, not a count of refreshes.
     public func recordOncePerDay(_ event: ProductEvent, discriminator: String) {
         guard allowed else { return }
+        adoptAccount()
         let today = Self.dayFormatter.string(from: now())
         if recordedDays[event.name]?[discriminator] == today { return }
         recordedDays[event.name, default: [:]][discriminator] = today
@@ -163,11 +169,26 @@ public final class ProductEventSender {
         sends && armed
     }
 
+    /// A different account signing in starts clean: whatever the previous
+    /// one left queued or marked is dropped rather than posted as the new
+    /// one. Counts recorded before anyone signed in go to the first account,
+    /// and the same account signing back in keeps everything.
+    private func adoptAccount() {
+        guard let account = session.accountEmail, account != recordedFor else { return }
+        if recordedFor != nil {
+            queue.removeAll()
+            recordedDays.removeAll()
+        }
+        recordedFor = account
+    }
+
     private func send() async {
         guard !queue.isEmpty else { return }
         // Signed out is temporary and nobody's fault, so the queue waits
         // rather than being spent against a request that cannot authenticate.
         guard let token = try? await session.validAccessToken() else { return }
+        adoptAccount()
+        guard !queue.isEmpty else { return }
         // Taken only once a request will actually be made, and gone whatever
         // becomes of it.
         let events = Array(queue.prefix(Defaults.batchLimit))
@@ -186,7 +207,7 @@ public final class ProductEventSender {
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(Self.clientName, forHTTPHeaderField: Self.clientHeader)
+        request.setValue(client.rawValue, forHTTPHeaderField: Self.clientHeader)
         let body: [String: Any] = ["events": events.map(wireEvent)]
         guard let data = try? JSONSerialization.data(withJSONObject: body) else { return nil }
         request.httpBody = data

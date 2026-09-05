@@ -10,6 +10,12 @@ import Foundation
 /// version, so a session title, a branch, or anything typed has no shape it
 /// could travel in.
 
+/// Which app is posting, as `PRODUCT_EVENT_CLIENT` names the Swift ones.
+public enum ProductEventClient: String, Sendable {
+    case iOS = "ios"
+    case watchOS = "watchos"
+}
+
 /// Every provider the shared vocabulary names (`PROVIDER_ID` in
 /// `packages/session`). A roster row's provider id is read back through this
 /// set before it may reach a count, so an id the vocabulary has not answered

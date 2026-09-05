@@ -251,7 +251,11 @@ Trust constraints:
   enums make free text unrepresentable, the service reads its batches against
   the TypeScript allowlist exactly as it reads the desktop's, and the one
   thing naming which app posted is a header whose value only selects between
-  fixed `$lib` tags — absent or unrecognized means the desktop. The service attaches the account's own name and address to
+  fixed `$lib` tags — absent or unrecognized means the desktop. The watch app
+  counts through the same Swift sender under its own fixed client value and
+  runs no other stream: the SDK's replay and crash autocapture do not build
+  for watchOS, so the watch posts nothing to the analytics provider directly.
+  The service attaches the account's own name and address to
   the analytics person record, read from its own user row, never from the
   request, and never onto an event, because an event property is what the
   allowlist governs and a person property is not. The renderer has one narrow
@@ -317,7 +321,7 @@ Trust constraints:
   sees SwiftUI at all, begun at first paint before any account, joined to the
   person by the same account id at sign-in, and reset to anonymous at
   sign-out; it has no account deletion surface, so the desktop's deletion is
-  what erases its recordings too.
+  what erases its recordings too. The watch app does not record at all.
   None of the three sends anything in a fixture or evidence run, and nothing
   else stands in front of any of them: there is no switch, and the run mode is
   the whole of the gate. On iOS, which has no fixture runs, the same gate is

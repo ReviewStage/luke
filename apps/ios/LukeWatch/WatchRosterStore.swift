@@ -22,12 +22,14 @@ final class WatchRosterStore {
     var searchQuery = ""
 
     private let session: WatchAccountSession
+    private let events: ProductEventSender
     private let client = RosterClient(serviceURL: AccountConstants.serviceURL)
     private var reloadRequested = true
     private var loadGeneration = 0
 
-    init(session: WatchAccountSession) {
+    init(session: WatchAccountSession, events: ProductEventSender) {
         self.session = session
+        self.events = events
     }
 
     /// Whether anything hides a row: a filter, or a query with words in it.
@@ -87,6 +89,7 @@ final class WatchRosterStore {
                 guard generation == loadGeneration else { return }
                 sessions = fetched
                 completedRequest = true
+                recordObservation(fetched)
             } catch is AccountSessionError {
                 guard generation == loadGeneration else { return }
                 session.signOut()
@@ -122,6 +125,20 @@ final class WatchRosterStore {
             try? await Task.sleep(for: .seconds(15))
             guard !Task.isCancelled else { break }
             await load()
+        }
+    }
+
+    /// One count per provider per day, in buckets — polling is not using.
+    /// A provider id the shared vocabulary has not answered for is left
+    /// uncounted rather than sent to be refused.
+    private func recordObservation(_ sessions: [RosterSession]) {
+        let rowsByProvider = Dictionary(grouping: sessions, by: \.providerId)
+        for (providerId, rows) in rowsByProvider {
+            guard let provider = ProductProviderID(rawValue: providerId) else { continue }
+            events.recordOncePerDay(
+                .sessionObserve(provider: provider, sessions: .bucket(for: rows.count)),
+                discriminator: providerId
+            )
         }
     }
 }

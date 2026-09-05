@@ -100,6 +100,7 @@ final class ProductEventSenderTests: XCTestCase {
     private let serviceURL = URL(string: "https://luke.test")!
 
     private func makeSender(
+        client: ProductEventClient = .iOS,
         sends: Bool = true,
         tokens: StubTokens = StubTokens(),
         clock: Clock = Clock(),
@@ -116,6 +117,7 @@ final class ProductEventSenderTests: XCTestCase {
         let sender = ProductEventSender(
             serviceURL: serviceURL,
             appVersion: "0.1.1",
+            client: client,
             sends: sends,
             session: tokens,
             http: http,
@@ -172,6 +174,18 @@ final class ProductEventSenderTests: XCTestCase {
         await sender.flush().value
         requests = await log.requests
         XCTAssertEqual(requests.count, 1)
+    }
+
+    /// The header only ever carries a member of the client set, so a watch
+    /// batch is stamped as the watch's and never mistaken for the phone's.
+    func testTheClientHeaderNamesTheAppThatPosted() async {
+        let (sender, log) = makeSender(client: .watchOS)
+        sender.arm()
+        sender.record(.appLaunch)
+        await sender.flush().value
+        let requests = await log.requests
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests[0].value(forHTTPHeaderField: "x-luke-client"), "watchos")
     }
 
     func testA401RefreshesAndRetriesOnceAndTheSameTokenTwiceDoesNot() async {
@@ -389,6 +403,60 @@ final class ProductEventSenderTests: XCTestCase {
         )
         let peak = await meter.peak
         XCTAssertEqual(peak, 1)
+    }
+
+    func testCountsRecordedBeforeAnyoneSignedInGoToTheFirstAccount() async {
+        let tokens = StubTokens(valid: nil)
+        tokens.accountEmail = nil
+        let (sender, log) = makeSender(tokens: tokens)
+        sender.arm()
+        sender.record(.appLaunch)
+        sender.markDayActive()
+        tokens.accountEmail = "dev@example.com"
+        tokens.valid = "at-1"
+        sender.markDayActive()
+        await sender.flush().value
+
+        let requests = await log.requests
+        XCTAssertEqual(
+            sentEvents(requests[0]).map { $0["name"] as? String },
+            ["app:launch", "app:day_active"]
+        )
+    }
+
+    func testADifferentAccountStartsCleanAndTheSameAccountKeepsItsMarks() async {
+        let tokens = StubTokens()
+        let (sender, log) = makeSender(tokens: tokens)
+        sender.arm()
+        sender.markDayActive()
+        await sender.flush().value
+        sender.record(.accountSignIn)
+
+        // Signed out before the flush, then a different account: what waited
+        // is dropped, and the new account marks its own day.
+        tokens.accountEmail = nil
+        tokens.valid = nil
+        sender.markDayActive()
+        tokens.accountEmail = "other@example.com"
+        tokens.valid = "at-2"
+        await sender.flush().value
+        var requests = await log.requests
+        XCTAssertEqual(requests.count, 1)
+        sender.markDayActive()
+        await sender.flush().value
+        requests = await log.requests
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(sentEvents(requests[1]).map { $0["name"] as? String }, ["app:day_active"])
+
+        // The same account back keeps its marks: nothing more today.
+        tokens.accountEmail = nil
+        tokens.valid = nil
+        tokens.accountEmail = "other@example.com"
+        tokens.valid = "at-2"
+        sender.markDayActive()
+        await sender.flush().value
+        requests = await log.requests
+        XCTAssertEqual(requests.count, 2)
     }
 
     func testStoppingDropsWhatWasQueuedRatherThanHoldingTheQuitOpen() async {

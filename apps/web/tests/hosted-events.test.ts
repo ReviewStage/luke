@@ -242,25 +242,27 @@ test("the forwarded document matches the processor's documented batch shape", as
 });
 
 test("the client header selects the $lib tag, and anything else is the desktop", async () => {
-  const mobile = upstream();
-  await handleEvents(
-    options({
-      request: new Request("https://luke.test/api/events", {
-        method: "POST",
-        headers: {
-          authorization: "Bearer token-1",
-          [PRODUCT_EVENT_CLIENT_HEADER]: PRODUCT_EVENT_CLIENT.IOS,
-        },
-        body: JSON.stringify({ events: [LAUNCH] }),
+  for (const client of [PRODUCT_EVENT_CLIENT.IOS, PRODUCT_EVENT_CLIENT.WATCHOS]) {
+    const posted = upstream();
+    await handleEvents(
+      options({
+        request: new Request("https://luke.test/api/events", {
+          method: "POST",
+          headers: {
+            authorization: "Bearer token-1",
+            [PRODUCT_EVENT_CLIENT_HEADER]: client,
+          },
+          body: JSON.stringify({ events: [LAUNCH] }),
+        }),
+        fetch: posted.fetch,
+        resolveUserId: freshUser(),
       }),
-      fetch: mobile.fetch,
-      resolveUserId: freshUser(),
-    }),
-  );
-  assert.equal(
-    itemAt(onlyBatch(mobile.forwarded).items, 0).properties.$lib,
-    PRODUCT_EVENT_CLIENT_LIB[PRODUCT_EVENT_CLIENT.IOS],
-  );
+    );
+    assert.equal(
+      itemAt(onlyBatch(posted.forwarded).items, 0).properties.$lib,
+      PRODUCT_EVENT_CLIENT_LIB[client],
+    );
+  }
 
   // A header outside the set cannot put its own words in the tag.
   const forged = upstream();
