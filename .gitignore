@@ -5,6 +5,7 @@ coverage/
 node_modules/
 apps/*/out/
 apps/*/dist/
+apps/*/dist-server/
 apps/*/.vite/
 *.tsbuildinfo
 pnpm-debug.log*

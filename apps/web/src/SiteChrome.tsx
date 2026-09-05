@@ -88,6 +88,18 @@ export function SiteHeader(): React.JSX.Element {
           >
             Changelog
           </a>
+          <a
+            className="text-sm font-medium text-muted-foreground no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
+            href="/docs"
+          >
+            Docs
+          </a>
+          <a
+            className="text-sm font-medium text-muted-foreground no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
+            href="/pricing"
+          >
+            Pricing
+          </a>
           {/* Icon-only, so the padding buys a comfortable hit target and a focus
               ring with room around the mark. The matching negative margin keeps
               the mark optically aligned with the wordmark's edge rather than
@@ -125,6 +137,18 @@ export function SiteFooter(): React.JSX.Element {
           href="/changelog"
         >
           Changelog
+        </a>
+        <a
+          className="no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
+          href="/docs"
+        >
+          Docs
+        </a>
+        <a
+          className="no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
+          href="/pricing"
+        >
+          Pricing
         </a>
         <a
           className="no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"

@@ -126,8 +126,13 @@ export function NotchMock(): React.JSX.Element {
   // The loop never runs under reduced motion, where a timed tour is exactly
   // the motion the visitor asked not to see: the panel is there from the
   // first paint, not popped in by a mount effect.
+  // No window means the build-time prerender is asking: draw the panel, the
+  // same hero state reduced motion gets, so the static markup shows the mock
+  // at its most legible rather than mid-loop.
   const [mode, setMode] = useState<MockMode>(() =>
-    window.matchMedia(REDUCED_MOTION_QUERY).matches ? MOCK_MODE.PANEL : MOCK_MODE.CAPSULE,
+    typeof window === "undefined" || window.matchMedia(REDUCED_MOTION_QUERY).matches
+      ? MOCK_MODE.PANEL
+      : MOCK_MODE.CAPSULE,
   );
   const [panelHeight, setPanelHeight] = useState<number>();
 

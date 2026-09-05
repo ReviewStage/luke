@@ -10,7 +10,7 @@
   "scripts": {
     "auth:generate": "DATABASE_URL=${DATABASE_URL:-postgresql://schema:generate@127.0.0.1:5432/luke} pnpm dlx @better-auth/cli@1.4.21 generate --config server/auth.ts --output server/db/auth-schema.ts --yes && pnpm exec biome check --write server/db/auth-schema.ts",
     "auth:seed": "tsx server/seed-clients.ts",
-    "build": "vite build",
+    "build": "vite build && vite build --ssr src/entry-server.tsx --outDir dist-server && tsx scripts/prerender.ts",
     "db:check": "drizzle-kit check",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx server/db/migrate.ts",
