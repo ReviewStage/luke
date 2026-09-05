@@ -806,6 +806,7 @@ const introductionWindow = new IntroductionWindow({
     process.stderr.write(`Introduction abandoned: ${reason}\n`);
     void abandonIntroduction();
   },
+  onClosed: () => quitUnlessPanelStands(),
 });
 /**
  * The hidden window that will hold the live conversation, so that no panel
@@ -827,6 +828,21 @@ const voiceWindow = new VoiceWindow({
   },
 });
 const voiceWindowWanted = runMode.registersGlobalKeys || runMode.sendsNetwork;
+
+/**
+ * The invariant the hidden window lives under: it never keeps the process
+ * alive. It is raised only once a panel stands, so it is never the only
+ * window, and whenever the takeover — the one other window that can stand
+ * with no panel — goes down by any route, a run with no panel ends here
+ * rather than living on invisibly.
+ */
+function raiseVoiceWindow(): void {
+  if (voiceWindowWanted && panels.standing > 0) voiceWindow.open();
+}
+
+function quitUnlessPanelStands(): void {
+  if (panels.standing === 0) app.quit();
+}
 /**
  * Whether the takeover's renderer ever reported mounting. A takeover that
  * never draws is a fullscreen window swallowing every click with nothing on
@@ -1118,6 +1134,7 @@ async function finishIntroduction(given: boolean): Promise<void> {
   // expands the gate — the same morph, Luke riding from the wing spot into
   // the gate's face, that every later signed-out launch plays.
   panels.reconcile();
+  raiseVoiceWindow();
   await Promise.race([
     panelReady,
     new Promise((resolve) => setTimeout(resolve, INTRODUCTION_HANDOFF_READY_MS)),
@@ -1143,6 +1160,7 @@ async function abandonIntroduction(): Promise<void> {
   // answered by the introduction's standing while it is being stood down.
   introductionWindow.retire();
   panels.reconcile();
+  raiseVoiceWindow();
   panels.showInactiveAll();
   introductionWindow.close();
   await hotkeys.reapply(HOTKEY_RANK.TALK);
@@ -3085,10 +3103,9 @@ export function startDesktopApp(): void {
       // The introduction owns the screen alone until it completes or is
       // abandoned; both of its endings reconcile the panels themselves.
       if (!introductionWindow.active) panels.reconcile();
-      // Raised after the panels, so it is never the only window standing: the
-      // panels closing is how this process decides it is done, and a hidden
-      // window that stood alone would keep an app nobody can see alive.
-      if (voiceWindowWanted) voiceWindow.open();
+      // Raised only once a panel stands; during the introduction, its ending
+      // is what raises the panels and the voice window with them.
+      raiseVoiceWindow();
       configurePermissions();
       startSessionObservation();
       startCalendarObservation();

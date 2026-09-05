@@ -306,6 +306,13 @@ export class PanelManager {
     this.#applyVoiceExchanges();
   }
 
+  /** How many panel windows stand — the count the process's lifetime is decided by. */
+  get standing(): number {
+    let count = 0;
+    for (const window of this.#windows.values()) if (!window.isDestroyed()) count += 1;
+    return count;
+  }
+
   /** Whether some panel window's renderer is asking, whichever display it is on. */
   owns(webContents: WebContents): boolean {
     for (const window of this.#windows.values()) {
