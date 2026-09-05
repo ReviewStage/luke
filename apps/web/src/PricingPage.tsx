@@ -1,3 +1,4 @@
+import { captureSiteEvent, SITE_EVENT } from "./analytics";
 import { DMG_URL, GitHubMark, REPOSITORY_URL, SiteFooter, SiteHeader } from "./SiteChrome";
 
 const SECTION_HEADING =
@@ -26,6 +27,7 @@ export function PricingPage(): React.JSX.Element {
           <a
             className="inline-flex items-center gap-2 rounded-md bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground no-underline transition-[filter,transform] duration-150 hover:brightness-95 active:translate-y-px motion-reduce:transition-none"
             href={DMG_URL}
+            onClick={() => captureSiteEvent(SITE_EVENT.DOWNLOAD_PRESS)}
           >
             Download for macOS
           </a>

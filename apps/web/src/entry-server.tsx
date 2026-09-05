@@ -12,24 +12,32 @@ import { PrivacyPage } from "./PrivacyPage";
  * are app surfaces rather than documents, so they stay client-rendered: a
  * static render of them would only ever describe a form.
  */
-const PRERENDERED_PAGES: Record<string, () => React.JSX.Element> = {
+const PRERENDERED_PAGES = {
   "index.html": App,
   "about.html": AboutPage,
   "changelog.html": ChangelogPage,
   "docs.html": DocsPage,
   "pricing.html": PricingPage,
   "privacy.html": PrivacyPage,
-};
+} as const satisfies Readonly<Record<string, () => React.JSX.Element>>;
+
+export interface PrerenderedPage {
+  /** The built HTML file whose `#root` the markup fills. */
+  readonly file: string;
+  readonly markup: string;
+}
 
 /**
- * Renders one page to static markup for `scripts/prerender.ts`. The client
- * entries still mount with `createRoot` rather than `hydrateRoot`: the
- * prerendered markup is there for crawlers and for the first paint, and the
- * live app replaces it on load instead of negotiating a hydration match with
- * the notch mock's animation state.
+ * Renders every prerendered page to static markup for `scripts/prerender.ts`,
+ * which learns the page list from here rather than keeping one of its own.
+ * The client entries still mount with `createRoot` rather than `hydrateRoot`:
+ * the prerendered markup is there for crawlers and for the first paint, and
+ * the live app replaces it on load instead of negotiating a hydration match
+ * with the notch mock's animation state.
  */
-export function renderPage(file: string): string {
-  const Page = PRERENDERED_PAGES[file];
-  if (!Page) throw new Error(`No prerendered page for ${file}`);
-  return renderToString(<Page />);
+export function renderPrerenderedPages(): readonly PrerenderedPage[] {
+  return Object.entries(PRERENDERED_PAGES).map(([file, Page]) => ({
+    file,
+    markup: renderToString(<Page />),
+  }));
 }

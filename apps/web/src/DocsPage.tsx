@@ -1,3 +1,9 @@
+import {
+  PROVIDER_ID_LIST,
+  PROVIDER_IDENTITY_BY_ID,
+  PROVIDER_LOCATION_KIND,
+} from "@sidecar/session";
+import { captureSiteEvent, SITE_EVENT } from "./analytics";
 import { DMG_URL, REPOSITORY_URL, SiteFooter, SiteHeader } from "./SiteChrome";
 
 /** A keyboard shortcut is a technical token, and mono is what the page reserves for those. */
@@ -15,21 +21,17 @@ const BODY = "m-0 mb-4 text-pretty text-muted-foreground";
 const LIST = "m-0 mb-4 list-disc pl-5 text-muted-foreground [&>li]:mb-2 [&>li:last-child]:mb-0";
 
 /**
- * The agents and platforms Luke watches, kept in step with the README's
- * provider table by hand: the README generates its own from the provider
- * registry, and this page states the same list for someone who never opens
- * the repository.
+ * The same catalog the README's provider table is generated from, so this
+ * page and the README cannot disagree about which agents Luke watches.
  */
-const SUPPORTED_AGENTS: readonly {
-  readonly agent: string;
-  readonly local: boolean;
-  readonly cloud: boolean;
-}[] = [
-  { agent: "Claude Code", local: true, cloud: false },
-  { agent: "Codex", local: true, cloud: true },
-  { agent: "Conductor", local: false, cloud: true },
-  { agent: "OMP", local: true, cloud: false },
-];
+const SUPPORTED_AGENTS = PROVIDER_ID_LIST.map((providerId) => {
+  const { displayName, location } = PROVIDER_IDENTITY_BY_ID[providerId];
+  return {
+    agent: displayName,
+    local: location !== PROVIDER_LOCATION_KIND.CLOUD,
+    cloud: location !== PROVIDER_LOCATION_KIND.LOCAL,
+  };
+});
 
 /** How to install, set up, and use Luke: a page of its own, linked from the header and footer. */
 export function DocsPage(): React.JSX.Element {
@@ -56,7 +58,11 @@ export function DocsPage(): React.JSX.Element {
         <h2 className={SECTION_HEADING}>Install</h2>
         <ol className="m-0 mb-4 list-decimal pl-5 text-muted-foreground [&>li]:mb-2 [&>li:last-child]:mb-0">
           <li>
-            <a className="text-accent-ink underline underline-offset-2" href={DMG_URL}>
+            <a
+              className="text-accent-ink underline underline-offset-2"
+              href={DMG_URL}
+              onClick={() => captureSiteEvent(SITE_EVENT.DOWNLOAD_PRESS)}
+            >
               Download Luke
             </a>
             .

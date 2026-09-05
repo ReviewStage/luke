@@ -78,18 +78,6 @@ export function SiteHeader(): React.JSX.Element {
         <div className="flex items-center gap-4">
           <a
             className="text-sm font-medium text-muted-foreground no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
-            href="/about"
-          >
-            About
-          </a>
-          <a
-            className="text-sm font-medium text-muted-foreground no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
-            href="/changelog"
-          >
-            Changelog
-          </a>
-          <a
-            className="text-sm font-medium text-muted-foreground no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
             href="/docs"
           >
             Docs
@@ -99,6 +87,22 @@ export function SiteHeader(): React.JSX.Element {
             href="/pricing"
           >
             Pricing
+          </a>
+          {/* Four labels and the mark overrun a phone's column and collide
+              with the wordmark, so below the shell's own breakpoint the two
+              secondary pages step out of the bar: the footer still carries
+              both on every page. */}
+          <a
+            className="text-sm font-medium text-muted-foreground no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none max-[520px]:hidden"
+            href="/about"
+          >
+            About
+          </a>
+          <a
+            className="text-sm font-medium text-muted-foreground no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none max-[520px]:hidden"
+            href="/changelog"
+          >
+            Changelog
           </a>
           {/* Icon-only, so the padding buys a comfortable hit target and a focus
               ring with room around the mark. The matching negative margin keeps

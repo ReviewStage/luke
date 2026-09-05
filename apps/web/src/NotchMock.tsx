@@ -126,11 +126,12 @@ export function NotchMock(): React.JSX.Element {
   // The loop never runs under reduced motion, where a timed tour is exactly
   // the motion the visitor asked not to see: the panel is there from the
   // first paint, not popped in by a mount effect.
-  // No window means the build-time prerender is asking: draw the panel, the
-  // same hero state reduced motion gets, so the static markup shows the mock
-  // at its most legible rather than mid-loop.
+  // The build-time prerender draws the capsule: the state the live app mounts
+  // in for everyone but reduced motion, so the first frame a visitor sees is
+  // the one the bundle replaces it with, not a panel that snaps shut the
+  // moment the script lands.
   const [mode, setMode] = useState<MockMode>(() =>
-    typeof window === "undefined" || window.matchMedia(REDUCED_MOTION_QUERY).matches
+    !import.meta.env.SSR && window.matchMedia(REDUCED_MOTION_QUERY).matches
       ? MOCK_MODE.PANEL
       : MOCK_MODE.CAPSULE,
   );
