@@ -812,7 +812,7 @@ const introductionWindow = new IntroductionWindow({
  * does. It stands for the whole run on any launch that could speak — an
  * interactive one, or one that reaches the network — and never in a fixture or
  * capture run, where nothing would. A renderer that dies is stood up again by
- * the main process; nothing drawn depends on it.
+ * the window itself, within its own bound; nothing drawn depends on it.
  */
 const voiceWindow = new VoiceWindow({
   runMode,
@@ -821,16 +821,12 @@ const voiceWindow = new VoiceWindow({
   rendererUrl: rendererUrl(),
   onGone: (reason) => {
     process.stderr.write(`Voice window replaced: ${reason}\n`);
-    voiceWindow.close();
-    if (!quitting) voiceWindow.open();
+  },
+  onGaveUp: (reason) => {
+    process.stderr.write(`Voice window abandoned: ${reason}\n`);
   },
 });
 const voiceWindowWanted = runMode.registersGlobalKeys || runMode.sendsNetwork;
-/**
- * Set at the first quit signal so a voice renderer going down during the quit
- * itself is not stood up again behind the app's back.
- */
-let quitting = false;
 /**
  * Whether the takeover's renderer ever reported mounting. A takeover that
  * never draws is a fullscreen window swallowing every click with nothing on
@@ -3175,10 +3171,9 @@ export function startDesktopApp(): void {
   });
 
   app.on("before-quit", () => {
-    quitting = true;
     // Closed by the main process, never waited on: the panels closing is what
     // decides the app is done, and this window was never one of them.
-    voiceWindow.close();
+    voiceWindow.closeForGood();
     observationSupervisor.setEnabled(false);
     stopCalendarObservation();
     for (const watcher of spoolWatchers) watcher.close();
