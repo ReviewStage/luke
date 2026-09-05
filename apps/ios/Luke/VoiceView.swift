@@ -302,7 +302,7 @@ struct VoiceView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) {
             _ in
-            guard composerShown, composing else { return }
+            guard composerShown else { return }
             composing = false
             hideComposer()
         }
