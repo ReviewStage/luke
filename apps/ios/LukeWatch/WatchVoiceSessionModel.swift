@@ -68,7 +68,14 @@ final class WatchVoiceSessionModel {
             status = .idle
             return
         }
-        guard session == nil else { return }
+        // stop() may have run while activation was in flight: it has already
+        // cleared the account and deactivated, and the activation that just
+        // landed put the session back up, so it goes down again here rather
+        // than opening a call nobody is holding.
+        guard !Task.isCancelled, self.accountSession != nil, session == nil else {
+            WatchVoiceAudioSession.deactivate()
+            return
+        }
 
         let opts = RealtimeSessionOptions(
             requestConnection: { [weak accountSession, weak self] in
