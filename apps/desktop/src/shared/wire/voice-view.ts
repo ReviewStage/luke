@@ -43,6 +43,43 @@ export const VOICE_COMMAND = {
 
 export type VoiceCommand = (typeof VOICE_COMMAND)[keyof typeof VOICE_COMMAND];
 
+/**
+ * What became of a command that has an outcome worth answering: a typed ask,
+ * so the composer can keep or clear its draft, and a Clear, so the panel can
+ * say when the stored thread could not be deleted. Refused covers every way
+ * an ask does not reach a conversation — the brain absent, the ask timed
+ * out, the voice window gone or silent — because the composer's one question
+ * is whether the developer's words are still theirs to retry. The other
+ * commands answer nothing.
+ */
+export const VOICE_COMMAND_OUTCOME = {
+  ACCEPTED: "accepted",
+  REFUSED: "refused",
+} as const;
+
+export type VoiceCommandOutcome =
+  (typeof VOICE_COMMAND_OUTCOME)[keyof typeof VOICE_COMMAND_OUTCOME];
+
+const VOICE_COMMAND_OUTCOMES: ReadonlySet<string> = new Set(Object.values(VOICE_COMMAND_OUTCOME));
+
+export function isVoiceCommandOutcome(value: UnparsedWireValue): value is VoiceCommandOutcome {
+  return isWireString(value) && VOICE_COMMAND_OUTCOMES.has(value);
+}
+
+/**
+ * The voice at rest: what a panel draws before the voice window has reported
+ * anything, and what the main process tells every panel when the voice
+ * renderer dies, so no display keeps drawing an exchange that is gone.
+ */
+export const IDLE_VOICE_VIEW: VoiceView = {
+  voiceStatus: REALTIME_STATUS.IDLE,
+  voiceError: undefined,
+  voiceNotice: undefined,
+  talkOpening: false,
+  lukeCaptions: undefined,
+  liveConversationEntries: [],
+};
+
 const REALTIME_STATUSES: ReadonlySet<string> = new Set(Object.values(REALTIME_STATUS));
 
 export function isRealtimeStatus(value: UnparsedWireValue): value is RealtimeStatus {

@@ -10,6 +10,7 @@ import type { ActResult } from "@sidecar/wire";
 import type { MicrophoneStatus, OutputAudioState } from "./audio";
 import type { AppSettings } from "./settings";
 import type { UpdateSnapshot } from "./update";
+import type { VoiceView } from "./voice-view";
 
 export {
   isWorkspaceProviderId,
@@ -98,14 +99,12 @@ export interface SessionReplayBootstrap {
 }
 
 /**
- * The conversation history as every panel window shares it. A voice exchange
- * lands on one window — the primary display hosts the talk key and the
- * announcements, a typed ask lands on the panel it was typed into — so the
- * thread is relayed through the main process for every other display's
- * History to draw the same. `cleared` marks the relay of a Clear pressed on
- * another display, which retires the receiving window's in-flight turns the
- * way its own press would; an ordinary report replaces the thread and
- * retires nothing.
+ * The conversation history as every panel window draws it. The thread has one
+ * writer, the hidden voice window, and one store, the main process, which
+ * relays each report whole to every panel so History reads the same on every
+ * display. `cleared` marks the relay of a Clear, which the voice window is
+ * told of on its own command; a panel needs nothing from it but the empty
+ * thread.
  */
 export interface ConversationHistoryPayload {
   entries: readonly ConversationEntry[];
@@ -204,6 +203,13 @@ export interface AppBootstrap {
    * Empty in a fixture or capture run, which reads no thread and writes none.
    */
   conversationHistory: readonly ConversationEntry[];
+  /**
+   * The live conversation as the voice window last reported it, so a panel
+   * that opens mid-exchange draws the exchange rather than an idle voice.
+   * Absent until the voice window has reported once, and always in a fixture
+   * or capture run, which raises no voice window.
+   */
+  voiceView: VoiceView | undefined;
   /** Luke's bounded durable facts about the developer. Empty in fixture and capture runs. */
   rememberedFacts: readonly RememberedFact[];
   /**

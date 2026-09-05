@@ -93,10 +93,13 @@ import {
 import type { UpdateSnapshot } from "./wire/update";
 import {
   isVoiceCommand,
+  isVoiceCommandOutcome,
   isVoiceView,
   VOICE_COMMAND,
   type VoiceCommand,
+  type VoiceCommandOutcome,
   type VoiceView,
+  voiceExchangeActive,
 } from "./wire/voice-view";
 
 export interface WireGuard<Value> {
@@ -450,21 +453,6 @@ export const BRIDGE = {
     args: noArgs,
     result: result<ActResult>(isActResult),
   }),
-  setVoiceExchangeActive: entry({
-    kind: "send",
-    channel: "app:set-voice-exchange",
-    // The level and the count are two different things on one channel: the
-    // boolean is the panel's, sent on every change because the duck and the
-    // face follow it, and the kind is the count's, sent only on the edge that
-    // opened the exchange — so a turn walking from connecting to responding
-    // is counted once, and named by who opened it.
-    args: args<[boolean, ProductExchangeKind | undefined]>(
-      (v) =>
-        v.length === 2 &&
-        isWireBoolean(v[0]) &&
-        (v[1] === undefined || (v[0] === true && isProductExchangeKind(v[1]))),
-    ),
-  }),
   openSession: entry({
     kind: "invoke",
     channel: "app:open-session",
@@ -554,7 +542,10 @@ export const BRIDGE = {
    * A panel's ask of the voice window, carried through the main process, which
    * validates it and forwards it on `onVoiceCommand`. Only a typed ask carries
    * a payload — the words themselves, bounded by the same limit the session
-   * applies — and every other command carries none.
+   * applies — and every other command carries none. A typed ask is answered
+   * with whether it reached a conversation, so the composer can keep a refused
+   * draft, and a Clear with whether the stored thread was deleted; the other
+   * commands resolve with nothing.
    */
   voiceCommand: entry({
     kind: "invoke",
@@ -567,17 +558,40 @@ export const BRIDGE = {
           ? isWireString(v[1]) && v[1].length <= maximumTypedAskLength
           : v[1] === undefined),
     ),
-    result: result<void>(),
+    result: result<VoiceCommandOutcome | undefined>(
+      (v) => v === undefined || isVoiceCommandOutcome(v),
+    ),
+  }),
+  /**
+   * The voice window's answer to one forwarded typed ask, by the request id
+   * the forward carried, so the main process can resolve the panel's invoke.
+   */
+  answerVoiceAsk: entry({
+    kind: "send",
+    channel: "app:answer-voice-ask",
+    args: args<[string, VoiceCommandOutcome]>(
+      (v) => v.length === 2 && isWireString(v[0]) && isVoiceCommandOutcome(v[1]),
+    ),
   }),
   /**
    * The voice window's whole snapshot of the live conversation, reported on
    * every edge. The main process keeps only the latest, to hand a panel that
-   * opens later, and forwards each one to every panel on `onVoiceViewChanged`.
+   * opens later, forwards each one to every panel on `onVoiceViewChanged`,
+   * and derives the exchange level the media duck follows from it. The count
+   * of exchanges rides beside it: a kind travels only on the edge that opened
+   * an exchange, named by the one window that knows who opened it, so a turn
+   * walking from connecting to responding is counted once.
    */
   reportVoiceView: entry({
     kind: "send",
     channel: "app:report-voice-view",
-    args: args<[VoiceView]>((v) => v.length === 1 && isVoiceView(v[0])),
+    args: args<[VoiceView, ProductExchangeKind | undefined]>(
+      (v) =>
+        v.length === 2 &&
+        isVoiceView(v[0]) &&
+        (v[1] === undefined ||
+          (voiceExchangeActive(v[0].voiceStatus) && isProductExchangeKind(v[1]))),
+    ),
   }),
   /**
    * How loud whoever is talking is right now, in the unit interval, reported
@@ -622,13 +636,6 @@ export const BRIDGE = {
           );
         }),
     ),
-  }),
-  /** The History Clear press, persisted and relayed to every other display. */
-  clearConversationHistory: entry({
-    kind: "invoke",
-    channel: "app:clear-conversation-history",
-    args: noArgs,
-    result: result<boolean>(isWireBoolean),
   }),
   /**
    * Words the renderer already draws, placed on this machine's clipboard and
@@ -918,20 +925,26 @@ export const BRIDGE = {
   }),
   /**
    * A panel's validated command, forwarded by the main process to the voice
-   * window alone; a typed ask arrives with its words, every other command with
-   * none.
+   * window alone; a typed ask arrives with its words and the request id its
+   * outcome is answered under, every other command with neither.
    */
   onVoiceCommand: entry({
     kind: "subscribe",
     channel: "app:voice-command-forwarded",
     args: noArgs,
-    result: result<{ command: VoiceCommand; text: string | undefined }>(
+    result: result<{
+      command: VoiceCommand;
+      text: string | undefined;
+      requestId: string | undefined;
+    }>(
       (value) =>
         isRecord(value) &&
         isVoiceCommand(value.command) &&
         (value.command === VOICE_COMMAND.ASK_TEXT
-          ? isWireString(value.text) && value.text.length <= maximumTypedAskLength
-          : value.text === undefined),
+          ? isWireString(value.text) &&
+            value.text.length <= maximumTypedAskLength &&
+            isWireString(value.requestId)
+          : value.text === undefined && value.requestId === undefined),
     ),
   }),
   /**

@@ -48,13 +48,6 @@ test("a conversation history report carries only well-formed history lines", () 
   assert.equal(guard([[{ ...ask, recordedAt: Number.POSITIVE_INFINITY }]]), false);
 });
 
-test("clearing conversation history is acknowledged", () => {
-  assert.equal(BRIDGE.clearConversationHistory.kind, "invoke");
-  assert.equal(BRIDGE.clearConversationHistory.result?.(true), true);
-  assert.equal(BRIDGE.clearConversationHistory.result?.(false), true);
-  assert.equal(BRIDGE.clearConversationHistory.result?.(undefined), false);
-});
-
 test("remembered-fact pushes enforce their complete bounded shape", () => {
   const guard = BRIDGE.onRememberedFactsChanged.result;
   assert.equal(guard?.([{ id: "one", words: "kept" }]), true);
@@ -206,9 +199,26 @@ test("a voice view carries its six fields and nothing malformed", () => {
   assert.equal(guard({ ...VOICE_VIEW, lukeCaptions: [1] }), false);
   assert.equal(guard({ ...VOICE_VIEW, liveConversationEntries: [{ kind: "reply" }] }), false);
   assert.equal(guard({ ...VOICE_VIEW, liveConversationEntries: undefined }), false);
-  assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW]), true);
+  assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, undefined]), true);
+  assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW]), false);
   assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, VOICE_VIEW]), false);
-  assert.equal(BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, voiceStatus: 1 }]), false);
+  assert.equal(BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, voiceStatus: 1 }, undefined]), false);
+});
+
+test("an exchange kind rides a voice view only on an edge that opened one", () => {
+  assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, "spoken"]), true);
+  assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, "typed"]), true);
+  assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, "announcement"]), true);
+  assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, "shouted"]), false);
+  // A settled call opened nothing, so nothing may be counted against it.
+  assert.equal(
+    BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, voiceStatus: "ready" }, "spoken"]),
+    false,
+  );
+  assert.equal(
+    BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, voiceStatus: "ready" }, undefined]),
+    true,
+  );
 });
 
 test("a voice level is one finite number in the unit interval", () => {
@@ -256,11 +266,32 @@ test("a voice command carries words only for a typed ask, bounded", () => {
   assert.equal(guard(["stop-speaking"]), false);
   const forwarded = BRIDGE.onVoiceCommand.result;
   assert.ok(forwarded);
-  assert.equal(forwarded({ command: "ask-text", text: "hello" }), true);
-  assert.equal(forwarded({ command: "stop-speaking", text: undefined }), true);
-  assert.equal(forwarded({ command: "stop-speaking", text: "hello" }), false);
-  assert.equal(forwarded({ command: "ask-text", text: undefined }), false);
+  assert.equal(forwarded({ command: "ask-text", text: "hello", requestId: "ask-1" }), true);
+  assert.equal(forwarded({ command: "ask-text", text: "hello", requestId: undefined }), false);
+  assert.equal(
+    forwarded({ command: "stop-speaking", text: undefined, requestId: undefined }),
+    true,
+  );
+  assert.equal(forwarded({ command: "stop-speaking", text: "hello", requestId: undefined }), false);
+  assert.equal(forwarded({ command: "stop-speaking", text: undefined, requestId: "ask-1" }), false);
+  assert.equal(forwarded({ command: "ask-text", text: undefined, requestId: "ask-1" }), false);
   assert.equal(forwarded({ command: "dance" }), false);
+});
+
+test("a typed ask or a Clear is answered with its outcome, and nothing else is", () => {
+  const outcome = BRIDGE.voiceCommand.result;
+  assert.ok(outcome);
+  assert.equal(outcome("accepted"), true);
+  assert.equal(outcome("refused"), true);
+  assert.equal(outcome(undefined), true);
+  assert.equal(outcome("sent"), false);
+  assert.equal(outcome(true), false);
+  assert.equal(BRIDGE.answerVoiceAsk.kind, "send");
+  assert.equal(BRIDGE.answerVoiceAsk.args(["ask-1", "accepted"]), true);
+  assert.equal(BRIDGE.answerVoiceAsk.args(["ask-1", "refused"]), true);
+  assert.equal(BRIDGE.answerVoiceAsk.args(["ask-1", "maybe"]), false);
+  assert.equal(BRIDGE.answerVoiceAsk.args([1, "accepted"]), false);
+  assert.equal(BRIDGE.answerVoiceAsk.args(["ask-1"]), false);
 });
 
 test("shortcut capture is reported as one boolean", () => {

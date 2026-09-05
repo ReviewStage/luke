@@ -1,20 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PRODUCT_EXCHANGE_KIND } from "@sidecar/analytics";
-import { FIXTURE_SPEAKING_CAPTION } from "@sidecar/fixtures";
 import {
   CONVERSATION_ENTRY_KIND,
   REALTIME_STATUS,
   REALTIME_VOICE,
   REALTIME_VOICE_SPEED,
 } from "@sidecar/realtime";
-import { voiceExchangeActive, voiceExchangeKind } from "#shared/wire/voice-view";
 import { REPLY_KIND } from "./realtime-session";
 import {
   activeVoiceStream,
   authorizeConversationAct,
   conversationEntryBelongsToConversation,
-  conversationHistoryMayPersist,
   liveConversationEntries,
   liveSpeedApplies,
   lukeCaptionsToShow,
@@ -25,13 +21,9 @@ import {
   talkOpeningHolds,
   typedAskHolds,
   VOICE_RESTART,
-  voiceErrorToShow,
-  voiceNoticeToShow,
   voiceRestartAction,
   waitForConversationContext,
-  waveformVoice,
-} from "./use-voice-conversation";
-import { WAVEFORM_VOICE } from "./waveform";
+} from "./use-voice-session";
 
 test("a delayed transcription cannot repopulate history after Clear", () => {
   assert.equal(spokenAskBelongsToConversation(3, 4), false);
@@ -111,7 +103,7 @@ test("a gone call takes its half-transcribed previews with it", () => {
   assert.equal(spokenAskPreviewSurvives(REALTIME_STATUS.RESPONDING), true);
 });
 
-test("restore anchors pending speech and is the first point history may persist", () => {
+test("restore anchors pending speech behind the restored thread", () => {
   const restoredTail = { kind: "reply", words: "Earlier reply." } as const;
   const unanchored = { after: undefined };
   const anchored = { after: { kind: "reply", words: "Current reply." } as const };
@@ -120,9 +112,6 @@ test("restore anchors pending speech and is the first point history may persist"
 
   assert.equal(unanchored.after, restoredTail);
   assert.equal(anchored.after.words, "Current reply.");
-  assert.equal(conversationHistoryMayPersist(false, false), false);
-  assert.equal(conversationHistoryMayPersist(true, true), false);
-  assert.equal(conversationHistoryMayPersist(true, false), true);
 });
 
 test("the first call waits for durable conversation context", async () => {
@@ -174,21 +163,7 @@ test("an authorization that outlives Clear cannot record its act", async () => {
   assert.deepEqual(history, ["current act"]);
 });
 
-test("the meter follows whoever is actually talking", () => {
-  assert.equal(waveformVoice(REALTIME_STATUS.RESPONDING), WAVEFORM_VOICE.LUKE);
-  assert.equal(waveformVoice(REALTIME_STATUS.LISTENING), WAVEFORM_VOICE.DEVELOPER);
-  for (const status of [
-    REALTIME_STATUS.IDLE,
-    REALTIME_STATUS.CONNECTING,
-    REALTIME_STATUS.READY,
-    REALTIME_STATUS.FAILED,
-    REALTIME_STATUS.UNAVAILABLE,
-  ] as const) {
-    assert.equal(waveformVoice(status), undefined);
-  }
-});
-
-test("the analyser listens to the stream of whoever holds the turn", () => {
+test("the meter listens to the stream of whoever holds the turn", () => {
   assert.equal(
     activeVoiceStream({ status: REALTIME_STATUS.RESPONDING, local: "mic", remote: "luke" }),
     "luke",
@@ -203,50 +178,12 @@ test("the analyser listens to the stream of whoever holds the turn", () => {
   );
 });
 
-test("the media duck follows the exchange, not a settled call", () => {
-  assert.equal(voiceExchangeActive(REALTIME_STATUS.CONNECTING), true);
-  assert.equal(voiceExchangeActive(REALTIME_STATUS.LISTENING), true);
-  assert.equal(voiceExchangeActive(REALTIME_STATUS.RESPONDING), true);
-  assert.equal(voiceExchangeActive(REALTIME_STATUS.READY), false);
-  assert.equal(voiceExchangeActive(REALTIME_STATUS.IDLE), false);
-});
-
-test("Luke's own speak-only call is never counted as somebody speaking to him", () => {
-  assert.equal(
-    voiceExchangeKind({ microphoneCall: false, typedAsk: false }),
-    PRODUCT_EXCHANGE_KIND.ANNOUNCEMENT,
-  );
-  assert.equal(
-    voiceExchangeKind({ microphoneCall: true, typedAsk: true }),
-    PRODUCT_EXCHANGE_KIND.TYPED,
-  );
-  assert.equal(
-    voiceExchangeKind({ microphoneCall: true, typedAsk: false }),
-    PRODUCT_EXCHANGE_KIND.SPOKEN,
-  );
-});
-
-test("a capture run always captions the fixture's words", () => {
-  assert.deepEqual(
-    lukeCaptionsToShow({
-      fixtureSpeaking: true,
-      captionsEnabled: false,
-      typedAsk: false,
-      outputSilent: false,
-      voice: WAVEFORM_VOICE.LUKE,
-      captions: ["live words"],
-    }),
-    [FIXTURE_SPEAKING_CAPTION],
-  );
-});
-
-test("Luke's captions are drawn only on his turn, and only with a reason to read them", () => {
+test("Luke's captions are offered only on his turn, and only with a reason to read them", () => {
   const shown = {
-    fixtureSpeaking: false,
     captionsEnabled: true,
     typedAsk: false,
     outputSilent: false,
-    voice: WAVEFORM_VOICE.LUKE,
+    status: REALTIME_STATUS.RESPONDING,
     captions: ["two sessions are waiting on you.", "and the build just finished."],
   };
   assert.deepEqual(lukeCaptionsToShow(shown), [
@@ -254,7 +191,7 @@ test("Luke's captions are drawn only on his turn, and only with a reason to read
     "and the build just finished.",
   ]);
   assert.equal(
-    lukeCaptionsToShow({ ...shown, voice: WAVEFORM_VOICE.DEVELOPER }),
+    lukeCaptionsToShow({ ...shown, status: REALTIME_STATUS.LISTENING }),
     undefined,
     "a caption that raced a status change must not be drawn on the developer's turn",
   );
@@ -265,59 +202,12 @@ test("Luke's captions are drawn only on his turn, and only with a reason to read
   );
 });
 
-test("a voice failure is drawn on the strip, but never over a live turn or a fixture", () => {
-  const failure = {
-    fixtureSpeaking: false,
-    voice: undefined,
-    error: "The voice service refused the call (status 401).",
-  };
-  assert.equal(voiceErrorToShow(failure), failure.error);
-  assert.equal(voiceErrorToShow({ ...failure, error: undefined }), undefined);
-  assert.equal(
-    voiceErrorToShow({ ...failure, voice: WAVEFORM_VOICE.LUKE }),
-    undefined,
-    "words being said are the thing to read over words that already failed",
-  );
-  assert.equal(
-    voiceErrorToShow({ ...failure, voice: WAVEFORM_VOICE.DEVELOPER }),
-    undefined,
-    "the developer's own turn is not the moment to report an old fault",
-  );
-  assert.equal(
-    voiceErrorToShow({ ...failure, fixtureSpeaking: true }),
-    undefined,
-    "a fixture has no call to fail, so a capture run never draws one",
-  );
-});
-
-test("a notice yields to Luke's turn alone, because the developer's draws nothing on the strip", () => {
-  const notice = {
-    fixtureSpeaking: false,
-    voice: undefined,
-    notice: "The microphone is open. Finish saying it.",
-  };
-  assert.equal(voiceNoticeToShow(notice), notice.notice);
-  assert.equal(voiceNoticeToShow({ ...notice, notice: undefined }), undefined);
-  assert.equal(
-    voiceNoticeToShow({ ...notice, voice: WAVEFORM_VOICE.DEVELOPER }),
-    notice.notice,
-    "the one refusal an open microphone causes is exactly what the strip should answer with",
-  );
-  assert.equal(
-    voiceNoticeToShow({ ...notice, voice: WAVEFORM_VOICE.LUKE }),
-    undefined,
-    "Luke's words own the box whether or not the captions draw them",
-  );
-  assert.equal(voiceNoticeToShow({ ...notice, fixtureSpeaking: true }), undefined);
-});
-
 test("a typed ask, or an output that would swallow the reply, captions whatever the preference says", () => {
   const hidden = {
-    fixtureSpeaking: false,
     captionsEnabled: false,
     typedAsk: false,
     outputSilent: false,
-    voice: WAVEFORM_VOICE.LUKE,
+    status: REALTIME_STATUS.RESPONDING,
     captions: ["the words"],
   };
   assert.deepEqual(lukeCaptionsToShow({ ...hidden, typedAsk: true }), ["the words"]);
@@ -431,7 +321,6 @@ test("a voice change with no call up is not owed a restart", () => {
   );
 });
 
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a connecting call counts as one to reopen: its credential may already be the old voice", () => {
   assert.deepEqual(
     voiceRestartAction({

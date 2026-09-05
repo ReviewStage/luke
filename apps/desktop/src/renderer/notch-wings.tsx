@@ -1,7 +1,7 @@
 import { ProviderMark, WingFace, wingMarkCapacity, wingPileOffset } from "@sidecar/panel";
 import { CAPSULE_SIDE_WIDTH, PANEL_WIDTH, peekWidth } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { errandOriginProps } from "./luke-errand";
 import {
   faceYieldsToMeter,
@@ -31,10 +31,21 @@ import { WAVEFORM_VOICE, Waveform, type WaveformVoice } from "./waveform";
  */
 interface NotchWingsProps {
   tally: SessionTally;
+  /**
+   * A stream to measure here. Only the introduction takeover, which holds a
+   * session of its own, hands one in; the panel has no stream and is handed
+   * the level and the voice's edges below instead.
+   */
   analyser?: AnalyserNode;
+  /** How loud whoever is talking is, in the unit interval, as last relayed. */
+  level?: number;
   voice?: WaveformVoice;
-  /** Reported upward so the turn can end when Luke actually goes quiet. */
-  onVoiceActivity?: (active: boolean) => void;
+  /**
+   * Whether whoever holds the turn is audibly speaking right now, on the
+   * debounced edge the voice window measures beside the stream. The face and
+   * the meter both answer it, so it is decided once, there, and relayed.
+   */
+  voiceActive?: boolean;
   fixtureSpeaking: boolean;
   hasAudioSignal: boolean;
   /** A pressed talk key still waiting for the call it asked to open. */
@@ -130,8 +141,9 @@ export function wingSlots(
 export function NotchWings({
   tally,
   analyser,
+  level = 0,
   voice,
-  onVoiceActivity,
+  voiceActive: relayedVoiceActive,
   fixtureSpeaking,
   hasAudioSignal,
   voiceOpening,
@@ -142,19 +154,14 @@ export function NotchWings({
   accountGated,
   statusLabel,
 }: NotchWingsProps): React.JSX.Element {
-  const [voiceActive, setVoiceActive] = useState(false);
-  const reportVoiceActivity = useCallback(
-    (active: boolean) => {
-      setVoiceActive(active);
-      onVoiceActivity?.(active);
-    },
-    [onVoiceActivity],
-  );
+  // A measured stream reports its own edges; a relayed level arrives with them.
+  const [measuredVoiceActive, setMeasuredVoiceActive] = useState(false);
+  const voiceActive = relayedVoiceActive ?? measuredVoiceActive;
   // The meter is the developer's from the press, not from the handshake: while
   // the call is opening it already stands where it will stand once live, so the
   // key answers on the frame it lands rather than when the network does. It
-  // also holds through the turn itself rather than following the analyser,
-  // which arrives an effect-tick after the turn opens and would blink the
+  // also holds through the turn itself rather than following the level,
+  // which arrives a relay later than the turn opens and would blink the
   // meter out for that frame.
   const meterVoice = voice ?? (voiceOpening ? WAVEFORM_VOICE.DEVELOPER : undefined);
   const meterShown = hasAudioSignal || voiceOpening || meterVoice === WAVEFORM_VOICE.DEVELOPER;
@@ -240,12 +247,13 @@ export function NotchWings({
                of its travel away. */
             <span className="wing-meter" data-turn={meterVoice} key={meterVoice}>
               <Waveform
-                analyser={analyser}
+                {...(analyser ? { analyser } : undefined)}
+                level={level}
                 speaking={fixtureSpeaking}
                 voice={meterVoice}
                 voiceActive={voiceActive}
-                connecting={voiceOpening && !analyser}
-                onVoiceActivity={reportVoiceActivity}
+                connecting={voiceOpening && voice === undefined && !analyser}
+                onVoiceActivity={setMeasuredVoiceActive}
               />
             </span>
           )}
