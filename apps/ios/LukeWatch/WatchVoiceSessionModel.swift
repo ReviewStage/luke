@@ -26,6 +26,9 @@ enum WatchPendingNavigation {
 final class WatchVoiceSessionModel {
     var status: RealtimeStatus = .idle
     var errorMessage: String?
+    // Read at each mint, so the watch uses the latest local voice settings.
+    var voice = RealtimeVoice.default
+    var speed = RealtimeVoiceSpeed.default
     var pendingNavigation: WatchPendingNavigation?
     /// The tools the service minted the latest call with, as the server
     /// confirmed them at channel open; nil until a call has connected.
@@ -79,6 +82,8 @@ final class WatchVoiceSessionModel {
             }
             return
         }
+        let mintVoice = voice.rawValue
+        let mintSpeed = speed.multiplier
 
         let opts = RealtimeSessionOptions(
             requestConnection: { [weak accountSession, weak self] in
@@ -98,8 +103,8 @@ final class WatchVoiceSessionModel {
                     )
                     .mint(
                         accessToken: token,
-                        voice: RealtimeVoice.default.rawValue,
-                        speed: RealtimeVoiceSpeed.default.multiplier
+                        voice: mintVoice,
+                        speed: mintSpeed
                     )
                 } catch let error as URLError {
                     throw WatchNetworkFailure(error)
@@ -236,5 +241,28 @@ final class WatchVoiceSessionModel {
         } else {
             session?.endTurn()
         }
+    }
+
+    /// Voice is fixed at mint time. The watch opens sockets only when the
+    /// developer presses, so a changed voice closes the current one and lets
+    /// the next press mint with the new choice.
+    func changeVoice(_ newVoice: RealtimeVoice) {
+        guard newVoice != voice else { return }
+        voice = newVoice
+        guard session != nil || connectTask != nil else { return }
+        connectTask?.cancel()
+        connectTask = nil
+        connectingForTurn = false
+        endTurnAfterConnect = false
+        session?.close()
+        session = nil
+        WatchVoiceAudioSession.deactivate()
+        status = .idle
+    }
+
+    func changeSpeed(_ newSpeed: RealtimeVoiceSpeed) {
+        guard newSpeed != speed else { return }
+        speed = newSpeed
+        session?.applySpeed(newSpeed.multiplier)
     }
 }

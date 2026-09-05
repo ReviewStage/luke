@@ -12,8 +12,11 @@ struct WatchVoiceView: View {
     @Environment(WatchNavigation.self) private var navigation
     @Environment(VoiceConversationThread.self) private var conversation
     @Environment(ProductEventSender.self) private var events
+    @AppStorage(VoiceSettingsKey.voice) private var voice = RealtimeVoice.default
+    @AppStorage(VoiceSettingsKey.speed) private var speed = RealtimeVoiceSpeed.default
     @State private var model = WatchVoiceSessionModel()
     @State private var isPressing = false
+    @State private var settingsShown = false
     private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
 
     var body: some View {
@@ -22,6 +25,8 @@ struct WatchVoiceView: View {
             floatingControls
         }
         .task {
+            model.voice = voice
+            model.speed = speed
             model.prepare(
                 accountSession: accountSession, thread: conversation, actContext: makeActContext
             )
@@ -35,8 +40,23 @@ struct WatchVoiceView: View {
                 performPendingNavigation()
             }
         }
+        .onChange(of: voice) { _, newVoice in model.changeVoice(newVoice) }
+        .onChange(of: speed) { _, newSpeed in model.changeSpeed(newSpeed) }
         .onDisappear {
             model.stop()
+        }
+        .navigationTitle("Luke")
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) { settingsButton }
+        }
+        .sheet(isPresented: $settingsShown) {
+            WatchVoiceSettingsView(
+                toolReport: VoiceToolAvailability.report(
+                    mintedTools: model.mintedTools,
+                    sessions: store.sessions,
+                    projects: model.projects
+                )
+            )
         }
     }
 
@@ -120,6 +140,15 @@ struct WatchVoiceView: View {
     }
 
     // MARK: - Floating controls
+
+    private var settingsButton: some View {
+        Button {
+            settingsShown = true
+        } label: {
+            Label("Voice Settings", systemImage: "gearshape")
+        }
+        .accessibilityLabel("Voice Settings")
+    }
 
     private var floatingControls: some View {
         VStack(spacing: 4) {
