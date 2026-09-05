@@ -42,8 +42,6 @@ public final class ProductEventSender {
     private struct QueuedEvent {
         let event: ProductEvent
         let at: Date
-        /// Who was signed in when it was recorded; nil waits for whoever signs in.
-        let account: String?
     }
 
     private let endpoint: URL
@@ -61,8 +59,8 @@ public final class ProductEventSender {
     private var queue: [QueuedEvent] = []
     /// Nested rather than an interpolated key: the name and the discriminator stay apart.
     private var recordedDays: [String: [String: String]] = [:]
-    /// Whose days those are; a different account signing in starts its own.
-    private var recordedDaysAccount: String?
+    /// Whose queue and day marks these are, once anyone has signed in.
+    private var recordedFor: String?
     private var armed = false
     private var timer: Timer?
     private var inFlight: Task<Void, Never>?
@@ -93,7 +91,8 @@ public final class ProductEventSender {
     /// sit on any path without ordering itself around it.
     public func record(_ event: ProductEvent) {
         guard allowed else { return }
-        queue.append(QueuedEvent(event: event, at: now(), account: session.accountEmail))
+        adoptAccount()
+        queue.append(QueuedEvent(event: event, at: now()))
         if queue.count > queueLimit {
             queue.removeFirst(queue.count - queueLimit)
         }
@@ -109,12 +108,7 @@ public final class ProductEventSender {
     /// provider per day is the fact worth having, not a count of refreshes.
     public func recordOncePerDay(_ event: ProductEvent, discriminator: String) {
         guard allowed else { return }
-        if let account = session.accountEmail {
-            if let recordedFor = recordedDaysAccount, recordedFor != account {
-                recordedDays.removeAll()
-            }
-            recordedDaysAccount = account
-        }
+        adoptAccount()
         let today = Self.dayFormatter.string(from: now())
         if recordedDays[event.name]?[discriminator] == today { return }
         recordedDays[event.name, default: [:]][discriminator] = today
@@ -175,15 +169,25 @@ public final class ProductEventSender {
         sends && armed
     }
 
+    /// A different account signing in starts clean: whatever the previous
+    /// one left queued or marked is dropped rather than posted as the new
+    /// one. Counts recorded before anyone signed in go to the first account,
+    /// and the same account signing back in keeps everything.
+    private func adoptAccount() {
+        guard let account = session.accountEmail, account != recordedFor else { return }
+        if recordedFor != nil {
+            queue.removeAll()
+            recordedDays.removeAll()
+        }
+        recordedFor = account
+    }
+
     private func send() async {
         guard !queue.isEmpty else { return }
         // Signed out is temporary and nobody's fault, so the queue waits
         // rather than being spent against a request that cannot authenticate.
         guard let token = try? await session.validAccessToken() else { return }
-        // A count recorded under one account never posts as another: what a
-        // sign-out left waiting is dropped once a different account signs in.
-        let account = session.accountEmail
-        queue.removeAll { $0.account != nil && $0.account != account }
+        adoptAccount()
         guard !queue.isEmpty else { return }
         // Taken only once a request will actually be made, and gone whatever
         // becomes of it.

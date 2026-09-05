@@ -405,52 +405,58 @@ final class ProductEventSenderTests: XCTestCase {
         XCTAssertEqual(peak, 1)
     }
 
-    func testADifferentAccountGetsItsOwnDayMarkerAndTheSameOneDoesNot() async {
-        let tokens = StubTokens()
-        let (sender, log) = makeSender(tokens: tokens)
-        sender.arm()
-        sender.markDayActive()
-        await sender.flush().value
-
-        tokens.accountEmail = "other@example.com"
-        sender.markDayActive()
-        await sender.flush().value
-
-        tokens.accountEmail = nil
-        tokens.valid = nil
-        sender.markDayActive()
-        tokens.accountEmail = "other@example.com"
-        tokens.valid = "at-1"
-        sender.markDayActive()
-        await sender.flush().value
-
-        let requests = await log.requests
-        XCTAssertEqual(requests.count, 2)
-    }
-
-    func testCountsRecordedUnderOneAccountNeverPostAsAnother() async {
+    func testCountsRecordedBeforeAnyoneSignedInGoToTheFirstAccount() async {
         let tokens = StubTokens(valid: nil)
         tokens.accountEmail = nil
         let (sender, log) = makeSender(tokens: tokens)
         sender.arm()
         sender.record(.appLaunch)
+        sender.markDayActive()
         tokens.accountEmail = "dev@example.com"
         tokens.valid = "at-1"
+        sender.markDayActive()
+        await sender.flush().value
+
+        let requests = await log.requests
+        XCTAssertEqual(
+            sentEvents(requests[0]).map { $0["name"] as? String },
+            ["app:launch", "app:day_active"]
+        )
+    }
+
+    func testADifferentAccountStartsCleanAndTheSameAccountKeepsItsMarks() async {
+        let tokens = StubTokens()
+        let (sender, log) = makeSender(tokens: tokens)
+        sender.arm()
+        sender.markDayActive()
+        await sender.flush().value
         sender.record(.accountSignIn)
+
+        // Signed out before the flush, then a different account: what waited
+        // is dropped, and the new account marks its own day.
         tokens.accountEmail = nil
         tokens.valid = nil
-        await sender.flush().value
-        var requests = await log.requests
-        XCTAssertTrue(requests.isEmpty)
-
-        // A different account signs in: only the count recorded signed out,
-        // which belongs to nobody yet, may travel.
+        sender.markDayActive()
         tokens.accountEmail = "other@example.com"
         tokens.valid = "at-2"
         await sender.flush().value
-        requests = await log.requests
+        var requests = await log.requests
         XCTAssertEqual(requests.count, 1)
-        XCTAssertEqual(sentEvents(requests[0]).map { $0["name"] as? String }, ["app:launch"])
+        sender.markDayActive()
+        await sender.flush().value
+        requests = await log.requests
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(sentEvents(requests[1]).map { $0["name"] as? String }, ["app:day_active"])
+
+        // The same account back keeps its marks: nothing more today.
+        tokens.accountEmail = nil
+        tokens.valid = nil
+        tokens.accountEmail = "other@example.com"
+        tokens.valid = "at-2"
+        sender.markDayActive()
+        await sender.flush().value
+        requests = await log.requests
+        XCTAssertEqual(requests.count, 2)
     }
 
     func testStoppingDropsWhatWasQueuedRatherThanHoldingTheQuitOpen() async {
