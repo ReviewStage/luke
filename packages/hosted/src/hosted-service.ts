@@ -301,13 +301,40 @@ export function remoteMintAnswerFromWire(
 }
 
 /**
+ * Who opened the brain turn a request runs. It is derived by the desktop's
+ * main process from how the turn was invoked — an ask the developer typed or
+ * spoke against a wake, a roster look, or a hold release — and never from
+ * anything a model wrote or a transcript said. It fixes the toolset the turn
+ * is offered: a developer turn may act and never announces, an observation
+ * turn may only read and announce. It lives here rather than in the brain
+ * package so the hosted service can read it without a hosted → brain edge.
+ */
+export const BRAIN_TURN_AUTHORITY = {
+  DEVELOPER: "developer",
+  OBSERVATION: "observation",
+} as const;
+
+export type BrainTurnAuthority = (typeof BRAIN_TURN_AUTHORITY)[keyof typeof BRAIN_TURN_AUTHORITY];
+
+/** Reads an authority off the wire, or nothing: an absent or unknown one is never a developer's. */
+export function brainTurnAuthorityFromWire(
+  value: UnparsedWireValue,
+): BrainTurnAuthority | undefined {
+  if (!isWireString(value)) return undefined;
+  return Object.values(BRAIN_TURN_AUTHORITY).find((authority) => authority === value);
+}
+
+/**
  * What one hosted brain turn carries up: the input array as the desktop holds
- * it, every item a record the Responses API shaped or the desktop built, and
- * at most the output budget. Instructions, tools, and model never travel —
- * the service's build fixes them — so a request cannot widen what the brain
- * may do, only what it is shown.
+ * it, every item a record the Responses API shaped or the desktop built, the
+ * authority the turn runs under, and at most the output budget. Instructions,
+ * tools, and model never travel — the service's build fixes them from the
+ * authority — so a request cannot widen what the brain may do, only what it
+ * is shown. A request naming no authority is refused whole rather than read
+ * as a developer's.
  */
 export interface HostedBrainRequest {
+  authority: BrainTurnAuthority;
   input: readonly WireRecord[];
   max_output_tokens?: number;
 }
@@ -320,6 +347,8 @@ export function hostedBrainRequestFromWire(
   value: UnparsedWireValue,
 ): HostedBrainRequest | undefined {
   if (!isRecord(value) || !Array.isArray(value.input)) return undefined;
+  const authority = brainTurnAuthorityFromWire(value.authority);
+  if (authority === undefined) return undefined;
   if (value.input.length === 0 || value.input.length > maximumHostedBrainInputItems)
     return undefined;
   const input: WireRecord[] = [];
@@ -327,7 +356,7 @@ export function hostedBrainRequestFromWire(
     if (!isRecord(item)) return undefined;
     input.push(item);
   }
-  const request: HostedBrainRequest = { input };
+  const request: HostedBrainRequest = { authority, input };
   if (value.max_output_tokens !== undefined) {
     const budget = wholeNumber(value.max_output_tokens);
     if (budget === undefined || budget <= 0 || !Number.isInteger(budget)) return undefined;

@@ -1,15 +1,21 @@
 import { REALTIME_TOOL, realtimeToolDefinitions } from "@sidecar/acts";
+import { BRAIN_TURN_AUTHORITY, type BrainTurnAuthority } from "@sidecar/hosted";
 
 /**
- * The tools the brain is offered: every act the voice model could carry, less
- * the spoken transcript reading, plus the three that exist only for a brain —
- * the roster in full, a whole transcript, and the briefing it hands the mouth.
+ * The tools the brain is offered, fixed by the authority of the turn. A
+ * developer turn — an ask they typed or spoke — is offered every act the voice
+ * model could carry, less the spoken transcript reading, plus the two reads
+ * that exist only for a brain: the roster in full and a whole transcript. An
+ * observation turn — a wake, a roster look, a hold release — is offered the
+ * two reads and `announce`, and no act at all: nothing a transcript said, a
+ * standing ask implied, or a tool answered can widen it, because the toolset
+ * is chosen from how the turn was invoked and never from its content.
  *
  * The act rows come from the same table the Realtime session was configured
  * from, so the brain can ask for nothing the acts package does not validate;
- * the three brain-only tools are dispatched inside the agent and reach no act
- * path. `read_session_transcript` is left out because its result was a
- * reading for the developer's ear, and the brain reads for itself.
+ * the brain-only tools are dispatched inside the agent and reach no act path.
+ * `read_session_transcript` is left out because its result was a reading for
+ * the developer's ear, and the brain reads for itself.
  */
 
 const BRAIN_TOOL_TYPE = "function";
@@ -111,9 +117,20 @@ const BRAIN_ONLY_TOOLS: readonly BrainToolWireDefinition[] = [
 
 const EXCLUDED_ACT_TOOLS: ReadonlySet<string> = new Set([REALTIME_TOOL.READ_SESSION_TRANSCRIPT]);
 
-/** The tool schemas one brain turn is configured with. */
-export function brainToolDefinitions(): readonly BrainToolWireDefinition[] {
-  const acts = realtimeToolDefinitions()
+const BRAIN_ONLY_TOOLS_BY_AUTHORITY = {
+  [BRAIN_TURN_AUTHORITY.DEVELOPER]: new Set<string>([
+    BRAIN_TOOL.LIST_SESSIONS,
+    BRAIN_TOOL.READ_TRANSCRIPT,
+  ]),
+  [BRAIN_TURN_AUTHORITY.OBSERVATION]: new Set<string>([
+    BRAIN_TOOL.LIST_SESSIONS,
+    BRAIN_TOOL.READ_TRANSCRIPT,
+    BRAIN_TOOL.ANNOUNCE,
+  ]),
+} as const satisfies Record<BrainTurnAuthority, ReadonlySet<string>>;
+
+function actToolDefinitions(): readonly BrainToolWireDefinition[] {
+  return realtimeToolDefinitions()
     .filter((tool) => !EXCLUDED_ACT_TOOLS.has(tool.name))
     .map(
       (tool): BrainToolWireDefinition => ({
@@ -123,7 +140,25 @@ export function brainToolDefinitions(): readonly BrainToolWireDefinition[] {
         parameters: tool.parameters,
       }),
     );
-  return [...acts, ...BRAIN_ONLY_TOOLS];
+}
+
+/** The tool schemas one brain turn is configured with, fixed by the turn's authority. */
+export function brainToolDefinitions(
+  authority: BrainTurnAuthority,
+): readonly BrainToolWireDefinition[] {
+  const own = BRAIN_ONLY_TOOLS.filter((tool) =>
+    BRAIN_ONLY_TOOLS_BY_AUTHORITY[authority].has(tool.name),
+  );
+  return authority === BRAIN_TURN_AUTHORITY.DEVELOPER ? [...actToolDefinitions(), ...own] : own;
+}
+
+/**
+ * Whether a turn of this authority may run a tool of this name at all. It is
+ * the runtime side of `brainToolDefinitions`: a model that emits a call for a
+ * tool it was never offered is refused here before any performer sees it.
+ */
+export function brainToolAllowed(authority: BrainTurnAuthority, name: string): boolean {
+  return brainToolDefinitions(authority).some((tool) => tool.name === name);
 }
 
 const BRAIN_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(BRAIN_TOOL));

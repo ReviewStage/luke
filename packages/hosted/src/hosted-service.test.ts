@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  BRAIN_TURN_AUTHORITY,
+  brainTurnAuthorityFromWire,
   HOSTED_CALLS_URL,
   HOSTED_SERVICE_PATH,
   HOSTED_WS_BASE_URL,
@@ -222,21 +224,34 @@ test("a conversation answer carries its history positions when the read reported
   assert.equal(malformed.hasOlder, undefined);
 });
 
-test("a hosted brain request is an array of records and at most a budget", () => {
+test("a hosted brain request names its authority, carries records, and at most a budget", () => {
   const input = [{ type: "message", role: "user", content: [] }];
-  assert.deepEqual(hostedBrainRequestFromWire({ input, max_output_tokens: 500 }), {
+  const authority = BRAIN_TURN_AUTHORITY.OBSERVATION;
+  assert.deepEqual(hostedBrainRequestFromWire({ authority, input, max_output_tokens: 500 }), {
+    authority,
     input,
     max_output_tokens: 500,
   });
-  assert.deepEqual(hostedBrainRequestFromWire({ input }), { input });
-  assert.equal(hostedBrainRequestFromWire({ input: [] }), undefined);
-  assert.equal(hostedBrainRequestFromWire({ input: ["text"] }), undefined);
-  assert.equal(hostedBrainRequestFromWire({ input, max_output_tokens: 0 }), undefined);
-  assert.equal(hostedBrainRequestFromWire({ input, max_output_tokens: 1.5 }), undefined);
+  assert.deepEqual(
+    hostedBrainRequestFromWire({ authority: BRAIN_TURN_AUTHORITY.DEVELOPER, input }),
+    { authority: BRAIN_TURN_AUTHORITY.DEVELOPER, input },
+  );
+  // An authority is never assumed: a request without one, or with one this
+  // build does not name, is refused whole rather than read as a developer's.
+  assert.equal(hostedBrainRequestFromWire({ input }), undefined);
+  assert.equal(hostedBrainRequestFromWire({ authority: "root", input }), undefined);
+  assert.equal(hostedBrainRequestFromWire({ authority: 1, input }), undefined);
+  assert.equal(hostedBrainRequestFromWire({ authority, input: [] }), undefined);
+  assert.equal(hostedBrainRequestFromWire({ authority, input: ["text"] }), undefined);
+  assert.equal(hostedBrainRequestFromWire({ authority, input, max_output_tokens: 0 }), undefined);
+  assert.equal(hostedBrainRequestFromWire({ authority, input, max_output_tokens: 1.5 }), undefined);
   assert.equal(
     hostedBrainRequestFromWire({
+      authority,
       input: Array.from({ length: maximumHostedBrainInputItems + 1 }, () => ({})),
     }),
     undefined,
   );
+  assert.equal(brainTurnAuthorityFromWire(undefined), undefined);
+  assert.equal(brainTurnAuthorityFromWire("developer"), BRAIN_TURN_AUTHORITY.DEVELOPER);
 });

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { BRAIN_TURN_AUTHORITY } from "@sidecar/hosted";
 import {
   BRAIN_REASONING_EFFORT,
   brainResponsesOutput,
@@ -14,7 +15,7 @@ test("the request asks for compaction on the API's default, stores nothing, and 
   const request = brainResponsesRequest([userMessageItem("hello")], {
     model: "gpt-test",
     instructions: "be Luke",
-    tools: brainToolDefinitions(),
+    tools: brainToolDefinitions(BRAIN_TURN_AUTHORITY.OBSERVATION),
     maximumOutputTokens: 1234,
     reasoningEffort: BRAIN_REASONING_EFFORT.MEDIUM,
   });

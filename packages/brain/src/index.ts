@@ -1,6 +1,12 @@
 export {
+  BRAIN_TURN_AUTHORITY,
+  type BrainTurnAuthority,
+  brainTurnAuthorityFromWire,
+} from "@sidecar/hosted";
+export {
   BRAIN_DEFAULTS,
   BRAIN_TURN_TRIGGER,
+  type BrainActExecution,
   type BrainActPerformer,
   BrainAgent,
   type BrainAgentOptions,
@@ -75,6 +81,7 @@ export {
   type BrainToolName,
   type BrainToolParameters,
   type BrainToolWireDefinition,
+  brainToolAllowed,
   brainToolDefinitions,
   isBrainOnlyTool,
   maximumBriefingLength,
