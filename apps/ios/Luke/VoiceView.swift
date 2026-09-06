@@ -360,10 +360,41 @@ struct VoiceView: View {
     }
 
     private var statusLabel: some View {
-        Text(statusText)
-            .font(.system(size: 15, weight: .medium))
-            .foregroundStyle(Color.inkSecondary)
-            .animation(.easeInOut(duration: 0.2), value: model.status)
+        HStack(spacing: 5) {
+            statusGlyph
+            Text(statusText)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(Color.inkSecondary)
+        }
+        .animation(.easeInOut(duration: 0.15), value: model.status)
+    }
+
+    @ViewBuilder
+    private var statusGlyph: some View {
+        switch model.status {
+        case .connecting:
+            ProgressView()
+                .tint(Color.inkSecondary)
+                .scaleEffect(0.7)
+                .frame(width: 16, height: 16)
+        case .listening:
+            Image(systemName: "waveform")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Color(red: 0.25, green: 0.55, blue: 1.0))
+                .symbolEffect(.variableColor.iterative, isActive: true)
+        case .thinking:
+            Image(systemName: "ellipsis")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Color(red: 0.9, green: 0.7, blue: 0.2))
+                .symbolEffect(.variableColor.iterative, isActive: true)
+        case .speaking:
+            Image(systemName: "speaker.wave.2")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Color(red: 0.2, green: 0.8, blue: 0.5))
+                .symbolEffect(.variableColor.iterative, isActive: true)
+        default:
+            EmptyView()
+        }
     }
 
     private var conversationHistory: some View {
@@ -713,9 +744,9 @@ struct VoiceView: View {
 
     private var statusText: String {
         switch model.status {
-        case .idle: return model.errorMessage != nil ? "Connection failed" : "Tap or hold to talk"
+        case .idle: return model.errorMessage != nil ? "Connection failed" : "Hold to talk"
         case .connecting: return "Connecting…"
-        case .ready: return "Tap or hold to talk"
+        case .ready: return "Hold to talk"
         case .listening: return "Listening…"
         case .thinking: return "Thinking…"
         case .speaking: return "Speaking…"
