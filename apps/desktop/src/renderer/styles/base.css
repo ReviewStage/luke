@@ -1232,6 +1232,21 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   border-radius: calc((var(--capsule-height) - var(--shape-top) * 2) / 2);
 }
 
+/* Signed out, the strip above a popup holds nothing: the wings draw neither
+   the face nor the marks while the gate stands, the "Sign in" label reads only
+   in the compact shapes, and the signed-out Luke steps out of the popup's way.
+   Beside a housing the band stays black regardless, because the housing sits
+   in it; a bubble has no housing to wrap, so an empty band there is only room
+   above the words. The row takes the gap alone, and the strip's press target
+   stands down with the strip, or it would take the row's own presses. */
+.app-stage[data-notch="false"][data-gated="true"] .key-slot {
+  padding-top: 12px;
+}
+
+.app-stage[data-notch="false"][data-gated="true"][data-presentation="slot"] .compact-hover-target {
+  pointer-events: none;
+}
+
 /* Inside an open panel the strip is surrounded by the shape rather than
    bounding it, so it has no corner of its own to follow. This has to follow
    the non-notch pill: the two are equal specificity. */
