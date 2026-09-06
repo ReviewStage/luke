@@ -2,8 +2,6 @@ import { renderToString } from "react-dom/server";
 import { AboutPage } from "./AboutPage";
 import { App } from "./App";
 import { ChangelogPage } from "./ChangelogPage";
-import { DocsPage } from "./DocsPage";
-import { PricingPage } from "./PricingPage";
 import { PrivacyPage } from "./PrivacyPage";
 
 /**
@@ -16,8 +14,6 @@ const PRERENDERED_PAGES = {
   "index.html": App,
   "about.html": AboutPage,
   "changelog.html": ChangelogPage,
-  "docs.html": DocsPage,
-  "pricing.html": PricingPage,
   "privacy.html": PrivacyPage,
 } as const satisfies Readonly<Record<string, () => React.JSX.Element>>;
 
