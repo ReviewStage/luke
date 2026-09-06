@@ -120,7 +120,9 @@ export function createBrainActPerformer(
     // recorded as what Luke said.
     if (execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
     dependencies.recordConversationEntry(sessionActConversationEntry(action, sessions));
-    return dependencies.sessionActs.perform(action);
+    // The performer awaits once more of its own before a create or a spawn,
+    // so the execution rides along to be asked again there.
+    return dependencies.sessionActs.perform(action, execution);
   };
 
   const performIssue = async (
@@ -132,7 +134,7 @@ export function createBrainActPerformer(
     const action = issueToolAction(call, issues);
     if (action.status === ACT_RESULT_STATUS.REJECTED) return rejection(action.reason);
     if (execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
-    return dependencies.sessionActs.perform(action);
+    return dependencies.sessionActs.perform(action, execution);
   };
 
   const performApp = async (

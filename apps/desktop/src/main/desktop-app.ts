@@ -1682,7 +1682,8 @@ const sessionActPerformer = createSessionActPerformer({
  * The gauntlet every act the brain asks for runs, in this process: validated
  * against the roster, the issue board, the offered projects, the guide, or
  * the remembered facts as each stands at the moment of the act, then carried
- * by the performer above. Every turn may act; the validators are the guard.
+ * by the performer above. Only a turn the developer opened may act, and the
+ * validators guard what it may act on.
  */
 const brainActPerformer = createBrainActPerformer({
   sessionActs: sessionActPerformer,

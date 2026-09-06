@@ -65,7 +65,7 @@ export interface SessionActPerformerDependencies {
   openExternal: (url: string) => Promise<void>;
   adapterFor: (providerId: string) => SessionProviderAdapter | undefined;
   sendsNetwork: boolean;
-  settingsStore: SettingsStore;
+  settingsStore: Pick<SettingsStore, "get">;
   rememberWorkspaceDefaults: (
     adapter: SessionProviderAdapter,
     providerProjectId: string,
@@ -79,8 +79,24 @@ export interface SessionActPerformerDependencies {
   issueTrackers: readonly LinearIssueTracker[];
   refreshIssues: () => void;
   supersetContext: (identity: SessionIdentity) => SupersetSessionContext | undefined;
-  supersetCli: SupersetCli;
+  supersetCli: Pick<
+    SupersetCli,
+    "sendMessage" | "executeControl" | "createAgent" | "renameWorkspace"
+  >;
   recordProductEvent: RecordProductEvent;
+}
+
+/**
+ * Whether the turn an act belongs to still stands, asked once more at the
+ * last boundary before a provider effect. A brain-origin act arrives with
+ * one; a row press, which is not a write and opens its turn and its effect
+ * in the same breath, carries none. The performer asks it only after an
+ * await of its own that stands between validation and the effect — the
+ * stored agent defaults read before a create or a spawn — because an act
+ * whose turn ended during that read must refuse rather than start the write.
+ */
+export interface ActExecutionGuard {
+  isRevoked(): boolean;
 }
 
 export interface SessionActsIpcDependencies {
@@ -97,7 +113,10 @@ export interface SessionActsIpcDependencies {
  * not a write and reaches them without the brain.
  */
 export interface SessionActPerformer {
-  perform(action: CarriedSessionAction | CarriedIssueAction): Promise<WireRecord>;
+  perform(
+    action: CarriedSessionAction | CarriedIssueAction,
+    guard?: ActExecutionGuard,
+  ): Promise<WireRecord>;
   openSession(identity: SessionIdentity): Promise<SessionOpenResult>;
   openSessionApplication(
     identity: SessionIdentity,
@@ -147,6 +166,7 @@ const REFUSAL = {
   OPEN_FAILED: "The system could not open that session.",
   OPEN_APP_FAILED: "The system could not open that session in the selected app.",
   OPEN_CHANGE_FAILED: "The system could not open that pull request.",
+  TURN_OVER: "Not run: the turn that asked for this act ended before it could start.",
 } as const;
 
 export function createSessionActPerformer(
@@ -382,6 +402,7 @@ export function createSessionActPerformer(
     name: string | undefined,
     task: string | undefined,
     namedSelection: WorkspaceAgentSelection | undefined,
+    guard: ActExecutionGuard | undefined,
   ): Promise<ProviderWorkspaceResult> => {
     if (!sendsNetwork) {
       return {
@@ -435,6 +456,8 @@ export function createSessionActPerformer(
     const stored = isProviderId(providerId)
       ? (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId]
       : undefined;
+    if (guard?.isRevoked())
+      return { status: ACT_RESULT_STATUS.REJECTED, reason: REFUSAL.TURN_OVER };
     const agentSelection = namedSelection ?? stored;
     const createRequest: Parameters<SessionProviderAdapter["createWorkspace"]>[0] = {
       providerProjectId,
@@ -511,6 +534,7 @@ export function createSessionActPerformer(
     task: string | undefined,
     namedModel: string | undefined,
     namedEffort: string | undefined,
+    guard: ActExecutionGuard | undefined,
   ): Promise<WireRecord> => {
     const session = sessionRegistry.get(identity);
     if (!session) return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_SESSION };
@@ -561,6 +585,9 @@ export function createSessionActPerformer(
             identity.providerId
           ]
         : undefined;
+      if (guard?.isRevoked()) {
+        return { status: ACT_RESULT_STATUS.REJECTED, reason: REFUSAL.TURN_OVER };
+      }
       const fallback = stored?.agent === advertised ? stored : undefined;
       const model = namedModel ?? fallback?.model;
       const effort = namedModel !== undefined ? namedEffort : fallback?.effort;
@@ -703,7 +730,13 @@ export function createSessionActPerformer(
     return result;
   };
 
-  const performSessionAction = (action: CarriedSessionAction): Promise<WireRecord> =>
+  // Of the acts below, only the create and the spawn await anything of their
+  // own between validation and the provider effect, so only they take the
+  // guard; the rest reach their adapter or the CLI with nothing awaited between.
+  const performSessionAction = (
+    action: CarriedSessionAction,
+    guard: ActExecutionGuard | undefined,
+  ): Promise<WireRecord> =>
     dispatchByKind(action, {
       [SESSION_TOOL_KIND.MESSAGE]: (act) => sendMessage(act.identity, act.text),
       [SESSION_TOOL_KIND.CONTROL]: (act) => executeControl(act.identity, act.control.id),
@@ -725,22 +758,31 @@ export function createSessionActPerformer(
           act.name,
           act.task,
           act.agentSelection,
+          guard,
         ),
       [SESSION_TOOL_KIND.ADD_AGENT]: (act) =>
-        addWorkspaceAgent(act.identity, act.agent, act.name, act.task, act.model, act.effort),
+        addWorkspaceAgent(
+          act.identity,
+          act.agent,
+          act.name,
+          act.task,
+          act.model,
+          act.effort,
+          guard,
+        ),
       [SESSION_TOOL_KIND.RENAME_WORKSPACE]: (act) => renameWorkspace(act.identity, act.name),
       [SESSION_TOOL_KIND.RENAME_SESSION]: (act) => renameSession(act.identity, act.name),
     });
 
   return {
-    async perform(action) {
+    async perform(action, guard) {
       if (
         action.kind === ISSUE_TOOL_KIND.ISSUE_STATE ||
         action.kind === ISSUE_TOOL_KIND.ISSUE_COMMENT
       ) {
         return performIssueAct(action);
       }
-      return performSessionAction(action);
+      return performSessionAction(action, guard);
     },
     openSession,
     openSessionApplication,
