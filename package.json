@@ -10,6 +10,7 @@
   "scripts": {
     "build": "pnpm --recursive --if-present run build",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "dev:emit": "node scripts/dev-emit.mjs",
     "evidence:record": "node scripts/record-evidence.mjs",
     "format": "biome format --write .",
     "lint": "biome check . && pnpm oxlint",

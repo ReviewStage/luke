@@ -40,6 +40,15 @@ if [[ $capture_trace == true && -z ${LUKE_TRACE_DIR:-} ]]; then
     export LUKE_TRACE_DIR="$SIDECAR_REPO_ROOT/.build/traces"
 fi
 
+# Dev control channel: the app listens here for session-state and capture-
+# override commands from `pnpm dev:emit`. A pre-existing value wins so a
+# developer can point the CLI at a custom path. Only an unpackaged live run
+# honours the variable at all, so a fixture run or a packaged build ignores
+# it however this is set.
+if [[ -z ${LUKE_DEV_HARNESS_SOCK:-} ]]; then
+    export LUKE_DEV_HARNESS_SOCK="$SIDECAR_REPO_ROOT/.build/dev-harness.sock"
+fi
+
 if [[ $replace_running_app == true ]]; then
     sidecar_stop_running_app
 fi
