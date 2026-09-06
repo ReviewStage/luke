@@ -1,6 +1,5 @@
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
 import { startSiteAnalytics } from "./analytics";
+import { mountPrerenderedPage } from "./mount-page";
 import { PrivacyPage } from "./PrivacyPage";
 import "./styles.css";
 
@@ -8,11 +7,4 @@ import "./styles.css";
 // the landing page alone would undercount everyone who arrived by a link.
 startSiteAnalytics();
 
-const rootElement = document.getElementById("root");
-if (!rootElement) throw new Error("Root element is missing");
-
-createRoot(rootElement).render(
-  <StrictMode>
-    <PrivacyPage />
-  </StrictMode>,
-);
+mountPrerenderedPage(<PrivacyPage />);

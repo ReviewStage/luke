@@ -9,6 +9,7 @@
     "src/**/*.tsx",
     "server/**/*.ts",
     "tests/**/*.ts",
+    "scripts/**/*.ts",
     "drizzle.config.ts",
     "vite.config.ts"
   ]

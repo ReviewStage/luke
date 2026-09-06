@@ -123,16 +123,20 @@ const MOCK_LABEL = `Luke's notch capsule expanding into its session panel, listi
  * the face's usual condition: it only moves when something happens to it.
  */
 export function NotchMock(): React.JSX.Element {
-  // The loop never runs under reduced motion, where a timed tour is exactly
-  // the motion the visitor asked not to see: the panel is there from the
-  // first paint, not popped in by a mount effect.
-  const [mode, setMode] = useState<MockMode>(() =>
-    window.matchMedia(REDUCED_MOTION_QUERY).matches ? MOCK_MODE.PANEL : MOCK_MODE.CAPSULE,
-  );
+  // The capsule on both sides of the build: the prerender has no window to ask
+  // about motion, and the client must hydrate the markup it was handed, so
+  // the reduced-motion answer is read after mount. Under reduced motion the
+  // loop never runs, because a timed tour is exactly the motion the visitor
+  // asked not to see; the panel is set once instead, and the stylesheet's
+  // reduced-motion durations make that a cut rather than an expansion.
+  const [mode, setMode] = useState<MockMode>(MOCK_MODE.CAPSULE);
   const [panelHeight, setPanelHeight] = useState<number>();
 
   useEffect(() => {
-    if (window.matchMedia(REDUCED_MOTION_QUERY).matches) return;
+    if (window.matchMedia(REDUCED_MOTION_QUERY).matches) {
+      setMode(MOCK_MODE.PANEL);
+      return;
+    }
     let timer: number;
     const hold = (current: MockMode) => {
       const { holdMs, next } = CYCLE[current];
