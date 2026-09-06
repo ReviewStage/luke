@@ -98,6 +98,14 @@ export const HOSTED_SERVICE_PATH = {
 } as const;
 
 /**
+ * Selects the judgment-only attention response of the released contract's
+ * second version; a request without the header is a first-version client that
+ * still expects the summary sentence. Both stand for released desktops.
+ */
+export const HOSTED_ATTENTION_CONTRACT_HEADER = "x-luke-attention-contract";
+export const HOSTED_ATTENTION_CONTRACT_VERSION = "2";
+
+/**
  * The cloud providers whose API keys the vault accepts. Only providers that
  * Luke's service can observe on the user's behalf belong here; local-only
  * providers supply their credentials directly on the user's machine.
