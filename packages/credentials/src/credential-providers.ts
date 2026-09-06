@@ -182,11 +182,6 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
 export const CREDENTIAL_PROVIDER_LIST: readonly CredentialProvider[] =
   Object.values(CREDENTIAL_PROVIDERS);
 
-/* A key is a key, so every service lives in the one provider registry — but
-   Settings draws these apart: an integration is a service Luke uses, not an
-   agent whose sessions he observes. The tracker is one he reads and acts on. */
-const INTEGRATION_IDS: ReadonlySet<CredentialProviderId> = new Set([CREDENTIAL_PROVIDER_ID.LINEAR]);
-
 /**
  * The one key Luke speaks through, and asks about a session with. Named here so
  * the main process reads it by what it is for rather than by an id spelled out
@@ -199,31 +194,6 @@ export const VOICE_CREDENTIAL_PROVIDER_ID = CREDENTIAL_PROVIDER_ID.OPENAI;
 /** The one provider the Voice page holds a key for. */
 export const VOICE_CREDENTIAL_PROVIDER: CredentialProvider =
   CREDENTIAL_PROVIDERS[VOICE_CREDENTIAL_PROVIDER_ID];
-
-/** The coding-agent providers, in the order the Providers section lists them. */
-export const CLOUD_AGENT_PROVIDER_LIST: readonly CredentialProvider[] =
-  CREDENTIAL_PROVIDER_LIST.filter(
-    (provider) => !INTEGRATION_IDS.has(provider.id) && provider.id !== VOICE_CREDENTIAL_PROVIDER_ID,
-  );
-
-/**
- * The services beyond the agents. The Integrations section draws each as its
- * own block rather than from this list — a consent row and a key row are not
- * the same line — so this stands for what belongs in that section, which is
- * what keeps the three lists together covering the whole registry.
- */
-export const INTEGRATION_PROVIDER_LIST: readonly CredentialProvider[] =
-  CREDENTIAL_PROVIDER_LIST.filter((provider) => INTEGRATION_IDS.has(provider.id));
-
-/**
- * Whether this provider's key buys the observation of cloud sessions, which is
- * what the cloud badge on a mark says. Linear's issues and OpenAI's voice are
- * services Luke uses rather than sessions he watches, so their marks carry no
- * badge — a badge there would claim sessions neither service has.
- */
-export function providerRunsSessionsInCloud(id: CredentialProviderId): boolean {
-  return !INTEGRATION_IDS.has(id) && id !== VOICE_CREDENTIAL_PROVIDER_ID;
-}
 
 /**
  * Guards the provider id an IPC message carries. `hasOwn` rather than `in`: an

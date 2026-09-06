@@ -14,7 +14,6 @@ import {
   PRODUCT_CREDENTIAL_SOURCE,
   PRODUCT_DIAGNOSTIC_KIND,
   PRODUCT_EVENT,
-  PRODUCT_SUPERSET_ACT,
   PRODUCT_UPDATE_ACT,
   type ProductDiagnosticKind,
   ProductEventSender,
@@ -29,7 +28,7 @@ import {
   type MeetingInterval,
   nextMeetingBoundary,
 } from "@sidecar/calendar";
-import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
+import { CONNECTION_ID, SIGN_IN_EDGE } from "@sidecar/credentials";
 import {
   AgentTraceWriter,
   tracedAttentionEvaluator,
@@ -37,27 +36,29 @@ import {
 } from "@sidecar/devtrace";
 import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
 import { fixtureSnapshot } from "@sidecar/fixtures";
-import { normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
+import { ISSUE_TRACKER_ID_LIST, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
 import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticKind,
   ClaudeDesktopSessionApplicationReader,
   CodexCloudSessionAdapter,
-  ConductorLocalWorkspaceAdapter,
   ConductorSessionApplicationReader,
   ObservationHookRegistry,
   type ProviderRegistration,
   peekLocalSessions,
   providerRegistrations,
+  REGISTRATION_OBSERVATION,
+  registrationObservation,
   type WorkspaceHostEnrichment,
-  type WorkspaceHostRegistration,
   workspaceHostRegistrations,
+  workspaceProviderRegistrations,
 } from "@sidecar/providers";
 import type { ConversationEntry, SessionAnnouncement } from "@sidecar/realtime";
 import {
-  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   CreatedWorkspaceOpenTracker,
   InMemorySessionRegistry,
+  isKindsWorkspaceProviderId,
+  isModelsWorkspaceProviderId,
   isProviderId,
   isWorkspaceProviderId,
   normalizeObservedWorkspaceProjects,
@@ -78,6 +79,7 @@ import {
   type SessionProviderAdapter,
   type SessionRegistrySnapshot,
   staleWorkspaceProjectDefaults,
+  WORKSPACE_PROVIDER_ID_LIST,
   type WorkspaceAgentSelection,
   workspaceProjectSelectionId,
 } from "@sidecar/session";
@@ -85,13 +87,11 @@ import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import {
   SupersetCli,
   SupersetSignIn,
-  SupersetWorkspaceAdapter,
-  SupersetWorkspaceReader,
-  SupersetWorkspaceSnapshot,
+  SupersetWorkspaceHost,
   supersetPressedLink,
 } from "@sidecar/superset";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
-import { LinearCredentials, LinearIssueTracker, LinearSignIn } from "@sidecar/trackers";
+import { issueTrackerRegistrations } from "@sidecar/trackers";
 import {
   IntroductionRealtimeCredentialMinter,
   sessionAnnouncementFromReview,
@@ -122,13 +122,13 @@ import {
   type AccountSnapshot,
   type AppBootstrap,
   type ConversationHistoryPayload,
+  INTERACTIVE_SIGN_IN_STAGE,
   type MicrophoneRoute,
   type MicrophoneStatus,
   type ObservedAccountCalendars,
   type OutputAudioState,
   type SessionReplayBootstrap,
   type SessionRosterPayload,
-  SUPERSET_SIGN_IN_STAGE,
   SUPERSET_WORKSPACE_PROVIDER_ID,
   WINDOW_ROLE,
 } from "#shared/contracts";
@@ -152,6 +152,7 @@ import {
   calendarOnboardingStateFromStored,
   shouldBackfillCalendarOnboardingSettled,
 } from "./calendar-onboarding-flow";
+import { connectionRegistrations } from "./connections";
 import {
   INTRODUCTION_FADE_MS,
   INTRODUCTION_HANDOFF_READY_MS,
@@ -165,9 +166,9 @@ import {
 } from "./introduction-flow";
 import { registerAccountSessionIpc } from "./ipc/account-session";
 import { registerCalendarConnectionIpc } from "./ipc/calendar-connection";
+import { registerConnectionIpc } from "./ipc/connections";
 import { registerSessionActsIpc } from "./ipc/session-acts";
 import { registerSettingsRowsIpc } from "./ipc/settings-rows";
-import { registerTrackerConnectionIpc } from "./ipc/tracker-connection";
 import { registerVoiceRuntimeIpc } from "./ipc/voice-runtime";
 import { registerWindowSurfaceIpc } from "./ipc/window-surface";
 import {
@@ -267,33 +268,24 @@ const conductorSessionApplications = new ConductorSessionApplicationReader();
 // keeps a record per session under its own application data; reading it is
 // what lets those rows say which app holds them and open there.
 const claudeDesktopSessionApplications = new ClaudeDesktopSessionApplicationReader();
-// The local counterpart of the cloud Conductor adapter's creation path: it
-// reads the repositories Conductor holds and creates a workspace in one by
-// handing Conductor's own creation deep link to the operating system. It
-// observes no sessions of its own, so it joins the workspace-project offer and
-// the act router rather than the observation registry.
-const conductorLocalWorkspaceAdapter = new ConductorLocalWorkspaceAdapter({
-  openExternal: (url) => shell.openExternal(url),
-});
 const supersetHomeDirectory =
   process.env.SUPERSET_HOME_DIR ?? path.join(app.getPath("home"), ".superset");
-const supersetWorkspaces = new SupersetWorkspaceReader({
-  homeDirectory: supersetHomeDirectory,
-});
 const supersetCli = new SupersetCli({ homeDirectory: supersetHomeDirectory });
-const supersetWorkspaceAdapter = new SupersetWorkspaceAdapter(supersetCli);
-let observedSupersetWorkspaces = new SupersetWorkspaceSnapshot([]);
-let observedSupersetOrganization: string | undefined;
-const supersetWorkspaceHost: WorkspaceHostRegistration = {
-  observationFailureLabel: "Superset observation",
-  read: readSupersetWorkspaceHost,
-  // The read absorbs its own failures into an empty snapshot so the act
-  // contexts and the workspace rows move with it; a rejection would be a
-  // bug, and it costs only the enrichment rather than the pass.
-  emptyEnrichment: (_providerId, observations) => observations,
-};
+// The Superset entry of the workspace-host registry carries the whole Superset
+// pass: the host-state read, the acts a drawn row advertises, and the chatless
+// workspace rows, all moving together. The CLI is constructed here because the
+// sign-in flow and the settings rows read the same binary.
+const supersetHost = new SupersetWorkspaceHost({
+  cli: supersetCli,
+  homeDirectory: supersetHomeDirectory,
+  agentDefault: async () =>
+    (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
+      SUPERSET_WORKSPACE_PROVIDER_ID
+    ]?.agent,
+  report: (message) => process.stderr.write(message),
+});
 const workspaceHosts = workspaceHostRegistrations({
-  superset: supersetWorkspaceHost,
+  superset: supersetHost,
   conductorApplications: conductorSessionApplications,
   claudeDesktopApplications: claudeDesktopSessionApplications,
 });
@@ -309,7 +301,15 @@ const settingsStore = new SettingsStore({
     encrypt: (plainText) => safeStorage.encryptString(plainText),
     decrypt: (cipherText) => safeStorage.decryptString(cipherText),
   },
-  codexCloudConnection: () => codexCloudAdapter.connection(),
+  // Both answered by the connection rows themselves, resolved at snapshot
+  // time like the key sources beside them, so the store names no provider.
+  cliConnections: async () => ({
+    [CONNECTION_ID.CODEX]: await connections[CONNECTION_ID.CODEX].cliConnection(),
+    [CONNECTION_ID.SUPERSET]: await connections[CONNECTION_ID.SUPERSET].cliConnection(),
+  }),
+  consentSignInAvailable: () => ({
+    [CONNECTION_ID.LINEAR]: connections[CONNECTION_ID.LINEAR].signInAvailable(),
+  }),
 });
 const accountClient = new AccountClient({ baseUrl: ACCOUNT_BASE_URL, clientId: ACCOUNT_CLIENT_ID });
 let account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
@@ -368,35 +368,41 @@ const providerRegistry = providerRegistrations({
 const orderedRegistrations: readonly ProviderRegistration[] = PROVIDER_ID_LIST.map(
   (providerId) => providerRegistry[providerId],
 );
-// The issue tracker is not a session provider: its issues feed the voice
-// roster rather than the registry, so it stands beside the adapters rather
-// than among them.
-// What authorizes a read is minted rather than stored ready to send: Linear's
-// access tokens last a day, so the grant behind the row is renewed here, and
-// only Linear refusing that renewal disconnects anything.
-const linearCredentials = new LinearCredentials({
-  readGrant: () => settingsStore.readGrant(CREDENTIAL_PROVIDER_ID.LINEAR),
-  writeGrant: async (grant) => {
-    await settingsStore.setGrant(CREDENTIAL_PROVIDER_ID.LINEAR, grant);
+// Every provider a workspace can be created through: the observed providers
+// above and the two workspace-only providers, Superset's (whose rows the
+// Superset host read decorates) and local Conductor's (which observes no
+// sessions and joins the pass only through its repository refresh). The act
+// router and the project offer read this table; hooks, spools, and credentials
+// belong to the observed providers alone.
+const workspaceRegistry = workspaceProviderRegistrations({
+  registrations: providerRegistry,
+  supersetWorkspace: supersetHost.adapter,
+  openExternal: (url) => shell.openExternal(url),
+});
+const orderedWorkspaceRegistrations: readonly ProviderRegistration[] =
+  WORKSPACE_PROVIDER_ID_LIST.map((providerId) => workspaceRegistry[providerId]);
+// The issue trackers are not session providers: their issues feed the voice
+// roster rather than the registry, so they stand beside the adapters rather
+// than among them. Each tracker's grant is stored encrypted like a key and
+// renewed by the tracker's own credentials, which forget it only when the
+// tracker itself refuses a renewal.
+const issueTrackers = issueTrackerRegistrations({
+  readGrant: (trackerId) => settingsStore.readGrant(trackerId),
+  writeGrant: async (trackerId, grant) => {
+    await settingsStore.setGrant(trackerId, grant);
   },
-  forgetGrant: async () => {
-    const cleared = await settingsStore.clearGrant(CREDENTIAL_PROVIDER_ID.LINEAR);
-    // Nobody pressed anything to end this connection — Linear refused the
-    // renewal — so no settings reply is on its way to say so. A row left
+  forgetGrant: async (trackerId) => {
+    const cleared = await settingsStore.clearGrant(trackerId);
+    // Nobody pressed anything to end this connection — the tracker refused
+    // the renewal — so no settings reply is on its way to say so. A row left
     // saying connected would be a row about a grant that no longer exists.
     panels.broadcast(channels.onSettingsChanged, cleared.settings);
   },
-});
-const linearTracker = new LinearIssueTracker({
-  readAccessToken: () => linearCredentials.accessToken(),
-});
-// The sign-in behind the Linear row: it opens Linear's own consent page in the
-// user's browser and hands back one grant, which the connect handler stores.
-// Offered only when this build carries an OAuth client.
-const linearSignIn = new LinearSignIn({
   openExternal: (url) => void shell.openExternal(url),
 });
-const issueTrackers = [linearTracker] as const;
+const issueTrackerAdapters = ISSUE_TRACKER_ID_LIST.map(
+  (trackerId) => issueTrackers[trackerId].adapter,
+);
 /** A board changes at the pace of hands, not of models; a minute is current. */
 const ISSUE_REFRESH_INTERVAL_MS = 60_000;
 /** The latest roster, which is also what every spoken act is validated against. */
@@ -1138,17 +1144,43 @@ const supersetSignIn = new SupersetSignIn({
   cli: supersetCli,
   openExternal: (url) => shell.openExternal(url),
   onChange: (state) => {
-    panels.broadcast(channels.onSupersetSignInChanged, state);
-    if (state.stage !== SUPERSET_SIGN_IN_STAGE.CONNECTED) return;
+    panels.broadcast(channels.onProviderSignInChanged, {
+      providerId: CONNECTION_ID.SUPERSET,
+      state,
+    });
+    // The settings rows draw the login from the CLI's own answer, which a
+    // stage landing on connected or returning to idle has just moved.
+    void broadcastCliConnections();
+    if (state.stage !== INTERACTIVE_SIGN_IN_STAGE.CONNECTED) return;
     void sessionObservationLoop.refresh();
     // The edge into connected, which is where a sign-in actually lands: the
     // code submission only reaches `exchanging`, and the CLI answers on its
     // own time. Counted here so a sign-in that failed after the code counts
     // nothing at all.
-    recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
-      superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_COMPLETE,
-    });
+    connections[CONNECTION_ID.SUPERSET].countSignInEdge(SIGN_IN_EDGE.COMPLETE);
   },
+});
+// Every connection's row, assembled once from the pieces above; the handlers
+// and the settings store iterate it and name no provider themselves.
+const connections = connectionRegistrations({
+  workspaceRegistry,
+  refreshAdapter: async (adapter) => {
+    await sessionRegistry.refresh(adapter);
+  },
+  codexCloudConnection: () => codexCloudAdapter.connection(),
+  superset: {
+    host: supersetHost,
+    signIn: supersetSignIn,
+    refreshSessions: () => void sessionObservationLoop.refresh(),
+  },
+  trackers: issueTrackers,
+  settingsStore,
+  refreshIssues: () => void issueObservationLoop.refresh(),
+  voiceCredentialChanged: async () => {
+    await applyVoiceCredential();
+    await hotkeys.reapply(HOTKEY_RANK.TALK);
+  },
+  recordProductEvent,
 });
 const hotkeys = new HotkeyRegistrar({
   registersGlobalKeys: runMode.registersGlobalKeys,
@@ -1360,19 +1392,21 @@ async function broadcastSessionReplay(): Promise<void> {
 }
 
 /**
- * What the settings last told the panels about the Codex CLI login. The
- * connection is not a setting anyone writes, so no save ever announces it
- * moving: the observation loop is where it changes — the user ran codex
- * login or logout in their own terminal — and without this the panels keep
- * drawing the words of whatever snapshot they loaded.
+ * What the settings last told the panels about each CLI login. A connection
+ * is not a setting anyone writes, so no save ever announces it moving: the
+ * observation loop and the sign-in flow are where it changes — the user ran
+ * a login or logout in their own terminal, or finished one from the row —
+ * and without this the panels keep drawing the words of whatever snapshot
+ * they loaded.
  */
-let announcedCodexCloudConnection = codexCloudAdapter.connection();
+let announcedCliConnections: string | undefined;
 
-async function broadcastCodexCloudConnection(): Promise<void> {
-  const connection = codexCloudAdapter.connection();
-  if (connection === announcedCodexCloudConnection) return;
-  announcedCodexCloudConnection = connection;
-  panels.broadcast(channels.onSettingsChanged, await settingsStore.snapshot());
+async function broadcastCliConnections(): Promise<void> {
+  const snapshot = await settingsStore.snapshot();
+  const connections = JSON.stringify(snapshot.status.cliConnections);
+  if (connections === announcedCliConnections) return;
+  announcedCliConnections = connections;
+  panels.broadcast(channels.onSettingsChanged, snapshot);
 }
 
 async function startAccountCapabilities(): Promise<void> {
@@ -1429,13 +1463,7 @@ async function readLocalTranscriptRendering(
 }
 
 function adapterFor(providerId: string) {
-  if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return supersetWorkspaceAdapter;
-  if (providerId === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID) return conductorLocalWorkspaceAdapter;
-  return isProviderId(providerId) ? providerRegistry[providerId].adapter : undefined;
-}
-
-function adapterForCredential(providerId: CredentialProviderId) {
-  return orderedRegistrations.find((entry) => entry.credential?.id === providerId)?.adapter;
+  return isWorkspaceProviderId(providerId) ? workspaceRegistry[providerId].adapter : undefined;
 }
 
 /** Whether a provider is currently offering the project a default would name. */
@@ -1472,16 +1500,17 @@ async function rememberWorkspaceDefaults(
       );
       panels.broadcast(channels.onSettingsChanged, saved.settings);
     }
+    // A provider whose new agents are chosen among its own observed kinds
+    // remembers the kind this creation named, on the same first-choice terms.
     if (
-      providerId === SUPERSET_WORKSPACE_PROVIDER_ID &&
+      isKindsWorkspaceProviderId(providerId) &&
       agent !== undefined &&
-      (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
-        SUPERSET_WORKSPACE_PROVIDER_ID
-      ] === undefined
+      (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId] ===
+        undefined
     ) {
       const saved = await settingsStore.setEntry(
         APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-        SUPERSET_WORKSPACE_PROVIDER_ID,
+        providerId,
         { agent },
       );
       panels.broadcast(channels.onSettingsChanged, saved.settings);
@@ -1512,7 +1541,7 @@ async function rememberWorkspaceDefaults(
     // choice made by hand while the provider was answering is already
     // held, and must not lose to the request it overlapped.
     if (
-      isProviderId(providerId) &&
+      isModelsWorkspaceProviderId(providerId) &&
       namedSelection !== undefined &&
       (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId] ===
         undefined
@@ -1558,10 +1587,6 @@ function registerIpc(): void {
       const display =
         (displayId !== undefined ? panels.display(displayId) : undefined) ??
         screen.getPrimaryDisplay();
-      const [supersetInstalled, supersetConnected] = await Promise.all([
-        supersetCli.installed(),
-        supersetCli.connected(),
-      ]);
       return {
         mode: displayId !== undefined ? panels.modeFor(displayId) : panels.initialMode,
         startPeeked,
@@ -1571,8 +1596,6 @@ function registerIpc(): void {
         captureMode,
         fixtureMode,
         agentTraceEnabled: agentTrace !== undefined,
-        supersetInstalled,
-        supersetConnected,
         accountRequired: runMode.requiresAccount,
         account,
         packaged: app.isPackaged,
@@ -1693,39 +1716,6 @@ function registerIpc(): void {
     });
     void speakArrivalBeat();
   });
-  registerHandler(BRIDGE.beginSupersetSignIn, async () => {
-    recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
-      superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_START,
-    });
-    return supersetSignIn.begin();
-  });
-  registerHandler(BRIDGE.submitSupersetSignInCode, (code: string) => {
-    return supersetSignIn.submitCode(code);
-  });
-  registerHandler(BRIDGE.chooseSupersetOrganization, async (slug: string) => {
-    return supersetSignIn.chooseOrganization(slug);
-  });
-  registerHandler(BRIDGE.reopenSupersetSignIn, supersetSignIn.reopen.bind(supersetSignIn));
-  registerHandler(BRIDGE.cancelSupersetSignIn, () => {
-    supersetSignIn.cancel();
-    recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
-      superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_CANCEL,
-    });
-  });
-  registerHandler(BRIDGE.disconnectSuperset, async () => {
-    if (!(await supersetCli.signOut())) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: "Superset could not sign out." };
-    }
-    // The sign-in machine returning to idle is what tells every renderer the
-    // login is gone; the refreshed pass retires the rows the login was buying.
-    supersetSignIn.cancel();
-    void sessionObservationLoop.refresh();
-    recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
-      superset_act: PRODUCT_SUPERSET_ACT.DISCONNECT,
-    });
-    return { status: ACT_RESULT_STATUS.ACCEPTED };
-  });
-
   registerAccountSessionIpc({
     ipcMain,
     trustedSender,
@@ -1750,11 +1740,7 @@ function registerIpc(): void {
   registerSettingsRowsIpc({
     registerSettingHandler,
     settingsStore,
-    adapterForCredential,
-    refreshAdapter: async (adapter) => {
-      await sessionRegistry.refresh(adapter);
-    },
-    refreshIssues: () => void issueObservationLoop.refresh(),
+    connections,
     applyVoiceCredential,
     hotkeys,
     dock,
@@ -1783,15 +1769,12 @@ function registerIpc(): void {
     recordProductEvent,
   });
 
-  registerTrackerConnectionIpc({
+  registerConnectionIpc({
     ipcMain,
     trustedSender,
     registerSetting: registerSettingHandler,
     settingsStore,
-    credentials: linearCredentials,
-    signIn: linearSignIn,
-    refresh: () => void issueObservationLoop.refresh(),
-    recordProductEvent,
+    connections,
   });
 
   // The row's button. Answered rather than fire-and-forget so the row that
@@ -1874,15 +1857,9 @@ function registerIpc(): void {
     expectCreatedWorkspace: (identity, now) => createdWorkspaceOpens.expect(identity, now),
     openCreatedWorkspaces: () => openCreatedWorkspaces(sessionRegistry.list()),
     trackedIssues: () => trackedIssues,
-    issueTrackers,
+    issueTrackers: issueTrackerAdapters,
     refreshIssues: () => void issueObservationLoop.refresh(),
-    supersetContext: (identity) =>
-      observedSupersetWorkspaces.actableContext(
-        identity.providerId,
-        identity.providerSessionId,
-        observedSupersetOrganization,
-      ),
-    supersetCli,
+    workspaceHosts,
     recordProductEvent,
     rememberedFacts: () => rememberedFacts,
     writeRememberedFacts: (facts) => {
@@ -2009,11 +1986,7 @@ function registerIpc(): void {
  */
 function offeredWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
   if (!runMode.observesProviders) return [];
-  return [
-    ...orderedRegistrations.map(({ adapter }) => adapter),
-    supersetWorkspaceAdapter,
-    conductorLocalWorkspaceAdapter,
-  ].flatMap((adapter) =>
+  return orderedWorkspaceRegistrations.flatMap(({ adapter }) =>
     adapter.workspaceProjects().map((project) => ({
       ...project,
       providerId: adapter.provider.id,
@@ -2053,60 +2026,23 @@ async function applyLocalSessionHooks(): Promise<void> {
   );
 }
 
-/**
- * The Superset entry of the workspace-host registry carries the whole
- * Superset pass, not only the enrichment: the acts a drawn row still
- * advertises resolve against this module's latest snapshot, and the chatless
- * workspace rows ride the same read, so all of it moves together.
- */
-async function readSupersetWorkspaceHost(): Promise<WorkspaceHostEnrichment> {
-  let supersetSnapshot = new SupersetWorkspaceSnapshot([]);
-  let supersetOrganization: string | undefined;
-  let supersetAgentDefault: string | undefined;
-  try {
-    supersetAgentDefault = (
-      await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field)
-    )?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
-    [supersetSnapshot, supersetOrganization] = await Promise.all([
-      supersetWorkspaces.read(),
-      supersetCli.activeOrganization(),
-    ]);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Superset observation failed: ${message}\n`);
-  }
-  // The fresh snapshot answers acts the drawn rows still advertise from
-  // before this pass's enrichment runs, so the directory matches enrichment
-  // made carry over, re-anchored to the worktrees just read.
-  supersetSnapshot.adoptDirectoryMatches(observedSupersetWorkspaces);
-  observedSupersetWorkspaces = supersetSnapshot;
-  observedSupersetOrganization = supersetOrganization;
-  // Refreshed outside the read's own try so a failed pass hands the adapter
-  // the same emptiness the act contexts just took: rows the router would
-  // refuse to act on must not keep standing on a snapshot that is gone.
-  try {
-    await supersetWorkspaceAdapter.refresh(
-      supersetAgentDefault,
-      supersetOrganization !== undefined,
-      supersetSnapshot.workspaceRowObservations(supersetOrganization),
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Superset observation failed: ${message}\n`);
-  }
-  return (providerId, observations) =>
-    supersetSnapshot.enrich(providerId, observations, supersetOrganization);
-}
-
 async function refreshProviderSessions(generation: number): Promise<void> {
-  const actionsWereEnabled = observedSupersetOrganization !== undefined;
-  // Re-reads the repositories Conductor holds so the local create offer tracks
-  // its index. A failed read empties the offer inside the adapter, so a create
-  // is never validated against repositories a later read could no longer see.
-  const conductorRepositoriesPromise = conductorLocalWorkspaceAdapter.refresh().catch((error) => {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Conductor repository observation failed: ${message}\n`);
-  });
+  const actionsWereEnabled = supersetHost.connected();
+  // Each row's own per-pass read — local Conductor re-reading the repositories
+  // it holds so the create offer tracks its index — runs beside the host
+  // reads. A failed read is the row's to absorb (Conductor's empties its
+  // offer) and is only reported here.
+  const rowRefreshes = Promise.all(
+    orderedWorkspaceRegistrations.map(async ({ refresh }) => {
+      if (!refresh) return;
+      try {
+        await refresh.run();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        process.stderr.write(`${refresh.failureLabel} failed: ${message}\n`);
+      }
+    }),
+  );
   const hostEnrichments = await Promise.all(
     workspaceHosts.map((host) =>
       host.read().catch((error) => {
@@ -2116,12 +2052,13 @@ async function refreshProviderSessions(generation: number): Promise<void> {
       }),
     ),
   );
-  await conductorRepositoriesPromise;
-  const supersetActionsEnabled = observedSupersetOrganization !== undefined;
+  await rowRefreshes;
+  const supersetActionsEnabled = supersetHost.connected();
   if (actionsWereEnabled !== supersetActionsEnabled) {
     if (supersetActionsEnabled) {
-      panels.broadcast(channels.onSupersetSignInChanged, {
-        stage: SUPERSET_SIGN_IN_STAGE.CONNECTED,
+      panels.broadcast(channels.onProviderSignInChanged, {
+        providerId: CONNECTION_ID.SUPERSET,
+        state: { stage: INTERACTIVE_SIGN_IN_STAGE.CONNECTED, scopes: [] },
       });
     } else {
       // The CLI withdrawing its login is also what makes a later Connect a
@@ -2134,38 +2071,33 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   // registry commits each provider atomically, so one that is slow or failing
   // can neither delay nor cancel the others. A network provider would
   // otherwise hold up the local ones for as long as its requests take.
-  await Promise.all([
-    ...orderedRegistrations.map(async ({ adapter }) => {
+  // The fold applies the managers in registry order, which is what makes the
+  // registry's declared claim order the enrichment precedence: the first
+  // registration annotates first, and each later one sees what the earlier
+  // ones already claimed. A row whose observations arrive decorated takes no
+  // fold — the host read that produced them annotated them already — and a
+  // row that observes nothing is left out of the pass entirely.
+  const hostFold: WorkspaceHostEnrichment = (providerId, observations) =>
+    hostEnrichments.reduce(
+      (enriched, enrichment) => enrichment(providerId, enriched),
+      observations,
+    );
+  await Promise.all(
+    orderedWorkspaceRegistrations.map(async (registration) => {
+      const observation = registrationObservation(registration);
+      if (observation === REGISTRATION_OBSERVATION.NONE) return;
+      const { adapter } = registration;
       try {
-        // The fold applies the managers in registry order, which is what
-        // makes the registry's declared claim order the enrichment
-        // precedence: the first registration annotates first, and each later
-        // one sees what the earlier ones already claimed.
-        await sessionRegistry.refresh(adapter, (providerId, observations) =>
-          hostEnrichments.reduce(
-            (enriched, enrichment) => enrichment(providerId, enriched),
-            observations,
-          ),
+        await sessionRegistry.refresh(
+          adapter,
+          observation === REGISTRATION_OBSERVATION.HOST_ENRICHED ? hostFold : undefined,
         );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         process.stderr.write(`Session observation failed (${adapter.provider.id}): ${message}\n`);
       }
     }),
-    // The chatless Superset workspaces, as rows of the workspace provider.
-    // No transform rides this refresh: the snapshot decorated them already,
-    // so an act path's plain refresh commits exactly this shape.
-    (async () => {
-      try {
-        await sessionRegistry.refresh(supersetWorkspaceAdapter);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        process.stderr.write(
-          `Session observation failed (${supersetWorkspaceAdapter.provider.id}): ${message}\n`,
-        );
-      }
-    })(),
-  ]);
+  );
   if (!sessionObservationLoop.isCurrent(generation)) return;
   // The registry only spoke if the sessions themselves changed, and a pass can
   // change the project list while leaving them exactly as they were.
@@ -2511,7 +2443,7 @@ const sessionObservationLoop = new ObservationLoop({
   // settings save stands behind that to announce it.
   afterRun: () => {
     broadcastRelevantSessions();
-    void broadcastCodexCloudConnection();
+    void broadcastCliConnections();
   },
 });
 const attentionObservationLoop = new ObservationLoop({
@@ -2730,7 +2662,7 @@ async function refreshTrackedIssues(generation: number): Promise<void> {
   try {
     const collected: TrackedIssue[] = [];
     let connected = false;
-    for (const tracker of issueTrackers) {
+    for (const tracker of issueTrackerAdapters) {
       const observations = await tracker.observe();
       if (!observations) continue;
       connected = true;

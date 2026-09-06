@@ -25,3 +25,8 @@ export {
   LinearIssueTracker,
   type LinearTrackerOptions,
 } from "./linear/tracker.js";
+export {
+  type IssueTrackerRegistration,
+  type IssueTrackerRegistrationOptions,
+  issueTrackerRegistrations,
+} from "./registrations.js";

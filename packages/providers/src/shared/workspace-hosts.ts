@@ -1,4 +1,11 @@
-import type { ProviderSessionObservation } from "@sidecar/session";
+import type {
+  ProviderActResult,
+  ProviderControlResult,
+  ProviderMessageResult,
+  ProviderSessionObservation,
+  ProviderWorkspaceResult,
+  SessionIdentity,
+} from "@sidecar/session";
 import {
   type ClaudeDesktopSessionApplicationReader,
   ClaudeDesktopSessionApplicationSnapshot,
@@ -15,15 +22,39 @@ export type WorkspaceHostEnrichment = (
 ) => readonly ProviderSessionObservation[];
 
 /**
+ * The acts a workspace manager delivers for one session it has claimed, each
+ * bound to the context the manager's latest read resolved for that session.
+ * A manager delivers an act only for a capability its own enrichment
+ * advertised on the row: the performer re-checks the roster before asking,
+ * and the manager answers unsupported for anything its context cannot carry
+ * (a chatless workspace row has no terminal for a message to land in).
+ */
+export interface WorkspaceHostSessionActs {
+  sendMessage(text: string): Promise<ProviderMessageResult>;
+  executeControl(controlId: string): Promise<ProviderControlResult>;
+  spawnAgent(agent: string, task: string | undefined): Promise<ProviderWorkspaceResult>;
+  renameWorkspace(name: string): Promise<ProviderActResult>;
+}
+
+/**
  * One workspace manager in the observation pass: how its own records become
  * one pass's enrichment, and what a failed read stands in with — the manager
  * annotating nothing, never a failed pass. `observationFailureLabel` opens
  * the stderr line the caller reports a failed read under.
+ *
+ * A manager that also carries acts for the sessions it groups declares
+ * `claim`: the acts for a session its latest read resolved, or nothing for a
+ * session it does not manage, so the performer hands a claimed session's act
+ * to the manager and every other session's to its provider adapter.
+ * `ownsControl` names the controls the manager's enrichment added to a row,
+ * so a provider's own control on a managed row still reaches the provider.
  */
 export interface WorkspaceHostRegistration {
   observationFailureLabel: string;
   read(): Promise<WorkspaceHostEnrichment>;
   emptyEnrichment: WorkspaceHostEnrichment;
+  claim?(identity: SessionIdentity): WorkspaceHostSessionActs | undefined;
+  ownsControl?(controlId: string): boolean;
 }
 
 export interface WorkspaceHostRegistrationOptions {

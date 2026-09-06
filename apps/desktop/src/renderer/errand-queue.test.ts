@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
+import { CONNECTION_ID, CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/wire/account";
@@ -39,7 +39,10 @@ function settings(captions: boolean): AppSettingsView {
       [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
     },
     secretStorage: SECRET_STORAGE.UNKNOWN,
-    codexCloudConnection: CLI_CONNECTION.UNKNOWN,
+    cliConnections: {
+      [CONNECTION_ID.CODEX]: CLI_CONNECTION.UNKNOWN,
+      [CONNECTION_ID.SUPERSET]: CLI_CONNECTION.UNKNOWN,
+    },
     showInDock: false,
     voice: REALTIME_VOICE.CEDAR,
     voiceSpeed: REALTIME_VOICE_SPEED.NORMAL,
@@ -48,7 +51,7 @@ function settings(captions: boolean): AppSettingsView {
     quietDuringMeetings: true,
     announceSessions: true,
     calendarSignInAvailable: false,
-    linearSignInAvailable: false,
+    consentSignInAvailable: { [CONNECTION_ID.LINEAR]: false },
     appleCalendarAvailable: false,
     voiceAvailable: false,
     voiceSource: VOICE_SOURCE.ACCOUNT,

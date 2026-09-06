@@ -1,6 +1,10 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import {
+  INTERACTIVE_SIGN_IN_STAGE,
+  type InteractiveSignIn,
+  type InteractiveSignInSnapshot,
+} from "@sidecar/credentials/interactive-sign-in";
 import type { SupersetCli } from "./cli.js";
-import { SUPERSET_SIGN_IN_STAGE, type SupersetSignInSnapshot } from "./sign-in-stage.js";
 
 const SIGN_IN_TIMEOUT_MS = 3 * 60_000;
 const OUTPUT_TAIL_LIMIT = 16_384;
@@ -30,20 +34,20 @@ interface LoginChild {
 export interface SupersetSignInOptions {
   cli: SupersetCli;
   openExternal: (url: string) => Promise<void>;
-  onChange: (snapshot: SupersetSignInSnapshot) => void;
+  onChange: (snapshot: InteractiveSignInSnapshot) => void;
   spawnLogin?: (executable: string, arguments_: readonly string[]) => LoginChild;
   timeoutMs?: number;
 }
 
 function snapshot(
-  stage: SupersetSignInSnapshot["stage"],
-  options: Pick<SupersetSignInSnapshot, "failure" | "organizations"> = {
-    organizations: [],
+  stage: InteractiveSignInSnapshot["stage"],
+  options: Pick<InteractiveSignInSnapshot, "failure" | "scopes"> = {
+    scopes: [],
   },
-): SupersetSignInSnapshot {
-  const next: SupersetSignInSnapshot = {
+): InteractiveSignInSnapshot {
+  const next: InteractiveSignInSnapshot = {
     stage,
-    organizations: options.organizations,
+    scopes: options.scopes,
   };
   if (options.failure) next.failure = options.failure;
   return next;
@@ -72,10 +76,10 @@ export function validSupersetSignInCode(code: string): boolean {
   return separator > 0 && separator === code.lastIndexOf("#") && separator < code.length - 1;
 }
 
-export class SupersetSignIn {
+export class SupersetSignIn implements InteractiveSignIn {
   readonly #cli: SupersetCli;
   readonly #openExternal: (url: string) => Promise<void>;
-  readonly #onChange: (snapshot: SupersetSignInSnapshot) => void;
+  readonly #onChange: (snapshot: InteractiveSignInSnapshot) => void;
   readonly #spawnLogin: NonNullable<SupersetSignInOptions["spawnLogin"]>;
   readonly #timeoutMs: number;
   #child: LoginChild | undefined;
@@ -83,7 +87,7 @@ export class SupersetSignIn {
   #timeout: ReturnType<typeof setTimeout> | undefined;
   #attempt = 0;
   #starting = false;
-  #state = snapshot(SUPERSET_SIGN_IN_STAGE.IDLE);
+  #state = snapshot(INTERACTIVE_SIGN_IN_STAGE.IDLE);
 
   constructor(options: SupersetSignInOptions) {
     this.#cli = options.cli;
@@ -100,15 +104,15 @@ export class SupersetSignIn {
     this.#timeoutMs = options.timeoutMs ?? SIGN_IN_TIMEOUT_MS;
   }
 
-  current(): SupersetSignInSnapshot {
+  current(): InteractiveSignInSnapshot {
     return this.#state;
   }
 
-  async begin(): Promise<SupersetSignInSnapshot> {
+  async begin(): Promise<InteractiveSignInSnapshot> {
     if (this.#child || this.#starting) return this.#state;
     if (
-      this.#state.stage !== SUPERSET_SIGN_IN_STAGE.IDLE &&
-      this.#state.stage !== SUPERSET_SIGN_IN_STAGE.FAILURE
+      this.#state.stage !== INTERACTIVE_SIGN_IN_STAGE.IDLE &&
+      this.#state.stage !== INTERACTIVE_SIGN_IN_STAGE.FAILURE
     ) {
       return this.#state;
     }
@@ -125,7 +129,7 @@ export class SupersetSignIn {
     }
 
     this.#authorizationUrl = undefined;
-    this.#set(snapshot(SUPERSET_SIGN_IN_STAGE.BROWSER_CODE));
+    this.#set(snapshot(INTERACTIVE_SIGN_IN_STAGE.BROWSER_CODE));
     let child: LoginChild;
     try {
       child = this.#spawnLogin(this.#cli.executable, ["auth", "login", "--json"]);
@@ -166,8 +170,8 @@ export class SupersetSignIn {
     return this.#state;
   }
 
-  submitCode(code: string): SupersetSignInSnapshot {
-    if (!this.#child || this.#state.stage !== SUPERSET_SIGN_IN_STAGE.BROWSER_CODE)
+  submitCode(code: string): InteractiveSignInSnapshot {
+    if (!this.#child || this.#state.stage !== INTERACTIVE_SIGN_IN_STAGE.BROWSER_CODE)
       return this.#state;
     if (!validSupersetSignInCode(code)) {
       return this.#fail("Paste the complete Superset code, including its # separator.");
@@ -177,7 +181,7 @@ export class SupersetSignIn {
     } catch {
       return this.#fail("Superset did not accept that sign-in code.");
     }
-    this.#set(snapshot(SUPERSET_SIGN_IN_STAGE.EXCHANGING));
+    this.#set(snapshot(INTERACTIVE_SIGN_IN_STAGE.EXCHANGING));
     return this.#state;
   }
 
@@ -190,23 +194,23 @@ export class SupersetSignIn {
     this.#starting = false;
     this.#stopChild();
     this.#authorizationUrl = undefined;
-    this.#set(snapshot(SUPERSET_SIGN_IN_STAGE.IDLE));
+    this.#set(snapshot(INTERACTIVE_SIGN_IN_STAGE.IDLE));
   }
 
   shutdown(): void {
     this.cancel();
   }
 
-  async chooseOrganization(slug: string): Promise<SupersetSignInSnapshot> {
-    if (this.#state.stage !== SUPERSET_SIGN_IN_STAGE.ORGANIZATION) return this.#state;
+  async chooseScope(slug: string): Promise<InteractiveSignInSnapshot> {
+    if (this.#state.stage !== INTERACTIVE_SIGN_IN_STAGE.SCOPE) return this.#state;
     const attempt = ++this.#attempt;
     // The CLI's own word for this act: an organization switch is not the code
     // exchange, and drawing it as one would ask for a code nobody owes.
-    this.#set(snapshot(SUPERSET_SIGN_IN_STAGE.SWITCHING));
+    this.#set(snapshot(INTERACTIVE_SIGN_IN_STAGE.SWITCHING));
     const connected = await this.#cli.chooseOrganization(slug);
     if (attempt !== this.#attempt) return this.#state;
     if (connected) {
-      this.#set(snapshot(SUPERSET_SIGN_IN_STAGE.CONNECTED));
+      this.#set(snapshot(INTERACTIVE_SIGN_IN_STAGE.CONNECTED));
     } else {
       this.#fail("Superset could not select that organization.");
     }
@@ -221,29 +225,29 @@ export class SupersetSignIn {
     if (attempt !== this.#attempt) return;
     if (connected) {
       this.#starting = false;
-      this.#set(snapshot(SUPERSET_SIGN_IN_STAGE.CONNECTED));
+      this.#set(snapshot(INTERACTIVE_SIGN_IN_STAGE.CONNECTED));
       return;
     }
     const organizations = await this.#cli.organizations();
     if (attempt !== this.#attempt) return;
     this.#starting = false;
     if (organizations.length > 0) {
-      this.#set(snapshot(SUPERSET_SIGN_IN_STAGE.ORGANIZATION, { organizations }));
+      this.#set(snapshot(INTERACTIVE_SIGN_IN_STAGE.SCOPE, { scopes: organizations }));
       return;
     }
     this.#fail("Superset sign-in did not finish.");
   }
 
-  #fail(failure: string): SupersetSignInSnapshot {
+  #fail(failure: string): InteractiveSignInSnapshot {
     this.#attempt += 1;
     this.#starting = false;
     this.#stopChild();
     this.#authorizationUrl = undefined;
-    this.#set(snapshot(SUPERSET_SIGN_IN_STAGE.FAILURE, { failure, organizations: [] }));
+    this.#set(snapshot(INTERACTIVE_SIGN_IN_STAGE.FAILURE, { failure, scopes: [] }));
     return this.#state;
   }
 
-  #set(next: SupersetSignInSnapshot): void {
+  #set(next: InteractiveSignInSnapshot): void {
     this.#state = next;
     this.#onChange(next);
   }

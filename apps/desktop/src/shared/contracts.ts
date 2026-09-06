@@ -27,11 +27,6 @@ export {
   VOICE_SOURCE,
   type VoiceSource,
 } from "@sidecar/settings";
-export {
-  SUPERSET_SIGN_IN_STAGE,
-  type SupersetOrganizationChoice,
-  type SupersetSignInSnapshot,
-} from "@sidecar/superset/sign-in-stage";
 export type { WindowMode } from "@sidecar/surface";
 export { type AppBridge, BRIDGE, channels } from "./bridge";
 export * from "./wire/account";

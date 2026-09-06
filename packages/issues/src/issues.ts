@@ -18,7 +18,10 @@ export const ISSUE_TRACKER_ID = {
 
 export type IssueTrackerId = (typeof ISSUE_TRACKER_ID)[keyof typeof ISSUE_TRACKER_ID];
 
-const ISSUE_TRACKER_IDS: ReadonlySet<string> = new Set(Object.values(ISSUE_TRACKER_ID));
+/** Every tracker this build knows, in registry order. */
+export const ISSUE_TRACKER_ID_LIST: readonly IssueTrackerId[] = Object.values(ISSUE_TRACKER_ID);
+
+const ISSUE_TRACKER_IDS: ReadonlySet<string> = new Set(ISSUE_TRACKER_ID_LIST);
 
 /** Whether this build knows the tracker an observation or an act names. */
 export function isIssueTrackerId(value: string): value is IssueTrackerId {

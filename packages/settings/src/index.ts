@@ -13,6 +13,7 @@ export {
   isSettingsResetScope,
   isVoiceSource,
   type KeyedAppSettingField,
+  providerDefaultChoice,
   SETTING_PAGE,
   SETTING_SIDE_EFFECT,
   SETTINGS_PAGE,
@@ -33,6 +34,9 @@ export {
   spokenSettingValue,
   VOICE_SOURCE,
   type VoiceSource,
+  WORKSPACE_AGENT_SETTING_ID,
+  type WorkspaceAgentSettingProvider,
+  workspaceAgentSettingProvider,
 } from "./schema.js";
 export {
   askHotkeyCandidates,

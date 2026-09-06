@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
+  credentialSessionsInCloud,
+  INTEGRATION_PROVIDER_LIST,
+} from "./connections.js";
+import {
   CREDENTIAL_CONNECTION,
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDER_LIST,
   CREDENTIAL_PROVIDERS,
-  INTEGRATION_PROVIDER_LIST,
   isCredentialProviderId,
-  providerRunsSessionsInCloud,
   VOICE_CREDENTIAL_PROVIDER,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "./credential-providers.js";
@@ -94,10 +96,10 @@ test("the cloud badge belongs to the agents alone", () => {
   // issues and OpenAI's voice are services Luke uses rather than sessions he
   // watches, so a badge on their marks would claim sessions neither has.
   for (const provider of CLOUD_AGENT_PROVIDER_LIST) {
-    assert.equal(providerRunsSessionsInCloud(provider.id), true, provider.id);
+    assert.equal(credentialSessionsInCloud(provider.id), true, provider.id);
   }
-  assert.equal(providerRunsSessionsInCloud(CREDENTIAL_PROVIDER_ID.LINEAR), false);
-  assert.equal(providerRunsSessionsInCloud(CREDENTIAL_PROVIDER_ID.OPENAI), false);
+  assert.equal(credentialSessionsInCloud(CREDENTIAL_PROVIDER_ID.LINEAR), false);
+  assert.equal(credentialSessionsInCloud(CREDENTIAL_PROVIDER_ID.OPENAI), false);
 });
 
 test("holds no key format for a provider that publishes one kind of key", () => {

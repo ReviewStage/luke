@@ -1,10 +1,5 @@
 import { PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/analytics";
-import {
-  CREDENTIAL_PROVIDER_ID,
-  type CredentialProviderId,
-  VOICE_CREDENTIAL_PROVIDER_ID,
-} from "@sidecar/credentials";
-import type { SessionProviderAdapter } from "@sidecar/session";
+import type { ConnectionId, ConnectionRegistration } from "@sidecar/credentials";
 import {
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
@@ -30,9 +25,8 @@ import type { PanelManager } from "../window/panel-manager";
 export interface SettingsRowsIpcDependencies {
   registerSettingHandler: ReturnType<typeof createSettingsHandler>;
   settingsStore: SettingsStore;
-  adapterForCredential: (providerId: CredentialProviderId) => SessionProviderAdapter | undefined;
-  refreshAdapter: (adapter: SessionProviderAdapter) => Promise<void>;
-  refreshIssues: () => void;
+  /** Every connection's row, for what a saved or cleared credential moves. */
+  connections: Readonly<Record<ConnectionId, ConnectionRegistration>>;
   applyVoiceCredential: () => Promise<void>;
   hotkeys: HotkeyRegistrar;
   dock: DockPresence;
@@ -52,9 +46,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
   const {
     registerSettingHandler,
     settingsStore,
-    adapterForCredential,
-    refreshAdapter,
-    refreshIssues,
+    connections,
     applyVoiceCredential,
     hotkeys,
     dock,
@@ -76,25 +68,12 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     },
     save: ({ providerId, apiKey }) => settingsStore.setApiKey(providerId, apiKey),
     async apply(result, { providerId, apiKey }) {
-      // Only the provider whose key changed is affected, so the local
-      // observers are left alone rather than re-crawling the filesystem on
-      // every save.
-      const adapter = adapterForCredential(providerId);
-      if (!result.reason && adapter) void refreshAdapter(adapter);
-      // The tracker's key connects the tracker, not a session provider, so
-      // its save refreshes the roster instead of the registry.
-      if (!result.reason && providerId === CREDENTIAL_PROVIDER_ID.LINEAR) {
-        refreshIssues();
-      }
-      // The voice key connects neither: it is what the spoken conversation and
-      // the attention review are built from, so a change to it rebuilds both
-      // and then moves the talk key — claimed now that there is something to
-      // talk to, or given back to the machine now that there is not. Awaited,
-      // because a press right after the save has to find a minter.
-      if (!result.reason && providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
-        await applyVoiceCredential();
-        await hotkeys.reapply(HOTKEY_RANK.TALK);
-      }
+      // Only the connection whose key changed moves: its row says what a
+      // saved or cleared credential re-reads — a session provider's own
+      // observer, the tracker's roster, or the voice conversation and the talk
+      // key. Awaited, because a press right after a voice key's save has to
+      // find a minter.
+      if (!result.reason) await connections[providerId].onCredentialChanged?.();
       // The synced copy follows the local save it mirrors — stored while the
       // switch is on, deleted with its local key regardless — and quietly:
       // the local key is the working one, and the next save is the retry.

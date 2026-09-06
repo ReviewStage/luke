@@ -34,6 +34,16 @@ const OBSERVATION_HOOK_PROVIDERS = {
 
 export type ObservationHookProviderId = keyof typeof OBSERVATION_HOOK_PROVIDERS;
 
+// SAFETY: the table is an `as const` literal with no inherited members, so
+// its own keys are exactly its declared provider ids.
+const HOOKED_PROVIDER_IDS = Object.keys(
+  OBSERVATION_HOOK_PROVIDERS,
+) as readonly ObservationHookProviderId[];
+
+/** Every provider that registers an observation hook, in table order. */
+export const OBSERVATION_HOOK_PROVIDER_IDS: readonly ObservationHookProviderId[] =
+  HOOKED_PROVIDER_IDS;
+
 /**
  * Luke's own corners of the application data, holding each provider's
  * observation hook script and the spool it writes into. Resolved lazily

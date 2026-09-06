@@ -58,15 +58,15 @@ export function credentialSettingsPage(providerId: CredentialProviderId): Settin
 }
 
 /**
- * The three things that can stand the panel down and take its place: a key
- * being entered, a calendar sign-in waiting on the browser, and a note being
- * written. Each is begun from a row on one of Settings' pages, and each has to
- * come back to that row.
+ * The things that can stand the panel down and take its place: a key being
+ * entered, a consent sign-in waiting on the browser, a CLI sign-in waiting on
+ * its code, and a note being written. Each is begun from a row on one of
+ * Settings' pages, and each has to come back to that row.
  */
 export const PANEL_STAND_DOWN = {
   KEY: "key",
   CONSENT: "consent",
-  SUPERSET: "superset",
+  INTERACTIVE_SIGN_IN: "interactive-sign-in",
   FEEDBACK: "feedback",
 } as const;
 
@@ -77,13 +77,13 @@ export const PANEL_STAND_DOWN = {
 export type SlotOccupant =
   | typeof PANEL_STAND_DOWN.KEY
   | typeof PANEL_STAND_DOWN.CONSENT
-  | typeof PANEL_STAND_DOWN.SUPERSET;
+  | typeof PANEL_STAND_DOWN.INTERACTIVE_SIGN_IN;
 
 /** What stood the panel down, and — for a key — whose row it was begun from. */
 export type StoodDown =
   | { kind: typeof PANEL_STAND_DOWN.KEY; providerId: CredentialProviderId }
   | { kind: typeof PANEL_STAND_DOWN.CONSENT }
-  | { kind: typeof PANEL_STAND_DOWN.SUPERSET }
+  | { kind: typeof PANEL_STAND_DOWN.INTERACTIVE_SIGN_IN }
   | { kind: typeof PANEL_STAND_DOWN.FEEDBACK };
 
 /**
@@ -101,7 +101,7 @@ export function standDownReturnPage(stood: StoodDown): SettingsView {
     case PANEL_STAND_DOWN.KEY:
       return credentialSettingsPage(stood.providerId);
     case PANEL_STAND_DOWN.CONSENT:
-    case PANEL_STAND_DOWN.SUPERSET:
+    case PANEL_STAND_DOWN.INTERACTIVE_SIGN_IN:
       return SETTINGS_VIEW.CONNECTIONS;
     case PANEL_STAND_DOWN.FEEDBACK:
       return SETTINGS_VIEW.ROOT;

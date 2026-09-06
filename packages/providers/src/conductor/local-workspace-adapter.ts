@@ -7,6 +7,7 @@ import {
   SessionProviderAdapterBase,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
+  workspaceProviderDisplayName,
 } from "@sidecar/session";
 import { text, wireRecord } from "@sidecar/wire";
 import { repositoryLabel } from "../shared/cloud-session-adapter.js";
@@ -30,7 +31,9 @@ import {
  * picker or asked for by name out loud. The mark stays Conductor's; only the
  * word carries the locality.
  */
-export const CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_NAME = "Conductor (local)";
+export const CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_NAME = workspaceProviderDisplayName(
+  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
+);
 
 /** How the reader names the columns it reads, so a rename here is one edit. */
 const CONDUCTOR_REPO_FIELD = {

@@ -52,6 +52,11 @@ export class CompositeSessionProviderAdapter extends SessionProviderAdapterBase 
     this.#adapters = options.adapters;
   }
 
+  /** The observers, in observation order, for anything that reasons about them as a set. */
+  get members(): readonly SessionProviderAdapter[] {
+    return this.#adapters;
+  }
+
   /**
    * A pass fails whole. The registry commits a provider snapshot entire, so
    * reporting the observers that answered would retire every session belonging

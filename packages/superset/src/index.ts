@@ -8,16 +8,15 @@ export {
   SupersetWorkspaceAdapter,
 } from "./cli.js";
 export {
+  SUPERSET_HOST_ACTS,
+  SupersetWorkspaceHost,
+  type SupersetWorkspaceHostOptions,
+} from "./host.js";
+export {
   SupersetSignIn,
   type SupersetSignInOptions,
   validSupersetSignInCode,
 } from "./sign-in.js";
-export {
-  SUPERSET_SIGN_IN_STAGE,
-  type SupersetOrganizationChoice,
-  type SupersetSignInSnapshot,
-  type SupersetSignInStage,
-} from "./sign-in-stage.js";
 export {
   type SupersetSessionContext,
   SupersetWorkspaceReader,

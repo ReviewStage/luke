@@ -1,7 +1,7 @@
 import {
   CREDENTIAL_CONNECTION,
   CREDENTIAL_PROVIDERS,
-  providerRunsSessionsInCloud,
+  credentialSessionsInCloud,
 } from "@sidecar/credentials/vocabulary";
 import { CloudBadge, ProviderMark } from "@sidecar/panel";
 import { useEffect, useRef } from "react";
@@ -109,7 +109,7 @@ export function KeySlot({
               line and the slot it opens. */}
           <span className="key-slot-mark">
             <ProviderMark providerId={provider.id} />
-            {providerRunsSessionsInCloud(provider.id) ? <CloudBadge /> : null}
+            {credentialSessionsInCloud(provider.id) ? <CloudBadge /> : null}
           </span>
           <input
             ref={field}

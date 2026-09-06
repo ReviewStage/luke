@@ -66,5 +66,5 @@ failure is a `FUNCTION_INVOCATION_FAILED` on a deployed route.
 Importing a package resolves its whole export graph, not the one name asked
 for. A package that holds both a wire vocabulary and a Node flow gives the
 vocabulary a subpath of its own (`@sidecar/calendar/vocabulary`,
-`@sidecar/account/snapshot`, `@sidecar/superset/sign-in-stage`), or the renderer
+`@sidecar/account/snapshot`, `@sidecar/credentials/interactive-sign-in`), or the renderer
 bundle fails to resolve `node:http` behind a string constant it wanted to draw.

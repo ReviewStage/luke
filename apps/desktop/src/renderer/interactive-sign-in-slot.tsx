@@ -1,56 +1,62 @@
+import type { ConnectionDeclaration } from "@sidecar/credentials/vocabulary";
 import { ProviderMark } from "@sidecar/panel";
-import { SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
 import { useEffect, useRef, useState } from "react";
 import { CREDENTIAL_SOURCE } from "#shared/wire/account";
-import type { SupersetSignInSnapshot } from "#shared/wire/session";
-import { SUPERSET_SIGN_IN_STAGE } from "#shared/wire/session";
+import type { InteractiveSignInSnapshot } from "#shared/wire/session";
+import { INTERACTIVE_SIGN_IN_STAGE } from "#shared/wire/session";
 import { CREDENTIAL_PLACEHOLDER, useStagedFocus } from "./credential-entry";
 import { DestinationNote } from "./destination-note";
 import { HIT_REGION } from "./panel-state";
 import { ExternalIcon } from "./settings-icons";
 
 /**
- * The panel stood down to Superset's sign-in code, on the key slot's exact
+ * The panel stood down to a CLI login's sign-in code, on the key slot's exact
  * terms: to anyone standing in front of Luke, a one-time code and an API key
  * are the same errand with a different word on it, so the popup keeps the
  * same shape and the same words — what to paste named above the field in
- * Superset's own word for it, the provider's mark beside it, where the code
- * comes from on the line below, and the confirm quiet until there is
- * something to confirm. Only the stages a key never has — choosing an
- * organization, the switch that choice starts, a sign-in that failed — keep
- * the waiting popups' one-line dress, worded the way the consent slot words
- * them: an organization switch asks for no code, so it never wears the field.
+ * the provider's own word for it, the provider's mark beside it, where the
+ * code comes from on the line below, and the confirm quiet until there is
+ * something to confirm. Only the stages a key never has — choosing a scope
+ * (Superset's organization), the switch that choice starts, a sign-in that
+ * failed — keep the waiting popups' one-line dress, worded the way the
+ * consent slot words them: a scope switch asks for no code, so it never
+ * wears the field. Every word naming the provider is read from its
+ * declaration, so the slot itself knows no provider by name.
  */
-export function SupersetSignInSlot({
+export function InteractiveSignInSlot({
+  declaration,
   state,
   drawn,
   onSubmit,
   onReopen,
   onCancel,
   onRetry,
-  onChooseOrganization,
+  onChooseScope,
   measure,
 }: {
-  state: SupersetSignInSnapshot;
+  declaration: ConnectionDeclaration;
+  state: InteractiveSignInSnapshot;
   drawn: boolean;
   onSubmit: (code: string) => void;
   onReopen: () => void;
   onCancel: () => void;
   onRetry: () => void;
-  onChooseOrganization: (slug: string) => void;
+  onChooseScope: (slug: string) => void;
   measure: (element: HTMLElement | null) => void;
 }): React.JSX.Element {
+  const name = declaration.displayName;
+  const scopeNoun = declaration.cliLogin?.scopeNoun ?? "scope";
   const [code, setCode] = useState("");
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    if (state.stage !== SUPERSET_SIGN_IN_STAGE.BROWSER_CODE) setCode("");
+    if (state.stage !== INTERACTIVE_SIGN_IN_STAGE.BROWSER_CODE) setCode("");
   }, [state.stage]);
 
-  const waiting = state.stage === SUPERSET_SIGN_IN_STAGE.BROWSER_CODE;
-  const exchanging = state.stage === SUPERSET_SIGN_IN_STAGE.EXCHANGING;
-  const failed = state.stage === SUPERSET_SIGN_IN_STAGE.FAILURE;
-  const choosing = state.stage === SUPERSET_SIGN_IN_STAGE.ORGANIZATION;
-  const switching = state.stage === SUPERSET_SIGN_IN_STAGE.SWITCHING;
+  const waiting = state.stage === INTERACTIVE_SIGN_IN_STAGE.BROWSER_CODE;
+  const exchanging = state.stage === INTERACTIVE_SIGN_IN_STAGE.EXCHANGING;
+  const failed = state.stage === INTERACTIVE_SIGN_IN_STAGE.FAILURE;
+  const choosing = state.stage === INTERACTIVE_SIGN_IN_STAGE.SCOPE;
+  const switching = state.stage === INTERACTIVE_SIGN_IN_STAGE.SWITCHING;
   const filled = code.trim().length > 0;
   const ready = filled && waiting;
 
@@ -71,18 +77,18 @@ export function SupersetSignInSlot({
       <div className="key-slot sign-in-slot" ref={measure} data-hit-region={HIT_REGION.SLOT}>
         {waiting || exchanging ? (
           <>
-            {/* What to paste, in Superset's own word for it, where every key
-                popup names its credential. */}
+            {/* What to paste, in the provider's own word for it, where every
+                key popup names its credential. */}
             <span className="settings-label key-slot-label">Sign-in code</span>
             <div className="key-slot-row">
               <span className="key-slot-mark">
-                <ProviderMark providerId={SUPERSET_WORKSPACE_PROVIDER_ID} />
+                <ProviderMark providerId={declaration.id} />
               </span>
               <input
                 ref={input}
                 className="settings-input key-slot-input"
                 type="password"
-                aria-label="Superset sign-in code"
+                aria-label={`${name} sign-in code`}
                 autoComplete="off"
                 spellCheck={false}
                 placeholder={CREDENTIAL_PLACEHOLDER[CREDENTIAL_SOURCE.NONE]}
@@ -110,7 +116,7 @@ export function SupersetSignInSlot({
                   the page the waiting flow built, and no address crosses from
                   here. */}
               <DestinationNote
-                lead="Superset shows a one-time code at the end of"
+                lead={`${name} shows a one-time code at the end of`}
                 destination="its sign-in page"
                 disabled={exchanging}
                 onOpen={onReopen}
@@ -139,7 +145,7 @@ export function SupersetSignInSlot({
         {choosing || switching || failed ? (
           <div className="key-slot-row">
             <span className="key-slot-mark">
-              <ProviderMark providerId={SUPERSET_WORKSPACE_PROVIDER_ID} />
+              <ProviderMark providerId={declaration.id} />
             </span>
             <span className="sign-in-slot-copy" role="status">
               <strong>
@@ -147,14 +153,14 @@ export function SupersetSignInSlot({
                   ? "Not connected"
                   : switching
                     ? "Connecting…"
-                    : "Choose a Superset organization"}
+                    : `Choose a ${name} ${scopeNoun}`}
               </strong>
               {failed ? (
                 <small>
                   {state.failure}{" "}
                   {/* The settings row's word for redoing the sign-in, dressed
-                      like the way back to a lost tab: retrying opens
-                      Superset's page again. */}
+                      like the way back to a lost tab: retrying opens the
+                      provider's page again. */}
                   <button type="button" className="link-button" onClick={onRetry}>
                     Sign in again
                     <ExternalIcon />
@@ -169,14 +175,14 @@ export function SupersetSignInSlot({
         ) : null}
         {choosing ? (
           <div className="superset-organization-list">
-            {state.organizations.map((organization) => (
+            {state.scopes.map((scope) => (
               <button
-                key={organization.id}
+                key={scope.id}
                 type="button"
                 className="quiet-button"
-                onClick={() => onChooseOrganization(organization.slug)}
+                onClick={() => onChooseScope(scope.slug)}
               >
-                {organization.name}
+                {scope.name}
               </button>
             ))}
           </div>

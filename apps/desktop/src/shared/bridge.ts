@@ -14,7 +14,12 @@ import {
   productEventFromWire,
 } from "@sidecar/analytics";
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
-import { type CredentialProviderId, isCredentialProviderId } from "@sidecar/credentials/vocabulary";
+import {
+  type ConnectionId,
+  type CredentialProviderId,
+  isConnectionId,
+  isCredentialProviderId,
+} from "@sidecar/credentials/vocabulary";
 import { type AgentWireTrace, isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import {
   type FeedbackKind,
@@ -65,7 +70,6 @@ import {
   type SettingsResetScope,
   settingEntryGuard,
 } from "@sidecar/settings";
-import type { SupersetSignInSnapshot } from "@sidecar/superset/sign-in-stage";
 import type { WindowMode } from "@sidecar/surface";
 import {
   type ActResult,
@@ -87,6 +91,8 @@ import {
   type AppBootstrap,
   type ConversationHistoryPayload,
   type DisplayDiagnostic,
+  type ProviderSignInChange,
+  type ProviderSignInResult,
   type SessionOpenResult,
   type SessionReplayBootstrap,
   type SessionRosterPayload,
@@ -162,6 +168,16 @@ function isWireValue(value: UnparsedWireValue): boolean {
 const noArgs = args<[]>((values) => values.length === 0);
 const oneString = args<[string]>((values) => values.length === 1 && isWireString(values[0]));
 const oneBoolean = args<[boolean]>((values) => values.length === 1 && isWireBoolean(values[0]));
+const oneConnectionId = args<[ConnectionId]>(
+  (values) => values.length === 1 && isWireString(values[0]) && isConnectionId(values[0]),
+);
+const connectionIdAndString = args<[ConnectionId, string]>(
+  (values) =>
+    values.length === 2 &&
+    isWireString(values[0]) &&
+    isConnectionId(values[0]) &&
+    isWireString(values[1]),
+);
 
 function isAccountProvider(value: UnparsedWireValue): value is AccountProvider {
   return value === ACCOUNT_PROVIDER.GOOGLE || value === ACCOUNT_PROVIDER.GITHUB;
@@ -403,19 +419,47 @@ export const BRIDGE = {
     ),
     result: result<SettingsUpdateResult>(),
   }),
-  connectLinear: entry({
+  // One row per connection, one set of entries: the main process answers
+  // unsupported for a connection whose declaration lacks the seam asked of it.
+  connectProvider: entry({
     kind: "invoke",
-    channel: "app:connect-linear",
-    args: noArgs,
+    channel: "app:connect-provider",
+    args: oneConnectionId,
     result: result<SettingsUpdateResult>(),
   }),
-  cancelLinearSignIn: entry({ kind: "send", channel: "app:cancel-linear-sign-in", args: noArgs }),
-  reopenLinearSignIn: entry({ kind: "send", channel: "app:reopen-linear-sign-in", args: noArgs }),
-  disconnectLinear: entry({
+  disconnectProvider: entry({
     kind: "invoke",
-    channel: "app:disconnect-linear",
-    args: noArgs,
+    channel: "app:disconnect-provider",
+    args: oneConnectionId,
     result: result<SettingsUpdateResult>(),
+  }),
+  beginProviderSignIn: entry({
+    kind: "invoke",
+    channel: "app:begin-provider-sign-in",
+    args: oneConnectionId,
+    result: result<ProviderSignInResult>(),
+  }),
+  submitProviderSignInCode: entry({
+    kind: "invoke",
+    channel: "app:submit-provider-sign-in-code",
+    args: connectionIdAndString,
+    result: result<ProviderSignInResult>(),
+  }),
+  chooseProviderSignInScope: entry({
+    kind: "invoke",
+    channel: "app:choose-provider-sign-in-scope",
+    args: connectionIdAndString,
+    result: result<ProviderSignInResult>(),
+  }),
+  reopenProviderSignIn: entry({
+    kind: "send",
+    channel: "app:reopen-provider-sign-in",
+    args: oneConnectionId,
+  }),
+  cancelProviderSignIn: entry({
+    kind: "send",
+    channel: "app:cancel-provider-sign-in",
+    args: oneConnectionId,
   }),
   checkForUpdates: entry({
     kind: "invoke",
@@ -426,40 +470,6 @@ export const BRIDGE = {
   installUpdate: entry({ kind: "send", channel: "app:install-update", args: noArgs }),
   openLatestRelease: entry({ kind: "send", channel: "app:open-latest-release", args: noArgs }),
   openChangelog: entry({ kind: "send", channel: "app:open-changelog", args: noArgs }),
-  beginSupersetSignIn: entry({
-    kind: "invoke",
-    channel: "app:begin-superset-sign-in",
-    args: noArgs,
-    result: result<SupersetSignInSnapshot>(),
-  }),
-  submitSupersetSignInCode: entry({
-    kind: "invoke",
-    channel: "app:submit-superset-sign-in-code",
-    args: oneString,
-    result: result<SupersetSignInSnapshot>(),
-  }),
-  reopenSupersetSignIn: entry({
-    kind: "send",
-    channel: "app:reopen-superset-sign-in",
-    args: noArgs,
-  }),
-  cancelSupersetSignIn: entry({
-    kind: "send",
-    channel: "app:cancel-superset-sign-in",
-    args: noArgs,
-  }),
-  chooseSupersetOrganization: entry({
-    kind: "invoke",
-    channel: "app:choose-superset-organization",
-    args: oneString,
-    result: result<SupersetSignInSnapshot>(),
-  }),
-  disconnectSuperset: entry({
-    kind: "invoke",
-    channel: "app:disconnect-superset",
-    args: noArgs,
-    result: result<ActResult>(isActResult),
-  }),
   setVoiceExchangeActive: entry({
     kind: "send",
     channel: "app:set-voice-exchange",
@@ -932,11 +942,11 @@ export const BRIDGE = {
     args: noArgs,
     result: result<OutputAudioState | undefined>(),
   }),
-  onSupersetSignInChanged: entry({
+  onProviderSignInChanged: entry({
     kind: "subscribe",
-    channel: "app:superset-sign-in-changed",
+    channel: "app:provider-sign-in-changed",
     args: noArgs,
-    result: result<SupersetSignInSnapshot>(),
+    result: result<ProviderSignInChange>(),
   }),
   onSessionAnnouncements: entry({
     kind: "subscribe",

@@ -657,6 +657,9 @@ importers:
 
   packages/superset:
     dependencies:
+      '@sidecar/credentials':
+        specifier: workspace:*
+        version: link:../credentials
       '@sidecar/process':
         specifier: workspace:*
         version: link:../process

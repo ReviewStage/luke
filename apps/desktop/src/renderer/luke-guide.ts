@@ -23,8 +23,12 @@
 
 import {
   CLOUD_AGENT_PROVIDER_LIST,
+  CONNECTION_ID,
+  CONNECTION_KIND,
+  CONNECTION_LIST,
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDERS,
+  isCliLoginConnectionId,
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials/vocabulary";
 import {
@@ -36,14 +40,30 @@ import {
   type AppGuideUpdate,
   type AppUpdateButton,
 } from "@sidecar/guide";
-import { PROVIDER_ID, type WorkspaceAgentSelection, workspaceAgentModels } from "@sidecar/session";
 import {
-  APP_SETTING_ID,
+  PROVIDER_ACT,
+  type ProviderAct,
+  providerCapabilities,
+  workspaceProvidersWithAct,
+} from "@sidecar/providers/vocabulary";
+import {
+  AGENT_CHOICE,
+  type ModelsWorkspaceProviderId,
+  PROVIDER_ID_LIST,
+  SESSION_APPLICATION_ID_LIST,
+  SESSION_APPLICATION_NAME,
+  type WorkspaceAgentSelection,
+  workspaceAgentModels,
+  workspaceProviderDisplayName,
+} from "@sidecar/session";
+import {
   APP_SETTING_SCHEMA,
   isAppSettingId,
+  providerDefaultChoice,
   settingFieldForGuideId,
   settingGuideEntries,
   spokenSettingValue,
+  workspaceAgentSettingProvider,
 } from "@sidecar/settings";
 import { ACT_RESULT_STATUS, type ActResult } from "@sidecar/wire";
 import type { AppBridge } from "#shared/bridge";
@@ -76,13 +96,6 @@ const SHORTCUTS_PAGE = `${SETTINGS_TAB}, on its Keyboard shortcuts page`;
 const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
 /* Where the Updates section stands, for the fact about it. */
 const FRONT_PAGE = `${SETTINGS_TAB}, on its front page`;
-
-/**
- * The word both Conductor agent entries use for no choice at all. It is a
- * member of their choices on purpose: saying it is how a spoken ask returns a
- * half to Conductor's own default.
- */
-const CONDUCTOR_DEFAULT_CHOICE = "Conductor's default";
 
 /** What the guide needs from the app to describe the current state of it. */
 export interface LukeGuideInput {
@@ -187,13 +200,56 @@ function connectionWord(source: CredentialSource): string {
       : "connected";
 }
 
-/** The row's answer about the Codex CLI login, in words a fact can carry. */
-const CODEX_CLOUD_CONNECTION_WORD = {
+/** Joins names the way a sentence lists them: "A", "A and B", "A, B, and C". */
+export function oxfordJoin(names: readonly string[], conjunction = "and"): string {
+  if (names.length <= 1) return names.join("");
+  if (names.length === 2) return `${names[0]} ${conjunction} ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, ${conjunction} ${names[names.length - 1]}`;
+}
+
+/** The workspace providers declaring an act, named for a sentence. */
+export function providersWith(act: ProviderAct, conjunction = "and"): string {
+  return oxfordJoin(workspaceProvidersWithAct(act).map(workspaceProviderDisplayName), conjunction);
+}
+
+/** The observed providers needing no credential at all, named for a sentence. */
+function keylessLocalProviders(): string {
+  return oxfordJoin(
+    PROVIDER_ID_LIST.filter(
+      (providerId) => providerCapabilities(providerId).credential === CONNECTION_KIND.LOCAL,
+    ).map(workspaceProviderDisplayName),
+  );
+}
+
+/** The row's answer about a CLI login, in words a fact can carry. */
+const CLI_CONNECTION_WORD = {
   [CLI_CONNECTION.CONNECTED]: "connected",
   [CLI_CONNECTION.SIGNED_OUT]: "not connected; the CLI is signed out",
   [CLI_CONNECTION.CLI_MISSING]: "not connected; the CLI is not installed",
   [CLI_CONNECTION.UNKNOWN]: "not checked yet",
 };
+
+/**
+ * One sentence per provider whose cloud sessions follow its own CLI's login,
+ * read from the connection declarations: the login command, and what the
+ * CLI's latest answer says.
+ */
+function cliLoginSentences(settings: AppSettingsView): string {
+  return CONNECTION_LIST.filter(
+    (connection) => connection.kind === CONNECTION_KIND.CLI_LOGIN && connection.sessionsInCloud,
+  )
+    .map((connection) => {
+      const word = isCliLoginConnectionId(connection.id)
+        ? CLI_CONNECTION_WORD[settings.cliConnections[connection.id]]
+        : CLI_CONNECTION_WORD[CLI_CONNECTION.UNKNOWN];
+      const command = connection.cliLogin?.loginCommand ?? "";
+      return (
+        `${connection.displayName} cloud tasks (${word}) follow the ${connection.displayName} ` +
+        `CLI's own login: ${command} connects them, and signing that CLI out stops them. `
+      );
+    })
+    .join("");
+}
 
 function providersFact(settings: AppSettingsView): AppGuideFact {
   const roster = CLOUD_AGENT_PROVIDER_LIST.map(
@@ -205,9 +261,8 @@ function providersFact(settings: AppSettingsView): AppGuideFact {
     detail:
       `${roster.join(", ")}. Connecting one takes the key its row names, typed by hand into ` +
       `${CONNECTIONS_PAGE}, under Providers — never spoken, and never repeated back. Local ` +
-      "providers such as Claude Code need no key and are observed on their own. Codex cloud " +
-      `tasks (${CODEX_CLOUD_CONNECTION_WORD[settings.codexCloudConnection]}) follow the ` +
-      "Codex CLI's own login: codex login connects them, and signing that CLI out stops them. " +
+      `providers such as ${keylessLocalProviders()} need no key and are observed on their own. ` +
+      `${cliLoginSentences(settings)}` +
       "While the Sync provider keys switch in the Sync section is on, a key saved while signed in " +
       "is also stored encrypted with Luke's own service, which never sends one back; the " +
       "switch is changed only by hand, and its own entry says what turning it moves.",
@@ -222,7 +277,7 @@ function providersFact(settings: AppSettingsView): AppGuideFact {
 function integrationFacts(settings: AppSettingsView): AppGuideFact[] {
   const facts: AppGuideFact[] = [];
   const linearProvider = CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.LINEAR];
-  if (settings.linearSignInAvailable) {
+  if (settings.consentSignInAvailable[CONNECTION_ID.LINEAR]) {
     facts.push({
       label: "Linear",
       detail:
@@ -385,7 +440,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Apps beside a session",
       detail:
-        "A chat held by several apps — Conductor, ChatGPT, Superset — wears their marks on " +
+        `A chat held by several apps — ${SESSION_APPLICATION_ID_LIST.map((id) => SESSION_APPLICATION_NAME[id]).join(", ")} — wears their marks on ` +
         "its row. A mark with an exact address opens the chat in that app, and an ask can " +
         "name which app it comes forward in.",
     },
@@ -441,14 +496,14 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       label: "Reading a session's transcript",
       detail:
         "Asked what a local session did, said, or is stuck on, Luke can read that session's " +
-        "own recent transcript — Claude Code, Codex, and OMP on this machine today — and " +
+        `own recent transcript — ${providersWith(PROVIDER_ACT.READ_TRANSCRIPT)} on this machine today — and ` +
         "answer from it; the reading is kept nowhere. A cloud session's conversation stays " +
         "with its provider, answered from roster fields alone.",
     },
     {
       label: "Creating workspaces",
       detail:
-        "Where a connected provider documents a creation endpoint — Conductor and Superset " +
+        `Where a connected provider documents a creation endpoint — ${providersWith(PROVIDER_ACT.CREATE_WORKSPACE)} ` +
         "today — an ask in conversation, spoken or typed, can create a new " +
         "workspace in a project that provider reports, with an opening task in the " +
         "developer's own words where the project takes one, named as the developer chose or, " +
@@ -476,7 +531,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Adding agents to a workspace",
       detail:
-        "Where a session's provider documents it — Conductor today — the same kind of ask " +
+        `Where a session's provider documents it — ${providersWith(PROVIDER_ACT.ADD_AGENT)} today — the same kind of ask ` +
         "can start another agent in an observed session's workspace, as one of the agent " +
         "kinds its roster entry lists; a session whose entry lists none takes no such ask. " +
         "The ask must name the workspace or session — a bare ask for a new agent creates a " +
@@ -485,8 +540,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Renaming workspaces and chats",
       detail:
-        "Where a provider documents it — a Conductor or Superset-managed workspace, or a " +
-        "Conductor chat on its own — an ask can rename what is observed to a name in the " +
+        `Where a provider documents it — a workspace ${providersWith(PROVIDER_ACT.RENAME_WORKSPACE, "or")} manages, or a ` +
+        `${providersWith(PROVIDER_ACT.RENAME_SESSION, "or")} chat on its own — an ask can rename what is observed to a name in the ` +
         "developer's own words. An ask naming the workspace renames the workspace, one " +
         "about the chat renames the chat, and a session whose roster entry allows neither " +
         "takes no such ask.",
@@ -632,28 +687,31 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
 }
 
 /**
- * Composes the stored Conductor selection a spoken model or effort change
- * asks for. A model is named by its label; an effort named beside it rides
+ * Composes the stored selection a spoken model or effort change asks for, on
+ * the provider whose row the setting id belongs to. A model is named by its label; an effort named beside it rides
  * that same change, and one left unsaid carries the current effort forward
  * only where the new model's agent documents it. An effort change alone
  * rides the model already chosen, which is why the effort entry only exists
- * while one is. Naming the default returns that half to Conductor: the whole
- * selection for a model, the effort alone otherwise.
+ * while one is. Naming the default returns that half to the provider: the
+ * whole selection for a model, the effort alone otherwise.
  */
 function spokenWorkspaceAgentSelection(
-  settingId: string,
+  providerId: ModelsWorkspaceProviderId,
+  half: "model" | "effort",
   value: string,
   namedEffort: string | undefined,
   current: WorkspaceAgentSelection | undefined,
 ): { selection: WorkspaceAgentSelection | undefined } | { refusal: string } {
-  if (settingId === APP_SETTING_ID.WORKSPACE_AGENT_MODEL) {
-    if (value === CONDUCTOR_DEFAULT_CHOICE) {
+  const name = workspaceProviderDisplayName(providerId);
+  const defaultChoice = providerDefaultChoice(name);
+  if (half === "model") {
+    if (value === defaultChoice) {
       if (namedEffort !== undefined) {
-        return { refusal: "Conductor's own default takes no effort level." };
+        return { refusal: `${name}'s own default takes no effort level.` };
       }
       return { selection: undefined };
     }
-    const named = workspaceAgentModels(PROVIDER_ID.CONDUCTOR)
+    const named = workspaceAgentModels(providerId)
       .flatMap((entry) =>
         entry.models.map((model) => ({
           agent: entry.agent,
@@ -663,7 +721,7 @@ function spokenWorkspaceAgentSelection(
         })),
       )
       .find((candidate) => candidate.label === value);
-    if (!named) return { refusal: "No documented Conductor model goes by that name." };
+    if (!named) return { refusal: `No documented ${name} model goes by that name.` };
     if (namedEffort !== undefined) {
       // Composed against the table itself, not the guide the call was
       // validated against: this half answers to what an endpoint takes.
@@ -687,10 +745,10 @@ function spokenWorkspaceAgentSelection(
   // without one is a guide ahead of the state; refuse honestly.
   if (!current) {
     return {
-      refusal: "No model is chosen for new Conductor agents, so there is no effort to set.",
+      refusal: `No model is chosen for new ${name} agents, so there is no effort to set.`,
     };
   }
-  if (value === CONDUCTOR_DEFAULT_CHOICE) {
+  if (value === defaultChoice) {
     return { selection: { agent: current.agent, model: current.model } };
   }
   return { selection: { agent: current.agent, model: current.model, effort: value } };
@@ -712,22 +770,29 @@ export async function applySpokenSetting(
   current?: AppSettingsView,
 ): Promise<ActResult> {
   let result: SettingsUpdateResult;
-  if (
-    action.setting.id === APP_SETTING_ID.WORKSPACE_AGENT_MODEL ||
-    action.setting.id === APP_SETTING_ID.WORKSPACE_AGENT_EFFORT
-  ) {
+  const agentSetting = workspaceAgentSettingProvider(action.setting.id);
+  if (agentSetting?.choice === AGENT_CHOICE.KINDS) {
+    // A provider whose agent kinds are observed presets takes its choice by
+    // hand: its row is the only place the kinds on offer are drawn.
+    return {
+      status: ACT_RESULT_STATUS.REJECTED,
+      reason: `Which agent new ${workspaceProviderDisplayName(agentSetting.providerId)} sessions run is chosen by hand in Settings.`,
+    };
+  }
+  if (agentSetting) {
     const composed = spokenWorkspaceAgentSelection(
-      action.setting.id,
+      agentSetting.providerId,
+      agentSetting.half,
       action.value,
       action.effort,
-      current?.workspaceAgentDefaults?.[PROVIDER_ID.CONDUCTOR],
+      current?.workspaceAgentDefaults?.[agentSetting.providerId],
     );
     if ("refusal" in composed) {
       return { status: ACT_RESULT_STATUS.REJECTED, reason: composed.refusal };
     }
     result = await bridge.updateSettingEntry(
       APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-      PROVIDER_ID.CONDUCTOR,
+      agentSetting.providerId,
       composed.selection,
     );
   } else {

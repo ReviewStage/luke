@@ -232,6 +232,14 @@ export type SessionApplicationId =
 export const SESSION_APPLICATION_ID_LIST: readonly SessionApplicationId[] =
   Object.values(SESSION_APPLICATION_ID);
 
+/** The name a person reads for each app that can hold a chat. */
+export const SESSION_APPLICATION_NAME = {
+  [SESSION_APPLICATION_ID.CHATGPT]: "ChatGPT",
+  [SESSION_APPLICATION_ID.CLAUDE]: "Claude",
+  [SESSION_APPLICATION_ID.CONDUCTOR]: "Conductor",
+  [SESSION_APPLICATION_ID.SUPERSET]: "Superset",
+} as const satisfies Readonly<Record<SessionApplicationId, string>>;
+
 export function isSessionApplicationId(value: string): value is SessionApplicationId {
   return SESSION_APPLICATION_ID_LIST.some((candidate) => candidate === value);
 }

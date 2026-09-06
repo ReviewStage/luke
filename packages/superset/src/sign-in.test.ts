@@ -5,10 +5,10 @@ import os from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import test, { type TestContext } from "node:test";
+import { INTERACTIVE_SIGN_IN_STAGE } from "@sidecar/credentials/interactive-sign-in";
 import { isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
 import { SupersetCli } from "./cli.js";
 import { SupersetSignIn, validSupersetSignInCode } from "./sign-in.js";
-import { SUPERSET_SIGN_IN_STAGE } from "./sign-in-stage.js";
 
 class FakeChild extends EventEmitter {
   readonly stdin = new PassThrough();
@@ -83,18 +83,18 @@ test("login streams a pinned authorization URL and submits one bounded code", as
     },
   });
 
-  assert.equal((await signIn.begin()).stage, SUPERSET_SIGN_IN_STAGE.BROWSER_CODE);
+  assert.equal((await signIn.begin()).stage, INTERACTIVE_SIGN_IN_STAGE.BROWSER_CODE);
   child.stdout.write("Open https://api.super");
   child.stdout.write("set.sh/api/auth/oauth2/authorize?attempt=one\nignored secret output");
   await turn();
   assert.deepEqual(opened, ["https://api.superset.sh/api/auth/oauth2/authorize?attempt=one"]);
-  assert.equal(signIn.submitCode("device#proof").stage, SUPERSET_SIGN_IN_STAGE.EXCHANGING);
+  assert.equal(signIn.submitCode("device#proof").stage, INTERACTIVE_SIGN_IN_STAGE.EXCHANGING);
   assert.equal(written, "device#proof\r");
 
   await fs.writeFile(path.join(home, "config.json"), '{"organizationId":"org-1"}');
   child.emit("close", 0);
-  await waitFor(() => signIn.current().stage === SUPERSET_SIGN_IN_STAGE.CONNECTED);
-  assert.equal(signIn.current().stage, SUPERSET_SIGN_IN_STAGE.CONNECTED);
+  await waitFor(() => signIn.current().stage === INTERACTIVE_SIGN_IN_STAGE.CONNECTED);
+  assert.equal(signIn.current().stage, INTERACTIVE_SIGN_IN_STAGE.CONNECTED);
 });
 
 test("only the pinned Superset HTTPS host can be opened or reopened", async (t) => {
@@ -142,7 +142,7 @@ test("codes require one separator, stay bounded, and can arrive before the URL",
   assert.equal(validSupersetSignInCode("missing"), false);
   assert.equal(validSupersetSignInCode(`a#${"b".repeat(511)}`), false);
   assert.equal(validSupersetSignInCode("a#b#c"), false);
-  assert.equal(signIn.submitCode("early#proof").stage, SUPERSET_SIGN_IN_STAGE.EXCHANGING);
+  assert.equal(signIn.submitCode("early#proof").stage, INTERACTIVE_SIGN_IN_STAGE.EXCHANGING);
   assert.equal(written, "early#proof\r");
   signIn.cancel();
 });
@@ -164,7 +164,7 @@ test("duplicate starts share one attempt and cancellation kills its exact child"
   assert.equal(spawns, 1);
   signIn.cancel();
   assert.equal(child.killed, true);
-  assert.equal(signIn.current().stage, SUPERSET_SIGN_IN_STAGE.IDLE);
+  assert.equal(signIn.current().stage, INTERACTIVE_SIGN_IN_STAGE.IDLE);
 });
 
 test("process failure, timeout, and shutdown end without exposing CLI output", async (t) => {
@@ -190,8 +190,8 @@ test("process failure, timeout, and shutdown end without exposing CLI output", a
     );
     assert.equal(child.killed, true);
     assert.ok(
-      signIn.current().stage === SUPERSET_SIGN_IN_STAGE.FAILURE ||
-        signIn.current().stage === SUPERSET_SIGN_IN_STAGE.IDLE,
+      signIn.current().stage === INTERACTIVE_SIGN_IN_STAGE.FAILURE ||
+        signIn.current().stage === INTERACTIVE_SIGN_IN_STAGE.IDLE,
     );
   }
 });
@@ -217,13 +217,13 @@ test("zero organizations fail; listed organizations are offered and revalidated"
   });
   await signIn.begin();
   first.emit("close", 1);
-  await waitFor(() => signIn.current().stage === SUPERSET_SIGN_IN_STAGE.ORGANIZATION);
+  await waitFor(() => signIn.current().stage === INTERACTIVE_SIGN_IN_STAGE.SCOPE);
   assert.deepEqual(signIn.current(), {
-    stage: SUPERSET_SIGN_IN_STAGE.ORGANIZATION,
-    organizations,
+    stage: INTERACTIVE_SIGN_IN_STAGE.SCOPE,
+    scopes: organizations,
   });
   listed = [];
-  assert.equal((await signIn.chooseOrganization("acme")).stage, SUPERSET_SIGN_IN_STAGE.FAILURE);
+  assert.equal((await signIn.chooseScope("acme")).stage, INTERACTIVE_SIGN_IN_STAGE.FAILURE);
 
   const chosen = new FakeChild();
   listed = organizations;
@@ -237,15 +237,12 @@ test("zero organizations fail; listed organizations are offered and revalidated"
   await fs.rm(path.join(home, "config.json"), { force: true });
   await switching.begin();
   chosen.emit("close", 1);
-  await waitFor(() => switching.current().stage === SUPERSET_SIGN_IN_STAGE.ORGANIZATION);
-  assert.equal(
-    (await switching.chooseOrganization("acme")).stage,
-    SUPERSET_SIGN_IN_STAGE.CONNECTED,
-  );
+  await waitFor(() => switching.current().stage === INTERACTIVE_SIGN_IN_STAGE.SCOPE);
+  assert.equal((await switching.chooseScope("acme")).stage, INTERACTIVE_SIGN_IN_STAGE.CONNECTED);
   // The switch is its own stage: drawn as the code exchange, the slot would
   // ask for a second code nobody owes.
-  assert.ok(stages.includes(SUPERSET_SIGN_IN_STAGE.SWITCHING));
-  assert.equal(stages.includes(SUPERSET_SIGN_IN_STAGE.EXCHANGING), false);
+  assert.ok(stages.includes(INTERACTIVE_SIGN_IN_STAGE.SWITCHING));
+  assert.equal(stages.includes(INTERACTIVE_SIGN_IN_STAGE.EXCHANGING), false);
   await fs.rm(path.join(home, "config.json"), { force: true });
 
   const second = new FakeChild();
@@ -258,6 +255,6 @@ test("zero organizations fail; listed organizations are offered and revalidated"
   });
   await empty.begin();
   second.emit("close", 1);
-  await waitFor(() => empty.current().stage === SUPERSET_SIGN_IN_STAGE.FAILURE);
-  assert.equal(empty.current().stage, SUPERSET_SIGN_IN_STAGE.FAILURE);
+  await waitFor(() => empty.current().stage === INTERACTIVE_SIGN_IN_STAGE.FAILURE);
+  assert.equal(empty.current().stage, INTERACTIVE_SIGN_IN_STAGE.FAILURE);
 });

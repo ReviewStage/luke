@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
+import { CONNECTION_KIND } from "@sidecar/credentials/connections";
 import {
   PROVIDER_ID,
   PROVIDER_ID_LIST,
   PROVIDER_IDENTITY_BY_ID,
   type ProviderId,
 } from "@sidecar/session";
+import { providerCapabilities } from "./capabilities.js";
 import { CodexCloudSessionAdapter } from "./codex/cloud-adapter.js";
 import { providerRegistrations } from "./registrations.js";
 import {
@@ -41,14 +42,19 @@ test("declares credentials and observation hooks beside their adapters", () => {
     Object.values(registrations)
       .flatMap((registration) => ("credential" in registration ? registration.credential.id : []))
       .sort(),
-    [CREDENTIAL_PROVIDER_ID.CONDUCTOR],
+    PROVIDER_ID_LIST.filter((providerId) => {
+      const kind = providerCapabilities(providerId).credential;
+      return kind === CONNECTION_KIND.KEY || kind === CONNECTION_KIND.CONSENT;
+    }).sort(),
   );
   assert.deepEqual(
     Object.entries(registrations)
       .filter(([, registration]) => "registerObservationHook" in registration)
       .map(([providerId]) => providerId)
       .sort(),
-    [PROVIDER_ID.CLAUDE_CODE, PROVIDER_ID.CODEX].sort(),
+    PROVIDER_ID_LIST.filter(
+      (providerId) => providerCapabilities(providerId).observationHook,
+    ).sort(),
   );
 });
 

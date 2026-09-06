@@ -29,9 +29,11 @@ import {
   type TrackedIssue,
   type TrackerActionResult,
 } from "@sidecar/issues";
+import type { WorkspaceHostRegistration, WorkspaceHostSessionActs } from "@sidecar/providers";
 import {
   type InMemorySessionRegistry,
   isListedWorkspaceAgentModel,
+  isModelsWorkspaceProviderId,
   isProviderId,
   type ProviderActResult,
   type ProviderControlResult,
@@ -46,8 +48,7 @@ import {
   workspaceNameText,
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
-import type { SupersetSessionContext } from "@sidecar/superset";
-import { isSupersetControlId, type SupersetCli, supersetPressedLink } from "@sidecar/superset";
+import { supersetPressedLink } from "@sidecar/superset";
 import type { LinearIssueTracker } from "@sidecar/trackers";
 import { ACT_RESULT_STATUS, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
@@ -79,8 +80,13 @@ export interface SessionActsIpcDependencies {
   trackedIssues: () => readonly TrackedIssue[] | undefined;
   issueTrackers: readonly LinearIssueTracker[];
   refreshIssues: () => void;
-  supersetContext: (identity: SessionIdentity) => SupersetSessionContext | undefined;
-  supersetCli: SupersetCli;
+  /**
+   * The workspace managers of the observation pass, in claim order. A session
+   * one of them claims takes its message, control, added agent, and workspace
+   * rename through that manager rather than through the provider adapter,
+   * because the manager is what advertised those acts on the row.
+   */
+  workspaceHosts: readonly WorkspaceHostRegistration[];
   recordProductEvent: RecordProductEvent;
   /** The remembered entries as the main process holds them, and the write back. */
   rememberedFacts: () => readonly RememberedFact[];
@@ -229,8 +235,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     trackedIssues,
     issueTrackers,
     refreshIssues,
-    supersetContext,
-    supersetCli,
+    workspaceHosts,
     recordProductEvent,
     rememberedFacts,
     writeRememberedFacts,
@@ -323,6 +328,31 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
     }
     return countSessionAct(adapter.provider.id, counted, result);
   }
+  // The first manager to claim a session delivers its acts, which matches the
+  // enrichment precedence: the manager that annotated the row first is the
+  // one whose acts the row advertises. A host delivering its own act does not
+  // refresh the roster: the host's next read is what reports the outcome.
+  const hostActsFor = (identity: SessionIdentity): WorkspaceHostSessionActs | undefined => {
+    for (const host of workspaceHosts) {
+      const acts = host.claim?.(identity);
+      if (acts) return acts;
+    }
+    return undefined;
+  };
+  // A control on a managed row belongs to the manager only when the manager
+  // added it; a provider's own control on the same row still reaches the
+  // provider.
+  const hostForControl = (
+    identity: SessionIdentity,
+    controlId: string,
+  ): WorkspaceHostSessionActs | undefined => {
+    for (const host of workspaceHosts) {
+      if (!host.ownsControl?.(controlId)) continue;
+      const acts = host.claim?.(identity);
+      if (acts) return acts;
+    }
+    return undefined;
+  };
   const registerOpenAction = (
     definition: Parameters<typeof registerAction>[0],
     address: (identity: SessionIdentity) => string | undefined,
@@ -550,12 +580,12 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           reason: "That session does not take messages right now.",
         };
       }
-      const managed = supersetContext(identity);
-      if (managed) {
+      const hosted = hostActsFor(identity);
+      if (hosted) {
         return countSessionAct(
           identity.providerId,
           PRODUCT_SESSION_ACT.MESSAGE_SEND,
-          await supersetCli.sendMessage(managed, messageText),
+          await hosted.sendMessage(messageText),
         );
       }
       return performSessionAct(identity, PRODUCT_SESSION_ACT.MESSAGE_SEND, (adapter) => {
@@ -590,12 +620,12 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
             ? `That session advertises no such control, only ${session.controls.map((candidate) => candidate.label).join(", ")}.`
             : "That session advertises no controls right now.",
         };
-      const managed = supersetContext(identity);
-      if (managed && isSupersetControlId(control.id)) {
+      const hosted = hostForControl(identity, control.id);
+      if (hosted) {
         return countSessionAct(
           identity.providerId,
           PRODUCT_SESSION_ACT.CONTROL_RUN,
-          await supersetCli.executeControl(managed, control.id),
+          await hosted.executeControl(control.id),
         );
       }
       return performSessionAct(identity, PRODUCT_SESSION_ACT.CONTROL_RUN, (adapter) => {
@@ -677,7 +707,7 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
       // are held to the build's documented table — the named one just above,
       // the stored one when it was written — and the adapter holds whichever
       // rides to its own table again before anything reaches the network.
-      const stored = isProviderId(providerId)
+      const stored = isModelsWorkspaceProviderId(providerId)
         ? (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId]
         : undefined;
       const agentSelection = parsedSelection ?? stored;
@@ -878,16 +908,18 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           reason: "That task is empty or too long.",
         };
       }
-      const managed = supersetContext(identity);
-      if (managed) {
+      const hosted = hostActsFor(identity);
+      if (hosted) {
         return countSessionAct(
           identity.providerId,
           PRODUCT_SESSION_ACT.AGENT_ADD,
-          await supersetCli.createAgent(managed, advertised, openingTask.value),
+          await hosted.spawnAgent(advertised, openingTask.value),
         );
       }
       return performSessionAct(identity, PRODUCT_SESSION_ACT.AGENT_ADD, async (adapter) => {
-        const stored: WorkspaceAgentSelection | undefined = isProviderId(identity.providerId)
+        const stored: WorkspaceAgentSelection | undefined = isModelsWorkspaceProviderId(
+          identity.providerId,
+        )
           ? (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
               identity.providerId
             ]
@@ -936,12 +968,12 @@ export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies)
           status: ACT_RESULT_STATUS.UNSUPPORTED,
           reason: "That session's workspace cannot be renamed.",
         };
-      const managed = supersetContext(identity);
-      if (managed) {
+      const hosted = hostActsFor(identity);
+      if (hosted) {
         return countSessionAct(
           identity.providerId,
           PRODUCT_SESSION_ACT.WORKSPACE_RENAME,
-          await supersetCli.renameWorkspace(managed, workspaceName),
+          await hosted.renameWorkspace(workspaceName),
         );
       }
       return performSessionAct(identity, PRODUCT_SESSION_ACT.WORKSPACE_RENAME, (adapter) =>

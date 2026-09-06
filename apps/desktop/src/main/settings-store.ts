@@ -1,6 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
+  CLI_LOGIN_CONNECTION_IDS,
+  type CliLoginConnectionId,
+  CONSENT_CONNECTION_IDS,
+  type ConsentConnectionId,
+  type ConsentGrant,
   CREDENTIAL_CONNECTION,
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDER_LIST,
@@ -63,7 +68,6 @@ import {
 } from "@sidecar/settings";
 // The same ownership the calendar reader has over its credential shape: what
 // this store resolves a stored grant into is what the sign-in produced.
-import { type LinearGrant, linearSignInConfig } from "@sidecar/trackers";
 import {
   environmentRealtimeSpeed,
   environmentRealtimeVoice,
@@ -138,7 +142,14 @@ export interface SettingsStoreOptions {
    * store resolving it. Absent, the snapshot says the question was never
    * asked, which is what a store without an app around it can honestly say.
    */
-  codexCloudConnection?: () => CliConnection;
+  cliConnections?: () => Promise<Readonly<Record<CliLoginConnectionId, CliConnection>>>;
+  /**
+   * Whether this build can offer each consent row's sign-in at all: a
+   * registered OAuth client resolved. Answered by the rows themselves, so the
+   * store knows no tracker by name; without an app around it, nothing is
+   * offered, which a store can honestly say.
+   */
+  consentSignInAvailable?: () => Readonly<Record<ConsentConnectionId, boolean>>;
 }
 
 interface PersistedSettings extends StoredAppSettings {
@@ -304,6 +315,25 @@ function storedAppleCalendar(record: WireRecord): PersistedSettings["appleCalend
  * beside it: when a token lapses is not a secret, and knowing it without
  * decrypting is what lets a pass skip the refresh it does not need.
  */
+// SAFETY: both tables are built over every id of their declared list exactly once.
+const UNKNOWN_CLI_CONNECTIONS = Object.fromEntries(
+  CLI_LOGIN_CONNECTION_IDS.map((id) => [id, CLI_CONNECTION.UNKNOWN]),
+) as Readonly<Record<CliLoginConnectionId, CliConnection>>;
+// SAFETY: as above.
+const NO_CONSENT_SIGN_INS = Object.fromEntries(
+  CONSENT_CONNECTION_IDS.map((id) => [id, false]),
+) as Readonly<Record<ConsentConnectionId, boolean>>;
+
+function consentSignInsUsable(
+  available: Readonly<Record<ConsentConnectionId, boolean>>,
+  credentialsUsable: boolean,
+): Readonly<Record<ConsentConnectionId, boolean>> {
+  // SAFETY: every consent id is mapped exactly once from the declared list.
+  return Object.fromEntries(
+    CONSENT_CONNECTION_IDS.map((id) => [id, credentialsUsable && available[id]]),
+  ) as Readonly<Record<ConsentConnectionId, boolean>>;
+}
+
 interface PersistedGrant {
   tokenCipher: string;
   expiresAt: number;
@@ -485,13 +515,14 @@ export class SettingsStore {
   readonly #providers: readonly CredentialProvider[];
   readonly #credentialsUsable: boolean;
   readonly #appleCalendarSupported: boolean;
-  readonly #codexCloudConnection: () => CliConnection;
+  readonly #cliConnections: NonNullable<SettingsStoreOptions["cliConnections"]>;
+  readonly #consentSignInAvailable: NonNullable<SettingsStoreOptions["consentSignInAvailable"]>;
   #loading: Promise<PersistedSettings> | undefined;
   #resolved = new Map<CredentialProviderId, ResolvedApiKey>();
   /** Decrypted accounts, cached like the keys so timers never drum the Keychain. */
   #resolvedCalendarAccounts: readonly CalendarAccountCredential[] | undefined;
   /** Decrypted grants, cached for the same reason and cleared by the same writes. */
-  #resolvedGrants = new Map<CredentialProviderId, LinearGrant | undefined>();
+  #resolvedGrants = new Map<CredentialProviderId, ConsentGrant | undefined>();
   #mutations: Promise<void> = Promise.resolve();
 
   async get<Field extends AppSettingField>(field: Field): Promise<AppSettingValue<Field>> {
@@ -590,7 +621,8 @@ export class SettingsStore {
     this.#providers = options.providers ?? CREDENTIAL_PROVIDER_LIST;
     this.#credentialsUsable = options.credentialsUsable ?? true;
     this.#appleCalendarSupported = options.appleCalendarSupported ?? process.platform === "darwin";
-    this.#codexCloudConnection = options.codexCloudConnection ?? (() => CLI_CONNECTION.UNKNOWN);
+    this.#cliConnections = options.cliConnections ?? (async () => UNKNOWN_CLI_CONNECTIONS);
+    this.#consentSignInAvailable = options.consentSignInAvailable ?? (() => NO_CONSENT_SIGN_INS);
   }
 
   async snapshot(): Promise<AppSettings> {
@@ -632,7 +664,7 @@ export class SettingsStore {
         // whose connection is a CLI login rather than a key: asked of the
         // observer that actually holds the answer, at snapshot time like the
         // key sources beside it.
-        codexCloudConnection: this.#codexCloudConnection(),
+        cliConnections: await this.#cliConnections(),
         // Reports what storing a key has already established, and asks nothing on
         // its own: a snapshot is taken on every launch, and most of them are for
         // a user with no key to protect.
@@ -648,11 +680,13 @@ export class SettingsStore {
         // grants. Without one the integration is not drawn at all.
         calendarSignInAvailable:
           this.#credentialsUsable && googleCalendarSignInConfig(this.#environment) !== undefined,
-        // The same question for Linear, answered the same way: without a
-        // registered OAuth client there is no consent page to open, so the row
-        // is not drawn rather than drawn refusing.
-        linearSignInAvailable:
-          this.#credentialsUsable && linearSignInConfig(this.#environment) !== undefined,
+        // The same question for each consent row, answered the same way:
+        // without a registered OAuth client there is no consent page to open,
+        // so the row is not drawn rather than drawn refusing.
+        consentSignInAvailable: consentSignInsUsable(
+          this.#consentSignInAvailable(),
+          this.#credentialsUsable,
+        ),
         // Whether this build can offer the Apple Calendar connection: a Mac to
         // read, and a run that would use what macOS grants. No client gates it
         // the way the sign-ins are gated — the grant lives with the system.
@@ -881,7 +915,7 @@ export class SettingsStore {
    * that no longer decrypts — another OS account, a rotated Keychain — reads
    * as absent, and the row it draws says to connect again.
    */
-  async readGrant(providerId: CredentialProviderId): Promise<LinearGrant | undefined> {
+  async readGrant(providerId: CredentialProviderId): Promise<ConsentGrant | undefined> {
     if (this.#resolvedGrants.has(providerId)) return this.#resolvedGrants.get(providerId);
     const held = (await this.#load()).grants?.[providerId];
     const grant = held ? this.#decryptGrant(held) : undefined;
@@ -897,7 +931,7 @@ export class SettingsStore {
    */
   async setGrant(
     providerId: CredentialProviderId,
-    grant: LinearGrant,
+    grant: ConsentGrant,
   ): Promise<SettingsUpdateResult> {
     const accessToken = grant.accessToken.trim();
     const rejection = !this.#secretStorageUsable()
@@ -964,7 +998,7 @@ export class SettingsStore {
   }
 
   /** Recovers one stored grant's tokens, or nothing if they cannot be read. */
-  #decryptGrant(held: PersistedGrant): LinearGrant | undefined {
+  #decryptGrant(held: PersistedGrant): ConsentGrant | undefined {
     try {
       const tokens = JSON.parse(this.#cipher.decrypt(Buffer.from(held.tokenCipher, "base64")));
       if (!isRecord(tokens)) return undefined;
