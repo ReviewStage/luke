@@ -26,10 +26,9 @@ export interface PrerenderedPage {
 /**
  * Renders every prerendered page to static markup for `scripts/prerender.ts`,
  * which learns the page list from here rather than keeping one of its own.
- * The client entries still mount with `createRoot` rather than `hydrateRoot`:
- * the prerendered markup is there for crawlers and for the first paint, and
- * the live app replaces it on load instead of negotiating a hydration match
- * with the notch mock's animation state.
+ * These pages' client entries hydrate that markup rather than replacing it,
+ * so a page component here must render the same tree in Node and in the
+ * browser: anything that depends on the window is read in an effect.
  */
 export function renderPrerenderedPages(): readonly PrerenderedPage[] {
   return Object.entries(PRERENDERED_PAGES).map(([file, Page]) => ({

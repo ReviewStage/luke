@@ -1,5 +1,5 @@
 import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
+import { hydrateRoot } from "react-dom/client";
 import { startSiteAnalytics } from "./analytics";
 import { PrivacyPage } from "./PrivacyPage";
 import "./styles.css";
@@ -11,7 +11,8 @@ startSiteAnalytics();
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Root element is missing");
 
-createRoot(rootElement).render(
+hydrateRoot(
+  rootElement,
   <StrictMode>
     <PrivacyPage />
   </StrictMode>,
