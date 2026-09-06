@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BRAIN_TOOL, BRAIN_TURN_TRIGGER, brainToolDefinitions } from "@sidecar/brain";
+import {
+  BRAIN_TOOL,
+  BRAIN_TURN_AUTHORITY,
+  BRAIN_TURN_TRIGGER,
+  brainToolDefinitions,
+} from "@sidecar/brain";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
 import { TRACE_ENTRY_KIND } from "./trace-writer.js";
 import { unboxTraceFromLines } from "./unbox-export.js";
@@ -181,7 +186,7 @@ test("a brain turn becomes its own generation, and junk lines cost only themselv
   const toolNames = toolsOf(generation).map((tool) => tool.name);
   assert.deepEqual(
     toolNames,
-    brainToolDefinitions().map((tool) => tool.name),
+    brainToolDefinitions(BRAIN_TURN_AUTHORITY.OBSERVATION).map((tool) => tool.name),
   );
   const announce = toolsOf(generation).find((tool) => tool.name === BRAIN_TOOL.ANNOUNCE);
   assert.equal(announce?.type, "function");

@@ -1,4 +1,5 @@
 import type { RealtimeFunctionCall } from "@sidecar/acts";
+import { BRAIN_TURN_AUTHORITY, type BrainTurnAuthority } from "@sidecar/hosted";
 import type { ScheduledTimer } from "@sidecar/realtime";
 import {
   type ProviderTranscriptResult,
@@ -37,7 +38,12 @@ import {
   functionCallOutputItem,
   type ResponsesInputItem,
 } from "./brain-openai.js";
-import { BRAIN_TOOL, isBrainOnlyTool, maximumBriefingLength } from "./brain-tools.js";
+import {
+  BRAIN_TOOL,
+  brainToolAllowed,
+  isBrainOnlyTool,
+  maximumBriefingLength,
+} from "./brain-tools.js";
 
 /**
  * The brain: one long-lived agent that is woken by the agents' hooks and by
@@ -52,7 +58,12 @@ import { BRAIN_TOOL, isBrainOnlyTool, maximumBriefingLength } from "./brain-tool
  *
  * Every write it can cause still runs the host's own validation: an act tool
  * call goes to the performer as a function call and nothing more, and the host
- * validates it against what it observed exactly as it would a spoken one.
+ * validates it against what it observed exactly as it would a spoken one. And
+ * an act can leave a turn at all only when the developer opened it: the turn's
+ * authority is fixed here from what invoked it — an ask is the developer's,
+ * a wake, a roster look, or a hold release is observation — so the toolset a
+ * model is offered and the gate every emitted call meets are both decided
+ * before the model reads a word, and nothing it reads can move them.
  */
 
 export const BRAIN_DEFAULTS = {
@@ -83,6 +94,9 @@ export type BrainTurnTrigger = (typeof BRAIN_TURN_TRIGGER)[keyof typeof BRAIN_TU
 const REFUSAL_REASON = {
   UNOBSERVED_SESSION: "not an observed session",
   ANNOUNCE_IN_ASK: "reply in text: this is a developer ask, and your final text is the speech",
+  ACT_IN_OBSERVATION:
+    "not run: an act needs a turn the developer opened, and this one was opened by observation",
+  NOT_OFFERED: "not run: no such tool in this turn",
   EMPTY_BRIEFING: "a briefing needs words",
   BUDGET_SPENT: "not run: this turn's tool budget is spent",
   ACT_FAILED: "the act did not complete",
@@ -100,9 +114,23 @@ export interface BrainRoster {
   sessions?: readonly Session[];
 }
 
+/**
+ * The standing a developer-opened turn hands the performer with each act: its
+ * authority, which can only ever be the developer's because no other turn
+ * reaches a performer, and whether the turn it belongs to still stands. The
+ * performer asks `isRevoked()` after each step it awaited and once more just
+ * before the effect, so an act prepared inside a turn that has since ended
+ * is refused rather than dispatched. Today a turn's execution is revoked when
+ * the turn ends or the agent stops; a request lifecycle may bind it tighter.
+ */
+export interface BrainActExecution {
+  readonly authority: typeof BRAIN_TURN_AUTHORITY.DEVELOPER;
+  isRevoked(): boolean;
+}
+
 /** Carries one act for the host to validate and perform; answers what happened as a record. */
 export interface BrainActPerformer {
-  perform(call: RealtimeFunctionCall): Promise<WireRecord>;
+  perform(call: RealtimeFunctionCall, execution: BrainActExecution): Promise<WireRecord>;
 }
 
 export interface BrainAskAnswer {
@@ -124,6 +152,7 @@ export interface BrainToolCallTrace {
  */
 export interface BrainTurnTraceRecord {
   trigger: BrainTurnTrigger;
+  authority: BrainTurnAuthority;
   inputItemKinds: readonly string[];
   inputTokens?: number;
   transcriptBytes: number;
@@ -177,6 +206,7 @@ type TurnResult =
 
 interface TurnPlan {
   trigger: BrainTurnTrigger;
+  authority: BrainTurnAuthority;
   events: readonly BrainWakeEvent[];
   open: (events: readonly BrainWakeEvent[], now: number) => readonly ResponsesInputItem[];
   deliverySource?: BrainDeliverySource;
@@ -313,6 +343,7 @@ export class BrainAgent {
     const turn = this.#enqueue(() =>
       this.#turn({
         trigger: BRAIN_TURN_TRIGGER.ASK,
+        authority: BRAIN_TURN_AUTHORITY.DEVELOPER,
         events,
         open: (attached, now) => [askInputItem(question, attached, now)],
       }),
@@ -340,6 +371,7 @@ export class BrainAgent {
     void this.#enqueue(() =>
       this.#turn({
         trigger: BRAIN_TURN_TRIGGER.HOLD_RELEASED,
+        authority: BRAIN_TURN_AUTHORITY.OBSERVATION,
         events,
         open: (attached, now) => [
           ...(attached.length > 0 ? [wakeInputItem(attached, now)] : []),
@@ -388,6 +420,7 @@ export class BrainAgent {
     void this.#enqueue(() =>
       this.#turn({
         trigger: BRAIN_TURN_TRIGGER.ROSTER,
+        authority: BRAIN_TURN_AUTHORITY.OBSERVATION,
         events,
         open: (attached, openedAt) => [wakeInputItem(attached, openedAt, roster.text)],
         deliverySource: BRAIN_DELIVERY_SOURCE.WAKE,
@@ -422,6 +455,7 @@ export class BrainAgent {
     void this.#enqueue(async () => {
       const result = await this.#turn({
         trigger: BRAIN_TURN_TRIGGER.WAKE,
+        authority: BRAIN_TURN_AUTHORITY.OBSERVATION,
         events,
         open: (attached, now) => [wakeInputItem(attached, now)],
         deliverySource: BRAIN_DELIVERY_SOURCE.WAKE,
@@ -463,14 +497,20 @@ export class BrainAgent {
 
   async #turn(plan: TurnPlan): Promise<TurnResult> {
     this.#turnInFlight = true;
+    let ended = false;
+    const execution: BrainActExecution = {
+      authority: BRAIN_TURN_AUTHORITY.DEVELOPER,
+      isRevoked: () => ended || this.#stopped,
+    };
     try {
-      return await this.#runTurn(plan);
+      return await this.#runTurn(plan, execution);
     } finally {
+      ended = true;
       this.#turnInFlight = false;
     }
   }
 
-  async #runTurn(plan: TurnPlan): Promise<TurnResult> {
+  async #runTurn(plan: TurnPlan, execution: BrainActExecution): Promise<TurnResult> {
     await this.#ready();
     const startedAt = this.#now();
     const mark = this.#memory.mark();
@@ -506,6 +546,7 @@ export class BrainAgent {
         this.#now(),
       );
       const answer = await this.#options.client.respond([...this.#memory.items(), context], {
+        authority: plan.authority,
         maximumOutputTokens: this.#maximumOutputTokens,
       });
       if (answer.outcome === BRAIN_CLIENT_OUTCOME.QUIET) {
@@ -561,7 +602,7 @@ export class BrainAgent {
 
       const outcomes = await Promise.all(
         output.functionCalls.map((call) =>
-          this.#dispatch(call, roster, plan, deliveries).then((outcome) => {
+          this.#dispatch(call, roster, plan, execution, deliveries).then((outcome) => {
             toolCalls.push({
               name: call.name,
               argumentsChars: call.argumentsJson.length,
@@ -603,6 +644,7 @@ export class BrainAgent {
 
     this.#options.trace?.({
       trigger: plan.trigger,
+      authority: plan.authority,
       inputItemKinds: appendedKinds,
       ...(inputTokens !== undefined ? { inputTokens } : undefined),
       transcriptBytes,
@@ -663,24 +705,47 @@ export class BrainAgent {
     };
   }
 
+  /**
+   * The gate every emitted call meets, whatever the model was offered: a tool
+   * outside the turn's authority is refused here before any performer or
+   * delivery sees it, so a model that emits an omitted tool — because a
+   * transcript, a standing ask, or a tool's answer read like an instruction —
+   * changes nothing but the refusal it reads back.
+   */
+  #refusalForAuthority(plan: TurnPlan, name: string): WireRecord | undefined {
+    if (brainToolAllowed(plan.authority, name)) return undefined;
+    if (name === BRAIN_TOOL.ANNOUNCE) return rejection(REFUSAL_REASON.ANNOUNCE_IN_ASK);
+    if (plan.authority === BRAIN_TURN_AUTHORITY.OBSERVATION && !isBrainOnlyTool(name)) {
+      return rejection(REFUSAL_REASON.ACT_IN_OBSERVATION);
+    }
+    return rejection(REFUSAL_REASON.NOT_OFFERED);
+  }
+
   async #dispatch(
     call: BrainFunctionCall,
     roster: BrainRoster,
     plan: TurnPlan,
+    execution: BrainActExecution,
     deliveries: BrainDelivery[],
   ): Promise<DispatchOutcome> {
+    const refused = this.#refusalForAuthority(plan, call.name);
+    if (refused) return { callId: call.callId, output: refused };
+
     const args = parsedArguments(call.argumentsJson);
     const observed = (identity: SessionIdentity) =>
       roster.identities.some((listed) => sameIdentity(listed, identity));
     const named = identityFromRecord(args);
 
     if (!isBrainOnlyTool(call.name)) {
+      if (plan.authority !== BRAIN_TURN_AUTHORITY.DEVELOPER) {
+        return { callId: call.callId, output: rejection(REFUSAL_REASON.ACT_IN_OBSERVATION) };
+      }
       let output: WireRecord;
       try {
-        output = await this.#options.acts.perform({
-          name: call.name,
-          argumentsJson: call.argumentsJson,
-        });
+        output = await this.#options.acts.perform(
+          { name: call.name, argumentsJson: call.argumentsJson },
+          execution,
+        );
       } catch {
         output = rejection(REFUSAL_REASON.ACT_FAILED);
       }
@@ -698,7 +763,7 @@ export class BrainAgent {
       }
       case BRAIN_TOOL.ANNOUNCE: {
         if (plan.deliverySource === undefined) {
-          return { callId: call.callId, output: rejection(REFUSAL_REASON.ANNOUNCE_IN_ASK) };
+          return { callId: call.callId, output: rejection(REFUSAL_REASON.NOT_OFFERED) };
         }
         const briefing = text(args.briefing)?.slice(0, maximumBriefingLength);
         if (!briefing) {

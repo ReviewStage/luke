@@ -1,4 +1,9 @@
-import { HOSTED_SERVICE_PATH, type HostedBrainRequest, hostedQuotaFromWire } from "@sidecar/hosted";
+import {
+  type BrainTurnAuthority,
+  HOSTED_SERVICE_PATH,
+  type HostedBrainRequest,
+  hostedQuotaFromWire,
+} from "@sidecar/hosted";
 import {
   positiveInteger,
   text,
@@ -39,6 +44,8 @@ export type BrainClientAnswer =
   | { outcome: typeof BRAIN_CLIENT_OUTCOME.FAILED; reason: string };
 
 export interface BrainRespondOptions {
+  /** Who opened the turn; it fixes the toolset and is never inferred from the input. */
+  authority: BrainTurnAuthority;
   maximumOutputTokens: number;
 }
 
@@ -166,7 +173,7 @@ export class OpenAiBrainClient implements BrainClient {
           brainResponsesRequest(input, {
             model: this.model,
             instructions: brainInstructions(),
-            tools: brainToolDefinitions(),
+            tools: brainToolDefinitions(options.authority),
             maximumOutputTokens: options.maximumOutputTokens,
             reasoningEffort: this.#reasoningEffort,
           }),
@@ -233,8 +240,9 @@ export interface HostedBrainClientOptions {
 /**
  * Runs brain turns through Luke's hosted service on the signed-in account, for
  * a developer with no OpenAI key of their own. What leaves the machine is the
- * same input array the keyed client sends; the service holds the instructions,
- * tools, and model fixed by its own build. A spent allowance stands the client
+ * same input array the keyed client sends and the turn's authority; the
+ * service holds the instructions, model, and each authority's toolset fixed
+ * by its own build. A spent allowance stands the client
  * down until the day's counters reset rather than spending refusals on it.
  */
 export class HostedBrainClient implements BrainClient {
@@ -277,6 +285,7 @@ export class HostedBrainClient implements BrainClient {
     if (!token) return failed("no account token");
 
     const request: HostedBrainRequest = {
+      authority: options.authority,
       input,
       max_output_tokens: options.maximumOutputTokens,
     };

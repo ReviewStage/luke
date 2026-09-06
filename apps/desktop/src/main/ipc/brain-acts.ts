@@ -13,7 +13,11 @@ import {
   SESSION_TOOL_KIND,
   sessionToolAction,
 } from "@sidecar/acts";
-import type { BrainActPerformer } from "@sidecar/brain";
+import {
+  BRAIN_TURN_AUTHORITY,
+  type BrainActExecution,
+  type BrainActPerformer,
+} from "@sidecar/brain";
 import type { AppGuideSnapshot } from "@sidecar/guide";
 import type { TrackedIssue } from "@sidecar/issues";
 import { type ConversationEntry, sessionActConversationEntry } from "@sidecar/realtime";
@@ -56,6 +60,8 @@ export interface BrainActPerformerDependencies {
 
 const REFUSAL = {
   NO_SUCH_TOOL: "No such tool exists.",
+  NO_AUTHORITY: "Not run: an act needs a turn the developer opened.",
+  TURN_OVER: "Not run: the turn that asked for this act is over.",
   NO_TRACKER: "No issue tracker is connected.",
   BRAIN_READS_ITSELF: "Read the transcript with read_transcript; nothing is spoken from this act.",
   MEMORY_NOT_SAVED: "That memory could not be saved.",
@@ -75,14 +81,28 @@ function rejection(reason: string): WireRecord {
  * never a wider one: a call that names a session Luke was not shown, a
  * project no adapter offers, or a setting the guide does not list is refused
  * with a reason the brain can read.
+ *
+ * Before any of that, the act has to arrive with the developer's own standing:
+ * an execution context the brain built for a turn the developer opened, and
+ * only for such a turn. A call with no context, a malformed one, or one whose
+ * authority is anything but the developer's is refused before a validator
+ * runs, so the shape of the context, not the words of the call, is what opens
+ * the gate. The context is asked again after every step awaited here and once
+ * more just before the effect, so an act whose turn ended while the roster
+ * was refreshing is refused rather than dispatched.
  */
 export function createBrainActPerformer(
   dependencies: BrainActPerformerDependencies,
 ): BrainActPerformer {
-  const performSession = async (call: RealtimeFunctionCall): Promise<WireRecord> => {
+  const performSession = async (
+    call: RealtimeFunctionCall,
+    execution: BrainActExecution,
+  ): Promise<WireRecord> => {
     await dependencies.refreshSessions();
+    if (execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
     const sessions = dependencies.sessions();
     const defaults = await dependencies.workspaceDefaults();
+    if (execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
     const action = sessionToolAction(
       call,
       sessions,
@@ -98,19 +118,29 @@ export function createBrainActPerformer(
     // The ask is recorded before the outcome is known: a refusal still leaves
     // the developer having asked it, and the reply voicing the outcome is
     // recorded as what Luke said.
+    if (execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
     dependencies.recordConversationEntry(sessionActConversationEntry(action, sessions));
-    return dependencies.sessionActs.perform(action);
+    // The performer awaits once more of its own before a create or a spawn,
+    // so the execution rides along to be asked again there.
+    return dependencies.sessionActs.perform(action, execution);
   };
 
-  const performIssue = async (call: RealtimeFunctionCall): Promise<WireRecord> => {
+  const performIssue = async (
+    call: RealtimeFunctionCall,
+    execution: BrainActExecution,
+  ): Promise<WireRecord> => {
     const issues = dependencies.trackedIssues();
     if (!issues) return rejection(REFUSAL.NO_TRACKER);
     const action = issueToolAction(call, issues);
     if (action.status === ACT_RESULT_STATUS.REJECTED) return rejection(action.reason);
-    return dependencies.sessionActs.perform(action);
+    if (execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
+    return dependencies.sessionActs.perform(action, execution);
   };
 
-  const performApp = async (call: RealtimeFunctionCall): Promise<WireRecord> => {
+  const performApp = async (
+    call: RealtimeFunctionCall,
+    execution: BrainActExecution,
+  ): Promise<WireRecord> => {
     const action = appToolAction(
       call,
       dependencies.appGuide(),
@@ -118,6 +148,7 @@ export function createBrainActPerformer(
       dependencies.rememberedFacts(),
     );
     if (action.status === ACT_RESULT_STATUS.REJECTED) return rejection(action.reason);
+    if (execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
     return carryAppAction(action);
   };
 
@@ -159,14 +190,30 @@ export function createBrainActPerformer(
     [REALTIME_TOOL_FAMILY.APP]: performApp,
   } as const satisfies Record<
     RealtimeToolFamily,
-    (call: RealtimeFunctionCall) => Promise<WireRecord>
+    (call: RealtimeFunctionCall, execution: BrainActExecution) => Promise<WireRecord>
   >;
 
   return {
-    async perform(call: RealtimeFunctionCall) {
+    async perform(call: RealtimeFunctionCall, execution: BrainActExecution) {
+      if (!isDeveloperExecution(execution)) return rejection(REFUSAL.NO_AUTHORITY);
+      if (execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
       const family = realtimeToolFamily(call.name);
       if (family === undefined) return rejection(REFUSAL.NO_SUCH_TOOL);
-      return performers[family](call);
+      return performers[family](call, execution);
     },
   };
+}
+
+/**
+ * Read as untrusted even though the type says otherwise: the main process is
+ * the last gate before an effect, and a context missing, mis-shaped, or of any
+ * authority but the developer's must refuse here rather than trust its type.
+ */
+function isDeveloperExecution(
+  execution: BrainActExecution | undefined,
+): execution is BrainActExecution {
+  return (
+    execution?.authority === BRAIN_TURN_AUTHORITY.DEVELOPER &&
+    execution.isRevoked instanceof Function
+  );
 }

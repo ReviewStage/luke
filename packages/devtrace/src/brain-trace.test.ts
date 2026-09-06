@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   BRAIN_CLIENT_OUTCOME,
+  BRAIN_TURN_AUTHORITY,
   type BrainClient,
   type BrainClientAnswer,
   type ResponsesInputItem,
@@ -15,7 +16,7 @@ const INPUT: readonly ResponsesInputItem[] = [
   { type: "function_call_output", call_id: "call_1", output: "{}" },
 ];
 const INPUT_CHARS = JSON.stringify(INPUT).length;
-const OPTIONS = { maximumOutputTokens: 400 };
+const OPTIONS = { authority: BRAIN_TURN_AUTHORITY.OBSERVATION, maximumOutputTokens: 400 };
 
 const ANSWERED: BrainClientAnswer = {
   outcome: BRAIN_CLIENT_OUTCOME.ANSWERED,

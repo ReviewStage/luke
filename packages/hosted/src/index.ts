@@ -1,4 +1,7 @@
 export {
+  BRAIN_TURN_AUTHORITY,
+  type BrainTurnAuthority,
+  brainTurnAuthorityFromWire,
   HOSTED_ACT_RESULT,
   HOSTED_API_ERROR,
   HOSTED_ATTENTION_CONTRACT_HEADER,
