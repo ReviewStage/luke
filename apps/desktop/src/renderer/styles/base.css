@@ -251,6 +251,12 @@
      fields share a line — and narrower than the panel, so the composer reads as
      the panel stood down to one thing rather than as the panel refilled. */
   --feedback-width: max(520px, calc(var(--notch-housing-width) + 340px));
+  /* A popup's one vertical inset, above its first row and below its last. The
+     same number on both edges, because the two edges are the same edge: beside
+     a housing the first row sits one inset under the strip, and where the
+     strip is nothing the row sits one inset from each curved edge of the pill,
+     so the row is centred by construction rather than by a second number. */
+  --slot-inset: 12px;
   /* The mark sits outside the field's column, so everything else in the slot is
      indented past it by the same amount. */
   --slot-mark-size: 22px;
@@ -2323,7 +2329,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   max-height: var(--panel-height-max);
   flex-direction: column;
   gap: 8px;
-  padding: calc(var(--strip-height) + 12px) 16px 15px;
+  padding: calc(var(--strip-height) + var(--slot-inset)) 16px var(--slot-inset);
   border-radius: 0 0 var(--slot-radius) var(--slot-radius);
 }
 
@@ -2769,7 +2775,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   width: var(--slot-width);
   flex-direction: column;
   gap: 7px;
-  padding: calc(var(--strip-height) + 12px) 16px 15px;
+  padding: calc(var(--strip-height) + var(--slot-inset)) 16px var(--slot-inset);
   border-radius: 0 0 var(--slot-radius) var(--slot-radius);
 }
 
