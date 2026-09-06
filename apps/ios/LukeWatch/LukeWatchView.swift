@@ -28,8 +28,10 @@ struct LukeWatchView: View {
     private var signedInPages: some View {
         @Bindable var navigation = navigation
         return TabView(selection: $navigation.page) {
-            WatchVoiceView()
-                .tag(WatchPage.voice)
+            NavigationStack {
+                WatchVoiceView()
+            }
+            .tag(WatchPage.voice)
             NavigationStack(path: $navigation.path) {
                 WatchRosterView()
             }

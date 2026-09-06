@@ -26,6 +26,18 @@ const watchRoster = fs.readFileSync(
   path.join(repoRoot, "apps", "ios", "LukeWatch", "WatchRosterView.swift"),
   "utf8",
 );
+const watchVoice = fs.readFileSync(
+  path.join(repoRoot, "apps", "ios", "LukeWatch", "WatchVoiceView.swift"),
+  "utf8",
+);
+const watchVoiceModel = fs.readFileSync(
+  path.join(repoRoot, "apps", "ios", "LukeWatch", "WatchVoiceSessionModel.swift"),
+  "utf8",
+);
+const watchVoiceSettings = fs.readFileSync(
+  path.join(repoRoot, "apps", "ios", "LukeWatch", "WatchVoiceSettingsView.swift"),
+  "utf8",
+);
 const watchAccount = fs.readFileSync(
   path.join(repoRoot, "apps", "ios", "LukeWatch", "WatchAccountSession.swift"),
   "utf8",
@@ -42,6 +54,14 @@ const watchConnectivity = fs.readFileSync(
   path.join(repoRoot, "apps", "ios", "LukeWatch", "WatchConnectivityReceiver.swift"),
   "utf8",
 );
+
+test("the Xcode project has unique object identifiers", () => {
+  const definitions = [...project.matchAll(/^\t\t([A-F0-9]{24}) (?:\/\* .* \*\/ )?= /gm)].map(
+    (match) => match[1],
+  );
+  const duplicates = definitions.filter((id, index) => definitions.indexOf(id) !== index);
+  assert.deepEqual(duplicates, []);
+});
 
 test("the iPhone app embeds and depends on the Watch app", () => {
   assert.match(project, /LukeWatch\.app in Embed Watch Content/);
@@ -84,6 +104,35 @@ test("the Watch tears down account-scoped UI when the paired account changes", (
   assert.match(watchAccount, /func signOut\(\)[\s\S]*?accountScope = nil/);
   assert.match(watchRoot, /NavigationStack[\s\S]*?\.id\(watchSession\.accountScope\)/);
   assert.match(watchRoot, /\.onChange\(of: watchSession\.accountScope\)/);
+});
+
+test("the Watch voice page exposes settings and applies them to mints", () => {
+  assert.match(
+    watchRoot,
+    /NavigationStack \{[\s\S]*?WatchVoiceView\(\)[\s\S]*?\.tag\(WatchPage\.voice\)/,
+  );
+  assert.match(watchVoice, /ToolbarItem\(placement: \.topBarLeading\) \{ settingsButton \}/);
+  assert.match(watchVoice, /WatchVoiceSettingsView\([\s\S]*?VoiceToolAvailability\.report/);
+  assert.doesNotMatch(watchVoiceSettings, /Button\("Done"\)/);
+  assert.doesNotMatch(watchVoiceSettings, /placement: \.confirmationAction/);
+  assert.match(watchVoiceSettings, /Picker\("Voice", selection: voiceChoice\)/);
+  assert.match(watchVoiceSettings, /Picker\("Speed", selection: speedChoice\)/);
+  assert.match(
+    watchVoiceSettings,
+    /events\.record\(\.settingUpdate\(setting: \.voice, value: \.set\)\)/,
+  );
+  assert.match(
+    watchVoiceSettings,
+    /events\.record\(\.settingUpdate\(setting: \.voiceSpeed, value: \.set\)\)/,
+  );
+  assert.match(watchVoiceModel, /let mintVoice = voice\.rawValue/);
+  assert.match(watchVoiceModel, /let mintSpeed = speed\.multiplier/);
+  assert.match(watchVoiceModel, /voice: mintVoice/);
+  assert.match(watchVoiceModel, /speed: mintSpeed/);
+  assert.match(
+    watchVoiceModel,
+    /func changeSpeed\(_ newSpeed: RealtimeVoiceSpeed\)[\s\S]*?session\?\.applySpeed\(newSpeed\.multiplier\)/,
+  );
 });
 
 test("cancelled Watch roster reads do not become completed empty states", () => {
