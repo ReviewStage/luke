@@ -3138,10 +3138,10 @@ export function startDesktopApp(): void {
         // in the database what it does not admit, and the clock takes it
         // from there. The last Clear's marker outlives the launch that made
         // it, so a line the Clear meant to erase is refused here too.
-        const brainState = await brainWiring.store().load();
+        await brainWiring.store().load();
         conversationThread.restore(
           await runtimeStoreClient().listHistory(MAIN_SESSION_KEY, Date.now()),
-          brainState.reset?.clearedAt,
+          await runtimeStoreClient().historyClearedAt(MAIN_SESSION_KEY),
         );
         rememberedFacts = await runtimeStoreClient().personalFacts();
       }

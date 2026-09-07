@@ -14,7 +14,11 @@
  * is not a foreign key, so a generation's expiry erases no visible line. Only
  * the Clear erases both, and it does so explicitly. A conversation's history
  * sequence counts up from a counter on the conversation row and is never
- * reused, however many lines retention or a Clear has let go of.
+ * reused, however many lines retention or a Clear has let go of. The Clear's
+ * cutoff is kept on the conversation row as well, written in the same
+ * transaction as the generation's marker and only ever raised, so a line from
+ * before a Clear stays refused after the generation that carried the marker
+ * has itself expired.
  *
  * The schema is versioned by the `schema_version` table. A database at a
  * version this build does not know is refused rather than migrated by guess.
@@ -43,7 +47,8 @@ export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
     agent_id TEXT NOT NULL REFERENCES agents(agent_id),
     name TEXT NOT NULL,
     created_at INTEGER NOT NULL,
-    next_history_sequence INTEGER NOT NULL DEFAULT 1
+    next_history_sequence INTEGER NOT NULL DEFAULT 1,
+    history_cleared_at INTEGER
   )`,
   `CREATE TABLE IF NOT EXISTS conversation_sessions (
     session_id TEXT PRIMARY KEY,

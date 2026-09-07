@@ -123,6 +123,11 @@ export class RuntimeStoreClient {
     return this.request(RUNTIME_STORE_METHOD.HISTORY_LIST, { sessionKey, now });
   }
 
+  /** The Clear cutoff the store holds for the conversation, durable past the generation that carried it. */
+  historyClearedAt(sessionKey: SessionKey): Promise<number | undefined> {
+    return this.request(RUNTIME_STORE_METHOD.HISTORY_CUTOFF, { sessionKey });
+  }
+
   clearHistoryAtOrBefore(sessionKey: SessionKey, clearedAt: number): Promise<boolean> {
     return this.request(RUNTIME_STORE_METHOD.HISTORY_CLEAR, { sessionKey, clearedAt });
   }

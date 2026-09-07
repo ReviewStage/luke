@@ -272,7 +272,10 @@ Trust constraints:
   the erased generation's id when one is known, learned from the database
   when the store had not yet loaded — over the old content; the thread's
   lines at or before the instant are deleted, and the recovery copies of the
-  imported files with them. The main process's own thread carries an epoch
+  imported files with them. The cutoff is also kept on the conversation's own
+  row, written in the marker's transaction and only ever raised, so a line
+  from before a Clear stays refused after the generation that carried the
+  marker has itself expired, whatever the disk did about the erasure. The main process's own thread carries an epoch
   the fence moves, so a store answer still out when the Clear landed installs
   nothing and broadcasts nothing. A launch that finds the marker refuses
   every stored line at or before its instant, so a crash between the two

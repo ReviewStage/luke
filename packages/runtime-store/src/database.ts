@@ -177,9 +177,30 @@ export class RuntimeDatabase {
     };
   }
 
-  /** The Clear cutoff the standing generation carries, before which no history line may stand. */
+  /**
+   * The Clear cutoff before which no history line may stand: the later of the
+   * standing generation's marker and the conversation's own durable cutoff,
+   * which outlives the generation.
+   */
   clearedAt(sessionKey: SessionKey): number | undefined {
-    return this.#standingSession(sessionKey)?.resetClearedAt;
+    // SAFETY: the query selects the one nullable integer column the row type names.
+    const row = this.#db
+      .prepare("SELECT history_cleared_at FROM conversations WHERE session_key = ?")
+      .get(sessionKey) as { history_cleared_at: number | null } | undefined;
+    const durable = row?.history_cleared_at ?? undefined;
+    const marker = this.#standingSession(sessionKey)?.resetClearedAt;
+    if (durable === undefined) return marker;
+    return marker === undefined ? durable : Math.max(durable, marker);
+  }
+
+  /** Raises the conversation's durable cutoff to `clearedAt`; never lowers it. */
+  #raiseHistoryCutoff(sessionKey: SessionKey, clearedAt: number): void {
+    this.#db
+      .prepare(
+        `UPDATE conversations SET history_cleared_at = MAX(COALESCE(history_cleared_at, ?), ?)
+         WHERE session_key = ?`,
+      )
+      .run(clearedAt, clearedAt, sessionKey);
   }
 
   /**
@@ -319,6 +340,7 @@ export class RuntimeDatabase {
         optional(state.reset?.clearedAt),
         optionalText(state.reset?.generationId),
       );
+    if (state.reset) this.#raiseHistoryCutoff(sessionKey, state.reset.clearedAt);
     this.#insertItems(state.generationId, state.items, 0);
     this.#insertCursors(state.generationId, state.cursors);
     state.requests.forEach((record, ordinal) => {
@@ -420,7 +442,7 @@ export class RuntimeDatabase {
   ): HistoryAppendOutcome<ConversationEntry> {
     return this.transaction(() => {
       const standing = this.#standingSession(sessionKey);
-      const clearedAt = standing?.resetClearedAt;
+      const clearedAt = this.clearedAt(sessionKey);
       let changed = false;
       for (const entry of entries) {
         if (!historyEntryAdmitted(entry, now, clearedAt)) continue;
@@ -577,6 +599,7 @@ export class RuntimeDatabase {
   /** The Clear's erasure of the thread: every line at or before the cutoff goes, publications with it. */
   clearHistoryAtOrBefore(sessionKey: SessionKey, clearedAt: number): void {
     this.transaction(() => {
+      this.#raiseHistoryCutoff(sessionKey, clearedAt);
       this.#db
         .prepare("DELETE FROM history_events WHERE session_key = ? AND recorded_at <= ?")
         .run(sessionKey, clearedAt);

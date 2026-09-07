@@ -21,6 +21,7 @@ export const RUNTIME_STORE_METHOD = {
   HISTORY_APPEND: "history.append",
   HISTORY_LIST: "history.list",
   HISTORY_CLEAR: "history.clear",
+  HISTORY_CUTOFF: "history.cutoff",
   RECOVERY_ERASE: "recovery.erase",
   FACTS_LIST: "facts.list",
   FACTS_REPLACE: "facts.replace",
@@ -57,6 +58,10 @@ export interface RuntimeStoreMethods {
   [RUNTIME_STORE_METHOD.HISTORY_LIST]: {
     params: { sessionKey: SessionKey; now: number };
     result: readonly ConversationEntry[];
+  };
+  [RUNTIME_STORE_METHOD.HISTORY_CUTOFF]: {
+    params: { sessionKey: SessionKey };
+    result: number | undefined;
   };
   [RUNTIME_STORE_METHOD.HISTORY_CLEAR]: {
     params: { sessionKey: SessionKey; clearedAt: number };

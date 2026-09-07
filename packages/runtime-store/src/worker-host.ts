@@ -95,6 +95,11 @@ export function serveRuntimeStore(port: RuntimeStorePort, options: RuntimeStoreH
         opened().clearHistoryAtOrBefore(params.sessionKey, params.clearedAt);
         return true;
       }
+      case RUNTIME_STORE_METHOD.HISTORY_CUTOFF: {
+        // SAFETY: the method name is what the request carries; its params are the ones that method declares.
+        const params = request.params as RuntimeStoreMethods["history.cutoff"]["params"];
+        return opened().clearedAt(params.sessionKey);
+      }
       case RUNTIME_STORE_METHOD.RECOVERY_ERASE:
         return recoveryDirectory === undefined ? true : eraseRecovery(recoveryDirectory);
       case RUNTIME_STORE_METHOD.FACTS_LIST:

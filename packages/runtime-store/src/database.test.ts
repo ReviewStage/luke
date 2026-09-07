@@ -12,7 +12,7 @@ import {
 } from "@sidecar/brain";
 import { CONVERSATION_ENTRY_KIND, maximumStoredConversationEntries } from "@sidecar/realtime";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
-import type { RuntimeDatabase } from "./database.js";
+import { RuntimeDatabase } from "./database.js";
 import { brainStateSave } from "./envelope.js";
 import { HISTORY_RETENTION } from "./history.js";
 import { line, NOW, openTestDatabase, populatedState, request } from "./testing.js";
@@ -322,4 +322,81 @@ test("a generation whose rows this build cannot read is repaired by the store th
   assert.equal(stale.save(freshBrainState("gen-intruder", NOW)), false);
   assert.equal(database.loadBrainState(MAIN_SESSION_KEY).state?.generationId, "gen-repaired-1");
   database.close();
+});
+
+test("the Clear's cutoff outlives the generation that carried its marker, at the exact expiry instant included", () => {
+  const database = openTestDatabase();
+  const cutoff = NOW;
+  const atCutoff = line("AT_CUTOFF", cutoff, { eventId: "at" });
+  database.appendHistory(MAIN_SESSION_KEY, [atCutoff], cutoff);
+  // The Clear's marker lands; the thread's erasure does not (the disk refused it).
+  database.saveBrainState(MAIN_SESSION_KEY, {
+    expectGeneration: undefined,
+    full: { ...freshBrainState("gen-cleared", cutoff), reset: { clearedAt: cutoff } },
+  });
+  assert.deepEqual(database.listHistory(MAIN_SESSION_KEY, cutoff + 1), []);
+  // The marker's generation expires and an unmarked successor replaces it at exactly cutoff + lifetime,
+  // when the retained-age comparison alone would still admit a line stamped at the cutoff.
+  const expiry = cutoff + BRAIN_GENERATION_LIFETIME_MS;
+  database.saveBrainState(MAIN_SESSION_KEY, {
+    expectGeneration: "gen-cleared",
+    full: freshBrainState("gen-after", expiry),
+  });
+  assert.equal(database.loadBrainState(MAIN_SESSION_KEY).state?.reset, undefined);
+  assert.equal(database.clearedAt(MAIN_SESSION_KEY), cutoff);
+  assert.deepEqual(database.listHistory(MAIN_SESSION_KEY, expiry), []);
+  assert.equal(database.appendHistory(MAIN_SESSION_KEY, [atCutoff], expiry).changed, false);
+  // A later Clear only raises the cutoff; an older marker never lowers it.
+  database.clearHistoryAtOrBefore(MAIN_SESSION_KEY, expiry + 5);
+  database.saveBrainState(MAIN_SESSION_KEY, {
+    expectGeneration: "gen-after",
+    full: { ...freshBrainState("gen-late", expiry + 6), reset: { clearedAt: cutoff } },
+  });
+  assert.equal(database.clearedAt(MAIN_SESSION_KEY), expiry + 5);
+});
+
+test("the reproduced boundary: marker written, erase failed, store load at exactly cutoff + lifetime, then a relaunch — the erased line never projects", async () => {
+  const location = path.join(
+    fs.mkdtempSync(path.join(os.tmpdir(), "luke-boundary-")),
+    "agent.sqlite",
+  );
+  const cutoff = NOW;
+  let clock = cutoff;
+  let ids = 0;
+  const first = openTestDatabase(location);
+  first.appendHistory(
+    MAIN_SESSION_KEY,
+    [line("ERASED_SYNTHETIC", cutoff, { eventId: "e" })],
+    cutoff,
+  );
+  const store = new BrainStateStore({
+    repository: repository(first),
+    createGenerationId: () => `gen-${++ids}`,
+    now: () => clock,
+  });
+  await store.load();
+  // The Clear: the marker lands, the erasure is never asked for (the disk refused it).
+  assert.equal(await store.clear(cutoff), true);
+  assert.deepEqual(first.listHistory(MAIN_SESSION_KEY, cutoff + 1), []);
+  // Exactly one lifetime later the marked generation expires through the store itself.
+  clock = cutoff + BRAIN_GENERATION_LIFETIME_MS;
+  assert.equal(store.expireIfDue(clock), true);
+  await store.flush();
+  assert.equal(first.loadBrainState(MAIN_SESSION_KEY).state?.reset, undefined);
+  assert.deepEqual(first.listHistory(MAIN_SESSION_KEY, clock), []);
+  first.close();
+  // The next launch opens the same file: the cutoff is the conversation's, not the dead generation's.
+  const relaunch = RuntimeDatabase.open(location);
+  assert.equal(relaunch.clearedAt(MAIN_SESSION_KEY), cutoff);
+  assert.deepEqual(relaunch.listHistory(MAIN_SESSION_KEY, clock), []);
+  assert.deepEqual(relaunch.listHistory(MAIN_SESSION_KEY, clock + 1), []);
+  assert.equal(
+    relaunch.appendHistory(
+      MAIN_SESSION_KEY,
+      [line("ERASED_SYNTHETIC", cutoff, { eventId: "e2" })],
+      clock,
+    ).changed,
+    false,
+  );
+  relaunch.close();
 });
