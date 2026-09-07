@@ -2794,3 +2794,103 @@ test("a Clear pressed while a starting agent's load is still reading the file le
   assert.deepEqual(h.storage.stored()?.reset, { clearedAt: NOW, generationId: "gen-old" });
   assert.ok(!generationSurface(h, h.client).includes(OLD_SECRET));
 });
+
+test("an ask during a client quiet ends as an honest failure with no effects, and its id stays spent", async () => {
+  const h = harness();
+  await h.agent.ready();
+  h.client.quiet = NOW + 60_000;
+  h.client.answers.push({ outcome: BRAIN_CLIENT_OUTCOME.QUIET, until: NOW + 60_000 });
+  const first = await submit(h, "hello", "sub-quiet");
+  const runId = acceptedRunId(first);
+  await settle();
+  // The run is not held for the quiet to end: it settles as a failed call,
+  // with nothing performed and nothing delivered.
+  const record = h.agent.request(runId);
+  assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.MODEL);
+  assert.equal(record?.text, undefined);
+  assert.equal(record?.performedActs, 0);
+  assert.equal(h.performed.length, 0);
+  assert.deepEqual(h.deliveries, []);
+  assert.equal(h.storage.stored()?.requests[0]?.status, BRAIN_REQUEST_STATUS.FAILED);
+  // The same submission id is idempotent: it answers with the spent run,
+  // never a second one.
+  assert.deepEqual(await submit(h, "hello", "sub-quiet"), first);
+  assert.equal(h.agent.requests().length, 1);
+  // The quiet ending replays nothing: no delayed call opens for the ask.
+  const calls = h.client.inputs.length;
+  h.client.quiet = undefined;
+  await h.clock.advance(NOW + 61_000);
+  assert.equal(h.client.inputs.length, calls);
+  assert.equal(h.agent.request(runId)?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.equal(h.performed.length, 0);
+});
+
+test("a refused result checkpoint under a landed terminal write keeps the confirmed count, and a restart replays nothing", async () => {
+  const storage = new FakeStorage();
+  const h = harness({}, storage);
+  await h.agent.ready();
+  const write = storage.write.bind(storage);
+  let refused = 0;
+  // Only the checkpoints carrying an act's recorded result are refused; the
+  // record-only writes, including the terminal one, still land.
+  storage.write = (contents) => {
+    if (brainStateFromStored(contents)?.journal.some((entry) => entry.outputJson !== undefined)) {
+      refused += 1;
+      return false;
+    }
+    return write(contents);
+  };
+  h.client.answers.push(
+    answered([
+      call("call_b", "send_session_message", {
+        provider_id: ABC.providerId,
+        provider_session_id: ABC.providerSessionId,
+        text: "run the tests",
+      }),
+    ]),
+    answered([message("Sent.")]),
+  );
+  const answer = await ask(h, "tell the checkout agent to run the tests");
+  assert.ok(refused > 0);
+  assert.equal(h.performed.length, 1);
+  // The act's acceptance was observed, so its count stands, and the run ends
+  // as the persistence failure it is rather than as a success.
+  assert.equal(answer?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.equal(answer?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
+  assert.equal(answer?.performedActs, 1);
+  assert.equal(answer?.unknownActs, 0);
+  assert.equal(answer?.text, "Sent.");
+  const stored = storage.stored();
+  assert.equal(stored?.requests[0]?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.equal(stored?.requests[0]?.performedActs, 1);
+  assert.deepEqual(
+    stored?.journal.map((entry) => [entry.callId, entry.outputJson]),
+    [["call_b", undefined]],
+  );
+  assert.deepEqual(
+    stored?.items.map((item) => item.type),
+    ["message", "function_call"],
+  );
+
+  // A restart on the same file keeps the terminal record as written, pairs
+  // the dangling call with an unknown result for the model's memory, and
+  // performs nothing again.
+  storage.write = write;
+  const again = harness({}, storage);
+  await again.agent.ready();
+  const restored = again.agent.request(answer?.runId ?? "");
+  assert.equal(restored?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.equal(restored?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
+  assert.equal(restored?.performedActs, 1);
+  assert.equal(restored?.unknownActs, 0);
+  const file = storage.stored();
+  assert.deepEqual(
+    file?.items.map((item) => item.type),
+    ["message", "function_call", "function_call_output"],
+  );
+  const paired = file?.items.find((item) => item.type === "function_call_output");
+  assert.ok(isWireString(paired?.output) && paired.output.includes('"unknown"'));
+  assert.equal(again.performed.length, 0);
+  assert.equal(again.client.inputs.length, 0);
+});
