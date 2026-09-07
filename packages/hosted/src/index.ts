@@ -1,4 +1,7 @@
 export {
+  BRAIN_TURN_AUTHORITY,
+  type BrainTurnAuthority,
+  brainTurnAuthorityFromWire,
   DEVICE_PLATFORM,
   DEVICE_TOKEN_BOUNDS,
   type DevicePlatform,
@@ -18,6 +21,7 @@ export {
   type HostedActResult,
   type HostedActWorkspaceAnswer,
   type HostedApiError,
+  type HostedBrainRequest,
   type HostedConversationAnswer,
   type HostedConversationMessage,
   type HostedMintAnswer,
@@ -30,6 +34,7 @@ export {
   type HostedWorkspaceProject,
   hostedActAnswerFromWire,
   hostedActWorkspaceAnswerFromWire,
+  hostedBrainRequestFromWire,
   hostedConversationAnswerFromWire,
   hostedErrorFromWire,
   hostedMintAnswerFromWire,
@@ -69,3 +74,17 @@ export {
   type RealtimeCredential,
   realtimeCredentialIsUsable,
 } from "./realtime-contract.js";
+export {
+  admitBrainInput,
+  admitBrainInputItem,
+  brainOutputReplayable,
+  maximumHostedBrainInputItems,
+  maximumHostedBrainRequestBytes,
+  RESPONSES_CALLER_TYPE,
+  RESPONSES_CONTENT_PART_TYPE,
+  RESPONSES_INPUT_ITEM_TYPE,
+  RESPONSES_ITEM_STATUS,
+  RESPONSES_MESSAGE_PHASE,
+  RESPONSES_MESSAGE_ROLE,
+  serializedRequestBytes,
+} from "./responses-input.js";
