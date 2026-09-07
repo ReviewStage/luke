@@ -12,7 +12,6 @@ import {
   MAIN_SESSION_KEY,
 } from "@sidecar/runtime-contracts";
 import { RuntimeStoreClient } from "./client.js";
-import { RuntimeDatabase } from "./database.js";
 import type { RuntimeStorePort } from "./protocol.js";
 import { line, NOW, populatedState } from "./testing.js";
 import { serveRuntimeStore } from "./worker-host.js";
@@ -28,7 +27,7 @@ function inThread() {
   const channel = new MessageChannel();
   // SAFETY: a MessagePort posts and receives structured-clone values on the same events the port contract names.
   const host = channel.port2 as unknown as RuntimeStorePort;
-  serveRuntimeStore(host, { openDatabase: (location) => RuntimeDatabase.open(location) });
+  serveRuntimeStore(host);
   // SAFETY: as above, for the client's end of the same channel.
   const client = new RuntimeStoreClient(channel.port1 as unknown as RuntimeStorePort);
   return {

@@ -28,4 +28,4 @@ export {
   RUNTIME_SCHEMA_STATEMENTS,
   RUNTIME_SCHEMA_VERSION,
 } from "./schema.js";
-export { type RuntimeStoreHostOptions, serveRuntimeStore } from "./worker-host.js";
+export { serveRuntimeStore } from "./worker-host.js";

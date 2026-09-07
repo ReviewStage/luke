@@ -1,6 +1,6 @@
 import path from "node:path";
 import type { UnparsedWireValue } from "@sidecar/wire";
-import { AGENT_DATABASE_FILE, type RuntimeDatabase } from "./database.js";
+import { AGENT_DATABASE_FILE, RuntimeDatabase } from "./database.js";
 import {
   RUNTIME_STORE_METHOD,
   type RuntimeStoreMethod,
@@ -17,79 +17,86 @@ import {
  * to interleave — and never lets an exception cross the channel as anything
  * but an error answer with the request's id, so a caller always hears back.
  */
-export interface RuntimeStoreHostOptions {
-  openDatabase: (location: string) => RuntimeDatabase;
+
+/** What a handler runs against: the database once opened, and the open and close of it. */
+interface RuntimeStoreHost {
+  opened(): RuntimeDatabase;
+  open(location: string): void;
+  close(): void;
 }
 
-export function serveRuntimeStore(port: RuntimeStorePort, options: RuntimeStoreHostOptions): void {
+/**
+ * One handler per method, keyed by the protocol's own table, so a method
+ * added to the protocol without a handler here fails to compile rather than
+ * falling through at runtime.
+ */
+type RuntimeStoreHandlers = {
+  [Method in RuntimeStoreMethod]: (
+    host: RuntimeStoreHost,
+    params: RuntimeStoreMethods[Method]["params"],
+  ) => RuntimeStoreMethods[Method]["result"];
+};
+
+const HANDLERS: RuntimeStoreHandlers = {
+  [RUNTIME_STORE_METHOD.OPEN]: (host, params) => {
+    host.open(path.join(params.agentRoot, AGENT_DATABASE_FILE));
+    host
+      .opened()
+      .ensureConversation(params.agentId, params.sessionKey, params.conversationName, params.now);
+    return true;
+  },
+  [RUNTIME_STORE_METHOD.BRAIN_LOAD]: (host, params) =>
+    host.opened().loadBrainState(params.sessionKey),
+  [RUNTIME_STORE_METHOD.BRAIN_SAVE]: (host, params) =>
+    host.opened().saveBrainState(params.sessionKey, params.save),
+  [RUNTIME_STORE_METHOD.HISTORY_APPEND]: (host, params) =>
+    host.opened().appendHistory(params.sessionKey, params.entries, params.now),
+  [RUNTIME_STORE_METHOD.HISTORY_LIST]: (host, params) =>
+    host.opened().listHistory(params.sessionKey, params.now),
+  [RUNTIME_STORE_METHOD.HISTORY_CLEAR]: (host, params) => {
+    host.opened().clearHistoryAtOrBefore(params.sessionKey, params.clearedAt);
+    return true;
+  },
+  [RUNTIME_STORE_METHOD.HISTORY_CUTOFF]: (host, params) =>
+    host.opened().clearedAt(params.sessionKey),
+  [RUNTIME_STORE_METHOD.FACTS_LIST]: (host) => host.opened().personalFacts(),
+  [RUNTIME_STORE_METHOD.FACTS_REPLACE]: (host, params) =>
+    host.opened().replacePersonalFacts(params.facts),
+  [RUNTIME_STORE_METHOD.CLOSE]: (host) => {
+    host.close();
+    return true;
+  },
+};
+
+function dispatch<Method extends RuntimeStoreMethod>(
+  host: RuntimeStoreHost,
+  request: RuntimeStoreRequest<Method>,
+): RuntimeStoreMethods[Method]["result"] {
+  // SAFETY: the handler table is indexed by the request's own method, so the handler's params
+  // and result are the ones that method declares; TypeScript cannot correlate the two through
+  // a generic index, which is the one place this file narrows by hand.
+  const handler = HANDLERS[request.method] as (
+    host: RuntimeStoreHost,
+    params: RuntimeStoreMethods[Method]["params"],
+  ) => RuntimeStoreMethods[Method]["result"];
+  return handler(host, request.params);
+}
+
+export function serveRuntimeStore(port: RuntimeStorePort): void {
   let database: RuntimeDatabase | undefined;
-
-  const handle = <Method extends RuntimeStoreMethod>(
-    request: RuntimeStoreRequest<Method>,
-  ): RuntimeStoreMethods[Method]["result"] => {
-    const method: RuntimeStoreMethod = request.method;
-    switch (method) {
-      case RUNTIME_STORE_METHOD.OPEN: {
-        // SAFETY: the method name is what the request carries; its params are the ones that method declares.
-        const params = request.params as RuntimeStoreMethods["open"]["params"];
-        database?.close();
-        database = options.openDatabase(path.join(params.agentRoot, AGENT_DATABASE_FILE));
-        database.ensureConversation(
-          params.agentId,
-          params.sessionKey,
-          params.conversationName,
-          params.now,
-        );
-        return true;
-      }
-      case RUNTIME_STORE_METHOD.BRAIN_LOAD: {
-        // SAFETY: the method name is what the request carries; its params are the ones that method declares.
-        const params = request.params as RuntimeStoreMethods["brain.load"]["params"];
-        return opened().loadBrainState(params.sessionKey);
-      }
-      case RUNTIME_STORE_METHOD.BRAIN_SAVE: {
-        // SAFETY: the method name is what the request carries; its params are the ones that method declares.
-        const params = request.params as RuntimeStoreMethods["brain.save"]["params"];
-        return opened().saveBrainState(params.sessionKey, params.save);
-      }
-      case RUNTIME_STORE_METHOD.HISTORY_APPEND: {
-        // SAFETY: the method name is what the request carries; its params are the ones that method declares.
-        const params = request.params as RuntimeStoreMethods["history.append"]["params"];
-        return opened().appendHistory(params.sessionKey, params.entries, params.now);
-      }
-      case RUNTIME_STORE_METHOD.HISTORY_LIST: {
-        // SAFETY: the method name is what the request carries; its params are the ones that method declares.
-        const params = request.params as RuntimeStoreMethods["history.list"]["params"];
-        return opened().listHistory(params.sessionKey, params.now);
-      }
-      case RUNTIME_STORE_METHOD.HISTORY_CLEAR: {
-        // SAFETY: the method name is what the request carries; its params are the ones that method declares.
-        const params = request.params as RuntimeStoreMethods["history.clear"]["params"];
-        opened().clearHistoryAtOrBefore(params.sessionKey, params.clearedAt);
-        return true;
-      }
-      case RUNTIME_STORE_METHOD.HISTORY_CUTOFF: {
-        // SAFETY: the method name is what the request carries; its params are the ones that method declares.
-        const params = request.params as RuntimeStoreMethods["history.cutoff"]["params"];
-        return opened().clearedAt(params.sessionKey);
-      }
-      case RUNTIME_STORE_METHOD.FACTS_LIST:
-        return opened().personalFacts();
-      case RUNTIME_STORE_METHOD.FACTS_REPLACE: {
-        // SAFETY: the method name is what the request carries; its params are the ones that method declares.
-        const params = request.params as RuntimeStoreMethods["facts.replace"]["params"];
-        return opened().replacePersonalFacts(params.facts);
-      }
-      case RUNTIME_STORE_METHOD.CLOSE:
-        database?.close();
-        database = undefined;
-        return true;
-    }
-  };
-
-  const opened = (): RuntimeDatabase => {
-    if (!database) throw new Error("runtime store is not open");
-    return database;
+  const host: RuntimeStoreHost = {
+    opened: () => {
+      if (!database) throw new Error("runtime store is not open");
+      return database;
+    },
+    open: (location) => {
+      database?.close();
+      database = RuntimeDatabase.open(location);
+    },
+    close: () => {
+      database?.close();
+      database = undefined;
+    },
   };
 
   port.on("message", (message) => {
@@ -98,7 +105,7 @@ export function serveRuntimeStore(port: RuntimeStorePort, options: RuntimeStoreH
     let response: RuntimeStoreResponse;
     try {
       // SAFETY: a method's result is the structured-clone value its declared type describes.
-      response = { id: request.id, ok: true, result: handle(request) as UnparsedWireValue };
+      response = { id: request.id, ok: true, result: dispatch(host, request) as UnparsedWireValue };
     } catch (error) {
       response = {
         id: request.id,
