@@ -495,6 +495,23 @@
   color: var(--text-primary);
 }
 
+.mock .header-controls {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.mock .search-button {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--text-secondary);
+}
+
 .mock .options-button {
   display: inline-flex;
   min-height: 28px;
@@ -506,10 +523,58 @@
   color: var(--text-secondary);
 }
 
+.mock .search-glyph,
 .mock .options-glyph {
   width: 14px;
   height: 14px;
   flex: 0 0 auto;
+}
+
+/* The composer at the panel's foot, the renderer's own pill at rest: the
+   placeholder where the field would be and the send disc unlit, since nothing
+   has been typed. It rides the same fan-in as the rows so it arrives with the
+   list rather than after it. */
+.mock .ask-luke-row {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  margin-top: 10px;
+}
+
+.mock .ask-luke {
+  display: flex;
+  min-width: 0;
+  align-items: flex-end;
+  gap: 7px;
+  padding: 4px 4px 4px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 19px;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.mock .ask-luke-input {
+  min-width: 0;
+  flex: 1;
+  padding: 6px 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.mock .ask-luke-send {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text-tertiary);
+  place-items: center;
+}
+
+.mock .ask-luke-send .control-icon {
+  width: 12px;
+  height: 12px;
 }
 
 /* Rows dissolve into the panel rather than being cut off at its edge — the
@@ -550,7 +615,8 @@
    thing that moves. `--row-delay` is what makes it directional: zero on the
    way out, the stagger on the way in. */
 .mock .session-row,
-.mock .panel-header {
+.mock .panel-header,
+.mock .ask-luke-row {
   --row-delay: 0s;
 
   opacity: 0;
@@ -563,7 +629,8 @@
 }
 
 .mock[data-mode="panel"] .session-row,
-.mock[data-mode="panel"] .panel-header {
+.mock[data-mode="panel"] .panel-header,
+.mock[data-mode="panel"] .ask-luke-row {
   --row-delay: calc(
     var(--expand-delay) +
     min(var(--row-index, 0), var(--row-fan-limit)) *

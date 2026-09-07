@@ -28,7 +28,7 @@
   <a href="mailto:founders@stagereview.app">Contact</a>
 </p>
 
-![Luke's panel expanded from the notch on a Mac desktop, listing local and cloud agent sessions with their status and workspace grouping.](docs/media/luke-desktop.jpg)
+![Luke's panel expanded under the notch, listing local and cloud agent sessions with their status and workspace grouping, with the Ask Luke field at its foot.](docs/media/luke-panel.png)
 
 ## Features
 
@@ -48,7 +48,7 @@ and goes with the History when you clear it. Luke also silently keeps a small lo
 useful preferences, personal context, goals, and recurring constraints; ask him
 what he remembers, correct something, or tell him to forget it.
 
-![Luke's capsule under the notch, speaking a summary of which sessions finished and which are waiting.](docs/media/luke-talking.png)
+![Luke's capsule under the notch, captioning a briefing about which sessions finished, which is still packaging, and which are waiting on you.](docs/media/luke-talking.png)
 
 ### Announcements
 

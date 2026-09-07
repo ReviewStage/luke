@@ -108,13 +108,71 @@ const BACKDROP_SWIRL = 0.5;
 const BACKDROP_SPEED = 0.5;
 
 /**
+ * The panel's tabs, in the renderer's own order and words. Sessions is the one
+ * the mock shows; History and Settings are drawn only so the bar is the
+ * product's bar and not a two-tab sketch of it.
+ */
+const MOCK_TABS = ["Sessions", "History", "Settings"] as const;
+
+/** The composer's placeholder, the renderer's own words for the pill at the panel's foot. */
+const ASK_PLACEHOLDER = "Ask Luke…";
+
+/**
+ * The renderer's stroked glyphs for the two header controls beside the tab bar
+ * and the send disc in the composer, traced at the same weight so the mock's
+ * header reads as the product's. Still glyphs on a still illustration: none
+ * is a control here.
+ */
+function StrokedGlyph({
+  className,
+  children,
+}: {
+  className: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {children}
+    </svg>
+  );
+}
+
+function SearchGlyph(): React.JSX.Element {
+  return (
+    <StrokedGlyph className="search-glyph">
+      <circle cx="10.6" cy="10.6" r="6.1" />
+      <path d="M15.2 15.2L20.2 20.2" />
+    </StrokedGlyph>
+  );
+}
+
+function SendGlyph(): React.JSX.Element {
+  return (
+    <StrokedGlyph className="control-icon">
+      <path d="M12 18.6V5.8" />
+      <path d="m6.4 11.2 5.6-5.6 5.6 5.6" />
+    </StrokedGlyph>
+  );
+}
+
+/**
  * `lastActivityLabel` in the renderer, read against the fixture's own epoch so
  * the page's labels match the product's evidence captures exactly.
  */
 const MOCK_LABEL = `Luke's notch capsule expanding into its session panel, listing ${MOCK_SESSIONS.map(
   (session) =>
     `${session.title} on ${session.provider}, ${urgencyLabel(session.urgency).toLowerCase()}`,
-).join("; ")}.`;
+).join("; ")}, with an Ask Luke field at its foot.`;
 
 /**
  * Luke's face at rest, traced from `design/brand/` like the nav's mark but on
@@ -260,18 +318,24 @@ export function NotchMock(): React.JSX.Element {
                 <div
                   className="tab-bar"
                   // SAFETY: React.CSSProperties omits custom properties; --tab-count and --tab-index are declared custom properties.
-                  style={{ "--tab-count": 2, "--tab-index": 0 } as CSSProperties}
+                  style={{ "--tab-count": MOCK_TABS.length, "--tab-index": 0 } as CSSProperties}
                 >
                   <span className="tab-thumb" />
-                  <span className="tab" data-active="true">
-                    Sessions
-                  </span>
-                  <span className="tab" data-active="false">
-                    Settings
-                  </span>
+                  {MOCK_TABS.map((label, index) => (
+                    <span className="tab" data-active={String(index === 0)} key={label}>
+                      {label}
+                    </span>
+                  ))}
                 </div>
-                <span className="options-button">
-                  <OptionsIcon />
+                {/* The two ways of narrowing the list, seated together at the
+                    header's end as the renderer seats them. */}
+                <span className="header-controls">
+                  <span className="search-button">
+                    <SearchGlyph />
+                  </span>
+                  <span className="options-button">
+                    <OptionsIcon />
+                  </span>
                 </span>
               </div>
               <div className="session-list">
@@ -296,6 +360,21 @@ export function NotchMock(): React.JSX.Element {
                     />
                   </article>
                 ))}
+              </div>
+              {/* The composer at the panel's foot, addressed to Luke rather than
+                  to any session: the pill, its placeholder, and the send disc
+                  as the renderer draws them before anything is typed. */}
+              <div
+                className="ask-luke-row"
+                // SAFETY: React.CSSProperties omits the declared --row-index custom property.
+                style={{ "--row-index": MOCK_SESSIONS.length + 1 } as CSSProperties}
+              >
+                <span className="ask-luke">
+                  <span className="ask-luke-input">{ASK_PLACEHOLDER}</span>
+                  <span className="ask-luke-send">
+                    <SendGlyph />
+                  </span>
+                </span>
               </div>
             </div>
           </section>
