@@ -1236,32 +1236,6 @@ export class RealtimeVoiceSession {
   }
 
   /**
-   * Sends a typed ask and requests the reply to it, reporting whether it
-   * could. Typing is the developer opening a turn, exactly as holding the talk
-   * key is, so the turn is armed for tools on the same terms as a push-to-talk
-   * commit: a write out of it is the developer's own request, made in their
-   * own words.
-   *
-   * An ask arriving over a reply interrupts it — the developer's turn always
-   * wins, however it is taken. The one thing it will not interrupt is the
-   * developer's own open microphone: half a spoken question is still theirs,
-   * and a keystroke is no reason to discard it.
-   */
-  sendText(text: string): boolean {
-    // A typed ask runs only on the developer's own call: Luke's speak-only
-    // call exists to say one thing and is not a conversation. A typed ask
-    // needs no capture device, so one this call put away stays put away.
-    if (!this.isConnected || !this.#withMicrophone) return false;
-    if (this.#status === REALTIME_STATUS.LISTENING) return false;
-    const ask = text.trim().slice(0, maximumTypedAskLength);
-    if (!ask) return false;
-    if (this.#status === REALTIME_STATUS.RESPONDING) this.#interruptReply();
-    this.#startResponse([]);
-    this.#sdkTransport?.sendMessage(ask);
-    return true;
-  }
-
-  /**
    * Speaks the brain's reply to a typed ask, reporting whether it could. The
    * ask itself went to the brain over the bridge — the voice never saw it —
    * so what the call is handed is the finished reply, on the briefing's own
