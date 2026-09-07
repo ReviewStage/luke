@@ -220,6 +220,28 @@ export interface AppBootstrap {
   settings: AppSettings;
 }
 
+/**
+ * What the hidden voice window bootstraps with: only the fields it reads. It
+ * stands on no display, draws no panel, and records nothing, so the panel's
+ * display, account, Superset, project, issue, calendar, and recording fields
+ * are neither read nor waited for — a voice window held on a Superset CLI
+ * probe or an account read would report itself ready that much later for
+ * nothing. Every field here is the same value the panel bootstrap carries,
+ * read from the same source at the same moment.
+ */
+export type VoiceBootstrap = Pick<
+  AppBootstrap,
+  | "agentTraceEnabled"
+  | "microphoneStatus"
+  | "voiceEpoch"
+  | "voiceHotkey"
+  | "outputAudio"
+  | "sessionRoster"
+  | "announcementsHeld"
+  | "conversationHistory"
+  | "settings"
+>;
+
 /** The complete session state one observation revision publishes to a desktop surface. */
 export interface SessionRosterPayload {
   sessions: readonly Session[];

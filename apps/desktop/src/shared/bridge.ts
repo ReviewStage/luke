@@ -93,6 +93,7 @@ import {
   type SessionOpenResult,
   type SessionReplayBootstrap,
   type SessionRosterPayload,
+  type VoiceBootstrap,
   WINDOW_ROLE,
   type WindowRole,
 } from "./wire/session";
@@ -244,6 +245,12 @@ export const BRIDGE = {
     channel: "app:bootstrap",
     args: noArgs,
     result: result<AppBootstrap>(),
+  }),
+  getVoiceBootstrap: entry({
+    kind: "invoke",
+    channel: "app:voice-bootstrap",
+    args: noArgs,
+    result: result<VoiceBootstrap>(),
   }),
   beginSignIn: entry({
     kind: "invoke",

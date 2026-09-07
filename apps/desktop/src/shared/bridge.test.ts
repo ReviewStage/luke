@@ -48,6 +48,13 @@ test("a conversation history report carries only well-formed history lines", () 
   assert.equal(guard([[{ ...ask, recordedAt: Number.POSITIVE_INFINITY }]]), false);
 });
 
+test("the voice bootstraps through its own invoke, taking no arguments", () => {
+  assert.equal(BRIDGE.getVoiceBootstrap.kind, "invoke");
+  assert.notEqual(BRIDGE.getVoiceBootstrap.channel, BRIDGE.getBootstrap.channel);
+  assert.equal(BRIDGE.getVoiceBootstrap.args([]), true);
+  assert.equal(BRIDGE.getVoiceBootstrap.args(["voice"]), false);
+});
+
 test("a brain ask is one submission with an id, bounded words, and an origin", () => {
   assert.equal(BRIDGE.submitBrainAsk.kind, "invoke");
   const guard = BRIDGE.submitBrainAsk.args;

@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import {
   CONVERSATION_ENTRY_KIND,
   REALTIME_STATUS,
   REALTIME_VOICE,
   REALTIME_VOICE_SPEED,
 } from "@sidecar/realtime";
+import { normalizeSession, SESSION_STATUS } from "@sidecar/session";
+import { APP_SETTING_DEFAULTS } from "@sidecar/settings";
+import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "#shared/wire/account";
+import type { VoiceBootstrap } from "#shared/wire/session";
+import { type AppSettings, appSettingsView, CLI_CONNECTION } from "#shared/wire/settings";
 import { REPLY_KIND } from "./realtime-session";
 import {
   activeVoiceStream,
@@ -21,8 +27,10 @@ import {
   typedAskHolds,
   VOICE_RESTART,
   voiceRestartAction,
+  voiceSurroundingsFromBootstrap,
   waitForConversationContext,
 } from "./use-voice-session";
+import { VOICE_READINESS_PART, VoiceReadiness } from "./voice-readiness";
 
 test("a delayed transcription cannot repopulate history after Clear", () => {
   assert.equal(spokenAskBelongsToConversation(3, 4), false);
@@ -283,4 +291,109 @@ test("a connecting call counts as one to reopen: its credential may already be t
     }),
     { due: true, action: VOICE_RESTART.WAIT },
   );
+});
+
+const BOOTSTRAP_SETTINGS: AppSettings = {
+  stored: { ...APP_SETTING_DEFAULTS, voiceCaptions: true },
+  status: {
+    credentialSources: {
+      [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.NONE,
+      [CREDENTIAL_PROVIDER_ID.LINEAR]: CREDENTIAL_SOURCE.NONE,
+      [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
+    },
+    codexCloudConnection: CLI_CONNECTION.UNKNOWN,
+    secretStorage: SECRET_STORAGE.UNKNOWN,
+    voiceAvailable: false,
+    calendarSignInAvailable: false,
+    linearSignInAvailable: false,
+    calendarAccounts: [],
+    appleCalendarAvailable: false,
+  },
+};
+
+const VOICE_BOOTSTRAP: VoiceBootstrap = {
+  agentTraceEnabled: false,
+  microphoneStatus: "granted",
+  voiceEpoch: 3,
+  voiceHotkey: "Alt+Space",
+  outputAudio: { muted: false, volume: 0.5 },
+  sessionRoster: { sessions: [] },
+  announcementsHeld: true,
+  conversationHistory: [],
+  settings: BOOTSTRAP_SETTINGS,
+};
+
+const NOTHING_PUSHED = {
+  settings: undefined,
+  sessions: [],
+  outputAudio: undefined,
+  announcementsHeld: false,
+};
+
+test("the voice bootstrap fills only what no push has said yet", () => {
+  // Nothing pushed: the snapshot is the whole answer, and the first turn may open.
+  const fresh = voiceSurroundingsFromBootstrap(NOTHING_PUSHED, VOICE_BOOTSTRAP, false);
+  assert.equal(fresh.settings?.voiceCaptions, true);
+  assert.deepEqual(fresh.sessions, []);
+  assert.deepEqual(fresh.outputAudio, { muted: false, volume: 0.5 });
+  assert.equal(fresh.announcementsHeld, true);
+  assert.equal(fresh.bootstrapVoiceHotkey, "Alt+Space");
+  assert.equal(fresh.conversationContextReady, true);
+
+  // Every push that raced past the bootstrap is newer than it and is kept:
+  // a settings change, a roster, an output edge, and a hold released to
+  // `false`, which is a real value and not a gap for the snapshot to fill.
+  const pushedSettings = appSettingsView({
+    ...BOOTSTRAP_SETTINGS,
+    stored: { ...BOOTSTRAP_SETTINGS.stored, voiceCaptions: false },
+  });
+  const pushedSession = normalizeSession(
+    { id: "claude-code", displayName: "Claude Code" },
+    {
+      providerSessionId: "s-1",
+      title: "checkout",
+      status: SESSION_STATUS.WORKING,
+      lastActivityAt: 1_800_000_000_000,
+    },
+  );
+  const raced = voiceSurroundingsFromBootstrap(
+    {
+      settings: pushedSettings,
+      sessions: [pushedSession],
+      outputAudio: { muted: true, volume: 0 },
+      announcementsHeld: false,
+    },
+    VOICE_BOOTSTRAP,
+    true,
+  );
+  assert.equal(raced.settings, pushedSettings);
+  assert.deepEqual(raced.sessions, [pushedSession]);
+  assert.deepEqual(raced.outputAudio, { muted: true, volume: 0 });
+  assert.equal(raced.announcementsHeld, false);
+  // The gate and the key's name come from the bootstrap alone; no push carries them.
+  assert.equal(raced.agentTraceEnabled, false);
+  assert.equal(raced.bootstrapVoiceHotkey, "Alt+Space");
+  assert.equal(raced.conversationContextReady, true);
+});
+
+test("the readiness report names the voice bootstrap's epoch however the pushes and subscriptions raced it", () => {
+  const reported: number[] = [];
+  const readiness = new VoiceReadiness((epoch) => reported.push(epoch));
+  // Every subscription stood before the narrow bootstrap answered, as when the
+  // main process's pushes all beat it: nothing is reported until the epoch lands.
+  for (const part of Object.values(VOICE_READINESS_PART)) readiness.installed(part);
+  assert.deepEqual(reported, []);
+  readiness.bootstrapped(VOICE_BOOTSTRAP.voiceEpoch);
+  assert.deepEqual(reported, [3]);
+
+  // The other order — bootstrap first, subscriptions after — reports once too,
+  // under the same epoch, and a later epoch cannot re-report a settled window.
+  const late: number[] = [];
+  const lateReadiness = new VoiceReadiness((epoch) => late.push(epoch));
+  lateReadiness.bootstrapped(VOICE_BOOTSTRAP.voiceEpoch);
+  assert.deepEqual(late, []);
+  for (const part of Object.values(VOICE_READINESS_PART)) lateReadiness.installed(part);
+  assert.deepEqual(late, [3]);
+  lateReadiness.bootstrapped(4);
+  assert.deepEqual(late, [3]);
 });

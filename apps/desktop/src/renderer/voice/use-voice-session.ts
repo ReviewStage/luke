@@ -33,7 +33,7 @@ import {
   brainReplyWords,
   brainRequestPending,
 } from "#shared/wire/brain";
-import type { AppBootstrap } from "#shared/wire/session";
+import type { VoiceBootstrap } from "#shared/wire/session";
 import { type AppSettingsView, appSettingsView } from "#shared/wire/settings";
 import {
   VOICE_COMMAND,
@@ -330,6 +330,31 @@ const INITIAL_SURROUNDINGS: VoiceSurroundings = {
   announcementsHeld: false,
   conversationContextReady: false,
 };
+
+/**
+ * What the bootstrap may fill in once it lands. A push is newer than any
+ * bootstrap still in flight, so a value a push has already set is kept and
+ * only the gaps are taken from the snapshot: merged the other way, a false
+ * push would be overwritten back to held, or a roster push back to empty.
+ * The hold needs its own flag because `false` is a real pushed value.
+ */
+export function voiceSurroundingsFromBootstrap(
+  current: Pick<VoiceSurroundings, "settings" | "sessions" | "outputAudio" | "announcementsHeld">,
+  bootstrap: VoiceBootstrap,
+  announcementsHeldPushed: boolean,
+): Partial<VoiceSurroundings> {
+  return {
+    settings: current.settings ?? appSettingsView(bootstrap.settings),
+    agentTraceEnabled: bootstrap.agentTraceEnabled,
+    sessions: current.sessions.length > 0 ? current.sessions : bootstrap.sessionRoster.sessions,
+    bootstrapVoiceHotkey: bootstrap.voiceHotkey,
+    outputAudio: current.outputAudio ?? bootstrap.outputAudio,
+    announcementsHeld: announcementsHeldPushed
+      ? current.announcementsHeld
+      : bootstrap.announcementsHeld,
+    conversationContextReady: true,
+  };
+}
 
 /**
  * Where one spoken turn belongs in the thread, and what it has since become:
@@ -1214,30 +1239,19 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     voiceSession.current?.stopListening(false);
   }, []);
 
-  // The bootstrap, read once: the settings that shape a call, the thread the
-  // last launch left, and the facts pushes will keep current from here on.
-  // The voice window stands on no display and never announces itself ready;
-  // the panel-only fields are simply not read.
+  // The voice's own bootstrap, read once: the settings that shape a call,
+  // the thread the last launch left, and the facts pushes will keep current
+  // from here on. It is the voice's narrow bootstrap rather than the panel's,
+  // so the readiness report is not held behind reads the voice never uses.
   useEffect(() => {
     let cancelled = false;
-    void window.sidecar.getBootstrap().then((value: AppBootstrap) => {
+    void window.sidecar.getVoiceBootstrap().then((value: VoiceBootstrap) => {
       if (cancelled) return;
       seedConversationHistory(value.conversationHistory);
       setMicrophoneStatus(value.microphoneStatus);
-      const current = surroundingsNow();
-      // Only fill in what no push has said yet: the bootstrap snapshot is
-      // older than any change that raced past it.
-      amend({
-        settings: current.settings ?? appSettingsView(value.settings),
-        agentTraceEnabled: value.agentTraceEnabled,
-        sessions: current.sessions.length > 0 ? current.sessions : value.sessionRoster.sessions,
-        bootstrapVoiceHotkey: value.voiceHotkey,
-        outputAudio: current.outputAudio ?? value.outputAudio,
-        announcementsHeld: announcementsHeldPushed.current
-          ? current.announcementsHeld
-          : value.announcementsHeld,
-        conversationContextReady: true,
-      });
+      amend(
+        voiceSurroundingsFromBootstrap(surroundingsNow(), value, announcementsHeldPushed.current),
+      );
       // Applied, so the readiness report may name the epoch this load was given.
       voiceEpochRef.current = value.voiceEpoch;
       readiness.current?.bootstrapped(value.voiceEpoch);
