@@ -14,6 +14,7 @@ export {
   type ConversationEntryKind,
   conversationEntryKey,
   conversationHistoryText,
+  enrichedConversationEntry,
   hasConversationEntryForRequest,
   insertSpokenAskEntry,
   insertSpokenAskThreadEntry,

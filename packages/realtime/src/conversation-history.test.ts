@@ -17,6 +17,7 @@ import {
   type ConversationEntry,
   conversationEntryKey,
   conversationHistoryText,
+  enrichedConversationEntry,
   hasConversationEntryForRequest,
   insertSpokenAskEntry,
   insertSpokenAskThreadEntry,
@@ -602,9 +603,14 @@ test("a line tied to a run is recorded once per kind, and its run survives stora
   // The run rides through storage and tells two otherwise equal lines apart.
   const stored = thread.map((entry) => storedConversationEntry(JSON.parse(JSON.stringify(entry))));
   assert.deepEqual(stored, thread);
+  // The run is not part of a line's identity — the same line, later tied to
+  // its run, is still that line — so the better-informed copy is chosen.
   const [, firstReply, secondReply] = thread;
   assert.ok(firstReply && secondReply);
-  assert.notEqual(conversationEntryKey(firstReply), conversationEntryKey(secondReply));
+  assert.equal(conversationEntryKey(firstReply), conversationEntryKey(secondReply));
+  const untied = { ...firstReply, requestId: undefined };
+  assert.equal(enrichedConversationEntry(untied, firstReply), firstReply);
+  assert.equal(enrichedConversationEntry(firstReply, untied), firstReply);
   assert.equal(
     storedConversationEntry({ kind: "reply", words: "x", recordedAt: now, requestId: "" }),
     undefined,

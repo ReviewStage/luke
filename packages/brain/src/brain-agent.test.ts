@@ -1698,3 +1698,220 @@ test("a run's history mark is kept once and survives a relaunch", async () => {
   await relaunched.agent.ready();
   assert.equal(relaunched.agent.request(record.runId)?.historyRecordedAt, NOW + 5);
 });
+
+test("work queued behind a held act opens nothing once the generation it was queued in is reset", async () => {
+  const held = heldPerformer();
+  const h = harness({ acts: held.acts });
+  h.client.answers.push(answered([messageAct("call_1")]));
+  await submit(h, "send");
+  await settle();
+  // Every observation kind queues behind the held act: a hold release with an
+  // old briefing, a roster look, a coalesced wake, and a quiet retry's wakes.
+  h.agent.releaseHeld([{ briefing: "OLD_SECRET_QUEUED_BRIEFING", decidedAt: NOW, source: "wake" }]);
+  h.agent.wake([edge(DEF)]);
+  h.agent.rosterLook();
+  await h.clock.advance(NOW + 3_000);
+  assert.equal(await h.store.reset(), true);
+  assert.equal(h.agent.pendingWakes(), 0);
+  held.releases[0]?.();
+  await settle();
+  await h.clock.advance(NOW + 10_000);
+  // The only inference was the held ask's own, in the old generation.
+  assert.equal(h.client.inputs.length, 1);
+  const surface = generationSurface(h, h.client);
+  assert.ok(!surface.includes("OLD_SECRET_QUEUED_BRIEFING"));
+  assert.deepEqual(h.store.current()?.cursors, {});
+  assert.deepEqual(h.deliveries, []);
+  // The new generation still takes fresh work.
+  h.client.answers.push(answered([message("fresh")]));
+  assert.equal((await ask(h, "NEW_ASK"))?.text, "fresh");
+});
+
+test("a briefing is not delivered after a stop or reset that lands during the turn's final write or an earlier delivery", async () => {
+  let releaseWrite: (() => void) | undefined;
+  const h = harness();
+  await h.agent.ready();
+  const storage = h.storage;
+  const write = storage.write.bind(storage);
+  h.client.answers.push(
+    answered([
+      call("a1", BRAIN_TOOL.ANNOUNCE, { briefing: "OLD_STALE_ANNOUNCEMENT" }),
+      call("a2", BRAIN_TOOL.ANNOUNCE, { briefing: "SECOND_STALE_ANNOUNCEMENT" }),
+    ]),
+    answered([message("")]),
+  );
+  storage.write = (contents) =>
+    // SAFETY: the store accepts a promise of the write's outcome; this test holds it open.
+    new Promise<boolean>((resolve) => {
+      releaseWrite = () => resolve(write(contents));
+    }) as unknown as boolean;
+  h.agent.wake([edge(ABC)]);
+  await h.clock.advance(NOW + 3_000);
+  assert.ok(releaseWrite, "the turn is in its final write");
+  const stopping = h.agent.stop();
+  storage.write = write;
+  releaseWrite();
+  await stopping;
+  await settle();
+  assert.deepEqual(h.deliveries, []);
+
+  // A reset between two deliveries withdraws the second.
+  const later = harness({
+    deliver: async (delivery) => {
+      later.deliveries.push(delivery);
+      await later.store.reset();
+    },
+  });
+  later.client.answers.push(
+    answered([
+      call("b1", BRAIN_TOOL.ANNOUNCE, { briefing: "first" }),
+      call("b2", BRAIN_TOOL.ANNOUNCE, { briefing: "second" }),
+    ]),
+    answered([message("")]),
+  );
+  later.agent.wake([edge(ABC)]);
+  await later.clock.advance(NOW + 3_000);
+  assert.deepEqual(
+    later.deliveries.map((delivery) => delivery.briefing),
+    ["first"],
+  );
+});
+
+test("stop settles only after a held acceptance, which the successor then finds interrupted and cannot be written over", async () => {
+  let releaseWrite: (() => void) | undefined;
+  const h = harness();
+  await h.agent.ready();
+  const storage = h.storage;
+  const write = storage.write.bind(storage);
+  storage.write = (contents) =>
+    // SAFETY: the store accepts a promise of the write's outcome; this test holds it open.
+    new Promise<boolean>((resolve) => {
+      releaseWrite = () => resolve(write(contents));
+    }) as unknown as boolean;
+  const pending = submit(h, "send", "sub-1");
+  await settle();
+  let stopped = false;
+  const stopping = h.agent.stop().then(() => {
+    stopped = true;
+  });
+  await settle();
+  assert.equal(stopped, false, "stop waits for the acceptance to settle");
+  storage.write = write;
+  releaseWrite?.();
+  await stopping;
+  assert.equal((await pending).outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
+  assert.equal(h.agent.requests()[0]?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
+  assert.equal(h.client.inputs.length, 0);
+
+  // The successor takes the store's lease: the old agent's late checkpoint
+  // — here, a mark — lands nowhere, while the successor's own writes do.
+  const successor = new BrainAgent({
+    client: new FakeClient(),
+    acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
+    roster: () => ({ text: "", identities: [] }),
+    standingContext: () => "",
+    readTranscriptSince: async () => ({ status: ACT_RESULT_STATUS.REJECTED, reason: "no" }),
+    readTranscript: async () => ({ status: ACT_RESULT_STATUS.REJECTED, reason: "no" }),
+    deliver: () => undefined,
+    store: h.store,
+    createRunId: () => `successor-${runIds++}`,
+    report: () => {},
+    now: () => h.clock.now,
+    schedule: h.clock.schedule,
+    cancel: h.clock.cancel,
+  });
+  await successor.ready();
+  const runId = h.agent.requests()[0]?.runId ?? "";
+  assert.equal(await h.agent.markHistoryRecorded(runId, NOW + 1), false);
+  assert.equal(h.storage.stored()?.requests[0]?.historyRecordedAt, undefined);
+  assert.equal(await successor.markHistoryRecorded(runId, NOW + 1), true);
+  assert.equal(h.storage.stored()?.requests[0]?.historyRecordedAt, NOW + 1);
+  await successor.stop();
+});
+
+test("a copy taken before the second model answer already carries the acts the journal established", async () => {
+  // One accepted act, then a held model call.
+  const inner = new FakeClient();
+  inner.answers.push(answered([messageAct("call_1", "one")]));
+  let release: ((answer: BrainClientAnswer) => void) | undefined;
+  let calls = 0;
+  const client: BrainClient = {
+    respond: (input, options) => {
+      calls += 1;
+      if (calls === 1) return inner.respond(input, options);
+      return new Promise((resolve) => {
+        release = resolve;
+      });
+    },
+    quietUntil: () => undefined,
+  };
+  const h = harness({ client });
+  await submit(h, "send");
+  await settle();
+  assert.ok(release, "the second model call is held");
+  const copy = h.storage.file;
+  const stored = brainStateFromStored(copy);
+  assert.equal(stored?.requests[0]?.status, BRAIN_REQUEST_STATUS.RUNNING);
+  assert.equal(stored?.requests[0]?.performedActs, 1);
+  const relaunched = harness({}, new FakeStorage(copy));
+  await relaunched.agent.ready();
+  const record = relaunched.agent.requests()[0];
+  assert.equal(record?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
+  assert.equal(record?.performedActs, 1);
+  assert.equal(record?.unknownActs, 0);
+  // A second relaunch of the recovered file says the same.
+  const again = harness({}, new FakeStorage(relaunched.storage.file));
+  await again.agent.ready();
+  assert.equal(again.agent.requests()[0]?.performedActs, 1);
+
+  // One explicitly unknown act, one confirmed refusal, one started-unanswered
+  // act, then the crash: each counted once from the journal.
+  const held = heldPerformer();
+  let dispatched = 0;
+  const mixed = harness({
+    acts: {
+      perform: (functionCall, execution) => {
+        dispatched += 1;
+        if (dispatched === 1) return Promise.reject(new Error("socket closed after send"));
+        if (dispatched === 2) {
+          return Promise.resolve({ status: ACT_RESULT_STATUS.REJECTED, reason: "not observed" });
+        }
+        return held.acts.perform(functionCall, execution);
+      },
+    },
+  });
+  mixed.client.answers.push(
+    answered([messageAct("m1", "one"), messageAct("m2", "two"), messageAct("m3", "three")]),
+  );
+  await submit(mixed, "send three");
+  await settle();
+  const midway = brainStateFromStored(mixed.storage.file);
+  assert.equal(midway?.requests[0]?.unknownActs, 1);
+  assert.equal(midway?.journal.length, 3);
+  const recovered = harness({}, new FakeStorage(mixed.storage.file));
+  await recovered.agent.ready();
+  const mixedRecord = recovered.agent.requests()[0];
+  assert.equal(mixedRecord?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
+  assert.equal(mixedRecord?.performedActs, 0);
+  assert.equal(mixedRecord?.unknownActs, 2);
+});
+
+test("a history mark the store refused is not held either, and the next attempt writes it", async () => {
+  const h = harness();
+  h.client.answers.push(answered([message("Hi.")]));
+  const record = await ask(h, "hello");
+  assert.ok(record);
+  h.storage.failWrites = true;
+  assert.equal(await h.agent.markHistoryRecorded(record.runId, NOW + 5), false);
+  assert.equal(h.agent.request(record.runId)?.historyRecordedAt, undefined);
+  h.storage.failWrites = false;
+  assert.equal(await h.agent.markHistoryRecorded(record.runId, NOW + 6), true);
+  assert.equal(h.agent.request(record.runId)?.historyRecordedAt, NOW + 6);
+  assert.equal(h.storage.stored()?.requests[0]?.historyRecordedAt, NOW + 6);
+  // The same terms for the ask's own mark.
+  h.storage.failWrites = true;
+  assert.equal(await h.agent.markAskRecorded(record.runId, NOW), false);
+  assert.equal(h.agent.request(record.runId)?.askRecordedAt, undefined);
+  h.storage.failWrites = false;
+  assert.equal(await h.agent.markAskRecorded(record.runId, NOW), true);
+});

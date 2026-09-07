@@ -16,6 +16,8 @@ export {
   type BrainTurnTraceRecord,
   type BrainTurnTrigger,
   OMISSION_MARKER,
+  type Settled,
+  settledUnlessAborted,
 } from "./brain-agent.js";
 export {
   BRAIN_CLIENT_OUTCOME,

@@ -153,7 +153,17 @@ export function appendConversationThreadEntry(
   const appended: ConversationEntry = { kind: entry.kind, words, recordedAt };
   if (entry.identity) appended.identity = entry.identity;
   if (entry.requestId !== undefined) appended.requestId = entry.requestId;
-  return retainedConversationEntries([...entries, appended], now);
+  // A line stamped earlier than the tail goes where it happened: after the
+  // last line that happened no later than it.
+  let at = entries.length;
+  while (at > 0) {
+    const before = entries[at - 1]?.recordedAt;
+    if (before === undefined || before <= recordedAt) break;
+    at -= 1;
+  }
+  const placed = [...entries];
+  placed.splice(at, 0, appended);
+  return retainedConversationEntries(placed, now);
 }
 
 /**
@@ -194,15 +204,32 @@ function sameConversationEntry(a: ConversationEntry, b: ConversationEntry): bool
   return conversationEntryKey(a) === conversationEntryKey(b);
 }
 
-/** Stable value identity shared by renderer adoption and main-process merging. */
+/**
+ * Stable value identity shared by renderer adoption and main-process merging.
+ * The run a line was later tied to is not part of it: a spoken ask's
+ * transcript and the same transcript once its run is known are one line, so
+ * the correlation enriches the line rather than standing beside it.
+ */
 export function conversationEntryKey(entry: ConversationEntry): string {
   return JSON.stringify([
     entry.kind,
     entry.words,
     entry.recordedAt,
     entry.identity ? [entry.identity.providerId, entry.identity.providerSessionId] : undefined,
-    entry.requestId,
   ]);
+}
+
+/**
+ * The better-informed of two copies of one line: the one that knows its run.
+ * Nothing else about a line changes after it is recorded, so a copy without
+ * the run is the older one, and a stale window snapshot cannot take the
+ * correlation back off.
+ */
+export function enrichedConversationEntry(
+  held: ConversationEntry,
+  incoming: ConversationEntry,
+): ConversationEntry {
+  return held.requestId === undefined && incoming.requestId !== undefined ? incoming : held;
 }
 
 /** The recent slice safe to place back into the model's context window. */

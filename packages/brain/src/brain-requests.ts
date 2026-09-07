@@ -115,6 +115,8 @@ export interface BrainRequestRecord {
    * happened, so none is retried and the developer is told as much.
    */
   unknownActs: number;
+  /** When the host recorded the ask itself in the thread, for an origin whose words the host records. */
+  askRecordedAt?: number;
   /** When the host recorded the run's end in the thread, so it is recorded exactly once. */
   historyRecordedAt?: number;
 }
@@ -137,6 +139,7 @@ export function brainRequestRecordFromWire(
   if (value.historyRecordedAt !== undefined && !finiteNumber(value.historyRecordedAt)) {
     return undefined;
   }
+  if (value.askRecordedAt !== undefined && !finiteNumber(value.askRecordedAt)) return undefined;
   if (value.startedAt !== undefined && !finiteNumber(value.startedAt)) return undefined;
   if (value.settledAt !== undefined && !finiteNumber(value.settledAt)) return undefined;
   if (value.text !== undefined && !isWireString(value.text)) return undefined;
@@ -153,6 +156,7 @@ export function brainRequestRecordFromWire(
     unknownActs: value.unknownActs,
   };
   if (value.historyRecordedAt !== undefined) record.historyRecordedAt = value.historyRecordedAt;
+  if (value.askRecordedAt !== undefined) record.askRecordedAt = value.askRecordedAt;
   if (value.startedAt !== undefined) record.startedAt = value.startedAt;
   if (value.settledAt !== undefined) record.settledAt = value.settledAt;
   if (value.text !== undefined) record.text = value.text;

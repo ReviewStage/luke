@@ -116,14 +116,15 @@ test("the store loads once, serializes writes, and fences a write against a repl
     now: () => NOW,
   });
   assert.equal(store.current(), undefined);
+  const lease = store.lease();
   const loaded = await store.load();
   assert.equal(loaded.generationId, "gen-1");
   assert.equal(storage.file, undefined);
   await store.load();
   assert.deepEqual(storage.log, ["read"]);
 
-  const first = store.write("gen-1", (state) => ({ ...state, cursors: { p: { s: "1" } } }));
-  const second = store.write("gen-1", (state) => ({
+  const first = store.write(lease, "gen-1", (state) => ({ ...state, cursors: { p: { s: "1" } } }));
+  const second = store.write(lease, "gen-1", (state) => ({
     ...state,
     cursors: { ...state.cursors, q: { t: "2" } },
   }));
@@ -138,18 +139,23 @@ test("the store loads once, serializes writes, and fences a write against a repl
   assert.equal(store.generationId(), "gen-2");
   assert.equal(replaced[0]?.generationId, "gen-2");
   // A writer still holding the old generation lands nowhere.
-  assert.equal(await store.write("gen-1", (state) => state), false);
+  assert.equal(await store.write(lease, "gen-1", (state) => state), false);
   assert.equal(storage.log.filter((entry) => entry === "write").length, 2);
-  assert.equal(await store.write("gen-2", (state) => state), true);
+  assert.equal(await store.write(lease, "gen-2", (state) => state), true);
 
   // Storage refusing leaves the held copy as it was.
   storage.refuse = true;
   assert.equal(
-    await store.write("gen-2", (state) => ({ ...state, cursors: { z: { z: "z" } } })),
+    await store.write(lease, "gen-2", (state) => ({ ...state, cursors: { z: { z: "z" } } })),
     false,
   );
   assert.deepEqual(store.current()?.cursors, {});
   storage.refuse = false;
+
+  // A later holder taking the lease fences the earlier one, generation or not.
+  const successor = store.lease();
+  assert.equal(await store.write(lease, "gen-2", (state) => state), false);
+  assert.equal(await store.write(successor, "gen-2", (state) => state), true);
 
   const whole = { ...complete(), generationId: "gen-9" };
   assert.equal(await store.replace(whole), true);

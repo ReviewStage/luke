@@ -1,13 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import { REALTIME_STATUS } from "@sidecar/realtime";
-import { BRAIN_ASK_REFUSAL, type BrainRequestSnapshot } from "#shared/wire/brain";
+import { BRAIN_ASK_REFUSAL } from "#shared/wire/brain";
 import { IDLE_VOICE_VIEW } from "#shared/wire/voice-view";
 import {
   ASK_UNSENT_REASON,
   askDraftReason,
-  reconciledBrainRequests,
   voiceActiveFor,
   voiceErrorToShow,
   voiceNoticeToShow,
@@ -93,32 +91,6 @@ test("a refused or unanswered typed ask keeps its draft; an accepted one clears 
     ASK_UNSENT_REASON,
     "an ask nobody answered is the developer's words to retry, not to lose",
   );
-});
-
-test("records are reconciled by run, the higher revision winning whichever arrived last", () => {
-  const record = (runId: string, revision: number, acceptedAt: number): BrainRequestSnapshot => ({
-    runId,
-    submissionId: `sub-${runId}`,
-    origin: BRAIN_REQUEST_ORIGIN.TYPED,
-    question: "?",
-    status: revision > 1 ? BRAIN_REQUEST_STATUS.SUCCEEDED : BRAIN_REQUEST_STATUS.RUNNING,
-    revision,
-    acceptedAt,
-    performedActs: 0,
-    unknownActs: 0,
-  });
-  // The push landed first with the newer revision; the bootstrap's older read
-  // must not roll it back, while a run only the bootstrap knew is kept.
-  const pushed = reconciledBrainRequests([], [record("b", 3, 2)]);
-  const merged = reconciledBrainRequests(pushed, [record("a", 1, 1), record("b", 2, 2)]);
-  assert.deepEqual(
-    merged.map((snapshot) => [snapshot.runId, snapshot.revision]),
-    [
-      ["a", 1],
-      ["b", 3],
-    ],
-  );
-  assert.equal(reconciledBrainRequests(merged, [record("a", 2, 1)])[0]?.revision, 2);
 });
 
 test("a quiet level lets the hangover run out from the last loud one, never past it", () => {

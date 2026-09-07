@@ -137,11 +137,22 @@ export interface BrainStateStoreOptions {
  * write reached storage, because the caller decides what a failed checkpoint
  * means for the act it guards.
  */
+/**
+ * Who may write through the store right now. Each agent built on the store
+ * takes the lease at construction; taking it releases every earlier holder, so
+ * a replaced agent's late checkpoint — drained or not — lands nowhere once its
+ * successor holds the store, even inside the same generation.
+ */
+export interface BrainStoreLease {
+  readonly holder: symbol;
+}
+
 export class BrainStateStore {
   readonly #storage: BrainStateStorage;
   readonly #createGenerationId: () => string;
   readonly #now: () => number;
   #state: BrainPersistedState | undefined;
+  #lease: BrainStoreLease | undefined;
   #queue: Promise<unknown> = Promise.resolve();
   readonly #replacedListeners = new Set<(state: BrainPersistedState) => void>();
 
@@ -171,6 +182,16 @@ export class BrainStateStore {
     });
   }
 
+  /** Takes the write lease, releasing whoever held it. */
+  lease(): BrainStoreLease {
+    this.#lease = { holder: Symbol("brain store lease") };
+    return this.#lease;
+  }
+
+  holdsLease(lease: BrainStoreLease): boolean {
+    return this.#lease === lease;
+  }
+
   /** The envelope as last loaded or written, or nothing before the first load. */
   current(): BrainPersistedState | undefined {
     return this.#state;
@@ -181,13 +202,15 @@ export class BrainStateStore {
   }
 
   /**
-   * Writes a new envelope of the generation named. Answers false without
-   * touching storage when that generation is no longer the store's — the
-   * fence a reset or replacement raises against late writers — and false
+   * Writes a new envelope of the generation named, under the lease given.
+   * Answers false without touching storage when that generation is no longer
+   * the store's, or the lease has passed to a later agent — the fences a
+   * reset, a replacement, and a rebuild raise against late writers — and false
    * when storage refused, leaving the held copy as it was so the caller's
    * own memory and the file cannot silently disagree about what is known.
    */
   write(
+    lease: BrainStoreLease,
     generationId: string,
     mutate: (
       state: BrainPersistedState,
@@ -195,7 +218,7 @@ export class BrainStateStore {
   ): Promise<boolean> {
     return this.#serialized(async () => {
       const held = this.#state;
-      if (!held || held.generationId !== generationId) return false;
+      if (!this.holdsLease(lease) || !held || held.generationId !== generationId) return false;
       const next: BrainPersistedState = {
         ...mutate(held),
         version: BRAIN_STATE_VERSION,

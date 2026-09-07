@@ -36,24 +36,6 @@ export function askDraftReason(result: BrainAskSubmissionResult | undefined): st
     : BRAIN_ASK_REFUSAL[result.reason];
 }
 
-/**
- * Takes one report of the brain's records into the list a panel draws. The
- * push and the bootstrap read race, so records are reconciled by run: the
- * higher revision of a run wins whichever arrived last, and a run one side
- * never mentioned is kept from the other.
- */
-export function reconciledBrainRequests(
-  current: readonly BrainRequestSnapshot[],
-  incoming: readonly BrainRequestSnapshot[],
-): readonly BrainRequestSnapshot[] {
-  const byRun = new Map(current.map((snapshot) => [snapshot.runId, snapshot]));
-  for (const snapshot of incoming) {
-    const held = byRun.get(snapshot.runId);
-    if (!held || held.revision <= snapshot.revision) byRun.set(snapshot.runId, snapshot);
-  }
-  return [...byRun.values()].sort((left, right) => left.acceptedAt - right.acceptedAt);
-}
-
 /** What the strip says when the stored thread could not be deleted. */
 export const CLEAR_FAILED_REASON = "Could not clear history. Try again.";
 
@@ -253,17 +235,20 @@ export function useVoiceView(): VoiceViewState {
   );
   // Subscribed before the snapshots are read, and reconciled by run, so a
   // change landing between the two is never overwritten by the older read.
+  // Every push is the whole list the standing brain holds — a run absent
+  // from it is one no current brain can find, so its row must go — and the
+  // bootstrap read applies only where no push has spoken yet.
   const [brainRequests, setBrainRequests] = useState<readonly BrainRequestSnapshot[]>([]);
+  const acceptRequestsBootstrap = useBootstrapRacedChannel(
+    (onChange) => window.sidecar.onBrainRequestsChanged(onChange),
+    setBrainRequests,
+  );
   useEffect(() => {
-    const unsubscribe = window.sidecar.onBrainRequestsChanged((records) =>
-      setBrainRequests((current) => reconciledBrainRequests(current, records)),
-    );
     void window.sidecar
       .brainRequestSnapshots()
-      .then((records) => setBrainRequests((current) => reconciledBrainRequests(current, records)))
+      .then((records) => acceptRequestsBootstrap(records))
       .catch(() => undefined);
-    return unsubscribe;
-  }, []);
+  }, [acceptRequestsBootstrap]);
   const cancelBrainAsk = useCallback((runId: string) => {
     void window.sidecar.cancelBrainAsk(runId).catch(() => undefined);
   }, []);

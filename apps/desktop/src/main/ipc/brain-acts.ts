@@ -17,6 +17,7 @@ import {
   BRAIN_TURN_AUTHORITY,
   type BrainActExecution,
   type BrainActPerformer,
+  settledUnlessAborted,
 } from "@sidecar/brain";
 import type { AppGuideSnapshot } from "@sidecar/guide";
 import type { TrackedIssue } from "@sidecar/issues";
@@ -98,11 +99,15 @@ export function createBrainActPerformer(
     call: RealtimeFunctionCall,
     execution: BrainActExecution,
   ): Promise<WireRecord> => {
-    await dependencies.refreshSessions();
-    if (execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
+    // The reads before the effect wait only as long as the standing does: a
+    // cancel landing mid-refresh settles the act here, and the refresh's late
+    // answer dispatches nothing.
+    const refreshed = await settledUnlessAborted(dependencies.refreshSessions(), execution.signal);
+    if (refreshed.aborted || execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
     const sessions = dependencies.sessions();
-    const defaults = await dependencies.workspaceDefaults();
-    if (execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
+    const read = await settledUnlessAborted(dependencies.workspaceDefaults(), execution.signal);
+    if (read.aborted || execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
+    const defaults = read.value;
     const action = sessionToolAction(
       call,
       sessions,

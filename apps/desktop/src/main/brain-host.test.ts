@@ -39,7 +39,7 @@ test("retiring withdraws the agent at once and begins its stop before any await"
     assert.equal(brains.current(), a.agent);
     brains.retire();
     assert.equal(brains.current(), undefined);
-    assert.deepEqual(log, ["follow agent", "unfollow", "stop a"]);
+    assert.deepEqual(log, ["follow agent", "stop a"]);
   });
 });
 
@@ -95,4 +95,37 @@ test("a build decided after a newer transition is stopped rather than installed,
   assert.ok(log.includes("stop a"));
   assert.ok(!log.includes("follow agent"));
   assert.equal(log.filter((entry) => entry === "publish empty").length, 1);
+});
+
+test("a retirement while an earlier replacement waits on a stop leaves that build uninstalled", async () => {
+  const log: string[] = [];
+  const brains = host(log);
+  const a = fakeAgent("a", log);
+  const b = fakeAgent("b", log);
+  await brains.replace(() => a.agent);
+  const replacing = brains.replace(() => {
+    log.push("build b");
+    return b.agent;
+  });
+  // The source goes away before A has finished stopping: nothing may install.
+  brains.retire();
+  a.release();
+  await replacing;
+  assert.equal(brains.current(), undefined);
+  assert.ok(!log.includes("build b"));
+  // A later transition with no capability publishes the empty list once.
+  await brains.replace(() => undefined);
+  assert.equal(log.filter((entry) => entry === "publish empty").length, 1);
+});
+
+test("the follower outlives the stop it relays, and retires once the stop settles", async () => {
+  const log: string[] = [];
+  const brains = host(log);
+  const a = fakeAgent("a", log);
+  await brains.replace(() => a.agent);
+  brains.retire();
+  assert.deepEqual(log, ["follow agent", "stop a"]);
+  a.release();
+  await brains.replace(() => undefined);
+  assert.deepEqual(log, ["follow agent", "stop a", "unfollow", "publish empty"]);
 });

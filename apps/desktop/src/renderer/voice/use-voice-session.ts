@@ -670,9 +670,15 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
    * pending, with its cancel, beside the words actually said.
    */
   const tieSpokenTurnToRun = useCallback(
-    (runId: string) => {
-      const mark = latestSpokenTurnMarkRef.current;
-      if (!mark) return;
+    (mark: SpokenTurnMark | undefined, runId: string) => {
+      // A turn from before a Clear has no line left to tie, and must not
+      // hand its run to whatever the thread now holds in its place.
+      if (
+        !mark ||
+        !spokenAskBelongsToConversation(mark.generation, conversationGenerationRef.current)
+      ) {
+        return;
+      }
       mark.runId = runId;
       if (!mark.entry) return;
       const tied = withConversationEntryRequest(conversationRef.current, mark.entry, runId);
@@ -717,6 +723,10 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       // here are not recorded again.
       askBrain: async (question, submissionId): Promise<BrainAskResult> => {
         brainReplyRunRef.current = undefined;
+        // The turn this ask belongs to is the one committed when the ask was
+        // made, read before the acceptance is awaited: a turn committed while
+        // the brain is deciding is somebody else's words.
+        const spokenTurn = latestSpokenTurnMarkRef.current;
         const submitted = await window.sidecar.submitBrainAsk({
           submissionId,
           question,
@@ -728,7 +738,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
             reason: BRAIN_ASK_REFUSAL[submitted.reason],
           };
         }
-        tieSpokenTurnToRun(submitted.runId);
+        tieSpokenTurnToRun(spokenTurn, submitted.runId);
         const record = await window.sidecar.waitBrainAsk(submitted.runId);
         if (!record) {
           return { status: ACT_RESULT_STATUS.REJECTED, reason: BRAIN_ASK_REFUSAL.absent };

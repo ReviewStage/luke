@@ -35,17 +35,34 @@ export class BrainHost {
   }
 
   /**
-   * Withdraws the standing agent now: nothing may ask it anything more, its
-   * follower stops relaying, and its `stop` — which revokes every run and
-   * observation turn synchronously before it awaits — is begun at once. The
-   * stop's settling is awaited by the next build, never by the caller.
+   * Withdraws the standing agent now: nothing may ask it anything more, and
+   * its `stop` — which revokes every run and observation turn synchronously
+   * before it awaits — is begun at once. Its follower relays the stop's own
+   * interruptions and retires when the stop settles. The stop's settling is
+   * awaited by the next build, never by the caller.
    */
   retire(): void {
+    // Retiring is itself a transition: a build already queued for an earlier
+    // one must not install after this withdrawal, or a source that has gone
+    // away would gain an agent.
+    this.#transitions += 1;
     const previous = this.#agent;
+    const unfollow = this.#unfollow;
     this.#agent = undefined;
-    this.#unfollow?.();
     this.#unfollow = undefined;
-    if (previous) this.#retiring.push(previous.stop().catch(() => undefined));
+    if (!previous) {
+      unfollow?.();
+      return;
+    }
+    // The follower stays through the stop, so the runs the stop interrupts
+    // still reach the windows and the thread; it retires once nothing more
+    // can be reported.
+    this.#retiring.push(
+      previous
+        .stop()
+        .catch(() => undefined)
+        .finally(() => unfollow?.()),
+    );
   }
 
   /**

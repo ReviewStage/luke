@@ -64,9 +64,45 @@ export const UNCONFIRMED_ACT_RESULT = {
   reason: "the act was dispatched but did not answer; it may have happened, so do not repeat it",
 } as const;
 
-/** How many of a run's journaled acts have no recorded result. */
-export function unknownActCount(entries: readonly BrainJournalEntry[], runId: string): number {
-  return entries.filter((entry) => entry.runId === runId && entry.outputJson === undefined).length;
+/** What a run's journal can vouch for: acts that went through, and acts whose outcome is not known. */
+export interface JournalActCounts {
+  performedActs: number;
+  unknownActs: number;
+}
+
+/**
+ * Reads a run's accounting from its journal alone: an entry whose result was
+ * accepted went through; one whose result says unknown, or that has no result
+ * at all, may have. Counting from the journal rather than from a running
+ * tally means a launch that finds the run mid-flight reports exactly what
+ * the acts before the crash established, no more and no less.
+ */
+export function journalActCounts(
+  entries: readonly BrainJournalEntry[],
+  runId: string,
+): JournalActCounts {
+  const counts: JournalActCounts = { performedActs: 0, unknownActs: 0 };
+  for (const entry of entries) {
+    if (entry.runId !== runId) continue;
+    if (entry.outputJson === undefined) {
+      counts.unknownActs += 1;
+      continue;
+    }
+    const status = outputStatus(entry.outputJson);
+    if (status === "accepted") counts.performedActs += 1;
+    else if (status === UNKNOWN_ACT_STATUS) counts.unknownActs += 1;
+  }
+  return counts;
+}
+
+function outputStatus(outputJson: string): string | undefined {
+  try {
+    // SAFETY: JSON.parse returns a wire value; the record and string guards are the validation.
+    const parsed = JSON.parse(outputJson) as UnparsedWireValue;
+    return isRecord(parsed) && isWireString(parsed.status) ? parsed.status : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
