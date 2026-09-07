@@ -48,7 +48,7 @@ and goes with the History when you clear it. Luke also silently keeps a small lo
 useful preferences, personal context, goals, and recurring constraints; ask him
 what he remembers, correct something, or tell him to forget it.
 
-![Luke's capsule under the notch, speaking a summary of which sessions finished and which are waiting.](docs/media/luke-talking.png)
+![Luke's capsule under the notch, captioning a briefing about which sessions finished, which is still packaging, and which are waiting on you.](docs/media/luke-talking.png)
 
 ### Announcements
 

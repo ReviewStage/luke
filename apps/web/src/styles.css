@@ -453,7 +453,8 @@
   .mock .wing-mark,
   .mock .tab-thumb,
   .mock .session-row,
-  .mock .panel-header {
+  .mock .panel-header,
+  .mock .ask-luke-row {
     transition-duration: 1ms;
     transition-delay: 0ms;
   }
