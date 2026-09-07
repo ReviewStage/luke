@@ -5,6 +5,7 @@ import type {
   BrainTranscriptCursors,
   ResponsesInputItem,
 } from "@sidecar/brain";
+import type { EnvelopeRead } from "./brain-envelope.js";
 
 /**
  * How one envelope becomes the next in the database without rewriting every
@@ -33,27 +34,33 @@ export interface BrainJournalDelta {
 }
 
 export interface BrainStateDelta {
-  generationId: string;
   items?: BrainItemsDelta;
   cursors?: BrainTranscriptCursors;
   requests?: BrainRequestsDelta;
   journal?: BrainJournalDelta;
 }
 
+export const SAVE_KIND = {
+  /** A whole envelope replacing whatever generation stands, named as the one it expects to replace. */
+  REPLACE: "replace",
+  /** The difference from the last envelope saved, applied to the generation it names. */
+  AMEND: "amend",
+} as const;
+
+export type SaveKind = (typeof SAVE_KIND)[keyof typeof SAVE_KIND];
+
 /**
- * What one save carries: the whole envelope, or the difference from the last
- * one saved, and in both cases the generation the writer believes stands in
- * the database — or none. The database applies a save only while exactly
- * that generation stands there, so a writer whose picture is stale — a
- * second handle, a checkpoint prepared against a generation the store has
- * since replaced — is refused, and never turns "the database moved on" into
- * a replacement of the newer generation. Replacing a generation on purpose
- * is a whole envelope that names the generation it replaces.
+ * What one save carries, and the one generation id the database checks it
+ * against. A replacement names the generation the writer believes stands —
+ * or none — and lands only while exactly that one stands; an amendment
+ * names the generation it changes, and lands only while that one stands. So
+ * a writer whose picture is stale — a second handle, a checkpoint prepared
+ * against a generation the store has since replaced — is refused, and never
+ * turns "the database moved on" into a replacement of the newer generation.
  */
-export type BrainStateSave = { expectGeneration: string | undefined } & (
-  | { full: BrainPersistedState }
-  | { delta: BrainStateDelta }
-);
+export type BrainStateSave =
+  | { kind: typeof SAVE_KIND.REPLACE; expectGeneration?: string; state: BrainPersistedState }
+  | { kind: typeof SAVE_KIND.AMEND; generationId: string; delta: BrainStateDelta };
 
 function sameJson<Value>(left: Value, right: Value): boolean {
   return left === right || JSON.stringify(left) === JSON.stringify(right);
@@ -117,24 +124,27 @@ function journalDelta(
 }
 
 /**
- * The save that turns `previous` into `next`: a delta while both are the same
- * generation, the whole envelope otherwise. A generation's birth, expiry, and
- * marker never change within it, so a delta carries none of them. The
- * generation the save expects to find is `observedGeneration` — what the
- * writer last saw standing in the database, decoded or not — so a generation
- * whose rows this build could not read is still named exactly, and the
- * repair that replaces it lands while a stale writer's save does not.
+ * The save that turns `previous` into `next`: an amendment while both are
+ * the same generation, the whole envelope otherwise. A generation's birth,
+ * expiry, and marker never change within it, so an amendment carries none of
+ * them. The generation a replacement expects to find is `observedGeneration`
+ * — what the writer last saw standing in the database, decoded or not — so a
+ * generation whose rows this build could not read is still named exactly,
+ * and the repair that replaces it lands while a stale writer's save does not.
  */
 export function brainStateSave(
   previous: BrainPersistedState | undefined,
   observedGeneration: string | undefined,
   next: BrainPersistedState,
 ): BrainStateSave {
-  const expectGeneration = observedGeneration;
   if (!previous || previous.generationId !== next.generationId) {
-    return { expectGeneration, full: next };
+    return {
+      kind: SAVE_KIND.REPLACE,
+      ...(observedGeneration !== undefined ? { expectGeneration: observedGeneration } : undefined),
+      state: next,
+    };
   }
-  const delta: BrainStateDelta = { generationId: next.generationId };
+  const delta: BrainStateDelta = {};
   const items = itemsDelta(previous.items, next.items);
   if (items) delta.items = items;
   if (!sameJson(previous.cursors, next.cursors)) delta.cursors = next.cursors;
@@ -142,5 +152,32 @@ export function brainStateSave(
   if (requests) delta.requests = requests;
   const journal = journalDelta(previous.journal, next.journal);
   if (journal) delta.journal = journal;
-  return { expectGeneration, delta };
+  return { kind: SAVE_KIND.AMEND, generationId: next.generationId, delta };
+}
+
+/**
+ * One writer's picture of the database, and the compare-and-set each of its
+ * saves carries. The picture is what it last observed standing — loaded,
+ * readable or not, or saved — so after every save that landed the tables
+ * hold exactly the envelope given, and a save from a picture the database
+ * has moved past is refused and leaves the picture as it was, refused the
+ * same way until the writer observes again.
+ */
+export class EnvelopeTracker {
+  #saved: BrainPersistedState | undefined;
+  #observed: string | undefined;
+
+  observe(read: EnvelopeRead): void {
+    this.#saved = read.state;
+    this.#observed = read.generation;
+  }
+
+  saveFor(next: BrainPersistedState): BrainStateSave {
+    return brainStateSave(this.#saved, this.#observed, next);
+  }
+
+  landed(next: BrainPersistedState): void {
+    this.#saved = next;
+    this.#observed = next.generationId;
+  }
 }

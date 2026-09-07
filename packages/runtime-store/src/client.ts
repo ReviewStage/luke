@@ -3,7 +3,7 @@ import type { BrainPersistedState, BrainStateLoad, BrainStateRepository } from "
 import type { ConversationEntry } from "@sidecar/realtime";
 import type { HistoryAppendOutcome, SessionKey } from "@sidecar/runtime-contracts";
 import type { UnparsedWireValue } from "@sidecar/wire";
-import { brainStateSave } from "./envelope.js";
+import { EnvelopeTracker } from "./envelope.js";
 import {
   RUNTIME_STORE_METHOD,
   type RuntimeStoreMethod,
@@ -89,22 +89,17 @@ export class RuntimeStoreClient {
    * its next save is refused the same way until it loads again.
    */
   brainStateRepository(sessionKey: SessionKey): BrainStateRepository {
-    let saved: BrainPersistedState | undefined;
-    let observed: string | undefined;
+    const tracker = new EnvelopeTracker();
     return {
       load: async (): Promise<BrainStateLoad> => {
         const loaded = await this.request(RUNTIME_STORE_METHOD.BRAIN_LOAD, { sessionKey });
-        saved = loaded.state;
-        observed = loaded.generation;
+        tracker.observe(loaded);
         return loaded.state ? { state: loaded.state } : { unreadable: loaded.unreadable === true };
       },
       save: async (state: BrainPersistedState): Promise<boolean> => {
-        const save = brainStateSave(saved, observed, state);
+        const save = tracker.saveFor(state);
         const landed = await this.request(RUNTIME_STORE_METHOD.BRAIN_SAVE, { sessionKey, save });
-        if (landed) {
-          saved = state;
-          observed = state.generationId;
-        }
+        if (landed) tracker.landed(state);
         return landed;
       },
     };

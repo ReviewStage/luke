@@ -8,7 +8,7 @@ import {
 import type { SessionKey } from "@sidecar/runtime-contracts";
 import { isWireNumber, isWireString, type WireRecord, type WireValue } from "@sidecar/wire";
 import { column, nullable, type RuntimeDatabase } from "./database.js";
-import type { BrainStateSave } from "./envelope.js";
+import { type BrainStateSave, SAVE_KIND } from "./envelope.js";
 import { CHECKPOINT_FORMAT } from "./schema.js";
 
 /**
@@ -135,12 +135,12 @@ export function loadBrainEnvelope(database: RuntimeDatabase, sessionKey: Session
 }
 
 /**
- * Makes the envelope given the one that stands, if the generation the
- * writer expected is the one standing. A whole envelope then replaces that
- * generation, its rows cascading away with it; a delta then changes the
- * generation it names, which is the same one. A writer expecting some other
- * generation — or none, when one stands — is stale, and is refused without
- * anything of what it carried touching the tables.
+ * Makes the envelope given the one that stands, if the save's generation is
+ * the one standing. A replacement replaces the generation it expected, its
+ * rows cascading away with it; an amendment changes the generation it names.
+ * A writer naming some other generation — or none, when one stands — is
+ * stale, and is refused without anything of what it carried touching the
+ * tables.
  */
 export function saveBrainEnvelope(
   database: RuntimeDatabase,
@@ -149,14 +149,14 @@ export function saveBrainEnvelope(
 ): boolean {
   return database.transaction(() => {
     const standing = standingGeneration(database, sessionKey);
-    if (standing?.sessionId !== save.expectGeneration) return false;
-    if ("full" in save) {
-      replaceGeneration(database, sessionKey, save.full);
+    if (save.kind === SAVE_KIND.REPLACE) {
+      if (standing?.sessionId !== save.expectGeneration) return false;
+      replaceGeneration(database, sessionKey, save.state);
       return true;
     }
-    if (!standing || standing.sessionId !== save.delta.generationId) return false;
+    if (standing?.sessionId !== save.generationId) return false;
     const { delta } = save;
-    const sessionId = delta.generationId;
+    const sessionId = save.generationId;
     if (delta.items) {
       database
         .prepare("DELETE FROM runtime_checkpoints WHERE session_id = ? AND sequence >= ?")

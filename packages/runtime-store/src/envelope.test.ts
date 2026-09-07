@@ -1,24 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { BRAIN_REQUEST_STATUS, freshBrainState } from "@sidecar/brain";
-import { brainStateSave } from "./envelope.js";
+import { brainStateSave, SAVE_KIND } from "./envelope.js";
 import { NOW, populatedState, receipt, request } from "./testing.js";
 
 test("a first save and a new generation are whole envelopes naming what they replace", () => {
   const first = populatedState("gen-1");
   assert.deepEqual(brainStateSave(undefined, undefined, first), {
-    expectGeneration: undefined,
-    full: first,
+    kind: SAVE_KIND.REPLACE,
+    state: first,
   });
   const second = freshBrainState("gen-2", NOW + 1);
   assert.deepEqual(brainStateSave(first, "gen-1", second), {
+    kind: SAVE_KIND.REPLACE,
     expectGeneration: "gen-1",
-    full: second,
+    state: second,
   });
   // An unreadable generation is still named as what the repair replaces.
   assert.deepEqual(brainStateSave(undefined, "gen-broken", second), {
+    kind: SAVE_KIND.REPLACE,
     expectGeneration: "gen-broken",
-    full: second,
+    state: second,
   });
 });
 
@@ -35,8 +37,9 @@ test("within a generation a save carries only what changed, keyed the way the ta
     journal: [receipt("run-2", "call-2", { outputJson: "{}", settledAt: NOW + 8 })],
   };
   const save = brainStateSave(before, "gen-1", after);
-  assert.ok("delta" in save);
-  assert.equal(save.expectGeneration, "gen-1");
+  assert.equal(save.kind, SAVE_KIND.AMEND);
+  assert.ok(save.kind === SAVE_KIND.AMEND);
+  assert.equal(save.generationId, "gen-1");
   assert.deepEqual(save.delta.items, { keepPrefix: 3, append: [after.items[3]] });
   assert.deepEqual(save.delta.cursors, after.cursors);
   assert.deepEqual(save.delta.requests, {
@@ -54,9 +57,9 @@ test("a rollback that shortens the items replaces from the divergence point, and
   const before = populatedState("gen-1");
   const shorter = { ...before, items: before.items.slice(0, 1) };
   const save = brainStateSave(before, "gen-1", shorter);
-  assert.ok("delta" in save);
+  assert.ok(save.kind === SAVE_KIND.AMEND);
   assert.deepEqual(save.delta.items, { keepPrefix: 1, append: [] });
   const same = brainStateSave(before, "gen-1", { ...before, items: [...before.items] });
-  assert.ok("delta" in same);
-  assert.deepEqual(same.delta, { generationId: "gen-1" });
+  assert.ok(same.kind === SAVE_KIND.AMEND);
+  assert.deepEqual(same.delta, {});
 });

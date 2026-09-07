@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
   BRAIN_REQUEST_STATUS,
+  type BrainPersistedState,
   BrainStateStore,
   freshBrainState,
 } from "@sidecar/brain";
@@ -14,7 +15,7 @@ import { CONVERSATION_ENTRY_KIND, maximumStoredConversationEntries } from "@side
 import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import { loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
 import { RuntimeDatabase } from "./database.js";
-import { brainStateSave } from "./envelope.js";
+import { EnvelopeTracker, SAVE_KIND } from "./envelope.js";
 import { personalFacts, replacePersonalFacts } from "./facts-table.js";
 import { HISTORY_RETENTION } from "./history.js";
 import {
@@ -27,26 +28,17 @@ import { inspectHistory, line, NOW, openTestDatabase, populatedState, request } 
 
 /** A repository over the database in-thread, tracking the last envelope it saw land as the client does. */
 function repository(database: RuntimeDatabase) {
-  const first = loadBrainEnvelope(database, MAIN_SESSION_KEY);
-  let saved = first.state;
-  let observed = first.generation;
+  const tracker = new EnvelopeTracker();
+  tracker.observe(loadBrainEnvelope(database, MAIN_SESSION_KEY));
   return {
     load: () => {
       const loaded = loadBrainEnvelope(database, MAIN_SESSION_KEY);
-      saved = loaded.state;
-      observed = loaded.generation;
+      tracker.observe(loaded);
       return loaded;
     },
-    save: (state: Parameters<typeof brainStateSave>[2]) => {
-      const landed = saveBrainEnvelope(
-        database,
-        MAIN_SESSION_KEY,
-        brainStateSave(saved, observed, state),
-      );
-      if (landed) {
-        saved = state;
-        observed = state.generationId;
-      }
+    save: (state: BrainPersistedState) => {
+      const landed = saveBrainEnvelope(database, MAIN_SESSION_KEY, tracker.saveFor(state));
+      if (landed) tracker.landed(state);
       return landed;
     },
   };
@@ -57,7 +49,7 @@ test("the envelope round-trips through the tables, requests and receipts in thei
   assert.deepEqual(loadBrainEnvelope(database, MAIN_SESSION_KEY), {});
   const state = populatedState("gen-1");
   assert.equal(
-    saveBrainEnvelope(database, MAIN_SESSION_KEY, { expectGeneration: undefined, full: state }),
+    saveBrainEnvelope(database, MAIN_SESSION_KEY, { kind: SAVE_KIND.REPLACE, state: state }),
     true,
   );
   assert.deepEqual(loadBrainEnvelope(database, MAIN_SESSION_KEY), {
@@ -66,7 +58,11 @@ test("the envelope round-trips through the tables, requests and receipts in thei
   });
   const marked = { ...state, reset: { clearedAt: NOW - 5, generationId: "gen-0" } };
   assert.equal(
-    saveBrainEnvelope(database, MAIN_SESSION_KEY, { expectGeneration: "gen-1", full: marked }),
+    saveBrainEnvelope(database, MAIN_SESSION_KEY, {
+      kind: SAVE_KIND.REPLACE,
+      expectGeneration: "gen-1",
+      state: marked,
+    }),
     true,
   );
   assert.deepEqual(loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.reset, marked.reset);
@@ -118,7 +114,7 @@ test("a stale handle cannot save over a newer generation, whole or by delta, and
   // A handle that believes nothing stands is refused too when something does.
   const third = repository(openTestDatabase());
   assert.equal(
-    saveBrainEnvelope(database, MAIN_SESSION_KEY, { expectGeneration: undefined, full: gen1 }),
+    saveBrainEnvelope(database, MAIN_SESSION_KEY, { kind: SAVE_KIND.REPLACE, state: gen1 }),
     false,
   );
   assert.equal(third.save(gen1), true);
@@ -238,14 +234,15 @@ test("retention keeps the 200 most recent lines and nothing older than a fortnig
 test("a brain generation's expiry erases no visible history; only the Clear reaches both", () => {
   const database = openTestDatabase();
   const gen1 = populatedState("gen-1");
-  saveBrainEnvelope(database, MAIN_SESSION_KEY, { expectGeneration: undefined, full: gen1 });
+  saveBrainEnvelope(database, MAIN_SESSION_KEY, { kind: SAVE_KIND.REPLACE, state: gen1 });
   const said = line("said under gen-1", NOW, { eventId: "h1" });
   appendHistory(database, MAIN_SESSION_KEY, [said], NOW);
   // The generation runs out and an empty successor replaces it: its rows cascade away...
   const later = NOW + BRAIN_GENERATION_LIFETIME_MS;
   saveBrainEnvelope(database, MAIN_SESSION_KEY, {
+    kind: SAVE_KIND.REPLACE,
     expectGeneration: "gen-1",
-    full: freshBrainState("gen-2", later),
+    state: freshBrainState("gen-2", later),
   });
   assert.deepEqual(loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.requests, []);
   // ...while the thread keeps its lines under its own retention, still attributed to gen-1.
@@ -254,8 +251,9 @@ test("a brain generation's expiry erases no visible history; only the Clear reac
   // The Clear writes the marker into the successor and erases the lines at or before it.
   const clearedAt = NOW + 2;
   saveBrainEnvelope(database, MAIN_SESSION_KEY, {
+    kind: SAVE_KIND.REPLACE,
     expectGeneration: "gen-2",
-    full: { ...freshBrainState("gen-3", clearedAt), reset: { clearedAt, generationId: "gen-2" } },
+    state: { ...freshBrainState("gen-3", clearedAt), reset: { clearedAt, generationId: "gen-2" } },
   });
   clearHistoryAtOrBefore(database, MAIN_SESSION_KEY, clearedAt);
   assert.deepEqual(listHistory(database, MAIN_SESSION_KEY, NOW + 3), []);
@@ -300,8 +298,8 @@ test("a generation whose rows this build cannot read is repaired by the store th
   );
   const database = openTestDatabase(location);
   saveBrainEnvelope(database, MAIN_SESSION_KEY, {
-    expectGeneration: undefined,
-    full: populatedState("gen-old"),
+    kind: SAVE_KIND.REPLACE,
+    state: populatedState("gen-old"),
   });
   const stale = repository(database);
   // One checkpoint item is corrupted on disk, beneath everything.
@@ -349,16 +347,17 @@ test("the Clear's cutoff outlives the generation that carried its marker, at the
   appendHistory(database, MAIN_SESSION_KEY, [atCutoff], cutoff);
   // The Clear's marker lands; the thread's erasure does not (the disk refused it).
   saveBrainEnvelope(database, MAIN_SESSION_KEY, {
-    expectGeneration: undefined,
-    full: { ...freshBrainState("gen-cleared", cutoff), reset: { clearedAt: cutoff } },
+    kind: SAVE_KIND.REPLACE,
+    state: { ...freshBrainState("gen-cleared", cutoff), reset: { clearedAt: cutoff } },
   });
   assert.deepEqual(listHistory(database, MAIN_SESSION_KEY, cutoff + 1), []);
   // The marker's generation expires and an unmarked successor replaces it at exactly cutoff + lifetime,
   // when the retained-age comparison alone would still admit a line stamped at the cutoff.
   const expiry = cutoff + BRAIN_GENERATION_LIFETIME_MS;
   saveBrainEnvelope(database, MAIN_SESSION_KEY, {
+    kind: SAVE_KIND.REPLACE,
     expectGeneration: "gen-cleared",
-    full: freshBrainState("gen-after", expiry),
+    state: freshBrainState("gen-after", expiry),
   });
   assert.equal(loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.reset, undefined);
   assert.equal(historyClearedAt(database, MAIN_SESSION_KEY), cutoff);
@@ -367,8 +366,9 @@ test("the Clear's cutoff outlives the generation that carried its marker, at the
   // A later Clear only raises the cutoff; an older marker never lowers it.
   clearHistoryAtOrBefore(database, MAIN_SESSION_KEY, expiry + 5);
   saveBrainEnvelope(database, MAIN_SESSION_KEY, {
+    kind: SAVE_KIND.REPLACE,
     expectGeneration: "gen-after",
-    full: { ...freshBrainState("gen-late", expiry + 6), reset: { clearedAt: cutoff } },
+    state: { ...freshBrainState("gen-late", expiry + 6), reset: { clearedAt: cutoff } },
   });
   assert.equal(historyClearedAt(database, MAIN_SESSION_KEY), expiry + 5);
 });

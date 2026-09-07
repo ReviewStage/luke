@@ -12,6 +12,9 @@ export {
   type BrainStateDelta,
   type BrainStateSave,
   brainStateSave,
+  EnvelopeTracker,
+  SAVE_KIND,
+  type SaveKind,
 } from "./envelope.js";
 export { personalFacts, replacePersonalFacts } from "./facts-table.js";
 export {
