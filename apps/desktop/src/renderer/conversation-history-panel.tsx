@@ -7,7 +7,12 @@ import {
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { type BrainRequestSnapshot, brainRequestPending } from "#shared/wire/brain";
 import { type AskHandler, AskLuke } from "./ask-luke";
-import { isSidewaysStep, revealAfterStep, TIME_REVEAL_SETTLE_MS } from "./history-time-reveal";
+import {
+  isSidewaysStep,
+  panningBlockBetween,
+  revealAfterStep,
+  TIME_REVEAL_SETTLE_MS,
+} from "./history-time-reveal";
 import { MarkdownMessage } from "./markdown-message";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CheckIcon, CopyIcon } from "./settings-icons";
@@ -155,6 +160,20 @@ const TIME_REVEAL_STATE = {
   HELD: "held",
 } as const;
 
+const PANNING_OVERFLOW = new Set(["auto", "scroll"]);
+
+/**
+ * A block wider than its bubble that the stylesheet lets pan: a fenced code
+ * line or a table. Overflow alone is not enough, since a row's clipped stamp
+ * gives the row overflow too, and the row pans nothing.
+ */
+function pansSideways(element: Element): boolean {
+  return (
+    element.scrollWidth > element.clientWidth &&
+    PANNING_OVERFLOW.has(getComputedStyle(element).overflowX)
+  );
+}
+
 /**
  * The iMessage pull: a sideways trackpad scroll over the thread drags every
  * row left by the distance the fingers travel, uncovering the stamps the list
@@ -178,8 +197,13 @@ function useTimeRevealPull(scroller: RefObject<HTMLDivElement | null>, thread: b
     };
     const pull = (step: WheelEvent) => {
       if (!isSidewaysStep(step)) return;
-      // Nothing here scrolls sideways, so the step is the pull's alone, and
-      // it must not travel on to anything behind the thread that would.
+      // A code line or table wider than its bubble pans on this same gesture,
+      // and over one the step is the block's: the pull waits for a step
+      // beside it.
+      const target = step.target instanceof Element ? step.target : null;
+      if (panningBlockBetween(target, element, pansSideways)) return;
+      // Nothing else here scrolls sideways, so the step is the pull's alone,
+      // and it must not travel on to anything behind the thread that would.
       step.preventDefault();
       const column = element.querySelector(`.${HISTORY_TIME_CLASS}`)?.getBoundingClientRect().width;
       reveal = revealAfterStep(reveal, step.deltaX, column ?? 0);
