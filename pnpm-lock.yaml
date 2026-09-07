@@ -371,6 +371,9 @@ importers:
       '@sidecar/realtime':
         specifier: workspace:*
         version: link:../realtime
+      '@sidecar/runtime-contracts':
+        specifier: workspace:*
+        version: link:../runtime-contracts
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
@@ -507,6 +510,9 @@ importers:
 
   packages/hosted:
     dependencies:
+      '@sidecar/runtime-contracts':
+        specifier: workspace:*
+        version: link:../runtime-contracts
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session

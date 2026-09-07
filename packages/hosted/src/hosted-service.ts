@@ -75,6 +75,16 @@ export const HOSTED_SERVICE_PATH = {
    * Responses payload for the desktop to append and act on.
    */
   BRAIN_RESPOND: "/api/brain/respond",
+  /**
+   * The second brain contract (see `brain-contract.ts`). GET the
+   * capabilities to learn the model, the operations, the registered tool
+   * names, and the bounds before sending anything; POST the three operations
+   * with a prepared prompt and tool names, and the same admitted input array.
+   */
+  BRAIN_CAPABILITIES: "/api/brain/capabilities",
+  BRAIN_RESPOND_V2: "/api/brain/v2/respond",
+  BRAIN_COUNT_TOKENS: "/api/brain/v2/count-tokens",
+  BRAIN_COMPACT: "/api/brain/v2/compact",
   ACCOUNT_DELETE: "/api/account/delete",
   USAGE: "/api/usage",
   EVENTS: "/api/events",
@@ -225,6 +235,10 @@ export const HOSTED_API_ERROR = {
   UPSTREAM_ERROR: "upstream-error",
   /** The request body weighs more than the endpoint's fixed byte bound; nothing of it was read. */
   REQUEST_TOO_LARGE: "request-too-large",
+  /** The prepared prompt is longer than the contract's own prompt envelope; nothing was sent upstream. */
+  PROMPT_TOO_LARGE: "prompt-too-large",
+  /** A tool name the service's catalog does not register; no schema was selected. */
+  UNKNOWN_TOOL: "unknown-tool",
   METHOD_NOT_ALLOWED: "method-not-allowed",
 } as const;
 

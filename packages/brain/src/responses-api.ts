@@ -1,11 +1,18 @@
 import type { RealtimeToolWireDefinition } from "@sidecar/acts";
 import {
+  MODEL_RESPONSE_OUTCOME,
+  type ModelAnswer,
+  type ModelUsage,
+  type ToolSchema,
+} from "@sidecar/runtime-contracts";
+import {
   isRecord,
   isWireString,
   text,
   type UnparsedWireValue,
   type WireRecord,
   wholeNumber,
+  wireRecord,
 } from "@sidecar/wire";
 
 /**
@@ -204,4 +211,108 @@ export function brainResponsesOutput(payload: UnparsedWireValue): BrainResponses
     ...(status ? { status } : undefined),
     ...(incompleteReason ? { incompleteReason } : undefined),
   };
+}
+
+/** The provider item format the brain's checkpoints are in: the Responses input array, first shape. */
+export const RESPONSES_ITEM_FORMAT = {
+  FORMAT: "openai-responses-input",
+  VERSION: 1,
+} as const;
+
+export const BRAIN_RESPONSES_COMPACT_PATH = "/responses/compact";
+export const BRAIN_RESPONSES_INPUT_TOKENS_PATH = "/responses/input_tokens";
+
+/** A tool as the brain's contracts carry it, as the Responses API takes it: a function tool. */
+export function responsesToolDefinition(schema: ToolSchema): RealtimeToolWireDefinition {
+  // SAFETY: a ToolSchema's parameters are the same JSON-schema object the acts
+  // table builds; both are the wire form the API documents for a function tool.
+  return {
+    type: "function",
+    name: schema.name,
+    description: schema.description,
+    parameters: schema.parameters as unknown as RealtimeToolWireDefinition["parameters"],
+  };
+}
+
+/** A tool as the acts table or the brain defines it, in the brain's contract shape. */
+export function toolSchemaFromDefinition(definition: RealtimeToolWireDefinition): ToolSchema {
+  // SAFETY: the parameters are a JSON-schema object built from literals; a JSON round trip is its wire form.
+  const parameters = wireRecord(
+    JSON.parse(JSON.stringify(definition.parameters)) as UnparsedWireValue,
+  );
+  return {
+    name: definition.name,
+    description: definition.description,
+    parameters: parameters ?? {},
+  };
+}
+
+/** The explicit compaction request: the model and the window to fold, and the same instructions the window was built under. */
+export function brainCompactRequest(
+  input: readonly ResponsesInputItem[],
+  options: Pick<BrainResponsesOptions, "model" | "instructions">,
+) {
+  return { model: options.model, instructions: options.instructions, input };
+}
+
+export type BrainCompactRequest = ReturnType<typeof brainCompactRequest>;
+
+/** The token count request: everything one inference would carry except the output budget. */
+export function brainInputTokensRequest(
+  input: readonly ResponsesInputItem[],
+  options: Pick<BrainResponsesOptions, "model" | "instructions" | "tools">,
+) {
+  return { model: options.model, instructions: options.instructions, tools: options.tools, input };
+}
+
+export type BrainInputTokensRequest = ReturnType<typeof brainInputTokensRequest>;
+
+/**
+ * One Responses answer as the brain's contracts carry it: the output items
+ * verbatim for the context engine, the text, the tool calls, the usage, and
+ * whether the provider folded the context or stopped short.
+ */
+export function responsesModelAnswer(payload: UnparsedWireValue): ModelAnswer | undefined {
+  const output = brainResponsesOutput(payload);
+  if (!output) return undefined;
+  const usage = isRecord(payload) && isRecord(payload.usage) ? payload.usage : undefined;
+  const outputTokens = usage ? wholeNumber(usage.output_tokens) : undefined;
+  const modelUsage: ModelUsage = {
+    ...(output.inputTokens !== undefined ? { inputTokens: output.inputTokens } : undefined),
+    ...(outputTokens !== undefined ? { outputTokens } : undefined),
+  };
+  return {
+    outcome: MODEL_RESPONSE_OUTCOME.ANSWERED,
+    items: output.items,
+    text: output.outputText,
+    toolCalls: output.functionCalls,
+    ...(usage ? { usage: modelUsage } : undefined),
+    compacted: output.compacted,
+    ...(output.incompleteReason
+      ? {
+          incomplete: {
+            reason: output.incompleteReason,
+            ...(output.status ? { status: output.status } : undefined),
+          },
+        }
+      : undefined),
+  };
+}
+
+/** The compacted window an explicit compaction answered, or nothing when the payload carries none. */
+export function responsesCompactedWindow(
+  payload: UnparsedWireValue,
+): readonly ResponsesInputItem[] | undefined {
+  if (!isRecord(payload) || !Array.isArray(payload.output)) return undefined;
+  const items: ResponsesInputItem[] = [];
+  for (const item of payload.output) {
+    if (!isRecord(item)) return undefined;
+    items.push(item);
+  }
+  return items;
+}
+
+/** The count a token-count answer carries, or nothing. */
+export function responsesInputTokens(payload: UnparsedWireValue): number | undefined {
+  return isRecord(payload) ? wholeNumber(payload.input_tokens) : undefined;
 }
