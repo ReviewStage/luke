@@ -1,37 +1,153 @@
-import {
-  MARKDOWN_BLOCK_KIND,
-  MARKDOWN_INLINE_KIND,
-  MARKDOWN_TABLE_ALIGNMENT,
-  type MarkdownBlock,
-  type MarkdownInline,
-  type MarkdownListItem,
-  type MarkdownTableAlignment,
-  parseMarkdown,
-} from "@sidecar/markdown";
-import { createElement, type ReactNode, useMemo } from "react";
+import type { Element, Root } from "hast";
+import { createContext, type ReactNode, useContext } from "react";
+import Markdown, { type Components, type Options } from "react-markdown";
+import remarkBreaks from "remark-breaks";
+import remarkGfm from "remark-gfm";
 
-const TABLE_ALIGN_ATTRIBUTE = {
-  [MARKDOWN_TABLE_ALIGNMENT.LEADING]: "leading",
-  [MARKDOWN_TABLE_ALIGNMENT.CENTER]: "center",
-  [MARKDOWN_TABLE_ALIGNMENT.TRAILING]: "trailing",
-} as const;
+const SAFE_LINK = /^https?:\/\//i;
+const TASK_ITEM_CLASS = "task-list-item";
+
+/**
+ * The plugins that make the dialect coding agents write: GitHub's tables,
+ * strikethrough, and task lists, with a single tilde left as the character
+ * it is (two home-directory paths in one sentence must not strike the words
+ * between them), and a line break in the source kept as one line break,
+ * because a message is a chat's words rather than a manuscript whose soft
+ * breaks a typesetter joins.
+ */
+const REMARK_PLUGINS: Options["remarkPlugins"] = [
+  [remarkGfm, { singleTilde: false }],
+  remarkBreaks,
+];
+
+/**
+ * The stamp a chat puts on a message's last line. It rides inside the last
+ * paragraph where there is one, and on a line of its own after a block that
+ * cannot hold it. The paragraph is marked here, on the tree, because the
+ * paragraph component cannot see whether it is the last.
+ */
+const TRAILING_PROPERTY = "dataTrailing";
+
+function markTrailingParagraph() {
+  return (tree: Root): void => {
+    let last: Element | undefined;
+    for (const child of tree.children) {
+      if (child.type === "element") last = child;
+    }
+    if (last !== undefined && last.tagName === "p") {
+      last.properties[TRAILING_PROPERTY] = "";
+      return;
+    }
+    tree.children.push({
+      type: "element",
+      tagName: "p",
+      properties: { className: ["markdown-trailing"], [TRAILING_PROPERTY]: "" },
+      children: [],
+    });
+  };
+}
+
+const REHYPE_PLUGINS_WITH_TRAILING: Options["rehypePlugins"] = [markTrailingParagraph];
+const REHYPE_PLUGINS_WITHOUT_TRAILING: Options["rehypePlugins"] = [];
+
+const TrailingContext = createContext<ReactNode>(undefined);
+
+/** Whether the item's task box is ticked, read from the box GitHub's list handler put in it. */
+function taskChecked(node: Element): boolean | undefined {
+  for (const child of node.children) {
+    if (child.type !== "element") continue;
+    if (child.tagName === "input") return child.properties.checked === true;
+    if (child.tagName === "p") {
+      const inner = taskChecked(child);
+      if (inner !== undefined) return inner;
+    }
+  }
+  return undefined;
+}
+
+function isTaskItem(node: Element | undefined): node is Element {
+  const className = node?.properties.className;
+  return Array.isArray(className) && className.includes(TASK_ITEM_CLASS);
+}
+
+/**
+ * How each element is drawn where the library's default would say the wrong
+ * thing on this surface.
+ *
+ * A link is drawn as one and names its destination on hover, but it is not a
+ * control: the renderer refuses every navigation and has no door for opening
+ * an arbitrary address, and a message's words must not become an act by
+ * being pressed. Only HTTP and HTTPS destinations survive `urlTransform`
+ * below, so anything else arrives here as words alone.
+ *
+ * A heading is styled, never announced: a reader walking the document's
+ * headings should meet the panel's, not a reply's. An image has no picture
+ * to draw in a caption, so its alternative words stand in for it. A task box
+ * is the library's disabled checkbox, drawn instead as the list item's own
+ * square in CSS, with the state read out for a reader.
+ */
+const COMPONENTS: Components = {
+  a: ({ href, children }) =>
+    href !== undefined && SAFE_LINK.test(href) ? (
+      <span className="markdown-link" title={href}>
+        {children}
+      </span>
+    ) : (
+      <>{children}</>
+    ),
+  h1: ({ children }) => heading(1, children),
+  h2: ({ children }) => heading(2, children),
+  h3: ({ children }) => heading(3, children),
+  h4: ({ children }) => heading(4, children),
+  h5: ({ children }) => heading(5, children),
+  h6: ({ children }) => heading(6, children),
+  img: ({ alt }) => <>{alt ?? ""}</>,
+  input: ({ checked }) => <span className="visually-hidden">{checked ? "Done: " : "To do: "}</span>,
+  li: ({ node, children }) =>
+    isTaskItem(node) ? (
+      <li className="markdown-task" data-checked={taskChecked(node) ? "true" : "false"}>
+        {children}
+      </li>
+    ) : (
+      <li>{children}</li>
+    ),
+  p: ({ node, className, children }) => {
+    const trailing = useContext(TrailingContext);
+    const carriesTrailing = node?.properties[TRAILING_PROPERTY] !== undefined;
+    return (
+      <p className={className}>
+        {children}
+        {carriesTrailing ? trailing : null}
+      </p>
+    );
+  },
+  table: ({ children }) => (
+    <div className="markdown-table-scroll">
+      <table>{children}</table>
+    </div>
+  ),
+};
+
+function heading(level: number, children: ReactNode): React.JSX.Element {
+  return (
+    <p className="markdown-heading" data-level={level}>
+      {children}
+    </p>
+  );
+}
+
+function safeUrl(url: string): string {
+  return SAFE_LINK.test(url) ? url : "";
+}
 
 /**
  * A message's words drawn as the Markdown they were written in, the way the
  * iOS app's bubbles draw them: inline emphasis, code, strikethrough, and web
  * links inside the paragraph, and the blocks a paragraph cannot hold —
  * headings, lists, quotes, fenced code, tables, rules — composed around it.
- * Every size is in `em`, so the same component reads at the caption's ten
- * pixels and the thread's twelve and a half.
- *
- * A link is drawn as one and names its destination on hover, but it is not a
- * control: the renderer refuses every navigation and has no door for opening
- * an arbitrary address, and a message's words must not become an act by
- * being pressed. Only HTTP and HTTPS destinations reach here at all; the
- * parser has already reduced every other scheme to its words.
- *
- * `trailing` rides inside the last paragraph, where a chat app puts its
- * timestamp, or on a line of its own when the message ends in something else.
+ * Raw HTML in the words is text. Every size in the stylesheet is in `em`, so
+ * the same component reads at the caption's ten pixels and the thread's
+ * twelve and a half.
  */
 export function MarkdownMessage({
   words,
@@ -42,137 +158,20 @@ export function MarkdownMessage({
   className?: string;
   trailing?: ReactNode;
 }): React.JSX.Element {
-  const blocks = useMemo(() => parseMarkdown(words), [words]);
-  const last = blocks[blocks.length - 1];
-  const trailingInLastParagraph =
-    trailing !== undefined && last !== undefined && last.kind === MARKDOWN_BLOCK_KIND.PARAGRAPH;
-  const children = blocks.map((block, index) =>
-    trailingInLastParagraph && index === blocks.length - 1
-      ? renderBlock(block, trailing)
-      : renderBlock(block),
+  return (
+    <div className={className === undefined ? "markdown" : `markdown ${className}`}>
+      <TrailingContext value={trailing}>
+        <Markdown
+          remarkPlugins={REMARK_PLUGINS}
+          rehypePlugins={
+            trailing === undefined ? REHYPE_PLUGINS_WITHOUT_TRAILING : REHYPE_PLUGINS_WITH_TRAILING
+          }
+          components={COMPONENTS}
+          urlTransform={safeUrl}
+        >
+          {words}
+        </Markdown>
+      </TrailingContext>
+    </div>
   );
-  if (trailing !== undefined && !trailingInLastParagraph) {
-    children.push(createElement("p", { className: "markdown-trailing" }, trailing));
-  }
-  return createElement(
-    "div",
-    { className: className === undefined ? "markdown" : `markdown ${className}` },
-    ...children,
-  );
-}
-
-function renderBlock(block: MarkdownBlock, trailing?: ReactNode): ReactNode {
-  switch (block.kind) {
-    case MARKDOWN_BLOCK_KIND.PARAGRAPH:
-      return createElement("p", null, ...renderInlines(block.inlines), trailing);
-    case MARKDOWN_BLOCK_KIND.HEADING:
-      // Styled as a heading, never announced as one: a reader walking the
-      // document's headings should meet the panel's, not a reply's.
-      return createElement(
-        "p",
-        { className: "markdown-heading", "data-level": block.level },
-        ...renderInlines(block.inlines),
-      );
-    case MARKDOWN_BLOCK_KIND.CODE:
-      return createElement(
-        "pre",
-        block.language === undefined ? null : { "data-language": block.language },
-        createElement("code", null, block.code),
-      );
-    case MARKDOWN_BLOCK_KIND.QUOTE:
-      return createElement("blockquote", null, ...block.blocks.map((inner) => renderBlock(inner)));
-    case MARKDOWN_BLOCK_KIND.LIST: {
-      const start = block.items[0]?.ordinal;
-      return createElement(
-        block.ordered ? "ol" : "ul",
-        block.ordered && start !== undefined && start !== 1 ? { start } : null,
-        ...block.items.map(renderListItem),
-      );
-    }
-    case MARKDOWN_BLOCK_KIND.TABLE:
-      return renderTable(block.header, block.alignments, block.rows);
-    case MARKDOWN_BLOCK_KIND.RULE:
-      return createElement("hr");
-  }
-}
-
-function renderListItem(item: MarkdownListItem): ReactNode {
-  const blocks = item.blocks.map((block) => renderBlock(block));
-  if (item.checked === undefined) return createElement("li", null, ...blocks);
-  return createElement(
-    "li",
-    { className: "markdown-task", "data-checked": item.checked ? "true" : "false" },
-    createElement("span", { className: "visually-hidden" }, item.checked ? "Done: " : "To do: "),
-    ...blocks,
-  );
-}
-
-function renderTable(
-  header: readonly MarkdownInline[][],
-  alignments: readonly MarkdownTableAlignment[],
-  rows: readonly MarkdownInline[][][],
-): ReactNode {
-  const alignAttribute = (column: number) => {
-    const alignment = alignments[column];
-    return alignment === undefined ? null : { "data-align": TABLE_ALIGN_ATTRIBUTE[alignment] };
-  };
-  return createElement(
-    "div",
-    { className: "markdown-table-scroll" },
-    createElement(
-      "table",
-      null,
-      createElement(
-        "thead",
-        null,
-        createElement(
-          "tr",
-          null,
-          ...header.map((cell, column) =>
-            createElement("th", alignAttribute(column), ...renderInlines(cell)),
-          ),
-        ),
-      ),
-      createElement(
-        "tbody",
-        null,
-        ...rows.map((row) =>
-          createElement(
-            "tr",
-            null,
-            ...row.map((cell, column) =>
-              createElement("td", alignAttribute(column), ...renderInlines(cell)),
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-function renderInlines(inlines: readonly MarkdownInline[]): ReactNode[] {
-  return inlines.map(renderInline);
-}
-
-function renderInline(inline: MarkdownInline): ReactNode {
-  switch (inline.kind) {
-    case MARKDOWN_INLINE_KIND.TEXT:
-      return inline.text;
-    case MARKDOWN_INLINE_KIND.BREAK:
-      return createElement("br");
-    case MARKDOWN_INLINE_KIND.CODE:
-      return createElement("code", null, inline.code);
-    case MARKDOWN_INLINE_KIND.STRONG:
-      return createElement("strong", null, ...renderInlines(inline.inlines));
-    case MARKDOWN_INLINE_KIND.EMPHASIS:
-      return createElement("em", null, ...renderInlines(inline.inlines));
-    case MARKDOWN_INLINE_KIND.STRIKETHROUGH:
-      return createElement("s", null, ...renderInlines(inline.inlines));
-    case MARKDOWN_INLINE_KIND.LINK:
-      return createElement(
-        "span",
-        { className: "markdown-link", title: inline.href },
-        ...renderInlines(inline.inlines),
-      );
-  }
 }

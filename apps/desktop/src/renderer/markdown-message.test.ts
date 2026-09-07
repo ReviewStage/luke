@@ -22,11 +22,11 @@ test("inline styles draw as their elements", () => {
   const markup = render("Ran **all** tests with `pnpm test`, ~~twice~~ once.");
   assert.match(markup, /<strong>all<\/strong>/);
   assert.match(markup, /<code>pnpm test<\/code>/);
-  assert.match(markup, /<s>twice<\/s>/);
+  assert.match(markup, /<del>twice<\/del>/);
 });
 
 test("a line break in the words is a line break on screen", () => {
-  assert.equal(render("one\ntwo"), '<div class="markdown"><p>one<br/>two</p></div>');
+  assert.equal(render("one\ntwo"), '<div class="markdown"><p>one<br/>\ntwo</p></div>');
 });
 
 test("a link is drawn but is not a control", () => {
@@ -40,6 +40,13 @@ test("a link is drawn but is not a control", () => {
   // The custom scheme never reaches the markup, not even as a title.
   assert.doesNotMatch(markup, /custom:/);
   assert.match(markup, / and run\.<\/p>/);
+});
+
+test("a single tilde is a character, not strikethrough", () => {
+  assert.equal(
+    render("Copy ~/.ssh/config to ~/backup, ~not struck~"),
+    '<div class="markdown"><p>Copy ~/.ssh/config to ~/backup, ~not struck~</p></div>',
+  );
 });
 
 test("raw HTML in the words is escaped, never markup", () => {
@@ -79,19 +86,24 @@ test("fenced code, quotes, lists, tables, and rules compose around the paragraph
       "---",
     ].join("\n"),
   );
-  assert.match(markup, /<pre data-language="ts"><code>const a = 1;<\/code><\/pre>/);
-  assert.match(markup, /<blockquote><p>noted<\/p><\/blockquote>/);
-  assert.match(markup, /<ol start="3"><li><p>three<\/p><\/li><li><p>four<\/p><\/li><\/ol>/);
+  assert.match(markup, /<pre><code class="language-ts">const a = 1;\n<\/code><\/pre>/);
+  assert.match(markup, /<blockquote>\n<p>noted<\/p>\n<\/blockquote>/);
+  assert.match(markup, /<ol start="3">\n<li>three<\/li>\n<li>four<\/li>\n<\/ol>/);
   assert.match(
     markup,
-    /<li class="markdown-task" data-checked="true"><span class="visually-hidden">Done: <\/span><p>done<\/p><\/li>/,
+    /<li class="markdown-task" data-checked="true"><span class="visually-hidden">Done: <\/span> done<\/li>/,
   );
   assert.match(
     markup,
-    /<li class="markdown-task" data-checked="false"><span class="visually-hidden">To do: <\/span><p>todo<\/p><\/li>/,
+    /<li class="markdown-task" data-checked="false"><span class="visually-hidden">To do: <\/span> todo<\/li>/,
   );
-  assert.match(markup, /<th data-align="leading">a<\/th><th data-align="trailing">b<\/th>/);
-  assert.match(markup, /<td data-align="leading">1<\/td><td data-align="trailing">2<\/td>/);
+  // The library's disabled checkbox never reaches the markup; the square is the item's own.
+  assert.doesNotMatch(markup, /<input/);
+  assert.match(
+    markup,
+    /<div class="markdown-table-scroll"><table><thead><tr><th style="text-align:left">a<\/th><th style="text-align:right">b<\/th>/,
+  );
+  assert.match(markup, /<td style="text-align:left">1<\/td><td style="text-align:right">2<\/td>/);
   assert.match(markup, /<hr\/><\/div>$/);
 });
 
@@ -105,6 +117,6 @@ test("the trailing node rides in the last paragraph, or on its own line after a 
     renderToStaticMarkup(
       createElement(MarkdownMessage, { words: "```\nls\n```", trailing: stamp }),
     ),
-    '<div class="markdown"><pre><code>ls</code></pre><p class="markdown-trailing"><time class="history-time">3:04</time></p></div>',
+    '<div class="markdown"><pre><code>ls\n</code></pre><p class="markdown-trailing"><time class="history-time">3:04</time></p></div>',
   );
 });
