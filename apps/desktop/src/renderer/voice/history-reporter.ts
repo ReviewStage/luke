@@ -1,4 +1,4 @@
-import { type ConversationEntry, conversationEntryKey } from "@sidecar/realtime";
+import { type ConversationEntry, conversationEntryIdentity } from "@sidecar/realtime";
 
 /**
  * Which of this window's lines the main process's store has acknowledged, so
@@ -30,7 +30,7 @@ export class HistoryReporter {
     const taken: ConversationEntry[] = [];
     for (const entry of entries) {
       if (entry.recordedAt === undefined) continue;
-      const key = lineKey(entry);
+      const key = conversationEntryIdentity(entry);
       if (this.#inFlight.has(key)) continue;
       const known = this.#reported.has(key);
       const learnedRun = this.#reported.get(key) === undefined && entry.requestId !== undefined;
@@ -47,16 +47,17 @@ export class HistoryReporter {
    * Clear, leave nothing behind and stay eligible for the next publish.
    */
   settle(taken: TakenLines, acknowledged: boolean): void {
-    for (const entry of taken.entries) this.#inFlight.delete(lineKey(entry));
+    for (const entry of taken.entries) this.#inFlight.delete(conversationEntryIdentity(entry));
     if (!acknowledged || taken.epoch !== this.#epoch) return;
-    for (const entry of taken.entries) this.#reported.set(lineKey(entry), entry.requestId);
+    for (const entry of taken.entries)
+      this.#reported.set(conversationEntryIdentity(entry), entry.requestId);
   }
 
   /** Lines the main process itself relayed are already the store's; nothing about them is owed. */
   adopt(entries: readonly ConversationEntry[]): void {
     for (const entry of entries) {
       if (entry.recordedAt === undefined) continue;
-      this.#reported.set(lineKey(entry), entry.requestId);
+      this.#reported.set(conversationEntryIdentity(entry), entry.requestId);
     }
   }
 
@@ -66,8 +67,4 @@ export class HistoryReporter {
     this.#reported.clear();
     this.#inFlight.clear();
   }
-}
-
-function lineKey(entry: ConversationEntry): string {
-  return entry.eventId ?? conversationEntryKey(entry);
 }

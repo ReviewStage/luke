@@ -1,6 +1,7 @@
 import {
   type ConversationEntry,
-  conversationEntryKey,
+  conversationEntryIdentity,
+  recordedAfterClear,
   storedConversationEntry,
   storedConversationMaximumAgeMs,
 } from "@sidecar/realtime";
@@ -20,24 +21,22 @@ export function historyEntryAdmitted(
   now: number,
   clearedAt: number | undefined,
 ): entry is ConversationEntry & { recordedAt: number } {
-  if (entry.recordedAt === undefined || entry.recordedAt > now) return false;
-  if (now - entry.recordedAt > storedConversationMaximumAgeMs) return false;
-  return clearedAt === undefined || entry.recordedAt > clearedAt;
+  if (!recordedAfterClear(entry, clearedAt)) return false;
+  return entry.recordedAt <= now && now - entry.recordedAt <= storedConversationMaximumAgeMs;
 }
 
 const EXPLICIT_EVENT_KEY_PREFIX = "event:";
 const VALUE_EVENT_KEY_PREFIX = "value:";
 /**
- * What an append is idempotent on. A line that carries its own id is that id:
- * delivered twice it is one line, and two deliberate identical utterances
- * with ids of their own are two. A line without one — written by a build that
- * minted none — is identified by its value, kind, words, instant, and
- * subject together, the older rule.
+ * What an append is idempotent on: the line's identity, prefixed by which
+ * kind it is so an id can never collide with a value key in the one column
+ * that holds both.
  */
 export function historyEventKey(entry: ConversationEntry): string {
+  const identity = conversationEntryIdentity(entry);
   return entry.eventId !== undefined
-    ? `${EXPLICIT_EVENT_KEY_PREFIX}${entry.eventId}`
-    : `${VALUE_EVENT_KEY_PREFIX}${conversationEntryKey(entry)}`;
+    ? `${EXPLICIT_EVENT_KEY_PREFIX}${identity}`
+    : `${VALUE_EVENT_KEY_PREFIX}${identity}`;
 }
 
 /** The payload a line is kept as, exactly the entry, so the projection is the record read back. */

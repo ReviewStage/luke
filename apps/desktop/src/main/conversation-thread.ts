@@ -1,7 +1,8 @@
 import {
   appendConversationThreadEntry,
   type ConversationEntry,
-  conversationEntryKey,
+  conversationEntryIdentity,
+  recordedAfterClear,
   retainedConversationEntries,
 } from "@sidecar/realtime";
 import type { HistoryAppendOutcome } from "@sidecar/runtime-contracts";
@@ -99,10 +100,10 @@ export class ConversationThread<Reporter = never> {
       // whatever the disk did.
       merged = outcome.entries.filter((entry) => this.#afterClear(entry));
     } else {
-      const held = new Set(this.#entries.map(memoryKey));
+      const held = new Set(this.#entries.map(conversationEntryIdentity));
       merged = admitted.reduce((thread, entry) => {
-        if (held.has(memoryKey(entry))) return thread;
-        held.add(memoryKey(entry));
+        if (held.has(conversationEntryIdentity(entry))) return thread;
+        held.add(conversationEntryIdentity(entry));
         return appendConversationThreadEntry(thread, entry, now, entry.recordedAt ?? now);
       }, this.#entries);
       if (merged === this.#entries) return true;
@@ -134,14 +135,6 @@ export class ConversationThread<Reporter = never> {
   }
 
   #afterClear(entry: ConversationEntry): boolean {
-    return (
-      this.#clearedAt === undefined ||
-      (entry.recordedAt !== undefined && entry.recordedAt > this.#clearedAt)
-    );
+    return recordedAfterClear(entry, this.#clearedAt);
   }
-}
-
-/** The in-memory thread's idempotency key: the line's own id, or its value for a line without one. */
-function memoryKey(entry: ConversationEntry): string {
-  return entry.eventId ?? conversationEntryKey(entry);
 }

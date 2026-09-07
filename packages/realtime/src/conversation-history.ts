@@ -232,6 +232,30 @@ export function conversationEntryKey(entry: ConversationEntry): string {
 }
 
 /**
+ * What a line is one of: its own id, minted by the writer that recorded it,
+ * or its value for a line that reached the thread without one. Every keeper
+ * of the thread — the store's table, the main process's relay, a window's
+ * report of what it added — is idempotent on this and on nothing else.
+ */
+export function conversationEntryIdentity(entry: ConversationEntry): string {
+  return entry.eventId ?? conversationEntryKey(entry);
+}
+
+/**
+ * Whether a line stands after the last Clear: recorded, and recorded after
+ * the cutoff. A line at or before the cutoff was settled by the Clear itself,
+ * whatever else is true of it, and a line with no instant cannot be placed
+ * after one. No cutoff admits every recorded line.
+ */
+export function recordedAfterClear(
+  entry: ConversationEntry,
+  clearedAt: number | undefined,
+): entry is ConversationEntry & { recordedAt: number } {
+  if (entry.recordedAt === undefined) return false;
+  return clearedAt === undefined || entry.recordedAt > clearedAt;
+}
+
+/**
  * The better-informed of two copies of one line: the one that knows its run.
  * Nothing else about a line changes after it is recorded, so a copy without
  * the run is the older one, and a stale window snapshot cannot take the
