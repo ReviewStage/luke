@@ -1,4 +1,8 @@
-import { REALTIME_TOOL, realtimeToolDefinitions } from "@sidecar/acts";
+import {
+  REALTIME_TOOL,
+  type RealtimeToolWireDefinition,
+  realtimeToolDefinitions,
+} from "@sidecar/acts";
 import { BRAIN_TURN_AUTHORITY, type BrainTurnAuthority } from "@sidecar/hosted";
 
 /**
@@ -38,39 +42,7 @@ export type BrainToolName = (typeof BRAIN_TOOL)[keyof typeof BRAIN_TOOL];
 /** The longest briefing the mouth is handed; a briefing is a breath, not a report. */
 export const maximumBriefingLength = 600;
 
-/** The JSON Schema a brain tool's parameters are described in: the acts table's own vocabulary. */
-export type BrainSchemaProperty =
-  | { type: "string"; description?: string; enum?: readonly string[] }
-  | {
-      type: "object";
-      description?: string;
-      properties?: BrainSchemaPropertyMap;
-      required?: readonly string[];
-      additionalProperties?: boolean;
-    }
-  | {
-      type: "array";
-      description?: string;
-      items: { type: "string"; description?: string; enum?: readonly string[] };
-    };
-
-export type BrainSchemaPropertyMap = { readonly [key: string]: BrainSchemaProperty };
-
-export interface BrainToolParameters {
-  type: "object";
-  properties: BrainSchemaPropertyMap;
-  required: readonly string[];
-}
-
-/** A function tool as the Responses API takes it. */
-export interface BrainToolWireDefinition {
-  type: typeof BRAIN_TOOL_TYPE;
-  name: string;
-  description: string;
-  parameters: BrainToolParameters;
-}
-
-const BRAIN_ONLY_TOOLS: readonly BrainToolWireDefinition[] = [
+const BRAIN_ONLY_TOOLS: readonly RealtimeToolWireDefinition[] = [
   {
     type: BRAIN_TOOL_TYPE,
     name: BRAIN_TOOL.LIST_SESSIONS,
@@ -129,23 +101,14 @@ const BRAIN_ONLY_TOOLS_BY_AUTHORITY = {
   ]),
 } as const satisfies Record<BrainTurnAuthority, ReadonlySet<string>>;
 
-function actToolDefinitions(): readonly BrainToolWireDefinition[] {
-  return realtimeToolDefinitions()
-    .filter((tool) => !EXCLUDED_ACT_TOOLS.has(tool.name))
-    .map(
-      (tool): BrainToolWireDefinition => ({
-        type: BRAIN_TOOL_TYPE,
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.parameters,
-      }),
-    );
+function actToolDefinitions(): readonly RealtimeToolWireDefinition[] {
+  return realtimeToolDefinitions().filter((tool) => !EXCLUDED_ACT_TOOLS.has(tool.name));
 }
 
 /** The tool schemas one brain turn is configured with, fixed by the turn's authority. */
 export function brainToolDefinitions(
   authority: BrainTurnAuthority,
-): readonly BrainToolWireDefinition[] {
+): readonly RealtimeToolWireDefinition[] {
   const own = BRAIN_ONLY_TOOLS.filter((tool) =>
     BRAIN_ONLY_TOOLS_BY_AUTHORITY[authority].has(tool.name),
   );
