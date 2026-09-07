@@ -33,7 +33,6 @@ import {
 } from "./brain-input.js";
 import {
   BrainJournal,
-  type BrainJournalEntry,
   journalActCounts,
   UNCONFIRMED_ACT_RESULT,
   UNKNOWN_ACT_RESULT,
@@ -743,36 +742,23 @@ export class BrainAgent {
   }
 
   /**
-   * A staged write of some fields of one record: the store is handed the
-   * generation as it stands with those fields applied, and the live record
-   * takes them only once the store has. Nothing reads the fields in between,
-   * so no caller — a wait, a snapshot, a follower — can act on a state the
-   * file may yet refuse.
+   * A staged write of some fields of one record. The envelope is composed
+   * inside the store's queue from the generation as it then stands, with the
+   * fields applied to that record, and the live record takes them in the same
+   * queue step once the store has — so no save assembled from older state can
+   * follow and undo them, and nothing reads the fields before they are kept.
    */
-  async #commit(
+  #commit(
     generation: Generation,
     runId: string,
     changes: Partial<Omit<BrainRequestRecord, "runId" | "revision">>,
   ): Promise<boolean> {
-    const memory = generation.memory.persisted();
-    const journal: readonly BrainJournalEntry[] = generation.journal.entries();
-    const staged = [...generation.requests.values()].map((record) =>
-      record.runId === runId
-        ? { ...record, ...changes, revision: record.revision + 1 }
-        : { ...record },
+    return this.#save(
+      generation,
+      (record) =>
+        record.runId === runId ? { ...record, ...changes, revision: record.revision + 1 } : record,
+      () => this.#update(generation, runId, changes),
     );
-    const written = await this.#options.store.write(this.#lease, generation.id, () => ({
-      items: memory.items,
-      cursors: memory.cursors,
-      requests: staged,
-      journal,
-    }));
-    if (!written) {
-      this.#report("Brain memory could not be checkpointed");
-      return false;
-    }
-    this.#update(generation, runId, changes);
-    return true;
   }
 
   /**
@@ -1039,16 +1025,36 @@ export class BrainAgent {
    * False means the file does not hold what that copy holds — refused by the
    * fence or by storage — and the caller decides what that forbids.
    */
-  async #checkpoint(generation: Generation): Promise<boolean> {
-    const memory = generation.memory.persisted();
-    const requests = [...generation.requests.values()].map((record) => ({ ...record }));
-    const journal: readonly BrainJournalEntry[] = generation.journal.entries();
-    const written = await this.#options.store.write(this.#lease, generation.id, () => ({
-      items: memory.items,
-      cursors: memory.cursors,
-      requests,
-      journal,
-    }));
+  #checkpoint(generation: Generation): Promise<boolean> {
+    return this.#save(generation, (record) => record);
+  }
+
+  /**
+   * The one way a generation reaches the store. Every envelope is composed
+   * inside the store's serialized queue from the generation's live memory,
+   * journal, and records at that moment — never from a copy taken before
+   * entering the queue — so a save can only add to what the saves before it
+   * kept, and an acknowledged field is in every envelope that follows.
+   */
+  async #save(
+    generation: Generation,
+    project: (record: BrainRequestRecord) => BrainRequestRecord,
+    committed?: () => void,
+  ): Promise<boolean> {
+    const written = await this.#options.store.write(
+      this.#lease,
+      generation.id,
+      () => {
+        const memory = generation.memory.persisted();
+        return {
+          items: memory.items,
+          cursors: memory.cursors,
+          requests: [...generation.requests.values()].map((record) => project({ ...record })),
+          journal: generation.journal.entries(),
+        };
+      },
+      committed,
+    );
     if (!written) this.#report("Brain memory could not be checkpointed");
     return written;
   }

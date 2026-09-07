@@ -203,9 +203,14 @@ export class BrainStateStore {
 
   /**
    * Writes a new envelope of the generation named, under the lease given.
-   * Answers false without touching storage when that generation is no longer
-   * the store's, or the lease has passed to a later agent — the fences a
-   * reset, a replacement, and a rebuild raise against late writers — and false
+   * `mutate` runs inside the store's queue, once every earlier write has
+   * settled, so an envelope composed there from live state includes every
+   * earlier save; `committed` runs in the same queue step once the write has
+   * landed, before any later write composes, so what it applies to live state
+   * is in every later envelope. Answers false without touching storage when
+   * that generation is no longer the store's, or the lease has passed to a
+   * later agent — the fences a reset, a replacement, and a rebuild raise
+   * against late writers — and false
    * when storage refused, leaving the held copy as it was so the caller's
    * own memory and the file cannot silently disagree about what is known.
    */
@@ -215,6 +220,7 @@ export class BrainStateStore {
     mutate: (
       state: BrainPersistedState,
     ) => Omit<BrainPersistedState, "version" | "generationId" | "createdAt" | "expiresAt">,
+    committed?: () => void,
   ): Promise<boolean> {
     return this.#serialized(async () => {
       const held = this.#state;
@@ -228,6 +234,7 @@ export class BrainStateStore {
       };
       if (!(await this.#persist(next))) return false;
       this.#state = next;
+      committed?.();
       return true;
     });
   }

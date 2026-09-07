@@ -2058,3 +2058,141 @@ test("a run's success is seen by no reader before the write that keeps it has la
   assert.equal(darkEnd?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(darkEnd?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
 });
+
+/** A completed run on a harness whose storage never refuses, for the save-ordering regressions. */
+async function completedRun(h: Harness, question = "hello"): Promise<string> {
+  h.client.answers.push(answered([message("Hi.")]));
+  const record = await ask(h, question);
+  assert.ok(record);
+  return record.runId;
+}
+
+test("two different markers saved concurrently both survive, in either order, on one run or two", async () => {
+  for (const historyFirst of [true, false]) {
+    const h = harness();
+    const runId = await completedRun(h);
+    const marks = [
+      () => h.agent.markHistoryRecorded(runId, NOW + 1),
+      () => h.agent.markAskRecorded(runId, NOW),
+    ];
+    const results = await Promise.all(
+      historyFirst ? marks.map((m) => m()) : marks.reverse().map((m) => m()),
+    );
+    assert.deepEqual(results, [true, true]);
+    const live = h.agent.request(runId);
+    const stored = h.storage.stored()?.requests.find((r) => r.runId === runId);
+    assert.equal(live?.historyRecordedAt, NOW + 1);
+    assert.equal(live?.askRecordedAt, NOW);
+    assert.deepEqual(stored, live);
+  }
+  // Two runs marked at once: each keeps its own.
+  const h = harness();
+  const first = await completedRun(h, "one");
+  const second = await completedRun(h, "two");
+  assert.deepEqual(
+    await Promise.all([
+      h.agent.markHistoryRecorded(first, NOW + 1),
+      h.agent.markHistoryRecorded(second, NOW + 2),
+      h.agent.markAskRecorded(second, NOW),
+    ]),
+    [true, true, true],
+  );
+  assert.deepEqual(h.storage.stored()?.requests, h.agent.requests());
+  assert.equal(h.storage.stored()?.requests[1]?.historyRecordedAt, NOW + 2);
+});
+
+test("an ordinary observation checkpoint composed behind a held mark keeps the mark", async () => {
+  let releaseWrite: (() => void) | undefined;
+  const h = harness();
+  const runId = await completedRun(h);
+  const storage = h.storage;
+  const write = storage.write.bind(storage);
+  storage.write = (contents) => {
+    storage.write = write;
+    // SAFETY: the store accepts a promise of the write's outcome; this test holds it open.
+    return new Promise<boolean>((resolve) => {
+      releaseWrite = () => resolve(write(contents));
+    }) as unknown as boolean;
+  };
+  const marking = h.agent.markHistoryRecorded(runId, NOW + 1);
+  await settle();
+  // Periodic observation races the publication: its inference and checkpoint
+  // queue behind the held mark write.
+  h.client.answers.push(answered([message("noted")]));
+  h.agent.rosterLook();
+  await settle();
+  releaseWrite?.();
+  assert.equal(await marking, true);
+  await settle();
+  assert.equal(h.client.inputs.length, 2);
+  assert.equal(h.agent.request(runId)?.historyRecordedAt, NOW + 1);
+  assert.equal(h.storage.stored()?.requests[0]?.historyRecordedAt, NOW + 1);
+  assert.equal(h.storage.stored()?.items.length, 4);
+});
+
+test("a terminal end and its marks overlapping a new submission and a checkpoint regress nothing", async () => {
+  const inner = new FakeClient();
+  inner.answers.push(answered([messageAct("call_1")]), answered([message("Sent.")]));
+  const gated = gatedClient(inner);
+  const h = harness({ client: gated.client });
+  const first = acceptedRunId(await submit(h, "send"));
+  await settle();
+  gated.open();
+  // While the first run's end and marks are being saved, a second ask is
+  // accepted and an observation wakes: every save composes on the last.
+  const [second, end, marked, askMarked] = await Promise.all([
+    submit(h, "second"),
+    h.agent.waitAsk(first, 60_000),
+    h.agent.waitAsk(first, 60_000).then(() => h.agent.markHistoryRecorded(first, NOW + 9)),
+    h.agent.markAskRecorded(first, NOW),
+  ]);
+  h.agent.wake([edge(ABC)]);
+  await h.clock.advance(h.clock.now + 3_000);
+  assert.equal(second.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
+  assert.equal(end?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  assert.deepEqual([marked, askMarked], [true, true]);
+  const stored = h.storage.stored();
+  const kept = stored?.requests.find((r) => r.runId === first);
+  assert.equal(kept?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  assert.equal(kept?.text, "Sent.");
+  assert.equal(kept?.performedActs, 1);
+  assert.equal(kept?.historyRecordedAt, NOW + 9);
+  assert.equal(kept?.askRecordedAt, NOW);
+  assert.equal(stored?.journal[0]?.outputJson?.includes(ACT_RESULT_STATUS.ACCEPTED), true);
+  assert.equal(stored?.requests.length, 2);
+  assert.deepEqual(stored?.requests, h.agent.requests());
+  assert.equal(
+    functionOutputs(stored?.items ?? []).length,
+    itemsOfType(stored?.items ?? [], RESPONSES_ITEM_TYPE.FUNCTION_CALL).length,
+  );
+});
+
+test("a failure among overlapping saves leaves the others kept, and a retry lands beside them", async () => {
+  const h = harness();
+  const runId = await completedRun(h);
+  const storage = h.storage;
+  const write = storage.write.bind(storage);
+  let writes = 0;
+  storage.write = (contents) => {
+    writes += 1;
+    // The second of the overlapping saves is refused.
+    return writes === 2 ? false : write(contents);
+  };
+  const results = await Promise.all([
+    h.agent.markHistoryRecorded(runId, NOW + 1),
+    h.agent.markAskRecorded(runId, NOW),
+  ]);
+  assert.deepEqual(results, [true, false]);
+  storage.write = write;
+  let live = h.agent.request(runId);
+  let stored = h.storage.stored()?.requests[0];
+  assert.equal(live?.historyRecordedAt, NOW + 1);
+  assert.equal(live?.askRecordedAt, undefined);
+  assert.deepEqual(stored, live);
+  assert.equal(await h.agent.markAskRecorded(runId, NOW), true);
+  live = h.agent.request(runId);
+  stored = h.storage.stored()?.requests[0];
+  assert.equal(live?.askRecordedAt, NOW);
+  assert.equal(live?.historyRecordedAt, NOW + 1);
+  assert.deepEqual(stored, live);
+});
