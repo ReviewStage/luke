@@ -5,19 +5,9 @@ export {
 } from "@sidecar/hosted";
 export {
   BRAIN_DEFAULTS,
-  BRAIN_TURN_TRIGGER,
-  type BrainActExecution,
-  type BrainActPerformer,
   BrainAgent,
   type BrainAgentOptions,
   type BrainRequestsListener,
-  type BrainRoster,
-  type BrainToolCallTrace,
-  type BrainTurnTraceRecord,
-  type BrainTurnTrigger,
-  OMISSION_MARKER,
-  type Settled,
-  settledUnlessAborted,
 } from "./agent.js";
 export {
   BRAIN_CLIENT_OUTCOME,
@@ -35,13 +25,6 @@ export {
   openAiBrainClient,
 } from "./client.js";
 export { BrainGenerationClock, type BrainGenerationClockOptions } from "./generation-clock.js";
-export {
-  BRAIN_WAKE_KIND,
-  type BrainDelivery,
-  type BrainTranscriptDelta,
-  type BrainWakeEvent,
-  type BrainWakeKind,
-} from "./wake-events.js";
 export {
   askInputItem,
   BRAIN_INPUT_MARKER,
@@ -63,22 +46,7 @@ export {
   type BrainMemoryState,
   pairedDanglingCalls,
 } from "./memory.js";
-export {
-  BRAIN_REASONING_EFFORT,
-  BRAIN_RESPONSES_PATH,
-  type BrainFunctionCall,
-  type BrainReasoningEffort,
-  type BrainResponsesOptions,
-  type BrainResponsesOutput,
-  type BrainResponsesRequest,
-  brainResponsesOutput,
-  brainResponsesRequest,
-  functionCallOutputItem,
-  isCompactionItem,
-  RESPONSES_ITEM_TYPE,
-  type ResponsesInputItem,
-  userMessageItem,
-} from "./responses-api.js";
+export type { BrainActExecution, BrainActPerformer, BrainRoster } from "./performer.js";
 export {
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_ORIGIN,
@@ -100,6 +68,23 @@ export {
   isBrainRequestStatus,
   isTerminalBrainRequestStatus,
 } from "./requests.js";
+export {
+  BRAIN_REASONING_EFFORT,
+  BRAIN_RESPONSES_PATH,
+  type BrainFunctionCall,
+  type BrainReasoningEffort,
+  type BrainResponsesOptions,
+  type BrainResponsesOutput,
+  type BrainResponsesRequest,
+  brainResponsesOutput,
+  brainResponsesRequest,
+  functionCallOutputItem,
+  isCompactionItem,
+  RESPONSES_ITEM_TYPE,
+  type ResponsesInputItem,
+  userMessageItem,
+} from "./responses-api.js";
+export { type Settled, settledUnlessAborted } from "./settled.js";
 export {
   BRAIN_GENERATION_LIFETIME_MS,
   BRAIN_STATE_BOUNDS,
@@ -130,3 +115,13 @@ export {
   isBrainOnlyTool,
   maximumBriefingLength,
 } from "./tools.js";
+export type { BrainToolCallTrace, BrainTurnTraceRecord } from "./trace.js";
+export { OMISSION_MARKER } from "./transcript-reads.js";
+export { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
+export {
+  BRAIN_WAKE_KIND,
+  type BrainDelivery,
+  type BrainTranscriptDelta,
+  type BrainWakeEvent,
+  type BrainWakeKind,
+} from "./wake-events.js";
