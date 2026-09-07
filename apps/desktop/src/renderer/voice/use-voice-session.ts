@@ -44,7 +44,7 @@ import {
 import { hostedVoiceUnavailableNote } from "../microphone-access";
 import { useStateWithRef } from "../use-state-with-ref";
 import { outputSilent } from "../volume-hint";
-import { HistoryReporter } from "./history-reporter";
+import { HistoryReporter, withPendingLines } from "./history-reporter";
 import { openPreferredMicrophone } from "./microphone-choice";
 import { REPLY_KIND, RealtimeVoiceSession, type ReplyKind } from "./realtime-session";
 import { ReplyDeliveryPlayer } from "./reply-delivery-player";
@@ -573,7 +573,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
    * part of itself, and a report then would name lines the store already
    * holds as though they were new.
    */
-  const publishConversation = useCallback(() => {
+  const publishConversation = useCallback(function publish() {
     conversationRef.current = retainedConversationEntries(conversationRef.current, Date.now());
     setConversationHistory(conversationRef.current);
     if (!conversationSeeded.current) return;
@@ -581,7 +581,14 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     const taken = reporter.take(conversationRef.current);
     if (taken.entries.length === 0) return;
     window.sidecar.appendConversationHistory(taken.entries).then(
-      (acknowledged) => reporter.settle(taken, acknowledged),
+      (acknowledged) => {
+        reporter.settle(taken, acknowledged);
+        // A line that learned its run while its append was out is owed once
+        // more; an acknowledgement is what makes it sendable, so it is sent
+        // now rather than waiting for the next line. A refusal is not
+        // followed up here: the next publish retries, and nothing spins.
+        if (acknowledged) publish();
+      },
       () => reporter.settle(taken, false),
     );
   }, []);
@@ -689,7 +696,14 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       window.sidecar.onConversationHistoryChanged((payload) => {
         if (payload.cleared) return;
         noteReported(payload.entries);
-        conversationRef.current = adoptConversationThread(conversationRef.current, payload.entries);
+        // The relay is the store's thread as another writer left it; a line of
+        // this window's still awaiting the store's acknowledgement is kept.
+        const reporter = reporterRef.current;
+        conversationRef.current = withPendingLines(
+          adoptConversationThread(conversationRef.current, payload.entries),
+          conversationRef.current,
+          (entry) => reporter.pending(entry),
+        );
         setConversationHistory(conversationRef.current);
       }),
     [noteReported],

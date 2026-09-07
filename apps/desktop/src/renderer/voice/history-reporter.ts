@@ -49,6 +49,15 @@ export class HistoryReporter {
       this.#reported.set(conversationEntryIdentity(entry), entry.requestId);
   }
 
+  /** Whether the store has yet to acknowledge this line: not yet sent, or sent and still unanswered. */
+  pending(entry: ConversationEntry): boolean {
+    if (entry.recordedAt === undefined) return false;
+    const key = conversationEntryIdentity(entry);
+    if (this.#inFlight.has(key)) return true;
+    if (!this.#reported.has(key)) return true;
+    return this.#reported.get(key) === undefined && entry.requestId !== undefined;
+  }
+
   /** Lines the main process itself relayed are already the store's; nothing about them is owed. */
   adopt(entries: readonly ConversationEntry[]): void {
     for (const entry of entries) {
@@ -63,4 +72,38 @@ export class HistoryReporter {
     this.#reported.clear();
     this.#inFlight.clear();
   }
+}
+
+/**
+ * The thread after a relay from the main process: the relayed lines, with this
+ * window's own lines the store has not yet acknowledged kept in their places.
+ * A relay is the store's thread as it stood when another writer's line landed,
+ * so it cannot yet hold a line of this window's still on its way — and the
+ * acknowledgement of that line is never echoed back here — so dropping it
+ * would lose the developer's spoken words and the mark that ties them to
+ * their run. The local objects are kept as they are, because the spoken-turn
+ * marks find their lines by identity. Only the Clear discards pending lines,
+ * on its own command.
+ */
+export function withPendingLines(
+  relayed: readonly ConversationEntry[],
+  current: readonly ConversationEntry[],
+  pending: (entry: ConversationEntry) => boolean,
+): readonly ConversationEntry[] {
+  const held = new Set(relayed.map(conversationEntryIdentity));
+  const kept = current.filter(
+    (entry) => !held.has(conversationEntryIdentity(entry)) && pending(entry),
+  );
+  if (kept.length === 0) return relayed;
+  const merged = [...relayed];
+  for (const entry of kept) {
+    let at = merged.length;
+    while (at > 0) {
+      const before = merged[at - 1]?.recordedAt;
+      if (before === undefined || before <= (entry.recordedAt ?? before)) break;
+      at -= 1;
+    }
+    merged.splice(at, 0, entry);
+  }
+  return merged;
 }
