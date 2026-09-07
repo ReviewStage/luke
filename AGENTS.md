@@ -168,8 +168,9 @@ Trust constraints:
   operating system, and nothing reaches the provider; an open asked of Luke
   still runs only in a developer-opened turn, and a session that reported no
   address is offered nowhere to open. A History line records the acts Luke
-  carried and the sessions they named, but draws no press of its own: the
-  roster row is the one way to a session's address. A workspace Luke just
+  carried and the sessions they named, but draws no press of its own: a
+  session's address is reached by its row's press or by a validated ask in a
+  developer-opened turn, and by nothing else. A workspace Luke just
   created opens itself the same way: the creation ask, already a
   developer-opened turn, is also the ask to be taken there, so the session id
   the provider's creation response named (the one thing read out of that
@@ -179,18 +180,23 @@ Trust constraints:
   press would. Nothing a model decided can start that wait, and a created
   session that reports no address inside its window is left unopened like any
   other row without one. Reading a local session's
-  transcript in conversation is the same shape of act: asked of Luke in a
-  turn the developer opened, validated against the observed roster in the
-  renderer and again in the main process, read from the provider's own file
-  on this machine, and rendered into a bounded reply: the read performs
-  nothing, reaches no provider, and is offered only for a
-  local session whose provider's transcript this build documents reading
-  (Claude Code, Codex, and OMP today); a cloud session's conversation lives
-  with its provider and is never fetched. The read renders only what the
-  provider actually wrote down, and a provider whose stored shape this build
-  cannot render faithfully keeps the honest refusal instead. What the read
-  rendered enters the brain's working memory like every other tool answer,
-  and lives and dies with its generation under the next rule.
+  transcript at the developer's ask is the brain's own read, not an act: the
+  brain's `read_transcript` tool, offered in every kind of turn, names a
+  session by the identity the standing context lists, is refused in the
+  agent for any identity the roster does not hold, is refused again in the
+  main process for a session whose location is not this machine or whose
+  provider is not connected, and reads the provider's own file through that
+  provider's adapter, bounded as the next rule says. The read performs
+  nothing, reaches no provider, and answers only for a local session whose
+  provider's transcript this build documents reading (Claude Code, Codex,
+  and OMP today); a cloud session's conversation lives with its provider and
+  is never fetched. The read renders only what the provider actually wrote
+  down, and a provider whose stored shape this build cannot render
+  faithfully keeps the honest refusal instead. What the read rendered enters
+  the brain's working memory like every other tool answer, and lives and dies
+  with its generation under the next rule; what reaches the developer is the
+  reply the brain writes from it, which may quote or summarize the reading
+  and which History keeps as Luke's words under the thread's own retention.
 - The brain's transcript reads are the one place transcript content reaches
   a model unbidden, and both the read and what it leaves behind are bounded
   on every side. Luke's judgment is one long-lived agent in the main process,
@@ -631,8 +637,10 @@ What Luke may show:
   of its own; widening this read to another provider, another caller, an unattributed
   message kind, or anything stored is a product decision, not an
   implementation detail.
-- Session material leaves the machine unbidden in exactly two places, each
-  with its own narrower rule. The brain's own turns are the first, under the
+- On the brain and speech paths, session material leaves the machine
+  unbidden in exactly two places, each with its own narrower rule; the
+  analytics, replay, and crash streams above are disclosed on their own terms
+  and are not counted here. The brain's own turns are the first, under the
   transcript-read rule above: what a local session's transcript gained since
   the brain last looked, bounded and behind a marker, on the developer's own
   key or through Luke's own service. The second is a briefing the brain
@@ -668,20 +676,24 @@ What Luke may show:
   offers no microphone track, carries no tools, and is sent the one briefing
   alone: never the roster, the guide, or a
   transcript, which reach only the brain, and the voice only as the words the
-  brain chose to say. A
-  developer-opened conversation also carries a bounded history of the recent
-  exchange itself (the developer's own asks, typed or spoken and handed back
-  as text by the same service that heard them, the words Luke already spoke
-  or announced, and the acts he carried at the developer's ask) so the one
-  conversation survives the calls that transport it: an announcement read out
-  on Luke's own call, or a call retired idle, is still remembered by the next
-  one. Every history line already traveled to the same service once, on the
-  call that said it; a transcript reading enters the history only as the fact
-  that one was read, never a word of the rendering; each line's identity is
-  the roster-validated one the words traveled with, offered only while that
-  session is still observed; and the history is stored only where the constraint
-  above puts it, on this machine and under its retention policy, and is never
-  sent on Luke's speak-only call. A
+  brain chose to say. The desktop's voice knows no roster, guide, or history
+  of its own: a developer-opened conversation hands their words to the brain
+  through the voice's one tool and says the brain's reply whole. It is the
+  brain whose standing context carries the recent exchange — the 20 most
+  recent History lines, each cut to its own length bound (the developer's
+  asks, typed or spoken and handed back as text by the service that heard
+  them, the words Luke spoke or announced, and the acts he carried at their
+  ask), beside the brain's own working memory of its turns — so the one
+  conversation survives the calls that transport it: a briefing read out on
+  Luke's own call, or a call retired idle, is still remembered on the next
+  ask. A reply that quoted or summarized a transcript read is History like
+  any other reply, and enters that context under the same bounds. Each
+  History line's session identity is the roster-validated one its act
+  traveled with, and the history is stored only where the constraint above
+  puts it, on this machine and under its retention policy, and is never sent
+  on Luke's speak-only call. The phone's call keeps the older shape: it
+  carries the roster it was shown as context and the session acts as its own
+  tools, and no History. A
   briefing's trigger is an observation turn of the brain — a provider's hook,
   the brain's own look at the roster on the observation pass, or a hold's
   release — and the brain's `announce` call inside it, offered in no other
@@ -695,8 +707,8 @@ What Luke may show:
   Luke's own surface under the housing, and nothing else is drawn about it:
   no notice names a session, no chip previews an issue, and no press under
   the housing opens anything, so the words are the whole of what an
-  announcement puts on screen, and the roster row is the one way to a
-  session's address.
+  announcement puts on screen, and a session's address is still reached only
+  by its row's press or a validated ask in a developer-opened turn.
 
 Before handoff, run `./scripts/check.sh` for portable-only changes. For any
 macOS or UI change, `./scripts/verify.sh` is the completion invariant. Report

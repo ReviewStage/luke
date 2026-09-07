@@ -52,10 +52,12 @@ what he remembers, correct something, or tell him to forget it.
 
 ### Announcements
 
-Luke speaks up when an agent is waiting for you, hits an error, or finishes. He
-reads what each agent's transcript gained since he last looked, judges whether
-it is worth interrupting you for, and says everything worth saying in one
-breath rather than a sentence per event.
+Luke speaks up when an agent is waiting for you, hits an error, or finishes. For
+a local agent whose transcript he can read (Claude Code, Codex, and OMP today)
+he reads what the transcript gained since he last looked; for a cloud agent he
+goes by what its provider reports about it. Either way he judges whether it is
+worth interrupting you for, and says everything worth saying in one breath
+rather than a sentence per event.
 
 ### Compatible with every agent and platform
 
