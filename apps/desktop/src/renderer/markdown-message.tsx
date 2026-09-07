@@ -1,74 +1,16 @@
-import type { Element, Root } from "hast";
-import { createContext, type ReactNode, useContext } from "react";
+import type { ReactNode } from "react";
 import Markdown, { type Components, type Options } from "react-markdown";
-import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 
 const SAFE_LINK = /^https?:\/\//i;
-const TASK_ITEM_CLASS = "task-list-item";
 
 /**
- * The plugins that make the dialect coding agents write: GitHub's tables,
- * strikethrough, and task lists, with a single tilde left as the character
- * it is (two home-directory paths in one sentence must not strike the words
- * between them), and a line break in the source kept as one line break,
- * because a message is a chat's words rather than a manuscript whose soft
- * breaks a typesetter joins.
+ * GitHub's dialect, which is the one coding agents write: tables,
+ * strikethrough, and task lists, with a single tilde left as the character it
+ * is, so two home-directory paths in one sentence do not strike the words
+ * between them.
  */
-const REMARK_PLUGINS: Options["remarkPlugins"] = [
-  [remarkGfm, { singleTilde: false }],
-  remarkBreaks,
-];
-
-/**
- * The stamp a chat puts on a message's last line. It rides inside the last
- * paragraph where there is one, and on a line of its own after a block that
- * cannot hold it. The paragraph is marked here, on the tree, because the
- * paragraph component cannot see whether it is the last.
- */
-const TRAILING_PROPERTY = "dataTrailing";
-
-function markTrailingParagraph() {
-  return (tree: Root): void => {
-    let last: Element | undefined;
-    for (const child of tree.children) {
-      if (child.type === "element") last = child;
-    }
-    if (last !== undefined && last.tagName === "p") {
-      last.properties[TRAILING_PROPERTY] = "";
-      return;
-    }
-    tree.children.push({
-      type: "element",
-      tagName: "p",
-      properties: { className: ["markdown-trailing"], [TRAILING_PROPERTY]: "" },
-      children: [],
-    });
-  };
-}
-
-const REHYPE_PLUGINS_WITH_TRAILING: Options["rehypePlugins"] = [markTrailingParagraph];
-const REHYPE_PLUGINS_WITHOUT_TRAILING: Options["rehypePlugins"] = [];
-
-const TrailingContext = createContext<ReactNode>(undefined);
-
-/** Whether the item's task box is ticked, read from the box GitHub's list handler put in it. */
-function taskChecked(node: Element): boolean | undefined {
-  for (const child of node.children) {
-    if (child.type !== "element") continue;
-    if (child.tagName === "input") return child.properties.checked === true;
-    if (child.tagName === "p") {
-      const inner = taskChecked(child);
-      if (inner !== undefined) return inner;
-    }
-  }
-  return undefined;
-}
-
-function isTaskItem(node: Element | undefined): node is Element {
-  const className = node?.properties.className;
-  return Array.isArray(className) && className.includes(TASK_ITEM_CLASS);
-}
+const REMARK_PLUGINS: Options["remarkPlugins"] = [[remarkGfm, { singleTilde: false }]];
 
 /**
  * How each element is drawn where the library's default would say the wrong
@@ -82,9 +24,7 @@ function isTaskItem(node: Element | undefined): node is Element {
  *
  * A heading is styled, never announced: a reader walking the document's
  * headings should meet the panel's, not a reply's. An image has no picture
- * to draw in a caption, so its alternative words stand in for it. A task box
- * is the library's disabled checkbox, drawn instead as the list item's own
- * square in CSS, with the state read out for a reader.
+ * to draw in a caption, so its alternative words stand in for it.
  */
 const COMPONENTS: Components = {
   a: ({ href, children }) =>
@@ -102,30 +42,6 @@ const COMPONENTS: Components = {
   h5: ({ children }) => heading(5, children),
   h6: ({ children }) => heading(6, children),
   img: ({ alt }) => <>{alt ?? ""}</>,
-  input: ({ checked }) => <span className="visually-hidden">{checked ? "Done: " : "To do: "}</span>,
-  li: ({ node, children }) =>
-    isTaskItem(node) ? (
-      <li className="markdown-task" data-checked={taskChecked(node) ? "true" : "false"}>
-        {children}
-      </li>
-    ) : (
-      <li>{children}</li>
-    ),
-  p: ({ node, className, children }) => {
-    const trailing = useContext(TrailingContext);
-    const carriesTrailing = node?.properties[TRAILING_PROPERTY] !== undefined;
-    return (
-      <p className={className}>
-        {children}
-        {carriesTrailing ? trailing : null}
-      </p>
-    );
-  },
-  table: ({ children }) => (
-    <div className="markdown-table-scroll">
-      <table>{children}</table>
-    </div>
-  ),
 };
 
 function heading(level: number, children: ReactNode): React.JSX.Element {
@@ -147,7 +63,8 @@ function safeUrl(url: string): string {
  * headings, lists, quotes, fenced code, tables, rules — composed around it.
  * Raw HTML in the words is text. Every size in the stylesheet is in `em`, so
  * the same component reads at the caption's ten pixels and the thread's
- * twelve and a half.
+ * twelve and a half. `trailing` is the stamp a chat puts under a message,
+ * drawn on a line of its own after the words.
  */
 export function MarkdownMessage({
   words,
@@ -160,18 +77,10 @@ export function MarkdownMessage({
 }): React.JSX.Element {
   return (
     <div className={className === undefined ? "markdown" : `markdown ${className}`}>
-      <TrailingContext value={trailing}>
-        <Markdown
-          remarkPlugins={REMARK_PLUGINS}
-          rehypePlugins={
-            trailing === undefined ? REHYPE_PLUGINS_WITHOUT_TRAILING : REHYPE_PLUGINS_WITH_TRAILING
-          }
-          components={COMPONENTS}
-          urlTransform={safeUrl}
-        >
-          {words}
-        </Markdown>
-      </TrailingContext>
+      <Markdown remarkPlugins={REMARK_PLUGINS} components={COMPONENTS} urlTransform={safeUrl}>
+        {words}
+      </Markdown>
+      {trailing === undefined ? null : <p className="markdown-trailing">{trailing}</p>}
     </div>
   );
 }

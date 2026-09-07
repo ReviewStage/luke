@@ -25,8 +25,11 @@ test("inline styles draw as their elements", () => {
   assert.match(markup, /<del>twice<\/del>/);
 });
 
-test("a line break in the words is a line break on screen", () => {
-  assert.equal(render("one\ntwo"), '<div class="markdown"><p>one<br/>\ntwo</p></div>');
+test("a lone newline joins lines and a blank line separates paragraphs, as GitHub reads them", () => {
+  assert.equal(
+    render("one\ntwo\n\nthree"),
+    '<div class="markdown"><p>one\ntwo</p>\n<p>three</p></div>',
+  );
 });
 
 test("a link is drawn but is not a control", () => {
@@ -89,34 +92,31 @@ test("fenced code, quotes, lists, tables, and rules compose around the paragraph
   assert.match(markup, /<pre><code class="language-ts">const a = 1;\n<\/code><\/pre>/);
   assert.match(markup, /<blockquote>\n<p>noted<\/p>\n<\/blockquote>/);
   assert.match(markup, /<ol start="3">\n<li>three<\/li>\n<li>four<\/li>\n<\/ol>/);
+  // The task box is the library's own disabled checkbox: nothing a press can change.
   assert.match(
     markup,
-    /<li class="markdown-task" data-checked="true"><span class="visually-hidden">Done: <\/span> done<\/li>/,
+    /<li class="task-list-item"><input type="checkbox" disabled="" checked=""\/> done<\/li>/,
   );
   assert.match(
     markup,
-    /<li class="markdown-task" data-checked="false"><span class="visually-hidden">To do: <\/span> todo<\/li>/,
+    /<li class="task-list-item"><input type="checkbox" disabled=""\/> todo<\/li>/,
   );
-  // The library's disabled checkbox never reaches the markup; the square is the item's own.
-  assert.doesNotMatch(markup, /<input/);
   assert.match(
     markup,
-    /<div class="markdown-table-scroll"><table><thead><tr><th style="text-align:left">a<\/th><th style="text-align:right">b<\/th>/,
+    /<table><thead><tr><th style="text-align:left">a<\/th><th style="text-align:right">b<\/th>/,
   );
   assert.match(markup, /<td style="text-align:left">1<\/td><td style="text-align:right">2<\/td>/);
   assert.match(markup, /<hr\/><\/div>$/);
 });
 
-test("the trailing node rides in the last paragraph, or on its own line after a block", () => {
+test("the trailing node stands on its own line after the words", () => {
   const stamp = createElement("time", { className: "history-time" }, "3:04");
   assert.equal(
     renderToStaticMarkup(createElement(MarkdownMessage, { words: "Done.", trailing: stamp })),
-    '<div class="markdown"><p>Done.<time class="history-time">3:04</time></p></div>',
+    '<div class="markdown"><p>Done.</p><p class="markdown-trailing"><time class="history-time">3:04</time></p></div>',
   );
   assert.equal(
-    renderToStaticMarkup(
-      createElement(MarkdownMessage, { words: "```\nls\n```", trailing: stamp }),
-    ),
-    '<div class="markdown"><pre><code>ls\n</code></pre><p class="markdown-trailing"><time class="history-time">3:04</time></p></div>',
+    renderToStaticMarkup(createElement(MarkdownMessage, { words: "Done." })),
+    '<div class="markdown"><p>Done.</p></div>',
   );
 });

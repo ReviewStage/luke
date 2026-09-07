@@ -1,11 +1,15 @@
 /* A message's Markdown, drawn wherever Luke's or the developer's words are: the
    History bubbles and the caption under the housing. Every measure is in `em`
    so the same rules read at the caption's ten pixels and the thread's twelve
-   and a half, and every colour is a token off the surface so a block reads on
-   the raised bubble and on the sent bubble's accent alike. Blocks are spaced by
-   margin rather than a flex gap: the caption's root is an ordinary block whose
-   wrapped height is measured, and a list item that went flex would lose its
-   marker. */
+   and a half, and every tint is mixed from `currentColor`, so the same rule
+   reads on the raised bubble's grey and on the sent bubble's accent without a
+   per-speaker override. Blocks are spaced by margin rather than a flex gap:
+   the caption's root is an ordinary block whose wrapped height is measured. */
+.markdown {
+  --markdown-tint: color-mix(in srgb, currentColor 13%, transparent);
+  --markdown-edge: color-mix(in srgb, currentColor 28%, transparent);
+}
+
 .markdown > * + *,
 .markdown li > * + *,
 .markdown blockquote > * + * {
@@ -37,7 +41,7 @@
 .markdown code {
   padding: 0.08em 0.36em;
   border-radius: 0.36em;
-  background: var(--raised);
+  background: var(--markdown-tint);
   font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
   /* Mono runs wider than the text around it at equal size. */
   font-size: 0.92em;
@@ -52,7 +56,7 @@
   margin: 0;
   padding: 0.6em 0.8em;
   border-radius: 0.7em;
-  background: var(--raised);
+  background: var(--markdown-tint);
   overflow-x: auto;
   scrollbar-width: none;
   text-align: left;
@@ -71,8 +75,8 @@
 .markdown blockquote {
   margin: 0;
   padding-left: 0.85em;
-  border-left: 0.2em solid var(--text-tertiary);
-  color: var(--text-secondary);
+  border-left: 0.2em solid var(--markdown-edge);
+  opacity: 0.8;
   text-align: left;
 }
 
@@ -88,72 +92,45 @@
 }
 
 .markdown li::marker {
-  color: var(--text-secondary);
+  opacity: 0.7;
   font-variant-numeric: tabular-nums;
 }
 
-/* A task box draws as a checklist square; ticked, it takes the same green a
-   finished session wears. */
-.markdown li.markdown-task {
-  position: relative;
+/* A task item keeps the library's own disabled checkbox as its marker, in the
+   green a finished session wears once ticked. */
+.markdown li.task-list-item {
   list-style: none;
 }
 
-.markdown li.markdown-task::before {
-  position: absolute;
-  top: 0.22em;
-  left: -1.35em;
-  display: block;
-  box-sizing: border-box;
+.markdown li.task-list-item input[type="checkbox"] {
   width: 0.95em;
   height: 0.95em;
-  border: 0.1em solid var(--text-tertiary);
-  border-radius: 0.25em;
-  content: "";
+  margin: 0 0.45em 0 -1.45em;
+  vertical-align: -0.1em;
+  accent-color: var(--state-complete);
 }
 
-.markdown li.markdown-task[data-checked="true"]::before {
-  border-color: var(--state-complete);
-  background: var(--state-complete);
-}
-
-/* The tick is two borders of a rotated box rather than a glyph, so it draws
-   the same in every font the surface might fall back to. */
-.markdown li.markdown-task[data-checked="true"]::after {
-  position: absolute;
-  top: 0.36em;
-  left: -1.02em;
-  width: 0.24em;
-  height: 0.48em;
-  border: solid var(--surface-fill);
-  border-width: 0 0.13em 0.13em 0;
-  content: "";
-  transform: rotate(45deg);
-}
-
-.markdown-table-scroll {
+/* A table scrolls sideways rather than widening the bubble; a column's
+   alignment arrives as each cell's own inline style, from the delimiter row. */
+.markdown table {
+  display: block;
   max-width: 100%;
+  border-collapse: collapse;
   overflow-x: auto;
   scrollbar-width: none;
+  font-variant-numeric: tabular-nums;
   text-align: left;
 }
 
-.markdown table {
-  border-collapse: collapse;
-  font-variant-numeric: tabular-nums;
-}
-
-/* A column's alignment arrives as the cell's own inline style, from the
-   table's delimiter row, so nothing here sets one. */
 .markdown th,
 .markdown td {
   padding: 0.3em 0.7em 0.3em 0;
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--markdown-edge);
   vertical-align: top;
 }
 
 .markdown th {
-  color: var(--text-secondary);
+  opacity: 0.8;
   font-weight: 640;
 }
 
@@ -164,7 +141,7 @@
 .markdown hr {
   margin: 0.3em 0;
   border: 0;
-  border-top: 1px solid var(--hairline);
+  border-top: 1px solid var(--markdown-edge);
 }
 
 /* Drawn as a link, so the reader knows the words pointed somewhere, but not a
@@ -172,13 +149,12 @@
    hover title. */
 .markdown-link {
   text-decoration: underline;
-  text-decoration-color: var(--text-tertiary);
+  text-decoration-color: var(--markdown-edge);
   text-decoration-thickness: 1px;
   text-underline-offset: 0.15em;
 }
 
-/* The stamp under a message that did not end in a paragraph, kept to the same
-   line a chat app puts it on. */
+/* The stamp under a message, on a line of its own. */
 .markdown-trailing {
   text-align: right;
 }

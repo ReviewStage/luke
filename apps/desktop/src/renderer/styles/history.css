@@ -179,14 +179,13 @@
   overflow-wrap: anywhere;
 }
 
-/* The stamp rides inside the bubble, on the last line where a chat app puts
-   it, so a thread with times lays out exactly like one without and the copy
-   control stays centred on the words. It inherits the bubble's own colour
-   because the sent bubble's ground is the accent, where a fixed secondary
-   grey would not be readable. */
+/* The stamp rides inside the bubble, on a line of its own under the words,
+   so the copy control stays anchored to one bubble. It inherits the bubble's
+   own colour because the sent bubble's ground is the accent, where a fixed
+   secondary grey would not be readable. */
 .history-time {
-  margin-left: 6px;
   color: inherit;
+  opacity: 0.75;
   font-size: 9.5px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -203,29 +202,6 @@
   color: rgba(255, 255, 255, 0.98);
 }
 
-/* On the accent ground the raised token vanishes, so code, quotes, and rules
-   take their tint from the bubble's own white ink instead. */
-.history-entry[data-speaker="you"] .history-words code,
-.history-entry[data-speaker="you"] .history-words pre {
-  background: rgba(255, 255, 255, 0.16);
-}
-
-.history-entry[data-speaker="you"] .history-words blockquote {
-  border-left-color: rgba(255, 255, 255, 0.45);
-  color: rgba(255, 255, 255, 0.82);
-}
-
-.history-entry[data-speaker="you"] .history-words th,
-.history-entry[data-speaker="you"] .history-words li::marker {
-  color: rgba(255, 255, 255, 0.82);
-}
-
-.history-entry[data-speaker="you"] .history-words td,
-.history-entry[data-speaker="you"] .history-words th,
-.history-entry[data-speaker="you"] .history-words hr {
-  border-color: rgba(255, 255, 255, 0.28);
-}
-
 .history-entry[data-speaker="luke"] {
   align-self: flex-start;
   /* Shrink-wrapped, not stretched: the bubble is the copy control's anchor. */
@@ -235,13 +211,6 @@
 .history-entry[data-speaker="luke"] .history-words {
   border-radius: 15px 15px 15px 5px;
   background: var(--raised-strong);
-}
-
-/* Inside the raised bubble the raised token is the bubble itself, so a code
-   block steps down to the surface's fill to stand apart from its ground. */
-.history-entry[data-speaker="luke"] .history-words code,
-.history-entry[data-speaker="luke"] .history-words pre {
-  background: var(--surface-fill);
 }
 
 .history-entry[data-speaker="event"] {
