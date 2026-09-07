@@ -135,6 +135,7 @@ struct SessionsView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Color.ground.ignoresSafeArea())
+        .refreshable { await refreshSessions() }
         // Over the list rather than in it: a row sits at the top of an
         // otherwise empty list, while an overlay centers in the whole area,
         // and the list beneath keeps its pull-to-refresh.
@@ -149,18 +150,14 @@ struct SessionsView: View {
                 }
             }
         }
-        // The drawer keeps the field at the top of the list, summoned by the
-        // bar's own search button, rather than iOS 26's bottom-edge default,
-        // which would crowd the tab bar.
         .searchable(
             text: $store.searchQuery,
             isPresented: $store.searchPresented,
-            placement: .navigationBarDrawer(displayMode: .automatic),
+            placement: .navigationBarDrawer(displayMode: .always),
             prompt: "Search sessions"
         )
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                searchButton
+            ToolbarItem(placement: .topBarTrailing) {
                 optionsButton
             }
         }
@@ -168,7 +165,6 @@ struct SessionsView: View {
             SessionOptionsSheet(sessions: store.sessions, filters: $store.filters, sort: $store.sort)
                 .presentationDetents([.medium, .large])
         }
-        .refreshable { await refreshSessions() }
         .task { await refreshSessions() }
     }
 
@@ -178,15 +174,6 @@ struct SessionsView: View {
         } label: {
             Label("Filter & Sort", systemImage: "line.3.horizontal.decrease")
                 .symbolVariant(store.filters.isEmpty ? .none : .circle.fill)
-        }
-        .tint(Color.ink)
-    }
-
-    private var searchButton: some View {
-        Button {
-            store.searchPresented = true
-        } label: {
-            Label("Search", systemImage: "magnifyingglass")
         }
         .tint(Color.ink)
     }
