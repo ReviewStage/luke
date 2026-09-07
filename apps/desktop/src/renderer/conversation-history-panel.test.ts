@@ -79,7 +79,7 @@ test("a reply keeps its lines through the thread and draws as the Markdown it wa
   assert.match(markup, /<pre><code class="language-sh">git push\n<\/code><\/pre>/);
 });
 
-test("a recorded entry shows its local time", () => {
+test("a recorded entry keeps its local time at the row's edge, outside the bubble", () => {
   const markup = renderToStaticMarkup(
     createElement(ConversationHistoryPanel, {
       entries: [
@@ -95,10 +95,13 @@ test("a recorded entry shows its local time", () => {
     }),
   );
 
+  // The stamp is the row's last child, after the bubble closes: it rests in
+  // the clipped column a pull uncovers, never on a line of the bubble's own.
   assert.match(
     markup,
-    /<time class="history-time" dateTime="2026-01-02T03:04:00.000Z">[^<]+<\/time>/,
+    /<\/span><time class="history-time" dateTime="2026-01-02T03:04:00.000Z">[^<]+<\/time><\/li>/,
   );
+  assert.match(markup, /<div class="history-scroll"><ol class="history-list">/);
 });
 
 test("conversation history is blocked from optional panel recordings", () => {

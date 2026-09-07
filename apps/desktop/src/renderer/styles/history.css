@@ -53,30 +53,59 @@
   color: var(--danger);
 }
 
-.history-list {
-  display: flex;
+/* The thread scrolls and the list inside it clips, and they are two elements
+   because the stamps rest past the list's right edge: a scroll container
+   counts whatever lies past its edge as room to scroll to, while a clipping
+   box counts it as gone. */
+.history-scroll {
   min-height: 0;
   flex: 1;
-  flex-direction: column;
-  gap: 4px;
-  margin: 0;
   padding: 4px 4px 8px;
   overflow-x: clip;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
   scrollbar-width: thin;
-  list-style: none;
   animation: scroll-edge-fade linear both;
   animation-timeline: scroll(self block);
 }
 
+.history-list {
+  /* Room for the widest stamp a twelve-hour clock draws, with its own
+     inset from the thread's edge. The renderer measures the drawn stamp
+     rather than restating this. */
+  --history-time-column: 56px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  overflow-x: clip;
+  list-style: none;
+}
+
+/* A row spans the thread, and the whole thread is what a pull moves: every
+   row rides `--history-time-reveal`, which the scroller writes as the fingers
+   travel and drops when they lift, so the rows spring home together on the
+   panel's own spring. Held, the transition is off so the rows track the hand
+   rather than trail it. A row whose copy control holds keyboard focus makes
+   the same travel on its own, so the times are reachable without a trackpad. */
 .history-entry {
   position: relative;
   display: flex;
-  max-width: min(82%, 58ch);
+  width: 100%;
   flex: 0 0 auto;
-  flex-direction: column;
+  transform: translateX(calc(-1 * var(--history-time-reveal, 0px)));
+  transition: transform var(--duration-fast) var(--spring);
+}
+
+.history-scroll[data-time-reveal="held"] .history-entry {
+  transition: none;
+}
+
+.history-entry:has(.history-copy:focus-visible) {
+  transform: translateX(calc(-1 * var(--history-time-column)));
 }
 
 /* The bubble is the copy control's anchor. It stacks: the words, then the
@@ -86,7 +115,7 @@
   position: relative;
   display: flex;
   min-width: 0;
-  max-width: 100%;
+  max-width: min(82%, 58ch);
   flex-direction: column;
 }
 
@@ -179,21 +208,27 @@
   overflow-wrap: anywhere;
 }
 
-/* The stamp rides inside the bubble, on a line of its own under the words,
-   so the copy control stays anchored to one bubble. It inherits the bubble's
-   own colour because the sent bubble's ground is the accent, where a fixed
-   secondary grey would not be readable. */
+/* The stamp rests past the row's right edge, in the column the list clips
+   away until the thread is pulled, and so takes no room: a thread with times
+   lays out exactly like one without. It hangs off the row rather than the
+   bubble so the sent side's stamps and the received side's stand in one
+   column, the way iMessage keeps them. */
 .history-time {
-  color: inherit;
-  opacity: 0.75;
-  font-size: 9.5px;
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  width: var(--history-time-column);
+  padding-right: 6px;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
+  text-align: right;
   white-space: nowrap;
 }
 
 .history-entry[data-speaker="you"] {
-  align-self: flex-end;
-  align-items: flex-end;
+  justify-content: flex-end;
 }
 
 .history-entry[data-speaker="you"] .history-words {
@@ -202,23 +237,20 @@
   color: rgba(255, 255, 255, 0.98);
 }
 
-.history-entry[data-speaker="luke"] {
-  align-self: flex-start;
-  /* Shrink-wrapped, not stretched: the bubble is the copy control's anchor. */
-  align-items: flex-start;
-}
-
 .history-entry[data-speaker="luke"] .history-words {
   border-radius: 15px 15px 15px 5px;
   background: var(--raised-strong);
 }
 
 .history-entry[data-speaker="event"] {
-  max-width: 84%;
-  align-self: center;
-  align-items: center;
+  justify-content: center;
   padding: 8px 12px;
   text-align: center;
+}
+
+.history-entry[data-speaker="event"] .history-bubble {
+  max-width: 84%;
+  align-items: center;
 }
 
 .history-entry[data-speaker="event"] .history-words {

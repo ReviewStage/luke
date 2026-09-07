@@ -153,8 +153,3 @@
   text-decoration-thickness: 1px;
   text-underline-offset: 0.15em;
 }
-
-/* The stamp under a message, on a line of its own. */
-.markdown-trailing {
-  text-align: right;
-}

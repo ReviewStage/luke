@@ -4,9 +4,10 @@ import {
   type ConversationEntryKind,
   conversationEntryKey,
 } from "@sidecar/realtime";
-import { useEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { type BrainRequestSnapshot, brainRequestPending } from "#shared/wire/brain";
 import { type AskHandler, AskLuke } from "./ask-luke";
+import { isSidewaysStep, revealAfterStep, TIME_REVEAL_SETTLE_MS } from "./history-time-reveal";
 import { MarkdownMessage } from "./markdown-message";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CheckIcon, CopyIcon } from "./settings-icons";
@@ -41,6 +42,13 @@ export function historyEntryPresentation(kind: ConversationEntryKind): HistoryEn
 const COPY_CONFIRMATION_MS = 1500;
 
 const ENTRY_TIME = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+
+/**
+ * The stamp's class, named once because the gesture below measures the drawn
+ * stamp to learn how far a pull may travel: the column's width is the
+ * stylesheet's, and the renderer reads it rather than restating it.
+ */
+const HISTORY_TIME_CLASS = "history-time";
 
 /** What History says under an ask whose run has not ended yet. */
 export const HISTORY_PENDING_LABEL = "Luke is working on this…";
@@ -77,19 +85,7 @@ function HistoryEntryRow({
     >
       <small className="visually-hidden">{presentation.label}</small>
       <span className="history-bubble">
-        <MarkdownMessage
-          words={words}
-          className="history-words"
-          {...(recordedAt
-            ? {
-                trailing: (
-                  <time className="history-time" dateTime={recordedAt.toISOString()}>
-                    {ENTRY_TIME.format(recordedAt)}
-                  </time>
-                ),
-              }
-            : undefined)}
-        />
+        <MarkdownMessage words={words} className="history-words" />
         {pending ? (
           <span className="history-pending" role="status">
             <span className="history-pending-label">{HISTORY_PENDING_LABEL}</span>
@@ -120,6 +116,14 @@ function HistoryEntryRow({
           </button>
         )}
       </span>
+      {/* The stamp is the row's, not the bubble's: it rests in one column past
+          the thread's right edge, sent and received alike, where the pull
+          below uncovers it. */}
+      {recordedAt ? (
+        <time className={HISTORY_TIME_CLASS} dateTime={recordedAt.toISOString()}>
+          {ENTRY_TIME.format(recordedAt)}
+        </time>
+      ) : null}
     </li>
   );
 }
@@ -142,6 +146,57 @@ function keyedHistoryEntries(entries: readonly ConversationEntry[]) {
  * further than that, and the stream must not drag them back down.
  */
 const STREAM_FOLLOW_SLACK_PX = 48;
+
+/** The custom property every row's travel reads, written on the scroller as the hand moves. */
+const TIME_REVEAL_PROPERTY = "--history-time-reveal";
+
+const TIME_REVEAL_STATE = {
+  /** The hand is still on the trackpad: rows track it instead of springing. */
+  HELD: "held",
+} as const;
+
+/**
+ * The iMessage pull: a sideways trackpad scroll over the thread drags every
+ * row left by the distance the fingers travel, uncovering the stamps the list
+ * clips at rest, and the rows spring home once the steps stop arriving. The
+ * travel is written straight to the scroller as a custom property rather than
+ * through state, because a step arrives every frame and a render of the whole
+ * thread on each would draw the Markdown of every line again to move it.
+ */
+function useTimeRevealPull(scroller: RefObject<HTMLDivElement | null>, thread: boolean): void {
+  useEffect(() => {
+    const element = scroller.current;
+    if (!thread || !element) return;
+    let reveal = 0;
+    let settle: ReturnType<typeof setTimeout> | undefined;
+    const draw = () => element.style.setProperty(TIME_REVEAL_PROPERTY, `${reveal}px`);
+    const release = () => {
+      settle = undefined;
+      reveal = 0;
+      delete element.dataset.timeReveal;
+      draw();
+    };
+    const pull = (step: WheelEvent) => {
+      if (!isSidewaysStep(step)) return;
+      // Nothing here scrolls sideways, so the step is the pull's alone, and
+      // it must not travel on to anything behind the thread that would.
+      step.preventDefault();
+      const column = element.querySelector(`.${HISTORY_TIME_CLASS}`)?.getBoundingClientRect().width;
+      reveal = revealAfterStep(reveal, step.deltaX, column ?? 0);
+      element.dataset.timeReveal = TIME_REVEAL_STATE.HELD;
+      draw();
+      if (settle !== undefined) clearTimeout(settle);
+      settle = setTimeout(release, TIME_REVEAL_SETTLE_MS);
+    };
+    // React registers wheel listeners passive, and a passive listener cannot
+    // claim the step; the element takes its own.
+    element.addEventListener("wheel", pull, { passive: false });
+    return () => {
+      element.removeEventListener("wheel", pull);
+      if (settle !== undefined) clearTimeout(settle);
+    };
+  }, [scroller, thread]);
+}
 
 /**
  * Where the composer stands in the panel's arrival stack: the tab bar is index
@@ -180,7 +235,7 @@ export function ConversationHistoryPanel({
   askShortcut?: string;
 }): React.JSX.Element {
   const [confirmingClear, setConfirmingClear] = useState(false);
-  const list = useRef<HTMLOListElement | null>(null);
+  const list = useRef<HTMLDivElement | null>(null);
   const entryCount = entries.length;
   const liveLength = live.reduce((total, entry) => total + entry.words.length, 0);
   const pendingRuns = new Set(
@@ -208,6 +263,9 @@ export function ConversationHistoryPanel({
   useEffect(() => {
     if (entries.length === 0) setConfirmingClear(false);
   }, [entries.length]);
+
+  const thread = entries.length > 0 || live.length > 0;
+  useTimeRevealPull(list, thread);
 
   return (
     <section
@@ -246,39 +304,41 @@ export function ConversationHistoryPanel({
           </span>
         </header>
       ) : null}
-      {entries.length === 0 && live.length === 0 ? (
+      {thread ? (
+        <div className="history-scroll" ref={list}>
+          <ol className="history-list">
+            {keyedHistoryEntries(entries).map(({ entry, key }) => {
+              const runId = entry.requestId;
+              const pending =
+                runId !== undefined &&
+                (entry.kind === CONVERSATION_ENTRY_KIND.TYPED_ASK ||
+                  entry.kind === CONVERSATION_ENTRY_KIND.SPOKEN_ASK) &&
+                pendingRuns.has(runId);
+              return (
+                <HistoryEntryRow
+                  key={key}
+                  entry={entry}
+                  pending={pending}
+                  {...(pending && runId !== undefined && onCancelRequest
+                    ? { onCancel: () => onCancelRequest(runId) }
+                    : undefined)}
+                />
+              );
+            })}
+            {live.map((entry, index) => (
+              <HistoryEntryRow
+                // biome-ignore lint/suspicious/noArrayIndexKey: A line still being said has no durable id, and its words change on every delta — a key made of either would remount the bubble mid-sentence, while its position holds still for exactly as long as the line does.
+                key={`live:${entry.kind}:${index}`}
+                entry={entry}
+                streaming
+              />
+            ))}
+          </ol>
+        </div>
+      ) : (
         <div className="history-empty">
           <strong>No messages yet</strong>
         </div>
-      ) : (
-        <ol className="history-list" ref={list}>
-          {keyedHistoryEntries(entries).map(({ entry, key }) => {
-            const runId = entry.requestId;
-            const pending =
-              runId !== undefined &&
-              (entry.kind === CONVERSATION_ENTRY_KIND.TYPED_ASK ||
-                entry.kind === CONVERSATION_ENTRY_KIND.SPOKEN_ASK) &&
-              pendingRuns.has(runId);
-            return (
-              <HistoryEntryRow
-                key={key}
-                entry={entry}
-                pending={pending}
-                {...(pending && runId !== undefined && onCancelRequest
-                  ? { onCancel: () => onCancelRequest(runId) }
-                  : undefined)}
-              />
-            );
-          })}
-          {live.map((entry, index) => (
-            <HistoryEntryRow
-              // biome-ignore lint/suspicious/noArrayIndexKey: A line still being said has no durable id, and its words change on every delta — a key made of either would remount the bubble mid-sentence, while its position holds still for exactly as long as the line does.
-              key={`live:${entry.kind}:${index}`}
-              entry={entry}
-              streaming
-            />
-          ))}
-        </ol>
       )}
       {/* The thread is where a typed ask's reply lands as a bubble, so the field
           that asks stands at its foot — the same composer the sessions tab
