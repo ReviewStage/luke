@@ -1,3 +1,4 @@
+import type { RealtimeToolWireDefinition } from "@sidecar/acts";
 import {
   isRecord,
   isWireString,
@@ -6,7 +7,6 @@ import {
   type WireRecord,
   wholeNumber,
 } from "@sidecar/wire";
-import type { BrainToolWireDefinition } from "./brain-tools.js";
 
 /**
  * The one OpenAI Responses request a brain turn may be, and the one reading of
@@ -68,7 +68,7 @@ export type BrainReasoningEffort =
 export interface BrainResponsesOptions {
   model: string;
   instructions: string;
-  tools: readonly BrainToolWireDefinition[];
+  tools: readonly RealtimeToolWireDefinition[];
   maximumOutputTokens: number;
   reasoningEffort: BrainReasoningEffort;
 }

@@ -116,11 +116,7 @@ export {
 } from "./brain-state.js";
 export {
   BRAIN_TOOL,
-  type BrainSchemaProperty,
-  type BrainSchemaPropertyMap,
   type BrainToolName,
-  type BrainToolParameters,
-  type BrainToolWireDefinition,
   brainToolAllowed,
   brainToolDefinitions,
   isBrainOnlyTool,
