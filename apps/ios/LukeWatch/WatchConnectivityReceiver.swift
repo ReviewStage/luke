@@ -1,14 +1,21 @@
+import LukeKit
 import WatchConnectivity
 
 /// Activates WatchConnectivity on the watch, requests tokens from the paired
-/// iPhone on first launch, and feeds every inbound payload to WatchAccountSession.
+/// iPhone on first launch, feeds every inbound payload to WatchAccountSession,
+/// and keeps this watch's device settings and the phone's equal through the
+/// session's application context: the phone's latest snapshot is applied as
+/// it arrives, and a change made on the wrist is sent back the same way.
 final class WatchConnectivityReceiver: NSObject, WCSessionDelegate {
     private let watchSession: WatchAccountSession
+    private let settings: DeviceSettingsSync
 
     @MainActor
     init(watchSession: WatchAccountSession) {
         self.watchSession = watchSession
+        settings = DeviceSettingsSync(publish: Self.publishSettings)
         super.init()
+        settings.start()
         watchSession.onCredentialsNeeded = { [weak self] in
             self?.requestTokensIfNeeded()
         }
@@ -25,6 +32,11 @@ final class WatchConnectivityReceiver: NSObject, WCSessionDelegate {
         error: (any Error)?
     ) {
         guard activationState == .activated else { return }
+        let received = session.receivedApplicationContext
+        Task { @MainActor [weak self] in
+            self?.settings.receive(received)
+            self?.settings.publishCurrent()
+        }
         requestTokensIfNeeded()
     }
 
@@ -49,7 +61,17 @@ final class WatchConnectivityReceiver: NSObject, WCSessionDelegate {
         replyHandler([:])
     }
 
+    func session(_ session: WCSession, didReceiveApplicationContext context: [String: Any]) {
+        Task { @MainActor [weak self] in self?.settings.receive(context) }
+    }
+
     // MARK: - Private
+
+    private static func publishSettings(_ payload: [String: Any]) {
+        let s = WCSession.default
+        guard s.activationState == .activated else { return }
+        try? s.updateApplicationContext(payload)
+    }
 
     private func requestTokensIfNeeded() {
         Task { @MainActor [weak self] in

@@ -62,24 +62,40 @@ public final class WorkspaceCreationDefaults {
         store.set(held, forKey: Key.projectByProvider)
     }
 
+    /// Replaces every provider's remembered project at once — the shape a
+    /// paired device's copy of these choices arrives in.
+    public func setLastProjectIds(_ projectIds: [String: String]) {
+        if projectIds.isEmpty {
+            store.removeObject(forKey: Key.projectByProvider)
+        } else {
+            store.set(projectIds, forKey: Key.projectByProvider)
+        }
+    }
+
+    /// Every provider's remembered agent selection at once, keyed by provider id.
+    public var agentDefaults: [String: WorkspaceAgentDefault] {
+        agentsByProvider().compactMapValues(Self.agentDefault(fields:))
+    }
+
+    /// Replaces every provider's remembered agent selection at once.
+    public func setAgentDefaults(_ selections: [String: WorkspaceAgentDefault]) {
+        if selections.isEmpty {
+            store.removeObject(forKey: Key.agentByProvider)
+        } else {
+            store.set(selections.mapValues(Self.fields(of:)), forKey: Key.agentByProvider)
+        }
+    }
+
     public func agentDefault(for providerId: String) -> WorkspaceAgentDefault? {
-        guard
-            let held = store.dictionary(forKey: Key.agentByProvider) as? [String: [String: String]],
-            let fields = held[providerId],
-            let agent = fields["agent"],
-            let model = fields["model"]
-        else { return nil }
-        return WorkspaceAgentDefault(agent: agent, model: model, effort: fields["effort"])
+        agentsByProvider()[providerId].flatMap(Self.agentDefault(fields:))
     }
 
     /// Passing nil forgets the provider's stored choice, so choosing the
     /// provider's own default again is remembered as exactly that.
     public func setAgentDefault(_ selection: WorkspaceAgentDefault?, for providerId: String) {
-        var held = store.dictionary(forKey: Key.agentByProvider) as? [String: [String: String]] ?? [:]
+        var held = agentsByProvider()
         if let selection {
-            var fields = ["agent": selection.agent, "model": selection.model]
-            if let effort = selection.effort { fields["effort"] = effort }
-            held[providerId] = fields
+            held[providerId] = Self.fields(of: selection)
         } else {
             held.removeValue(forKey: providerId)
         }
@@ -88,5 +104,20 @@ public final class WorkspaceCreationDefaults {
 
     private func projectsByProvider() -> [String: String] {
         store.dictionary(forKey: Key.projectByProvider) as? [String: String] ?? [:]
+    }
+
+    private func agentsByProvider() -> [String: [String: String]] {
+        store.dictionary(forKey: Key.agentByProvider) as? [String: [String: String]] ?? [:]
+    }
+
+    private static func agentDefault(fields: [String: String]) -> WorkspaceAgentDefault? {
+        guard let agent = fields["agent"], let model = fields["model"] else { return nil }
+        return WorkspaceAgentDefault(agent: agent, model: model, effort: fields["effort"])
+    }
+
+    private static func fields(of selection: WorkspaceAgentDefault) -> [String: String] {
+        var fields = ["agent": selection.agent, "model": selection.model]
+        if let effort = selection.effort { fields["effort"] = effort }
+        return fields
     }
 }

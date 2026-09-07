@@ -75,7 +75,9 @@ sorts, or searches the watch list the same way, drawing a Show All row above
 the rows a narrowing leaves so a list Luke narrowed never hides a session
 without saying so. The watch voice page also has the phone's Settings pattern:
 a gear button opens voice and speed controls, plus the Debug tool list read
-from the watch call and roster.
+from the watch call and roster. The voice and speed chosen there are the
+phone's own, kept equal through the settings sync described under Watch below,
+so the wrist is a quick way to change them and never a second copy.
 
 ## Analytics
 
@@ -116,12 +118,27 @@ streams down.
 ## Watch
 
 `LukeWatch` is its own client of the hosted service, not a view the iPhone
-feeds. The phone hands it the account's tokens over WatchConnectivity and
-nothing else; the sessions list, a session's conversation, the messages and
-controls sent from the wrist, and the voice call's mint and Realtime socket
-all leave the watch itself. watchOS chooses the path and prefers the phone:
+feeds. The phone hands it the account's tokens over WatchConnectivity, and the
+two exchange one more thing over the same channel, described next; the
+sessions list, a session's conversation, the messages and controls sent from
+the wrist, and the voice call's mint and Realtime socket all leave the watch
+itself. watchOS chooses the path and prefers the phone:
 the paired iPhone's connection tunneled over Bluetooth whenever the phone is
 in range, the watch's own Wi-Fi or cellular only when it is not.
+
+The settings the two apps both hold — the voice and speed the next mint asks
+for, and the New Workspace choices remembered per provider — are kept equal
+through WatchConnectivity's application context, in `DeviceSettingsSync` in
+`LukeKit` with `PhoneSessionRelay` and `WatchConnectivityReceiver` as its two
+ends. Each app keeps reading and writing its own UserDefaults keys; the sync
+follows those keys, sends one whole snapshot on every local change and at
+activation, and applies an arriving snapshot only when it is newer than the
+last change made on the receiving device, so a choice made while the pair was
+apart is never undone by the other device's older copy. The application
+context is the right channel because it holds only the latest snapshot,
+delivers it whenever the pair next connects, and keeps the last one received
+across a relaunch. Nothing in it is account data: no token, key, or anything
+a provider wrote travels this way, and it leaves neither device.
 
 watchOS draws one line through that traffic. HTTP over `URLSession` is open
 to every app, and every hosted read and act on the watch travels that way,
