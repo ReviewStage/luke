@@ -74,13 +74,16 @@ export interface VoiceCapabilityAssemblerOptions {
 }
 
 /**
- * What one `apply` answers: whether it was the latest application asked for
- * when its reads completed. Only the latest publishes, warms, and reports; a
- * stale one leaves the set its successor published standing and answers so,
- * and its caller must build nothing on it.
+ * What one `apply` answers. `latest` says whether the application was the
+ * newest when its reads completed, which is when it published, warmed, and
+ * reported, or was overtaken and did none of that. `isCurrent` asks the same
+ * question live: a newer application may begin between the publication and
+ * the caller's continuation, and a caller about to build on the published set
+ * must ask at the moment of use rather than trust the snapshot it was handed.
  */
 export interface VoiceCapabilityApplication {
   latest: boolean;
+  isCurrent: () => boolean;
 }
 
 export class VoiceCapabilityAssembler {
@@ -135,6 +138,7 @@ export class VoiceCapabilityAssembler {
    */
   async apply(): Promise<VoiceCapabilityApplication> {
     const application = ++this.#applications;
+    const isCurrent = () => application === this.#applications;
     const credentialsUsable = this.#options.credentialsUsable();
     const voiceSource = await this.#options.settings.readVoiceSource();
     const apiKey =
@@ -157,7 +161,7 @@ export class VoiceCapabilityAssembler {
       this.#options.settings.get(APP_SETTING_SCHEMA.voice.field).catch(() => undefined),
       this.#options.settings.get(APP_SETTING_SCHEMA.voiceSpeed.field).catch(() => undefined),
     ]);
-    if (application !== this.#applications) return { latest: false };
+    if (!isCurrent()) return { latest: false, isCurrent };
 
     const builtBrainClient = policy.useKey
       ? openAiBrainClient(apiKey)
@@ -184,7 +188,7 @@ export class VoiceCapabilityAssembler {
     this.#voiceSource = policy.source;
     if (policy.useHosted) this.#warmHostedVoice();
     this.#report(apiKey !== undefined);
-    return { latest: true };
+    return { latest: true, isCurrent };
   }
 
   #warmHostedVoice(): void {
