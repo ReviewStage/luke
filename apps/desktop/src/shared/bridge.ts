@@ -695,10 +695,12 @@ export const BRIDGE = {
    * report is not echoed back to it. A report never replaces the thread: what
    * the store holds is authoritative, and a window can only add to it. The
    * relay never leaves the machine, and every line in it is one the reporting
-   * window already held on the terms the history's own module states.
+   * window already held on the terms the history's own module states. The
+   * answer says whether the store took them, so the window marks a line
+   * reported only then and sends a refused one again.
    */
   appendConversationHistory: entry({
-    kind: "send",
+    kind: "invoke",
     channel: "app:append-conversation-history",
     args: args<[readonly ConversationEntry[]]>(
       (v) =>
@@ -712,6 +714,7 @@ export const BRIDGE = {
           );
         }),
     ),
+    result: result<boolean>(isWireBoolean),
   }),
   /**
    * Words the renderer already draws, placed on this machine's clipboard and

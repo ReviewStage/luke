@@ -92,7 +92,12 @@ export class ConversationThread<Reporter = never> {
       }
       if (epoch !== this.#epoch) return true;
       if (!outcome.changed) return true;
-      merged = outcome.entries;
+      // The store's answer is filtered through the cutoff as it stands now,
+      // not trusted whole: until the Clear's marker and erasure land in the
+      // store — and for good if the disk refused them — its rows still hold
+      // the lines the fence already emptied here, and the fence must hold
+      // whatever the disk did.
+      merged = outcome.entries.filter((entry) => this.#afterClear(entry));
     } else {
       const held = new Set(this.#entries.map(memoryKey));
       merged = admitted.reduce((thread, entry) => {

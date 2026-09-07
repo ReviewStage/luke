@@ -7,7 +7,6 @@ import {
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
-  conversationEntryKey,
   insertSpokenAskThreadEntry,
   isArrivalSpeech,
   REALTIME_STATUS,
@@ -45,6 +44,7 @@ import {
 import { hostedVoiceUnavailableNote } from "../microphone-access";
 import { useStateWithRef } from "../use-state-with-ref";
 import { outputSilent } from "../volume-hint";
+import { HistoryReporter } from "./history-reporter";
 import { openPreferredMicrophone } from "./microphone-choice";
 import { REPLY_KIND, RealtimeVoiceSession, type ReplyKind } from "./realtime-session";
 import { ReplyDeliveryPlayer } from "./reply-delivery-player";
@@ -554,41 +554,37 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   }, []);
 
   /**
-   * Which lines the main process already holds, by the id each carries, with
-   * the run each was known to belong to when it was last reported. A publish
-   * sends only what is new against this — a line not yet reported, or one
-   * that has since learned its run — so a report can only add to the thread
-   * the store owns and never stands a stale copy of it back up.
+   * Which lines the main process's store has acknowledged, so a publish sends
+   * only what is new — a line not yet acknowledged, or one that has since
+   * learned its run — and a report can only add to the thread the store owns,
+   * never stand a stale copy of it back up.
    */
-  const reportedRef = useRef(new Map<string, string | undefined>());
+  const reporterRef = useRef(new HistoryReporter());
   const noteReported = useCallback((entries: readonly ConversationEntry[]) => {
-    for (const entry of entries) {
-      if (entry.recordedAt === undefined) continue;
-      reportedRef.current.set(entry.eventId ?? conversationEntryKey(entry), entry.requestId);
-    }
+    reporterRef.current.adopt(entries);
   }, []);
 
   /**
    * Persists what this window appended. The main process's store takes each
    * line by its id, relays the thread to every panel's History, and reads the
-   * recent slice for the brain, so nothing is re-fed to a call here. Before
-   * the restore this thread is only part of itself, and a report then would
-   * name lines the store already holds as though they were new.
+   * recent slice for the brain, so nothing is re-fed to a call here. A line is
+   * marked reported only once the store said it took it; one it refused is
+   * sent again on the next publish. Before the restore this thread is only
+   * part of itself, and a report then would name lines the store already
+   * holds as though they were new.
    */
   const publishConversation = useCallback(() => {
     conversationRef.current = retainedConversationEntries(conversationRef.current, Date.now());
     setConversationHistory(conversationRef.current);
     if (!conversationSeeded.current) return;
-    const unreported = conversationRef.current.filter((entry) => {
-      if (entry.recordedAt === undefined) return false;
-      const key = entry.eventId ?? conversationEntryKey(entry);
-      if (!reportedRef.current.has(key)) return true;
-      return reportedRef.current.get(key) === undefined && entry.requestId !== undefined;
-    });
-    if (unreported.length === 0) return;
-    noteReported(unreported);
-    window.sidecar.appendConversationHistory(unreported);
-  }, [noteReported]);
+    const reporter = reporterRef.current;
+    const taken = reporter.take(conversationRef.current);
+    if (taken.entries.length === 0) return;
+    window.sidecar.appendConversationHistory(taken.entries).then(
+      (acknowledged) => reporter.settle(taken, acknowledged),
+      () => reporter.settle(taken, false),
+    );
+  }, []);
 
   useEffect(() => {
     const expiresAt = conversationHistory.reduce(
@@ -636,7 +632,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     // cannot deliver the very thread this press just cleared.
     conversationSeeded.current = true;
     conversationRef.current = [];
-    reportedRef.current.clear();
+    reporterRef.current.reset();
     spokenTurnMarksRef.current.clear();
     pendingSpokenTurnMarksRef.current = [];
     latestSpokenTurnMarkRef.current = undefined;

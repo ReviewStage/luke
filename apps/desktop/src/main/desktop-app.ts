@@ -2016,7 +2016,7 @@ function registerIpc(): void {
     BRIDGE,
     {
       appendConversationHistory(context, entries) {
-        void conversationThread.append(entries, context.sender);
+        return conversationThread.append(entries, context.sender);
       },
     },
     { ipcMain, trustedSender },

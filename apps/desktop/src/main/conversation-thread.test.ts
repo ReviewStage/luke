@@ -94,3 +94,42 @@ test("a store that refuses answers false, and a run without a store keeps the th
   assert.equal(await memory.append([line("a", NOW - 2)]), true);
   assert.deepEqual(memory.entries(), []);
 });
+
+test("after a Clear whose durable marker failed, an append's answer still cannot stand the old lines back up", async () => {
+  const store = new HeldStore();
+  const broadcasts: (readonly ConversationEntry[])[] = [];
+  let clock = NOW;
+  const thread = new ConversationThread({
+    store,
+    now: () => clock,
+    onChanged: (entries) => broadcasts.push(entries),
+  });
+  const before = thread.append([line("OLD_WORDS", NOW)]);
+  store.release();
+  assert.equal(await before, true);
+  assert.deepEqual(
+    thread.entries().map((entry) => entry.words),
+    ["OLD_WORDS"],
+  );
+  // The Clear fences here; the store's marker and erasure never land, so its
+  // rows still hold the old line.
+  clock = NOW + 10;
+  thread.fence(clock);
+  const sinceFence = broadcasts.length;
+  clock = NOW + 20;
+  const after = thread.append([line("NEW_WORDS", NOW + 20)]);
+  store.release();
+  assert.equal(await after, true);
+  assert.deepEqual(
+    store.held.map((entry) => entry.words),
+    ["OLD_WORDS", "NEW_WORDS"],
+  );
+  assert.deepEqual(
+    thread.entries().map((entry) => entry.words),
+    ["NEW_WORDS"],
+  );
+  assert.deepEqual(
+    broadcasts.slice(sinceFence).map((entries) => entries.map((entry) => entry.words)),
+    [["NEW_WORDS"]],
+  );
+});
