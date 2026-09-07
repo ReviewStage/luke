@@ -1,7 +1,7 @@
 import type { Session } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import type { BrainDelivery, BrainWakeEvent } from "./brain-events.js";
-import { type ResponsesInputItem, userMessageItem } from "./brain-openai.js";
+import { type ResponsesInputItem, userMessageItem } from "./responses-api.js";
+import type { BrainDelivery, BrainWakeEvent } from "./wake-events.js";
 
 /**
  * The items a turn opens with, each a marker naming what kind of turn it is

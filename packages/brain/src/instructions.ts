@@ -1,6 +1,6 @@
 import { LUKE_PERSONA } from "@sidecar/guide";
-import { BRAIN_INPUT_MARKER } from "./brain-input.js";
-import { BRAIN_TOOL, maximumBriefingLength } from "./brain-tools.js";
+import { BRAIN_INPUT_MARKER } from "./input-items.js";
+import { BRAIN_TOOL, maximumBriefingLength } from "./tools.js";
 
 /**
  * The standing instructions of the brain: the persona every surface shares,

@@ -8,8 +8,8 @@ import {
   functionCallOutputItem,
   isCompactionItem,
   userMessageItem,
-} from "./brain-openai.js";
-import { BRAIN_TOOL, brainToolDefinitions } from "./brain-tools.js";
+} from "./responses-api.js";
+import { BRAIN_TOOL, brainToolDefinitions } from "./tools.js";
 
 test("the request asks for compaction on the API's default, stores nothing, and replays reasoning", () => {
   const request = brainResponsesRequest([userMessageItem("hello")], {

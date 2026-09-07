@@ -5,7 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
-    "./requests": "./src/brain-requests.js"
+    "./requests": "./src/requests.js"
   },
   "types": "./src/index.ts",
   "scripts": {

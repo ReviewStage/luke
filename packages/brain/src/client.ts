@@ -14,15 +14,15 @@ import {
   unparsedWire,
   wireRecord,
 } from "@sidecar/wire";
-import { brainInstructions } from "./brain-instructions.js";
+import { brainInstructions } from "./instructions.js";
 import {
   BRAIN_REASONING_EFFORT,
   BRAIN_RESPONSES_PATH,
   type BrainReasoningEffort,
   brainResponsesRequest,
   type ResponsesInputItem,
-} from "./brain-openai.js";
-import { brainToolDefinitions } from "./brain-tools.js";
+} from "./responses-api.js";
+import { brainToolDefinitions } from "./tools.js";
 
 /**
  * How a brain turn reaches a model: directly, on the developer's own key, or

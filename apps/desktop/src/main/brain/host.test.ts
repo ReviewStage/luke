@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { BrainAgent } from "@sidecar/brain";
-import { BrainHost } from "./brain-host";
+import { BrainHost } from "./host";
 
 /** An agent whose stop the test releases, recording the order things happened in. */
 function fakeAgent(name: string, log: string[]) {

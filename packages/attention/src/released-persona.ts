@@ -302,4 +302,4 @@ const EXAMPLE_LINES: readonly string[] = [
   "day — two agents finishing an hour apart are two different sentences.",
 ];
 
-export const LEGACY_LUKE_PERSONA: string = [...CHARACTER_LINES, "", ...EXAMPLE_LINES].join("\n");
+export const RELEASED_LUKE_PERSONA: string = [...CHARACTER_LINES, "", ...EXAMPLE_LINES].join("\n");

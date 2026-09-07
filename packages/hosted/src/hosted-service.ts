@@ -18,12 +18,12 @@ import {
   type WireRecord,
   wholeNumber,
 } from "@sidecar/wire";
-import { admitBrainInput } from "./brain-admission.js";
 import {
   REALTIME_CALLS_PATH,
   type RealtimeConnection,
   realtimeCredentialIsUsable,
 } from "./realtime-contract.js";
+import { admitBrainInput } from "./responses-input.js";
 
 /**
  * The wire contract between Luke's hosted service and the desktop. The web
@@ -330,7 +330,7 @@ export function brainTurnAuthorityFromWire(
 /**
  * What one hosted brain turn carries up: the input array as the desktop holds
  * it, every item one of the Responses forms this build replays (see
- * `brain-admission.ts`), and the authority the turn runs under. Nothing else
+ * `responses-input.ts`), and the authority the turn runs under. Nothing else
  * travels — not a model, instructions, tools, a store flag, or an output
  * budget — because the service's build fixes every one of them from the
  * authority, so a request cannot widen what the brain may do, only what it is

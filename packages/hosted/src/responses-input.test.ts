@@ -9,7 +9,7 @@ import {
   maximumHostedBrainRequestBytes,
   RESPONSES_MESSAGE_PHASE,
   serializedRequestBytes,
-} from "./brain-admission.js";
+} from "./responses-input.js";
 
 /**
  * Synthetic items in the shapes the Responses API hands back and the desktop

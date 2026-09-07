@@ -1,7 +1,7 @@
 import type { SessionIdentity } from "@sidecar/session";
 import { isWireString } from "@sidecar/wire";
-import { isCompactionItem, RESPONSES_ITEM_TYPE, type ResponsesInputItem } from "./brain-openai.js";
-import type { BrainTranscriptCursors } from "./brain-state.js";
+import { isCompactionItem, RESPONSES_ITEM_TYPE, type ResponsesInputItem } from "./responses-api.js";
+import type { BrainTranscriptCursors } from "./state-store.js";
 
 /**
  * What the brain remembers between turns and across launches: the input array
@@ -9,7 +9,7 @@ import type { BrainTranscriptCursors } from "./brain-state.js";
  * session was last read to. No summary of its own is kept — the API's
  * compaction item is the memory of everything before it, opaque and safe to
  * store — so the shape is the array itself. The envelope that carries both
- * across launches is `brain-state`; this is the working copy one agent holds.
+ * across launches is the state store; this is the working copy one agent holds.
  */
 
 export interface BrainMemoryState {

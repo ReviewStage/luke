@@ -25,15 +25,15 @@ import {
 } from "@sidecar/realtime";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { SPEECH_OUTCOME } from "#shared/wire/speech";
-import { BrainHost } from "./brain-host";
-import { clearConversationAndBrain } from "./conversation-clear";
-import { followBrainRequests, submitBrainAsk } from "./ipc/brain";
 import {
   conversationFromStored,
   conversationRecord,
   mergeConversationHistory,
-} from "./memory-flow";
-import { SpeechArbiter } from "./speech-arbiter";
+} from "../memory-flow";
+import { SpeechArbiter } from "../voice/speech-arbiter";
+import { clearConversationAndBrain } from "./conversation-clear";
+import { BrainHost } from "./host";
+import { followBrainRequests, submitBrainAsk } from "./ipc";
 
 /**
  * The Clear composed as the main process composes it: the real store, agent,

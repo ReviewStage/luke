@@ -1,11 +1,11 @@
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import { type BrainJournalEntry, brainJournalEntryFromWire } from "./brain-journal.js";
-import type { ResponsesInputItem } from "./brain-openai.js";
+import { type BrainJournalEntry, brainJournalEntryFromWire } from "./journal.js";
 import {
   type BrainRequestRecord,
   brainRequestRecordFromWire,
   isTerminalBrainRequestStatus,
-} from "./brain-requests.js";
+} from "./requests.js";
+import type { ResponsesInputItem } from "./responses-api.js";
 
 /**
  * Everything the brain keeps across launches, in one envelope with one

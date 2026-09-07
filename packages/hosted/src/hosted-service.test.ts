@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { WireRecord } from "@sidecar/wire";
-import { maximumHostedBrainInputItems } from "./brain-admission.js";
 import {
   BRAIN_TURN_AUTHORITY,
   brainTurnAuthorityFromWire,
@@ -16,6 +15,7 @@ import {
   VAULT_PROVIDER_ID,
   vaultKeyIsStorable,
 } from "./hosted-service.js";
+import { maximumHostedBrainInputItems } from "./responses-input.js";
 
 const NOW = 1_800_000_000_000;
 const MODEL = "gpt-realtime-2.1";

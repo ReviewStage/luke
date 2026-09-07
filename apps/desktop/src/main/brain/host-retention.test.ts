@@ -12,7 +12,7 @@ import {
 } from "@sidecar/brain";
 import type { ScheduledTimer } from "@sidecar/realtime";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
-import { BrainHost } from "./brain-host";
+import { BrainHost } from "./host";
 
 /**
  * Retention as the main process owns it: the store and its clock stand from

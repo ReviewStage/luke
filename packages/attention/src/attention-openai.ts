@@ -12,7 +12,7 @@ import {
   attentionInstructions,
   attentionUpdateInput,
 } from "./attention-prompt.js";
-import { LEGACY_LUKE_PERSONA } from "./legacy-persona.js";
+import { RELEASED_LUKE_PERSONA } from "./released-persona.js";
 
 /**
  * The one OpenAI Responses request a hosted attention review may be. The
@@ -55,7 +55,7 @@ const LEGACY_ATTENTION_DECISION_SCHEMA = {
 
 const LEGACY_ATTENTION_INSTRUCTIONS = attentionInstructions().replace(
   /What you return:[\s\S]*$/u,
-  `How to word it:\n- If speaking, write the sentence Luke says, in Luke's own voice as it is described below. State what the CTO needs to know and stop; add no advice and no next step.\n\n${LEGACY_LUKE_PERSONA}`,
+  `How to word it:\n- If speaking, write the sentence Luke says, in Luke's own voice as it is described below. State what the CTO needs to know and stop; add no advice and no next step.\n\n${RELEASED_LUKE_PERSONA}`,
 );
 
 export interface LegacyAttentionDecision {

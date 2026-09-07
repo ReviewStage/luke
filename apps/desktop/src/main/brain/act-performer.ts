@@ -29,7 +29,11 @@ import {
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import type { BrainAppActRequest } from "#shared/contracts";
-import { forgetRememberedFact, type SessionActPerformer, saveRememberedFact } from "./session-acts";
+import {
+  forgetRememberedFact,
+  type SessionActPerformer,
+  saveRememberedFact,
+} from "../ipc/session-acts";
 
 /** The developer's saved creation tie-breaks, as the projects context narrates them. */
 export interface WorkspaceCreationDefaults {

@@ -12,7 +12,7 @@ import {
   subjectResponsesRequest,
   subjectTranscript,
 } from "./index.js";
-import { releasedSubjectAnswer } from "./released-clients.test-fixture.js";
+import { releasedSubjectAnswer } from "./testing/released-clients.js";
 
 const TITLE = "According to Mercury what is our approximate monthly burn";
 const TRANSCRIPT =

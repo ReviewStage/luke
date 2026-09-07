@@ -5,20 +5,10 @@ export {
 } from "@sidecar/hosted";
 export {
   BRAIN_DEFAULTS,
-  BRAIN_TURN_TRIGGER,
-  type BrainActExecution,
-  type BrainActPerformer,
   BrainAgent,
   type BrainAgentOptions,
   type BrainRequestsListener,
-  type BrainRoster,
-  type BrainToolCallTrace,
-  type BrainTurnTraceRecord,
-  type BrainTurnTrigger,
-  OMISSION_MARKER,
-  type Settled,
-  settledUnlessAborted,
-} from "./brain-agent.js";
+} from "./agent.js";
 export {
   BRAIN_CLIENT_OUTCOME,
   BRAIN_OPENAI_DEFAULTS,
@@ -33,15 +23,8 @@ export {
   type OpenAiBrainClientOptions,
   type OpenAiBrainOptions,
   openAiBrainClient,
-} from "./brain-client.js";
-export { BrainGenerationClock, type BrainGenerationClockOptions } from "./brain-clock.js";
-export {
-  BRAIN_WAKE_KIND,
-  type BrainDelivery,
-  type BrainTranscriptDelta,
-  type BrainWakeEvent,
-  type BrainWakeKind,
-} from "./brain-events.js";
+} from "./client.js";
+export { BrainGenerationClock, type BrainGenerationClockOptions } from "./generation-clock.js";
 export {
   askInputItem,
   BRAIN_INPUT_MARKER,
@@ -49,36 +32,21 @@ export {
   holdReleasedInputItem,
   standingContextItem,
   wakeInputItem,
-} from "./brain-input.js";
-export { brainInstructions } from "./brain-instructions.js";
+} from "./input-items.js";
+export { brainInstructions } from "./instructions.js";
 export {
   BrainJournal,
   type BrainJournalEntry,
   brainJournalEntryFromWire,
   UNKNOWN_ACT_RESULT,
-} from "./brain-journal.js";
+} from "./journal.js";
 export {
   BrainMemory,
   type BrainMemoryMark,
   type BrainMemoryState,
   pairedDanglingCalls,
-} from "./brain-memory.js";
-export {
-  BRAIN_REASONING_EFFORT,
-  BRAIN_RESPONSES_PATH,
-  type BrainFunctionCall,
-  type BrainReasoningEffort,
-  type BrainResponsesOptions,
-  type BrainResponsesOutput,
-  type BrainResponsesRequest,
-  brainResponsesOutput,
-  brainResponsesRequest,
-  functionCallOutputItem,
-  isCompactionItem,
-  RESPONSES_ITEM_TYPE,
-  type ResponsesInputItem,
-  userMessageItem,
-} from "./brain-openai.js";
+} from "./memory.js";
+export type { BrainActExecution, BrainActPerformer, BrainRoster } from "./performer.js";
 export {
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_ORIGIN,
@@ -99,7 +67,24 @@ export {
   isBrainRequestOrigin,
   isBrainRequestStatus,
   isTerminalBrainRequestStatus,
-} from "./brain-requests.js";
+} from "./requests.js";
+export {
+  BRAIN_REASONING_EFFORT,
+  BRAIN_RESPONSES_PATH,
+  type BrainFunctionCall,
+  type BrainReasoningEffort,
+  type BrainResponsesOptions,
+  type BrainResponsesOutput,
+  type BrainResponsesRequest,
+  brainResponsesOutput,
+  brainResponsesRequest,
+  functionCallOutputItem,
+  isCompactionItem,
+  RESPONSES_ITEM_TYPE,
+  type ResponsesInputItem,
+  userMessageItem,
+} from "./responses-api.js";
+export { type Settled, settledUnlessAborted } from "./settled.js";
 export {
   BRAIN_GENERATION_LIFETIME_MS,
   BRAIN_STATE_BOUNDS,
@@ -121,7 +106,7 @@ export {
   freshBrainState,
   type RetainedBrainState,
   retainedBrainState,
-} from "./brain-state.js";
+} from "./state-store.js";
 export {
   BRAIN_TOOL,
   type BrainToolName,
@@ -129,4 +114,14 @@ export {
   brainToolDefinitions,
   isBrainOnlyTool,
   maximumBriefingLength,
-} from "./brain-tools.js";
+} from "./tools.js";
+export type { BrainToolCallTrace, BrainTurnTraceRecord } from "./trace.js";
+export { OMISSION_MARKER } from "./transcript-reads.js";
+export { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
+export {
+  BRAIN_WAKE_KIND,
+  type BrainDelivery,
+  type BrainTranscriptDelta,
+  type BrainWakeEvent,
+  type BrainWakeKind,
+} from "./wake-events.js";

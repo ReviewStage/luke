@@ -1,5 +1,5 @@
 import { isRecord, isWireString, text, type UnparsedWireValue } from "@sidecar/wire";
-import { ATTENTION_DISPOSITION, type AttentionDisposition } from "./attention.js";
+import { ATTENTION_DISPOSITION, type AttentionDisposition } from "../attention.js";
 
 /**
  * How released desktops read a hosted attention answer, transcribed from the

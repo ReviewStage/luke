@@ -18,8 +18,8 @@ import {
 } from "@sidecar/realtime";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import type { BrainRequestSnapshot } from "#shared/wire/brain";
-import { BrainHost } from "./brain-host";
-import { followBrainRequests, submitBrainAsk } from "./ipc/brain";
+import { BrainHost } from "./host";
+import { followBrainRequests, submitBrainAsk } from "./ipc";
 
 /**
  * The real agent, store, host, follower, and submission path composed as the
