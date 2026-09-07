@@ -168,6 +168,9 @@ importers:
       '@sidecar/attention':
         specifier: workspace:*
         version: link:../../packages/attention
+      '@sidecar/brain':
+        specifier: workspace:*
+        version: link:../../packages/brain
       '@sidecar/credentials':
         specifier: workspace:*
         version: link:../../packages/credentials
