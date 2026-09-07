@@ -49,9 +49,9 @@ most 32 are stored on your Mac beside your settings and they do not expire. The
 iOS app keeps no such memory and does not read the Mac's. You can ask Luke what
 he remembers, correct something, or tell him to forget it.
 They are sent to OpenAI with the rest of a conversation's context so Luke can
-personalize replies: directly on your own key from the Mac app as released
-today, or, in a build of Luke that thinks through our service on our key (see
-the brain endpoint under "Who we send it to"), inside that one call, which our
+personalize replies: directly from the Mac app to OpenAI as released today,
+or, in a build of Luke that thinks through our service on our key (see the
+brain endpoint under "Who we send it to"), inside that one call, which our
 service performs once and stores and logs nothing of. They are not sent to a
 coding-agent provider or a tracker, and they are never used to decide anything
 on your behalf.
@@ -173,9 +173,11 @@ and email you signed it with, and any screenshots you attached.
   tool and keeps no conversation, and stores and logs none of the request or
   the reply. Each call counts against the same daily review allowance as the
   attention review above. The Mac app released today does not call this
-  endpoint, reads no transcript beyond the subject phrase described above,
-  and keeps no working memory of its own; a build that does will say so here
-  when it ships.
+  endpoint: it starts no automatic or background collection of your
+  transcripts for it and keeps no brain working memory; its transcript reads
+  stay what they are today, the subject phrase before an announcement and a
+  session you ask him about in conversation. A build that activates the brain
+  will say so here when it ships.
   The one voice call that happens before you sign in is the spoken
   introduction on first launch of the Mac app: it sends its own fixed script,
   the titles of the coding agent sessions found on your Mac, and anything you

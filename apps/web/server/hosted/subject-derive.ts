@@ -92,7 +92,7 @@ export async function handleSubjectDerive(options: SubjectDeriveOptions): Promis
     }),
     { apiKey, fetch: options.fetch, timeoutMs: options.timeoutMs },
   );
-  if (!response?.ok) {
+  if (!response || !response.ok) {
     const extra: HostedErrorFields = {};
     if (response) extra.upstreamStatus = response.status;
     return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR, extra);
