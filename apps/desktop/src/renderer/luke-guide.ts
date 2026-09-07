@@ -371,8 +371,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "The panel",
       detail:
-        "Two tabs, Sessions and Settings, switched by pressing one or by asking Luke to show " +
-        "it. Asked while the panel is closed, the panel opens on that tab.",
+        "Three tabs, Sessions, History, and Settings, switched by pressing one or by asking " +
+        "Luke to show it. Asked while the panel is closed, the panel opens on that tab.",
     },
     {
       label: "The sessions list",
@@ -539,8 +539,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
               "an error, or finishes — a hold is a question, a permission, or an approval, " +
               "not a turn that merely ended — naming the session and what it needs. No " +
               "conversation needs to be open, the microphone stays off, and it is on by " +
-              "default while voice is available. Luke waits five seconds for nearby updates and says " +
-              "them together in one announcement. A session in a live voice conversation " +
+              "default while voice is available. Updates landing close together are judged " +
+              "as one and said in one announcement. A session in a live voice conversation " +
               "with its own provider announces nothing until that conversation closes. " +
               "The Announce when sessions need you switch on the Voice page — on by " +
               "default, and also flippable by asking Luke — turns them off: Luke sleeps " +
