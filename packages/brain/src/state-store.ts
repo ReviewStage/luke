@@ -257,12 +257,11 @@ export function retainedBrainState(
   };
 }
 
-/** Where the envelope is kept: one file's worth of read, write, and remove, however the host does them. */
+/** Where the envelope is kept: one file's worth of read and write, however the host does them. */
 export interface BrainStateStorage {
   read(): string | undefined | Promise<string | undefined>;
   /** Answers whether the write landed; a store that throws is read as one that did not. */
   write(contents: string): boolean | Promise<boolean>;
-  remove(): boolean | Promise<boolean>;
 }
 
 export interface BrainStateStoreOptions {

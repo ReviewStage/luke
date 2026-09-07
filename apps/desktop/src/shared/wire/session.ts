@@ -1,8 +1,6 @@
 import type { AccountSnapshot } from "@sidecar/account/snapshot";
-import type { RememberedFact } from "@sidecar/acts";
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { FixtureSnapshot } from "@sidecar/fixtures";
-import type { TrackedIssue } from "@sidecar/issues";
 import type { ConversationEntry } from "@sidecar/realtime";
 import type { ObservedWorkspaceProject, Session } from "@sidecar/session";
 import type { Rectangle, ResolvedNotchGeometry, WindowMode } from "@sidecar/surface";
@@ -137,9 +135,6 @@ export interface AppBootstrap {
   account: AccountSnapshot;
   packaged: boolean;
   platform: string;
-  electronVersion: string;
-  chromiumVersion: string;
-  nodeVersion: string;
   microphoneStatus: MicrophoneStatus;
   /**
    * The receiver epoch the main process gave this load of the hidden voice
@@ -196,8 +191,6 @@ export interface AppBootstrap {
   sessionsSettled: boolean;
   /** Where a new workspace can be created, as the adapters currently offer it. */
   workspaceProjects: readonly ObservedWorkspaceProject[];
-  /** Absent while no issue tracker is connected, which is its own answer. */
-  issues?: readonly TrackedIssue[];
   /** Each connected account's calendars, as last observed. */
   calendars: readonly ObservedAccountCalendars[];
   /** Whether announcements are held right now, by the pause switch or a meeting's quiet. */
@@ -216,8 +209,6 @@ export interface AppBootstrap {
    * or capture run, which raises no voice window.
    */
   voiceView: VoiceView | undefined;
-  /** Luke's bounded durable facts about the developer. Empty in fixture and capture runs. */
-  rememberedFacts: readonly RememberedFact[];
   /**
    * Whether the mandatory calendar step of onboarding still stands: this
    * install's first sign-in has been observed and no calendar has connected

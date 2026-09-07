@@ -33,7 +33,6 @@ export {
   type SubjectInput,
   subjectDerivationFromModel,
   subjectInputFromWire,
-  subjectTranscript,
 } from "./subject.js";
 export {
   SUBJECT_RESPONSES_PATH,

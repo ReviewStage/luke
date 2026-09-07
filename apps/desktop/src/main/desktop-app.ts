@@ -1693,7 +1693,6 @@ function writeRememberedFacts(facts: readonly RememberedFact[]): boolean {
     return false;
   }
   rememberedFacts = facts;
-  broadcast(channels.onRememberedFactsChanged, facts);
   return true;
 }
 
@@ -1729,7 +1728,6 @@ const brainWiring = wireBrain({
     read: () => readStoredState(brainStatePath()),
     write: (contents) =>
       writeStoredState(brainStatePath(), contents, "Luke's memory of the agents"),
-    remove: () => removeStoredState(brainStatePath(), "Luke's memory of the agents"),
   },
   createId: () => randomUUID(),
   report: (message) => process.stderr.write(`${message}\n`),
@@ -1939,9 +1937,6 @@ function registerIpc(): void {
         account,
         packaged: app.isPackaged,
         platform: process.platform,
-        electronVersion: process.versions.electron,
-        chromiumVersion: process.versions.chrome,
-        nodeVersion: process.versions.node,
         microphoneStatus: microphoneStatus(),
         ...(voiceWindow.owns(context.sender) ? { voiceEpoch: voiceReceiver.epoch() } : undefined),
         // Both keys travel as accelerators rather than labels: the renderer needs
@@ -1973,9 +1968,6 @@ function registerIpc(): void {
               await settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
             )
           : [],
-        ...(trackedIssues && runMode.observesProviders && accountCapabilitiesActive()
-          ? { issues: trackedIssues }
-          : undefined),
         // The calendar is a capability like the rosters: nothing of it is
         // shown, or held quiet, before the account gate opens.
         calendars: accountCapabilitiesActive() ? observedCalendars : [],
@@ -1984,7 +1976,6 @@ function registerIpc(): void {
         announcementsHeld: accountCapabilitiesActive() && (await announcementsQuietNow(Date.now())),
         conversationHistory,
         voiceView: latestVoiceView,
-        rememberedFacts,
         calendarOnboardingOwed: calendarOnboardingGateOwed(),
         sessionReplay: await sessionReplayBootstrap(),
         settings: await settingsStore.snapshot(),
@@ -3033,7 +3024,6 @@ async function refreshTrackedIssues(generation: number): Promise<void> {
     }
     if (issueObservationLoop.isCurrent(generation)) {
       trackedIssues = connected ? collected : undefined;
-      broadcast(channels.onIssuesChanged, trackedIssues);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -3043,7 +3033,6 @@ async function refreshTrackedIssues(generation: number): Promise<void> {
 
 function stopIssueObservation(): void {
   trackedIssues = undefined;
-  broadcast(channels.onIssuesChanged, undefined);
 }
 
 function configurePermissions(): void {

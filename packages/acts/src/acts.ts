@@ -70,7 +70,6 @@ import {
 } from "@sidecar/session";
 import {
   isRecord,
-  isWireBoolean,
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
@@ -97,25 +96,11 @@ export const REALTIME_TOOL_FAMILY = {
 
 export type RealtimeToolFamily = (typeof REALTIME_TOOL_FAMILY)[keyof typeof REALTIME_TOOL_FAMILY];
 
-export const ACT_VALIDATION_TARGET = {
-  SESSION_ROSTER: "session-roster",
-  ISSUE_ROSTER: "issue-roster",
-  WORKSPACE_PROJECT: "workspace-project",
-  SETTING_ID: "setting-id",
-  UPDATE_ROW: "update-row",
-  APP_GUIDE: "app-guide",
-  REMEMBERED_FACT: "remembered-fact",
-} as const;
-
-export type ActValidationTarget =
-  (typeof ACT_VALIDATION_TARGET)[keyof typeof ACT_VALIDATION_TARGET];
-
 /** What a validated session tool call asks for, as the bridge names it. */
 export const SESSION_TOOL_KIND = {
   MESSAGE: "message",
   CONTROL: "control",
   OPEN: "open",
-  READ_TRANSCRIPT: "read-transcript",
   CREATE_WORKSPACE: "create-workspace",
   ADD_AGENT: "add-agent",
   RENAME_WORKSPACE: "rename-workspace",
@@ -196,7 +181,6 @@ type CarriedSessionActionFields =
       /** The one app the developer named to open it in, resolved to its id. */
       applicationId?: SessionApplicationId;
     }
-  | { kind: typeof SESSION_TOOL_KIND.READ_TRANSCRIPT; identity: SessionIdentity }
   | {
       kind: typeof SESSION_TOOL_KIND.CREATE_WORKSPACE;
       providerId: string;
@@ -301,40 +285,6 @@ export type AppToolAction = CarriedAppAction | ActRejection;
 
 export type CarriedAct = CarriedSessionAction | CarriedIssueAction | CarriedAppAction;
 
-export interface ActEnvelope {
-  id: string;
-  act: CarriedAct;
-  armed: boolean;
-}
-
-export function isActEnvelope(value: UnparsedWireValue): value is ActEnvelope & WireRecord {
-  if (
-    !isRecord(value) ||
-    !isWireString(value.id) ||
-    !isWireBoolean(value.armed) ||
-    !isRecord(value.act) ||
-    !isWireString(value.act.kind)
-  ) {
-    return false;
-  }
-  return ACTS_BY_NAME.get(value.id)?.actionKind === value.act.kind;
-}
-
-const APP_ACT_KINDS: ReadonlySet<string> = new Set(Object.values(APP_TOOL_KIND));
-const ISSUE_ACT_KINDS: ReadonlySet<string> = new Set(Object.values(ISSUE_TOOL_KIND));
-
-export function isCarriedAppAction(action: CarriedAct): action is CarriedAppAction {
-  return APP_ACT_KINDS.has(action.kind);
-}
-
-export function isCarriedIssueAction(action: CarriedAct): action is CarriedIssueAction {
-  return ISSUE_ACT_KINDS.has(action.kind);
-}
-
-export function isCarriedSessionAction(action: CarriedAct): action is CarriedSessionAction {
-  return !isCarriedAppAction(action) && !isCarriedIssueAction(action);
-}
-
 export interface SessionToolContext {
   sessions: readonly Session[];
   workspaceProjects: readonly ObservedWorkspaceProject[];
@@ -425,9 +375,7 @@ type SessionToolSpec = {
   name: string;
   family: typeof REALTIME_TOOL_FAMILY.SESSION;
   actionKind: ActActionKind;
-  validatedAgainst: ActValidationTarget;
   narration: ActNarration;
-  guide: string;
   schema: RealtimeToolSchema;
   /**
    * The same act as the phone offers it, where the phone's surface gives the
@@ -443,9 +391,7 @@ type IssueToolSpec = {
   name: string;
   family: typeof REALTIME_TOOL_FAMILY.ISSUE;
   actionKind: ActActionKind;
-  validatedAgainst: ActValidationTarget;
   narration: ActNarration;
-  guide: string;
   schema: RealtimeToolSchema;
   remoteSchema?: RealtimeToolSchema;
   validate: IssueToolValidate;
@@ -455,9 +401,7 @@ type AppToolSpec = {
   name: string;
   family: typeof REALTIME_TOOL_FAMILY.APP;
   actionKind: ActActionKind;
-  validatedAgainst: ActValidationTarget;
   narration: ActNarration;
-  guide: string;
   schema: RealtimeToolSchema;
   remoteSchema?: RealtimeToolSchema;
   validate: AppToolValidate;
@@ -676,27 +620,6 @@ function validateOpenSession(parsed: WireRecord, context: SessionToolContext): S
     return { status: ACT_RESULT_STATUS.REJECTED, reason: "That session has no address to open." };
   }
   return { kind: SESSION_TOOL_KIND.OPEN, identity };
-}
-
-function validateReadSessionTranscript(
-  parsed: WireRecord,
-  context: SessionToolContext,
-): SessionToolAction {
-  const found = sessionFromArguments(parsed, context.sessions);
-  if ("status" in found) return found;
-  const { session, identity } = found;
-  // The action carries the identity, never a path: the main process locates
-  // the transcript in its own provider home, the same way a pressed row's
-  // open never carries an address. Only a session on this machine has a
-  // transcript here to read; which local providers keep a readable one is
-  // the main process's answer.
-  if (session.location !== SESSION_LOCATION.LOCAL) {
-    return {
-      status: ACT_RESULT_STATUS.REJECTED,
-      reason: "Only local sessions keep a transcript on this machine.",
-    };
-  }
-  return { kind: SESSION_TOOL_KIND.READ_TRANSCRIPT, identity };
 }
 
 function validateCreateWorkspace(
@@ -1337,13 +1260,11 @@ export const ACTS = {
     name: "send_session_message",
     family: REALTIME_TOOL_FAMILY.SESSION,
     actionKind: SESSION_TOOL_KIND.MESSAGE,
-    validatedAgainst: ACT_VALIDATION_TARGET.SESSION_ROSTER,
     narration: narrate(
       SESSION_TOOL_KIND.MESSAGE,
       (action, sessions) =>
         `sent a message to ${observedSessionName(action.identity, sessions)}: "${action.text}"`,
     ),
-    guide: "Send the developer's words to a session that currently advertises messages.",
     schema: {
       description: "Send a message to an observed session.",
       parameters: {
@@ -1364,13 +1285,11 @@ export const ACTS = {
     name: "run_session_control",
     family: REALTIME_TOOL_FAMILY.SESSION,
     actionKind: SESSION_TOOL_KIND.CONTROL,
-    validatedAgainst: ACT_VALIDATION_TARGET.SESSION_ROSTER,
     narration: narrate(
       SESSION_TOOL_KIND.CONTROL,
       (action, sessions) =>
         `ran "${action.control.label}" on ${observedSessionName(action.identity, sessions)}`,
     ),
-    guide: "Run only a control the session currently advertises.",
     schema: {
       description: "Run a control advertised by an observed session.",
       parameters: {
@@ -1391,14 +1310,12 @@ export const ACTS = {
     name: "open_session",
     family: REALTIME_TOOL_FAMILY.SESSION,
     actionKind: SESSION_TOOL_KIND.OPEN,
-    validatedAgainst: ACT_VALIDATION_TARGET.SESSION_ROSTER,
     narration: narrate(SESSION_TOOL_KIND.OPEN, (action, sessions) => {
       const name = observedSessionName(action.identity, sessions);
       return action.applicationId
         ? `opened ${name} in ${observedApplicationName(action.identity, action.applicationId, sessions)}`
         : `opened ${name}`;
     }),
-    guide: "Open an observed session at the address its latest roster row reports.",
     schema: {
       description:
         "Open one observed session where its provider keeps it — only when the developer asks " +
@@ -1435,38 +1352,15 @@ export const ACTS = {
     },
     validate: validateOpenSession,
   },
-  READ_SESSION_TRANSCRIPT: {
-    name: "read_session_transcript",
-    family: REALTIME_TOOL_FAMILY.SESSION,
-    actionKind: SESSION_TOOL_KIND.READ_TRANSCRIPT,
-    validatedAgainst: ACT_VALIDATION_TARGET.SESSION_ROSTER,
-    narration: narrate(
-      SESSION_TOOL_KIND.READ_TRANSCRIPT,
-      (action, sessions) =>
-        `read ${observedSessionName(action.identity, sessions)}'s transcript aloud`,
-    ),
-    guide: "Read only a local transcript this build documents rendering.",
-    schema: {
-      description: "Read the recent transcript of an observed local session.",
-      parameters: {
-        type: "object",
-        properties: { ...SESSION_IDENTITY_PARAMETERS },
-        required: ["provider_id", "provider_session_id"],
-      },
-    },
-    validate: validateReadSessionTranscript,
-  },
   CREATE_WORKSPACE: {
     name: "create_workspace",
     family: REALTIME_TOOL_FAMILY.SESSION,
     actionKind: SESSION_TOOL_KIND.CREATE_WORKSPACE,
-    validatedAgainst: ACT_VALIDATION_TARGET.WORKSPACE_PROJECT,
     narration: narrate(
       SESSION_TOOL_KIND.CREATE_WORKSPACE,
       (action) =>
         `asked ${action.providerId} to create a workspace${action.name ? ` named "${action.name}"` : ""}`,
     ),
-    guide: "Create only in a project and target from the latest workspace roster.",
     schema: {
       description: "Create a workspace for a new agent.",
       parameters: {
@@ -1518,13 +1412,11 @@ export const ACTS = {
     name: "add_workspace_agent",
     family: REALTIME_TOOL_FAMILY.SESSION,
     actionKind: SESSION_TOOL_KIND.ADD_AGENT,
-    validatedAgainst: ACT_VALIDATION_TARGET.SESSION_ROSTER,
     narration: narrate(
       SESSION_TOOL_KIND.ADD_AGENT,
       (action, sessions) =>
         `added a ${action.agent} agent to ${observedSessionName(action.identity, sessions)}`,
     ),
-    guide: "Add only an agent kind and model the latest session row advertises.",
     schema: {
       description: "Add an agent to an observed workspace.",
       parameters: {
@@ -1561,13 +1453,11 @@ export const ACTS = {
     name: "rename_workspace",
     family: REALTIME_TOOL_FAMILY.SESSION,
     actionKind: SESSION_TOOL_KIND.RENAME_WORKSPACE,
-    validatedAgainst: ACT_VALIDATION_TARGET.SESSION_ROSTER,
     narration: narrate(
       SESSION_TOOL_KIND.RENAME_WORKSPACE,
       (action, sessions) =>
         `renamed the workspace of ${observedSessionName(action.identity, sessions)} to "${action.name}"`,
     ),
-    guide: "Rename only the workspace target the latest session row advertises.",
     schema: {
       description:
         "Rename the workspace one observed session runs in, to a name the developer just " +
@@ -1591,13 +1481,11 @@ export const ACTS = {
     name: "rename_session",
     family: REALTIME_TOOL_FAMILY.SESSION,
     actionKind: SESSION_TOOL_KIND.RENAME_SESSION,
-    validatedAgainst: ACT_VALIDATION_TARGET.SESSION_ROSTER,
     narration: narrate(
       SESSION_TOOL_KIND.RENAME_SESSION,
       (action, sessions) =>
         `renamed ${observedSessionName(action.identity, sessions)} to "${action.name}"`,
     ),
-    guide: "Rename only a chat whose latest roster row advertises rename.",
     schema: {
       description:
         "Rename one observed chat itself — not the workspace around it — to a name the " +
@@ -1621,12 +1509,10 @@ export const ACTS = {
     name: "update_issue_state",
     family: REALTIME_TOOL_FAMILY.ISSUE,
     actionKind: ISSUE_TOOL_KIND.ISSUE_STATE,
-    validatedAgainst: ACT_VALIDATION_TARGET.ISSUE_ROSTER,
     narration: narrate(
       ISSUE_TOOL_KIND.ISSUE_STATE,
       (action) => `moved issue ${action.identity.identifier} to "${action.transition.name}"`,
     ),
-    guide: "Move an issue only through a transition its latest tracker row advertises.",
     schema: {
       description: "Update a tracked issue's state.",
       parameters: {
@@ -1647,12 +1533,10 @@ export const ACTS = {
     name: "comment_on_issue",
     family: REALTIME_TOOL_FAMILY.ISSUE,
     actionKind: ISSUE_TOOL_KIND.ISSUE_COMMENT,
-    validatedAgainst: ACT_VALIDATION_TARGET.ISSUE_ROSTER,
     narration: narrate(
       ISSUE_TOOL_KIND.ISSUE_COMMENT,
       (action) => `commented on issue ${action.identity.identifier}`,
     ),
-    guide: "Add the developer's words only to an issue that currently accepts comments.",
     schema: {
       description: "Add a comment to a tracked issue.",
       parameters: {
@@ -1673,12 +1557,10 @@ export const ACTS = {
     name: "change_app_setting",
     family: REALTIME_TOOL_FAMILY.APP,
     actionKind: APP_TOOL_KIND.SETTING,
-    validatedAgainst: ACT_VALIDATION_TARGET.SETTING_ID,
     narration: narrate(
       APP_TOOL_KIND.SETTING,
       (action) => `changed ${action.setting.label} to ${action.value}`,
     ),
-    guide: "Change only an adjustable setting and value listed by the current guide.",
     schema: {
       description: "Change a Luke setting.",
       parameters: {
@@ -1706,9 +1588,7 @@ export const ACTS = {
     name: "show_panel",
     family: REALTIME_TOOL_FAMILY.APP,
     actionKind: APP_TOOL_KIND.PANEL,
-    validatedAgainst: ACT_VALIDATION_TARGET.SESSION_ROSTER,
     narration: narrate(APP_TOOL_KIND.PANEL, (action) => `showed the ${action.tab} panel`),
-    guide: "Show a panel tab and only roster-backed session filters.",
     schema: {
       description:
         "Show Luke's panel on a tab — and, on the sessions tab, narrow or reorder the list. " +
@@ -1778,12 +1658,10 @@ export const ACTS = {
     name: "open_feedback_composer",
     family: REALTIME_TOOL_FAMILY.APP,
     actionKind: APP_TOOL_KIND.FEEDBACK,
-    validatedAgainst: ACT_VALIDATION_TARGET.APP_GUIDE,
     narration: narrate(
       APP_TOOL_KIND.FEEDBACK,
       (action) => `opened the ${action.composer} composer`,
     ),
-    guide: "Open the chosen feedback composer without sending anything.",
     schema: {
       description: "Open the feedback composer.",
       parameters: {
@@ -1808,9 +1686,7 @@ export const ACTS = {
     name: "run_update_action",
     family: REALTIME_TOOL_FAMILY.APP,
     actionKind: APP_TOOL_KIND.UPDATE,
-    validatedAgainst: ACT_VALIDATION_TARGET.UPDATE_ROW,
     narration: narrate(APP_TOOL_KIND.UPDATE, (action) => `ran the Updates row's ${action.act}`),
-    guide: "Run only the action the current Updates row offers.",
     schema: {
       description:
         "Press the Updates row's button for the developer: check for updates, open the latest " +
@@ -1835,13 +1711,11 @@ export const ACTS = {
     name: "remember_fact",
     family: REALTIME_TOOL_FAMILY.APP,
     actionKind: APP_TOOL_KIND.REMEMBER,
-    validatedAgainst: ACT_VALIDATION_TARGET.REMEMBERED_FACT,
     narration: narrate(APP_TOOL_KIND.REMEMBER, (action) =>
       action.replaces
         ? `remembered "${action.words}" in place of something remembered before`
         : `remembered "${action.words}"`,
     ),
-    guide: "Silently save useful durable context about the developer.",
     schema: {
       description:
         "Silently save a concise stable preference, personal fact, goal, or recurring constraint " +
@@ -1871,9 +1745,7 @@ export const ACTS = {
     name: "forget_fact",
     family: REALTIME_TOOL_FAMILY.APP,
     actionKind: APP_TOOL_KIND.FORGET,
-    validatedAgainst: ACT_VALIDATION_TARGET.REMEMBERED_FACT,
     narration: narrate(APP_TOOL_KIND.FORGET, () => "forgot something remembered before"),
-    guide: "Silently forget an outdated entry or one the developer asked to drop.",
     schema: {
       description:
         "Silently forget an outdated or explicitly unwanted memory. Only an id from the remembered " +
@@ -1915,35 +1787,6 @@ const ACTS_BY_NAME = new Map<string, RealtimeToolSpec>(
   REALTIME_TOOL_LIST.map((tool) => [tool.name, tool]),
 );
 
-export function actValidationTarget(name: string): ActValidationTarget | undefined {
-  return ACTS_BY_NAME.get(name)?.validatedAgainst;
-}
-
-function toolNamesOfFamily(family: RealtimeToolFamily): ReadonlySet<string> {
-  return new Set(
-    REALTIME_TOOL_LIST.filter((tool) => tool.family === family).map((tool) => tool.name),
-  );
-}
-
-const SESSION_TOOL_NAMES = toolNamesOfFamily(REALTIME_TOOL_FAMILY.SESSION);
-const ISSUE_TOOL_NAMES = toolNamesOfFamily(REALTIME_TOOL_FAMILY.ISSUE);
-const APP_TOOL_NAMES = toolNamesOfFamily(REALTIME_TOOL_FAMILY.APP);
-
-/** Whether a tool call names one of the session acts. */
-export function isSessionToolName(name: string): boolean {
-  return SESSION_TOOL_NAMES.has(name);
-}
-
-/** Whether a tool call names one of the issue acts. */
-export function isIssueToolName(name: string): boolean {
-  return ISSUE_TOOL_NAMES.has(name);
-}
-
-/** Whether a tool call is about the app itself rather than about a session. */
-export function isAppToolCall(call: RealtimeFunctionCall): boolean {
-  return APP_TOOL_NAMES.has(call.name);
-}
-
 /** The family a named tool belongs to, or nothing when no such tool exists. */
 export function realtimeToolFamily(name: string): RealtimeToolFamily | undefined {
   return ACTS_BY_NAME.get(name)?.family;
@@ -1968,9 +1811,7 @@ export function realtimeToolDefinitions(): readonly RealtimeToolWireDefinition[]
  * on the session's own screen in the app and PANEL on the app's own list, so
  * each is performed on the phone and reaches no endpoint at all.
  *
- * READ_TRANSCRIPT is absent because the phone observes no local session, and
- * a cloud conversation is read only by its own opened screen. The issue
- * acts are absent because no tracker is connected on the phone; a setting
+ * The issue acts are absent because no tracker is connected on the phone; a setting
  * change, the feedback composer, and the Updates row are surfaces the phone
  * does not draw. REMEMBER and FORGET are absent because the phone keeps no
  * memory: Luke's durable facts live on the Mac alone.

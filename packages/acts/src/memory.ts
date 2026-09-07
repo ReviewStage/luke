@@ -31,21 +31,6 @@ export function isRememberedFact(value: UnparsedWireValue): value is RememberedF
   );
 }
 
-/** The complete bounded list shape used at disk and IPC boundaries. */
-export function isRememberedFacts(
-  value: UnparsedWireValue,
-): value is readonly (RememberedFact & WireRecord)[] {
-  if (!Array.isArray(value) || value.length > maximumRememberedFacts) return false;
-  const ids = new Set<string>();
-  const words = new Set<string>();
-  for (const fact of value) {
-    if (!isRememberedFact(fact) || ids.has(fact.id) || words.has(fact.words)) return false;
-    ids.add(fact.id);
-    words.add(fact.words);
-  }
-  return true;
-}
-
 export function holdsRememberedFact(facts: readonly RememberedFact[], id: string): boolean {
   return facts.some((fact) => fact.id === id);
 }

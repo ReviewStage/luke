@@ -23,9 +23,10 @@ import {
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import {
   appToolAction,
-  isAppToolCall,
   REALTIME_TOOL,
+  REALTIME_TOOL_FAMILY,
   type RealtimeFunctionCall,
+  realtimeToolFamily,
   SESSION_LIST_VOICE,
 } from "./acts.js";
 
@@ -135,11 +136,14 @@ test("a spoken toggle accepts the unambiguous words and nothing else", () => {
 });
 
 test("only the app's own tools are routed to the guide", () => {
-  assert.equal(isAppToolCall(call(REALTIME_TOOL.CHANGE_APP_SETTING, "{}")), true);
-  assert.equal(isAppToolCall(call(REALTIME_TOOL.SHOW_PANEL, "{}")), true);
-  assert.equal(isAppToolCall(call(REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER, "{}")), true);
-  assert.equal(isAppToolCall(call(REALTIME_TOOL.RUN_UPDATE_ACTION, "{}")), true);
-  assert.equal(isAppToolCall(call(REALTIME_TOOL.SEND_SESSION_MESSAGE, "{}")), false);
+  assert.equal(realtimeToolFamily(REALTIME_TOOL.CHANGE_APP_SETTING), REALTIME_TOOL_FAMILY.APP);
+  assert.equal(realtimeToolFamily(REALTIME_TOOL.SHOW_PANEL), REALTIME_TOOL_FAMILY.APP);
+  assert.equal(realtimeToolFamily(REALTIME_TOOL.OPEN_FEEDBACK_COMPOSER), REALTIME_TOOL_FAMILY.APP);
+  assert.equal(realtimeToolFamily(REALTIME_TOOL.RUN_UPDATE_ACTION), REALTIME_TOOL_FAMILY.APP);
+  assert.equal(
+    realtimeToolFamily(REALTIME_TOOL.SEND_SESSION_MESSAGE),
+    REALTIME_TOOL_FAMILY.SESSION,
+  );
 });
 
 test("a spoken change can name only a setting the guide lists, to a value it accepts", () => {

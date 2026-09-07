@@ -62,10 +62,6 @@ class MemoryStorage implements BrainStateStorage {
     this.file = contents;
     return true;
   }
-  remove() {
-    this.file = undefined;
-    return true;
-  }
 }
 
 function heldClient(): BrainClient & {

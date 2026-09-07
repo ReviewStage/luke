@@ -188,10 +188,6 @@ class FakeStorage implements BrainStateStorage {
     this.file = contents;
     return true;
   }
-  remove() {
-    this.file = undefined;
-    return true;
-  }
   /** Every state the file has held, newest last, as the tests read "persisted". */
   stored(): BrainPersistedState | undefined {
     return brainStateFromStored(this.file);
@@ -229,7 +225,6 @@ function harness(overrides: Partial<BrainAgentOptions> = {}, storage = new FakeS
         if (written && state) persisted.push(state);
         return written;
       },
-      remove: () => storage.remove(),
     },
     createGenerationId: () => `gen-${runIds++}`,
     now: () => clock.now,

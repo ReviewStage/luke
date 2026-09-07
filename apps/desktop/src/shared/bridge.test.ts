@@ -48,19 +48,6 @@ test("a conversation history report carries only well-formed history lines", () 
   assert.equal(guard([[{ ...ask, recordedAt: Number.POSITIVE_INFINITY }]]), false);
 });
 
-test("remembered-fact pushes enforce their complete bounded shape", () => {
-  const guard = BRIDGE.onRememberedFactsChanged.result;
-  assert.equal(guard?.([{ id: "one", words: "kept" }]), true);
-  assert.equal(guard?.([{ id: "one", words: "x".repeat(241) }]), false);
-  assert.equal(
-    guard?.([
-      { id: "one", words: "first" },
-      { id: "one", words: "second" },
-    ]),
-    false,
-  );
-});
-
 test("a brain ask is one submission with an id, bounded words, and an origin", () => {
   assert.equal(BRIDGE.submitBrainAsk.kind, "invoke");
   const guard = BRIDGE.submitBrainAsk.args;

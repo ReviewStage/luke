@@ -16,11 +16,10 @@ import {
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import {
   ACTS,
-  isIssueToolName,
-  isSessionToolName,
   issueToolAction,
   REALTIME_TOOL,
   REALTIME_TOOL_FAMILY,
+  realtimeToolFamily,
   SESSION_LIST_ALL,
   SESSION_LIST_VOICE,
   sessionToolAction,
@@ -77,17 +76,6 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
     },
   );
 
-  // A transcript read carries the identity and nothing else — the main
-  // process locates the file in its own provider home — and is offered only
-  // for a session on this machine.
-  assert.deepEqual(
-    sessionToolAction(messageCall(`{${identity}}`, REALTIME_TOOL.READ_SESSION_TRANSCRIPT), roster),
-    {
-      kind: "read-transcript",
-      identity: { providerId: "conductor", providerSessionId: "conductor-1" },
-    },
-  );
-
   // Every way a call can point somewhere Luke was not shown is a refusal with
   // a reason he can say aloud, never a request that reaches a bridge.
   const refusals = [
@@ -131,26 +119,13 @@ test("a tool call can act only on a session Luke was shown, doing what it advert
   );
   assert.equal(nowhereToOpen.status, ACT_RESULT_STATUS.REJECTED);
 
-  // A cloud session's conversation lives with its provider, not on this
-  // machine, so a transcript read is refused rather than guessed at.
-  const cloudSession = normalizeSession(
-    { id: "conductor", displayName: "Conductor" },
-    {
-      providerSessionId: "conductor-9",
-      title: "Conductor: cloud",
-      status: SESSION_STATUS.WAITING,
-      lastActivityAt: DECIDED_AT,
-      location: SESSION_LOCATION.CLOUD,
-    },
+  // The retired spoken transcript reading is no act at all: a call naming it
+  // is refused as unknown rather than routed anywhere.
+  const retired = sessionToolAction(
+    messageCall(`{${identity}}`, "read_session_transcript"),
+    roster,
   );
-  const nothingToRead = sessionToolAction(
-    messageCall(
-      '{"provider_id":"conductor","provider_session_id":"conductor-9"}',
-      REALTIME_TOOL.READ_SESSION_TRANSCRIPT,
-    ),
-    [cloudSession],
-  );
-  assert.equal(nothingToRead.status, ACT_RESULT_STATUS.REJECTED);
+  assert.equal(retired.status, ACT_RESULT_STATUS.REJECTED);
 });
 
 test("an open ask can pick the app, held to the roster's own associations", () => {
@@ -727,12 +702,14 @@ test("an issue tool call can act only on an issue Luke was shown, going where it
   );
 });
 
-test("the session and issue tools answer to their own validators", () => {
-  assert.equal(isSessionToolName(REALTIME_TOOL.SEND_SESSION_MESSAGE), true);
-  assert.equal(isSessionToolName(REALTIME_TOOL.UPDATE_ISSUE_STATE), false);
-  assert.equal(isIssueToolName(REALTIME_TOOL.UPDATE_ISSUE_STATE), true);
-  assert.equal(isIssueToolName(REALTIME_TOOL.COMMENT_ON_ISSUE), true);
-  assert.equal(isIssueToolName("delete_everything"), false);
+test("each act belongs to one family", () => {
+  assert.equal(
+    realtimeToolFamily(REALTIME_TOOL.SEND_SESSION_MESSAGE),
+    REALTIME_TOOL_FAMILY.SESSION,
+  );
+  assert.equal(realtimeToolFamily(REALTIME_TOOL.UPDATE_ISSUE_STATE), REALTIME_TOOL_FAMILY.ISSUE);
+  assert.equal(realtimeToolFamily(REALTIME_TOOL.COMMENT_ON_ISSUE), REALTIME_TOOL_FAMILY.ISSUE);
+  assert.equal(realtimeToolFamily("delete_everything"), undefined);
   assert.equal(ACTS.CHANGE_APP_SETTING.family, REALTIME_TOOL_FAMILY.APP);
   assert.equal(ACTS.SEND_SESSION_MESSAGE.family, REALTIME_TOOL_FAMILY.SESSION);
   assert.equal(ACTS.UPDATE_ISSUE_STATE.family, REALTIME_TOOL_FAMILY.ISSUE);

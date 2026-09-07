@@ -459,10 +459,6 @@ function desktopOnHostedService(
         storage.file = contents;
         return true;
       },
-      remove: () => {
-        storage.file = undefined;
-        return true;
-      },
     },
     createGenerationId: () => "gen-1",
   });

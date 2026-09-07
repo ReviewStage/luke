@@ -44,10 +44,6 @@ class MemoryStorage implements BrainStateStorage {
     this.file = contents;
     return true;
   }
-  remove() {
-    this.file = undefined;
-    return true;
-  }
 }
 
 /** A model that answers nothing until the test says so. */

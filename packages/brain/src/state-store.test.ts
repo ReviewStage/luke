@@ -102,11 +102,6 @@ class MemoryStorage implements BrainStateStorage {
     this.file = contents;
     return true;
   }
-  remove() {
-    this.log.push("remove");
-    this.file = undefined;
-    return true;
-  }
 }
 
 test("the store loads once, serializes writes, and fences a write against a replaced generation", async () => {

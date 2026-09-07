@@ -351,25 +351,6 @@ export function MicrophoneIcon(): React.JSX.Element {
   );
 }
 
-/**
- * The stop glyph every chat surface uses: a filled, slightly rounded square.
- * Filled rather than stroked, because at control size a stroked square reads
- * as a checkbox.
- */
-export function StopIcon(): React.JSX.Element {
-  return (
-    <svg
-      className="control-icon"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <rect x="6.4" y="6.4" width="11.2" height="11.2" rx="2.6" />
-    </svg>
-  );
-}
-
 /** Words meant to carry: what the feedback section is for. */
 export function MegaphoneIcon(): React.JSX.Element {
   return (

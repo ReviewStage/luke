@@ -4,20 +4,16 @@ import { REALTIME_TOOL, realtimeToolDefinitions } from "@sidecar/acts";
 import { BRAIN_TURN_AUTHORITY } from "@sidecar/hosted";
 import { BRAIN_TOOL, brainToolAllowed, brainToolDefinitions, isBrainOnlyTool } from "./tools.js";
 
-test("a developer turn gets every act but the spoken transcript reading, plus the two reads, never announce", () => {
+test("a developer turn gets every act plus the two reads, never announce", () => {
   const names = brainToolDefinitions(BRAIN_TURN_AUTHORITY.DEVELOPER).map((tool) => tool.name);
   for (const act of realtimeToolDefinitions()) {
-    if (act.name === REALTIME_TOOL.READ_SESSION_TRANSCRIPT) {
-      assert.ok(!names.includes(act.name));
-    } else {
-      assert.ok(names.includes(act.name), `${act.name} is offered`);
-    }
+    assert.ok(names.includes(act.name), `${act.name} is offered`);
   }
   assert.ok(names.includes(BRAIN_TOOL.LIST_SESSIONS));
   assert.ok(names.includes(BRAIN_TOOL.READ_TRANSCRIPT));
   assert.ok(!names.includes(BRAIN_TOOL.ANNOUNCE));
   assert.equal(new Set(names).size, names.length);
-  assert.equal(names.length, realtimeToolDefinitions().length - 1 + 2);
+  assert.equal(names.length, realtimeToolDefinitions().length + 2);
 });
 
 test("an observation turn gets the two reads and announce, and no act at all", () => {
@@ -33,6 +29,9 @@ test("an observation turn gets the two reads and announce, and no act at all", (
   assert.ok(!brainToolAllowed(BRAIN_TURN_AUTHORITY.DEVELOPER, BRAIN_TOOL.ANNOUNCE));
   assert.ok(brainToolAllowed(BRAIN_TURN_AUTHORITY.DEVELOPER, REALTIME_TOOL.SEND_SESSION_MESSAGE));
   assert.ok(!brainToolAllowed(BRAIN_TURN_AUTHORITY.DEVELOPER, "delete_everything"));
+  // The retired spoken transcript reading is no tool at all now, in either turn.
+  assert.ok(!brainToolAllowed(BRAIN_TURN_AUTHORITY.DEVELOPER, "read_session_transcript"));
+  assert.ok(!brainToolAllowed(BRAIN_TURN_AUTHORITY.OBSERVATION, "read_session_transcript"));
 });
 
 test("announce takes the briefing alone and every definition is a function tool", () => {

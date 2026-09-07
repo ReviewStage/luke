@@ -138,9 +138,8 @@ test("the phone is handed the acts it carries, in the shape its own surface give
       REALTIME_TOOL.SHOW_PANEL,
     ],
   );
-  // No local transcript, tracker, setting, composer, Updates row, or memory stands on the phone.
+  // No tracker, setting, composer, Updates row, or memory stands on the phone.
   for (const absent of [
-    REALTIME_TOOL.READ_SESSION_TRANSCRIPT,
     REALTIME_TOOL.REMEMBER_FACT,
     REALTIME_TOOL.FORGET_FACT,
     REALTIME_TOOL.UPDATE_ISSUE_STATE,

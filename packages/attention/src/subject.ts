@@ -68,12 +68,6 @@ export function boundedSubject(value: string | undefined): string | undefined {
   return boundedText(value?.replace(/\s+/g, " "), maximumSessionSubjectLength);
 }
 
-/** The rendering as it travels: whole, trimmed, or nothing when there is nothing in it. */
-export function subjectTranscript(rendering: string): string | undefined {
-  const trimmed = rendering.trim();
-  return trimmed || undefined;
-}
-
 /**
  * Validates a subject input arriving as untrusted JSON — a hosted derivation
  * request — down to the fields the prompt reads, each held to its bound.
