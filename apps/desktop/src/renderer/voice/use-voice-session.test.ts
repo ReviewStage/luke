@@ -9,7 +9,6 @@ import {
 import { REPLY_KIND } from "./realtime-session";
 import {
   activeVoiceStream,
-  authorizeConversationAct,
   conversationEntryBelongsToConversation,
   liveConversationEntries,
   liveSpeedApplies,
@@ -113,38 +112,6 @@ test("the first call waits for durable conversation context", async () => {
   const readyWaiters = new Set<() => void>();
   await waitForConversationContext(true, readyWaiters);
   assert.equal(readyWaiters.size, 0);
-});
-
-test("an authorization that outlives Clear cannot record its act", async () => {
-  let resolveAuthorization: ((value: string) => void) | undefined;
-  const authorization = new Promise<string>((resolve) => {
-    resolveAuthorization = resolve;
-  });
-  let activeReplyGeneration: number | undefined = 3;
-  const activeReply = {
-    get current(): number | undefined {
-      return activeReplyGeneration;
-    },
-  };
-  let conversationGeneration = 3;
-  const history: string[] = [];
-  const pending = authorizeConversationAct(activeReply, () => authorization);
-
-  conversationGeneration = 4;
-  activeReplyGeneration = undefined;
-  resolveAuthorization?.("accepted");
-  const stale = await pending;
-  if (conversationEntryBelongsToConversation(stale.generation, conversationGeneration)) {
-    history.push("stale act");
-  }
-  assert.equal(history.length, 0);
-
-  activeReplyGeneration = conversationGeneration;
-  const current = await authorizeConversationAct(activeReply, async () => "accepted");
-  if (conversationEntryBelongsToConversation(current.generation, conversationGeneration)) {
-    history.push("current act");
-  }
-  assert.deepEqual(history, ["current act"]);
 });
 
 test("the meter listens to the stream of whoever holds the turn", () => {

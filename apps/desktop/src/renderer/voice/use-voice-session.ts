@@ -300,15 +300,6 @@ export function waitForConversationContext(
   return new Promise((resolve) => waiters.add(resolve));
 }
 
-/** Captures the reply that owns an act before main-process authorization can pause it. */
-export async function authorizeConversationAct<T>(
-  activeReplyGeneration: { readonly current: number | undefined },
-  authorize: () => Promise<T>,
-): Promise<{ authorization: T; generation: number | undefined }> {
-  const generation = activeReplyGeneration.current;
-  return { authorization: await authorize(), generation };
-}
-
 /**
  * The state the voice window reads from the main process rather than owns:
  * the settings that shape a call, the roster the arrival beat is worded from,
