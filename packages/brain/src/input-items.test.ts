@@ -8,15 +8,15 @@ import {
   type SessionProvider,
 } from "@sidecar/session";
 import { isRecord, isWireString, unparsedWire, type WireRecord, wireRecord } from "@sidecar/wire";
-import { BRAIN_WAKE_KIND, type BrainWakeEvent } from "./brain-events.js";
 import {
   askInputItem,
   BRAIN_INPUT_MARKER,
   holdReleasedInputItem,
   standingContextItem,
   wakeInputItem,
-} from "./brain-input.js";
-import type { ResponsesInputItem } from "./brain-openai.js";
+} from "./input-items.js";
+import type { ResponsesInputItem } from "./responses-api.js";
+import { BRAIN_WAKE_KIND, type BrainWakeEvent } from "./wake-events.js";
 
 const NOW = 1_800_000_000_000;
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };

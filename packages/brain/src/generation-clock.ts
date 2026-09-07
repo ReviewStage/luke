@@ -3,7 +3,7 @@ import {
   type BrainPersistedState,
   type BrainStateStore,
   brainGenerationExpired,
-} from "./brain-state.js";
+} from "./state-store.js";
 
 export interface BrainGenerationClockOptions {
   store: BrainStateStore;

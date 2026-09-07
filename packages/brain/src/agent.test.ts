@@ -29,18 +29,18 @@ import {
   type BrainAgentOptions,
   type BrainTurnTraceRecord,
   OMISSION_MARKER,
-} from "./brain-agent.js";
+} from "./agent.js";
 import {
   BRAIN_CLIENT_OUTCOME,
   type BrainClient,
   type BrainClientAnswer,
   type BrainRespondOptions,
-} from "./brain-client.js";
-import { BrainGenerationClock } from "./brain-clock.js";
-import { BRAIN_WAKE_KIND, type BrainDelivery, type BrainWakeEvent } from "./brain-events.js";
-import { BRAIN_INPUT_MARKER } from "./brain-input.js";
-import { UNKNOWN_ACT_RESULT } from "./brain-journal.js";
-import { RESPONSES_ITEM_TYPE, type ResponsesInputItem } from "./brain-openai.js";
+} from "./client.js";
+import { BrainGenerationClock } from "./generation-clock.js";
+import { BRAIN_WAKE_KIND, type BrainDelivery, type BrainWakeEvent } from "./wake-events.js";
+import { BRAIN_INPUT_MARKER } from "./input-items.js";
+import { UNKNOWN_ACT_RESULT } from "./journal.js";
+import { RESPONSES_ITEM_TYPE, type ResponsesInputItem } from "./responses-api.js";
 import {
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_ORIGIN,
@@ -50,15 +50,15 @@ import {
   type BrainRequestRecord,
   type BrainSubmissionResult,
   isTerminalBrainRequestStatus,
-} from "./brain-requests.js";
+} from "./requests.js";
 import {
   type BrainPersistedState,
   type BrainStateStorage,
   BrainStateStore,
   brainStateFromStored,
   freshBrainState,
-} from "./brain-state.js";
-import { BRAIN_TOOL } from "./brain-tools.js";
+} from "./state-store.js";
+import { BRAIN_TOOL } from "./tools.js";
 
 const NOW = 1_800_000_000_000;
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };

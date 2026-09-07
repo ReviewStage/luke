@@ -16,33 +16,33 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import { BRAIN_CLIENT_OUTCOME, type BrainClient } from "./brain-client.js";
+import { BRAIN_CLIENT_OUTCOME, type BrainClient } from "./client.js";
 import {
   BRAIN_WAKE_KIND,
   type BrainDelivery,
   type BrainTranscriptDelta,
   type BrainWakeEvent,
-} from "./brain-events.js";
+} from "./wake-events.js";
 import {
   askInputItem,
   holdReleasedInputItem,
   standingContextItem,
   wakeInputItem,
-} from "./brain-input.js";
+} from "./input-items.js";
 import {
   BrainJournal,
   journalActCounts,
   UNCONFIRMED_ACT_RESULT,
   UNKNOWN_ACT_RESULT,
-} from "./brain-journal.js";
-import { BrainMemory, pairedDanglingCalls } from "./brain-memory.js";
+} from "./journal.js";
+import { BrainMemory, pairedDanglingCalls } from "./memory.js";
 import {
   type BrainFunctionCall,
   type BrainResponsesOutput,
   brainResponsesOutput,
   functionCallOutputItem,
   type ResponsesInputItem,
-} from "./brain-openai.js";
+} from "./responses-api.js";
 import {
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_STATUS,
@@ -54,19 +54,19 @@ import {
   type BrainSubmissionResult,
   interruptedUnfinishedRequests,
   isTerminalBrainRequestStatus,
-} from "./brain-requests.js";
+} from "./requests.js";
 import {
   type BrainPersistedState,
   type BrainStateStore,
   type BrainStoreLease,
   brainGenerationExpired,
-} from "./brain-state.js";
+} from "./state-store.js";
 import {
   BRAIN_TOOL,
   brainToolAllowed,
   isBrainOnlyTool,
   maximumBriefingLength,
-} from "./brain-tools.js";
+} from "./tools.js";
 
 /**
  * The brain: one long-lived agent that is woken by the agents' hooks and by

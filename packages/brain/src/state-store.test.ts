@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
-import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "./brain-requests.js";
+import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "./requests.js";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
   BRAIN_STATE_VERSION,
@@ -14,7 +14,7 @@ import {
   brainStateRecord,
   freshBrainState,
   retainedBrainState,
-} from "./brain-state.js";
+} from "./state-store.js";
 
 const NOW = 1_800_000_000_000;
 

@@ -12,9 +12,9 @@ import {
   HostedBrainClient,
   OpenAiBrainClient,
   openAiBrainClient,
-} from "./brain-client.js";
-import { userMessageItem } from "./brain-openai.js";
-import { BRAIN_TOOL, brainToolDefinitions } from "./brain-tools.js";
+} from "./client.js";
+import { userMessageItem } from "./responses-api.js";
+import { BRAIN_TOOL, brainToolDefinitions } from "./tools.js";
 
 const NOW = 1_800_000_000_000;
 const INPUT = [userMessageItem("[observed events] ...")];

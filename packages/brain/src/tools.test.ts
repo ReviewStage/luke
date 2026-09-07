@@ -2,12 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_TOOL, realtimeToolDefinitions } from "@sidecar/acts";
 import { BRAIN_TURN_AUTHORITY } from "@sidecar/hosted";
-import {
-  BRAIN_TOOL,
-  brainToolAllowed,
-  brainToolDefinitions,
-  isBrainOnlyTool,
-} from "./brain-tools.js";
+import { BRAIN_TOOL, brainToolAllowed, brainToolDefinitions, isBrainOnlyTool } from "./tools.js";
 
 test("a developer turn gets every act but the spoken transcript reading, plus the two reads, never announce", () => {
   const names = brainToolDefinitions(BRAIN_TURN_AUTHORITY.DEVELOPER).map((tool) => tool.name);

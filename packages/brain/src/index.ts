@@ -18,7 +18,7 @@ export {
   OMISSION_MARKER,
   type Settled,
   settledUnlessAborted,
-} from "./brain-agent.js";
+} from "./agent.js";
 export {
   BRAIN_CLIENT_OUTCOME,
   BRAIN_OPENAI_DEFAULTS,
@@ -33,15 +33,15 @@ export {
   type OpenAiBrainClientOptions,
   type OpenAiBrainOptions,
   openAiBrainClient,
-} from "./brain-client.js";
-export { BrainGenerationClock, type BrainGenerationClockOptions } from "./brain-clock.js";
+} from "./client.js";
+export { BrainGenerationClock, type BrainGenerationClockOptions } from "./generation-clock.js";
 export {
   BRAIN_WAKE_KIND,
   type BrainDelivery,
   type BrainTranscriptDelta,
   type BrainWakeEvent,
   type BrainWakeKind,
-} from "./brain-events.js";
+} from "./wake-events.js";
 export {
   askInputItem,
   BRAIN_INPUT_MARKER,
@@ -49,20 +49,20 @@ export {
   holdReleasedInputItem,
   standingContextItem,
   wakeInputItem,
-} from "./brain-input.js";
-export { brainInstructions } from "./brain-instructions.js";
+} from "./input-items.js";
+export { brainInstructions } from "./instructions.js";
 export {
   BrainJournal,
   type BrainJournalEntry,
   brainJournalEntryFromWire,
   UNKNOWN_ACT_RESULT,
-} from "./brain-journal.js";
+} from "./journal.js";
 export {
   BrainMemory,
   type BrainMemoryMark,
   type BrainMemoryState,
   pairedDanglingCalls,
-} from "./brain-memory.js";
+} from "./memory.js";
 export {
   BRAIN_REASONING_EFFORT,
   BRAIN_RESPONSES_PATH,
@@ -78,7 +78,7 @@ export {
   RESPONSES_ITEM_TYPE,
   type ResponsesInputItem,
   userMessageItem,
-} from "./brain-openai.js";
+} from "./responses-api.js";
 export {
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_ORIGIN,
@@ -99,7 +99,7 @@ export {
   isBrainRequestOrigin,
   isBrainRequestStatus,
   isTerminalBrainRequestStatus,
-} from "./brain-requests.js";
+} from "./requests.js";
 export {
   BRAIN_GENERATION_LIFETIME_MS,
   BRAIN_STATE_BOUNDS,
@@ -121,7 +121,7 @@ export {
   freshBrainState,
   type RetainedBrainState,
   retainedBrainState,
-} from "./brain-state.js";
+} from "./state-store.js";
 export {
   BRAIN_TOOL,
   type BrainToolName,
@@ -129,4 +129,4 @@ export {
   brainToolDefinitions,
   isBrainOnlyTool,
   maximumBriefingLength,
-} from "./brain-tools.js";
+} from "./tools.js";

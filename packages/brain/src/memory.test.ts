@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BrainMemory, pairedDanglingCalls } from "./brain-memory.js";
-import { functionCallOutputItem, userMessageItem } from "./brain-openai.js";
+import { BrainMemory, pairedDanglingCalls } from "./memory.js";
+import { functionCallOutputItem, userMessageItem } from "./responses-api.js";
 
 const IDENTITY = { providerId: "claude-code", providerSessionId: "abc" };
 const COMPACTION = { type: "compaction", id: "cmp_1", encrypted_content: "folded" };
