@@ -167,24 +167,25 @@
   color: var(--surface);
 }
 
-.history-entry p {
-  margin: 0;
+/* The bubble's words, drawn as the Markdown they were written in; the block
+   rules live in markdown.css and this is only their ground. */
+.history-words {
+  min-width: 0;
+  max-width: 100%;
   padding: 7px 10px 8px;
   color: var(--text-primary);
   font-size: 12.5px;
   line-height: 1.38;
   overflow-wrap: anywhere;
-  white-space: pre-wrap;
 }
 
-/* The stamp rides inside the bubble, on the last line where a chat app puts
-   it, so a thread with times lays out exactly like one without and the copy
-   control stays centred on the words. It inherits the bubble's own colour
-   because the sent bubble's ground is the accent, where a fixed secondary
-   grey would not be readable. */
+/* The stamp rides inside the bubble, on a line of its own under the words,
+   so the copy control stays anchored to one bubble. It inherits the bubble's
+   own colour because the sent bubble's ground is the accent, where a fixed
+   secondary grey would not be readable. */
 .history-time {
-  margin-left: 6px;
   color: inherit;
+  opacity: 0.75;
   font-size: 9.5px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -195,7 +196,7 @@
   align-items: flex-end;
 }
 
-.history-entry[data-speaker="you"] p {
+.history-entry[data-speaker="you"] .history-words {
   border-radius: 15px 15px 5px 15px;
   background: var(--message-sent);
   color: rgba(255, 255, 255, 0.98);
@@ -207,7 +208,7 @@
   align-items: flex-start;
 }
 
-.history-entry[data-speaker="luke"] p {
+.history-entry[data-speaker="luke"] .history-words {
   border-radius: 15px 15px 15px 5px;
   background: var(--raised-strong);
 }
@@ -220,7 +221,7 @@
   text-align: center;
 }
 
-.history-entry[data-speaker="event"] p {
+.history-entry[data-speaker="event"] .history-words {
   padding: 0;
   color: var(--text-secondary);
   font-size: 10.5px;

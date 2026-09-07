@@ -101,6 +101,7 @@ import { KeySlot } from "./key-slot";
 import { type Errand, errandTargets, LukeErrand } from "./luke-errand";
 import { usePrefersReducedMotion } from "./luke-face-mood";
 import { applySpokenSetting, buildLukeGuide, isAppSettingId } from "./luke-guide";
+import { MarkdownMessage } from "./markdown-message";
 import { NotchWings } from "./notch-wings";
 import { PanelBody, type SessionWriteHandlers } from "./panel-body";
 import {
@@ -3079,9 +3080,9 @@ export function App(): React.JSX.Element {
       >
         <span className="voice-caption-stack" ref={captionTextElement}>
           {settledCaption === undefined ? null : (
-            <span className="voice-caption-text">{settledCaption}</span>
+            <MarkdownMessage className="voice-caption-text" words={settledCaption} />
           )}
-          <span className="voice-caption-text">{liveCaption}</span>
+          <MarkdownMessage className="voice-caption-text" words={liveCaption ?? ""} />
         </span>
       </span>
 

@@ -7,6 +7,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { type BrainRequestSnapshot, brainRequestPending } from "#shared/wire/brain";
 import { type AskHandler, AskLuke } from "./ask-luke";
+import { MarkdownMessage } from "./markdown-message";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CheckIcon, CopyIcon } from "./settings-icons";
 
@@ -76,14 +77,19 @@ function HistoryEntryRow({
     >
       <small className="visually-hidden">{presentation.label}</small>
       <span className="history-bubble">
-        <p>
-          {words}
-          {recordedAt ? (
-            <time className="history-time" dateTime={recordedAt.toISOString()}>
-              {ENTRY_TIME.format(recordedAt)}
-            </time>
-          ) : null}
-        </p>
+        <MarkdownMessage
+          words={words}
+          className="history-words"
+          {...(recordedAt
+            ? {
+                trailing: (
+                  <time className="history-time" dateTime={recordedAt.toISOString()}>
+                    {ENTRY_TIME.format(recordedAt)}
+                  </time>
+                ),
+              }
+            : undefined)}
+        />
         {pending ? (
           <span className="history-pending" role="status">
             <span className="history-pending-label">{HISTORY_PENDING_LABEL}</span>
@@ -103,8 +109,9 @@ function HistoryEntryRow({
             data-copied={copied ? "true" : undefined}
             aria-label={copied ? "Copied" : "Copy message"}
             onClick={() => {
-              // The visible words, never the structured model context behind an
-              // announcement: copy takes exactly what the bubble shows.
+              // The line's own words as written, Markdown marks included, so
+              // a paste carries the structure the bubble drew — and never the
+              // structured model context behind an announcement.
               window.sidecar.copyText(words);
               setCopied(true);
             }}
