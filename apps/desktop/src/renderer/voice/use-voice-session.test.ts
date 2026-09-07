@@ -15,6 +15,7 @@ import { type AppSettings, appSettingsView, CLI_CONNECTION } from "#shared/wire/
 import { REPLY_KIND } from "./realtime-session";
 import {
   activeVoiceStream,
+  applyVoiceBootstrap,
   conversationEntryBelongsToConversation,
   liveConversationEntries,
   liveSpeedApplies,
@@ -27,7 +28,6 @@ import {
   typedAskHolds,
   VOICE_RESTART,
   voiceRestartAction,
-  voiceSurroundingsFromBootstrap,
   waitForConversationContext,
 } from "./use-voice-session";
 import { VOICE_READINESS_PART, VoiceReadiness } from "./voice-readiness";
@@ -330,19 +330,23 @@ const NOTHING_PUSHED = {
   announcementsHeld: false,
 };
 
+const NOTHING_PUSHED_YET = { sessions: false, announcementsHeld: false, microphoneStatus: false };
+
 test("the voice bootstrap fills only what no push has said yet", () => {
   // Nothing pushed: the snapshot is the whole answer, and the first turn may open.
-  const fresh = voiceSurroundingsFromBootstrap(NOTHING_PUSHED, VOICE_BOOTSTRAP, false);
-  assert.equal(fresh.settings?.voiceCaptions, true);
-  assert.deepEqual(fresh.sessions, []);
-  assert.deepEqual(fresh.outputAudio, { muted: false, volume: 0.5 });
-  assert.equal(fresh.announcementsHeld, true);
-  assert.equal(fresh.bootstrapVoiceHotkey, "Alt+Space");
-  assert.equal(fresh.conversationContextReady, true);
+  const fresh = applyVoiceBootstrap(NOTHING_PUSHED, VOICE_BOOTSTRAP, NOTHING_PUSHED_YET);
+  assert.equal(fresh.surroundings.settings?.voiceCaptions, true);
+  assert.deepEqual(fresh.surroundings.sessions, []);
+  assert.deepEqual(fresh.surroundings.outputAudio, { muted: false, volume: 0.5 });
+  assert.equal(fresh.surroundings.announcementsHeld, true);
+  assert.equal(fresh.surroundings.bootstrapVoiceHotkey, "Alt+Space");
+  assert.equal(fresh.surroundings.conversationContextReady, true);
+  assert.equal(fresh.microphoneStatus, "granted");
 
   // Every push that raced past the bootstrap is newer than it and is kept:
-  // a settings change, a roster, an output edge, and a hold released to
-  // `false`, which is a real value and not a gap for the snapshot to fill.
+  // a settings change, a roster, an output edge, a hold released to
+  // `false`, and a permission the developer answered, none of which is a gap
+  // for the snapshot to fill.
   const pushedSettings = appSettingsView({
     ...BOOTSTRAP_SETTINGS,
     stored: { ...BOOTSTRAP_SETTINGS.stored, voiceCaptions: false },
@@ -356,7 +360,7 @@ test("the voice bootstrap fills only what no push has said yet", () => {
       lastActivityAt: 1_800_000_000_000,
     },
   );
-  const raced = voiceSurroundingsFromBootstrap(
+  const raced = applyVoiceBootstrap(
     {
       settings: pushedSettings,
       sessions: [pushedSession],
@@ -364,16 +368,49 @@ test("the voice bootstrap fills only what no push has said yet", () => {
       announcementsHeld: false,
     },
     VOICE_BOOTSTRAP,
-    true,
+    { sessions: true, announcementsHeld: true, microphoneStatus: true },
   );
-  assert.equal(raced.settings, pushedSettings);
-  assert.deepEqual(raced.sessions, [pushedSession]);
-  assert.deepEqual(raced.outputAudio, { muted: true, volume: 0 });
-  assert.equal(raced.announcementsHeld, false);
+  assert.equal(raced.surroundings.settings, pushedSettings);
+  assert.deepEqual(raced.surroundings.sessions, [pushedSession]);
+  assert.deepEqual(raced.surroundings.outputAudio, { muted: true, volume: 0 });
+  assert.equal(raced.surroundings.announcementsHeld, false);
+  assert.equal(raced.microphoneStatus, undefined);
   // The gate and the key's name come from the bootstrap alone; no push carries them.
-  assert.equal(raced.agentTraceEnabled, false);
-  assert.equal(raced.bootstrapVoiceHotkey, "Alt+Space");
-  assert.equal(raced.conversationContextReady, true);
+  assert.equal(raced.surroundings.agentTraceEnabled, false);
+  assert.equal(raced.surroundings.bootstrapVoiceHotkey, "Alt+Space");
+  assert.equal(raced.surroundings.conversationContextReady, true);
+});
+
+test("a roster pushed empty, or a permission pushed back, is not undone by a stale bootstrap", () => {
+  // The bootstrap was captured while a session stood; the roster then pushed
+  // [] — the last row gone, or a sign-out — before the bootstrap landed. An
+  // empty push is an observation, not an absence, so the stale row must not
+  // come back; the same for a permission a push has since moved.
+  const staleSession = normalizeSession(
+    { id: "codex", displayName: "Codex" },
+    {
+      providerSessionId: "thread-1",
+      title: "gone already",
+      status: SESSION_STATUS.WAITING,
+      lastActivityAt: 1_800_000_000_000,
+    },
+  );
+  const stale: VoiceBootstrap = {
+    ...VOICE_BOOTSTRAP,
+    sessionRoster: { sessions: [staleSession] },
+    microphoneStatus: "not-determined",
+  };
+  const applied = applyVoiceBootstrap({ ...NOTHING_PUSHED, sessions: [] }, stale, {
+    sessions: true,
+    announcementsHeld: false,
+    microphoneStatus: true,
+  });
+  assert.deepEqual(applied.surroundings.sessions, []);
+  assert.equal(applied.microphoneStatus, undefined);
+  // With no roster push at all, the bootstrap's row is the only reading and stands.
+  const unpushed = applyVoiceBootstrap(NOTHING_PUSHED, stale, NOTHING_PUSHED_YET);
+  assert.deepEqual(unpushed.surroundings.sessions, [staleSession]);
+  assert.equal(unpushed.microphoneStatus, "not-determined");
 });
 
 test("the readiness report names the voice bootstrap's epoch however the pushes and subscriptions raced it", () => {
