@@ -417,21 +417,6 @@ function rejection(reason: string): WireRecord {
   return { status: ACT_RESULT_STATUS.REJECTED, reason };
 }
 
-/** Identities collected without a composite key: one list, membership by both fields. */
-class IdentitySet {
-  readonly #identities: SessionIdentity[] = [];
-
-  add(identity: SessionIdentity): void {
-    if (!this.#identities.some((held) => sameIdentity(held, identity))) {
-      this.#identities.push({ ...identity });
-    }
-  }
-
-  list(): readonly SessionIdentity[] {
-    return [...this.#identities];
-  }
-}
-
 function generationFrom(state: BrainPersistedState): Generation {
   return {
     id: state.generationId,
@@ -1544,16 +1529,16 @@ export class BrainAgent {
     events: readonly BrainWakeEvent[],
     context: TurnContext,
   ): Promise<{ events: readonly BrainWakeEvent[]; transcriptBytes: number }> {
-    const read = new IdentitySet();
+    const read: SessionIdentity[] = [];
     let transcriptBytes = 0;
     const attached: BrainWakeEvent[] = [];
     for (const event of events) {
       if (this.#revoked(context)) break;
-      if (read.list().some((identity) => sameIdentity(identity, event.identity))) {
+      if (read.some((identity) => sameIdentity(identity, event.identity))) {
         attached.push({ ...event });
         continue;
       }
-      read.add(event.identity);
+      read.push({ ...event.identity });
       const delta = await this.#readDelta(event.identity, context);
       if (!delta) break;
       transcriptBytes += delta.text.length;

@@ -370,6 +370,33 @@ test("wakes inside the window open one turn, with each session's delta read once
   assert.equal(h.traces[0]?.transcriptBytes, `${TRANSCRIPT_SECRET} for abc`.length * 2);
 });
 
+test("the same session id under two providers is two identities, each read once", async () => {
+  const codexAbc: SessionIdentity = { providerId: "codex", providerSessionId: "abc" };
+  const h = harness({
+    roster: () => ({ text: "roster", identities: [ABC, codexAbc] }),
+  });
+  h.agent.wake([edge(ABC), edge(codexAbc), edge(ABC, NOW + 500)]);
+  await h.clock.advance(NOW + 3_000);
+
+  assert.equal(h.client.inputs.length, 1);
+  assert.deepEqual(h.sinceReads, [
+    { identity: ABC, cursor: undefined },
+    { identity: codexAbc, cursor: undefined },
+  ]);
+  assert.deepEqual(h.persisted[0]?.cursors, {
+    "claude-code": { abc: "abc-cursor" },
+    codex: { abc: "abc-cursor" },
+  });
+  const wake = itemText((h.client.inputs[0] ?? [])[0]);
+  const body = wireRecord(unparsedWire(JSON.parse(wake.slice(wake.indexOf("\n") + 1))));
+  assert.ok(body && Array.isArray(body.events));
+  assert.deepEqual(
+    body.events.map((event) => wireRecord(unparsedWire(event))?.provider_id),
+    [claude.id, "codex", claude.id],
+  );
+  assert.equal(h.traces[0]?.transcriptBytes, `${TRANSCRIPT_SECRET} for abc`.length * 2);
+});
+
 test("an announce is delivered trimmed, and every output item is remembered", async () => {
   const h = harness();
   h.client.answers.push(
