@@ -67,6 +67,8 @@ export interface LegacyImportOptions {
   sources: LegacySources;
   recoveryDirectory: string;
   now: number;
+  /** How a source's bytes are read; the file system's own read unless a test injects a failing one. */
+  readFile?: (location: string) => Buffer;
 }
 
 export const RECOVERY_DIRECTORY_NAME = "recovery";
@@ -83,10 +85,10 @@ type ReadSource =
   | { kind: "read"; contents: string; sha256: string }
   | { kind: "unreadable"; error: string };
 
-function readSource(location: string): ReadSource {
+function readSource(location: string, readFile: (location: string) => Buffer): ReadSource {
   let bytes: Buffer;
   try {
-    bytes = fs.readFileSync(location);
+    bytes = readFile(location);
   } catch (error) {
     if (isMissingFile(error)) return { kind: "missing" };
     return { kind: "unreadable", error: error instanceof Error ? error.message : String(error) };
@@ -115,9 +117,10 @@ export function importLegacyState(options: LegacyImportOptions): LegacyImportRep
   const { database, sessionKey, sources, now } = options;
   const failures: string[] = [];
   const report: LegacyImportReport = { retired: [], expiredRecoveries: [], failures };
-  const brain = readSource(sources.brainState);
-  const conversation = readSource(sources.conversation);
-  const facts = readSource(sources.personalFacts);
+  const readFile = options.readFile ?? ((location: string) => fs.readFileSync(location));
+  const brain = readSource(sources.brainState, readFile);
+  const conversation = readSource(sources.conversation, readFile);
+  const facts = readSource(sources.personalFacts, readFile);
   const brainReceipt = database.migrationReceipt(sources.brainState);
   const conversationReceipt = database.migrationReceipt(sources.conversation);
   const factsReceipt = database.migrationReceipt(sources.personalFacts);

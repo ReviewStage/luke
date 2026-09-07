@@ -228,6 +228,57 @@ test("a file that is there but cannot be read is not an empty migration: no rece
   assert.equal(fs.existsSync(s.sources.conversation), false);
 });
 
+test("an injected read failure is reported as unreadable the same way, whatever the file system enforces", () => {
+  const s = scratch();
+  fs.writeFileSync(s.sources.brainState, brainStateRecord(populatedState("gen-1")));
+  fs.writeFileSync(s.sources.conversation, conversationFile(THREAD));
+  fs.writeFileSync(s.sources.personalFacts, JSON.stringify(FACTS));
+  const database = openTestDatabase();
+  const denied = Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+  const report = importLegacyState({
+    database,
+    sessionKey: MAIN_SESSION_KEY,
+    sources: s.sources,
+    recoveryDirectory: s.recovery,
+    now: NOW,
+    readFile: (location) => {
+      if (location === s.sources.conversation) throw denied;
+      return fs.readFileSync(location);
+    },
+  });
+  assert.equal(report.brainState?.outcome, MIGRATION_OUTCOME.IMPORTED);
+  assert.equal(report.personalFacts?.outcome, MIGRATION_OUTCOME.IMPORTED);
+  assert.deepEqual(report.conversation, {
+    outcome: MIGRATION_OUTCOME.UNREADABLE,
+    alreadyImported: false,
+    error: "EACCES: permission denied",
+  });
+  assert.deepEqual(report.failures, [
+    `${s.sources.conversation} could not be read: EACCES: permission denied`,
+  ]);
+  assert.equal(database.migrationReceipt(s.sources.conversation), undefined);
+  assert.equal(database.countHistory(MAIN_SESSION_KEY), 0);
+  // The unreadable file stays for the next launch; the two that were read are retired.
+  assert.equal(fs.existsSync(s.sources.conversation), true);
+  assert.equal(fs.existsSync(s.sources.brainState), false);
+  assert.equal(fs.existsSync(s.sources.personalFacts), false);
+  const retry = run(database, s, NOW + 1);
+  assert.equal(retry.conversation?.outcome, MIGRATION_OUTCOME.IMPORTED);
+  assert.equal(database.countHistory(MAIN_SESSION_KEY), THREAD.length);
+  // A read that fails with a missing-file code is a missing source, not a failure.
+  const missing = importLegacyState({
+    database: openTestDatabase(),
+    sessionKey: MAIN_SESSION_KEY,
+    sources: scratch().sources,
+    recoveryDirectory: scratch().recovery,
+    now: NOW,
+    readFile: () => {
+      throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    },
+  });
+  assert.deepEqual(missing, { retired: [], expiredRecoveries: [], failures: [] });
+});
+
 test("a crash before the commit leaves nothing imported and nothing retired, and the next launch imports everything once", () => {
   const s = scratch();
   const state = populatedState("gen-1");
