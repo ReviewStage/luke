@@ -32,3 +32,9 @@ export {
   SESSION_LIST_SORT,
   type SessionListSort,
 } from "./guide.js";
+export {
+  AGENT_WORK_LANGUAGE_INSTRUCTION,
+  CTO_RELEVANCE_INSTRUCTION,
+  INTERRUPTION_CONTEXT_INSTRUCTION,
+  LUKE_PERSONA,
+} from "./persona.js";
