@@ -28,7 +28,6 @@ import {
   sessionRunKeys,
   sessionTally,
   spokenSearchOutcome,
-  tallySummary,
   toggledSessionFilters,
   workspaceTrayChange,
 } from "./session-model";
@@ -300,19 +299,6 @@ test("the apps re-seat with the rows when the other sort is chosen", () => {
     { ...recent, providers: undefined },
     { ...sessionTally(FIXTURE_SESSIONS), providers: undefined },
   );
-});
-
-test("the spoken summary names the state its own number counts", () => {
-  const tally = sessionTally(displaySessions(bootstrap(true), []));
-
-  assert.equal(tallySummary(tally), "1 session needs you");
-  assert.equal(tallySummary({ ...tally, attention: 0, working: 3 }), "3 sessions working");
-  assert.equal(tallySummary({ ...tally, attention: 0, working: 0 }), "1 session complete");
-  assert.equal(
-    tallySummary({ ...tally, attention: 0, working: 0, complete: 0 }),
-    "6 sessions tracked",
-  );
-  assert.equal(tallySummary(sessionTally([])), "No sessions tracked");
 });
 
 test("the filters offered are grouped by axis, coarse to fine, counted", () => {

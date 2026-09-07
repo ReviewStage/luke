@@ -66,12 +66,6 @@ interface NotchWingsProps {
    * the one thing introducing him.
    */
   accountGated: boolean;
-  /**
-   * The one sentence the wing states about the roster, derived where the
-   * capsule button's own label is so the two can never drift. The live region
-   * below is what speaks it as it changes.
-   */
-  statusLabel: string;
 }
 
 /**
@@ -152,7 +146,6 @@ export function NotchWings({
   presentation,
   housingWidth,
   accountGated,
-  statusLabel,
 }: NotchWingsProps): React.JSX.Element {
   // A measured stream reports its own edges; a relayed level arrives with them.
   const [measuredVoiceActive, setMeasuredVoiceActive] = useState(false);
@@ -286,10 +279,9 @@ export function NotchWings({
               side has room for one, so at rest it draws the app whose session
               needs a person soonest and the rest wait behind it; the peek and
               the panel lay the whole strip out flat. Drawn in every state but
-              the gate, which takes this place for the label below. Decorative —
-              the live region beside them already states everything they show,
-              and the panel's own filter chips are what filtering is done
-              with. */}
+              the gate, which takes this place for the label below. Decorative:
+              the panel's own rows and filter chips are where the roster is
+              read and filtered. */}
           <span
             className="wing-marks"
             ref={marksRef}
@@ -328,12 +320,6 @@ export function NotchWings({
               Sign in
             </span>
           )}
-          {/* The roster's own sentence, spoken rather than drawn. It rides its
-              own element rather than the label's, which is rendered only while
-              signed out and would take every later announcement down with it. */}
-          <span className="wing-status" role="status" aria-live="polite">
-            {statusLabel}
-          </span>
         </div>
       </div>
     </>
