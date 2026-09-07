@@ -2,6 +2,7 @@ import type { RememberedFact } from "@sidecar/acts";
 import type { BrainPersistedState, BrainStateLoad, BrainStateRepository } from "@sidecar/brain";
 import type { ConversationEntry } from "@sidecar/realtime";
 import type { HistoryAppendOutcome, SessionKey } from "@sidecar/runtime-contracts";
+import type { UnparsedWireValue } from "@sidecar/wire";
 import { brainStateSave } from "./envelope.js";
 import type { LegacyImportReport } from "./legacy-import.js";
 import {
@@ -12,6 +13,7 @@ import {
   type RuntimeStorePort,
   type RuntimeStoreRequest,
   type RuntimeStoreResponse,
+  runtimeStoreResponseFromWire,
 } from "./protocol.js";
 
 /**
@@ -25,14 +27,17 @@ export class RuntimeStoreClient {
   readonly #port: RuntimeStorePort;
   readonly #pending = new Map<
     number,
-    { resolve: (value: unknown) => void; reject: (error: Error) => void }
+    { resolve: (value: UnparsedWireValue) => void; reject: (error: Error) => void }
   >();
   #nextId = 1;
   #failure: Error | undefined;
 
   constructor(port: RuntimeStorePort) {
     this.#port = port;
-    port.on("message", (message) => this.#answered(message as RuntimeStoreResponse));
+    port.on("message", (message) => {
+      const response = runtimeStoreResponseFromWire(message);
+      if (response) this.#answered(response);
+    });
     port.on("error", (error) => this.#fail(error));
     port.on("exit", (code) =>
       this.#fail(new Error(`runtime store worker exited with code ${code}`)),
@@ -53,6 +58,7 @@ export class RuntimeStoreClient {
     const message: RuntimeStoreRequest<Method> = { id, method, params };
     return new Promise((resolve, reject) => {
       this.#pending.set(id, {
+        // SAFETY: the worker answers a request with the result type its method declares; the id pairs them.
         resolve: (value) => resolve(value as RuntimeStoreMethods[Method]["result"]),
         reject,
       });

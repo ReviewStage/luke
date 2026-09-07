@@ -90,8 +90,9 @@ function readSource(location: string, readFile: (location: string) => Buffer): R
   try {
     bytes = readFile(location);
   } catch (error) {
+    if (!(error instanceof Error)) return { kind: "unreadable", error: String(error) };
     if (isMissingFile(error)) return { kind: "missing" };
-    return { kind: "unreadable", error: error instanceof Error ? error.message : String(error) };
+    return { kind: "unreadable", error: error.message };
   }
   return {
     kind: "read",
@@ -100,13 +101,10 @@ function readSource(location: string, readFile: (location: string) => Buffer): R
   };
 }
 
-function isMissingFile(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error.code === "ENOENT" || error.code === "ENOTDIR")
-  );
+function isMissingFile(error: Error): boolean {
+  // SAFETY: a failed file read reports an errno-like error whose code names the failure.
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "ENOENT" || code === "ENOTDIR";
 }
 
 function unreadable(read: ReadSource & { kind: "unreadable" }): LegacySourceImport {
@@ -216,12 +214,12 @@ export function importLegacyState(options: LegacyImportOptions): LegacyImportRep
   // reads. Whatever is at the path goes — the file, and a temporary write
   // beside it — because an older writer mid-write is the very thing the move
   // is for. A file that would not be read stays, for the next launch to try.
-  const retiring = [
+  const readable: readonly (readonly [string, ReadSource])[] = [
     [sources.brainState, brain],
     [sources.conversation, conversation],
     [sources.personalFacts, facts],
-  ]
-    .filter((pair): pair is [string, ReadSource] => typeof pair[0] === "string")
+  ];
+  const retiring = readable
     .filter(([, read]) => read.kind !== "unreadable")
     .filter(([location]) => !(conversationDeferred && location === sources.conversation))
     .map(([location]) => location)

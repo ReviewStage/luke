@@ -14,7 +14,13 @@ import type {
   MigrationReceipt,
   SessionKey,
 } from "@sidecar/runtime-contracts";
-import { isWireNumber, isWireString, type WireRecord, type WireValue } from "@sidecar/wire";
+import {
+  isWireNumber,
+  isWireString,
+  type UnparsedWireValue,
+  type WireRecord,
+  type WireValue,
+} from "@sidecar/wire";
 import type { BrainStateSave } from "./envelope.js";
 import {
   HISTORY_RETENTION,
@@ -85,6 +91,7 @@ export class RuntimeDatabase {
   #migrateSchema(): void {
     this.transaction(() => {
       for (const statement of RUNTIME_SCHEMA_STATEMENTS) this.#db.exec(statement);
+      // SAFETY: the schema_version table has one integer column; a row is that column or nothing.
       const row = this.#db.prepare("SELECT version FROM schema_version").get() as
         | { version: number }
         | undefined;
@@ -145,6 +152,7 @@ export class RuntimeDatabase {
   }
 
   #standingSession(sessionKey: SessionKey): StandingSession | undefined {
+    // SAFETY: the columns selected are the ones the row type names, typed by the schema.
     const row = this.#db
       .prepare(
         `SELECT session_id, created_at, expires_at, reset_cleared_at, reset_generation_id
@@ -187,9 +195,11 @@ export class RuntimeDatabase {
     const session = this.#standingSession(sessionKey);
     if (!session) return {};
     const standingGeneration = session.sessionId;
+    // SAFETY: each query below selects exactly the columns its row type names, typed by the schema.
     const items = this.#db
       .prepare("SELECT item FROM runtime_checkpoints WHERE session_id = ? ORDER BY sequence")
       .all(session.sessionId) as { item: string }[];
+    // SAFETY: the three text columns selected are the ones the row type names.
     const cursorRows = this.#db
       .prepare(
         "SELECT provider_id, provider_session_id, cursor FROM observation_cursors WHERE session_id = ?",
@@ -199,9 +209,11 @@ export class RuntimeDatabase {
       provider_session_id: string;
       cursor: string;
     }[];
+    // SAFETY: every column of a row is a SQL value; the envelope reader admits each field or refuses the whole.
     const requestRows = this.#db
       .prepare("SELECT * FROM requests WHERE session_id = ? ORDER BY ordinal")
       .all(session.sessionId) as Record<string, SQLInputValue>[];
+    // SAFETY: as above, for the receipts.
     const journalRows = this.#db
       .prepare("SELECT * FROM action_receipts WHERE session_id = ? ORDER BY ordinal")
       .all(session.sessionId) as Record<string, SQLInputValue>[];
@@ -218,7 +230,7 @@ export class RuntimeDatabase {
     } catch {
       return { unreadable: true, standingGeneration };
     }
-    const wire: Record<string, WireValue> = {
+    const wire = {
       version: 2,
       generationId: session.sessionId,
       createdAt: session.createdAt,
@@ -227,15 +239,17 @@ export class RuntimeDatabase {
       cursors,
       requests: requestRows.map(requestWire),
       journal: journalRows.map(journalWire),
-    };
-    if (session.resetClearedAt !== undefined) {
-      wire.reset = {
-        clearedAt: session.resetClearedAt,
-        ...(session.resetGenerationId !== undefined
-          ? { generationId: session.resetGenerationId }
-          : undefined),
-      };
-    }
+      ...(session.resetClearedAt !== undefined
+        ? {
+            reset: {
+              clearedAt: session.resetClearedAt,
+              ...(session.resetGenerationId !== undefined
+                ? { generationId: session.resetGenerationId }
+                : undefined),
+            },
+          }
+        : undefined),
+    } satisfies WireRecord;
     const state = brainPersistedStateFromWire(wire);
     return state ? { state, standingGeneration } : { unreadable: true, standingGeneration };
   }
@@ -423,6 +437,7 @@ export class RuntimeDatabase {
     entry: ConversationEntry & { recordedAt: number },
   ): boolean {
     const eventKey = historyEventKey(entry);
+    // SAFETY: the two columns selected are the ones the row type names, typed by the schema.
     const held = this.#db
       .prepare(
         "SELECT sequence, request_id FROM history_events WHERE session_key = ? AND event_key = ?",
@@ -471,6 +486,7 @@ export class RuntimeDatabase {
 
   /** The conversation's next sequence, taken from its counter so a number is never handed out twice. */
   #nextHistorySequence(sessionKey: SessionKey): number {
+    // SAFETY: RETURNING yields the one integer expression named `sequence`, or no row.
     const row = this.#db
       .prepare(
         `UPDATE conversations SET next_history_sequence = next_history_sequence + 1
@@ -536,6 +552,7 @@ export class RuntimeDatabase {
     now: number,
     clearedAt: number | undefined,
   ): readonly ConversationEntry[] {
+    // SAFETY: the query selects the one text column the row type names.
     const rows = this.#db
       .prepare(
         `SELECT payload FROM history_events
@@ -571,6 +588,7 @@ export class RuntimeDatabase {
 
   /** The sequences the table holds for the conversation, in order; for tests and diagnostics. */
   historySequences(sessionKey: SessionKey): readonly number[] {
+    // SAFETY: the query selects the one integer column the row type names.
     const rows = this.#db
       .prepare("SELECT sequence FROM history_events WHERE session_key = ? ORDER BY sequence")
       .all(sessionKey) as { sequence: number }[];
@@ -579,6 +597,7 @@ export class RuntimeDatabase {
 
   /** The distinct generations the conversation's lines were written under; for tests and diagnostics. */
   historySessionIds(sessionKey: SessionKey): readonly (string | undefined)[] {
+    // SAFETY: the query selects the one nullable text column the row type names.
     const rows = this.#db
       .prepare(
         "SELECT DISTINCT session_id FROM history_events WHERE session_key = ? ORDER BY session_id",
@@ -589,6 +608,7 @@ export class RuntimeDatabase {
 
   /** How many lines the table holds for the conversation, retention or not; for tests and diagnostics. */
   countHistory(sessionKey: SessionKey): number {
+    // SAFETY: COUNT(*) yields one integer named `count`.
     const row = this.#db
       .prepare("SELECT COUNT(*) AS count FROM history_events WHERE session_key = ?")
       .get(sessionKey) as { count: number };
@@ -596,6 +616,7 @@ export class RuntimeDatabase {
   }
 
   migrationReceipt(source: string): MigrationReceipt | undefined {
+    // SAFETY: the columns selected are the ones the row type names, typed by the schema.
     const row = this.#db
       .prepare(
         "SELECT source, sha256, imported_at, outcome FROM migration_receipts WHERE source = ?",
@@ -645,6 +666,7 @@ export class RuntimeDatabase {
   }
 
   personalFacts(): readonly RememberedFact[] {
+    // SAFETY: the two text columns selected are the ones the row type names.
     const rows = this.#db
       .prepare("SELECT id, words FROM personal_facts ORDER BY ordinal")
       .all() as { id: string; words: string }[];
@@ -671,7 +693,7 @@ export class RuntimeDatabase {
 }
 
 function requestWire(row: Record<string, SQLInputValue>): WireRecord {
-  const wire: Record<string, WireValue> = {
+  return {
     runId: text(row.run_id),
     submissionId: text(row.submission_id),
     origin: text(row.origin),
@@ -681,27 +703,30 @@ function requestWire(row: Record<string, SQLInputValue>): WireRecord {
     acceptedAt: number(row.accepted_at),
     performedActs: number(row.performed_acts),
     unknownActs: number(row.unknown_acts),
+    ...optionalField("startedAt", number(row.started_at)),
+    ...optionalField("settledAt", number(row.settled_at)),
+    ...optionalField("text", text(row.text)),
+    ...optionalField("failure", text(row.failure)),
+    ...optionalField("askRecordedAt", number(row.ask_recorded_at)),
+    ...optionalField("historyRecordedAt", number(row.history_recorded_at)),
   };
-  if (row.started_at !== null) wire.startedAt = number(row.started_at);
-  if (row.settled_at !== null) wire.settledAt = number(row.settled_at);
-  if (row.text !== null) wire.text = text(row.text);
-  if (row.failure !== null) wire.failure = text(row.failure);
-  if (row.ask_recorded_at !== null) wire.askRecordedAt = number(row.ask_recorded_at);
-  if (row.history_recorded_at !== null) wire.historyRecordedAt = number(row.history_recorded_at);
-  return wire;
 }
 
 function journalWire(row: Record<string, SQLInputValue>): WireRecord {
-  const wire: Record<string, WireValue> = {
+  return {
     runId: text(row.run_id),
     callId: text(row.call_id),
     name: text(row.name),
     argumentsJson: text(row.arguments_json),
     startedAt: number(row.started_at),
+    ...optionalField("outputJson", text(row.output_json)),
+    ...optionalField("settledAt", number(row.settled_at)),
   };
-  if (row.output_json !== null) wire.outputJson = text(row.output_json);
-  if (row.settled_at !== null) wire.settledAt = number(row.settled_at);
-  return wire;
+}
+
+/** A nullable column as the envelope reader expects it: present with its value, or absent. */
+function optionalField(name: string, value: WireValue): WireRecord {
+  return value === null ? {} : { [name]: value };
 }
 
 /**
@@ -710,10 +735,17 @@ function journalWire(row: Record<string, SQLInputValue>): WireRecord {
  * absent field, which the reader refuses.
  */
 function text(value: SQLInputValue | undefined): WireValue {
-  return typeof value === "string" && isWireString(value) ? value : null;
+  const wire = columnValue(value);
+  return isWireString(wire) ? wire : null;
 }
 
 function number(value: SQLInputValue | undefined): WireValue {
-  if (typeof value === "bigint") return Number(value);
-  return typeof value === "number" && isWireNumber(value) ? value : null;
+  const wire = columnValue(value);
+  return isWireNumber(wire) ? wire : null;
+}
+
+function columnValue(value: SQLInputValue | undefined): UnparsedWireValue {
+  // SAFETY: these tables declare only TEXT and INTEGER columns, read as strings and numbers; a
+  // blob or bigint would be a schema violation, and the wire guards then refuse the field.
+  return value as UnparsedWireValue;
 }

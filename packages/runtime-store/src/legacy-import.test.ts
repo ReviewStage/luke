@@ -15,17 +15,14 @@ import type { RuntimeDatabase } from "./database.js";
 import { importLegacyState, type LegacySources, RECOVERY_DIRECTORY_NAME } from "./legacy-import.js";
 import { line, NOW, openTestDatabase, populatedState, request } from "./testing.js";
 
-function scratch(): { root: string; sources: LegacySources; recovery: string } {
+function scratch() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "luke-legacy-"));
-  return {
-    root,
-    sources: {
-      brainState: path.join(root, "brain-state.json"),
-      conversation: path.join(root, "conversation.json"),
-      personalFacts: path.join(root, "memory.json"),
-    },
-    recovery: path.join(root, "agents", "main", RECOVERY_DIRECTORY_NAME),
+  const sources: LegacySources = {
+    brainState: path.join(root, "brain-state.json"),
+    conversation: path.join(root, "conversation.json"),
+    personalFacts: path.join(root, "memory.json"),
   };
+  return { root, sources, recovery: path.join(root, "agents", "main", RECOVERY_DIRECTORY_NAME) };
 }
 
 function conversationFile(entries: readonly ConversationEntry[]): string {
@@ -288,18 +285,12 @@ test("a crash before the commit leaves nothing imported and nothing retired, and
   const database = openTestDatabase();
   // The facts are the last thing the import writes: failing there proves the
   // generation and the thread written before it rolled back with it.
-  const crashing = new Proxy(database, {
-    get(target, property, receiver) {
-      if (property === "importPersonalFacts") {
-        return () => {
-          throw new Error("disk went away");
-        };
-      }
-      const value = Reflect.get(target, property, receiver);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
-  assert.throws(() => run(crashing, s), /disk went away/);
+  const intact = database.importPersonalFacts.bind(database);
+  database.importPersonalFacts = () => {
+    throw new Error("disk went away");
+  };
+  assert.throws(() => run(database, s), /disk went away/);
+  database.importPersonalFacts = intact;
   assert.deepEqual(database.loadBrainState(MAIN_SESSION_KEY), {});
   assert.equal(database.countHistory(MAIN_SESSION_KEY), 0);
   assert.equal(database.migrationReceipt(s.sources.brainState), undefined);

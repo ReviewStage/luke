@@ -28,24 +28,25 @@ export interface ConversationThreadStore {
   ): Promise<HistoryAppendOutcome<ConversationEntry>>;
 }
 
-export interface ConversationThreadOptions {
+export interface ConversationThreadOptions<Reporter> {
   store?: ConversationThreadStore;
   now?: () => number;
   /** Hears the thread as every window should now draw it, less the window that reported the change. */
-  onChanged: (entries: readonly ConversationEntry[], except?: unknown) => void;
+  onChanged: (entries: readonly ConversationEntry[], except?: Reporter) => void;
   report?: (message: string) => void;
 }
 
-export class ConversationThread {
+/** `Reporter` is whatever names the window a change came from; the desktop hands its WebContents. */
+export class ConversationThread<Reporter = never> {
   readonly #store: ConversationThreadStore | undefined;
   readonly #now: () => number;
-  readonly #onChanged: ConversationThreadOptions["onChanged"];
+  readonly #onChanged: ConversationThreadOptions<Reporter>["onChanged"];
   readonly #report: (message: string) => void;
   #entries: readonly ConversationEntry[] = [];
   #clearedAt: number | undefined;
   #epoch = 0;
 
-  constructor(options: ConversationThreadOptions) {
+  constructor(options: ConversationThreadOptions<Reporter>) {
     this.#store = options.store;
     this.#now = options.now ?? Date.now;
     this.#onChanged = options.onChanged;
@@ -73,7 +74,7 @@ export class ConversationThread {
    * is not taken, a line the store refused answers false, and a line whose
    * answer arrived after a later Clear is that Clear's to erase.
    */
-  async append(entries: readonly ConversationEntry[], except?: unknown): Promise<boolean> {
+  async append(entries: readonly ConversationEntry[], except?: Reporter): Promise<boolean> {
     const admitted = entries.filter((entry) => this.#afterClear(entry));
     if (admitted.length === 0) return true;
     const epoch = this.#epoch;

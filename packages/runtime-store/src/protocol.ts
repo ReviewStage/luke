@@ -1,6 +1,7 @@
 import type { RememberedFact } from "@sidecar/acts";
 import type { ConversationEntry } from "@sidecar/realtime";
 import type { AgentId, HistoryAppendOutcome, SessionKey } from "@sidecar/runtime-contracts";
+import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import type { RuntimeBrainStateLoad } from "./database.js";
 import type { BrainStateSave } from "./envelope.js";
 import type { LegacyImportReport, LegacySources } from "./legacy-import.js";
@@ -80,13 +81,55 @@ export interface RuntimeStoreRequest<Method extends RuntimeStoreMethod = Runtime
 }
 
 export type RuntimeStoreResponse =
-  | { id: number; ok: true; result: unknown }
+  | { id: number; ok: true; result: UnparsedWireValue }
   | { id: number; ok: false; error: string };
+
+/** What travels on the channel in either direction: a structured-clone value, parsed on arrival. */
+export type RuntimeStoreMessage = RuntimeStoreRequest | RuntimeStoreResponse;
 
 /** The two ends of a message channel as both sides use them: a `Worker`, a `MessagePort`, or a test double. */
 export interface RuntimeStorePort {
-  postMessage(message: unknown): void;
-  on(event: "message", listener: (message: unknown) => void): unknown;
-  on(event: "error", listener: (error: Error) => void): unknown;
-  on(event: "exit", listener: (code: number) => void): unknown;
+  postMessage(message: RuntimeStoreMessage): void;
+  on(event: "message", listener: (message: UnparsedWireValue) => void): void;
+  on(event: "error", listener: (error: Error) => void): void;
+  on(event: "exit", listener: (code: number) => void): void;
+}
+
+/**
+ * Reads a message off the channel. Both ends are Luke's own code on the
+ * same machine, so what arrives is one of the two envelopes above; the read
+ * establishes the envelope's shape and leaves the payload to the method's
+ * own types, which the sender chose.
+ */
+export function runtimeStoreResponseFromWire(
+  value: UnparsedWireValue,
+): RuntimeStoreResponse | undefined {
+  if (!isRecord(value) || !isWireNumber(value.id)) return undefined;
+  if (value.ok === true) return { id: value.id, ok: true, result: value.result };
+  if (value.ok === false && isWireString(value.error)) {
+    return { id: value.id, ok: false, error: value.error };
+  }
+  return undefined;
+}
+
+export function runtimeStoreRequestFromWire(
+  value: UnparsedWireValue,
+): RuntimeStoreRequest | undefined {
+  if (!isRecord(value) || !isWireNumber(value.id) || !isRuntimeStoreMethod(value.method)) {
+    return undefined;
+  }
+  // SAFETY: the method name selects the params type; the sender is the same build's client, which typed them.
+  return {
+    id: value.id,
+    method: value.method,
+    params: value.params as RuntimeStoreRequest["params"],
+  };
+}
+
+const RUNTIME_STORE_METHOD_LIST: readonly RuntimeStoreMethod[] =
+  Object.values(RUNTIME_STORE_METHOD);
+
+export function isRuntimeStoreMethod(value: UnparsedWireValue): value is RuntimeStoreMethod {
+  // SAFETY: value is a string; list membership is the vocabulary check.
+  return isWireString(value) && RUNTIME_STORE_METHOD_LIST.includes(value as RuntimeStoreMethod);
 }

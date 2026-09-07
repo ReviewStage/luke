@@ -24,11 +24,12 @@ function agentRoot(): string {
 }
 
 /** Both ends of a channel in one thread: the client on one port, the host on the other. */
-function inThread(): { client: RuntimeStoreClient; close: () => void } {
+function inThread() {
   const channel = new MessageChannel();
-  serveRuntimeStore(channel.port2 as unknown as RuntimeStorePort, {
-    openDatabase: (location) => RuntimeDatabase.open(location),
-  });
+  // SAFETY: a MessagePort posts and receives structured-clone values on the same events the port contract names.
+  const host = channel.port2 as unknown as RuntimeStorePort;
+  serveRuntimeStore(host, { openDatabase: (location) => RuntimeDatabase.open(location) });
+  // SAFETY: as above, for the client's end of the same channel.
   const client = new RuntimeStoreClient(channel.port1 as unknown as RuntimeStorePort);
   return {
     client,
@@ -118,17 +119,18 @@ test("two handles over the boundary: a stale checkpoint cannot replace the newer
 });
 
 test("a worker that dies settles every pending request as rejected and refuses later ones", async () => {
-  const listeners = new Map<string, (value: unknown) => void>();
+  let exit: ((code: number) => void) | undefined;
   const port: RuntimeStorePort = {
     postMessage: () => undefined,
     on: (event, listener) => {
-      listeners.set(event, listener as (value: unknown) => void);
-      return undefined;
+      if (event !== "exit") return;
+      // SAFETY: the "exit" listener takes the code this test fires; the others are never called.
+      exit = listener as (code: number) => void;
     },
   };
   const client = new RuntimeStoreClient(port);
   const pending = client.listHistory(MAIN_SESSION_KEY, NOW);
-  listeners.get("exit")?.(1);
+  exit?.(1);
   await assert.rejects(pending, /exited with code 1/);
   await assert.rejects(client.listHistory(MAIN_SESSION_KEY, NOW), /exited with code 1/);
   assert.match(client.failed()?.message ?? "", /exited/);
@@ -138,6 +140,7 @@ test("the real worker entry serves the same protocol on its own thread", async (
   const worker = new Worker(new URL("./worker-entry.ts", import.meta.url), {
     execArgv: ["--import", "tsx"],
   });
+  // SAFETY: a Worker posts and receives structured-clone values on the same events the port contract names.
   const client = new RuntimeStoreClient(worker as unknown as RuntimeStorePort);
   try {
     const root = agentRoot();

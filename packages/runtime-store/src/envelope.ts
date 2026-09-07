@@ -55,7 +55,7 @@ export type BrainStateSave = { expectGeneration: string | undefined } & (
   | { delta: BrainStateDelta }
 );
 
-function sameJson(left: unknown, right: unknown): boolean {
+function sameJson<Value>(left: Value, right: Value): boolean {
   return left === right || JSON.stringify(left) === JSON.stringify(right);
 }
 

@@ -1,4 +1,5 @@
 import path from "node:path";
+import type { UnparsedWireValue } from "@sidecar/wire";
 import { AGENT_DATABASE_FILE, type RuntimeDatabase } from "./database.js";
 import {
   eraseRecovery,
@@ -14,6 +15,7 @@ import {
   type RuntimeStorePort,
   type RuntimeStoreRequest,
   type RuntimeStoreResponse,
+  runtimeStoreRequestFromWire,
 } from "./protocol.js";
 
 /**
@@ -39,6 +41,7 @@ export function serveRuntimeStore(port: RuntimeStorePort, options: RuntimeStoreH
     const method: RuntimeStoreMethod = request.method;
     switch (method) {
       case RUNTIME_STORE_METHOD.OPEN: {
+        // SAFETY: the method name is what the request carries; its params are the ones that method declares.
         const params = request.params as RuntimeStoreMethods["open"]["params"];
         database?.close();
         database = options.openDatabase(path.join(params.agentRoot, AGENT_DATABASE_FILE));
@@ -67,22 +70,27 @@ export function serveRuntimeStore(port: RuntimeStorePort, options: RuntimeStoreH
         return report;
       }
       case RUNTIME_STORE_METHOD.BRAIN_LOAD: {
+        // SAFETY: the method name is what the request carries; its params are the ones that method declares.
         const params = request.params as RuntimeStoreMethods["brain.load"]["params"];
         return opened().loadBrainState(params.sessionKey);
       }
       case RUNTIME_STORE_METHOD.BRAIN_SAVE: {
+        // SAFETY: the method name is what the request carries; its params are the ones that method declares.
         const params = request.params as RuntimeStoreMethods["brain.save"]["params"];
         return opened().saveBrainState(params.sessionKey, params.save);
       }
       case RUNTIME_STORE_METHOD.HISTORY_APPEND: {
+        // SAFETY: the method name is what the request carries; its params are the ones that method declares.
         const params = request.params as RuntimeStoreMethods["history.append"]["params"];
         return opened().appendHistory(params.sessionKey, params.entries, params.now);
       }
       case RUNTIME_STORE_METHOD.HISTORY_LIST: {
+        // SAFETY: the method name is what the request carries; its params are the ones that method declares.
         const params = request.params as RuntimeStoreMethods["history.list"]["params"];
         return opened().listHistory(params.sessionKey, params.now);
       }
       case RUNTIME_STORE_METHOD.HISTORY_CLEAR: {
+        // SAFETY: the method name is what the request carries; its params are the ones that method declares.
         const params = request.params as RuntimeStoreMethods["history.clear"]["params"];
         opened().clearHistoryAtOrBefore(params.sessionKey, params.clearedAt);
         return true;
@@ -92,6 +100,7 @@ export function serveRuntimeStore(port: RuntimeStorePort, options: RuntimeStoreH
       case RUNTIME_STORE_METHOD.FACTS_LIST:
         return opened().personalFacts();
       case RUNTIME_STORE_METHOD.FACTS_REPLACE: {
+        // SAFETY: the method name is what the request carries; its params are the ones that method declares.
         const params = request.params as RuntimeStoreMethods["facts.replace"]["params"];
         return opened().replacePersonalFacts(params.facts);
       }
@@ -108,10 +117,12 @@ export function serveRuntimeStore(port: RuntimeStorePort, options: RuntimeStoreH
   };
 
   port.on("message", (message) => {
-    const request = message as RuntimeStoreRequest;
+    const request = runtimeStoreRequestFromWire(message);
+    if (!request) return;
     let response: RuntimeStoreResponse;
     try {
-      response = { id: request.id, ok: true, result: handle(request) };
+      // SAFETY: a method's result is the structured-clone value its declared type describes.
+      response = { id: request.id, ok: true, result: handle(request) as UnparsedWireValue };
     } catch (error) {
       response = {
         id: request.id,

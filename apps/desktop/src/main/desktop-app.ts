@@ -488,7 +488,7 @@ let announcementsHeld = false;
  * copy of the thread back up. In a fixture or capture run nothing is on disk
  * and this list alone is the thread.
  */
-const conversationThread = new ConversationThread({
+const conversationThread = new ConversationThread<WebContents>({
   ...(runMode.observesProviders
     ? {
         store: {
@@ -499,8 +499,7 @@ const conversationThread = new ConversationThread({
     : undefined),
   onChanged: (entries, except) => {
     const payload: ConversationHistoryPayload = { entries, cleared: entries.length === 0 };
-    // SAFETY: the one caller that names a window hands the WebContents that reported the change.
-    broadcast(channels.onConversationHistoryChanged, payload, except as WebContents | undefined);
+    broadcast(channels.onConversationHistoryChanged, payload, except);
   },
   report: (message) => process.stderr.write(`${message}\n`),
 });
