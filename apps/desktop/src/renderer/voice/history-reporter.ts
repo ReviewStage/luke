@@ -21,10 +21,6 @@ export class HistoryReporter {
   readonly #inFlight = new Set<string>();
   #epoch = 0;
 
-  epoch(): number {
-    return this.#epoch;
-  }
-
   /** The lines the store has not acknowledged and that are not already on their way; marks them in flight. */
   take(entries: readonly ConversationEntry[]): TakenLines {
     const taken: ConversationEntry[] = [];

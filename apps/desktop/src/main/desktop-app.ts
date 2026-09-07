@@ -10,7 +10,7 @@ import {
   accountGateOpen,
   HostedVaultClient,
 } from "@sidecar/account";
-import { type RememberedFact, rememberedFactsText } from "@sidecar/acts";
+import { rememberedFactsText } from "@sidecar/acts";
 import {
   PRODUCT_CREDENTIAL_SOURCE,
   PRODUCT_DIAGNOSTIC_KIND,
@@ -58,18 +58,11 @@ import {
   ARRIVAL_SPEECH_KIND,
   BRIEFING_SPEECH_KIND,
   CALENDAR_ONBOARDING_SPEECH_KIND,
-  type ConversationEntry,
   conversationHistoryText,
   recentConversationEntries,
   sessionContextText,
   workspaceProjectContextText,
 } from "@sidecar/realtime";
-import {
-  DEFAULT_AGENT_ID,
-  MAIN_CONVERSATION_NAME,
-  MAIN_SESSION_KEY,
-} from "@sidecar/runtime-contracts";
-import { RuntimeStoreClient } from "@sidecar/runtime-store";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   CreatedWorkspaceOpenTracker,
@@ -159,7 +152,6 @@ import {
   shouldBackfillArrivalSettled,
 } from "./arrival-flow";
 import type { WorkspaceCreationDefaults } from "./brain/act-performer";
-import { clearConversationAndBrain } from "./brain/conversation-clear";
 import { wakeEventsFromHooks } from "./brain/flow";
 import { BrainReplyDeliveries } from "./brain/reply-delivery";
 import { wireBrain } from "./brain/wiring";
@@ -171,7 +163,6 @@ import {
   calendarOnboardingStateFromStored,
   shouldBackfillCalendarOnboardingSettled,
 } from "./calendar-onboarding-flow";
-import { ConversationThread } from "./conversation-thread";
 import {
   INTRODUCTION_FADE_MS,
   INTRODUCTION_HANDOFF_READY_MS,
@@ -197,6 +188,7 @@ import { ProviderKeyVaultSync, type VaultSyncAccount } from "./provider-key-vaul
 import { type BridgeContext, registerBridge, registerBridgeEntry } from "./register-bridge";
 import { runModeFor, sentryReportingEnabled } from "./run-mode";
 import { agentRootPath, runtimeStoreWorkerPath } from "./runtime-store-path";
+import { wireRuntimeStore } from "./runtime-store-wiring";
 import { createSettingsHandler } from "./settings-handler";
 import { SettingsStore } from "./settings-store";
 import { createElectronUpdaterEngine } from "./update-installer";
@@ -480,43 +472,27 @@ let appleAccessProbeFailing = false;
  */
 let announcementsHeld = false;
 /**
- * The conversation history as the runtime store holds it, one retained thread
- * shared by every panel window and persisted for the next launch. The store is
- * the writer: a window's report and the main process's own lines are appended
- * to it by their ids, and what it answers with is what every panel is shown,
- * so one display cannot erase another's line and no report can stand a stale
- * copy of the thread back up. In a fixture or capture run nothing is on disk
- * and this list alone is the thread.
+ * The runtime store and the conversation it holds: one retained thread shared
+ * by every panel window and persisted for the next launch. The store is the
+ * writer: a window's report and the main process's own lines are appended to
+ * it by their ids, and what it answers with is what every panel is shown, so
+ * one display cannot erase another's line and no report can stand a stale
+ * copy of the thread back up. The files an earlier build kept beside
+ * `settings.json` are left where they are and never read.
  */
-const conversationThread = new ConversationThread<WebContents>({
-  ...(runMode.observesProviders
-    ? {
-        store: {
-          appendHistory: (entries, now) =>
-            runtimeStoreClient().appendHistory(MAIN_SESSION_KEY, entries, now),
-        },
-      }
-    : undefined),
-  onChanged: (entries, except) => {
+const runtimeStoreWiring = wireRuntimeStore({
+  persistent: runMode.observesProviders,
+  createWorker: () => new Worker(runtimeStoreWorkerPath(__dirname), { name: "runtime-store" }),
+  agentRoot: () => agentRootPath(app.getPath("userData")),
+  ensureDirectory: (directory) => fs.mkdirSync(directory, { recursive: true, mode: 0o700 }),
+  now: Date.now,
+  createEventId: () => randomUUID(),
+  onHistoryChanged: (entries, except) => {
     const payload: ConversationHistoryPayload = { entries, cleared: entries.length === 0 };
     broadcast(channels.onConversationHistoryChanged, payload, except);
   },
   report: (message) => process.stderr.write(`${message}\n`),
 });
-/**
- * The runtime store: one database under the agent's own directory, spoken to
- * on its own worker thread so the main thread never waits on the disk. It
- * holds the brain's envelope, the conversation, and the remembered facts, and
- * it is opened once at launch — importing what an earlier build kept in JSON
- * files and retiring those files — in every run that observes providers.
- */
-let runtimeStore: RuntimeStoreClient | undefined;
-function runtimeStoreClient(): RuntimeStoreClient {
-  runtimeStore ??= new RuntimeStoreClient(
-    new Worker(runtimeStoreWorkerPath(__dirname), { name: "runtime-store" }),
-  );
-  return runtimeStore;
-}
 /**
  * Which ended runs are still owed to the developer's ear, and to which voice
  * renderer. Owned here, never persisted, and emptied with the generation: a
@@ -974,8 +950,6 @@ function writeArrivalState(state: ArrivalState): void {
   // said about it is taken back rather than spoken over a settle it raced.
   if (state.settledAt !== undefined) withdrawBeat(ARRIVAL_SPEECH_KIND);
 }
-
-let rememberedFacts: readonly RememberedFact[] = [];
 
 /**
  * The calendar onboarding record as this run knows it, loaded once at launch
@@ -1477,23 +1451,6 @@ async function applyVoiceCredential(): Promise<void> {
   });
 }
 
-/**
- * Opens the runtime store for this launch: the agent's database under its own
- * directory. The files an earlier build kept beside `settings.json` are left
- * where they are and never read: nothing draws or writes them any more.
- */
-async function openRuntimeStore(): Promise<void> {
-  const agentRoot = agentRootPath(app.getPath("userData"));
-  fs.mkdirSync(agentRoot, { recursive: true, mode: 0o700 });
-  await runtimeStoreClient().open({
-    agentRoot,
-    agentId: DEFAULT_AGENT_ID,
-    sessionKey: MAIN_SESSION_KEY,
-    conversationName: MAIN_CONVERSATION_NAME,
-    now: Date.now(),
-  });
-}
-
 function withdrawBriefings(): void {
   const offered = speechArbiter.withdrawBriefings();
   if (offered) voiceWindow.current()?.webContents.send(channels.onSpeechWithdrawn, { id: offered });
@@ -1565,65 +1522,15 @@ function brainStandingContext(): string {
       brainWorkspaceDefaults.defaultProviderId,
       brainWorkspaceDefaults.defaultProjectIds,
     ),
-    rememberedFactsText(rememberedFacts),
-    conversationHistoryText(recentConversationEntries(conversationThread.entries()), sessions),
+    rememberedFactsText(runtimeStoreWiring.rememberedFacts()),
+    conversationHistoryText(
+      recentConversationEntries(runtimeStoreWiring.thread.entries()),
+      sessions,
+    ),
     appGuideContextText(appGuide),
   ]
     .filter((part): part is string => part !== undefined && part.trim().length > 0)
     .join("\n\n");
-}
-
-/**
- * Records a line in the shared conversation from the main process — the ask a
- * carried act was, a typed ask the brain accepted, a run's end — minting the
- * line's id here, since this process is its writer. A fixture or capture run
- * holds no thread of its own to record into.
- */
-function recordMainConversationEntry(
-  entry: ConversationEntry,
-  recordedAt = Date.now(),
-): Promise<boolean> {
-  if (!runMode.observesProviders) return Promise.resolve(false);
-  return conversationThread.append([
-    { ...entry, recordedAt, eventId: entry.eventId ?? randomUUID() },
-  ]);
-}
-
-/**
- * The History Clear a panel pressed: the cutoff raised and the relay emptied
- * for every panel first, so no context, publication, or report can carry
- * the old lines whatever the disk does; the brain's generation fenced and
- * marked erased, which the store's listener below answers by withdrawing
- * the speech that generation had queued; then the thread's lines at or
- * before the cutoff deleted from the store. Answers whether every step landed, which is what the panel reports;
- * the fence stands either way. What Luke separately remembers about the
- * developer is another table under another rule, and a Clear does not reach
- * it. A fixture or capture run holds nothing on disk and empties the view
- * alone.
- */
-function clearConversationHistory(): Promise<boolean> {
-  if (!runMode.observesProviders) {
-    conversationThread.fence(Date.now());
-    return Promise.resolve(true);
-  }
-  let cutoff: number | undefined;
-  return clearConversationAndBrain({
-    store: brainWiring.store(),
-    now: Date.now,
-    fence: (clearedAt) => {
-      cutoff = clearedAt;
-      conversationThread.fence(clearedAt);
-    },
-    eraseConversation: async () => {
-      if (cutoff === undefined) return false;
-      try {
-        return await runtimeStoreClient().clearHistoryAtOrBefore(MAIN_SESSION_KEY, cutoff);
-      } catch {
-        return false;
-      }
-    },
-    report: (message) => process.stderr.write(`${message}\n`),
-  });
 }
 
 /**
@@ -1670,23 +1577,6 @@ async function deliverBriefing(delivery: BrainDelivery): Promise<void> {
   await reconcileSpeech();
 }
 
-/** The remembered entries' write back through the runtime store, returning whether the list persisted. */
-async function writeRememberedFacts(facts: readonly RememberedFact[]): Promise<boolean> {
-  if (!runMode.observesProviders) return false;
-  let persisted: boolean;
-  try {
-    persisted = await runtimeStoreClient().replacePersonalFacts(facts);
-  } catch (error) {
-    process.stderr.write(
-      `Could not persist Luke's memory: ${error instanceof Error ? error.message : String(error)}\n`,
-    );
-    return false;
-  }
-  if (!persisted) return false;
-  rememberedFacts = facts;
-  return true;
-}
-
 /**
  * The one entry every act on a session or an issue passes through, and the
  * opens a row press reaches without the brain. Its checks stay its own so no
@@ -1715,11 +1605,11 @@ const sessionActPerformer = createSessionActPerformer({
 });
 
 const brainWiring = wireBrain({
-  repository: runtimeStoreClient().brainStateRepository(MAIN_SESSION_KEY),
+  repository: runtimeStoreWiring.brainStateRepository(),
   createId: () => randomUUID(),
   report: (message) => process.stderr.write(`${message}\n`),
   ...(agentTrace ? { traceTurn: (record) => agentTrace.recordBrainTurn(record) } : undefined),
-  recordConversationEntry: recordMainConversationEntry,
+  recordConversationEntry: runtimeStoreWiring.recordConversationEntry,
   broadcastRequests: broadcastBrainRequests,
   onEndPublished: offerBrainReply,
   onGenerationReplaced: () => {
@@ -1757,10 +1647,10 @@ const brainWiring = wireBrain({
     workspaceDefaults: readWorkspaceDefaults,
     trackedIssues: () => trackedIssues,
     appGuide: () => appGuide,
-    rememberedFacts: () => rememberedFacts,
-    writeRememberedFacts,
+    rememberedFacts: runtimeStoreWiring.rememberedFacts,
+    writeRememberedFacts: runtimeStoreWiring.writeRememberedFacts,
     performAppAct: performBrainAppAct,
-    recordConversationEntry: recordMainConversationEntry,
+    recordConversationEntry: runtimeStoreWiring.recordConversationEntry,
   },
   roster: brainRoster,
   standingContext: brainStandingContext,
@@ -1921,7 +1811,7 @@ function registerIpc(): void {
     // Computed rather than read from the cached flag: at launch nothing
     // has recomputed it yet, so a persisted pause would draw a waking face.
     announcementsHeld: accountCapabilitiesActive() && (await announcementsQuietNow(Date.now())),
-    conversationHistory: conversationThread.entries(),
+    conversationHistory: runtimeStoreWiring.thread.entries(),
     settings: await settingsStore.snapshot(),
   });
   registerContextHandler(BRIDGE.getVoiceBootstrap, voiceBootstrapFields);
@@ -1989,7 +1879,7 @@ function registerIpc(): void {
     BRIDGE,
     {
       appendConversationHistory(context, entries) {
-        return conversationThread.append(entries, context.sender);
+        return runtimeStoreWiring.thread.append(entries, context.sender);
       },
     },
     { ipcMain, trustedSender },
@@ -2172,7 +2062,7 @@ function registerIpc(): void {
     storeVoiceView: (view) => {
       latestVoiceView = view;
     },
-    clearConversation: clearConversationHistory,
+    clearConversation: () => runtimeStoreWiring.clearConversation(brainWiring.store()),
     setShortcutCapturing: (capturing) => hotkeys.setShortcutCapturing(capturing),
     openExternal: (url) => shell.openExternal(url),
     // While the takeover stands and no account credential exists yet, the
@@ -3105,18 +2995,14 @@ export function startDesktopApp(): void {
       // that opened on an empty History and filled it a beat later would read
       // as a conversation arriving rather than one resumed.
       if (runMode.observesProviders) {
-        await openRuntimeStore();
+        await runtimeStoreWiring.open();
         // Retention runs on every live launch, key or no key: the store's
         // load admits the envelope within its bounds and lifetime, replacing
         // in the database what it does not admit, and the clock takes it
         // from there. The last Clear's marker outlives the launch that made
         // it, so a line the Clear meant to erase is refused here too.
         await brainWiring.store().load();
-        conversationThread.restore(
-          await runtimeStoreClient().listHistory(MAIN_SESSION_KEY, Date.now()),
-          await runtimeStoreClient().historyClearedAt(MAIN_SESSION_KEY),
-        );
-        rememberedFacts = await runtimeStoreClient().personalFacts();
+        await runtimeStoreWiring.restore();
       }
       // A signed-in install with no arrival record predates the beat: its
       // sign-in was never observed, so it is settled now rather than greeted

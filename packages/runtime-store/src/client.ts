@@ -43,11 +43,6 @@ export class RuntimeStoreClient {
     );
   }
 
-  /** Whether the worker behind this client has failed; nothing will answer after it has. */
-  failed(): Error | undefined {
-    return this.#failure;
-  }
-
   request<Method extends RuntimeStoreMethod>(
     method: Method,
     params: RuntimeStoreMethods[Method]["params"],

@@ -3,7 +3,6 @@ import {
   type ConversationEntry,
   conversationEntryIdentity,
   recordedAfterClear,
-  retainedConversationEntries,
 } from "@sidecar/realtime";
 import type { HistoryAppendOutcome } from "@sidecar/runtime-contracts";
 
@@ -18,9 +17,6 @@ import type { HistoryAppendOutcome } from "@sidecar/runtime-contracts";
  * dispatch, and checked again after the answer: a late answer from an earlier
  * epoch installs nothing and broadcasts nothing, and the lines it carried are
  * the Clear's to erase in the store, where the same cutoff is applied.
- *
- * Without a store — a fixture or capture run — the thread lives here alone,
- * under the same append rule.
  */
 export interface ConversationThreadStore {
   appendHistory(
@@ -29,8 +25,34 @@ export interface ConversationThreadStore {
   ): Promise<HistoryAppendOutcome<ConversationEntry>>;
 }
 
+/**
+ * The thread of a run with nothing on disk — a fixture or capture run — kept
+ * under the same append rule: idempotent on each line's identity, placed
+ * where it happened, and retained to the same bounds.
+ */
+export class MemoryHistoryStore implements ConversationThreadStore {
+  #entries: readonly ConversationEntry[] = [];
+  readonly #held = new Set<string>();
+
+  appendHistory(
+    entries: readonly ConversationEntry[],
+    now: number,
+  ): Promise<HistoryAppendOutcome<ConversationEntry>> {
+    let thread = this.#entries;
+    for (const entry of entries) {
+      const identity = conversationEntryIdentity(entry);
+      if (this.#held.has(identity)) continue;
+      this.#held.add(identity);
+      thread = appendConversationThreadEntry(thread, entry, now, entry.recordedAt ?? now);
+    }
+    const changed = thread !== this.#entries;
+    this.#entries = thread;
+    return Promise.resolve({ changed, entries: thread });
+  }
+}
+
 export interface ConversationThreadOptions<Reporter> {
-  store?: ConversationThreadStore;
+  store: ConversationThreadStore;
   now?: () => number;
   /** Hears the thread as every window should now draw it, less the window that reported the change. */
   onChanged: (entries: readonly ConversationEntry[], except?: Reporter) => void;
@@ -39,7 +61,7 @@ export interface ConversationThreadOptions<Reporter> {
 
 /** `Reporter` is whatever names the window a change came from; the desktop hands its WebContents. */
 export class ConversationThread<Reporter = never> {
-  readonly #store: ConversationThreadStore | undefined;
+  readonly #store: ConversationThreadStore;
   readonly #now: () => number;
   readonly #onChanged: ConversationThreadOptions<Reporter>["onChanged"];
   readonly #report: (message: string) => void;
@@ -56,10 +78,6 @@ export class ConversationThread<Reporter = never> {
 
   entries(): readonly ConversationEntry[] {
     return this.#entries;
-  }
-
-  clearedAt(): number | undefined {
-    return this.#clearedAt;
   }
 
   /** The thread as the store holds it at launch, and the cutoff its marker carries. */
@@ -79,35 +97,23 @@ export class ConversationThread<Reporter = never> {
     const admitted = entries.filter((entry) => this.#afterClear(entry));
     if (admitted.length === 0) return true;
     const epoch = this.#epoch;
-    const now = this.#now();
-    let merged: readonly ConversationEntry[];
-    if (this.#store) {
-      let outcome: HistoryAppendOutcome<ConversationEntry>;
-      try {
-        outcome = await this.#store.appendHistory(admitted, now);
-      } catch (error) {
-        this.#report(
-          `Could not persist the conversation: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        return false;
-      }
-      if (epoch !== this.#epoch) return true;
-      if (!outcome.changed) return true;
-      // The store's answer is filtered through the cutoff as it stands now,
-      // not trusted whole: until the Clear's marker and erasure land in the
-      // store — and for good if the disk refused them — its rows still hold
-      // the lines the fence already emptied here, and the fence must hold
-      // whatever the disk did.
-      merged = outcome.entries.filter((entry) => this.#afterClear(entry));
-    } else {
-      const held = new Set(this.#entries.map(conversationEntryIdentity));
-      merged = admitted.reduce((thread, entry) => {
-        if (held.has(conversationEntryIdentity(entry))) return thread;
-        held.add(conversationEntryIdentity(entry));
-        return appendConversationThreadEntry(thread, entry, now, entry.recordedAt ?? now);
-      }, this.#entries);
-      if (merged === this.#entries) return true;
+    let outcome: HistoryAppendOutcome<ConversationEntry>;
+    try {
+      outcome = await this.#store.appendHistory(admitted, this.#now());
+    } catch (error) {
+      this.#report(
+        `Could not persist the conversation: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return false;
     }
+    if (epoch !== this.#epoch) return true;
+    if (!outcome.changed) return true;
+    // The store's answer is filtered through the cutoff as it stands now,
+    // not trusted whole: until the Clear's marker and erasure land in the
+    // store — and for good if the disk refused them — its rows still hold
+    // the lines the fence already emptied here, and the fence must hold
+    // whatever the disk did.
+    const merged = outcome.entries.filter((entry) => this.#afterClear(entry));
     this.#entries = merged;
     this.#onChanged(merged, except);
     return true;
@@ -124,14 +130,6 @@ export class ConversationThread<Reporter = never> {
     this.#clearedAt = clearedAt;
     this.#entries = [];
     this.#onChanged([]);
-  }
-
-  /** Lets go of retained lines past their age, for the in-memory thread of a run without a store. */
-  retain(): void {
-    const retained = retainedConversationEntries(this.#entries, this.#now());
-    if (retained.length === this.#entries.length) return;
-    this.#entries = retained;
-    this.#onChanged(retained);
   }
 
   #afterClear(entry: ConversationEntry): boolean {

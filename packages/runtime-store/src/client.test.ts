@@ -122,7 +122,6 @@ test("a worker that dies settles every pending request as rejected and refuses l
   exit?.(1);
   await assert.rejects(pending, /exited with code 1/);
   await assert.rejects(client.listHistory(MAIN_SESSION_KEY, NOW), /exited with code 1/);
-  assert.match(client.failed()?.message ?? "", /exited/);
 });
 
 test("the real worker entry serves the same protocol on its own thread", async () => {

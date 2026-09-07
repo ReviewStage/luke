@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
 import type { HistoryAppendOutcome } from "@sidecar/runtime-contracts";
-import { ConversationThread, type ConversationThreadStore } from "./conversation-thread";
+import {
+  ConversationThread,
+  type ConversationThreadStore,
+  MemoryHistoryStore,
+} from "./conversation-thread";
 
 const NOW = 1_800_000_000_000;
 
@@ -82,7 +86,11 @@ test("a store that refuses answers false, and a run without a store keeps the th
   assert.deepEqual(reports, ["Could not persist the conversation: worker gone"]);
 
   const broadcasts: (readonly ConversationEntry[])[] = [];
-  const memory = new ConversationThread({ now: () => NOW, onChanged: (e) => broadcasts.push(e) });
+  const memory = new ConversationThread({
+    store: new MemoryHistoryStore(),
+    now: () => NOW,
+    onChanged: (e) => broadcasts.push(e),
+  });
   assert.equal(await memory.append([line("a", NOW - 2), line("b", NOW - 1)]), true);
   assert.equal(await memory.append([line("a", NOW - 2)]), true);
   assert.deepEqual(
