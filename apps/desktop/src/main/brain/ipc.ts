@@ -188,7 +188,7 @@ export async function publishRuns(
 /**
  * Follows the brain that currently stands: each rebuilt agent is subscribed
  * as it arrives, its records relayed to every window and its runs written to
- * the thread. The subscription is the completion channel PR 7's delivery
+ * the thread. The subscription is the completion channel the reply delivery
  * reads; the thread write here is the one History write for a run.
  * Unfollowing retires the subscription, drains the publication of the reports
  * already taken, and then relays nothing more, so a replaced agent's records

@@ -162,24 +162,14 @@ Trust constraints:
   endpoint; a session whose provider lists none takes no such ask. A session whose provider documents no way in, or whose current state is
   documented for none, advertises nothing and is offered nothing; local
   sessions have no such endpoint and stay entirely read-only. Opening a
-  session (its row pressed, the same press asked of Luke in conversation,
-  the notice popup announcing it pressed under the housing, or a History
-  line's chat chip pressed) is not a write
+  session (its row pressed, or the same press asked of Luke in conversation)
+  is not a write
   and needs no endpoint: the address its provider reported is handed to the
   operating system, and nothing reaches the provider; an open asked of Luke
   still runs only in a developer-opened turn, and a session that reported no
-  address is offered nowhere to open; its popup's press opens Luke's own
-  panel instead, which touches no provider at all. A History line's chips
-  are the one press that outlives a roster row, because the words they were
-  recorded beside do: each line draws a chip per chat it attributably named —
-  identity, title, and marks read from the roster at the moment of the entry,
-  never from a model's words alone — and a chat archived in its provider
-  keeps a working deep link, so its chip still opens it, at the last address an
-  observation pass itself reported this run — remembered in the main
-  process, never carried over the bridge — while a session still reporting
-  an address opens at its current one, the remembered address answering
-  only where the roster has nothing better, and a chat that never reported
-  an address draws no chip at all. A workspace Luke just
+  address is offered nowhere to open. A History line records the acts Luke
+  carried and the sessions they named, but draws no press of its own: the
+  roster row is the one way to a session's address. A workspace Luke just
   created opens itself the same way: the creation ask, already a
   developer-opened turn, is also the ask to be taken there, so the session id
   the provider's creation response named (the one thing read out of that
@@ -416,8 +406,12 @@ Trust constraints:
   whether anything is recorded. What it records is the
   desktop's own view of its own conversation — the realtime events already
   crossing the data channel, with an audio append reduced to its byte count
-  before it leaves the renderer, and the attention evaluator's update,
-  decision, and reviewing model when the desktop knows one — appended as
+  before it leaves the renderer; each brain turn and request as its
+  about-fields and counts (trigger, authority, input item kinds, transcript
+  bytes, tool names, token and briefing character counts, model, timing)
+  and never a transcript's text; and each speech decision the arbiter took,
+  as the turn's kind, the decision, and how many requests still stood, never
+  the briefing's words — appended as
   JSONL under the developer's chosen directory and
   sent nowhere; `pnpm trace:export` turns one file into a document a local
   viewer opens. The tap only observes: nothing reads its result, and the
@@ -638,15 +632,23 @@ What Luke may show:
   message kind, or anything stored is a product decision, not an
   implementation detail.
 - Session material leaves the machine unbidden in exactly two places, each
-  with its own narrower rule. An evaluator receives `AttentionContext`, what
-  a provider wrote *about* a session, and never the transcript behind it: no
-  message history, file contents, or command output. A
-  spoken announcement (a session that started waiting, stopped on an error,
-  or finished, or an evaluator sentence approved for speech) reaches the
-  voice service so it can be said aloud. Two onboarding beats are
+  with its own narrower rule. The brain's own turns are the first, under the
+  transcript-read rule above: what a local session's transcript gained since
+  the brain last looked, bounded and behind a marker, on the developer's own
+  key or through Luke's own service. The second is a briefing the brain
+  decided to give — its own words about what changed, under the briefing
+  bound — which reaches the voice service so it can be said aloud, as the one
+  input of a call that carries no tools and no conversation, behind a marker
+  that says it is data, so nothing in a briefing can become an act or inherit
+  an earlier question. Nothing decides an announcement deterministically any
+  more: no status edge speaks on its own, and no evaluator sentence stands
+  between the transcript and the voice. The hosted service still answers an
+  older installed desktop's attention review and subject derivation under the
+  frozen released persona; the current desktop calls neither. Two onboarding
+  beats are
   the members of that set about no session, and each keeps the same terms:
-  worded from a script fixed by the build, speak-only and tool-free like an
-  edge announcement, drawing no notice band and claiming none. The arrival
+  worded from a script fixed by the build, speak-only and tool-free like a
+  briefing, drawing no notice band and claiming none. The arrival
   beat is spoken once per install at the deterministic edge of the account's
   first sign-in, remembered in Luke's own state file, and carrying as
   observed values only one working session's title, read from the same roster
@@ -660,16 +662,13 @@ What Luke may show:
   that cannot speak the arrival — no credential, a meeting's quiet, a beat
   dropped before its reply began — leaves it owed for the next signed-in
   launch rather than improvising a substitute; only the voice window
-  reporting the reply actually begun settles it. An edge announcement
-  sends that update's *about* fields, the same ones the evaluator may see,
-  and the voice words the
-  sentence said aloud, so it can say what the session is waiting on rather
-  than only that it waits. When no conversation is open, Luke opens a call of
-  his own to say it, and that call is speak-only by construction: it offers
-  no microphone track, carries no tools, and is sent the one update's fields,
-  or the one evaluator sentence, alone: never the roster, the guide, or a
-  transcript rendering, which travel only on conversations the developer
-  opens, and the rendering only in the turn that asked for it. A
+  reporting the reply actually begun settles it. When no conversation is
+  open, Luke opens a call of
+  his own to say a briefing, and that call is speak-only by construction: it
+  offers no microphone track, carries no tools, and is sent the one briefing
+  alone: never the roster, the guide, or a
+  transcript, which reach only the brain, and the voice only as the words the
+  brain chose to say. A
   developer-opened conversation also carries a bounded history of the recent
   exchange itself (the developer's own asks, typed or spoken and handed back
   as text by the same service that heard them, the words Luke already spoke
@@ -682,33 +681,22 @@ What Luke may show:
   the roster-validated one the words traveled with, offered only while that
   session is still observed; and the history is stored only where the constraint
   above puts it, on this machine and under its retention policy, and is never
-  sent on Luke's speak-only call. Its
-  trigger is a deterministic status edge, an onboarding beat's own
-  deterministic trigger (the recorded sign-in edge, or the calendar gate
-  standing), or the evaluator finding an update worth speaking. The edge
-  announcements and approved evaluator sentences speak whenever voice can.
-  Widening either set is a product decision, not an implementation detail;
-  make it deliberately. While an announcement is being spoken, a notice on
-  Luke's own surface under the housing names the session it is about,
-  drawn on this machine from the roster and the same roster-validated
-  identity the voice was handed, leaving it never, and living exactly as
-  long as the spoken reply, so it can never stand for news nobody is
-  telling. The notice's press is a row press at one remove: the session's
-  reported address goes to the operating system, or Luke's own panel opens
-  for a session that reported none. The same band previews tracked issues
-  while a spoken reply names them: the reply's own words are matched against
-  the identifiers and whole titles the latest tracker observation listed,
-  arithmetic against observed state, under the session mentions' own
-  minimum-length and ambiguity rules, so nothing a model said can conjure an
-  issue the tracker does not track, and each named issue draws a chip
-  beside the session chips, its identifier and title read on this machine
-  from that roster, living exactly as long as the words, with an
-  announcement's one session subject still the whole answer. An issue chip's
-  press hands the issue's tracker-reported address to the operating system
-  exactly as a session's would, validated against the observed roster again
-  in the main process; it reaches none of the tracker's write paths, and an
-  issue that reported none is taken nowhere, because no panel surface holds
-  a row to fall back to.
+  sent on Luke's speak-only call. A
+  briefing's trigger is an observation turn of the brain — a provider's hook,
+  the brain's own look at the roster on the observation pass, or a hold's
+  release — and the brain's `announce` call inside it, offered in no other
+  kind of turn; an onboarding beat's trigger is its own deterministic one
+  (the recorded sign-in edge, or the calendar gate standing). A briefing
+  speaks whenever voice can, through the speech arbiter, which holds it while
+  a meeting or the pause stands and lets a held briefing be decided again
+  against the roster as it then is rather than spoken stale. Widening either
+  set is a product decision, not an implementation detail; make it
+  deliberately. While a briefing is being spoken, its words are captioned on
+  Luke's own surface under the housing, and nothing else is drawn about it:
+  no notice names a session, no chip previews an issue, and no press under
+  the housing opens anything, so the words are the whole of what an
+  announcement puts on screen, and the roster row is the one way to a
+  session's address.
 
 Before handoff, run `./scripts/check.sh` for portable-only changes. For any
 macOS or UI change, `./scripts/verify.sh` is the completion invariant. Report

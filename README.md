@@ -53,7 +53,9 @@ what he remembers, correct something, or tell him to forget it.
 ### Announcements
 
 Luke speaks up when an agent is waiting for you, hits an error, or finishes. He
-waits five seconds for nearby updates and combines them into one announcement.
+reads what each agent's transcript gained since he last looked, judges whether
+it is worth interrupting you for, and says everything worth saying in one
+breath rather than a sentence per event.
 
 ### Compatible with every agent and platform
 

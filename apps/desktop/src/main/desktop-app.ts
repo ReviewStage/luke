@@ -1306,12 +1306,14 @@ let lastWorkspaceProjects: string | undefined;
 let workspaceProjectsBroadcastGeneration = 0;
 
 /**
- * Announces where a workspace can be created whenever the offer changes. This
- * cannot ride the registry's own notifications alone: the registry only speaks
- * when the session snapshot changes, and a pass can change the project list
- * while leaving the sessions exactly as they were — a key just added with no
- * workspaces yet, a project connected but not yet worked in — so the check
- * runs on the observation cadence as well as on every commit.
+ * Announces where a workspace can be created whenever the offer changes. The
+ * roster announces every pass whether or not anything moved, so the offer is
+ * compared against the last one announced here rather than re-sent on every
+ * commit. It runs on every commit and once more when a pass completes,
+ * because the offer is read from the adapters rather than from the roster —
+ * a key just added with no workspaces yet, a project connected but not yet
+ * worked in — and the pass's last word on them is its end, not any one
+ * provider's commit.
  */
 async function broadcastWorkspaceProjects(): Promise<void> {
   const generation = ++workspaceProjectsBroadcastGeneration;
@@ -2539,8 +2541,8 @@ async function refreshProviderSessions(generation: number): Promise<void> {
     })(),
   ]);
   if (!sessionObservationLoop.isCurrent(generation)) return;
-  // The registry only spoke if the sessions themselves changed, and a pass can
-  // change the project list while leaving them exactly as they were.
+  // Every provider's observation has settled by here, committed or not, so
+  // this is the pass's last word on the offer; the broadcast dedupes itself.
   void broadcastWorkspaceProjects();
 }
 

@@ -46,7 +46,7 @@ export function conversationFromStored(
   return retainedConversationEntries(entries, now);
 }
 
-/** Whether a line may stand given the last Clear: unclocked lines and lines after the cutoff may. */
+/** Whether a line may stand given the last Clear: with no cutoff every line does; with one, only a clocked line after it. */
 export function conversationEntryAfterClear(
   entry: ConversationEntry,
   clearedAt: number | undefined,

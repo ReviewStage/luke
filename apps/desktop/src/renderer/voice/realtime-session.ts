@@ -2139,9 +2139,7 @@ export class RealtimeVoiceSession {
    * Answers the voice's one tool. The developer's words go to the brain over
    * the bridge, and what comes back — the reply, or a bounded refusal — is
    * the tool's output, for the follow-up to say. The brain acts on its own
-   * side behind its own validators; nothing here performs anything. The
-   * sessions the reply named become the caption's subject, so the band under
-   * the housing can point at them while the follow-up speaks.
+   * side behind its own validators; nothing here performs anything.
    */
   async #toolCallOutput(call: RealtimeFunctionCall, current: boolean): Promise<WireRecord> {
     if (!current) {

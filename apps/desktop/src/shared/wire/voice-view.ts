@@ -43,13 +43,11 @@ export const VOICE_COMMAND = {
 export type VoiceCommand = (typeof VOICE_COMMAND)[keyof typeof VOICE_COMMAND];
 
 /**
- * What became of a command that has an outcome worth answering: a typed ask,
- * so the composer can keep or clear its draft, and a Clear, so the panel can
- * say when the stored thread could not be deleted. Refused covers every way
- * an ask does not reach a conversation — the brain absent, the ask timed
- * out, the voice window gone or silent — because the composer's one question
- * is whether the developer's words are still theirs to retry. The other
- * commands answer nothing.
+ * What became of the one command with an outcome worth answering, a Clear:
+ * refused when the stored thread could not be deleted, so the panel can say
+ * so. The other commands answer nothing; a typed ask is not a command at all
+ * but a brain submission, whose own result tells the composer whether the
+ * draft is still the developer's to retry.
  */
 export const VOICE_COMMAND_OUTCOME = {
   ACCEPTED: "accepted",
