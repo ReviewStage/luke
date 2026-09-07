@@ -26,7 +26,6 @@ import { type AppGuideSnapshot, isAppGuideSnapshot } from "@sidecar/guide";
 import type { TrackedIssue } from "@sidecar/issues";
 import {
   type ConversationEntry,
-  maximumTypedAskLength,
   type RealtimeConnection,
   type RealtimeDiagnostics,
   storedConversationEntry,
@@ -70,7 +69,17 @@ import type {
   OutputAudioState,
   VoiceHotkeyState,
 } from "./wire/audio";
-import type { BrainAppActAnswer, BrainAppActRequest, BrainAskResult } from "./wire/brain";
+import {
+  type BrainAppActAnswer,
+  type BrainAppActRequest,
+  type BrainAskSubmission,
+  type BrainAskSubmissionResult,
+  type BrainRequestSnapshot,
+  isBrainAskSubmission,
+  isBrainAskSubmissionResult,
+  isBrainRequestSnapshot,
+  isBrainRequestSnapshotList,
+} from "./wire/brain";
 import {
   type AppBootstrap,
   type ConversationHistoryPayload,
@@ -95,7 +104,6 @@ import {
   isVoiceCommand,
   isVoiceCommandOutcome,
   isVoiceView,
-  VOICE_COMMAND,
   type VoiceCommand,
   type VoiceCommandOutcome,
   type VoiceView,
@@ -478,15 +486,45 @@ export const BRIDGE = {
     result: result<SessionOpenResult>(),
   }),
   /**
-   * A typed ask to Luke's brain, in the developer's own words. The reply comes
-   * back as the words the voice speaks, with the observed sessions it named;
-   * a run with no brain answers a bounded refusal the voice says instead.
+   * One ask submitted to Luke's brain, typed or spoken, in the developer's own
+   * words. The answer is only whether the brain accepted it into a run, and
+   * which run: the reply arrives later, through the run's record. A run with
+   * no brain is refused with a fixed reason the voice can say instead.
    */
-  askBrain: entry({
+  submitBrainAsk: entry({
     kind: "invoke",
-    channel: "app:ask-brain",
+    channel: "app:submit-brain-ask",
+    args: args<[BrainAskSubmission]>((v) => v.length === 1 && isBrainAskSubmission(v[0])),
+    result: result<BrainAskSubmissionResult>(isBrainAskSubmissionResult),
+  }),
+  /**
+   * Waits on one run for as long as the brain's wait allows, answering the
+   * record as it then stands — ended, or still pending — or nothing for a run
+   * the brain does not know.
+   */
+  waitBrainAsk: entry({
+    kind: "invoke",
+    channel: "app:wait-brain-ask",
     args: oneString,
-    result: result<BrainAskResult>(),
+    result: result<BrainRequestSnapshot | undefined>(
+      (v) => v === undefined || isBrainRequestSnapshot(v),
+    ),
+  }),
+  /** Cancels one run the developer no longer wants, answering its record as it then stands. */
+  cancelBrainAsk: entry({
+    kind: "invoke",
+    channel: "app:cancel-brain-ask",
+    args: oneString,
+    result: result<BrainRequestSnapshot | undefined>(
+      (v) => v === undefined || isBrainRequestSnapshot(v),
+    ),
+  }),
+  /** Every run the brain holds, for a window to reconcile against the pushes it already heard. */
+  brainRequestSnapshots: entry({
+    kind: "invoke",
+    channel: "app:brain-request-snapshots",
+    args: noArgs,
+    result: result<readonly BrainRequestSnapshot[]>(isBrainRequestSnapshotList),
   }),
   /**
    * The renderer's guide snapshot, pushed whenever it changes, so the main
@@ -539,38 +577,19 @@ export const BRIDGE = {
     result: result<void>(),
   }),
   /**
-   * A panel's ask of the voice window, carried through the main process, which
-   * validates it and forwards it on `onVoiceCommand`. Only a typed ask carries
-   * a payload — the words themselves, bounded by the same limit the session
-   * applies — and every other command carries none. A typed ask is answered
-   * with whether it reached a conversation, so the composer can keep a refused
-   * draft, and a Clear with whether the stored thread was deleted; the other
-   * commands resolve with nothing.
+   * A panel's command to the voice window, carried through the main process,
+   * which validates it and forwards it on `onVoiceCommand`. A Clear is
+   * answered with whether the stored thread was deleted; the other commands
+   * resolve with nothing. A typed ask is not a command: it goes to the brain
+   * through `submitBrainAsk`, and the voice window hears of the run's end
+   * through its record.
    */
   voiceCommand: entry({
     kind: "invoke",
     channel: "app:voice-command",
-    args: args<[VoiceCommand, string | undefined]>(
-      (v) =>
-        v.length === 2 &&
-        isVoiceCommand(v[0]) &&
-        (v[0] === VOICE_COMMAND.ASK_TEXT
-          ? isWireString(v[1]) && v[1].length <= maximumTypedAskLength
-          : v[1] === undefined),
-    ),
+    args: args<[VoiceCommand]>((v) => v.length === 1 && isVoiceCommand(v[0])),
     result: result<VoiceCommandOutcome | undefined>(
       (v) => v === undefined || isVoiceCommandOutcome(v),
-    ),
-  }),
-  /**
-   * The voice window's answer to one forwarded typed ask, by the request id
-   * the forward carried, so the main process can resolve the panel's invoke.
-   */
-  answerVoiceAsk: entry({
-    kind: "send",
-    channel: "app:answer-voice-ask",
-    args: args<[string, VoiceCommandOutcome]>(
-      (v) => v.length === 2 && isWireString(v[0]) && isVoiceCommandOutcome(v[1]),
     ),
   }),
   /**
@@ -932,20 +951,16 @@ export const BRIDGE = {
     kind: "subscribe",
     channel: "app:voice-command-forwarded",
     args: noArgs,
-    result: result<{
-      command: VoiceCommand;
-      text: string | undefined;
-      requestId: string | undefined;
-    }>(
-      (value) =>
-        isRecord(value) &&
-        isVoiceCommand(value.command) &&
-        (value.command === VOICE_COMMAND.ASK_TEXT
-          ? isWireString(value.text) &&
-            value.text.length <= maximumTypedAskLength &&
-            isWireString(value.requestId)
-          : value.text === undefined && value.requestId === undefined),
+    result: result<{ command: VoiceCommand }>(
+      (value) => isRecord(value) && isVoiceCommand(value.command),
     ),
+  }),
+  /** Every run the brain holds, pushed whole whenever any record changes. */
+  onBrainRequestsChanged: entry({
+    kind: "subscribe",
+    channel: "app:brain-requests-changed",
+    args: noArgs,
+    result: result<readonly BrainRequestSnapshot[]>(isBrainRequestSnapshotList),
   }),
   /**
    * An app act the brain decided that only the renderer can perform, already

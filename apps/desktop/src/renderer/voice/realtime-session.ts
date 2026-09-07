@@ -39,7 +39,11 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import type { BrainAppActRequest, BrainAskResult } from "#shared/contracts";
+import {
+  BRAIN_ASK_PENDING_STATUS,
+  type BrainAppActRequest,
+  type BrainAskResult,
+} from "#shared/contracts";
 import {
   type BuiltRealtimeSessionConfig,
   createAgentsRealtimeTransport,
@@ -69,8 +73,8 @@ export const REALTIME_SETTLE_TIMEOUT_MS = 20_000;
  * How long a turn that asked the brain may wait for the answer and the reply
  * voicing it. A brain turn reads transcripts and may act before it answers,
  * so the ordinary settle backstop is far too short for it; the main process's
- * own ask deadline is what ends a turn the brain never answers, and this is
- * the backstop under that.
+ * own wait answers a turn the brain has not finished with "still working",
+ * and this is the backstop under that.
  */
 export const BRAIN_ASK_SETTLE_TIMEOUT_MS = 60_000;
 
@@ -226,11 +230,13 @@ export interface MicrophoneSender {
 export interface RealtimeVoiceSessionOptions extends RealtimeVoiceSessionCallbacks {
   requestConnection(): Promise<RealtimeConnection | undefined>;
   /**
-   * Answers the voice's one tool: the developer's words go to the brain and
-   * its reply comes back for the voice to say. Absent means the voice can only
-   * speak for itself, and every ask is answered with a bounded refusal.
+   * Answers the voice's one tool: the developer's words go to the brain under
+   * the tool call's own id as the submission — so a call the service repeats
+   * finds the same run — and what comes back is the reply for the voice to
+   * say, the note that the run is still going, or a bounded refusal. Absent
+   * means the voice can only speak for itself, and every ask is refused.
    */
-  askBrain?: (question: string) => Promise<BrainAskResult>;
+  askBrain?: (question: string, submissionId: string) => Promise<BrainAskResult>;
   /** The SDK call seam, injectable so the complete transport can be tested without WebRTC. */
   createSdkTransport?: SdkTransportFactory;
   /** The full session document used by the SDK; the introduction narrows this to no tools. */
@@ -2173,12 +2179,18 @@ export class RealtimeVoiceSession {
     const epoch = this.#turnEpoch;
     let answer: BrainAskResult;
     try {
-      answer = await this.#options.askBrain(question);
+      answer = await this.#options.askBrain(question, call.callId);
     } catch {
       return {
         status: ACT_RESULT_STATUS.REJECTED,
         reason: "Luke's judgment did not answer.",
       };
+    }
+    if (answer.status === BRAIN_ASK_PENDING_STATUS) {
+      // The run goes on without this turn: the follow-up says so, and the
+      // turn is released rather than held open for a reply that may be a
+      // long time coming.
+      return { status: answer.status, note: answer.note };
     }
     if (answer.status !== ACT_RESULT_STATUS.ACCEPTED) {
       return { status: answer.status, reason: answer.reason };

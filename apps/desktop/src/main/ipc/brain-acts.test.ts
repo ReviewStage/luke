@@ -18,7 +18,11 @@ const NOW = 1_800_000_000_000;
 
 /** A developer-opened turn still standing, or one revoked from the moment `revoked()` first says so. */
 function developerTurn(revoked: () => boolean = () => false): BrainActExecution {
-  return { authority: BRAIN_TURN_AUTHORITY.DEVELOPER, isRevoked: revoked };
+  return {
+    authority: BRAIN_TURN_AUTHORITY.DEVELOPER,
+    isRevoked: revoked,
+    signal: new AbortController().signal,
+  };
 }
 
 const LIVE = developerTurn();
@@ -304,4 +308,40 @@ test("an act is validated against the roster as refreshed inside the turn, not a
   const refused = await acts.perform(MESSAGE_CALL, LIVE);
   assert.equal(refused.status, ACT_RESULT_STATUS.REJECTED);
   assert.deepEqual(performed, []);
+});
+
+test("a cancel during the roster refresh or the defaults read settles the act, and the late read dispatches nothing", async () => {
+  for (const held of ["refreshSessions", "workspaceDefaults"] as const) {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const h = performer({
+      [held]: async () => {
+        await gate;
+        return {};
+      },
+    });
+    const controller = new AbortController();
+    const execution: BrainActExecution = {
+      authority: BRAIN_TURN_AUTHORITY.DEVELOPER,
+      isRevoked: () => controller.signal.aborted,
+      signal: controller.signal,
+    };
+    const pending = h.acts.perform(MESSAGE_CALL, execution);
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(settled, false);
+    controller.abort();
+    const outcome = await pending;
+    assert.equal(outcome.status, ACT_RESULT_STATUS.REJECTED);
+    assert.deepEqual(h.performed, []);
+    release?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(h.performed, [], `${held}: the late read dispatched nothing`);
+    assert.deepEqual(h.recorded, []);
+  }
 });

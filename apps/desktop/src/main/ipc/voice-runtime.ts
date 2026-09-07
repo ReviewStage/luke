@@ -1,10 +1,8 @@
-import { randomUUID } from "node:crypto";
 import {
   PRODUCT_EVENT,
   type ProductCredentialSource,
   type RecordProductEvent,
 } from "@sidecar/analytics";
-import { BRAIN_DEFAULTS } from "@sidecar/brain";
 import { CREDENTIAL_CONNECTION, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
 import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import type { RealtimeCredentialMinter } from "@sidecar/voice";
@@ -19,7 +17,6 @@ import { BRIDGE, channels } from "#shared/bridge";
 import {
   VOICE_COMMAND,
   VOICE_COMMAND_OUTCOME,
-  type VoiceCommandOutcome,
   type VoiceView,
   voiceExchangeActive,
 } from "#shared/wire/voice-view";
@@ -72,72 +69,27 @@ export interface VoiceRuntimeIpcDependencies {
   setShortcutCapturing: (capturing: boolean) => void;
 }
 
-/**
- * How long a forwarded typed ask may wait for the voice window's answer: the
- * brain's own ask deadline, which the voice window awaits before answering,
- * plus the round trips around it. Past this the panel is told refused, and
- * the draft stays the developer's to retry.
- */
-export const ASK_ANSWER_TIMEOUT_MS = BRAIN_DEFAULTS.ASK_DEADLINE_MS + 10_000;
-
 export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencies): void {
   const { panels, voiceWindow } = dependencies;
-  const pendingAsks = new Map<string, (outcome: VoiceCommandOutcome) => void>();
-  // The same shape `performBrainAppAct` keeps for an act the panel carries:
-  // the request travels with an id, the answer comes back under it, and a
-  // window that never answers is refused on a clock rather than holding the
-  // composer open.
-  const forwardAsk = (host: BrowserWindow, text: string): Promise<VoiceCommandOutcome> => {
-    const requestId = randomUUID();
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        pendingAsks.delete(requestId);
-        resolve(VOICE_COMMAND_OUTCOME.REFUSED);
-      }, ASK_ANSWER_TIMEOUT_MS);
-      pendingAsks.set(requestId, (outcome) => {
-        clearTimeout(timer);
-        pendingAsks.delete(requestId);
-        resolve(outcome);
-      });
-      host.webContents.send(channels.onVoiceCommand, {
-        command: VOICE_COMMAND.ASK_TEXT,
-        text,
-        requestId,
-      });
-    });
-  };
   registerBridge(
     BRIDGE,
     {
-      // A panel's ask of the voice window. The bridge guard has already bounded
-      // it; here it is checked to come from a panel — the voice window does
-      // not command itself — and handed on. A typed ask is answered: with no
-      // voice window standing it is refused at once, and the composer keeps
-      // the words. A Clear is carried out here first, because the main
-      // process is the thread's store and every panel's relay, and the voice
-      // window is told to retire its own turns only once the file has gone.
-      voiceCommand(context, command, text) {
+      // A panel's command to the voice window. The bridge guard has already
+      // bounded it; here it is checked to come from a panel — the voice window
+      // does not command itself — and handed on. A Clear is carried out here
+      // first, because the main process is the thread's store and every
+      // panel's relay, and the voice window is told to retire its own turns
+      // only once the file has gone.
+      voiceCommand(context, command) {
         if (!panels.owns(context.sender)) return undefined;
         const host = voiceWindow.current();
-        if (command === VOICE_COMMAND.ASK_TEXT) {
-          if (!host || text === undefined) return VOICE_COMMAND_OUTCOME.REFUSED;
-          return forwardAsk(host, text);
-        }
         if (command === VOICE_COMMAND.CLEAR_CONVERSATION && !dependencies.clearConversation()) {
           return VOICE_COMMAND_OUTCOME.REFUSED;
         }
-        host?.webContents.send(channels.onVoiceCommand, {
-          command,
-          text: undefined,
-          requestId: undefined,
-        });
+        host?.webContents.send(channels.onVoiceCommand, { command });
         return command === VOICE_COMMAND.CLEAR_CONVERSATION
           ? VOICE_COMMAND_OUTCOME.ACCEPTED
           : undefined;
-      },
-      answerVoiceAsk(context, requestId, outcome) {
-        if (!voiceWindow.owns(context.sender)) return;
-        pendingAsks.get(requestId)?.(outcome);
       },
       // The voice window's snapshot: kept for a late panel, forwarded to every
       // panel, and read for the one level the main process owns — whether an

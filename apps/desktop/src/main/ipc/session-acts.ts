@@ -18,6 +18,7 @@ import {
   type ProductSessionAct,
   type RecordProductEvent,
 } from "@sidecar/analytics";
+import { settledUnlessAborted } from "@sidecar/brain";
 import {
   ISSUE_ACTION_KIND,
   isIssueTrackerId,
@@ -95,8 +96,25 @@ export interface SessionActPerformerDependencies {
  * stored agent defaults read before a create or a spawn — because an act
  * whose turn ended during that read must refuse rather than start the write.
  */
+/**
+ * A read awaited before an effect, held only as long as the guard's standing:
+ * once the signal fires the wait answers nothing, and the `isRevoked` check
+ * that follows every such read refuses the act before anything is dispatched.
+ * A guard with no signal — a row's own press — waits the read out.
+ */
+async function guardedRead<T>(
+  read: Promise<T>,
+  guard: ActExecutionGuard | undefined,
+): Promise<T | undefined> {
+  if (!guard?.signal) return read;
+  const settled = await settledUnlessAborted(read, guard.signal);
+  return settled.aborted ? undefined : settled.value;
+}
+
 export interface ActExecutionGuard {
   isRevoked(): boolean;
+  /** Fires on revocation, so a read awaited before the effect settles at once rather than finishing first. */
+  readonly signal?: AbortSignal;
 }
 
 export interface SessionActsIpcDependencies {
@@ -454,7 +472,12 @@ export function createSessionActPerformer(
     // validator, the stored one when it was written — and the adapter holds
     // whichever rides to its own table again before anything reaches the network.
     const stored = isProviderId(providerId)
-      ? (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId]
+      ? (
+          await guardedRead(
+            settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field),
+            guard,
+          )
+        )?.[providerId]
       : undefined;
     if (guard?.isRevoked())
       return { status: ACT_RESULT_STATUS.REJECTED, reason: REFUSAL.TURN_OVER };
@@ -581,9 +604,12 @@ export function createSessionActPerformer(
     }
     return performSessionAct(identity, PRODUCT_SESSION_ACT.AGENT_ADD, async (adapter) => {
       const stored: WorkspaceAgentSelection | undefined = isProviderId(identity.providerId)
-        ? (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
-            identity.providerId
-          ]
+        ? (
+            await guardedRead(
+              settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field),
+              guard,
+            )
+          )?.[identity.providerId]
         : undefined;
       if (guard?.isRevoked()) {
         return { status: ACT_RESULT_STATUS.REJECTED, reason: REFUSAL.TURN_OVER };

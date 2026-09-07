@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   CONVERSATION_ENTRY_KIND,
+  insertSpokenAskThreadEntry,
   maximumStoredConversationEntries,
   storedConversationMaximumAgeMs,
+  withConversationEntryRequest,
 } from "@sidecar/realtime";
 import {
   conversationFromStored,
@@ -113,4 +115,26 @@ test("stored memory drops noncanonical and duplicate entries", () => {
     ],
   });
   assert.deepEqual(rememberedFactsFromStored(stored), [{ id: "one", words: "kept" }]);
+});
+
+test("a spoken line tied to its run after it was relayed is enriched, not duplicated", () => {
+  const now = 1_800_000_000_000;
+  const spoken = insertSpokenAskThreadEntry([], "the exact spoken words", undefined, now);
+  const [line] = spoken;
+  assert.ok(line);
+  let main = mergeConversationHistory([], spoken, undefined, now + 1);
+  const tied = withConversationEntryRequest(spoken, line, "run-1");
+  main = mergeConversationHistory(main, tied, undefined, now + 2);
+  assert.equal(main.length, 1);
+  assert.equal(main[0]?.requestId, "run-1");
+  assert.equal(main[0]?.words, "the exact spoken words");
+  // A stale window still reporting the uncorrelated copy neither doubles the
+  // line nor takes the run back off it.
+  main = mergeConversationHistory(main, spoken, undefined, now + 3);
+  assert.equal(main.length, 1);
+  assert.equal(main[0]?.requestId, "run-1");
+  // Two utterances with the same words at different moments stay two lines.
+  const again = insertSpokenAskThreadEntry(tied, "the exact spoken words", tied[0], now + 5);
+  main = mergeConversationHistory(main, again, undefined, now + 6);
+  assert.equal(main.length, 2);
 });

@@ -131,6 +131,30 @@
   color: var(--text-primary);
 }
 
+/* The wait under an ask still running, and the one control it offers: quiet,
+   in the bubble's own column, gone the moment the reply's line arrives. */
+.history-pending {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 7px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.history-cancel {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--text-primary);
+  font-size: 11px;
+}
+
+.history-cancel:hover {
+  background: var(--text-secondary);
+  color: var(--surface);
+}
+
 .history-entry p {
   margin: 0;
   padding: 7px 10px 8px;

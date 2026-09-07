@@ -2,6 +2,7 @@ import { isRememberedFact, maximumRememberedFacts, type RememberedFact } from "@
 import {
   type ConversationEntry,
   conversationEntryKey,
+  enrichedConversationEntry,
   retainedConversationEntries,
   storedConversationEntry,
 } from "@sidecar/realtime";
@@ -56,17 +57,24 @@ export function mergeConversationHistory(
   const afterClear = (entry: ConversationEntry) =>
     clearedAt === undefined || (entry.recordedAt !== undefined && entry.recordedAt > clearedAt);
   const merged = current.filter(afterClear);
-  const currentCounts = new Map<string, number>();
-  for (const entry of merged) {
+  const currentByKey = new Map<string, number[]>();
+  merged.forEach((entry, index) => {
     const key = conversationEntryKey(entry);
-    currentCounts.set(key, (currentCounts.get(key) ?? 0) + 1);
-  }
+    currentByKey.set(key, [...(currentByKey.get(key) ?? []), index]);
+  });
   const incomingCounts = new Map<string, number>();
   for (const entry of incoming.filter(afterClear)) {
     const key = conversationEntryKey(entry);
-    const count = (incomingCounts.get(key) ?? 0) + 1;
-    incomingCounts.set(key, count);
-    if (count > (currentCounts.get(key) ?? 0)) merged.push(entry);
+    const seen = incomingCounts.get(key) ?? 0;
+    incomingCounts.set(key, seen + 1);
+    const held = currentByKey.get(key)?.[seen];
+    if (held === undefined) {
+      merged.push(entry);
+      continue;
+    }
+    // The same line again: it may now know the run it opened.
+    const current = merged[held];
+    if (current) merged[held] = enrichedConversationEntry(current, entry);
   }
   return retainedConversationEntries(
     merged.sort((left, right) => (left.recordedAt ?? now) - (right.recordedAt ?? now)),

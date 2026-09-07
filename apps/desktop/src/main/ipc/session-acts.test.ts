@@ -210,6 +210,31 @@ test("a spawn whose turn ends while the stored defaults are read never reaches t
   assert.deepEqual(adapter.spawns, []);
 });
 
+test("a create whose turn is cancelled while the stored defaults are read settles at once, and the late read lands nothing", async () => {
+  const adapter = new FakeAdapter();
+  const settings = heldSettings();
+  const performer = deeperPerformer(adapter, settings.store);
+  const controller = new AbortController();
+  const pending = performer.perform(CREATE, {
+    isRevoked: () => controller.signal.aborted,
+    signal: controller.signal,
+  });
+  await settleMicrotasks();
+  assert.equal(settings.reads(), 1);
+  controller.abort();
+  // Settles without the read being released.
+  const result = await pending;
+  assert.equal(result.status, ACT_RESULT_STATUS.REJECTED);
+  settings.release();
+  await settleMicrotasks();
+  assert.deepEqual(adapter.creates, []);
+  // A row's own press carries no signal and waits the read out, as before.
+  const direct = performer.perform(CREATE, { isRevoked: () => false });
+  await settleMicrotasks();
+  settings.release();
+  assert.equal((await direct).status, ACT_RESULT_STATUS.ACCEPTED);
+});
+
 test("a create and a spawn whose turn still stands after the read land on the provider", async () => {
   const adapter = new FakeAdapter();
   const settings = heldSettings();

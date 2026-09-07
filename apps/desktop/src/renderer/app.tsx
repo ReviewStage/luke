@@ -1980,6 +1980,8 @@ export function App(): React.JSX.Element {
     conversationHistory,
     acceptBootstrap: acceptVoiceBootstrap,
     askLuke,
+    brainRequests,
+    cancelBrainAsk,
     discardListening,
     stopSpeaking,
     requestMicrophoneAccess,
@@ -2842,6 +2844,8 @@ export function App(): React.JSX.Element {
             conversationHistory={conversationHistory}
             liveConversationEntries={liveConversationEntries}
             onClearConversationHistory={clearConversationHistory}
+            brainRequests={brainRequests}
+            onCancelBrainRequest={cancelBrainAsk}
             ask={askLuke}
             onAskEngaged={changeAskEngagement}
             {...(shownAskHotkey ? { askShortcut: shownAskHotkey } : undefined)}

@@ -1,7 +1,6 @@
 /* oxlint-disable anti-slop/no-unknown-returns -- Fake Electron listeners deliberately retain the IPC boundary shape. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { BRIDGE } from "#shared/bridge";
 import { registerBridge } from "./register-bridge";
@@ -88,26 +87,30 @@ test("a validated request reaches its domain handler", async () => {
   assert.equal(await fixture.invokes.get(BRIDGE.setExpanded.channel)?.(event, true), "expanded");
 });
 
-test("a brain ask crosses the bridge as one string and answers a bounded result", async () => {
+test("a brain ask crosses the bridge as one submission and answers the run it opened", async () => {
   const fixture = fixtureHost(true);
   registerBridge(
     BRIDGE,
     {
-      askBrain: (_context, question) => ({
-        status: ACT_RESULT_STATUS.ACCEPTED,
-        briefing: `heard: ${question}`,
+      submitBrainAsk: (_context, submission) => ({
+        outcome: "accepted",
+        runId: `run for ${submission.submissionId}`,
+        acceptedAt: 1,
       }),
     },
     fixture.host,
   );
   // SAFETY: registerBridge reads only the sender field supplied by this focused fixture.
   const event = { sender: {} } as IpcMainInvokeEvent;
-  const invoke = fixture.invokes.get(BRIDGE.askBrain.channel);
+  const invoke = fixture.invokes.get(BRIDGE.submitBrainAsk.channel);
+  assert.ok(invoke);
 
-  assert.deepEqual(await invoke?.(event, "what needs me?"), {
-    status: ACT_RESULT_STATUS.ACCEPTED,
-    briefing: "heard: what needs me?",
-  });
+  assert.deepEqual(
+    await invoke(event, { submissionId: "sub-1", question: "what needs me?", origin: "typed" }),
+    { outcome: "accepted", runId: "run for sub-1", acceptedAt: 1 },
+  );
+  // SAFETY: Electron invoke listeners always return promises; the fixture retains the erased host signature only.
+  await assert.rejects(() => invoke(event, "what needs me?") as Promise<unknown>);
 });
 
 test("an omitted optional argument cannot steal the bridge context", async () => {

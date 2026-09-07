@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   ConversationHistoryPanel,
   HISTORY_ENTRY_SPEAKER,
+  HISTORY_PENDING_LABEL,
   historyEntryPresentation,
 } from "./conversation-history-panel";
 
@@ -196,4 +197,50 @@ test("the composer stands at the foot of the thread, empty or not", () => {
   assert.equal(threaded.match(/id="ask-luke-input"/g)?.length, 1);
   assert.ok(threaded.indexOf("</ol>") < threaded.indexOf('id="ask-luke-input"'));
   assert.match(threaded, /aria-keyshortcuts="Alt\+Space"/);
+});
+
+test("an ask whose run is still going waits beside its words and offers a cancel", () => {
+  const cancelled: string[] = [];
+  const run = {
+    runId: "run-1",
+    submissionId: "sub-1",
+    origin: "typed",
+    question: "ship it",
+    revision: 1,
+    acceptedAt: 1,
+    performedActs: 0,
+    unknownActs: 0,
+  } as const;
+  const render = (status: "running" | "succeeded") =>
+    renderToStaticMarkup(
+      createElement(ConversationHistoryPanel, {
+        entries: [
+          { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "ship it", requestId: "run-1" },
+        ],
+        requests: [{ ...run, status }],
+        onCancelRequest: (runId) => cancelled.push(runId),
+        onClear: () => undefined,
+        ask: async () => undefined,
+        onAskEngaged: () => undefined,
+      }),
+    );
+  const pending = render("running");
+  assert.match(pending, new RegExp(HISTORY_PENDING_LABEL));
+  assert.match(pending, /class="history-cancel"/);
+  // Still inside the blocked subtree: a wait is drawn beside words a recording never sees.
+  assert.match(pending, /ph-no-capture/);
+  const settled = render("succeeded");
+  assert.doesNotMatch(settled, /history-cancel|history-pending/);
+  // A spoken ask is the same lifecycle: its transcript, tied to its run, waits too.
+  const spoken = renderToStaticMarkup(
+    createElement(ConversationHistoryPanel, {
+      entries: [{ kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words: "ship it", requestId: "run-1" }],
+      requests: [{ ...run, origin: "spoken", status: "running" }],
+      onCancelRequest: (runId) => cancelled.push(runId),
+      onClear: () => undefined,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
+    }),
+  );
+  assert.match(spoken, /class="history-cancel"/);
 });

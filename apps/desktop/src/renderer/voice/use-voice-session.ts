@@ -1,3 +1,4 @@
+import { BRAIN_REQUEST_ORIGIN, BRAIN_SUBMISSION_OUTCOME } from "@sidecar/brain/requests";
 import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import {
   type ArrivalSpeech,
@@ -17,18 +18,26 @@ import {
   retainedConversationEntries,
   storedConversationMaximumAgeMs,
   streamingConversationEntry,
+  withConversationEntryRequest,
 } from "@sidecar/realtime";
 import { SESSION_STATUS, type Session } from "@sidecar/session";
 import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyLabel } from "@sidecar/settings";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MicrophoneStatus, OutputAudioState, VoiceHotkeyState } from "#shared/wire/audio";
+import {
+  BRAIN_ASK_PENDING_NOTE,
+  BRAIN_ASK_PENDING_STATUS,
+  BRAIN_ASK_REFUSAL,
+  type BrainAskResult,
+  type BrainRequestSnapshot,
+  brainReplyWords,
+  brainRequestPending,
+} from "#shared/wire/brain";
 import type { AppBootstrap } from "#shared/wire/session";
 import { type AppSettingsView, appSettingsView } from "#shared/wire/settings";
 import {
   VOICE_COMMAND,
-  VOICE_COMMAND_OUTCOME,
-  type VoiceCommandOutcome,
   type VoiceView,
   voiceExchangeActive,
   voiceExchangeKind,
@@ -333,6 +342,19 @@ const INITIAL_SURROUNDINGS: VoiceSurroundings = {
 };
 
 /**
+ * Where one spoken turn belongs in the thread, and what it has since become:
+ * the entry its transcript settled into, and the brain run it opened, each
+ * written onto the mark when it is known so the other can find it.
+ */
+interface SpokenTurnMark {
+  after: ConversationEntry | undefined;
+  generation: number;
+  recordedAt: number;
+  entry?: ConversationEntry;
+  runId?: string;
+}
+
+/**
  * The spoken conversation, held in the hidden voice window so no panel does:
  * the session, the microphone, the talk key's latch, the mouth that lets Luke
  * speak into silence, the level meter that ends his turn, and the thread the
@@ -405,6 +427,10 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
    * edge the count is taken on.
    */
   const typedExchange = useRef(false);
+  /** The brain run whose reply the voice is speaking now, so its words are not recorded twice. */
+  const brainReplyRunRef = useRef<string | undefined>(undefined);
+  /** Each run's last status this window saw, so only an end it watched arrive is spoken. */
+  const knownRequestsRef = useRef(new Map<string, BrainRequestSnapshot["status"]>());
   /**
    * The conversation history, surviving here across calls: a call is a
    * transport that comes and goes — an announcement is often read out on
@@ -433,20 +459,17 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     conversationContextWaitersRef.current.clear();
   }, [surroundings.conversationContextReady]);
   /** Where each server-identified spoken turn belongs when its transcript returns. */
-  const spokenTurnMarksRef = useRef(
-    new Map<
-      string,
-      { after: ConversationEntry | undefined; generation: number; recordedAt: number }
-    >(),
-  );
+  const spokenTurnMarksRef = useRef(new Map<string, SpokenTurnMark>());
   /** Local turn-close marks waiting for the server item ids that name them. */
-  const pendingSpokenTurnMarksRef = useRef<
-    { after: ConversationEntry | undefined; generation: number; recordedAt: number }[]
-  >([]);
+  const pendingSpokenTurnMarksRef = useRef<SpokenTurnMark[]>([]);
   /** The turn opened by the current talk-key press, before it closes. */
-  const activeSpokenTurnMarkRef = useRef<
-    { after: ConversationEntry | undefined; generation: number; recordedAt: number } | undefined
-  >(undefined);
+  const activeSpokenTurnMarkRef = useRef<SpokenTurnMark | undefined>(undefined);
+  /**
+   * The spoken turn whose reply is under way — the one an `ask_brain` call
+   * inside that reply belongs to — so the run it opens can be tied to the
+   * transcript, whichever of the two lands first.
+   */
+  const latestSpokenTurnMarkRef = useRef<SpokenTurnMark | undefined>(undefined);
   /** The generation of the developer-opened turn whose reply is still in flight. */
   const activeReplyGenerationRef = useRef<number | undefined>(undefined);
   /** The History generation in which the current announcement began speaking. */
@@ -543,6 +566,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     conversationRef.current = [];
     spokenTurnMarksRef.current.clear();
     pendingSpokenTurnMarksRef.current = [];
+    latestSpokenTurnMarkRef.current = undefined;
     setConversationHistory([]);
     // The previews go with the marks: a transcription still arriving belongs
     // to a turn the press just retired.
@@ -622,15 +646,48 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
         transcript,
         mark.after,
         mark.recordedAt,
+        mark.runId,
       );
       // A transcription that came back empty ended its turn — the preview
       // and the mark are already spent — but placed no line, and a thread
       // that did not change owes the other displays no report.
       if (placed === conversationRef.current) return;
+      // The mark keeps its line, so a run accepted after the transcript can
+      // still be tied to these very words.
+      mark.entry = placed[mark.after ? placed.indexOf(mark.after) + 1 : 0];
       conversationRef.current = placed;
       publishConversation();
     },
     [dropSpokenAskPreview, publishConversation],
+  );
+
+  /**
+   * Ties the brain run a spoken ask opened to the developer's own words for
+   * it — the voice service's transcript, never the mouth's paraphrase of the
+   * question. The transcript may already stand in the thread, in which case
+   * the run is written onto that line; otherwise the mark carries the run to
+   * the transcript when it lands. Either way History can draw the ask as
+   * pending, with its cancel, beside the words actually said.
+   */
+  const tieSpokenTurnToRun = useCallback(
+    (mark: SpokenTurnMark | undefined, runId: string) => {
+      // A turn from before a Clear has no line left to tie, and must not
+      // hand its run to whatever the thread now holds in its place.
+      if (
+        !mark ||
+        !spokenAskBelongsToConversation(mark.generation, conversationGenerationRef.current)
+      ) {
+        return;
+      }
+      mark.runId = runId;
+      if (!mark.entry) return;
+      const tied = withConversationEntryRequest(conversationRef.current, mark.entry, runId);
+      if (tied === conversationRef.current) return;
+      mark.entry = tied[conversationRef.current.indexOf(mark.entry)];
+      conversationRef.current = tied;
+      publishConversation();
+    },
+    [publishConversation],
   );
 
   const ensureVoiceSession = useCallback((): RealtimeVoiceSession => {
@@ -659,16 +716,38 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           open: (audio) => navigator.mediaDevices.getUserMedia({ audio, video: false }),
         }),
       // The voice's one tool: the developer's words go to the brain in the
-      // main process, which reads, decides, and acts behind its own validators,
-      // and the reply comes back for the voice to say. A reply to an ask the
-      // developer made is recorded when the words end, like every reply.
-      askBrain: async (question) => {
-        const generation = conversationGenerationRef.current;
-        const answer = await window.sidecar.askBrain(question);
-        if (answer.status === ACT_RESULT_STATUS.ACCEPTED) {
-          activeReplyGenerationRef.current = generation;
+      // main process, which reads, decides, and acts behind its own validators.
+      // The tool call's id is the submission, so a call the service repeats
+      // finds the run it already has. The reply the follow-up then speaks was
+      // recorded by the main process at the run's end, so the words that end
+      // here are not recorded again.
+      askBrain: async (question, submissionId): Promise<BrainAskResult> => {
+        brainReplyRunRef.current = undefined;
+        // The turn this ask belongs to is the one committed when the ask was
+        // made, read before the acceptance is awaited: a turn committed while
+        // the brain is deciding is somebody else's words.
+        const spokenTurn = latestSpokenTurnMarkRef.current;
+        const submitted = await window.sidecar.submitBrainAsk({
+          submissionId,
+          question,
+          origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+        });
+        if (submitted.outcome !== BRAIN_SUBMISSION_OUTCOME.ACCEPTED) {
+          return {
+            status: ACT_RESULT_STATUS.REJECTED,
+            reason: BRAIN_ASK_REFUSAL[submitted.reason],
+          };
         }
-        return answer;
+        tieSpokenTurnToRun(spokenTurn, submitted.runId);
+        const record = await window.sidecar.waitBrainAsk(submitted.runId);
+        if (!record) {
+          return { status: ACT_RESULT_STATUS.REJECTED, reason: BRAIN_ASK_REFUSAL.absent };
+        }
+        if (brainRequestPending(record)) {
+          return { status: BRAIN_ASK_PENDING_STATUS, note: BRAIN_ASK_PENDING_NOTE };
+        }
+        brainReplyRunRef.current = record.runId;
+        return { status: ACT_RESULT_STATUS.ACCEPTED, briefing: brainReplyWords(record) ?? "" };
       },
       onStatus: setVoiceStatus,
       onLocalStream: setLocalStream,
@@ -684,11 +763,19 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
         }
         const generation = activeReplyGenerationRef.current;
         activeReplyGenerationRef.current = undefined;
+        // A reply voicing a brain run's end is already in the thread, written
+        // by the main process from the record; the voice's rendering of it is
+        // not a second line.
+        if (brainReplyRunRef.current !== undefined) {
+          brainReplyRunRef.current = undefined;
+          return;
+        }
         rememberConversationEntry(replyConversationEntry(texts.join(" ")), generation);
       },
       onSpokenAskCommitted: (itemId) => {
         const mark = pendingSpokenTurnMarksRef.current.shift();
         if (mark) spokenTurnMarksRef.current.set(itemId, mark);
+        latestSpokenTurnMarkRef.current = mark;
       },
       onSpokenAskClosed: () => {
         const mark = activeSpokenTurnMarkRef.current;
@@ -737,6 +824,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     rememberSpokenAsk,
     setVoiceStatus,
     surroundingsNow,
+    tieSpokenTurnToRun,
   ]);
 
   /**
@@ -1040,57 +1128,59 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   }, [voiceStatusNow]);
 
   /**
-   * A typed ask to Luke himself, forwarded from the panel it was typed into.
-   * The words go to the brain over the bridge — typing is the developer
-   * asking in their own words, so the brain's turn may act, behind the same
-   * validators every act runs — and the reply comes back to be spoken on the
-   * same call the talk key opens. It asks the system for nothing on the way:
-   * typing opens no capture device, and the reply arrives on the call's
-   * receiving half. A refusal lands on the strip; where voice cannot speak
-   * the reply, the words stand on the strip instead, so an ask is never
-   * answered with silence. Whether the ask reached a conversation is answered
-   * back to the panel that typed it, so a refused draft stays in its composer
-   * and the composer counts the outcome once, as it always has.
+   * Speaks the reply a typed ask's run ended in. The ask itself never passed
+   * through this window — the panel submitted it to the main process, which
+   * ran it and recorded both halves in the thread — so what arrives here is
+   * the record, and the words are spoken on the developer's own call, opened
+   * for them if none stands. Voice that cannot say it puts the words on the
+   * strip instead, so an ask is never answered with silence; nothing is
+   * recorded here either way.
    */
-  const askLuke = useCallback(
-    async (text: string): Promise<VoiceCommandOutcome> => {
-      const generation = conversationGenerationRef.current;
+  const speakTypedReply = useCallback(
+    async (runId: string, words: string): Promise<void> => {
       const session = ensureVoiceSession();
       typedExchange.current = true;
-      // The developer's own words enter the history as they were typed, so
-      // the thread holds both halves of the exchange the reply answers.
-      rememberConversationEntry(
-        { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: text },
-        generation,
-      );
-      // A sent ask outdates whatever refusal the strip was still reading.
       setVoiceNotice(undefined);
-      // Luke's own speak-only call cannot carry the reply to a typed ask — it
-      // is not a conversation — so it counts as no call here, and `connect`
-      // inside stands it down for the developer's own. A microphone call
-      // still connecting is awaited, not doubled.
-      const connecting =
-        !session.isConnected || !session.microphoneCall
-          ? startConversation()
-          : Promise.resolve(true);
-      const [connected, answer] = await Promise.all([connecting, window.sidecar.askBrain(text)]);
-      if (answer.status !== ACT_RESULT_STATUS.ACCEPTED) {
-        setVoiceNotice(answer.reason);
-        return VOICE_COMMAND_OUTCOME.REFUSED;
-      }
-      if (connected && session.speakReply(answer.briefing)) {
-        activeReplyGenerationRef.current = generation;
+      const connected =
+        !session.isConnected || !session.microphoneCall ? await startConversation() : true;
+      brainReplyRunRef.current = runId;
+      if (connected && session.speakReply(words)) {
         setTypedAsk(true);
-        return VOICE_COMMAND_OUTCOME.ACCEPTED;
+        return;
       }
-      // Voice cannot say it, so the words stand on the strip and enter the
-      // record as the reply they are.
-      rememberConversationEntry(replyConversationEntry(answer.briefing), generation);
-      setVoiceNotice(answer.briefing);
-      return VOICE_COMMAND_OUTCOME.ACCEPTED;
+      brainReplyRunRef.current = undefined;
+      setVoiceNotice(words);
     },
-    [rememberConversationEntry, ensureVoiceSession, startConversation],
+    [ensureVoiceSession, startConversation],
   );
+
+  // The brain's records, followed for the one edge this window answers: a
+  // typed ask's run ending while this window watched it run. A run already
+  // ended when first seen — the bootstrap after a reload, a launch finding
+  // the last one's interrupted runs — is not spoken, because its words may
+  // already have been said; the thread holds them either way. Subscribed
+  // before the snapshots are read, so no change falls between the two.
+  useEffect(() => {
+    const known = knownRequestsRef.current;
+    const heard = (records: readonly BrainRequestSnapshot[]) => {
+      for (const record of records) {
+        const previous = known.get(record.runId);
+        known.set(record.runId, record.status);
+        if (record.origin !== BRAIN_REQUEST_ORIGIN.TYPED) continue;
+        if (previous === undefined || brainRequestPending(record)) continue;
+        if (!brainRequestPending({ ...record, status: previous })) continue;
+        const words = brainReplyWords(record);
+        if (words) void speakTypedReply(record.runId, words);
+      }
+    };
+    const unsubscribe = window.sidecar.onBrainRequestsChanged(heard);
+    void window.sidecar.brainRequestSnapshots().then((records) => {
+      for (const record of records) {
+        if (!known.has(record.runId)) known.set(record.runId, record.status);
+      }
+    });
+    return unsubscribe;
+  }, [speakTypedReply]);
 
   const discardListening = useCallback(() => {
     talkLatched.current = false;
@@ -1166,21 +1256,14 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   // a turn the developer did not.
   useEffect(
     () =>
-      window.sidecar.onVoiceCommand(({ command, text, requestId }) => {
-        if (command === VOICE_COMMAND.ASK_TEXT) {
-          if (text === undefined || requestId === undefined) return;
-          // Answered under the forward's id however the ask ends, so the
-          // composer never waits on a throw for a draft it is owed back.
-          void askLuke(text)
-            .catch((): VoiceCommandOutcome => VOICE_COMMAND_OUTCOME.REFUSED)
-            .then((outcome) => window.sidecar.answerVoiceAsk(requestId, outcome));
-        } else if (command === VOICE_COMMAND.DISCARD_LISTENING) discardListening();
+      window.sidecar.onVoiceCommand(({ command }) => {
+        if (command === VOICE_COMMAND.DISCARD_LISTENING) discardListening();
         else if (command === VOICE_COMMAND.STOP_SPEAKING) voiceSession.current?.stopSpeaking();
         else if (command === VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS)
           void requestMicrophoneAccess();
         else if (command === VOICE_COMMAND.CLEAR_CONVERSATION) clearConversation();
       }),
-    [askLuke, clearConversation, discardListening, requestMicrophoneAccess],
+    [clearConversation, discardListening, requestMicrophoneAccess],
   );
 
   const heardSpeed = useRef<RealtimeVoiceSpeed | undefined>(undefined);

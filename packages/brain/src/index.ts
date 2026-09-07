@@ -10,12 +10,14 @@ export {
   type BrainActPerformer,
   BrainAgent,
   type BrainAgentOptions,
-  type BrainAskAnswer,
+  type BrainRequestsListener,
   type BrainRoster,
   type BrainToolCallTrace,
   type BrainTurnTraceRecord,
   type BrainTurnTrigger,
   OMISSION_MARKER,
+  type Settled,
+  settledUnlessAborted,
 } from "./brain-agent.js";
 export {
   BRAIN_CLIENT_OUTCOME,
@@ -51,12 +53,16 @@ export {
 } from "./brain-input.js";
 export { brainInstructions } from "./brain-instructions.js";
 export {
-  BRAIN_STATE_VERSION,
+  BrainJournal,
+  type BrainJournalEntry,
+  brainJournalEntryFromWire,
+  UNKNOWN_ACT_RESULT,
+} from "./brain-journal.js";
+export {
   BrainMemory,
   type BrainMemoryMark,
-  type BrainPersistedState,
-  type BrainTranscriptCursors,
-  brainPersistedStateFromWire,
+  type BrainMemoryState,
+  pairedDanglingCalls,
 } from "./brain-memory.js";
 export {
   BRAIN_REASONING_EFFORT,
@@ -74,6 +80,40 @@ export {
   type ResponsesInputItem,
   userMessageItem,
 } from "./brain-openai.js";
+export {
+  BRAIN_REQUEST_FAILURE,
+  BRAIN_REQUEST_ORIGIN,
+  BRAIN_REQUEST_STATUS,
+  BRAIN_REQUEST_TERMINAL_STATUS,
+  BRAIN_SUBMISSION_OUTCOME,
+  BRAIN_SUBMISSION_REJECTION,
+  type BrainRequestFailure,
+  type BrainRequestOrigin,
+  type BrainRequestRecord,
+  type BrainRequestStatus,
+  type BrainSubmission,
+  type BrainSubmissionRejection,
+  type BrainSubmissionResult,
+  brainRequestRecordFromWire,
+  interruptedUnfinishedRequests,
+  isBrainRequestFailure,
+  isBrainRequestOrigin,
+  isBrainRequestStatus,
+  isTerminalBrainRequestStatus,
+} from "./brain-requests.js";
+export {
+  BRAIN_GENERATION_LIFETIME_MS,
+  BRAIN_STATE_VERSION,
+  type BrainPersistedState,
+  type BrainStateStorage,
+  BrainStateStore,
+  type BrainStateStoreOptions,
+  type BrainTranscriptCursors,
+  brainPersistedStateFromWire,
+  brainStateFromStored,
+  brainStateRecord,
+  freshBrainState,
+} from "./brain-state.js";
 export {
   BRAIN_TOOL,
   type BrainSchemaProperty,

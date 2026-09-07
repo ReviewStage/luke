@@ -47,6 +47,8 @@ export interface BrainRespondOptions {
   /** Who opened the turn; it fixes the toolset and is never inferred from the input. */
   authority: BrainTurnAuthority;
   maximumOutputTokens: number;
+  /** Fires when the run this turn belongs to is cancelled or times out; the request is dropped with it. */
+  signal?: AbortSignal;
 }
 
 export interface BrainClient {
@@ -90,6 +92,12 @@ type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
 function withoutTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
+}
+
+/** The per-request timeout, joined with the run's own cancellation when the turn belongs to one. */
+function requestSignal(timeoutMs: number, cancellation: AbortSignal | undefined): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return cancellation ? AbortSignal.any([timeout, cancellation]) : timeout;
 }
 
 function failed(reason: string): BrainClientAnswer {
@@ -178,7 +186,7 @@ export class OpenAiBrainClient implements BrainClient {
             reasoningEffort: this.#reasoningEffort,
           }),
         ),
-        signal: AbortSignal.timeout(this.#requestTimeoutMs),
+        signal: requestSignal(this.#requestTimeoutMs, options.signal),
       });
     } catch (error) {
       return failed(
@@ -289,13 +297,15 @@ export class HostedBrainClient implements BrainClient {
       input,
       max_output_tokens: options.maximumOutputTokens,
     };
-    let response = await this.#request(token, request);
+    let response = await this.#request(token, request, options.signal);
     if (response?.status === UNAUTHORIZED_STATUS) {
       // Routine expiry of an hour-lived token inside a day-lived app: refresh
       // and retry once, like the hosted mint.
       await this.#refreshAccount().catch(() => undefined);
       const refreshed = await this.#readAccessToken();
-      if (refreshed && refreshed !== token) response = await this.#request(refreshed, request);
+      if (refreshed && refreshed !== token) {
+        response = await this.#request(refreshed, request, options.signal);
+      }
     }
     if (!response) return failed("request did not complete");
     if (response.status === RATE_LIMIT_STATUS) return this.#quiet(response);
@@ -303,7 +313,11 @@ export class HostedBrainClient implements BrainClient {
     return answered(response);
   }
 
-  async #request(token: string, request: HostedBrainRequest): Promise<Response | undefined> {
+  async #request(
+    token: string,
+    request: HostedBrainRequest,
+    signal: AbortSignal | undefined,
+  ): Promise<Response | undefined> {
     try {
       return await this.#fetch(this.#endpoint, {
         method: "POST",
@@ -312,7 +326,7 @@ export class HostedBrainClient implements BrainClient {
           "content-type": "application/json",
         },
         body: JSON.stringify(request),
-        signal: AbortSignal.timeout(this.#requestTimeoutMs),
+        signal: requestSignal(this.#requestTimeoutMs, signal),
       });
     } catch {
       return undefined;

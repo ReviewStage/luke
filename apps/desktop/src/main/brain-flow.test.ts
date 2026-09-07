@@ -1,30 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BRAIN_STATE_VERSION, BRAIN_WAKE_KIND } from "@sidecar/brain";
+import { BRAIN_WAKE_KIND } from "@sidecar/brain";
 import { normalizeSession, SESSION_STATUS, type Session } from "@sidecar/session";
-import { brainStateFromStored, brainStateRecord, wakeEventsFromHooks } from "./brain-flow";
+import { wakeEventsFromHooks } from "./brain-flow";
 
 const NOW = 1_800_000_000_000;
-
-test("the brain's state round-trips through its file, and anything else reads as nothing", () => {
-  const state = {
-    version: BRAIN_STATE_VERSION,
-    items: [{ type: "message", role: "user", content: [] }],
-    cursors: { "claude-code": { "session-a": "1024" } },
-  } as const;
-
-  assert.deepEqual(brainStateFromStored(brainStateRecord(state)), state);
-  assert.equal(brainStateFromStored(undefined), undefined);
-  assert.equal(brainStateFromStored("not json"), undefined);
-  assert.equal(
-    brainStateFromStored(JSON.stringify({ version: 99, items: [], cursors: {} })),
-    undefined,
-  );
-  assert.equal(
-    brainStateFromStored(JSON.stringify({ version: 1, items: "x", cursors: {} })),
-    undefined,
-  );
-});
 
 test("every hook event wakes the brain, carrying the session when the roster holds it", () => {
   const held = normalizeSession(

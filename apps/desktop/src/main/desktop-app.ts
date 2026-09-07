@@ -22,7 +22,7 @@ import {
   productSignInAge,
   type RecordProductEvent,
 } from "@sidecar/analytics";
-import { BrainAgent, type BrainDelivery, type BrainPersistedState } from "@sidecar/brain";
+import { BrainAgent, type BrainDelivery, BrainStateStore } from "@sidecar/brain";
 import {
   activeMeetingEnd,
   GoogleCalendarReader,
@@ -150,12 +150,8 @@ import {
   countsFirstAnnouncement,
   shouldBackfillArrivalSettled,
 } from "./arrival-flow";
-import {
-  BRAIN_STATE_FILE,
-  brainStateFromStored,
-  brainStateRecord,
-  wakeEventsFromHooks,
-} from "./brain-flow";
+import { BRAIN_STATE_FILE, wakeEventsFromHooks } from "./brain-flow";
+import { BrainHost } from "./brain-host";
 import {
   CALENDAR_ONBOARDING_STATE_FILE,
   type CalendarOnboardingState,
@@ -176,7 +172,7 @@ import {
   shouldRunIntroduction,
 } from "./introduction-flow";
 import { registerAccountSessionIpc } from "./ipc/account-session";
-import { registerBrainIpc } from "./ipc/brain";
+import { followBrainRequests, registerBrainIpc } from "./ipc/brain";
 import { createBrainActPerformer, type WorkspaceCreationDefaults } from "./ipc/brain-acts";
 import { registerCalendarConnectionIpc } from "./ipc/calendar-connection";
 import { createSessionActPerformer, registerSessionActsIpc } from "./ipc/session-acts";
@@ -491,7 +487,22 @@ let conversationClearedAt: number | undefined;
  * OpenAI key in this build: with no key there is no brain, nothing is
  * announced, and an ask is answered with the honest refusal.
  */
-let brain: BrainAgent | undefined;
+const brains = new BrainHost({
+  follow: (agent) =>
+    followBrainRequests(agent, {
+      recordConversationEntry: recordMainConversationEntry,
+      broadcastRequests: (snapshots) => broadcast(channels.onBrainRequestsChanged, snapshots),
+    }),
+  publishEmpty: () => broadcast(channels.onBrainRequestsChanged, []),
+});
+/** The brain that stands now, or nothing between transitions and on a run with no key. */
+const brain = () => brains.current();
+/**
+ * The one writer of the brain's state file, owned here and outliving every
+ * agent built on it: a key or account change rebuilds the agent, never the
+ * store, so two agents can never write the envelope past each other.
+ */
+let brainStateStore: BrainStateStore | undefined;
 /** The spool watchers standing on each hooked provider's spool, closed at quit. */
 let spoolWatchers: readonly ObservationSpoolWatcher[] = [];
 /**
@@ -1480,11 +1491,29 @@ async function stopAccountCapabilities(): Promise<void> {
 }
 
 async function applyVoiceCredential(): Promise<void> {
+  // The standing agent loses its execution before the transition's first
+  // await, so no run keeps the old source's authority while the new one is
+  // being decided; the rebuild behind the await installs what the new
+  // capability allows, and only the latest transition's rebuild installs.
+  brains.retire();
   await voiceCapabilities.apply();
   await rebuildBrain();
 }
 
 const brainStatePath = () => path.join(app.getPath("userData"), BRAIN_STATE_FILE);
+
+function brainStore(): BrainStateStore {
+  brainStateStore ??= new BrainStateStore({
+    storage: {
+      read: () => readStoredState(brainStatePath()),
+      write: (contents) =>
+        writeStoredState(brainStatePath(), contents, "Luke's memory of the agents"),
+      remove: () => removeStoredState(brainStatePath(), "Luke's memory of the agents"),
+    },
+    createGenerationId: () => randomUUID(),
+  });
+  return brainStateStore;
+}
 
 /**
  * The roster as the brain is shown it and validates every act against: the
@@ -1564,17 +1593,20 @@ function brainStandingContext(): string {
  * carried act was — and relays it to every panel, the way a window's own
  * report is merged and relayed. Nothing here reaches a provider.
  */
-function recordMainConversationEntry(entry: ConversationEntry): void {
-  if (!runMode.observesProviders) return;
+function recordMainConversationEntry(entry: ConversationEntry, recordedAt = Date.now()): boolean {
+  if (!runMode.observesProviders) return false;
   const now = Date.now();
-  const merged = appendConversationThreadEntry(conversationHistory, entry, now);
-  if (merged === conversationHistory) return;
+  const merged = appendConversationThreadEntry(conversationHistory, entry, now, recordedAt);
+  // Unchanged means the thread already holds this line, or refused an empty
+  // one: either way it holds everything it was asked to.
+  if (merged === conversationHistory) return true;
   if (!writeStoredState(conversationPath(), conversationRecord(merged, now), "the conversation")) {
-    return;
+    return false;
   }
   conversationHistory = merged;
   const payload: ConversationHistoryPayload = { entries: merged, cleared: false };
   broadcast(channels.onConversationHistoryChanged, payload);
+  return true;
 }
 
 /**
@@ -1709,21 +1741,24 @@ const brainActPerformer = createBrainActPerformer({
  * voice does. Never in a fixture or capture run, which observes nothing and
  * sends nothing, and never past a closed account gate.
  */
-async function rebuildBrain(): Promise<void> {
-  const previous = brain;
-  brain = undefined;
-  if (previous) await previous.stop();
-  const client = voiceCapabilities.brainClient;
-  if (
-    !client ||
-    !runMode.observesProviders ||
-    !runMode.sendsNetwork ||
-    !accountCapabilitiesActive()
-  ) {
-    speechArbiter.dropBriefings();
-    return;
-  }
-  brain = new BrainAgent({
+function rebuildBrain(): Promise<void> {
+  return brains.replace(() => {
+    const client = voiceCapabilities.brainClient;
+    if (
+      !client ||
+      !runMode.observesProviders ||
+      !runMode.sendsNetwork ||
+      !accountCapabilitiesActive()
+    ) {
+      speechArbiter.dropBriefings();
+      return undefined;
+    }
+    return buildBrain(client);
+  });
+}
+
+function buildBrain(client: NonNullable<typeof voiceCapabilities.brainClient>): BrainAgent {
+  return new BrainAgent({
     client,
     acts: brainActPerformer,
     roster: brainRoster,
@@ -1756,10 +1791,8 @@ async function rebuildBrain(): Promise<void> {
       return adapter.readTranscript(identity.providerSessionId);
     },
     deliver: deliverBriefing,
-    persist: (state: BrainPersistedState) => {
-      writeStoredState(brainStatePath(), brainStateRecord(state), "Luke's memory of the agents");
-    },
-    restore: () => brainStateFromStored(readStoredState(brainStatePath())),
+    store: brainStore(),
+    createRunId: () => randomUUID(),
     ...(agentTrace ? { trace: (record) => agentTrace.recordBrainTurn(record) } : undefined),
     report: (message) => process.stderr.write(`${message}\n`),
   });
@@ -2203,7 +2236,17 @@ function registerIpc(): void {
   });
 
   registerSessionActsIpc({ ipcMain, trustedSender, performer: sessionActPerformer });
-  registerBrainIpc({ ipcMain, trustedSender, brain: () => brain });
+  registerBrainIpc({
+    ipcMain,
+    trustedSender,
+    brain,
+    submitters: {
+      panel: (sender) => panels.owns(sender),
+      voice: (sender) => voiceWindow.owns(sender),
+    },
+    recordConversationEntry: recordMainConversationEntry,
+    broadcastRequests: (snapshots) => broadcast(channels.onBrainRequestsChanged, snapshots),
+  });
   // The renderer's description of the app, pushed whenever it changes: what an
   // app act the brain asks for is validated against here, and what the brain
   // reads as the guide.
@@ -2393,7 +2436,7 @@ function watchObservationSpools(): void {
         onEvents: (events) => {
           void (async () => {
             await sessionObservationLoop.refresh().catch(() => undefined);
-            brain?.wake(wakeEventsFromHooks(providerId, events, sessionRegistry, Date.now()));
+            brain()?.wake(wakeEventsFromHooks(providerId, events, sessionRegistry, Date.now()));
           })();
         },
       }),
@@ -2628,8 +2671,9 @@ async function reconcileSpeech(): Promise<void> {
   const quiet = await announcementsQuietNow(Date.now());
   speechArbiter.setQuiet(quiet);
   if (!quiet && speechArbiter.heldBriefingCount > 0) {
-    if (brain && voiceCapabilities.realtimeCredentials) {
-      brain.releaseHeld(speechArbiter.takeHeldBriefings());
+    const standing = brain();
+    if (standing && voiceCapabilities.realtimeCredentials) {
+      standing.releaseHeld(speechArbiter.takeHeldBriefings());
     } else if (!voiceCapabilities.realtimeCredentials) {
       speechArbiter.dropBriefings();
     }
@@ -2745,7 +2789,7 @@ const sessionObservationLoop = new ObservationLoop({
   // is closed (observesProviders && accountCapabilitiesActive()).
   afterRun: () => {
     void broadcastCodexCloudConnection();
-    brain?.rosterLook();
+    brain()?.rosterLook();
   },
 });
 const issueObservationLoop = new ObservationLoop({
@@ -3266,7 +3310,7 @@ export function startDesktopApp(): void {
     stopCalendarObservation();
     for (const watcher of spoolWatchers) watcher.close();
     spoolWatchers = [];
-    void brain?.stop();
+    brains.retire();
     // Deliberately not a flush: a request here either delays the quit or is
     // killed mid-flight, and an instant quit is worth the last minute of
     // counts.

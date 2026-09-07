@@ -15,7 +15,10 @@ import {
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
+  conversationEntryKey,
   conversationHistoryText,
+  enrichedConversationEntry,
+  hasConversationEntryForRequest,
   insertSpokenAskEntry,
   insertSpokenAskThreadEntry,
   isConversationEntryKind,
@@ -29,6 +32,8 @@ import {
   storedConversationEntry,
   storedConversationMaximumAgeMs,
   streamingConversationEntry,
+  typedAskConversationEntry,
+  withConversationEntryRequest,
 } from "./conversation-history.js";
 import { SESSION_NO_LONGER_OBSERVED_NOTE } from "./realtime-protocol.js";
 
@@ -557,4 +562,93 @@ test("adopting another window's thread reuses the entry objects already held", (
   // A cleared or diverged thread is taken as reported: entries the report no
   // longer carries do not survive the adoption.
   assert.deepEqual(adoptConversationThread([ask, reply], []), []);
+});
+
+test("a line tied to a run is recorded once per kind, and its run survives storage", () => {
+  const now = Date.parse("2026-01-02T03:04:05.000Z");
+  let thread = appendConversationThreadEntry(
+    [],
+    typedAskConversationEntry("ship it", "run-1"),
+    now,
+  );
+  thread = appendConversationThreadEntry(
+    thread,
+    typedAskConversationEntry("ship it", "run-1"),
+    now,
+  );
+  thread = appendConversationThreadEntry(thread, replyConversationEntry("Shipping.", "run-1"), now);
+  thread = appendConversationThreadEntry(
+    thread,
+    replyConversationEntry("Shipping, I said.", "run-1"),
+    now + 1,
+  );
+  // The same words for another run are another line.
+  thread = appendConversationThreadEntry(thread, replyConversationEntry("Shipping.", "run-2"), now);
+  assert.deepEqual(
+    thread.map((entry) => [entry.kind, entry.words, entry.requestId]),
+    [
+      [CONVERSATION_ENTRY_KIND.TYPED_ASK, "ship it", "run-1"],
+      [CONVERSATION_ENTRY_KIND.REPLY, "Shipping.", "run-1"],
+      [CONVERSATION_ENTRY_KIND.REPLY, "Shipping.", "run-2"],
+    ],
+  );
+  assert.equal(
+    hasConversationEntryForRequest(thread, "run-1", CONVERSATION_ENTRY_KIND.REPLY),
+    true,
+  );
+  assert.equal(
+    hasConversationEntryForRequest(thread, "run-3", CONVERSATION_ENTRY_KIND.REPLY),
+    false,
+  );
+  // The run rides through storage and tells two otherwise equal lines apart.
+  const stored = thread.map((entry) => storedConversationEntry(JSON.parse(JSON.stringify(entry))));
+  assert.deepEqual(stored, thread);
+  // The run is not part of a line's identity — the same line, later tied to
+  // its run, is still that line — so the better-informed copy is chosen.
+  const [, firstReply, secondReply] = thread;
+  assert.ok(firstReply && secondReply);
+  assert.equal(conversationEntryKey(firstReply), conversationEntryKey(secondReply));
+  const untied = { ...firstReply, requestId: undefined };
+  assert.equal(enrichedConversationEntry(untied, firstReply), firstReply);
+  assert.equal(enrichedConversationEntry(firstReply, untied), firstReply);
+  assert.equal(
+    storedConversationEntry({ kind: "reply", words: "x", recordedAt: now, requestId: "" }),
+    undefined,
+  );
+  assert.equal(
+    storedConversationEntry({ kind: "reply", words: "x", recordedAt: now, requestId: 7 }),
+    undefined,
+  );
+});
+
+test("a spoken ask is tied to its run whichever lands first, its words untouched", () => {
+  const now = Date.parse("2026-01-02T03:04:05.000Z");
+  // The run was accepted before the transcript arrived: the line carries it.
+  const early = insertSpokenAskThreadEntry([], "  ship   it ", undefined, now, "run-1");
+  assert.deepEqual(early, [
+    {
+      kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
+      words: "ship it",
+      recordedAt: now,
+      requestId: "run-1",
+    },
+  ]);
+  // The transcript arrived first: the run is written onto that very line.
+  const late = insertSpokenAskThreadEntry([], "ship it", undefined, now);
+  const [line] = late;
+  assert.ok(line);
+  const tied = withConversationEntryRequest(late, line, "run-2");
+  assert.deepEqual(tied, [
+    {
+      kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
+      words: "ship it",
+      recordedAt: now,
+      requestId: "run-2",
+    },
+  ]);
+  // Tying is idempotent, and a line the thread no longer holds ties nothing.
+  const [tiedLine] = tied;
+  assert.ok(tiedLine);
+  assert.equal(withConversationEntryRequest(tied, tiedLine, "run-2"), tied);
+  assert.equal(withConversationEntryRequest([], line, "run-2").length, 0);
 });

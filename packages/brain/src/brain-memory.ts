@@ -1,48 +1,50 @@
 import type { SessionIdentity } from "@sidecar/session";
-import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import { isCompactionItem, type ResponsesInputItem } from "./brain-openai.js";
+import { isWireString } from "@sidecar/wire";
+import { isCompactionItem, RESPONSES_ITEM_TYPE, type ResponsesInputItem } from "./brain-openai.js";
+import type { BrainTranscriptCursors } from "./brain-state.js";
 
 /**
  * What the brain remembers between turns and across launches: the input array
  * from the latest compaction item onward, and the transcript cursor each
  * session was last read to. No summary of its own is kept — the API's
  * compaction item is the memory of everything before it, opaque and safe to
- * store — so the shape is the array itself.
+ * store — so the shape is the array itself. The envelope that carries both
+ * across launches is `brain-state`; this is the working copy one agent holds.
  */
 
-export const BRAIN_STATE_VERSION = 1;
-
-export type BrainTranscriptCursors = Readonly<Record<string, Readonly<Record<string, string>>>>;
-
-export interface BrainPersistedState {
-  version: typeof BRAIN_STATE_VERSION;
+export interface BrainMemoryState {
   items: readonly ResponsesInputItem[];
-  /** Keyed by provider id, then by provider session id. */
   cursors: BrainTranscriptCursors;
 }
 
-/** Reads a persisted state, or nothing when the file is from another build or malformed. */
-export function brainPersistedStateFromWire(
-  value: UnparsedWireValue,
-): BrainPersistedState | undefined {
-  if (!isRecord(value) || value.version !== BRAIN_STATE_VERSION) return undefined;
-  if (!Array.isArray(value.items) || !isRecord(value.cursors)) return undefined;
-  const items: ResponsesInputItem[] = [];
-  for (const item of value.items) {
-    if (!isRecord(item)) return undefined;
-    items.push(item);
-  }
-  const cursors: Record<string, Record<string, string>> = {};
-  for (const [providerId, sessions] of Object.entries(value.cursors)) {
-    if (!isRecord(sessions)) return undefined;
-    const provider: Record<string, string> = {};
-    for (const [providerSessionId, cursor] of Object.entries(sessions)) {
-      if (!isWireString(cursor)) return undefined;
-      provider[providerSessionId] = cursor;
+/**
+ * Answers every `function_call` in the array that has no `function_call_output`
+ * anywhere in it with the output given, so a memory restored from a checkpoint
+ * taken between an act's start and its result never replays the call and
+ * never hands the model a dangling one.
+ */
+export function pairedDanglingCalls(
+  items: readonly ResponsesInputItem[],
+  outputFor: (callId: string) => string,
+): readonly ResponsesInputItem[] {
+  const answered = new Set<string>();
+  for (const item of items) {
+    if (item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT && isWireString(item.call_id)) {
+      answered.add(item.call_id);
     }
-    cursors[providerId] = provider;
   }
-  return { version: BRAIN_STATE_VERSION, items, cursors };
+  const dangling: ResponsesInputItem[] = [];
+  for (const item of items) {
+    if (item.type !== RESPONSES_ITEM_TYPE.FUNCTION_CALL || !isWireString(item.call_id)) continue;
+    if (answered.has(item.call_id)) continue;
+    answered.add(item.call_id);
+    dangling.push({
+      type: RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
+      call_id: item.call_id,
+      output: outputFor(item.call_id),
+    });
+  }
+  return dangling.length === 0 ? items : [...items, ...dangling];
 }
 
 /** Everything a failed turn is rolled back to, taken before the turn appends anything. */
@@ -79,7 +81,7 @@ export class BrainMemory {
   #items: ResponsesInputItem[];
   #cursors: Map<string, Map<string, string>>;
 
-  constructor(state?: BrainPersistedState) {
+  constructor(state?: BrainMemoryState) {
     this.#items = state ? [...state.items] : [];
     this.#cursors = state ? cursorMap(state.cursors) : new Map();
   }
@@ -142,9 +144,8 @@ export class BrainMemory {
     }
   }
 
-  persisted(): BrainPersistedState {
+  persisted(): BrainMemoryState {
     return {
-      version: BRAIN_STATE_VERSION,
       items: [...this.#items],
       cursors: cursorRecord(this.#cursors),
     };

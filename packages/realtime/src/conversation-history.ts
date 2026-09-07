@@ -118,23 +118,66 @@ export interface ConversationEntry {
    * retention's clock and never enters model context.
    */
   recordedAt?: number;
+  /**
+   * The brain run this line belongs to, when it is an ask the brain took or
+   * the reply that run ended in. It is what lets a reply be recorded exactly
+   * once however many windows hear of the run's end, and what lets History
+   * draw a run still working beside the ask that opened it. Never rendered
+   * into model context.
+   */
+  requestId?: string;
 }
 
 /**
  * Appends one flattened line to the retained thread. An entry with
  * nothing left after flattening appends nothing: an empty line says nothing
- * worth keeping or spending model-window space on.
+ * worth keeping or spending model-window space on. A line recorded after the
+ * fact — a run's end written once its record is read — may carry the moment
+ * it happened rather than the moment it was written, so the thread keeps the
+ * order things occurred in; retention still runs on `now`.
  */
 export function appendConversationThreadEntry(
   entries: readonly ConversationEntry[],
   entry: ConversationEntry,
   now: number = Date.now(),
+  recordedAt: number = now,
 ): readonly ConversationEntry[] {
   const words = flattenedEntryWords(entry.words);
   if (!words) return entries;
-  const appended: ConversationEntry = { kind: entry.kind, words, recordedAt: now };
+  if (
+    entry.requestId !== undefined &&
+    hasConversationEntryForRequest(entries, entry.requestId, entry.kind)
+  ) {
+    return entries;
+  }
+  const appended: ConversationEntry = { kind: entry.kind, words, recordedAt };
   if (entry.identity) appended.identity = entry.identity;
-  return retainedConversationEntries([...entries, appended], now);
+  if (entry.requestId !== undefined) appended.requestId = entry.requestId;
+  // A line stamped earlier than the tail goes where it happened: after the
+  // last line that happened no later than it.
+  let at = entries.length;
+  while (at > 0) {
+    const before = entries[at - 1]?.recordedAt;
+    if (before === undefined || before <= recordedAt) break;
+    at -= 1;
+  }
+  const placed = [...entries];
+  placed.splice(at, 0, appended);
+  return retainedConversationEntries(placed, now);
+}
+
+/**
+ * Whether the thread already holds this kind of line for this run. A run's
+ * ask and its reply are each recorded once: the main process records the
+ * reply at the run's end, and a window that also heard the end must not add
+ * a second line for it.
+ */
+export function hasConversationEntryForRequest(
+  entries: readonly ConversationEntry[],
+  requestId: string,
+  kind: ConversationEntryKind,
+): boolean {
+  return entries.some((entry) => entry.requestId === requestId && entry.kind === kind);
 }
 
 /**
@@ -161,7 +204,12 @@ function sameConversationEntry(a: ConversationEntry, b: ConversationEntry): bool
   return conversationEntryKey(a) === conversationEntryKey(b);
 }
 
-/** Stable value identity shared by renderer adoption and main-process merging. */
+/**
+ * Stable value identity shared by renderer adoption and main-process merging.
+ * The run a line was later tied to is not part of it: a spoken ask's
+ * transcript and the same transcript once its run is known are one line, so
+ * the correlation enriches the line rather than standing beside it.
+ */
 export function conversationEntryKey(entry: ConversationEntry): string {
   return JSON.stringify([
     entry.kind,
@@ -169,6 +217,19 @@ export function conversationEntryKey(entry: ConversationEntry): string {
     entry.recordedAt,
     entry.identity ? [entry.identity.providerId, entry.identity.providerSessionId] : undefined,
   ]);
+}
+
+/**
+ * The better-informed of two copies of one line: the one that knows its run.
+ * Nothing else about a line changes after it is recorded, so a copy without
+ * the run is the older one, and a stale window snapshot cannot take the
+ * correlation back off.
+ */
+export function enrichedConversationEntry(
+  held: ConversationEntry,
+  incoming: ConversationEntry,
+): ConversationEntry {
+  return held.requestId === undefined && incoming.requestId !== undefined ? incoming : held;
 }
 
 /** The recent slice safe to place back into the model's context window. */
@@ -230,6 +291,7 @@ export function insertSpokenAskThreadEntry(
   words: string,
   after: ConversationEntry | undefined,
   recordedAt: number = Date.now(),
+  requestId?: string,
 ): readonly ConversationEntry[] {
   const flattened = flattenedEntryWords(words);
   if (!flattened) return entries;
@@ -241,8 +303,27 @@ export function insertSpokenAskThreadEntry(
     kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
     words: flattened,
     recordedAt,
+    ...(requestId !== undefined ? { requestId } : undefined),
   });
   return placed;
+}
+
+/**
+ * Ties a line already in the thread to the run it turned out to open: a
+ * spoken ask's transcript can land before the brain has accepted the ask,
+ * and the correlation is then written onto the very entry, words untouched.
+ * A thread that does not hold the entry is returned as it was.
+ */
+export function withConversationEntryRequest(
+  entries: readonly ConversationEntry[],
+  entry: ConversationEntry,
+  requestId: string,
+): readonly ConversationEntry[] {
+  const at = entries.indexOf(entry);
+  if (at === -1 || entry.requestId === requestId) return entries;
+  const tied = [...entries];
+  tied[at] = { ...entry, requestId };
+  return tied;
 }
 
 /** Places a spoken ask into the recent model context and retires old lines. */
@@ -281,8 +362,17 @@ export function announcementConversationEntry(words: string): ConversationEntry 
  * The history line a conversation reply leaves behind. A reply carries no
  * subject of its own: only an act names the session it was about.
  */
-export function replyConversationEntry(words: string): ConversationEntry {
-  return { kind: CONVERSATION_ENTRY_KIND.REPLY, words };
+export function replyConversationEntry(words: string, requestId?: string): ConversationEntry {
+  return {
+    kind: CONVERSATION_ENTRY_KIND.REPLY,
+    words,
+    ...(requestId !== undefined ? { requestId } : undefined),
+  };
+}
+
+/** The history line a typed ask the brain accepted leaves behind, tied to its run. */
+export function typedAskConversationEntry(words: string, requestId: string): ConversationEntry {
+  return { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words, requestId };
 }
 
 /**
@@ -358,6 +448,9 @@ export function storedConversationEntry(value: UnparsedWireValue): ConversationE
       ? value.recordedAt
       : undefined;
   if (recordedAt === undefined || recordedAt < 0) return undefined;
+  if (value.requestId !== undefined && !(isWireString(value.requestId) && value.requestId)) {
+    return undefined;
+  }
   const identity = value.identity;
   const providerId = isRecord(identity) ? identity.providerId : undefined;
   const providerSessionId = isRecord(identity) ? identity.providerSessionId : undefined;
@@ -377,6 +470,7 @@ export function storedConversationEntry(value: UnparsedWireValue): ConversationE
     ...(isWireString(providerId) && isWireString(providerSessionId)
       ? { identity: { providerId, providerSessionId } }
       : undefined),
+    ...(isWireString(value.requestId) ? { requestId: value.requestId } : undefined),
   };
 }
 

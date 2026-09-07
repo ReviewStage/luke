@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_STATUS } from "@sidecar/realtime";
-import { IDLE_VOICE_VIEW, VOICE_COMMAND_OUTCOME } from "#shared/wire/voice-view";
+import { BRAIN_ASK_REFUSAL } from "#shared/wire/brain";
+import { IDLE_VOICE_VIEW } from "#shared/wire/voice-view";
 import {
   ASK_UNSENT_REASON,
   askDraftReason,
@@ -83,8 +84,8 @@ test("a notice yields to Luke's turn alone, because the developer's draws nothin
 test("a refused or unanswered typed ask keeps its draft; an accepted one clears it", () => {
   // The composer clears the field only on a falsy answer, so an accepted ask
   // must answer nothing and every other outcome must answer a reason.
-  assert.equal(askDraftReason(VOICE_COMMAND_OUTCOME.ACCEPTED), undefined);
-  assert.equal(askDraftReason(VOICE_COMMAND_OUTCOME.REFUSED), ASK_UNSENT_REASON);
+  assert.equal(askDraftReason({ outcome: "accepted", runId: "run-1", acceptedAt: 1 }), undefined);
+  assert.equal(askDraftReason({ outcome: "rejected", reason: "absent" }), BRAIN_ASK_REFUSAL.absent);
   assert.equal(
     askDraftReason(undefined),
     ASK_UNSENT_REASON,
