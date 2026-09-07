@@ -22,7 +22,7 @@ import {
   legacyAttentionDecisionFromModel,
   legacyAttentionResponsesRequest,
 } from "./index.js";
-import { releasedV1ReviewAnswer, releasedV2ReviewAnswer } from "./released-clients.test-fixture.js";
+import { releasedV1ReviewAnswer, releasedV2ReviewAnswer } from "./testing/released-clients.js";
 
 const DECIDED_AT = 1_800_000_000_000;
 const SPOKEN_SENTENCE = "Claude Code needs permission to continue.";
