@@ -6,6 +6,9 @@
    to the key-slot and feedback tweaks there, and those tweaks have to win. */
 @import "./settings.css";
 @import "./base.css";
+/* Before the surfaces that draw messages, so each can restate a measure of its
+   own without out-specifying the block it is styling. */
+@import "./markdown.css";
 /* Before the surfaces that hold keycaps, so each can size its own without
    out-specifying the cap itself. */
 @import "./keycaps.css";

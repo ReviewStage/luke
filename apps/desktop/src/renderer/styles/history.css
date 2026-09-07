@@ -167,14 +167,16 @@
   color: var(--surface);
 }
 
-.history-entry p {
-  margin: 0;
+/* The bubble's words, drawn as the Markdown they were written in; the block
+   rules live in markdown.css and this is only their ground. */
+.history-words {
+  min-width: 0;
+  max-width: 100%;
   padding: 7px 10px 8px;
   color: var(--text-primary);
   font-size: 12.5px;
   line-height: 1.38;
   overflow-wrap: anywhere;
-  white-space: pre-wrap;
 }
 
 /* The stamp rides inside the bubble, on the last line where a chat app puts
@@ -195,10 +197,33 @@
   align-items: flex-end;
 }
 
-.history-entry[data-speaker="you"] p {
+.history-entry[data-speaker="you"] .history-words {
   border-radius: 15px 15px 5px 15px;
   background: var(--message-sent);
   color: rgba(255, 255, 255, 0.98);
+}
+
+/* On the accent ground the raised token vanishes, so code, quotes, and rules
+   take their tint from the bubble's own white ink instead. */
+.history-entry[data-speaker="you"] .history-words code,
+.history-entry[data-speaker="you"] .history-words pre {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.history-entry[data-speaker="you"] .history-words blockquote {
+  border-left-color: rgba(255, 255, 255, 0.45);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.history-entry[data-speaker="you"] .history-words th,
+.history-entry[data-speaker="you"] .history-words li::marker {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.history-entry[data-speaker="you"] .history-words td,
+.history-entry[data-speaker="you"] .history-words th,
+.history-entry[data-speaker="you"] .history-words hr {
+  border-color: rgba(255, 255, 255, 0.28);
 }
 
 .history-entry[data-speaker="luke"] {
@@ -207,9 +232,16 @@
   align-items: flex-start;
 }
 
-.history-entry[data-speaker="luke"] p {
+.history-entry[data-speaker="luke"] .history-words {
   border-radius: 15px 15px 15px 5px;
   background: var(--raised-strong);
+}
+
+/* Inside the raised bubble the raised token is the bubble itself, so a code
+   block steps down to the surface's fill to stand apart from its ground. */
+.history-entry[data-speaker="luke"] .history-words code,
+.history-entry[data-speaker="luke"] .history-words pre {
+  background: var(--surface-fill);
 }
 
 .history-entry[data-speaker="event"] {
@@ -220,7 +252,7 @@
   text-align: center;
 }
 
-.history-entry[data-speaker="event"] p {
+.history-entry[data-speaker="event"] .history-words {
   padding: 0;
   color: var(--text-secondary);
   font-size: 10.5px;

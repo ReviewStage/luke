@@ -1,0 +1,193 @@
+/* A message's Markdown, drawn wherever Luke's or the developer's words are: the
+   History bubbles and the caption under the housing. Every measure is in `em`
+   so the same rules read at the caption's ten pixels and the thread's twelve
+   and a half, and every colour is a token off the surface so a block reads on
+   the raised bubble and on the sent bubble's accent alike. Blocks are spaced by
+   margin rather than a flex gap: the caption's root is an ordinary block whose
+   wrapped height is measured, and a list item that went flex would lose its
+   marker. */
+.markdown > * + *,
+.markdown li > * + *,
+.markdown blockquote > * + * {
+  margin-top: 0.5em;
+}
+
+.markdown p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.markdown-heading {
+  font-weight: 680;
+  letter-spacing: -0.01em;
+}
+
+.markdown-heading[data-level="1"] {
+  font-size: 1.25em;
+}
+
+.markdown-heading[data-level="2"] {
+  font-size: 1.15em;
+}
+
+.markdown-heading[data-level="3"] {
+  font-size: 1.05em;
+}
+
+.markdown code {
+  padding: 0.08em 0.36em;
+  border-radius: 0.36em;
+  background: var(--raised);
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  /* Mono runs wider than the text around it at equal size. */
+  font-size: 0.92em;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+/* Code keeps each source line whole and scrolls only sideways: a wrapped
+   identifier reads as one the author never wrote. Left-aligned even inside the
+   centred caption, because indentation is part of what code says. */
+.markdown pre {
+  margin: 0;
+  padding: 0.6em 0.8em;
+  border-radius: 0.7em;
+  background: var(--raised);
+  overflow-x: auto;
+  scrollbar-width: none;
+  text-align: left;
+}
+
+.markdown pre code {
+  display: block;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  font-weight: 450;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.markdown blockquote {
+  margin: 0;
+  padding-left: 0.85em;
+  border-left: 0.2em solid var(--text-tertiary);
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.markdown ul,
+.markdown ol {
+  margin: 0;
+  padding-left: 1.5em;
+  text-align: left;
+}
+
+.markdown li + li {
+  margin-top: 0.25em;
+}
+
+.markdown li::marker {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A task box draws as a checklist square; ticked, it takes the same green a
+   finished session wears. */
+.markdown li.markdown-task {
+  position: relative;
+  list-style: none;
+}
+
+.markdown li.markdown-task::before {
+  position: absolute;
+  top: 0.22em;
+  left: -1.35em;
+  display: block;
+  box-sizing: border-box;
+  width: 0.95em;
+  height: 0.95em;
+  border: 0.1em solid var(--text-tertiary);
+  border-radius: 0.25em;
+  content: "";
+}
+
+.markdown li.markdown-task[data-checked="true"]::before {
+  border-color: var(--state-complete);
+  background: var(--state-complete);
+}
+
+/* The tick is two borders of a rotated box rather than a glyph, so it draws
+   the same in every font the surface might fall back to. */
+.markdown li.markdown-task[data-checked="true"]::after {
+  position: absolute;
+  top: 0.36em;
+  left: -1.02em;
+  width: 0.24em;
+  height: 0.48em;
+  border: solid var(--surface-fill);
+  border-width: 0 0.13em 0.13em 0;
+  content: "";
+  transform: rotate(45deg);
+}
+
+.markdown-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  text-align: left;
+}
+
+.markdown table {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.markdown th,
+.markdown td {
+  padding: 0.3em 0.7em 0.3em 0;
+  border-bottom: 1px solid var(--hairline);
+  vertical-align: top;
+  text-align: left;
+}
+
+.markdown th {
+  color: var(--text-secondary);
+  font-weight: 640;
+}
+
+.markdown tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.markdown th[data-align="center"],
+.markdown td[data-align="center"] {
+  text-align: center;
+}
+
+.markdown th[data-align="trailing"],
+.markdown td[data-align="trailing"] {
+  text-align: right;
+}
+
+.markdown hr {
+  margin: 0.3em 0;
+  border: 0;
+  border-top: 1px solid var(--hairline);
+}
+
+/* Drawn as a link, so the reader knows the words pointed somewhere, but not a
+   control: the renderer opens no arbitrary address. The destination is the
+   hover title. */
+.markdown-link {
+  text-decoration: underline;
+  text-decoration-color: var(--text-tertiary);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+
+/* The stamp under a message that did not end in a paragraph, kept to the same
+   line a chat app puts it on. */
+.markdown-trailing {
+  text-align: right;
+}
