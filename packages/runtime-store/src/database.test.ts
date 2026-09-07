@@ -423,3 +423,23 @@ test("the reproduced boundary: marker written, erase failed, store load at exact
   );
   relaunch.close();
 });
+
+test("a line keeps its Markdown line structure through the store and a relaunch", () => {
+  const location = path.join(
+    fs.mkdtempSync(path.join(os.tmpdir(), "luke-multiline-")),
+    "agent.sqlite",
+  );
+  const words = "Two things:\n\n- first\n- second\n\n```ts\nconst x = 1;\n```";
+  const database = openTestDatabase(location);
+  const appended = appendHistory(
+    database,
+    MAIN_SESSION_KEY,
+    [line(words, NOW, { eventId: "multiline" })],
+    NOW,
+  );
+  assert.equal(appended.entries[0]?.words, words);
+  database.close();
+  const relaunch = RuntimeDatabase.open(location);
+  assert.equal(listHistory(relaunch, MAIN_SESSION_KEY, NOW)[0]?.words, words);
+  relaunch.close();
+});
