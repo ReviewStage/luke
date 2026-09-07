@@ -3,7 +3,6 @@ import test from "node:test";
 import {
   holdsRememberedFact,
   isRememberedFact,
-  isRememberedFacts,
   maximumRememberedFactLength,
   rememberedFactsText,
   rememberedFactText,
@@ -47,6 +46,4 @@ test("memory renders as non-authoritative context", () => {
     isRememberedFact({ id: "a", words: "x".repeat(maximumRememberedFactLength + 1) }),
     false,
   );
-  assert.equal(isRememberedFacts([fact("a", "same"), fact("a", "different")]), false);
-  assert.equal(isRememberedFacts([fact("a", "same"), fact("b", "same")]), false);
 });

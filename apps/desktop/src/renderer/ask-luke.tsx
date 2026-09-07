@@ -1,5 +1,4 @@
 import { PRODUCT_ASK_OUTCOME, PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
-import { REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useCallback, useRef, useState } from "react";
 import { FOCUS_FRAME_LIMIT } from "./credential-entry";
@@ -54,36 +53,6 @@ export function focusAskField(): () => void {
  * stays.
  */
 export type AskHandler = (text: string) => Promise<string | undefined>;
-
-/**
- * Why an ask could not be opened, said in one sentence the field can show.
- *
- * The refusal is diagnosed from the same fact the settings rows draw — how
- * far the voice loop got — so the sentence on the strip and the rows in
- * settings can never tell two different stories. The microphone permission
- * has no say here: typing opens no capture device, and the reply arrives on
- * the call's receiving half, so a typed ask goes whether or not the system
- * would let a press capture. A failure's own message is not repeated here:
- * it lands on the caption strip directly below, where the reply would have.
- *
- * `unavailableNote` lets a hosted refusal stay neutral instead of sending a
- * signed-in developer to connect a key they do not need.
- */
-export function askRefusal(status: RealtimeStatus, unavailableNote?: string): string {
-  if (status === REALTIME_STATUS.LISTENING) {
-    return "The microphone is open. Finish saying it.";
-  }
-  if (status === REALTIME_STATUS.UNAVAILABLE) {
-    return unavailableNote ?? "Sign in, or connect an OpenAI key, in Settings.";
-  }
-  if (status === REALTIME_STATUS.CONNECTING) {
-    return "Still connecting. Ask again in a moment.";
-  }
-  if (status === REALTIME_STATUS.FAILED) {
-    return "The conversation could not be opened.";
-  }
-  return "Luke could not take that just now.";
-}
 
 /**
  * The panel's own composer: one pill at the foot of the sessions list and of

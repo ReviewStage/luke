@@ -3,7 +3,7 @@ import {
   type AccountProvider,
   type AccountSnapshot,
 } from "@sidecar/account/snapshot";
-import { APP_TOOL_KIND, isRememberedFacts, type RememberedFact } from "@sidecar/acts";
+import { APP_TOOL_KIND } from "@sidecar/acts";
 import {
   isProductExchangeKind,
   isProductSurfaceEventName,
@@ -23,7 +23,6 @@ import {
   isFeedbackKind,
 } from "@sidecar/feedback";
 import { type AppGuideSnapshot, isAppGuideSnapshot } from "@sidecar/guide";
-import type { TrackedIssue } from "@sidecar/issues";
 import {
   type ConversationEntry,
   type RealtimeConnection,
@@ -839,12 +838,6 @@ export const BRIDGE = {
     args: noArgs,
     result: result<AppSettings>(),
   }),
-  onRememberedFactsChanged: entry({
-    kind: "subscribe",
-    channel: "app:remembered-facts-changed",
-    args: noArgs,
-    result: result<readonly RememberedFact[]>(isRememberedFacts),
-  }),
   onAccountChanged: entry({
     kind: "subscribe",
     channel: "app:account-changed",
@@ -874,12 +867,6 @@ export const BRIDGE = {
     channel: "app:workspace-projects-changed",
     args: noArgs,
     result: result<readonly ObservedWorkspaceProject[]>(),
-  }),
-  onIssuesChanged: entry({
-    kind: "subscribe",
-    channel: "app:issues-changed",
-    args: noArgs,
-    result: result<readonly TrackedIssue[] | undefined>(),
   }),
   onCalendarsChanged: entry({
     kind: "subscribe",

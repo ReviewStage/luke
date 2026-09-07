@@ -25,8 +25,6 @@ export type ScheduledTimer = number | object;
 
 /** The Realtime session shape a client secret is minted against. */
 export const REALTIME_SESSION_TYPE = "realtime";
-/** Both directions of the Realtime protocol travel over this one data channel. */
-export const REALTIME_DATA_CHANNEL = "oai-events";
 
 /** How far the voice loop has progressed, as the main process and UI both read it. */
 export const REALTIME_STATUS = {
@@ -339,14 +337,6 @@ export function truncateResponseEvents(input: {
  * sentence to a companion, not a transfer.
  */
 export const maximumTypedAskLength = maximumSessionMessageLength;
-
-/**
- * How long a spoken open may draft into the feedback composer. The typed ask's
- * own bound, for the typed ask's own reason: the draft is the developer's ask
- * restated in their words, not a document — anything longer is typed into the
- * composer by the hand that sends it.
- */
-export const maximumFeedbackDraftLength = maximumTypedAskLength;
 
 const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 

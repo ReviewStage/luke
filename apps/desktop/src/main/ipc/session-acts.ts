@@ -770,11 +770,6 @@ export function createSessionActPerformer(
         act.applicationId
           ? openSessionApplication(act.identity, act.applicationId)
           : openSession(act.identity),
-      // The brain reads transcripts for itself; nothing here is spoken.
-      [SESSION_TOOL_KIND.READ_TRANSCRIPT]: async (): Promise<WireRecord> => ({
-        status: ACT_RESULT_STATUS.REJECTED,
-        reason: "Transcripts are read with the brain's own read, not carried as an act.",
-      }),
       [SESSION_TOOL_KIND.CREATE_WORKSPACE]: async (act): Promise<WireRecord> =>
         createWorkspace(
           act.providerId,

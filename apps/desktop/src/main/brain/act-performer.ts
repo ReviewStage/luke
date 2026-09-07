@@ -10,7 +10,6 @@ import {
   type RealtimeToolFamily,
   type RememberedFact,
   realtimeToolFamily,
-  SESSION_TOOL_KIND,
   sessionToolAction,
 } from "@sidecar/acts";
 import {
@@ -68,7 +67,6 @@ const REFUSAL = {
   NO_AUTHORITY: "Not run: an act needs a turn the developer opened.",
   TURN_OVER: "Not run: the turn that asked for this act is over.",
   NO_TRACKER: "No issue tracker is connected.",
-  BRAIN_READS_ITSELF: "Read the transcript with read_transcript; nothing is spoken from this act.",
   MEMORY_NOT_SAVED: "That memory could not be saved.",
   MEMORY_NOT_REMOVED: "That memory could not be removed.",
 } as const;
@@ -121,9 +119,6 @@ export function createBrainActPerformer(
       defaults.defaultProjectIds,
     );
     if (action.status === ACT_RESULT_STATUS.REJECTED) return rejection(action.reason);
-    if (action.kind === SESSION_TOOL_KIND.READ_TRANSCRIPT) {
-      return rejection(REFUSAL.BRAIN_READS_ITSELF);
-    }
     // The ask is recorded before the outcome is known: a refusal still leaves
     // the developer having asked it, and the reply voicing the outcome is
     // recorded as what Luke said.

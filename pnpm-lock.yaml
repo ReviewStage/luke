@@ -428,9 +428,6 @@ importers:
       '@sidecar/realtime':
         specifier: workspace:*
         version: link:../realtime
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
@@ -610,9 +607,6 @@ importers:
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../hosted
-      '@sidecar/issues':
-        specifier: workspace:*
-        version: link:../issues
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
@@ -760,9 +754,6 @@ importers:
       '@sidecar/realtime':
         specifier: workspace:*
         version: link:../realtime
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
       '@sidecar/settings':
         specifier: workspace:*
         version: link:../settings

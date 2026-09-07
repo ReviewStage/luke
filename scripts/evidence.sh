@@ -86,8 +86,7 @@ validate_evidence() {
 # so a mode change never moves it, and a compact one still holds the peek the
 # capsule grows into, the caption block a whole reply is shown in, the inset
 # that closes the stack against the shape's bottom edge, and room for a
-# spring to overshoot — 38 + 210 + 6 + 40 tall on the pinned housing. The
-# notice band draws no chip rows since #685, so none are held for.
+# spring to overshoot — 38 + 210 + 6 + 40 tall on the pinned housing.
 validate_evidence "$SIDECAR_EXPANDED_EVIDENCE_PATH" 700 560
 validate_evidence "$SIDECAR_COMPACT_EVIDENCE_PATH" 700 294
 validate_evidence "$SIDECAR_PEEK_EVIDENCE_PATH" 700 294

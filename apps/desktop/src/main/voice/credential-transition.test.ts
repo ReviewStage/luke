@@ -114,10 +114,6 @@ function composition() {
         file = contents;
         return true;
       },
-      remove: () => {
-        file = undefined;
-        return true;
-      },
     },
     createGenerationId: () => "gen-1",
   });

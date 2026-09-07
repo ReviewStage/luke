@@ -165,10 +165,10 @@ what a provider connection allows.
 
 Rules the guide must keep:
 
-- A spoken settings change runs only in a turn the developer opened by
-  speaking, is validated against the guide before any carrier runs, and goes
-  through the same bridge call the setting's own row uses, never a new write
-  path.
+- A settings change asked of Luke runs only in a turn the developer opened,
+  by speaking or by typing, is validated against the guide in the main
+  process and again here before any carrier runs, and goes through the same
+  bridge call the setting's own row uses, never a new write path.
 - Mark a setting `adjustable` only after wiring its id into
   `applySpokenSetting`; the test suite refuses an adjustable entry the bridge
   cannot carry. A setting only a hand may change stays in the guide with

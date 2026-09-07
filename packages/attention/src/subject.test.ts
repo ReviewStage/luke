@@ -10,7 +10,6 @@ import {
   subjectInput,
   subjectInputFromWire,
   subjectResponsesRequest,
-  subjectTranscript,
 } from "./index.js";
 import { releasedSubjectAnswer } from "./testing/released-clients.js";
 
@@ -59,8 +58,6 @@ test("model output is validated and bounded, never repaired", () => {
   assert.equal(subjectDerivationFromModel({}), undefined);
   assert.equal(subjectDerivationFromModel("researching"), undefined);
   assert.equal(boundedSubject(undefined), undefined);
-  assert.equal(subjectTranscript("  \n "), undefined);
-  assert.equal(subjectTranscript(` ${TRANSCRIPT} `), TRANSCRIPT);
 });
 
 test("a hosted input is validated to the bounds this build produces", () => {

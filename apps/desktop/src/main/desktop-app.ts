@@ -1306,12 +1306,14 @@ let lastWorkspaceProjects: string | undefined;
 let workspaceProjectsBroadcastGeneration = 0;
 
 /**
- * Announces where a workspace can be created whenever the offer changes. This
- * cannot ride the registry's own notifications alone: the registry only speaks
- * when the session snapshot changes, and a pass can change the project list
- * while leaving the sessions exactly as they were — a key just added with no
- * workspaces yet, a project connected but not yet worked in — so the check
- * runs on the observation cadence as well as on every commit.
+ * Announces where a workspace can be created whenever the offer changes. The
+ * roster announces every pass whether or not anything moved, so the offer is
+ * compared against the last one announced here rather than re-sent on every
+ * commit. It runs on every commit and once more when a pass completes,
+ * because the offer is read from the adapters rather than from the roster —
+ * a key just added with no workspaces yet, a project connected but not yet
+ * worked in — and the pass's last word on them is its end, not any one
+ * provider's commit.
  */
 async function broadcastWorkspaceProjects(): Promise<void> {
   const generation = ++workspaceProjectsBroadcastGeneration;
@@ -1693,7 +1695,6 @@ function writeRememberedFacts(facts: readonly RememberedFact[]): boolean {
     return false;
   }
   rememberedFacts = facts;
-  broadcast(channels.onRememberedFactsChanged, facts);
   return true;
 }
 
@@ -1729,7 +1730,6 @@ const brainWiring = wireBrain({
     read: () => readStoredState(brainStatePath()),
     write: (contents) =>
       writeStoredState(brainStatePath(), contents, "Luke's memory of the agents"),
-    remove: () => removeStoredState(brainStatePath(), "Luke's memory of the agents"),
   },
   createId: () => randomUUID(),
   report: (message) => process.stderr.write(`${message}\n`),
@@ -1939,9 +1939,6 @@ function registerIpc(): void {
         account,
         packaged: app.isPackaged,
         platform: process.platform,
-        electronVersion: process.versions.electron,
-        chromiumVersion: process.versions.chrome,
-        nodeVersion: process.versions.node,
         microphoneStatus: microphoneStatus(),
         ...(voiceWindow.owns(context.sender) ? { voiceEpoch: voiceReceiver.epoch() } : undefined),
         // Both keys travel as accelerators rather than labels: the renderer needs
@@ -1973,9 +1970,6 @@ function registerIpc(): void {
               await settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
             )
           : [],
-        ...(trackedIssues && runMode.observesProviders && accountCapabilitiesActive()
-          ? { issues: trackedIssues }
-          : undefined),
         // The calendar is a capability like the rosters: nothing of it is
         // shown, or held quiet, before the account gate opens.
         calendars: accountCapabilitiesActive() ? observedCalendars : [],
@@ -1984,7 +1978,6 @@ function registerIpc(): void {
         announcementsHeld: accountCapabilitiesActive() && (await announcementsQuietNow(Date.now())),
         conversationHistory,
         voiceView: latestVoiceView,
-        rememberedFacts,
         calendarOnboardingOwed: calendarOnboardingGateOwed(),
         sessionReplay: await sessionReplayBootstrap(),
         settings: await settingsStore.snapshot(),
@@ -2548,8 +2541,8 @@ async function refreshProviderSessions(generation: number): Promise<void> {
     })(),
   ]);
   if (!sessionObservationLoop.isCurrent(generation)) return;
-  // The registry only spoke if the sessions themselves changed, and a pass can
-  // change the project list while leaving them exactly as they were.
+  // Every provider's observation has settled by here, committed or not, so
+  // this is the pass's last word on the offer; the broadcast dedupes itself.
   void broadcastWorkspaceProjects();
 }
 
@@ -3033,7 +3026,6 @@ async function refreshTrackedIssues(generation: number): Promise<void> {
     }
     if (issueObservationLoop.isCurrent(generation)) {
       trackedIssues = connected ? collected : undefined;
-      broadcast(channels.onIssuesChanged, trackedIssues);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -3043,7 +3035,6 @@ async function refreshTrackedIssues(generation: number): Promise<void> {
 
 function stopIssueObservation(): void {
   trackedIssues = undefined;
-  broadcast(channels.onIssuesChanged, undefined);
 }
 
 function configurePermissions(): void {

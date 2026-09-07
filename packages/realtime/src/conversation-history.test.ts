@@ -166,14 +166,6 @@ test("an act's line records the ask in words, with the identity it named", () =>
     'ran "Retry" on "checkout-service"',
   );
 
-  // A transcript reading is only ever the fact of the act: the rendering
-  // travels in the turn that asked for it and never enters the record.
-  assert.equal(
-    sessionActConversationEntry({ kind: SESSION_TOOL_KIND.READ_TRANSCRIPT, identity }, sessions)
-      .words,
-    'read "checkout-service"\'s transcript aloud',
-  );
-
   // A session the roster no longer shows is still named honestly.
   assert.equal(
     sessionActConversationEntry({ kind: SESSION_TOOL_KIND.OPEN, identity }, []).words,
