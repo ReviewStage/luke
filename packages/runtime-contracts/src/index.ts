@@ -8,6 +8,7 @@ export {
   type ContextEngine,
   type ContextInput,
   type ContextInputKind,
+  type ContextLifecycle,
   type ContextMark,
   type ContextOpening,
   checkpointFormatFromTag,

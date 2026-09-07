@@ -16,7 +16,8 @@ export interface BrainToolCallTrace {
 export interface BrainTurnTraceRecord {
   trigger: BrainTurnTrigger;
   authority: BrainTurnAuthority;
-  inputItemKinds: readonly string[];
+  /** Which agent runtime ran the turn, by its id. */
+  runtime: string;
   inputTokens?: number;
   transcriptBytes: number;
   toolCalls: readonly BrainToolCallTrace[];
@@ -24,6 +25,7 @@ export interface BrainTurnTraceRecord {
   deliveries: readonly { briefingChars: number }[];
   model?: string;
   elapsedMs: number;
+  /** How many inferences answered with tool calls; the loop has no cap on them. */
   iterations: number;
   compacted: boolean;
   error?: string;

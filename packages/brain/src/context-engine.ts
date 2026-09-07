@@ -53,6 +53,7 @@ export class ResponsesContextEngine implements ContextEngine {
    * about a memory it cannot read is the caller's decision.
    */
   bootstrap(checkpoint: RuntimeCheckpoint | undefined, lostResultJson: string): ContextBootstrap {
+    // Synchronous throughout: every hook answers before a signal could fire, so none reads one.
     if (!checkpoint) {
       this.#items = [];
       return { loaded: true, repaired: 0 };

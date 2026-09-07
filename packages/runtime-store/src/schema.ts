@@ -27,15 +27,30 @@
  * version this build does not know is refused rather than migrated by guess.
  */
 
-export const RUNTIME_SCHEMA_VERSION = 1;
+export const RUNTIME_SCHEMA_VERSION = 2;
 
-/** The format tag every checkpoint item carries, naming whose shape it is. */
-export const CHECKPOINT_FORMAT = {
-  /** An item of the OpenAI Responses input array, stored as its JSON. */
-  OPENAI_RESPONSES_INPUT_V1: "openai-responses-input/1",
-} as const;
+/**
+ * The tag version 1 of the schema wrote on every checkpoint item before the
+ * stamp moved onto the generation itself. Every such item was the tool-loop
+ * runtime's first version over the Responses input array, because nothing
+ * else ever wrote one, so the migration to version 2 stamps a generation that
+ * has items with exactly that.
+ */
+export const LEGACY_ITEM_FORMAT_TAG = "openai-responses-input/1";
 
-export type CheckpointFormat = (typeof CHECKPOINT_FORMAT)[keyof typeof CHECKPOINT_FORMAT];
+/**
+ * How a database at an earlier version is brought to this one, in order. Each
+ * step runs inside the migration's transaction; a version this build does not
+ * know how to reach is refused rather than guessed at.
+ */
+export const RUNTIME_SCHEMA_MIGRATIONS: Readonly<Record<number, readonly string[]>> = {
+  2: [
+    "ALTER TABLE conversation_sessions ADD COLUMN checkpoint_format TEXT",
+    `UPDATE conversation_sessions SET checkpoint_format = 'tool-loop@1:openai-responses-input/1'
+     WHERE checkpoint_format IS NULL
+       AND EXISTS (SELECT 1 FROM runtime_checkpoints WHERE runtime_checkpoints.session_id = conversation_sessions.session_id)`,
+  ],
+};
 
 export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS schema_version (
@@ -59,7 +74,8 @@ export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
     created_at INTEGER NOT NULL,
     expires_at INTEGER NOT NULL,
     reset_cleared_at INTEGER,
-    reset_generation_id TEXT
+    reset_generation_id TEXT,
+    checkpoint_format TEXT
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS conversation_sessions_one_standing
     ON conversation_sessions(session_key)`,

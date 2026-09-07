@@ -358,14 +358,26 @@ export interface ContextMark {
 export type MaybePromise<Value> = Value | Promise<Value>;
 
 /**
+ * What every lifecycle hook is handed beside its own arguments: the signal of
+ * the run or generation the work belongs to. A hook that waits must settle
+ * when it fires and apply nothing afterwards, because the runtime stops
+ * waiting the moment it fires and the host may roll the engine back or reuse
+ * it for the next run; a hook that answers at once may ignore it.
+ */
+export interface ContextLifecycle {
+  readonly signal?: AbortSignal;
+}
+
+/**
  * Owns what the model sees: the provider's item shapes, how words become
  * items, how a compaction folds the past, and what persists as a checkpoint.
  * The engine holds retained state; the host decides when a turn commits or
  * rolls back, and persists the checkpoint the engine hands it. The lifecycle
  * hooks may be asynchronous — an engine backed by a store or a remote thread
- * is as much an engine as one holding an array — and the runtime awaits each.
- * The three snapshot operations stay synchronous because the host takes them
- * inside its own serialized save, where nothing may be awaited.
+ * is as much an engine as one holding an array — and the runtime awaits each
+ * only until the run's signal fires. The three snapshot operations stay
+ * synchronous because the host takes them inside its own serialized save,
+ * where nothing may be awaited.
  */
 export interface ContextEngine {
   readonly checkpointFormat: CheckpointFormat;
@@ -373,16 +385,20 @@ export interface ContextEngine {
   bootstrap(
     checkpoint: RuntimeCheckpoint | undefined,
     lostResultJson: string,
+    lifecycle?: ContextLifecycle,
   ): MaybePromise<ContextBootstrap>;
-  ingest(input: ContextInput): MaybePromise<void>;
+  ingest(input: ContextInput, lifecycle?: ContextLifecycle): MaybePromise<void>;
   /** The items one inference is shown, the ephemeral text last so the retained prefix stays stable. */
-  assemble(assembly: ContextAssembly): MaybePromise<readonly WireRecord[]>;
+  assemble(
+    assembly: ContextAssembly,
+    lifecycle?: ContextLifecycle,
+  ): MaybePromise<readonly WireRecord[]>;
   /** Folds the retained items behind the latest compaction the provider produced inline; answers how many went. */
-  compact(): MaybePromise<number>;
+  compact(lifecycle?: ContextLifecycle): MaybePromise<number>;
   /** Adopts the window an explicit compaction answered, whole: it is the canonical next context. */
-  adoptCompaction(items: readonly WireRecord[]): MaybePromise<void>;
+  adoptCompaction(items: readonly WireRecord[], lifecycle?: ContextLifecycle): MaybePromise<void>;
   /** Maintenance once a turn has committed; nothing the model sees changes here. */
-  afterTurn(): MaybePromise<void>;
+  afterTurn(lifecycle?: ContextLifecycle): MaybePromise<void>;
   mark(): ContextMark;
   rollback(mark: ContextMark): void;
   checkpoint(): RuntimeCheckpoint;
@@ -390,6 +406,8 @@ export interface ContextEngine {
 }
 
 export const RUNTIME_EVENT = {
+  /** One inference answered; how many tool calls it carried. */
+  ANSWERED: "answered",
   TEXT: "text",
   TOOL_CALL: "tool_call",
   TOOL_RESULT: "tool_result",
@@ -433,6 +451,7 @@ export type RuntimeRunEnd =
   | { readonly reason: typeof RUN_END_REASON.LOOP_GUARD; readonly detail: string };
 
 export type RuntimeEvent =
+  | { readonly kind: typeof RUNTIME_EVENT.ANSWERED; readonly toolCalls: number }
   | { readonly kind: typeof RUNTIME_EVENT.TEXT; readonly text: string }
   | { readonly kind: typeof RUNTIME_EVENT.TOOL_CALL; readonly invocation: ToolInvocation }
   | {
@@ -512,6 +531,7 @@ export interface AgentRuntime {
   openContext(
     checkpoint: RuntimeCheckpoint | undefined,
     lostResultJson: string,
+    lifecycle?: ContextLifecycle,
   ): Promise<ContextOpening>;
   start(request: RuntimeRunRequest): RuntimeRun;
   /** Starts a run over a context restored from the checkpoint; a checkpoint of another format is refused. */

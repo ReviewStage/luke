@@ -97,6 +97,8 @@ export const BRAIN_ASK_REFUSAL = {
     "That ask arrived under an id I already have for different words. Ask it afresh.",
   [BRAIN_SUBMISSION_REJECTION.FULL]:
     "My notes are full of asks whose endings I haven't managed to file yet. Give me a moment and ask again.",
+  [BRAIN_SUBMISSION_REJECTION.INCOMPATIBLE]:
+    "My memory was written by a different version of me, so I can't take that on until it's cleared or that version is back.",
 } as const satisfies Record<BrainSubmissionRejection, string>;
 
 /** What the voice says while a run is still going when its wait ran out. */

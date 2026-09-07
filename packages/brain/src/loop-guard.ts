@@ -3,7 +3,10 @@ import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 
 /**
  * The tool-loop guard, ported from OpenClaw at b7528507
- * (`src/agents/tool-loop-detection.ts`): a sliding window of the run's
+ * (`src/agents/tool-loop-detection.ts`, `tool-loop-no-progress.ts`,
+ * `tool-loop-argument-churn.ts`, `tool-loop-thresholds.ts`; MIT, Copyright
+ * (c) 2026 OpenClaw Foundation — the notice travels in
+ * `THIRD_PARTY_NOTICES.md` at the repository root): a sliding window of the run's
  * recent tool calls, each hashed by name and arguments and, once answered,
  * by its result, read for the no-progress patterns that mean a model is
  * stuck rather than working. It is off unless a configuration enables it,

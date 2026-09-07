@@ -154,7 +154,12 @@ test("a run with no tool calls completes with the model's text, having shown the
   h.model.answers.push(answered({ text: "hi there", usage: { inputTokens: 12 } }));
   const end = await runtime(h.model).start(h.request()).done;
   assert.deepEqual(end, { reason: RUN_END_REASON.COMPLETED, text: "hi there" });
-  assert.deepEqual(kinds(h.events), [RUNTIME_EVENT.USAGE, RUNTIME_EVENT.TEXT, RUNTIME_EVENT.ENDED]);
+  assert.deepEqual(kinds(h.events), [
+    RUNTIME_EVENT.ANSWERED,
+    RUNTIME_EVENT.USAGE,
+    RUNTIME_EVENT.TEXT,
+    RUNTIME_EVENT.ENDED,
+  ]);
   const shown = h.model.requests[0]?.items ?? [];
   assert.equal(shown.length, 2);
   assert.equal(h.context.checkpoint().items.length, 1);
@@ -232,6 +237,7 @@ test("a throttle, a provider failure, and an answer that stopped short each end 
     until: 5_000,
   });
   assert.deepEqual(kinds(throttled.events), [RUNTIME_EVENT.THROTTLED, RUNTIME_EVENT.ENDED]);
+  assert.ok(!throttled.events.some((event) => event.kind === RUNTIME_EVENT.ANSWERED));
 
   const failed = harness();
   failed.model.answers.push({
@@ -261,7 +267,8 @@ test("a compaction item in the answer folds the context and is reported", async 
   const folded = { type: RESPONSES_ITEM_TYPE.COMPACTION, id: "cmp", encrypted_content: "x" };
   h.model.answers.push(answered({ items: [folded], text: "ok", compacted: true }));
   await runtime(h.model).start(h.request()).done;
-  assert.deepEqual(h.events[0], { kind: RUNTIME_EVENT.COMPACTED, dropped: 1 });
+  assert.deepEqual(h.events[0], { kind: RUNTIME_EVENT.ANSWERED, toolCalls: 0 });
+  assert.deepEqual(h.events[1], { kind: RUNTIME_EVENT.COMPACTED, dropped: 1 });
   assert.deepEqual(h.context.checkpoint().items, [folded]);
 });
 

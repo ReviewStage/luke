@@ -13,6 +13,7 @@ import {
   brainStateFromStored,
   brainStateRecord,
   freshBrainState,
+  LEGACY_CHECKPOINT_FORMAT_TAG,
   retainedBrainState,
 } from "./state-store.js";
 
@@ -27,6 +28,7 @@ function raw(value: BrainPersistedState | BrainPersistedState["requests"][number
 function complete(): BrainPersistedState {
   return {
     ...freshBrainState("gen-1", NOW),
+    checkpointFormat: LEGACY_CHECKPOINT_FORMAT_TAG,
     items: [{ type: "message", role: "user", content: [] }],
     cursors: { "claude-code": { abc: "7" } },
     requests: [
@@ -86,6 +88,23 @@ test("the envelope round-trips, and anything from another shape reads as nothing
     undefined,
   );
   assert.equal(read({ ...raw(state), journal: [{ runId: "x" }] }), undefined);
+});
+
+test("the checkpoint stamp is kept as written, defaulted for unstamped items, and absent for an empty unstamped generation", () => {
+  const read = (value: WireBoundaryInput) => brainPersistedStateFromWire(unparsedWire(value));
+  const { checkpointFormat: _stamp, ...unstamped } = raw(complete());
+  assert.equal(read(unstamped)?.checkpointFormat, LEGACY_CHECKPOINT_FORMAT_TAG);
+  const empty = read({ ...unstamped, items: [] });
+  assert.ok(empty && !("checkpointFormat" in empty));
+  // An empty checkpoint of another runtime keeps saying whose it is.
+  const foreign = "other-runtime@3:anthropic-messages/2";
+  assert.equal(
+    read({ ...unstamped, items: [], checkpointFormat: foreign })?.checkpointFormat,
+    foreign,
+  );
+  assert.equal(read({ ...unstamped, checkpointFormat: foreign })?.checkpointFormat, foreign);
+  assert.equal(read({ ...unstamped, checkpointFormat: "not a stamp" }), undefined);
+  assert.equal(read({ ...unstamped, checkpointFormat: 7 }), undefined);
 });
 
 class MemoryStorage implements BrainStateStorage {

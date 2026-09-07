@@ -205,6 +205,12 @@ export const BRAIN_SUBMISSION_REJECTION = {
   CONFLICT: "conflict",
   /** The generation holds as many records as it may, and none is yet eligible to be let go. */
   FULL: "full",
+  /**
+   * The generation's checkpoint was written by a runtime this build does not
+   * run; it is kept whole, and nothing may open a turn over it until a
+   * compatible runtime loads it or the developer starts fresh.
+   */
+  INCOMPATIBLE: "incompatible",
 } as const;
 
 export type BrainSubmissionRejection =

@@ -1,3 +1,4 @@
+import { checkpointFormatFromTag } from "@sidecar/runtime-contracts";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { type BrainJournalEntry, brainJournalEntryFromWire } from "./journal.js";
 import {
@@ -54,11 +55,24 @@ export interface BrainResetMarker {
 
 export type BrainTranscriptCursors = Readonly<Record<string, Readonly<Record<string, string>>>>;
 
+/**
+ * The stamp a checkpoint written before stamps existed carries: every such
+ * checkpoint was the tool-loop runtime's first version over the Responses
+ * input array, because nothing else ever wrote one.
+ */
+export const LEGACY_CHECKPOINT_FORMAT_TAG = "tool-loop@1:openai-responses-input/1";
+
 export interface BrainPersistedState {
   version: typeof BRAIN_STATE_VERSION;
   generationId: string;
   createdAt: number;
   expiresAt: number;
+  /**
+   * Whose shape the items are, as `checkpointFormatTag` writes it, carried on
+   * the generation itself so an empty checkpoint keeps its stamp too. Absent
+   * only on a generation nothing has checkpointed into yet.
+   */
+  checkpointFormat?: string;
   items: readonly ResponsesInputItem[];
   /** Keyed by provider id, then by provider session id. */
   cursors: BrainTranscriptCursors;
@@ -101,6 +115,8 @@ export function brainPersistedStateFromWire(
   if (value.expiresAt - value.createdAt !== BRAIN_GENERATION_LIFETIME_MS) return undefined;
   if (!Array.isArray(value.items) || !isRecord(value.cursors)) return undefined;
   if (!Array.isArray(value.requests) || !Array.isArray(value.journal)) return undefined;
+  const checkpointFormat = checkpointFormatTagFromWire(value.checkpointFormat, value.items.length);
+  if (checkpointFormat === null) return undefined;
   const reset = resetMarkerFromWire(value.reset);
   if (reset === null || (reset && reset.clearedAt > value.createdAt)) return undefined;
   const items: ResponsesInputItem[] = [];
@@ -135,12 +151,27 @@ export function brainPersistedStateFromWire(
     generationId: value.generationId,
     createdAt: value.createdAt,
     expiresAt: value.expiresAt,
+    ...(checkpointFormat !== undefined ? { checkpointFormat } : undefined),
     items,
     cursors,
     requests,
     journal,
     ...(reset ? { reset } : undefined),
   };
+}
+
+/**
+ * The stamp as stored: nothing for a generation never checkpointed, the
+ * legacy stamp for items written before stamps existed, the tag itself when
+ * it reads as one, and null for a tag not written by the rule.
+ */
+function checkpointFormatTagFromWire(
+  value: UnparsedWireValue,
+  itemCount: number,
+): string | undefined | null {
+  if (value === undefined) return itemCount > 0 ? LEGACY_CHECKPOINT_FORMAT_TAG : undefined;
+  if (!isWireString(value) || !checkpointFormatFromTag(value)) return null;
+  return value;
 }
 
 /** The marker as stored, nothing when absent, and null when present but unreadable. */
@@ -550,8 +581,9 @@ export class BrainStateStore {
     return this.#serialized(async () => {
       const held = this.#state;
       if (!this.holdsLease(lease) || !held || held.generationId !== generationId) return false;
+      const mutated = mutate(held);
       const composed: BrainPersistedState = {
-        ...mutate(held),
+        ...mutated,
         version: BRAIN_STATE_VERSION,
         generationId: held.generationId,
         createdAt: held.createdAt,

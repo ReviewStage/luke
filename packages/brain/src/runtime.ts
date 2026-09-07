@@ -5,7 +5,9 @@ import {
   CONTEXT_INPUT_KIND,
   type ContextEngine,
   type ContextInput,
+  type ContextLifecycle,
   type ContextOpening,
+  type MaybePromise,
   MODEL_RESPONSE_OUTCOME,
   type ModelAdapter,
   type ModelAnswer,
@@ -105,9 +107,10 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
   async openContext(
     checkpoint: RuntimeCheckpoint | undefined,
     lostResultJson: string,
+    lifecycle?: ContextLifecycle,
   ): Promise<ContextOpening> {
     const context = this.#options.createContext(this.descriptor.checkpoint);
-    return { context, bootstrap: await context.bootstrap(checkpoint, lostResultJson) };
+    return { context, bootstrap: await context.bootstrap(checkpoint, lostResultJson, lifecycle) };
   }
 
   async resume(
@@ -135,18 +138,22 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
     const signal = AbortSignal.any([request.signal, internal.signal]);
     const end: EndSignal = { deadline: false, ended: false };
     const steered: ContextInput[] = [];
+    // The end is decided synchronously: a cancel closes admission the instant
+    // it is asked for, a terminal path closes it before any listener hears
+    // the end, and the fallback below closes it when the execution threw.
     const done = this.#execute(request, signal, end, steered).finally(() => {
       end.ended = true;
     });
     return {
       runId: request.runId,
       steer: (input) => {
-        if (end.ended) return false;
+        if (end.ended || signal.aborted) return false;
         steered.push(input);
         return true;
       },
       cancel: (reason) => {
         if (reason?.deadline) end.deadline = true;
+        end.ended = true;
         internal.abort();
       },
       done,
@@ -163,10 +170,12 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
       await request.onEvent(event);
     };
     const finish = async (result: RuntimeRunEnd): Promise<RuntimeRunEnd> => {
+      end.ended = true;
       await emit({ kind: RUNTIME_EVENT.ENDED, end: result });
       return result;
     };
     const cancelled = async (): Promise<RuntimeRunEnd> => {
+      end.ended = true;
       await emit({ kind: RUNTIME_EVENT.CANCELLED, deadline: end.deadline });
       return finish({ reason: end.deadline ? RUN_END_REASON.DEADLINE : RUN_END_REASON.CANCELLED });
     };
@@ -176,12 +185,29 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
       request.toolSchemas.map((schema) => schema.name),
     );
     const revoked = () => end.ended || signal.aborted;
-    for (const input of request.input) await context.ingest(input);
+    const lifecycle: ContextLifecycle = { signal };
+    // Every wait on the engine settles when the signal fires, like every wait
+    // on the model: a held hook cannot keep a cancel or a deadline from
+    // landing, and its late answer is not read.
+    const engine = async <Value>(work: MaybePromise<Value>): Promise<Value | undefined> => {
+      const settled = await settledUnlessAborted(Promise.resolve(work), signal);
+      return settled.aborted ? undefined : settled.value;
+    };
+    const ingest = (input: ContextInput) => engine(context.ingest(input, lifecycle));
+    for (const input of request.input) {
+      await ingest(input);
+      if (signal.aborted) return cancelled();
+    }
     for (;;) {
       if (signal.aborted) return cancelled();
-      for (const input of steered.splice(0)) await context.ingest(input);
-      const assembled = await context.assemble({ ephemeral: request.ephemeral() });
-      if (signal.aborted) return cancelled();
+      for (const input of steered.splice(0)) {
+        await ingest(input);
+        if (signal.aborted) return cancelled();
+      }
+      const assembled = await engine(
+        context.assemble({ ephemeral: request.ephemeral() }, lifecycle),
+      );
+      if (assembled === undefined || signal.aborted) return cancelled();
       const answered = await settledUnlessAborted(
         this.#options.model.respond(assembled, {
           prompt: request.prompt,
@@ -210,7 +236,8 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
           detail: answer.reason,
         });
       }
-      const continued = await this.#absorb(answer, request, emit);
+      const continued = await this.#absorb(answer, request, emit, ingest, lifecycle);
+      if (signal.aborted) return cancelled();
       if (!continued) {
         if (answer.incomplete && !answer.text) {
           await emit({ kind: RUNTIME_EVENT.INCOMPLETE, incomplete: answer.incomplete });
@@ -241,7 +268,7 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
               }),
               status: ACT_RESULT_STATUS.REJECTED,
             };
-            await context.ingest({
+            await ingest({
               kind: CONTEXT_INPUT_KIND.TOOL_RESULT,
               callId: refused.callId,
               outputJson: result.outputJson,
@@ -253,7 +280,7 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
         }
         await emit({ kind: RUNTIME_EVENT.TOOL_CALL, invocation: call });
         const result = await this.#executeOne(call, tools, request.runId, signal, revoked);
-        await context.ingest({
+        await ingest({
           kind: CONTEXT_INPUT_KIND.TOOL_RESULT,
           callId: call.callId,
           outputJson: result.outputJson,
@@ -262,7 +289,7 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
         await emit({ kind: RUNTIME_EVENT.TOOL_RESULT, invocation: call, result });
         if (verdict.stuck) {
           // A warning is words for the model, read at its next inference and never kept as an act.
-          await context.ingest({
+          await ingest({
             kind: CONTEXT_INPUT_KIND.USER_TEXT,
             text: `${LOOP_GUARD_MARKER} ${verdict.message}`,
           });
@@ -278,11 +305,19 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
     answer: ModelAnswer,
     request: RuntimeRunRequest,
     emit: (event: RuntimeEvent) => Promise<void>,
+    ingest: (input: ContextInput) => Promise<void | undefined>,
+    lifecycle: ContextLifecycle,
   ): Promise<boolean> {
-    await request.context.ingest({ kind: CONTEXT_INPUT_KIND.MODEL_OUTPUT, items: answer.items });
+    await emit({ kind: RUNTIME_EVENT.ANSWERED, toolCalls: answer.toolCalls.length });
+    await ingest({ kind: CONTEXT_INPUT_KIND.MODEL_OUTPUT, items: answer.items });
+    if (lifecycle.signal?.aborted) return false;
     if (answer.compacted) {
-      const dropped = await request.context.compact();
-      await emit({ kind: RUNTIME_EVENT.COMPACTED, dropped });
+      const settled = await settledUnlessAborted(
+        Promise.resolve(request.context.compact(lifecycle)),
+        lifecycle.signal ?? new AbortController().signal,
+      );
+      if (settled.aborted) return false;
+      await emit({ kind: RUNTIME_EVENT.COMPACTED, dropped: settled.value });
     }
     if (answer.usage) await emit({ kind: RUNTIME_EVENT.USAGE, usage: answer.usage });
     if (answer.text) await emit({ kind: RUNTIME_EVENT.TEXT, text: answer.text });

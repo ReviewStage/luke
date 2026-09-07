@@ -1,3 +1,10 @@
+import {
+  type AgentRuntime,
+  type ContextEngine,
+  checkpointFormatFromTag,
+  checkpointFormatTag,
+  type RuntimeCheckpoint,
+} from "@sidecar/runtime-contracts";
 import type { SessionIdentity } from "@sidecar/session";
 import {
   ACT_RESULT_STATUS,
@@ -6,8 +13,8 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { TranscriptCursors } from "./cursors.js";
 import { BrainJournal } from "./journal.js";
-import { BrainMemory } from "./memory.js";
 import type { BrainRequestRecord } from "./requests.js";
 import type { BrainPersistedState } from "./state-store.js";
 
@@ -19,11 +26,24 @@ import type { BrainPersistedState } from "./state-store.js";
  * orphaned copy, whose checkpoints the store then fences, and can neither
  * append to nor roll back the generation that succeeded it. The signal fires
  * on replacement and on stop, and every wait of the generation settles on it.
+ *
+ * The context is the runtime's: opened from the stored checkpoint, which the
+ * runtime loads only when the stamp is its own. A checkpoint of another
+ * runtime's stamp is not corruption — it is kept whole in the store, beside
+ * the requests and the journal — and the generation stands with no context
+ * and `incompatible` naming why, refusing every turn until a runtime that can
+ * read it loads it or the developer starts fresh.
  */
 export interface Generation {
   id: string;
   expiresAt: number;
-  memory: BrainMemory;
+  /** Settles once the checkpoint has been offered to the runtime; the fields below are read after it. */
+  ready: Promise<void>;
+  context?: ContextEngine;
+  incompatible?: string;
+  /** How many dangling tool calls the context paired at load, so the load may be checkpointed. */
+  repaired: number;
+  cursors: TranscriptCursors;
   journal: BrainJournal;
   requests: Map<string, BrainRequestRecord>;
   /** Runs accepted in memory but not yet checkpointed; not yet acknowledged to anyone. */
@@ -31,16 +51,52 @@ export interface Generation {
   abort: AbortController;
 }
 
-export function generationFrom(state: BrainPersistedState): Generation {
-  return {
+/** The stored items as a checkpoint, or nothing for a generation never checkpointed into. */
+export function storedCheckpoint(state: BrainPersistedState): RuntimeCheckpoint | undefined {
+  if (state.checkpointFormat === undefined) return undefined;
+  const format = checkpointFormatFromTag(state.checkpointFormat);
+  if (!format) return undefined;
+  return { format, items: state.items };
+}
+
+export function generationFrom(
+  state: BrainPersistedState,
+  runtime: AgentRuntime,
+  lostResultJson: string,
+): Generation {
+  const abort = new AbortController();
+  const generation: Generation = {
     id: state.generationId,
     expiresAt: state.expiresAt,
-    memory: new BrainMemory({ items: state.items, cursors: state.cursors }),
+    ready: Promise.resolve(),
+    repaired: 0,
+    cursors: new TranscriptCursors(state.cursors),
     journal: new BrainJournal(state.journal),
     requests: new Map(state.requests.map((record) => [record.runId, { ...record }])),
     provisional: new Set(),
-    abort: new AbortController(),
+    abort,
   };
+  const checkpoint = storedCheckpoint(state);
+  if (state.checkpointFormat !== undefined && !checkpoint) {
+    generation.incompatible = `checkpoint stamp ${state.checkpointFormat} is not one this build reads`;
+    return generation;
+  }
+  generation.ready = runtime
+    .openContext(checkpoint, lostResultJson, { signal: abort.signal })
+    .then(({ context, bootstrap }) => {
+      if (bootstrap.loaded) {
+        generation.context = context;
+        generation.repaired = bootstrap.repaired;
+        return;
+      }
+      generation.incompatible =
+        bootstrap.reason ??
+        `checkpoint ${checkpoint ? checkpointFormatTag(checkpoint.format) : "(none)"} could not be loaded`;
+    })
+    .catch((error: unknown) => {
+      generation.incompatible = `the runtime could not open the context: ${error instanceof Error ? error.name : "unknown error"}`;
+    });
+  return generation;
 }
 
 export function parsedRecord(json: string): WireRecord {
