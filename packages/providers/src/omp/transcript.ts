@@ -1,4 +1,5 @@
 import path from "node:path";
+import type { ProviderTranscriptSinceReading } from "@sidecar/session";
 import { isRecord, oneLine, text, type WireRecord } from "@sidecar/wire";
 import {
   readDirectory,
@@ -8,7 +9,9 @@ import {
 } from "../shared/local-session-adapter.js";
 import {
   boundedTranscript,
+  readRecordsSince,
   TRANSCRIPT_BOUNDS,
+  type TranscriptPathCache,
   transcriptLine,
 } from "../shared/local-transcript.js";
 import {
@@ -37,6 +40,11 @@ export interface OmpTranscriptRequest {
   providerSessionId: string;
   readTailBytes?: number;
   maximumRenderedLength?: number;
+}
+
+export interface OmpTranscriptSinceRequest extends OmpTranscriptRequest {
+  cursor?: string;
+  pathCache: TranscriptPathCache;
 }
 
 function toolCallLine(block: WireRecord): string | undefined {
@@ -124,4 +132,28 @@ export async function readOmpSessionTranscript(
     tailRecords(tail).flatMap(linesFromRecord),
     request.maximumRenderedLength,
   );
+}
+
+/**
+ * Renders what the session's recording has gained since `cursor`, or nothing
+ * when no recording exists for that id.
+ */
+export async function readOmpSessionTranscriptSince(
+  request: OmpTranscriptSinceRequest,
+): Promise<ProviderTranscriptSinceReading | undefined> {
+  const filePath = await request.pathCache.resolve(request.providerSessionId, () =>
+    transcriptFilePath(request.ompHome, request.providerSessionId),
+  );
+  if (!filePath) return undefined;
+
+  const since = await readRecordsSince(
+    filePath,
+    request.cursor,
+    request.readTailBytes ?? TRANSCRIPT_BOUNDS.READ_TAIL_BYTES,
+  );
+  return {
+    text: boundedTranscript(since.records.flatMap(linesFromRecord)) ?? "",
+    cursor: since.cursor,
+    truncated: since.truncated,
+  };
 }

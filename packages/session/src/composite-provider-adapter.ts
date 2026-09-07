@@ -9,6 +9,7 @@ import {
   type ProviderSessionMessage,
   type ProviderSessionRenameRequest,
   type ProviderTranscriptResult,
+  type ProviderTranscriptSinceResult,
   type ProviderWorkspaceAgentRequest,
   type ProviderWorkspaceRenameRequest,
   type ProviderWorkspaceRequest,
@@ -123,6 +124,13 @@ export class CompositeSessionProviderAdapter extends SessionProviderAdapterBase 
 
   override async readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult> {
     return this.#dispatchAct((adapter) => adapter.readTranscript(providerSessionId));
+  }
+
+  override async readTranscriptSince(
+    providerSessionId: string,
+    cursor?: string,
+  ): Promise<ProviderTranscriptSinceResult> {
+    return this.#dispatchAct((adapter) => adapter.readTranscriptSince(providerSessionId, cursor));
   }
 
   /** A conversation read finds the observer holding its session the same way. */

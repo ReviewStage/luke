@@ -310,3 +310,61 @@ test("reads nothing when Codex has no state database at all", async (t) => {
 
   assert.equal(rendered, undefined);
 });
+
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("reads what a rollout gained since the cursor an earlier read minted", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const adapter = new CodexSessionAdapter({ codexHome });
+  await writeSession(codexHome, [
+    {
+      timestamp: "2026-08-16T20:00:00.000Z",
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "Fix the flaky test" }],
+      },
+    },
+  ]);
+
+  const first = await adapter.readTranscriptSince(TEST_SESSION_ID);
+  assert.equal(first.status, "accepted");
+  if (first.status !== "accepted") return;
+  assert.equal(first.text, "Developer: Fix the flaky test");
+  assert.equal(first.truncated, false);
+
+  await fs.appendFile(
+    path.join(codexHome, `rollout-${TEST_SESSION_ID}.jsonl`),
+    `${JSON.stringify({
+      timestamp: "2026-08-16T20:00:05.000Z",
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "Fixed and green." }],
+      },
+    })}\n`,
+  );
+
+  const second = await adapter.readTranscriptSince(TEST_SESSION_ID, first.cursor);
+  assert.equal(second.status, "accepted");
+  if (second.status !== "accepted") return;
+  assert.equal(second.text, "Codex: Fixed and green.");
+  assert.notEqual(second.cursor, first.cursor);
+});
+
+test("an incremental read of a compressed rollout is unsupported, not missing", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  await writeThreadRow(
+    codexHome,
+    TEST_SESSION_ID,
+    path.join(codexHome, `rollout-${TEST_SESSION_ID}.jsonl.zst`),
+  );
+  const adapter = new CodexSessionAdapter({ codexHome });
+
+  const since = await adapter.readTranscriptSince(TEST_SESSION_ID);
+  const unknown = await adapter.readTranscriptSince("0198c1f2-4d5e-7789-abcd-000000000000");
+
+  assert.equal(since.status, "unsupported");
+  assert.equal(unknown.status, "rejected");
+});

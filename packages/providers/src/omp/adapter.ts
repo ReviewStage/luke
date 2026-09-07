@@ -4,7 +4,9 @@ import {
   PROVIDER_ID,
   type ProviderSessionObservation,
   type ProviderTranscriptResult,
+  type ProviderTranscriptSinceResult,
   providerTranscriptResult,
+  providerTranscriptSinceResult,
   SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
   type SessionDetail,
@@ -25,6 +27,7 @@ import {
   tailRecords,
   workspaceLabel,
 } from "../shared/local-session-adapter.js";
+import { TranscriptPathCache } from "../shared/local-transcript.js";
 import {
   defaultOmpHome,
   OMP_CONTENT_TYPE,
@@ -39,7 +42,7 @@ import {
   ompMessageText,
   sessionIdFromOmpFileName,
 } from "./records.js";
-import { readOmpSessionTranscript } from "./transcript.js";
+import { readOmpSessionTranscript, readOmpSessionTranscriptSince } from "./transcript.js";
 
 const OMP_PROVIDER_ID = PROVIDER_ID.OMP;
 const OMP_PROVIDER_NAME = "OMP";
@@ -306,6 +309,7 @@ export class OmpSessionAdapter extends LocalFileSessionAdapter<
 
   readonly #ompHome: string;
   readonly #transcriptMaximumRenderedLength: number | undefined;
+  readonly #transcriptPaths = new TranscriptPathCache();
 
   constructor(options: OmpAdapterOptions = {}) {
     super(options);
@@ -356,6 +360,20 @@ export class OmpSessionAdapter extends LocalFileSessionAdapter<
         ompHome: this.#ompHome,
         providerSessionId,
         maximumRenderedLength: this.#transcriptMaximumRenderedLength,
+      }),
+    );
+  }
+
+  override readTranscriptSince(
+    providerSessionId: string,
+    cursor?: string,
+  ): Promise<ProviderTranscriptSinceResult> {
+    return providerTranscriptSinceResult(
+      readOmpSessionTranscriptSince({
+        ompHome: this.#ompHome,
+        providerSessionId,
+        cursor,
+        pathCache: this.#transcriptPaths,
       }),
     );
   }
