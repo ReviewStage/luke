@@ -317,6 +317,20 @@ interface DispatchOutcome {
   output: WireRecord;
 }
 
+type RecordChanges = Partial<Omit<BrainRequestRecord, "runId" | "revision">>;
+
+/**
+ * What one save owns. A record scope changes one record's fields over the
+ * committed record — or inserts the record, for its own acceptance. A working
+ * scope commits the turn's memory, cursors, and journal. The whole scope is
+ * the restore's alone.
+ */
+interface SaveScope {
+  working?: boolean;
+  whole?: boolean;
+  record?: { runId: string; changes: RecordChanges; insert?: BrainRequestRecord };
+}
+
 /** What a run's end carries into its record beyond the status. */
 interface RunEnd {
   text?: string;
@@ -605,7 +619,9 @@ export class BrainAgent {
     };
     generation.provisional.add(record.runId);
     generation.requests.set(record.runId, record);
-    const written = await this.#checkpoint(generation);
+    const written = await this.#save(generation, {
+      record: { runId: record.runId, changes: {}, insert: record },
+    });
     generation.provisional.delete(record.runId);
     if (!written) {
       generation.requests.delete(record.runId);
@@ -742,23 +758,15 @@ export class BrainAgent {
   }
 
   /**
-   * A staged write of some fields of one record. The envelope is composed
-   * inside the store's queue from the generation as it then stands, with the
-   * fields applied to that record, and the live record takes them in the same
-   * queue step once the store has — so no save assembled from older state can
-   * follow and undo them, and nothing reads the fields before they are kept.
+   * A staged write of some fields of one record, owning nothing else: the
+   * envelope is the store's committed state with the fields applied to that
+   * record alone, and the live record takes them in the same queue step once
+   * the store has — so no save assembled from older state can follow and undo
+   * them, nothing reads the fields before they are kept, and nothing of any
+   * other record or of a turn still in flight rides along.
    */
-  #commit(
-    generation: Generation,
-    runId: string,
-    changes: Partial<Omit<BrainRequestRecord, "runId" | "revision">>,
-  ): Promise<boolean> {
-    return this.#save(
-      generation,
-      (record) =>
-        record.runId === runId ? { ...record, ...changes, revision: record.revision + 1 } : record,
-      () => this.#update(generation, runId, changes),
-    );
+  #commit(generation: Generation, runId: string, changes: RecordChanges): Promise<boolean> {
+    return this.#save(generation, { record: { runId, changes } });
   }
 
   /**
@@ -991,7 +999,7 @@ export class BrainAgent {
       ]),
     );
     generation.memory = new BrainMemory({ items: paired, cursors: state.cursors });
-    await this.#checkpoint(generation);
+    await this.#save(generation, { whole: true });
     this.#notify();
   }
 
@@ -1021,42 +1029,95 @@ export class BrainAgent {
   }
 
   /**
-   * Writes one generation's working copy through the store under its own id.
-   * False means the file does not hold what that copy holds — refused by the
-   * fence or by storage — and the caller decides what that forbids.
+   * A turn's or an act's checkpoint: the working memory, cursors, and journal
+   * this turn owns become the committed ones, together with the run's own
+   * accounting when a run owns the turn. Nothing else changes: every other
+   * record stays as committed, so a request accepted or marked meanwhile is
+   * untouched and a request still provisional is not published.
    */
-  #checkpoint(generation: Generation): Promise<boolean> {
-    return this.#save(generation, (record) => record);
+  #checkpoint(generation: Generation, run?: RunControl): Promise<boolean> {
+    return this.#save(generation, {
+      working: true,
+      ...(run
+        ? {
+            record: {
+              runId: run.runId,
+              changes: { performedActs: run.performedActs, unknownActs: run.unknownActs },
+            },
+          }
+        : undefined),
+    });
   }
 
   /**
-   * The one way a generation reaches the store. Every envelope is composed
-   * inside the store's serialized queue from the generation's live memory,
-   * journal, and records at that moment — never from a copy taken before
-   * entering the queue — so a save can only add to what the saves before it
-   * kept, and an acknowledged field is in every envelope that follows.
+   * The one way a generation reaches the store, and the one place the scope
+   * of a save is decided. Every envelope is composed inside the store's
+   * serialized queue from the store's committed state — never from a copy
+   * taken before entering the queue, and never from live state the save does
+   * not own — so a save can only add what it owns to what the saves before it
+   * kept. What a save may own: the working memory, cursors, and journal, when
+   * it is the checkpoint of the turn holding them; one record's fields, when
+   * it is that record's acceptance, transition, accounting, end, or mark; or
+   * the whole generation, when it is the restore that just loaded it. Owned
+   * record fields land on the live record in the queue step that keeps them.
    */
-  async #save(
-    generation: Generation,
-    project: (record: BrainRequestRecord) => BrainRequestRecord,
-    committed?: () => void,
-  ): Promise<boolean> {
+  async #save(generation: Generation, scope: SaveScope): Promise<boolean> {
+    let owned: BrainRequestRecord | undefined;
+    let missing = false;
     const written = await this.#options.store.write(
       this.#lease,
       generation.id,
-      () => {
+      (state) => {
         const memory = generation.memory.persisted();
+        const working = scope.working === true || scope.whole === true;
+        let requests: readonly BrainRequestRecord[];
+        if (scope.whole) {
+          requests = [...generation.requests.values()].map((record) => ({ ...record }));
+        } else if (scope.record) {
+          const { runId, changes } = scope.record;
+          const committed = state.requests.find((record) => record.runId === runId);
+          if (committed) {
+            const changed: BrainRequestRecord = {
+              ...committed,
+              ...changes,
+              revision: committed.revision + 1,
+            };
+            owned = changed;
+            requests = state.requests.map((record) => (record.runId === runId ? changed : record));
+          } else if (scope.record.insert) {
+            owned = { ...scope.record.insert };
+            requests = [...state.requests, owned];
+          } else {
+            missing = true;
+            requests = state.requests;
+          }
+        } else {
+          requests = state.requests;
+        }
         return {
-          items: memory.items,
-          cursors: memory.cursors,
-          requests: [...generation.requests.values()].map((record) => project({ ...record })),
-          journal: generation.journal.entries(),
+          items: working ? memory.items : state.items,
+          cursors: working ? memory.cursors : state.cursors,
+          journal: working ? generation.journal.entries() : state.journal,
+          requests,
         };
       },
-      committed,
+      () => {
+        if (!owned || !scope.record) return;
+        const live = generation.requests.get(owned.runId);
+        if (live) {
+          generation.requests.set(owned.runId, {
+            ...live,
+            ...scope.record.changes,
+            revision: owned.revision,
+          });
+        }
+      },
     );
-    if (!written) this.#report("Brain memory could not be checkpointed");
-    return written;
+    if (!written || missing) {
+      this.#report("Brain memory could not be checkpointed");
+      return false;
+    }
+    return true;
   }
 
   #runRevoked(run: RunControl): boolean {
@@ -1082,11 +1143,10 @@ export class BrainAgent {
       this.#runs.delete(run.runId);
       return;
     }
-    this.#update(generation, run.runId, {
+    await this.#commit(generation, run.runId, {
       status: BRAIN_REQUEST_STATUS.RUNNING,
       startedAt: this.#now(),
     });
-    await this.#checkpoint(generation);
     this.#notify();
     run.deadline = this.#schedule(() => {
       run.timedOut = true;
@@ -1135,11 +1195,7 @@ export class BrainAgent {
     await this.#settleRun(generation, run.runId, status, end, run);
   }
 
-  #update(
-    generation: Generation,
-    runId: string,
-    changes: Partial<Omit<BrainRequestRecord, "runId" | "revision">>,
-  ): void {
+  #update(generation: Generation, runId: string, changes: RecordChanges): void {
     const record = generation.requests.get(runId);
     if (!record) return;
     generation.requests.set(runId, { ...record, ...changes, revision: record.revision + 1 });
@@ -1170,7 +1226,7 @@ export class BrainAgent {
   ): Promise<void> {
     const record = generation.requests.get(runId);
     if (!record || isTerminalBrainRequestStatus(record.status)) return;
-    const settled: Partial<Omit<BrainRequestRecord, "runId" | "revision">> = {
+    const settled: RecordChanges = {
       status,
       settledAt: this.#now(),
       ...(end.text !== undefined ? { text: end.text } : undefined),
@@ -1299,7 +1355,7 @@ export class BrainAgent {
           // whole, so the deltas it read are read again rather than skipped.
           advanceMark: async () => {
             if (!run) return;
-            if (!(await this.#checkpoint(generation))) run.checkpointFailed = true;
+            if (!(await this.#checkpoint(generation, run))) run.checkpointFailed = true;
             mark = memory.mark();
           },
         });
@@ -1316,7 +1372,7 @@ export class BrainAgent {
       this.#report(`Brain ${plan.trigger} turn did not complete: ${error}`);
     } else {
       memory.retainCursors(this.#options.roster().identities);
-      const written = await this.#checkpoint(generation);
+      const written = await this.#checkpoint(generation, run);
       if (!written && run) run.checkpointFailed = true;
       // A briefing leaves only from a turn that still stands: the stop or the
       // replacement that landed during the write — or during an earlier
@@ -1615,7 +1671,7 @@ export class BrainAgent {
       argumentsJson: call.argumentsJson,
       startedAt: this.#now(),
     });
-    if (!(await this.#checkpoint(generation))) {
+    if (!(await this.#checkpoint(generation, run))) {
       generation.journal.forget(run.runId, call.callId);
       run.checkpointFailed = true;
       return rejection(REFUSAL_REASON.NOT_CHECKPOINTED);
@@ -1632,13 +1688,9 @@ export class BrainAgent {
     if (output.status === ACT_RESULT_STATUS.ACCEPTED) run.performedActs += 1;
     if (output.status === UNCONFIRMED_ACT_RESULT.status) run.unknownActs += 1;
     generation.journal.settle(run.runId, call.callId, JSON.stringify(output), this.#now());
-    // The record's accounting moves with the journal, in the same checkpoint
-    // that follows, so a copy taken before the next inference already says
-    // what was done.
-    this.#update(generation, run.runId, {
-      performedActs: run.performedActs,
-      unknownActs: run.unknownActs,
-    });
+    // The record's accounting travels with the checkpoint that follows the
+    // result, owned by the run, so a copy taken before the next inference
+    // already says what was done.
     return output;
   }
 

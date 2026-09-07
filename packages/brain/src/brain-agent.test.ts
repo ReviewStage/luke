@@ -2196,3 +2196,171 @@ test("a failure among overlapping saves leaves the others kept, and a retry land
   assert.equal(live?.historyRecordedAt, NOW + 1);
   assert.deepEqual(stored, live);
 });
+
+/** Holds the next storage write until released, answering true; later writes pass through. */
+function holdNextWrite(storage: FakeStorage) {
+  const write = storage.write.bind(storage);
+  let release: ((written?: boolean) => void) | undefined;
+  storage.write = (contents) => {
+    storage.write = write;
+    // SAFETY: the store accepts a promise of the write's outcome; this test holds it open.
+    return new Promise<boolean>((resolve) => {
+      release = (written = true) => resolve(written && write(contents));
+    }) as unknown as boolean;
+  };
+  return { release: (written?: boolean) => release?.(written) };
+}
+
+test("a refused acceptance is never saved by an unrelated mark, and never comes back at relaunch", async () => {
+  const h = harness();
+  const a = await completedRun(h, "s");
+  const held = holdNextWrite(h.storage);
+  const firstMark = h.agent.markHistoryRecorded(a, NOW + 1);
+  await settle();
+  const secondMark = h.agent.markAskRecorded(a, NOW);
+  // B is provisional while its own acceptance write waits behind the marks.
+  const rejectedB = submit(h, "ASK_THAT_WAS_REJECTED", "rejected-b");
+  await settle();
+  // Behind the held write: A's second mark lands, B's own write is refused.
+  const write = h.storage.write.bind(h.storage);
+  let later = 0;
+  h.storage.write = (contents) => {
+    later += 1;
+    return later === 2 ? false : write(contents);
+  };
+  held.release(true);
+  const [first, second, b] = await Promise.all([firstMark, secondMark, rejectedB]);
+  h.storage.write = write;
+  assert.deepEqual([first, second], [true, true]);
+  assert.deepEqual(b, {
+    outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+    reason: BRAIN_SUBMISSION_REJECTION.PERSISTENCE,
+  });
+  await settle();
+  assert.equal(h.client.inputs.length, 1, "no effect ran for the refused ask");
+  assert.deepEqual(
+    h.agent.requests().map((r) => r.runId),
+    [a],
+  );
+  assert.deepEqual(
+    h.storage.stored()?.requests.map((r) => r.runId),
+    [a],
+  );
+  assert.equal(h.storage.stored()?.requests[0]?.historyRecordedAt, NOW + 1);
+  assert.equal(h.storage.stored()?.requests[0]?.askRecordedAt, NOW);
+  const relaunched = harness({}, new FakeStorage(h.storage.file));
+  await relaunched.agent.ready();
+  assert.deepEqual(
+    relaunched.agent.requests().map((r) => r.submissionId),
+    ["submission-" + (submissions - 3)].map(() => relaunched.agent.requests()[0]?.submissionId),
+  );
+  assert.equal(relaunched.agent.requests().length, 1);
+  assert.ok(!JSON.stringify(relaunched.storage.file).includes("rejected-b"));
+  // The refused submission retried lands as a fresh acceptance, once.
+  relaunched.client.answers.push(answered([message("now")]));
+  const retried = await relaunched.agent.submitAsk({
+    submissionId: "rejected-b",
+    question: "ASK_THAT_WAS_REJECTED",
+    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+  });
+  assert.equal(retried.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
+  await settle();
+  assert.equal(relaunched.storage.stored()?.requests.length, 2);
+});
+
+test("two overlapping submissions, one refused, leave no ghost run and execute the accepted one once", async () => {
+  const h = harness();
+  await h.agent.ready();
+  const write = h.storage.write.bind(h.storage);
+  let writes = 0;
+  h.storage.write = (contents) => {
+    writes += 1;
+    return writes === 2 ? false : write(contents);
+  };
+  h.client.answers.push(answered([message("one")]), answered([message("two")]));
+  const [first, second] = await Promise.all([submit(h, "first", "a"), submit(h, "second", "b")]);
+  h.storage.write = write;
+  assert.equal(first.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
+  assert.deepEqual(second, {
+    outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+    reason: BRAIN_SUBMISSION_REJECTION.PERSISTENCE,
+  });
+  await settle();
+  assert.equal(h.client.inputs.length, 1);
+  assert.deepEqual(
+    h.storage.stored()?.requests.map((r) => r.submissionId),
+    ["a"],
+  );
+  assert.deepEqual(
+    h.agent.requests().map((r) => r.submissionId),
+    ["a"],
+  );
+  // The refused one retried is a fresh run, and the accepted one ran once.
+  assert.equal((await submit(h, "second", "b")).outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
+  await settle();
+  assert.equal(h.client.inputs.length, 2);
+  assert.deepEqual(
+    h.storage.stored()?.requests.map((r) => r.submissionId),
+    ["a", "b"],
+  );
+});
+
+test("an observation in flight is not made durable by an unrelated mark or acceptance, and its failed delta is reread", async () => {
+  const inner = new FakeClient();
+  const gated = gatedClient(inner);
+  const h = harness({ client: gated.client });
+  // A completed run, answered before the gate closes on the observation.
+  gated.open();
+  const a = await completedRun(h, "hello");
+  const regate = gatedClient(inner);
+  // Swap the client for the observation only.
+  const observing = harness({ client: regate.client }, h.storage);
+  await observing.agent.ready();
+  // The pending wake rides in the hold release's turn: one observation that
+  // reads a real delta, moves a cursor, and then waits on the model.
+  observing.agent.wake([edge(ABC)]);
+  observing.agent.releaseHeld([
+    { briefing: "UNCOMMITTED_OBSERVATION", decidedAt: NOW, source: "wake" },
+  ]);
+  await settle();
+  // The delta was read into working memory and its cursor moved; the model is held.
+  assert.equal(observing.sinceReads.length, 1);
+  const before = brainStateFromStored(observing.storage.file);
+  assert.ok(!JSON.stringify(before?.items).includes("UNCOMMITTED_OBSERVATION"));
+  // Unrelated publication and acceptance land while the observation is out.
+  assert.equal(await observing.agent.markHistoryRecorded(a, NOW + 1), true);
+  inner.answers.push(answered([message("later")]));
+  const accepted = await submit(observing, "another ask");
+  assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
+  const during = brainStateFromStored(observing.storage.file);
+  assert.ok(!JSON.stringify(during?.items).includes("UNCOMMITTED_OBSERVATION"));
+  assert.deepEqual(during?.cursors, before?.cursors);
+  assert.equal(during?.requests.find((r) => r.runId === a)?.historyRecordedAt, NOW + 1);
+  // A crash copy taken now restores nothing of the observation.
+  const crashed = harness({}, new FakeStorage(observing.storage.file));
+  await crashed.agent.ready();
+  assert.ok(!JSON.stringify(crashed.storage.file).includes("UNCOMMITTED_OBSERVATION"));
+  assert.deepEqual(crashed.storage.stored()?.cursors, before?.cursors);
+  // The observation fails: durable memory and cursors never advanced, and the
+  // same delta is read again on the next wake.
+  inner.answers.unshift({ outcome: BRAIN_CLIENT_OUTCOME.FAILED, reason: "network" });
+  regate.open();
+  await settle();
+  const after = brainStateFromStored(observing.storage.file);
+  assert.ok(!JSON.stringify(after?.items).includes("UNCOMMITTED_OBSERVATION"));
+  assert.deepEqual(after?.cursors, before?.cursors);
+  // The success control: the next observation reads the same delta again
+  // and, answered, commits the cursor it owns.
+  inner.answers.push(answered([message("seen")]));
+  observing.agent.wake([edge(ABC)]);
+  await observing.clock.advance(observing.clock.now + 3_000);
+  await settle();
+  assert.deepEqual(
+    observing.sinceReads.map((read) => read.cursor),
+    [undefined, undefined],
+  );
+  assert.equal(
+    brainStateFromStored(observing.storage.file)?.cursors["claude-code"]?.abc,
+    "abc-cursor",
+  );
+});
