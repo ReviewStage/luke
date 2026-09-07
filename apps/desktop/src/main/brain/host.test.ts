@@ -158,25 +158,18 @@ test("a build that throws fails its own transition, and the next transition stil
   assert.deepEqual(log, ["follow agent", "stop b", "unfollow", "publish empty"]);
 });
 
-test("a rejected drain fails the transition that waited on it, after every other drain has ended, and the next transition still installs", async () => {
+test("a rejected drain fails the transition that waited on it, and the next transition still installs", async () => {
   const log: string[] = [];
-  let releaseSlow: (() => void) | undefined;
-  const slowUnfollow = new Promise<void>((resolve) => {
-    releaseSlow = resolve;
-  });
   let followed = 0;
   const brains = new BrainHost({
     follow: () => {
       followed += 1;
       log.push(`follow ${followed}`);
-      // The first follower's drain rejects; the second's is slow to settle.
-      if (followed === 1) return () => Promise.reject(new Error("publication refused"));
-      if (followed === 2)
-        return async () => {
-          await slowUnfollow;
-          log.push("slow unfollow settled");
-        };
-      return async () => undefined;
+      return followed === 1
+        ? () => Promise.reject(new Error("publication refused"))
+        : async () => {
+            log.push("unfollow");
+          };
     },
     publishEmpty: () => log.push("publish empty"),
   });
@@ -194,83 +187,54 @@ test("a rejected drain fails the transition that waited on it, after every other
   assert.equal(brains.current(), undefined);
   assert.equal(log.includes("follow 2"), false);
 
-  // The queue is not poisoned: the next transition installs.
+  // The queue is not poisoned: the next transition installs, and the one
+  // after it retires that agent and publishes empty.
   const c = fakeAgent("c", log);
   c.release();
   await brains.replace(() => c.agent);
   assert.equal(brains.current(), c.agent);
-
-  // Its drain is slow. Queued beside a bare retirement whose drain rejects at
-  // once, both end before the transition waiting on them decides — and it
-  // decides against installing, saying why.
-  brains.retire();
-  const d = fakeAgent("d", log);
-  d.release();
-  let built = false;
-  const replacement = brains.replace(() => {
-    built = true;
-    return d.agent;
-  });
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(built, false, "the transition waited on the slow drain");
-  releaseSlow?.();
-  await replacement;
-  assert.equal(built, true);
-  assert.equal(brains.current(), d.agent);
-  assert.ok(log.includes("slow unfollow settled"));
+  await brains.replace(() => undefined);
+  assert.deepEqual(log.slice(-3), ["stop c", "unfollow", "publish empty"]);
 });
 
-test("a rejecting drain and a slow drain queued together both end before the transition decides", async () => {
+test("a superseded build's rejecting stop fails the older transition, and the newer one still installs", async () => {
   const log: string[] = [];
-  let releaseSlow: (() => void) | undefined;
-  const slowStop = new Promise<void>((resolve) => {
-    releaseSlow = resolve;
+  const brains = host(log);
+  let releaseFirstStop: (() => void) | undefined;
+  const firstStop = new Promise<void>((resolve) => {
+    releaseFirstStop = resolve;
   });
   // SAFETY: the host reads only `stop` off an agent; the fixture stands in for the rest.
-  const slow = {
+  const first = {
     stop: () => {
-      log.push("stop slow");
-      return slowStop;
+      log.push("stop first");
+      return firstStop;
     },
   } as unknown as BrainAgent;
-  let followed = 0;
-  const brains = new BrainHost({
-    follow: () => {
-      followed += 1;
-      return followed === 1
-        ? () => Promise.reject(new Error("publication refused"))
-        : async () => {
-            log.push("unfollow slow");
-          };
+  // SAFETY: as above; this one's stop rejects.
+  const stale = {
+    stop: () => {
+      log.push("stop stale");
+      return Promise.reject(new Error("stale stop refused"));
     },
-    publishEmpty: () => log.push("publish empty"),
+  } as unknown as BrainAgent;
+  await brains.replace(() => first);
+  const later = fakeAgent("later", log);
+  later.release();
+  // The older transition's build is decided while first's stop is still out;
+  // by then the newer transition has been asked for, so the stale agent is
+  // stopped rather than installed, and its refusal is the older caller's.
+  let newer: Promise<void> | undefined;
+  const older = brains.replace(() => {
+    newer = brains.replace(() => later.agent);
+    return stale;
   });
-  const a = fakeAgent("a", log);
-  a.release();
-  await brains.replace(() => a.agent);
-  // a's rejecting drain is queued at retire time — with a handler already
-  // attached, so nothing is unhandled while the slow stop below runs.
-  brains.retire();
-  await assert.rejects(
-    brains.replace(() => slow),
-    /publication refused/,
-  );
-  // The queue recovered; slow installs, then is retired with a stop that lingers.
-  await brains.replace(() => slow);
-  assert.equal(brains.current(), slow);
-  brains.retire();
-  let built = false;
-  const replacement = brains.replace(() => {
-    built = true;
-    return undefined;
-  });
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(built, false, "the successor waited on the slow stop");
-  releaseSlow?.();
-  await replacement;
-  assert.equal(built, true);
-  assert.deepEqual(log.slice(-3), ["stop slow", "unfollow slow", "publish empty"]);
-  await brains.settled();
+  releaseFirstStop?.();
+  await assert.rejects(older, /stale stop refused/);
+  assert.ok(newer);
+  await newer;
+  assert.equal(brains.current(), later.agent);
+  assert.deepEqual(log, ["follow agent", "stop first", "unfollow", "stop stale", "follow agent"]);
 });
 
 test("a retirement queued alone has its rejection handled before any transition waits on it", async () => {

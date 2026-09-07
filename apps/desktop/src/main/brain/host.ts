@@ -93,10 +93,9 @@ export class BrainHost {
     this.retire();
     const transition = ++this.#transitions;
     const step = this.#chain.then(async () => {
-      // Every retirement drains before a successor stands, whichever way each
-      // settles: a drain that rejected has still ended, and the others must
-      // not be left outstanding behind a first rejection. A rejected drain
-      // fails this transition, as it always has, once every drain has ended.
+      // Every retirement queued so far drains before a successor stands. A
+      // drain that rejected has still ended, and its failure is this
+      // transition's to answer with, as it always was.
       const outcomes = await Promise.all(this.#retiring.splice(0));
       const failed = outcomes.find((outcome) => !outcome.ok);
       if (failed && !failed.ok) throw failed.error;
@@ -105,7 +104,7 @@ export class BrainHost {
       if (transition !== this.#transitions) {
         // Decided too late: a newer transition owns the outcome, and an
         // agent built for this one must not stand beside its successor.
-        if (agent) await agent.stop().catch(() => undefined);
+        if (agent) await agent.stop();
         return;
       }
       this.#agent = agent;
