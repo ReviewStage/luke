@@ -7,7 +7,6 @@ export {
 export {
   adoptConversationThread,
   announcementConversationEntry,
-  appendConversationEntry,
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
@@ -16,7 +15,6 @@ export {
   conversationHistoryText,
   enrichedConversationEntry,
   hasConversationEntryForRequest,
-  insertSpokenAskEntry,
   insertSpokenAskThreadEntry,
   isConversationEntryKind,
   maximumConversationEntries,

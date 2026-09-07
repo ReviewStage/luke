@@ -239,15 +239,6 @@ export function recentConversationEntries(
   return entries.slice(-maximumConversationEntries);
 }
 
-/** Appends one bounded line to the recent model context. */
-export function appendConversationEntry(
-  entries: readonly ConversationEntry[],
-  entry: ConversationEntry,
-  now: number = Date.now(),
-): readonly ConversationEntry[] {
-  return recentConversationEntries(appendConversationThreadEntry(entries, entry, now));
-}
-
 /**
  * One flattening for every line, however it enters. Flattening alone, no
  * length cut: the model render applies its own bound to its own copy.
@@ -324,16 +315,6 @@ export function withConversationEntryRequest(
   const tied = [...entries];
   tied[at] = { ...entry, requestId };
   return tied;
-}
-
-/** Places a spoken ask into the recent model context and retires old lines. */
-export function insertSpokenAskEntry(
-  entries: readonly ConversationEntry[],
-  words: string,
-  after: ConversationEntry | undefined,
-  now: number = Date.now(),
-): readonly ConversationEntry[] {
-  return recentConversationEntries(insertSpokenAskThreadEntry(entries, words, after, now));
 }
 
 /**
