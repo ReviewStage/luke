@@ -10,8 +10,8 @@ import {
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { APP_SETTING_SCHEMA, VOICE_SOURCE, type VoiceSource } from "@sidecar/settings";
 import { VoiceCapabilityAssembler, type VoiceSettings } from "@sidecar/voice";
-import { BrainHost } from "./brain-host";
-import { transitionVoiceCredential } from "./voice-credential-transition";
+import { BrainHost } from "../brain/host";
+import { transitionVoiceCredential } from "./credential-transition";
 
 const HELD_READ = {
   SOURCE: "source",

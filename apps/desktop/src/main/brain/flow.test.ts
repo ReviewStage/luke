@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { BRAIN_WAKE_KIND } from "@sidecar/brain";
 import { normalizeSession, SESSION_STATUS, type Session } from "@sidecar/session";
-import { wakeEventsFromHooks } from "./brain-flow";
+import { wakeEventsFromHooks } from "./flow";
 
 const NOW = 1_800_000_000_000;
 

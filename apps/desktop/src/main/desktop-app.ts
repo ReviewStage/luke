@@ -156,8 +156,11 @@ import {
   countsFirstAnnouncement,
   shouldBackfillArrivalSettled,
 } from "./arrival-flow";
-import { BRAIN_STATE_FILE, wakeEventsFromHooks } from "./brain-flow";
-import { BrainHost } from "./brain-host";
+import { createBrainActPerformer, type WorkspaceCreationDefaults } from "./brain/act-performer";
+import { clearConversationAndBrain } from "./brain/conversation-clear";
+import { BRAIN_STATE_FILE, wakeEventsFromHooks } from "./brain/flow";
+import { BrainHost } from "./brain/host";
+import { followBrainRequests, registerBrainIpc } from "./brain/ipc";
 import {
   CALENDAR_ONBOARDING_STATE_FILE,
   type CalendarOnboardingState,
@@ -166,7 +169,6 @@ import {
   calendarOnboardingStateFromStored,
   shouldBackfillCalendarOnboardingSettled,
 } from "./calendar-onboarding-flow";
-import { clearConversationAndBrain } from "./conversation-clear";
 import {
   INTRODUCTION_FADE_MS,
   INTRODUCTION_HANDOFF_READY_MS,
@@ -179,8 +181,6 @@ import {
   shouldRunIntroduction,
 } from "./introduction-flow";
 import { registerAccountSessionIpc } from "./ipc/account-session";
-import { followBrainRequests, registerBrainIpc } from "./ipc/brain";
-import { createBrainActPerformer, type WorkspaceCreationDefaults } from "./ipc/brain-acts";
 import { registerCalendarConnectionIpc } from "./ipc/calendar-connection";
 import { createSessionActPerformer, registerSessionActsIpc } from "./ipc/session-acts";
 import { registerSettingsRowsIpc } from "./ipc/settings-rows";
@@ -204,10 +204,10 @@ import { type BridgeContext, registerBridge, registerBridgeEntry } from "./regis
 import { runModeFor, sentryReportingEnabled } from "./run-mode";
 import { createSettingsHandler } from "./settings-handler";
 import { SettingsStore } from "./settings-store";
-import { type OnboardingBeatKind, SpeechArbiter } from "./speech-arbiter";
 import { createElectronUpdaterEngine } from "./update-installer";
 import { UPDATE_ENDPOINT, UpdateService } from "./update-service";
-import { transitionVoiceCredential } from "./voice-credential-transition";
+import { transitionVoiceCredential } from "./voice/credential-transition";
+import { type OnboardingBeatKind, SpeechArbiter } from "./voice/speech-arbiter";
 import { DockPresence } from "./window/dock-presence";
 import { HOTKEY_RANK, HotkeyRegistrar } from "./window/hotkey-registrar";
 import { IntroductionWindow } from "./window/introduction-window";

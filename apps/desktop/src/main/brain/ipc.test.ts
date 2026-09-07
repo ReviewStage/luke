@@ -9,7 +9,7 @@ import {
   maximumTypedAskLength,
 } from "@sidecar/realtime";
 import { BRAIN_ASK_REFUSAL, brainReplyWords } from "#shared/wire/brain";
-import { followBrainRequests, publishRuns, submitBrainAsk } from "./brain";
+import { followBrainRequests, publishRuns, submitBrainAsk } from "./ipc";
 
 const NOW = 1_800_000_000_000;
 
