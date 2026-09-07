@@ -30,17 +30,10 @@
  * app" was itself a policy and persisting means replacing it with a real one.
  */
 
-import {
-  MAXIMUM_MENTIONED_SESSIONS,
-  mentionedSessions,
-  SESSION_MENTION_KIND,
-  type Session,
-  type SessionIdentity,
-  type SessionMentionKind,
-} from "@sidecar/session";
+import { actNarration, type CarriedSessionAction } from "@sidecar/acts";
+import type { Session, SessionIdentity } from "@sidecar/session";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { SESSION_NO_LONGER_OBSERVED_NOTE } from "./realtime-protocol.js";
-import { actNarration, type CarriedSessionAction } from "./realtime-tools.js";
 
 /** What one history line records, which also says who it speaks for. */
 export const CONVERSATION_ENTRY_KIND = {
@@ -100,30 +93,6 @@ export const maximumConversationEntryLength = 400;
 export const maximumStoredConversationEntries = 200;
 export const storedConversationMaximumAgeMs = 14 * 24 * 60 * 60 * 1000;
 
-/** One app mark trailing a chip's name, as the chat's own row wore it at the entry. */
-export interface ConversationEntryMentionApplication {
-  id: string;
-  name: string;
-}
-
-/** One chat a line named, as the roster reported it at the moment of the entry. */
-export interface ConversationEntryMention extends SessionIdentity {
-  /**
-   * The title the roster read when the line was recorded: the label its chip
-   * wears. History is a record, so a later rename does not rewrite it, and a
-   * chat the roster has since let go still has a worded way back.
-   */
-  title: string;
-  /**
-   * The mark the chip leads with — the agent having the conversation, the
-   * same identity the session's own row and the notice band's chips lead
-   * with — falling back to the provider where no agent was reported.
-   */
-  markId: string;
-  /** The app marks trailing the name, less the one the leading mark already draws. */
-  applications: readonly ConversationEntryMentionApplication[];
-}
-
 export interface ConversationEntry {
   kind: ConversationEntryKind;
   /**
@@ -143,8 +112,6 @@ export interface ConversationEntry {
    * toward a refusal nor leave "that chat" open to a lookalike.
    */
   identity?: SessionIdentity;
-  /** Every roster-validated session named by one batched announcement. */
-  identities?: readonly SessionIdentity[];
   /**
    * When the line happened in the conversation. Appends stamp themselves;
    * delayed spoken transcripts carry the time their turn began. This is also
@@ -152,38 +119,65 @@ export interface ConversationEntry {
    */
   recordedAt?: number;
   /**
-   * The chats the line named, for the History panel's chips alone. Each is
-   * an identity the roster reported at the moment of the entry, with the
-   * title it wore then — never anything a model composed — and none of it is
-   * ever rendered into model context: {@link conversationHistoryText}
-   * carries `identity` or `identities` and nothing of this list, so however many chats a
-   * line names, the model's window pays for one subject at most. A chip's
-   * press hands its identity — never an address — back to the main process,
-   * which answers from what observation itself reported, which is what lets
-   * the press outlast the roster row for a chat archived away. Persisting a
-   * line keeps its chips: labels the roster read on this machine, stored in
-   * Luke's own file beside the words that named them and nowhere else.
+   * The brain run this line belongs to, when it is an ask the brain took or
+   * the reply that run ended in. It is what lets a reply be recorded exactly
+   * once however many windows hear of the run's end, and what lets History
+   * draw a run still working beside the ask that opened it. Never rendered
+   * into model context.
    */
-  mentions?: readonly ConversationEntryMention[];
+  requestId?: string;
 }
 
 /**
  * Appends one flattened line to the retained thread. An entry with
  * nothing left after flattening appends nothing: an empty line says nothing
- * worth keeping or spending model-window space on.
+ * worth keeping or spending model-window space on. A line recorded after the
+ * fact — a run's end written once its record is read — may carry the moment
+ * it happened rather than the moment it was written, so the thread keeps the
+ * order things occurred in; retention still runs on `now`.
  */
 export function appendConversationThreadEntry(
   entries: readonly ConversationEntry[],
   entry: ConversationEntry,
   now: number = Date.now(),
+  recordedAt: number = now,
 ): readonly ConversationEntry[] {
   const words = flattenedEntryWords(entry.words);
   if (!words) return entries;
-  const appended: ConversationEntry = { kind: entry.kind, words, recordedAt: now };
+  if (
+    entry.requestId !== undefined &&
+    hasConversationEntryForRequest(entries, entry.requestId, entry.kind)
+  ) {
+    return entries;
+  }
+  const appended: ConversationEntry = { kind: entry.kind, words, recordedAt };
   if (entry.identity) appended.identity = entry.identity;
-  if (entry.identities) appended.identities = entry.identities;
-  if (entry.mentions && entry.mentions.length > 0) appended.mentions = entry.mentions;
-  return retainedConversationEntries([...entries, appended], now);
+  if (entry.requestId !== undefined) appended.requestId = entry.requestId;
+  // A line stamped earlier than the tail goes where it happened: after the
+  // last line that happened no later than it.
+  let at = entries.length;
+  while (at > 0) {
+    const before = entries[at - 1]?.recordedAt;
+    if (before === undefined || before <= recordedAt) break;
+    at -= 1;
+  }
+  const placed = [...entries];
+  placed.splice(at, 0, appended);
+  return retainedConversationEntries(placed, now);
+}
+
+/**
+ * Whether the thread already holds this kind of line for this run. A run's
+ * ask and its reply are each recorded once: the main process records the
+ * reply at the run's end, and a window that also heard the end must not add
+ * a second line for it.
+ */
+export function hasConversationEntryForRequest(
+  entries: readonly ConversationEntry[],
+  requestId: string,
+  kind: ConversationEntryKind,
+): boolean {
+  return entries.some((entry) => entry.requestId === requestId && entry.kind === kind);
 }
 
 /**
@@ -210,22 +204,32 @@ function sameConversationEntry(a: ConversationEntry, b: ConversationEntry): bool
   return conversationEntryKey(a) === conversationEntryKey(b);
 }
 
-/** Stable value identity shared by renderer adoption and main-process merging. */
+/**
+ * Stable value identity shared by renderer adoption and main-process merging.
+ * The run a line was later tied to is not part of it: a spoken ask's
+ * transcript and the same transcript once its run is known are one line, so
+ * the correlation enriches the line rather than standing beside it.
+ */
 export function conversationEntryKey(entry: ConversationEntry): string {
-  const identities = entry.identities ?? (entry.identity ? [entry.identity] : undefined);
   return JSON.stringify([
     entry.kind,
     entry.words,
     entry.recordedAt,
-    identities?.map(({ providerId, providerSessionId }) => [providerId, providerSessionId]),
-    entry.mentions?.map(({ providerId, providerSessionId, title, markId, applications }) => [
-      providerId,
-      providerSessionId,
-      title,
-      markId,
-      applications.map(({ id, name }) => [id, name]),
-    ]),
+    entry.identity ? [entry.identity.providerId, entry.identity.providerSessionId] : undefined,
   ]);
+}
+
+/**
+ * The better-informed of two copies of one line: the one that knows its run.
+ * Nothing else about a line changes after it is recorded, so a copy without
+ * the run is the older one, and a stale window snapshot cannot take the
+ * correlation back off.
+ */
+export function enrichedConversationEntry(
+  held: ConversationEntry,
+  incoming: ConversationEntry,
+): ConversationEntry {
+  return held.requestId === undefined && incoming.requestId !== undefined ? incoming : held;
 }
 
 /** The recent slice safe to place back into the model's context window. */
@@ -233,15 +237,6 @@ export function recentConversationEntries(
   entries: readonly ConversationEntry[],
 ): readonly ConversationEntry[] {
   return entries.slice(-maximumConversationEntries);
-}
-
-/** Appends one bounded line to the recent model context. */
-export function appendConversationEntry(
-  entries: readonly ConversationEntry[],
-  entry: ConversationEntry,
-  now: number = Date.now(),
-): readonly ConversationEntry[] {
-  return recentConversationEntries(appendConversationThreadEntry(entries, entry, now));
 }
 
 /**
@@ -264,15 +259,10 @@ function flattenedEntryWords(words: string): string {
 export function streamingConversationEntry(
   kind: ConversationEntryKind,
   words: string,
-  identity?: SessionIdentity,
-  identities?: readonly SessionIdentity[],
 ): ConversationEntry | undefined {
   const flattened = flattenedEntryWords(words);
   if (!flattened) return undefined;
-  const entry: ConversationEntry = { kind, words: flattened };
-  if (identity) entry.identity = identity;
-  if (identities) entry.identities = identities;
-  return entry;
+  return { kind, words: flattened };
 }
 
 /**
@@ -292,6 +282,7 @@ export function insertSpokenAskThreadEntry(
   words: string,
   after: ConversationEntry | undefined,
   recordedAt: number = Date.now(),
+  requestId?: string,
 ): readonly ConversationEntry[] {
   const flattened = flattenedEntryWords(words);
   if (!flattened) return entries;
@@ -303,18 +294,27 @@ export function insertSpokenAskThreadEntry(
     kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
     words: flattened,
     recordedAt,
+    ...(requestId !== undefined ? { requestId } : undefined),
   });
   return placed;
 }
 
-/** Places a spoken ask into the recent model context and retires old lines. */
-export function insertSpokenAskEntry(
+/**
+ * Ties a line already in the thread to the run it turned out to open: a
+ * spoken ask's transcript can land before the brain has accepted the ask,
+ * and the correlation is then written onto the very entry, words untouched.
+ * A thread that does not hold the entry is returned as it was.
+ */
+export function withConversationEntryRequest(
   entries: readonly ConversationEntry[],
-  words: string,
-  after: ConversationEntry | undefined,
-  now: number = Date.now(),
+  entry: ConversationEntry,
+  requestId: string,
 ): readonly ConversationEntry[] {
-  return recentConversationEntries(insertSpokenAskThreadEntry(entries, words, after, now));
+  const at = entries.indexOf(entry);
+  if (at === -1 || entry.requestId === requestId) return entries;
+  const tied = [...entries];
+  tied[at] = { ...entry, requestId };
+  return tied;
 }
 
 /**
@@ -330,118 +330,36 @@ export function sessionActConversationEntry(
 ): ConversationEntry {
   const words = actNarration(action, sessions);
   const entry: ConversationEntry = { kind: CONVERSATION_ENTRY_KIND.ACT, words };
-  if ("identity" in action) {
-    entry.identity = action.identity;
-    const mention = rosterMention(action.identity, sessions);
-    if (mention) entry.mentions = [mention];
-  }
+  if ("identity" in action) entry.identity = action.identity;
   return entry;
 }
 
-/**
- * The history line an announcement leaves behind: the spoken words, every
- * roster-validated subject the batch was about, and those subjects' chips.
- */
-export function announcementConversationEntry(
-  words: string,
-  about: readonly SessionIdentity[],
-  sessions: readonly Session[],
-): ConversationEntry {
-  const entry: ConversationEntry = {
-    kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
-    words,
-  };
-  if (about.length === 1) entry.identity = about[0];
-  if (about.length > 1) entry.identities = about;
-  const mentions = about.flatMap((identity) => {
-    const mention = rosterMention(identity, sessions);
-    return mention ? [mention] : [];
-  });
-  if (mentions.length > 0) entry.mentions = mentions;
-  return entry;
+/** The history line an announcement leaves behind: the words the brain had spoken. */
+export function announcementConversationEntry(words: string): ConversationEntry {
+  return { kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT, words };
 }
 
 /**
- * The history line a conversation reply leaves behind, with the chats it
- * answered about when the words say so attributably. A reply carries no
- * subject of its own, so its chats are read the way the notice band reads
- * its chips: the reply's words matched whole against the observed roster's
- * own names, under the mention rules' minimum-length and ambiguity bounds,
- * so nothing a model said can name a session the roster does not observe.
- * Every chat named earns a chip; only an answer about exactly one also
- * records it as the line's subject, because the subject is what a later
- * turn's bare "that chat" resolves through, and several cannot say which.
+ * The history line a conversation reply leaves behind. A reply carries no
+ * subject of its own: only an act names the session it was about.
  */
-export function replyConversationEntry(
-  words: string,
-  sessions: readonly Session[],
-): ConversationEntry {
-  const entry: ConversationEntry = { kind: CONVERSATION_ENTRY_KIND.REPLY, words };
-  const named = new Map<string, Map<string, ConversationEntryMention>>();
-  for (const mentioned of mentionedSessions(words, sessions)) {
-    const mention = rosterMention(mentioned, sessions, mentioned.kind);
-    if (!mention) continue;
-    let provider = named.get(mention.providerId);
-    if (!provider) {
-      provider = new Map();
-      named.set(mention.providerId, provider);
-    }
-    provider.set(mention.providerSessionId, mention);
-  }
-  // A title mention and its workspace's may resolve to the same chat; the
-  // subject is single when the identities are, not when the names were.
-  const mentions = [...named.values()].flatMap((provider) => [...provider.values()]);
-  if (mentions.length === 0) return entry;
-  entry.mentions = mentions;
-  const [subject] = mentions;
-  if (subject && mentions.length === 1) {
-    entry.identity = {
-      providerId: subject.providerId,
-      providerSessionId: subject.providerSessionId,
-    };
-  }
-  return entry;
-}
-
-/**
- * The chip one identity earns — its roster row's title, marks, and app
- * associations, or nothing off-roster. A mention made by a workspace's name
- * wears that name, since those are the words that named it; every other chip
- * wears the chat's own title.
- */
-function rosterMention(
-  identity: SessionIdentity,
-  sessions: readonly Session[],
-  namedAs?: SessionMentionKind,
-): ConversationEntryMention | undefined {
-  const session = sessions.find(
-    (candidate) =>
-      candidate.providerId === identity.providerId &&
-      candidate.providerSessionId === identity.providerSessionId,
-  );
-  if (!session) return undefined;
-  const markId = session.agent?.id ?? session.providerId;
+export function replyConversationEntry(words: string, requestId?: string): ConversationEntry {
   return {
-    providerId: identity.providerId,
-    providerSessionId: identity.providerSessionId,
-    title:
-      namedAs === SESSION_MENTION_KIND.WORKSPACE && session.workspace?.name !== undefined
-        ? session.workspace.name
-        : session.title,
-    markId,
-    // An app the leading mark already stands for — a provider that is itself
-    // the app, standing in where no agent was reported — would draw the same
-    // mark twice on one chip.
-    applications: session.applications.flatMap((application) =>
-      application.id === markId ? [] : [{ id: application.id, name: application.displayName }],
-    ),
+    kind: CONVERSATION_ENTRY_KIND.REPLY,
+    words,
+    ...(requestId !== undefined ? { requestId } : undefined),
   };
+}
+
+/** The history line a typed ask the brain accepted leaves behind, tied to its run. */
+export function typedAskConversationEntry(words: string, requestId: string): ConversationEntry {
+  return { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words, requestId };
 }
 
 /**
  * How each line leads, which is also who it speaks for. Only the typed-ask
  * lines speak for the developer; words inside a reply, an announcement, or an
- * act never do — the same rule the attention update keeps.
+ * act never do — the same rule every observed value keeps.
  */
 const CONVERSATION_ENTRY_LEAD = {
   [CONVERSATION_ENTRY_KIND.TYPED_ASK]: "the developer typed",
@@ -480,19 +398,16 @@ export function conversationHistoryText(
       const words = entry.words.slice(0, maximumConversationEntryLength);
       const line =
         entry.kind === CONVERSATION_ENTRY_KIND.ACT ? `- ${lead} ${words}` : `- ${lead}: "${words}"`;
-      const identities = entry.identities ?? (entry.identity ? [entry.identity] : []);
-      if (identities.length === 0) return line;
-      const identityNotes = identities.map((identity) => {
-        const observed = sessions.some(
-          (candidate) =>
-            candidate.providerId === identity.providerId &&
-            candidate.providerSessionId === identity.providerSessionId,
-        );
-        return observed
-          ? `[provider_id=${identity.providerId} provider_session_id=${identity.providerSessionId}]`
-          : `[${SESSION_NO_LONGER_OBSERVED_NOTE}]`;
-      });
-      return `${line} ${identityNotes.join(" ")}`;
+      const identity = entry.identity;
+      if (!identity) return line;
+      const observed = sessions.some(
+        (candidate) =>
+          candidate.providerId === identity.providerId &&
+          candidate.providerSessionId === identity.providerSessionId,
+      );
+      return observed
+        ? `${line} [provider_id=${identity.providerId} provider_session_id=${identity.providerSessionId}]`
+        : `${line} [${SESSION_NO_LONGER_OBSERVED_NOTE}]`;
     }),
   ].join("\n");
 }
@@ -501,7 +416,9 @@ export function conversationHistoryText(
  * Parses one stored line back, or nothing. A file half-written by a crash, or
  * a record from a build that spelled an entry differently, drops the line
  * rather than the thread: history is not load-bearing, and a single unreadable
- * line is worth less than everything said around it.
+ * line is worth less than everything said around it. Fields an older build
+ * stored beside the words are left unread rather than refused, so the words
+ * of a line recorded before them still come back.
  */
 export function storedConversationEntry(value: UnparsedWireValue): ConversationEntry | undefined {
   if (!isRecord(value) || !isConversationEntryKind(value.kind)) return undefined;
@@ -512,6 +429,9 @@ export function storedConversationEntry(value: UnparsedWireValue): ConversationE
       ? value.recordedAt
       : undefined;
   if (recordedAt === undefined || recordedAt < 0) return undefined;
+  if (value.requestId !== undefined && !(isWireString(value.requestId) && value.requestId)) {
+    return undefined;
+  }
   const identity = value.identity;
   const providerId = isRecord(identity) ? identity.providerId : undefined;
   const providerSessionId = isRecord(identity) ? identity.providerSessionId : undefined;
@@ -524,33 +444,6 @@ export function storedConversationEntry(value: UnparsedWireValue): ConversationE
   ) {
     return undefined;
   }
-  const mentions = value.mentions === undefined ? [] : storedEntryMentions(value.mentions);
-  if (mentions === undefined) return undefined;
-  if (identity !== undefined && value.identities !== undefined) return undefined;
-  const rawIdentities = value.identities;
-  const identityCount = Array.isArray(rawIdentities) ? rawIdentities.length : undefined;
-  const identities = Array.isArray(rawIdentities)
-    ? rawIdentities.flatMap((candidate) => {
-        if (!isRecord(candidate)) return [];
-        const candidateProviderId = candidate.providerId;
-        const candidateSessionId = candidate.providerSessionId;
-        return isWireString(candidateProviderId) &&
-          candidateProviderId.length > 0 &&
-          isWireString(candidateSessionId) &&
-          candidateSessionId.length > 0
-          ? [{ providerId: candidateProviderId, providerSessionId: candidateSessionId }]
-          : [];
-      })
-    : undefined;
-  if (
-    rawIdentities !== undefined &&
-    (!identities ||
-      identities.length === 0 ||
-      identities.length !== identityCount ||
-      identities.length > MAXIMUM_MENTIONED_SESSIONS)
-  ) {
-    return undefined;
-  }
   return {
     kind: value.kind,
     words,
@@ -558,51 +451,8 @@ export function storedConversationEntry(value: UnparsedWireValue): ConversationE
     ...(isWireString(providerId) && isWireString(providerSessionId)
       ? { identity: { providerId, providerSessionId } }
       : undefined),
-    ...(identities ? { identities } : undefined),
-    ...(mentions.length > 0 ? { mentions } : undefined),
+    ...(isWireString(value.requestId) ? { requestId: value.requestId } : undefined),
   };
-}
-
-/**
- * Parses a stored line's chips back, or refuses the line's mentions whole:
- * like a misspelled identity, a mentions list this build cannot read means a
- * record from another spelling, and half a chip row would press for chats it
- * cannot name. The count bound is the mention rules' own — nothing this build
- * records can exceed it, so a longer list is not this build's record.
- */
-function storedEntryMentions(
-  value: UnparsedWireValue,
-): readonly ConversationEntryMention[] | undefined {
-  if (!Array.isArray(value) || value.length > MAXIMUM_MENTIONED_SESSIONS) return undefined;
-  const mentions: ConversationEntryMention[] = [];
-  for (const mention of value) {
-    if (!isRecord(mention)) return undefined;
-    const { providerId, providerSessionId, title, markId, applications } = mention;
-    if (
-      !isWireString(providerId) ||
-      providerId.length === 0 ||
-      !isWireString(providerSessionId) ||
-      providerSessionId.length === 0 ||
-      !isWireString(title) ||
-      title.length === 0 ||
-      !isWireString(markId) ||
-      markId.length === 0 ||
-      !Array.isArray(applications)
-    ) {
-      return undefined;
-    }
-    const marks: ConversationEntryMentionApplication[] = [];
-    for (const application of applications) {
-      if (!isRecord(application)) return undefined;
-      const { id, name } = application;
-      if (!isWireString(id) || id.length === 0 || !isWireString(name) || name.length === 0) {
-        return undefined;
-      }
-      marks.push({ id, name });
-    }
-    mentions.push({ providerId, providerSessionId, title, markId, applications: marks });
-  }
-  return mentions;
 }
 
 /**

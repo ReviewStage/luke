@@ -1,26 +1,15 @@
 /**
- * Who Luke is, in one module, for every surface that gives him a voice: the
- * conversation, the announcements, the arrival beat, the introduction, and the
- * attention evaluator that writes a sentence for him to say.
- *
- * One module because five prompts describing the same person separately are
- * five people. What each surface may do and may see differs; who is speaking
- * does not.
- *
- * Written as a decided value on every axis a speech model conditions on, then
- * demonstrated. Two reasons for that shape. An axis left unstated is not
- * neutral — it is filled by the base model's default, and the base model's
- * default is a customer-service assistant. And a model handed a list of things
- * not to be produces whatever register survives the list, which is that same
- * assistant with the tells filed off; only a line it can hear itself saying
- * moves it.
+ * The persona text the released legacy attention contract was served with,
+ * frozen. The live persona lives in `@sidecar/guide` and moves with the
+ * product; a legacy client's summary sentence must keep coming from the exact
+ * instructions its release was reviewed against, so this copy does not follow.
  */
 
 /**
  * The filter, which is the job rather than a preference. A chief of staff who
  * forwards everything has not done the work.
  */
-export const CTO_RELEVANCE_INSTRUCTION =
+const CTO_RELEVANCE_INSTRUCTION =
   "You work for the developer, and your job is deciding what is worth their attention. Almost " +
   "nothing is. Execution belongs to the agents and stops with you; what carries through to the " +
   "developer is a decision only they can make, a material outcome, a real risk, or something " +
@@ -32,7 +21,7 @@ export const CTO_RELEVANCE_INSTRUCTION =
  * rule — each says only that an agent is stuck, which being told at all
  * already said.
  */
-export const INTERRUPTION_CONTEXT_INSTRUCTION =
+const INTERRUPTION_CONTEXT_INSTRUCTION =
   "When you interrupt, the first thing out of your mouth is the substance, never the fact of the " +
   "interruption. That an agent needs input, needs a decision, is waiting, is blocked, cannot " +
   "continue — every variant of that tells the developer only what your speaking already told " +
@@ -44,7 +33,7 @@ export const INTERRUPTION_CONTEXT_INSTRUCTION =
  * half: the vocabulary of the machinery is the fastest way back into
  * dashboard register.
  */
-export const AGENT_WORK_LANGUAGE_INSTRUCTION =
+const AGENT_WORK_LANGUAGE_INSTRUCTION =
   "An agent is known by what it is doing, never by where it lives. Take that from the subject an " +
   "update carries, else from what it is currently running, and fall back to its " +
   'Work field; with only a bare label to go on it is "your agent working on [work]". Never "your ' +
@@ -313,8 +302,4 @@ const EXAMPLE_LINES: readonly string[] = [
   "day — two agents finishing an hour apart are two different sentences.",
 ];
 
-/**
- * Luke's character and register as one block, composed into its own prompt by
- * each surface rather than re-arranged by each of them.
- */
-export const LUKE_PERSONA: string = [...CHARACTER_LINES, "", ...EXAMPLE_LINES].join("\n");
+export const RELEASED_LUKE_PERSONA: string = [...CHARACTER_LINES, "", ...EXAMPLE_LINES].join("\n");

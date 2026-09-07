@@ -10,7 +10,13 @@
  * a provider is connected, never what connects it.
  */
 
-import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import {
+  isRecord,
+  isWireBoolean,
+  isWireString,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@sidecar/wire";
 
 /** How a setting takes a value: a switch, or one choice from a fixed set. */
 export const APP_SETTING_KIND = {
@@ -137,6 +143,61 @@ export interface AppGuideSnapshot {
 
 /** The guide before the app has said anything, which allows nothing. */
 export const EMPTY_APP_GUIDE: AppGuideSnapshot = { facts: [], settings: [] };
+
+function isStringList(value: UnparsedWireValue): value is readonly string[] {
+  return Array.isArray(value) && value.every(isWireString);
+}
+
+function isAppGuideFact(value: UnparsedWireValue): value is AppGuideFact & WireRecord {
+  return isRecord(value) && isWireString(value.label) && isWireString(value.detail);
+}
+
+function isAppGuideSetting(value: UnparsedWireValue): value is AppGuideSetting & WireRecord {
+  if (!isRecord(value)) return false;
+  if (value.efforts !== undefined) {
+    if (!isRecord(value.efforts)) return false;
+    if (
+      !Object.values(value.efforts).every((levels) => levels === undefined || isStringList(levels))
+    )
+      return false;
+  }
+  return (
+    isWireString(value.id) &&
+    isWireString(value.label) &&
+    isWireString(value.description) &&
+    (value.kind === APP_SETTING_KIND.TOGGLE || value.kind === APP_SETTING_KIND.CHOICE) &&
+    isWireString(value.value) &&
+    (value.defaultValue === undefined || isWireString(value.defaultValue)) &&
+    (value.choices === undefined || isStringList(value.choices)) &&
+    isWireBoolean(value.adjustable) &&
+    isWireString(value.manual)
+  );
+}
+
+function isAppGuideUpdate(value: UnparsedWireValue): value is AppGuideUpdate & WireRecord {
+  return (
+    isRecord(value) &&
+    isWireString(value.version) &&
+    isWireString(value.detail) &&
+    (isAppUpdateAct(value.button) ||
+      value.button === APP_UPDATE_WAIT.CHECKING ||
+      value.button === APP_UPDATE_WAIT.DOWNLOADING)
+  );
+}
+
+/**
+ * Guards a guide snapshot crossing a process boundary. The guide is what an
+ * app act is validated against, so a snapshot that arrives malformed is
+ * refused whole rather than read as a guide that happens to allow less.
+ */
+export function isAppGuideSnapshot(
+  value: UnparsedWireValue,
+): value is AppGuideSnapshot & WireRecord {
+  if (!isRecord(value)) return false;
+  if (!Array.isArray(value.facts) || !value.facts.every(isAppGuideFact)) return false;
+  if (!Array.isArray(value.settings) || !value.settings.every(isAppGuideSetting)) return false;
+  return value.update === undefined || isAppGuideUpdate(value.update);
+}
 
 /**
  * The panel surfaces a spoken ask can bring forward. The set is the panel's

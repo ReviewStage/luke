@@ -17,7 +17,7 @@
     "typescript": "7.0.2"
   },
   "dependencies": {
-    "@sidecar/attention": "workspace:*",
+    "@sidecar/brain": "workspace:*",
     "@sidecar/credentials": "workspace:*",
     "@sidecar/hosted": "workspace:*",
     "@sidecar/realtime": "workspace:*",

@@ -14,7 +14,6 @@ import {
   hostedBrainRequestFromWire,
   hostedConversationAnswerFromWire,
   hostedMintAnswerFromWire,
-  hostedSubjectAnswerFromWire,
   isDevicePlatform,
   isPushEnvironment,
   isVaultProviderId,
@@ -231,18 +230,6 @@ test("a conversation answer carries its history positions when the read reported
   // Positions that are not what a read reports are dropped, not repaired.
   assert.equal(malformed.firstOffset, undefined);
   assert.equal(malformed.hasOlder, undefined);
-});
-
-test("a subject answer is a bounded phrase or an honest null, and nothing else", () => {
-  assert.deepEqual(hostedSubjectAnswerFromWire({ subject: " the\n checkout bug " }), {
-    subject: "the checkout bug",
-  });
-  assert.deepEqual(hostedSubjectAnswerFromWire({ subject: null }), { subject: null });
-  assert.equal(hostedSubjectAnswerFromWire({ subject: "x".repeat(200) })?.subject?.length, 80);
-  assert.deepEqual(hostedSubjectAnswerFromWire({ subject: "   " }), { subject: null });
-  assert.equal(hostedSubjectAnswerFromWire({ subject: 7 }), undefined);
-  assert.equal(hostedSubjectAnswerFromWire({}), undefined);
-  assert.equal(HOSTED_SERVICE_PATH.SUBJECT_DERIVE, "/api/subject/derive");
 });
 
 test("a device token is stored only as bounded hex, whichever gateway issued it", () => {

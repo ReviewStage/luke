@@ -1,8 +1,9 @@
-import { ATTENTION_DISPOSITION, type AttentionDisposition } from "@sidecar/session";
 import { isRecord, isWireString, text, type UnparsedWireValue } from "@sidecar/wire";
 import {
   ATTENTION_DECISION_SCHEMA,
   ATTENTION_DECISION_SCHEMA_NAME,
+  ATTENTION_DISPOSITION,
+  type AttentionDisposition,
   attentionDecisionFromModel,
   DISPOSITION_GUIDANCE,
 } from "./attention.js";
@@ -11,14 +12,15 @@ import {
   attentionInstructions,
   attentionUpdateInput,
 } from "./attention-prompt.js";
-import { LUKE_PERSONA } from "./persona.js";
+import { RELEASED_LUKE_PERSONA } from "./released-persona.js";
 
 /**
- * The one OpenAI Responses request an attention review may be. The desktop
- * evaluator sends it on the developer's own key and the hosted endpoint sends
- * it on Luke's, so it is built here once: the instructions, the decision
- * schema, and the refusal to store are fixed by the build on both paths, and
- * only the bounded update varies between two requests.
+ * The one OpenAI Responses request a hosted attention review may be. The
+ * instructions, the decision schema, and the refusal to store are fixed by the
+ * build, and only the bounded update varies between two requests. Two shapes
+ * stand because two generations of released client do: the versioned contract
+ * asks for a judgment alone, and the header-less legacy contract asks for the
+ * summary sentence those clients speak verbatim.
  */
 
 export const ATTENTION_RESPONSES_PATH = "/responses";
@@ -53,7 +55,7 @@ const LEGACY_ATTENTION_DECISION_SCHEMA = {
 
 const LEGACY_ATTENTION_INSTRUCTIONS = attentionInstructions().replace(
   /What you return:[\s\S]*$/u,
-  `How to word it:\n- If speaking, write the sentence Luke says, in Luke's own voice as it is described below. State what the CTO needs to know and stop; add no advice and no next step.\n\n${LUKE_PERSONA}`,
+  `How to word it:\n- If speaking, write the sentence Luke says, in Luke's own voice as it is described below. State what the CTO needs to know and stop; add no advice and no next step.\n\n${RELEASED_LUKE_PERSONA}`,
 );
 
 export interface LegacyAttentionDecision {
@@ -143,19 +145,4 @@ export function attentionResponsesOutputText(payload: UnparsedWireValue): string
       .map((item) => (isRecord(item) ? outputTextFromContent(item.content) : ""))
       .join(""),
   );
-}
-
-/**
- * Describes why a payload carried no decision. A model that spends its output
- * budget on reasoning returns `incomplete` with empty output, which would
- * otherwise look identical to a healthy silent pass.
- */
-export function attentionResponsesMissingReason(payload: UnparsedWireValue): string {
-  if (!isRecord(payload)) return "";
-  const status = text(payload.status);
-  const details = isRecord(payload.incomplete_details) ? payload.incomplete_details : undefined;
-  const reason = details ? text(details.reason) : undefined;
-  if (status && reason) return ` (${status}: ${reason})`;
-  if (status) return ` (${status})`;
-  return "";
 }
