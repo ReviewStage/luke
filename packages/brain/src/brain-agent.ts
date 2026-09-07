@@ -460,7 +460,6 @@ export class BrainAgent {
   #queue: Promise<unknown> = Promise.resolve();
   #pending: BrainWakeEvent[] = [];
   #flushTimer: ScheduledTimer | undefined;
-  #expiryTimer: ScheduledTimer | undefined;
   #stopped = false;
   #unsubscribeStore: (() => void) | undefined;
 
@@ -823,7 +822,6 @@ export class BrainAgent {
   async stop(): Promise<void> {
     this.#stopped = true;
     this.#cancelFlush();
-    this.#disarmExpiry();
     this.#pending = [];
     this.#unsubscribeStore?.();
     this.#unsubscribeStore = undefined;
@@ -970,9 +968,15 @@ export class BrainAgent {
       );
       return;
     }
+    // A generation adopted from the store's announcement while the load was
+    // out — a Clear or expiry pressed under a starting agent — is the one
+    // that stands; the loaded copy is not built over it.
+    const adopted = this.#generation;
+    const current = this.#options.store.current() ?? state;
+    if (adopted && adopted.id === current.generationId) return;
+    state = current;
     const generation = generationFrom(state);
     this.#generation = generation;
-    this.#armExpiry(generation);
     const interrupted = interruptedUnfinishedRequests(state.requests, this.#now());
     const paired = pairedDanglingCalls(state.items, () => JSON.stringify(UNKNOWN_ACT_RESULT));
     if (interrupted === state.requests && paired === state.items) return;
@@ -1023,41 +1027,14 @@ export class BrainAgent {
     this.#cancelFlush();
     this.#pending = [];
     this.#generation = generationFrom(state);
-    this.#armExpiry(this.#generation);
     this.#notify();
   }
 
   /**
-   * The generation's own clock. Its lifetime was fixed when it was born and
-   * no write moves it, so the timer is armed once per adopted generation, at
-   * the instant the store will agree it has died; firing asks the store,
-   * which is the one judge of the moment, and a generation that dies mid-turn
-   * is replaced under the turn exactly as a Clear would replace it.
-   */
-  #armExpiry(generation: Generation): void {
-    this.#disarmExpiry();
-    if (this.#stopped) return;
-    const delay = Math.max(0, generation.expiresAt - this.#now());
-    const fire = () => {
-      this.#expiryTimer = undefined;
-      this.#expireIfDue();
-    };
-    // On the host's own clock the timer is unreferenced: housekeeping never
-    // holds a process open on its own, and the door check covers a
-    // generation found dead at the next launch.
-    this.#expiryTimer = this.#options.schedule
-      ? this.#schedule(fire, delay)
-      : globalThis.setTimeout(fire, delay).unref();
-  }
-
-  #disarmExpiry(): void {
-    if (this.#expiryTimer === undefined) return;
-    this.#cancel(this.#expiryTimer);
-    this.#expiryTimer = undefined;
-  }
-
-  /**
-   * Asks the store to end the generation if its time has come. The store's
+   * Asks the store to end the generation if its time has come: the door
+   * check, for a generation that outlived its fortnight while nothing kept
+   * its clock. The clock itself — a timer at the expiry instant — is the
+   * host's, one per store, standing whether or not an agent does. The store's
    * fence is synchronous and its announcement adopts the successor here in
    * the same call, so by the time this returns the dead generation's signal
    * has fired and nothing of it can open, dispatch, or deliver.

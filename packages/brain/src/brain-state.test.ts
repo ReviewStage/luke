@@ -92,7 +92,7 @@ class MemoryStorage implements BrainStateStorage {
   file: string | undefined;
   refuse = false;
   readonly log: string[] = [];
-  read() {
+  read(): string | undefined | Promise<string | undefined> {
     this.log.push("read");
     return this.file;
   }
@@ -464,7 +464,9 @@ class HeldStorage extends MemoryStorage {
       this.#release = () => resolve(super.write(contents));
     });
   }
+  /** Releases the held write, or cancels a hold no write has taken yet. */
   release() {
+    this.holdNext = false;
     this.#release?.();
     this.#release = undefined;
   }
@@ -681,3 +683,161 @@ test("the record count is a hard bound: admission closes at capacity and a write
   assert.equal(store.admits("gen-1"), true);
   assert.equal(store.admits("gen-other"), false);
 });
+
+/** Storage whose next read waits until the test releases it. */
+class HeldReadStorage extends MemoryStorage {
+  #release: (() => void) | undefined;
+  holdNextRead = false;
+  override read(): string | undefined | Promise<string | undefined> {
+    if (!this.holdNextRead) return super.read();
+    this.holdNextRead = false;
+    return new Promise<string | undefined>((resolve) => {
+      this.#release = () => resolve(super.read());
+    });
+  }
+  release() {
+    this.holdNextRead = false;
+    this.#release?.();
+    this.#release = undefined;
+  }
+  get holding() {
+    return this.#release !== undefined;
+  }
+}
+
+test("a load whose read was out when a Clear landed adopts the successor, never the file, and the marker still lands", async () => {
+  for (const refuseDisk of [false, true]) {
+    const storage = new HeldReadStorage();
+    storage.file = brainStateRecord({
+      ...complete(),
+      items: [{ type: "message", role: "user", content: "OLD_LOAD_SECRET" }],
+    });
+    let generations = 0;
+    const store = new BrainStateStore({
+      storage,
+      createGenerationId: () => `fresh-${++generations}`,
+      now: () => NOW,
+    });
+    const heard: string[] = [];
+    store.onReplaced((state) => heard.push(state.generationId));
+    storage.holdNextRead = true;
+    const loading = store.load();
+    await Promise.resolve();
+    assert.ok(storage.holding);
+    const clearing = store.clear(NOW + 1);
+    assert.equal(store.generationId(), "fresh-1");
+    storage.refuse = refuseDisk;
+    storage.release();
+    const loaded = await loading;
+    assert.equal(loaded.generationId, "fresh-1");
+    assert.equal(await clearing, !refuseDisk);
+    assert.equal(store.generationId(), "fresh-1");
+    assert.deepEqual(heard, ["fresh-1"]);
+    // The erased id was learned from the file's identity alone.
+    assert.deepEqual(store.resetMarker(), { clearedAt: NOW + 1, generationId: "gen-1" });
+    assert.deepEqual(store.current()?.items, []);
+    if (refuseDisk) {
+      assert.ok(String(storage.file).includes("OLD_LOAD_SECRET"));
+      storage.refuse = false;
+      const lease = store.lease();
+      assert.equal(await store.write(lease, "fresh-1", (state) => state), true);
+    }
+    assert.ok(!String(storage.file).includes("OLD_LOAD_SECRET"));
+    assert.deepEqual(brainStateFromStored(storage.file)?.reset, {
+      clearedAt: NOW + 1,
+      generationId: "gen-1",
+    });
+  }
+});
+
+test("a load's own cleanup write and a replacement both yield to a Clear or expiry raised while they were out", async () => {
+  // Startup cleanup write held, Clear during it.
+  const storage = new HeldStorage();
+  const stale = {
+    ...complete(),
+    items: [{ type: "message", role: "user", content: "EXPIRED_SECRET" }],
+  };
+  storage.file = brainStateRecord(stale);
+  let generations = 0;
+  const store = new BrainStateStore({
+    storage,
+    createGenerationId: () => `fresh-${++generations}`,
+    now: () => stale.expiresAt,
+  });
+  storage.holdNext = true;
+  const loading = store.load();
+  await settleTicks();
+  assert.ok(storage.holding, "the cleanup write is on disk");
+  const clearing = store.clear(stale.expiresAt + 1);
+  assert.equal(store.generationId(), "fresh-2");
+  storage.release();
+  assert.equal((await loading).generationId, "fresh-2");
+  assert.equal(await clearing, true);
+  assert.equal(brainStateFromStored(storage.file)?.generationId, "fresh-2");
+  assert.deepEqual(brainStateFromStored(storage.file)?.reset, {
+    clearedAt: stale.expiresAt + 1,
+    generationId: "fresh-1",
+  });
+  assert.ok(!String(storage.file).includes("EXPIRED_SECRET"));
+
+  // A replacement is fenced synchronously and its write yields to a Clear.
+  const heard: string[] = [];
+  store.onReplaced((state) => heard.push(state.generationId));
+  storage.holdNext = true;
+  const replacement = {
+    ...complete(),
+    generationId: "replacement",
+    createdAt: stale.expiresAt,
+    expiresAt: stale.expiresAt + BRAIN_GENERATION_LIFETIME_MS,
+  };
+  const replacing = store.replace({
+    ...replacement,
+    items: [{ type: "message", role: "user", content: "REPLACEMENT_SECRET" }],
+  });
+  assert.equal(store.generationId(), "replacement");
+  assert.deepEqual(heard, ["replacement"]);
+  const cleared = store.clear(stale.expiresAt + 2);
+  assert.equal(store.generationId(), "fresh-3");
+  storage.release();
+  assert.equal(await replacing, false);
+  assert.equal(await cleared, true);
+  assert.equal(store.generationId(), "fresh-3");
+  assert.deepEqual(store.resetMarker(), {
+    clearedAt: stale.expiresAt + 2,
+    generationId: "replacement",
+  });
+  assert.ok(!String(storage.file).includes("REPLACEMENT_SECRET"));
+
+  // And to an expiry raised in the same tick, the same way: the replacement
+  // never reaches the disk, the successor does.
+  const late = store.replace(replacement);
+  assert.equal(store.generationId(), "replacement");
+  assert.equal(store.expireIfDue(replacement.expiresAt), true);
+  assert.equal(store.generationId(), "fresh-4");
+  assert.equal(await late, false);
+  await store.flush();
+  assert.equal(brainStateFromStored(storage.file)?.generationId, "fresh-4");
+
+  // Two Clears in a row leave the newest cutoff standing.
+  const first = store.clear(NOW + 10);
+  const second = store.clear(NOW + 11);
+  assert.deepEqual(store.resetMarker(), { clearedAt: NOW + 11, generationId: "fresh-5" });
+  assert.equal(await first, false);
+  assert.equal(await second, true);
+  assert.deepEqual(brainStateFromStored(storage.file)?.reset, {
+    clearedAt: NOW + 11,
+    generationId: "fresh-5",
+  });
+});
+
+function settleTicks(): Promise<void> {
+  return new Promise((resolve) => {
+    let ticks = 0;
+    const tick = () => {
+      ticks += 1;
+      if (ticks > 10) resolve();
+      else setImmediate(tick);
+    };
+    tick();
+  });
+}

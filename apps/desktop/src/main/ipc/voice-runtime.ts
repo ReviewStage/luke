@@ -79,18 +79,22 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
       // bounded it; here it is checked to come from a panel — the voice window
       // does not command itself — and handed on. A Clear is carried out here
       // first, because the main process is the thread's store and every
-      // panel's relay; the voice window is told to retire its own turns
-      // whatever the disk answered, because the fence stands either way, and
-      // the panel hears whether the erasure completed.
+      // panel's relay; the voice window is told to retire its own turns at
+      // the fence, whatever the disk later answers, and the panel hears
+      // whether the erasure completed.
       async voiceCommand(context, command) {
         if (!panels.owns(context.sender)) return undefined;
-        const erased =
+        // The Clear's fence is raised in the call's synchronous prefix, and
+        // the voice window is told in the same breath — before the disk is
+        // waited on — so its turns, marks, and context retire with main's.
+        // Its answer, the disk's, comes after and goes to the panel alone.
+        const erasing =
           command === VOICE_COMMAND.CLEAR_CONVERSATION
-            ? await dependencies.clearConversation()
+            ? dependencies.clearConversation()
             : undefined;
         voiceWindow.current()?.webContents.send(channels.onVoiceCommand, { command });
-        if (erased === undefined) return undefined;
-        return erased ? VOICE_COMMAND_OUTCOME.ACCEPTED : VOICE_COMMAND_OUTCOME.REFUSED;
+        if (erasing === undefined) return undefined;
+        return (await erasing) ? VOICE_COMMAND_OUTCOME.ACCEPTED : VOICE_COMMAND_OUTCOME.REFUSED;
       },
       // The voice window's snapshot: kept for a late panel, forwarded to every
       // panel, and read for the one level the main process owns — whether an

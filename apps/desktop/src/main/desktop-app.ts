@@ -25,6 +25,7 @@ import {
 import {
   BrainAgent,
   type BrainDelivery,
+  BrainGenerationClock,
   BrainStateStore,
   brainStateFromStored,
 } from "@sidecar/brain";
@@ -509,6 +510,7 @@ const brain = () => brains.current();
  * store, so two agents can never write the envelope past each other.
  */
 let brainStateStore: BrainStateStore | undefined;
+let brainGenerationClock: BrainGenerationClock | undefined;
 /** The spool watchers standing on each hooked provider's spool, closed at quit. */
 let spoolWatchers: readonly ObservationSpoolWatcher[] = [];
 /**
@@ -1525,6 +1527,11 @@ function brainStore(): BrainStateStore {
   // are that generation's words, and an offer is not proof they were said.
   // The agent hears the same announcement and stands its runs down itself.
   brainStateStore.onReplaced(() => withdrawBriefings());
+  // The generation's clock stands with the store, not with an agent: a
+  // launch with no key or account, and an app left open after its agent was
+  // retired, still see the generation die on time and the file replaced.
+  brainGenerationClock = new BrainGenerationClock({ store: brainStateStore });
+  void brainGenerationClock.start();
   return brainStateStore;
 }
 
@@ -1661,7 +1668,14 @@ function clearConversationHistory(): Promise<boolean> {
       conversationClearedAt = clearedAt;
       emptyConversation();
     },
-    removeConversation: () => removeStoredState(conversationPath(), "the conversation"),
+    eraseConversation: () =>
+      conversationHistory.length === 0
+        ? removeStoredState(conversationPath(), "the conversation")
+        : writeStoredState(
+            conversationPath(),
+            conversationRecord(conversationHistory, Date.now()),
+            "the conversation",
+          ),
     report: (message) => process.stderr.write(`${message}\n`),
   });
 }
@@ -3122,6 +3136,10 @@ export function startDesktopApp(): void {
           conversationClearedAt,
         );
         rememberedFacts = rememberedFactsFromStored(readStoredState(rememberedFactsPath()));
+        // Retention runs on every live launch, key or no key: the store's
+        // load admits the file within its bounds and lifetime, replacing on
+        // disk what it does not admit, and the clock takes it from there.
+        brainStore();
       }
       // A signed-in install with no arrival record predates the beat: its
       // sign-in was never observed, so it is settled now rather than greeted

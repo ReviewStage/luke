@@ -219,9 +219,10 @@ function composed(brainDisk = new MemoryStorage()) {
         thread = [];
         cleared.push(at);
       },
-      removeConversation: () => {
+      eraseConversation: () => {
         if (refuseThreadRemoval) return false;
-        conversationFile = undefined;
+        // As the main process erases: to what the thread holds now.
+        conversationFile = thread.length === 0 ? undefined : conversationRecord(thread, clock);
         return true;
       },
       report: (message) => reports.push(message),
@@ -494,7 +495,9 @@ test("a Clear whose marker will not write stays fenced and answers incomplete, a
   assert.ok(c.reports.some((message) => message.includes("marked erased")));
   assert.deepEqual(c.cleared, [c.now()]);
   assert.deepEqual(c.thread(), []);
-  assert.equal(c.conversationFile(), undefined);
+  // Without a durable cutoff the thread's file is left standing, out of
+  // every view and context, for the next thread write to replace.
+  assert.ok(String(c.conversationFile()).includes(OLD_REPLY));
   assert.equal(c.arbiter.pendingCount, 0);
   assert.deepEqual(agent.requests(), []);
   assert.equal(c.store.holdsGeneration("gen-1"), false);
@@ -512,6 +515,7 @@ test("a Clear whose marker will not write stays fenced and answers incomplete, a
   const stored = brainStateFromStored(c.brainDisk.file);
   assert.equal(stored?.reset?.generationId, "gen-1");
   assert.ok(!String(c.brainDisk.file).includes(OLD_ASK));
+  assert.ok(!String(c.conversationFile()).includes(OLD_REPLY));
   c.tick();
   assert.equal(await c.clear(), true);
   assert.equal(brainStateFromStored(c.brainDisk.file)?.reset?.generationId, "gen-2");
@@ -538,5 +542,49 @@ test("an expiry takes the held speech backlog with the generation, so the succes
   assert.deepEqual(agent.requests(), []);
   await c.store.flush();
   assert.ok(!String(c.brainDisk.file).includes(OLD_COMPACTION));
+  await c.host.replace(() => undefined);
+});
+
+test("the thread is erased only once the marker is durable, and a line recorded after the fence survives the erasure", async () => {
+  const c = composed();
+  const { agent, client } = await seeded(c);
+  // The marker's write is held on disk.
+  let releaseWrite: (() => void) | undefined;
+  const write = c.brainDisk.write.bind(c.brainDisk);
+  c.brainDisk.write = (contents) =>
+    // SAFETY: the store accepts a promise of the write's outcome; this test holds it open.
+    new Promise<boolean>((resolve) => {
+      releaseWrite = () => resolve(write(contents));
+    }) as unknown as boolean;
+  c.tick();
+  const clearing = c.clear();
+  await settle();
+  assert.ok(releaseWrite, "the marker is on disk");
+  // Fenced, yet the old thread's file is untouched until the marker lands.
+  assert.deepEqual(c.thread(), []);
+  assert.ok(String(c.conversationFile()).includes(OLD_REPLY));
+  // A new-generation ask is recorded meanwhile; its acceptance queues behind
+  // the marker on disk, its line stands in the thread at once.
+  c.tick();
+  const submitting = c.submit(agent, "NEW_ASK");
+  await settle();
+  c.brainDisk.write = write;
+  releaseWrite();
+  assert.equal(await clearing, true);
+  await submitting;
+  await settle();
+  // The erasure kept the new line and dropped the old ones.
+  assert.deepEqual(
+    c.thread().map((entry) => entry.words),
+    ["NEW_ASK"],
+  );
+  assert.ok(!String(c.conversationFile()).includes(OLD_REPLY));
+  assert.ok(String(c.conversationFile()).includes("NEW_ASK"));
+  client.release(reply("NEW_REPLY"));
+  await settle();
+  assert.deepEqual(
+    c.thread().map((entry) => entry.words),
+    ["NEW_ASK", "NEW_REPLY"],
+  );
   await c.host.replace(() => undefined);
 });

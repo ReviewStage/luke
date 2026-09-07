@@ -346,7 +346,7 @@ export class BrainStateStore {
         if (!brainGenerationExpired(held, this.#now())) return held;
         const fresh = this.#begin(this.#now());
         await this.#persistHousekeeping(fresh, "the expired generation");
-        return fresh;
+        return this.#state ?? fresh;
       }
       let stored: string | undefined;
       try {
@@ -354,13 +354,17 @@ export class BrainStateStore {
       } catch {
         stored = undefined;
       }
+      // A Clear, expiry, or replacement that landed while the file was being
+      // read is the newer truth: what the file held is not installed over
+      // it, and the caller adopts what now stands.
+      if (this.#state) return this.#state;
       const admitted = this.#admit(stored);
       this.#state = admitted.state;
       if (admitted.rewrite) {
         this.#report(`Brain memory discarded ${admitted.rewrite}`);
         await this.#persistHousekeeping(admitted.state, admitted.rewrite);
       }
-      return admitted.state;
+      return this.#state ?? admitted.state;
     });
   }
 
@@ -517,15 +521,23 @@ export class BrainStateStore {
     });
   }
 
-  /** Replaces the envelope whole with the one given, a new generation included. */
+  /**
+   * Replaces the envelope whole with the one given, a new generation
+   * included, under the same rule as every other end of a generation: the
+   * fence is synchronous — the replacement stands and is announced before
+   * this returns — and its write is queued behind the writes already out. An
+   * envelope past its bounds replaces nothing. Answers whether the write
+   * landed; a later fence raised while it was out leaves it unwritten, the
+   * newer truth carrying the file.
+   */
   replace(state: BrainPersistedState): Promise<boolean> {
+    const retained = retainedBrainState(state, this.#bounds);
+    if (retained.oversized) return Promise.resolve(false);
+    this.#state = retained.state;
+    this.#announceReplaced(retained.state);
     return this.#serialized(async () => {
-      const retained = retainedBrainState(state, this.#bounds);
-      if (retained.oversized) return false;
-      if (!(await this.#persistRecord(retained.record))) return false;
-      this.#state = retained.state;
-      this.#announceReplaced(retained.state);
-      return true;
+      if (this.#state !== retained.state) return false;
+      return this.#persistRecord(retained.record);
     });
   }
 

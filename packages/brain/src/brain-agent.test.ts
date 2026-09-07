@@ -36,6 +36,7 @@ import {
   type BrainClientAnswer,
   type BrainRespondOptions,
 } from "./brain-client.js";
+import { BrainGenerationClock } from "./brain-clock.js";
 import { BRAIN_WAKE_KIND, type BrainDelivery, type BrainWakeEvent } from "./brain-events.js";
 import { BRAIN_INPUT_MARKER } from "./brain-input.js";
 import { UNKNOWN_ACT_RESULT } from "./brain-journal.js";
@@ -473,8 +474,7 @@ test("an ask returns the final text, carries pending wakes, and refuses announce
   assert.ok(opening.includes("tell the checkout agent to run the tests"));
   assert.ok(opening.includes(`${TRANSCRIPT_SECRET} for def`));
   assert.equal(h.agent.pendingWakes(), 0);
-  // The one timer left standing is the generation's own expiry.
-  assert.equal(h.clock.timers.size, 1);
+  assert.equal(h.clock.timers.size, 0);
   const outputs = itemsOfType(h.client.inputs[1] ?? [], RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT);
   const refusal = outputs.find((item) => item.call_id === "call_a");
   assert.ok(refusal && isWireString(refusal.output) && refusal.output.includes("reply in text"));
@@ -2497,9 +2497,16 @@ test("a cancel or stop landing while the start is being written ends the run uno
 
 const LIFETIME = 14 * 24 * 60 * 60 * 1000;
 
-test("a generation dies exactly one lifetime after its birth, on its own timer, revoking the turn it dies under", async () => {
+test("a generation dies exactly one lifetime after its birth, on the host's clock, revoking the turn it dies under", async () => {
   const inner = new FakeClient();
   const h = harness({ client: inner });
+  const generationClock = new BrainGenerationClock({
+    store: h.store,
+    now: () => h.clock.now,
+    schedule: h.clock.schedule,
+    cancel: h.clock.cancel,
+  });
+  await generationClock.start();
   inner.answers.push(answered([message(`noted ${OLD_SECRET}`)]));
   assert.equal((await ask(h, `remember ${OLD_SECRET}`))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   const born = h.store.current();
@@ -2536,6 +2543,7 @@ test("a generation dies exactly one lifetime after its birth, on its own timer, 
   assert.ok(!surface.includes(OLD_SECRET), "expired memory reached the new generation");
   assert.equal(h.storage.stored()?.generationId, h.store.generationId());
   assert.equal(h.storage.stored()?.requests.length, 1);
+  generationClock.stop();
 });
 
 test("an expiry is enforced at the door of a turn and a submission even when no timer fired", async () => {
@@ -2581,6 +2589,13 @@ test("an expiry is enforced at the door of a turn and a submission even when no 
 
 test("a compaction and a fortnight of writes never extend a generation's life", async () => {
   const h = harness();
+  const generationClock = new BrainGenerationClock({
+    store: h.store,
+    now: () => h.clock.now,
+    schedule: h.clock.schedule,
+    cancel: h.clock.cancel,
+  });
+  await generationClock.start();
   h.client.answers.push(answered([message("one")]));
   await ask(h, "one");
   const born = h.store.current();
@@ -2596,6 +2611,7 @@ test("a compaction and a fortnight of writes never extend a generation's life", 
   assert.equal(h.store.generationId(), born.generationId);
   await h.clock.advance(born.expiresAt);
   assert.notEqual(h.store.generationId(), born.generationId);
+  generationClock.stop();
 });
 
 test("runs retention lets go of leave the live records and journal too, so the next checkpoint cannot bring them back", async () => {
@@ -2695,6 +2711,13 @@ test("a Clear or expiry asked for while a write is out on disk revokes a held ac
       },
     };
     const h = harness({ acts });
+    const generationClock = new BrainGenerationClock({
+      store: h.store,
+      now: () => h.clock.now,
+      schedule: h.clock.schedule,
+      cancel: h.clock.cancel,
+    });
+    await generationClock.start();
     h.client.answers.push(answered([message("first")]));
     await ask(h, "first");
     const born = h.store.current();
@@ -2735,5 +2758,43 @@ test("a Clear or expiry asked for while a write is out on disk revokes a held ac
     assert.equal(h.store.current()?.journal.length, 0);
     assert.equal(h.storage.stored()?.generationId, h.store.generationId());
     assert.equal(h.storage.stored()?.requests.length, 0);
+    generationClock.stop();
   }
+});
+
+test("a Clear pressed while a starting agent's load is still reading the file leaves the fresh generation standing, never the file's", async () => {
+  let releaseRead: (() => void) | undefined;
+  const storage = new FakeStorage();
+  const old: BrainPersistedState = {
+    ...freshBrainState("gen-old", NOW - 1000),
+    items: [message(`kept ${OLD_SECRET}`)],
+  };
+  storage.file = `${JSON.stringify(old)}\n`;
+  const read = storage.read.bind(storage);
+  storage.read = () => {
+    // Only the load's read is held; the Clear's own look at the file answers at once.
+    storage.read = read;
+    // SAFETY: the store accepts a promise of the read; this test holds it open.
+    return new Promise<string | undefined>((resolve) => {
+      releaseRead = () => resolve(read());
+    }) as unknown as string | undefined;
+  };
+  const h = harness({}, storage);
+  const readying = h.agent.ready();
+  await settle();
+  assert.ok(releaseRead, "the load is reading the file");
+  const clearing = h.store.clear(NOW);
+  const fresh = h.store.generationId();
+  assert.notEqual(fresh, "gen-old");
+  releaseRead();
+  await readying;
+  assert.equal(await clearing, true);
+  // Store, agent, and disk agree on the successor; the file's memory is gone.
+  assert.equal(h.store.generationId(), fresh);
+  assert.deepEqual(h.agent.requests(), []);
+  h.client.answers.push(answered([message("fresh")]));
+  assert.equal((await ask(h, "NEW_ASK"))?.text, "fresh");
+  assert.equal(h.storage.stored()?.generationId, fresh);
+  assert.deepEqual(h.storage.stored()?.reset, { clearedAt: NOW, generationId: "gen-old" });
+  assert.ok(!generationSurface(h, h.client).includes(OLD_SECRET));
 });

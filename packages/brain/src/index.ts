@@ -34,6 +34,7 @@ export {
   type OpenAiBrainOptions,
   openAiBrainClient,
 } from "./brain-client.js";
+export { BrainGenerationClock, type BrainGenerationClockOptions } from "./brain-clock.js";
 export {
   BRAIN_WAKE_KIND,
   type BrainDelivery,
