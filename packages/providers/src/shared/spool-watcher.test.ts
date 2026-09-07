@@ -350,3 +350,47 @@ test("a batch read after close is not reported", async (t) => {
   await clock.advance(DEBOUNCE_MS);
   assert.equal(batches.length, 0);
 });
+
+test("a listener that throws loses its own batch and the next batch is still delivered", async (t) => {
+  const spoolDirectory = await temporarySpool(t);
+  const watcher = fakeWatcher();
+  const clock = fakeClock();
+  const batches: (readonly ObservedSpoolEvent<SpoolEvent>[])[] = [];
+  let throwOnce = true;
+  const handle = watchObservationSpool({
+    spoolDirectory,
+    events: EVENTS,
+    onEvents: (events) => {
+      if (throwOnce) {
+        throwOnce = false;
+        throw new Error("listener failed");
+      }
+      batches.push(events);
+    },
+    watch: watcher.watch,
+    schedule: clock.schedule,
+    cancel: clock.cancel,
+  });
+
+  await writeSpoolFile(spoolDirectory, "first.json", '{"event":"stop"}');
+  watcher.emit("rename", "first.json");
+  await clock.advance(DEBOUNCE_MS);
+  await settle();
+  assert.equal(batches.length, 0);
+
+  await writeSpoolFile(spoolDirectory, "second.json", '{"event":"prompt"}');
+  watcher.emit("rename", "second.json");
+  await clock.advance(DEBOUNCE_MS);
+  await waitFor(() => batches.length === 1);
+  assert.deepEqual(
+    batches[0]?.map(({ providerSessionId }) => providerSessionId),
+    ["second"],
+  );
+
+  handle.close();
+  await writeSpoolFile(spoolDirectory, "third.json", '{"event":"stop"}');
+  watcher.emit("rename", "third.json");
+  await clock.advance(DEBOUNCE_MS);
+  await settle();
+  assert.equal(batches.length, 1);
+});

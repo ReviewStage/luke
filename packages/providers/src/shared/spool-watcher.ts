@@ -170,7 +170,7 @@ class SpoolWatcher<Event extends string> implements ObservationSpoolWatcher {
       this.#debounceTimer = undefined;
       const ids = [...this.#pendingIds];
       this.#pendingIds.clear();
-      this.#reads = this.#reads.then(() => this.#report(ids));
+      this.#reads = this.#reads.then(() => this.#report(ids)).catch(() => undefined);
     }, this.#debounceMs);
   }
 
@@ -178,7 +178,10 @@ class SpoolWatcher<Event extends string> implements ObservationSpoolWatcher {
    * Reads run one batch after another so two batches can never reach the
    * listener out of order. A file that cannot be read — gone again already,
    * or unreadable for any reason — is dropped: the spool is a refinement of
-   * state the adapters still read for themselves.
+   * state the adapters still read for themselves. A listener that throws
+   * loses only its own batch; the chain recovers so the next batch is still
+   * delivered, because a watcher that stalled on one bad callback would
+   * silently stop sharpening anything after it.
    */
   async #report(ids: readonly string[]): Promise<void> {
     const observed: ObservedSpoolEvent<Event>[] = [];

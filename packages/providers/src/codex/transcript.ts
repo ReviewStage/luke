@@ -296,8 +296,10 @@ export async function readCodexSessionTranscript(
 
 /**
  * Renders what the session's rollout has gained since `cursor`. A thread with
- * no rollout file answers rejected, and a compressed rollout unsupported: it
- * is a transcript this build cannot walk, not one that went missing.
+ * no rollout file answers rejected, and so does a compressed rollout, in its
+ * own words: the thread is known here, so the refusal must be this adapter's
+ * answer rather than an unsupported that would send the ask on to the next
+ * observer of the same provider.
  */
 export async function readCodexSessionTranscriptSince(
   request: CodexTranscriptSinceRequest,
@@ -313,7 +315,7 @@ export async function readCodexSessionTranscriptSince(
   }
   if (isCompressedRollout(rolloutPath)) {
     return {
-      status: ACT_RESULT_STATUS.UNSUPPORTED,
+      status: ACT_RESULT_STATUS.REJECTED,
       reason: "That session's rollout is compressed, which this build cannot read incrementally.",
     };
   }
