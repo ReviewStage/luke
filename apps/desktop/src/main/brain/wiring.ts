@@ -21,7 +21,12 @@ import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import type { BrainRequestSnapshot } from "#shared/wire/brain";
 import { type BrainActPerformerDependencies, createBrainActPerformer } from "./act-performer";
 import { BrainHost } from "./host";
-import { type BrainSubmitters, followBrainRequests, registerBrainIpc } from "./ipc";
+import {
+  type BrainIpcDependencies,
+  type BrainSubmitters,
+  followBrainRequests,
+  registerBrainIpc,
+} from "./ipc";
 
 /** What a provider adapter answers a transcript read with, by the session's own id. */
 interface TranscriptReader {
@@ -40,6 +45,10 @@ export interface BrainWiringDependencies {
   traceTurn?: (record: BrainTurnTraceRecord) => void;
   recordConversationEntry: (entry: ConversationEntry, recordedAt?: number) => boolean;
   broadcastRequests: (snapshots: readonly BrainRequestSnapshot[]) => void;
+  /** A run's end stands in History, written and marked: the moment its reply may be owed to the ear. */
+  onEndPublished?: BrainIpcDependencies["onEndPublished"];
+  /** The voice window's grants: claims and acknowledgements of offered replies, and the on-call grant. */
+  replies?: BrainIpcDependencies["replies"];
   /** A generation ended — cleared, expired, or replaced — and its unspoken briefings go with it. */
   onGenerationReplaced: () => void;
   acts: BrainActPerformerDependencies;
@@ -95,11 +104,20 @@ export interface BrainWiring {
  * announced, and an ask is answered with the honest refusal.
  */
 export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
+  // The standing follower's publication, awaited by a wait that found its run
+  // ended: the end is said only once the follower has written and marked it.
+  let publicationSettled: () => Promise<void> = () => Promise.resolve();
   const host = new BrainHost({
     follow: (agent) =>
       followBrainRequests(agent, {
         recordConversationEntry: dependencies.recordConversationEntry,
         broadcastRequests: dependencies.broadcastRequests,
+        ...(dependencies.onEndPublished
+          ? { onEndPublished: dependencies.onEndPublished }
+          : undefined),
+        onPublication: (settled) => {
+          publicationSettled = settled;
+        },
       }),
     publishEmpty: () => dependencies.broadcastRequests([]),
   });
@@ -192,6 +210,8 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       brain: current,
       recordConversationEntry: dependencies.recordConversationEntry,
       broadcastRequests: dependencies.broadcastRequests,
+      publicationSettled: () => publicationSettled(),
+      ...(dependencies.replies ? { replies: dependencies.replies } : undefined),
     });
   };
 

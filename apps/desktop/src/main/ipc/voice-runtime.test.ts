@@ -5,6 +5,7 @@ import type { WireRecord } from "@sidecar/wire";
 import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import { BRIDGE, channels } from "#shared/bridge";
 import { VOICE_COMMAND, VOICE_COMMAND_OUTCOME } from "#shared/wire/voice-view";
+import { VoiceReceiver } from "../voice-receiver";
 import type { PanelManager } from "../window/panel-manager";
 import { registerVoiceRuntimeIpc, type VoiceWindowSurface } from "./voice-runtime";
 
@@ -39,6 +40,7 @@ function fixture(clearConversation: () => Promise<boolean>) {
     displayIdFor: () => undefined,
     focusIfExpanded: () => undefined,
   } as unknown as PanelManager;
+  const receiver = new VoiceReceiver();
   registerVoiceRuntimeIpc({
     ipcMain: {
       handle: (channel, listener) => {
@@ -50,6 +52,7 @@ function fixture(clearConversation: () => Promise<boolean>) {
     trustedSender: () => true,
     panels,
     voiceWindow,
+    receiver,
     broadcast: () => undefined,
     openExternal: async () => undefined,
     chooseRealtimeCredentials: () => undefined,
@@ -67,7 +70,13 @@ function fixture(clearConversation: () => Promise<boolean>) {
       { sender } as IpcMainInvokeEvent & IpcMainEvent,
       VOICE_COMMAND.CLEAR_CONVERSATION,
     ) as Promise<unknown>;
-  return { command, sentToVoice, panelSender, voiceSender };
+  // SAFETY: as above, for the readiness report.
+  const ready = (sender: WebContents, epoch: number) =>
+    invokes.get(BRIDGE.reportVoiceReady.channel)?.(
+      { sender } as IpcMainInvokeEvent & IpcMainEvent,
+      epoch,
+    ) as Promise<unknown>;
+  return { command, ready, receiver, sentToVoice, panelSender, voiceSender };
 }
 
 test("the voice window is told to clear at the fence, before the disk answers, and the panel hears the disk's answer", async () => {
@@ -106,4 +115,24 @@ test("a Clear from anything but a panel clears nothing and tells the voice windo
   assert.equal(await f.command(f.voiceSender), undefined);
   assert.equal(cleared, 0);
   assert.deepEqual(f.sentToVoice, []);
+});
+
+test("only the voice window may report the receiver ready, and only for the current epoch", async () => {
+  const f = fixture(async () => true);
+  const epoch = f.receiver.begin();
+  // A panel claiming to be the voice renderer readies nothing.
+  assert.equal(await f.ready(f.panelSender, epoch), false);
+  assert.equal(f.receiver.isReady(), false);
+  // The voice renderer naming a stale epoch — one before its own load — is refused.
+  assert.equal(await f.ready(f.voiceSender, epoch - 1), false);
+  assert.equal(f.receiver.isReady(), false);
+  assert.equal(await f.ready(f.voiceSender, epoch), true);
+  assert.equal(f.receiver.isReady(), true);
+  // The same report again is not a second readiness.
+  assert.equal(await f.ready(f.voiceSender, epoch), false);
+  // A reload begins a new epoch; the old renderer's report no longer counts.
+  const next = f.receiver.begin();
+  assert.equal(f.receiver.isReady(), false);
+  assert.equal(await f.ready(f.voiceSender, epoch), false);
+  assert.equal(await f.ready(f.voiceSender, next), true);
 });

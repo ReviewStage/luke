@@ -30,7 +30,6 @@ import {
   BRAIN_ASK_PENDING_STATUS,
   BRAIN_ASK_REFUSAL,
   type BrainAskResult,
-  type BrainRequestSnapshot,
   brainReplyWords,
   brainRequestPending,
 } from "#shared/wire/brain";
@@ -47,8 +46,10 @@ import { useStateWithRef } from "../use-state-with-ref";
 import { outputSilent } from "../volume-hint";
 import { openPreferredMicrophone } from "./microphone-choice";
 import { REPLY_KIND, RealtimeVoiceSession, type ReplyKind } from "./realtime-session";
+import { ReplyDeliveryPlayer } from "./reply-delivery-player";
 import { SpeechMouth } from "./speech-mouth";
 import { startVoiceLevelMeter } from "./voice-level-meter";
+import { VOICE_READINESS_PART, VoiceReadiness } from "./voice-readiness";
 
 /**
  * What a changed voice on a live call should do. The API locks a session's
@@ -416,10 +417,19 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
    * edge the count is taken on.
    */
   const typedExchange = useRef(false);
-  /** The brain run whose reply the voice is speaking now, so its words are not recorded twice. */
-  const brainReplyRunRef = useRef<string | undefined>(undefined);
-  /** Each run's last status this window saw, so only an end it watched arrive is spoken. */
-  const knownRequestsRef = useRef(new Map<string, BrainRequestSnapshot["status"]>());
+  /**
+   * What this window must have standing before the main process may send it
+   * anything, reported once under the epoch the bootstrap named. Built here
+   * so the effects below can mark their subscriptions as they install.
+   */
+  const readiness = useRef<VoiceReadiness | undefined>(undefined);
+  readiness.current ??= new VoiceReadiness((epoch) => void window.sidecar.reportVoiceReady(epoch));
+  /** The receiver epoch the bootstrap gave this load, which every grant asked of the main process names. */
+  const voiceEpochRef = useRef<number | undefined>(undefined);
+  /** The receiving end of reply deliveries; built beside the session, below. */
+  const replyPlayer = useRef<ReplyDeliveryPlayer | undefined>(undefined);
+  /** Rises whenever the brain's generation ends under this window, so a grant held across it is void. */
+  const replyWithdrawalsRef = useRef(0);
   /**
    * The conversation history, surviving here across calls: a call is a
    * transport that comes and goes — an announcement is often read out on
@@ -550,6 +560,10 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     talkPressedAt.current = undefined;
     activeReplyGenerationRef.current = undefined;
     activeAnnouncementGenerationRef.current = undefined;
+    // A reply offered or granted before the press belongs to the cleared
+    // thread: not spoken, not shown, not acknowledged.
+    replyWithdrawalsRef.current += 1;
+    replyPlayer.current?.withdraw();
   }, []);
 
   /**
@@ -697,7 +711,6 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       // recorded by the main process at the run's end, so the words that end
       // here are not recorded again.
       askBrain: async (question, submissionId): Promise<BrainAskResult> => {
-        brainReplyRunRef.current = undefined;
         // The turn this ask belongs to is the one committed when the ask was
         // made, read before the acceptance is awaited: a turn committed while
         // the brain is deciding is somebody else's words.
@@ -714,22 +727,41 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           };
         }
         tieSpokenTurnToRun(spokenTurn, submitted.runId);
-        const record = await window.sidecar.waitBrainAsk(submitted.runId);
-        if (!record) {
+        // The wait names this load's receiver epoch: the words come back for
+        // this call to say only if the main process grants them to it, once,
+        // with the end already in History. Otherwise the run is reported as
+        // still going and its reply is delivered later, by the same owner.
+        // The moment is captured first: a Clear or a withdrawn generation
+        // while the wait is held means words granted to it are not said —
+        // the follow-up hears the pending note, and History holds nothing
+        // of the thread they answered.
+        const generation = conversationGenerationRef.current;
+        const withdrawals = replyWithdrawalsRef.current;
+        const waited = await window.sidecar.waitBrainAsk(
+          submitted.runId,
+          voiceEpochRef.current ?? 0,
+        );
+        if (!waited.record) {
           return { status: ACT_RESULT_STATUS.REJECTED, reason: BRAIN_ASK_REFUSAL.absent };
         }
-        if (brainRequestPending(record)) {
+        const moved =
+          generation !== conversationGenerationRef.current ||
+          withdrawals !== replyWithdrawalsRef.current;
+        if (brainRequestPending(waited.record) || !waited.speak || moved) {
           return { status: BRAIN_ASK_PENDING_STATUS, note: BRAIN_ASK_PENDING_NOTE };
         }
-        brainReplyRunRef.current = record.runId;
-        return { status: ACT_RESULT_STATUS.ACCEPTED, briefing: brainReplyWords(record) ?? "" };
+        return {
+          status: ACT_RESULT_STATUS.ACCEPTED,
+          briefing: brainReplyWords(waited.record) ?? "",
+          runId: waited.record.runId,
+        };
       },
       onStatus: setVoiceStatus,
       onLocalStream: setLocalStream,
       onRemoteStream: setRemoteStream,
       onError: setVoiceError,
       onCaption: (texts, kind) => setVoiceCaption({ texts, kind }),
-      onReplyEnded: (texts, kind) => {
+      onReplyEnded: (texts, kind, runId) => {
         if (kind === REPLY_KIND.BRIEFING) {
           const generation = activeAnnouncementGenerationRef.current;
           activeAnnouncementGenerationRef.current = undefined;
@@ -740,9 +772,11 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
         activeReplyGenerationRef.current = undefined;
         // A reply voicing a brain run's end is already in the thread, written
         // by the main process from the record; the voice's rendering of it is
-        // not a second line.
-        if (brainReplyRunRef.current !== undefined) {
-          brainReplyRunRef.current = undefined;
+        // not a second line. The reply names its own run, so a reply cut off
+        // by the next one cannot hand its attribution to it, and its ending
+        // is what lets the next delivered reply be offered.
+        if (runId !== undefined) {
+          replyPlayer.current?.onReplyEnded(runId);
           return;
         }
         rememberConversationEntry(replyConversationEntry(texts.join(" ")), generation);
@@ -1103,59 +1137,76 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   }, [voiceStatusNow]);
 
   /**
-   * Speaks the reply a typed ask's run ended in. The ask itself never passed
-   * through this window — the panel submitted it to the main process, which
-   * ran it and recorded both halves in the thread — so what arrives here is
-   * the record, and the words are spoken on the developer's own call, opened
-   * for them if none stands. Voice that cannot say it puts the words on the
-   * strip instead, so an ask is never answered with silence; nothing is
-   * recorded here either way.
+   * The receiving end of reply deliveries: the one offer the main process has
+   * out to this window, claimed at a quiet moment and spoken on the
+   * developer's own call — opened for them if none stands — or put on the
+   * strip where the voice cannot say it, and acknowledged when its reply
+   * ends so the next may be offered. The main process granted the words
+   * once, to this epoch, from the live record; the player checks its moment
+   * again after every await, so a Clear or a withdrawn generation mid-way
+   * leaves the words unspoken. Nothing is recorded here: the thread already
+   * holds them.
    */
-  const speakTypedReply = useCallback(
-    async (runId: string, words: string): Promise<void> => {
-      const session = ensureVoiceSession();
-      typedExchange.current = true;
-      setVoiceNotice(undefined);
-      const connected =
-        !session.isConnected || !session.microphoneCall ? await startConversation() : true;
-      brainReplyRunRef.current = runId;
-      if (connected && session.speakReply(words)) {
+  const startConversationRef = useRef(startConversation);
+  startConversationRef.current = startConversation;
+  const ensureReplyPlayer = useCallback((): ReplyDeliveryPlayer => {
+    replyPlayer.current ??= new ReplyDeliveryPlayer({
+      session: () => ensureVoiceSession(),
+      connect: () => startConversationRef.current(),
+      claim: (offer) => window.sidecar.claimBrainReply(offer.runId, offer.deliveryId, offer.epoch),
+      acknowledge: (offer) =>
+        window.sidecar.ackBrainReply(offer.runId, offer.deliveryId, offer.epoch),
+      showNotice: (words) => setVoiceNotice(words),
+      // Only a typed ask's reply is the composer's exchange: it counts as one
+      // and holds the caption the composer asked for. A spoken ask answered
+      // late is the spoken exchange it always was.
+      onSpeaking: (origin) => {
+        setVoiceNotice(undefined);
+        if (origin !== BRAIN_REQUEST_ORIGIN.TYPED) return;
+        typedExchange.current = true;
         setTypedAsk(true);
-        return;
-      }
-      brainReplyRunRef.current = undefined;
-      setVoiceNotice(words);
-    },
-    [ensureVoiceSession, startConversation],
-  );
-
-  // The brain's records, followed for the one edge this window answers: a
-  // typed ask's run ending while this window watched it run. A run already
-  // ended when first seen — the bootstrap after a reload, a launch finding
-  // the last one's interrupted runs — is not spoken, because its words may
-  // already have been said; the thread holds them either way. Subscribed
-  // before the snapshots are read, so no change falls between the two.
-  useEffect(() => {
-    const known = knownRequestsRef.current;
-    const heard = (records: readonly BrainRequestSnapshot[]) => {
-      for (const record of records) {
-        const previous = known.get(record.runId);
-        known.set(record.runId, record.status);
-        if (record.origin !== BRAIN_REQUEST_ORIGIN.TYPED) continue;
-        if (previous === undefined || brainRequestPending(record)) continue;
-        if (!brainRequestPending({ ...record, status: previous })) continue;
-        const words = brainReplyWords(record);
-        if (words) void speakTypedReply(record.runId, words);
-      }
-    };
-    const unsubscribe = window.sidecar.onBrainRequestsChanged(heard);
-    void window.sidecar.brainRequestSnapshots().then((records) => {
-      for (const record of records) {
-        if (!known.has(record.runId)) known.set(record.runId, record.status);
-      }
+      },
+      conversationGeneration: () => conversationGenerationRef.current,
     });
-    return unsubscribe;
-  }, [speakTypedReply]);
+    return replyPlayer.current;
+  }, [ensureVoiceSession]);
+
+  // The main process offering an ended run's reply. It offers one at a time,
+  // only runs it watched end while this process ran, and only once their
+  // words stand in History; this window's part is to claim before speaking.
+  // Marked standing for the readiness report: an offer sent before this
+  // subscription would land on nothing, so the main process sends none until
+  // told.
+  useEffect(() => {
+    const unsubscribe = window.sidecar.onBrainReplyOffered((offer) => {
+      ensureReplyPlayer().offer(offer);
+    });
+    readiness.current?.installed(VOICE_READINESS_PART.REPLY_OFFERS);
+    return () => {
+      readiness.current?.uninstalled(VOICE_READINESS_PART.REPLY_OFFERS);
+      unsubscribe();
+    };
+  }, [ensureReplyPlayer]);
+
+  // The brain's generation ended under this window — cleared elsewhere,
+  // expired, replaced — so whatever it offered or granted is void here too.
+  useEffect(() => {
+    const unsubscribe = window.sidecar.onBrainRepliesWithdrawn(() => {
+      replyWithdrawalsRef.current += 1;
+      replyPlayer.current?.withdraw();
+    });
+    readiness.current?.installed(VOICE_READINESS_PART.REPLY_WITHDRAWALS);
+    return () => {
+      readiness.current?.uninstalled(VOICE_READINESS_PART.REPLY_WITHDRAWALS);
+      unsubscribe();
+    };
+  }, []);
+
+  // The player paces itself by the session's status: a quiet moment is when
+  // an offer in hand may be claimed, and a call ending settles the grant on it.
+  useEffect(() => {
+    replyPlayer.current?.onStatus(voiceStatus);
+  }, [voiceStatus]);
 
   const discardListening = useCallback(() => {
     talkLatched.current = false;
@@ -1187,6 +1238,9 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           : value.announcementsHeld,
         conversationContextReady: true,
       });
+      // Applied, so the readiness report may name the epoch this load was given.
+      voiceEpochRef.current = value.voiceEpoch;
+      readiness.current?.bootstrapped(value.voiceEpoch);
     });
     return () => {
       cancelled = true;
@@ -1229,17 +1283,19 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   // A panel's ask, validated and forwarded by the main process. Each command
   // is the same act the panel used to perform on its own session; none opens
   // a turn the developer did not.
-  useEffect(
-    () =>
-      window.sidecar.onVoiceCommand(({ command }) => {
-        if (command === VOICE_COMMAND.DISCARD_LISTENING) discardListening();
-        else if (command === VOICE_COMMAND.STOP_SPEAKING) voiceSession.current?.stopSpeaking();
-        else if (command === VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS)
-          void requestMicrophoneAccess();
-        else if (command === VOICE_COMMAND.CLEAR_CONVERSATION) clearConversation();
-      }),
-    [clearConversation, discardListening, requestMicrophoneAccess],
-  );
+  useEffect(() => {
+    const unsubscribe = window.sidecar.onVoiceCommand(({ command }) => {
+      if (command === VOICE_COMMAND.DISCARD_LISTENING) discardListening();
+      else if (command === VOICE_COMMAND.STOP_SPEAKING) voiceSession.current?.stopSpeaking();
+      else if (command === VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS) void requestMicrophoneAccess();
+      else if (command === VOICE_COMMAND.CLEAR_CONVERSATION) clearConversation();
+    });
+    readiness.current?.installed(VOICE_READINESS_PART.COMMANDS);
+    return () => {
+      readiness.current?.uninstalled(VOICE_READINESS_PART.COMMANDS);
+      unsubscribe();
+    };
+  }, [clearConversation, discardListening, requestMicrophoneAccess]);
 
   const heardSpeed = useRef<RealtimeVoiceSpeed | undefined>(undefined);
   const voiceSpeed = surroundings.settings?.voiceSpeed;
@@ -1383,17 +1439,27 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   // held under the quiet, and settles it stale rather than speaking it past
   // its deadline; every outcome is reported by id so the next can be offered.
   useEffect(() => {
-    return window.sidecar.onSpeechOffered((offer) => {
+    const unsubscribe = window.sidecar.onSpeechOffered((offer) => {
       ensureMouth().offer(offer);
     });
+    readiness.current?.installed(VOICE_READINESS_PART.SPEECH_OFFERS);
+    return () => {
+      readiness.current?.uninstalled(VOICE_READINESS_PART.SPEECH_OFFERS);
+      unsubscribe();
+    };
   }, [ensureMouth]);
 
   // The main process taking an offer back — the gate a beat explained stood
   // down, the account it greeted signed out — before it is spoken.
   useEffect(() => {
-    return window.sidecar.onSpeechWithdrawn(({ id }) => {
+    const unsubscribe = window.sidecar.onSpeechWithdrawn(({ id }) => {
       mouth.current?.withdraw(id);
     });
+    readiness.current?.installed(VOICE_READINESS_PART.SPEECH_WITHDRAWALS);
+    return () => {
+      readiness.current?.uninstalled(VOICE_READINESS_PART.SPEECH_WITHDRAWALS);
+      unsubscribe();
+    };
   }, []);
 
   // The mouth paces itself by the session's status: READY is when the offer

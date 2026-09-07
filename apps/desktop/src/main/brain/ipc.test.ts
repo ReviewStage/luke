@@ -1,3 +1,4 @@
+/* oxlint-disable anti-slop/no-unknown-returns -- Fake Electron listeners deliberately retain the IPC boundary shape. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { BrainAgent, BrainRequestRecord, BrainSubmission } from "@sidecar/brain";
@@ -8,8 +9,17 @@ import {
   type ConversationEntry,
   maximumTypedAskLength,
 } from "@sidecar/realtime";
-import { BRAIN_ASK_REFUSAL, brainReplyWords } from "#shared/wire/brain";
-import { followBrainRequests, publishRuns, submitBrainAsk } from "./ipc";
+import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
+import { BRIDGE } from "#shared/bridge";
+import {
+  BRAIN_ASK_REFUSAL,
+  type BrainAskWait,
+  type BrainReplyClaimResult,
+  brainReplyWords,
+} from "#shared/wire/brain";
+import { VoiceReceiver } from "../voice-receiver";
+import { followBrainRequests, publishRuns, registerBrainIpc, submitBrainAsk } from "./ipc";
+import { BrainReplyDeliveries } from "./reply-delivery";
 
 const NOW = 1_800_000_000_000;
 
@@ -384,4 +394,233 @@ test("a retired follower relays nothing a late report carries", async () => {
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(broadcasts, []);
   assert.deepEqual(written.recorded, []);
+});
+
+test("an end is published downstream only once its line and its mark have both landed, then on every later report", async () => {
+  const published: string[] = [];
+  let markRefused = true;
+  let marked = false;
+  const live = () =>
+    record({ askRecordedAt: NOW, historyRecordedAt: marked ? NOW + 2 : undefined });
+  // SAFETY: publication reads only these members off the agent.
+  const agent = {
+    request: () => live(),
+    markAskRecorded: async () => true,
+    markHistoryRecorded: async () => {
+      if (markRefused) return false;
+      marked = true;
+      return true;
+    },
+  } as unknown as BrainAgent;
+  const written = thread();
+  const report = () =>
+    publishRuns(
+      agent,
+      [live()],
+      written.record,
+      () => true,
+      (ended) => published.push(`${ended.runId}@${ended.historyRecordedAt}`),
+    );
+  // The line was taken but the mark refused: not published downstream, and
+  // the line is not written a second time on the retry because the thread
+  // already holds it for that run.
+  await report();
+  assert.deepEqual(published, []);
+  assert.equal(written.entries().length, 1);
+  markRefused = false;
+  await report();
+  assert.deepEqual(published, ["run-1@1800000000002"]);
+  assert.equal(written.entries().length, 1);
+  // Already marked: reported downstream again, written nowhere. The retry
+  // before it offered the line a second time and the thread, holding it,
+  // took nothing.
+  await report();
+  assert.deepEqual(published, ["run-1@1800000000002", "run-1@1800000000002"]);
+  assert.equal(written.recorded.length, 2);
+  assert.equal(written.entries().length, 1);
+});
+
+test("a refused thread write publishes nothing downstream, and a retired follower publishes nothing late", async () => {
+  const published: string[] = [];
+  let refuse = true;
+  // SAFETY: publication reads only these members off the agent.
+  const agent = {
+    request: () => record({ askRecordedAt: NOW, historyRecordedAt: undefined }),
+    markAskRecorded: async () => true,
+    markHistoryRecorded: async () => true,
+  } as unknown as BrainAgent;
+  const written = thread(() => refuse);
+  await publishRuns(
+    agent,
+    [record()],
+    written.record,
+    () => true,
+    (ended) => published.push(ended.runId),
+  );
+  assert.equal(published.length, 0);
+  refuse = false;
+  let following = true;
+  // The follower retires while the mark is out: the end is written, but not
+  // handed on, because nothing may be offered on a retired follower's behalf.
+  // SAFETY: publication reads only `request` and the two marks off the agent; the fixture stands in for the rest.
+  const retiringAgent = {
+    ...agent,
+    markHistoryRecorded: async () => {
+      following = false;
+      return true;
+    },
+  } as unknown as BrainAgent;
+  await publishRuns(
+    retiringAgent,
+    [record()],
+    written.record,
+    () => following,
+    (ended) => published.push(ended.runId),
+  );
+  assert.equal(published.length, 0);
+  assert.equal(written.entries().length, 1);
+});
+
+/**
+ * The grant boundary as the IPC registration actually wires it: a real
+ * ledger and receiver behind the real `registerBrainIpc`, reached through
+ * fake `ipcMain` invokes from two senders, so what is checked is what a
+ * renderer's call can and cannot do — not the ledger's own arguments.
+ */
+function registered(live: () => BrainRequestRecord | undefined) {
+  const invokes = new Map<string, (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown>();
+  const sends = new Map<string, (event: IpcMainEvent, ...args: unknown[]) => void>();
+  // SAFETY: the registration reads senders by identity alone; two distinct inert objects are two windows.
+  const voiceSender = {} as WebContents;
+  // SAFETY: as above, the panel.
+  const panelSender = {} as WebContents;
+  let ids = 0;
+  const deliveries = new BrainReplyDeliveries({ nextDeliveryId: () => `delivery-${++ids}` });
+  const receiver = new VoiceReceiver();
+  const context = () => ({
+    receiverCurrent: (epoch: number) => receiver.isReady() && receiver.epoch() === epoch,
+    generationStands: (generationId: string) => generationId === "gen-1",
+    liveRecord: () => live(),
+  });
+  const acknowledged: string[] = [];
+  // SAFETY: the grant boundary reads only `request` and `waitAsk` off the agent; the fixture stands in for the rest.
+  const agent = {
+    request: () => live(),
+    waitAsk: async () => live(),
+  } as unknown as BrainAgent;
+  registerBrainIpc({
+    ipcMain: {
+      handle: (channel, listener) => {
+        invokes.set(channel, listener);
+      },
+      on: (channel, listener) => {
+        sends.set(channel, listener);
+        // SAFETY: this inert fixture implements only the IpcMain return identity the listener API requires.
+        return {} as Electron.IpcMain;
+      },
+    },
+    trustedSender: () => true,
+    brain: () => agent,
+    submitters: {
+      panel: (sender) => sender === panelSender,
+      voice: (sender) => sender === voiceSender,
+    },
+    recordConversationEntry: () => true,
+    broadcastRequests: () => undefined,
+    publicationSettled: () => Promise.resolve(),
+    replies: {
+      claim: (runId, deliveryId, epoch) => deliveries.claim(runId, deliveryId, epoch, context()),
+      acknowledge: (runId, deliveryId, epoch) => {
+        if (deliveries.acknowledge(runId, deliveryId, epoch)) acknowledged.push(runId);
+      },
+      grantOnCall: (record, epoch) => deliveries.grantOnCall(record, "gen-1", epoch, context()),
+    },
+  });
+  // SAFETY: the bridge reads only the sender off the event, and an Electron invoke listener always answers a promise.
+  const claim = (sender: WebContents, runId: string, deliveryId: string, epoch: number) =>
+    invokes.get(BRIDGE.claimBrainReply.channel)?.(
+      { sender } as IpcMainInvokeEvent,
+      runId,
+      deliveryId,
+      epoch,
+    ) as Promise<BrainReplyClaimResult>;
+  // SAFETY: as above, for the wait.
+  const wait = (sender: WebContents, runId: string, epoch: number) =>
+    invokes.get(BRIDGE.waitBrainAsk.channel)?.(
+      { sender } as IpcMainInvokeEvent,
+      runId,
+      epoch,
+    ) as Promise<BrainAskWait>;
+  const ack = (sender: WebContents, runId: string, deliveryId: string, epoch: number) =>
+    // SAFETY: the bridge reads only the sender off the event.
+    sends.get(BRIDGE.ackBrainReply.channel)?.({ sender } as IpcMainEvent, runId, deliveryId, epoch);
+  return { deliveries, receiver, voiceSender, panelSender, claim, wait, ack, acknowledged };
+}
+
+test("a claim is granted only to the voice window, for the epoch the offer went to, while that epoch stands", async () => {
+  const ended = record({ historyRecordedAt: NOW + 2 });
+  const f = registered(() => ended);
+  const first = f.receiver.begin();
+  f.receiver.markReady(first);
+  f.deliveries.observe([record({ status: BRAIN_REQUEST_STATUS.RUNNING })]);
+  f.deliveries.published(ended, "gen-1");
+  const offer = f.deliveries.nextOffer(first);
+  assert.ok(offer);
+  // A panel naming the right ids and epoch is refused.
+  assert.deepEqual(await f.claim(f.panelSender, offer.runId, offer.deliveryId, offer.epoch), {
+    granted: false,
+  });
+  // The same WebContents reloads: a new epoch, the unclaimed offer reoffered
+  // to it. The old renderer's queued invoke carries the old epoch and is
+  // refused, however current the main process's own epoch now is.
+  f.receiver.begin();
+  const second = f.receiver.begin();
+  f.receiver.markReady(second);
+  const reoffer = f.deliveries.nextOffer(second);
+  assert.ok(reoffer && reoffer.deliveryId === offer.deliveryId);
+  assert.deepEqual(await f.claim(f.voiceSender, offer.runId, offer.deliveryId, offer.epoch), {
+    granted: false,
+  });
+  // The current renderer's claim, naming the epoch of its own offer, is granted once.
+  assert.deepEqual(await f.claim(f.voiceSender, reoffer.runId, reoffer.deliveryId, reoffer.epoch), {
+    granted: true,
+    words: "Two agents are waiting.",
+    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+  });
+  assert.deepEqual(await f.claim(f.voiceSender, reoffer.runId, reoffer.deliveryId, reoffer.epoch), {
+    granted: false,
+  });
+  // A stale acknowledgement — the old epoch's, or a panel's — changes nothing; the current one empties the hand.
+  f.ack(f.voiceSender, reoffer.runId, reoffer.deliveryId, first);
+  f.ack(f.panelSender, reoffer.runId, reoffer.deliveryId, second);
+  assert.deepEqual(f.acknowledged, []);
+  f.ack(f.voiceSender, reoffer.runId, reoffer.deliveryId, second);
+  assert.deepEqual(f.acknowledged, ["run-1"]);
+});
+
+test("a wait grants the asking call the words only for the current voice renderer, once, and only after History holds them", async () => {
+  let live = record({ status: BRAIN_REQUEST_STATUS.RUNNING, historyRecordedAt: undefined });
+  const f = registered(() => live);
+  const epoch = f.receiver.begin();
+  f.receiver.markReady(epoch);
+  f.deliveries.observe([live]);
+  // Still running: the record, no grant.
+  assert.deepEqual(await f.wait(f.voiceSender, "run-1", epoch), { record: live, speak: false });
+  // Ended but not yet in History — the write was refused — the call is not granted.
+  live = record({ historyRecordedAt: undefined });
+  assert.equal((await f.wait(f.voiceSender, "run-1", epoch)).speak, false);
+  // In History now. A panel, or a renderer naming a stale epoch, is not granted and consumes nothing.
+  live = record({ historyRecordedAt: NOW + 2 });
+  assert.equal((await f.wait(f.panelSender, "run-1", epoch)).speak, false);
+  assert.equal((await f.wait(f.voiceSender, "run-1", epoch - 1)).speak, false);
+  // The offer path had already offered it; the call's grant withdraws that offer.
+  f.deliveries.published(live, "gen-1");
+  const offer = f.deliveries.nextOffer(epoch);
+  assert.ok(offer);
+  assert.deepEqual(await f.wait(f.voiceSender, "run-1", epoch), { record: live, speak: true });
+  assert.deepEqual(await f.claim(f.voiceSender, offer.runId, offer.deliveryId, offer.epoch), {
+    granted: false,
+  });
+  // The grant was the run's one: a second wait is not granted again.
+  assert.equal((await f.wait(f.voiceSender, "run-1", epoch)).speak, false);
 });

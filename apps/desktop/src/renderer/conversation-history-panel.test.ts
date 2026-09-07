@@ -227,6 +227,9 @@ test("an ask whose run is still going waits beside its words and offers a cancel
   const pending = render("running");
   assert.match(pending, new RegExp(HISTORY_PENDING_LABEL));
   assert.match(pending, /class="history-cancel"/);
+  // The wait stands beneath the words, inside the bubble, after the question's
+  // own paragraph: the bubble stacks, so the status never shares the row.
+  assert.match(pending, /<\/p><span class="history-pending" role="status">/);
   // Still inside the blocked subtree: a wait is drawn beside words a recording never sees.
   assert.match(pending, /ph-no-capture/);
   const settled = render("succeeded");

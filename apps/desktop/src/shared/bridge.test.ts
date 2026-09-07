@@ -94,15 +94,47 @@ test("a run is waited on, cancelled, and listed by its own record shape", () => 
     performedActs: 0,
     unknownActs: 0,
   };
-  for (const entry of [BRIDGE.waitBrainAsk, BRIDGE.cancelBrainAsk]) {
-    assert.equal(entry.kind, "invoke");
-    assert.equal(entry.args(["run-1"]), true);
-    assert.equal(entry.args([1]), false);
-    assert.ok(entry.result);
-    assert.equal(entry.result(snapshot), true);
-    assert.equal(entry.result(undefined), true);
-    assert.equal(entry.result({ ...snapshot, status: "dreaming" }), false);
-  }
+  assert.equal(BRIDGE.cancelBrainAsk.kind, "invoke");
+  assert.equal(BRIDGE.cancelBrainAsk.args(["run-1"]), true);
+  assert.equal(BRIDGE.cancelBrainAsk.args([1]), false);
+  assert.ok(BRIDGE.cancelBrainAsk.result);
+  assert.equal(BRIDGE.cancelBrainAsk.result(snapshot), true);
+  assert.equal(BRIDGE.cancelBrainAsk.result(undefined), true);
+  assert.equal(BRIDGE.cancelBrainAsk.result({ ...snapshot, status: "dreaming" }), false);
+  // A wait names the caller's receiver epoch and answers the record with the
+  // call's grant; a grant without a record, or a record of no known shape, is refused.
+  assert.equal(BRIDGE.waitBrainAsk.args(["run-1", 3]), true);
+  assert.equal(BRIDGE.waitBrainAsk.args(["run-1"]), false);
+  assert.equal(BRIDGE.waitBrainAsk.args(["run-1", -1]), false);
+  assert.ok(BRIDGE.waitBrainAsk.result);
+  assert.equal(BRIDGE.waitBrainAsk.result({ record: snapshot, speak: false }), true);
+  assert.equal(BRIDGE.waitBrainAsk.result({ record: undefined, speak: false }), true);
+  assert.equal(
+    BRIDGE.waitBrainAsk.result({ record: { ...snapshot, status: "dreaming" }, speak: true }),
+    false,
+  );
+  assert.equal(BRIDGE.waitBrainAsk.result(snapshot), false);
+  // A reply's offer, claim, and acknowledgement all carry the epoch; the grant carries the origin.
+  assert.ok(BRIDGE.onBrainReplyOffered.result);
+  assert.equal(
+    BRIDGE.onBrainReplyOffered.result({ runId: "run-1", deliveryId: "d-1", epoch: 2 }),
+    true,
+  );
+  assert.equal(BRIDGE.onBrainReplyOffered.result({ runId: "run-1", deliveryId: "d-1" }), false);
+  assert.equal(BRIDGE.claimBrainReply.args(["run-1", "d-1", 2]), true);
+  assert.equal(BRIDGE.claimBrainReply.args(["run-1", "d-1"]), false);
+  assert.ok(BRIDGE.claimBrainReply.result);
+  assert.equal(
+    BRIDGE.claimBrainReply.result({ granted: true, words: "w", origin: "spoken" }),
+    true,
+  );
+  assert.equal(BRIDGE.claimBrainReply.result({ granted: true, words: "w" }), false);
+  assert.equal(BRIDGE.claimBrainReply.result({ granted: false }), true);
+  assert.equal(BRIDGE.ackBrainReply.args(["run-1", "d-1", 2]), true);
+  assert.equal(BRIDGE.ackBrainReply.args(["run-1", "d-1", "2"]), false);
+  assert.ok(BRIDGE.onBrainRepliesWithdrawn.result);
+  assert.equal(BRIDGE.onBrainRepliesWithdrawn.result(2), true);
+  assert.equal(BRIDGE.onBrainRepliesWithdrawn.result("2"), false);
   assert.equal(BRIDGE.brainRequestSnapshots.args([]), true);
   assert.ok(BRIDGE.brainRequestSnapshots.result);
   assert.equal(BRIDGE.brainRequestSnapshots.result([snapshot]), true);

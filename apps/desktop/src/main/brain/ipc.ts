@@ -17,6 +17,8 @@ import { BRIDGE } from "#shared/bridge";
 import {
   type BrainAskSubmission,
   type BrainAskSubmissionResult,
+  type BrainAskWait,
+  type BrainReplyClaimResult,
   type BrainRequestSnapshot,
   brainReplyWords,
 } from "#shared/wire/brain";
@@ -45,6 +47,33 @@ export interface BrainIpcDependencies {
   recordConversationEntry: (entry: ConversationEntry, recordedAt: number) => boolean;
   /** Hands the whole list of records to every window. */
   broadcastRequests: (snapshots: readonly BrainRequestSnapshot[]) => void;
+  /**
+   * A run's end stands in the thread, written and marked: the one moment a
+   * reply becomes deliverable to the ear, handed the live record as it then
+   * reads. Called again on later reports of the same ended run, so a receiver
+   * that missed it is not owed a report that never comes; the delivery owner
+   * decides what is new.
+   */
+  onEndPublished?: (record: BrainRequestRecord) => void;
+  /**
+   * Hands the standing follower's publication chain to whoever answers a
+   * wait, so a wait that finds its run ended can let the end reach History
+   * before the words are granted anywhere.
+   */
+  onPublication?: (settled: () => Promise<void>) => void;
+  /** Settles once the standing follower has published every report taken so far. */
+  publicationSettled?: () => Promise<void>;
+  /**
+   * The one owner of every grant to speak a run's end, reached only by the
+   * voice window: the claim on an offered delivery, its acknowledgement, and
+   * the grant to the call that asked, each under the receiver epoch the
+   * caller names — never an epoch read off the main process's own state.
+   */
+  replies?: {
+    claim: (runId: string, deliveryId: string, epoch: number) => BrainReplyClaimResult;
+    acknowledge: (runId: string, deliveryId: string, epoch: number) => void;
+    grantOnCall: (record: BrainRequestRecord, epoch: number) => boolean;
+  };
   /** How long one wait holds before answering the run still pending. */
   askWaitMs?: number;
 }
@@ -101,20 +130,31 @@ async function publishAsk(
   await agent.markAskRecorded(runId, current.acceptedAt);
 }
 
-/** Writes a run's end once, at the moment it settled, and marks the run when the thread took it. */
+/**
+ * Writes a run's end once, at the moment it settled, and marks the run when
+ * the thread took it. Answers the live record once its end stands written and
+ * marked — now, or from an earlier report — and nothing while it does not: a
+ * write the thread refused, or a mark the store refused, leaves the end
+ * unpublished for the next report, and nothing downstream may treat it as
+ * said.
+ */
 async function publishEnd(
   agent: BrainPublicationAgent,
   runId: string,
   record: BrainIpcDependencies["recordConversationEntry"],
-): Promise<void> {
+): Promise<BrainRequestRecord | undefined> {
   const current = agent.request(runId);
-  if (!current || !isTerminalBrainRequestStatus(current.status)) return;
-  if (current.historyRecordedAt !== undefined) return;
+  if (!current || !isTerminalBrainRequestStatus(current.status)) return undefined;
+  if (current.historyRecordedAt !== undefined) return current;
   const words = brainReplyWords(current);
-  if (!words) return;
+  if (!words) return undefined;
   const at = current.settledAt ?? current.acceptedAt;
-  if (!record(replyConversationEntry(words, current.runId), at)) return;
-  await agent.markHistoryRecorded(runId, at);
+  if (!record(replyConversationEntry(words, current.runId), at)) return undefined;
+  if (!(await agent.markHistoryRecorded(runId, at))) return undefined;
+  // Re-read rather than patched: the mark landed on the live record, and a
+  // Clear or a replacement in the meantime has taken the record with it.
+  const marked = agent.request(runId);
+  return marked?.historyRecordedAt !== undefined ? marked : undefined;
 }
 
 /**
@@ -134,12 +174,14 @@ export async function publishRuns(
   snapshots: readonly BrainRequestSnapshot[],
   record: BrainIpcDependencies["recordConversationEntry"],
   stillFollowing: () => boolean = () => true,
+  onEndPublished: BrainIpcDependencies["onEndPublished"] = undefined,
 ): Promise<void> {
   for (const snapshot of snapshots) {
     if (!stillFollowing()) return;
     await publishAsk(agent, snapshot.runId, record);
     if (!stillFollowing()) return;
-    await publishEnd(agent, snapshot.runId, record);
+    const published = await publishEnd(agent, snapshot.runId, record);
+    if (published && stillFollowing()) onEndPublished?.(published);
   }
 }
 
@@ -155,18 +197,28 @@ export async function publishRuns(
  */
 export function followBrainRequests(
   agent: BrainAgent,
-  dependencies: Pick<BrainIpcDependencies, "recordConversationEntry" | "broadcastRequests">,
+  dependencies: Pick<
+    BrainIpcDependencies,
+    "recordConversationEntry" | "broadcastRequests" | "onEndPublished" | "onPublication"
+  >,
 ): () => Promise<void> {
   let accepting = true;
   let following = true;
   let publishing: Promise<void> = Promise.resolve();
+  dependencies.onPublication?.(() => publishing);
   const listener = (records: readonly BrainRequestRecord[]) => {
     if (!accepting) return;
     dependencies.broadcastRequests(records);
     // Reports are published one at a time, each against the records as they
     // then stand, so two reports of the same end cannot both find it unmarked.
     publishing = publishing.then(() =>
-      publishRuns(agent, records, dependencies.recordConversationEntry, () => following),
+      publishRuns(
+        agent,
+        records,
+        dependencies.recordConversationEntry,
+        () => following,
+        dependencies.onEndPublished,
+      ),
     );
   };
   const unsubscribe = agent.subscribe(listener);
@@ -198,9 +250,37 @@ export function registerBrainIpc(dependencies: BrainIpcDependencies): void {
         if (!originAllowed(context.sender, submission)) return REJECTED_SUBMISSION;
         return submitBrainAsk(brain(), submission, dependencies.recordConversationEntry);
       },
-      waitBrainAsk: (_context, runId) => brain()?.waitAsk(runId, askWaitMs),
+      // A wait that finds its run ended does not hand the words over on the
+      // strength of the record alone: the follower's publication is let
+      // finish, the live record is re-read for its History mark, and the
+      // grant to say the words on the call is asked of the delivery owner —
+      // which refuses if an offer for the run was already claimed, and
+      // withdraws an unclaimed offer if it grants. A pending run, a refused
+      // History write, or a caller that is not the current voice renderer
+      // comes back with the record and no grant, and the eventual delivery
+      // says the words instead.
+      async waitBrainAsk(context, runId, epoch): Promise<BrainAskWait> {
+        const waited = await brain()?.waitAsk(runId, askWaitMs);
+        if (!waited || !isTerminalBrainRequestStatus(waited.status)) {
+          return { record: waited, speak: false };
+        }
+        await dependencies.publicationSettled?.();
+        const live = brain()?.request(runId) ?? waited;
+        if (!submitters.voice(context.sender) || live.historyRecordedAt === undefined) {
+          return { record: live, speak: false };
+        }
+        return { record: live, speak: dependencies.replies?.grantOnCall(live, epoch) === true };
+      },
       cancelBrainAsk: (_context, runId) => brain()?.cancelAsk(runId),
       brainRequestSnapshots: () => brain()?.requests() ?? [],
+      claimBrainReply(context, runId, deliveryId, epoch): BrainReplyClaimResult {
+        if (!submitters.voice(context.sender) || !dependencies.replies) return { granted: false };
+        return dependencies.replies.claim(runId, deliveryId, epoch);
+      },
+      ackBrainReply(context, runId, deliveryId, epoch) {
+        if (!submitters.voice(context.sender)) return;
+        dependencies.replies?.acknowledge(runId, deliveryId, epoch);
+      },
     },
     { ipcMain, trustedSender },
   );

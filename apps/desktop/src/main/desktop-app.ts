@@ -22,7 +22,7 @@ import {
   productSignInAge,
   type RecordProductEvent,
 } from "@sidecar/analytics";
-import { type BrainDelivery, brainStateFromStored } from "@sidecar/brain";
+import { type BrainDelivery, type BrainRequestRecord, brainStateFromStored } from "@sidecar/brain";
 import {
   activeMeetingEnd,
   GoogleCalendarReader,
@@ -136,6 +136,7 @@ import {
   WINDOW_ROLE,
 } from "#shared/contracts";
 import { VOICE_SOURCE_COUNTED_AS } from "#shared/product-vocabulary";
+import type { BrainRequestSnapshot } from "#shared/wire/brain";
 import { SPEECH_OUTCOME, type SpeechOutcome } from "#shared/wire/speech";
 import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/wire/voice-view";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
@@ -152,6 +153,7 @@ import {
 import type { WorkspaceCreationDefaults } from "./brain/act-performer";
 import { clearConversationAndBrain } from "./brain/conversation-clear";
 import { BRAIN_STATE_FILE, wakeEventsFromHooks } from "./brain/flow";
+import { BrainReplyDeliveries } from "./brain/reply-delivery";
 import { wireBrain } from "./brain/wiring";
 import {
   CALENDAR_ONBOARDING_STATE_FILE,
@@ -200,6 +202,7 @@ import { createElectronUpdaterEngine } from "./update-installer";
 import { UPDATE_ENDPOINT, UpdateService } from "./update-service";
 import { transitionVoiceCredential } from "./voice/credential-transition";
 import { type OnboardingBeatKind, SpeechArbiter } from "./voice/speech-arbiter";
+import { VoiceReceiver } from "./voice-receiver";
 import { DockPresence } from "./window/dock-presence";
 import { HOTKEY_RANK, HotkeyRegistrar } from "./window/hotkey-registrar";
 import { IntroductionWindow } from "./window/introduction-window";
@@ -477,6 +480,19 @@ let announcementsHeld = false;
  */
 let conversationHistory: readonly ConversationEntry[] = [];
 let conversationClearedAt: number | undefined;
+/**
+ * Which ended runs are still owed to the developer's ear, and to which voice
+ * renderer. Owned here, never persisted, and emptied with the generation: a
+ * launch restores the words to History and speaks none of them.
+ */
+const brainReplyDeliveries = new BrainReplyDeliveries({ nextDeliveryId: () => randomUUID() });
+/**
+ * Whether the hidden voice renderer can receive, by the main process's own
+ * account: an epoch per load, ready only on that renderer's report. Every
+ * offer to the voice window — proactive speech and owed replies alike —
+ * waits on it, and a reset takes back what the vanished renderer held.
+ */
+const voiceReceiver = new VoiceReceiver();
 /** The spool watchers standing on each hooked provider's spool, closed at quit. */
 let spoolWatchers: readonly ObservationSpoolWatcher[] = [];
 /**
@@ -804,6 +820,7 @@ const introductionWindow = new IntroductionWindow({
  */
 const voiceWindow = new VoiceWindow({
   runMode,
+  receiver: voiceReceiver,
   preloadPath: path.join(__dirname, "preload.js"),
   rendererHtmlPath: path.join(__dirname, "renderer", "index.html"),
   rendererUrl: rendererUrl(),
@@ -1712,8 +1729,26 @@ const brainWiring = wireBrain({
   report: (message) => process.stderr.write(`${message}\n`),
   ...(agentTrace ? { traceTurn: (record) => agentTrace.recordBrainTurn(record) } : undefined),
   recordConversationEntry: recordMainConversationEntry,
-  broadcastRequests: (snapshots) => broadcast(channels.onBrainRequestsChanged, snapshots),
-  onGenerationReplaced: withdrawBriefings,
+  broadcastRequests: broadcastBrainRequests,
+  onEndPublished: offerBrainReply,
+  onGenerationReplaced: () => {
+    withdrawBriefings();
+    withdrawBrainReplies();
+  },
+  replies: {
+    claim: (runId, deliveryId, epoch) =>
+      brainReplyDeliveries.claim(runId, deliveryId, epoch, brainReplyClaimContext()),
+    acknowledge: (runId, deliveryId, epoch) => {
+      if (brainReplyDeliveries.acknowledge(runId, deliveryId, epoch)) offerBrainReplies();
+    },
+    grantOnCall: (record, epoch) =>
+      brainReplyDeliveries.grantOnCall(
+        record,
+        brainWiring.store().generationId() ?? "",
+        epoch,
+        brainReplyClaimContext(),
+      ),
+  },
   acts: {
     sessionActs: sessionActPerformer,
     sessions: brainActableSessions,
@@ -1896,6 +1931,7 @@ function registerIpc(): void {
         chromiumVersion: process.versions.chrome,
         nodeVersion: process.versions.node,
         microphoneStatus: microphoneStatus(),
+        ...(voiceWindow.owns(context.sender) ? { voiceEpoch: voiceReceiver.epoch() } : undefined),
         // Both keys travel as accelerators rather than labels: the renderer needs
         // both spellings — the keycaps' ⌥ and L drawn apart, and aria's Alt+L —
         // and only the accelerator can produce the pair.
@@ -2144,6 +2180,7 @@ function registerIpc(): void {
     trustedSender,
     panels,
     voiceWindow,
+    receiver: voiceReceiver,
     broadcast,
     storeVoiceView: (view) => {
       latestVoiceView = view;
@@ -2653,10 +2690,78 @@ function settleSpeech(id: string, outcome: SpeechOutcome): void {
  */
 function offerNextSpeech(): void {
   const host = voiceWindow.current();
-  if (!host || !voiceCapabilities.realtimeCredentials) return;
+  if (!host || !voiceReceiver.isReady() || !voiceCapabilities.realtimeCredentials) return;
   const offer = speechArbiter.next();
   if (offer) host.webContents.send(channels.onSpeechOffered, offer);
 }
+
+/**
+ * The brain's whole list of records, to every window and to the delivery
+ * owner, which reads it for the runs it watched go by while they were still
+ * going — the only ones whose ends it may ever offer to the ear.
+ */
+function broadcastBrainRequests(snapshots: readonly BrainRequestSnapshot[]): void {
+  brainReplyDeliveries.observe(snapshots);
+  broadcast(channels.onBrainRequestsChanged, snapshots);
+}
+
+/**
+ * A run's end has reached the thread, written and marked. Only now may it be
+ * owed to the ear, under the generation that stands at this moment — the one
+ * the live record was read from — and it goes out at once if a receiver is
+ * ready, or waits for the next one that reports.
+ */
+function offerBrainReply(record: BrainRequestRecord): void {
+  const generationId = brainWiring.store().generationId();
+  if (generationId === undefined) return;
+  brainReplyDeliveries.published(record, generationId);
+  offerBrainReplies();
+}
+
+/** What every grant is checked against at the moment it lands, read live rather than captured. */
+function brainReplyClaimContext() {
+  return {
+    receiverCurrent: (epoch: number) => voiceReceiver.isReady() && voiceReceiver.epoch() === epoch,
+    generationStands: (generationId: string) => brainWiring.store().holdsGeneration(generationId),
+    liveRecord: (runId: string) => brainWiring.current()?.request(runId),
+  };
+}
+
+/**
+ * The generation ended under the receiver: nothing owed of it may be spoken,
+ * and a renderer holding an offer or a grant from it is told so, in the same
+ * breath as the fence, so words already granted are not played into a thread
+ * that no longer exists.
+ */
+function withdrawBrainReplies(): void {
+  brainReplyDeliveries.reset();
+  voiceWindow.current()?.webContents.send(channels.onBrainRepliesWithdrawn, voiceReceiver.epoch());
+}
+
+/**
+ * Hands the ready receiver the one delivery it may hold now, under the epoch
+ * it is sent to; the next follows its acknowledgement. Nothing is sent to a
+ * window whose renderer has not reported, and nothing here is held by the
+ * announcement quiet: a reply to the developer's own ask is conversation,
+ * not news, and speaks under a meeting the way a reply on their call would.
+ */
+function offerBrainReplies(): void {
+  const host = voiceWindow.current();
+  if (!host || !voiceReceiver.isReady()) return;
+  const offer = brainReplyDeliveries.nextOffer(voiceReceiver.epoch());
+  if (offer) host.webContents.send(channels.onBrainReplyOffered, offer);
+}
+
+// The receiver reporting ready is the flush: whatever the arbiter holds and
+// every reply still owed goes to it now. Its epoch ending takes the arbiter's
+// outstanding offer back to the head, so the next renderer is offered it at
+// once rather than after the deadline; an owed reply the vanished renderer
+// never claimed is simply still unclaimed, and a claimed one stays claimed.
+voiceReceiver.onReady(() => {
+  offerNextSpeech();
+  offerBrainReplies();
+});
+voiceReceiver.onReset(() => speechArbiter.reclaimOffer());
 
 /**
  * Takes a pending beat back from the arbiter and, when the mouth already

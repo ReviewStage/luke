@@ -79,12 +79,23 @@
   flex-direction: column;
 }
 
-/* The bubble is the copy control's anchor. */
+/* The bubble is the copy control's anchor. It stacks: the words, then the
+   wait an ask still running draws beneath them, so a pending label never
+   shares the row with the question and squeezes beside it into a column. */
 .history-bubble {
   position: relative;
   display: flex;
   min-width: 0;
   max-width: 100%;
+  flex-direction: column;
+}
+
+.history-entry[data-speaker="you"] .history-bubble {
+  align-items: flex-end;
+}
+
+.history-entry[data-speaker="luke"] .history-bubble {
+  align-items: flex-start;
 }
 
 /* Copy sits in the bubble's free margin, absolutely positioned so a thread
@@ -136,8 +147,9 @@
 .history-pending {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 10px 7px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 4px 6px 2px;
   color: var(--text-secondary);
   font-size: 11.5px;
 }

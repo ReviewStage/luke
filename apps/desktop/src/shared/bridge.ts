@@ -74,11 +74,18 @@ import {
   type BrainAppActRequest,
   type BrainAskSubmission,
   type BrainAskSubmissionResult,
+  type BrainAskWait,
+  type BrainReplyClaimResult,
+  type BrainReplyOffer,
   type BrainRequestSnapshot,
   isBrainAskSubmission,
   isBrainAskSubmissionResult,
+  isBrainAskWait,
+  isBrainReplyClaimResult,
+  isBrainReplyOffer,
   isBrainRequestSnapshot,
   isBrainRequestSnapshotList,
+  isReceiverEpoch,
 } from "./wire/brain";
 import {
   type AppBootstrap,
@@ -500,15 +507,18 @@ export const BRIDGE = {
   /**
    * Waits on one run for as long as the brain's wait allows, answering the
    * record as it then stands — ended, or still pending — or nothing for a run
-   * the brain does not know.
+   * the brain does not know, and whether the asking call may say the words:
+   * granted only to the voice window, under the receiver epoch it names, for
+   * an end already in History, and only once per run, so the words are never
+   * both said on the call and delivered later.
    */
   waitBrainAsk: entry({
     kind: "invoke",
     channel: "app:wait-brain-ask",
-    args: oneString,
-    result: result<BrainRequestSnapshot | undefined>(
-      (v) => v === undefined || isBrainRequestSnapshot(v),
+    args: args<[string, number]>(
+      (v) => v.length === 2 && isWireString(v[0]) && isReceiverEpoch(v[1]),
     ),
+    result: result<BrainAskWait>(isBrainAskWait),
   }),
   /** Cancels one run the developer no longer wants, answering its record as it then stands. */
   cancelBrainAsk: entry({
@@ -525,6 +535,44 @@ export const BRIDGE = {
     channel: "app:brain-request-snapshots",
     args: noArgs,
     result: result<readonly BrainRequestSnapshot[]>(isBrainRequestSnapshotList),
+  }),
+  /**
+   * The voice window asking to speak one offered reply, by run and delivery.
+   * The main process grants at most once per delivery, only to the receiver
+   * epoch the offer went to, and only while the run and its generation still
+   * stand; the grant carries the words, read from the live record.
+   */
+  claimBrainReply: entry({
+    kind: "invoke",
+    channel: "app:claim-brain-reply",
+    args: args<[string, string, number]>(
+      (v) => v.length === 3 && isWireString(v[0]) && isWireString(v[1]) && isReceiverEpoch(v[2]),
+    ),
+    result: result<BrainReplyClaimResult>(isBrainReplyClaimResult),
+  }),
+  /**
+   * The voice window reporting the claimed reply it held done with — its reply
+   * ended or cut short, or shown where it could not be spoken — under the
+   * epoch it was granted to. The next owed reply is offered only after this.
+   */
+  ackBrainReply: entry({
+    kind: "send",
+    channel: "app:ack-brain-reply",
+    args: args<[string, string, number]>(
+      (v) => v.length === 3 && isWireString(v[0]) && isWireString(v[1]) && isReceiverEpoch(v[2]),
+    ),
+  }),
+  /**
+   * The voice window reporting it can receive: its bootstrap applied and its
+   * subscriptions standing, under the receiver epoch the bootstrap named. The
+   * main process accepts it only from the current voice renderer for the
+   * current epoch, and answers whether this report made the receiver ready.
+   */
+  reportVoiceReady: entry({
+    kind: "invoke",
+    channel: "app:report-voice-ready",
+    args: args<[number]>((v) => v.length === 1 && isWireNumber(v[0]) && Number.isInteger(v[0])),
+    result: result<boolean>(isWireBoolean),
   }),
   /**
    * The renderer's guide snapshot, pushed whenever it changes, so the main
@@ -954,6 +1002,29 @@ export const BRIDGE = {
     result: result<{ command: VoiceCommand }>(
       (value) => isRecord(value) && isVoiceCommand(value.command),
     ),
+  }),
+  /**
+   * One ended run whose reply the main process offers the voice window to
+   * speak. The words come with the grant, not the offer: the window claims
+   * through `claimBrainReply` before a word is said.
+   */
+  onBrainReplyOffered: entry({
+    kind: "subscribe",
+    channel: "app:brain-reply-offered",
+    args: noArgs,
+    result: result<BrainReplyOffer>(isBrainReplyOffer),
+  }),
+  /**
+   * The brain's generation ended — cleared, expired, or replaced — so every
+   * reply offered or granted from it is withdrawn: an offer in hand is
+   * dropped unclaimed, and words granted but not yet spoken are not spoken.
+   * Carries the receiver epoch it was sent under.
+   */
+  onBrainRepliesWithdrawn: entry({
+    kind: "subscribe",
+    channel: "app:brain-replies-withdrawn",
+    args: noArgs,
+    result: result<number>(isReceiverEpoch),
   }),
   /** Every run the brain holds, pushed whole whenever any record changes. */
   onBrainRequestsChanged: entry({
