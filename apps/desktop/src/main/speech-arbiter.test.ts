@@ -137,19 +137,18 @@ test("quiet beginning holds every pending request; quiet ending releases the bea
   assert.equal(offer.speakBy, clock.now + SPOKEN_NOTICE_MAX_AGE_MS);
 });
 
-test("held briefings are taken in order with their source intact, once", () => {
+test("held briefings are taken in order with briefing and timestamp intact, once", () => {
   const { arbiter } = harness();
   arbiter.setQuiet(true);
-  requestBriefing(arbiter, "first");
-  requestBriefing(arbiter, "second");
+  requestBriefing(arbiter, "first", 1_000);
+  requestBriefing(arbiter, "second", 2_000);
   arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
   arbiter.setQuiet(false);
 
-  const taken = arbiter.takeHeldBriefings();
-  assert.deepEqual(
-    taken.map((item) => item.briefing),
-    ["first", "second"],
-  );
+  assert.deepEqual(arbiter.takeHeldBriefings(), [
+    { briefing: "first", decidedAt: 1_000 },
+    { briefing: "second", decidedAt: 2_000 },
+  ]);
   assert.equal(arbiter.heldBriefingCount, 0);
   assert.equal(arbiter.pendingCount, 1, "the beat is not a briefing and stays");
   assert.deepEqual(arbiter.takeHeldBriefings(), []);
