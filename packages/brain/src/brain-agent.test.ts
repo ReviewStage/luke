@@ -24,6 +24,7 @@ import {
 import {
   BRAIN_TURN_TRIGGER,
   type BrainActExecution,
+  type BrainActPerformer,
   BrainAgent,
   type BrainAgentOptions,
   type BrainTurnTraceRecord,
@@ -42,8 +43,24 @@ import {
   type BrainWakeEvent,
 } from "./brain-events.js";
 import { BRAIN_INPUT_MARKER } from "./brain-input.js";
-import type { BrainPersistedState } from "./brain-memory.js";
+import { UNKNOWN_ACT_RESULT } from "./brain-journal.js";
 import { RESPONSES_ITEM_TYPE, type ResponsesInputItem } from "./brain-openai.js";
+import {
+  BRAIN_REQUEST_FAILURE,
+  BRAIN_REQUEST_ORIGIN,
+  BRAIN_REQUEST_STATUS,
+  BRAIN_SUBMISSION_OUTCOME,
+  BRAIN_SUBMISSION_REJECTION,
+  type BrainRequestRecord,
+  type BrainSubmissionResult,
+} from "./brain-requests.js";
+import {
+  type BrainPersistedState,
+  type BrainStateStorage,
+  BrainStateStore,
+  brainStateFromStored,
+  freshBrainState,
+} from "./brain-state.js";
 import { BRAIN_TOOL } from "./brain-tools.js";
 
 const NOW = 1_800_000_000_000;
@@ -158,10 +175,42 @@ async function settle(): Promise<void> {
   for (let index = 0; index < 20; index += 1) await new Promise((resolve) => setImmediate(resolve));
 }
 
+/**
+ * Storage a test can break: every write lands in `writes` and is the store's
+ * held file, unless `failWrites` says the disk refused it.
+ */
+class FakeStorage implements BrainStateStorage {
+  file: string | undefined;
+  failWrites = false;
+  writes = 0;
+  constructor(file?: string) {
+    this.file = file;
+  }
+  read() {
+    return this.file;
+  }
+  write(contents: string) {
+    if (this.failWrites) return false;
+    this.writes += 1;
+    this.file = contents;
+    return true;
+  }
+  remove() {
+    this.file = undefined;
+    return true;
+  }
+  /** Every state the file has held, newest last, as the tests read "persisted". */
+  stored(): BrainPersistedState | undefined {
+    return brainStateFromStored(this.file);
+  }
+}
+
 interface Harness {
   agent: BrainAgent;
   client: FakeClient;
   clock: FakeClock;
+  storage: FakeStorage;
+  store: BrainStateStore;
   deliveries: BrainDelivery[];
   persisted: BrainPersistedState[];
   performed: RealtimeFunctionCall[];
@@ -171,11 +220,27 @@ interface Harness {
   wholeReads: SessionIdentity[];
 }
 
-function harness(overrides: Partial<BrainAgentOptions> = {}): Harness {
+let runIds = 0;
+
+function harness(overrides: Partial<BrainAgentOptions> = {}, storage = new FakeStorage()): Harness {
   const client = new FakeClient();
   const clock = new FakeClock();
   const deliveries: BrainDelivery[] = [];
   const persisted: BrainPersistedState[] = [];
+  const store = new BrainStateStore({
+    storage: {
+      read: () => storage.read(),
+      write: (contents) => {
+        const written = storage.write(contents);
+        const state = brainStateFromStored(contents);
+        if (written && state) persisted.push(state);
+        return written;
+      },
+      remove: () => storage.remove(),
+    },
+    createGenerationId: () => `gen-${runIds++}`,
+    now: () => clock.now,
+  });
   const performed: RealtimeFunctionCall[] = [];
   const executions: BrainActExecution[] = [];
   const traces: BrainTurnTraceRecord[] = [];
@@ -208,10 +273,8 @@ function harness(overrides: Partial<BrainAgentOptions> = {}): Harness {
     deliver: (delivery) => {
       deliveries.push(delivery);
     },
-    persist: (state) => {
-      persisted.push(state);
-    },
-    restore: () => undefined,
+    store,
+    createRunId: () => `run-${runIds++}`,
     trace: (record) => {
       traces.push(record);
     },
@@ -226,6 +289,8 @@ function harness(overrides: Partial<BrainAgentOptions> = {}): Harness {
     agent,
     client,
     clock,
+    storage,
+    store,
     deliveries,
     persisted,
     performed,
@@ -234,6 +299,32 @@ function harness(overrides: Partial<BrainAgentOptions> = {}): Harness {
     sinceReads,
     wholeReads,
   };
+}
+
+let submissions = 0;
+
+/** Submits a typed ask and waits as long as it takes, answering the terminal record. */
+async function ask(h: Harness, question: string): Promise<BrainRequestRecord | undefined> {
+  const accepted = await submit(h, question);
+  if (accepted.outcome !== BRAIN_SUBMISSION_OUTCOME.ACCEPTED) return undefined;
+  return h.agent.waitAsk(accepted.runId, 10 * 24 * 60 * 60 * 1000);
+}
+
+function submit(
+  h: Harness,
+  question: string,
+  submissionId?: string,
+): Promise<BrainSubmissionResult> {
+  return h.agent.submitAsk({
+    submissionId: submissionId ?? `submission-${submissions++}`,
+    question,
+    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+  });
+}
+
+function acceptedRunId(result: BrainSubmissionResult): string {
+  assert.equal(result.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
+  return result.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? result.runId : "";
 }
 
 function itemText(item: ResponsesInputItem | undefined): string {
@@ -338,9 +429,11 @@ test("an ask returns the final text, carries pending wakes, and refuses announce
     ]),
     answered([message("Sent.")]),
   );
-  const answer = await h.agent.ask("tell the checkout agent to run the tests");
+  const answer = await ask(h, "tell the checkout agent to run the tests");
 
-  assert.deepEqual(answer, { text: "Sent." });
+  assert.equal(answer?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  assert.equal(answer?.text, "Sent.");
+  assert.equal(answer?.performedActs, 1);
   assert.deepEqual(h.deliveries, []);
   assert.deepEqual(h.performed, [
     {
@@ -353,10 +446,10 @@ test("an ask returns the final text, carries pending wakes, and refuses announce
     },
   ]);
   const first = h.client.inputs[0] ?? [];
-  const ask = itemText(first[0]);
-  assert.ok(ask.startsWith(`${BRAIN_INPUT_MARKER.DEVELOPER_ASK} `));
-  assert.ok(ask.includes("tell the checkout agent to run the tests"));
-  assert.ok(ask.includes(`${TRANSCRIPT_SECRET} for def`));
+  const opening = itemText(first[0]);
+  assert.ok(opening.startsWith(`${BRAIN_INPUT_MARKER.DEVELOPER_ASK} `));
+  assert.ok(opening.includes("tell the checkout agent to run the tests"));
+  assert.ok(opening.includes(`${TRANSCRIPT_SECRET} for def`));
   assert.equal(h.agent.pendingWakes(), 0);
   assert.equal(h.clock.timers.size, 0);
   const outputs = itemsOfType(h.client.inputs[1] ?? [], RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT);
@@ -375,27 +468,52 @@ test("an ask returns the final text, carries pending wakes, and refuses announce
   assert.equal(h.executions[0]?.isRevoked(), true);
 });
 
-test("an ask past its deadline answers nothing while the turn still finishes and persists", async () => {
-  const h = harness({ askDeadlineMs: 1_000 });
+test("a wait that runs out answers the run still pending, and the same run finishes once", async () => {
   let release: (() => void) | undefined;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
+  const inner = new FakeClient();
+  inner.answers.push(answered([message("Done at last.")]));
   const slow: BrainClient = {
     respond: async (input, options) => {
       await gate;
-      return h.client.respond(input, options);
+      return inner.respond(input, options);
     },
     quietUntil: () => undefined,
   };
-  const slowHarness = harness({ client: slow, askDeadlineMs: 1_000 });
-  const pending = slowHarness.agent.ask("anything?");
+  const h = harness({ client: slow });
+  const accepted = await submit(h, "anything?", "sub-1");
+  const runId = acceptedRunId(accepted);
   await settle();
-  await slowHarness.clock.advance(NOW + 1_000);
-  assert.equal(await pending, undefined);
+  // The transport retries the same submission: the same run, no second turn.
+  assert.deepEqual(await submit(h, "anything?", "sub-1"), accepted);
+  const firstWait = h.agent.waitAsk(runId, 30_000);
+  await settle();
+  await h.clock.advance(NOW + 30_000);
+  const pending = await firstWait;
+  assert.equal(pending?.status, BRAIN_REQUEST_STATUS.RUNNING);
+  assert.equal(pending?.runId, runId);
+  // A second wait, well past the old 45-second deadline: still the one run.
+  const secondWait = h.agent.waitAsk(runId, 30_000);
+  await settle();
+  await h.clock.advance(NOW + 60_000);
+  assert.equal((await secondWait)?.status, BRAIN_REQUEST_STATUS.RUNNING);
   release?.();
   await settle();
-  assert.equal(slowHarness.persisted.length, 1);
+  const done = await h.agent.waitAsk(runId, 1);
+  assert.equal(done?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  assert.equal(done?.text, "Done at last.");
+  assert.equal(inner.inputs.length, 1);
+  assert.equal(h.agent.requests().length, 1);
+  const stored = h.storage.stored();
+  assert.equal(stored?.requests[0]?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  // The record's own history: queued, running, and succeeded each checkpointed.
+  const statuses = h.persisted.map((state) => state.requests[0]?.status);
+  assert.deepEqual(
+    statuses.filter((status, index) => status !== statuses[index - 1]),
+    [BRAIN_REQUEST_STATUS.QUEUED, BRAIN_REQUEST_STATUS.RUNNING, BRAIN_REQUEST_STATUS.SUCCEEDED],
+  );
 });
 
 test("the tool loop stops at its cap with every call answered, so no function_call dangles", async () => {
@@ -545,13 +663,14 @@ test("a delta longer than its bound is cut from the front and marked truncated",
 
 test("restored memory opens the next turn, and held briefings are re-decided from their own item", async () => {
   const prior = [compaction("cmp_0"), message("earlier")];
-  const h = harness({
-    restore: () => ({
-      version: 1,
+  const storage = new FakeStorage(
+    JSON.stringify({
+      ...freshBrainState("gen-prior", NOW - 1),
       items: prior,
       cursors: { "claude-code": { abc: "old" } },
     }),
-  });
+  );
+  const h = harness({}, storage);
   h.client.answers.push(
     answered([call("call_1", BRAIN_TOOL.ANNOUNCE, { briefing: "Still waiting on you." })]),
     answered([message("")]),
@@ -576,7 +695,10 @@ test("stop drops pending wakes and takes nothing more", async () => {
   assert.equal(h.agent.pendingWakes(), 0);
   await h.clock.advance(NOW + 10_000);
   assert.equal(h.client.inputs.length, 0);
-  assert.equal(await h.agent.ask("hello?"), undefined);
+  assert.deepEqual(await submit(h, "hello?"), {
+    outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+    reason: BRAIN_SUBMISSION_REJECTION.ABSENT,
+  });
 });
 
 test("a roster look carries the roster and only the transcripts that grew", async () => {
@@ -664,13 +786,13 @@ test("a roster look is skipped while the client is quiet or a turn is in flight"
     await slow;
     return respond(input, options);
   };
-  const ask = h.agent.ask("what's up?");
+  const asked = ask(h, "what's up?");
   await settle();
   h.agent.rosterLook();
   await settle();
   assert.equal(h.client.inputs.length, 0);
   release?.();
-  await ask;
+  await asked;
   await settle();
   assert.equal(h.client.inputs.length, 1);
 
@@ -823,7 +945,7 @@ test("a developer ask carries every act with a live execution, revoked once the 
   const [messageAct] = FORBIDDEN_ACTS;
   assert.ok(messageAct);
   h.client.answers.push(answered([messageAct]), answered([message("Done.")]));
-  const asked = h.agent.ask("send it");
+  const asked = ask(h, "send it");
   await settle();
   assert.equal(performedLate.length, 1);
   const [late] = performedLate;
@@ -837,7 +959,399 @@ test("a developer ask carries every act with a live execution, revoked once the 
   release?.();
   await stopping;
   const answer = await asked;
-  assert.equal(answer?.text, "Done.");
-  const outputs = functionOutputs(h.client.inputs[1] ?? []);
+  // The agent stopped under the run: the record says interrupted, and the
+  // refused act's output is paired in memory rather than a second call made.
+  assert.equal(answer?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
+  assert.equal(h.client.inputs.length, 1);
+  const stored = h.storage.stored();
+  const outputs = functionOutputs(stored?.items ?? []);
   assert.ok(outputs[0]?.output.includes("turn over"));
+});
+
+/** A message act on the observed session `ABC`, under the call id given. */
+function messageAct(callId: string, words = "run the tests"): WireRecord {
+  return call(callId, REALTIME_TOOL.SEND_SESSION_MESSAGE, {
+    provider_id: ABC.providerId,
+    provider_session_id: ABC.providerSessionId,
+    text: words,
+  });
+}
+
+/** A performer whose acts hold until the test releases each one, in order. */
+function heldPerformer() {
+  const releases: (() => void)[] = [];
+  const performed: RealtimeFunctionCall[] = [];
+  const executions: BrainActExecution[] = [];
+  const acts: BrainActPerformer = {
+    perform: async (functionCall, execution): Promise<WireRecord> => {
+      performed.push(functionCall);
+      executions.push(execution);
+      await new Promise<void>((resolve) => {
+        releases.push(resolve);
+      });
+      return execution.isRevoked()
+        ? { status: ACT_RESULT_STATUS.REJECTED, reason: "turn over" }
+        : { status: ACT_RESULT_STATUS.ACCEPTED };
+    },
+  };
+  return { acts, releases, performed, executions };
+}
+
+/** A client whose every answer waits for the test to open the gate. */
+function gatedClient(inner: FakeClient) {
+  let open: (() => void) | undefined;
+  const gate = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  const client: BrainClient = {
+    respond: async (input, options) => {
+      await gate;
+      return inner.respond(input, options);
+    },
+    quietUntil: () => undefined,
+  };
+  return { client, open: () => open?.() };
+}
+
+test("a queued ask cancelled before its turn never starts, and its record says cancelled", async () => {
+  let release: (() => void) | undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const inner = new FakeClient();
+  inner.answers.push(answered([message("first")]), answered([message("second")]));
+  const h = harness({
+    client: {
+      respond: async (input, options) => {
+        await gate;
+        return inner.respond(input, options);
+      },
+      quietUntil: () => undefined,
+    },
+  });
+  const first = acceptedRunId(await submit(h, "first?"));
+  const second = acceptedRunId(await submit(h, "second?"));
+  await settle();
+  const cancelled = await h.agent.cancelAsk(second);
+  assert.equal(cancelled?.status, BRAIN_REQUEST_STATUS.CANCELLED);
+  release?.();
+  await settle();
+  assert.equal((await h.agent.waitAsk(first, 1))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  assert.equal(inner.inputs.length, 1);
+  assert.equal(h.storage.stored()?.requests[1]?.status, BRAIN_REQUEST_STATUS.CANCELLED);
+  // Cancelling a finished run changes nothing.
+  assert.equal((await h.agent.cancelAsk(first))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  assert.equal(await h.agent.cancelAsk("no-such-run"), undefined);
+});
+
+test("a cancel while the model is thinking aborts the request and settles the run cancelled", async () => {
+  const signals: (AbortSignal | undefined)[] = [];
+  let reject: ((error: Error) => void) | undefined;
+  const h = harness({
+    client: {
+      respond: (_input, options) => {
+        signals.push(options.signal);
+        return new Promise((_resolve, rejectRespond) => {
+          reject = rejectRespond;
+          options.signal?.addEventListener("abort", () => rejectRespond(new Error("aborted")));
+        });
+      },
+      quietUntil: () => undefined,
+    },
+  });
+  const runId = acceptedRunId(await submit(h, "slow?"));
+  await settle();
+  assert.equal(signals[0]?.aborted, false);
+  const cancelled = await h.agent.cancelAsk(runId);
+  assert.equal(signals[0]?.aborted, true);
+  assert.equal(cancelled?.status, BRAIN_REQUEST_STATUS.RUNNING);
+  await settle();
+  assert.equal(h.agent.request(runId)?.status, BRAIN_REQUEST_STATUS.CANCELLED);
+  assert.equal(h.storage.stored()?.requests[0]?.status, BRAIN_REQUEST_STATUS.CANCELLED);
+  assert.equal(h.storage.stored()?.items.length, 0);
+  assert.ok(reject);
+});
+
+test("a cancel between two acts keeps the first's result and refuses the second, never undoing the first", async () => {
+  const held = heldPerformer();
+  const performed = held.performed;
+  const h = harness({ acts: held.acts });
+  h.client.answers.push(
+    answered([messageAct("call_1", "one"), messageAct("call_2", "two")]),
+    answered([message("Both sent.")]),
+  );
+  const runId = acceptedRunId(await submit(h, "send both"));
+  await settle();
+  assert.equal(performed.length, 1);
+  held.releases[0]?.();
+  await settle();
+  // The first act's result is journaled and checkpointed before the second starts.
+  const journaled = h.storage.stored()?.journal ?? [];
+  assert.equal(journaled.length, 2);
+  assert.ok(journaled[0]?.outputJson?.includes(ACT_RESULT_STATUS.ACCEPTED));
+  assert.equal(journaled[1]?.outputJson, undefined);
+  await h.agent.cancelAsk(runId);
+  held.releases[1]?.();
+  await settle();
+  const record = h.agent.request(runId);
+  assert.equal(record?.status, BRAIN_REQUEST_STATUS.CANCELLED);
+  assert.equal(record?.performedActs, 1);
+  const outputs = functionOutputs(h.storage.stored()?.items ?? []);
+  assert.equal(outputs.length, 2);
+  assert.ok(outputs[0]?.output.includes(ACT_RESULT_STATUS.ACCEPTED));
+  assert.ok(outputs[1]?.output.includes("turn over"));
+  // No follow-up inference ran for a cancelled run.
+  assert.equal(h.client.inputs.length, 1);
+});
+
+test("an act that succeeded survives the follow-up model failing, in the record and in memory", async () => {
+  const h = harness();
+  h.client.answers.push(answered([messageAct("call_1")]), {
+    outcome: BRAIN_CLIENT_OUTCOME.FAILED,
+    reason: "network",
+  });
+  const record = await ask(h, "send it");
+  assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.MODEL);
+  assert.equal(record?.performedActs, 1);
+  assert.equal(record?.text, undefined);
+  assert.equal(h.performed.length, 1);
+  // The call and its output stand in the stored memory, paired, so the next
+  // turn's model sees what was done rather than doing it again.
+  const items = h.storage.stored()?.items ?? [];
+  assert.equal(itemsOfType(items, RESPONSES_ITEM_TYPE.FUNCTION_CALL).length, 1);
+  assert.equal(functionOutputs(items).length, 1);
+  h.client.answers.push(answered([message("As I said, sent.")]));
+  await ask(h, "did you?");
+  const next = h.client.inputs[2] ?? [];
+  assert.equal(itemsOfType(next, RESPONSES_ITEM_TYPE.FUNCTION_CALL).length, 1);
+  assert.equal(h.performed.length, 1);
+});
+
+test("a repeated call id answers the recorded result once; the same id with other arguments is refused", async () => {
+  const h = harness();
+  h.client.answers.push(
+    answered([messageAct("call_1", "one")]),
+    answered([
+      messageAct("call_1", "one"),
+      messageAct("call_1", "changed"),
+      messageAct("call_2", "two"),
+    ]),
+    answered([message("Done.")]),
+  );
+  const record = await ask(h, "send");
+  assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  assert.deepEqual(
+    h.performed.map((functionCall) => JSON.parse(functionCall.argumentsJson).text),
+    ["one", "two"],
+  );
+  const outputs = functionOutputs(h.client.inputs[2] ?? []);
+  const repeated = outputs.filter((output) => output.callId === "call_1");
+  assert.equal(repeated.length, 3);
+  assert.ok(repeated[1]?.output.includes(ACT_RESULT_STATUS.ACCEPTED));
+  assert.ok(repeated[2]?.output.includes("already used with different arguments"));
+  assert.equal(record?.performedActs, 2);
+});
+
+test("acts run one at a time in the order the model emitted them", async () => {
+  const held = heldPerformer();
+  const order: string[] = [];
+  const h = harness({
+    acts: {
+      perform: async (functionCall, execution) => {
+        order.push(`start ${JSON.parse(functionCall.argumentsJson).text}`);
+        const output = await held.acts.perform(functionCall, execution);
+        order.push(`end ${JSON.parse(functionCall.argumentsJson).text}`);
+        return output;
+      },
+    },
+  });
+  h.client.answers.push(
+    answered([messageAct("c1", "a"), messageAct("c2", "b"), messageAct("c3", "c")]),
+    answered([message("Three sent.")]),
+  );
+  const asked = ask(h, "send three");
+  await settle();
+  assert.deepEqual(order, ["start a"]);
+  held.releases[0]?.();
+  await settle();
+  assert.deepEqual(order, ["start a", "end a", "start b"]);
+  held.releases[1]?.();
+  await settle();
+  held.releases[2]?.();
+  const record = await asked;
+  assert.deepEqual(order, ["start a", "end a", "start b", "end b", "start c", "end c"]);
+  assert.equal(record?.performedActs, 3);
+});
+
+test("a checkpoint that fails before an act refuses it, and acceptance itself needs the record written", async () => {
+  const inner = new FakeClient();
+  inner.answers.push(answered([messageAct("call_1", "one")]), answered([message("Nothing sent.")]));
+  const gated = gatedClient(inner);
+  const h = harness({ client: gated.client });
+  h.storage.failWrites = true;
+  assert.deepEqual(await submit(h, "send"), {
+    outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+    reason: BRAIN_SUBMISSION_REJECTION.PERSISTENCE,
+  });
+  assert.equal(h.agent.requests().length, 0);
+  h.storage.failWrites = false;
+  const runId = acceptedRunId(await submit(h, "send"));
+  await settle();
+  h.storage.failWrites = true;
+  gated.open();
+  await settle();
+  const record = h.agent.request(runId);
+  assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
+  assert.equal(record?.performedActs, 0);
+  assert.equal(h.performed.length, 0);
+  const refusal = functionOutputs(inner.inputs[1] ?? [])[0];
+  assert.ok(refusal?.output.includes("could not be recorded before running"));
+  // The disk never saw a started act it could mistake for one that ran.
+  assert.equal(h.storage.stored()?.journal.length, 0);
+});
+
+test("a checkpoint that fails after an act keeps its result in memory, blocks further acts, and reports the failure", async () => {
+  let acted = 0;
+  let storage: FakeStorage | undefined;
+  const h = harness({
+    acts: {
+      perform: async (): Promise<WireRecord> => {
+        acted += 1;
+        // The disk goes away from the moment the first effect has happened.
+        if (storage) storage.failWrites = true;
+        return { status: ACT_RESULT_STATUS.ACCEPTED };
+      },
+    },
+  });
+  storage = h.storage;
+  h.client.answers.push(
+    answered([messageAct("call_1", "one"), messageAct("call_2", "two")]),
+    answered([message("Sent.")]),
+  );
+  const record = await ask(h, "send two");
+  assert.equal(acted, 1);
+  assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
+  assert.equal(record?.performedActs, 1);
+  assert.equal(record?.text, "Sent.");
+  const outputs = functionOutputs(h.client.inputs[1] ?? []);
+  assert.ok(outputs[0]?.output.includes(ACT_RESULT_STATUS.ACCEPTED));
+  assert.ok(outputs[1]?.output.includes("could not be recorded"));
+  // The disk holds the started entry with no result, which a restart reads as unknown.
+  const stored = h.storage.stored();
+  assert.equal(stored?.journal.length, 1);
+  assert.equal(stored?.journal[0]?.outputJson, undefined);
+  assert.equal(stored?.requests[0]?.status, BRAIN_REQUEST_STATUS.RUNNING);
+});
+
+test("a restart marks unfinished runs interrupted and pairs a started act as unknown, never replaying it", async () => {
+  const held = heldPerformer();
+  const h = harness({ acts: held.acts });
+  h.client.answers.push(answered([messageAct("call_1")]), answered([message("Sent.")]));
+  const runId = acceptedRunId(await submit(h, "send"));
+  await settle();
+  // The process dies here: the act has started, its result never recorded.
+  const file = h.storage.file;
+  const stored = brainStateFromStored(file);
+  assert.equal(stored?.requests[0]?.status, BRAIN_REQUEST_STATUS.RUNNING);
+  assert.equal(stored?.journal[0]?.outputJson, undefined);
+  assert.equal(functionOutputs(stored?.items ?? []).length, 0);
+
+  const relaunched = harness({}, new FakeStorage(file));
+  await relaunched.agent.ready();
+  const record = relaunched.agent.request(runId);
+  assert.equal(record?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
+  assert.equal(relaunched.performed.length, 0);
+  const restored = relaunched.storage.stored();
+  assert.equal(restored?.requests[0]?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
+  const paired = functionOutputs(restored?.items ?? []);
+  assert.equal(paired.length, 1);
+  assert.ok(paired[0]?.output.includes(UNKNOWN_ACT_RESULT.status));
+  // The next ask opens on a memory with no dangling call, and runs no old act.
+  relaunched.client.answers.push(answered([message("Hello.")]));
+  const next = await ask(relaunched, "hi");
+  assert.equal(next?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  assert.equal(relaunched.performed.length, 0);
+  assert.equal(
+    itemsOfType(relaunched.client.inputs[0] ?? [], RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT).length,
+    1,
+  );
+  // A wait on the interrupted run answers at once; a wait on an unknown run answers nothing.
+  assert.equal(
+    (await relaunched.agent.waitAsk(runId, 1))?.status,
+    BRAIN_REQUEST_STATUS.INTERRUPTED,
+  );
+  assert.equal(await relaunched.agent.waitAsk("never", 1), undefined);
+});
+
+test("a run past its execution deadline is timed out and its act refused", async () => {
+  const held = heldPerformer();
+  const h = harness({ acts: held.acts, executionDeadlineMs: 60_000 });
+  h.client.answers.push(answered([messageAct("call_1")]), answered([message("Sent.")]));
+  const runId = acceptedRunId(await submit(h, "send"));
+  await settle();
+  await h.clock.advance(NOW + 60_000);
+  held.releases[0]?.();
+  await settle();
+  const record = h.agent.request(runId);
+  assert.equal(record?.status, BRAIN_REQUEST_STATUS.TIMED_OUT);
+  assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.DEADLINE);
+  assert.equal(record?.performedActs, 0);
+  assert.equal(h.client.inputs.length, 1);
+});
+
+test("the store's generation changing under a run revokes it and fences its late checkpoints", async () => {
+  const held = heldPerformer();
+  const h = harness({ acts: held.acts });
+  // Only the act is answered: a revoked run asks the model for no follow-up.
+  h.client.answers.push(answered([messageAct("call_1")]));
+  const runId = acceptedRunId(await submit(h, "send"));
+  await settle();
+  const execution = held.executions[0];
+  assert.equal(execution?.isRevoked(), false);
+  assert.equal(await h.store.reset(), true);
+  assert.equal(execution?.isRevoked(), true);
+  assert.equal(h.agent.requests().length, 0);
+  held.releases[0]?.();
+  await settle();
+  // Nothing of the old generation reached the new envelope.
+  const fresh = h.store.current();
+  assert.equal(fresh?.requests.length, 0);
+  assert.equal(fresh?.items.length, 0);
+  assert.equal(fresh?.journal.length, 0);
+  assert.equal(h.agent.request(runId), undefined);
+  // The new generation takes asks as before.
+  h.client.answers.push(answered([message("Fresh start.")]));
+  assert.equal((await ask(h, "hello"))?.text, "Fresh start.");
+});
+
+test("a spoken submission keeps its origin, and an empty ask is refused without a record", async () => {
+  const h = harness();
+  assert.deepEqual(
+    await h.agent.submitAsk({
+      submissionId: "s",
+      question: "   ",
+      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+    }),
+    { outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED, reason: BRAIN_SUBMISSION_REJECTION.EMPTY },
+  );
+  assert.equal(h.agent.requests().length, 0);
+  h.client.answers.push(answered([message("Hi.")]));
+  const accepted = await h.agent.submitAsk({
+    submissionId: "s",
+    question: "hello there",
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+  });
+  const runId = acceptedRunId(accepted);
+  const heard: (readonly BrainRequestRecord[])[] = [];
+  const unsubscribe = h.agent.subscribe((records) => heard.push(records));
+  const record = await h.agent.waitAsk(runId, 60_000);
+  unsubscribe();
+  assert.equal(record?.origin, BRAIN_REQUEST_ORIGIN.SPOKEN);
+  assert.equal(record?.question, "hello there");
+  assert.ok(heard.length > 0);
+  assert.ok(heard.every((records) => records[0]?.runId === runId));
+  assert.ok((heard.at(-1)?.[0]?.revision ?? 0) > 0);
 });

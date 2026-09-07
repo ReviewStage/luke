@@ -17,7 +17,11 @@ import {
 } from "@sidecar/realtime";
 import { ACT_RESULT_STATUS, isRecord, text, type WireRecord } from "@sidecar/wire";
 import type { JsonValue, ParsedJsonObject } from "@sidecar/wire/testing";
-import type { BrainAskResult } from "#shared/wire/brain";
+import {
+  BRAIN_ASK_PENDING_NOTE,
+  BRAIN_ASK_PENDING_STATUS,
+  type BrainAskResult,
+} from "#shared/wire/brain";
 import {
   asMediaStream,
   asMediaTrack,
@@ -72,6 +76,8 @@ interface Harness {
   replyEndings: ReplyEnding[];
   /** The questions the voice asked the brain, in order. */
   asked: string[];
+  /** The submission id each ask travelled under: the tool call's own id. */
+  submissions: string[];
   /** The developer's spoken turns, as the service handed them back. */
   spokenAsks: string[];
   /** The growing pieces of those turns' words, in arrival order. */
@@ -117,6 +123,10 @@ function brainAnswer(briefing: string): BrainAskResult {
   return { status: ACT_RESULT_STATUS.ACCEPTED, briefing };
 }
 
+function brainPending(): BrainAskResult {
+  return { status: BRAIN_ASK_PENDING_STATUS, note: BRAIN_ASK_PENDING_NOTE };
+}
+
 function harness(
   options: {
     connection?: RealtimeConnection | undefined;
@@ -147,6 +157,7 @@ function harness(
   const captions: (readonly string[] | undefined)[] = [];
   const replyEndings: ReplyEnding[] = [];
   const asked: string[] = [];
+  const submissions: string[] = [];
   const spokenAsks: string[] = [];
   const spokenAskDeltas: { itemId: string; delta: string }[] = [];
   const spokenAskFailures: string[] = [];
@@ -370,8 +381,9 @@ function harness(
   }
   const askBrain = options.askBrain;
   if (askBrain) {
-    sessionOptions.askBrain = (question) => {
+    sessionOptions.askBrain = (question, submissionId) => {
       asked.push(question);
+      submissions.push(submissionId);
       return askBrain(question);
     };
   }
@@ -384,6 +396,7 @@ function harness(
     captions,
     replyEndings,
     asked,
+    submissions,
     spokenAsks,
     spokenAskDeltas,
     spokenAskFailures,
@@ -2800,6 +2813,29 @@ test("a typed ask interrupts the reply it arrives over", async () => {
     ],
   );
   assert.equal(context.session.status, REALTIME_STATUS.RESPONDING);
+});
+
+test("an ask the brain has not finished with is answered pending under the call's own id, and the turn is released", async () => {
+  const context = harness({ askBrain: async () => brainPending() });
+  await context.session.connect();
+  await armDeveloperTurn(context);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-a" } });
+  const before = context.sent.length;
+  context.emit(
+    askBrainDone("read every transcript", { callId: "call-slow", responseId: "resp-a" }),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // The tool call's id is the submission, so the service repeating the call
+  // finds the same run rather than opening a second one.
+  assert.deepEqual(context.asked, ["read every transcript"]);
+  assert.deepEqual(context.submissions, ["call-slow"]);
+  // The output says the run goes on; the follow-up voices that, and nothing
+  // here holds the turn open for the eventual reply.
+  assert.deepEqual(toolOutputs(context, before), [
+    { status: BRAIN_ASK_PENDING_STATUS, note: BRAIN_ASK_PENDING_NOTE },
+  ]);
+  assert.equal(responseCreates(context, before).length, 1);
 });
 
 test("a cancelled reply's late finish cannot ask the brain in the turn that replaced it", async () => {

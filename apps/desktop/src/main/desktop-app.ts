@@ -22,7 +22,7 @@ import {
   productSignInAge,
   type RecordProductEvent,
 } from "@sidecar/analytics";
-import { BrainAgent, type BrainDelivery, type BrainPersistedState } from "@sidecar/brain";
+import { BrainAgent, type BrainDelivery, BrainStateStore } from "@sidecar/brain";
 import {
   activeMeetingEnd,
   GoogleCalendarReader,
@@ -150,12 +150,7 @@ import {
   countsFirstAnnouncement,
   shouldBackfillArrivalSettled,
 } from "./arrival-flow";
-import {
-  BRAIN_STATE_FILE,
-  brainStateFromStored,
-  brainStateRecord,
-  wakeEventsFromHooks,
-} from "./brain-flow";
+import { BRAIN_STATE_FILE, wakeEventsFromHooks } from "./brain-flow";
 import {
   CALENDAR_ONBOARDING_STATE_FILE,
   type CalendarOnboardingState,
@@ -176,7 +171,7 @@ import {
   shouldRunIntroduction,
 } from "./introduction-flow";
 import { registerAccountSessionIpc } from "./ipc/account-session";
-import { registerBrainIpc } from "./ipc/brain";
+import { followBrainRequests, registerBrainIpc } from "./ipc/brain";
 import { createBrainActPerformer, type WorkspaceCreationDefaults } from "./ipc/brain-acts";
 import { registerCalendarConnectionIpc } from "./ipc/calendar-connection";
 import { createSessionActPerformer, registerSessionActsIpc } from "./ipc/session-acts";
@@ -492,6 +487,14 @@ let conversationClearedAt: number | undefined;
  * announced, and an ask is answered with the honest refusal.
  */
 let brain: BrainAgent | undefined;
+/** The subscription following the standing brain's records, retired with it. */
+let unfollowBrain: (() => void) | undefined;
+/**
+ * The one writer of the brain's state file, owned here and outliving every
+ * agent built on it: a key or account change rebuilds the agent, never the
+ * store, so two agents can never write the envelope past each other.
+ */
+let brainStateStore: BrainStateStore | undefined;
 /** The spool watchers standing on each hooked provider's spool, closed at quit. */
 let spoolWatchers: readonly ObservationSpoolWatcher[] = [];
 /**
@@ -1486,6 +1489,19 @@ async function applyVoiceCredential(): Promise<void> {
 
 const brainStatePath = () => path.join(app.getPath("userData"), BRAIN_STATE_FILE);
 
+function brainStore(): BrainStateStore {
+  brainStateStore ??= new BrainStateStore({
+    storage: {
+      read: () => readStoredState(brainStatePath()),
+      write: (contents) =>
+        writeStoredState(brainStatePath(), contents, "Luke's memory of the agents"),
+      remove: () => removeStoredState(brainStatePath(), "Luke's memory of the agents"),
+    },
+    createGenerationId: () => randomUUID(),
+  });
+  return brainStateStore;
+}
+
 /**
  * The roster as the brain is shown it and validates every act against: the
  * sessions still worth a row, less Luke's own voice, rendered with the same
@@ -1712,6 +1728,8 @@ const brainActPerformer = createBrainActPerformer({
 async function rebuildBrain(): Promise<void> {
   const previous = brain;
   brain = undefined;
+  unfollowBrain?.();
+  unfollowBrain = undefined;
   if (previous) await previous.stop();
   const client = voiceCapabilities.brainClient;
   if (
@@ -1756,12 +1774,14 @@ async function rebuildBrain(): Promise<void> {
       return adapter.readTranscript(identity.providerSessionId);
     },
     deliver: deliverBriefing,
-    persist: (state: BrainPersistedState) => {
-      writeStoredState(brainStatePath(), brainStateRecord(state), "Luke's memory of the agents");
-    },
-    restore: () => brainStateFromStored(readStoredState(brainStatePath())),
+    store: brainStore(),
+    createRunId: () => randomUUID(),
     ...(agentTrace ? { trace: (record) => agentTrace.recordBrainTurn(record) } : undefined),
     report: (message) => process.stderr.write(`${message}\n`),
+  });
+  unfollowBrain = followBrainRequests(brain, {
+    recordConversationEntry: recordMainConversationEntry,
+    broadcastRequests: (snapshots) => broadcast(channels.onBrainRequestsChanged, snapshots),
   });
 }
 
@@ -2203,7 +2223,17 @@ function registerIpc(): void {
   });
 
   registerSessionActsIpc({ ipcMain, trustedSender, performer: sessionActPerformer });
-  registerBrainIpc({ ipcMain, trustedSender, brain: () => brain });
+  registerBrainIpc({
+    ipcMain,
+    trustedSender,
+    brain: () => brain,
+    submitters: {
+      panel: (sender) => panels.owns(sender),
+      voice: (sender) => voiceWindow.owns(sender),
+    },
+    recordConversationEntry: recordMainConversationEntry,
+    broadcastRequests: (snapshots) => broadcast(channels.onBrainRequestsChanged, snapshots),
+  });
   // The renderer's description of the app, pushed whenever it changes: what an
   // app act the brain asks for is validated against here, and what the brain
   // reads as the guide.

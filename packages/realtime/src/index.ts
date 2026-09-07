@@ -14,6 +14,7 @@ export {
   type ConversationEntryKind,
   conversationEntryKey,
   conversationHistoryText,
+  hasConversationEntryForRequest,
   insertSpokenAskEntry,
   insertSpokenAskThreadEntry,
   isConversationEntryKind,
@@ -27,6 +28,7 @@ export {
   storedConversationEntry,
   storedConversationMaximumAgeMs,
   streamingConversationEntry,
+  typedAskConversationEntry,
 } from "./conversation-history.js";
 export {
   type IntroductionLine,

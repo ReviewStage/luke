@@ -1,6 +1,12 @@
+import { BRAIN_REQUEST_ORIGIN, BRAIN_SUBMISSION_OUTCOME } from "@sidecar/brain/requests";
 import { type ConversationEntry, REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MicrophoneStatus, VoiceHotkeyState } from "#shared/wire/audio";
+import {
+  BRAIN_ASK_REFUSAL,
+  type BrainAskSubmissionResult,
+  type BrainRequestSnapshot,
+} from "#shared/wire/brain";
 import type { AppBootstrap } from "#shared/wire/session";
 import {
   IDLE_VOICE_VIEW,
@@ -15,17 +21,37 @@ import { VOICE_ACTIVITY_HANGOVER_MS, VOICE_ACTIVITY_THRESHOLD } from "./voice/vo
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
 
 /**
- * What the composer hears back from a typed ask: nothing when the ask reached
- * a conversation, so the draft clears, and a reason when it did not, so the
- * developer's words stay theirs to retry. An ask nobody answered — the voice
- * window gone, the wait run out — is refused too: words lost on a silence
- * would be the one outcome nobody chose. The strip already carries the
- * specific refusal through the view, so this only has to be true.
+ * What the composer hears back from a typed ask: nothing when the brain
+ * accepted it into a run, so the draft clears, and a reason when it did not,
+ * so the developer's words stay theirs to retry. An ask nobody answered — the
+ * bridge throwing, the main process gone — is refused too: words lost on a
+ * silence would be the one outcome nobody chose.
  */
 export const ASK_UNSENT_REASON = "Luke could not take that ask. Try again.";
 
-export function askDraftReason(outcome: VoiceCommandOutcome | undefined): string | undefined {
-  return outcome === VOICE_COMMAND_OUTCOME.ACCEPTED ? undefined : ASK_UNSENT_REASON;
+export function askDraftReason(result: BrainAskSubmissionResult | undefined): string | undefined {
+  if (result === undefined) return ASK_UNSENT_REASON;
+  return result.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED
+    ? undefined
+    : BRAIN_ASK_REFUSAL[result.reason];
+}
+
+/**
+ * Takes one report of the brain's records into the list a panel draws. The
+ * push and the bootstrap read race, so records are reconciled by run: the
+ * higher revision of a run wins whichever arrived last, and a run one side
+ * never mentioned is kept from the other.
+ */
+export function reconciledBrainRequests(
+  current: readonly BrainRequestSnapshot[],
+  incoming: readonly BrainRequestSnapshot[],
+): readonly BrainRequestSnapshot[] {
+  const byRun = new Map(current.map((snapshot) => [snapshot.runId, snapshot]));
+  for (const snapshot of incoming) {
+    const held = byRun.get(snapshot.runId);
+    if (!held || held.revision <= snapshot.revision) byRun.set(snapshot.runId, snapshot);
+  }
+  return [...byRun.values()].sort((left, right) => left.acceptedAt - right.acceptedAt);
 }
 
 /** What the strip says when the stored thread could not be deleted. */
@@ -118,12 +144,16 @@ export interface VoiceViewState {
   /** The bootstrap's snapshots, applied only where no push has spoken yet. */
   acceptBootstrap: (bootstrap: AppBootstrap) => void;
   /**
-   * A typed ask to Luke, forwarded to the voice window and answered with
-   * whether it reached a conversation: nothing when it did, a reason when it
-   * did not, so the composer keeps a refused draft. The specific refusal
-   * lands on the strip through the view.
+   * A typed ask to Luke, submitted to the brain in the main process and
+   * answered with whether it was accepted into a run: nothing when it was, a
+   * reason when it was not, so the composer keeps a refused draft. The reply
+   * arrives later, in the thread and in the voice.
    */
   askLuke: (text: string) => Promise<string | undefined>;
+  /** Every run the brain holds, for History to draw a pending ask beside its words. */
+  brainRequests: readonly BrainRequestSnapshot[];
+  /** Cancels one run the developer no longer wants. */
+  cancelBrainAsk: (runId: string) => void;
   /** Escape out of an open turn: forget the press and the latch, and stop listening. */
   discardListening: () => void;
   stopSpeaking: () => void;
@@ -206,23 +236,45 @@ export function useVoiceView(): VoiceViewState {
   // or bootstrap's old chord would keep winning for the rest of the session.
   useEffect(() => window.sidecar.onVoiceHotkeyChanged(setVoiceHotkey), []);
 
+  // One submission id per press of Send: the id is what makes a retry of
+  // this very ask the same run and a second deliberate ask a new one.
   const askLuke = useCallback(
     async (text: string): Promise<string | undefined> =>
       askDraftReason(
         await window.sidecar
-          .voiceCommand(VOICE_COMMAND.ASK_TEXT, text)
-          .catch((): VoiceCommandOutcome => VOICE_COMMAND_OUTCOME.REFUSED),
+          .submitBrainAsk({
+            submissionId: crypto.randomUUID(),
+            question: text,
+            origin: BRAIN_REQUEST_ORIGIN.TYPED,
+          })
+          .catch((): BrainAskSubmissionResult | undefined => undefined),
       ),
     [],
   );
+  // Subscribed before the snapshots are read, and reconciled by run, so a
+  // change landing between the two is never overwritten by the older read.
+  const [brainRequests, setBrainRequests] = useState<readonly BrainRequestSnapshot[]>([]);
+  useEffect(() => {
+    const unsubscribe = window.sidecar.onBrainRequestsChanged((records) =>
+      setBrainRequests((current) => reconciledBrainRequests(current, records)),
+    );
+    void window.sidecar
+      .brainRequestSnapshots()
+      .then((records) => setBrainRequests((current) => reconciledBrainRequests(current, records)))
+      .catch(() => undefined);
+    return unsubscribe;
+  }, []);
+  const cancelBrainAsk = useCallback((runId: string) => {
+    void window.sidecar.cancelBrainAsk(runId).catch(() => undefined);
+  }, []);
   const discardListening = useCallback(() => {
-    void window.sidecar.voiceCommand(VOICE_COMMAND.DISCARD_LISTENING, undefined);
+    void window.sidecar.voiceCommand(VOICE_COMMAND.DISCARD_LISTENING);
   }, []);
   const stopSpeaking = useCallback(() => {
-    void window.sidecar.voiceCommand(VOICE_COMMAND.STOP_SPEAKING, undefined);
+    void window.sidecar.voiceCommand(VOICE_COMMAND.STOP_SPEAKING);
   }, []);
   const requestMicrophoneAccess = useCallback(() => {
-    void window.sidecar.voiceCommand(VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS, undefined);
+    void window.sidecar.voiceCommand(VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS);
   }, []);
   // The one failure the panel reports itself: the stored thread refusing to
   // go is the main process's answer to this press, not anything the voice
@@ -235,7 +287,7 @@ export function useVoiceView(): VoiceViewState {
   }, [localError]);
   const clearConversationHistory = useCallback(() => {
     void window.sidecar
-      .voiceCommand(VOICE_COMMAND.CLEAR_CONVERSATION, undefined)
+      .voiceCommand(VOICE_COMMAND.CLEAR_CONVERSATION)
       .catch((): VoiceCommandOutcome => VOICE_COMMAND_OUTCOME.REFUSED)
       .then((outcome) => {
         if (outcome === VOICE_COMMAND_OUTCOME.REFUSED) setLocalError(CLEAR_FAILED_REASON);
@@ -253,6 +305,8 @@ export function useVoiceView(): VoiceViewState {
     conversationHistory,
     acceptBootstrap,
     askLuke,
+    brainRequests,
+    cancelBrainAsk,
     discardListening,
     stopSpeaking,
     requestMicrophoneAccess,

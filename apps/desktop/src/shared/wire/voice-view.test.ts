@@ -11,9 +11,10 @@ test("every realtime status is recognized and nothing else is", () => {
   assert.equal(isRealtimeStatus(1), false);
 });
 
-test("the five voice commands are the whole set", () => {
+test("the four voice commands are the whole set; a typed ask is a brain submission, not one", () => {
   const commands = Object.values(VOICE_COMMAND);
-  assert.equal(commands.length, 5);
+  assert.equal(commands.length, 4);
+  assert.equal(isVoiceCommand("ask-text"), false);
   for (const command of commands) assert.equal(isVoiceCommand(command), true);
   assert.equal(isVoiceCommand("stop-microphone"), false);
 });

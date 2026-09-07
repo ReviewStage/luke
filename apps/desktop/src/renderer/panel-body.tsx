@@ -11,6 +11,7 @@ import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { useCallback, useState } from "react";
 import { ACCOUNT_STATUS, type AccountProvider, type AccountSnapshot } from "#shared/wire/account";
+import type { BrainRequestSnapshot } from "#shared/wire/brain";
 import type { SessionOpenResult } from "#shared/wire/session";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { CalendarGate, type CalendarGateControl } from "./calendar-gate";
@@ -523,6 +524,10 @@ export interface PanelBodyProps {
   liveConversationEntries: readonly ConversationEntry[];
   /** Clears that same thread from the view, Luke's next context, and the stored file. */
   onClearConversationHistory: () => void;
+  /** The brain's runs, so History draws an ask still being worked on beside its words. */
+  brainRequests: readonly BrainRequestSnapshot[];
+  /** Cancels one of those runs at the developer's press. */
+  onCancelBrainRequest: (runId: string) => void;
   /** Carries a typed ask to Luke's own conversation, answering why it could not go. */
   ask: AskHandler;
   /** Reports someone being part-way through an ask, so the panel holds for them. */
@@ -575,6 +580,8 @@ export function PanelBody({
   conversationHistory,
   liveConversationEntries,
   onClearConversationHistory,
+  brainRequests,
+  onCancelBrainRequest,
   ask,
   onAskEngaged,
   askShortcut,
@@ -691,6 +698,8 @@ export function PanelBody({
         <ConversationHistoryPanel
           entries={conversationHistory}
           live={liveConversationEntries}
+          requests={brainRequests}
+          onCancelRequest={onCancelBrainRequest}
           onClear={onClearConversationHistory}
           ask={ask}
           onAskEngaged={onAskEngaged}

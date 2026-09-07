@@ -5,6 +5,7 @@ import {
   conversationEntryKey,
 } from "@sidecar/realtime";
 import { useEffect, useRef, useState } from "react";
+import { type BrainRequestSnapshot, brainRequestPending } from "#shared/wire/brain";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CheckIcon, CopyIcon } from "./settings-icons";
@@ -40,12 +41,20 @@ const COPY_CONFIRMATION_MS = 1500;
 
 const ENTRY_TIME = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
 
+/** What History says under an ask whose run has not ended yet. */
+export const HISTORY_PENDING_LABEL = "Luke is working on this…";
+
 function HistoryEntryRow({
   entry,
   streaming,
+  pending,
+  onCancel,
 }: {
   entry: ConversationEntry;
   streaming?: boolean;
+  /** Whether the run this ask opened is still going, which draws the wait and the cancel. */
+  pending?: boolean;
+  onCancel?: () => void;
 }): React.JSX.Element {
   const presentation = historyEntryPresentation(entry.kind);
   const words = entry.words;
@@ -75,6 +84,16 @@ function HistoryEntryRow({
             </time>
           ) : null}
         </p>
+        {pending ? (
+          <span className="history-pending" role="status">
+            <span className="history-pending-label">{HISTORY_PENDING_LABEL}</span>
+            {onCancel ? (
+              <button type="button" className="history-cancel" onClick={onCancel}>
+                Cancel
+              </button>
+            ) : null}
+          </span>
+        ) : null}
         {/* Copying words still arriving would copy half a sentence; the control
             appears with the settled line the same words become. */}
         {presentation.speaker === HISTORY_ENTRY_SPEAKER.EVENT || streaming ? null : (
@@ -127,12 +146,21 @@ const HISTORY_COMPOSER_ROW_INDEX = 1;
 export function ConversationHistoryPanel({
   entries,
   live = [],
+  requests = [],
+  onCancelRequest,
   onClear,
   ask,
   onAskEngaged,
   askShortcut,
 }: {
   entries: readonly ConversationEntry[];
+  /**
+   * The brain's runs, so an ask whose run is still going is drawn waiting,
+   * with the cancel the developer holds. Read here from the records alone;
+   * the reply's own line arrives when the run ends.
+   */
+  requests?: readonly BrainRequestSnapshot[];
+  onCancelRequest?: (runId: string) => void;
   /**
    * The lines still being said, drawn under the settled thread as the same
    * bubbles they will settle into — words growing, no timestamp, no copy.
@@ -148,6 +176,9 @@ export function ConversationHistoryPanel({
   const list = useRef<HTMLOListElement | null>(null);
   const entryCount = entries.length;
   const liveLength = live.reduce((total, entry) => total + entry.words.length, 0);
+  const pendingRuns = new Set(
+    requests.filter(brainRequestPending).map((snapshot) => snapshot.runId),
+  );
 
   useEffect(() => {
     // Reading the count binds the scroll to an append or clear, not to an
@@ -214,9 +245,23 @@ export function ConversationHistoryPanel({
         </div>
       ) : (
         <ol className="history-list" ref={list}>
-          {keyedHistoryEntries(entries).map(({ entry, key }) => (
-            <HistoryEntryRow key={key} entry={entry} />
-          ))}
+          {keyedHistoryEntries(entries).map(({ entry, key }) => {
+            const runId = entry.requestId;
+            const pending =
+              runId !== undefined &&
+              entry.kind === CONVERSATION_ENTRY_KIND.TYPED_ASK &&
+              pendingRuns.has(runId);
+            return (
+              <HistoryEntryRow
+                key={key}
+                entry={entry}
+                pending={pending}
+                {...(pending && runId !== undefined && onCancelRequest
+                  ? { onCancel: () => onCancelRequest(runId) }
+                  : undefined)}
+              />
+            );
+          })}
           {live.map((entry, index) => (
             <HistoryEntryRow
               // biome-ignore lint/suspicious/noArrayIndexKey: A line still being said has no durable id, and its words change on every delta — a key made of either would remount the bubble mid-sentence, while its position holds still for exactly as long as the line does.

@@ -15,7 +15,9 @@ import {
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
+  conversationEntryKey,
   conversationHistoryText,
+  hasConversationEntryForRequest,
   insertSpokenAskEntry,
   insertSpokenAskThreadEntry,
   isConversationEntryKind,
@@ -29,6 +31,7 @@ import {
   storedConversationEntry,
   storedConversationMaximumAgeMs,
   streamingConversationEntry,
+  typedAskConversationEntry,
 } from "./conversation-history.js";
 import { SESSION_NO_LONGER_OBSERVED_NOTE } from "./realtime-protocol.js";
 
@@ -557,4 +560,56 @@ test("adopting another window's thread reuses the entry objects already held", (
   // A cleared or diverged thread is taken as reported: entries the report no
   // longer carries do not survive the adoption.
   assert.deepEqual(adoptConversationThread([ask, reply], []), []);
+});
+
+test("a line tied to a run is recorded once per kind, and its run survives storage", () => {
+  const now = Date.parse("2026-01-02T03:04:05.000Z");
+  let thread = appendConversationThreadEntry(
+    [],
+    typedAskConversationEntry("ship it", "run-1"),
+    now,
+  );
+  thread = appendConversationThreadEntry(
+    thread,
+    typedAskConversationEntry("ship it", "run-1"),
+    now,
+  );
+  thread = appendConversationThreadEntry(thread, replyConversationEntry("Shipping.", "run-1"), now);
+  thread = appendConversationThreadEntry(
+    thread,
+    replyConversationEntry("Shipping, I said.", "run-1"),
+    now + 1,
+  );
+  // The same words for another run are another line.
+  thread = appendConversationThreadEntry(thread, replyConversationEntry("Shipping.", "run-2"), now);
+  assert.deepEqual(
+    thread.map((entry) => [entry.kind, entry.words, entry.requestId]),
+    [
+      [CONVERSATION_ENTRY_KIND.TYPED_ASK, "ship it", "run-1"],
+      [CONVERSATION_ENTRY_KIND.REPLY, "Shipping.", "run-1"],
+      [CONVERSATION_ENTRY_KIND.REPLY, "Shipping.", "run-2"],
+    ],
+  );
+  assert.equal(
+    hasConversationEntryForRequest(thread, "run-1", CONVERSATION_ENTRY_KIND.REPLY),
+    true,
+  );
+  assert.equal(
+    hasConversationEntryForRequest(thread, "run-3", CONVERSATION_ENTRY_KIND.REPLY),
+    false,
+  );
+  // The run rides through storage and tells two otherwise equal lines apart.
+  const stored = thread.map((entry) => storedConversationEntry(JSON.parse(JSON.stringify(entry))));
+  assert.deepEqual(stored, thread);
+  const [, firstReply, secondReply] = thread;
+  assert.ok(firstReply && secondReply);
+  assert.notEqual(conversationEntryKey(firstReply), conversationEntryKey(secondReply));
+  assert.equal(
+    storedConversationEntry({ kind: "reply", words: "x", recordedAt: now, requestId: "" }),
+    undefined,
+  );
+  assert.equal(
+    storedConversationEntry({ kind: "reply", words: "x", recordedAt: now, requestId: 7 }),
+    undefined,
+  );
 });

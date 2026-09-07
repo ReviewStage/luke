@@ -118,6 +118,14 @@ export interface ConversationEntry {
    * retention's clock and never enters model context.
    */
   recordedAt?: number;
+  /**
+   * The brain run this line belongs to, when it is an ask the brain took or
+   * the reply that run ended in. It is what lets a reply be recorded exactly
+   * once however many windows hear of the run's end, and what lets History
+   * draw a run still working beside the ask that opened it. Never rendered
+   * into model context.
+   */
+  requestId?: string;
 }
 
 /**
@@ -132,9 +140,30 @@ export function appendConversationThreadEntry(
 ): readonly ConversationEntry[] {
   const words = flattenedEntryWords(entry.words);
   if (!words) return entries;
+  if (
+    entry.requestId !== undefined &&
+    hasConversationEntryForRequest(entries, entry.requestId, entry.kind)
+  ) {
+    return entries;
+  }
   const appended: ConversationEntry = { kind: entry.kind, words, recordedAt: now };
   if (entry.identity) appended.identity = entry.identity;
+  if (entry.requestId !== undefined) appended.requestId = entry.requestId;
   return retainedConversationEntries([...entries, appended], now);
+}
+
+/**
+ * Whether the thread already holds this kind of line for this run. A run's
+ * ask and its reply are each recorded once: the main process records the
+ * reply at the run's end, and a window that also heard the end must not add
+ * a second line for it.
+ */
+export function hasConversationEntryForRequest(
+  entries: readonly ConversationEntry[],
+  requestId: string,
+  kind: ConversationEntryKind,
+): boolean {
+  return entries.some((entry) => entry.requestId === requestId && entry.kind === kind);
 }
 
 /**
@@ -168,6 +197,7 @@ export function conversationEntryKey(entry: ConversationEntry): string {
     entry.words,
     entry.recordedAt,
     entry.identity ? [entry.identity.providerId, entry.identity.providerSessionId] : undefined,
+    entry.requestId,
   ]);
 }
 
@@ -281,8 +311,17 @@ export function announcementConversationEntry(words: string): ConversationEntry 
  * The history line a conversation reply leaves behind. A reply carries no
  * subject of its own: only an act names the session it was about.
  */
-export function replyConversationEntry(words: string): ConversationEntry {
-  return { kind: CONVERSATION_ENTRY_KIND.REPLY, words };
+export function replyConversationEntry(words: string, requestId?: string): ConversationEntry {
+  return {
+    kind: CONVERSATION_ENTRY_KIND.REPLY,
+    words,
+    ...(requestId !== undefined ? { requestId } : undefined),
+  };
+}
+
+/** The history line a typed ask the brain accepted leaves behind, tied to its run. */
+export function typedAskConversationEntry(words: string, requestId: string): ConversationEntry {
+  return { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words, requestId };
 }
 
 /**
@@ -358,6 +397,9 @@ export function storedConversationEntry(value: UnparsedWireValue): ConversationE
       ? value.recordedAt
       : undefined;
   if (recordedAt === undefined || recordedAt < 0) return undefined;
+  if (value.requestId !== undefined && !(isWireString(value.requestId) && value.requestId)) {
+    return undefined;
+  }
   const identity = value.identity;
   const providerId = isRecord(identity) ? identity.providerId : undefined;
   const providerSessionId = isRecord(identity) ? identity.providerSessionId : undefined;
@@ -377,6 +419,7 @@ export function storedConversationEntry(value: UnparsedWireValue): ConversationE
     ...(isWireString(providerId) && isWireString(providerSessionId)
       ? { identity: { providerId, providerSessionId } }
       : undefined),
+    ...(isWireString(value.requestId) ? { requestId: value.requestId } : undefined),
   };
 }
 
