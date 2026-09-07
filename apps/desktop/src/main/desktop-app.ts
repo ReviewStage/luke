@@ -134,6 +134,7 @@ import {
   type SessionRosterPayload,
   SUPERSET_SIGN_IN_STAGE,
   SUPERSET_WORKSPACE_PROVIDER_ID,
+  type VoiceBootstrap,
   WINDOW_ROLE,
 } from "#shared/contracts";
 import { VOICE_SOURCE_COUNTED_AS } from "#shared/product-vocabulary";
@@ -1908,6 +1909,38 @@ function registerIpc(): void {
     snapshot: () => settingsStore.snapshot(),
     broadcast: (settings, except) => broadcast(channels.onSettingsChanged, settings, except),
   });
+  /**
+   * The fields the hidden voice window reads, assembled for it alone or
+   * inside a panel's bootstrap: the settings that shape a call, the roster
+   * the arrival beat is worded from, the thread the last launch left, the
+   * talk key, the microphone and output state, the trace gate, and — only
+   * for the voice window itself — the receiver epoch its readiness report
+   * must name. Nothing here waits on the Superset CLI, the account, a
+   * project default, or the recording identity, which the voice never reads.
+   */
+  const voiceBootstrapFields = async (context: BridgeContext): Promise<VoiceBootstrap> => ({
+    agentTraceEnabled: agentTrace !== undefined,
+    microphoneStatus: microphoneStatus(),
+    ...(voiceWindow.owns(context.sender) ? { voiceEpoch: voiceReceiver.epoch() } : undefined),
+    // Both keys travel as accelerators rather than labels: the renderer needs
+    // both spellings — the keycaps' ⌥ and L drawn apart, and aria's Alt+L —
+    // and only the accelerator can produce the pair.
+    ...(hotkeys.talk ? { voiceHotkey: hotkeys.talk } : undefined),
+    ...(outputAudio ? { outputAudio } : undefined),
+    // Bootstrapped through the same relevance gate every broadcast passes:
+    // a window that opens late must not learn of rows the roster has already
+    // let go and then hold them past the next broadcast's dedupe.
+    sessionRoster:
+      runMode.observesProviders && accountCapabilitiesActive()
+        ? { sessions: sessionRegistry.list() }
+        : { sessions: [] },
+    // Computed rather than read from the cached flag: at launch nothing
+    // has recomputed it yet, so a persisted pause would draw a waking face.
+    announcementsHeld: accountCapabilitiesActive() && (await announcementsQuietNow(Date.now())),
+    conversationHistory,
+    settings: await settingsStore.snapshot(),
+  });
+  registerContextHandler(BRIDGE.getVoiceBootstrap, voiceBootstrapFields);
   registerContextHandler(
     BRIDGE.getBootstrap,
     async (context: BridgeContext): Promise<AppBootstrap> => {
@@ -1920,11 +1953,13 @@ function registerIpc(): void {
         ? undefined
         : ((displayId !== undefined ? panels.display(displayId) : undefined) ??
           screen.getPrimaryDisplay());
-      const [supersetInstalled, supersetConnected] = await Promise.all([
+      const [supersetInstalled, supersetConnected, voiceFields] = await Promise.all([
         supersetCli.installed(),
         supersetCli.connected(),
+        voiceBootstrapFields(context),
       ]);
       return {
+        ...voiceFields,
         mode: displayId !== undefined ? panels.modeFor(displayId) : panels.initialMode,
         startPeeked,
         startInSlot,
@@ -1932,32 +1967,17 @@ function registerIpc(): void {
         fixture,
         captureMode,
         fixtureMode,
-        agentTraceEnabled: agentTrace !== undefined,
         supersetInstalled,
         supersetConnected,
         accountRequired: runMode.requiresAccount,
         account,
         packaged: app.isPackaged,
         platform: process.platform,
-        microphoneStatus: microphoneStatus(),
-        ...(voiceWindow.owns(context.sender) ? { voiceEpoch: voiceReceiver.epoch() } : undefined),
-        // Both keys travel as accelerators rather than labels: the renderer needs
-        // both spellings — the keycaps' ⌥ and L drawn apart, and aria's Alt+L —
-        // and only the accelerator can produce the pair.
-        ...(hotkeys.talk ? { voiceHotkey: hotkeys.talk } : undefined),
         voiceHotkeyHeld: hotkeys.held,
         ...(hotkeys.ask ? { askHotkey: hotkeys.ask } : undefined),
         ...(hotkeys.stop ? { stopHotkey: hotkeys.stop } : undefined),
-        ...(outputAudio ? { outputAudio } : undefined),
         display: display ? panels.diagnostic(display) : undefined,
         update: updateService.snapshot(),
-        // Bootstrapped through the same relevance gate every broadcast passes:
-        // a panel that opens late must not learn of rows the roster has already
-        // let go and then hold them past the next broadcast's dedupe.
-        sessionRoster:
-          runMode.observesProviders && accountCapabilitiesActive()
-            ? { sessions: sessionRegistry.list() }
-            : { sessions: [] },
         // A live run's roster has settled once it has been broadcast at all —
         // the first pass publishes even an empty reading — so before that, the
         // empty list above means "not looked yet" and the face must not sleep
@@ -1973,14 +1993,9 @@ function registerIpc(): void {
         // The calendar is a capability like the rosters: nothing of it is
         // shown, or held quiet, before the account gate opens.
         calendars: accountCapabilitiesActive() ? observedCalendars : [],
-        // Computed rather than read from the cached flag: at launch nothing
-        // has recomputed it yet, so a persisted pause would draw a waking face.
-        announcementsHeld: accountCapabilitiesActive() && (await announcementsQuietNow(Date.now())),
-        conversationHistory,
         voiceView: latestVoiceView,
         calendarOnboardingOwed: calendarOnboardingGateOwed(),
         sessionReplay: await sessionReplayBootstrap(),
-        settings: await settingsStore.snapshot(),
       };
     },
   );

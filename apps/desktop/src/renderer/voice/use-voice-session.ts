@@ -33,7 +33,7 @@ import {
   brainReplyWords,
   brainRequestPending,
 } from "#shared/wire/brain";
-import type { AppBootstrap } from "#shared/wire/session";
+import type { VoiceBootstrap } from "#shared/wire/session";
 import { type AppSettingsView, appSettingsView } from "#shared/wire/settings";
 import {
   VOICE_COMMAND,
@@ -332,6 +332,55 @@ const INITIAL_SURROUNDINGS: VoiceSurroundings = {
 };
 
 /**
+ * Which values a push, or this window's own act, has already set while the
+ * bootstrap was still in flight. Each is tracked as a flag rather than read
+ * off the value, because the pushed value may look like an absence: an empty
+ * roster is a real observation (the last row gone, or a sign-out), a hold
+ * released is `false`, and a permission can be pushed back to undetermined.
+ */
+export interface VoiceValuesPushedBeforeBootstrap {
+  sessions: boolean;
+  announcementsHeld: boolean;
+  microphoneStatus: boolean;
+}
+
+/**
+ * What the bootstrap may fill in once it lands. A push is newer than any
+ * bootstrap still in flight, so a value already pushed is kept and only the
+ * gaps are taken from the snapshot: merged the other way, a false push would
+ * be overwritten back to held, an emptied roster back to a session that has
+ * gone, or a permission the developer just granted back to its old answer.
+ * The microphone status is answered separately because it is not a
+ * surrounding: `undefined` says the bootstrap has nothing to set.
+ */
+export interface VoiceBootstrapApplication {
+  surroundings: Partial<VoiceSurroundings>;
+  /** Absent when a push or this window's own ask already answered it. */
+  microphoneStatus: MicrophoneStatus | undefined;
+}
+
+export function applyVoiceBootstrap(
+  current: Pick<VoiceSurroundings, "settings" | "sessions" | "outputAudio" | "announcementsHeld">,
+  bootstrap: VoiceBootstrap,
+  pushed: VoiceValuesPushedBeforeBootstrap,
+): VoiceBootstrapApplication {
+  return {
+    surroundings: {
+      settings: current.settings ?? appSettingsView(bootstrap.settings),
+      agentTraceEnabled: bootstrap.agentTraceEnabled,
+      sessions: pushed.sessions ? current.sessions : bootstrap.sessionRoster.sessions,
+      bootstrapVoiceHotkey: bootstrap.voiceHotkey,
+      outputAudio: current.outputAudio ?? bootstrap.outputAudio,
+      announcementsHeld: pushed.announcementsHeld
+        ? current.announcementsHeld
+        : bootstrap.announcementsHeld,
+      conversationContextReady: true,
+    },
+    microphoneStatus: pushed.microphoneStatus ? undefined : bootstrap.microphoneStatus,
+  };
+}
+
+/**
  * Where one spoken turn belongs in the thread, and what it has since become:
  * the entry its transcript settled into, and the brain run it opened, each
  * written onto the mark when it is known so the other can find it.
@@ -356,11 +405,15 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   const [surroundings, setSurroundings, surroundingsNow] =
     useStateWithRef<VoiceSurroundings>(INITIAL_SURROUNDINGS);
   /**
-   * Whether the hold has been pushed at all. A push is newer than any
-   * bootstrap still in flight, so once one has landed the bootstrap's answer
-   * is not read: merged, a false push would be overwritten back to held.
+   * Which values have been pushed, or set by this window's own act, before
+   * the bootstrap answered. A push is newer than any bootstrap still in
+   * flight, so once one has landed the bootstrap's answer for it is not read.
    */
-  const announcementsHeldPushed = useRef(false);
+  const pushedBeforeBootstrap = useRef<VoiceValuesPushedBeforeBootstrap>({
+    sessions: false,
+    announcementsHeld: false,
+    microphoneStatus: false,
+  });
   const amend = useCallback(
     (change: Partial<VoiceSurroundings>) => {
       setSurroundings({ ...surroundingsNow(), ...change });
@@ -371,6 +424,14 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   // Read only inside the press's own closure, so the ref is the half that matters.
   const [, setMicrophoneStatus, microphoneStatusNow] =
     useStateWithRef<MicrophoneStatus>("not-determined");
+  /** A status learned from a push or this window's own ask, which a late bootstrap must not undo. */
+  const learnMicrophoneStatus = useCallback(
+    (status: MicrophoneStatus) => {
+      pushedBeforeBootstrap.current.microphoneStatus = true;
+      setMicrophoneStatus(status);
+    },
+    [setMicrophoneStatus],
+  );
   const [voiceError, setVoiceError] = useState<string>();
   const [voiceNotice, setVoiceNotice] = useState<string>();
   const [voiceStatus, setVoiceStatus, voiceStatusNow] = useStateWithRef<RealtimeStatus>(
@@ -982,7 +1043,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     setVoiceError(undefined);
     const session = ensureVoiceSession();
     const permission = await window.sidecar.requestMicrophone();
-    setMicrophoneStatus(permission);
+    learnMicrophoneStatus(permission);
     if (permission !== "granted") {
       // The press that asked for this is still waiting for a call that is now
       // not coming. The status never changes on this path, so the meter the
@@ -993,7 +1054,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     }
     await startConversation();
     return permission;
-  }, [ensureVoiceSession, setMicrophoneStatus, startConversation]);
+  }, [ensureVoiceSession, learnMicrophoneStatus, startConversation]);
 
   /** The neutral note used when the hosted service's emergency brake refuses a call. */
   const hostedUnavailableNote = useCallback(async (): Promise<string | undefined> => {
@@ -1007,8 +1068,8 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
    * and the panel's row must not be a second way to it.
    */
   const requestMicrophoneAccess = useCallback(async () => {
-    setMicrophoneStatus(await window.sidecar.requestMicrophone());
-  }, [setMicrophoneStatus]);
+    learnMicrophoneStatus(await window.sidecar.requestMicrophone());
+  }, [learnMicrophoneStatus]);
 
   /**
    * What the talk key means, wherever it was pressed. A first press has to open
@@ -1038,7 +1099,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     if (microphoneStatusNow() !== "granted") {
       const pressedAt = talkPressedAt.current;
       const permission = await window.sidecar.requestMicrophone();
-      setMicrophoneStatus(permission);
+      learnMicrophoneStatus(permission);
       if (permission !== "granted") {
         // Said where the device failure used to land it: the caption strip.
         setVoiceError(
@@ -1084,8 +1145,8 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   }, [
     ensureVoiceSession,
     hostedUnavailableNote,
+    learnMicrophoneStatus,
     microphoneStatusNow,
-    setMicrophoneStatus,
     startMicrophone,
   ]);
 
@@ -1214,30 +1275,18 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     voiceSession.current?.stopListening(false);
   }, []);
 
-  // The bootstrap, read once: the settings that shape a call, the thread the
-  // last launch left, and the facts pushes will keep current from here on.
-  // The voice window stands on no display and never announces itself ready;
-  // the panel-only fields are simply not read.
+  // The voice's own bootstrap, read once: the settings that shape a call,
+  // the thread the last launch left, and the facts pushes will keep current
+  // from here on. It is the voice's narrow bootstrap rather than the panel's,
+  // so the readiness report is not held behind reads the voice never uses.
   useEffect(() => {
     let cancelled = false;
-    void window.sidecar.getBootstrap().then((value: AppBootstrap) => {
+    void window.sidecar.getVoiceBootstrap().then((value: VoiceBootstrap) => {
       if (cancelled) return;
       seedConversationHistory(value.conversationHistory);
-      setMicrophoneStatus(value.microphoneStatus);
-      const current = surroundingsNow();
-      // Only fill in what no push has said yet: the bootstrap snapshot is
-      // older than any change that raced past it.
-      amend({
-        settings: current.settings ?? appSettingsView(value.settings),
-        agentTraceEnabled: value.agentTraceEnabled,
-        sessions: current.sessions.length > 0 ? current.sessions : value.sessionRoster.sessions,
-        bootstrapVoiceHotkey: value.voiceHotkey,
-        outputAudio: current.outputAudio ?? value.outputAudio,
-        announcementsHeld: announcementsHeldPushed.current
-          ? current.announcementsHeld
-          : value.announcementsHeld,
-        conversationContextReady: true,
-      });
+      const applied = applyVoiceBootstrap(surroundingsNow(), value, pushedBeforeBootstrap.current);
+      if (applied.microphoneStatus !== undefined) setMicrophoneStatus(applied.microphoneStatus);
+      amend(applied.surroundings);
       // Applied, so the readiness report may name the epoch this load was given.
       voiceEpochRef.current = value.voiceEpoch;
       readiness.current?.bootstrapped(value.voiceEpoch);
@@ -1253,13 +1302,17 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     [amend],
   );
   useEffect(
-    () => window.sidecar.onSessionsChanged((pushed) => amend({ sessions: pushed.sessions })),
+    () =>
+      window.sidecar.onSessionsChanged((pushed) => {
+        pushedBeforeBootstrap.current.sessions = true;
+        amend({ sessions: pushed.sessions });
+      }),
     [amend],
   );
   useEffect(
     () =>
       window.sidecar.onAnnouncementsHeldChanged((held) => {
-        announcementsHeldPushed.current = true;
+        pushedBeforeBootstrap.current.announcementsHeld = true;
         amend({ announcementsHeld: held });
       }),
     [amend],
@@ -1276,8 +1329,8 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   // asked, or this window's own press did — so a press here reads the same
   // status the rows draw.
   useEffect(
-    () => window.sidecar.onMicrophoneStatusChanged(setMicrophoneStatus),
-    [setMicrophoneStatus],
+    () => window.sidecar.onMicrophoneStatusChanged(learnMicrophoneStatus),
+    [learnMicrophoneStatus],
   );
 
   // A panel's ask, validated and forwarded by the main process. Each command
