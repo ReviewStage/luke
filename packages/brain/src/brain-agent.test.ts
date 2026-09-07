@@ -53,6 +53,7 @@ import {
   BRAIN_SUBMISSION_REJECTION,
   type BrainRequestRecord,
   type BrainSubmissionResult,
+  isTerminalBrainRequestStatus,
 } from "./brain-requests.js";
 import {
   type BrainPersistedState,
@@ -2363,4 +2364,116 @@ test("an observation in flight is not made durable by an unrelated mark or accep
     brainStateFromStored(observing.storage.file)?.cursors["claude-code"]?.abc,
     "abc-cursor",
   );
+});
+
+test("a run whose start the store refuses opens no work and ends as a persistence failure", async () => {
+  const h = harness({
+    acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
+  });
+  await h.agent.ready();
+  h.client.answers.push(answered([messageAct("call_1")]), answered([message("Sent.")]));
+  const write = h.storage.write.bind(h.storage);
+  h.storage.write = (contents) => {
+    if (contents.includes(`"status":"${BRAIN_REQUEST_STATUS.RUNNING}"`)) {
+      h.storage.write = write;
+      return false;
+    }
+    return write(contents);
+  };
+  const runId = acceptedRunId(await submit(h, "send"));
+  const record = await h.agent.waitAsk(runId, 60_000);
+  assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
+  assert.equal(record?.performedActs, 0);
+  assert.equal(h.client.inputs.length, 0, "no model call");
+  assert.deepEqual(h.performed, []);
+  assert.deepEqual(h.storage.stored()?.requests[0], record);
+  assert.equal(h.agent.requests().length, 1);
+  const relaunched = harness({}, new FakeStorage(h.storage.file));
+  await relaunched.agent.ready();
+  assert.deepEqual(relaunched.agent.requests()[0], record);
+});
+
+/** Holds the first storage write whose contents match, until released; every other write passes. */
+function holdWriteMatching(storage: FakeStorage, marker: string) {
+  const write = storage.write.bind(storage);
+  let release: ((written?: boolean) => void) | undefined;
+  storage.write = (contents) => {
+    if (!contents.includes(marker)) return write(contents);
+    storage.write = write;
+    // SAFETY: the store accepts a promise of the write's outcome; this test holds it open.
+    return new Promise<boolean>((resolve) => {
+      release = (written = true) => resolve(written && write(contents));
+    }) as unknown as boolean;
+  };
+  return {
+    held: () => release !== undefined,
+    release: (written?: boolean) => release?.(written),
+  };
+}
+
+const RUNNING_MARKER = `"status":"${BRAIN_REQUEST_STATUS.RUNNING}"`;
+
+test("a cancel or stop landing while the start is being written ends the run unopened, and work starts only once the start has landed", async () => {
+  // Cancel during the held start write.
+  const cancelling = harness();
+  await cancelling.agent.ready();
+  cancelling.client.answers.push(answered([messageAct("call_1")]));
+  const heldStart = holdWriteMatching(cancelling.storage, RUNNING_MARKER);
+  const runId = acceptedRunId(await submit(cancelling, "send"));
+  await settle();
+  assert.equal(heldStart.held(), true);
+  const cancelled = cancelling.agent.cancelAsk(runId);
+  await settle();
+  heldStart.release(true);
+  await cancelled;
+  await settle();
+  assert.equal(cancelling.agent.request(runId)?.status, BRAIN_REQUEST_STATUS.CANCELLED);
+  assert.equal(cancelling.client.inputs.length, 0);
+  assert.deepEqual(cancelling.performed, []);
+  assert.deepEqual(cancelling.storage.stored()?.requests[0], cancelling.agent.request(runId));
+
+  // Stop during a start that is then refused.
+  const stopping = harness();
+  await stopping.agent.ready();
+  stopping.client.answers.push(answered([messageAct("call_1")]));
+  const refusedStart = holdWriteMatching(stopping.storage, RUNNING_MARKER);
+  const stopRun = acceptedRunId(await submit(stopping, "send"));
+  await settle();
+  assert.equal(refusedStart.held(), true);
+  const stopped = stopping.agent.stop();
+  refusedStart.release(false);
+  await stopped;
+  assert.equal(stopping.agent.request(stopRun)?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
+  assert.equal(stopping.client.inputs.length, 0);
+  assert.deepEqual(stopping.performed, []);
+
+  // Positive control: the model is called only after the start has landed,
+  // and a cancel over a dispatched act still waits to publish the counted end.
+  const held = heldPerformer();
+  const h = harness({ acts: held.acts });
+  await h.agent.ready();
+  h.client.answers.push(answered([messageAct("call_1")]));
+  const start = holdWriteMatching(h.storage, RUNNING_MARKER);
+  const live = acceptedRunId(await submit(h, "send"));
+  await settle();
+  assert.equal(start.held(), true);
+  assert.equal(h.client.inputs.length, 0);
+  start.release(true);
+  await settle();
+  assert.equal(h.client.inputs.length, 1);
+  assert.equal(held.performed.length, 1);
+  const cancelledLate = await h.agent.cancelAsk(live);
+  assert.equal(cancelledLate?.status, BRAIN_REQUEST_STATUS.RUNNING);
+  const seen: BrainRequestRecord[] = [];
+  h.agent.subscribe((records) => {
+    const record = records.find((entry) => entry.runId === live);
+    if (record && isTerminalBrainRequestStatus(record.status)) seen.push(record);
+  });
+  held.releases[0]?.();
+  await settle();
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0]?.status, BRAIN_REQUEST_STATUS.CANCELLED);
+  assert.equal(seen[0]?.performedActs, 0);
+  assert.deepEqual(h.storage.stored()?.requests[0], h.agent.request(live));
 });

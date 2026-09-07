@@ -1143,11 +1143,37 @@ export class BrainAgent {
       this.#runs.delete(run.runId);
       return;
     }
-    await this.#commit(generation, run.runId, {
+    // The start is durable before any work opens: a run the file does not
+    // show running is one a relaunch would find queued while its acts had
+    // begun, and a cancel would settle on the queued path under a dispatched
+    // effect. A start the store refuses ends the run as the persistence
+    // failure it is, with nothing called; a revocation that landed while the
+    // start was being written ends it on its own terms, likewise unopened.
+    const started = await this.#commit(generation, run.runId, {
       status: BRAIN_REQUEST_STATUS.RUNNING,
       startedAt: this.#now(),
     });
     this.#notify();
+    if (!started || this.#runRevoked(run)) {
+      this.#runs.delete(run.runId);
+      if (this.#runRevoked(run)) {
+        await this.#settleRun(
+          generation,
+          run.runId,
+          run.cancelled ? BRAIN_REQUEST_STATUS.CANCELLED : BRAIN_REQUEST_STATUS.INTERRUPTED,
+          {},
+        );
+        return;
+      }
+      await this.#settleRun(
+        generation,
+        run.runId,
+        BRAIN_REQUEST_STATUS.FAILED,
+        { failure: BRAIN_REQUEST_FAILURE.PERSISTENCE },
+        run,
+      );
+      return;
+    }
     run.deadline = this.#schedule(() => {
       run.timedOut = true;
       run.abort.abort();
