@@ -1,11 +1,6 @@
 /* oxlint-disable anti-slop/no-unknown-returns -- Fake Electron listeners deliberately retain the IPC boundary shape. */
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
-} from "@sidecar/session";
-import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { BRIDGE } from "#shared/bridge";
 import { registerBridge } from "./register-bridge";
@@ -92,31 +87,30 @@ test("a validated request reaches its domain handler", async () => {
   assert.equal(await fixture.invokes.get(BRIDGE.setExpanded.channel)?.(event, true), "expanded");
 });
 
-test("workspace-only providers reach workspace creation", async () => {
+test("a brain ask crosses the bridge as one submission and answers the run it opened", async () => {
   const fixture = fixtureHost(true);
   registerBridge(
     BRIDGE,
     {
-      createSessionWorkspace: (_context, providerId) => ({
-        status: ACT_RESULT_STATUS.ACCEPTED,
-        providerSessionId: providerId,
+      submitBrainAsk: (_context, submission) => ({
+        outcome: "accepted",
+        runId: `run for ${submission.submissionId}`,
+        acceptedAt: 1,
       }),
     },
     fixture.host,
   );
   // SAFETY: registerBridge reads only the sender field supplied by this focused fixture.
   const event = { sender: {} } as IpcMainInvokeEvent;
-  const invoke = fixture.invokes.get(BRIDGE.createSessionWorkspace.channel);
+  const invoke = fixture.invokes.get(BRIDGE.submitBrainAsk.channel);
+  assert.ok(invoke);
 
-  for (const providerId of [
-    SUPERSET_WORKSPACE_PROVIDER_ID,
-    CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-  ]) {
-    assert.deepEqual(await invoke?.(event, providerId, "project-1"), {
-      status: ACT_RESULT_STATUS.ACCEPTED,
-      providerSessionId: providerId,
-    });
-  }
+  assert.deepEqual(
+    await invoke(event, { submissionId: "sub-1", question: "what needs me?", origin: "typed" }),
+    { outcome: "accepted", runId: "run for sub-1", acceptedAt: 1 },
+  );
+  // SAFETY: Electron invoke listeners always return promises; the fixture retains the erased host signature only.
+  await assert.rejects(() => invoke(event, "what needs me?") as Promise<unknown>);
 });
 
 test("an omitted optional argument cannot steal the bridge context", async () => {

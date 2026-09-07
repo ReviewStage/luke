@@ -747,12 +747,12 @@ html[data-keyboard="true"] button.session-row:focus-visible {
 }
 
 /* The tray's name line: the workspace's name on the left, and at the far end
-   the glyph leading the checkout — then, past those, any act that belongs to
-   the workspace rather than to one chat, drawn as the same chip a row's
-   actions use. Everything else here is in the panel's own face — the line is
-   what the user calls the work, not an identifier to be consulted. The wrap
-   is for the outcome line a pressed act answers on, which takes the full
-   width below the header's own line. */
+   the glyph leading the checkout — then, past those, the one pull request the
+   workspace's chats share, drawn as the same chip a row's own wears.
+   Everything else here is in the panel's own face — the line is what the user
+   calls the work, not an identifier to be consulted. The wrap is for the
+   outcome line a pressed chip answers on, which takes the full width below
+   the header's own line. */
 .workspace-tray-header {
   display: flex;
   flex-wrap: wrap;
@@ -809,11 +809,10 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   white-space: nowrap;
 }
 
-/* A workspace act keeps the chip a row's actions wear, but the chip is pulled
-   toward the name's own line with negative margins — the way a settings
-   heading holds its reset — so a header with an act to offer stays the height
-   of one without. The chip still draws its full size; it spends the header's
-   padding instead of growing it. */
+/* The header's chip is pulled toward the name's own line with negative
+   margins — the way a settings heading holds its reset — so a header with a
+   chip to offer stays the height of one without. The chip still draws its
+   full size; it spends the header's padding instead of growing it. */
 .workspace-tray-header .row-action {
   margin-top: -6px;
   margin-bottom: -6px;
@@ -850,19 +849,19 @@ html[data-keyboard="true"] button.session-row:focus-visible {
 .workspace-tray button.session-row[data-state="attention"]:hover,
 .workspace-tray
   .session-row[data-actions][data-openable]:hover:not(
-    :has(.row-compose:hover, .row-action:hover, .row-stop:hover, .row-application-button:hover)
+    :has(.row-action:hover, .row-application-button:hover)
   ),
 .workspace-tray
   .session-row[data-actions][data-openable][data-state="attention"]:hover:not(
-    :has(.row-compose:hover, .row-action:hover, .row-stop:hover, .row-application-button:hover)
+    :has(.row-action:hover, .row-application-button:hover)
   ),
 .workspace-tray
   .session-row[data-application-controls][data-openable]:hover:not(
-    :has(.row-application-button:hover, .row-compose:hover, .row-action:hover, .row-stop:hover)
+    :has(.row-application-button:hover, .row-action:hover)
   ),
 .workspace-tray
   .session-row[data-application-controls][data-openable][data-state="attention"]:hover:not(
-    :has(.row-application-button:hover, .row-compose:hover, .row-action:hover, .row-stop:hover)
+    :has(.row-application-button:hover, .row-action:hover)
   ) {
   border-color: rgba(255, 255, 255, 0.05);
 }
@@ -1036,7 +1035,7 @@ html[data-keyboard="true"] button.session-row:focus-visible {
 
 /* A row with a second line stacks, and hands its box's padding down: the first
    line has to keep today's geometry so the two kinds of row read as one list,
-   and the actions line has to reach the same left edge as the copy above it. */
+   and the chip line has to reach the same left edge as the copy above it. */
 .session-row[data-actions] {
   flex-direction: column;
   align-items: stretch;
@@ -1055,23 +1054,23 @@ html[data-keyboard="true"] button.session-row:focus-visible {
   text-align: left;
 }
 
-/* The whole openable row is the press target, controls excepted, so the
-   whole row takes the hand and the lift. The one place neither belongs is a
-   pointer that is on a control: a press there is about the message or the
-   action, and a lift under it would promise a window it will not open. */
+/* The whole openable row is the press target, the chip excepted, so the whole
+   row takes the hand and the lift. The one place neither belongs is a pointer
+   that is on the chip: a press there is about the pull request, and a lift
+   under it would promise a window it will not open. */
 .session-row[data-actions][data-openable] {
   cursor: pointer;
 }
 
 .session-row[data-actions][data-openable]:hover:not(
-  :has(.row-compose:hover, .row-action:hover, .row-stop:hover, .row-application-button:hover)
+  :has(.row-action:hover, .row-application-button:hover)
 ) {
   border-color: rgba(255, 255, 255, 0.16);
   background: var(--raised);
 }
 
 .session-row[data-actions][data-openable][data-state="attention"]:hover:not(
-  :has(.row-compose:hover, .row-action:hover, .row-stop:hover, .row-application-button:hover)
+  :has(.row-action:hover, .row-application-button:hover)
 ) {
   border-color: color-mix(in srgb, var(--accent) 46%, transparent);
   background: color-mix(in srgb, var(--accent) 15%, transparent);
@@ -1098,14 +1097,14 @@ html[data-keyboard="true"] button.row-main:focus-visible {
 }
 
 .session-row[data-application-controls][data-openable]:hover:not(
-  :has(.row-application-button:hover, .row-compose:hover, .row-action:hover, .row-stop:hover)
+  :has(.row-application-button:hover, .row-action:hover)
 ) {
   border-color: rgba(255, 255, 255, 0.16);
   background: var(--raised);
 }
 
 .session-row[data-application-controls][data-openable][data-state="attention"]:hover:not(
-  :has(.row-application-button:hover, .row-compose:hover, .row-action:hover, .row-stop:hover)
+  :has(.row-application-button:hover, .row-action:hover)
 ) {
   border-color: color-mix(in srgb, var(--accent) 46%, transparent);
   background: color-mix(in srgb, var(--accent) 15%, transparent);
@@ -1126,10 +1125,9 @@ html[data-keyboard="true"] .row-application-button:focus-visible {
   outline-offset: 1px;
 }
 
-/* What a provider promised for this session: a composer that is simply there,
-   the way every chat surface keeps one on screen, and each advertised action
-   beside it. One quiet line — the row above it is the subject, this is what
-   can be done about it. */
+/* What a provider reported for this session: the pull request its work
+   published, as one chip. One quiet line — the row above it is the subject,
+   this is where its work landed. */
 .row-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1158,125 +1156,13 @@ html[data-keyboard="true"] .row-application-button:focus-visible {
   color: var(--text-primary);
 }
 
-.row-action:disabled {
-  opacity: 0.4;
-}
-
-/* The stop every chat surface has: one round control holding the square. It
-   is drawn the same weight as the send button so the two read as siblings,
-   and its label lives on hover and in the accessible name. */
-.row-stop {
-  display: grid;
-  width: 26px;
-  height: 26px;
-  flex: 0 0 auto;
-  border: 1px solid var(--hairline);
-  border-radius: 50%;
-  background: var(--raised);
-  color: var(--text-secondary);
-  place-items: center;
-  transition:
-    border-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.row-stop:hover {
-  border-color: rgba(255, 255, 255, 0.16);
-  color: var(--text-primary);
-}
-
-.row-stop:disabled {
-  opacity: 0.4;
-}
-
 .control-icon {
   width: 12px;
   height: 12px;
 }
 
-/* The composer is one pill — hairline around the pair, field on the left,
-   send on the right — because that is the shape a message field has had since
-   phones started drawing them, and matching it is what makes the affordance
-   need no label. */
-.row-compose {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 3px 3px 12px;
-  border: 1px solid var(--hairline);
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.4);
-  /* The whole pill is the field — a press anywhere in it lands the caret —
-     so the whole pill says so, against the hand the row around it shows. */
-  cursor: text;
-  transition:
-    border-color var(--duration-hover) ease,
-    background-color var(--duration-hover) ease;
-}
-
-.row-compose:focus-within {
-  border-color: color-mix(in srgb, var(--state-working) 45%, transparent);
-  background: rgba(0, 0, 0, 0.55);
-}
-
-/* The field itself is bare: the pill around it is the drawn edge. */
-.row-compose-input {
-  min-width: 0;
-  flex: 1;
-  padding: 4px 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: 11px;
-  outline: none;
-}
-
-.row-compose-input::placeholder {
-  color: var(--text-tertiary);
-}
-
-.row-compose-input:disabled {
-  color: var(--text-tertiary);
-  cursor: not-allowed;
-}
-
-/* Lit only once there is something to send, like every composer people
-   already know. Colour is the whole state change: the button must not grow
-   or move inside an element that reflows the pill. */
-.row-send {
-  display: grid;
-  width: 22px;
-  height: 22px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.14);
-  color: var(--text-tertiary);
-  place-items: center;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.row-send:not(:disabled) {
-  background: var(--text-primary);
-  color: rgba(0, 0, 0, 0.82);
-}
-
-.row-send:disabled {
-  cursor: default;
-}
-
-.row-send .control-icon {
-  width: 11px;
-  height: 11px;
-}
-
-/* What became of the last write, said on its own line under the controls that
-   asked for it. It is one bounded sentence from this build or the provider's
-   status, never transcript. */
+/* Why the chip's press did not open, said on its own line under the chip that
+   asked. It is one bounded sentence from this build, never transcript. */
 .row-feedback {
   overflow: hidden;
   flex-basis: 100%;

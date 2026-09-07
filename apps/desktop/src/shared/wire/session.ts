@@ -3,13 +3,14 @@ import type { RememberedFact } from "@sidecar/acts";
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { FixtureSnapshot } from "@sidecar/fixtures";
 import type { TrackedIssue } from "@sidecar/issues";
-import type { ConversationEntry, IssueToolAction } from "@sidecar/realtime";
-import type { ObservedWorkspaceProject, Session, SessionAttentionEntry } from "@sidecar/session";
+import type { ConversationEntry } from "@sidecar/realtime";
+import type { ObservedWorkspaceProject, Session } from "@sidecar/session";
 import type { Rectangle, ResolvedNotchGeometry, WindowMode } from "@sidecar/surface";
-import type { ACT_RESULT_STATUS, ActResult } from "@sidecar/wire";
+import type { ActResult } from "@sidecar/wire";
 import type { MicrophoneStatus, OutputAudioState } from "./audio";
 import type { AppSettings } from "./settings";
 import type { UpdateSnapshot } from "./update";
+import type { VoiceView } from "./voice-view";
 
 export {
   isWorkspaceProviderId,
@@ -34,25 +35,17 @@ export type { WindowMode } from "@sidecar/surface";
 export type SessionOpenResult = ActResult;
 
 /**
- * What became of a request to read a session's transcript. Reading is a local
- * act like opening — nothing reaches a provider — and the rendering rides the
- * answer so the conversation that asked can ground its reply in the session's
- * own words. Every refusal carries words Luke can say aloud.
- */
-export type SessionTranscriptResult =
-  | { status: typeof ACT_RESULT_STATUS.ACCEPTED; transcript: string }
-  | { status: typeof ACT_RESULT_STATUS.REJECTED; reason: string }
-  | { status: typeof ACT_RESULT_STATUS.UNSUPPORTED; reason: string };
-
-/**
  * Which surface a window exists to draw. Every window loads the same renderer
  * bundle, so the role is what tells the one fullscreen introduction takeover
- * apart from the panel windows — decided in the main process by which window
- * asked, never by anything the renderer could claim about itself.
+ * and the hidden voice window apart from the panel windows — decided in the
+ * main process by which window asked, never by anything the renderer could
+ * claim about itself.
  */
 export const WINDOW_ROLE = {
   PANEL: "panel",
   INTRODUCTION: "introduction",
+  /** The one hidden window that will hold the live conversation; it draws nothing. */
+  VOICE: "voice",
 } as const;
 
 export type WindowRole = (typeof WINDOW_ROLE)[keyof typeof WINDOW_ROLE];
@@ -106,14 +99,12 @@ export interface SessionReplayBootstrap {
 }
 
 /**
- * The conversation history as every panel window shares it. A voice exchange
- * lands on one window — the primary display hosts the talk key and the
- * announcements, a typed ask lands on the panel it was typed into — so the
- * thread is relayed through the main process for every other display's
- * History to draw the same. `cleared` marks the relay of a Clear pressed on
- * another display, which retires the receiving window's in-flight turns the
- * way its own press would; an ordinary report replaces the thread and
- * retires nothing.
+ * The conversation history as every panel window draws it. The thread has one
+ * writer, the hidden voice window, and one store, the main process, which
+ * relays each report whole to every panel so History reads the same on every
+ * display. `cleared` marks the relay of a Clear, which the voice window is
+ * told of on its own command; a panel needs nothing from it but the empty
+ * thread.
  */
 export interface ConversationHistoryPayload {
   entries: readonly ConversationEntry[];
@@ -151,6 +142,12 @@ export interface AppBootstrap {
   nodeVersion: string;
   microphoneStatus: MicrophoneStatus;
   /**
+   * The receiver epoch the main process gave this load of the hidden voice
+   * window, which its readiness report must name; absent for every other
+   * window, which receives no speech.
+   */
+  voiceEpoch?: number;
+  /**
    * The accelerator the talk key was registered as, absent when the system
    * refused to register one — a shortcut nothing can trigger must not be shown
    * as though it works. Raw rather than labelled for the ask key's reason
@@ -181,7 +178,11 @@ export interface AppBootstrap {
    * arrives — or forever, where there is no helper to ask.
    */
   outputAudio?: OutputAudioState;
-  display: DisplayDiagnostic;
+  /**
+   * The display this window stands on. Absent for the hidden voice window,
+   * which stands on none and draws nothing that would need one.
+   */
+  display: DisplayDiagnostic | undefined;
   /** Where the app stands against the latest release, as last learned. */
   update: UpdateSnapshot;
   sessionRoster: SessionRosterPayload;
@@ -208,6 +209,13 @@ export interface AppBootstrap {
    * Empty in a fixture or capture run, which reads no thread and writes none.
    */
   conversationHistory: readonly ConversationEntry[];
+  /**
+   * The live conversation as the voice window last reported it, so a panel
+   * that opens mid-exchange draws the exchange rather than an idle voice.
+   * Absent until the voice window has reported once, and always in a fixture
+   * or capture run, which raises no voice window.
+   */
+  voiceView: VoiceView | undefined;
   /** Luke's bounded durable facts about the developer. Empty in fixture and capture runs. */
   rememberedFacts: readonly RememberedFact[];
   /**
@@ -224,8 +232,4 @@ export interface AppBootstrap {
 /** The complete session state one observation revision publishes to a desktop surface. */
 export interface SessionRosterPayload {
   sessions: readonly Session[];
-  attention: readonly SessionAttentionEntry[];
 }
-
-/** One validated issue act on its way to the main process. */
-export type IssueActionAsk = Extract<IssueToolAction, { kind: "issue-state" | "issue-comment" }>;

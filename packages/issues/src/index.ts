@@ -1,9 +1,5 @@
 export { ACT_RESULT_STATUS } from "@sidecar/wire";
 export {
-  MAXIMUM_MENTIONED_ISSUES,
-  mentionedIssues,
-} from "./issue-mentions.js";
-export {
   ISSUE_ACTION_KIND,
   ISSUE_TRACKER_ID,
   type IssueIdentity,

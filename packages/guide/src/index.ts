@@ -25,6 +25,7 @@ export {
   EMPTY_APP_GUIDE,
   FEEDBACK_COMPOSER_KIND,
   type FeedbackComposerKind,
+  isAppGuideSnapshot,
   isAppPanelTab,
   isAppUpdateAct,
   isFeedbackComposerKind,

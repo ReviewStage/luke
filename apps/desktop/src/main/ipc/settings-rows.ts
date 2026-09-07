@@ -41,8 +41,8 @@ export interface SettingsRowsIpcDependencies {
   realtimeCredentials: () => RealtimeCredentialMinter | undefined;
   mediaDuck: MediaDuckController;
   workspaceProjectOffered: (providerId: string, providerProjectId: string) => boolean;
-  refreshAnnouncementHold: () => void;
-  releaseHeldNotices: () => void;
+  /** Re-reads the announcement hold and lets the speech arbiter offer what it may. */
+  reconcileSpeech: () => void;
   recordProductEvent: RecordProductEvent;
   /** Mirrors local provider keys into the account vault, main-process only. */
   vaultSync: ProviderKeyVaultSync;
@@ -63,8 +63,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     realtimeCredentials,
     mediaDuck,
     workspaceProjectOffered,
-    refreshAnnouncementHold,
-    releaseHeldNotices,
+    reconcileSpeech,
     recordProductEvent,
     vaultSync,
   } = dependencies;
@@ -87,7 +86,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
         refreshIssues();
       }
       // The voice key connects neither: it is what the spoken conversation and
-      // the attention review are built from, so a change to it rebuilds both
+      // the brain are built from, so a change to it rebuilds both
       // and then moves the talk key — claimed now that there is something to
       // talk to, or given back to the machine now that there is not. Awaited,
       // because a press right after the save has to find a minter.
@@ -176,8 +175,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
         void applyVoiceCredential();
         break;
       case SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD:
-        refreshAnnouncementHold();
-        releaseHeldNotices();
+        reconcileSpeech();
         break;
       case SETTING_SIDE_EFFECT.VAULT_SYNC:
         // The flip is a hand on the switch, so an on claims the keys for the

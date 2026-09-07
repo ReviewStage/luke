@@ -6,6 +6,7 @@ import {
   REALTIME_DEFAULTS,
   realtimeClientSecretRequest,
   remoteRealtimeClientSecretRequest,
+  remoteRealtimeInstructions,
   remoteRealtimeToolDefinitions,
 } from "../server/core";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
@@ -75,12 +76,15 @@ test("a phone or watch mint keeps its own narrowed session document on the share
 
   assert.equal(call.url, "https://api.openai.com/v1/realtime/client_secrets");
   const sent = JSON.parse(String(call.init?.body));
-  // The document is the remote one, byte for byte, and the desktop's full-act
-  // session differs from it only by the toolset.
+  // The document is the remote one, byte for byte: the phone keeps its own
+  // direct-act tools and the instructions that resolve agents from the roster
+  // it carries, while the desktop's mint is the brain's mouth and shares
+  // neither.
   assert.deepEqual(sent, remoteRealtimeClientSecretRequest());
   assert.deepEqual(sent.session.tools, remoteRealtimeToolDefinitions());
   assert.notDeepEqual(sent.session.tools, realtimeClientSecretRequest().session.tools);
-  assert.equal(sent.session.instructions, realtimeClientSecretRequest().session.instructions);
+  assert.equal(sent.session.instructions, remoteRealtimeInstructions().trim());
+  assert.notEqual(sent.session.instructions, realtimeClientSecretRequest().session.instructions);
   // No caller cancellation is joined here: the upstream signal is the helper's
   // own timeout, not aborted, exactly as before the brain route shared it.
   assert.ok(call.init?.signal instanceof AbortSignal);

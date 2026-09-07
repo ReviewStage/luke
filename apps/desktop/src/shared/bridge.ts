@@ -3,8 +3,7 @@ import {
   type AccountProvider,
   type AccountSnapshot,
 } from "@sidecar/account/snapshot";
-import type { RememberedFact } from "@sidecar/acts";
-import { type ActEnvelope, isActEnvelope, isRememberedFacts } from "@sidecar/acts";
+import { APP_TOOL_KIND, isRememberedFacts, type RememberedFact } from "@sidecar/acts";
 import {
   isProductExchangeKind,
   isProductSurfaceEventName,
@@ -23,34 +22,21 @@ import {
   feedbackSubmission,
   isFeedbackKind,
 } from "@sidecar/feedback";
-import {
-  type IssueIdentity,
-  isIssueTrackerId,
-  type TrackedIssue,
-  type TrackerActionResult,
-} from "@sidecar/issues";
+import { type AppGuideSnapshot, isAppGuideSnapshot } from "@sidecar/guide";
+import type { TrackedIssue } from "@sidecar/issues";
 import {
   type ConversationEntry,
-  type IssueToolAction,
   type RealtimeConnection,
   type RealtimeDiagnostics,
-  type SessionAnnouncement,
   storedConversationEntry,
 } from "@sidecar/realtime";
 import {
   isProviderId,
   isSessionApplicationId,
-  isWorkspaceAgentSelection,
-  isWorkspaceProviderId,
   type ObservedWorkspaceProject,
-  type ProviderActResult,
-  type ProviderControlResult,
-  type ProviderMessageResult,
-  type ProviderWorkspaceResult,
   type Session,
   type SessionApplicationId,
   type SessionIdentity,
-  type WorkspaceAgentSelection,
 } from "@sidecar/session";
 import {
   APP_SETTING_SCHEMA,
@@ -84,18 +70,52 @@ import type {
   VoiceHotkeyState,
 } from "./wire/audio";
 import {
+  type BrainAppActAnswer,
+  type BrainAppActRequest,
+  type BrainAskSubmission,
+  type BrainAskSubmissionResult,
+  type BrainAskWait,
+  type BrainReplyClaimResult,
+  type BrainReplyOffer,
+  type BrainRequestSnapshot,
+  isBrainAskSubmission,
+  isBrainAskSubmissionResult,
+  isBrainAskWait,
+  isBrainReplyClaimResult,
+  isBrainReplyOffer,
+  isBrainRequestSnapshot,
+  isBrainRequestSnapshotList,
+  isReceiverEpoch,
+} from "./wire/brain";
+import {
   type AppBootstrap,
   type ConversationHistoryPayload,
   type DisplayDiagnostic,
   type SessionOpenResult,
   type SessionReplayBootstrap,
   type SessionRosterPayload,
-  type SessionTranscriptResult,
   WINDOW_ROLE,
   type WindowRole,
 } from "./wire/session";
 import type { AppSettings, SettingsUpdateResult } from "./wire/settings";
+import {
+  isSpeechOffer,
+  isSpeechOutcome,
+  isSpeechWithdrawal,
+  type SpeechOffer,
+  type SpeechOutcome,
+  type SpeechWithdrawal,
+} from "./wire/speech";
 import type { UpdateSnapshot } from "./wire/update";
+import {
+  isVoiceCommand,
+  isVoiceCommandOutcome,
+  isVoiceView,
+  type VoiceCommand,
+  type VoiceCommandOutcome,
+  type VoiceView,
+  voiceExchangeActive,
+} from "./wire/voice-view";
 
 export interface WireGuard<Value> {
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A bridge guard is the parser at the IPC boundary.
@@ -167,8 +187,26 @@ function isAccountProvider(value: UnparsedWireValue): value is AccountProvider {
   return value === ACCOUNT_PROVIDER.GOOGLE || value === ACCOUNT_PROVIDER.GITHUB;
 }
 
+function isUnitLevel(value: UnparsedWireValue): value is number {
+  return isWireNumber(value) && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+const MICROPHONE_STATUSES: ReadonlySet<string> = new Set<MicrophoneStatus>([
+  "not-determined",
+  "granted",
+  "denied",
+  "restricted",
+  "unknown",
+]);
+
+function isMicrophoneStatus(value: UnparsedWireValue): value is MicrophoneStatus {
+  return isWireString(value) && MICROPHONE_STATUSES.has(value);
+}
+
 function isWindowRole(value: UnparsedWireValue): value is WindowRole {
-  return value === WINDOW_ROLE.PANEL || value === WINDOW_ROLE.INTRODUCTION;
+  return (
+    value === WINDOW_ROLE.PANEL || value === WINDOW_ROLE.INTRODUCTION || value === WINDOW_ROLE.VOICE
+  );
 }
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This function parses an IPC field into a domain identity.
@@ -181,36 +219,6 @@ function isSessionIdentity(value: unknown): value is SessionIdentity {
     isWireString(wire.providerSessionId) &&
     wire.providerSessionId.length > 0
   );
-}
-
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This function parses an IPC field into a domain identity.
-function isIssueIdentity(value: unknown): value is IssueIdentity {
-  const wire = wireValue(value);
-  if (!isRecord(wire)) return false;
-  return (
-    isWireString(wire.trackerId) &&
-    isIssueTrackerId(wire.trackerId) &&
-    isWireString(wire.identifier) &&
-    wire.identifier.length > 0
-  );
-}
-
-type IssueActionAsk = Extract<IssueToolAction, { kind: "issue-state" | "issue-comment" }>;
-
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This function parses an IPC field into a domain action.
-function isIssueActionAsk(value: unknown): value is IssueActionAsk {
-  const wire = wireValue(value);
-  if (!isRecord(wire) || !isWireString(wire.kind) || !isIssueIdentity(wire.identity)) return false;
-  if (wire.kind === "issue-state") {
-    return (
-      isRecord(wire.transition) &&
-      isWireString(wire.transition.id) &&
-      wire.transition.id.length > 0 &&
-      isWireString(wire.transition.name) &&
-      wire.transition.name.length > 0
-    );
-  }
-  return wire.kind === "issue-comment" && isWireString(wire.body);
 }
 
 const optionalString = (value: UnparsedWireValue): value is string | undefined =>
@@ -460,27 +468,6 @@ export const BRIDGE = {
     args: noArgs,
     result: result<ActResult>(isActResult),
   }),
-  setVoiceExchangeActive: entry({
-    kind: "send",
-    channel: "app:set-voice-exchange",
-    // The level and the count are two different things on one channel: the
-    // boolean is the panel's, sent on every change because the duck and the
-    // face follow it, and the kind is the count's, sent only on the edge that
-    // opened the exchange — so a turn walking from connecting to responding
-    // is counted once, and named by who opened it.
-    args: args<[boolean, ProductExchangeKind | undefined]>(
-      (v) =>
-        v.length === 2 &&
-        isWireBoolean(v[0]) &&
-        (v[1] === undefined || (v[0] === true && isProductExchangeKind(v[1]))),
-    ),
-  }),
-  authorizeAct: entry({
-    kind: "invoke",
-    channel: "app:authorize-act",
-    args: args<[ActEnvelope]>((v) => v.length === 1 && isActEnvelope(v[0])),
-    result: result<ActResult>(isActResult),
-  }),
   openSession: entry({
     kind: "invoke",
     channel: "app:open-session",
@@ -505,113 +492,109 @@ export const BRIDGE = {
     args: args<[SessionIdentity]>((v) => v.length === 1 && isSessionIdentity(v[0])),
     result: result<SessionOpenResult>(),
   }),
-  readSessionTranscript: entry({
+  /**
+   * One ask submitted to Luke's brain, typed or spoken, in the developer's own
+   * words. The answer is only whether the brain accepted it into a run, and
+   * which run: the reply arrives later, through the run's record. A run with
+   * no brain is refused with a fixed reason the voice can say instead.
+   */
+  submitBrainAsk: entry({
     kind: "invoke",
-    channel: "app:read-session-transcript",
-    args: args<[SessionIdentity]>((v) => v.length === 1 && isSessionIdentity(v[0])),
-    result: result<SessionTranscriptResult>(),
+    channel: "app:submit-brain-ask",
+    args: args<[BrainAskSubmission]>((v) => v.length === 1 && isBrainAskSubmission(v[0])),
+    result: result<BrainAskSubmissionResult>(isBrainAskSubmissionResult),
   }),
-  sendSessionMessage: entry({
+  /**
+   * Waits on one run for as long as the brain's wait allows, answering the
+   * record as it then stands — ended, or still pending — or nothing for a run
+   * the brain does not know, and whether the asking call may say the words:
+   * granted only to the voice window, under the receiver epoch it names, for
+   * an end already in History, and only once per run, so the words are never
+   * both said on the call and delivered later.
+   */
+  waitBrainAsk: entry({
     kind: "invoke",
-    channel: "app:send-session-message",
-    args: args<[SessionIdentity, string]>(
-      (v) => v.length === 2 && isSessionIdentity(v[0]) && isWireString(v[1]),
+    channel: "app:wait-brain-ask",
+    args: args<[string, number]>(
+      (v) => v.length === 2 && isWireString(v[0]) && isReceiverEpoch(v[1]),
     ),
-    result: result<ProviderMessageResult>(),
+    result: result<BrainAskWait>(isBrainAskWait),
   }),
-  executeSessionControl: entry({
+  /** Cancels one run the developer no longer wants, answering its record as it then stands. */
+  cancelBrainAsk: entry({
     kind: "invoke",
-    channel: "app:execute-session-control",
-    args: args<[SessionIdentity, string]>(
-      (v) =>
-        v.length === 2 && isSessionIdentity(v[0]) && isWireString(v[1]) && v[1].trim().length > 0,
-    ),
-    result: result<ProviderControlResult>(),
-  }),
-  /** Memory writes return the complete list that actually persisted. */
-  rememberFact: entry({
-    kind: "invoke",
-    channel: "app:remember-fact",
-    args: args<[string, string?]>(
-      (v) => v.length >= 1 && v.length <= 2 && isWireString(v[0]) && optionalString(v[1]),
-    ),
-    result: result<readonly RememberedFact[]>(isRememberedFacts),
-  }),
-  forgetFact: entry({
-    kind: "invoke",
-    channel: "app:forget-fact",
+    channel: "app:cancel-brain-ask",
     args: oneString,
-    result: result<readonly RememberedFact[]>(isRememberedFacts),
-  }),
-  createSessionWorkspace: entry({
-    kind: "invoke",
-    channel: "app:create-session-workspace",
-    args: args<[string, string, string?, string?, string?, string?, WorkspaceAgentSelection?]>(
-      (v) => {
-        if (
-          v.length < 2 ||
-          v.length > 7 ||
-          !isWireString(v[0]) ||
-          !isWorkspaceProviderId(v[0]) ||
-          !isWireString(v[1])
-        )
-          return false;
-        if (
-          !optionalString(v[2]) ||
-          !optionalString(v[3]) ||
-          !optionalString(v[4]) ||
-          !optionalString(v[5])
-        )
-          return false;
-        return v[6] === undefined || isWorkspaceAgentSelection(v[0], v[6]);
-      },
+    result: result<BrainRequestSnapshot | undefined>(
+      (v) => v === undefined || isBrainRequestSnapshot(v),
     ),
-    result: result<ProviderWorkspaceResult>(),
   }),
-  addWorkspaceAgent: entry({
+  /** Every run the brain holds, for a window to reconcile against the pushes it already heard. */
+  brainRequestSnapshots: entry({
     kind: "invoke",
-    channel: "app:add-workspace-agent",
-    args: args<[SessionIdentity, string, string?, string?, string?, string?]>(
-      (v) =>
-        v.length >= 2 &&
-        v.length <= 6 &&
-        isSessionIdentity(v[0]) &&
-        isWireString(v[1]) &&
-        optionalString(v[2]) &&
-        optionalString(v[3]) &&
-        optionalString(v[4]) &&
-        optionalString(v[5]) &&
-        (v[5] === undefined || v[4] !== undefined),
+    channel: "app:brain-request-snapshots",
+    args: noArgs,
+    result: result<readonly BrainRequestSnapshot[]>(isBrainRequestSnapshotList),
+  }),
+  /**
+   * The voice window asking to speak one offered reply, by run and delivery.
+   * The main process grants at most once per delivery, only to the receiver
+   * epoch the offer went to, and only while the run and its generation still
+   * stand; the grant carries the words, read from the live record.
+   */
+  claimBrainReply: entry({
+    kind: "invoke",
+    channel: "app:claim-brain-reply",
+    args: args<[string, string, number]>(
+      (v) => v.length === 3 && isWireString(v[0]) && isWireString(v[1]) && isReceiverEpoch(v[2]),
     ),
-    result: result<ProviderWorkspaceResult>(),
+    result: result<BrainReplyClaimResult>(isBrainReplyClaimResult),
   }),
-  renameSessionWorkspace: entry({
-    kind: "invoke",
-    channel: "app:rename-session-workspace",
-    args: args<[SessionIdentity, string]>(
-      (v) => v.length === 2 && isSessionIdentity(v[0]) && isWireString(v[1]),
+  /**
+   * The voice window reporting the claimed reply it held done with — its reply
+   * ended or cut short, or shown where it could not be spoken — under the
+   * epoch it was granted to. The next owed reply is offered only after this.
+   */
+  ackBrainReply: entry({
+    kind: "send",
+    channel: "app:ack-brain-reply",
+    args: args<[string, string, number]>(
+      (v) => v.length === 3 && isWireString(v[0]) && isWireString(v[1]) && isReceiverEpoch(v[2]),
     ),
-    result: result<ProviderActResult>(isActResult),
   }),
-  renameSession: entry({
+  /**
+   * The voice window reporting it can receive: its bootstrap applied and its
+   * subscriptions standing, under the receiver epoch the bootstrap named. The
+   * main process accepts it only from the current voice renderer for the
+   * current epoch, and answers whether this report made the receiver ready.
+   */
+  reportVoiceReady: entry({
     kind: "invoke",
-    channel: "app:rename-session",
-    args: args<[SessionIdentity, string]>(
-      (v) => v.length === 2 && isSessionIdentity(v[0]) && isWireString(v[1]),
+    channel: "app:report-voice-ready",
+    args: args<[number]>((v) => v.length === 1 && isWireNumber(v[0]) && Number.isInteger(v[0])),
+    result: result<boolean>(isWireBoolean),
+  }),
+  /**
+   * The renderer's guide snapshot, pushed whenever it changes, so the main
+   * process can validate an app act against the settings the panel actually
+   * describes and hand the brain the same text.
+   */
+  reportAppGuide: entry({
+    kind: "send",
+    channel: "app:report-app-guide",
+    args: args<[AppGuideSnapshot]>((v) => v.length === 1 && isAppGuideSnapshot(v[0])),
+  }),
+  /**
+   * The renderer's answer to one app act the brain asked it to perform,
+   * matched to the request by id. The answer is the outcome record the brain
+   * reads, as the renderer's own carrier produced it.
+   */
+  answerBrainAppAct: entry({
+    kind: "send",
+    channel: "app:answer-brain-app-act",
+    args: args<[string, BrainAppActAnswer]>(
+      (v) => v.length === 2 && isWireString(v[0]) && isRecord(v[1]) && isWireValue(v[1]),
     ),
-    result: result<ProviderActResult>(isActResult),
-  }),
-  executeIssueAction: entry({
-    kind: "invoke",
-    channel: "app:execute-issue-action",
-    args: args<[IssueActionAsk]>((v) => v.length === 1 && isIssueActionAsk(v[0])),
-    result: result<TrackerActionResult>(isActResult),
-  }),
-  openIssue: entry({
-    kind: "invoke",
-    channel: "app:open-issue",
-    args: args<[IssueIdentity]>((v) => v.length === 1 && isIssueIdentity(v[0])),
-    result: result<SessionOpenResult>(),
   }),
   sendFeedback: entry({
     kind: "invoke",
@@ -628,17 +611,74 @@ export const BRIDGE = {
     result: result<void>(),
   }),
   /**
-   * The voice window reporting that the arrival beat's reply actually began,
-   * which is the one thing that settles the owed record. A trigger the
-   * renderer never heard, or a beat the announcer dropped unspoken — a
-   * meeting's quiet, a call that would not open, news gone stale — settles
-   * nothing, so the next signed-in launch speaks it instead.
+   * The mouth reporting what became of one speech offer, by the id the offer
+   * carried: spoken, refused, held, or stale. The arbiter offers the next turn
+   * only once this lands, and an id it no longer knows — withdrawn, or past
+   * its deadline — is ignored rather than acted on.
    */
-  completeArrivalBeat: entry({
+  settleSpeech: entry({
     kind: "invoke",
-    channel: "app:complete-arrival-beat",
-    args: noArgs,
+    channel: "app:settle-speech",
+    args: args<[string, SpeechOutcome]>(
+      (v) => v.length === 2 && isWireString(v[0]) && isSpeechOutcome(v[1]),
+    ),
     result: result<void>(),
+  }),
+  /**
+   * A panel's command to the voice window, carried through the main process,
+   * which validates it and forwards it on `onVoiceCommand`. A Clear is
+   * answered with whether the stored thread was deleted; the other commands
+   * resolve with nothing. A typed ask is not a command: it goes to the brain
+   * through `submitBrainAsk`, and the voice window hears of the run's end
+   * through its record.
+   */
+  voiceCommand: entry({
+    kind: "invoke",
+    channel: "app:voice-command",
+    args: args<[VoiceCommand]>((v) => v.length === 1 && isVoiceCommand(v[0])),
+    result: result<VoiceCommandOutcome | undefined>(
+      (v) => v === undefined || isVoiceCommandOutcome(v),
+    ),
+  }),
+  /**
+   * The voice window's whole snapshot of the live conversation, reported on
+   * every edge. The main process keeps only the latest, to hand a panel that
+   * opens later, forwards each one to every panel on `onVoiceViewChanged`,
+   * and derives the exchange level the media duck follows from it. The count
+   * of exchanges rides beside it: a kind travels only on the edge that opened
+   * an exchange, named by the one window that knows who opened it, so a turn
+   * walking from connecting to responding is counted once.
+   */
+  reportVoiceView: entry({
+    kind: "send",
+    channel: "app:report-voice-view",
+    args: args<[VoiceView, ProductExchangeKind | undefined]>(
+      (v) =>
+        v.length === 2 &&
+        isVoiceView(v[0]) &&
+        (v[1] === undefined ||
+          (voiceExchangeActive(v[0].voiceStatus) && isProductExchangeKind(v[1]))),
+    ),
+  }),
+  /**
+   * How loud whoever is talking is right now, in the unit interval, reported
+   * by the voice window at a bounded rate only while a turn is listening or
+   * responding. It rides its own channel so the snapshot stays edge-driven.
+   */
+  reportVoiceLevel: entry({
+    kind: "send",
+    channel: "app:report-voice-level",
+    args: args<[number]>((v) => v.length === 1 && isUnitLevel(v[0])),
+  }),
+  /**
+   * Whether a panel is recording a new shortcut, during which the talk key it
+   * is capturing must not open a turn. Panel state gating a global key the
+   * main process routes, so the main process is told rather than the window.
+   */
+  setShortcutCapturing: entry({
+    kind: "send",
+    channel: "app:set-shortcut-capturing",
+    args: oneBoolean,
   }),
   /**
    * One window's copy of the conversation history, reported whole after each
@@ -659,18 +699,10 @@ export const BRIDGE = {
           const stored = storedConversationEntry(entry);
           return (
             stored !== undefined &&
-            (stored.identity === undefined || isSessionIdentity(stored.identity)) &&
-            (stored.identities === undefined || stored.identities.every(isSessionIdentity))
+            (stored.identity === undefined || isSessionIdentity(stored.identity))
           );
         }),
     ),
-  }),
-  /** The History Clear press, persisted and relayed to every other display. */
-  clearConversationHistory: entry({
-    kind: "invoke",
-    channel: "app:clear-conversation-history",
-    args: noArgs,
-    result: result<boolean>(isWireBoolean),
   }),
   /**
    * Words the renderer already draws, placed on this machine's clipboard and
@@ -837,29 +869,6 @@ export const BRIDGE = {
     args: noArgs,
     result: result<SessionRosterPayload>(),
   }),
-  /**
-   * The one-time arrival beat, decided in the main process at the sign-in
-   * edge. It carries nothing: the trigger is the whole message, and the
-   * beat's observed values are the renderer's own to read from the roster it
-   * already draws.
-   */
-  onArrivalSpeech: entry({
-    kind: "subscribe",
-    channel: "app:arrival-speech",
-    args: noArgs,
-    result: result<void>((v) => v === undefined),
-  }),
-  /**
-   * The calendar onboarding beat, decided in the main process while the
-   * gate stands after the first sign-in. It carries nothing: the words are a
-   * script fixed by the build, about the gate alone.
-   */
-  onCalendarOnboardingSpeech: entry({
-    kind: "subscribe",
-    channel: "app:calendar-onboarding-speech",
-    args: noArgs,
-    result: result<void>((v) => v === undefined),
-  }),
   onWorkspaceProjectsChanged: entry({
     kind: "subscribe",
     channel: "app:workspace-projects-changed",
@@ -938,11 +947,109 @@ export const BRIDGE = {
     args: noArgs,
     result: result<SupersetSignInSnapshot>(),
   }),
-  onSessionAnnouncements: entry({
+  /**
+   * One proactive turn the speech arbiter decided to voice now — a briefing
+   * or an onboarding beat — with its id and the deadline past which it is
+   * stale. At most one is outstanding: the next is offered only after the
+   * mouth settles this one.
+   */
+  onSpeechOffered: entry({
     kind: "subscribe",
-    channel: "app:session-announcements",
+    channel: "app:speech-offered",
     args: noArgs,
-    result: result<readonly SessionAnnouncement[]>(),
+    result: result<SpeechOffer>(isSpeechOffer),
+  }),
+  /** The arbiter taking back an offer the mouth has not yet begun to speak. */
+  onSpeechWithdrawn: entry({
+    kind: "subscribe",
+    channel: "app:speech-withdrawn",
+    args: noArgs,
+    result: result<SpeechWithdrawal>(isSpeechWithdrawal),
+  }),
+  /** The latest voice snapshot, forwarded by the main process to every panel. */
+  onVoiceViewChanged: entry({
+    kind: "subscribe",
+    channel: "app:voice-view-changed",
+    args: noArgs,
+    result: result<VoiceView>(isVoiceView),
+  }),
+  /** The current loudness of whoever is talking, relayed to every panel. */
+  onVoiceLevelChanged: entry({
+    kind: "subscribe",
+    channel: "app:voice-level-changed",
+    args: noArgs,
+    result: result<number>(isUnitLevel),
+  }),
+  /**
+   * The system's answer on microphone access, which the main process owns and
+   * broadcasts so no panel has to hold a microphone to know it.
+   */
+  onMicrophoneStatusChanged: entry({
+    kind: "subscribe",
+    channel: "app:microphone-status-changed",
+    args: noArgs,
+    result: result<MicrophoneStatus>(isMicrophoneStatus),
+  }),
+  /**
+   * A panel's validated command, forwarded by the main process to the voice
+   * window alone; a typed ask arrives with its words and the request id its
+   * outcome is answered under, every other command with neither.
+   */
+  onVoiceCommand: entry({
+    kind: "subscribe",
+    channel: "app:voice-command-forwarded",
+    args: noArgs,
+    result: result<{ command: VoiceCommand }>(
+      (value) => isRecord(value) && isVoiceCommand(value.command),
+    ),
+  }),
+  /**
+   * One ended run whose reply the main process offers the voice window to
+   * speak. The words come with the grant, not the offer: the window claims
+   * through `claimBrainReply` before a word is said.
+   */
+  onBrainReplyOffered: entry({
+    kind: "subscribe",
+    channel: "app:brain-reply-offered",
+    args: noArgs,
+    result: result<BrainReplyOffer>(isBrainReplyOffer),
+  }),
+  /**
+   * The brain's generation ended — cleared, expired, or replaced — so every
+   * reply offered or granted from it is withdrawn: an offer in hand is
+   * dropped unclaimed, and words granted but not yet spoken are not spoken.
+   * Carries the receiver epoch it was sent under.
+   */
+  onBrainRepliesWithdrawn: entry({
+    kind: "subscribe",
+    channel: "app:brain-replies-withdrawn",
+    args: noArgs,
+    result: result<number>(isReceiverEpoch),
+  }),
+  /** Every run the brain holds, pushed whole whenever any record changes. */
+  onBrainRequestsChanged: entry({
+    kind: "subscribe",
+    channel: "app:brain-requests-changed",
+    args: noArgs,
+    result: result<readonly BrainRequestSnapshot[]>(isBrainRequestSnapshotList),
+  }),
+  /**
+   * An app act the brain decided that only the renderer can perform, already
+   * validated in the main process against the guide the renderer reported.
+   */
+  onBrainAppAct: entry({
+    kind: "subscribe",
+    channel: "app:brain-app-act",
+    args: noArgs,
+    result: result<BrainAppActRequest>(
+      (v) =>
+        isRecord(v) &&
+        isWireString(v.requestId) &&
+        isRecord(v.action) &&
+        isWireString(v.action.kind) &&
+        v.action.kind !== APP_TOOL_KIND.REMEMBER &&
+        v.action.kind !== APP_TOOL_KIND.FORGET,
+    ),
   }),
   onConversationHistoryChanged: entry({
     kind: "subscribe",

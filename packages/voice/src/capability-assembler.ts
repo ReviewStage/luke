@@ -1,15 +1,7 @@
-import {
-  type AttentionEvaluator,
-  openAiAttentionEvaluator,
-  openAiSubjectDeriver,
-  SessionAttentionReviewer,
-  SessionSubjectDeriver,
-  type SubjectEvaluator,
-} from "@sidecar/attention";
+import { type BrainClient, HostedBrainClient, openAiBrainClient } from "@sidecar/brain";
 import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { type RealtimeDiagnostics, realtimeMintExplanation } from "@sidecar/realtime";
-import type { Session, SessionIdentity } from "@sidecar/session";
 import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
@@ -17,9 +9,7 @@ import {
   VOICE_SOURCE,
   type VoiceSource,
 } from "@sidecar/settings";
-import { HostedAttentionEvaluator } from "./hosted-attention-evaluator.js";
 import { HostedRealtimeCredentialMinter } from "./hosted-credentials.js";
-import { HostedSubjectDeriver } from "./hosted-subject-deriver.js";
 import type { RealtimeCredentialMinter } from "./minter.js";
 import { openAiRealtimeCredentials, unavailableRealtimeDiagnostics } from "./openai-credentials.js";
 
@@ -72,34 +62,37 @@ export interface VoiceCapabilityAssemblerOptions {
   accountSignedIn: () => boolean;
   hostedServiceBaseUrl: string;
   refreshAccount: () => Promise<void>;
-  currentSession: (identity: SessionIdentity) => Session | undefined;
-  /**
-   * Reads one local session's bounded transcript rendering for the subject
-   * deriver, or nothing. Only the main process reaches the adapters, so it
-   * is injected here the way `currentSession` is; absent means no subjects
-   * are derived at all.
-   */
-  readTranscript?: (identity: SessionIdentity) => Promise<string | undefined>;
   fetch?: typeof fetch;
   report?: (message: string) => void;
   /**
-   * Decorates whichever evaluator the policy builds — keyed or hosted — so a
-   * traced development run reads the same however the pass is credentialed.
-   * The decoration may only observe: the reviewer still sees an
-   * `AttentionEvaluator`, and absence means the evaluator is used as built.
+   * Decorates the brain client the policy builds, so a traced development
+   * run records every turn's request without the client learning it is being
+   * watched. The decoration may only observe: the agent still sees a
+   * `BrainClient`, and absence means the client is used as built.
    */
-  wrapEvaluator?: (evaluator: AttentionEvaluator) => AttentionEvaluator;
-  /** The same decoration for the subject evaluator, under the same terms. */
-  wrapSubjectEvaluator?: (evaluator: SubjectEvaluator) => SubjectEvaluator;
+  wrapBrainClient?: (client: BrainClient) => BrainClient;
+}
+
+/**
+ * What one `apply` answers. `latest` says whether the application was the
+ * newest when its reads completed, which is when it published, warmed, and
+ * reported, or was overtaken and did none of that. `isCurrent` asks the same
+ * question live: a newer application may begin between the publication and
+ * the caller's continuation, and a caller about to build on the published set
+ * must ask at the moment of use rather than trust the snapshot it was handed.
+ */
+export interface VoiceCapabilityApplication {
+  latest: boolean;
+  isCurrent: () => boolean;
 }
 
 export class VoiceCapabilityAssembler {
   readonly #options: VoiceCapabilityAssemblerOptions;
-  #attentionReviewer: SessionAttentionReviewer | undefined;
-  #subjectDeriver: SessionSubjectDeriver | undefined;
+  #brainClient: BrainClient | undefined;
   #realtimeCredentials: RealtimeCredentialMinter | undefined;
   #unavailableDiagnostics: RealtimeDiagnostics;
   #voiceSource: VoiceSource = VOICE_SOURCE.ACCOUNT;
+  #applications = 0;
 
   constructor(options: VoiceCapabilityAssemblerOptions) {
     this.#options = options;
@@ -109,18 +102,17 @@ export class VoiceCapabilityAssembler {
     });
   }
 
-  get attentionReviewer(): SessionAttentionReviewer | undefined {
-    return this.#attentionReviewer;
-  }
-
   /**
-   * Built beside the reviewer on the same policy, so a subject can be derived
-   * exactly when an attention review could be: never in a fixture run, and
-   * on the key or the account the reviews travel on. It is asked only at an
-   * announcement, for the session being announced.
+   * The client the brain's turns run on, or nothing. It follows the voice
+   * source exactly: the developer's own key runs turns directly, a signed-in
+   * account with the account source runs them through Luke's hosted service
+   * on Luke's key, and a fixture or evidence run, or a run with neither, has
+   * no brain, so nothing is announced and an ask meets the honest refusal.
+   * The key is read only when the key source is chosen, so an account-source
+   * run never spends a stored personal key.
    */
-  get subjectDeriver(): SessionSubjectDeriver | undefined {
-    return this.#subjectDeriver;
+  get brainClient(): BrainClient | undefined {
+    return this.#brainClient;
   }
 
   get realtimeCredentials(): RealtimeCredentialMinter | undefined {
@@ -136,7 +128,17 @@ export class VoiceCapabilityAssembler {
     return this.#voiceSource;
   }
 
-  async apply(): Promise<void> {
+  /**
+   * Reads the chosen source, the key, the account, and the preferences, and
+   * publishes the capability set they decide as one unit, after every read
+   * has completed. Two applications can overlap — an account chosen while a
+   * key read is still out — and the older must never publish over the newer:
+   * each application takes its number before its first await and checks it
+   * after its last, and one that has been overtaken installs nothing.
+   */
+  async apply(): Promise<VoiceCapabilityApplication> {
+    const application = ++this.#applications;
+    const isCurrent = () => application === this.#applications;
     const credentialsUsable = this.#options.credentialsUsable();
     const voiceSource = await this.#options.settings.readVoiceSource();
     const apiKey =
@@ -155,45 +157,25 @@ export class VoiceCapabilityAssembler {
       refreshAccount: this.#options.refreshAccount,
       ...(this.#options.fetch ? { fetch: this.#options.fetch } : undefined),
     };
-    const builtEvaluator = apiKey
-      ? openAiAttentionEvaluator(apiKey)
-      : policy.useHosted
-        ? new HostedAttentionEvaluator(seams)
-        : undefined;
-    const evaluator =
-      builtEvaluator && this.#options.wrapEvaluator
-        ? this.#options.wrapEvaluator(builtEvaluator)
-        : builtEvaluator;
-    this.#attentionReviewer = evaluator
-      ? new SessionAttentionReviewer({
-          evaluator,
-          currentSession: this.#options.currentSession,
-        })
-      : undefined;
-    const readTranscript = this.#options.readTranscript;
-    const builtSubjectEvaluator = readTranscript
-      ? apiKey
-        ? openAiSubjectDeriver(apiKey)
-        : policy.useHosted
-          ? new HostedSubjectDeriver(seams)
-          : undefined
-      : undefined;
-    const subjectEvaluator =
-      builtSubjectEvaluator && this.#options.wrapSubjectEvaluator
-        ? this.#options.wrapSubjectEvaluator(builtSubjectEvaluator)
-        : builtSubjectEvaluator;
-    this.#subjectDeriver =
-      subjectEvaluator && readTranscript
-        ? new SessionSubjectDeriver({ evaluator: subjectEvaluator, readTranscript })
-        : undefined;
     const [voice, speed] = await Promise.all([
       this.#options.settings.get(APP_SETTING_SCHEMA.voice.field).catch(() => undefined),
       this.#options.settings.get(APP_SETTING_SCHEMA.voiceSpeed.field).catch(() => undefined),
     ]);
+    if (!isCurrent()) return { latest: false, isCurrent };
+
+    const builtBrainClient = policy.useKey
+      ? openAiBrainClient(apiKey)
+      : policy.useHosted
+        ? new HostedBrainClient(seams)
+        : undefined;
     const preferences = {
       ...(voice ? { voice } : undefined),
       ...(speed ? { speed } : undefined),
     };
+    this.#brainClient =
+      builtBrainClient && this.#options.wrapBrainClient
+        ? this.#options.wrapBrainClient(builtBrainClient)
+        : builtBrainClient;
     this.#realtimeCredentials = apiKey
       ? openAiRealtimeCredentials(apiKey, preferences)
       : policy.useHosted
@@ -206,6 +188,7 @@ export class VoiceCapabilityAssembler {
     this.#voiceSource = policy.source;
     if (policy.useHosted) this.#warmHostedVoice();
     this.#report(apiKey !== undefined);
+    return { latest: true, isCurrent };
   }
 
   #warmHostedVoice(): void {
@@ -216,15 +199,22 @@ export class VoiceCapabilityAssembler {
     }).catch(() => undefined);
   }
 
-  #report(_apiKeyConfigured: boolean): void {
+  #report(apiKeyConfigured: boolean): void {
     const write = this.#options.report ?? ((message: string) => process.stderr.write(message));
     if (this.#realtimeCredentials) {
       const report = this.#realtimeCredentials.diagnostics();
       write(`Luke voice: enabled (${report.hosted ? "hosted, " : ""}${report.model})\n`);
-      return;
+    } else {
+      write(
+        `Luke voice: unavailable — ${realtimeMintExplanation(this.#unavailableDiagnostics.lastOutcome)}\n`,
+      );
     }
-    write(
-      `Luke voice: unavailable — ${realtimeMintExplanation(this.#unavailableDiagnostics.lastOutcome)}\n`,
-    );
+    if (this.#brainClient) {
+      write(`Luke brain: enabled (${this.#brainClient.model ?? "model chosen by the service"})\n`);
+    } else if (apiKeyConfigured) {
+      write("Luke brain: unavailable — the key was found but no client was built\n");
+    } else {
+      write("Luke brain: absent — no OpenAI key and no signed-in account\n");
+    }
   }
 }

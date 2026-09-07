@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   CONVERSATION_ENTRY_KIND,
+  insertSpokenAskThreadEntry,
   maximumStoredConversationEntries,
   storedConversationMaximumAgeMs,
+  withConversationEntryRequest,
 } from "@sidecar/realtime";
 import {
   conversationFromStored,
@@ -76,14 +78,14 @@ test("window snapshots merge once and cannot restore a cleared thread", () => {
 
 test("window snapshots keep matching words about different sessions", () => {
   const first = {
-    kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
-    words: "Two chats changed.",
-    identities: [{ providerId: "claude-code", providerSessionId: "session-a" }],
+    kind: CONVERSATION_ENTRY_KIND.ACT,
+    words: "sent a message.",
+    identity: { providerId: "claude-code", providerSessionId: "session-a" },
     recordedAt: NOW,
   };
   const second = {
     ...first,
-    identities: [{ providerId: "codex", providerSessionId: "session-b" }],
+    identity: { providerId: "codex", providerSessionId: "session-b" },
   };
   const merged = mergeConversationHistory([first], [second], undefined, NOW);
 
@@ -113,4 +115,45 @@ test("stored memory drops noncanonical and duplicate entries", () => {
     ],
   });
   assert.deepEqual(rememberedFactsFromStored(stored), [{ id: "one", words: "kept" }]);
+});
+
+test("a spoken line tied to its run after it was relayed is enriched, not duplicated", () => {
+  const now = 1_800_000_000_000;
+  const spoken = insertSpokenAskThreadEntry([], "the exact spoken words", undefined, now);
+  const [line] = spoken;
+  assert.ok(line);
+  let main = mergeConversationHistory([], spoken, undefined, now + 1);
+  const tied = withConversationEntryRequest(spoken, line, "run-1");
+  main = mergeConversationHistory(main, tied, undefined, now + 2);
+  assert.equal(main.length, 1);
+  assert.equal(main[0]?.requestId, "run-1");
+  assert.equal(main[0]?.words, "the exact spoken words");
+  // A stale window still reporting the uncorrelated copy neither doubles the
+  // line nor takes the run back off it.
+  main = mergeConversationHistory(main, spoken, undefined, now + 3);
+  assert.equal(main.length, 1);
+  assert.equal(main[0]?.requestId, "run-1");
+  // Two utterances with the same words at different moments stay two lines.
+  const again = insertSpokenAskThreadEntry(tied, "the exact spoken words", tied[0], now + 5);
+  main = mergeConversationHistory(main, again, undefined, now + 6);
+  assert.equal(main.length, 2);
+});
+
+test("a stored thread drops every line at or before the last Clear's cutoff", () => {
+  const stored = JSON.stringify({
+    entries: [
+      { kind: "typed-ask", words: "before", recordedAt: 1_800_000_000_000 },
+      { kind: "reply", words: "at the cutoff", recordedAt: 1_800_000_000_500 },
+      { kind: "reply", words: "after", recordedAt: 1_800_000_000_501 },
+    ],
+  });
+  const now = 1_800_000_001_000;
+  assert.deepEqual(
+    conversationFromStored(stored, now, 1_800_000_000_500).map((entry) => entry.words),
+    ["after"],
+  );
+  assert.deepEqual(
+    conversationFromStored(stored, now).map((entry) => entry.words),
+    ["before", "at the cutoff", "after"],
+  );
 });

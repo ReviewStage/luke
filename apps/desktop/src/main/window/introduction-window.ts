@@ -14,6 +14,12 @@ export interface IntroductionWindowOptions {
    * worst failure this feature has.
    */
   onGone: (reason: string) => void;
+  /**
+   * The takeover's window is gone by any route — its own `close()`, or a
+   * teardown that never passed through `onGone` — so whoever decides the
+   * process's lifetime can check that something visible still stands.
+   */
+  onClosed: () => void;
 }
 
 /**
@@ -85,6 +91,7 @@ export class IntroductionWindow {
     window.webContents.on("did-fail-load", (_event, _code, description) => {
       this.#options.onGone(`The takeover failed to load: ${description}`);
     });
+    window.on("closed", () => this.#options.onClosed());
     window.once("ready-to-show", () => {
       if (window.isDestroyed() || this.#retired) return;
       window.show();

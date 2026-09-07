@@ -5,11 +5,11 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import {
-  InMemorySessionRegistry,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
   SESSION_COMPLETION_CAUSE,
   SESSION_STATUS,
+  SessionRoster,
 } from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import { CODEX_PROVIDER, CodexSessionAdapter, isCodexRealtimeDelegationText } from "./adapter.js";
@@ -1273,7 +1273,7 @@ test("a thread archived between passes leaves the roster and stays gone", async 
     },
   ]);
   const adapter = new CodexSessionAdapter({ codexHome, now: () => TEST_TIME });
-  const registry = new InMemorySessionRegistry();
+  const registry = new SessionRoster();
 
   await registry.refresh(adapter);
   assert.deepEqual(

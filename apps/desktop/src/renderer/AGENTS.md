@@ -11,6 +11,18 @@ both are real modules that simply are not there at run time.
 `repository-checks.sh` fails the build on either. A colocated `*.test.ts` is
 exempt from the `node:` half: it runs under Node and never enters the bundle.
 
+Two renderers load this bundle under the same rule. The panel is one; the
+hidden voice window under `WINDOW_ROLE.VOICE` is the other, and everything it
+mounts lives under `renderer/voice/`: the realtime session, the microphone,
+the mouth, and the hook that reports the conversation back to the main process
+as one `VoiceView`. It reaches the main process through the same bridge, under
+the same sandbox, and it must never mount `App` or import `session-replay.ts`:
+the panel is the one surface that records, and a recording of a blank hidden
+window would be a session nobody consented to. `repository-checks.sh` fails the
+build on a `session-replay` import anywhere under `renderer/voice/`. A panel
+draws the voice state the main process forwards and forwards its presses back;
+it constructs no session of its own.
+
 The same trap arrives through a package barrel, where nothing greps for it.
 Importing `@sidecar/calendar` for one string constant resolves that package's
 whole export graph, `node:http` included. Packages that hold both a vocabulary
@@ -122,15 +134,14 @@ against its rock deliberately, like a person mid-sentence.
 `apps/desktop/src/renderer/luke-guide.ts` is the one place Luke's
 self-knowledge is described: what Luke is on screen, every user-facing setting
 with its current value, and where each is changed by hand. The renderer builds
-an `AppGuideSnapshot` from it and sends it into the voice conversation inside
-the session's own instructions, behind an `[app guide]` marker — build-fixed
-prose belongs on the cacheable prefix rather than in a conversation item —
-refreshed by a `session.update` on the same economy the roster items keep: at
-the turn that reads it, only on the developer's call, and never re-sent
-unchanged. The spoken
-`change_app_setting` and `show_panel` tools are validated against that
-snapshot, so the guide is simultaneously what Luke can say about himself and
-the outer bound of what a spoken ask can do to him.
+an `AppGuideSnapshot` from it and reports it to the main process over
+`reportAppGuide` whenever it changes; main renders it behind an `[app guide]`
+marker into the brain's standing context, the build-fixed prose every turn
+reads, and never into a conversation item. The voice is only the brain's
+mouth and carries no guide of its own. The brain's `change_app_setting` and
+`show_panel` acts are validated against that same snapshot in the renderer, so
+the guide is simultaneously what Luke can say about himself and the outer
+bound of what an ask can do to him.
 
 **When you add a feature or a setting, teach the guide about it in the same
 change.** Stored settings are declared once, in `APP_SETTING_SCHEMA`: its guard

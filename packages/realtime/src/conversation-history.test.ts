@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { SESSION_TOOL_KIND } from "@sidecar/acts";
 import {
   normalizeSession,
   SESSION_APPLICATION_ID,
@@ -10,12 +11,13 @@ import {
 import {
   adoptConversationThread,
   announcementConversationEntry,
-  appendConversationEntry,
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
+  conversationEntryKey,
   conversationHistoryText,
-  insertSpokenAskEntry,
+  enrichedConversationEntry,
+  hasConversationEntryForRequest,
   insertSpokenAskThreadEntry,
   isConversationEntryKind,
   maximumConversationEntries,
@@ -28,9 +30,10 @@ import {
   storedConversationEntry,
   storedConversationMaximumAgeMs,
   streamingConversationEntry,
+  typedAskConversationEntry,
+  withConversationEntryRequest,
 } from "./conversation-history.js";
 import { SESSION_NO_LONGER_OBSERVED_NOTE } from "./realtime-protocol.js";
-import { SESSION_TOOL_KIND } from "./realtime-tools.js";
 
 const OBSERVED_AT = 1_800_000_000_000;
 
@@ -47,7 +50,7 @@ test("appending flattens, keeps the words whole, and retires the oldest lines", 
   // new section of the context item it will be rendered into. Length is not
   // cut here: the thread is the developer's own record, and only the model
   // render bounds its copy.
-  const appended = appendConversationEntry([], {
+  const appended = appendConversationThreadEntry([], {
     kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
     words: `  hello\n\nthere ${"x".repeat(2 * maximumConversationEntryLength)}  `,
     identity,
@@ -58,31 +61,29 @@ test("appending flattens, keeps the words whole, and retires the oldest lines", 
 
   // An entry with nothing left says nothing worth a window's space.
   assert.deepEqual(
-    appendConversationEntry([], { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "   " }),
+    appendConversationThreadEntry([], { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "   " }),
     [],
   );
 
-  // The history is a thread, not an archive: the oldest lines leave first.
+  // The history is a thread, not an archive: the oldest lines leave first,
+  // at the retained bound rather than the smaller model-context one.
   let entries: readonly ConversationEntry[] = [];
-  for (let index = 0; index < maximumConversationEntries + 3; index += 1) {
-    entries = appendConversationEntry(entries, {
+  for (let index = 0; index < maximumStoredConversationEntries + 3; index += 1) {
+    entries = appendConversationThreadEntry(entries, {
       kind: CONVERSATION_ENTRY_KIND.REPLY,
       words: `line ${index}`,
     });
   }
-  assert.equal(entries.length, maximumConversationEntries);
+  assert.equal(entries.length, maximumStoredConversationEntries);
   assert.equal(entries[0]?.words, "line 3");
 });
 
 test("a streaming line is flattened like the settled line it previews", () => {
-  const identity = { providerId: "claude-code", providerSessionId: "session-a" };
   const line = streamingConversationEntry(
     CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
     `  Checkout\n\nfinished ${"x".repeat(2 * maximumConversationEntryLength)}  `,
-    identity,
   );
   assert.equal(line?.words, `Checkout finished ${"x".repeat(2 * maximumConversationEntryLength)}`);
-  assert.deepEqual(line?.identity, identity);
   // A line still growing has not happened yet: the record stamps at settle.
   assert.equal(line?.recordedAt, undefined);
 
@@ -93,7 +94,7 @@ test("a streaming line is flattened like the settled line it previews", () => {
 
 test("the model render cuts a long line the retained thread keeps whole", () => {
   const longAnswer = `The checkout work is done. ${"x".repeat(2 * maximumConversationEntryLength)}`;
-  const entries = appendConversationEntry(
+  const entries = appendConversationThreadEntry(
     [],
     { kind: CONVERSATION_ENTRY_KIND.REPLY, words: longAnswer },
     OBSERVED_AT,
@@ -235,20 +236,20 @@ test("the rendering reads oldest first and says who each line speaks for", () =>
   const sessions = [rosterSession("session-a", "checkout-service")];
   const identity = { providerId: "claude-code", providerSessionId: "session-a" };
   let entries: readonly ConversationEntry[] = [];
-  entries = appendConversationEntry(entries, {
+  entries = appendConversationThreadEntry(entries, {
     kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
     words: "Claude Code finished checkout-service.",
     identity,
   });
-  entries = appendConversationEntry(entries, {
+  entries = appendConversationThreadEntry(entries, {
     kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
     words: "what did it finish?",
   });
-  entries = appendConversationEntry(entries, {
+  entries = appendConversationThreadEntry(entries, {
     kind: CONVERSATION_ENTRY_KIND.REPLY,
     words: "The checkout service work is done.",
   });
-  entries = appendConversationEntry(entries, {
+  entries = appendConversationThreadEntry(entries, {
     kind: CONVERSATION_ENTRY_KIND.ACT,
     words: 'sent a message to "checkout-service": "ship it"',
     identity,
@@ -270,33 +271,21 @@ test("the rendering reads oldest first and says who each line speaks for", () =>
   assert.match(lines[4] ?? "", /\[provider_id=claude-code provider_session_id=session-a\]$/);
 });
 
-test("a batched announcement carries every validated session through history", () => {
-  const identities = [
-    { providerId: "claude-code", providerSessionId: "session-a" },
-    { providerId: "claude-code", providerSessionId: "session-b" },
-  ];
-  const entries = appendConversationEntry(
-    [],
-    {
-      kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
-      words: "Checkout finished and billing needs approval.",
-      identities,
-    },
-    OBSERVED_AT,
-  );
-
-  const text = conversationHistoryText(entries, [
-    rosterSession("session-a", "checkout"),
-    rosterSession("session-b", "billing"),
-  ]);
-
-  assert.ok(text);
-  assert.match(text, /provider_session_id=session-a.*provider_session_id=session-b/);
-  assert.deepEqual(storedConversationEntry(JSON.parse(JSON.stringify(entries[0]))), entries[0]);
+test("an announcement's line and a reply's line are their words alone", () => {
+  assert.deepEqual(announcementConversationEntry("Checkout finished."), {
+    kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
+    words: "Checkout finished.",
+  });
+  // A reply carries no subject: nothing in its words can name a session for a
+  // later turn to act on, only an act's own identity does that.
+  assert.deepEqual(replyConversationEntry("checkout-service just finished its tests."), {
+    kind: CONVERSATION_ENTRY_KIND.REPLY,
+    words: "checkout-service just finished its tests.",
+  });
 });
 
 test("a spoken ask reads as the developer's own words, said rather than typed", () => {
-  const entries = insertSpokenAskEntry([], "how is the checkout agent doing?", undefined);
+  const entries = insertSpokenAskThreadEntry([], "how is the checkout agent doing?", undefined);
 
   const text = conversationHistoryText(entries, []);
 
@@ -343,7 +332,7 @@ test("a spoken ask lands at its turn's own mark, not where its transcription did
     { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Sent it over." },
   ];
 
-  const placed = insertSpokenAskEntry(exchange, "ask that chat to ship it", priorReply);
+  const placed = insertSpokenAskThreadEntry(exchange, "ask that chat to ship it", priorReply);
 
   assert.deepEqual(
     placed.map((entry) => entry.words),
@@ -358,7 +347,7 @@ test("a spoken ask lands at its turn's own mark, not where its transcription did
 
   // A transcription that beats the reply finds nothing behind its mark and
   // lands at the end — the order everything was said in.
-  const onTime = insertSpokenAskEntry(exchange.slice(0, 2), "and what broke?", priorReply);
+  const onTime = insertSpokenAskThreadEntry(exchange.slice(0, 2), "and what broke?", priorReply);
   assert.deepEqual(
     onTime.map((entry) => entry.words),
     ["how is checkout going?", "The checkout work is done.", "and what broke?"],
@@ -367,9 +356,9 @@ test("a spoken ask lands at its turn's own mark, not where its transcription did
   // A turn committed against an empty history belongs at the very front, and
   // so does one whose mark the bounds have already retired: both are older
   // than everything recorded since.
-  const first = insertSpokenAskEntry(exchange, "the very first ask", undefined);
+  const first = insertSpokenAskThreadEntry(exchange, "the very first ask", undefined);
   assert.equal(first[0]?.words, "the very first ask");
-  const retired = insertSpokenAskEntry(exchange, "an ancient ask", {
+  const retired = insertSpokenAskThreadEntry(exchange, "an ancient ask", {
     kind: CONVERSATION_ENTRY_KIND.REPLY,
     words: "long evicted",
   });
@@ -379,22 +368,29 @@ test("a spoken ask lands at its turn's own mark, not where its transcription did
   // placed — and the very thread handed in, so a caller can tell an unchanged
   // history from one that owes the open call an update.
   assert.equal(insertSpokenAskThreadEntry(exchange, "   ", priorReply, OBSERVED_AT), exchange);
-  assert.deepEqual(insertSpokenAskEntry(exchange, "   ", priorReply), exchange);
+});
+
+test("a spoken ask placed into a full context window retires the oldest line from the slice", () => {
   let full: readonly ConversationEntry[] = [];
   for (let index = 0; index < maximumConversationEntries; index += 1) {
-    full = appendConversationEntry(full, {
+    full = appendConversationThreadEntry(full, {
       kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
       words: `line ${index}`,
     });
   }
-  assert.equal(
-    insertSpokenAskEntry(full, "one more", full.at(-1)).length,
-    maximumConversationEntries,
-  );
+
+  const placed = insertSpokenAskThreadEntry(full, "one more", full.at(-1), OBSERVED_AT);
+
+  // The thread keeps every line; only the model's slice pays for the new one.
+  assert.equal(placed.length, maximumConversationEntries + 1);
+  const recent = recentConversationEntries(placed);
+  assert.equal(recent.length, maximumConversationEntries);
+  assert.equal(recent[0]?.words, "line 1");
+  assert.equal(recent.at(-1)?.words, "one more");
 });
 
 test("a line whose session left the roster keeps its words and says the session is gone", () => {
-  const entries = appendConversationEntry([], {
+  const entries = appendConversationThreadEntry([], {
     kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
     words: "Claude Code finished checkout-service.",
     identity: { providerId: "claude-code", providerSessionId: "session-gone" },
@@ -414,7 +410,7 @@ test("a line whose session left the roster keeps its words and says the session 
 
   // A line that never named a session carries neither identity nor note.
   const aboutNoSession = conversationHistoryText(
-    appendConversationEntry([], { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "All quiet." }),
+    appendConversationThreadEntry([], { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "All quiet." }),
     [],
   );
   assert.ok(aboutNoSession);
@@ -468,13 +464,13 @@ test("a stored line reads back, and retention cuts by age and by count", () => {
     storedConversationEntry({ ...line, identity: { providerId: "claude-code" } }),
     undefined,
   );
-  assert.equal(
+  // Fields an older build stored beside the words are left unread, not refused.
+  assert.deepEqual(
     storedConversationEntry({
       ...line,
-      identity: { providerId: "claude-code", providerSessionId: "a" },
-      identities: [{ providerId: "claude-code", providerSessionId: "b" }],
+      mentions: [{ providerId: "claude-code", providerSessionId: "a", title: "checkout" }],
     }),
-    undefined,
+    line,
   );
 
   const stale = { ...line, recordedAt: now - storedConversationMaximumAgeMs - 1 };
@@ -507,7 +503,7 @@ test("the live thread obeys the same count and age retention as storage", () => 
 
 test("an appended line carries retention's clock without it reaching the model", () => {
   const now = 1_800_000_000_000;
-  const entries = appendConversationEntry(
+  const entries = appendConversationThreadEntry(
     [],
     { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "what is running" },
     now,
@@ -574,183 +570,91 @@ test("adopting another window's thread reuses the entry objects already held", (
   assert.deepEqual(adoptConversationThread([ask, reply], []), []);
 });
 
-test("a reply answering about one session records its subject and its chip", () => {
-  const sessions = [
-    rosterSession("session-a", "checkout-service"),
-    rosterSession("session-b", "billing-service"),
-  ];
-
-  const entry = replyConversationEntry("checkout-service just finished its tests.", sessions);
-  assert.equal(entry.kind, CONVERSATION_ENTRY_KIND.REPLY);
-  assert.deepEqual(entry.identity, {
-    providerId: "claude-code",
-    providerSessionId: "session-a",
-  });
-  assert.deepEqual(entry.mentions, [
-    {
-      providerId: "claude-code",
-      providerSessionId: "session-a",
-      title: "checkout-service",
-      markId: "claude-code",
-      applications: [],
-    },
-  ]);
-});
-
-test("a reply naming several sessions draws every chip but records no subject", () => {
-  const sessions = [
-    rosterSession("session-a", "checkout-service"),
-    rosterSession("session-b", "billing-service"),
-  ];
-
-  // Two chats named: a chip each, but the subject a later turn's bare "that
-  // chat" resolves through cannot choose between them.
-  const both = replyConversationEntry(
-    "checkout-service is done and billing-service is waiting.",
-    sessions,
+test("a line tied to a run is recorded once per kind, and its run survives storage", () => {
+  const now = Date.parse("2026-01-02T03:04:05.000Z");
+  let thread = appendConversationThreadEntry(
+    [],
+    typedAskConversationEntry("ship it", "run-1"),
+    now,
   );
-  assert.equal(both.identity, undefined);
+  thread = appendConversationThreadEntry(
+    thread,
+    typedAskConversationEntry("ship it", "run-1"),
+    now,
+  );
+  thread = appendConversationThreadEntry(thread, replyConversationEntry("Shipping.", "run-1"), now);
+  thread = appendConversationThreadEntry(
+    thread,
+    replyConversationEntry("Shipping, I said.", "run-1"),
+    now + 1,
+  );
+  // The same words for another run are another line.
+  thread = appendConversationThreadEntry(thread, replyConversationEntry("Shipping.", "run-2"), now);
   assert.deepEqual(
-    both.mentions?.map((mention) => [mention.providerSessionId, mention.title, mention.markId]),
+    thread.map((entry) => [entry.kind, entry.words, entry.requestId]),
     [
-      ["session-a", "checkout-service", "claude-code"],
-      ["session-b", "billing-service", "claude-code"],
+      [CONVERSATION_ENTRY_KIND.TYPED_ASK, "ship it", "run-1"],
+      [CONVERSATION_ENTRY_KIND.REPLY, "Shipping.", "run-1"],
+      [CONVERSATION_ENTRY_KIND.REPLY, "Shipping.", "run-2"],
     ],
   );
-
-  // No observed name appears whole, so nothing a model said earns a chip.
-  const neither = replyConversationEntry("Nothing is running right now.", sessions);
-  assert.equal(neither.identity, undefined);
-  assert.equal(neither.mentions, undefined);
-});
-
-test("a reply's subject is single when the identities are, not when the names were", () => {
-  // The chat's own title and its workspace's name both resolve to session-a:
-  // two mentions, one chat, one chip, still one attributable subject.
-  const chat = normalizeSession(
-    { id: "conductor", displayName: "Conductor" },
-    {
-      providerSessionId: "session-a",
-      title: "checkout-service",
-      status: SESSION_STATUS.WORKING,
-      lastActivityAt: OBSERVED_AT,
-      workspace: { providerWorkspaceId: "ws-1", name: "hong-kong" },
-    },
-  );
-
-  const entry = replyConversationEntry("checkout-service in hong-kong is finished.", [chat]);
-  assert.deepEqual(entry.identity, {
-    providerId: "conductor",
-    providerSessionId: "session-a",
-  });
-  assert.equal(entry.mentions?.length, 1);
-});
-
-test("an announcement's line carries every subject and subject chip", () => {
-  const sessions = [
-    rosterSession("session-a", "checkout-service"),
-    rosterSession("session-b", "billing"),
-  ];
-  const about = { providerId: "claude-code", providerSessionId: "session-a" };
-
-  const entry = announcementConversationEntry("checkout-service finished.", [about], sessions);
-  assert.equal(entry.kind, CONVERSATION_ENTRY_KIND.ANNOUNCEMENT);
-  assert.deepEqual(entry.identity, about);
-  assert.equal(entry.mentions?.length, 1);
-  assert.equal(entry.mentions?.[0]?.title, "checkout-service");
-
-  const batched = announcementConversationEntry(
-    "Checkout finished and billing needs approval.",
-    [about, { providerId: "claude-code", providerSessionId: "session-b" }],
-    sessions,
-  );
-  assert.equal(batched.identity, undefined);
-  assert.deepEqual(
-    batched.identities?.map(({ providerSessionId }) => providerSessionId),
-    ["session-a", "session-b"],
-  );
-  assert.deepEqual(
-    batched.mentions?.map(({ providerSessionId }) => providerSessionId),
-    ["session-a", "session-b"],
-  );
-
-  // A subject the roster cannot word keeps its identity and draws no chip.
-  const unworded = announcementConversationEntry("It finished.", [about], []);
-  assert.deepEqual(unworded.identity, about);
-  assert.equal(unworded.mentions, undefined);
-});
-
-test("an act's line wears its session's chip while the roster can word it", () => {
-  const sessions = [rosterSession("session-a", "checkout-service")];
-  const identity = { providerId: "claude-code", providerSessionId: "session-a" };
-
-  const acted = sessionActConversationEntry(
-    { kind: SESSION_TOOL_KIND.MESSAGE, identity, text: "ship it" },
-    sessions,
-  );
-  assert.deepEqual(acted.mentions, [
-    {
-      providerId: "claude-code",
-      providerSessionId: "session-a",
-      title: "checkout-service",
-      markId: "claude-code",
-      applications: [],
-    },
-  ]);
-
-  const departed = sessionActConversationEntry({ kind: SESSION_TOOL_KIND.OPEN, identity }, []);
-  assert.deepEqual(departed.identity, identity);
-  assert.equal(departed.mentions, undefined);
-});
-
-test("a line's chips survive the append, the store, and the read back", () => {
-  const mentions = [
-    {
-      providerId: "conductor",
-      providerSessionId: "chat-1",
-      title: "checkout-service",
-      markId: "claude-code",
-      applications: [{ id: "conductor", name: "Conductor" }],
-    },
-  ];
-  const appended = appendConversationThreadEntry(
-    [],
-    { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "checkout-service is done.", mentions },
-    OBSERVED_AT,
-  );
-  assert.deepEqual(appended[0]?.mentions, mentions);
-
-  // The stored round trip keeps the chips exactly, so a restart or another
-  // display's panel draws the same row of ways back.
-  const stored = storedConversationEntry(JSON.parse(JSON.stringify(appended[0])));
-  assert.deepEqual(stored?.mentions, mentions);
-});
-
-test("a stored line whose mentions this build cannot read drops whole", () => {
-  const line = {
-    kind: CONVERSATION_ENTRY_KIND.REPLY,
-    words: "checkout-service is done.",
-    recordedAt: OBSERVED_AT,
-  };
-  // Absent mentions are an older build's record and read back fine.
-  assert.ok(storedConversationEntry(line));
-  // A mentions list from another spelling refuses the line, like a misspelled
-  // identity: half a chip row would press for chats it cannot name.
-  assert.equal(storedConversationEntry({ ...line, mentions: "checkout" }), undefined);
-  assert.equal(storedConversationEntry({ ...line, mentions: [{ title: "checkout" }] }), undefined);
   assert.equal(
-    storedConversationEntry({
-      ...line,
-      mentions: [
-        {
-          providerId: "conductor",
-          providerSessionId: "chat-1",
-          title: "checkout-service",
-          markId: "claude-code",
-          applications: [{ id: "conductor" }],
-        },
-      ],
-    }),
+    hasConversationEntryForRequest(thread, "run-1", CONVERSATION_ENTRY_KIND.REPLY),
+    true,
+  );
+  assert.equal(
+    hasConversationEntryForRequest(thread, "run-3", CONVERSATION_ENTRY_KIND.REPLY),
+    false,
+  );
+  // The run rides through storage and tells two otherwise equal lines apart.
+  const stored = thread.map((entry) => storedConversationEntry(JSON.parse(JSON.stringify(entry))));
+  assert.deepEqual(stored, thread);
+  // The run is not part of a line's identity — the same line, later tied to
+  // its run, is still that line — so the better-informed copy is chosen.
+  const [, firstReply, secondReply] = thread;
+  assert.ok(firstReply && secondReply);
+  assert.equal(conversationEntryKey(firstReply), conversationEntryKey(secondReply));
+  const untied = { ...firstReply, requestId: undefined };
+  assert.equal(enrichedConversationEntry(untied, firstReply), firstReply);
+  assert.equal(enrichedConversationEntry(firstReply, untied), firstReply);
+  assert.equal(
+    storedConversationEntry({ kind: "reply", words: "x", recordedAt: now, requestId: "" }),
     undefined,
   );
+  assert.equal(
+    storedConversationEntry({ kind: "reply", words: "x", recordedAt: now, requestId: 7 }),
+    undefined,
+  );
+});
+
+test("a spoken ask is tied to its run whichever lands first, its words untouched", () => {
+  const now = Date.parse("2026-01-02T03:04:05.000Z");
+  // The run was accepted before the transcript arrived: the line carries it.
+  const early = insertSpokenAskThreadEntry([], "  ship   it ", undefined, now, "run-1");
+  assert.deepEqual(early, [
+    {
+      kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
+      words: "ship it",
+      recordedAt: now,
+      requestId: "run-1",
+    },
+  ]);
+  // The transcript arrived first: the run is written onto that very line.
+  const late = insertSpokenAskThreadEntry([], "ship it", undefined, now);
+  const [line] = late;
+  assert.ok(line);
+  const tied = withConversationEntryRequest(late, line, "run-2");
+  assert.deepEqual(tied, [
+    {
+      kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
+      words: "ship it",
+      recordedAt: now,
+      requestId: "run-2",
+    },
+  ]);
+  // Tying is idempotent, and a line the thread no longer holds ties nothing.
+  const [tiedLine] = tied;
+  assert.ok(tiedLine);
+  assert.equal(withConversationEntryRequest(tied, tiedLine, "run-2"), tied);
+  assert.equal(withConversationEntryRequest([], line, "run-2").length, 0);
 });

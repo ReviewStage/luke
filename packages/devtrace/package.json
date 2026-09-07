@@ -14,7 +14,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@sidecar/attention": "workspace:*",
+    "@sidecar/brain": "workspace:*",
     "@sidecar/realtime": "workspace:*",
     "@sidecar/session": "workspace:*",
     "@sidecar/wire": "workspace:*"

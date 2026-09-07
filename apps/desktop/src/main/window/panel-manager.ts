@@ -31,6 +31,12 @@ export interface PanelManagerOptions {
   rendererHtmlPath: string;
   rendererUrl: string;
   argv?: readonly string[];
+  /**
+   * The last panel window went down on its own. All panels closed is how
+   * this process decides it is done, and `window-all-closed` can no longer
+   * say so once a hidden window of Luke's own stands beside them.
+   */
+  onAllClosed?: () => void;
 }
 
 /**
@@ -61,6 +67,7 @@ export class PanelManager {
   readonly #preloadPath: string;
   readonly #rendererHtmlPath: string;
   readonly #rendererUrl: string;
+  readonly #onAllClosed: (() => void) | undefined;
   readonly initialMode: WindowMode;
   /**
    * One panel window per display Luke stands on, keyed by the display's id, each
@@ -71,13 +78,6 @@ export class PanelManager {
   readonly #windows = new Map<number, BrowserWindow>();
   readonly #modes = new Map<number, WindowMode>();
   readonly #collapseTimers = new Map<number, NodeJS.Timeout>();
-  /**
-   * Which windows hold a live spoken exchange, and the single answer the media
-   * duck is given: live anywhere is live. Only the voice host ever actually
-   * opens one, but every window reports, so the union is what keeps a
-   * bystander's idle from ending the host's exchange.
-   */
-  readonly #voiceExchanges = new Map<number, boolean>();
   /**
    * Whether Luke stands on every display, mirroring the settings file the way
    * the minter mirrors the chosen voice: read once before any panel exists,
@@ -95,6 +95,7 @@ export class PanelManager {
     this.#preloadPath = options.preloadPath;
     this.#rendererHtmlPath = options.rendererHtmlPath;
     this.#rendererUrl = options.rendererUrl;
+    this.#onAllClosed = options.onAllClosed;
     this.initialMode = initialWindowMode(options.runMode, options.argv ?? process.argv);
   }
 
@@ -127,10 +128,6 @@ export class PanelManager {
       this.#windows.delete(displayId);
       this.#modes.delete(displayId);
       this.#clearCollapseTimer(displayId);
-      // A window taken down takes its exchange report with it, so a host that
-      // goes mid-conversation releases the duck rather than pinning it forever.
-      this.#voiceExchanges.delete(displayId);
-      this.#applyVoiceExchanges();
       window?.destroy();
     }
     this.positionAll();
@@ -192,15 +189,13 @@ export class PanelManager {
   }
 
   /**
-   * The one window a spoken conversation lives in. Voice is a single thing —
-   * one microphone, one reply, one face speaking — so the talk key and the
-   * attention readouts go to a single renderer rather than opening one
-   * conversation per display: the main display's window when Luke stands there,
-   * else the first window standing anywhere. The thread the exchange leaves
-   * behind is not the host's alone: each appended line comes back through the
-   * conversation history relay, so every display's History reads the same.
+   * The one panel an act aimed at the panel itself lands on — a settings
+   * change the brain asks for, the panel expanded from a second launch: the
+   * main display's window when Luke stands there, else the first window
+   * standing anywhere, so an act about the app has one drawn surface to
+   * answer from rather than one per display.
    */
-  voiceHost(): BrowserWindow | undefined {
+  primaryPanel(): BrowserWindow | undefined {
     const primary = this.#windows.get(screen.getPrimaryDisplay().id);
     if (primary && !primary.isDestroyed()) return primary;
     for (const window of this.#windows.values()) {
@@ -282,9 +277,21 @@ export class PanelManager {
     this.#panelFormFactor = formFactor;
   }
 
-  setVoiceExchange(displayId: number, active: boolean): void {
-    this.#voiceExchanges.set(displayId, active);
-    this.#applyVoiceExchanges();
+  /**
+   * Whether a spoken exchange is live, as the main process derives it from the
+   * voice window's report. One answer for every display: the exchange lives
+   * in no panel, so no panel's coming or going can change it, and the media
+   * duck follows it directly.
+   */
+  setVoiceExchange(active: boolean): void {
+    this.#mediaDuck.setExchangeActive(active);
+  }
+
+  /** How many panel windows stand — the count the process's lifetime is decided by. */
+  get standing(): number {
+    let count = 0;
+    for (const window of this.#windows.values()) if (!window.isDestroyed()) count += 1;
+    return count;
   }
 
   /** Whether some panel window's renderer is asking, whichever display it is on. */
@@ -385,10 +392,6 @@ export class PanelManager {
     // The timer's closure names the old display; the reposition below redraws
     // whatever a cancelled collapse would have.
     this.#clearCollapseTimer(fromDisplayId);
-    const exchange = this.#voiceExchanges.get(fromDisplayId);
-    this.#voiceExchanges.delete(fromDisplayId);
-    if (exchange !== undefined) this.#voiceExchanges.set(toDisplayId, exchange);
-    this.#applyVoiceExchanges();
   }
 
   #clearCollapseTimer(displayId: number): void {
@@ -413,10 +416,6 @@ export class PanelManager {
     if (process.platform === "darwin") app.focus({ steal: true });
     window.show();
     window.focus();
-  }
-
-  #applyVoiceExchanges(): void {
-    this.#mediaDuck.setExchangeActive([...this.#voiceExchanges.values()].some(Boolean));
   }
 
   #collapseDelay(): number {
@@ -477,9 +476,8 @@ export class PanelManager {
         this.#windows.delete(id);
         this.#modes.delete(id);
         this.#clearCollapseTimer(id);
-        this.#voiceExchanges.delete(id);
-        this.#applyVoiceExchanges();
       }
+      if (this.#windows.size === 0) this.#onAllClosed?.();
     });
     void window.loadFile(this.#rendererHtmlPath);
   }

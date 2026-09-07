@@ -1,4 +1,4 @@
-import { LUKE_PERSONA } from "@sidecar/attention";
+import { LUKE_PERSONA } from "@sidecar/guide";
 import type { WireRecord } from "@sidecar/wire";
 import { type RealtimeSessionOptions, realtimeSessionConfig } from "./realtime-credentials.js";
 import { REALTIME_CLIENT_EVENT } from "./realtime-protocol.js";

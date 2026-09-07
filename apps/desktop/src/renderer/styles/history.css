@@ -79,13 +79,23 @@
   flex-direction: column;
 }
 
-/* The bubble is the copy control's anchor: a chip row wrapping wider below
-   must not pull the glyph off the words it copies. */
+/* The bubble is the copy control's anchor. It stacks: the words, then the
+   wait an ask still running draws beneath them, so a pending label never
+   shares the row with the question and squeezes beside it into a column. */
 .history-bubble {
   position: relative;
   display: flex;
   min-width: 0;
   max-width: 100%;
+  flex-direction: column;
+}
+
+.history-entry[data-speaker="you"] .history-bubble {
+  align-items: flex-end;
+}
+
+.history-entry[data-speaker="luke"] .history-bubble {
+  align-items: flex-start;
 }
 
 /* Copy sits in the bubble's free margin, absolutely positioned so a thread
@@ -132,73 +142,29 @@
   color: var(--text-primary);
 }
 
-/* A chip per chat the line named, in the notice band's own vocabulary: the
-   words above are the record, the chips are the way back to the chats they
-   name. Always visible, unlike the copy glyph, because which chats a line
-   was about is content rather than chrome. */
-.history-mentions {
+/* The wait under an ask still running, and the one control it offers: quiet,
+   in the bubble's own column, gone the moment the reply's line arrives. */
+.history-pending {
   display: flex;
-  max-width: 100%;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 4px;
-}
-
-.history-entry[data-speaker="event"] .history-mentions {
-  justify-content: center;
-}
-
-.history-chip {
-  display: inline-flex;
-  min-width: 0;
-  max-width: 100%;
   align-items: center;
-  gap: 5px;
-  height: 20px;
-  padding: 0 9px;
-  border-radius: 10px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 4px 6px 2px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.history-cancel {
+  padding: 1px 8px;
+  border-radius: 999px;
   background: var(--raised);
   color: var(--text-primary);
-  font-size: 10px;
-  font-weight: 640;
-  transition: background-color var(--duration-hover) ease;
+  font-size: 11px;
 }
 
-.history-chip:hover {
-  background: var(--raised-strong);
-}
-
-.history-chip .provider-mark {
-  flex: 0 0 auto;
-  width: 11px;
-  height: 11px;
-}
-
-.history-chip .provider-mark[data-mark="superset"] {
-  width: 19px;
-}
-
-.history-chip-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* App associations trail the name as bare marks, the way they trail it on the
-   notice band's chips: the leading mark says which agent this is, these say
-   where the same chat is also held, in secondary ink to stay subordinate to
-   the name inside a chip this small. */
-.history-chip-applications {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 4px;
-  color: var(--text-secondary);
-}
-
-.history-chip-application {
-  display: grid;
-  place-items: center;
+.history-cancel:hover {
+  background: var(--text-secondary);
+  color: var(--surface);
 }
 
 .history-entry p {
@@ -237,8 +203,7 @@
 
 .history-entry[data-speaker="luke"] {
   align-self: flex-start;
-  /* Shrink-wrapped, not stretched: the bubble is the copy control's anchor,
-     and a chip row wrapping wider than the words must not widen it. */
+  /* Shrink-wrapped, not stretched: the bubble is the copy control's anchor. */
   align-items: flex-start;
 }
 

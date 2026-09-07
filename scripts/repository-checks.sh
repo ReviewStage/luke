@@ -234,6 +234,16 @@ if [[ -n "$renderer_escapes" ]]; then
     exit 1
 fi
 
+# The hidden voice window mounts nothing drawn and must record nothing: the
+# session-replay client starts only inside the panel's App, and nothing under
+# the voice role may reach for it.
+voice_replay_imports=$(grep -rnaE 'from "[^"]*session-replay' "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer/voice" 2>/dev/null || true)
+if [[ -n "$voice_replay_imports" ]]; then
+    printf 'error: the voice window never records — nothing under renderer/voice/ may import session-replay:\n%s\n' \
+        "$voice_replay_imports" >&2
+    exit 1
+fi
+
 # BRIDGE is the one renderer-to-main declaration, and registerBridge is the
 # one place that may attach it to Electron. A handler registered beside its
 # domain logic would bypass the manifest's sender and wire guards.

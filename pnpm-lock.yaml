@@ -51,9 +51,9 @@ importers:
       '@sidecar/analytics':
         specifier: workspace:*
         version: link:../../packages/analytics
-      '@sidecar/attention':
+      '@sidecar/brain':
         specifier: workspace:*
-        version: link:../../packages/attention
+        version: link:../../packages/brain
       '@sidecar/calendar':
         specifier: workspace:*
         version: link:../../packages/calendar
@@ -275,9 +275,6 @@ importers:
 
   packages/acts:
     dependencies:
-      '@sidecar/attention':
-        specifier: workspace:*
-        version: link:../attention
       '@sidecar/guide':
         specifier: workspace:*
         version: link:../guide
@@ -425,9 +422,9 @@ importers:
 
   packages/devtrace:
     dependencies:
-      '@sidecar/attention':
+      '@sidecar/brain':
         specifier: workspace:*
-        version: link:../attention
+        version: link:../brain
       '@sidecar/realtime':
         specifier: workspace:*
         version: link:../realtime
@@ -520,9 +517,6 @@ importers:
 
   packages/issues:
     dependencies:
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
@@ -610,9 +604,6 @@ importers:
       '@sidecar/acts':
         specifier: workspace:*
         version: link:../acts
-      '@sidecar/attention':
-        specifier: workspace:*
-        version: link:../attention
       '@sidecar/guide':
         specifier: workspace:*
         version: link:../guide
@@ -757,9 +748,9 @@ importers:
 
   packages/voice:
     dependencies:
-      '@sidecar/attention':
+      '@sidecar/brain':
         specifier: workspace:*
-        version: link:../attention
+        version: link:../brain
       '@sidecar/credentials':
         specifier: workspace:*
         version: link:../credentials

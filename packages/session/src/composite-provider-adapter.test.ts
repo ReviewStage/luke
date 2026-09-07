@@ -3,7 +3,6 @@ import test from "node:test";
 import {
   ACT_RESULT_STATUS,
   CompositeSessionProviderAdapter,
-  InMemorySessionRegistry,
   type ProviderMessageResult,
   type ProviderSessionMessage,
   type ProviderSessionObservation,
@@ -16,6 +15,7 @@ import {
   type SessionProvider,
   type SessionProviderAdapter,
   SessionProviderAdapterBase,
+  SessionRoster,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "@sidecar/session";
@@ -99,7 +99,7 @@ test("leaves each half of a provider saying where its own sessions run", async (
 
   // One provider mark, two places. Merging under one id must not make the
   // sessions on this machine read as though they ran in a datacentre.
-  const registry = new InMemorySessionRegistry();
+  const registry = new SessionRoster();
   await registry.refresh(adapter);
   const locations = new Map(
     registry.list().map((session) => [session.providerSessionId, session.location]),
@@ -123,12 +123,12 @@ test("keeps a session two observers both reached from being reported twice", asy
   assert.equal(observations[0]?.title, "Cursor: luke");
   // The registry rejects a snapshot that names one session twice, so this is
   // what keeps a provider observed in two places from failing its own refresh.
-  const registry = new InMemorySessionRegistry();
-  assert.equal((await registry.refresh(adapter)).sessions.length, 1);
+  const registry = new SessionRoster();
+  assert.equal((await registry.refresh(adapter)).length, 1);
 });
 
 test("fails the pass when one observer fails, rather than retiring its sessions", async () => {
-  const registry = new InMemorySessionRegistry();
+  const registry = new SessionRoster();
   const healthy = observerOf(cursor, [observation("local-session")]);
   await registry.refresh(
     new CompositeSessionProviderAdapter({ provider: cursor, adapters: [healthy] }),

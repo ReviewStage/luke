@@ -6,11 +6,9 @@ import {
   type ProviderId,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
-  SESSION_CONTROL_KIND,
   SESSION_LOCATION,
   type SessionApplicationId,
   type SessionApplicationScope,
-  type SessionControl,
   type SessionLocation,
 } from "@sidecar/session";
 import { SESSION_URGENCY, type SessionUrgency } from "@sidecar/surface";
@@ -58,14 +56,10 @@ export interface SessionSnapshot {
   /** When the session was last seen, in the same units a live observation uses. */
   lastActivityAt: number;
   /**
-   * Drawn only: a fixture row can show the composer a live session would have,
-   * but a fixture run refuses every write — its registry is empty, so nothing
-   * a capture could press reaches a provider.
+   * Drawn only: the pull-request chip a live session's published work earns.
+   * A fixture run refuses every act — its registry is empty, so nothing a
+   * capture could press reaches a provider.
    */
-  canMessage?: boolean;
-  /** Drawn only, like the composer: the controls a live session would show. */
-  actions?: readonly SessionControl[];
-  /** Drawn only: the pull-request chip a live session's published work earns. */
   hasChange?: boolean;
   /** Drawn only: the number the chip is titled by when the address names one. */
   changeNumber?: number;
@@ -83,14 +77,8 @@ export interface FixtureSnapshot {
  * opens a call, so there are no words to draw unless the fixture supplies
  * them — and it must, or the caption strip ships unphotographed. Synthetic,
  * like every fixture, and long enough to wrap: a one-line fixture would leave
- * the wrapped form of the strip unphotographed too.
- *
- * It lives here, beside the roster it talks about, because it names that
- * roster's own rows — three chats by title and one workspace by name — and a
- * reply's mentions are what the notice band draws chips for. Reworded apart
- * from the fixture, it would quietly stop naming anything and the band would
- * go unphotographed; the test beside this file is what holds the two
- * together.
+ * the wrapped form of the strip unphotographed too. It lives here, beside the
+ * roster it talks about, so the sentence stays true to the rows it names.
  */
 export const FIXTURE_SPEAKING_CAPTION =
   "Bootstrap the desktop shell and Review trust constraints are finished, lisbon-v2 is packaging the macOS build, and Follow a cloud agent and Watch a cloud session are waiting on you.";
@@ -274,12 +262,10 @@ const smokeFixture: FixtureSnapshot = {
       urgency: SESSION_URGENCY.WORKING,
       location: SESSION_LOCATION.CLOUD,
       lastActivityAt: minutesBeforeEpoch(18),
-      // What a working Conductor chat advertises live, so the one screenshot
-      // the evidence is reviewed from also proves the stop control is drawn —
-      // and the pull-request chip beside it, on the row whose sentence names
+      // The pull-request chip on a lone chat's own row, whose sentence names
       // one, titled by a synthetic number the way a live address would title
-      // it.
-      actions: [{ id: "cancel-run", label: "Stop this run", kind: SESSION_CONTROL_KIND.STOP }],
+      // it — so the one screenshot the evidence is reviewed from proves the
+      // chip is drawn on a row as well as on a tray header.
       hasChange: true,
       changeNumber: 31,
       workspace: {
@@ -313,9 +299,6 @@ const smokeFixture: FixtureSnapshot = {
       urgency: SESSION_URGENCY.UNKNOWN,
       location: SESSION_LOCATION.CLOUD,
       lastActivityAt: minutesBeforeEpoch(41),
-      // A settled Conductor chat takes a message live, so this row is what
-      // puts the composer in the evidence.
-      canMessage: true,
       workspace: {
         id: "conductor-watch",
         name: "watch-session",
@@ -333,7 +316,7 @@ export function fixtureSnapshot(name: string): FixtureSnapshot {
   return smokeFixture;
 }
 
-export function attentionCount(snapshot: FixtureSnapshot): number {
+export function urgentSessionCount(snapshot: FixtureSnapshot): number {
   return snapshot.sessions.filter((session) => session.urgency === SESSION_URGENCY.ATTENTION)
     .length;
 }
