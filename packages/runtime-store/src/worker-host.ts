@@ -1,6 +1,14 @@
 import path from "node:path";
 import type { UnparsedWireValue } from "@sidecar/wire";
+import { loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
 import { AGENT_DATABASE_FILE, RuntimeDatabase } from "./database.js";
+import { personalFacts, replacePersonalFacts } from "./facts-table.js";
+import {
+  appendHistory,
+  clearHistoryAtOrBefore,
+  historyClearedAt,
+  listHistory,
+} from "./history-table.js";
 import {
   RUNTIME_STORE_METHOD,
   type RuntimeStoreMethod,
@@ -46,22 +54,22 @@ const HANDLERS: RuntimeStoreHandlers = {
     return true;
   },
   [RUNTIME_STORE_METHOD.BRAIN_LOAD]: (host, params) =>
-    host.opened().loadBrainState(params.sessionKey),
+    loadBrainEnvelope(host.opened(), params.sessionKey),
   [RUNTIME_STORE_METHOD.BRAIN_SAVE]: (host, params) =>
-    host.opened().saveBrainState(params.sessionKey, params.save),
+    saveBrainEnvelope(host.opened(), params.sessionKey, params.save),
   [RUNTIME_STORE_METHOD.HISTORY_APPEND]: (host, params) =>
-    host.opened().appendHistory(params.sessionKey, params.entries, params.now),
+    appendHistory(host.opened(), params.sessionKey, params.entries, params.now),
   [RUNTIME_STORE_METHOD.HISTORY_LIST]: (host, params) =>
-    host.opened().listHistory(params.sessionKey, params.now),
+    listHistory(host.opened(), params.sessionKey, params.now),
   [RUNTIME_STORE_METHOD.HISTORY_CLEAR]: (host, params) => {
-    host.opened().clearHistoryAtOrBefore(params.sessionKey, params.clearedAt);
+    clearHistoryAtOrBefore(host.opened(), params.sessionKey, params.clearedAt);
     return true;
   },
   [RUNTIME_STORE_METHOD.HISTORY_CUTOFF]: (host, params) =>
-    host.opened().clearedAt(params.sessionKey),
-  [RUNTIME_STORE_METHOD.FACTS_LIST]: (host) => host.opened().personalFacts(),
+    historyClearedAt(host.opened(), params.sessionKey),
+  [RUNTIME_STORE_METHOD.FACTS_LIST]: (host) => personalFacts(host.opened()),
   [RUNTIME_STORE_METHOD.FACTS_REPLACE]: (host, params) =>
-    host.opened().replacePersonalFacts(params.facts),
+    replacePersonalFacts(host.opened(), params.facts),
   [RUNTIME_STORE_METHOD.CLOSE]: (host) => {
     host.close();
     return true;

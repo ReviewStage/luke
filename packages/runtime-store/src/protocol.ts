@@ -2,7 +2,7 @@ import type { RememberedFact } from "@sidecar/acts";
 import type { ConversationEntry } from "@sidecar/realtime";
 import type { AgentId, HistoryAppendOutcome, SessionKey } from "@sidecar/runtime-contracts";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import type { RuntimeBrainStateLoad } from "./database.js";
+import type { EnvelopeRead } from "./brain-envelope.js";
 import type { BrainStateSave } from "./envelope.js";
 
 /**
@@ -41,7 +41,7 @@ export interface RuntimeStoreMethods {
   [RUNTIME_STORE_METHOD.OPEN]: { params: RuntimeStoreOpenOptions; result: boolean };
   [RUNTIME_STORE_METHOD.BRAIN_LOAD]: {
     params: { sessionKey: SessionKey };
-    result: RuntimeBrainStateLoad;
+    result: EnvelopeRead;
   };
   [RUNTIME_STORE_METHOD.BRAIN_SAVE]: {
     params: { sessionKey: SessionKey; save: BrainStateSave };

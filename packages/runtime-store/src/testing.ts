@@ -7,6 +7,7 @@ import {
   freshBrainState,
 } from "@sidecar/brain";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
+import type { SessionKey } from "@sidecar/runtime-contracts";
 import {
   DEFAULT_AGENT_ID,
   MAIN_CONVERSATION_NAME,
@@ -87,4 +88,33 @@ export function line(
   overrides: Partial<ConversationEntry> = {},
 ): ConversationEntry {
   return { kind: CONVERSATION_ENTRY_KIND.REPLY, words, recordedAt, ...overrides };
+}
+
+/** What the history table holds for a conversation, retention or not: the raw rows a test asserts on. */
+export interface HistoryTableContents {
+  sequences: readonly number[];
+  /** The distinct generations the lines were written under. */
+  sessionIds: readonly (string | undefined)[];
+  count: number;
+}
+
+export function inspectHistory(
+  database: RuntimeDatabase,
+  sessionKey: SessionKey,
+): HistoryTableContents {
+  // SAFETY: each query selects the one column its row type names.
+  const sequences = database
+    .prepare("SELECT sequence FROM history_events WHERE session_key = ? ORDER BY sequence")
+    .all(sessionKey) as { sequence: number }[];
+  // SAFETY: as above, for the nullable text column.
+  const sessionIds = database
+    .prepare(
+      "SELECT DISTINCT session_id FROM history_events WHERE session_key = ? ORDER BY session_id",
+    )
+    .all(sessionKey) as { session_id: string | null }[];
+  return {
+    sequences: sequences.map((row) => row.sequence),
+    sessionIds: sessionIds.map((row) => row.session_id ?? undefined),
+    count: sequences.length,
+  };
 }

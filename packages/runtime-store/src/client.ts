@@ -95,7 +95,7 @@ export class RuntimeStoreClient {
       load: async (): Promise<BrainStateLoad> => {
         const loaded = await this.request(RUNTIME_STORE_METHOD.BRAIN_LOAD, { sessionKey });
         saved = loaded.state;
-        observed = loaded.standingGeneration;
+        observed = loaded.generation;
         return loaded.state ? { state: loaded.state } : { unreadable: loaded.unreadable === true };
       },
       save: async (state: BrainPersistedState): Promise<boolean> => {

@@ -1,5 +1,10 @@
+export {
+  type EnvelopeRead,
+  loadBrainEnvelope,
+  saveBrainEnvelope,
+} from "./brain-envelope.js";
 export { RuntimeStoreClient } from "./client.js";
-export { AGENT_DATABASE_FILE, type RuntimeBrainStateLoad, RuntimeDatabase } from "./database.js";
+export { AGENT_DATABASE_FILE, RuntimeDatabase } from "./database.js";
 export {
   type BrainItemsDelta,
   type BrainJournalDelta,
@@ -8,11 +13,18 @@ export {
   type BrainStateSave,
   brainStateSave,
 } from "./envelope.js";
+export { personalFacts, replacePersonalFacts } from "./facts-table.js";
 export {
   HISTORY_RETENTION,
   historyEntryAdmitted,
   historyEventKey,
 } from "./history.js";
+export {
+  appendHistory,
+  clearHistoryAtOrBefore,
+  historyClearedAt,
+  listHistory,
+} from "./history-table.js";
 export {
   RUNTIME_STORE_METHOD,
   type RuntimeStoreMethod,
