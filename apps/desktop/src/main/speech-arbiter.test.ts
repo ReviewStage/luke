@@ -404,3 +404,29 @@ test("every trace record carries a kind, a decision, and a count, and never the 
     assert.equal(JSON.stringify(record).includes("secret"), false);
   }
 });
+
+test("withdrawing briefings takes the queued, the held, and the offered alike, answers the offered id, and leaves beats standing", () => {
+  const { arbiter, clock } = harness();
+  requestBriefing(arbiter, "OFFERED_OLD");
+  requestBriefing(arbiter, "QUEUED_OLD");
+  arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
+  const offer = arbiter.next();
+  assert.ok(offer && isBriefingSpeech(offer.turn) && offer.turn.briefing === "OFFERED_OLD");
+  arbiter.setQuiet(true);
+  requestBriefing(arbiter, "HELD_OLD");
+  // The quiet held the queued one too; the offered one is the mouth's.
+  assert.equal(arbiter.heldBriefingCount, 2);
+
+  assert.equal(arbiter.withdrawBriefings(), offer.id);
+  assert.equal(arbiter.offeredId, undefined);
+  assert.equal(arbiter.heldBriefingCount, 0);
+  assert.equal(arbiter.pendingCount, 1);
+  assert.deepEqual(arbiter.takeHeldBriefings(), []);
+  // The mouth's late report on the withdrawn offer is nobody's.
+  assert.equal(arbiter.settle(offer.id, SPEECH_OUTCOME.SPOKEN), undefined);
+  arbiter.setQuiet(false);
+  clock.now += 1;
+  assert.equal(offeredWords(arbiter), ARRIVAL_SPEECH_KIND);
+  // Nothing to withdraw answers nothing, and a beat is never a briefing.
+  assert.equal(arbiter.withdrawBriefings(), undefined);
+});

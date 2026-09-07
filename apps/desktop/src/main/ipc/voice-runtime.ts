@@ -61,10 +61,11 @@ export interface VoiceRuntimeIpcDependencies {
   storeVoiceView: (view: VoiceView) => void;
   /**
    * The History Clear, carried out here before the voice window is told, and
-   * answering whether the stored thread went — a thread that could not be
-   * deleted must not be half-forgotten by a voice window that was told anyway.
+   * answering whether the erasure completed on disk: the view and every
+   * context are emptied either way, and a false answer is what the panel
+   * shows as a Clear that did not finish.
    */
-  clearConversation: () => boolean;
+  clearConversation: () => boolean | Promise<boolean>;
   /** Whether a panel is recording a chord, which holds the talk and stop presses. */
   setShortcutCapturing: (capturing: boolean) => void;
 }
@@ -78,18 +79,22 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
       // bounded it; here it is checked to come from a panel — the voice window
       // does not command itself — and handed on. A Clear is carried out here
       // first, because the main process is the thread's store and every
-      // panel's relay, and the voice window is told to retire its own turns
-      // only once the file has gone.
-      voiceCommand(context, command) {
+      // panel's relay; the voice window is told to retire its own turns at
+      // the fence, whatever the disk later answers, and the panel hears
+      // whether the erasure completed.
+      async voiceCommand(context, command) {
         if (!panels.owns(context.sender)) return undefined;
-        const host = voiceWindow.current();
-        if (command === VOICE_COMMAND.CLEAR_CONVERSATION && !dependencies.clearConversation()) {
-          return VOICE_COMMAND_OUTCOME.REFUSED;
-        }
-        host?.webContents.send(channels.onVoiceCommand, { command });
-        return command === VOICE_COMMAND.CLEAR_CONVERSATION
-          ? VOICE_COMMAND_OUTCOME.ACCEPTED
-          : undefined;
+        // The Clear's fence is raised in the call's synchronous prefix, and
+        // the voice window is told in the same breath — before the disk is
+        // waited on — so its turns, marks, and context retire with main's.
+        // Its answer, the disk's, comes after and goes to the panel alone.
+        const erasing =
+          command === VOICE_COMMAND.CLEAR_CONVERSATION
+            ? dependencies.clearConversation()
+            : undefined;
+        voiceWindow.current()?.webContents.send(channels.onVoiceCommand, { command });
+        if (erasing === undefined) return undefined;
+        return (await erasing) ? VOICE_COMMAND_OUTCOME.ACCEPTED : VOICE_COMMAND_OUTCOME.REFUSED;
       },
       // The voice window's snapshot: kept for a late panel, forwarded to every
       // panel, and read for the one level the main process owns — whether an

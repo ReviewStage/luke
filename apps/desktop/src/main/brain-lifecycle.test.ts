@@ -262,11 +262,14 @@ test("a reset under outstanding runs discards them without publishing, and the s
   assert.ok(agent);
   await submitMany(agent, c.record, 3);
   await settle();
-  assert.equal(await c.store.reset(), true);
+  assert.equal(await c.store.clear(), true);
   await settle();
   assert.deepEqual(agent.requests(), []);
   assert.equal(c.thread().filter((e) => e.kind === CONVERSATION_ENTRY_KIND.REPLY).length, 0);
-  assert.equal(brainStateFromStored(c.storage.file), undefined);
+  // The file holds the empty successor and the marker of the erasure alone.
+  const stored = brainStateFromStored(c.storage.file);
+  assert.equal(stored?.requests.length, 0);
+  assert.equal(stored?.reset?.generationId, "gen-1");
   await c.host.replace(() => undefined);
   await settle();
   assert.equal(c.thread().filter((e) => e.kind === CONVERSATION_ENTRY_KIND.REPLY).length, 0);

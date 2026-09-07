@@ -224,6 +224,29 @@ export class SpeechArbiter {
   }
 
   /**
+   * Withdraws every briefing, the one the mouth holds included: the
+   * generation that decided them has been cleared or has died, and a
+   * briefing not yet spoken is that generation's words. An offer is not
+   * proof the words were said, so the offered one goes too, and its id is
+   * answered so the caller can take it back from the mouth; a settle that
+   * still arrives for it is a late report and is ignored. Speech already
+   * begun is the mouth's to finish.
+   */
+  withdrawBriefings(): string | undefined {
+    let offered: string | undefined;
+    for (const request of [...this.#pending]) {
+      if (request.kind !== BRIEFING_SPEECH_KIND) continue;
+      if (request.id === this.#offered?.id) {
+        offered = request.id;
+        this.#offered = undefined;
+      }
+      this.#remove(request.id);
+      this.#trace(BRIEFING_SPEECH_KIND, SPEECH_DECISION.DROPPED);
+    }
+    return offered;
+  }
+
+  /**
    * Removes a pending beat whose reason has gone — the gate it explained
    * stood down, the account it greeted signed out. Withdrawal does not spend
    * the kind. When the beat was the one offered, its id is returned so the

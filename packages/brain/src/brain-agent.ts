@@ -55,7 +55,12 @@ import {
   interruptedUnfinishedRequests,
   isTerminalBrainRequestStatus,
 } from "./brain-requests.js";
-import type { BrainPersistedState, BrainStateStore, BrainStoreLease } from "./brain-state.js";
+import {
+  type BrainPersistedState,
+  type BrainStateStore,
+  type BrainStoreLease,
+  brainGenerationExpired,
+} from "./brain-state.js";
 import {
   BRAIN_TOOL,
   brainToolAllowed,
@@ -259,6 +264,7 @@ type TurnResult =
  */
 interface Generation {
   id: string;
+  expiresAt: number;
   memory: BrainMemory;
   journal: BrainJournal;
   requests: Map<string, BrainRequestRecord>;
@@ -420,6 +426,7 @@ function rejection(reason: string): WireRecord {
 function generationFrom(state: BrainPersistedState): Generation {
   return {
     id: state.generationId,
+    expiresAt: state.expiresAt,
     memory: new BrainMemory({ items: state.items, cursors: state.cursors }),
     journal: new BrainJournal(state.journal),
     requests: new Map(state.requests.map((record) => [record.runId, { ...record }])),
@@ -536,6 +543,7 @@ export class BrainAgent {
    */
   async submitAsk(submission: BrainSubmission): Promise<BrainSubmissionResult> {
     await this.ready();
+    this.#expireIfDue();
     const generation = this.#generation;
     if (this.#stopped || !generation) {
       return {
@@ -569,6 +577,14 @@ export class BrainAgent {
             acceptedAt: existing.acceptedAt,
           }
         : conflict;
+    }
+    if (!this.#options.store.admits(generation.id)) {
+      // The record count is a hard bound on the file: a run the store could
+      // not then write is refused at the door, in a word the host can say.
+      return {
+        outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+        reason: BRAIN_SUBMISSION_REJECTION.FULL,
+      };
     }
     const result = this.#accept(generation, { ...submission, question });
     this.#pendingSubmissions.set(submission.submissionId, {
@@ -952,6 +968,13 @@ export class BrainAgent {
       );
       return;
     }
+    // A generation adopted from the store's announcement while the load was
+    // out — a Clear or expiry pressed under a starting agent — is the one
+    // that stands; the loaded copy is not built over it.
+    const adopted = this.#generation;
+    const current = this.#options.store.current() ?? state;
+    if (adopted && adopted.id === current.generationId) return;
+    state = current;
     const generation = generationFrom(state);
     this.#generation = generation;
     const interrupted = interruptedUnfinishedRequests(state.requests, this.#now());
@@ -1008,6 +1031,21 @@ export class BrainAgent {
   }
 
   /**
+   * Asks the store to end the generation if its time has come: the door
+   * check, for a generation that outlived its fortnight while nothing kept
+   * its clock. The clock itself — a timer at the expiry instant — is the
+   * host's, one per store, standing whether or not an agent does. The store's
+   * fence is synchronous and its announcement adopts the successor here in
+   * the same call, so by the time this returns the dead generation's signal
+   * has fired and nothing of it can open, dispatch, or deliver.
+   */
+  #expireIfDue(): void {
+    const generation = this.#generation;
+    if (this.#stopped || !generation || !brainGenerationExpired(generation, this.#now())) return;
+    this.#options.store.expireIfDue(this.#now());
+  }
+
+  /**
    * A turn's or an act's checkpoint: the working memory, cursors, and journal
    * this turn owns become the committed ones, together with the run's own
    * accounting when a run owns the turn. Nothing else changes: every other
@@ -1043,6 +1081,7 @@ export class BrainAgent {
   async #save(generation: Generation, scope: SaveScope): Promise<boolean> {
     let owned: BrainRequestRecord | undefined;
     let missing = false;
+    let pruned = false;
     const written = await this.#options.store.write(
       this.#lease,
       generation.id,
@@ -1080,7 +1119,15 @@ export class BrainAgent {
           requests,
         };
       },
-      () => {
+      (commit) => {
+        // Retention decided inside the same queue step: the runs the store
+        // let go of leave the working copy too, or the next checkpoint of
+        // the journal would write them straight back.
+        if (commit.prunedRunIds.length > 0) {
+          for (const runId of commit.prunedRunIds) generation.requests.delete(runId);
+          generation.journal.dropRuns(commit.prunedRunIds);
+          pruned = true;
+        }
         if (!owned || !scope.record) return;
         const live = generation.requests.get(owned.runId);
         if (live) {
@@ -1096,6 +1143,9 @@ export class BrainAgent {
       this.#report("Brain memory could not be checkpointed");
       return false;
     }
+    // Runs retention let go of are gone from the list every window draws,
+    // and the windows hear it now rather than on the next unrelated change.
+    if (pruned) this.#notify();
     return true;
   }
 
@@ -1258,6 +1308,10 @@ export class BrainAgent {
 
   async #turn(plan: TurnPlan): Promise<TurnResult> {
     await this.ready();
+    // The generation's death is checked at the door of every turn, so a
+    // memory that outlived its fortnight while the app sat idle is not read
+    // one more time on the way out.
+    this.#expireIfDue();
     const generation = plan.generation;
     // Work queued in a generation since replaced opens nothing: its briefings
     // and its wakes described a memory that no longer exists.

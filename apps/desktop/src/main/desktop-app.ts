@@ -22,7 +22,13 @@ import {
   productSignInAge,
   type RecordProductEvent,
 } from "@sidecar/analytics";
-import { BrainAgent, type BrainDelivery, BrainStateStore } from "@sidecar/brain";
+import {
+  BrainAgent,
+  type BrainDelivery,
+  BrainGenerationClock,
+  BrainStateStore,
+  brainStateFromStored,
+} from "@sidecar/brain";
 import {
   activeMeetingEnd,
   GoogleCalendarReader,
@@ -160,6 +166,7 @@ import {
   calendarOnboardingStateFromStored,
   shouldBackfillCalendarOnboardingSettled,
 } from "./calendar-onboarding-flow";
+import { clearConversationAndBrain } from "./conversation-clear";
 import {
   INTRODUCTION_FADE_MS,
   INTRODUCTION_HANDOFF_READY_MS,
@@ -503,6 +510,7 @@ const brain = () => brains.current();
  * store, so two agents can never write the envelope past each other.
  */
 let brainStateStore: BrainStateStore | undefined;
+let brainGenerationClock: BrainGenerationClock | undefined;
 /** The spool watchers standing on each hooked provider's spool, closed at quit. */
 let spoolWatchers: readonly ObservationSpoolWatcher[] = [];
 /**
@@ -1503,7 +1511,8 @@ async function applyVoiceCredential(): Promise<void> {
 const brainStatePath = () => path.join(app.getPath("userData"), BRAIN_STATE_FILE);
 
 function brainStore(): BrainStateStore {
-  brainStateStore ??= new BrainStateStore({
+  if (brainStateStore) return brainStateStore;
+  brainStateStore = new BrainStateStore({
     storage: {
       read: () => readStoredState(brainStatePath()),
       write: (contents) =>
@@ -1511,8 +1520,25 @@ function brainStore(): BrainStateStore {
       remove: () => removeStoredState(brainStatePath(), "Luke's memory of the agents"),
     },
     createGenerationId: () => randomUUID(),
+    report: (message) => process.stderr.write(`${message}\n`),
   });
+  // A generation that ends — cleared, expired, or replaced — takes its
+  // unspoken briefings with it, the one in the mouth's hand included: they
+  // are that generation's words, and an offer is not proof they were said.
+  // The agent hears the same announcement and stands its runs down itself.
+  brainStateStore.onReplaced(() => withdrawBriefings());
+  // The generation's clock stands with the store, not with an agent: a
+  // launch with no key or account, and an app left open after its agent was
+  // retired, still see the generation die on time and the file replaced.
+  brainGenerationClock = new BrainGenerationClock({ store: brainStateStore });
+  void brainGenerationClock.start();
   return brainStateStore;
+}
+
+function withdrawBriefings(): void {
+  const offered = speechArbiter.withdrawBriefings();
+  if (offered) voiceWindow.current()?.webContents.send(channels.onSpeechWithdrawn, { id: offered });
+  offerNextSpeech();
 }
 
 /**
@@ -1595,6 +1621,10 @@ function brainStandingContext(): string {
  */
 function recordMainConversationEntry(entry: ConversationEntry, recordedAt = Date.now()): boolean {
   if (!runMode.observesProviders) return false;
+  // A line from at or before the last Clear was settled by the Clear itself:
+  // a run of the erased generation publishing late, or a report of the thread
+  // as it stood before the press. Nothing is owed for it, and it is not taken.
+  if (conversationClearedAt !== undefined && recordedAt <= conversationClearedAt) return true;
   const now = Date.now();
   const merged = appendConversationThreadEntry(conversationHistory, entry, now, recordedAt);
   // Unchanged means the thread already holds this line, or refused an empty
@@ -1610,22 +1640,44 @@ function recordMainConversationEntry(entry: ConversationEntry, recordedAt = Date
 }
 
 /**
- * The History Clear a panel pressed: the stored thread deleted, the relay
- * emptied for every panel, and the moment remembered so a report still in
- * flight from before it cannot stand the old lines back up. Answers whether
- * the file went; only then is the voice window told to retire its own turns,
- * so a thread that could not be deleted is not half-forgotten.
+ * The History Clear a panel pressed: the cutoff raised and the relay emptied
+ * for every panel first, so no context, publication, or report can carry
+ * the old lines whatever the disk does; the brain's generation fenced and
+ * marked erased, which the store's listener below answers by withdrawing
+ * the speech that generation had queued; then the stored thread deleted.
+ * Answers whether both files went, which is what the panel reports; the
+ * fence stands either way. What Luke separately remembers about the
+ * developer is another file under another rule, and a Clear does not reach
+ * it. A fixture or capture run holds nothing on disk and empties the view
+ * alone.
  */
-function clearConversationHistory(): boolean {
-  if (runMode.observesProviders) {
-    const clearedAt = Date.now();
-    if (!removeStoredState(conversationPath(), "the conversation")) return false;
-    conversationClearedAt = clearedAt;
+function clearConversationHistory(): Promise<boolean> {
+  const emptyConversation = () => {
+    conversationHistory = [];
+    const payload: ConversationHistoryPayload = { entries: [], cleared: true };
+    broadcast(channels.onConversationHistoryChanged, payload);
+  };
+  if (!runMode.observesProviders) {
+    emptyConversation();
+    return Promise.resolve(true);
   }
-  conversationHistory = [];
-  const payload: ConversationHistoryPayload = { entries: [], cleared: true };
-  broadcast(channels.onConversationHistoryChanged, payload);
-  return true;
+  return clearConversationAndBrain({
+    store: brainStore(),
+    now: Date.now,
+    fence: (clearedAt) => {
+      conversationClearedAt = clearedAt;
+      emptyConversation();
+    },
+    eraseConversation: () =>
+      conversationHistory.length === 0
+        ? removeStoredState(conversationPath(), "the conversation")
+        : writeStoredState(
+            conversationPath(),
+            conversationRecord(conversationHistory, Date.now()),
+            "the conversation",
+          ),
+    report: (message) => process.stderr.write(`${message}\n`),
+  });
 }
 
 /**
@@ -3073,11 +3125,21 @@ export function startDesktopApp(): void {
       // that opened on an empty History and filled it a beat later would read
       // as a conversation arriving rather than one resumed.
       if (runMode.observesProviders) {
+        // The last Clear's marker outlives the launch that made it, so a
+        // thread the Clear meant to erase is refused here even when its own
+        // file outlived the press.
+        conversationClearedAt = brainStateFromStored(readStoredState(brainStatePath()))?.reset
+          ?.clearedAt;
         conversationHistory = conversationFromStored(
           readStoredState(conversationPath()),
           Date.now(),
+          conversationClearedAt,
         );
         rememberedFacts = rememberedFactsFromStored(readStoredState(rememberedFactsPath()));
+        // Retention runs on every live launch, key or no key: the store's
+        // load admits the file within its bounds and lifetime, replacing on
+        // disk what it does not admit, and the clock takes it from there.
+        brainStore();
       }
       // A signed-in install with no arrival record predates the beat: its
       // sign-in was never observed, so it is settled now rather than greeted

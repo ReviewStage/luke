@@ -36,6 +36,7 @@ import {
   type BrainClientAnswer,
   type BrainRespondOptions,
 } from "./brain-client.js";
+import { BrainGenerationClock } from "./brain-clock.js";
 import { BRAIN_WAKE_KIND, type BrainDelivery, type BrainWakeEvent } from "./brain-events.js";
 import { BRAIN_INPUT_MARKER } from "./brain-input.js";
 import { UNKNOWN_ACT_RESULT } from "./brain-journal.js";
@@ -1330,7 +1331,7 @@ test("the store's generation changing under a run revokes it and fences its late
   await settle();
   const execution = held.executions[0];
   assert.equal(execution?.isRevoked(), false);
-  assert.equal(await h.store.reset(), true);
+  assert.equal(await h.store.clear(), true);
   assert.equal(execution?.isRevoked(), true);
   assert.equal(h.agent.requests().length, 0);
   held.releases[0]?.();
@@ -1405,7 +1406,7 @@ test("a reset while the model is thinking cannot roll old memory into the new ge
   };
   const held = acceptedRunId(await submit(h, "and now?"));
   await settle();
-  assert.equal(await h.store.reset(), true);
+  assert.equal(await h.store.clear(), true);
   release?.(answered([message(`late answer about ${OLD_SECRET}`)]));
   await settle();
   assert.equal(h.agent.request(held), undefined);
@@ -1434,7 +1435,7 @@ test("a reset during a transcript read or an act's result cannot write into the 
   h.agent.wake([edge(ABC)]);
   await h.clock.advance(NOW + 3_000);
   assert.ok(releaseRead);
-  assert.equal(await h.store.reset(), true);
+  assert.equal(await h.store.clear(), true);
   releaseRead({
     status: ACT_RESULT_STATUS.ACCEPTED,
     text: OLD_SECRET,
@@ -1453,7 +1454,7 @@ test("a reset during a transcript read or an act's result cannot write into the 
   acting.client.answers.push(answered([messageAct("call_1", OLD_SECRET)]));
   const runId = acceptedRunId(await submit(acting, `send ${OLD_SECRET}`));
   await settle();
-  assert.equal(await acting.store.reset(), true);
+  assert.equal(await acting.store.clear(), true);
   held.releases[0]?.();
   await settle();
   acting.client.answers.push(answered([message("fresh")]));
@@ -1730,7 +1731,7 @@ test("work queued behind a held act opens nothing once the generation it was que
   h.agent.wake([edge(DEF)]);
   h.agent.rosterLook();
   await h.clock.advance(NOW + 3_000);
-  assert.equal(await h.store.reset(), true);
+  assert.equal(await h.store.clear(), true);
   assert.equal(h.agent.pendingWakes(), 0);
   held.releases[0]?.();
   await settle();
@@ -1778,7 +1779,7 @@ test("a briefing is not delivered after a stop or reset that lands during the tu
   const later = harness({
     deliver: async (delivery) => {
       later.deliveries.push(delivery);
-      await later.store.reset();
+      await later.store.clear();
     },
   });
   later.client.answers.push(
@@ -2492,4 +2493,308 @@ test("a cancel or stop landing while the start is being written ends the run uno
   assert.equal(seen[0]?.status, BRAIN_REQUEST_STATUS.CANCELLED);
   assert.equal(seen[0]?.performedActs, 0);
   assert.deepEqual(h.storage.stored()?.requests[0], h.agent.request(live));
+});
+
+const LIFETIME = 14 * 24 * 60 * 60 * 1000;
+
+test("a generation dies exactly one lifetime after its birth, on the host's clock, revoking the turn it dies under", async () => {
+  const inner = new FakeClient();
+  const h = harness({ client: inner });
+  const generationClock = new BrainGenerationClock({
+    store: h.store,
+    now: () => h.clock.now,
+    schedule: h.clock.schedule,
+    cancel: h.clock.cancel,
+  });
+  await generationClock.start();
+  inner.answers.push(answered([message(`noted ${OLD_SECRET}`)]));
+  assert.equal((await ask(h, `remember ${OLD_SECRET}`))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  const born = h.store.current();
+  assert.ok(born);
+  assert.equal(born.expiresAt, NOW + LIFETIME);
+
+  // Held mid-turn one millisecond before the end: still the same generation.
+  let release: ((answer: BrainClientAnswer) => void) | undefined;
+  inner.respond = (input, options) => {
+    inner.inputs.push([...input]);
+    inner.authorities.push(options.authority);
+    return new Promise((resolve) => {
+      release = resolve;
+    });
+  };
+  await h.clock.advance(born.expiresAt - 1);
+  const held = acceptedRunId(await submit(h, "and now?"));
+  await settle();
+  assert.equal(h.store.generationId(), born.generationId);
+  assert.ok(release, "the model holds the turn open");
+
+  // The expiry timer fires at the instant itself, under the held turn.
+  await h.clock.advance(born.expiresAt);
+  assert.notEqual(h.store.generationId(), born.generationId);
+  assert.equal(h.store.current()?.createdAt, born.expiresAt);
+  assert.equal(h.agent.request(held), undefined);
+  release?.(answered([message(`late ${OLD_SECRET}`)]));
+  await settle();
+
+  inner.respond = FakeClient.prototype.respond;
+  inner.answers.push(answered([message("fresh")]));
+  assert.equal((await ask(h, "NEW_ASK"))?.text, "fresh");
+  const surface = generationSurface(h, inner);
+  assert.ok(!surface.includes(OLD_SECRET), "expired memory reached the new generation");
+  assert.equal(h.storage.stored()?.generationId, h.store.generationId());
+  assert.equal(h.storage.stored()?.requests.length, 1);
+  generationClock.stop();
+});
+
+test("an expiry is enforced at the door of a turn and a submission even when no timer fired", async () => {
+  // A stored generation past its time, found by a launch whose timers are
+  // never advanced: the ask is accepted into a fresh generation regardless.
+  const storage = new FakeStorage();
+  const stale: BrainPersistedState = {
+    ...freshBrainState("gen-stale", NOW - LIFETIME - 1),
+    items: [
+      { type: RESPONSES_ITEM_TYPE.COMPACTION, id: "cmp", encrypted_content: OLD_SECRET },
+      message(`after compaction ${OLD_SECRET}`),
+    ],
+    cursors: { [claude.id]: { abc: "old-cursor" } },
+  };
+  storage.file = `${JSON.stringify(stale)}\n`;
+  const h = harness({}, storage);
+  h.client.answers.push(answered([message("fresh")]));
+  const answer = await ask(h, "NEW_ASK");
+  assert.equal(answer?.text, "fresh");
+  assert.notEqual(h.store.generationId(), "gen-stale");
+  assert.ok(!generationSurface(h, h.client).includes(OLD_SECRET));
+  // The cursor died with the generation: the next look reads from the start.
+  h.client.answers.push(answered([message("")]));
+  h.agent.wake([edge(ABC)]);
+  await h.clock.advance(h.clock.now + 3_000);
+  assert.equal(h.sinceReads.at(-1)?.cursor, undefined);
+
+  // A generation that reaches its end while the app sits idle, with the
+  // clock advanced but the timer lost, still dies at the next turn's door.
+  const idle = harness();
+  idle.client.answers.push(answered([message("first")]));
+  assert.equal((await ask(idle, "first"))?.text, "first");
+  const born = idle.store.current();
+  assert.ok(born);
+  for (const timer of idle.clock.timers.keys()) idle.clock.timers.delete(timer);
+  idle.clock.now = born.expiresAt;
+  idle.client.answers.push(answered([message("")]));
+  idle.agent.wake([edge(ABC)]);
+  await idle.clock.advance(idle.clock.now + 3_000);
+  assert.notEqual(idle.store.generationId(), born.generationId);
+  assert.equal(idle.store.current()?.requests.length, 0);
+});
+
+test("a compaction and a fortnight of writes never extend a generation's life", async () => {
+  const h = harness();
+  const generationClock = new BrainGenerationClock({
+    store: h.store,
+    now: () => h.clock.now,
+    schedule: h.clock.schedule,
+    cancel: h.clock.cancel,
+  });
+  await generationClock.start();
+  h.client.answers.push(answered([message("one")]));
+  await ask(h, "one");
+  const born = h.store.current();
+  assert.ok(born);
+  await h.clock.advance(NOW + 7 * 24 * 60 * 60 * 1000);
+  h.client.answers.push(answered([compaction("cmp_1"), message("two")]));
+  await ask(h, "two");
+  assert.equal(h.traces.at(-1)?.compacted, true);
+  assert.equal(h.store.current()?.expiresAt, born.expiresAt);
+  assert.equal(h.store.current()?.createdAt, born.createdAt);
+  assert.equal(h.storage.stored()?.expiresAt, born.expiresAt);
+  await h.clock.advance(born.expiresAt - 1);
+  assert.equal(h.store.generationId(), born.generationId);
+  await h.clock.advance(born.expiresAt);
+  assert.notEqual(h.store.generationId(), born.generationId);
+  generationClock.stop();
+});
+
+test("runs retention lets go of leave the live records and journal too, so the next checkpoint cannot bring them back", async () => {
+  const bounds = { MAXIMUM_TERMINAL_REQUESTS: 2, MAXIMUM_SERIALIZED_BYTES: 8 * 1024 * 1024 };
+  const storage = new FakeStorage();
+  const store = new BrainStateStore({
+    storage,
+    createGenerationId: () => "gen-bounded",
+    now: () => NOW,
+    bounds,
+  });
+  const h = harness({ store }, storage);
+  const runIds: string[] = [];
+  for (const words of ["a", "b", "c", "d"]) {
+    h.client.answers.push(answered([messageAct(`call_${words}`)]), answered([message(words)]));
+    const record = await ask(h, words);
+    assert.ok(record);
+    runIds.push(record.runId);
+    assert.equal(await h.agent.markHistoryRecorded(record.runId, h.clock.now), true);
+  }
+  const heard: (readonly BrainRequestRecord[])[] = [];
+  h.agent.subscribe((records) => heard.push(records));
+  // Retention ran inside the marks: only the newest two ended runs remain,
+  // in the file, in the live records, and in the journal the agent holds.
+  const stored = h.storage.stored();
+  assert.deepEqual(
+    stored?.requests.map((record) => record.runId),
+    runIds.slice(2),
+  );
+  assert.deepEqual(
+    h.agent.requests().map((record) => record.runId),
+    runIds.slice(2),
+  );
+  assert.deepEqual(new Set(stored?.journal.map((entry) => entry.runId)), new Set(runIds.slice(2)));
+  assert.equal(h.performed.length, 4);
+
+  // A later working checkpoint — an observation turn's — writes the agent's
+  // journal again, and the pruned runs stay gone.
+  h.client.answers.push(answered([message("")]));
+  h.agent.wake([edge(ABC)]);
+  await h.clock.advance(h.clock.now + 3_000);
+  const after = h.storage.stored();
+  assert.deepEqual(new Set(after?.journal.map((entry) => entry.runId)), new Set(runIds.slice(2)));
+  assert.deepEqual(
+    after?.requests.map((record) => record.runId),
+    runIds.slice(2),
+  );
+});
+
+test("a generation at its record bound refuses a new ask at the door, and admits one again once an end reaches the thread", async () => {
+  const storage = new FakeStorage();
+  const store = new BrainStateStore({
+    storage,
+    createGenerationId: () => "gen-bounded",
+    now: () => NOW,
+    bounds: { MAXIMUM_TERMINAL_REQUESTS: 2, MAXIMUM_SERIALIZED_BYTES: 8 * 1024 * 1024 },
+  });
+  const h = harness({ store }, storage);
+  h.client.answers.push(answered([message("a")]), answered([message("b")]));
+  const first = await ask(h, "a");
+  const second = await ask(h, "b");
+  assert.ok(first && second);
+  assert.deepEqual(await submit(h, "c"), {
+    outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+    reason: BRAIN_SUBMISSION_REJECTION.FULL,
+  });
+  assert.equal(h.agent.requests().length, 2);
+  const heard: (readonly BrainRequestRecord[])[] = [];
+  h.agent.subscribe((records) => heard.push(records));
+  assert.equal(await h.agent.markHistoryRecorded(first.runId, NOW), true);
+  h.client.answers.push(answered([message("c")]));
+  const third = await ask(h, "c");
+  assert.equal(third?.text, "c");
+  // The subscriber heard the oldest run go when the third was admitted.
+  assert.ok(heard.some((records) => !records.some((record) => record.runId === first.runId)));
+  assert.deepEqual(
+    h.agent.requests().map((record) => record.runId),
+    [second.runId, third.runId],
+  );
+});
+
+test("a Clear or expiry asked for while a write is out on disk revokes a held act's preparation before the disk answers, and no effect dispatches", async () => {
+  for (const ending of ["clear", "expiry"] as const) {
+    let releaseWrite: (() => void) | undefined;
+    let releasePreparation: (() => void) | undefined;
+    let effects = 0;
+    const acts: BrainActPerformer = {
+      perform: async (_call, execution): Promise<WireRecord> => {
+        await new Promise<void>((resolve) => {
+          releasePreparation = resolve;
+        });
+        if (execution.isRevoked()) {
+          return { status: ACT_RESULT_STATUS.REJECTED, reason: "revoked before the effect" };
+        }
+        effects += 1;
+        return { status: ACT_RESULT_STATUS.ACCEPTED };
+      },
+    };
+    const h = harness({ acts });
+    const generationClock = new BrainGenerationClock({
+      store: h.store,
+      now: () => h.clock.now,
+      schedule: h.clock.schedule,
+      cancel: h.clock.cancel,
+    });
+    await generationClock.start();
+    h.client.answers.push(answered([message("first")]));
+    await ask(h, "first");
+    const born = h.store.current();
+    assert.ok(born);
+    // The act's start is durable; its preparation is held.
+    h.client.answers.push(answered([messageAct("call_1")]));
+    const runId = acceptedRunId(await submit(h, "send"));
+    await settle();
+    assert.ok(releasePreparation, "the performer holds the act");
+    assert.equal(h.storage.stored()?.journal.length, 1);
+    // A metadata write of another run is out on disk when the end is asked for.
+    const storage = h.storage;
+    const write = storage.write.bind(storage);
+    storage.write = (contents) =>
+      // SAFETY: the store accepts a promise of the write's outcome; this test holds it open.
+      new Promise<boolean>((resolve) => {
+        releaseWrite = () => resolve(write(contents));
+      }) as unknown as boolean;
+    const marking = h.agent.markHistoryRecorded(runId, NOW);
+    await settle();
+    assert.ok(releaseWrite, "a write is on disk");
+    storage.write = write;
+    if (ending === "clear") {
+      void h.store.clear(h.clock.now + 1);
+    } else {
+      await h.clock.advance(born.expiresAt);
+    }
+    // Fenced before the disk answered.
+    assert.equal(h.store.holdsGeneration(born.generationId), false);
+    assert.equal(h.agent.request(runId), undefined);
+    releasePreparation();
+    await settle();
+    releaseWrite();
+    await marking;
+    await settle();
+    await h.store.flush();
+    assert.equal(effects, 0, `${ending}: an effect dispatched after the fence`);
+    assert.equal(h.store.current()?.journal.length, 0);
+    assert.equal(h.storage.stored()?.generationId, h.store.generationId());
+    assert.equal(h.storage.stored()?.requests.length, 0);
+    generationClock.stop();
+  }
+});
+
+test("a Clear pressed while a starting agent's load is still reading the file leaves the fresh generation standing, never the file's", async () => {
+  let releaseRead: (() => void) | undefined;
+  const storage = new FakeStorage();
+  const old: BrainPersistedState = {
+    ...freshBrainState("gen-old", NOW - 1000),
+    items: [message(`kept ${OLD_SECRET}`)],
+  };
+  storage.file = `${JSON.stringify(old)}\n`;
+  const read = storage.read.bind(storage);
+  storage.read = () => {
+    // Only the load's read is held; the Clear's own look at the file answers at once.
+    storage.read = read;
+    // SAFETY: the store accepts a promise of the read; this test holds it open.
+    return new Promise<string | undefined>((resolve) => {
+      releaseRead = () => resolve(read());
+    }) as unknown as string | undefined;
+  };
+  const h = harness({}, storage);
+  const readying = h.agent.ready();
+  await settle();
+  assert.ok(releaseRead, "the load is reading the file");
+  const clearing = h.store.clear(NOW);
+  const fresh = h.store.generationId();
+  assert.notEqual(fresh, "gen-old");
+  releaseRead();
+  await readying;
+  assert.equal(await clearing, true);
+  // Store, agent, and disk agree on the successor; the file's memory is gone.
+  assert.equal(h.store.generationId(), fresh);
+  assert.deepEqual(h.agent.requests(), []);
+  h.client.answers.push(answered([message("fresh")]));
+  assert.equal((await ask(h, "NEW_ASK"))?.text, "fresh");
+  assert.equal(h.storage.stored()?.generationId, fresh);
+  assert.deepEqual(h.storage.stored()?.reset, { clearedAt: NOW, generationId: "gen-old" });
+  assert.ok(!generationSurface(h, h.client).includes(OLD_SECRET));
 });

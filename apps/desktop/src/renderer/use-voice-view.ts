@@ -37,7 +37,8 @@ export function askDraftReason(result: BrainAskSubmissionResult | undefined): st
 }
 
 /** What the strip says when the stored thread could not be deleted. */
-export const CLEAR_FAILED_REASON = "Could not clear history. Try again.";
+export const CLEAR_FAILED_REASON =
+  "History was cleared from view, but its file could not be fully erased. Try again.";
 
 /**
  * How long a voice has been active, read off the relayed levels with the

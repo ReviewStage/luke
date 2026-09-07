@@ -203,6 +203,8 @@ export const BRAIN_SUBMISSION_REJECTION = {
   PERSISTENCE: "persistence",
   /** The submission id is already taken by an ask with other words or another origin. */
   CONFLICT: "conflict",
+  /** The generation holds as many records as it may, and none is yet eligible to be let go. */
+  FULL: "full",
 } as const;
 
 export type BrainSubmissionRejection =
