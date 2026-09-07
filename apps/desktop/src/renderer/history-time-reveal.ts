@@ -36,19 +36,24 @@ export function revealAfterStep(reveal: number, deltaX: number, column: number):
   return Math.min(column, Math.max(0, reveal + deltaX));
 }
 
+/** What the walk below needs of a node: the one above it, or nothing at the top. */
+export interface Ancestry<Node> {
+  readonly parentElement: Node | null;
+}
+
 /**
  * Whether a step over `target` belongs to a block between it and the thread
  * that already pans sideways, a fenced code line or a table wider than its
  * bubble, rather than to the pull. Over such a block the same gesture is the
  * only way to read the line's end, so the block keeps it whole, whichever edge
  * it stands at: a pull that took over at the block's edge would drag the
- * thread mid-swipe. `pans` is asked of each element on the way up, and the
+ * thread mid-swipe. `pans` is asked of each node on the way up, and the
  * thread itself is never asked.
  */
-export function panningBlockBetween(
-  target: Element | null,
-  thread: Element,
-  pans: (element: Element) => boolean,
+export function panningBlockBetween<Node extends Ancestry<Node>>(
+  target: Node | null,
+  thread: Node,
+  pans: (node: Node) => boolean,
 ): boolean {
   for (let node = target; node !== null && node !== thread; node = node.parentElement) {
     if (pans(node)) return true;

@@ -27,38 +27,37 @@ test("a thread with no stamp drawn has nothing to reveal", () => {
   assert.equal(revealAfterStep(0, 40, 0), 0);
 });
 
+interface FakeNode {
+  readonly parentElement: FakeNode | null;
+  readonly pans: boolean;
+}
+
 /**
  * Enough of an element tree for the walk, root first: the first mark is the
- * thread's, the last the leaf's, and each says whether that element pans.
+ * thread's, the last the leaf's, and each says whether that node pans.
  */
-function chain(...pans: boolean[]): {
-  leaf: Element;
-  thread: Element;
-  pans: (element: Element) => boolean;
-} {
-  const panning = new Set<Element>();
-  const nodes: Element[] = [];
-  for (const marks of pans) {
-    const node = { parentElement: nodes.at(-1) ?? null } as unknown as Element;
-    if (marks) panning.add(node);
-    nodes.push(node);
+function chain(...marks: readonly boolean[]) {
+  const nodes: FakeNode[] = [];
+  for (const pans of marks) {
+    nodes.push({ parentElement: nodes.at(-1) ?? null, pans });
   }
-  return {
-    leaf: nodes.at(-1) as Element,
-    thread: nodes[0] as Element,
-    pans: (element) => panning.has(element),
-  };
+  const thread = nodes[0];
+  const leaf = nodes.at(-1);
+  if (thread === undefined || leaf === undefined) throw new Error("a chain needs a thread");
+  return { leaf, thread };
 }
+
+const pans = (node: FakeNode) => node.pans;
 
 test("a step over a block that pans sideways is the block's, wherever the block stands", () => {
   const over = chain(false, false, true, false);
-  assert.equal(panningBlockBetween(over.leaf, over.thread, over.pans), true);
+  assert.equal(panningBlockBetween(over.leaf, over.thread, pans), true);
   const beside = chain(false, false, false, false);
-  assert.equal(panningBlockBetween(beside.leaf, beside.thread, beside.pans), false);
+  assert.equal(panningBlockBetween(beside.leaf, beside.thread, pans), false);
 });
 
 test("the thread itself is never mistaken for a panning block", () => {
-  const { leaf, thread, pans } = chain(true, false, false);
+  const { leaf, thread } = chain(true, false, false);
   assert.equal(panningBlockBetween(leaf, thread, pans), false);
   assert.equal(panningBlockBetween(null, thread, pans), false);
 });
