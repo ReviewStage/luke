@@ -3,9 +3,9 @@ import {
   type AgentRuntimeDescriptor,
   type CheckpointFormat,
   CONTEXT_INPUT_KIND,
-  type ContextBootstrap,
   type ContextEngine,
   type ContextInput,
+  type ContextOpening,
   MODEL_RESPONSE_OUTCOME,
   type ModelAdapter,
   type ModelAnswer,
@@ -20,7 +20,7 @@ import {
   type ToolInvocation,
   type ToolResult,
 } from "@sidecar/runtime-contracts";
-import { ACT_RESULT_STATUS, isRecord, type UnparsedWireValue } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { LOOP_GUARD_LEVEL, LoopGuard, type LoopGuardConfig } from "./loop-guard.js";
 import { settledUnlessAborted } from "./settled.js";
 
@@ -72,13 +72,14 @@ export interface ToolLoopRuntimeOptions {
 
 interface EndSignal {
   deadline: boolean;
+  ended: boolean;
 }
 
 function resultStatus(outputJson: string): string | undefined {
   try {
     // SAFETY: JSON.parse returns a wire value; the record and string checks are the validation.
     const parsed = JSON.parse(outputJson) as UnparsedWireValue;
-    return isRecord(parsed) && typeof parsed.status === "string" ? parsed.status : undefined;
+    return isRecord(parsed) && isWireString(parsed.status) ? parsed.status : undefined;
   } catch {
     return undefined;
   }
@@ -101,37 +102,48 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
     };
   }
 
-  openContext(
+  async openContext(
     checkpoint: RuntimeCheckpoint | undefined,
     lostResultJson: string,
-  ): { context: ContextEngine; bootstrap: ContextBootstrap } {
+  ): Promise<ContextOpening> {
     const context = this.#options.createContext(this.descriptor.checkpoint);
-    return { context, bootstrap: context.bootstrap(checkpoint, lostResultJson) };
+    return { context, bootstrap: await context.bootstrap(checkpoint, lostResultJson) };
   }
 
-  resume(
+  async resume(
     checkpoint: RuntimeCheckpoint,
     request: Omit<RuntimeRunRequest, "context">,
     lostResultJson: string,
-  ): RuntimeRun | { readonly refused: string } {
+  ): Promise<RuntimeRun | { readonly refused: string }> {
     if (!sameCheckpointFormat(checkpoint.format, this.descriptor.checkpoint)) {
       return { refused: "checkpoint format is not this runtime's" };
     }
-    const { context, bootstrap } = this.openContext(checkpoint, lostResultJson);
+    const { context, bootstrap } = await this.openContext(checkpoint, lostResultJson);
     if (!bootstrap.loaded) return { refused: bootstrap.reason ?? "checkpoint not loaded" };
     return this.start({ ...request, context });
   }
 
+  /**
+   * The run's execution ends on every terminal path — completion, cancel,
+   * deadline, throttle, failure, the guard, or a listener or engine that
+   * threw — and from that instant every context the run handed an executor
+   * answers revoked and late words are refused, so nothing prepared inside
+   * the run can act after it.
+   */
   start(request: RuntimeRunRequest): RuntimeRun {
     const internal = new AbortController();
     const signal = AbortSignal.any([request.signal, internal.signal]);
-    const end: EndSignal = { deadline: false };
+    const end: EndSignal = { deadline: false, ended: false };
     const steered: ContextInput[] = [];
-    const done = this.#execute(request, signal, end, steered);
+    const done = this.#execute(request, signal, end, steered).finally(() => {
+      end.ended = true;
+    });
     return {
       runId: request.runId,
       steer: (input) => {
+        if (end.ended) return false;
         steered.push(input);
+        return true;
       },
       cancel: (reason) => {
         if (reason?.deadline) end.deadline = true;
@@ -163,12 +175,15 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
       this.#options.loopGuard,
       request.toolSchemas.map((schema) => schema.name),
     );
-    for (const input of request.input) context.ingest(input);
+    const revoked = () => end.ended || signal.aborted;
+    for (const input of request.input) await context.ingest(input);
     for (;;) {
       if (signal.aborted) return cancelled();
-      for (const input of steered.splice(0)) context.ingest(input);
+      for (const input of steered.splice(0)) await context.ingest(input);
+      const assembled = await context.assemble({ ephemeral: request.ephemeral() });
+      if (signal.aborted) return cancelled();
       const answered = await settledUnlessAborted(
-        this.#options.model.respond(context.assemble({ ephemeral: request.ephemeral() }), {
+        this.#options.model.respond(assembled, {
           prompt: request.prompt,
           tools: request.toolSchemas,
           maximumOutputTokens: request.maximumOutputTokens,
@@ -226,7 +241,7 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
               }),
               status: ACT_RESULT_STATUS.REJECTED,
             };
-            context.ingest({
+            await context.ingest({
               kind: CONTEXT_INPUT_KIND.TOOL_RESULT,
               callId: refused.callId,
               outputJson: result.outputJson,
@@ -237,8 +252,8 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
           return finish({ reason: RUN_END_REASON.LOOP_GUARD, detail: verdict.message });
         }
         await emit({ kind: RUNTIME_EVENT.TOOL_CALL, invocation: call });
-        const result = await this.#executeOne(call, tools, request.runId, signal);
-        context.ingest({
+        const result = await this.#executeOne(call, tools, request.runId, signal, revoked);
+        await context.ingest({
           kind: CONTEXT_INPUT_KIND.TOOL_RESULT,
           callId: call.callId,
           outputJson: result.outputJson,
@@ -247,7 +262,7 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
         await emit({ kind: RUNTIME_EVENT.TOOL_RESULT, invocation: call, result });
         if (verdict.stuck) {
           // A warning is words for the model, read at its next inference and never kept as an act.
-          context.ingest({
+          await context.ingest({
             kind: CONTEXT_INPUT_KIND.USER_TEXT,
             text: `${LOOP_GUARD_MARKER} ${verdict.message}`,
           });
@@ -264,9 +279,9 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
     request: RuntimeRunRequest,
     emit: (event: RuntimeEvent) => Promise<void>,
   ): Promise<boolean> {
-    request.context.ingest({ kind: CONTEXT_INPUT_KIND.MODEL_OUTPUT, items: answer.items });
+    await request.context.ingest({ kind: CONTEXT_INPUT_KIND.MODEL_OUTPUT, items: answer.items });
     if (answer.compacted) {
-      const dropped = request.context.compact();
+      const dropped = await request.context.compact();
       await emit({ kind: RUNTIME_EVENT.COMPACTED, dropped });
     }
     if (answer.usage) await emit({ kind: RUNTIME_EVENT.USAGE, usage: answer.usage });
@@ -279,10 +294,11 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
     tools: RuntimeRunRequest["tools"],
     runId: string,
     signal: AbortSignal,
+    revoked: () => boolean,
   ): Promise<ToolResult> {
     let result: ToolResult;
     try {
-      result = await tools.execute(call, { runId, signal, isRevoked: () => signal.aborted });
+      result = await tools.execute(call, { runId, signal, isRevoked: revoked });
     } catch {
       result = {
         outputJson: JSON.stringify(TOOL_DID_NOT_ANSWER),

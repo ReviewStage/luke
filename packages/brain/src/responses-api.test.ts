@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { BRAIN_TURN_AUTHORITY } from "@sidecar/hosted";
+import { MODEL_FAILURE, MODEL_RESPONSE_OUTCOME } from "@sidecar/runtime-contracts";
 import {
   BRAIN_REASONING_EFFORT,
   brainResponsesOutput,
   brainResponsesRequest,
   functionCallOutputItem,
   isCompactionItem,
+  responsesModelAnswer,
   userMessageItem,
 } from "./responses-api.js";
 import { BRAIN_TOOL, brainToolDefinitions } from "./tools.js";
@@ -92,4 +94,39 @@ test("a function call output carries the call id and a string output", () => {
     call_id: "call_9",
     output: '{"status":"accepted"}',
   });
+});
+
+test("a response the provider marks failed, cancelled, or under way is a provider failure, never an empty reply", () => {
+  const failed = responsesModelAnswer({
+    status: "failed",
+    error: { code: "server_error", message: "synthetic failure" },
+    output: [],
+  });
+  assert.deepEqual(failed, {
+    outcome: MODEL_RESPONSE_OUTCOME.FAILED,
+    failure: MODEL_FAILURE.UPSTREAM,
+    reason: "response failed: server_error",
+  });
+  for (const status of ["cancelled", "in_progress", "queued"]) {
+    const answer = responsesModelAnswer({ status, output: [] });
+    assert.equal(answer?.outcome, MODEL_RESPONSE_OUTCOME.FAILED, status);
+  }
+  const completed = responsesModelAnswer({
+    status: "completed",
+    output: [
+      { type: "message", role: "assistant", content: [{ type: "output_text", text: "hi" }] },
+    ],
+    usage: { input_tokens: 3, output_tokens: 1 },
+  });
+  assert.ok(completed?.outcome === MODEL_RESPONSE_OUTCOME.ANSWERED);
+  assert.equal(completed.text, "hi");
+  assert.deepEqual(completed.usage, { inputTokens: 3, outputTokens: 1 });
+  const incomplete = responsesModelAnswer({
+    status: "incomplete",
+    incomplete_details: { reason: "max_output_tokens" },
+    output: [],
+  });
+  assert.ok(incomplete?.outcome === MODEL_RESPONSE_OUTCOME.ANSWERED);
+  assert.deepEqual(incomplete.incomplete, { status: "incomplete", reason: "max_output_tokens" });
+  assert.equal(responsesModelAnswer({ id: "resp" }), undefined);
 });

@@ -1,4 +1,4 @@
-import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
+import { isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 
 /**
  * The seams along which Luke's reasoning is replaceable. A host owns the
@@ -73,7 +73,7 @@ function versioned(
 
 /** Reads a stored tag back into a format, or nothing for a tag not written by this rule. */
 export function checkpointFormatFromTag(tag: UnparsedWireValue): CheckpointFormat | undefined {
-  if (typeof tag !== "string") return undefined;
+  if (!isWireString(tag)) return undefined;
   const split = tag.indexOf(TAG_FORMAT_SEPARATOR);
   if (split <= 0) return undefined;
   const runtime = versioned(tag.slice(0, split), TAG_RUNTIME_SEPARATOR);
@@ -137,7 +137,7 @@ export type ReasoningEffort = (typeof REASONING_EFFORT)[keyof typeof REASONING_E
 const REASONING_EFFORT_LIST: readonly string[] = Object.values(REASONING_EFFORT);
 
 export function isReasoningEffort(value: UnparsedWireValue): value is ReasoningEffort {
-  return typeof value === "string" && REASONING_EFFORT_LIST.includes(value);
+  return isWireString(value) && REASONING_EFFORT_LIST.includes(value);
 }
 
 /** What one inference is asked to do beyond the items it is shown. */
@@ -354,27 +354,39 @@ export interface ContextMark {
   readonly items: readonly WireRecord[];
 }
 
+/** A lifecycle hook may answer at once or after a wait; the runtime awaits either. */
+export type MaybePromise<Value> = Value | Promise<Value>;
+
 /**
  * Owns what the model sees: the provider's item shapes, how words become
  * items, how a compaction folds the past, and what persists as a checkpoint.
  * The engine holds retained state; the host decides when a turn commits or
- * rolls back, and persists the checkpoint the engine hands it.
+ * rolls back, and persists the checkpoint the engine hands it. The lifecycle
+ * hooks may be asynchronous — an engine backed by a store or a remote thread
+ * is as much an engine as one holding an array — and the runtime awaits each.
+ * The three snapshot operations stay synchronous because the host takes them
+ * inside its own serialized save, where nothing may be awaited.
  */
 export interface ContextEngine {
   readonly checkpointFormat: CheckpointFormat;
   /** Loads a checkpoint, refusing one of another format, and repairs what a crash left unpaired. */
-  bootstrap(checkpoint: RuntimeCheckpoint | undefined, lostResultJson: string): ContextBootstrap;
-  ingest(input: ContextInput): void;
+  bootstrap(
+    checkpoint: RuntimeCheckpoint | undefined,
+    lostResultJson: string,
+  ): MaybePromise<ContextBootstrap>;
+  ingest(input: ContextInput): MaybePromise<void>;
   /** The items one inference is shown, the ephemeral text last so the retained prefix stays stable. */
-  assemble(assembly: ContextAssembly): readonly WireRecord[];
-  /** Folds the retained items behind the latest compaction the provider produced; answers how many went. */
-  compact(): number;
+  assemble(assembly: ContextAssembly): MaybePromise<readonly WireRecord[]>;
+  /** Folds the retained items behind the latest compaction the provider produced inline; answers how many went. */
+  compact(): MaybePromise<number>;
+  /** Adopts the window an explicit compaction answered, whole: it is the canonical next context. */
+  adoptCompaction(items: readonly WireRecord[]): MaybePromise<void>;
   /** Maintenance once a turn has committed; nothing the model sees changes here. */
-  afterTurn(): void;
+  afterTurn(): MaybePromise<void>;
   mark(): ContextMark;
   rollback(mark: ContextMark): void;
   checkpoint(): RuntimeCheckpoint;
-  dispose(): void;
+  dispose(): MaybePromise<void>;
 }
 
 export const RUNTIME_EVENT = {
@@ -470,11 +482,17 @@ export interface RuntimeRunRequest {
 /** A run under way: the host may steer it with more words or cancel it, and awaits its end. */
 export interface RuntimeRun {
   readonly runId: string;
-  /** Words for the model to read at the next safe boundary, before its next inference. */
-  steer(input: ContextInput): void;
+  /** Words for the model to read at the next safe boundary, before its next inference; answers false once the run has ended. */
+  steer(input: ContextInput): boolean;
   /** Ends the run at the next safe point; a deadline is a cancel that says so. */
   cancel(reason?: { deadline: boolean }): void;
   readonly done: Promise<RuntimeRunEnd>;
+}
+
+/** A context engine just opened, and what its bootstrap said about the checkpoint it was handed. */
+export interface ContextOpening {
+  readonly context: ContextEngine;
+  readonly bootstrap: ContextBootstrap;
 }
 
 export interface AgentRuntimeDescriptor {
@@ -494,12 +512,12 @@ export interface AgentRuntime {
   openContext(
     checkpoint: RuntimeCheckpoint | undefined,
     lostResultJson: string,
-  ): { context: ContextEngine; bootstrap: ContextBootstrap };
+  ): Promise<ContextOpening>;
   start(request: RuntimeRunRequest): RuntimeRun;
   /** Starts a run over a context restored from the checkpoint; a checkpoint of another format is refused. */
   resume(
     checkpoint: RuntimeCheckpoint,
     request: Omit<RuntimeRunRequest, "context">,
     lostResultJson: string,
-  ): RuntimeRun | { readonly refused: string };
+  ): Promise<RuntimeRun | { readonly refused: string }>;
 }

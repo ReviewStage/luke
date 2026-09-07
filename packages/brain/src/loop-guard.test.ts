@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ToolInvocation } from "@sidecar/runtime-contracts";
+import type { WireRecord } from "@sidecar/wire";
 import {
   hashToolCall,
   LOOP_GUARD_DETECTOR,
@@ -10,7 +11,7 @@ import {
   stableStringify,
 } from "./loop-guard.js";
 
-function call(name: string, args: object, callId = "c"): ToolInvocation {
+function call(name: string, args: WireRecord, callId = "c"): ToolInvocation {
   return { callId, name, argumentsJson: JSON.stringify(args) };
 }
 
@@ -89,4 +90,50 @@ test("a tool the run was never offered, asked for 10 times, is critical", () => 
   const verdict = guard.detect(missing);
   assert.ok(verdict.stuck && verdict.detector === LOOP_GUARD_DETECTOR.UNKNOWN_TOOL_REPEAT);
   assert.equal(verdict.level, LOOP_GUARD_LEVEL.CRITICAL);
+});
+
+test("an unrelated call between identical no-progress calls does not hide the loop: 20 identical outcomes with one intervening call are critical", () => {
+  const guard = new LoopGuard({ enabled: true }, ["a", "b"]);
+  const stuck = call("a", { id: 1 });
+  const other = call("b", {});
+  for (let index = 0; index < LOOP_GUARD_THRESHOLDS.CRITICAL; index += 1) {
+    if (index === 15) {
+      guard.detect(other);
+      guard.record(other, { outputJson: '{"fresh":true}' });
+    }
+    guard.detect(stuck);
+    guard.record(stuck, { outputJson: '{"status":"running"}' });
+  }
+  const verdict = guard.detect(stuck);
+  assert.ok(verdict.stuck);
+  assert.equal(verdict.level, LOOP_GUARD_LEVEL.CRITICAL);
+  assert.equal(verdict.detector, LOOP_GUARD_DETECTOR.GENERIC_REPEAT);
+  assert.equal(verdict.count, LOOP_GUARD_THRESHOLDS.CRITICAL);
+});
+
+test("cycling through a few argument patterns onto one stable outcome is argument churn, warning-only", () => {
+  const guard = new LoopGuard({ enabled: true }, ["search"]);
+  const variants = [
+    call("search", { q: "a" }),
+    call("search", { q: "b" }),
+    call("search", { q: "c" }),
+  ];
+  // The first call of each pattern has nothing to compare with, so it is not
+  // yet no-progress; the warning needs ten no-progress calls behind it.
+  for (let round = 0; round < 5; round += 1) {
+    for (const variant of variants) {
+      guard.detect(variant);
+      guard.record(variant, { outputJson: '{"results":[]}' });
+    }
+  }
+  const verdict = guard.detect(variants[0] ?? call("search", {}));
+  assert.ok(verdict.stuck);
+  assert.equal(verdict.detector, LOOP_GUARD_DETECTOR.ARGUMENT_CHURN);
+  assert.equal(verdict.level, LOOP_GUARD_LEVEL.WARNING);
+  // A novel argument resets the evidence rather than inheriting it.
+  const novel = call("search", { q: "z" });
+  guard.detect(novel);
+  guard.record(novel, { outputJson: '{"results":[]}' });
+  const after = guard.detect(call("search", { q: "y" }));
+  assert.deepEqual(after, { stuck: false });
 });

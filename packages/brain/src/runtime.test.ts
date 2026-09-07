@@ -13,10 +13,11 @@ import {
   type RuntimeEvent,
   type RuntimeRun,
   type RuntimeRunRequest,
+  type ToolExecutionContext,
   type ToolExecutor,
   type ToolInvocation,
 } from "@sidecar/runtime-contracts";
-import type { WireRecord } from "@sidecar/wire";
+import { isWireString, type WireRecord } from "@sidecar/wire";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { RESPONSES_ITEM_FORMAT, RESPONSES_ITEM_TYPE } from "./responses-api.js";
 import { TOOL_LOOP_RUNTIME, TOOL_LOOP_RUNTIME_IDENTITY, ToolLoopAgentRuntime } from "./runtime.js";
@@ -323,8 +324,15 @@ test("a cancel between two calls still reaches the executor for the second, whic
   assert.equal(h.model.requests.length, 1);
 });
 
-test("steered words are read at the next safe boundary, before the next inference", async () => {
+test("steered words are read at the next safe boundary: after the tool that was running, before the next inference", async () => {
   const h = harness();
+  let run: RuntimeRun | undefined;
+  const steering: ToolExecutor = {
+    execute: async (invocation) => {
+      assert.equal(run?.steer({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: "also this" }), true);
+      return { outputJson: JSON.stringify({ status: "accepted", call: invocation.callId }) };
+    },
+  };
   h.model.answers.push(
     answered({
       items: [
@@ -333,16 +341,18 @@ test("steered words are read at the next safe boundary, before the next inferenc
       toolCalls: [toolCall("c1", "act")],
     }),
   );
-  const run = runtime(h.model).start(h.request());
-  run.steer({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: "also this" });
+  run = runtime(h.model).start(h.request({ tools: steering }));
   await run.done;
   assert.equal(h.model.requests.length, 2);
+  const first = h.model.requests[0]?.items ?? [];
+  assert.ok(!first.some((item) => JSON.stringify(item).includes("also this")));
   const second = h.model.requests[1]?.items ?? [];
   const steeredIndex = second.findIndex((item) => JSON.stringify(item).includes("also this"));
   const outputIndex = second.findIndex(
     (item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
   );
-  assert.ok(steeredIndex > outputIndex && steeredIndex === second.length - 2);
+  assert.ok(steeredIndex > outputIndex);
+  assert.equal(steeredIndex, second.length - 2);
 });
 
 test("an executor that throws leaves an unknown answer paired to the call rather than a dangling call", async () => {
@@ -363,7 +373,7 @@ test("an executor that throws leaves an unknown answer paired to the call rather
   const output = h.context
     .checkpoint()
     .items.find((item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT);
-  assert.ok(output && typeof output.output === "string" && output.output.includes('"unknown"'));
+  assert.ok(output && isWireString(output.output) && output.output.includes('"unknown"'));
 });
 
 test("with the guard enabled, a critical verdict pairs every remaining call and ends the run as the guard's", async () => {
@@ -395,17 +405,124 @@ test("resume loads a compatible checkpoint and refuses a foreign one without tou
   const h = harness();
   const items = [{ type: RESPONSES_ITEM_TYPE.MESSAGE, role: "user", content: "earlier" }];
   const r = runtime(h.model);
-  const refused = r.resume(
+  const refused = await r.resume(
     { format: { ...r.descriptor.checkpoint, runtime: "other" }, items },
     h.request(),
     "{}",
   );
   assert.ok("refused" in refused);
   h.model.answers.push(answered({ text: "resumed" }));
-  const resumed = r.resume({ format: r.descriptor.checkpoint, items }, h.request(), "{}");
+  const resumed = await r.resume({ format: r.descriptor.checkpoint, items }, h.request(), "{}");
   assert.ok(!("refused" in resumed));
   if (!("refused" in resumed)) {
     assert.deepEqual(await resumed.done, { reason: RUN_END_REASON.COMPLETED, text: "resumed" });
     assert.deepEqual(h.model.requests[0]?.items[0], items[0]);
   }
+});
+
+test("every context handed to an executor is revoked once the run ends, on completion, on a thrown listener, and on cancel, and late words are refused", async () => {
+  const completed = harness();
+  const contexts: ToolExecutionContext[] = [];
+  const capturing: ToolExecutor = {
+    execute: async (invocation, context) => {
+      contexts.push(context);
+      return { outputJson: JSON.stringify({ status: "accepted", call: invocation.callId }) };
+    },
+  };
+  const oneCall = () =>
+    answered({
+      items: [
+        { type: RESPONSES_ITEM_TYPE.FUNCTION_CALL, call_id: "c1", name: "act", arguments: "{}" },
+      ],
+      toolCalls: [toolCall("c1", "act")],
+    });
+  completed.model.answers.push(oneCall(), answered({ text: "done" }));
+  const run = runtime(completed.model).start(completed.request({ tools: capturing }));
+  assert.deepEqual(await run.done, { reason: RUN_END_REASON.COMPLETED, text: "done" });
+  assert.equal(contexts.length, 1);
+  assert.equal(contexts[0]?.isRevoked(), true);
+  assert.equal(run.steer({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: "too late" }), false);
+
+  const thrown = harness();
+  thrown.model.answers.push(oneCall(), answered({ text: "never" }));
+  const failing = runtime(thrown.model).start(
+    thrown.request({
+      tools: capturing,
+      onEvent: (event) => {
+        if (event.kind === RUNTIME_EVENT.TOOL_RESULT) throw new Error("listener broke");
+      },
+    }),
+  );
+  await assert.rejects(failing.done, /listener broke/u);
+  assert.equal(contexts[1]?.isRevoked(), true);
+  assert.equal(failing.steer({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: "late" }), false);
+
+  const cancelled = harness();
+  cancelled.model.answers.push(oneCall());
+  cancelled.model.fallback = answered({ text: "still" });
+  const stopping = runtime(cancelled.model).start(cancelled.request({ tools: capturing }));
+  await new Promise((resolve) => setImmediate(resolve));
+  stopping.cancel();
+  await stopping.done;
+  assert.equal(contexts[2]?.isRevoked(), true);
+});
+
+test("an engine whose lifecycle hooks are asynchronous is awaited at every step", async () => {
+  const h = harness();
+  const log: string[] = [];
+  const inner = new ResponsesContextEngine(TOOL_LOOP_RUNTIME_IDENTITY);
+  const later = <Value>(value: Value): Promise<Value> =>
+    new Promise((resolve) => setImmediate(() => resolve(value)));
+  const asyncEngine: ContextEngine = {
+    checkpointFormat: inner.checkpointFormat,
+    bootstrap: async (checkpoint, lost) => later(inner.bootstrap(checkpoint, lost)),
+    ingest: async (input) => {
+      log.push(`ingest:${input.kind}`);
+      await later(undefined);
+      inner.ingest(input);
+    },
+    assemble: async (assembly) => {
+      log.push("assemble");
+      return later(inner.assemble(assembly));
+    },
+    compact: async () => {
+      log.push("compact");
+      return later(inner.compact());
+    },
+    adoptCompaction: async (items) => later(inner.adoptCompaction(items)),
+    afterTurn: async () => later(undefined),
+    mark: () => inner.mark(),
+    rollback: (mark) => inner.rollback(mark),
+    checkpoint: () => inner.checkpoint(),
+    dispose: async () => later(inner.dispose()),
+  };
+  const folded = { type: RESPONSES_ITEM_TYPE.COMPACTION, id: "cmp", encrypted_content: "x" };
+  h.model.answers.push(
+    answered({
+      items: [
+        folded,
+        { type: RESPONSES_ITEM_TYPE.FUNCTION_CALL, call_id: "c1", name: "act", arguments: "{}" },
+      ],
+      toolCalls: [toolCall("c1", "act")],
+      compacted: true,
+    }),
+    answered({ text: "ok" }),
+  );
+  const r = runtime(h.model);
+  const opened = await r.openContext(undefined, "{}");
+  assert.equal(opened.bootstrap.loaded, true);
+  const end = await r.start(h.request({ context: asyncEngine })).done;
+  assert.deepEqual(end, { reason: RUN_END_REASON.COMPLETED, text: "ok" });
+  assert.deepEqual(log, [
+    "ingest:user_text",
+    "assemble",
+    "ingest:model_output",
+    "compact",
+    "ingest:tool_result",
+    "assemble",
+    "ingest:model_output",
+  ]);
+  const window = [{ type: RESPONSES_ITEM_TYPE.COMPACTION, id: "w", encrypted_content: "y" }];
+  await asyncEngine.adoptCompaction(window);
+  assert.deepEqual(asyncEngine.checkpoint().items, window);
 });

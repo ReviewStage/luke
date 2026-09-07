@@ -94,9 +94,15 @@ export function hostedBrainBounds(): HostedBrainBounds {
   };
 }
 
+/** A count or bound as the contract takes it: a safe integer above zero, never a fraction or a sign. */
 function positiveWhole(value: UnparsedWireValue): number | undefined {
   const parsed = wholeNumber(value);
-  return parsed !== undefined && parsed > 0 ? parsed : undefined;
+  return parsed !== undefined && Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function nonNegativeWhole(value: UnparsedWireValue): number | undefined {
+  const parsed = wholeNumber(value);
+  return parsed !== undefined && Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
 function textList(value: UnparsedWireValue, maximum: number): string[] | undefined {
@@ -191,65 +197,69 @@ function keysExactly(value: WireRecord, keys: readonly string[]): boolean {
   return present.length === keys.length && keys.every((key) => key in value);
 }
 
+type FieldRead<Value> =
+  | { ok: true; value: Value }
+  | { ok: false; refusal: HostedBrainRequestRefusal };
+
+function refusedField<Value>(refusal: HostedBrainRequestRefusal): FieldRead<Value> {
+  return { ok: false, refusal };
+}
+
 /** The prompt as sent, or the refusal it earns: absent or non-text is malformed, too long is its own word. */
-function promptRead(value: UnparsedWireValue): string | HostedBrainRequestRefusal {
-  if (!isWireString(value)) return HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED;
+function promptRead(value: UnparsedWireValue): FieldRead<string> {
+  if (!isWireString(value)) return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
   if (value.length > HOSTED_BRAIN_PROMPT_BOUNDS.MAXIMUM_CHARS) {
-    return HOSTED_BRAIN_REQUEST_REFUSAL.PROMPT_TOO_LARGE;
+    return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.PROMPT_TOO_LARGE);
   }
-  return value;
+  return { ok: true, value };
 }
 
 /** Registered names only: each within its length, unique, and known to the catalog given. */
 function toolsRead(
   value: UnparsedWireValue,
   catalog: ReadonlySet<string>,
-): readonly string[] | HostedBrainRequestRefusal {
+): FieldRead<readonly string[]> {
   const names = textList(value, HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_TOOLS);
-  if (!names) return HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED;
+  if (!names) return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
   if (names.some((name) => name.length > HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_NAME_CHARS)) {
-    return HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED;
+    return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
   }
-  if (new Set(names).size !== names.length) return HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED;
-  if (names.some((name) => !catalog.has(name))) return HOSTED_BRAIN_REQUEST_REFUSAL.UNKNOWN_TOOL;
-  return names;
+  if (new Set(names).size !== names.length) {
+    return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
+  }
+  if (names.some((name) => !catalog.has(name))) {
+    return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.UNKNOWN_TOOL);
+  }
+  return { ok: true, value: names };
 }
 
-function optionsRead(
-  value: UnparsedWireValue,
-): HostedBrainRequestOptions | HostedBrainRequestRefusal {
-  if (!isRecord(value)) return HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED;
-  if (
-    !Object.keys(value).every((key) => key === "maximumOutputTokens" || key === "reasoningEffort")
-  ) {
-    return HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED;
-  }
+function optionsRead(value: UnparsedWireValue): FieldRead<HostedBrainRequestOptions> {
+  if (!isRecord(value)) return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
+  const allowed = Object.keys(value).every(
+    (key) => key === "maximumOutputTokens" || key === "reasoningEffort",
+  );
+  if (!allowed) return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
   const options: HostedBrainRequestOptions = {};
   if (value.maximumOutputTokens !== undefined) {
     const tokens = positiveWhole(value.maximumOutputTokens);
-    if (tokens === undefined) return HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED;
+    if (tokens === undefined) return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
     if (tokens > HOSTED_BRAIN_OPTION_BOUNDS.MAXIMUM_OUTPUT_TOKENS) {
-      return HOSTED_BRAIN_REQUEST_REFUSAL.OPTIONS_OUT_OF_BOUNDS;
+      return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.OPTIONS_OUT_OF_BOUNDS);
     }
     options.maximumOutputTokens = tokens;
   }
   if (value.reasoningEffort !== undefined) {
-    if (!isReasoningEffort(value.reasoningEffort)) return HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED;
+    if (!isReasoningEffort(value.reasoningEffort)) {
+      return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
+    }
     options.reasoningEffort = value.reasoningEffort;
   }
-  return options;
+  return { ok: true, value: options };
 }
 
 const RESPOND_KEYS = ["contract", "prompt", "tools", "options", "input"] as const;
 const COUNT_TOKENS_KEYS = ["contract", "prompt", "tools", "input"] as const;
 const COMPACT_KEYS = ["contract", "prompt", "input"] as const;
-
-function isRefusal(value: unknown): value is HostedBrainRequestRefusal {
-  return (
-    typeof value === "string" &&
-    (Object.values(HOSTED_BRAIN_REQUEST_REFUSAL) as readonly string[]).includes(value)
-  );
-}
 
 /**
  * Reads a respond request against the tool catalog the reader is given — the
@@ -268,16 +278,22 @@ export function hostedBrainRespondRequestFromWire(
     return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
   }
   const prompt = promptRead(value.prompt);
-  if (isRefusal(prompt)) return refused(prompt);
+  if (!prompt.ok) return refused(prompt.refusal);
   const tools = toolsRead(value.tools, catalog);
-  if (isRefusal(tools)) return refused(tools);
+  if (!tools.ok) return refused(tools.refusal);
   const options = optionsRead(value.options);
-  if (isRefusal(options)) return refused(options);
+  if (!options.ok) return refused(options.refusal);
   const input = admitBrainInput(value.input);
   if (!input) return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
   return {
     ok: true,
-    request: { contract: HOSTED_BRAIN_CONTRACT_VERSION, prompt, tools, options, input },
+    request: {
+      contract: HOSTED_BRAIN_CONTRACT_VERSION,
+      prompt: prompt.value,
+      tools: tools.value,
+      options: options.value,
+      input,
+    },
   };
 }
 
@@ -292,12 +308,20 @@ export function hostedBrainCountTokensRequestFromWire(
     return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
   }
   const prompt = promptRead(value.prompt);
-  if (isRefusal(prompt)) return refused(prompt);
+  if (!prompt.ok) return refused(prompt.refusal);
   const tools = toolsRead(value.tools, catalog);
-  if (isRefusal(tools)) return refused(tools);
+  if (!tools.ok) return refused(tools.refusal);
   const input = admitBrainInput(value.input);
   if (!input) return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
-  return { ok: true, request: { contract: HOSTED_BRAIN_CONTRACT_VERSION, prompt, tools, input } };
+  return {
+    ok: true,
+    request: {
+      contract: HOSTED_BRAIN_CONTRACT_VERSION,
+      prompt: prompt.value,
+      tools: tools.value,
+      input,
+    },
+  };
 }
 
 export function hostedBrainCompactRequestFromWire(
@@ -310,10 +334,13 @@ export function hostedBrainCompactRequestFromWire(
     return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
   }
   const prompt = promptRead(value.prompt);
-  if (isRefusal(prompt)) return refused(prompt);
+  if (!prompt.ok) return refused(prompt.refusal);
   const input = admitBrainInput(value.input);
   if (!input) return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
-  return { ok: true, request: { contract: HOSTED_BRAIN_CONTRACT_VERSION, prompt, input } };
+  return {
+    ok: true,
+    request: { contract: HOSTED_BRAIN_CONTRACT_VERSION, prompt: prompt.value, input },
+  };
 }
 
 export interface HostedBrainCountTokensAnswer {
@@ -324,6 +351,6 @@ export function hostedBrainCountTokensAnswerFromWire(
   value: UnparsedWireValue,
 ): HostedBrainCountTokensAnswer | undefined {
   if (!isRecord(value)) return undefined;
-  const inputTokens = wholeNumber(value.inputTokens);
+  const inputTokens = nonNegativeWhole(value.inputTokens);
   return inputTokens === undefined ? undefined : { inputTokens };
 }

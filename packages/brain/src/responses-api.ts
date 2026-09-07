@@ -1,7 +1,8 @@
 import type { RealtimeToolWireDefinition } from "@sidecar/acts";
 import {
+  MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
-  type ModelAnswer,
+  type ModelResponse,
   type ModelUsage,
   type ToolSchema,
 } from "@sidecar/runtime-contracts";
@@ -72,10 +73,15 @@ export const BRAIN_REASONING_EFFORT = {
 export type BrainReasoningEffort =
   (typeof BRAIN_REASONING_EFFORT)[keyof typeof BRAIN_REASONING_EFFORT];
 
+/** A function tool as the Responses request carries it: the acts table's own row, or a contract schema wrapped. */
+export type ResponsesFunctionTool =
+  | RealtimeToolWireDefinition
+  | { type: "function"; name: string; description: string; parameters: WireRecord };
+
 export interface BrainResponsesOptions {
   model: string;
   instructions: string;
-  tools: readonly RealtimeToolWireDefinition[];
+  tools: readonly ResponsesFunctionTool[];
   maximumOutputTokens: number;
   reasoningEffort: BrainReasoningEffort;
 }
@@ -223,14 +229,12 @@ export const BRAIN_RESPONSES_COMPACT_PATH = "/responses/compact";
 export const BRAIN_RESPONSES_INPUT_TOKENS_PATH = "/responses/input_tokens";
 
 /** A tool as the brain's contracts carry it, as the Responses API takes it: a function tool. */
-export function responsesToolDefinition(schema: ToolSchema): RealtimeToolWireDefinition {
-  // SAFETY: a ToolSchema's parameters are the same JSON-schema object the acts
-  // table builds; both are the wire form the API documents for a function tool.
+export function responsesToolDefinition(schema: ToolSchema): ResponsesFunctionTool {
   return {
     type: "function",
     name: schema.name,
     description: schema.description,
-    parameters: schema.parameters as unknown as RealtimeToolWireDefinition["parameters"],
+    parameters: schema.parameters,
   };
 }
 
@@ -267,14 +271,41 @@ export function brainInputTokensRequest(
 
 export type BrainInputTokensRequest = ReturnType<typeof brainInputTokensRequest>;
 
+/** The states a Responses object may be in; only two carry a reply. */
+export const RESPONSES_STATUS = {
+  COMPLETED: "completed",
+  INCOMPLETE: "incomplete",
+  FAILED: "failed",
+  CANCELLED: "cancelled",
+  IN_PROGRESS: "in_progress",
+  QUEUED: "queued",
+} as const;
+
 /**
  * One Responses answer as the brain's contracts carry it: the output items
  * verbatim for the context engine, the text, the tool calls, the usage, and
- * whether the provider folded the context or stopped short.
+ * whether the provider folded the context or stopped short. An HTTP success
+ * is not a reply: a response the provider itself marks failed, cancelled, or
+ * still under way is a provider failure with the provider's own code, and
+ * never a completed answer with no words. A payload with no output array is
+ * not a Responses answer at all and reads as nothing.
  */
-export function responsesModelAnswer(payload: UnparsedWireValue): ModelAnswer | undefined {
+export function responsesModelAnswer(payload: UnparsedWireValue): ModelResponse | undefined {
   const output = brainResponsesOutput(payload);
   if (!output) return undefined;
+  if (
+    output.status !== undefined &&
+    output.status !== RESPONSES_STATUS.COMPLETED &&
+    output.status !== RESPONSES_STATUS.INCOMPLETE
+  ) {
+    const error = isRecord(payload) && isRecord(payload.error) ? payload.error : undefined;
+    const code = error ? text(error.code) : undefined;
+    return {
+      outcome: MODEL_RESPONSE_OUTCOME.FAILED,
+      failure: MODEL_FAILURE.UPSTREAM,
+      reason: code ? `response ${output.status}: ${code}` : `response ${output.status}`,
+    };
+  }
   const usage = isRecord(payload) && isRecord(payload.usage) ? payload.usage : undefined;
   const outputTokens = usage ? wholeNumber(usage.output_tokens) : undefined;
   const modelUsage: ModelUsage = {
