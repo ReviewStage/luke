@@ -224,13 +224,8 @@ Trust constraints:
   items, the transcript cursors, the requests, the action receipts — beside
   the conversation's own lines and the facts Luke remembers, so the main
   thread never waits on the disk and no second writer exists. The files an
-  earlier build kept beside `settings.json` are imported once, at the first
-  launch that finds them, under the same readers and the same expiry and
-  Clear rules that build applied at load, receipted in the same transaction
-  as what they imported, and then moved into the store's recovery directory
-  so nothing writes them again; a recovery copy lives one generation
-  lifetime and goes with the next Clear, and a file that could not be read is
-  left in place and reported, never counted as empty. Every save is a
+  earlier build kept beside `settings.json` are left in place and never
+  read: nothing draws or writes them any more. Every save is a
   compare-and-set against the generation the writer last observed standing,
   so a stale writer can neither refill nor replace a newer generation, and a
   generation whose rows this build cannot read is replaced by the store that
@@ -271,8 +266,7 @@ Trust constraints:
   empty successor carrying a content-free marker — the Clear's instant, and
   the erased generation's id when one is known, learned from the database
   when the store had not yet loaded — over the old content; the thread's
-  lines at or before the instant are deleted, and the recovery copies of the
-  imported files with them. The cutoff is also kept on the conversation's own
+  lines at or before the instant are deleted. The cutoff is also kept on the conversation's own
   row, written in the marker's transaction and only ever raised, so a line
   from before a Clear stays refused after the generation that carried the
   marker has itself expired, whatever the disk did about the erasure. The main process's own thread carries an epoch

@@ -23,9 +23,9 @@ import {
   conversationHistoryText,
   recentConversationEntries,
   retainedConversationEntries,
+  storedConversationEntry,
 } from "@sidecar/realtime";
-import { legacyConversationEntries } from "@sidecar/runtime-store";
-import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import { SPEECH_OUTCOME } from "#shared/wire/speech";
 import { SpeechArbiter } from "../voice/speech-arbiter";
 import { clearConversationAndBrain } from "./conversation-clear";
@@ -147,7 +147,14 @@ function conversationFromStored(
   now: number,
   clearedAt?: number,
 ): readonly ConversationEntry[] {
-  return retainedConversationEntries(legacyConversationEntries(stored, clearedAt), now);
+  if (stored === undefined) return [];
+  // SAFETY: JSON.parse returns a wire value; the stored-entry reader is the validation.
+  const parsed = JSON.parse(stored) as { entries: UnparsedWireValue[] };
+  const entries = parsed.entries
+    .map((value) => storedConversationEntry(value))
+    .filter((entry): entry is ConversationEntry => entry !== undefined)
+    .filter((entry) => clearedAt === undefined || (entry.recordedAt ?? 0) > clearedAt);
+  return retainedConversationEntries(entries, now);
 }
 
 function composed(brainDisk = new MemoryStorage()) {

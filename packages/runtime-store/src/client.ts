@@ -4,7 +4,6 @@ import type { ConversationEntry } from "@sidecar/realtime";
 import type { HistoryAppendOutcome, SessionKey } from "@sidecar/runtime-contracts";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { brainStateSave } from "./envelope.js";
-import type { LegacyImportReport } from "./legacy-import.js";
 import {
   RUNTIME_STORE_METHOD,
   type RuntimeStoreMethod,
@@ -71,7 +70,7 @@ export class RuntimeStoreClient {
     });
   }
 
-  open(options: RuntimeStoreOpenOptions): Promise<LegacyImportReport> {
+  open(options: RuntimeStoreOpenOptions): Promise<boolean> {
     return this.request(RUNTIME_STORE_METHOD.OPEN, options);
   }
 
@@ -130,10 +129,6 @@ export class RuntimeStoreClient {
 
   clearHistoryAtOrBefore(sessionKey: SessionKey, clearedAt: number): Promise<boolean> {
     return this.request(RUNTIME_STORE_METHOD.HISTORY_CLEAR, { sessionKey, clearedAt });
-  }
-
-  eraseRecovery(): Promise<boolean> {
-    return this.request(RUNTIME_STORE_METHOD.RECOVERY_ERASE, {});
   }
 
   personalFacts(): Promise<readonly RememberedFact[]> {

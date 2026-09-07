@@ -37,39 +37,3 @@ export interface HistoryAppendOutcome<Entry> {
   changed: boolean;
   entries: readonly Entry[];
 }
-
-/**
- * The receipt a migration leaves behind, one per legacy source it consumed.
- * The hash is of the bytes read, so a retry that finds the same file again
- * imports nothing twice and a file rewritten since is noticed rather than
- * silently re-read.
- */
-export interface MigrationReceipt {
-  source: string;
-  sha256: string;
-  importedAt: number;
-  outcome: MigrationOutcome;
-}
-
-export const MIGRATION_OUTCOME = {
-  /** The source was read, admitted, and its content imported. */
-  IMPORTED: "imported",
-  /** The source was read but this build could not vouch for its content; nothing was imported. */
-  REFUSED: "refused",
-  /** The source held nothing this build still considers live: expired, cleared, or empty. */
-  EMPTY: "empty",
-  /**
-   * The source exists but could not be read — a permission or I/O failure.
-   * No receipt is written for it and it is not retired, so the next launch
-   * tries again; it is never mistaken for a source that held nothing.
-   */
-  UNREADABLE: "unreadable",
-  /**
-   * The source waits on another the import must read first — the thread on
-   * the brain file whose Clear marker bounds it. Nothing of it is imported or
-   * retired and no receipt is written; the next launch tries again.
-   */
-  DEFERRED: "deferred",
-} as const;
-
-export type MigrationOutcome = (typeof MIGRATION_OUTCOME)[keyof typeof MIGRATION_OUTCOME];

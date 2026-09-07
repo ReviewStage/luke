@@ -4,7 +4,6 @@ import type { AgentId, HistoryAppendOutcome, SessionKey } from "@sidecar/runtime
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import type { RuntimeBrainStateLoad } from "./database.js";
 import type { BrainStateSave } from "./envelope.js";
-import type { LegacyImportReport, LegacySources } from "./legacy-import.js";
 
 /**
  * What crosses between the store's client on the main thread and the worker
@@ -22,7 +21,6 @@ export const RUNTIME_STORE_METHOD = {
   HISTORY_LIST: "history.list",
   HISTORY_CLEAR: "history.clear",
   HISTORY_CUTOFF: "history.cutoff",
-  RECOVERY_ERASE: "recovery.erase",
   FACTS_LIST: "facts.list",
   FACTS_REPLACE: "facts.replace",
   CLOSE: "close",
@@ -31,18 +29,16 @@ export const RUNTIME_STORE_METHOD = {
 export type RuntimeStoreMethod = (typeof RUNTIME_STORE_METHOD)[keyof typeof RUNTIME_STORE_METHOD];
 
 export interface RuntimeStoreOpenOptions {
-  /** The agent's own directory under Luke's application data; the database and recovery copies live in it. */
+  /** The agent's own directory under Luke's application data; the database lives in it. */
   agentRoot: string;
   agentId: AgentId;
   sessionKey: SessionKey;
   conversationName: string;
-  /** The files an earlier build kept, to import once and retire; absent when there are none to look for. */
-  legacy?: LegacySources;
   now: number;
 }
 
 export interface RuntimeStoreMethods {
-  [RUNTIME_STORE_METHOD.OPEN]: { params: RuntimeStoreOpenOptions; result: LegacyImportReport };
+  [RUNTIME_STORE_METHOD.OPEN]: { params: RuntimeStoreOpenOptions; result: boolean };
   [RUNTIME_STORE_METHOD.BRAIN_LOAD]: {
     params: { sessionKey: SessionKey };
     result: RuntimeBrainStateLoad;
@@ -67,7 +63,6 @@ export interface RuntimeStoreMethods {
     params: { sessionKey: SessionKey; clearedAt: number };
     result: boolean;
   };
-  [RUNTIME_STORE_METHOD.RECOVERY_ERASE]: { params: Record<string, never>; result: boolean };
   [RUNTIME_STORE_METHOD.FACTS_LIST]: {
     params: Record<string, never>;
     result: readonly RememberedFact[];

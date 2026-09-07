@@ -160,7 +160,7 @@ import {
 } from "./arrival-flow";
 import type { WorkspaceCreationDefaults } from "./brain/act-performer";
 import { clearConversationAndBrain } from "./brain/conversation-clear";
-import { LEGACY_STATE_FILES, wakeEventsFromHooks } from "./brain/flow";
+import { wakeEventsFromHooks } from "./brain/flow";
 import { BrainReplyDeliveries } from "./brain/reply-delivery";
 import { wireBrain } from "./brain/wiring";
 import {
@@ -1478,42 +1478,20 @@ async function applyVoiceCredential(): Promise<void> {
 }
 
 /**
- * Opens the runtime store for this launch: the agent's database under its
- * own directory, and the one-time import of the files an earlier build kept
- * beside `settings.json`, each read once under the same readers and expiry
- * and Clear rules the old launch applied, receipted in the same transaction,
- * and moved into the store's recovery directory so nothing writes to those
- * paths again. What the import did is logged; a source that could not be
- * read is reported and tried again next launch rather than counted as empty.
+ * Opens the runtime store for this launch: the agent's database under its own
+ * directory. The files an earlier build kept beside `settings.json` are left
+ * where they are and never read: nothing draws or writes them any more.
  */
 async function openRuntimeStore(): Promise<void> {
-  const userData = app.getPath("userData");
-  const agentRoot = agentRootPath(userData);
+  const agentRoot = agentRootPath(app.getPath("userData"));
   fs.mkdirSync(agentRoot, { recursive: true, mode: 0o700 });
-  const report = await runtimeStoreClient().open({
+  await runtimeStoreClient().open({
     agentRoot,
     agentId: DEFAULT_AGENT_ID,
     sessionKey: MAIN_SESSION_KEY,
     conversationName: MAIN_CONVERSATION_NAME,
-    legacy: {
-      brainState: path.join(userData, LEGACY_STATE_FILES.BRAIN_STATE),
-      conversation: path.join(userData, LEGACY_STATE_FILES.CONVERSATION),
-      personalFacts: path.join(userData, LEGACY_STATE_FILES.REMEMBERED_FACTS),
-    },
     now: Date.now(),
   });
-  for (const [source, imported] of [
-    ["brain state", report.brainState],
-    ["conversation", report.conversation],
-    ["remembered facts", report.personalFacts],
-  ] as const) {
-    if (imported && !imported.alreadyImported) {
-      process.stderr.write(`Runtime store imported the legacy ${source}: ${imported.outcome}\n`);
-    }
-  }
-  for (const failure of report.failures) {
-    process.stderr.write(`Runtime store migration: ${failure}\n`);
-  }
 }
 
 function withdrawBriefings(): void {
@@ -1617,9 +1595,7 @@ function recordMainConversationEntry(
  * the old lines whatever the disk does; the brain's generation fenced and
  * marked erased, which the store's listener below answers by withdrawing
  * the speech that generation had queued; then the thread's lines at or
- * before the cutoff deleted from the store, and the recovery copies of the
- * files an earlier build kept deleted with them, since they hold the same
- * words. Answers whether every step landed, which is what the panel reports;
+ * before the cutoff deleted from the store. Answers whether every step landed, which is what the panel reports;
  * the fence stands either way. What Luke separately remembers about the
  * developer is another table under another rule, and a Clear does not reach
  * it. A fixture or capture run holds nothing on disk and empties the view
@@ -1641,10 +1617,7 @@ function clearConversationHistory(): Promise<boolean> {
     eraseConversation: async () => {
       if (cutoff === undefined) return false;
       try {
-        const store = runtimeStoreClient();
-        const erased = await store.clearHistoryAtOrBefore(MAIN_SESSION_KEY, cutoff);
-        const recoveryErased = await store.eraseRecovery();
-        return erased && recoveryErased;
+        return await runtimeStoreClient().clearHistoryAtOrBefore(MAIN_SESSION_KEY, cutoff);
       } catch {
         return false;
       }

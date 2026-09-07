@@ -23,10 +23,7 @@ export {
   sessionKey,
   submissionId,
 } from "./identifiers.js";
-export {
-  type HistoryAppendOutcome,
-  MIGRATION_OUTCOME,
-  type MigrationOutcome,
-  type MigrationReceipt,
-  type StoredHistoryEvent,
+export type {
+  HistoryAppendOutcome,
+  StoredHistoryEvent,
 } from "./storage.js";

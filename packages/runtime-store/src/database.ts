@@ -8,12 +8,7 @@ import {
   brainPersistedStateFromWire,
 } from "@sidecar/brain";
 import type { ConversationEntry } from "@sidecar/realtime";
-import type {
-  AgentId,
-  HistoryAppendOutcome,
-  MigrationReceipt,
-  SessionKey,
-} from "@sidecar/runtime-contracts";
+import type { AgentId, HistoryAppendOutcome, SessionKey } from "@sidecar/runtime-contracts";
 import {
   isWireNumber,
   isWireString,
@@ -638,33 +633,6 @@ export class RuntimeDatabase {
     return row.count;
   }
 
-  migrationReceipt(source: string): MigrationReceipt | undefined {
-    // SAFETY: the columns selected are the ones the row type names, typed by the schema.
-    const row = this.#db
-      .prepare(
-        "SELECT source, sha256, imported_at, outcome FROM migration_receipts WHERE source = ?",
-      )
-      .get(source) as
-      | { source: string; sha256: string; imported_at: number; outcome: string }
-      | undefined;
-    if (!row) return undefined;
-    // SAFETY: the column is written only from the outcome vocabulary by recordMigrationReceipt.
-    return {
-      source: row.source,
-      sha256: row.sha256,
-      importedAt: row.imported_at,
-      outcome: row.outcome as MigrationReceipt["outcome"],
-    };
-  }
-
-  recordMigrationReceipt(receipt: MigrationReceipt): void {
-    this.#db
-      .prepare(
-        "INSERT OR REPLACE INTO migration_receipts (source, sha256, imported_at, outcome) VALUES (?, ?, ?, ?)",
-      )
-      .run(receipt.source, receipt.sha256, receipt.importedAt, receipt.outcome);
-  }
-
   /**
    * Makes the list given the facts Luke remembers, whole: the remember and
    * forget acts compute the next list from the one they read and hand it
@@ -694,24 +662,6 @@ export class RuntimeDatabase {
       .prepare("SELECT id, words FROM personal_facts ORDER BY ordinal")
       .all() as { id: string; words: string }[];
     return rows.map((row) => ({ id: row.id, words: row.words }));
-  }
-
-  /** Adds imported facts behind whatever stands, skipping any id or words already held, up to the cap. */
-  importPersonalFacts(facts: readonly RememberedFact[]): number {
-    const held = this.personalFacts();
-    const ids = new Set(held.map((fact) => fact.id));
-    const words = new Set(held.map((fact) => fact.words));
-    const merged = [...held];
-    for (const fact of facts) {
-      if (merged.length >= maximumRememberedFacts) break;
-      if (ids.has(fact.id) || words.has(fact.words)) continue;
-      merged.push(fact);
-      ids.add(fact.id);
-      words.add(fact.words);
-    }
-    const added = merged.length - held.length;
-    if (added > 0) this.replacePersonalFacts(merged);
-    return added;
   }
 }
 

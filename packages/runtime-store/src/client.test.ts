@@ -5,7 +5,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { MessageChannel, Worker } from "node:worker_threads";
-import { BrainStateStore, brainStateRecord } from "@sidecar/brain";
+import { BrainStateStore } from "@sidecar/brain";
 import {
   DEFAULT_AGENT_ID,
   MAIN_CONVERSATION_NAME,
@@ -40,25 +40,17 @@ function inThread() {
   };
 }
 
-test("the protocol answers every request once, opens with the import, and serves the brain store and the thread", async () => {
+test("the protocol answers every request once and serves the brain store, the thread, and the facts", async () => {
   const root = agentRoot();
-  const legacyRoot = path.dirname(path.dirname(root));
-  const legacy = {
-    brainState: path.join(legacyRoot, "brain-state.json"),
-    conversation: path.join(legacyRoot, "conversation.json"),
-    personalFacts: path.join(legacyRoot, "memory.json"),
-  };
-  fs.writeFileSync(legacy.brainState, brainStateRecord(populatedState("gen-legacy", NOW - 1)));
   const { client, close } = inThread();
   const report = await client.open({
     agentRoot: root,
     agentId: DEFAULT_AGENT_ID,
     sessionKey: MAIN_SESSION_KEY,
     conversationName: MAIN_CONVERSATION_NAME,
-    legacy,
     now: NOW,
   });
-  assert.equal(report.brainState?.outcome, "imported");
+  assert.equal(report, true);
   assert.equal(fs.existsSync(path.join(root, "agent.sqlite")), true);
   let ids = 0;
   const store = new BrainStateStore({
@@ -67,10 +59,10 @@ test("the protocol answers every request once, opens with the import, and serves
     now: () => NOW,
   });
   const loaded = await store.load();
-  assert.equal(loaded.generationId, "gen-legacy");
+  assert.equal(loaded.generationId, "gen-1");
   const lease = store.lease();
   assert.equal(
-    await store.write(lease, "gen-legacy", (state) => ({
+    await store.write(lease, "gen-1", (state) => ({
       ...state,
       cursors: { codex: { s: "c" } },
     })),
@@ -87,8 +79,6 @@ test("the protocol answers every request once, opens with the import, and serves
   assert.deepEqual(await client.personalFacts(), [{ id: "f", words: "w" }]);
   assert.equal(await client.clearHistoryAtOrBefore(MAIN_SESSION_KEY, NOW), true);
   assert.deepEqual(await client.listHistory(MAIN_SESSION_KEY, NOW), []);
-  assert.equal(await client.eraseRecovery(), true);
-  assert.equal(fs.existsSync(path.join(root, "recovery")), false);
   assert.equal(await client.close(), true);
   // A request against a closed database is an error answer, not a hang.
   await assert.rejects(client.listHistory(MAIN_SESSION_KEY, NOW), /not open/);

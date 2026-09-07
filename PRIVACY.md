@@ -80,14 +80,9 @@ per agent (`agents/main/agent.sqlite`), and it is written from one place: a
 worker thread of Luke's own, so nothing else on your Mac and no other part of
 Luke writes it. Earlier versions of Luke kept the conversation, the working
 memory, and the things he remembers about you in three files beside your
-settings. The first launch after this change reads each file once, under the
-same 14-day, 200-entry, and Clear rules the old files were kept under — an
-expired generation, and a line from before your last Clear, are not brought
-back — and then moves the files into a recovery folder beside the database,
-where nothing reads them again; the copies are deleted 14 days after that
-move, and sooner if you clear the History, because they hold the same words.
-A file that could not be read is left where it was and tried again next
-launch, and is never counted as empty.
+settings. Those files are no longer read or written, so that conversation,
+that memory, and those remembered things start over; the files stay where
+they were until you remove them.
 
 **Things Luke remembers about you.** During a conversation you start, Luke may
 silently save a concise preference, personal fact, goal, or recurring constraint

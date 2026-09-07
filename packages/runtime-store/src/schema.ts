@@ -133,12 +133,6 @@ export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
     recorded_at INTEGER NOT NULL,
     PRIMARY KEY (session_key, request_id, kind)
   )`,
-  `CREATE TABLE IF NOT EXISTS migration_receipts (
-    source TEXT PRIMARY KEY,
-    sha256 TEXT NOT NULL,
-    imported_at INTEGER NOT NULL,
-    outcome TEXT NOT NULL
-  )`,
   `CREATE TABLE IF NOT EXISTS personal_facts (
     id TEXT PRIMARY KEY,
     ordinal INTEGER NOT NULL,

@@ -3,23 +3,10 @@ import type { ObservedSpoolEvent } from "@sidecar/providers";
 import type { Session, SessionIdentity } from "@sidecar/session";
 
 /**
- * How a hook's spool event becomes a wake, and the names of the files an
- * earlier build kept. The decisions are pure so they can be tested without
- * Electron; the wiring that watches the spools lives in desktop-app.
- *
- * The brain's envelope, the conversation, and the remembered facts live in
- * the runtime store's database under Luke's own application data — never in a
- * provider's file. The three names below are what earlier builds wrote them
- * to, beside `settings.json`; a launch imports them once into the database
- * and moves them into the store's recovery directory, so nothing writes to
- * these paths again.
+ * How a hook's spool event becomes a wake. The decision is pure so it can be
+ * tested without Electron; the wiring that watches the spools lives in
+ * desktop-app.
  */
-
-export const LEGACY_STATE_FILES = {
-  BRAIN_STATE: "brain-state.json",
-  CONVERSATION: "conversation.json",
-  REMEMBERED_FACTS: "memory.json",
-} as const;
 
 /**
  * Turns one provider's batch of spool events into wakes. Every hook event
