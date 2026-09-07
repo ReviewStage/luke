@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { MessageChannel, Worker } from "node:worker_threads";
 import { BrainStateStore, brainStateRecord } from "@sidecar/brain";
@@ -157,4 +158,43 @@ test("the real worker entry serves the same protocol on its own thread", async (
   } finally {
     await worker.terminate();
   }
+});
+
+test("over the worker boundary an unreadable generation keeps its compare token, so the repair lands and a stale save does not", async () => {
+  const root = agentRoot();
+  const { client, close } = inThread();
+  await client.open({
+    agentRoot: root,
+    agentId: DEFAULT_AGENT_ID,
+    sessionKey: MAIN_SESSION_KEY,
+    conversationName: MAIN_CONVERSATION_NAME,
+    now: NOW,
+  });
+  const stale = client.brainStateRepository(MAIN_SESSION_KEY);
+  await stale.load();
+  assert.equal(await stale.save(populatedState("gen-old")), true);
+  const raw = new DatabaseSync(path.join(root, "agent.sqlite"));
+  raw.prepare("UPDATE runtime_checkpoints SET item = '{not json' WHERE sequence = 0").run();
+  raw.close();
+  let ids = 0;
+  const store = new BrainStateStore({
+    repository: client.brainStateRepository(MAIN_SESSION_KEY),
+    createGenerationId: () => `repaired-${++ids}`,
+    now: () => NOW,
+    report: () => undefined,
+  });
+  const fresh = await store.load();
+  await store.flush();
+  assert.equal(fresh.generationId, "repaired-1");
+  assert.equal(
+    await store.write(store.lease(), "repaired-1", (state) => ({
+      ...state,
+      cursors: { codex: { s: "c" } },
+    })),
+    true,
+  );
+  assert.equal(await stale.save({ ...populatedState("gen-old"), cursors: {} }), false);
+  const reader = client.brainStateRepository(MAIN_SESSION_KEY);
+  assert.deepEqual((await reader.load()).state?.cursors, { codex: { s: "c" } });
+  close();
 });

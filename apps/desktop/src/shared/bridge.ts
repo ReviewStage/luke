@@ -687,16 +687,19 @@ export const BRIDGE = {
     args: oneBoolean,
   }),
   /**
-   * One window's copy of the conversation history, reported whole after each
-   * line it appends. The main process holds the launch's thread and mirrors
-   * the report to every other panel window, so the History tab reads the same
-   * on every display; a window's own report is not echoed back to it. The
+   * The lines one window has appended to the conversation since its last
+   * report, each with the id the window minted for it. The main process
+   * appends them to the thread it owns — idempotently, so a line delivered
+   * twice is one line — and relays the thread whole to every other panel
+   * window, so the History tab reads the same on every display; a window's own
+   * report is not echoed back to it. A report never replaces the thread: what
+   * the store holds is authoritative, and a window can only add to it. The
    * relay never leaves the machine, and every line in it is one the reporting
    * window already held on the terms the history's own module states.
    */
-  reportConversationHistory: entry({
+  appendConversationHistory: entry({
     kind: "send",
-    channel: "app:report-conversation-history",
+    channel: "app:append-conversation-history",
     args: args<[readonly ConversationEntry[]]>(
       (v) =>
         v.length === 1 &&

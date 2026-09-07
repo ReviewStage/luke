@@ -64,6 +64,12 @@ export const MIGRATION_OUTCOME = {
    * tries again; it is never mistaken for a source that held nothing.
    */
   UNREADABLE: "unreadable",
+  /**
+   * The source waits on another the import must read first — the thread on
+   * the brain file whose Clear marker bounds it. Nothing of it is imported or
+   * retired and no receipt is written; the next launch tries again.
+   */
+  DEFERRED: "deferred",
 } as const;
 
 export type MigrationOutcome = (typeof MIGRATION_OUTCOME)[keyof typeof MIGRATION_OUTCOME];

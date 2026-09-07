@@ -1,5 +1,5 @@
 export { RuntimeStoreClient } from "./client.js";
-export { AGENT_DATABASE_FILE, RuntimeDatabase } from "./database.js";
+export { AGENT_DATABASE_FILE, type RuntimeBrainStateLoad, RuntimeDatabase } from "./database.js";
 export {
   type BrainItemsDelta,
   type BrainJournalDelta,

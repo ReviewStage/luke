@@ -48,9 +48,14 @@ export function historyEventKey(entry: ConversationEntry): string {
     : `${VALUE_EVENT_KEY_PREFIX}${conversationEntryKey(entry)}`;
 }
 
-/** The deterministic id a legacy line is given at import, so re-reading the same file mints the same one. */
-export function legacyEventId(entry: ConversationEntry): string {
-  return `${LEGACY_EVENT_ID_PREFIX}${conversationEntryKey(entry)}`;
+/**
+ * The deterministic id a legacy line is given at import: its value together
+ * with which occurrence of that value it is in the file, so re-reading the
+ * same file mints the same ids and two identical retained lines stay two,
+ * as the file kept them.
+ */
+export function legacyEventId(entry: ConversationEntry, occurrence: number): string {
+  return `${LEGACY_EVENT_ID_PREFIX}${occurrence}:${conversationEntryKey(entry)}`;
 }
 
 /** The payload a line is kept as, exactly the entry, so the projection is the record read back. */
@@ -79,6 +84,7 @@ export function legacyConversationEntries(
   clearedAt: number | undefined,
 ): readonly ConversationEntry[] {
   const entries: ConversationEntry[] = [];
+  const occurrences = new Map<string, number>();
   for (const value of parsedList(stored, "entries")) {
     const entry = storedConversationEntry(value);
     if (!entry) continue;
@@ -88,7 +94,12 @@ export function legacyConversationEntries(
     ) {
       continue;
     }
-    entries.push(entry.eventId === undefined ? { ...entry, eventId: legacyEventId(entry) } : entry);
+    const key = conversationEntryKey(entry);
+    const occurrence = occurrences.get(key) ?? 0;
+    occurrences.set(key, occurrence + 1);
+    entries.push(
+      entry.eventId === undefined ? { ...entry, eventId: legacyEventId(entry, occurrence) } : entry,
+    );
   }
   return entries;
 }

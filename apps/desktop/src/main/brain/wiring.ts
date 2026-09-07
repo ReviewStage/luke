@@ -4,7 +4,7 @@ import {
   type BrainDelivery,
   BrainGenerationClock,
   type BrainRoster,
-  type BrainStateStorage,
+  type BrainStateRepository,
   BrainStateStore,
   type BrainTurnTraceRecord,
 } from "@sidecar/brain";
@@ -38,12 +38,15 @@ interface TranscriptReader {
 }
 
 export interface BrainWiringDependencies {
-  /** The brain's state file on disk, read and written only through the store built here. */
-  storage: BrainStateStorage;
+  /** The brain's envelope in the runtime store, read and written only through the store built here. */
+  repository: BrainStateRepository;
   createId: () => string;
   report: (message: string) => void;
   traceTurn?: (record: BrainTurnTraceRecord) => void;
-  recordConversationEntry: (entry: ConversationEntry, recordedAt?: number) => boolean;
+  recordConversationEntry: (
+    entry: ConversationEntry,
+    recordedAt?: number,
+  ) => boolean | Promise<boolean>;
   broadcastRequests: (snapshots: readonly BrainRequestSnapshot[]) => void;
   /** A run's end stands in History, written and marked: the moment its reply may be owed to the ear. */
   onEndPublished?: BrainIpcDependencies["onEndPublished"];
@@ -75,7 +78,7 @@ export interface BrainWiring {
   /** The brain that stands now, or nothing between transitions and on a run with no key. */
   current: () => BrainAgent | undefined;
   /**
-   * The one writer of the brain's state file, owned here and outliving every
+   * The one writer of the brain's envelope, owned here and outliving every
    * agent built on it: a key or account change rebuilds the agent, never the
    * store, so two agents can never write the envelope past each other.
    */
@@ -128,7 +131,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
   const store = (): BrainStateStore => {
     if (stateStore) return stateStore;
     stateStore = new BrainStateStore({
-      storage: dependencies.storage,
+      repository: dependencies.repository,
       createGenerationId: dependencies.createId,
       report: dependencies.report,
     });

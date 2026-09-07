@@ -55,7 +55,7 @@ export interface BrainActPerformerDependencies {
   /** The guide as the renderer last reported it; empty before it has. */
   appGuide: () => AppGuideSnapshot;
   rememberedFacts: () => readonly RememberedFact[];
-  writeRememberedFacts: (facts: readonly RememberedFact[]) => boolean;
+  writeRememberedFacts: (facts: readonly RememberedFact[]) => boolean | Promise<boolean>;
   /** Carries an app act only a renderer can perform, and answers what became of it. */
   performAppAct: (action: BrainAppActRequest["action"]) => Promise<WireRecord>;
   /** Records the ask a carried session act was, so the thread holds it. */
@@ -161,7 +161,7 @@ export function createBrainActPerformer(
       // The two memory writes are the main process's own: the list lives
       // here, and the store's answer is the whole report.
       [APP_TOOL_KIND.REMEMBER]: async (act) => {
-        const facts = saveRememberedFact(
+        const facts = await saveRememberedFact(
           dependencies.rememberedFacts(),
           act.words,
           act.replaces,
@@ -173,7 +173,7 @@ export function createBrainActPerformer(
           : rejection(REFUSAL.MEMORY_NOT_SAVED);
       },
       [APP_TOOL_KIND.FORGET]: async (act) => {
-        const facts = forgetRememberedFact(
+        const facts = await forgetRememberedFact(
           dependencies.rememberedFacts(),
           act.id,
           dependencies.writeRememberedFacts,

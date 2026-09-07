@@ -37,48 +37,65 @@ sends nothing anywhere. It stays on your Mac unless a feature below sends it.
 
 **Your conversation with Luke.** Luke keeps the conversation you have with him
 — what you typed or said, what he spoke or announced, the actions he took at
-your request, and the asks he is still working on — in a file on your Mac, so
-it is still there the next time you open him. It holds the 200 most recent
-entries and nothing older than 14 days, whichever runs out first, each kept in
-full so the History tab shows every word. The 20 most recent lines, each cut
-to 400 characters, ride into a conversation as context, beside the working
-memory described next. Clearing the History tab deletes the file as well as
-the view. Nothing about the conversation is written on our servers, and a
-fixture or evidence run keeps no conversation at all.
+your request, and the asks he is still working on — in a database on your
+Mac, so it is still there the next time you open him. It holds the 200 most
+recent entries and nothing older than 14 days, whichever runs out first, each
+kept in full so the History tab shows every word, and each stamped with the
+working-memory generation, described next, that stood when it was said; that
+stamp is a label, and a generation ending on its own does not erase a line.
+The 20 most recent lines, each cut to 400 characters, ride into a conversation
+as context, beside the working memory. Clearing the History tab deletes the
+stored lines as well as the view. Nothing about the conversation is written on
+our servers, and a fixture or evidence run keeps no conversation at all.
 
-**Luke's working memory.** Luke keeps a working memory of his own turns in a
-second file on your Mac, beside your settings: the model's own record of what
+**Luke's working memory.** Luke keeps a working memory of his own turns in the
+same database on your Mac, in its own tables: the model's own record of what
 he read, said, and did — the transcript excerpts described above, the
 position he last read each transcript to, a record of each ask you made and
-how it ended, and a journal of each action he took at your ask. When that
+how it ended, and a receipt for each action he took at your ask. When that
 record grows long, OpenAI folds its older part into an opaque, encrypted
-compaction item, which Luke stores in the same file; it is still derived from
+compaction item, which Luke stores beside the rest; it is still derived from
 your sessions and your conversation, so it lives under the same rule as the
-rest. The whole file is one generation, and a generation lives exactly 14
+rest. The whole record is one generation, and a generation lives exactly 14
 days from the moment it began: writing into it never extends it, and when its
 time is up everything in it, the encrypted compaction included, is discarded
 and an empty generation begins, which may observe your sessions afresh; a
 generation found expired when Luke starts is discarded then and there. A
 generation holds at most 200 asks and stays under 8 MiB: the oldest finished
 asks go first once their endings are in the History, and when nothing can go
-Luke declines a new ask rather than growing the file. Clearing the History
+Luke declines a new ask rather than growing the record. Clearing the History
 tab discards the current generation too, along with anything Luke was still
 working on and anything he was about to say: the History, his context, and
-the memory are emptied the moment you press, and both files are erased with
-a small record, holding no content, of when the Clear happened so that
-nothing written before it can come back. If the disk refuses part of that
-erasure, the History and his context stay emptied, the Clear is reported as
-not finished rather than done, and the next thing Luke writes replaces what
-was left. Clearing does not touch the separate things Luke remembers about
-you, described next, and never touches your agents' own files.
+the memory are emptied the moment you press, and the stored conversation and
+the generation are erased with a small record, holding no content, of when
+the Clear happened so that nothing written before it can come back. If the
+disk refuses part of that erasure, the History and his context stay emptied,
+the Clear is reported as not finished rather than done, and the next thing
+Luke writes replaces what was left. Clearing does not touch the separate
+things Luke remembers about you, described next, and never touches your
+agents' own files.
+
+The database lives under Luke's own application data, in a folder of its own
+per agent (`agents/main/agent.sqlite`), and it is written from one place: a
+worker thread of Luke's own, so nothing else on your Mac and no other part of
+Luke writes it. Earlier versions of Luke kept the conversation, the working
+memory, and the things he remembers about you in three files beside your
+settings. The first launch after this change reads each file once, under the
+same 14-day, 200-entry, and Clear rules the old files were kept under — an
+expired generation, and a line from before your last Clear, are not brought
+back — and then moves the files into a recovery folder beside the database,
+where nothing reads them again; the copies are deleted 14 days after that
+move, and sooner if you clear the History, because they hold the same words.
+A file that could not be read is left where it was and tried again next
+launch, and is never counted as empty.
 
 **Things Luke remembers about you.** During a conversation you start, Luke may
 silently save a concise preference, personal fact, goal, or recurring constraint
 that looks useful later. He skips temporary details and uncertain guesses, never
 saves credentials, and saves sensitive facts only when you explicitly ask. At
-most 32 are stored on your Mac beside your settings and they do not expire. The
-iOS app keeps no such memory and does not read the Mac's. You can ask Luke what
-he remembers, correct something, or tell him to forget it.
+most 32 are stored on your Mac, in the same database, and they do not expire.
+The iOS app keeps no such memory and does not read the Mac's. You can ask Luke
+what he remembers, correct something, or tell him to forget it.
 They travel with the rest of Luke's working memory when he thinks, so he can
 personalize replies: directly to OpenAI on your own key if you entered one, or
 through our own service on our key when you use Luke through your account, on

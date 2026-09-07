@@ -298,6 +298,7 @@ export function insertSpokenAskThreadEntry(
   after: ConversationEntry | undefined,
   recordedAt: number = Date.now(),
   requestId?: string,
+  eventId?: string,
 ): readonly ConversationEntry[] {
   const normalized = normalizedEntryWords(words);
   if (!normalized) return entries;
@@ -310,6 +311,7 @@ export function insertSpokenAskThreadEntry(
     words: normalized,
     recordedAt,
     ...(requestId !== undefined ? { requestId } : undefined),
+    ...(eventId !== undefined ? { eventId } : undefined),
   });
   return placed;
 }

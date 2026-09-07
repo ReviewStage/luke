@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
@@ -15,16 +19,25 @@ import { line, NOW, openTestDatabase, populatedState, request } from "./testing.
 
 /** A repository over the database in-thread, tracking the last envelope it saw land as the client does. */
 function repository(database: RuntimeDatabase) {
-  let saved = database.loadBrainState(MAIN_SESSION_KEY).state;
+  const first = database.loadBrainState(MAIN_SESSION_KEY);
+  let saved = first.state;
+  let observed = first.standingGeneration;
   return {
     load: () => {
       const loaded = database.loadBrainState(MAIN_SESSION_KEY);
       saved = loaded.state;
+      observed = loaded.standingGeneration;
       return loaded;
     },
-    save: (state: Parameters<typeof brainStateSave>[1]) => {
-      const landed = database.saveBrainState(MAIN_SESSION_KEY, brainStateSave(saved, state));
-      if (landed) saved = state;
+    save: (state: Parameters<typeof brainStateSave>[2]) => {
+      const landed = database.saveBrainState(
+        MAIN_SESSION_KEY,
+        brainStateSave(saved, observed, state),
+      );
+      if (landed) {
+        saved = state;
+        observed = state.generationId;
+      }
       return landed;
     },
   };
@@ -38,7 +51,10 @@ test("the envelope round-trips through the tables, requests and receipts in thei
     database.saveBrainState(MAIN_SESSION_KEY, { expectGeneration: undefined, full: state }),
     true,
   );
-  assert.deepEqual(database.loadBrainState(MAIN_SESSION_KEY), { state });
+  assert.deepEqual(database.loadBrainState(MAIN_SESSION_KEY), {
+    state,
+    standingGeneration: state.generationId,
+  });
   const marked = { ...state, reset: { clearedAt: NOW - 5, generationId: "gen-0" } };
   assert.equal(
     database.saveBrainState(MAIN_SESSION_KEY, { expectGeneration: "gen-1", full: marked }),
@@ -65,7 +81,10 @@ test("deltas leave the tables holding exactly the envelope given, checkpoint by 
     journal: [],
   };
   assert.equal(repo.save(state), true);
-  assert.deepEqual(database.loadBrainState(MAIN_SESSION_KEY), { state });
+  assert.deepEqual(database.loadBrainState(MAIN_SESSION_KEY), {
+    state,
+    standingGeneration: state.generationId,
+  });
 });
 
 test("a stale handle cannot save over a newer generation, whole or by delta, and stays refused until it loads again", () => {
@@ -74,7 +93,7 @@ test("a stale handle cannot save over a newer generation, whole or by delta, and
   const second = repository(database);
   const gen1 = populatedState("gen-1");
   assert.equal(first.save(gen1), true);
-  assert.deepEqual(second.load(), { state: gen1 });
+  assert.deepEqual(second.load().state, gen1);
   // The second handle replaces the generation on purpose, naming the one it replaces.
   const gen2 = freshBrainState("gen-2", NOW + 10);
   assert.equal(second.save(gen2), true);
@@ -83,7 +102,7 @@ test("a stale handle cannot save over a newer generation, whole or by delta, and
   assert.equal(first.save(staleDelta), false);
   // ...and neither does a whole envelope it composes, because it names gen-1 as what stands.
   assert.equal(first.save(freshBrainState("gen-3", NOW + 20)), false);
-  assert.deepEqual(database.loadBrainState(MAIN_SESSION_KEY), { state: gen2 });
+  assert.deepEqual(database.loadBrainState(MAIN_SESSION_KEY).state, gen2);
   // Loading again brings the handle's picture current, and it may write once more.
   first.load();
   assert.equal(first.save({ ...gen2, cursors: { codex: { "session-z": "now" } } }), true);
@@ -256,4 +275,51 @@ test("the remembered facts have one writer here: the whole list, within its cap,
   assert.equal(database.replacePersonalFacts(tooMany), false);
   assert.equal(database.replacePersonalFacts([]), true);
   assert.deepEqual(database.personalFacts(), []);
+});
+
+test("a generation whose rows this build cannot read is repaired by the store that observed it, and by no stale writer", async () => {
+  const location = path.join(
+    fs.mkdtempSync(path.join(os.tmpdir(), "luke-corrupt-")),
+    "agent.sqlite",
+  );
+  const database = openTestDatabase(location);
+  database.saveBrainState(MAIN_SESSION_KEY, {
+    expectGeneration: undefined,
+    full: populatedState("gen-old"),
+  });
+  const stale = repository(database);
+  // One checkpoint item is corrupted on disk, beneath everything.
+  const raw = new DatabaseSync(location);
+  raw.prepare("UPDATE runtime_checkpoints SET item = '{not json' WHERE sequence = 1").run();
+  raw.close();
+  const loaded = database.loadBrainState(MAIN_SESSION_KEY);
+  assert.deepEqual(loaded, { unreadable: true, standingGeneration: "gen-old" });
+  // The store begins a fresh generation in place of the unreadable one and
+  // its repair lands, because the repository names the generation it observed.
+  let ids = 0;
+  const reports: string[] = [];
+  const store = new BrainStateStore({
+    repository: repository(database),
+    createGenerationId: () => `gen-repaired-${++ids}`,
+    now: () => NOW,
+    report: (message) => reports.push(message),
+  });
+  const fresh = await store.load();
+  await store.flush();
+  assert.equal(fresh.generationId, "gen-repaired-1");
+  assert.deepEqual(reports, ["Brain memory discarded an unreadable state file"]);
+  assert.deepEqual(database.loadBrainState(MAIN_SESSION_KEY).state, fresh);
+  const lease = store.lease();
+  assert.equal(
+    await store.write(lease, fresh.generationId, (state) => ({
+      ...state,
+      cursors: { codex: { s: "c" } },
+    })),
+    true,
+  );
+  assert.deepEqual(database.loadBrainState(MAIN_SESSION_KEY).state?.cursors, { codex: { s: "c" } });
+  // The handle that still pictures gen-old cannot replace the repair.
+  assert.equal(stale.save(freshBrainState("gen-intruder", NOW)), false);
+  assert.equal(database.loadBrainState(MAIN_SESSION_KEY).state?.generationId, "gen-repaired-1");
+  database.close();
 });

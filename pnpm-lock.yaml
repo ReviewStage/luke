@@ -87,6 +87,12 @@ importers:
       '@sidecar/realtime':
         specifier: workspace:*
         version: link:../../packages/realtime
+      '@sidecar/runtime-contracts':
+        specifier: workspace:*
+        version: link:../../packages/runtime-contracts
+      '@sidecar/runtime-store':
+        specifier: workspace:*
+        version: link:../../packages/runtime-store
       '@sidecar/session':
         specifier: workspace:*
         version: link:../../packages/session

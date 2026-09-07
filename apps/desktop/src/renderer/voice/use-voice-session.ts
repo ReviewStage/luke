@@ -7,6 +7,7 @@ import {
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
+  conversationEntryKey,
   insertSpokenAskThreadEntry,
   isArrivalSpeech,
   REALTIME_STATUS,
@@ -553,19 +554,41 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   }, []);
 
   /**
-   * Persists the retained thread. This window is the thread's one writer: the
-   * main process stores what it reports, relays it to every panel's History,
-   * and reads the recent slice for the brain, so nothing is re-fed to a call
-   * here. Before the restore this thread is only part of itself, and a write
-   * then would stand in for a thread nobody has.
+   * Which lines the main process already holds, by the id each carries, with
+   * the run each was known to belong to when it was last reported. A publish
+   * sends only what is new against this — a line not yet reported, or one
+   * that has since learned its run — so a report can only add to the thread
+   * the store owns and never stands a stale copy of it back up.
+   */
+  const reportedRef = useRef(new Map<string, string | undefined>());
+  const noteReported = useCallback((entries: readonly ConversationEntry[]) => {
+    for (const entry of entries) {
+      if (entry.recordedAt === undefined) continue;
+      reportedRef.current.set(entry.eventId ?? conversationEntryKey(entry), entry.requestId);
+    }
+  }, []);
+
+  /**
+   * Persists what this window appended. The main process's store takes each
+   * line by its id, relays the thread to every panel's History, and reads the
+   * recent slice for the brain, so nothing is re-fed to a call here. Before
+   * the restore this thread is only part of itself, and a report then would
+   * name lines the store already holds as though they were new.
    */
   const publishConversation = useCallback(() => {
     conversationRef.current = retainedConversationEntries(conversationRef.current, Date.now());
     setConversationHistory(conversationRef.current);
-    if (conversationSeeded.current) {
-      window.sidecar.reportConversationHistory(conversationRef.current);
-    }
-  }, []);
+    if (!conversationSeeded.current) return;
+    const unreported = conversationRef.current.filter((entry) => {
+      if (entry.recordedAt === undefined) return false;
+      const key = entry.eventId ?? conversationEntryKey(entry);
+      if (!reportedRef.current.has(key)) return true;
+      return reportedRef.current.get(key) === undefined && entry.requestId !== undefined;
+    });
+    if (unreported.length === 0) return;
+    noteReported(unreported);
+    window.sidecar.appendConversationHistory(unreported);
+  }, [noteReported]);
 
   useEffect(() => {
     const expiresAt = conversationHistory.reduce(
@@ -592,7 +615,10 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       ) {
         return;
       }
-      conversationRef.current = appendConversationThreadEntry(conversationRef.current, entry);
+      conversationRef.current = appendConversationThreadEntry(conversationRef.current, {
+        ...entry,
+        eventId: entry.eventId ?? crypto.randomUUID(),
+      });
       publishConversation();
     },
     [publishConversation],
@@ -610,6 +636,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     // cannot deliver the very thread this press just cleared.
     conversationSeeded.current = true;
     conversationRef.current = [];
+    reportedRef.current.clear();
     spokenTurnMarksRef.current.clear();
     pendingSpokenTurnMarksRef.current = [];
     latestSpokenTurnMarkRef.current = undefined;
@@ -647,13 +674,14 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           restoredTail,
         );
       }
+      noteReported(entries);
       conversationRef.current = adoptConversationThread(conversationRef.current, [
         ...entries,
         ...conversationRef.current,
       ]);
       publishConversation();
     },
-    [publishConversation],
+    [noteReported, publishConversation],
   );
 
   // The main process's own lines in the thread — the ask a carried act was —
@@ -664,10 +692,11 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     () =>
       window.sidecar.onConversationHistoryChanged((payload) => {
         if (payload.cleared) return;
+        noteReported(payload.entries);
         conversationRef.current = adoptConversationThread(conversationRef.current, payload.entries);
         setConversationHistory(conversationRef.current);
       }),
-    [],
+    [noteReported],
   );
 
   /**
@@ -697,6 +726,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
         mark.after,
         mark.recordedAt,
         mark.runId,
+        crypto.randomUUID(),
       );
       // A transcription that came back empty ended its turn — the preview
       // and the mark are already spent — but placed no line, and a thread

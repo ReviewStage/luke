@@ -1,7 +1,7 @@
 import type { RememberedFact } from "@sidecar/acts";
-import type { BrainStateLoad } from "@sidecar/brain";
 import type { ConversationEntry } from "@sidecar/realtime";
 import type { AgentId, HistoryAppendOutcome, SessionKey } from "@sidecar/runtime-contracts";
+import type { RuntimeBrainStateLoad } from "./database.js";
 import type { BrainStateSave } from "./envelope.js";
 import type { LegacyImportReport, LegacySources } from "./legacy-import.js";
 
@@ -41,7 +41,10 @@ export interface RuntimeStoreOpenOptions {
 
 export interface RuntimeStoreMethods {
   [RUNTIME_STORE_METHOD.OPEN]: { params: RuntimeStoreOpenOptions; result: LegacyImportReport };
-  [RUNTIME_STORE_METHOD.BRAIN_LOAD]: { params: { sessionKey: SessionKey }; result: BrainStateLoad };
+  [RUNTIME_STORE_METHOD.BRAIN_LOAD]: {
+    params: { sessionKey: SessionKey };
+    result: RuntimeBrainStateLoad;
+  };
   [RUNTIME_STORE_METHOD.BRAIN_SAVE]: {
     params: { sessionKey: SessionKey; save: BrainStateSave };
     result: boolean;

@@ -119,13 +119,18 @@ function journalDelta(
 /**
  * The save that turns `previous` into `next`: a delta while both are the same
  * generation, the whole envelope otherwise. A generation's birth, expiry, and
- * marker never change within it, so a delta carries none of them.
+ * marker never change within it, so a delta carries none of them. The
+ * generation the save expects to find is `observedGeneration` — what the
+ * writer last saw standing in the database, decoded or not — so a generation
+ * whose rows this build could not read is still named exactly, and the
+ * repair that replaces it lands while a stale writer's save does not.
  */
 export function brainStateSave(
   previous: BrainPersistedState | undefined,
+  observedGeneration: string | undefined,
   next: BrainPersistedState,
 ): BrainStateSave {
-  const expectGeneration = previous?.generationId;
+  const expectGeneration = observedGeneration;
   if (!previous || previous.generationId !== next.generationId) {
     return { expectGeneration, full: next };
   }

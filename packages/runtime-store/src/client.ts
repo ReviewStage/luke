@@ -71,28 +71,35 @@ export class RuntimeStoreClient {
 
   /**
    * The brain's envelope as a repository. Each save is a compare-and-set
-   * against the last envelope this handle saw land — loaded or saved — and
-   * carries only what changed since, or the whole envelope when the
-   * generation itself changes. The worker applies it only while exactly that
-   * generation stands in the database, so after every save that answered
-   * true the tables hold exactly the envelope given, and a save from a handle
-   * whose picture is stale answers false and changes nothing: there is no
-   * fallback that would let an old generation overwrite a newer one. A
-   * refused save leaves this handle's picture as it was, so its next save is
-   * refused the same way until it loads again.
+   * against the generation this handle last observed standing in the
+   * database — loaded, readable or not, or saved — and carries only what
+   * changed since the last envelope it saw land, or the whole envelope when
+   * the generation itself changes. The worker applies it only while exactly
+   * that generation stands, so after every save that answered true the
+   * tables hold exactly the envelope given; a generation whose rows could not
+   * be read is still observed by its id, so the store's repair of it lands;
+   * and a save from a handle whose picture is stale answers false and changes
+   * nothing: there is no fallback that would let an old generation overwrite
+   * a newer one. A refused save leaves this handle's picture as it was, so
+   * its next save is refused the same way until it loads again.
    */
   brainStateRepository(sessionKey: SessionKey): BrainStateRepository {
     let saved: BrainPersistedState | undefined;
+    let observed: string | undefined;
     return {
       load: async (): Promise<BrainStateLoad> => {
         const loaded = await this.request(RUNTIME_STORE_METHOD.BRAIN_LOAD, { sessionKey });
         saved = loaded.state;
-        return loaded;
+        observed = loaded.standingGeneration;
+        return loaded.state ? { state: loaded.state } : { unreadable: loaded.unreadable === true };
       },
       save: async (state: BrainPersistedState): Promise<boolean> => {
-        const save = brainStateSave(saved, state);
+        const save = brainStateSave(saved, observed, state);
         const landed = await this.request(RUNTIME_STORE_METHOD.BRAIN_SAVE, { sessionKey, save });
-        if (landed) saved = state;
+        if (landed) {
+          saved = state;
+          observed = state.generationId;
+        }
         return landed;
       },
     };

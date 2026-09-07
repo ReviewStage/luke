@@ -62,6 +62,21 @@ await Promise.all([
     logLevel: "info",
   }),
   build({
+    // The runtime store's worker thread. It is a bundle of its own because
+    // a worker starts from a file, and it is unpacked from the archive by the
+    // packaging config for the same reason; see runtime-store-path.ts.
+    entryPoints: [path.join(appRoot, "src/main/runtime-store-worker.ts")],
+    outfile: path.join(outputRoot, "runtime-store-worker.js"),
+    bundle: true,
+    platform: "node",
+    format: "cjs",
+    target: "node22",
+    external: ["electron"],
+    plugins: sentryPlugins(),
+    sourcemap: true,
+    logLevel: "info",
+  }),
+  build({
     entryPoints: [path.join(appRoot, "src/preload/index.ts")],
     outfile: path.join(outputRoot, "preload.js"),
     bundle: true,

@@ -79,7 +79,7 @@ test("a valid legacy state is imported whole, receipted, and its files retired; 
     alreadyImported: false,
   });
   assert.deepEqual(report.failures, []);
-  assert.deepEqual(database.loadBrainState(MAIN_SESSION_KEY), { state });
+  assert.deepEqual(database.loadBrainState(MAIN_SESSION_KEY).state, state);
   const history = database.listHistory(MAIN_SESSION_KEY, NOW);
   assert.deepEqual(
     history.map((entry) => ({ words: entry.words, requestId: entry.requestId })),
@@ -110,7 +110,7 @@ test("a valid legacy state is imported whole, receipted, and its files retired; 
   });
   assert.deepEqual(again.retired, []);
   assert.equal(database.countHistory(MAIN_SESSION_KEY), THREAD.length);
-  assert.deepEqual(database.loadBrainState(MAIN_SESSION_KEY), { state });
+  assert.deepEqual(database.loadBrainState(MAIN_SESSION_KEY).state, state);
   assert.deepEqual(database.personalFacts(), FACTS.facts);
 });
 
@@ -306,7 +306,7 @@ test("a crash before the commit leaves nothing imported and nothing retired, and
   assert.equal(fs.existsSync(s.sources.brainState), true);
   const report = run(database, s);
   assert.equal(report.brainState?.outcome, MIGRATION_OUTCOME.IMPORTED);
-  assert.deepEqual(database.loadBrainState(MAIN_SESSION_KEY), { state });
+  assert.deepEqual(database.loadBrainState(MAIN_SESSION_KEY).state, state);
   assert.equal(database.countHistory(MAIN_SESSION_KEY), THREAD.length);
 });
 
@@ -339,7 +339,7 @@ test("a crash after the commit but before the files moved is finished by the nex
     "conversation.json",
   ]);
   assert.deepEqual(second.failures, []);
-  assert.deepEqual(database.loadBrainState(MAIN_SESSION_KEY), { state });
+  assert.deepEqual(database.loadBrainState(MAIN_SESSION_KEY).state, state);
   assert.equal(database.countHistory(MAIN_SESSION_KEY), THREAD.length);
 });
 
@@ -351,7 +351,7 @@ test("a legacy file does not replace a generation the database already holds", (
   database.saveBrainState(MAIN_SESSION_KEY, { expectGeneration: undefined, full: standing });
   const report = run(database, s);
   assert.equal(report.brainState?.outcome, MIGRATION_OUTCOME.EMPTY);
-  assert.deepEqual(database.loadBrainState(MAIN_SESSION_KEY), { state: standing });
+  assert.deepEqual(database.loadBrainState(MAIN_SESSION_KEY).state, standing);
 });
 
 test("recovery copies live one generation lifetime and no longer", () => {
@@ -387,4 +387,81 @@ test("a terminal request whose end History took is retained like the file did, w
   const database = openTestDatabase();
   run(database, s);
   assert.deepEqual(database.loadBrainState(MAIN_SESSION_KEY).state?.requests, state.requests);
+});
+
+test("two identical retained lines in a legacy thread stay two lines, while a run's publication is still one", () => {
+  const s = scratch();
+  const twice = line("again", NOW - 500);
+  const asked = line("ask", NOW - 400, {
+    kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
+    requestId: "run-9",
+  });
+  const contents = conversationFile([twice, twice, asked, asked]);
+  fs.writeFileSync(s.sources.conversation, contents);
+  const database = openTestDatabase();
+  run(database, s);
+  const words = database.listHistory(MAIN_SESSION_KEY, NOW).map((entry) => entry.words);
+  assert.deepEqual(words, ["again", "again", "ask"]);
+  // The same file read again mints the same ids: a second import of it, were
+  // the receipt ever lost, would change nothing.
+  const same = openTestDatabase();
+  fs.writeFileSync(s.sources.conversation, contents);
+  run(same, s);
+  fs.writeFileSync(s.sources.conversation, contents);
+  const readAgain = importLegacyState({
+    database: same,
+    sessionKey: MAIN_SESSION_KEY,
+    sources: { ...s.sources, conversation: `${s.sources.conversation}` },
+    recoveryDirectory: s.recovery,
+    now: NOW + 1,
+    readFile: (location) => fs.readFileSync(location),
+  });
+  assert.equal(readAgain.conversation?.alreadyImported, true);
+  assert.equal(same.countHistory(MAIN_SESSION_KEY), 3);
+});
+
+test("a thread waits while the brain file that carries its Clear marker cannot be read, and is neither imported nor retired", () => {
+  const s = scratch();
+  const clearedAt = NOW - 1000;
+  fs.writeFileSync(
+    s.sources.brainState,
+    brainStateRecord({ ...freshBrainState("gen-live", NOW - 100), reset: { clearedAt } }),
+  );
+  fs.writeFileSync(
+    s.sources.conversation,
+    conversationFile([line("PRE_CLEAR_WORDS", clearedAt - 1), line("after", clearedAt + 1)]),
+  );
+  fs.writeFileSync(s.sources.personalFacts, JSON.stringify(FACTS));
+  const database = openTestDatabase();
+  const denied = Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+  const report = importLegacyState({
+    database,
+    sessionKey: MAIN_SESSION_KEY,
+    sources: s.sources,
+    recoveryDirectory: s.recovery,
+    now: NOW,
+    readFile: (location) => {
+      if (location === s.sources.brainState) throw denied;
+      return fs.readFileSync(location);
+    },
+  });
+  assert.equal(report.brainState?.outcome, MIGRATION_OUTCOME.UNREADABLE);
+  assert.deepEqual(report.conversation, {
+    outcome: MIGRATION_OUTCOME.DEFERRED,
+    alreadyImported: false,
+  });
+  assert.equal(report.personalFacts?.outcome, MIGRATION_OUTCOME.IMPORTED);
+  assert.equal(database.countHistory(MAIN_SESSION_KEY), 0);
+  assert.equal(database.migrationReceipt(s.sources.conversation), undefined);
+  assert.equal(fs.existsSync(s.sources.conversation), true);
+  assert.equal(fs.existsSync(s.sources.brainState), true);
+  // Once the marker can be read, the thread imports under it: the pre-Clear line never enters.
+  const retry = run(database, s, NOW + 1);
+  assert.equal(retry.brainState?.outcome, MIGRATION_OUTCOME.IMPORTED);
+  assert.equal(retry.conversation?.outcome, MIGRATION_OUTCOME.IMPORTED);
+  assert.deepEqual(
+    database.listHistory(MAIN_SESSION_KEY, NOW + 1).map((e) => e.words),
+    ["after"],
+  );
+  assert.equal(fs.existsSync(s.sources.conversation), false);
 });

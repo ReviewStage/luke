@@ -22,14 +22,11 @@ import {
   type ConversationEntry,
   conversationHistoryText,
   recentConversationEntries,
+  retainedConversationEntries,
 } from "@sidecar/realtime";
+import { legacyConversationEntries } from "@sidecar/runtime-store";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { SPEECH_OUTCOME } from "#shared/wire/speech";
-import {
-  conversationFromStored,
-  conversationRecord,
-  mergeConversationHistory,
-} from "../memory-flow";
 import { SpeechArbiter } from "../voice/speech-arbiter";
 import { clearConversationAndBrain } from "./conversation-clear";
 import { BrainHost } from "./host";
@@ -138,6 +135,19 @@ function settle(): Promise<void> {
     };
     tick();
   });
+}
+
+/** The legacy thread file's record and reader, as the main process kept them before the runtime store. */
+function conversationRecord(entries: readonly ConversationEntry[], now: number): string {
+  return `${JSON.stringify({ entries: retainedConversationEntries(entries, now) })}\n`;
+}
+
+function conversationFromStored(
+  stored: string | undefined,
+  now: number,
+  clearedAt?: number,
+): readonly ConversationEntry[] {
+  return retainedConversationEntries(legacyConversationEntries(stored, clearedAt), now);
 }
 
 function composed(brainDisk = new MemoryStorage()) {
@@ -354,7 +364,10 @@ test("a Clear under a held model answer, a held act, a held publication, and an 
     { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: OLD_ASK, recordedAt: NOW },
     { kind: CONVERSATION_ENTRY_KIND.REPLY, words: OLD_REPLY, recordedAt: cutoff ?? 0 },
   ];
-  assert.deepEqual(mergeConversationHistory(c.thread(), stale, cutoff, c.now()), []);
+  for (const entry of stale) {
+    assert.equal(c.record(entry, entry.recordedAt ?? 0), true);
+  }
+  assert.deepEqual(c.thread(), []);
   assert.equal(
     c.record({ kind: CONVERSATION_ENTRY_KIND.REPLY, words: LATE_REPLY }, cutoff ?? 0),
     true,

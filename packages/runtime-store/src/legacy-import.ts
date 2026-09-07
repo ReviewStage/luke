@@ -139,6 +139,14 @@ export function importLegacyState(options: LegacyImportOptions): LegacyImportRep
   if (brain.kind === "unreadable") report.brainState = unreadable(brain);
   if (conversation.kind === "unreadable") report.conversation = unreadable(conversation);
   if (facts.kind === "unreadable") report.personalFacts = unreadable(facts);
+  // The thread can only be imported once the marker that bounds it has been
+  // read: a brain file that is there but would not be read may hold a Clear
+  // whose cutoff this thread's lines fall under, so the thread waits with it.
+  const conversationDeferred =
+    brain.kind === "unreadable" && conversation.kind === "read" && !conversationReceipt;
+  if (conversationDeferred) {
+    report.conversation = { outcome: MIGRATION_OUTCOME.DEFERRED, alreadyImported: false };
+  }
 
   database.transaction(() => {
     if (brain.kind === "read" && !brainReceipt) {
@@ -174,7 +182,7 @@ export function importLegacyState(options: LegacyImportOptions): LegacyImportRep
       report.brainState = { outcome: brainReceipt.outcome, alreadyImported: true };
     }
 
-    if (conversation.kind === "read" && !conversationReceipt) {
+    if (conversation.kind === "read" && !conversationReceipt && !conversationDeferred) {
       const entries = legacyConversationEntries(conversation.contents, clearedAt);
       const appended = database.appendHistory(sessionKey, entries, now);
       const outcome = appended.changed ? MIGRATION_OUTCOME.IMPORTED : MIGRATION_OUTCOME.EMPTY;
@@ -215,6 +223,7 @@ export function importLegacyState(options: LegacyImportOptions): LegacyImportRep
   ]
     .filter((pair): pair is [string, ReadSource] => typeof pair[0] === "string")
     .filter(([, read]) => read.kind !== "unreadable")
+    .filter(([location]) => !(conversationDeferred && location === sources.conversation))
     .map(([location]) => location)
     .filter((location) => fs.existsSync(location) || fs.existsSync(`${location}.tmp`));
   if (retiring.length > 0) {

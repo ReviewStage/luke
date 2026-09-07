@@ -41,6 +41,12 @@ import { CHECKPOINT_FORMAT, RUNTIME_SCHEMA_STATEMENTS, RUNTIME_SCHEMA_VERSION } 
 
 export const AGENT_DATABASE_FILE = "agent.sqlite";
 
+/** The brain's load answer with the token the repository client compares its saves against. */
+export interface RuntimeBrainStateLoad extends BrainStateLoad {
+  /** The generation standing in the tables, readable or not; absent when none stands. */
+  standingGeneration?: string;
+}
+
 interface StandingSession {
   sessionId: string;
   createdAt: number;
@@ -172,11 +178,15 @@ export class RuntimeDatabase {
    * The envelope as the tables hold it, rebuilt into the same wire shape the
    * legacy file had and admitted by the same reader, so a row this build
    * cannot vouch for makes the whole generation unreadable exactly as a bad
-   * line in the file did.
+   * line in the file did. The standing generation's id travels beside the
+   * answer whether or not its rows could be read: it is the token a writer
+   * names to replace it, so an unreadable generation can be repaired by the
+   * store that loaded it and by nothing that did not.
    */
-  loadBrainState(sessionKey: SessionKey): BrainStateLoad {
+  loadBrainState(sessionKey: SessionKey): RuntimeBrainStateLoad {
     const session = this.#standingSession(sessionKey);
     if (!session) return {};
+    const standingGeneration = session.sessionId;
     const items = this.#db
       .prepare("SELECT item FROM runtime_checkpoints WHERE session_id = ? ORDER BY sequence")
       .all(session.sessionId) as { item: string }[];
@@ -206,7 +216,7 @@ export class RuntimeDatabase {
       // SAFETY: JSON.parse returns a wire value; the envelope reader below is the validation.
       parsedItems = items.map((row) => JSON.parse(row.item) as WireValue);
     } catch {
-      return { unreadable: true };
+      return { unreadable: true, standingGeneration };
     }
     const wire: Record<string, WireValue> = {
       version: 2,
@@ -227,7 +237,7 @@ export class RuntimeDatabase {
       };
     }
     const state = brainPersistedStateFromWire(wire);
-    return state ? { state } : { unreadable: true };
+    return state ? { state, standingGeneration } : { unreadable: true, standingGeneration };
   }
 
   /**
