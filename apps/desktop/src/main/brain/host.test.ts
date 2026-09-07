@@ -131,3 +131,178 @@ test("the follower outlives the stop it relays, and retires once the stop settle
   await brains.replace(() => undefined);
   assert.deepEqual(log, ["follow agent", "stop a", "unfollow", "publish empty"]);
 });
+
+test("a build that throws fails its own transition, and the next transition still installs", async () => {
+  const log: string[] = [];
+  const brains = host(log);
+  await assert.rejects(
+    brains.replace(() => {
+      throw new Error("client refused");
+    }),
+    /client refused/,
+  );
+  assert.equal(brains.current(), undefined);
+
+  const b = fakeAgent("b", log);
+  b.release();
+  await brains.replace(() => b.agent);
+  assert.equal(brains.current(), b.agent);
+
+  let laterBuilds = 0;
+  await brains.replace(() => {
+    laterBuilds += 1;
+    return undefined;
+  });
+  assert.equal(laterBuilds, 1);
+  assert.equal(brains.current(), undefined);
+  assert.deepEqual(log, ["follow agent", "stop b", "unfollow", "publish empty"]);
+});
+
+test("a rejected drain fails the transition that waited on it, after every other drain has ended, and the next transition still installs", async () => {
+  const log: string[] = [];
+  let releaseSlow: (() => void) | undefined;
+  const slowUnfollow = new Promise<void>((resolve) => {
+    releaseSlow = resolve;
+  });
+  let followed = 0;
+  const brains = new BrainHost({
+    follow: () => {
+      followed += 1;
+      log.push(`follow ${followed}`);
+      // The first follower's drain rejects; the second's is slow to settle.
+      if (followed === 1) return () => Promise.reject(new Error("publication refused"));
+      if (followed === 2)
+        return async () => {
+          await slowUnfollow;
+          log.push("slow unfollow settled");
+        };
+      return async () => undefined;
+    },
+    publishEmpty: () => log.push("publish empty"),
+  });
+  const a = fakeAgent("a", log);
+  a.release();
+  await brains.replace(() => a.agent);
+  const b = fakeAgent("b", log);
+  b.release();
+  // Retiring a queues its rejecting drain; the replacement that waits on it
+  // fails as its caller's transition, and b is never installed.
+  await assert.rejects(
+    brains.replace(() => b.agent),
+    /publication refused/,
+  );
+  assert.equal(brains.current(), undefined);
+  assert.equal(log.includes("follow 2"), false);
+
+  // The queue is not poisoned: the next transition installs.
+  const c = fakeAgent("c", log);
+  c.release();
+  await brains.replace(() => c.agent);
+  assert.equal(brains.current(), c.agent);
+
+  // Its drain is slow. Queued beside a bare retirement whose drain rejects at
+  // once, both end before the transition waiting on them decides — and it
+  // decides against installing, saying why.
+  brains.retire();
+  const d = fakeAgent("d", log);
+  d.release();
+  let built = false;
+  const replacement = brains.replace(() => {
+    built = true;
+    return d.agent;
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(built, false, "the transition waited on the slow drain");
+  releaseSlow?.();
+  await replacement;
+  assert.equal(built, true);
+  assert.equal(brains.current(), d.agent);
+  assert.ok(log.includes("slow unfollow settled"));
+});
+
+test("a rejecting drain and a slow drain queued together both end before the transition decides", async () => {
+  const log: string[] = [];
+  let releaseSlow: (() => void) | undefined;
+  const slowStop = new Promise<void>((resolve) => {
+    releaseSlow = resolve;
+  });
+  // SAFETY: the host reads only `stop` off an agent; the fixture stands in for the rest.
+  const slow = {
+    stop: () => {
+      log.push("stop slow");
+      return slowStop;
+    },
+  } as unknown as BrainAgent;
+  let followed = 0;
+  const brains = new BrainHost({
+    follow: () => {
+      followed += 1;
+      return followed === 1
+        ? () => Promise.reject(new Error("publication refused"))
+        : async () => {
+            log.push("unfollow slow");
+          };
+    },
+    publishEmpty: () => log.push("publish empty"),
+  });
+  const a = fakeAgent("a", log);
+  a.release();
+  await brains.replace(() => a.agent);
+  // a's rejecting drain is queued at retire time — with a handler already
+  // attached, so nothing is unhandled while the slow stop below runs.
+  brains.retire();
+  await assert.rejects(
+    brains.replace(() => slow),
+    /publication refused/,
+  );
+  // The queue recovered; slow installs, then is retired with a stop that lingers.
+  await brains.replace(() => slow);
+  assert.equal(brains.current(), slow);
+  brains.retire();
+  let built = false;
+  const replacement = brains.replace(() => {
+    built = true;
+    return undefined;
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(built, false, "the successor waited on the slow stop");
+  releaseSlow?.();
+  await replacement;
+  assert.equal(built, true);
+  assert.deepEqual(log.slice(-3), ["stop slow", "unfollow slow", "publish empty"]);
+  await brains.settled();
+});
+
+test("a retirement queued alone has its rejection handled before any transition waits on it", async () => {
+  const log: string[] = [];
+  let unhandled = 0;
+  const onUnhandled = () => {
+    unhandled += 1;
+  };
+  process.on("unhandledRejection", onUnhandled);
+  try {
+    let followed = 0;
+    const brains = new BrainHost({
+      follow: () => {
+        followed += 1;
+        return () => Promise.reject(new Error(`drain ${followed} refused`));
+      },
+      publishEmpty: () => log.push("publish empty"),
+    });
+    const a = fakeAgent("a", log);
+    a.release();
+    await brains.replace(() => a.agent);
+    brains.retire();
+    // A slow credential apply stands between the retire and the rebuild.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(unhandled, 0);
+    await assert.rejects(
+      brains.replace(() => undefined),
+      /drain 1 refused/,
+    );
+    await brains.replace(() => undefined);
+    assert.deepEqual(log.slice(-1), ["publish empty"]);
+  } finally {
+    process.off("unhandledRejection", onUnhandled);
+  }
+});
