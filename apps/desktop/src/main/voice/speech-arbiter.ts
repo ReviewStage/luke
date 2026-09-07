@@ -41,6 +41,7 @@ export const SPEECH_DECISION = {
   REQUESTED: "requested",
   OFFERED: "offered",
   DROPPED: "dropped",
+  RECLAIMED: "reclaimed",
   ...SPEECH_OUTCOME,
 } as const;
 
@@ -260,6 +261,27 @@ export class SpeechArbiter {
     this.#remove(request.id);
     this.#trace(kind, SPEECH_DECISION.DROPPED);
     return wasOffered ? request.id : undefined;
+  }
+
+  /**
+   * Takes back the outstanding offer from a receiver that is gone — the voice
+   * renderer reloaded, crashed, or was replaced with the offer in hand — and
+   * returns the request to the head unspoken, so the next receiver is offered
+   * it at once rather than after the deadline. Nothing here says whether the
+   * words were heard: an offer is not proof of speech, and a proactive turn
+   * said twice across a crash is the price of not losing it altogether. The
+   * request takes a fresh id on the way back, so the old offer's id is dead.
+   */
+  reclaimOffer(): void {
+    const offered = this.#offered;
+    if (!offered) return;
+    this.#offered = undefined;
+    const request = this.#pending.find((candidate) => candidate.id === offered.id);
+    if (!request) return;
+    // Under a fresh id, so a settle the vanished renderer still had in flight
+    // names an offer nobody holds, rather than the one about to be made.
+    request.id = this.#options.nextId();
+    this.#trace(request.kind, SPEECH_DECISION.RECLAIMED);
   }
 
   /**

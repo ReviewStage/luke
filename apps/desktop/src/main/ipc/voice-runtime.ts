@@ -21,6 +21,7 @@ import {
   voiceExchangeActive,
 } from "#shared/wire/voice-view";
 import { registerBridge } from "../register-bridge";
+import type { VoiceReceiver } from "../voice-receiver";
 import type { PanelManager } from "../window/panel-manager";
 
 /**
@@ -45,6 +46,8 @@ export interface VoiceRuntimeIpcDependencies {
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
   panels: PanelManager;
   voiceWindow: VoiceWindowSurface;
+  /** Whether the voice window's renderer can receive yet, which only its own report under the current epoch decides. */
+  receiver: Pick<VoiceReceiver, "markReady">;
   /** Hands a payload to every panel and the voice window alike. */
   broadcast: <Payload>(channel: string, payload: Payload) => void;
   openExternal: (url: string) => Promise<void>;
@@ -115,6 +118,14 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
       reportVoiceLevel(context, level) {
         if (!voiceWindow.owns(context.sender)) return;
         dependencies.broadcast(channels.onVoiceLevelChanged, level);
+      },
+      // The voice renderer saying it can receive. Only the renderer the
+      // window holds now may say so, and only for the epoch its own bootstrap
+      // named: a report from a panel, or from a renderer since reloaded or
+      // replaced, is refused rather than readying a receiver that is not there.
+      reportVoiceReady(context, epoch) {
+        if (!voiceWindow.owns(context.sender)) return false;
+        return dependencies.receiver.markReady(epoch);
       },
       setShortcutCapturing(context, capturing) {
         if (!panels.owns(context.sender)) return;

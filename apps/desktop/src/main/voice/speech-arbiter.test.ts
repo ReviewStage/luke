@@ -430,3 +430,33 @@ test("withdrawing briefings takes the queued, the held, and the offered alike, a
   // Nothing to withdraw answers nothing, and a beat is never a briefing.
   assert.equal(arbiter.withdrawBriefings(), undefined);
 });
+
+test("reclaiming takes the outstanding offer back to the head unspoken, so the next receiver is offered it at once", () => {
+  const { arbiter, traces, clock } = harness();
+  requestBriefing(arbiter, "first");
+  requestBriefing(arbiter, "second");
+  const offered = arbiter.next();
+  assert.equal(
+    offered && isBriefingSpeech(offered.turn) ? offered.turn.briefing : undefined,
+    "first",
+  );
+  // While the offer stands, nothing else is offered.
+  assert.equal(arbiter.next(), undefined);
+  // The renderer holding it is gone: the offer is reclaimed, not settled.
+  arbiter.reclaimOffer();
+  assert.equal(arbiter.offeredId, undefined);
+  assert.equal(arbiter.pendingCount, 2);
+  const again = arbiter.next();
+  assert.equal(again && isBriefingSpeech(again.turn) ? again.turn.briefing : undefined, "first");
+  // The reoffer carries a fresh id, so a late settle from the vanished renderer
+  // names an offer nobody holds and is ignored.
+  assert.notEqual(again?.id, offered?.id);
+  assert.equal(arbiter.settle(offered?.id ?? "", SPEECH_OUTCOME.SPOKEN), undefined);
+  assert.equal(arbiter.offeredId, again?.id);
+  assert.ok(traces.some((trace) => trace.decision === SPEECH_DECISION.RECLAIMED));
+  // Reclaiming with nothing offered is a no-op, and the clock is untouched.
+  arbiter.settle(again?.id ?? "", SPEECH_OUTCOME.SPOKEN);
+  arbiter.reclaimOffer();
+  assert.equal(arbiter.pendingCount, 1);
+  assert.equal(clock.now, 1_000);
+});

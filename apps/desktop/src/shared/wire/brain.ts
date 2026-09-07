@@ -5,6 +5,7 @@ import {
   BRAIN_REQUEST_STATUS,
   BRAIN_SUBMISSION_OUTCOME,
   BRAIN_SUBMISSION_REJECTION,
+  type BrainRequestOrigin,
   type BrainRequestRecord,
   type BrainSubmissionRejection,
   brainRequestRecordFromWire,
@@ -14,6 +15,7 @@ import { maximumTypedAskLength } from "@sidecar/realtime";
 import {
   type ACT_RESULT_STATUS,
   isRecord,
+  isWireBoolean,
   isWireNumber,
   isWireString,
   type UnparsedWireValue,
@@ -177,9 +179,75 @@ export const BRAIN_ASK_PENDING_STATUS = "pending";
  * the voice can say instead.
  */
 export type BrainAskResult =
-  | { status: typeof ACT_RESULT_STATUS.ACCEPTED; briefing: string }
+  | { status: typeof ACT_RESULT_STATUS.ACCEPTED; briefing: string; runId: string }
   | { status: typeof BRAIN_ASK_PENDING_STATUS; note: string }
   | { status: typeof ACT_RESULT_STATUS.REJECTED; reason: string };
+
+/**
+ * One ended run whose reply the main process offers the voice window to
+ * speak. The words do not travel with the offer: the window claims the
+ * delivery first, and the grant carries them, read from the live record at
+ * that moment so a run the store has since let go of is never spoken.
+ */
+export interface BrainReplyOffer {
+  runId: string;
+  deliveryId: string;
+  /** The receiver epoch the offer went to; the claim and the acknowledgement name it back. */
+  epoch: number;
+}
+
+export function isReceiverEpoch(value: UnparsedWireValue): value is number {
+  return isWireNumber(value) && Number.isInteger(value) && value >= 0;
+}
+
+export function isBrainReplyOffer(value: UnparsedWireValue): value is BrainReplyOffer & WireRecord {
+  return (
+    isRecord(value) &&
+    isWireString(value.runId) &&
+    value.runId.length > 0 &&
+    isWireString(value.deliveryId) &&
+    value.deliveryId.length > 0 &&
+    isReceiverEpoch(value.epoch)
+  );
+}
+
+/**
+ * What a wait on a spoken ask comes back with: the record as it then stands,
+ * or nothing for a run the brain does not know, and whether the call that
+ * asked has been granted the words. `speak` is true only for an ended run
+ * whose end already stands in History and whose one grant this wait took; a
+ * run still going, or one whose words another path holds, is not the
+ * call's to say.
+ */
+export interface BrainAskWait {
+  record: BrainRequestSnapshot | undefined;
+  speak: boolean;
+}
+
+export function isBrainAskWait(value: UnparsedWireValue): boolean {
+  return (
+    isRecord(value) &&
+    (value.record === undefined || isBrainRequestSnapshot(value.record)) &&
+    isWireBoolean(value.speak)
+  );
+}
+
+/** The main process's answer to a claim: the words to say, once, or nothing. */
+/**
+ * The main process's answer to a claim: the words to say, once, with the
+ * origin of the ask they answer — a typed ask's reply holds the composer's
+ * caption, a spoken one's does not — or nothing.
+ */
+export type BrainReplyClaimResult =
+  | { granted: true; words: string; origin: BrainRequestOrigin }
+  | { granted: false };
+
+export function isBrainReplyClaimResult(value: UnparsedWireValue): boolean {
+  if (!isRecord(value)) return false;
+  if (value.granted === true)
+    return isWireString(value.words) && isBrainRequestOrigin(value.origin);
+  return value.granted === false;
+}
 
 /**
  * An app act the brain decided that only the renderer can perform — a settings

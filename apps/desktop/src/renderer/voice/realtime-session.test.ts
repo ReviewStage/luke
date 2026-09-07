@@ -64,6 +64,7 @@ const CONNECTION: RealtimeConnection = {
 interface ReplyEnding {
   texts: readonly string[];
   kind: ReplyKind | undefined;
+  runId?: string;
 }
 
 interface Harness {
@@ -119,8 +120,8 @@ interface Harness {
 }
 
 /** An answer the brain accepted: words to say. */
-function brainAnswer(briefing: string): BrainAskResult {
-  return { status: ACT_RESULT_STATUS.ACCEPTED, briefing };
+function brainAnswer(briefing: string, runId = "run-1"): BrainAskResult {
+  return { status: ACT_RESULT_STATUS.ACCEPTED, briefing, runId };
 }
 
 function brainPending(): BrainAskResult {
@@ -353,8 +354,8 @@ function harness(
     onCaption: (texts) => {
       captions.push(texts);
     },
-    onReplyEnded: (texts, kind) => {
-      replyEndings.push({ texts, kind });
+    onReplyEnded: (texts, kind, runId) => {
+      replyEndings.push({ texts, kind, ...(runId !== undefined ? { runId } : undefined) });
     },
     onSpokenAsk: (transcript) => {
       spokenAsks.push(transcript);
@@ -2898,11 +2899,12 @@ test("a spoken ask goes to the brain and its answer is voiced", async () => {
   });
   settleReply(context);
 
-  // History records the words as a reply.
+  // History records the words as a reply, naming the run whose end they voice.
   assert.deepEqual(context.replyEndings, [
     {
       texts: ["Claude Code is on the tests now."],
       kind: REPLY_KIND.REPLY,
+      runId: "run-1",
     },
   ]);
 });
@@ -3781,4 +3783,119 @@ test("the developer's call replaces Luke's own and keeps the waiting press", asy
   assert.ok(context.calls.includes("microphone-requested"));
   assert.equal(context.microphoneEnabled(), true);
   assert.equal(context.session.status, REALTIME_STATUS.LISTENING);
+});
+
+test("a reply voicing a run's end names that run when it ends, and a plain reply names none", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  await armDeveloperTurn(context);
+  assert.equal(context.session.speakReply("Two agents are waiting.", "run-7"), true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-a" } });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item-1" },
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    item_id: "item-1",
+    delta: "Two agents are waiting.",
+  });
+  context.session.stopSpeaking();
+  assert.deepEqual(context.replyEndings, [
+    { texts: ["Two agents are waiting."], kind: REPLY_KIND.REPLY, runId: "run-7" },
+  ]);
+});
+
+test("two replies overlapping each carry their own run: the one cut off keeps its attribution, the next takes none of it", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  await armDeveloperTurn(context);
+  assert.equal(context.session.speakReply("First answer.", "run-a"), true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-a" } });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item-a" },
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    item_id: "item-a",
+    delta: "First answer.",
+  });
+  // The second reply interrupts the first: the first ends here, as its own.
+  assert.equal(context.session.speakReply("Second answer.", "run-b"), true);
+  assert.deepEqual(context.replyEndings, [
+    { texts: ["First answer."], kind: REPLY_KIND.REPLY, runId: "run-a" },
+  ]);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-b" } });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item-b" },
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    item_id: "item-b",
+    delta: "Second answer.",
+  });
+  context.session.stopSpeaking();
+  assert.deepEqual(context.replyEndings.at(-1), {
+    texts: ["Second answer."],
+    kind: REPLY_KIND.REPLY,
+    runId: "run-b",
+  });
+  // A reply nobody's run produced carries no run at all.
+  await armDeveloperTurn(context);
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item-c" },
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    item_id: "item-c",
+    delta: "Just talking.",
+  });
+  context.session.stopSpeaking();
+  assert.deepEqual(context.replyEndings.at(-1), { texts: ["Just talking."], kind: undefined });
+});
+
+test("the follow-up voicing a spoken ask's answer names the run the answer came from", async () => {
+  const context = harness({
+    askBrain: async () => brainAnswer("Claude Code is on the tests now.", "run-spoken"),
+  });
+  await context.session.connect();
+  await armDeveloperTurn(context);
+  context.emit(askBrainDone("ask claude code to add tests"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_ITEM_ADDED,
+    item: { id: "item-answer" },
+  });
+  context.emit({
+    type: REALTIME_SERVER_EVENT.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA,
+    item_id: "item-answer",
+    delta: "Claude Code is on the tests now.",
+  });
+  context.session.stopSpeaking();
+  assert.deepEqual(context.replyEndings.at(-1), {
+    texts: ["Claude Code is on the tests now."],
+    kind: REPLY_KIND.REPLY,
+    runId: "run-spoken",
+  });
+});
+
+test("a run's reply cut off before a word arrived still hands its ending over, so its delivery is acknowledged", async () => {
+  const context = harness();
+  await context.session.connect();
+  context.deliverRemoteTrack();
+  await armDeveloperTurn(context);
+  assert.equal(context.session.speakReply("Two agents are waiting.", "run-7"), true);
+  context.emit({ type: REALTIME_SERVER_EVENT.RESPONSE_CREATED, response: { id: "resp-a" } });
+  // The developer stops it before any transcript reached the caption.
+  context.session.stopSpeaking();
+  assert.deepEqual(context.replyEndings, [{ texts: [], kind: REPLY_KIND.REPLY, runId: "run-7" }]);
+  // A reply of nobody's run that said nothing still hands nothing over.
+  await armDeveloperTurn(context);
+  context.session.stopSpeaking();
+  assert.equal(context.replyEndings.length, 1);
 });

@@ -176,9 +176,13 @@ export interface RealtimeVoiceSessionCallbacks {
    * the words were a briefing or a reply, so History records each as itself.
    * The words were already spoken toward the room (the caption runs a little
    * ahead of the audio, so a cut reply hands over slightly more than was
-   * heard); the caller records them so the thread survives the call.
+   * heard); the caller records them so the thread survives the call. A reply
+   * voicing a brain run's end names that run: its words already stand in the
+   * thread, written by the main process from the record, and the caller
+   * records nothing for it. Each reply carries its own, so two overlapping —
+   * one cut off by the next — can never trade attributions.
    */
-  onReplyEnded?(texts: readonly string[], kind: ReplyKind | undefined): void;
+  onReplyEnded?(texts: readonly string[], kind: ReplyKind | undefined, runId?: string): void;
   /**
    * The developer's own spoken turn, as the voice service transcribed it. It
    * arrives on the transcription's clock — often after the reply to it has
@@ -511,6 +515,12 @@ export class RealtimeVoiceSession {
    * cleared wherever the caption is, so it can never outlive the reply.
    */
   #captionKind: ReplyKind | undefined;
+  /**
+   * The brain run whose end the reply under way is voicing, when it is one.
+   * Set with the kind and cleared wherever the caption is, so it is exactly
+   * as long-lived as the reply it names and no other reply can inherit it.
+   */
+  #captionRunId: string | undefined;
   /**
    * Whether this call has ever reported a reply's audio running out. Once it
    * has, silence stops being evidence of anything: the server says when Luke is
@@ -1248,7 +1258,7 @@ export class RealtimeVoiceSession {
    * out-of-band terms. A reply arriving over another interrupts it: the
    * developer's turn always wins, however it is taken.
    */
-  speakReply(briefing: string): boolean {
+  speakReply(briefing: string, runId?: string): boolean {
     if (!this.isConnected || !this.#withMicrophone) return false;
     if (this.#status === REALTIME_STATUS.LISTENING) return false;
     const events = briefingSpeechEvents({
@@ -1260,6 +1270,7 @@ export class RealtimeVoiceSession {
     if (this.#status === REALTIME_STATUS.RESPONDING) this.#interruptReply();
     this.#startResponse(events);
     this.#captionKind = REPLY_KIND.REPLY;
+    this.#captionRunId = runId;
     this.#emitCaption();
     return true;
   }
@@ -1663,9 +1674,14 @@ export class RealtimeVoiceSession {
     // final and still known.
     const texts = this.#captionTexts();
     const kind = this.#captionKind;
+    const runId = this.#captionRunId;
     this.#captionSegments = [];
     this.#captionKind = undefined;
-    if (texts) this.#options.onReplyEnded?.(texts, kind);
+    this.#captionRunId = undefined;
+    // A reply that said nothing leaves no words to hand over — unless it was
+    // voicing a run's end, whose ending is owed to the delivery it was granted
+    // under however little of it was heard.
+    if (texts || runId !== undefined) this.#options.onReplyEnded?.(texts ?? [], kind, runId);
     this.#options.onCaption(undefined, undefined);
   }
 
@@ -1673,6 +1689,7 @@ export class RealtimeVoiceSession {
   #discardCaption(): void {
     this.#captionSegments = [];
     this.#captionKind = undefined;
+    this.#captionRunId = undefined;
     this.#options.onCaption(undefined, undefined);
   }
 
@@ -2177,6 +2194,7 @@ export class RealtimeVoiceSession {
     // travels, because the brain did what it says it did.
     if (epoch === this.#turnEpoch) {
       this.#captionKind = REPLY_KIND.REPLY;
+      this.#captionRunId = answer.runId;
       this.#emitCaption();
     }
     return { briefing: answer.briefing };

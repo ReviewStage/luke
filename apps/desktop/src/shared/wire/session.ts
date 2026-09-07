@@ -142,6 +142,12 @@ export interface AppBootstrap {
   nodeVersion: string;
   microphoneStatus: MicrophoneStatus;
   /**
+   * The receiver epoch the main process gave this load of the hidden voice
+   * window, which its readiness report must name; absent for every other
+   * window, which receives no speech.
+   */
+  voiceEpoch?: number;
+  /**
    * The accelerator the talk key was registered as, absent when the system
    * refused to register one — a shortcut nothing can trigger must not be shown
    * as though it works. Raw rather than labelled for the ask key's reason
