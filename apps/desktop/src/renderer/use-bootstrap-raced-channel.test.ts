@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ATTENTION_DISPOSITION, normalizeSession, SESSION_STATUS } from "@sidecar/session";
+import { normalizeSession, SESSION_STATUS } from "@sidecar/session";
 import type { SessionRosterPayload } from "#shared/wire/session";
 import { staleBootstrap } from "./use-bootstrap-raced-channel";
 
@@ -27,17 +27,8 @@ test("a newer roster push cannot be partially overwritten by an older bootstrap"
       lastActivityAt: 2,
     },
   );
-  const older: SessionRosterPayload = { sessions: [], attention: [] };
-  const newer: SessionRosterPayload = {
-    sessions: [session],
-    attention: [
-      {
-        providerId: "codex",
-        providerSessionId: "task-1",
-        decision: { disposition: ATTENTION_DISPOSITION.SPEAK_DURING_TURN, decidedAt: 2 },
-      },
-    ],
-  };
+  const older: SessionRosterPayload = { sessions: [] };
+  const newer: SessionRosterPayload = { sessions: [session] };
   let current: SessionRosterPayload = older;
   let pushed = false;
 
@@ -47,5 +38,4 @@ test("a newer roster push cannot be partially overwritten by an older bootstrap"
 
   assert.equal(current, newer);
   assert.equal(current.sessions[0]?.providerSessionId, "task-1");
-  assert.equal(current.attention[0]?.providerSessionId, "task-1");
 });

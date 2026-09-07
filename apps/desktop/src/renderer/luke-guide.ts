@@ -410,15 +410,13 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       detail:
         "The panel's History tab shows every typed ask, transcribed spoken ask, reply, " +
         "announcement, and session act, kept across launches in Luke's own file on this Mac — " +
-        "up to 200 lines and 14 days, whichever cuts first. Luke carries only the 20 most " +
-        "recent entries into a call. The view is blocked from panel recordings, is not " +
-        "exportable, and can be cleared by hand from that tab. Luke's own composer stands at " +
+        "up to 200 lines and 14 days, whichever cuts first. The 20 most recent lines ride " +
+        "into a call beside Luke's working memory of what he read, said, and did, which lives " +
+        "in its own file on this Mac for exactly 14 days from when it began. The view is " +
+        "blocked from panel recordings, is not exportable, and can be cleared by hand from " +
+        "that tab, which discards the working memory with it. Luke's own composer stands at " +
         "its foot too, the same typed ask the sessions list offers, so a reply is asked for " +
-        "where it will land. A line draws a pressable chip " +
-        "for each chat it named, going to that chat by hand; a chip keeps working for a chat " +
-        "archived since — opened at the last address its provider reported this launch — and " +
-        "a chat with no address draws none. A spoken open still reaches only sessions " +
-        "currently observed.",
+        "where it will land. A spoken open still reaches only sessions currently observed.",
     },
     {
       label: "Account",
@@ -442,8 +440,12 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       detail:
         "Asked what a local session did, said, or is stuck on, Luke can read that session's " +
         "own recent transcript — Claude Code, Codex, and OMP on this machine today — and " +
-        "answer from it; the reading is kept nowhere. A cloud session's conversation stays " +
-        "with its provider, answered from roster fields alone.",
+        "answer from it. He also reads what a local transcript gained on his own, when an " +
+        "agent's hook wakes him and on his periodic look at working and waiting sessions, " +
+        "so he can notice what changed. What he read stays in his working memory for at " +
+        "most 14 days, or until History is cleared, and never reaches an agent's own files. " +
+        "A cloud session's conversation stays with its provider, answered from roster " +
+        "fields alone.",
     },
     {
       label: "Creating workspaces",

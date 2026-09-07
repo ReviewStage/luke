@@ -1,39 +1,29 @@
-import type { SessionSnapshot } from "@sidecar/fixtures";
+import { SESSION_LIST_ALL } from "@sidecar/acts";
 import { SESSION_LIST_SORT, type SessionListSort } from "@sidecar/guide";
-import type { IssueIdentity } from "@sidecar/issues";
-import { SESSION_LIST_ALL } from "@sidecar/realtime";
 import {
-  ATTENTION_DISPOSITION,
-  type AttentionDecision,
   HOSTED_AGENT_ID_LIST,
   type HostedAgentId,
   isHostedAgentId,
   isProviderId,
   isSessionApplicationId,
   matchesFilterSelection,
-  mentionedSessions,
   PROVIDER_ID_LIST,
   type ProviderId,
   SESSION_APPLICATION_ID_LIST,
   SESSION_FILTER,
   SESSION_FILTER_AXIS,
   SESSION_LOCATION,
-  SESSION_MENTION_KIND,
   SESSION_STATUS,
   type Session,
   type SessionApplicationId,
   type SessionApplicationScope,
-  type SessionAttentionEntry,
-  type SessionControlKind,
   type SessionDiffSummary,
   type SessionFilter,
   type SessionFilterAxis,
-  type SessionIdentity,
   type SessionLocation,
   SUPERSET_WORKSPACE_PROVIDER_ID,
   sessionChangeNumber,
   sessionFilterAxis,
-  silentAttention,
 } from "@sidecar/session";
 import {
   compareSessionsByUrgency,
@@ -213,21 +203,6 @@ export const DEFAULT_SESSION_VIEW: SessionArrangement = {
   query: "",
 };
 
-/** One provider-advertised action, exactly as the adapter advertised it. */
-export interface SessionAction {
-  id: string;
-  label: string;
-  /** A stop is drawn as the stop glyph; anything else is drawn by its label. */
-  kind?: SessionControlKind;
-  /**
-   * The provider-owned identifier of the thing the action acts on, when that
-   * is not the session itself — carried through from the advertisement because
-   * an action aimed at the row's whole workspace is drawn on the tray, not on
-   * every chat inside it.
-   */
-  target?: string;
-}
-
 /**
  * The workspace a row's session is one chat of, when its provider nests them.
  * The id is what rows are grouped by — always beside the provider id, because
@@ -295,14 +270,6 @@ export interface SessionView {
   /** The app owning the row's primary address, when that association is exact. */
   openApplication?: string;
   /**
-   * Whether the provider will take a typed message for this session right now.
-   * Like the address, the route stays in the main process; the row only has to
-   * know whether to offer the field.
-   */
-  canMessage: boolean;
-  /** Actions the provider advertised for this session, in its own words. */
-  actions: readonly SessionAction[];
-  /**
    * Whether the provider reported published work — a pull request — for this
    * session. Like the session's own address, the URL stays in the main
    * process; the row only has to know the chip would open something.
@@ -319,101 +286,6 @@ export interface SessionView {
 }
 
 /** One filter someone can choose, and how many sessions it alone would leave. */
-/** The two rosters a mention chip can stand for, deciding what its press does. */
-export const MENTION_CHIP_KIND = {
-  SESSION: "session",
-  ISSUE: "issue",
-} as const;
-
-/**
- * One app mark trailing a session chip's name: the same associations the
- * session's own row wears, answering where the chat is also held. Copied onto
- * the chip rather than looked up at draw time, so the band held through its
- * fade-out keeps wearing them after the roster moves on.
- */
-export type MentionChipApplication = {
-  id: string;
-  name: string;
-};
-
-/**
- * One pressable chip of the notice band: the mark and words it draws, and the
- * identity its press hands to the main process — where it is validated
- * against the observed roster again before any address reaches the system.
- * Resolved onto the chip when its mention is, so the band held through its
- * fade-out keeps saying what it said.
- */
-export type MentionChip =
-  | {
-      kind: typeof MENTION_CHIP_KIND.SESSION;
-      id: string;
-      markId: string;
-      title: string;
-      identity: SessionIdentity;
-      applications: readonly MentionChipApplication[];
-    }
-  | {
-      kind: typeof MENTION_CHIP_KIND.ISSUE;
-      id: string;
-      markId: string;
-      title: string;
-      identity: IssueIdentity;
-    };
-
-/**
- * The chips a fixture run's own sentence earns. A fixture run observes no
- * provider, so the roster a reply's mentions resolve against is empty and the
- * band would stand at no rows at all — while the sentence the profile speaks
- * was written to name four of the fixture's sessions and one of its
- * workspaces precisely so the evidence photographs it. The rows the surface
- * is already drawing answer for the roster here, matched by the same rules a
- * live reply is matched by, so what the PNG shows is the band a live reply
- * naming the same things would draw.
- */
-export function fixtureMentionChips(
-  caption: string,
-  sessions: readonly SessionSnapshot[],
-): readonly MentionChip[] {
-  const rows = sessions.map((session) => ({
-    providerId: session.providerId,
-    providerSessionId: session.id,
-    title: session.title,
-    lastActivityAt: session.lastActivityAt,
-    ...(session.workspace
-      ? {
-          workspace: {
-            providerWorkspaceId: session.workspace.id,
-            ...(session.workspace.scopeId ? { scopeId: session.workspace.scopeId } : undefined),
-            name: session.workspace.name,
-          },
-        }
-      : undefined),
-  }));
-  return mentionedSessions(caption, rows).flatMap((mention): readonly MentionChip[] => {
-    const session = sessions.find(
-      (candidate) =>
-        candidate.providerId === mention.providerId && candidate.id === mention.providerSessionId,
-    );
-    if (!session) return [];
-    const markId = session.agentId ?? session.providerId;
-    return [
-      {
-        kind: MENTION_CHIP_KIND.SESSION,
-        id: session.id,
-        markId,
-        title:
-          mention.kind === SESSION_MENTION_KIND.WORKSPACE && session.workspace !== undefined
-            ? session.workspace.name
-            : session.title,
-        identity: { providerId: session.providerId, providerSessionId: session.id },
-        applications: (session.applications ?? []).flatMap((application) =>
-          application.id === markId ? [] : [{ id: application.id, name: application.name }],
-        ),
-      },
-    ];
-  });
-}
-
 export interface SessionFilterOption {
   filter: SessionFilter;
   label: string;
@@ -484,30 +356,25 @@ export interface SessionTally {
   providers: readonly ProviderTally[];
 }
 
-type SessionWithAttention = Session & { attention: AttentionDecision };
-
-function sessionNeedsAttention(session: SessionWithAttention): boolean {
+function sessionNeedsAttention(session: Session): boolean {
   return (
     session.status === SESSION_STATUS.WAITING ||
     // A session that stopped on a failure cannot get itself going again, so it
     // wants a person at least as much as one that finished its turn.
-    session.status === SESSION_STATUS.ERROR ||
-    session.attention.disposition !== ATTENTION_DISPOSITION.SILENT
+    session.status === SESSION_STATUS.ERROR
   );
 }
 
 /**
  * The line under the title. What stopped a session outranks what it is
- * running. An attention decision adds nothing here: it is a judgment about
- * whether to speak, carrying no words of its own, and the fields it was
- * reached on are the ones already in this chain.
+ * running.
  *
  * When a provider reported neither, the line says the state in so many words.
  * This sentence is the one place the row states it, so a session whose
  * provider said nothing still reads as Working or Complete rather than as a
  * row with a line missing.
  */
-function sessionDetail(session: SessionWithAttention, urgency: SessionUrgency): string {
+function sessionDetail(session: Session, urgency: SessionUrgency): string {
   return session.detail.error ?? session.detail.activity ?? urgencyLabel(urgency);
 }
 
@@ -521,7 +388,7 @@ export function sessionDiffLabel(diff: SessionDiffSummary): string {
   return `${files} +${diff.linesAdded} −${diff.linesRemoved}`;
 }
 
-function sessionUrgency(session: SessionWithAttention): SessionUrgency {
+function sessionUrgency(session: Session): SessionUrgency {
   if (sessionNeedsAttention(session)) return SESSION_URGENCY.ATTENTION;
   if (session.status === SESSION_STATUS.COMPLETE) return SESSION_URGENCY.COMPLETE;
   if (session.status === SESSION_STATUS.UNKNOWN) return SESSION_URGENCY.UNKNOWN;
@@ -622,13 +489,7 @@ function bySort(sort: SessionSort): (first: SessionView, second: SessionView) =>
 export function displaySessions(
   bootstrap: AppBootstrap,
   sessions: readonly Session[],
-  attention: readonly SessionAttentionEntry[] = [],
 ): readonly SessionView[] {
-  const decisions = new Map(
-    attention.map(
-      (entry) => [`${entry.providerId}\0${entry.providerSessionId}`, entry.decision] as const,
-    ),
-  );
   const visible: readonly SessionView[] = bootstrap.fixtureMode
     ? bootstrap.fixture.sessions.map((session) => ({
         ...session,
@@ -638,27 +499,19 @@ export function displaySessions(
         detail: session.detail || urgencyLabel(session.urgency),
         label: urgencyLabel(session.urgency),
         // A fixture stands for sessions that are not on the machine drawing
-        // them, so there is nothing for a press to open. The composer and the
-        // controls are still drawn where the fixture says a live session would
-        // have them — the evidence has to show them — but a fixture run cannot
-        // reach a provider: the main process refuses every write against its
-        // empty registry.
+        // them, so there is nothing for a press to open. The pull-request chip
+        // is still drawn where the fixture says a live session would have it —
+        // the evidence has to show it — but a fixture run cannot reach a
+        // provider: the main process refuses every act against its empty
+        // registry.
         openable: false,
         applications: (session.applications ?? []).map((application) => ({
           ...application,
           openable: false,
         })),
-        canMessage: session.canMessage === true,
-        actions: session.actions ?? [],
         hasChange: session.hasChange === true,
       }))
-    : sessions.map((observed) => {
-        const session = {
-          ...observed,
-          attention:
-            decisions.get(`${observed.providerId}\0${observed.providerSessionId}`) ??
-            silentAttention(observed.lastActivityAt),
-        } satisfies SessionWithAttention;
+    : sessions.map((session) => {
         const urgency = sessionUrgency(session);
         const changeNumber = session.detail.change
           ? sessionChangeNumber(session.detail.change)
@@ -691,8 +544,6 @@ export function displaySessions(
           lastActivityAt: session.lastActivityAt,
           openable: session.detail.link !== undefined,
           ...(openApplication ? { openApplication: openApplication.displayName } : undefined),
-          canMessage: session.canReceiveMessage,
-          actions: session.controls,
           hasChange: session.detail.change !== undefined,
           ...(changeNumber !== undefined ? { changeNumber } : undefined),
           // A workspace the provider left unnamed still groups its chats; the
@@ -958,44 +809,6 @@ export function sessionRunKeys(
     const lead = run.indexes[0];
     return (lead !== undefined ? rows[lead]?.item.id : undefined) ?? "";
   });
-}
-
-/**
- * Whether an advertised action acts on the row's whole workspace rather than
- * on the chat itself — a Conductor archive, whose target is the workspace id
- * riding the advertisement. Only the target can say so: the label is the
- * provider's own words, and words are not a contract.
- */
-export function actsOnWorkspace(session: SessionView, action: SessionAction): boolean {
-  return session.workspace !== undefined && action.target === session.workspace.id;
-}
-
-/** One workspace-level act, and the chat whose advertisement carries it. */
-export interface WorkspaceTrayAction {
-  action: SessionAction;
-  session: SessionView;
-}
-
-/**
- * The acts a tray's header offers: every workspace-level action its chats
- * advertise, each once. A provider advertises the same archive on every chat
- * of a settled workspace, and a tray drawing one chip per chat reads as
- * several different acts when pressing any of them files the whole workspace
- * away — so the tray says it once, where the workspace is named once. The
- * first chat advertising an act is the one the press travels through, which
- * keeps the write validated against the same roster row that advertised it.
- */
-export function workspaceTrayActions(
-  sessions: readonly SessionView[],
-): readonly WorkspaceTrayAction[] {
-  const acts = new Map<string, WorkspaceTrayAction>();
-  for (const session of sessions) {
-    for (const action of session.actions) {
-      if (!actsOnWorkspace(session, action) || acts.has(action.id)) continue;
-      acts.set(action.id, { action, session });
-    }
-  }
-  return [...acts.values()];
 }
 
 /** The tray header's pull request, and the chat whose report carries it. */

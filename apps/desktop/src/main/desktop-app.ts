@@ -9,7 +9,7 @@ import {
   accountGateOpen,
   HostedVaultClient,
 } from "@sidecar/account";
-import type { RememberedFact } from "@sidecar/acts";
+import { type RememberedFact, rememberedFactsText } from "@sidecar/acts";
 import {
   PRODUCT_CREDENTIAL_SOURCE,
   PRODUCT_DIAGNOSTIC_KIND,
@@ -22,6 +22,7 @@ import {
   productSignInAge,
   type RecordProductEvent,
 } from "@sidecar/analytics";
+import { type BrainDelivery, type BrainRequestRecord, brainStateFromStored } from "@sidecar/brain";
 import {
   activeMeetingEnd,
   GoogleCalendarReader,
@@ -30,13 +31,10 @@ import {
   nextMeetingBoundary,
 } from "@sidecar/calendar";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
-import {
-  AgentTraceWriter,
-  tracedAttentionEvaluator,
-  tracedSubjectEvaluator,
-} from "@sidecar/devtrace";
+import { AgentTraceWriter, tracedBrainClient } from "@sidecar/devtrace";
 import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
 import { fixtureSnapshot } from "@sidecar/fixtures";
+import { type AppGuideSnapshot, appGuideContextText, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
 import {
   ADAPTER_DIAGNOSTIC_KIND,
@@ -46,18 +44,29 @@ import {
   ConductorLocalWorkspaceAdapter,
   ConductorSessionApplicationReader,
   ObservationHookRegistry,
+  type ObservationSpoolWatcher,
   type ProviderRegistration,
   peekLocalSessions,
   providerRegistrations,
   type WorkspaceHostEnrichment,
   type WorkspaceHostRegistration,
+  watchObservationSpool,
   workspaceHostRegistrations,
 } from "@sidecar/providers";
-import type { ConversationEntry, SessionAnnouncement } from "@sidecar/realtime";
+import {
+  ARRIVAL_SPEECH_KIND,
+  appendConversationThreadEntry,
+  BRIEFING_SPEECH_KIND,
+  CALENDAR_ONBOARDING_SPEECH_KIND,
+  type ConversationEntry,
+  conversationHistoryText,
+  recentConversationEntries,
+  sessionContextText,
+  workspaceProjectContextText,
+} from "@sidecar/realtime";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   CreatedWorkspaceOpenTracker,
-  InMemorySessionRegistry,
   isProviderId,
   isWorkspaceProviderId,
   normalizeObservedWorkspaceProjects,
@@ -67,16 +76,9 @@ import {
   PROVIDER_ID,
   PROVIDER_ID_LIST,
   type ProviderId,
-  ReportedSessionLinks,
-  rosterRelevantSessions,
-  SESSION_LOCATION,
   type Session,
-  type SessionIdentity,
-  type SessionNotice,
-  SessionNoticeHold,
-  SessionNoticeTracker,
   type SessionProviderAdapter,
-  type SessionRegistrySnapshot,
+  SessionRoster,
   staleWorkspaceProjectDefaults,
   type WorkspaceAgentSelection,
   workspaceProjectSelectionId,
@@ -92,14 +94,14 @@ import {
 } from "@sidecar/superset";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { LinearCredentials, LinearIssueTracker, LinearSignIn } from "@sidecar/trackers";
+import { IntroductionRealtimeCredentialMinter, VoiceCapabilityAssembler } from "@sidecar/voice";
 import {
-  IntroductionRealtimeCredentialMinter,
-  sessionAnnouncementFromReview,
-  sessionNoticeAnnouncement,
-  VoiceCapabilityAssembler,
-  withSubjects,
-} from "@sidecar/voice";
-import { ACT_RESULT_STATUS, isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
+  ACT_RESULT_STATUS,
+  isRecord,
+  text,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@sidecar/wire";
 import {
   app,
   BrowserWindow,
@@ -114,6 +116,7 @@ import {
   session,
   shell,
   systemPreferences,
+  type WebContents,
 } from "electron";
 import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "#shared/apple-calendar";
 import { BRIDGE, channels } from "#shared/bridge";
@@ -121,6 +124,7 @@ import {
   ACCOUNT_STATUS,
   type AccountSnapshot,
   type AppBootstrap,
+  type BrainAppActRequest,
   type ConversationHistoryPayload,
   type MicrophoneRoute,
   type MicrophoneStatus,
@@ -133,6 +137,9 @@ import {
   WINDOW_ROLE,
 } from "#shared/contracts";
 import { VOICE_SOURCE_COUNTED_AS } from "#shared/product-vocabulary";
+import type { BrainRequestSnapshot } from "#shared/wire/brain";
+import { SPEECH_OUTCOME, type SpeechOutcome } from "#shared/wire/speech";
+import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/wire/voice-view";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { AppleCalendarReader } from "./apple-calendar";
 import {
@@ -144,6 +151,11 @@ import {
   countsFirstAnnouncement,
   shouldBackfillArrivalSettled,
 } from "./arrival-flow";
+import type { WorkspaceCreationDefaults } from "./brain/act-performer";
+import { clearConversationAndBrain } from "./brain/conversation-clear";
+import { BRAIN_STATE_FILE, wakeEventsFromHooks } from "./brain/flow";
+import { BrainReplyDeliveries } from "./brain/reply-delivery";
+import { wireBrain } from "./brain/wiring";
 import {
   CALENDAR_ONBOARDING_STATE_FILE,
   type CalendarOnboardingState,
@@ -165,7 +177,7 @@ import {
 } from "./introduction-flow";
 import { registerAccountSessionIpc } from "./ipc/account-session";
 import { registerCalendarConnectionIpc } from "./ipc/calendar-connection";
-import { registerSessionActsIpc } from "./ipc/session-acts";
+import { createSessionActPerformer, registerSessionActsIpc } from "./ipc/session-acts";
 import { registerSettingsRowsIpc } from "./ipc/settings-rows";
 import { registerTrackerConnectionIpc } from "./ipc/tracker-connection";
 import { registerVoiceRuntimeIpc } from "./ipc/voice-runtime";
@@ -185,21 +197,18 @@ import { OutputVolumeWatcher } from "./native/output-volume";
 import { ProviderKeyVaultSync, type VaultSyncAccount } from "./provider-key-vault-sync";
 import { type BridgeContext, registerBridge, registerBridgeEntry } from "./register-bridge";
 import { runModeFor, sentryReportingEnabled } from "./run-mode";
-import {
-  currentSessionAnnouncements,
-  heldSessionAnnouncements,
-  type PendingSessionAnnouncement,
-  SessionAnnouncementBatch,
-  SUBJECT_DERIVATION_DEADLINE_MS,
-} from "./session-announcement-batch";
 import { createSettingsHandler } from "./settings-handler";
 import { SettingsStore } from "./settings-store";
 import { createElectronUpdaterEngine } from "./update-installer";
 import { UPDATE_ENDPOINT, UpdateService } from "./update-service";
+import { transitionVoiceCredential } from "./voice/credential-transition";
+import { type OnboardingBeatKind, SpeechArbiter } from "./voice/speech-arbiter";
+import { VoiceReceiver } from "./voice-receiver";
 import { DockPresence } from "./window/dock-presence";
 import { HOTKEY_RANK, HotkeyRegistrar } from "./window/hotkey-registrar";
 import { IntroductionWindow } from "./window/introduction-window";
 import { PanelManager } from "./window/panel-manager";
+import { VoiceWindow } from "./window/voice-window";
 
 // Which Luke this process is decides where its state lives and which Keychain
 // entry protects its credentials; see app-identity.ts for why a development
@@ -244,16 +253,13 @@ Sentry.init({
 const ACCOUNT_BASE_URL =
   (app.isPackaged ? undefined : process.env.LUKE_ACCOUNT_BASE_URL) ??
   "https://tryluke.dev/api/auth";
-// The hosted voice and attention endpoints live on the same origin as the
-// account service, so the one development override redirects both together —
-// a build pointed at a local account service reviews and mints against it too.
+// The hosted voice endpoints live on the same origin as the account service,
+// so the one development override redirects both together — a build pointed
+// at a local account service mints against it too.
 const HOSTED_SERVICE_BASE_URL = ACCOUNT_BASE_URL.replace(/\/api\/auth\/?$/, "");
 const ACCOUNT_CLIENT_ID = "luke-desktop";
-const SESSION_REFRESH_INTERVAL_MS = 5_000;
-const sessionRegistry = new InMemorySessionRegistry();
-// What lets a History line still open a chat whose roster row has departed —
-// archived in its provider — at the last address observation itself reported.
-const reportedSessionLinks = new ReportedSessionLinks();
+const SESSION_REFRESH_INTERVAL_MS = 60_000;
+const sessionRegistry = new SessionRoster();
 // Declared before the settings store because the store's snapshot asks it
 // what the latest pass learned about the Codex CLI's login. It observes only
 // inside the codex composite the provider registrations build; a fixture or
@@ -384,7 +390,7 @@ const linearCredentials = new LinearCredentials({
     // Nobody pressed anything to end this connection — Linear refused the
     // renewal — so no settings reply is on its way to say so. A row left
     // saying connected would be a row about a grant that no longer exists.
-    panels.broadcast(channels.onSettingsChanged, cleared.settings);
+    broadcast(channels.onSettingsChanged, cleared.settings);
   },
 });
 const linearTracker = new LinearIssueTracker({
@@ -466,17 +472,6 @@ const APPLE_ACCESS_POLL_INTERVAL_MS = 10_000;
 let appleAccessPollTimer: NodeJS.Timeout | undefined;
 /** Whether the last access probe failed, so only the edges reach the log. */
 let appleAccessProbeFailing = false;
-// Notices decided while a meeting is on wait here, in the main process: the
-// hold has to outlive any renderer, and this is the one place notices are
-// decided. What releases them is the clock against observed intervals —
-// deterministic, like the edges that produced them.
-const heldNotices = new SessionNoticeHold();
-/**
- * Evaluator approvals deferred by meeting quiet. Their words are not replayed
- * after the meeting because the session may have moved on; release instead
- * reopens a fresh evaluator pass against the current roster.
- */
-const heldEvaluatorSpeech = new SessionNoticeHold<SessionAnnouncement>();
 /**
  * Whether announcements are held right now, as last computed — what the
  * renderer draws Luke's sleeping face from. Kept and broadcast on change so
@@ -491,19 +486,41 @@ let announcementsHeld = false;
  */
 let conversationHistory: readonly ConversationEntry[] = [];
 let conversationClearedAt: number | undefined;
-// Notices come from status edges the registry observed, never from anything a
-// model decided, so they work — and matter most — with no evaluator configured.
-const sessionNoticeTracker = new SessionNoticeTracker();
-const sessionAnnouncementBatch = new SessionAnnouncementBatch((announcements) => {
-  void deliverSessionAnnouncementBatch(announcements);
-});
+/**
+ * Which ended runs are still owed to the developer's ear, and to which voice
+ * renderer. Owned here, never persisted, and emptied with the generation: a
+ * launch restores the words to History and speaks none of them.
+ */
+const brainReplyDeliveries = new BrainReplyDeliveries({ nextDeliveryId: () => randomUUID() });
+/**
+ * Whether the hidden voice renderer can receive, by the main process's own
+ * account: an epoch per load, ready only on that renderer's report. Every
+ * offer to the voice window — proactive speech and owed replies alike —
+ * waits on it, and a reset takes back what the vanished renderer held.
+ */
+const voiceReceiver = new VoiceReceiver();
+/** The spool watchers standing on each hooked provider's spool, closed at quit. */
+let spoolWatchers: readonly ObservationSpoolWatcher[] = [];
+/**
+ * The guide as the renderer last reported it. It is what an app act the brain
+ * asks for is validated against here, and what the brain is handed as the
+ * app's description of itself; empty until a panel has described one.
+ */
+let appGuide: AppGuideSnapshot = EMPTY_APP_GUIDE;
+/**
+ * The app acts the brain asked a renderer to perform and is still waiting on,
+ * by request id. A renderer answers within the round trip or the act is
+ * refused on a clock, so the brain never hangs on a panel that went away.
+ */
+const pendingBrainAppActs = new Map<string, (answer: WireRecord) => void>();
+const BRAIN_APP_ACT_TIMEOUT_MS = 10_000;
 // The workspaces Luke just created and has yet to open on screen. Entries come
 // only from the validated creation act — nothing a model decided can add one —
 // and each resolves against what observation itself reports.
 const createdWorkspaceOpens = new CreatedWorkspaceOpenTracker();
 /**
  * The development trace: Luke's own agent traffic — the realtime wire and the
- * attention evaluator's passes — appended as JSONL under a directory the
+ * brain's turns and requests — appended as JSONL under a directory the
  * developer's own shell named. Gated so it cannot exist for a user: a
  * packaged build never reads the variable, a fixture or evidence run has no
  * traffic to tap and constructs no writer, and everything a traced run
@@ -516,6 +533,18 @@ const agentTrace = agentTraceDirectory
   ? new AgentTraceWriter({ directory: agentTraceDirectory })
   : undefined;
 if (agentTrace) process.stderr.write(`Agent trace: ${agentTrace.file}\n`);
+// Everything Luke says unprompted — the brain's briefings and the two
+// onboarding beats — is decided here, in the main process, which has to
+// outlive any renderer: what stands, in what order, whether now, and what
+// became of each. The mouth in the renderer holds one offer at a time and
+// reports by id. What releases a held briefing is the clock against observed
+// intervals — deterministic, like the edges that woke the brain — and the
+// release is a re-decision, never a replay.
+const speechArbiter = new SpeechArbiter({
+  now: Date.now,
+  nextId: randomUUID,
+  ...(agentTrace ? { trace: (record) => agentTrace.recordSpeechDecision(record) } : undefined),
+});
 const voiceCapabilities = new VoiceCapabilityAssembler({
   settings: settingsStore,
   credentialsUsable: () => runMode.sendsNetwork && accountCapabilitiesActive(),
@@ -523,14 +552,10 @@ const voiceCapabilities = new VoiceCapabilityAssembler({
   accountSignedIn: () => account.status === ACCOUNT_STATUS.SIGNED_IN,
   hostedServiceBaseUrl: HOSTED_SERVICE_BASE_URL,
   refreshAccount: accountSession.refreshOnce,
-  currentSession: (identity) => sessionRegistry.get(identity),
-  readTranscript: readLocalTranscriptRendering,
   ...(agentTrace
     ? {
-        wrapEvaluator: (evaluator) =>
-          tracedAttentionEvaluator(evaluator, (record) => agentTrace.recordAttention(record)),
-        wrapSubjectEvaluator: (evaluator) =>
-          tracedSubjectEvaluator(evaluator, (record) => agentTrace.recordSubject(record)),
+        wrapBrainClient: (client) =>
+          tracedBrainClient(client, (record) => agentTrace.recordBrainRequest(record)),
       }
     : undefined),
 });
@@ -551,7 +576,7 @@ const feedbackDelivery = feedbackDeliveryFromEnvironment();
 const lastRunVersionPath = () => path.join(app.getPath("userData"), "last-run-version.json");
 const updateService = new UpdateService({
   currentVersion: app.getVersion(),
-  onChange: (update) => panels.broadcast(channels.onUpdateChanged, update),
+  onChange: (update) => broadcast(channels.onUpdateChanged, update),
   engine:
     app.isPackaged && runMode.sendsNetwork && process.platform === "darwin"
       ? createElectronUpdaterEngine()
@@ -707,7 +732,7 @@ async function sessionReplayBootstrap(): Promise<SessionReplayBootstrap> {
  */
 function haltSessionReplay(): void {
   sessionReplayBroadcastGeneration += 1;
-  panels.broadcast(channels.onSessionReplayChanged, {
+  broadcast(channels.onSessionReplayChanged, {
     permitted: false,
     appVersion: app.getVersion(),
   });
@@ -768,6 +793,9 @@ const panels = new PanelManager({
   preloadPath: path.join(__dirname, "preload.js"),
   rendererHtmlPath: path.join(__dirname, "renderer", "index.html"),
   rendererUrl: rendererUrl(),
+  // The hidden voice window outlives the panels, so the panels say for
+  // themselves when the last of them is gone.
+  onAllClosed: () => app.quit(),
 });
 // The one-time spoken introduction: a fullscreen takeover on the first
 // interactive launch, before any account exists. Its voice runs on the hosted
@@ -787,7 +815,69 @@ const introductionWindow = new IntroductionWindow({
     process.stderr.write(`Introduction abandoned: ${reason}\n`);
     void abandonIntroduction();
   },
+  onClosed: () => quitUnlessPanelStands(),
 });
+/**
+ * The hidden window that will hold the live conversation, so that no panel
+ * does. It stands for the whole run on any launch that could speak — an
+ * interactive one, or one that reaches the network — and never in a fixture or
+ * capture run, where nothing would. A renderer that dies is stood up again by
+ * the window itself, within its own bound; nothing drawn depends on it.
+ */
+const voiceWindow = new VoiceWindow({
+  runMode,
+  receiver: voiceReceiver,
+  preloadPath: path.join(__dirname, "preload.js"),
+  rendererHtmlPath: path.join(__dirname, "renderer", "index.html"),
+  rendererUrl: rendererUrl(),
+  onGone: (reason) => {
+    process.stderr.write(`Voice window replaced: ${reason}\n`);
+    // Whatever the dead renderer last reported is no longer true: no exchange
+    // is live, no panel opening now should bootstrap into one, and every
+    // panel drawing the last snapshot is told the voice is at rest, or Escape
+    // would keep asking a window that is gone to stop. The replacement
+    // reports its own view the moment it mounts.
+    latestVoiceView = undefined;
+    panels.setVoiceExchange(false);
+    broadcast(channels.onVoiceViewChanged, IDLE_VOICE_VIEW);
+  },
+  onGaveUp: (reason) => {
+    process.stderr.write(`Voice window abandoned: ${reason}\n`);
+  },
+});
+const voiceWindowWanted = runMode.registersGlobalKeys || runMode.sendsNetwork;
+
+/**
+ * The invariant the hidden window lives under: it never keeps the process
+ * alive. It is raised only once a panel stands, so it is never the only
+ * window, and whenever the takeover — the one other window that can stand
+ * with no panel — goes down by any route, a run with no panel ends here
+ * rather than living on invisibly.
+ */
+function raiseVoiceWindow(): void {
+  if (voiceWindowWanted && panels.standing > 0) voiceWindow.open();
+}
+
+function quitUnlessPanelStands(): void {
+  if (panels.standing === 0) app.quit();
+}
+
+/**
+ * Hands a payload to every panel and to the voice window, which reads the
+ * same settings, roster, and hold the panels do. A channel the voice window
+ * never subscribes to costs it nothing; the sender a reply already answered
+ * is skipped exactly as `PanelManager.broadcast` skips it.
+ */
+function broadcast<Payload>(channel: string, payload: Payload, except?: WebContents): void {
+  panels.broadcast(channel, payload, except);
+  const voice = voiceWindow.current();
+  if (!voice || voice.webContents === except) return;
+  // SAFETY: Main-process broadcasts carry structured-clone snapshots produced for channels fixed by this build.
+  voice.webContents.send(channel, payload as UnparsedWireValue);
+}
+
+/** The voice window's latest snapshot, for a panel that opens mid-exchange. */
+let latestVoiceView: VoiceView | undefined;
 /**
  * Whether the takeover's renderer ever reported mounting. A takeover that
  * never draws is a fullscreen window swallowing every click with nothing on
@@ -849,6 +939,9 @@ function writeArrivalState(state: ArrivalState): void {
       `Could not persist the arrival record: ${error instanceof Error ? error.message : String(error)}\n`,
     );
   }
+  // A settled record has nothing left to greet: a beat still waiting to be
+  // said about it is taken back rather than spoken over a settle it raced.
+  if (state.settledAt !== undefined) withdrawBeat(ARRIVAL_SPEECH_KIND);
 }
 
 /**
@@ -938,7 +1031,13 @@ function writeCalendarOnboardingState(state: CalendarOnboardingState): void {
       `Could not persist the calendar onboarding record: ${error instanceof Error ? error.message : String(error)}\n`,
     );
   }
-  panels.broadcast(channels.onCalendarOnboardingChanged, calendarOnboardingGateOwed());
+  const owed = calendarOnboardingGateOwed();
+  // The gate standing down outruns a beat still waiting about it: a fast Done
+  // or skip must not be answered by the ask it just settled, so the beat is
+  // taken back the moment the record says the step is over, before the
+  // arrival it was holding is requested.
+  if (!owed) withdrawBeat(CALENDAR_ONBOARDING_SPEECH_KIND);
+  broadcast(channels.onCalendarOnboardingChanged, owed);
 }
 
 /**
@@ -965,26 +1064,6 @@ async function settleCalendarOnboardingIfConnected(): Promise<void> {
   });
 }
 
-/** Whether an attempt to speak the arrival beat is already under way. */
-let arrivalBeatSpeaking = false;
-
-/**
- * Whether this run has already sent the trigger. One per run, however many
- * capability starts a run has: the record only settles when the reply
- * begins, so a second trigger while the first still sits queued would stack
- * two beats in the announcer's queue and speak the arrival twice. A trigger
- * that went nowhere is the next launch's to retry.
- */
-let arrivalBeatTriggered = false;
-
-/**
- * Whether this run has already sent the calendar onboarding beat's trigger.
- * Per run rather than per install: the gate is the durable prompt, and a
- * launch that still finds it standing may say so again, but one run says it
- * once however many capability starts it has.
- */
-let calendarOnboardingBeatTriggered = false;
-
 /**
  * Whether the calendar gate is actually being offered: owed by the record,
  * and with at least one source this build can connect — the same two facts
@@ -1003,53 +1082,39 @@ async function calendarGateOfferable(): Promise<boolean> {
 }
 
 /**
- * Speaks the one-time arrival beat, if it is owed and this moment can carry
- * it. The trigger is deterministic on every side — the record the sign-in
- * edge wrote, never anything a model decided — and what is sent is only the
- * fact of the beat: the script is fixed by the build in the realtime
- * vocabulary, and its observed values are the renderer's own to read from
- * the roster it already draws. Sending settles nothing: the trigger can be
- * lost — a renderer still loading, the announcer's own quiet or age-out
- * dropping the beat unspoken — so the record settles only when the voice
- * window reports the reply actually began, and everything short of that
- * leaves the beat owed for the next signed-in launch, because a moment
- * nobody heard was not the one moment this plays. The first observation
- * pass is awaited first, so the beat's suggestion can name a session the
- * developer actually has running.
+ * Asks the speech arbiter for the one onboarding beat this moment owes, if
+ * any. The trigger is deterministic on every side — the record the sign-in
+ * edge wrote, never anything a model decided — and what is requested is only
+ * the kind: the script is fixed by the build in the realtime vocabulary, and
+ * its observed values are the renderer's own to read from the roster it
+ * already draws. Requesting settles nothing: the record settles only when
+ * the mouth reports the reply actually began, and everything short of that
+ * — the quiet, a call that would not open, news gone stale — leaves the beat
+ * owed for the next signed-in launch, because a moment nobody heard was not
+ * the one moment this plays. The arbiter says each beat once per run however
+ * many capability starts a run has, and holds one through a meeting's quiet
+ * for the release rather than dropping it. The first observation pass is
+ * awaited first, so the beat's suggestion can name a session the developer
+ * actually has running.
  *
  * While the calendar gate stands, the calendar onboarding beat speaks in the
  * arrival's place — "you're all set" over a panel still asking for something
  * would be false — and the arrival waits for the step to settle, whose Done
  * and skip both call back here.
  */
-async function speakArrivalBeat(): Promise<void> {
-  if (arrivalBeatSpeaking) return;
+async function requestOnboardingBeat(): Promise<void> {
   if (!runMode.requiresAccount || account.status !== ACCOUNT_STATUS.SIGNED_IN) return;
   if (!voiceCapabilities.realtimeCredentials) return;
-  arrivalBeatSpeaking = true;
-  try {
-    if (await calendarGateOfferable()) {
-      if (calendarOnboardingBeatTriggered) return;
-      const host = panels.voiceHost();
-      if (!host) return;
-      host.webContents.send(channels.onCalendarOnboardingSpeech, undefined);
-      calendarOnboardingBeatTriggered = true;
-      return;
-    }
-    if (arrivalBeatTriggered || !arrivalBeatOwed(arrivalState)) return;
-    await sessionObservationLoop.refresh().catch(() => undefined);
-    if (account.status !== ACCOUNT_STATUS.SIGNED_IN || !arrivalBeatOwed(arrivalState)) return;
-    // The calendar may not have been read yet this early, so this check can
-    // miss a meeting; the announcer's own quiet still holds the beat there,
-    // and a beat it drops stays owed rather than lost.
-    if (await announcementsQuietNow(Date.now())) return;
-    const host = panels.voiceHost();
-    if (!host) return;
-    host.webContents.send(channels.onArrivalSpeech, undefined);
-    arrivalBeatTriggered = true;
-  } finally {
-    arrivalBeatSpeaking = false;
+  if (await calendarGateOfferable()) {
+    speechArbiter.request({ kind: CALENDAR_ONBOARDING_SPEECH_KIND });
+    void reconcileSpeech();
+    return;
   }
+  if (!arrivalBeatOwed(arrivalState)) return;
+  await sessionObservationLoop.refresh().catch(() => undefined);
+  if (account.status !== ACCOUNT_STATUS.SIGNED_IN || !arrivalBeatOwed(arrivalState)) return;
+  speechArbiter.request({ kind: ARRIVAL_SPEECH_KIND });
+  void reconcileSpeech();
 }
 
 /**
@@ -1104,6 +1169,7 @@ async function finishIntroduction(given: boolean): Promise<void> {
   // expands the gate — the same morph, Luke riding from the wing spot into
   // the gate's face, that every later signed-out launch plays.
   panels.reconcile();
+  raiseVoiceWindow();
   await Promise.race([
     panelReady,
     new Promise((resolve) => setTimeout(resolve, INTRODUCTION_HANDOFF_READY_MS)),
@@ -1129,6 +1195,7 @@ async function abandonIntroduction(): Promise<void> {
   // answered by the introduction's standing while it is being stood down.
   introductionWindow.retire();
   panels.reconcile();
+  raiseVoiceWindow();
   panels.showInactiveAll();
   introductionWindow.close();
   await hotkeys.reapply(HOTKEY_RANK.TALK);
@@ -1138,7 +1205,7 @@ const supersetSignIn = new SupersetSignIn({
   cli: supersetCli,
   openExternal: (url) => shell.openExternal(url),
   onChange: (state) => {
-    panels.broadcast(channels.onSupersetSignInChanged, state);
+    broadcast(channels.onSupersetSignInChanged, state);
     if (state.stage !== SUPERSET_SIGN_IN_STAGE.CONNECTED) return;
     void sessionObservationLoop.refresh();
     // The edge into connected, which is where a sign-in actually lands: the
@@ -1162,13 +1229,17 @@ const hotkeys = new HotkeyRegistrar({
     (rank === HOTKEY_RANK.TALK && introductionWindow.active),
   recordProductEvent,
   host: {
-    voiceHost: () => introductionWindow.current() ?? panels.voiceHost(),
+    // The talk and stop keys go to whichever window holds a voice: the
+    // takeover while it stands, else the hidden voice window. A panel is never
+    // a voice host; it is only where the ask key summons the composer.
+    voiceHost: () => introductionWindow.current() ?? voiceWindow.current(),
+    primaryPanel: () => panels.primaryPanel(),
     displayIdFor: (sender) => panels.displayIdFor(sender),
     modeFor: (displayId) => panels.modeFor(displayId),
     setMode: (displayId, mode, requestFocus) => {
       panels.setMode(displayId, mode, requestFocus);
     },
-    broadcast: (channel, payload) => panels.broadcast(channel, payload),
+    broadcast: (channel, payload) => broadcast(channel, payload),
   },
 });
 const dock = new DockPresence({
@@ -1197,7 +1268,7 @@ function startOutputVolumeWatch(): void {
   const send = (state: OutputAudioState | undefined) => {
     outputAudio = state;
     // Every display's panel captions the same voice, so every one is told.
-    panels.broadcast(channels.onOutputAudioChanged, state);
+    broadcast(channels.onOutputAudioChanged, state);
   };
   outputVolumeWatcher = new OutputVolumeWatcher({
     onState: send,
@@ -1245,7 +1316,7 @@ let workspaceProjectsBroadcastGeneration = 0;
 async function broadcastWorkspaceProjects(): Promise<void> {
   const generation = ++workspaceProjectsBroadcastGeneration;
   const offeredProjects = offeredWorkspaceProjects();
-  const defaults = await settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field);
+  const defaults = (await readWorkspaceDefaults()).defaultProjectIds;
   if (generation !== workspaceProjectsBroadcastGeneration) return;
   await pruneWorkspaceProjectDefaults(
     offeredProjects,
@@ -1257,7 +1328,7 @@ async function broadcastWorkspaceProjects(): Promise<void> {
   const serialized = JSON.stringify(projects);
   if (serialized === lastWorkspaceProjects) return;
   lastWorkspaceProjects = serialized;
-  panels.broadcast(channels.onWorkspaceProjectsChanged, projects);
+  broadcast(channels.onWorkspaceProjectsChanged, projects);
 }
 
 /**
@@ -1284,7 +1355,7 @@ async function pruneWorkspaceProjectDefaults(
       );
       if (!saved.cleared) continue;
       if (!isCurrent()) return;
-      panels.broadcast(channels.onSettingsChanged, saved.settings);
+      broadcast(channels.onSettingsChanged, saved.settings);
     }
   } catch {
     return;
@@ -1302,12 +1373,19 @@ function microphoneStatus(): MicrophoneStatus {
   return systemPreferences.getMediaAccessStatus("microphone") as MicrophoneStatus;
 }
 
+/**
+ * Asks the system for the microphone where it has not yet answered, and tells
+ * every window the answer: the status is the main process's to know, and no
+ * panel holds a microphone to learn it from.
+ */
 async function requestMicrophone(): Promise<MicrophoneStatus> {
   if (process.platform !== "darwin") return "granted";
   if (microphoneStatus() === "not-determined") {
     await systemPreferences.askForMediaAccess("microphone");
   }
-  return microphoneStatus();
+  const status = microphoneStatus();
+  broadcast(channels.onMicrophoneStatusChanged, status);
+  return status;
 }
 
 function trustedSender(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
@@ -1320,7 +1398,7 @@ function accountCapabilitiesActive(): boolean {
 }
 
 function broadcastAccount(): void {
-  panels.broadcast(channels.onAccountChanged, account);
+  broadcast(channels.onAccountChanged, account);
 }
 
 /**
@@ -1331,7 +1409,7 @@ function broadcastAccount(): void {
  * renderer keeps drawing the voice state of the account it no longer has.
  */
 async function broadcastVoiceAvailability(): Promise<void> {
-  panels.broadcast(channels.onSettingsChanged, await settingsStore.snapshot());
+  broadcast(channels.onSettingsChanged, await settingsStore.snapshot());
 }
 
 /**
@@ -1356,7 +1434,7 @@ async function broadcastSessionReplay(): Promise<void> {
   const generation = ++sessionReplayBroadcastGeneration;
   const replay = await sessionReplayBootstrap();
   if (generation !== sessionReplayBroadcastGeneration) return;
-  panels.broadcast(channels.onSessionReplayChanged, replay);
+  broadcast(channels.onSessionReplayChanged, replay);
 }
 
 /**
@@ -1372,7 +1450,7 @@ async function broadcastCodexCloudConnection(): Promise<void> {
   const connection = codexCloudAdapter.connection();
   if (connection === announcedCodexCloudConnection) return;
   announcedCodexCloudConnection = connection;
-  panels.broadcast(channels.onSettingsChanged, await settingsStore.snapshot());
+  broadcast(channels.onSettingsChanged, await settingsStore.snapshot());
 }
 
 async function startAccountCapabilities(): Promise<void> {
@@ -1388,7 +1466,7 @@ async function startAccountCapabilities(): Promise<void> {
   // After the credential and the observation it wants to name a session
   // from; unawaited because the sign-in that started these capabilities must
   // not wait on an observation pass to land.
-  void speakArrivalBeat();
+  void requestOnboardingBeat();
   // The sync switch is a standing state, not a one-shot act: while it is on,
   // the vault holds what this Mac's encrypted store holds, reconciled at the
   // sign-in for the account the keys were last synced for. The launch that
@@ -1401,32 +1479,313 @@ async function stopAccountCapabilities(): Promise<void> {
   stopSessionObservation();
   stopIssueObservation();
   stopCalendarObservation();
+  // A beat greets the account that just left; neither may speak into the
+  // signed-out panel, and neither is spent by being taken back.
+  withdrawBeat(ARRIVAL_SPEECH_KIND);
+  withdrawBeat(CALENDAR_ONBOARDING_SPEECH_KIND);
   await applyVoiceCredential();
   await hotkeys.reapply(HOTKEY_RANK.TALK);
 }
 
 async function applyVoiceCredential(): Promise<void> {
-  await voiceCapabilities.apply();
-  if (!voiceCapabilities.realtimeCredentials) sessionAnnouncementBatch.clear();
+  await transitionVoiceCredential({
+    retire: () => brainWiring.host.retire(),
+    apply: () => voiceCapabilities.apply(),
+    rebuild: brainWiring.rebuild,
+  });
+}
+
+const brainStatePath = () => path.join(app.getPath("userData"), BRAIN_STATE_FILE);
+
+function withdrawBriefings(): void {
+  const offered = speechArbiter.withdrawBriefings();
+  if (offered) voiceWindow.current()?.webContents.send(channels.onSpeechWithdrawn, { id: offered });
+  offerNextSpeech();
 }
 
 /**
- * The subject deriver's read of one local session's transcript: the same
- * adapter read the conversation tab's ask runs, bounded by the same rendering,
- * for a session the registry still holds on this machine. It counts no
- * developer act, because no developer asked; a cloud session, an unknown
- * provider, or a provider with no transcript this build reads answers nothing.
+ * The roster as the brain is shown it and validates every act against: the
+ * sessions still worth a row, less Luke's own voice, rendered with the same
+ * bounded fields the panel draws and the identities a tool call names.
  */
-async function readLocalTranscriptRendering(
-  identity: SessionIdentity,
-): Promise<string | undefined> {
-  const session = sessionRegistry.get(identity);
-  if (!session || session.location !== SESSION_LOCATION.LOCAL) return undefined;
-  const adapter = adapterFor(identity.providerId);
-  if (!adapter) return undefined;
-  const result = await adapter.readTranscript(identity.providerSessionId);
-  return result.status === ACT_RESULT_STATUS.ACCEPTED ? result.transcript : undefined;
+function brainRoster() {
+  const now = Date.now();
+  const sessions = sessionRegistry.list().filter((session) => session.realtimeVoice !== true);
+  return {
+    text: sessionContextText(sessions, now),
+    identities: sessions.map((session) => ({
+      providerId: session.providerId,
+      providerSessionId: session.providerSessionId,
+    })),
+    sessions,
+  };
 }
+
+/** The sessions an act the brain asks for is validated against, read at the moment of the act. */
+function brainActableSessions(): readonly Session[] {
+  return sessionRegistry.list().filter((session) => session.realtimeVoice !== true);
+}
+
+/**
+ * The developer's saved creation tie-breaks, as the projects context narrates
+ * them and the validator applies them. Cached beside the projects broadcast so
+ * the brain's standing context — rendered synchronously each turn — and the
+ * act's own validation read the same defaults.
+ */
+let brainWorkspaceDefaults: WorkspaceCreationDefaults = {};
+
+async function readWorkspaceDefaults(): Promise<WorkspaceCreationDefaults> {
+  const [defaultProviderId, defaultProjectIds] = await Promise.all([
+    settingsStore.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
+    settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
+  ]);
+  const defaults: WorkspaceCreationDefaults = {};
+  if (defaultProviderId) defaults.defaultProviderId = defaultProviderId;
+  if (defaultProjectIds) defaults.defaultProjectIds = defaultProjectIds;
+  brainWorkspaceDefaults = defaults;
+  return defaults;
+}
+
+function brainWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
+  return normalizeObservedWorkspaceProjects(
+    offeredWorkspaceProjects(),
+    brainWorkspaceDefaults.defaultProjectIds,
+  );
+}
+
+/**
+ * Everything the brain is handed beside the roster, rebuilt every turn and
+ * remembered nowhere: where a workspace can be created and the saved
+ * tie-breaks, the durable facts about the developer, the recent conversation
+ * rendered against the roster as both now stand, and the app guide.
+ */
+function brainStandingContext(): string {
+  const sessions = brainActableSessions();
+  const projects = brainWorkspaceProjects();
+  return [
+    workspaceProjectContextText(
+      projects,
+      brainWorkspaceDefaults.defaultProviderId,
+      brainWorkspaceDefaults.defaultProjectIds,
+    ),
+    rememberedFactsText(rememberedFacts),
+    conversationHistoryText(recentConversationEntries(conversationHistory), sessions),
+    appGuideContextText(appGuide),
+  ]
+    .filter((part): part is string => part !== undefined && part.trim().length > 0)
+    .join("\n\n");
+}
+
+/**
+ * Records a line in the shared conversation from the main process — the ask a
+ * carried act was — and relays it to every panel, the way a window's own
+ * report is merged and relayed. Nothing here reaches a provider.
+ */
+function recordMainConversationEntry(entry: ConversationEntry, recordedAt = Date.now()): boolean {
+  if (!runMode.observesProviders) return false;
+  // A line from at or before the last Clear was settled by the Clear itself:
+  // a run of the erased generation publishing late, or a report of the thread
+  // as it stood before the press. Nothing is owed for it, and it is not taken.
+  if (conversationClearedAt !== undefined && recordedAt <= conversationClearedAt) return true;
+  const now = Date.now();
+  const merged = appendConversationThreadEntry(conversationHistory, entry, now, recordedAt);
+  // Unchanged means the thread already holds this line, or refused an empty
+  // one: either way it holds everything it was asked to.
+  if (merged === conversationHistory) return true;
+  if (!writeStoredState(conversationPath(), conversationRecord(merged, now), "the conversation")) {
+    return false;
+  }
+  conversationHistory = merged;
+  const payload: ConversationHistoryPayload = { entries: merged, cleared: false };
+  broadcast(channels.onConversationHistoryChanged, payload);
+  return true;
+}
+
+/**
+ * The History Clear a panel pressed: the cutoff raised and the relay emptied
+ * for every panel first, so no context, publication, or report can carry
+ * the old lines whatever the disk does; the brain's generation fenced and
+ * marked erased, which the store's listener below answers by withdrawing
+ * the speech that generation had queued; then the stored thread deleted.
+ * Answers whether both files went, which is what the panel reports; the
+ * fence stands either way. What Luke separately remembers about the
+ * developer is another file under another rule, and a Clear does not reach
+ * it. A fixture or capture run holds nothing on disk and empties the view
+ * alone.
+ */
+function clearConversationHistory(): Promise<boolean> {
+  const emptyConversation = () => {
+    conversationHistory = [];
+    const payload: ConversationHistoryPayload = { entries: [], cleared: true };
+    broadcast(channels.onConversationHistoryChanged, payload);
+  };
+  if (!runMode.observesProviders) {
+    emptyConversation();
+    return Promise.resolve(true);
+  }
+  return clearConversationAndBrain({
+    store: brainWiring.store(),
+    now: Date.now,
+    fence: (clearedAt) => {
+      conversationClearedAt = clearedAt;
+      emptyConversation();
+    },
+    eraseConversation: () =>
+      conversationHistory.length === 0
+        ? removeStoredState(conversationPath(), "the conversation")
+        : writeStoredState(
+            conversationPath(),
+            conversationRecord(conversationHistory, Date.now()),
+            "the conversation",
+          ),
+    report: (message) => process.stderr.write(`${message}\n`),
+  });
+}
+
+/**
+ * Carries an app act only a renderer can perform — a settings change, the
+ * panel shown, the feedback composer, the Updates row's button — to the
+ * primary panel, already validated here against the guide it reported, and waits for
+ * its answer. A panel that does not answer within the round trip refuses the
+ * act on a clock rather than holding the brain's turn open.
+ */
+function performBrainAppAct(action: BrainAppActRequest["action"]): Promise<WireRecord> {
+  const host = panels.primaryPanel();
+  if (!host) {
+    return Promise.resolve({
+      status: ACT_RESULT_STATUS.REJECTED,
+      reason: "No panel is open to carry that.",
+    });
+  }
+  const requestId = randomUUID();
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      pendingBrainAppActs.delete(requestId);
+      resolve({ status: ACT_RESULT_STATUS.REJECTED, reason: "The panel did not answer in time." });
+    }, BRAIN_APP_ACT_TIMEOUT_MS);
+    pendingBrainAppActs.set(requestId, (answer) => {
+      clearTimeout(timer);
+      pendingBrainAppActs.delete(requestId);
+      resolve(answer);
+    });
+    const request: BrainAppActRequest = { requestId, action };
+    host.webContents.send(channels.onBrainAppAct, request);
+  });
+}
+
+/**
+ * Hands one briefing the brain decided to the speech arbiter, which offers it
+ * to the voice or holds it while a meeting or the pause stands. Voice gone
+ * means nothing to say it with, and by the time a key returns the news is
+ * the panel's. It is counted when the mouth reports the reply began, never
+ * here, and with nothing observed about it.
+ */
+async function deliverBriefing(delivery: BrainDelivery): Promise<void> {
+  if (!voiceCapabilities.realtimeCredentials) return;
+  speechArbiter.request({ kind: BRIEFING_SPEECH_KIND, delivery });
+  await reconcileSpeech();
+}
+
+/** The remembered entries' write back, returning whether the list persisted. */
+function writeRememberedFacts(facts: readonly RememberedFact[]): boolean {
+  if (!runMode.observesProviders) return false;
+  if (!writeStoredState(rememberedFactsPath(), rememberedFactsRecord(facts), "Luke's memory")) {
+    return false;
+  }
+  rememberedFacts = facts;
+  broadcast(channels.onRememberedFactsChanged, facts);
+  return true;
+}
+
+/**
+ * The one entry every act on a session or an issue passes through, and the
+ * opens a row press reaches without the brain. Its checks stay its own so no
+ * act can inherit another act's authority.
+ */
+const sessionActPerformer = createSessionActPerformer({
+  sessionRegistry,
+  openExternal: (url) => shell.openExternal(url),
+  adapterFor,
+  sendsNetwork: runMode.sendsNetwork,
+  settingsStore,
+  rememberWorkspaceDefaults,
+  expectCreatedWorkspace: (identity, now) => createdWorkspaceOpens.expect(identity, now),
+  openCreatedWorkspaces: () => openCreatedWorkspaces(sessionRegistry.list()),
+  trackedIssues: () => trackedIssues,
+  issueTrackers,
+  refreshIssues: () => void issueObservationLoop.refresh(),
+  supersetContext: (identity) =>
+    observedSupersetWorkspaces.actableContext(
+      identity.providerId,
+      identity.providerSessionId,
+      observedSupersetOrganization,
+    ),
+  supersetCli,
+  recordProductEvent,
+});
+
+const brainWiring = wireBrain({
+  storage: {
+    read: () => readStoredState(brainStatePath()),
+    write: (contents) =>
+      writeStoredState(brainStatePath(), contents, "Luke's memory of the agents"),
+    remove: () => removeStoredState(brainStatePath(), "Luke's memory of the agents"),
+  },
+  createId: () => randomUUID(),
+  report: (message) => process.stderr.write(`${message}\n`),
+  ...(agentTrace ? { traceTurn: (record) => agentTrace.recordBrainTurn(record) } : undefined),
+  recordConversationEntry: recordMainConversationEntry,
+  broadcastRequests: broadcastBrainRequests,
+  onEndPublished: offerBrainReply,
+  onGenerationReplaced: () => {
+    withdrawBriefings();
+    withdrawBrainReplies();
+  },
+  replies: {
+    claim: (runId, deliveryId, epoch) =>
+      brainReplyDeliveries.claim(runId, deliveryId, epoch, brainReplyClaimContext()),
+    acknowledge: (runId, deliveryId, epoch) => {
+      if (brainReplyDeliveries.acknowledge(runId, deliveryId, epoch)) offerBrainReplies();
+    },
+    grantOnCall: (record, epoch) => {
+      const granted = brainReplyDeliveries.grantOnCall(
+        record,
+        brainWiring.store().generationId() ?? "",
+        epoch,
+        brainReplyClaimContext(),
+      );
+      // The grant took the run's offer out of the receiver's hand, and no
+      // acknowledgement will come for a reply said on the call: the next owed
+      // reply is offered now, for the receiver to take at its next quiet moment.
+      if (granted) offerBrainReplies();
+      return granted;
+    },
+  },
+  acts: {
+    sessionActs: sessionActPerformer,
+    sessions: brainActableSessions,
+    // A fresh pass before every session act keeps validation against the
+    // observed roster current. At 60s intervals the registry could otherwise
+    // be almost a minute stale when the act's validation and perform run.
+    refreshSessions: () => sessionObservationLoop.refresh(),
+    workspaceProjects: brainWorkspaceProjects,
+    workspaceDefaults: readWorkspaceDefaults,
+    trackedIssues: () => trackedIssues,
+    appGuide: () => appGuide,
+    rememberedFacts: () => rememberedFacts,
+    writeRememberedFacts,
+    performAppAct: performBrainAppAct,
+    recordConversationEntry: recordMainConversationEntry,
+  },
+  roster: brainRoster,
+  standingContext: brainStandingContext,
+  adapterFor,
+  session: (identity) => sessionRegistry.get(identity),
+  deliver: deliverBriefing,
+  client: () => voiceCapabilities.brainClient,
+  runnable: () => runMode.observesProviders && runMode.sendsNetwork && accountCapabilitiesActive(),
+  dropBriefings: () => speechArbiter.dropBriefings(),
+});
 
 function adapterFor(providerId: string) {
   if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return supersetWorkspaceAdapter;
@@ -1470,7 +1829,7 @@ async function rememberWorkspaceDefaults(
         APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
         providerId,
       );
-      panels.broadcast(channels.onSettingsChanged, saved.settings);
+      broadcast(channels.onSettingsChanged, saved.settings);
     }
     if (
       providerId === SUPERSET_WORKSPACE_PROVIDER_ID &&
@@ -1484,7 +1843,7 @@ async function rememberWorkspaceDefaults(
         SUPERSET_WORKSPACE_PROVIDER_ID,
         { agent },
       );
-      panels.broadcast(channels.onSettingsChanged, saved.settings);
+      broadcast(channels.onSettingsChanged, saved.settings);
     }
     // The project the workspace landed in becomes that provider's default on
     // the same first-choice terms, read again for the same overlap reason as
@@ -1502,7 +1861,7 @@ async function rememberWorkspaceDefaults(
           providerTargetId ? { providerProjectId, providerTargetId } : { providerProjectId },
         ),
       );
-      panels.broadcast(channels.onSettingsChanged, saved.settings);
+      broadcast(channels.onSettingsChanged, saved.settings);
     }
     // A model named for this creation becomes the default on the same
     // first-choice terms as the provider: only while nothing is chosen.
@@ -1522,7 +1881,7 @@ async function rememberWorkspaceDefaults(
         providerId,
         namedSelection,
       );
-      panels.broadcast(channels.onSettingsChanged, saved.settings);
+      broadcast(channels.onSettingsChanged, saved.settings);
     }
   } catch {
     // The reply is the creation's; a failed remember has no line in it.
@@ -1547,7 +1906,7 @@ function registerIpc(): void {
     ipcMain,
     trustedSender,
     snapshot: () => settingsStore.snapshot(),
-    broadcast: (settings, except) => panels.broadcast(channels.onSettingsChanged, settings, except),
+    broadcast: (settings, except) => broadcast(channels.onSettingsChanged, settings, except),
   });
   registerContextHandler(
     BRIDGE.getBootstrap,
@@ -1555,9 +1914,12 @@ function registerIpc(): void {
       // Each window bootstraps as itself: its own display, its own mode. The
       // roster and the settings are the same everywhere.
       const displayId = panels.displayIdFor(context.sender);
-      const display =
-        (displayId !== undefined ? panels.display(displayId) : undefined) ??
-        screen.getPrimaryDisplay();
+      // The voice window stands on no display and ignores the panel-only
+      // fields; everything else is fabricated a display as before.
+      const display = voiceWindow.owns(context.sender)
+        ? undefined
+        : ((displayId !== undefined ? panels.display(displayId) : undefined) ??
+          screen.getPrimaryDisplay());
       const [supersetInstalled, supersetConnected] = await Promise.all([
         supersetCli.installed(),
         supersetCli.connected(),
@@ -1581,6 +1943,7 @@ function registerIpc(): void {
         chromiumVersion: process.versions.chrome,
         nodeVersion: process.versions.node,
         microphoneStatus: microphoneStatus(),
+        ...(voiceWindow.owns(context.sender) ? { voiceEpoch: voiceReceiver.epoch() } : undefined),
         // Both keys travel as accelerators rather than labels: the renderer needs
         // both spellings — the keycaps' ⌥ and L drawn apart, and aria's Alt+L —
         // and only the accelerator can produce the pair.
@@ -1589,21 +1952,21 @@ function registerIpc(): void {
         ...(hotkeys.ask ? { askHotkey: hotkeys.ask } : undefined),
         ...(hotkeys.stop ? { stopHotkey: hotkeys.stop } : undefined),
         ...(outputAudio ? { outputAudio } : undefined),
-        display: panels.diagnostic(display),
+        display: display ? panels.diagnostic(display) : undefined,
         update: updateService.snapshot(),
         // Bootstrapped through the same relevance gate every broadcast passes:
         // a panel that opens late must not learn of rows the roster has already
         // let go and then hold them past the next broadcast's dedupe.
         sessionRoster:
           runMode.observesProviders && accountCapabilitiesActive()
-            ? relevantSessionRoster(sessionRegistry.snapshot(), Date.now())
-            : { sessions: [], attention: [] },
+            ? { sessions: sessionRegistry.list() }
+            : { sessions: [] },
         // A live run's roster has settled once it has been broadcast at all —
         // the first pass publishes even an empty reading — so before that, the
         // empty list above means "not looked yet" and the face must not sleep
         // on it. A fixture run never broadcasts and its sessions travel in the
         // fixture itself, so it is settled from the start.
-        sessionsSettled: !runMode.observesProviders || lastRosterRevision !== -1,
+        sessionsSettled: !runMode.observesProviders || rosterBroadcast,
         workspaceProjects: accountCapabilitiesActive()
           ? normalizeObservedWorkspaceProjects(
               offeredWorkspaceProjects(),
@@ -1620,6 +1983,7 @@ function registerIpc(): void {
         // has recomputed it yet, so a persisted pause would draw a waking face.
         announcementsHeld: accountCapabilitiesActive() && (await announcementsQuietNow(Date.now())),
         conversationHistory,
+        voiceView: latestVoiceView,
         rememberedFacts,
         calendarOnboardingOwed: calendarOnboardingGateOwed(),
         sessionReplay: await sessionReplayBootstrap(),
@@ -1627,7 +1991,8 @@ function registerIpc(): void {
       };
     },
   );
-  // The conversation history's relay between windows and durable store.
+  // The conversation history's relay from its one writer, the voice window,
+  // to its durable store here and to every panel's History.
   registerBridge(
     BRIDGE,
     {
@@ -1649,27 +2014,20 @@ function registerIpc(): void {
         }
         conversationHistory = merged;
         const payload: ConversationHistoryPayload = { entries: merged, cleared: false };
-        panels.broadcast(channels.onConversationHistoryChanged, payload, context.sender);
-      },
-      clearConversationHistory(context) {
-        if (runMode.observesProviders) {
-          const clearedAt = Date.now();
-          if (!removeStoredState(conversationPath(), "the conversation")) return false;
-          conversationClearedAt = clearedAt;
-        }
-        conversationHistory = [];
-        const payload: ConversationHistoryPayload = { entries: [], cleared: true };
-        panels.broadcast(channels.onConversationHistoryChanged, payload, context.sender);
-        return true;
+        broadcast(channels.onConversationHistoryChanged, payload, context.sender);
       },
     },
     { ipcMain, trustedSender },
   );
-  registerHandler(BRIDGE.completeArrivalBeat, () => {
-    // A report that raced a settle already on file overwrites nothing.
-    if (!arrivalBeatOwed(arrivalState)) return;
-    writeArrivalState({ ...(arrivalState ?? {}), settledAt: new Date().toISOString() });
-  });
+  // Only the voice window's mouth may settle an offer: the offer went to it
+  // alone, and a report from anywhere else names an id it was never handed.
+  registerContextHandler(
+    BRIDGE.settleSpeech,
+    (context: BridgeContext, id: string, outcome: SpeechOutcome) => {
+      if (!voiceWindow.owns(context.sender)) return;
+      settleSpeech(id, outcome);
+    },
+  );
   registerHandler(BRIDGE.skipCalendarOnboarding, () => {
     // A skip that raced the step already settling overwrites nothing: it was
     // answered, and a confirmed calendar answered it better than the decline.
@@ -1679,7 +2037,7 @@ function registerIpc(): void {
       skippedAt: new Date().toISOString(),
     });
     // The step is over, so the arrival beat it was holding may speak now.
-    void speakArrivalBeat();
+    void requestOnboardingBeat();
   });
   registerHandler(BRIDGE.completeCalendarOnboarding, () => {
     // Done is what settles the step, not the connect before it: the gate
@@ -1691,7 +2049,7 @@ function registerIpc(): void {
       ...(calendarOnboardingState ?? {}),
       settledAt: new Date().toISOString(),
     });
-    void speakArrivalBeat();
+    void requestOnboardingBeat();
   });
   registerHandler(BRIDGE.beginSupersetSignIn, async () => {
     recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
@@ -1763,8 +2121,7 @@ function registerIpc(): void {
     realtimeCredentials: () => voiceCapabilities.realtimeCredentials,
     mediaDuck,
     workspaceProjectOffered,
-    refreshAnnouncementHold: () => void refreshAnnouncementHold(),
-    releaseHeldNotices: () => void releaseHeldNotices(),
+    reconcileSpeech: () => void reconcileSpeech(),
     recordProductEvent,
     vaultSync: providerKeyVaultSync,
   });
@@ -1834,6 +2191,14 @@ function registerIpc(): void {
     ipcMain,
     trustedSender,
     panels,
+    voiceWindow,
+    receiver: voiceReceiver,
+    broadcast,
+    storeVoiceView: (view) => {
+      latestVoiceView = view;
+    },
+    clearConversation: clearConversationHistory,
+    setShortcutCapturing: (capturing) => hotkeys.setShortcutCapturing(capturing),
     openExternal: (url) => shell.openExternal(url),
     // While the takeover stands and no account credential exists yet, the
     // introduction's bounded mint answers; the moment the account lands, the
@@ -1861,39 +2226,23 @@ function registerIpc(): void {
     recordAgentTrace: (trace) => agentTrace?.recordWire(trace),
   });
 
-  registerSessionActsIpc({
+  registerSessionActsIpc({ ipcMain, trustedSender, performer: sessionActPerformer });
+  brainWiring.registerIpc({
     ipcMain,
     trustedSender,
-    sessionRegistry,
-    lastReportedSessionLink: (identity) => reportedSessionLinks.lastReported(identity),
-    openExternal: (url) => shell.openExternal(url),
-    adapterFor,
-    sendsNetwork: runMode.sendsNetwork,
-    settingsStore,
-    rememberWorkspaceDefaults,
-    expectCreatedWorkspace: (identity, now) => createdWorkspaceOpens.expect(identity, now),
-    openCreatedWorkspaces: () => openCreatedWorkspaces(sessionRegistry.list()),
-    trackedIssues: () => trackedIssues,
-    issueTrackers,
-    refreshIssues: () => void issueObservationLoop.refresh(),
-    supersetContext: (identity) =>
-      observedSupersetWorkspaces.actableContext(
-        identity.providerId,
-        identity.providerSessionId,
-        observedSupersetOrganization,
-      ),
-    supersetCli,
-    recordProductEvent,
-    rememberedFacts: () => rememberedFacts,
-    writeRememberedFacts: (facts) => {
-      if (!runMode.observesProviders) return false;
-      if (!writeStoredState(rememberedFactsPath(), rememberedFactsRecord(facts), "Luke's memory")) {
-        return false;
-      }
-      rememberedFacts = facts;
-      panels.broadcast(channels.onRememberedFactsChanged, facts);
-      return true;
+    submitters: {
+      panel: (sender) => panels.owns(sender),
+      voice: (sender) => voiceWindow.owns(sender),
     },
+  });
+  // The renderer's description of the app, pushed whenever it changes: what an
+  // app act the brain asks for is validated against here, and what the brain
+  // reads as the guide.
+  registerHandler(BRIDGE.reportAppGuide, (snapshot: AppGuideSnapshot) => {
+    appGuide = snapshot;
+  });
+  registerHandler(BRIDGE.answerBrainAppAct, (requestId: string, answer: WireRecord) => {
+    pendingBrainAppActs.get(requestId)?.(answer);
   });
 
   // A note to the founders travels one road: typed in the composer, validated
@@ -1923,7 +2272,11 @@ function registerIpc(): void {
   // Which surface a window draws, decided by which window asked — never by
   // anything the renderer could claim about itself.
   registerContextHandler(BRIDGE.getWindowRole, (context: BridgeContext) =>
-    introductionWindow.owns(context.sender) ? WINDOW_ROLE.INTRODUCTION : WINDOW_ROLE.PANEL,
+    introductionWindow.owns(context.sender)
+      ? WINDOW_ROLE.INTRODUCTION
+      : voiceWindow.owns(context.sender)
+        ? WINDOW_ROLE.VOICE
+        : WINDOW_ROLE.PANEL,
   );
 
   // The introduction's one-shot keyless read of this machine's local
@@ -1931,19 +2284,16 @@ function registerIpc(): void {
   // registration and no credential, answered only to the takeover window
   // while it stands. It bypasses the account gate deliberately — detection is
   // the introduction's own beat — and stays bounded to what the panel itself
-  // would show: every roster-relevant row, in a list that scrolls like the
+  // would show: every fresh row, in a list that scrolls like the
   // panel's own, while what travels to the voice is bounded where the speech
   // is composed rather than by hiding rows here.
   registerContextHandler(BRIDGE.peekIntroductionSessions, async (context: BridgeContext) => {
     if (!introductionWindow.owns(context.sender) || !runMode.observesProviders) return [];
     const now = Date.now();
     const sessions = await peekLocalSessions();
-    // Fresher than the roster's own relevance: the roster keeps an unanswered
-    // wait forever, but an introduction that names last year's transcript
-    // introduces a graveyard.
-    return rosterRelevantSessions(sessions, now).filter(
-      (session) => now - session.lastActivityAt <= INTRODUCTION_PEEK_FRESH_MS,
-    );
+    // Fresher than the roster: an introduction that names last year's
+    // transcript introduces a graveyard.
+    return sessions.filter((session) => now - session.lastActivityAt <= INTRODUCTION_PEEK_FRESH_MS);
   });
 
   // The takeover reporting the sign-off has been spoken and its fade has
@@ -2034,7 +2384,7 @@ function offeredWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
  * the same independence the observation passes keep.
  */
 async function applyLocalSessionHooks(): Promise<void> {
-  if (fixtureMode) return;
+  if (fixtureMode || !runMode.observesProviders) return;
   // Failures are logged under the provider they belong to and absorbed here:
   // one provider's broken configuration must neither reach the other's
   // registration nor the launch, and either costs only the sharper status.
@@ -2051,6 +2401,37 @@ async function applyLocalSessionHooks(): Promise<void> {
       }
     }),
   );
+  watchObservationSpools();
+}
+
+/**
+ * Stands one watcher on each hooked provider's spool, so a hook landing wakes
+ * the brain the moment a session turns over rather than at the next pass. A
+ * batch of events runs a pass first — the wake should carry the session as it
+ * now stands — and then reaches the brain as hook wakes. The poll stays for
+ * the panel and for the providers no hook covers; a watcher on a spool that
+ * does not exist yet retries on its own clock.
+ */
+function watchObservationSpools(): void {
+  if (spoolWatchers.length > 0) return;
+  spoolWatchers = orderedRegistrations.flatMap(({ adapter, observationSpool }) => {
+    if (!observationSpool) return [];
+    const providerId = adapter.provider.id;
+    return [
+      watchObservationSpool({
+        spoolDirectory: observationSpool.directory(),
+        events: observationSpool.events,
+        onEvents: (events) => {
+          void (async () => {
+            await sessionObservationLoop.refresh().catch(() => undefined);
+            brainWiring
+              .current()
+              ?.wake(wakeEventsFromHooks(providerId, events, sessionRegistry, Date.now()));
+          })();
+        },
+      }),
+    ];
+  });
 }
 
 /**
@@ -2120,7 +2501,7 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   const supersetActionsEnabled = observedSupersetOrganization !== undefined;
   if (actionsWereEnabled !== supersetActionsEnabled) {
     if (supersetActionsEnabled) {
-      panels.broadcast(channels.onSupersetSignInChanged, {
+      broadcast(channels.onSupersetSignInChanged, {
         stage: SUPERSET_SIGN_IN_STAGE.CONNECTED,
       });
     } else {
@@ -2170,146 +2551,6 @@ async function refreshProviderSessions(generation: number): Promise<void> {
   // The registry only spoke if the sessions themselves changed, and a pass can
   // change the project list while leaving them exactly as they were.
   void broadcastWorkspaceProjects();
-  // Attention review runs outside the observation guard so a slow model call
-  // never delays the next provider snapshot.
-  void attentionObservationLoop.refresh();
-}
-
-async function deliverSessionAnnouncementBatch(
-  pending: readonly PendingSessionAnnouncement[],
-): Promise<void> {
-  if (!voiceCapabilities.realtimeCredentials) return;
-  const current = currentSessionAnnouncements(pending, (identity) => sessionRegistry.get(identity));
-  if (current.length === 0) return;
-  if (await announcementsQuietNow(Date.now())) {
-    const held = heldSessionAnnouncements(current);
-    heldNotices.hold(held.notices);
-    heldEvaluatorSpeech.hold(held.reviews);
-    return;
-  }
-  if (!panels.voiceHost()) return;
-  // The subject is derived here, for the sessions about to be spoken of, from
-  // each transcript as it stands now: this is the moment it holds the settled
-  // turn worth naming. The deadline is the most speech waits for a name.
-  const subjectDeriver = voiceCapabilities.subjectDeriver;
-  const announcements = await withSubjects(
-    current.map((item) => item.announcement),
-    (identity) => {
-      const session = sessionRegistry.get(identity);
-      return session && subjectDeriver
-        ? subjectDeriver.deriveFor(session)
-        : Promise.resolve(undefined);
-    },
-    SUBJECT_DERIVATION_DEADLINE_MS,
-  );
-  // The window can close while the derivations run.
-  const host = panels.voiceHost();
-  if (!host) return;
-  const notices = current.flatMap((item) => (item.source === "notice" ? [item.notice] : []));
-  countSpokenAnnouncements(notices);
-  host.webContents.send(channels.onSessionAnnouncements, announcements);
-  markFirstAnnouncementSpoken();
-}
-
-function pendingSessionNotices(
-  notices: readonly SessionNotice[],
-  decidedAt: number,
-): readonly PendingSessionAnnouncement[] {
-  return notices.flatMap((notice) => {
-    const announcement = sessionNoticeAnnouncement(notice, decidedAt);
-    return announcement
-      ? [
-          {
-            source: "notice",
-            announcement,
-            notice,
-          } satisfies PendingSessionAnnouncement,
-        ]
-      : [];
-  });
-}
-
-async function reviewSessionAttention(generation: number): Promise<void> {
-  const attentionReviewer = voiceCapabilities.attentionReviewer;
-  if (!attentionReviewer) return;
-  try {
-    // Only sessions still worth a row are worth a model call: an attention
-    // decision about a session with no row surfaces nowhere, and the registry
-    // holds every conversation ever observed — reviewing all of it would send
-    // an update about each one to OpenAI on every launch, hundreds of requests
-    // rate-limiting the same key the voice opens calls with.
-    // A session inside a live realtime voice conversation sends the evaluator
-    // nothing while it holds: its updates would only ever decide to speak over
-    // the very exchange the developer is already in, and the conversation
-    // closing puts the session back under review with the next pass.
-    const reviews = await attentionReviewer.review(
-      rosterRelevantSessions(sessionRegistry.list(), Date.now()).filter(
-        (session) => session.realtimeVoice !== true && session.realtimeVoiceLive !== true,
-      ),
-    );
-    if (!attentionObservationLoop.isCurrent(generation)) return;
-    for (const review of reviews) {
-      sessionRegistry.setAttention(review, review.decision);
-    }
-    // `decision` says the session needs attention, which the panel shows;
-    // `outcome` says whether to voice it now, which only these reviews do.
-    sessionAnnouncementBatch.enqueue(
-      reviews.flatMap((review) => {
-        const announcement = sessionAnnouncementFromReview(review);
-        if (!announcement) return [];
-        return [
-          {
-            source: "review",
-            announcement,
-            observedStatus: review.update.status,
-            lastActivityAt: review.update.lastActivityAt,
-          } satisfies PendingSessionAnnouncement,
-        ];
-      }),
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Attention review failed: ${message}\n`);
-  }
-}
-
-/**
- * Speaks each session that just arrived somewhere the user may be waiting on —
- * an answer wanted, an error, a finish. The trigger is a status edge the
- * registry observed, a deterministic fact like the media duck's, so nothing
- * Luke read or decided can reach it. The update's bounded fields travel the
- * same channel the evaluator's readouts do, to the one window that holds the
- * voice, which words the announcement itself; the announcer there opens a
- * speak-only call when no conversation is up, so being heard needs no
- * talk-key press first.
- */
-function announceSessionNotices(sessions: readonly Session[]): void {
-  const now = Date.now();
-  // The deterministic path is reserved for an error or a concrete hold for
-  // the developer. Routine finishes still reach the attention evaluator,
-  // which can speak when the outcome is useful.
-  // Fed synchronously, so passes reach the tracker in order.
-  const notices = sessionNoticeTracker.notices(
-    sessions.filter((session) => session.realtimeVoice !== true),
-    now,
-  );
-  sessionAnnouncementBatch.enqueue(pendingSessionNotices(notices, now));
-}
-
-/**
- * Counts the announcements about to be spoken. It sits beside the send rather
- * than inside the notice tracker because a notice held through a meeting is
- * spoken later or not at all, and only the two paths that actually hand
- * speech to the voice host know which happened.
- */
-function countSpokenAnnouncements(notices: readonly SessionNotice[]): void {
-  for (const notice of notices) {
-    if (!isProviderId(notice.providerId)) continue;
-    productEvents.record(PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK, {
-      provider_id: notice.providerId,
-      session_status: notice.status,
-    });
-  }
 }
 
 /**
@@ -2361,7 +2602,7 @@ async function announcementsQuietNow(now: number): Promise<boolean> {
     (inMeeting && (await settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field)));
   if (holding !== announcementsHeld) {
     announcementsHeld = holding;
-    panels.broadcast(channels.onAnnouncementsHeldChanged, holding);
+    broadcast(channels.onAnnouncementsHeldChanged, holding);
   }
   return holding;
 }
@@ -2369,9 +2610,9 @@ async function announcementsQuietNow(now: number): Promise<boolean> {
 /**
  * Recomputes whether announcements are held — the face sleeps beside the
  * housing for exactly as long as they are. The recompute itself broadcasts
- * any change; this name is for the callers with nothing to say and only the
- * face to keep current: the boundary timer, the ticks, and either setting's
- * toggle.
+ * any change; this name is for the caller with nothing to offer and only the
+ * face to keep current: the calendar's stop, after the backlog it held is
+ * gone.
  */
 async function refreshAnnouncementHold(): Promise<void> {
   await announcementsQuietNow(Date.now());
@@ -2397,8 +2638,7 @@ function armQuietBoundaryTimer(): void {
   quietBoundaryTimer = setTimeout(
     () => {
       quietBoundaryTimer = undefined;
-      void refreshAnnouncementHold();
-      void releaseHeldNotices();
+      void reconcileSpeech();
       armQuietBoundaryTimer();
     },
     boundary - now + 1,
@@ -2407,47 +2647,142 @@ function armQuietBoundaryTimer(): void {
 }
 
 /**
- * Says what was held once the meeting holding it has ended. Deciding to speak
- * is what happens here, so the sentences carry the release as `decidedAt` —
- * a backlog re-stamped any earlier would be dropped as stale by the renderer
- * before a word of it was read. Each notice is checked against the registry
- * first: a session that moved on while the meeting ran is no longer news, and
- * announcing its old state would be worse than silence.
+ * Brings the speech arbiter up to date with the quiet and lets it offer what
+ * it may. Runs wherever the quiet can have moved — the meeting edges, the
+ * ticks, either setting's toggle, a calendar pass — and whenever something
+ * new is requested or settled. When the quiet ends, the briefings held
+ * through it go back to the brain for one re-decision against the roster as
+ * it now stands: a session that moved on while the meeting ran is no longer
+ * news, and the brain, not a replay, is what knows. Voice gone while the
+ * backlog waited means nothing to say it with, and by the time a key returns
+ * the news is the panel's; a brain mid-rebuild under a standing credential
+ * keeps them for the next tick.
  */
-async function releaseHeldNotices(): Promise<void> {
-  if (heldNotices.count === 0 && heldEvaluatorSpeech.count === 0) {
-    return;
-  }
-  const now = Date.now();
-  if (await announcementsQuietNow(now)) return;
-  // Voice went away while the backlog waited; there is nothing to say it
-  // with, and by the time a key returns the news is the panel's.
-  if (!voiceCapabilities.realtimeCredentials) {
-    heldNotices.release();
-    heldEvaluatorSpeech.release();
-    return;
-  }
-  const current = new Map<string, Map<string, string>>();
-  for (const session of sessionRegistry.list()) {
-    let provider = current.get(session.providerId);
-    if (!provider) {
-      provider = new Map();
-      current.set(session.providerId, provider);
+async function reconcileSpeech(): Promise<void> {
+  const quiet = await announcementsQuietNow(Date.now());
+  speechArbiter.setQuiet(quiet);
+  if (!quiet && speechArbiter.heldBriefingCount > 0) {
+    const standing = brainWiring.current();
+    if (standing && voiceCapabilities.realtimeCredentials) {
+      standing.releaseHeld(speechArbiter.takeHeldBriefings());
+    } else if (!voiceCapabilities.realtimeCredentials) {
+      speechArbiter.dropBriefings();
     }
-    provider.set(session.providerSessionId, session.status);
   }
-  const released = heldNotices.release().filter((notice) => {
-    const status = current.get(notice.providerId)?.get(notice.providerSessionId);
-    // A session the registry no longer lists settled where the notice said —
-    // its parting words are still the answer to where the work stands.
-    return status === undefined || status === notice.status;
-  });
-  const deferredEvaluatorSpeech = heldEvaluatorSpeech.release();
-  if (deferredEvaluatorSpeech.length > 0) {
-    voiceCapabilities.attentionReviewer?.reconsider(deferredEvaluatorSpeech);
-    void attentionObservationLoop.refresh();
+  offerNextSpeech();
+}
+
+/**
+ * What became of one speech offer, by id. A reply that actually began is the
+ * one moment the briefing count and the owed arrival record may settle; a
+ * report that raced a settle already on file overwrites nothing.
+ */
+function settleSpeech(id: string, outcome: SpeechOutcome): void {
+  const settled = speechArbiter.settle(id, outcome);
+  if (!settled) return;
+  if (settled.outcome === SPEECH_OUTCOME.SPOKEN) {
+    if (settled.kind === BRIEFING_SPEECH_KIND) {
+      productEvents.record(PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK, {});
+      markFirstAnnouncementSpoken();
+    }
+    // The reply has actually begun, which is the one moment the owed record
+    // may settle. A report that raced a settle already on file overwrites
+    // nothing.
+    if (settled.kind === ARRIVAL_SPEECH_KIND && arrivalBeatOwed(arrivalState)) {
+      writeArrivalState({ ...(arrivalState ?? {}), settledAt: new Date().toISOString() });
+    }
   }
-  sessionAnnouncementBatch.enqueue(pendingSessionNotices(released, now));
+  void reconcileSpeech();
+}
+
+/**
+ * Hands the mouth the arbiter's head request, if one may be offered now.
+ * Synchronous past the quiet's await, so two reconciles landing together
+ * cannot each offer: the arbiter marks the offer outstanding in the same
+ * tick it is sent.
+ */
+function offerNextSpeech(): void {
+  const host = voiceWindow.current();
+  if (!host || !voiceReceiver.isReady() || !voiceCapabilities.realtimeCredentials) return;
+  const offer = speechArbiter.next();
+  if (offer) host.webContents.send(channels.onSpeechOffered, offer);
+}
+
+/**
+ * The brain's whole list of records, to every window and to the delivery
+ * owner, which reads it for the runs it watched go by while they were still
+ * going — the only ones whose ends it may ever offer to the ear.
+ */
+function broadcastBrainRequests(snapshots: readonly BrainRequestSnapshot[]): void {
+  brainReplyDeliveries.observe(snapshots);
+  broadcast(channels.onBrainRequestsChanged, snapshots);
+}
+
+/**
+ * A run's end has reached the thread, written and marked. Only now may it be
+ * owed to the ear, under the generation that stands at this moment — the one
+ * the live record was read from — and it goes out at once if a receiver is
+ * ready, or waits for the next one that reports.
+ */
+function offerBrainReply(record: BrainRequestRecord): void {
+  const generationId = brainWiring.store().generationId();
+  if (generationId === undefined) return;
+  brainReplyDeliveries.published(record, generationId);
+  offerBrainReplies();
+}
+
+/** What every grant is checked against at the moment it lands, read live rather than captured. */
+function brainReplyClaimContext() {
+  return {
+    receiverCurrent: (epoch: number) => voiceReceiver.isReady() && voiceReceiver.epoch() === epoch,
+    generationStands: (generationId: string) => brainWiring.store().holdsGeneration(generationId),
+    liveRecord: (runId: string) => brainWiring.current()?.request(runId),
+  };
+}
+
+/**
+ * The generation ended under the receiver: nothing owed of it may be spoken,
+ * and a renderer holding an offer or a grant from it is told so, in the same
+ * breath as the fence, so words already granted are not played into a thread
+ * that no longer exists.
+ */
+function withdrawBrainReplies(): void {
+  brainReplyDeliveries.reset();
+  voiceWindow.current()?.webContents.send(channels.onBrainRepliesWithdrawn, voiceReceiver.epoch());
+}
+
+/**
+ * Hands the ready receiver the one delivery it may hold now, under the epoch
+ * it is sent to; the next follows its acknowledgement. Nothing is sent to a
+ * window whose renderer has not reported, and nothing here is held by the
+ * announcement quiet: a reply to the developer's own ask is conversation,
+ * not news, and speaks under a meeting the way a reply on their call would.
+ */
+function offerBrainReplies(): void {
+  const host = voiceWindow.current();
+  if (!host || !voiceReceiver.isReady()) return;
+  const offer = brainReplyDeliveries.nextOffer(voiceReceiver.epoch());
+  if (offer) host.webContents.send(channels.onBrainReplyOffered, offer);
+}
+
+// The receiver reporting ready is the flush: whatever the arbiter holds and
+// every reply still owed goes to it now. Its epoch ending takes the arbiter's
+// outstanding offer back to the head, so the next renderer is offered it at
+// once rather than after the deadline; an owed reply the vanished renderer
+// never claimed is simply still unclaimed, and a claimed one stays claimed.
+voiceReceiver.onReady(() => {
+  offerNextSpeech();
+  offerBrainReplies();
+});
+voiceReceiver.onReset(() => speechArbiter.reclaimOffer());
+
+/**
+ * Takes a pending beat back from the arbiter and, when the mouth already
+ * holds it unspoken, from the mouth as well. A reply already begun finishes.
+ */
+function withdrawBeat(kind: OnboardingBeatKind): void {
+  const id = speechArbiter.retract(kind);
+  if (id) voiceWindow.current()?.webContents.send(channels.onSpeechWithdrawn, { id });
 }
 
 /**
@@ -2484,7 +2819,7 @@ async function refreshCalendarMeetings(generation: number): Promise<void> {
       ...(failure ? { failure } : undefined),
       ...(revoked ? { revoked } : undefined),
     }));
-    panels.broadcast(channels.onCalendarsChanged, observedCalendars);
+    broadcast(channels.onCalendarsChanged, observedCalendars);
     for (const account of accounts) {
       if (account.failure) {
         process.stderr.write(`Calendar observation failed: ${account.failure}\n`);
@@ -2497,8 +2832,7 @@ async function refreshCalendarMeetings(generation: number): Promise<void> {
     process.stderr.write(`Calendar observation failed: ${message}\n`);
   }
   if (!calendarObservationLoop.isCurrent(generation)) return;
-  void refreshAnnouncementHold();
-  void releaseHeldNotices();
+  void reconcileSpeech();
   armQuietBoundaryTimer();
 }
 
@@ -2508,16 +2842,14 @@ const sessionObservationLoop = new ObservationLoop({
   intervalMs: SESSION_REFRESH_INTERVAL_MS,
   run: refreshProviderSessions,
   // A pass is also when the Codex CLI login can have changed hands, and no
-  // settings save stands behind that to announce it.
+  // settings save stands behind that to announce it. The brain's roster look
+  // is driven here rather than on its own timer so the two reads stay in sync:
+  // the look always follows a fresh observation, and never runs when the gate
+  // is closed (observesProviders && accountCapabilitiesActive()).
   afterRun: () => {
-    broadcastRelevantSessions();
     void broadcastCodexCloudConnection();
+    brainWiring.current()?.rosterLook();
   },
-});
-const attentionObservationLoop = new ObservationLoop({
-  gate: () => observationGate() && voiceCapabilities.attentionReviewer !== undefined,
-  intervalMs: SESSION_REFRESH_INTERVAL_MS,
-  run: reviewSessionAttention,
 });
 const issueObservationLoop = new ObservationLoop({
   gate: observationGate,
@@ -2531,7 +2863,6 @@ const calendarObservationLoop = new ObservationLoop({
 });
 const observationSupervisor = new ObservationSupervisor([
   sessionObservationLoop,
-  attentionObservationLoop,
   issueObservationLoop,
   calendarObservationLoop,
 ]);
@@ -2577,8 +2908,7 @@ function startCalendarObservation(): void {
   heldNoticeReleaseTimer = setInterval(() => {
     // The boundary timer answers the meeting edges on time; this tick is the
     // net under it, re-asking on a cadence no missed timer can silence.
-    void refreshAnnouncementHold();
-    void releaseHeldNotices();
+    void reconcileSpeech();
   }, HELD_NOTICE_RELEASE_INTERVAL_MS);
   heldNoticeReleaseTimer.unref();
   if (process.platform === "darwin" && runMode.observesProviders) {
@@ -2611,87 +2941,50 @@ function stopCalendarObservation(): void {
   // signing back in starts from nothing, not from an era this stop ended.
   googleCalendar.forget();
   appleCalendar.forget();
-  heldNotices.release();
-  heldEvaluatorSpeech.release();
-  panels.broadcast(channels.onCalendarsChanged, observedCalendars);
+  speechArbiter.dropBriefings();
+  broadcast(channels.onCalendarsChanged, observedCalendars);
   void refreshAnnouncementHold();
 }
 
 /**
- * What the last roster broadcast said, so a pass that changed nothing the
- * renderer can see costs no send. The registry's revision covers every field
- * of every session; the id line covers the one thing revision cannot — a
- * session leaving the roster because only the clock moved.
+ * Whether a live run's roster has been read at all — what tells the panel's
+ * empty list "not looked yet" from "nothing to watch". The first pass
+ * publishes even an empty reading.
  */
-let lastRosterRevision = -1;
-let lastRosterIds = "";
-
-function relevantSessionRoster(
-  snapshot: SessionRegistrySnapshot,
-  now: number,
-): SessionRosterPayload {
-  const sessions = rosterRelevantSessions(snapshot.sessions, now);
-  const identities = new Map<string, Set<string>>();
-  for (const session of sessions) {
-    const providerSessions = identities.get(session.providerId) ?? new Set<string>();
-    providerSessions.add(session.providerSessionId);
-    identities.set(session.providerId, providerSessions);
-  }
-  return {
-    sessions,
-    attention: snapshot.attention.filter((entry) =>
-      identities.get(entry.providerId)?.has(entry.providerSessionId),
-    ),
-  } satisfies SessionRosterPayload;
-}
+let rosterBroadcast = false;
 
 /**
- * Hands the renderer the sessions still worth a row. The registry keeps every
- * observation — announcements and attention read it whole — but the panel and
- * the voice roster it feeds see only what `isRosterRelevant` keeps: adapters
- * age out and cap nothing, so this one gate is where a session that settled
- * long ago stops being a row.
+ * Hands the renderer the roster as the latest pass left it, after every pass.
+ * Nothing here decides whether anything moved: the roster is the poll, a
+ * session a provider stopped reporting is simply gone from it, and the
+ * renderer draws identical props as the same picture.
  */
-function broadcastRelevantSessions(): void {
-  const snapshot = sessionRegistry.snapshot();
-  const roster = relevantSessionRoster(snapshot, Date.now());
-  const rosterIds = roster.sessions
-    .map((session) => `${session.providerId}\0${session.providerSessionId}`)
-    .join("\0\0");
-  if (snapshot.revision === lastRosterRevision && rosterIds === lastRosterIds) return;
-  lastRosterRevision = snapshot.revision;
-  lastRosterIds = rosterIds;
-  panels.broadcast(channels.onSessionsChanged, roster);
+function broadcastSessions(sessions: readonly Session[]): void {
+  rosterBroadcast = true;
+  const roster: SessionRosterPayload = { sessions };
+  broadcast(channels.onSessionsChanged, roster);
 }
 
 function startSessionObservation(): void {
   if (!runMode.observesProviders || !accountCapabilitiesActive() || unsubscribeSessions) return;
-  unsubscribeSessions = sessionRegistry.subscribe((snapshot) => {
-    // Remembered from the unfiltered snapshot, before the roster narrows it:
-    // a History press may name any session an observation pass ever addressed.
-    reportedSessionLinks.remember(snapshot.sessions);
-    broadcastRelevantSessions();
-    // The registry only speaks on an effective change, which is exactly when
-    // a status edge can exist to announce. The notices read the unfiltered
-    // snapshot: an edge is an edge wherever the session ends up on the roster.
-    announceSessionNotices(snapshot.sessions);
+  unsubscribeSessions = sessionRegistry.subscribe((sessions) => {
+    broadcastSessions(sessions);
     // A commit is also the earliest a created workspace can have arrived with
     // the address to open it by — whether on the refresh the creation itself
     // fired or on an ordinary pass catching up.
-    openCreatedWorkspaces(snapshot.sessions);
-    // A commit is the earliest a write-triggered refresh can have changed the
+    openCreatedWorkspaces(sessions);
+    // A pass is the earliest a write-triggered refresh can have changed the
     // offer, so the announcement rides it rather than waiting for the timer.
     void broadcastWorkspaceProjects();
-    countObservedSessions(snapshot.sessions);
+    countObservedSessions(sessions);
   });
 }
 
 /**
- * Counts what each provider is observing, once per provider per day. The
- * registry commits on every effective change, so counting each commit would
- * measure registry churn rather than use; and the count itself is a rung of
- * the shared ladder rather than a number, because "137 sessions" identifies a
- * machine where "a crowd" does not.
+ * Counts what each provider is observing, once per provider per day. Every
+ * pass reaches here, so counting each would measure the poll rather than use;
+ * and the count itself is a rung of the shared ladder rather than a number,
+ * because "137 sessions" identifies a machine where "a crowd" does not.
  */
 function countObservedSessions(sessions: readonly Session[]): void {
   const counts = new Map<string, number>();
@@ -2709,14 +3002,13 @@ function countObservedSessions(sessions: readonly Session[]): void {
 
 function stopSessionObservation(): void {
   workspaceProjectsBroadcastGeneration += 1;
-  sessionAnnouncementBatch.clear();
   unsubscribeSessions?.();
   unsubscribeSessions = undefined;
   for (const { adapter } of orderedRegistrations) {
     sessionRegistry.replaceProvider(adapter.provider, []);
   }
-  panels.broadcast(channels.onSessionsChanged, { sessions: [], attention: [] });
-  panels.broadcast(channels.onWorkspaceProjectsChanged, []);
+  broadcast(channels.onSessionsChanged, { sessions: [] });
+  broadcast(channels.onWorkspaceProjectsChanged, []);
   lastWorkspaceProjects = undefined;
 }
 
@@ -2741,7 +3033,7 @@ async function refreshTrackedIssues(generation: number): Promise<void> {
     }
     if (issueObservationLoop.isCurrent(generation)) {
       trackedIssues = connected ? collected : undefined;
-      panels.broadcast(channels.onIssuesChanged, trackedIssues);
+      broadcast(channels.onIssuesChanged, trackedIssues);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -2751,15 +3043,17 @@ async function refreshTrackedIssues(generation: number): Promise<void> {
 
 function stopIssueObservation(): void {
   trackedIssues = undefined;
-  panels.broadcast(channels.onIssuesChanged, undefined);
+  broadcast(channels.onIssuesChanged, undefined);
 }
 
 function configurePermissions(): void {
-  // The takeover is a window of Luke's own under the same hardening as the
-  // panels, and its practice beat is a real spoken turn, so it is owed the
-  // same audio-only answer.
+  // The takeover and the voice window are windows of Luke's own under the
+  // same hardening as the panels, and each speaks a real spoken turn, so they
+  // are owed the same audio-only answer.
   const ownWindow = (webContents: Electron.WebContents) =>
-    panels.owns(webContents) || introductionWindow.owns(webContents);
+    panels.owns(webContents) ||
+    introductionWindow.owns(webContents) ||
+    voiceWindow.owns(webContents);
   session.defaultSession.setPermissionCheckHandler(
     (webContents, permission, _origin, details) =>
       webContents !== null &&
@@ -2838,11 +3132,21 @@ export function startDesktopApp(): void {
       // that opened on an empty History and filled it a beat later would read
       // as a conversation arriving rather than one resumed.
       if (runMode.observesProviders) {
+        // The last Clear's marker outlives the launch that made it, so a
+        // thread the Clear meant to erase is refused here even when its own
+        // file outlived the press.
+        conversationClearedAt = brainStateFromStored(readStoredState(brainStatePath()))?.reset
+          ?.clearedAt;
         conversationHistory = conversationFromStored(
           readStoredState(conversationPath()),
           Date.now(),
+          conversationClearedAt,
         );
         rememberedFacts = rememberedFactsFromStored(readStoredState(rememberedFactsPath()));
+        // Retention runs on every live launch, key or no key: the store's
+        // load admits the file within its bounds and lifetime, replacing on
+        // disk what it does not admit, and the clock takes it from there.
+        brainWiring.store();
       }
       // A signed-in install with no arrival record predates the beat: its
       // sign-in was never observed, so it is settled now rather than greeted
@@ -2983,6 +3287,9 @@ export function startDesktopApp(): void {
       // The introduction owns the screen alone until it completes or is
       // abandoned; both of its endings reconcile the panels themselves.
       if (!introductionWindow.active) panels.reconcile();
+      // Raised only once a panel stands; during the introduction, its ending
+      // is what raises the panels and the voice window with them.
+      raiseVoiceWindow();
       configurePermissions();
       startSessionObservation();
       startCalendarObservation();
@@ -2995,7 +3302,7 @@ export function startDesktopApp(): void {
       // A beat a previous launch could not speak — signed in, but voiceless
       // or quieted at the moment — is still owed, and this launch may be the
       // one that can say it.
-      void speakArrivalBeat();
+      void requestOnboardingBeat();
       // Reconcile in the background. Only an explicit invalid_grant removes the
       // stored account; network failures and service outages leave it active.
       void accountSession.refreshOnce();
@@ -3018,7 +3325,7 @@ export function startDesktopApp(): void {
             return;
           }
           if (argv.includes("--expanded")) {
-            const host = panels.voiceHost();
+            const host = panels.primaryPanel();
             const displayId = host ? panels.displayIdFor(host.webContents) : undefined;
             if (displayId !== undefined) panels.setMode(displayId, "expanded", true);
             return;
@@ -3034,7 +3341,7 @@ export function startDesktopApp(): void {
       for (const eventName of ["resume", "unlock-screen", "user-did-become-active"] as const) {
         const handlePowerEvent = () => {
           handleDisplayChange();
-          panels.broadcast(channels.onLifecycle, eventName);
+          broadcast(channels.onLifecycle, eventName);
         };
         if (eventName === "resume") powerMonitor.on("resume", handlePowerEvent);
         if (eventName === "unlock-screen") {
@@ -3065,8 +3372,14 @@ export function startDesktopApp(): void {
   });
 
   app.on("before-quit", () => {
+    // Closed by the main process, never waited on: the panels closing is what
+    // decides the app is done, and this window was never one of them.
+    voiceWindow.closeForGood();
     observationSupervisor.setEnabled(false);
     stopCalendarObservation();
+    for (const watcher of spoolWatchers) watcher.close();
+    spoolWatchers = [];
+    brainWiring.host.retire();
     // Deliberately not a flush: a request here either delays the quit or is
     // killed mid-flight, and an instant quit is worth the last minute of
     // counts.
@@ -3074,5 +3387,8 @@ export function startDesktopApp(): void {
     panels.clearCollapseTimers();
   });
 
+  // Fires only once every BrowserWindow is gone, the hidden voice window
+  // included, so the panels report their own last closing above; this stays
+  // for a run that never raised a voice window.
   app.on("window-all-closed", () => app.quit());
 }

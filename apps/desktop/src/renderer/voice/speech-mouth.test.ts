@@ -1,38 +1,48 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ProactiveSpeechTurn, RealtimeStatus, ScheduledTimer } from "@sidecar/realtime";
-import {
-  CALENDAR_ONBOARDING_SPEECH_KIND,
-  isArrivalSpeech,
-  isCalendarOnboardingSpeech,
-  REALTIME_STATUS,
-  SESSION_ANNOUNCEMENT_CHANGE,
-  type SessionAnnouncement,
+import type {
+  BriefingSpeech,
+  ProactiveSpeechTurn,
+  RealtimeStatus,
+  ScheduledTimer,
 } from "@sidecar/realtime";
+import {
+  BRIEFING_SPEECH_KIND,
+  CALENDAR_ONBOARDING_SPEECH_KIND,
+  isBriefingSpeech,
+  REALTIME_STATUS,
+} from "@sidecar/realtime";
+import { SPEECH_OUTCOME, type SpeechOffer, type SpeechOutcome } from "#shared/wire/speech";
 import {
   ANNOUNCER_GRACE_MS,
   ANNOUNCER_LINGER_MS,
   ANNOUNCER_RETRY_DELAY_MS,
-  type AnnouncerSession,
   MAXIMUM_CONNECT_ATTEMPTS,
-  MAXIMUM_QUEUED_NOTICES,
-  SPOKEN_NOTICE_MAX_AGE_MS,
-  SpokenNoticeAnnouncer,
-} from "./spoken-notices";
+  SpeechMouth,
+  type SpeechMouthSession,
+} from "./speech-mouth";
 
-function speech(id: string, decidedAt = 1_000): SessionAnnouncement {
+const FAR_DEADLINE = Number.MAX_SAFE_INTEGER;
+
+function speech(id: string, decidedAt = 1_000): BriefingSpeech {
   return {
-    providerId: "claude-code",
-    providerSessionId: id,
-    subject: id,
-    change: SESSION_ANNOUNCEMENT_CHANGE.FINISHED,
+    kind: BRIEFING_SPEECH_KIND,
+    briefing: `Claude Code finished ${id}.`,
     decidedAt,
   };
 }
 
-interface FakeSession extends AnnouncerSession {
-  spoken: SessionAnnouncement[];
-  turns: SessionAnnouncement[][];
+function offer(id: string, turn: ProactiveSpeechTurn = speech(id), speakBy = FAR_DEADLINE) {
+  return { id, speakBy, turn } satisfies SpeechOffer;
+}
+
+/** The ids the spoken briefings were worded about, in the order they were said. */
+function spokenIds(session: FakeSession): string[] {
+  return session.spoken.map((item) => /finished (.+)\.$/.exec(item.briefing)?.[1] ?? "");
+}
+
+interface FakeSession extends SpeechMouthSession {
+  spoken: BriefingSpeech[];
   connects: number;
   closes: number;
   stops: number;
@@ -45,7 +55,6 @@ interface FakeSession extends AnnouncerSession {
 function fakeSession(): FakeSession {
   const session: FakeSession = {
     spoken: [],
-    turns: [],
     connects: 0,
     closes: 0,
     stops: 0,
@@ -72,10 +81,7 @@ function fakeSession(): FakeSession {
     },
     speak(item: ProactiveSpeechTurn) {
       if (!this.isConnected || this.status === REALTIME_STATUS.RESPONDING) return false;
-      if (!isArrivalSpeech(item) && !isCalendarOnboardingSpeech(item)) {
-        this.turns.push([...item]);
-        this.spoken.push(...item);
-      }
+      if (isBriefingSpeech(item)) this.spoken.push(item);
       this.setStatus(REALTIME_STATUS.RESPONDING);
       return true;
     },
@@ -126,101 +132,132 @@ function fakeTimers(): Timers {
   };
 }
 
-function announcer(session: FakeSession, timers: Timers, now = () => 1_000) {
-  return new SpokenNoticeAnnouncer({
+interface Settlement {
+  id: string;
+  outcome: SpeechOutcome;
+}
+
+function mouth(session: FakeSession, timers: Timers, now = () => 1_000) {
+  const settled: Settlement[] = [];
+  const subject = new SpeechMouth({
     session: () => session,
+    settle: (id, outcome) => settled.push({ id, outcome }),
     now,
     schedule: timers.schedule,
     cancel: timers.cancel,
   });
+  return { subject, settled };
 }
 
-test("a notice arriving into silence opens Luke's own call and is spoken", async () => {
+test("an offer arriving into silence opens Luke's own call, is spoken, and settles SPOKEN", async () => {
   const session = fakeSession();
   const timers = fakeTimers();
-  const subject = announcer(session, timers);
+  const { subject, settled } = mouth(session, timers);
 
-  subject.enqueue([speech("a")]);
-  // Opening the call is a promise away, and only then is the queue flushed.
+  subject.offer(offer("a"));
+  assert.deepEqual(settled, [], "nothing is settled before the reply begins");
+  // Opening the call is a promise away, and only then is the offer flushed.
   await Promise.resolve();
 
   assert.equal(session.connects, 1);
-  assert.deepEqual(
-    session.spoken.map((item) => item.providerSessionId),
-    ["a"],
-  );
+  assert.deepEqual(spokenIds(session), ["a"]);
+  assert.deepEqual(settled, [{ id: "a", outcome: SPEECH_OUTCOME.SPOKEN }]);
 });
 
-test("queued notices speak together in one reply", async () => {
+test("offers speak one per reply, in order, on one call", async () => {
   const session = fakeSession();
   const timers = fakeTimers();
-  const subject = announcer(session, timers);
+  const { subject, settled } = mouth(session, timers);
 
-  subject.enqueue([speech("a"), speech("b")]);
+  subject.offer(offer("a"));
   await Promise.resolve();
-  assert.deepEqual(
-    session.spoken.map((item) => item.providerSessionId),
-    ["a", "b"],
-  );
-  assert.equal(session.turns.length, 1);
+  assert.deepEqual(spokenIds(session), ["a"]);
+  // The arbiter offers the next once the first is settled; the reply is still
+  // under way, so the second waits for the READY edge.
+  assert.equal(settled.length, 1);
+  subject.offer(offer("b"));
+  assert.deepEqual(spokenIds(session), ["a"]);
 
   session.setStatus(REALTIME_STATUS.READY);
   subject.onStatus(REALTIME_STATUS.READY);
+  assert.deepEqual(spokenIds(session), ["a", "b"]);
+  // One call served both.
+  assert.equal(session.connects, 1);
   assert.deepEqual(
-    session.spoken.map((item) => item.providerSessionId),
+    settled.map((item) => item.id),
     ["a", "b"],
   );
-  // One call served the whole queue.
-  assert.equal(session.connects, 1);
 });
 
-test("separate batches stay separate while the bounded queue sheds oldest news", () => {
+test("the same offer again is the same offer", async () => {
+  const session = fakeSession();
+  const timers = fakeTimers();
+  const { subject, settled } = mouth(session, timers);
+
+  subject.offer(offer("a"));
+  subject.offer(offer("a"));
+  await Promise.resolve();
+  assert.equal(session.connects, 1);
+  assert.deepEqual(spokenIds(session), ["a"]);
+  assert.equal(settled.length, 1);
+});
+
+test("an offer whose deadline passed settles STALE without speaking", () => {
   const session = fakeSession();
   session.setStatus(REALTIME_STATUS.RESPONDING);
-  const subject = announcer(session, fakeTimers());
+  session.microphone = true;
+  const timers = fakeTimers();
+  let now = 10_000;
+  const { subject, settled } = mouth(session, timers, () => now);
 
-  subject.enqueue(
-    Array.from({ length: MAXIMUM_QUEUED_NOTICES }, (_, index) => speech(`a-${index}`)),
-  );
-  subject.enqueue([speech("b")]);
+  // Arrives during a long reply and waits.
+  subject.offer(offer("a", speech("a", 10_000), 10_000 + 120_000));
+  assert.deepEqual(spokenIds(session), []);
+  assert.deepEqual(settled, []);
+
+  // By the time the turn ends, the news is old; the panel has shown the
+  // state the whole time, and the arbiter hears it went stale.
+  now = 10_000 + 120_000 + 1;
   session.setStatus(REALTIME_STATUS.READY);
   subject.onStatus(REALTIME_STATUS.READY);
-  assert.deepEqual(
-    session.turns.map((turn) => turn.map(({ providerSessionId }) => providerSessionId)),
-    [Array.from({ length: MAXIMUM_QUEUED_NOTICES - 1 }, (_, index) => `a-${index + 1}`)],
-  );
-
-  session.setStatus(REALTIME_STATUS.READY);
-  subject.onStatus(REALTIME_STATUS.READY);
-  assert.deepEqual(
-    session.turns.map((turn) => turn.map(({ providerSessionId }) => providerSessionId)),
-    [Array.from({ length: MAXIMUM_QUEUED_NOTICES - 1 }, (_, index) => `a-${index + 1}`), ["b"]],
-  );
+  assert.deepEqual(spokenIds(session), []);
+  assert.deepEqual(settled, [{ id: "a", outcome: SPEECH_OUTCOME.STALE }]);
+  // The retry clock armed mid-reply fires into an empty hand and says nothing.
+  timers.fire();
+  assert.deepEqual(spokenIds(session), []);
+  assert.equal(settled.length, 1);
 });
 
-test("a calendar beat still queued is dropped when the gate stands down", async () => {
+test("withdraw drops an unspoken offer without a settle and leaves a begun reply alone", async () => {
   const session = fakeSession();
   const timers = fakeTimers();
-  const subject = announcer(session, timers);
+  const { subject, settled } = mouth(session, timers);
 
-  subject.enqueue({ kind: CALENDAR_ONBOARDING_SPEECH_KIND, decidedAt: 1_000 });
-  subject.enqueue([speech("after-done")]);
-  // The gate settled before the beat could speak; only the real notice says.
-  subject.dropCalendarOnboardingSpeech();
+  subject.offer(offer("beat", { kind: CALENDAR_ONBOARDING_SPEECH_KIND, decidedAt: 1_000 }));
   await Promise.resolve();
+  // The beat began; withdrawing an id that already settled changes nothing.
+  assert.deepEqual(settled, [{ id: "beat", outcome: SPEECH_OUTCOME.SPOKEN }]);
+  subject.withdraw("beat");
+  assert.equal(session.stops, 0, "a reply begun is delivered");
+
+  // The next offer waits behind the reply; the gate settles before it can
+  // speak, and it is taken back unsaid and unsettled.
+  subject.offer(offer("second", { kind: CALENDAR_ONBOARDING_SPEECH_KIND, decidedAt: 1_000 }));
+  subject.withdraw("second");
   session.setStatus(REALTIME_STATUS.READY);
   subject.onStatus(REALTIME_STATUS.READY);
-
-  assert.equal(session.spoken.length, 1);
-  assert.equal(session.spoken[0]?.providerSessionId, "after-done");
+  assert.equal(settled.length, 1);
+  assert.equal(session.status, REALTIME_STATUS.READY, "nothing spoke into the empty hand");
+  // An empty hand on Luke's own call starts the linger, as an empty queue did.
+  assert.deepEqual(timers.delays.slice(-1), [ANNOUNCER_LINGER_MS]);
 });
 
 test("the call Luke opened lingers for stragglers, then closes itself", async () => {
   const session = fakeSession();
   const timers = fakeTimers();
-  const subject = announcer(session, timers);
+  const { subject } = mouth(session, timers);
 
-  subject.enqueue([speech("a")]);
+  subject.offer(offer("a"));
   await Promise.resolve();
   session.setStatus(REALTIME_STATUS.READY);
   subject.onStatus(REALTIME_STATUS.READY);
@@ -231,7 +268,7 @@ test("the call Luke opened lingers for stragglers, then closes itself", async ()
   assert.equal(session.closes, 0);
 
   // A straggler cancels the linger and rides the same call.
-  subject.enqueue([speech("b")]);
+  subject.offer(offer("b"));
   assert.equal(timers.armed(), 0);
   assert.equal(session.connects, 1);
 
@@ -241,19 +278,16 @@ test("the call Luke opened lingers for stragglers, then closes itself", async ()
   assert.equal(session.closes, 1);
 });
 
-test("a notice riding the developer's call never closes it", () => {
+test("an offer riding the developer's call never closes it", () => {
   const session = fakeSession();
   session.microphone = true;
   session.setStatus(REALTIME_STATUS.READY);
   const timers = fakeTimers();
-  const subject = announcer(session, timers);
+  const { subject } = mouth(session, timers);
 
-  subject.enqueue([speech("a")]);
+  subject.offer(offer("a"));
   assert.equal(session.connects, 0, "the open call is used, not replaced");
-  assert.deepEqual(
-    session.spoken.map((item) => item.providerSessionId),
-    ["a"],
-  );
+  assert.deepEqual(spokenIds(session), ["a"]);
 
   session.setStatus(REALTIME_STATUS.READY);
   subject.onStatus(REALTIME_STATUS.READY);
@@ -263,39 +297,38 @@ test("a notice riding the developer's call never closes it", () => {
   assert.equal(session.closes, 0);
 });
 
-test("a refused call keeps the backlog and speaks it on the retry", async () => {
+test("a refused call keeps the offer and speaks it on the retry", async () => {
   const session = fakeSession();
   session.connectOpens = false;
   const timers = fakeTimers();
-  const subject = announcer(session, timers);
+  const { subject, settled } = mouth(session, timers);
 
-  subject.enqueue([speech("a")]);
+  subject.offer(offer("a"));
   await Promise.resolve();
   subject.onStatus(REALTIME_STATUS.UNAVAILABLE);
 
-  // The refusal armed the retry clock instead of emptying the queue.
+  // The refusal armed the retry clock instead of settling the offer.
   assert.equal(session.connects, 1);
   assert.equal(timers.armed(), 1);
   assert.deepEqual(timers.delays, [ANNOUNCER_RETRY_DELAY_MS]);
+  assert.deepEqual(settled, []);
 
-  // The rate limit lifted; the retry delivers the same notice.
+  // The rate limit lifted; the retry delivers the same offer.
   session.connectOpens = true;
   timers.fire();
   await Promise.resolve();
   assert.equal(session.connects, 2);
-  assert.deepEqual(
-    session.spoken.map((item) => item.providerSessionId),
-    ["a"],
-  );
+  assert.deepEqual(spokenIds(session), ["a"]);
+  assert.deepEqual(settled, [{ id: "a", outcome: SPEECH_OUTCOME.SPOKEN }]);
 });
 
-test("a backlog that outlives its attempts is dropped, not retried into a loop", async () => {
+test("an offer that outlives its attempts settles REFUSED, not retried into a loop", async () => {
   const session = fakeSession();
   session.connectOpens = false;
   const timers = fakeTimers();
-  const subject = announcer(session, timers);
+  const { subject, settled } = mouth(session, timers);
 
-  subject.enqueue([speech("a")]);
+  subject.offer(offer("a"));
   await Promise.resolve();
   subject.onStatus(REALTIME_STATUS.UNAVAILABLE);
   for (let attempt = 1; attempt < MAXIMUM_CONNECT_ATTEMPTS; attempt += 1) {
@@ -305,60 +338,56 @@ test("a backlog that outlives its attempts is dropped, not retried into a loop",
   }
   assert.equal(session.connects, MAXIMUM_CONNECT_ATTEMPTS);
 
-  // The final refusal spent the attempts: the backlog is already dropped and
-  // no clock is left ticking for it.
+  // The final refusal spent the attempts: the offer is handed back refused
+  // and no clock is left ticking for it.
+  assert.deepEqual(settled, [{ id: "a", outcome: SPEECH_OUTCOME.REFUSED }]);
   assert.equal(timers.armed(), 0);
   timers.fire();
   await Promise.resolve();
   assert.equal(session.connects, MAXIMUM_CONNECT_ATTEMPTS);
 
-  // A later notice is a fresh backlog with fresh attempts.
+  // A later offer starts with fresh attempts.
   session.connectOpens = true;
-  subject.enqueue([speech("b")]);
+  subject.offer(offer("b"));
   await Promise.resolve();
-  assert.deepEqual(
-    session.spoken.map((item) => item.providerSessionId),
-    ["b"],
-  );
+  assert.deepEqual(spokenIds(session), ["b"]);
 });
 
-test("a notice arriving right after a spent backlog is kept, not dropped with it", async () => {
+test("an offer arriving right after a refused one is kept, not refused with it", async () => {
   const session = fakeSession();
   session.connectOpens = false;
   const timers = fakeTimers();
-  const subject = announcer(session, timers);
+  const { subject, settled } = mouth(session, timers);
 
-  subject.enqueue([speech("a")]);
+  subject.offer(offer("a"));
   await Promise.resolve();
   for (let attempt = 1; attempt < MAXIMUM_CONNECT_ATTEMPTS; attempt += 1) {
     timers.fire();
     await Promise.resolve();
   }
   assert.equal(session.connects, MAXIMUM_CONNECT_ATTEMPTS);
+  assert.deepEqual(settled, [{ id: "a", outcome: SPEECH_OUTCOME.REFUSED }]);
 
   // Fresh news arriving before any clock ticks must find a fresh counter,
-  // not die against the one the spent backlog left behind.
+  // not die against the one the refused offer left behind.
   session.connectOpens = true;
-  subject.enqueue([speech("b")]);
+  subject.offer(offer("b"));
   await Promise.resolve();
-  assert.deepEqual(
-    session.spoken.map((item) => item.providerSessionId),
-    ["b"],
-  );
+  assert.deepEqual(spokenIds(session), ["b"]);
 });
 
-test("a backlog stranded by a call that ended is picked up by the retry clock", async () => {
+test("an offer stranded by a call that ended is picked up by the retry clock", async () => {
   const session = fakeSession();
   session.microphone = true;
   session.setStatus(REALTIME_STATUS.RESPONDING);
   const timers = fakeTimers();
-  const subject = announcer(session, timers);
+  const { subject } = mouth(session, timers);
 
   // Arrives mid-reply on the developer's call and waits its turn.
-  subject.enqueue([speech("a")]);
-  assert.deepEqual<SessionAnnouncement[]>(session.spoken, []);
+  subject.offer(offer("a"));
+  assert.deepEqual(spokenIds(session), []);
 
-  // The developer hangs up before the turn ends; the backlog survives.
+  // The developer hangs up before the turn ends; the offer survives.
   session.microphone = false;
   session.setStatus(REALTIME_STATUS.IDLE);
   subject.onStatus(REALTIME_STATUS.IDLE);
@@ -367,83 +396,95 @@ test("a backlog stranded by a call that ended is picked up by the retry clock", 
   timers.fire();
   await Promise.resolve();
   assert.equal(session.connects, 1);
-  assert.deepEqual(
-    session.spoken.map((item) => item.providerSessionId),
-    ["a"],
-  );
+  assert.deepEqual(spokenIds(session), ["a"]);
 });
 
-test("a notice refused mid-reply keeps a clock of its own beside the READY edge", () => {
+test("an offer refused mid-reply keeps a clock of its own beside the READY edge", () => {
   const session = fakeSession();
   session.microphone = true;
   session.setStatus(REALTIME_STATUS.RESPONDING);
   const timers = fakeTimers();
-  const subject = announcer(session, timers);
+  const { subject } = mouth(session, timers);
 
   // Arrives mid-reply and is refused the turn. The READY edge is the
-  // session's promise, not this class's, so the backlog arms its own retry
+  // session's promise, not this class's, so the offer arms its own retry
   // rather than depending on that edge alone.
-  subject.enqueue([speech("a")]);
-  assert.deepEqual<SessionAnnouncement[]>(session.spoken, []);
+  subject.offer(offer("a"));
+  assert.deepEqual(spokenIds(session), []);
   assert.equal(timers.armed(), 1);
   assert.deepEqual(timers.delays, [ANNOUNCER_RETRY_DELAY_MS]);
 
   // The edge never lands; the clock fires into a call that has since settled
-  // and the notice is spoken rather than stranded.
+  // and the offer is spoken rather than stranded.
   session.setStatus(REALTIME_STATUS.READY);
   timers.fire();
-  assert.deepEqual(
-    session.spoken.map((item) => item.providerSessionId),
-    ["a"],
-  );
+  assert.deepEqual(spokenIds(session), ["a"]);
 });
 
-test("quiet beginning cuts the announcement mid-sentence and closes Luke's own call", async () => {
+test("quiet beginning cuts the reply mid-sentence, closes Luke's own call, and hands back the unspoken offer HELD", async () => {
   const session = fakeSession();
   const timers = fakeTimers();
-  const subject = announcer(session, timers);
+  const { subject, settled } = mouth(session, timers);
 
-  // Mid-announcement on Luke's own call, with two updates in the reply.
-  subject.enqueue([speech("a"), speech("b")]);
+  // Mid-briefing on Luke's own call, with the next offer waiting behind it.
+  subject.offer(offer("a"));
   await Promise.resolve();
+  subject.offer(offer("b"));
   assert.equal(session.status, REALTIME_STATUS.RESPONDING);
 
   subject.setHeld(true);
   assert.equal(session.stops, 1, "the reply under way is cut off");
   assert.equal(session.closes, 1, "the call Luke opened is closed");
+  // The spoken one was already settled; the unspoken one goes back held
+  // rather than being dropped, for the arbiter to keep until the release.
+  assert.deepEqual(settled, [
+    { id: "a", outcome: SPEECH_OUTCOME.SPOKEN },
+    { id: "b", outcome: SPEECH_OUTCOME.HELD },
+  ]);
 
-  // The backlog was dropped with the reply: quiet ending finds nothing to
-  // say, and no clock is left ticking toward saying it.
+  // Quiet ending finds nothing in hand and no clock ticking.
   subject.onStatus(REALTIME_STATUS.IDLE);
   subject.setHeld(false);
   assert.equal(timers.armed(), 0);
   assert.equal(session.connects, 1);
-  assert.deepEqual(
-    session.spoken.map((item) => item.providerSessionId),
-    ["a", "b"],
-  );
+  assert.deepEqual(spokenIds(session), ["a"]);
 
-  // Quiet over, fresh news speaks again — the release arrives exactly here.
-  subject.enqueue([speech("c")]);
+  // Quiet over, the arbiter offers again — the release arrives exactly here.
+  subject.offer(offer("c"));
   await Promise.resolve();
-  assert.deepEqual(
-    session.spoken.map((item) => item.providerSessionId),
-    ["a", "b", "c"],
-  );
+  assert.deepEqual(spokenIds(session), ["a", "c"]);
 });
 
-test("a notice arriving under the quiet never opens a call", async () => {
+test("an offer arriving under a hold the panel still draws is spoken, not handed back", async () => {
+  // The arbiter offers only once the quiet has ended; the panel's copy of
+  // the hold lands a render later. The offer is the fresher word.
   const session = fakeSession();
   const timers = fakeTimers();
-  const subject = announcer(session, timers);
+  const { subject, settled } = mouth(session, timers);
 
   subject.setHeld(true);
-  subject.enqueue([speech("a")]);
+  subject.offer(offer("a"));
   await Promise.resolve();
 
-  assert.equal(session.connects, 0);
-  assert.deepEqual<SessionAnnouncement[]>(session.spoken, []);
+  assert.equal(session.connects, 1);
+  assert.deepEqual(spokenIds(session), ["a"]);
+  assert.deepEqual(settled, [{ id: "a", outcome: SPEECH_OUTCOME.SPOKEN }]);
+});
+
+test("a hold beginning over an unspoken offer settles it HELD and opens no call", async () => {
+  const session = fakeSession();
+  const timers = fakeTimers();
+  const { subject, settled } = mouth(session, timers);
+
+  session.connectOpens = false;
+  subject.offer(offer("a"));
+  await Promise.resolve();
+  assert.equal(timers.armed(), 1, "the refused call left a retry clock");
+
+  subject.setHeld(true);
+  assert.deepEqual(settled, [{ id: "a", outcome: SPEECH_OUTCOME.HELD }]);
   assert.equal(timers.armed(), 0);
+  assert.deepEqual(spokenIds(session), []);
 });
 
 test("quiet beginning never touches the developer's own call", () => {
@@ -451,50 +492,30 @@ test("quiet beginning never touches the developer's own call", () => {
   session.microphone = true;
   session.setStatus(REALTIME_STATUS.RESPONDING);
   const timers = fakeTimers();
-  const subject = announcer(session, timers);
+  const { subject, settled } = mouth(session, timers);
 
   // Waiting out the developer's reply when the quiet lands.
-  subject.enqueue([speech("a")]);
-  assert.deepEqual<SessionAnnouncement[]>(session.spoken, []);
+  subject.offer(offer("a"));
+  assert.deepEqual(spokenIds(session), []);
 
   subject.setHeld(true);
   assert.equal(session.stops, 0, "the developer's reply is theirs to finish");
   assert.equal(session.closes, 0);
 
-  // But the waiting announcement is dropped rather than read after the reply.
+  // The waiting offer is handed back held rather than read after the reply.
+  assert.deepEqual(settled, [{ id: "a", outcome: SPEECH_OUTCOME.HELD }]);
   assert.equal(timers.armed(), 0);
   session.setStatus(REALTIME_STATUS.READY);
   subject.onStatus(REALTIME_STATUS.READY);
-  assert.deepEqual<SessionAnnouncement[]>(session.spoken, []);
+  assert.deepEqual(spokenIds(session), []);
 });
 
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("a sentence that went stale in the queue is dropped, not read as news", () => {
-  const session = fakeSession();
-  session.setStatus(REALTIME_STATUS.RESPONDING);
-  session.microphone = true;
-  const timers = fakeTimers();
-  let now = 10_000;
-  const subject = announcer(session, timers, () => now);
-
-  // Arrives during a long reply and waits.
-  subject.enqueue([speech("a", 10_000)]);
-  assert.deepEqual<SessionAnnouncement[]>(session.spoken, []);
-
-  // By the time the turn ends, the news is old; the panel has shown the
-  // state the whole time.
-  now = 10_000 + SPOKEN_NOTICE_MAX_AGE_MS + 1;
-  session.setStatus(REALTIME_STATUS.READY);
-  subject.onStatus(REALTIME_STATUS.READY);
-  assert.deepEqual<SessionAnnouncement[]>(session.spoken, []);
-});
-
-test("an announcement waits out the developer's floor after Luke answers them", () => {
+test("an offer waits out the developer's floor after Luke answers them", () => {
   const session = fakeSession();
   session.microphone = true;
   const timers = fakeTimers();
   let now = 1_000;
-  const subject = announcer(session, timers, () => now);
+  const { subject } = mouth(session, timers, () => now);
 
   // A full exchange: the developer asks, Luke answers, the reply ends.
   session.setStatus(REALTIME_STATUS.LISTENING);
@@ -502,33 +523,28 @@ test("an announcement waits out the developer's floor after Luke answers them", 
   session.setStatus(REALTIME_STATUS.RESPONDING);
   subject.onStatus(REALTIME_STATUS.RESPONDING);
 
-  // News arrives mid-reply and again right after: the pause belongs to the
-  // developer's next ask, not to the backlog.
-  subject.enqueue([speech("a")]);
+  // News arrives mid-reply: the pause belongs to the developer's next ask,
+  // not to the offer.
+  subject.offer(offer("a"));
   session.setStatus(REALTIME_STATUS.READY);
   subject.onStatus(REALTIME_STATUS.READY);
-  assert.deepEqual<SessionAnnouncement[]>(session.spoken, []);
+  assert.deepEqual(spokenIds(session), []);
 
-  // Half the window passes in silence; a straggler still may not speak.
+  // Half the window passes in silence; the offer still may not speak.
   now = 1_000 + ANNOUNCER_GRACE_MS / 2;
-  subject.enqueue([speech("b")]);
-  assert.deepEqual<SessionAnnouncement[]>(session.spoken, []);
+  timers.fire();
+  assert.deepEqual(spokenIds(session), []);
 
-  // The developer left the pause empty; the first waiting batch takes it.
+  // The developer left the pause empty; the waiting offer takes it.
   now = 1_000 + ANNOUNCER_GRACE_MS;
   timers.fire();
-  assert.deepEqual(
-    session.spoken.map((item) => item.providerSessionId),
-    ["a"],
-  );
+  assert.deepEqual(spokenIds(session), ["a"]);
 
-  // The later batch keeps its own readout after the first one ends.
+  // The next offer keeps its own readout after the first one ends.
+  subject.offer(offer("b"));
   session.setStatus(REALTIME_STATUS.READY);
   subject.onStatus(REALTIME_STATUS.READY);
-  assert.deepEqual(
-    session.spoken.map((item) => item.providerSessionId),
-    ["a", "b"],
-  );
+  assert.deepEqual(spokenIds(session), ["a", "b"]);
 });
 
 test("the developer speaking inside the window keeps the floor theirs", () => {
@@ -536,14 +552,14 @@ test("the developer speaking inside the window keeps the floor theirs", () => {
   session.microphone = true;
   const timers = fakeTimers();
   let now = 1_000;
-  const subject = announcer(session, timers, () => now);
+  const { subject } = mouth(session, timers, () => now);
 
   session.setStatus(REALTIME_STATUS.RESPONDING);
   subject.onStatus(REALTIME_STATUS.RESPONDING);
-  subject.enqueue([speech("s")]);
+  subject.offer(offer("s"));
   session.setStatus(REALTIME_STATUS.READY);
   subject.onStatus(REALTIME_STATUS.READY);
-  assert.deepEqual<SessionAnnouncement[]>(session.spoken, []);
+  assert.deepEqual(spokenIds(session), []);
 
   // The developer takes the turn inside the window — the grace did its job —
   // and Luke's answer to them ends with a fresh window, not a spent one.
@@ -555,15 +571,12 @@ test("the developer speaking inside the window keeps the floor theirs", () => {
   session.setStatus(REALTIME_STATUS.READY);
   subject.onStatus(REALTIME_STATUS.READY);
   timers.fire();
-  assert.deepEqual<SessionAnnouncement[]>(session.spoken, []);
+  assert.deepEqual(spokenIds(session), []);
 
   // Only the pause after the second answer, left empty, is spoken into.
   now = 1_000 + ANNOUNCER_GRACE_MS / 2 + ANNOUNCER_GRACE_MS;
   timers.fire();
-  assert.deepEqual(
-    session.spoken.map((item) => item.providerSessionId),
-    ["s"],
-  );
+  assert.deepEqual(spokenIds(session), ["s"]);
 });
 
 test("the retry clock respects the developer's floor", () => {
@@ -572,40 +585,34 @@ test("the retry clock respects the developer's floor", () => {
   session.setStatus(REALTIME_STATUS.RESPONDING);
   const timers = fakeTimers();
   let now = 1_000;
-  const subject = announcer(session, timers, () => now);
+  const { subject } = mouth(session, timers, () => now);
 
   subject.onStatus(REALTIME_STATUS.RESPONDING);
-  subject.enqueue([speech("a")]);
+  subject.offer(offer("a"));
   session.setStatus(REALTIME_STATUS.READY);
   subject.onStatus(REALTIME_STATUS.READY);
 
   // Every armed clock firing inside the window still finds the floor held.
   now = 1_000 + ANNOUNCER_GRACE_MS - 1;
   timers.fire();
-  assert.deepEqual<SessionAnnouncement[]>(session.spoken, []);
+  assert.deepEqual(spokenIds(session), []);
 
   now = 1_000 + ANNOUNCER_GRACE_MS;
   timers.fire();
-  assert.deepEqual(
-    session.spoken.map((item) => item.providerSessionId),
-    ["a"],
-  );
+  assert.deepEqual(spokenIds(session), ["a"]);
 });
 
-test("a notice on Luke's own call speaks without the developer's window", async () => {
+test("an offer on Luke's own call speaks without the developer's window", async () => {
   const session = fakeSession();
   const timers = fakeTimers();
-  const subject = announcer(session, timers);
+  const { subject } = mouth(session, timers);
 
   // Nobody is conversing: the window guards the developer's next ask, and
   // on Luke's own call there is no ask to guard.
-  subject.enqueue([speech("a")]);
+  subject.offer(offer("a"));
   await Promise.resolve();
   subject.onStatus(REALTIME_STATUS.READY);
-  assert.deepEqual(
-    session.spoken.map((item) => item.providerSessionId),
-    ["a"],
-  );
+  assert.deepEqual(spokenIds(session), ["a"]);
 });
 
 test("the developer taking the turn stands the grace clock down", () => {
@@ -613,11 +620,11 @@ test("the developer taking the turn stands the grace clock down", () => {
   session.microphone = true;
   const timers = fakeTimers();
   let now = 1_000;
-  const subject = announcer(session, timers, () => now);
+  const { subject } = mouth(session, timers, () => now);
 
   session.setStatus(REALTIME_STATUS.RESPONDING);
   subject.onStatus(REALTIME_STATUS.RESPONDING);
-  subject.enqueue([speech("a")]);
+  subject.offer(offer("a"));
   session.setStatus(REALTIME_STATUS.READY);
   subject.onStatus(REALTIME_STATUS.READY);
   const armedDuringWindow = timers.armed();
@@ -633,17 +640,14 @@ test("the developer taking the turn stands the grace clock down", () => {
   subject.onStatus(REALTIME_STATUS.RESPONDING);
   now = 1_000 + ANNOUNCER_GRACE_MS * 2;
   timers.fire();
-  assert.deepEqual<SessionAnnouncement[]>(session.spoken, []);
+  assert.deepEqual(spokenIds(session), []);
 
   // The answer's own end opens the next window, on a clock of its own.
   session.setStatus(REALTIME_STATUS.READY);
   subject.onStatus(REALTIME_STATUS.READY);
   timers.fire();
-  assert.deepEqual<SessionAnnouncement[]>(session.spoken, []);
+  assert.deepEqual(spokenIds(session), []);
   now = 1_000 + ANNOUNCER_GRACE_MS * 3;
   timers.fire();
-  assert.deepEqual(
-    session.spoken.map((item) => item.providerSessionId),
-    ["a"],
-  );
+  assert.deepEqual(spokenIds(session), ["a"]);
 });

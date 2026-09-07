@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   ConversationHistoryPanel,
   HISTORY_ENTRY_SPEAKER,
+  HISTORY_PENDING_LABEL,
   historyEntryPresentation,
 } from "./conversation-history-panel";
 
@@ -50,8 +51,6 @@ test("an announcement shows its spoken transcript", () => {
       onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
-      openable: () => false,
-      onOpenSession: () => undefined,
     }),
   );
 
@@ -73,8 +72,6 @@ test("a recorded entry shows its local time", () => {
       onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
-      openable: () => false,
-      onOpenSession: () => undefined,
     }),
   );
 
@@ -91,8 +88,6 @@ test("conversation history is blocked from optional panel recordings", () => {
       onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
-      openable: () => false,
-      onOpenSession: () => undefined,
     }),
   );
 
@@ -112,8 +107,6 @@ test("messages offer a copy control while quiet events offer none", () => {
       onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
-      openable: () => false,
-      onOpenSession: () => undefined,
     }),
   );
 
@@ -136,8 +129,6 @@ test("a line still being said draws as the bubble it will settle into", () => {
       onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
-      openable: () => false,
-      onOpenSession: () => undefined,
     }),
   );
 
@@ -157,8 +148,6 @@ test("words still arriving stand the thread up without a settled line", () => {
       onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
-      openable: () => false,
-      onOpenSession: () => undefined,
     }),
   );
 
@@ -175,8 +164,6 @@ test("the empty history reports only its state", () => {
       onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
-      openable: () => false,
-      onOpenSession: () => undefined,
     }),
   );
 
@@ -184,125 +171,11 @@ test("the empty history reports only its state", () => {
   assert.doesNotMatch(markup, /history-header|next typed|stays in memory/);
 });
 
-test("a line's named chats draw pressable chips, worded as recorded", () => {
-  const asked: string[] = [];
-  const markup = renderToStaticMarkup(
-    createElement(ConversationHistoryPanel, {
-      entries: [
-        {
-          kind: CONVERSATION_ENTRY_KIND.REPLY,
-          words: "checkout-service is done and billing-service is waiting.",
-          mentions: [
-            {
-              providerId: "conductor",
-              providerSessionId: "chat-1",
-              title: "checkout-service",
-              markId: "claude-code",
-              applications: [{ id: "conductor", name: "Conductor" }],
-            },
-            {
-              providerId: "conductor",
-              providerSessionId: "chat-2",
-              title: "billing-service",
-              markId: "conductor",
-              applications: [],
-            },
-          ],
-        },
-        { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "No session here." },
-      ],
-      onClear: () => undefined,
-      ask: async () => undefined,
-      onAskEngaged: () => undefined,
-      openable: (identity) => {
-        asked.push(identity.providerSessionId);
-        return true;
-      },
-      onOpenSession: () => undefined,
-    }),
-  );
-
-  assert.equal(markup.match(/class="history-chip"/g)?.length, 2);
-  assert.match(markup, /aria-label="Open checkout-service"/);
-  assert.match(markup, /aria-label="Open billing-service"/);
-  // The chip leads with the agent's mark and trails the app marks its chat's
-  // row wore when the line was recorded, exactly like the notice band's.
-  assert.match(markup, /data-mark="claude-code"/);
-  assert.match(markup, /aria-label="Also in Conductor"/);
-  // Only the chats the line named ask whether they can still be opened, and
-  // the session ids themselves stay out of the drawn markup.
-  assert.deepEqual(asked, ["chat-1", "chat-2"]);
-  assert.doesNotMatch(markup, /chat-1|chat-2/);
-});
-
-test("a chat with nowhere to go draws no chip", () => {
-  const markup = renderToStaticMarkup(
-    createElement(ConversationHistoryPanel, {
-      entries: [
-        {
-          kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
-          words: "Local run finished.",
-          identity: { providerId: "claude-code", providerSessionId: "local-1" },
-          mentions: [
-            {
-              providerId: "claude-code",
-              providerSessionId: "local-1",
-              title: "local-run",
-              markId: "claude-code",
-              applications: [],
-            },
-          ],
-        },
-      ],
-      onClear: () => undefined,
-      ask: async () => undefined,
-      onAskEngaged: () => undefined,
-      openable: () => false,
-      onOpenSession: () => undefined,
-    }),
-  );
-
-  assert.doesNotMatch(markup, /history-chip|history-mentions/);
-});
-
-test("a quiet act line draws its chat's chip without a copy control", () => {
-  const markup = renderToStaticMarkup(
-    createElement(ConversationHistoryPanel, {
-      entries: [
-        {
-          kind: CONVERSATION_ENTRY_KIND.ACT,
-          words: "sent Checkout a message.",
-          identity: { providerId: "conductor", providerSessionId: "chat-1" },
-          mentions: [
-            {
-              providerId: "conductor",
-              providerSessionId: "chat-1",
-              title: "Checkout",
-              markId: "conductor",
-              applications: [],
-            },
-          ],
-        },
-      ],
-      onClear: () => undefined,
-      ask: async () => undefined,
-      onAskEngaged: () => undefined,
-      openable: () => true,
-      onOpenSession: () => undefined,
-    }),
-  );
-
-  assert.match(markup, /class="history-chip"/);
-  assert.doesNotMatch(markup, /history-copy/);
-});
-
 test("the composer stands at the foot of the thread, empty or not", () => {
   const empty = renderToStaticMarkup(
     createElement(ConversationHistoryPanel, {
       entries: [],
       onClear: () => undefined,
-      openable: () => false,
-      onOpenSession: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
@@ -315,8 +188,6 @@ test("the composer stands at the foot of the thread, empty or not", () => {
     createElement(ConversationHistoryPanel, {
       entries: [{ kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "ship it" }],
       onClear: () => undefined,
-      openable: () => false,
-      onOpenSession: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
       askShortcut: "Alt+Space",
@@ -326,4 +197,53 @@ test("the composer stands at the foot of the thread, empty or not", () => {
   assert.equal(threaded.match(/id="ask-luke-input"/g)?.length, 1);
   assert.ok(threaded.indexOf("</ol>") < threaded.indexOf('id="ask-luke-input"'));
   assert.match(threaded, /aria-keyshortcuts="Alt\+Space"/);
+});
+
+test("an ask whose run is still going waits beside its words and offers a cancel", () => {
+  const cancelled: string[] = [];
+  const run = {
+    runId: "run-1",
+    submissionId: "sub-1",
+    origin: "typed",
+    question: "ship it",
+    revision: 1,
+    acceptedAt: 1,
+    performedActs: 0,
+    unknownActs: 0,
+  } as const;
+  const render = (status: "running" | "succeeded") =>
+    renderToStaticMarkup(
+      createElement(ConversationHistoryPanel, {
+        entries: [
+          { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "ship it", requestId: "run-1" },
+        ],
+        requests: [{ ...run, status }],
+        onCancelRequest: (runId) => cancelled.push(runId),
+        onClear: () => undefined,
+        ask: async () => undefined,
+        onAskEngaged: () => undefined,
+      }),
+    );
+  const pending = render("running");
+  assert.match(pending, new RegExp(HISTORY_PENDING_LABEL));
+  assert.match(pending, /class="history-cancel"/);
+  // The wait stands beneath the words, inside the bubble, after the question's
+  // own paragraph: the bubble stacks, so the status never shares the row.
+  assert.match(pending, /<\/p><span class="history-pending" role="status">/);
+  // Still inside the blocked subtree: a wait is drawn beside words a recording never sees.
+  assert.match(pending, /ph-no-capture/);
+  const settled = render("succeeded");
+  assert.doesNotMatch(settled, /history-cancel|history-pending/);
+  // A spoken ask is the same lifecycle: its transcript, tied to its run, waits too.
+  const spoken = renderToStaticMarkup(
+    createElement(ConversationHistoryPanel, {
+      entries: [{ kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words: "ship it", requestId: "run-1" }],
+      requests: [{ ...run, origin: "spoken", status: "running" }],
+      onCancelRequest: (runId) => cancelled.push(runId),
+      onClear: () => undefined,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
+    }),
+  );
+  assert.match(spoken, /class="history-cancel"/);
 });
