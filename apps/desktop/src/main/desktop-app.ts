@@ -22,7 +22,12 @@ import {
   productSignInAge,
   type RecordProductEvent,
 } from "@sidecar/analytics";
-import { BrainAgent, type BrainDelivery, BrainStateStore } from "@sidecar/brain";
+import {
+  BrainAgent,
+  type BrainDelivery,
+  BrainStateStore,
+  brainStateFromStored,
+} from "@sidecar/brain";
 import {
   activeMeetingEnd,
   GoogleCalendarReader,
@@ -160,6 +165,7 @@ import {
   calendarOnboardingStateFromStored,
   shouldBackfillCalendarOnboardingSettled,
 } from "./calendar-onboarding-flow";
+import { clearConversationAndBrain } from "./conversation-clear";
 import {
   INTRODUCTION_FADE_MS,
   INTRODUCTION_HANDOFF_READY_MS,
@@ -1595,6 +1601,10 @@ function brainStandingContext(): string {
  */
 function recordMainConversationEntry(entry: ConversationEntry, recordedAt = Date.now()): boolean {
   if (!runMode.observesProviders) return false;
+  // A line from at or before the last Clear was settled by the Clear itself:
+  // a run of the erased generation publishing late, or a report of the thread
+  // as it stood before the press. Nothing is owed for it, and it is not taken.
+  if (conversationClearedAt !== undefined && recordedAt <= conversationClearedAt) return true;
   const now = Date.now();
   const merged = appendConversationThreadEntry(conversationHistory, entry, now, recordedAt);
   // Unchanged means the thread already holds this line, or refused an empty
@@ -1610,22 +1620,37 @@ function recordMainConversationEntry(entry: ConversationEntry, recordedAt = Date
 }
 
 /**
- * The History Clear a panel pressed: the stored thread deleted, the relay
- * emptied for every panel, and the moment remembered so a report still in
- * flight from before it cannot stand the old lines back up. Answers whether
- * the file went; only then is the voice window told to retire its own turns,
- * so a thread that could not be deleted is not half-forgotten.
+ * The History Clear a panel pressed: the cutoff raised, the brain's
+ * generation fenced and marked erased, its undelivered briefings withdrawn,
+ * the stored thread deleted, and only then the relay emptied for every panel.
+ * Answers whether both files went; only then is the voice window told to
+ * retire its own turns, so a thread that could not be deleted is not
+ * half-forgotten, while the fence and the marker stand either way. What Luke
+ * separately remembers about the developer is another file under another
+ * rule, and a Clear does not reach it. A fixture or capture run holds
+ * nothing on disk and empties the view alone.
  */
-function clearConversationHistory(): boolean {
-  if (runMode.observesProviders) {
-    const clearedAt = Date.now();
-    if (!removeStoredState(conversationPath(), "the conversation")) return false;
-    conversationClearedAt = clearedAt;
+function clearConversationHistory(): Promise<boolean> {
+  const emptyConversation = () => {
+    conversationHistory = [];
+    const payload: ConversationHistoryPayload = { entries: [], cleared: true };
+    broadcast(channels.onConversationHistoryChanged, payload);
+  };
+  if (!runMode.observesProviders) {
+    emptyConversation();
+    return Promise.resolve(true);
   }
-  conversationHistory = [];
-  const payload: ConversationHistoryPayload = { entries: [], cleared: true };
-  broadcast(channels.onConversationHistoryChanged, payload);
-  return true;
+  return clearConversationAndBrain({
+    store: brainStore(),
+    now: Date.now,
+    fence: (clearedAt) => {
+      conversationClearedAt = clearedAt;
+    },
+    withdrawSpeech: () => speechArbiter.dropBriefings(),
+    removeConversation: () => removeStoredState(conversationPath(), "the conversation"),
+    emptyConversation,
+    report: (message) => process.stderr.write(`${message}\n`),
+  });
 }
 
 /**
@@ -3073,9 +3098,15 @@ export function startDesktopApp(): void {
       // that opened on an empty History and filled it a beat later would read
       // as a conversation arriving rather than one resumed.
       if (runMode.observesProviders) {
+        // The last Clear's marker outlives the launch that made it, so a
+        // thread the Clear meant to erase is refused here even when its own
+        // file outlived the press.
+        conversationClearedAt = brainStateFromStored(readStoredState(brainStatePath()))?.reset
+          ?.clearedAt;
         conversationHistory = conversationFromStored(
           readStoredState(conversationPath()),
           Date.now(),
+          conversationClearedAt,
         );
         rememberedFacts = rememberedFactsFromStored(readStoredState(rememberedFactsPath()));
       }

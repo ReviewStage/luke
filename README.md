@@ -41,8 +41,10 @@ behalf.
 
 The **History** tab keeps your conversation with Luke on your Mac, across
 launches: the 200 most recent entries and nothing older than a fortnight, until
-you clear it. Clearing deletes the file too. Only the 20 most recent entries are
-carried into Luke's next call. Luke also silently keeps a small local memory of
+you clear it. Clearing deletes the file too. The 20 most recent entries ride
+into Luke's next call beside his working memory of what he read, said, and did,
+which lives in its own file on your Mac for exactly 14 days from when it began
+and goes with the History when you clear it. Luke also silently keeps a small local memory of
 useful preferences, personal context, goals, and recurring constraints; ask him
 what he remembers, correct something, or tell him to forget it.
 

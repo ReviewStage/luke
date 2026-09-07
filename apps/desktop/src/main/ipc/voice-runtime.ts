@@ -64,7 +64,7 @@ export interface VoiceRuntimeIpcDependencies {
    * answering whether the stored thread went — a thread that could not be
    * deleted must not be half-forgotten by a voice window that was told anyway.
    */
-  clearConversation: () => boolean;
+  clearConversation: () => boolean | Promise<boolean>;
   /** Whether a panel is recording a chord, which holds the talk and stop presses. */
   setShortcutCapturing: (capturing: boolean) => void;
 }
@@ -80,12 +80,15 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
       // first, because the main process is the thread's store and every
       // panel's relay, and the voice window is told to retire its own turns
       // only once the file has gone.
-      voiceCommand(context, command) {
+      async voiceCommand(context, command) {
         if (!panels.owns(context.sender)) return undefined;
-        const host = voiceWindow.current();
-        if (command === VOICE_COMMAND.CLEAR_CONVERSATION && !dependencies.clearConversation()) {
+        if (
+          command === VOICE_COMMAND.CLEAR_CONVERSATION &&
+          !(await dependencies.clearConversation())
+        ) {
           return VOICE_COMMAND_OUTCOME.REFUSED;
         }
+        const host = voiceWindow.current();
         host?.webContents.send(channels.onVoiceCommand, { command });
         return command === VOICE_COMMAND.CLEAR_CONVERSATION
           ? VOICE_COMMAND_OUTCOME.ACCEPTED

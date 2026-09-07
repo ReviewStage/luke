@@ -192,46 +192,68 @@ Trust constraints:
   transcript in conversation is the same shape of act: asked of Luke in a
   turn the developer opened, validated against the observed roster in the
   renderer and again in the main process, read from the provider's own file
-  on this machine, and rendered into a bounded reply that is kept nowhere:
-  the read performs nothing, reaches no provider, and is offered only for a
+  on this machine, and rendered into a bounded reply: the read performs
+  nothing, reaches no provider, and is offered only for a
   local session whose provider's transcript this build documents reading
   (Claude Code, Codex, and OMP today); a cloud session's conversation lives
   with its provider and is never fetched. The read renders only what the
   provider actually wrote down, and a provider whose stored shape this build
-  cannot render faithfully keeps the honest refusal instead.
-- A session's subject is the one place transcript content reaches a model
-  unbidden, and it is bounded on every side. No observed field says what an
-  agent is generally working on — a title is the first message, an activity
-  is the tool running now — so an
-  announcement that named the agent by its title named work it had stopped
-  doing. Luke therefore derives one short phrase per local session from the
-  same bounded transcript rendering the conversation-tab ask already reads,
-  through the same adapter method, bounded only by the file tail the adapter
-  reads and its per-line cuts, together with the title as the developer's
-  first ask. The
-  derivation runs only for a session about to be announced, at the moment the
-  announcement is delivered, once per announcement, never in a fixture run,
-  under a fixed deadline past which the announcement speaks without it, so
-  the transcript it reads is the one holding the turn the announcement is
-  about; a cloud session, a provider with no transcript this build reads, a
-  closed session, and a session inside a live voice exchange derive nothing. It travels the way an
-  attention review travels: directly to OpenAI
-  on the developer's own key, or through Luke's own service on the hosted
-  tier, where the service validates it against the same bounds, spends the
-  attention meter, asks OpenAI not to store it, and keeps and logs none of it.
-  The model is offered no tools, the transcript enters as data behind a
-  marker, and the answer is a bounded phrase or an honest null, refused when
-  it merely echoes the title. The phrase lives only inside the announcement
-  payload that carries it and is kept nowhere: it reaches one place, the
-  payload's `subject`, in the slot the title no longer travels in. It is not
-  drawn on the panel, reaches no write path, never reaches the attention
-  evaluator, and never reaches a provider file. It counts no product event,
-  because no developer asked. The development trace records each
-  derivation's about-fields, answer, and timing, and the transcript's byte
-  count, never its text. Widening what it
-  reads, where it travels, or where it is shown is a product decision, not an
-  implementation detail, and `PRIVACY.md` says the read and the send in as
-  many words.
+  cannot render faithfully keeps the honest refusal instead. What the read
+  rendered enters the brain's working memory like every other tool answer,
+  and lives and dies with its generation under the next rule.
+- The brain's transcript reads are the one place transcript content reaches
+  a model unbidden, and both the read and what it leaves behind are bounded
+  on every side. Luke's judgment is one long-lived agent in the main process,
+  woken by a provider's hook, by its own look at the roster on the
+  observation pass, by a hold's release, and by a developer's ask. A wake or
+  a roster look reads, for each local session that is working or waiting or
+  that the brain has read before, only what its transcript gained since the
+  cursor the brain last kept for it, cut from the front to 20,000 characters
+  per session per turn; a developer's ask may read a whole transcript's tail,
+  cut from the front to 60,000 characters; a cloud session, and a provider
+  whose transcript this build does not read, are read from roster fields
+  alone. The provider's file is only ever read. Everything a turn reads and
+  says travels as the Responses input the agent keeps — behind a marker, as
+  data — directly to OpenAI on the developer's own key, or through Luke's own
+  service on the hosted tier, where the service performs one model inference
+  per request under the same authority, asks OpenAI not to store it, and
+  keeps and logs none of the request body, the output, or the compaction
+  inside it. The development trace records a turn's about-fields and byte
+  counts under its own gate, never a transcript's text.
+- What the brain keeps is one generation, in one file under one writer, and
+  the generation's shape is the retention rule. The envelope holds the
+  Responses input from the latest compaction onward — the API's encrypted
+  compaction item included, which is user-derived data however opaque — the
+  transcript cursors, the record of every developer ask and how it ended, and
+  the action journal that pairs each act with its outcome. A generation lives
+  exactly fourteen days from its creation: no write, checkpoint, or
+  compaction moves its expiry, and it is judged at load, at the door of every
+  turn and submission, and by a timer armed at the instant itself, so a
+  generation that dies under a held model answer, transcript read, or act is
+  replaced beneath it and the late result lands nowhere. Expiry revokes the
+  generation's runs and withdraws its deliveries; a version-1 file, of
+  unknown age, reads as nothing rather than as a fresh lifetime; and the
+  empty generation that follows may observe the same provider files again,
+  because the rule bounds how long a reading stands, not whether the source
+  can be read. Within its life a generation keeps at most 200 ended runs,
+  each let go together with its journal and only once its end is written into
+  History, and the serialized file stays under 8 MiB: ended runs go first,
+  and a write that would still grow an oversized envelope is refused rather
+  than dropping a run still going or its journal. The History Clear reaches
+  this file as well as the conversation's, in a fixed order: the cutoff is
+  raised so every later history write and window report is judged against it;
+  the store fences the generation and writes an empty successor carrying a
+  content-free marker — the erased generation's id and the Clear's instant —
+  in the one write that also removes the old content; the briefings not yet
+  in the mouth are withdrawn; the thread's file is removed; and only then are
+  the windows told. A launch that finds the marker refuses every stored line
+  at or before its instant, so a crash between the two files cannot stand the
+  thread back up, and a step that fails leaves everything before it standing
+  and reports the erasure incomplete, never done. A Clear does not reach the
+  facts Luke separately remembers about the developer, nor any provider's
+  file. Widening what the brain reads, where it travels, how long a
+  generation stands, or what a Clear leaves is a product decision, not an
+  implementation detail, and `PRIVACY.md` says each in as many words.
 - Counting is three streams with three different guarantees, and the
   difference is the thing to keep straight. Only the first carries the
   guarantee, and the other two must never be described as though they
@@ -291,8 +313,8 @@ Trust constraints:
   holds, its words whole, including session acts and the lines that outlived
   the last launch, until the developer clears it — the same thread on every
   display's panel, relayed between windows through the main process — while
-  only the 20 most recent lines enter model context, each cut there to its
-  own length bound. There
+  the 20 most recent lines enter model context, each cut there to its own
+  length bound, beside the brain's own working memory of its turns. There
   is no general masking module to consult and nothing that makes any other new
   component silent by construction, so what a recording may see is decided by
   what the panel draws or explicitly blocks — which makes drawing something
@@ -350,10 +372,12 @@ Trust constraints:
   so storing it changes only how long it stands, not what it is. It lives in
   Luke's own application data, never a provider's file, under a real retention
   policy replacing the old "dies with the app": the 200 most recent lines,
-  nothing older than a fortnight. What reaches a model is unchanged — the same
-  bounded recent slice — and the panel's Clear reaches the file as well as the
-  screen, because a Clear that emptied only the view would leave the words on
-  the machine with nothing left to draw them. The narrower thing is a durable
+  nothing older than a fortnight. What the thread hands a model is the same
+  bounded recent slice, riding beside the brain's own working memory, and the
+  panel's Clear reaches the file as well as the screen, because a Clear that
+  emptied only the view would leave the words on the machine with nothing
+  left to draw them; it reaches the brain's generation too, under the rule
+  above. The narrower thing is a durable
   fact about the developer themselves. During a turn the developer opened,
   Luke may silently keep a concise stable preference, personal fact, goal, or
   recurring constraint. He skips transient details and uncertain inferences,

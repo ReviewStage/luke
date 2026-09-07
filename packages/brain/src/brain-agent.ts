@@ -55,7 +55,12 @@ import {
   interruptedUnfinishedRequests,
   isTerminalBrainRequestStatus,
 } from "./brain-requests.js";
-import type { BrainPersistedState, BrainStateStore, BrainStoreLease } from "./brain-state.js";
+import {
+  type BrainPersistedState,
+  type BrainStateStore,
+  type BrainStoreLease,
+  brainGenerationExpired,
+} from "./brain-state.js";
 import {
   BRAIN_TOOL,
   brainToolAllowed,
@@ -259,6 +264,7 @@ type TurnResult =
  */
 interface Generation {
   id: string;
+  expiresAt: number;
   memory: BrainMemory;
   journal: BrainJournal;
   requests: Map<string, BrainRequestRecord>;
@@ -420,6 +426,7 @@ function rejection(reason: string): WireRecord {
 function generationFrom(state: BrainPersistedState): Generation {
   return {
     id: state.generationId,
+    expiresAt: state.expiresAt,
     memory: new BrainMemory({ items: state.items, cursors: state.cursors }),
     journal: new BrainJournal(state.journal),
     requests: new Map(state.requests.map((record) => [record.runId, { ...record }])),
@@ -453,6 +460,7 @@ export class BrainAgent {
   #queue: Promise<unknown> = Promise.resolve();
   #pending: BrainWakeEvent[] = [];
   #flushTimer: ScheduledTimer | undefined;
+  #expiryTimer: ScheduledTimer | undefined;
   #stopped = false;
   #unsubscribeStore: (() => void) | undefined;
 
@@ -536,6 +544,7 @@ export class BrainAgent {
    */
   async submitAsk(submission: BrainSubmission): Promise<BrainSubmissionResult> {
     await this.ready();
+    await this.#expireIfDue();
     const generation = this.#generation;
     if (this.#stopped || !generation) {
       return {
@@ -806,6 +815,7 @@ export class BrainAgent {
   async stop(): Promise<void> {
     this.#stopped = true;
     this.#cancelFlush();
+    this.#disarmExpiry();
     this.#pending = [];
     this.#unsubscribeStore?.();
     this.#unsubscribeStore = undefined;
@@ -954,6 +964,7 @@ export class BrainAgent {
     }
     const generation = generationFrom(state);
     this.#generation = generation;
+    this.#armExpiry(generation);
     const interrupted = interruptedUnfinishedRequests(state.requests, this.#now());
     const paired = pairedDanglingCalls(state.items, () => JSON.stringify(UNKNOWN_ACT_RESULT));
     if (interrupted === state.requests && paired === state.items) return;
@@ -1004,7 +1015,44 @@ export class BrainAgent {
     this.#cancelFlush();
     this.#pending = [];
     this.#generation = generationFrom(state);
+    this.#armExpiry(this.#generation);
     this.#notify();
+  }
+
+  /**
+   * The generation's own clock. Its lifetime was fixed when it was born and
+   * no write moves it, so the timer is armed once per adopted generation, at
+   * the instant the store will agree it has died; firing asks the store,
+   * which is the one judge of the moment, and a generation that dies mid-turn
+   * is replaced under the turn exactly as a Clear would replace it.
+   */
+  #armExpiry(generation: Generation): void {
+    this.#disarmExpiry();
+    if (this.#stopped) return;
+    const delay = Math.max(0, generation.expiresAt - this.#now());
+    const fire = () => {
+      this.#expiryTimer = undefined;
+      void this.#expireIfDue();
+    };
+    // On the host's own clock the timer is unreferenced: housekeeping never
+    // holds a process open on its own, and the door check covers a
+    // generation found dead at the next launch.
+    this.#expiryTimer = this.#options.schedule
+      ? this.#schedule(fire, delay)
+      : globalThis.setTimeout(fire, delay).unref();
+  }
+
+  #disarmExpiry(): void {
+    if (this.#expiryTimer === undefined) return;
+    this.#cancel(this.#expiryTimer);
+    this.#expiryTimer = undefined;
+  }
+
+  /** Asks the store to end the generation if its time has come; the store's announcement does the rest. */
+  async #expireIfDue(): Promise<void> {
+    const generation = this.#generation;
+    if (this.#stopped || !generation || !brainGenerationExpired(generation, this.#now())) return;
+    await this.#options.store.expireIfDue(this.#now());
   }
 
   /**
@@ -1080,7 +1128,14 @@ export class BrainAgent {
           requests,
         };
       },
-      () => {
+      (commit) => {
+        // Retention decided inside the same queue step: the runs the store
+        // let go of leave the working copy too, or the next checkpoint of
+        // the journal would write them straight back.
+        if (commit.prunedRunIds.length > 0) {
+          for (const runId of commit.prunedRunIds) generation.requests.delete(runId);
+          generation.journal.dropRuns(commit.prunedRunIds);
+        }
         if (!owned || !scope.record) return;
         const live = generation.requests.get(owned.runId);
         if (live) {
@@ -1258,6 +1313,10 @@ export class BrainAgent {
 
   async #turn(plan: TurnPlan): Promise<TurnResult> {
     await this.ready();
+    // The generation's death is checked at the door of every turn, so a
+    // memory that outlived its fortnight while the app sat idle is not read
+    // one more time on the way out.
+    await this.#expireIfDue();
     const generation = plan.generation;
     // Work queued in a generation since replaced opens nothing: its briefings
     // and its wakes described a memory that no longer exists.

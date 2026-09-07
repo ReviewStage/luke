@@ -138,3 +138,22 @@ test("a spoken line tied to its run after it was relayed is enriched, not duplic
   main = mergeConversationHistory(main, again, undefined, now + 6);
   assert.equal(main.length, 2);
 });
+
+test("a stored thread drops every line at or before the last Clear's cutoff", () => {
+  const stored = JSON.stringify({
+    entries: [
+      { kind: "typed-ask", words: "before", recordedAt: 1_800_000_000_000 },
+      { kind: "reply", words: "at the cutoff", recordedAt: 1_800_000_000_500 },
+      { kind: "reply", words: "after", recordedAt: 1_800_000_000_501 },
+    ],
+  });
+  const now = 1_800_000_001_000;
+  assert.deepEqual(
+    conversationFromStored(stored, now, 1_800_000_000_500).map((entry) => entry.words),
+    ["after"],
+  );
+  assert.deepEqual(
+    conversationFromStored(stored, now).map((entry) => entry.words),
+    ["before", "at the cutoff", "after"],
+  );
+});

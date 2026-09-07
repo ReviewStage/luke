@@ -101,16 +101,25 @@ export {
 } from "./brain-requests.js";
 export {
   BRAIN_GENERATION_LIFETIME_MS,
+  BRAIN_STATE_BOUNDS,
   BRAIN_STATE_VERSION,
   type BrainPersistedState,
+  type BrainResetMarker,
+  type BrainStateBounds,
   type BrainStateStorage,
   BrainStateStore,
   type BrainStateStoreOptions,
+  type BrainStoreLease,
   type BrainTranscriptCursors,
+  type BrainWriteCommit,
+  brainGenerationExpired,
   brainPersistedStateFromWire,
+  brainRequestPrunable,
   brainStateFromStored,
   brainStateRecord,
   freshBrainState,
+  type RetainedBrainState,
+  retainedBrainState,
 } from "./brain-state.js";
 export {
   BRAIN_TOOL,
