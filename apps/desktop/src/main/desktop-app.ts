@@ -207,6 +207,7 @@ import { SettingsStore } from "./settings-store";
 import { type OnboardingBeatKind, SpeechArbiter } from "./speech-arbiter";
 import { createElectronUpdaterEngine } from "./update-installer";
 import { UPDATE_ENDPOINT, UpdateService } from "./update-service";
+import { transitionVoiceCredential } from "./voice-credential-transition";
 import { DockPresence } from "./window/dock-presence";
 import { HOTKEY_RANK, HotkeyRegistrar } from "./window/hotkey-registrar";
 import { IntroductionWindow } from "./window/introduction-window";
@@ -490,8 +491,9 @@ let conversationClearedAt: number | undefined;
  * with briefings for the voice and acts for the performer below. Nothing here
  * detects a change for it — no status edge, no notice — because the brain
  * notices changes itself, against its own memory. Built by `rebuildBrain`
- * whenever the credential policy is applied, and only on the developer's own
- * OpenAI key in this build: with no key there is no brain, nothing is
+ * whenever the credential policy is applied, on whichever client the policy
+ * chose: the developer's own OpenAI key directly, or Luke's hosted service on
+ * the signed-in account. With neither there is no brain, nothing is
  * announced, and an ask is answered with the honest refusal.
  */
 const brains = new BrainHost({
@@ -1499,13 +1501,11 @@ async function stopAccountCapabilities(): Promise<void> {
 }
 
 async function applyVoiceCredential(): Promise<void> {
-  // The standing agent loses its execution before the transition's first
-  // await, so no run keeps the old source's authority while the new one is
-  // being decided; the rebuild behind the await installs what the new
-  // capability allows, and only the latest transition's rebuild installs.
-  brains.retire();
-  await voiceCapabilities.apply();
-  await rebuildBrain();
+  await transitionVoiceCredential({
+    retire: () => brains.retire(),
+    apply: () => voiceCapabilities.apply(),
+    rebuild: rebuildBrain,
+  });
 }
 
 const brainStatePath = () => path.join(app.getPath("userData"), BRAIN_STATE_FILE);
@@ -1789,8 +1789,8 @@ const brainActPerformer = createBrainActPerformer({
 /**
  * Stands the brain up on the client the credential policy built, or down when
  * it built none. Runs wherever the policy is applied — launch, a key stored or
- * removed, an account transition — so the brain follows the key exactly as the
- * voice does. Never in a fixture or capture run, which observes nothing and
+ * removed, an account transition — so the brain follows the chosen source
+ * exactly as the voice does. Never in a fixture or capture run, which observes nothing and
  * sends nothing, and never past a closed account gate.
  */
 function rebuildBrain(): Promise<void> {

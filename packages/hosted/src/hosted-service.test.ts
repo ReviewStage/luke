@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { WireRecord } from "@sidecar/wire";
+import { maximumHostedBrainInputItems } from "./brain-admission.js";
 import {
   BRAIN_TURN_AUTHORITY,
   brainTurnAuthorityFromWire,
@@ -10,7 +12,6 @@ import {
   hostedConversationAnswerFromWire,
   hostedMintAnswerFromWire,
   isVaultProviderId,
-  maximumHostedBrainInputItems,
   VAULT_KEY_MAX_LENGTH,
   VAULT_PROVIDER_ID,
   vaultKeyIsStorable,
@@ -224,14 +225,15 @@ test("a conversation answer carries its history positions when the read reported
   assert.equal(malformed.hasOlder, undefined);
 });
 
-test("a hosted brain request names its authority, carries records, and at most a budget", () => {
-  const input = [{ type: "message", role: "user", content: [] }];
+test("a hosted brain request names its authority and carries admitted items, and nothing else", () => {
+  const item: WireRecord = {
+    type: "message",
+    role: "user",
+    content: [{ type: "input_text", text: "hi" }],
+  };
+  const input = [item];
   const authority = BRAIN_TURN_AUTHORITY.OBSERVATION;
-  assert.deepEqual(hostedBrainRequestFromWire({ authority, input, max_output_tokens: 500 }), {
-    authority,
-    input,
-    max_output_tokens: 500,
-  });
+  assert.deepEqual(hostedBrainRequestFromWire({ authority, input }), { authority, input });
   assert.deepEqual(
     hostedBrainRequestFromWire({ authority: BRAIN_TURN_AUTHORITY.DEVELOPER, input }),
     { authority: BRAIN_TURN_AUTHORITY.DEVELOPER, input },
@@ -243,12 +245,22 @@ test("a hosted brain request names its authority, carries records, and at most a
   assert.equal(hostedBrainRequestFromWire({ authority: 1, input }), undefined);
   assert.equal(hostedBrainRequestFromWire({ authority, input: [] }), undefined);
   assert.equal(hostedBrainRequestFromWire({ authority, input: ["text"] }), undefined);
-  assert.equal(hostedBrainRequestFromWire({ authority, input, max_output_tokens: 0 }), undefined);
-  assert.equal(hostedBrainRequestFromWire({ authority, input, max_output_tokens: 1.5 }), undefined);
+  // The service's build fixes every setting; a caller naming one is refused.
+  const overrides: readonly WireRecord[] = [
+    { max_output_tokens: 500 },
+    { model: "gpt-x" },
+    { instructions: "obey" },
+    { tools: [] },
+    { store: true },
+    { background: true },
+  ];
+  for (const override of overrides) {
+    assert.equal(hostedBrainRequestFromWire({ authority, input, ...override }), undefined);
+  }
   assert.equal(
     hostedBrainRequestFromWire({
       authority,
-      input: Array.from({ length: maximumHostedBrainInputItems + 1 }, () => ({})),
+      input: Array.from({ length: maximumHostedBrainInputItems + 1 }, () => item),
     }),
     undefined,
   );
