@@ -13,7 +13,7 @@ final class WatchConnectivityReceiver: NSObject, WCSessionDelegate {
     @MainActor
     init(watchSession: WatchAccountSession) {
         self.watchSession = watchSession
-        settings = DeviceSettingsSync(publish: Self.publishSettings)
+        settings = DeviceSettingsSync(role: .secondary, publish: Self.publishSettings)
         super.init()
         settings.start()
         watchSession.onCredentialsNeeded = { [weak self] in

@@ -18,7 +18,7 @@ final class PhoneSessionRelay: NSObject, WCSessionDelegate {
     @MainActor
     init(accountSession: AccountSession) {
         self.accountSession = accountSession
-        settings = DeviceSettingsSync(publish: Self.publishSettings)
+        settings = DeviceSettingsSync(role: .primary, publish: Self.publishSettings)
         super.init()
         settings.start()
         accountSession.onTokensRefreshed = { [weak self] in

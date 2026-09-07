@@ -63,6 +63,24 @@ public struct DeviceSettingsSnapshot: Equatable, Sendable {
 /// the other device's older copy, whichever of the two activates first.
 @MainActor
 public final class DeviceSettingsSync {
+    /// Which of the pair this device is. Settings changed before a device ever
+    /// synced carry no stamp of their own, so the two copies are ranked by
+    /// role instead: the primary's copy wins over the secondary's, and both
+    /// lose to any change made once syncing, whichever device activates
+    /// first.
+    public enum Role: Sendable {
+        case primary
+        case secondary
+
+        /// Later than never-changed, earlier than any real change.
+        var preSyncStamp: Date {
+            switch self {
+            case .primary: Date(timeIntervalSinceReferenceDate: 2)
+            case .secondary: Date(timeIntervalSinceReferenceDate: 1)
+            }
+        }
+    }
+
     /// Bumped when a field changes meaning or type; a payload from another
     /// version is ignored rather than half-read.
     public static let payloadVersion = 1
@@ -83,6 +101,7 @@ public final class DeviceSettingsSync {
     private static let changedAtKey = "deviceSettings.changedAt"
 
     private let store: UserDefaults
+    private let role: Role
     private let now: () -> Date
     private let publish: ([String: Any]) -> Void
     private var known: DeviceSettingsSnapshot
@@ -91,10 +110,12 @@ public final class DeviceSettingsSync {
 
     public init(
         store: UserDefaults = .standard,
+        role: Role,
         now: @escaping () -> Date = Date.init,
         publish: @escaping ([String: Any]) -> Void
     ) {
         self.store = store
+        self.role = role
         self.now = now
         self.publish = publish
         known = DeviceSettingsSnapshot.read(from: store)
@@ -105,12 +126,13 @@ public final class DeviceSettingsSync {
     }
 
     /// Begins following the store. A device whose settings were already
-    /// changed before it ever synced has no stamp for them; they are stamped
-    /// now, so a fresh pair learns them rather than overwriting them with
-    /// its own untouched defaults.
+    /// changed before it ever synced has no stamp for them; they take the
+    /// role's pre-sync stamp, so a fresh pair learns them rather than
+    /// overwriting them with its own untouched defaults, and two devices
+    /// that each hold such a copy settle on the primary's.
     public func start() {
         if changedAt == nil, known != DeviceSettingsSnapshot() {
-            changedAt = now()
+            changedAt = role.preSyncStamp
         }
         observer = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: store, queue: nil

@@ -53,8 +53,8 @@ final class DeviceSettingsSyncTests: XCTestCase {
         let watchStore = makeStore()
         var phonePublished: [[String: Any]] = []
         var watchPublished: [[String: Any]] = []
-        let phone = DeviceSettingsSync(store: phoneStore, now: tick) { phonePublished.append($0) }
-        let watch = DeviceSettingsSync(store: watchStore, now: tick) { watchPublished.append($0) }
+        let phone = DeviceSettingsSync(store: phoneStore, role: .primary, now: tick) { phonePublished.append($0) }
+        let watch = DeviceSettingsSync(store: watchStore, role: .secondary, now: tick) { watchPublished.append($0) }
         phone.start()
         watch.start()
 
@@ -72,8 +72,8 @@ final class DeviceSettingsSyncTests: XCTestCase {
         let phoneStore = makeStore()
         let watchStore = makeStore()
         var published: [[String: Any]] = []
-        let phone = DeviceSettingsSync(store: phoneStore, now: tick) { published.append($0) }
-        let watch = DeviceSettingsSync(store: watchStore, now: tick) { _ in }
+        let phone = DeviceSettingsSync(store: phoneStore, role: .primary, now: tick) { published.append($0) }
+        let watch = DeviceSettingsSync(store: watchStore, role: .secondary, now: tick) { _ in }
         phone.start()
         watch.start()
 
@@ -88,8 +88,8 @@ final class DeviceSettingsSyncTests: XCTestCase {
         let watchStore = makeStore()
         var phonePublished: [[String: Any]] = []
         var watchPublished: [[String: Any]] = []
-        let phone = DeviceSettingsSync(store: phoneStore, now: tick) { phonePublished.append($0) }
-        let watch = DeviceSettingsSync(store: watchStore, now: tick) { watchPublished.append($0) }
+        let phone = DeviceSettingsSync(store: phoneStore, role: .primary, now: tick) { phonePublished.append($0) }
+        let watch = DeviceSettingsSync(store: watchStore, role: .secondary, now: tick) { watchPublished.append($0) }
         phone.start()
         watch.start()
 
@@ -110,8 +110,8 @@ final class DeviceSettingsSyncTests: XCTestCase {
         changed.write(to: phoneStore)
         let watchStore = makeStore()
         var phonePublished: [[String: Any]] = []
-        let phone = DeviceSettingsSync(store: phoneStore, now: tick) { phonePublished.append($0) }
-        let watch = DeviceSettingsSync(store: watchStore, now: tick) { _ in }
+        let phone = DeviceSettingsSync(store: phoneStore, role: .primary, now: tick) { phonePublished.append($0) }
+        let watch = DeviceSettingsSync(store: watchStore, role: .secondary, now: tick) { _ in }
         phone.start()
         watch.start()
 
@@ -120,12 +120,69 @@ final class DeviceSettingsSyncTests: XCTestCase {
         XCTAssertEqual(DeviceSettingsSnapshot.read(from: watchStore), changed)
     }
 
+    func testTwoPreSyncCopiesSettleOnThePrimaryWhicheverActivatesFirst() {
+        for primaryFirst in [true, false] {
+            let phoneStore = makeStore()
+            let watchStore = makeStore()
+            changed.write(to: phoneStore)
+            var onWatch = changed
+            onWatch.voice = .verse
+            onWatch.workspaceProviderId = "codex"
+            onWatch.write(to: watchStore)
+            var phonePublished: [[String: Any]] = []
+            var watchPublished: [[String: Any]] = []
+            let phone = DeviceSettingsSync(store: phoneStore, role: .primary, now: tick) {
+                phonePublished.append($0)
+            }
+            let watch = DeviceSettingsSync(store: watchStore, role: .secondary, now: tick) {
+                watchPublished.append($0)
+            }
+            if primaryFirst {
+                phone.start()
+                watch.start()
+            } else {
+                watch.start()
+                phone.start()
+            }
+
+            phone.publishCurrent()
+            watch.publishCurrent()
+            phone.receive(watchPublished.last!)
+            watch.receive(phonePublished.last!)
+            XCTAssertEqual(DeviceSettingsSnapshot.read(from: phoneStore), changed)
+            XCTAssertEqual(DeviceSettingsSnapshot.read(from: watchStore), changed)
+        }
+    }
+
+    func testAChangeMadeAfterSyncingBeatsAPreSyncCopy() {
+        let phoneStore = makeStore()
+        let watchStore = makeStore()
+        changed.write(to: phoneStore)
+        var phonePublished: [[String: Any]] = []
+        var watchPublished: [[String: Any]] = []
+        let phone = DeviceSettingsSync(store: phoneStore, role: .primary, now: tick) {
+            phonePublished.append($0)
+        }
+        let watch = DeviceSettingsSync(store: watchStore, role: .secondary, now: tick) {
+            watchPublished.append($0)
+        }
+        watch.start()
+        watchStore.set(RealtimeVoice.verse.rawValue, forKey: VoiceSettingsKey.voice)
+        phone.start()
+
+        phone.publishCurrent()
+        watch.receive(phonePublished.last!)
+        phone.receive(watchPublished.last!)
+        XCTAssertEqual(DeviceSettingsSnapshot.read(from: watchStore).voice, .verse)
+        XCTAssertEqual(DeviceSettingsSnapshot.read(from: phoneStore).voice, .verse)
+    }
+
     func testAnUntouchedDeviceNeverOverwritesAChangedOne() {
         let phoneStore = makeStore()
         let watchStore = makeStore()
         var watchPublished: [[String: Any]] = []
-        let phone = DeviceSettingsSync(store: phoneStore, now: tick) { _ in }
-        let watch = DeviceSettingsSync(store: watchStore, now: tick) { watchPublished.append($0) }
+        let phone = DeviceSettingsSync(store: phoneStore, role: .primary, now: tick) { _ in }
+        let watch = DeviceSettingsSync(store: watchStore, role: .secondary, now: tick) { watchPublished.append($0) }
         phone.start()
         watch.start()
 
@@ -139,17 +196,17 @@ final class DeviceSettingsSyncTests: XCTestCase {
         let phoneStore = makeStore()
         let watchStore = makeStore()
         var watchPublished: [[String: Any]] = []
-        let watch = DeviceSettingsSync(store: watchStore, now: tick) { watchPublished.append($0) }
+        let watch = DeviceSettingsSync(store: watchStore, role: .secondary, now: tick) { watchPublished.append($0) }
         watch.start()
         watchStore.set(RealtimeVoice.sage.rawValue, forKey: VoiceSettingsKey.voice)
         let stale = watchPublished.last!
 
-        var phone: DeviceSettingsSync? = DeviceSettingsSync(store: phoneStore, now: tick) { _ in }
+        var phone: DeviceSettingsSync? = DeviceSettingsSync(store: phoneStore, role: .primary, now: tick) { _ in }
         phone?.start()
         phoneStore.set(RealtimeVoice.ash.rawValue, forKey: VoiceSettingsKey.voice)
         phone = nil
 
-        let relaunched = DeviceSettingsSync(store: phoneStore, now: tick) { _ in }
+        let relaunched = DeviceSettingsSync(store: phoneStore, role: .primary, now: tick) { _ in }
         relaunched.start()
         relaunched.receive(stale)
         XCTAssertEqual(DeviceSettingsSnapshot.read(from: phoneStore).voice, .ash)
@@ -157,7 +214,7 @@ final class DeviceSettingsSyncTests: XCTestCase {
 
     func testUnreadablePayloadsAreIgnored() {
         let store = makeStore()
-        let sync = DeviceSettingsSync(store: store, now: tick) { _ in }
+        let sync = DeviceSettingsSync(store: store, role: .primary, now: tick) { _ in }
         sync.start()
         sync.receive(["settingsVersion": 99, "changedAt": 5.0, "voice": "coral", "speed": "fast"])
         sync.receive(["settingsVersion": 1, "voice": "coral", "speed": "fast"])

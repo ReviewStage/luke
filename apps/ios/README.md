@@ -134,7 +134,10 @@ ends. Each app keeps reading and writing its own UserDefaults keys; the sync
 follows those keys, sends one whole snapshot on every local change and at
 activation, and applies an arriving snapshot only when it is newer than the
 last change made on the receiving device, so a choice made while the pair was
-apart is never undone by the other device's older copy. The application
+apart is never undone by the other device's older copy. Settings changed before
+a device ever synced carry no stamp, so those copies are ranked by role
+instead, the phone's over the watch's, and both lose to any change made once
+syncing. The application
 context is the right channel because it holds only the latest snapshot,
 delivers it whenever the pair next connects, and keeps the last one received
 across a relaunch. Nothing in it is account data: no token, key, or anything
