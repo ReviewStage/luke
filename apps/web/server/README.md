@@ -184,6 +184,40 @@ one atomic upsert before each upstream call, checked against the ceilings in
 long they run; a spend limit on the OpenAI project behind the key is the
 backstop and should be configured with it.
 
+# Hosted brain inference
+
+`api/brain/respond.ts` runs one inference of Luke's brain on the deployment's
+own OpenAI key for a signed-in client that carries none of its own. It is an
+exact-path file like the voice and attention routes, resolved to a user
+through the same bearer seam, and it is the one hosted route with a raised
+function duration: `vercel.json` gives it 120 seconds so the 90-second
+upstream ceiling the brain shares with its keyed client can pass, and that
+`functions` entry names this route alone.
+
+One HTTP request is one model call and nothing more. The client sends
+`{ authority, input }`: who opened the turn, and the Responses API input array
+it would have posted itself. `hostedBrainRequestFromWire` in `@sidecar/hosted`
+is the whole admission policy — the body is read as it streams and cut at 2 MiB
+whatever its `Content-Length` says, the array is capped at 2,000 items, each
+item must take one of the forms the brain replays, and a body carrying any
+other field (a model, instructions, tools, a store flag) is refused. The
+service then fixes the model, the instructions, the toolset for that
+authority, the output budget, and `store: false` from its own build and posts
+once. The answer is handed down as it came, once it is known to be a Responses
+payload every item of which the same admission would replay next turn; an
+answer this route could not replay is a 502, because the client would keep it
+verbatim and every later turn of that memory would fail here. The service runs
+no tool, holds no memory, reaches no provider, and stores and logs nothing of
+the request, the reply, or the encrypted compaction that travels in them.
+
+Each request spends the attention review meter before the upstream call, so a
+refused upstream still counts. `LUKE_BRAIN_MODEL` optionally overrides the
+model, under the name the desktop's keyed client honours; a blank value is
+treated as absent, and nothing in a request can name one. Without
+`OPENAI_API_KEY` the route answers 503 like the rest of the hosted tier. The
+existing attention, subject, mint, and device routes are untouched by this
+route and keep their contracts for released clients.
+
 # Provider key vault
 
 `api/vault/key.ts` and `api/vault/keys.ts` store, list, and delete the provider

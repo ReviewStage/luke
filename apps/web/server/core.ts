@@ -28,6 +28,7 @@ import "../../../packages/issues/src/index.js";
 
 export * from "../../../packages/analytics/src/index.js";
 export * from "../../../packages/attention/src/index.js";
+export * from "../../../packages/brain/src/index.js";
 export * from "../../../packages/hosted/src/index.js";
 export * from "../../../packages/realtime/src/index.js";
 export * from "../../../packages/session/src/index.js";

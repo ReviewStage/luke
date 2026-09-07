@@ -112,7 +112,7 @@ export async function handleAttentionReview(options: AttentionReviewOptions): Pr
     }),
     { apiKey, fetch: options.fetch, timeoutMs: options.timeoutMs },
   );
-  if (!response || !response.ok) {
+  if (!response?.ok) {
     const extra: HostedErrorFields = {};
     if (response) extra.upstreamStatus = response.status;
     return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR, extra);
