@@ -451,6 +451,7 @@ export class BrainAgent {
   readonly #lease: BrainStoreLease;
   readonly #runs = new Map<string, RunControl>();
   readonly #pendingSubmissions = new Map<string, PendingSubmission>();
+  readonly #pendingMarks = new Map<string, Promise<boolean>>();
   readonly #listeners = new Set<BrainRequestsListener>();
   #turnInFlight = false;
   #restored: Promise<void> | undefined;
@@ -481,6 +482,11 @@ export class BrainAgent {
     this.#fullTranscriptChars = options.fullTranscriptChars ?? BRAIN_DEFAULTS.FULL_TRANSCRIPT_CHARS;
     this.#lease = options.store.lease();
     this.#unsubscribeStore = options.store.onReplaced((state) => this.#adoptGeneration(state));
+  }
+
+  /** The store lease this agent writes under, for a host to check who owns the store. */
+  get lease(): BrainStoreLease {
+    return this.#lease;
   }
 
   /** How many wakes are waiting for their turn to open. */
@@ -695,32 +701,78 @@ export class BrainAgent {
    * memory either, so the next report tries the whole step again.
    */
   markHistoryRecorded(runId: string, recordedAt: number): Promise<boolean> {
-    return this.#mark(runId, (record) =>
-      record.historyRecordedAt === undefined ? { historyRecordedAt: recordedAt } : undefined,
-    );
+    return this.#mark(runId, "historyRecordedAt", recordedAt);
   }
 
   /** Marks a run's own ask as written into the host's thread, on the same terms. */
   markAskRecorded(runId: string, recordedAt: number): Promise<boolean> {
-    return this.#mark(runId, (record) =>
-      record.askRecordedAt === undefined ? { askRecordedAt: recordedAt } : undefined,
-    );
+    return this.#mark(runId, "askRecordedAt", recordedAt);
   }
 
+  /**
+   * Writes one marker onto a run without the marker ever standing in memory
+   * before it stands on disk: the write carries the record as it would read
+   * with the marker, and only a write that landed puts the marker on the live
+   * record — merged onto whatever else has advanced meanwhile, never a
+   * captured copy rolled over it. Callers marking the same field of the same
+   * run while a write is out share that write's answer, the way retried
+   * submissions share one acceptance.
+   */
   async #mark(
     runId: string,
-    change: (record: BrainRequestRecord) => Partial<BrainRequestRecord> | undefined,
+    field: "askRecordedAt" | "historyRecordedAt",
+    recordedAt: number,
   ): Promise<boolean> {
-    await this.ready();
-    const generation = this.#generation;
-    const record = generation?.requests.get(runId);
-    if (!generation || !record) return false;
-    const changes = change(record);
-    if (!changes) return true;
+    const key = `${runId}\u0000${field}`;
+    const pending = this.#pendingMarks.get(key);
+    if (pending) return pending;
+    const marking = (async () => {
+      await this.ready();
+      const generation = this.#generation;
+      const record = generation?.requests.get(runId);
+      if (!generation || !record) return false;
+      if (record[field] !== undefined) return true;
+      return this.#commit(generation, runId, { [field]: recordedAt });
+    })();
+    this.#pendingMarks.set(key, marking);
+    try {
+      return await marking;
+    } finally {
+      this.#pendingMarks.delete(key);
+    }
+  }
+
+  /**
+   * A staged write of some fields of one record: the store is handed the
+   * generation as it stands with those fields applied, and the live record
+   * takes them only once the store has. Nothing reads the fields in between,
+   * so no caller — a wait, a snapshot, a follower — can act on a state the
+   * file may yet refuse.
+   */
+  async #commit(
+    generation: Generation,
+    runId: string,
+    changes: Partial<Omit<BrainRequestRecord, "runId" | "revision">>,
+  ): Promise<boolean> {
+    const memory = generation.memory.persisted();
+    const journal: readonly BrainJournalEntry[] = generation.journal.entries();
+    const staged = [...generation.requests.values()].map((record) =>
+      record.runId === runId
+        ? { ...record, ...changes, revision: record.revision + 1 }
+        : { ...record },
+    );
+    const written = await this.#options.store.write(this.#lease, generation.id, () => ({
+      items: memory.items,
+      cursors: memory.cursors,
+      requests: staged,
+      journal,
+    }));
+    if (!written) {
+      this.#report("Brain memory could not be checkpointed");
+      return false;
+    }
     this.#update(generation, runId, changes);
-    if (await this.#checkpoint(generation)) return true;
-    generation.requests.set(runId, record);
-    return false;
+    return true;
   }
 
   /**
@@ -1094,6 +1146,15 @@ export class BrainAgent {
    * write is tried once more; a failed end that will not write is reported
    * and stands in memory alone.
    */
+  /**
+   * Ends a run in its record, staged behind the write that keeps it: until
+   * the store has answered, every reader — a wait, a snapshot, the follower —
+   * still sees the run under way, so no success is spoken or written that the
+   * file may yet refuse. A success the store refuses is downgraded to a
+   * persistence failure, the reply kept, and written once more; an end the
+   * store will not take at all stands in memory alone, as the failure it is,
+   * so the run still finishes for everyone watching it.
+   */
   async #settleRun(
     generation: Generation,
     runId: string,
@@ -1103,19 +1164,27 @@ export class BrainAgent {
   ): Promise<void> {
     const record = generation.requests.get(runId);
     if (!record || isTerminalBrainRequestStatus(record.status)) return;
-    this.#update(generation, runId, {
+    const settled: Partial<Omit<BrainRequestRecord, "runId" | "revision">> = {
       status,
       settledAt: this.#now(),
       ...(end.text !== undefined ? { text: end.text } : undefined),
       ...(end.failure !== undefined ? { failure: end.failure } : undefined),
       ...(run ? { performedActs: run.performedActs, unknownActs: run.unknownActs } : undefined),
-    });
-    if (!(await this.#checkpoint(generation)) && status === BRAIN_REQUEST_STATUS.SUCCEEDED) {
-      this.#update(generation, runId, {
-        status: BRAIN_REQUEST_STATUS.FAILED,
-        failure: BRAIN_REQUEST_FAILURE.PERSISTENCE,
-      });
-      await this.#checkpoint(generation);
+    };
+    if (await this.#commit(generation, runId, settled)) {
+      this.#notify();
+      return;
+    }
+    const fallback =
+      status === BRAIN_REQUEST_STATUS.SUCCEEDED
+        ? {
+            ...settled,
+            status: BRAIN_REQUEST_STATUS.FAILED,
+            failure: BRAIN_REQUEST_FAILURE.PERSISTENCE,
+          }
+        : settled;
+    if (!(await this.#commit(generation, runId, fallback))) {
+      this.#update(generation, runId, fallback);
     }
     this.#notify();
   }

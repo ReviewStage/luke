@@ -23,7 +23,9 @@ function host(log: string[]) {
   return new BrainHost({
     follow: (agent) => {
       log.push(`follow ${agent === undefined ? "none" : "agent"}`);
-      return () => log.push("unfollow");
+      return async () => {
+        log.push("unfollow");
+      };
     },
     publishEmpty: () => log.push("publish empty"),
   });

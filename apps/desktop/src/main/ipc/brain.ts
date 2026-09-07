@@ -148,17 +148,20 @@ export async function publishRuns(
  * as it arrives, its records relayed to every window and its runs written to
  * the thread. The subscription is the completion channel PR 7's delivery
  * reads; the thread write here is the one History write for a run.
- * Unfollowing retires the subscription and any report still on its way, so a
- * replaced agent's late records reach neither the thread nor the windows.
+ * Unfollowing retires the subscription, drains the publication of the reports
+ * already taken, and then relays nothing more, so a replaced agent's records
+ * are all written once and its late ones reach neither the thread nor the
+ * windows.
  */
 export function followBrainRequests(
   agent: BrainAgent,
   dependencies: Pick<BrainIpcDependencies, "recordConversationEntry" | "broadcastRequests">,
-): () => void {
+): () => Promise<void> {
+  let accepting = true;
   let following = true;
   let publishing: Promise<void> = Promise.resolve();
   const listener = (records: readonly BrainRequestRecord[]) => {
-    if (!following) return;
+    if (!accepting) return;
     dependencies.broadcastRequests(records);
     // Reports are published one at a time, each against the records as they
     // then stand, so two reports of the same end cannot both find it unmarked.
@@ -168,9 +171,16 @@ export function followBrainRequests(
   };
   const unsubscribe = agent.subscribe(listener);
   void agent.ready().then(() => listener(agent.requests()));
-  return () => {
-    following = false;
+  // Unfollowing takes no more reports at once, but lets the ones already
+  // taken finish: the stop that retires an agent reports every run it
+  // interrupted, and those ends belong in the thread before the follower
+  // goes. Each write answers promptly — the store refuses rather than hangs —
+  // so the drain is bounded by the reports already queued.
+  return async () => {
+    accepting = false;
     unsubscribe();
+    await publishing;
+    following = false;
   };
 }
 

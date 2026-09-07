@@ -1915,3 +1915,146 @@ test("a history mark the store refused is not held either, and the next attempt 
   h.storage.failWrites = false;
   assert.equal(await h.agent.markAskRecorded(record.runId, NOW), true);
 });
+
+test("a mark is not visible or acknowledged before its write lands, and marking the same field twice shares one answer", async () => {
+  const h = harness();
+  h.client.answers.push(answered([message("Hi.")]));
+  const record = await ask(h, "hello");
+  assert.ok(record);
+  let releaseWrite: ((written: boolean) => void) | undefined;
+  const storage = h.storage;
+  const write = storage.write.bind(storage);
+  storage.write = (contents) =>
+    // SAFETY: the store accepts a promise of the write's outcome; this test holds it open.
+    new Promise<boolean>((resolve) => {
+      releaseWrite = (written) => resolve(written && write(contents));
+    }) as unknown as boolean;
+  const first = h.agent.markHistoryRecorded(record.runId, NOW + 5);
+  await settle();
+  // Nothing reads the mark while the write is out, and a second caller waits
+  // on the same write rather than being told yes.
+  assert.equal(h.agent.request(record.runId)?.historyRecordedAt, undefined);
+  let secondAnswered = false;
+  const second = h.agent.markHistoryRecorded(record.runId, NOW + 7).then((written) => {
+    secondAnswered = true;
+    return written;
+  });
+  // The ask marker is another field: it stages its own write and touches
+  // nothing of the history marker's.
+  const other = h.agent.markAskRecorded(record.runId, NOW);
+  await settle();
+  assert.equal(secondAnswered, false);
+  storage.write = write;
+  releaseWrite?.(false);
+  assert.deepEqual(await Promise.all([first, second]), [false, false]);
+  assert.equal(h.agent.request(record.runId)?.historyRecordedAt, undefined);
+  assert.equal(h.storage.stored()?.requests[0]?.historyRecordedAt, undefined);
+  // The ask marker's write queued behind the held one and landed on its own
+  // terms once storage answered again: one marker's refusal is not the other's.
+  assert.equal(await other, true);
+  assert.equal(h.agent.request(record.runId)?.askRecordedAt, NOW);
+  // A retry after storage recovers writes the mark, and lands beside fields
+  // that advanced meanwhile rather than over them.
+  assert.equal(await h.agent.markHistoryRecorded(record.runId, NOW + 9), true);
+  const marked = h.agent.request(record.runId);
+  assert.equal(marked?.historyRecordedAt, NOW + 9);
+  assert.equal(marked?.askRecordedAt, NOW);
+  assert.equal(marked?.text, "Hi.");
+  assert.deepEqual(h.storage.stored()?.requests[0], marked);
+});
+
+test("a run's success is seen by no reader before the write that keeps it has landed", async () => {
+  let releaseWrite: ((written: boolean) => void) | undefined;
+  const inner = new FakeClient();
+  inner.answers.push(answered([message("hi")]));
+  const gated = gatedClient(inner);
+  const h = harness({ client: gated.client });
+  await h.agent.ready();
+  const storage = h.storage;
+  const write = storage.write.bind(storage);
+  const runId = acceptedRunId(await submit(h, "hello"));
+  const seen: BrainRequestRecord["status"][] = [];
+  h.agent.subscribe((records) => {
+    const record = records.find((entry) => entry.runId === runId);
+    if (record) seen.push(record.status);
+  });
+  await settle();
+  // Hold the write that would carry the success; the turn's own end
+  // checkpoint lands first, so the held one is the settle.
+  let writes = 0;
+  storage.write = (contents) => {
+    writes += 1;
+    if (writes < 2) return write(contents);
+    // SAFETY: the store accepts a promise of the write's outcome; this test holds it open.
+    return new Promise<boolean>((resolve) => {
+      releaseWrite = (written) => resolve(written && write(contents));
+    }) as unknown as boolean;
+  };
+  gated.open();
+  await settle();
+  assert.ok(releaseWrite, "the settle write is held");
+  // Every public reader still sees the run under way.
+  assert.equal(h.agent.request(runId)?.status, BRAIN_REQUEST_STATUS.RUNNING);
+  assert.equal(h.agent.requests()[0]?.status, BRAIN_REQUEST_STATUS.RUNNING);
+  const waited = h.agent.waitAsk(runId, 1_000);
+  await settle();
+  await h.clock.advance(h.clock.now + 1_000);
+  assert.equal((await waited)?.status, BRAIN_REQUEST_STATUS.RUNNING);
+  assert.ok(!seen.includes(BRAIN_REQUEST_STATUS.SUCCEEDED));
+  assert.equal(h.storage.stored()?.requests[0]?.status, BRAIN_REQUEST_STATUS.RUNNING);
+  // The write fails: the run ends as the persistence failure it is, the reply
+  // kept, and that is the first terminal state anyone sees.
+  storage.write = write;
+  releaseWrite(false);
+  await settle();
+  const ended = h.agent.request(runId);
+  assert.equal(ended?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.equal(ended?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
+  assert.equal(ended?.text, "hi");
+  assert.equal(seen.at(-1), BRAIN_REQUEST_STATUS.FAILED);
+  assert.ok(!seen.includes(BRAIN_REQUEST_STATUS.SUCCEEDED));
+  assert.equal(h.storage.stored()?.requests[0]?.status, BRAIN_REQUEST_STATUS.FAILED);
+
+  // The write lands: success is seen only then, and only as success.
+  const okInner = new FakeClient();
+  okInner.answers.push(answered([message("hi")]));
+  const okGate = gatedClient(okInner);
+  const ok = harness({ client: okGate.client });
+  await ok.agent.ready();
+  const okWrite = ok.storage.write.bind(ok.storage);
+  const okRun = acceptedRunId(await submit(ok, "hello"));
+  await settle();
+  let okRelease: (() => void) | undefined;
+  let okWrites = 0;
+  ok.storage.write = (contents) => {
+    okWrites += 1;
+    if (okWrites < 2) return okWrite(contents);
+    // SAFETY: the store accepts a promise of the write's outcome; this test holds it open.
+    return new Promise<boolean>((resolve) => {
+      okRelease = () => resolve(okWrite(contents));
+    }) as unknown as boolean;
+  };
+  okGate.open();
+  await settle();
+  assert.equal(ok.agent.request(okRun)?.status, BRAIN_REQUEST_STATUS.RUNNING);
+  ok.storage.write = okWrite;
+  okRelease?.();
+  await settle();
+  assert.equal(ok.agent.request(okRun)?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  assert.equal(ok.storage.stored()?.requests[0]?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+
+  // Disk stays unavailable: the failure still stands in memory for everyone.
+  const darkInner = new FakeClient();
+  darkInner.answers.push(answered([message("hi")]));
+  const darkGate = gatedClient(darkInner);
+  const dark = harness({ client: darkGate.client });
+  await dark.agent.ready();
+  const darkRun = acceptedRunId(await submit(dark, "hello"));
+  await settle();
+  dark.storage.failWrites = true;
+  darkGate.open();
+  await settle();
+  const darkEnd = await dark.agent.waitAsk(darkRun, 1);
+  assert.equal(darkEnd?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.equal(darkEnd?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
+});

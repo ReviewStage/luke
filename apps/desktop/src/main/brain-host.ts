@@ -12,8 +12,8 @@ import type { BrainAgent } from "@sidecar/brain";
  * request still owns the outcome, and every older one installs nothing.
  */
 export interface BrainHostDependencies {
-  /** Follows a newly installed agent; answers the unfollow. */
-  follow: (agent: BrainAgent) => () => void;
+  /** Follows a newly installed agent; answers the unfollow, which settles once its publication has drained. */
+  follow: (agent: BrainAgent) => () => Promise<void>;
   /** Tells every window what stands when no agent does: no runs at all. */
   publishEmpty: () => void;
 }
@@ -21,7 +21,7 @@ export interface BrainHostDependencies {
 export class BrainHost {
   readonly #dependencies: BrainHostDependencies;
   #agent: BrainAgent | undefined;
-  #unfollow: (() => void) | undefined;
+  #unfollow: (() => Promise<void>) | undefined;
   #retiring: Promise<unknown>[] = [];
   #transitions = 0;
   #chain: Promise<void> = Promise.resolve();
@@ -51,17 +51,18 @@ export class BrainHost {
     this.#agent = undefined;
     this.#unfollow = undefined;
     if (!previous) {
-      unfollow?.();
+      if (unfollow) this.#retiring.push(unfollow());
       return;
     }
     // The follower stays through the stop, so the runs the stop interrupts
-    // still reach the windows and the thread; it retires once nothing more
-    // can be reported.
+    // still reach the windows and the thread, and its publication of them
+    // drains before anything succeeds this agent: the next build, and the
+    // store's lease, wait on it.
     this.#retiring.push(
       previous
         .stop()
         .catch(() => undefined)
-        .finally(() => unfollow?.()),
+        .then(() => unfollow?.()),
     );
   }
 
