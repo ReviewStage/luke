@@ -710,7 +710,10 @@ function tokenizeInlines(text: string, references: ReferenceDefinitions): Inline
         canOpen = leftFlanking && (!rightFlanking || isPunctuation(before));
         canClose = rightFlanking && (!leftFlanking || isPunctuation(after));
       }
-      if (character === "~" && run.length > 2) {
+      // Only a doubled tilde strikes, as Foundation's parser reads it: a
+      // single one is the character itself, so two home-directory paths in
+      // one sentence do not strike the words between them.
+      if (character === "~" && run.length !== 2) {
         buffer += run;
         index += run.length;
         continue;

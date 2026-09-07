@@ -116,6 +116,12 @@ test("an underscore inside a word and an unclosed marker stay as written", () =>
   ]);
 });
 
+test("a single tilde is a character, not strikethrough", () => {
+  assert.deepEqual(onlyParagraph(parseMarkdown("Copy ~/.ssh/config to ~/backup, ~not struck~")), [
+    text("Copy ~/.ssh/config to ~/backup, ~not struck~"),
+  ]);
+});
+
 test("backslash escapes read as the character itself", () => {
   assert.deepEqual(onlyParagraph(parseMarkdown("\\*not emphasis\\* and \\`not code\\`")), [
     text("*not emphasis* and `not code`"),
