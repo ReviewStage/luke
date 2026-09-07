@@ -176,7 +176,7 @@ test("a signed-out live run is diagnosed as missing credentials, not as a fixtur
   assert.match(voiceReport ?? "", /Signing in/);
 });
 
-test("the brain runs only on the developer's own key in this build", async () => {
+test("the brain follows the voice source: hosted on an account, direct on a key, none in a fixture run", async () => {
   const seams = {
     credentialsUsable: () => true,
     fixtureRun: () => false,
@@ -188,24 +188,32 @@ test("the brain runs only on the developer's own key in this build", async () =>
   };
   const hosted = new VoiceCapabilityAssembler({
     ...seams,
-    settings: settingsFor({ source: VOICE_SOURCE.ACCOUNT }),
+    settings: settingsFor({ source: VOICE_SOURCE.ACCOUNT, key: "stored-but-unchosen" }),
   });
   await hosted.apply();
-  // Voice through the hosted mint, and no brain behind it: nothing is
-  // announced and an ask meets the honest refusal rather than a service call.
   assert.ok(hosted.realtimeCredentials);
-  assert.equal(hosted.brainClient, undefined);
+  // The service names the model, and the stored key is never read for it.
+  assert.ok(hosted.brainClient);
+  assert.equal(hosted.brainClient?.model, undefined);
 
   const keyed = new VoiceCapabilityAssembler({
     ...seams,
     settings: settingsFor({ source: VOICE_SOURCE.KEY, key: "test-key" }),
   });
   await keyed.apply();
-  assert.ok(keyed.brainClient);
+  assert.ok(keyed.brainClient?.model);
+
+  const signedOut = new VoiceCapabilityAssembler({
+    ...seams,
+    accountSignedIn: () => false,
+    settings: settingsFor({ source: VOICE_SOURCE.ACCOUNT }),
+  });
+  await signedOut.apply();
+  assert.equal(signedOut.brainClient, undefined);
 
   const fixture = new VoiceCapabilityAssembler({
     ...seams,
-    settings: settingsFor({ source: VOICE_SOURCE.KEY, key: "test-key" }),
+    settings: settingsFor({ source: VOICE_SOURCE.ACCOUNT }),
     credentialsUsable: () => false,
     fixtureRun: () => true,
   });

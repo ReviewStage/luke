@@ -7,6 +7,7 @@
 
 import type {
   attentionResponsesRequest,
+  BrainResponsesRequest,
   legacyAttentionResponsesRequest,
   realtimeClientSecretRequest,
   remoteRealtimeClientSecretRequest,
@@ -22,6 +23,7 @@ export const HOSTED_OPENAI_ENVIRONMENT = {
   REALTIME_MODEL: "LUKE_REALTIME_MODEL",
   ATTENTION_MODEL: "LUKE_ATTENTION_MODEL",
   SUBJECT_MODEL: "LUKE_SUBJECT_MODEL",
+  BRAIN_MODEL: "LUKE_BRAIN_MODEL",
 } as const;
 
 export const HOSTED_OPENAI_DEFAULTS = {
@@ -38,12 +40,20 @@ export type OpenAiPostBody =
   | ReturnType<typeof introductionClientSecretRequest>
   | ReturnType<typeof attentionResponsesRequest>
   | ReturnType<typeof legacyAttentionResponsesRequest>
-  | ReturnType<typeof subjectResponsesRequest>;
+  | ReturnType<typeof subjectResponsesRequest>
+  | BrainResponsesRequest;
 
 export interface OpenAiUpstreamOptions {
   apiKey: string;
   fetch?: FetchLike;
   timeoutMs?: number;
+  /** The caller's own cancellation, when the runtime carries one; the upstream call is dropped with it. */
+  signal?: AbortSignal;
+}
+
+function upstreamSignal(timeoutMs: number, cancellation: AbortSignal | undefined): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return cancellation ? AbortSignal.any([timeout, cancellation]) : timeout;
 }
 
 /**
@@ -65,7 +75,10 @@ export async function postOpenAi(
         "content-type": "application/json",
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(options.timeoutMs ?? HOSTED_OPENAI_DEFAULTS.REQUEST_TIMEOUT_MS),
+      signal: upstreamSignal(
+        options.timeoutMs ?? HOSTED_OPENAI_DEFAULTS.REQUEST_TIMEOUT_MS,
+        options.signal,
+      ),
     });
   } catch {
     return undefined;

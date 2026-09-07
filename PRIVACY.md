@@ -74,9 +74,13 @@ that looks useful later. He skips temporary details and uncertain guesses, never
 saves credentials, and saves sensitive facts only when you explicitly ask. At
 most 32 are stored on your Mac beside your settings and they do not expire. You
 can ask Luke what he remembers, correct something, or tell him to forget it.
-They are sent to OpenAI with the rest of a conversation's context so Luke can
-personalize replies; they are not sent to a coding-agent provider, a tracker, or
-our own service, and they are never used to decide anything on your behalf.
+They travel with the rest of Luke's working memory when he thinks, so he can
+personalize replies: directly to OpenAI on your own key if you entered one, or
+through our own service on our key when you use Luke through your account, on
+the same terms as the rest of that call — one model call per request, and
+nothing of it stored or logged by our service. They are never sent to a
+coding-agent provider or a tracker, and they are never used to decide anything
+on your behalf.
 
 **Your account.** Signing in with Google or GitHub gives us your name, email
 address, and which of the two you used. We also keep the records that keep you

@@ -1,8 +1,10 @@
 import {
   type BrainTurnAuthority,
   HOSTED_SERVICE_PATH,
-  type HostedBrainRequest,
+  hostedBrainRequestFromWire,
   hostedQuotaFromWire,
+  maximumHostedBrainRequestBytes,
+  serializedRequestBytes,
 } from "@sidecar/hosted";
 import {
   positiveInteger,
@@ -289,22 +291,29 @@ export class HostedBrainClient implements BrainClient {
     const quietUntil = this.quietUntil();
     if (quietUntil !== undefined) return { outcome: BRAIN_CLIENT_OUTCOME.QUIET, until: quietUntil };
 
+    // The same admission the service runs, before the token is even read: an
+    // input the service would refuse never spends a call, and an oversized
+    // memory is an explicit bounded failure here rather than a truncation or
+    // a retry, so the agent reports it and rolls the turn back. The output
+    // budget does not travel: the service's build fixes it.
+    const request = hostedBrainRequestFromWire({ authority: options.authority, input });
+    if (!request) return failed("input carries an item the hosted service does not replay");
+    const serialized = JSON.stringify(request);
+    if (serializedRequestBytes(serialized) > maximumHostedBrainRequestBytes) {
+      return failed("input exceeds the hosted request size bound");
+    }
+
     const token = await this.#readAccessToken();
     if (!token) return failed("no account token");
 
-    const request: HostedBrainRequest = {
-      authority: options.authority,
-      input,
-      max_output_tokens: options.maximumOutputTokens,
-    };
-    let response = await this.#request(token, request, options.signal);
+    let response = await this.#request(token, serialized, options.signal);
     if (response?.status === UNAUTHORIZED_STATUS) {
       // Routine expiry of an hour-lived token inside a day-lived app: refresh
       // and retry once, like the hosted mint.
       await this.#refreshAccount().catch(() => undefined);
       const refreshed = await this.#readAccessToken();
       if (refreshed && refreshed !== token) {
-        response = await this.#request(refreshed, request, options.signal);
+        response = await this.#request(refreshed, serialized, options.signal);
       }
     }
     if (!response) return failed("request did not complete");
@@ -315,7 +324,7 @@ export class HostedBrainClient implements BrainClient {
 
   async #request(
     token: string,
-    request: HostedBrainRequest,
+    body: string,
     signal: AbortSignal | undefined,
   ): Promise<Response | undefined> {
     try {
@@ -325,7 +334,7 @@ export class HostedBrainClient implements BrainClient {
           authorization: `Bearer ${token}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify(request),
+        body,
         signal: requestSignal(this.#requestTimeoutMs, signal),
       });
     } catch {

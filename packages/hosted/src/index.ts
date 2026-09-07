@@ -1,4 +1,16 @@
 export {
+  admitBrainInput,
+  admitBrainInputItem,
+  maximumHostedBrainInputItems,
+  maximumHostedBrainRequestBytes,
+  RESPONSES_CONTENT_PART_TYPE,
+  RESPONSES_INPUT_ITEM_TYPE,
+  RESPONSES_ITEM_STATUS,
+  RESPONSES_MESSAGE_PHASE,
+  RESPONSES_MESSAGE_ROLE,
+  serializedRequestBytes,
+} from "./brain-admission.js";
+export {
   BRAIN_TURN_AUTHORITY,
   type BrainTurnAuthority,
   brainTurnAuthorityFromWire,
@@ -32,7 +44,6 @@ export {
   hostedQuotaFromWire,
   hostedUsageAnswerFromWire,
   isVaultProviderId,
-  maximumHostedBrainInputItems,
   type ObserveAnswer,
   type ObservedSession,
   type ObservedSessionControl,

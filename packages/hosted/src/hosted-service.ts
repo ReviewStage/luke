@@ -18,6 +18,7 @@ import {
   type WireRecord,
   wholeNumber,
 } from "@sidecar/wire";
+import { admitBrainInput } from "./brain-admission.js";
 import {
   REALTIME_CALLS_PATH,
   type RealtimeConnection,
@@ -165,6 +166,8 @@ export const HOSTED_API_ERROR = {
   UNAVAILABLE: "unavailable",
   /** The upstream refused or failed; the status travels, the bodies never do. */
   UPSTREAM_ERROR: "upstream-error",
+  /** The request body weighs more than the endpoint's fixed byte bound; nothing of it was read. */
+  REQUEST_TOO_LARGE: "request-too-large",
   METHOD_NOT_ALLOWED: "method-not-allowed",
 } as const;
 
@@ -326,43 +329,36 @@ export function brainTurnAuthorityFromWire(
 
 /**
  * What one hosted brain turn carries up: the input array as the desktop holds
- * it, every item a record the Responses API shaped or the desktop built, the
- * authority the turn runs under, and at most the output budget. Instructions,
- * tools, and model never travel — the service's build fixes them from the
- * authority — so a request cannot widen what the brain may do, only what it
- * is shown. A request naming no authority is refused whole rather than read
- * as a developer's.
+ * it, every item one of the Responses forms this build replays (see
+ * `brain-admission.ts`), and the authority the turn runs under. Nothing else
+ * travels — not a model, instructions, tools, a store flag, or an output
+ * budget — because the service's build fixes every one of them from the
+ * authority, so a request cannot widen what the brain may do, only what it is
+ * shown. A request naming no authority, or carrying any field beyond these
+ * two, is refused whole rather than read as a developer's.
  */
 export interface HostedBrainRequest {
   authority: BrainTurnAuthority;
   input: readonly WireRecord[];
-  max_output_tokens?: number;
 }
 
-/** How many input items one hosted brain turn may carry; a longer memory has compacted by then. */
-export const maximumHostedBrainInputItems = 2_000;
+const HOSTED_BRAIN_REQUEST_KEYS: ReadonlySet<string> = new Set(["authority", "input"]);
 
-/** Validates a brain turn request arriving as untrusted JSON, or nothing. */
+/**
+ * Validates and rebuilds a brain turn request arriving as untrusted JSON, or
+ * nothing. The desktop runs the same reader over the body it is about to
+ * send, so an input the service would refuse never spends a call.
+ */
 export function hostedBrainRequestFromWire(
   value: UnparsedWireValue,
 ): HostedBrainRequest | undefined {
-  if (!isRecord(value) || !Array.isArray(value.input)) return undefined;
+  if (!isRecord(value)) return undefined;
+  if (!Object.keys(value).every((key) => HOSTED_BRAIN_REQUEST_KEYS.has(key))) return undefined;
   const authority = brainTurnAuthorityFromWire(value.authority);
   if (authority === undefined) return undefined;
-  if (value.input.length === 0 || value.input.length > maximumHostedBrainInputItems)
-    return undefined;
-  const input: WireRecord[] = [];
-  for (const item of value.input) {
-    if (!isRecord(item)) return undefined;
-    input.push(item);
-  }
-  const request: HostedBrainRequest = { authority, input };
-  if (value.max_output_tokens !== undefined) {
-    const budget = wholeNumber(value.max_output_tokens);
-    if (budget === undefined || budget <= 0 || !Number.isInteger(budget)) return undefined;
-    request.max_output_tokens = budget;
-  }
-  return request;
+  const input = admitBrainInput(value.input);
+  if (!input) return undefined;
+  return { authority, input };
 }
 
 /**

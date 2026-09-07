@@ -1,4 +1,4 @@
-import { type BrainClient, openAiBrainClient } from "@sidecar/brain";
+import { type BrainClient, HostedBrainClient, openAiBrainClient } from "@sidecar/brain";
 import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { type RealtimeDiagnostics, realtimeMintExplanation } from "@sidecar/realtime";
@@ -89,10 +89,13 @@ export class VoiceCapabilityAssembler {
   }
 
   /**
-   * The client the brain's turns run on, or nothing. In this build the brain
-   * runs only on the developer's own key: a signed-in account with no key
-   * has voice through the hosted mint and no brain, so nothing is announced
-   * and an ask is answered with the honest refusal.
+   * The client the brain's turns run on, or nothing. It follows the voice
+   * source exactly: the developer's own key runs turns directly, a signed-in
+   * account with the account source runs them through Luke's hosted service
+   * on Luke's key, and a fixture or evidence run, or a run with neither, has
+   * no brain, so nothing is announced and an ask meets the honest refusal.
+   * The key is read only when the key source is chosen, so an account-source
+   * run never spends a stored personal key.
    */
   get brainClient(): BrainClient | undefined {
     return this.#brainClient;
@@ -130,7 +133,11 @@ export class VoiceCapabilityAssembler {
       refreshAccount: this.#options.refreshAccount,
       ...(this.#options.fetch ? { fetch: this.#options.fetch } : undefined),
     };
-    const builtBrainClient = openAiBrainClient(apiKey);
+    const builtBrainClient = policy.useKey
+      ? openAiBrainClient(apiKey)
+      : policy.useHosted
+        ? new HostedBrainClient(seams)
+        : undefined;
     this.#brainClient =
       builtBrainClient && this.#options.wrapBrainClient
         ? this.#options.wrapBrainClient(builtBrainClient)
@@ -180,7 +187,7 @@ export class VoiceCapabilityAssembler {
     } else if (apiKeyConfigured) {
       write("Luke brain: unavailable — the key was found but no client was built\n");
     } else {
-      write("Luke brain: absent — this build runs the brain only on an OpenAI key\n");
+      write("Luke brain: absent — no OpenAI key and no signed-in account\n");
     }
   }
 }
