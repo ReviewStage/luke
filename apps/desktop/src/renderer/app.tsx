@@ -121,7 +121,6 @@ import {
   sessionFiltersFromSpoken,
   sessionTally,
   spokenSearchOutcome,
-  tallySummary,
 } from "./session-model";
 import { parsePixels } from "./session-motion";
 import { SESSION_OPTIONS_CONTROL_ID, SESSION_OPTIONS_ID } from "./session-parts";
@@ -2606,16 +2605,6 @@ export function App(): React.JSX.Element {
   // Luke is watching, not what the panel is currently showing — but it reads
   // in the list's own sort, so the wing's marks sit in the order the rows do.
   const tally = sessionTally(visibleSessions, sessionView.sort);
-  // The one sentence the wing states about the roster, derived here so the
-  // capsule button's label and the wing's live region can never drift. Until
-  // the first roster reading lands, an unread zero is "checking", never "none
-  // tracked" — assistive tech must not hear a claim the wing is not making —
-  // and a gated Luke is not checking anything.
-  const tallyAnnouncement = accountGated
-    ? "Sign in"
-    : !sessionsSettled && tally.total === 0
-      ? "Checking for sessions"
-      : tallySummary(tally);
   const list = arrangeSessions(visibleSessions, sessionView);
   // Dropping an emptied selection is a change of view, not a way of drawing
   // one. Left in state it would lie dormant behind a list that only looks
@@ -3038,7 +3027,6 @@ export function App(): React.JSX.Element {
         presentation={presentation}
         housingWidth={display.notch.housingWidth}
         accountGated={accountGated}
-        statusLabel={tallyAnnouncement}
       />
 
       {/* The one signed-out Luke. Like the caption, he is a single element in
@@ -3127,7 +3115,7 @@ export function App(): React.JSX.Element {
           className="compact-hover-target"
           data-hit-region={HIT_REGION.CAPSULE}
           aria-expanded={panelOpen}
-          aria-label={`${tallyAnnouncement}. ${panelOpen ? "Close" : "Open"} the panel`}
+          aria-label={panelOpen ? "Close the panel" : "Open the panel"}
           // Keeps the press from moving focus here at all, so nothing is drawn
           // around the notch strip and a focused settings field keeps the caret.
           onMouseDown={(event) => event.preventDefault()}

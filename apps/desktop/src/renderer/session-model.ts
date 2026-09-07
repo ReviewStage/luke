@@ -985,21 +985,6 @@ export function sessionTally(
   };
 }
 
-/** One sentence that reads correctly for a screen reader in either mode. */
-export function tallySummary(tally: SessionTally): string {
-  if (tally.total === 0) return "No sessions tracked";
-  if (tally.attention > 0) {
-    return `${tally.attention} ${tally.attention === 1 ? "session needs" : "sessions need"} you`;
-  }
-  if (tally.working > 0) {
-    return `${tally.working} ${tally.working === 1 ? "session" : "sessions"} working`;
-  }
-  if (tally.complete > 0) {
-    return `${tally.complete} ${tally.complete === 1 ? "session" : "sessions"} complete`;
-  }
-  return `${tally.total} ${tally.total === 1 ? "session" : "sessions"} tracked`;
-}
-
 /**
  * How long ago a session was last seen, in the coarsest unit that has begun,
  * because the label answers "is this thing alive" rather than telling time.

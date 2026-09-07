@@ -19,7 +19,7 @@ import { usePrefersReducedMotion } from "../luke-face-mood";
 import { NotchWings } from "../notch-wings";
 import { SessionRow, type SessionWriteHandlers } from "../panel-body";
 import { PANEL_PRESENTATION } from "../panel-state";
-import { displaySessions, type SessionView, sessionTally, tallySummary } from "../session-model";
+import { displaySessions, type SessionView, sessionTally } from "../session-model";
 import { parseMilliseconds, useSessionReorderMotion } from "../session-motion";
 import { MicrophoneIcon } from "../settings-icons";
 import { useSignInFaceCycle } from "../sign-in-gate";
@@ -860,7 +860,6 @@ export function IntroductionTakeover({
           presentation={presentation}
           housingWidth={bootstrap.display.notch.housingWidth}
           accountGated={standingDown}
-          statusLabel={standingDown ? "Sign in" : tallySummary(stagedTally)}
         />
       ) : null}
       {/* The app's own signed-out Luke, at the wing spot the capsule pose
