@@ -45,7 +45,6 @@ test("the live lines mirror exactly what their recording paths will keep", () =>
     ]),
     captions: ["Checkout is", "nearly done."],
     kind: undefined,
-    transcriptSpoken: false,
   });
 
   // The asks precede the answer, and the reply's segments join into the one
@@ -62,13 +61,12 @@ test("the live lines mirror exactly what their recording paths will keep", () =>
   assert.ok(lines.every((line) => line.recordedAt === undefined));
 });
 
-test("a briefing's live line settles as an announcement, a transcript reading notwithstanding", () => {
+test("a briefing's live line settles as an announcement", () => {
   assert.deepEqual(
     liveConversationEntries({
       spokenAskPreviews: new Map(),
       captions: ["Claude Code finished checkout-service."],
       kind: REPLY_KIND.BRIEFING,
-      transcriptSpoken: true,
     }),
     [
       {
@@ -76,20 +74,6 @@ test("a briefing's live line settles as an announcement, a transcript reading no
         words: "Claude Code finished checkout-service.",
       },
     ],
-  );
-});
-
-test("a transcript reading's reply previews nothing it may never record", () => {
-  // The record keeps the act and not a word of the rendering, so the live
-  // line keeps the same silence the settled thread will.
-  assert.deepEqual(
-    liveConversationEntries({
-      spokenAskPreviews: new Map(),
-      captions: ["The session said the tests pass."],
-      kind: undefined,
-      transcriptSpoken: true,
-    }),
-    [],
   );
 });
 

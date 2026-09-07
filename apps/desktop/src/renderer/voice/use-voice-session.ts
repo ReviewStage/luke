@@ -250,15 +250,13 @@ const NO_SPOKEN_ASK_PREVIEWS: ReadonlyMap<string, string> = new Map();
  * the developer's spoken turns as the service transcribes them, then the
  * reply or announcement as its words are generated — the ask precedes its
  * answer. Presentation only, so each line mirrors exactly what its own
- * recording path will keep: a briefing settles as an announcement, and the
- * reply that is voicing a transcript reading draws nothing, because the
- * record keeps the act and never a word of the rendering.
+ * recording path will keep: a briefing settles as an announcement, and any
+ * other caption settles as a reply.
  */
 export function liveConversationEntries(input: {
   spokenAskPreviews: ReadonlyMap<string, string>;
   captions: readonly string[] | undefined;
   kind: ReplyKind | undefined;
-  transcriptSpoken: boolean;
 }): readonly ConversationEntry[] {
   const lines: ConversationEntry[] = [];
   for (const words of input.spokenAskPreviews.values()) {
@@ -266,7 +264,7 @@ export function liveConversationEntries(input: {
     if (ask) lines.push(ask);
   }
   const briefing = input.kind === REPLY_KIND.BRIEFING;
-  if (input.captions && (briefing || !input.transcriptSpoken)) {
+  if (input.captions) {
     const speech = streamingConversationEntry(
       briefing ? CONVERSATION_ENTRY_KIND.ANNOUNCEMENT : CONVERSATION_ENTRY_KIND.REPLY,
       input.captions.join(" "),
@@ -451,20 +449,6 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   const activeReplyGenerationRef = useRef<number | undefined>(undefined);
   /** The History generation in which the current announcement began speaking. */
   const activeAnnouncementGenerationRef = useRef<number | undefined>(undefined);
-  /**
-   * Whether the turn under way read a transcript aloud. The rendering travels
-   * only in the turn that asked for it, so the reply that spoke it must not
-   * be recorded: the record keeps the act — already recorded at the carry —
-   * and not a word of what it rendered.
-   */
-  const transcriptSpokenRef = useRef(false);
-  // State beside the ref, because the session's callbacks read the flag
-  // synchronously while History's live line derives from what React can see.
-  const [transcriptSpoken, setTranscriptSpoken] = useState(false);
-  const markTranscriptSpoken = useCallback((value: boolean) => {
-    transcriptSpokenRef.current = value;
-    setTranscriptSpoken(value);
-  }, []);
   /**
    * The developer's spoken turns still being transcribed, keyed by the server
    * item that names each turn: the preview History draws while the completed
@@ -1247,13 +1231,6 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     if (!typedAskHolds(voiceStatus)) {
       setTypedAsk(false);
     }
-    // The transcript skip belongs to the turn that read the transcript, and a
-    // reply abandoned wordless never fires the handover that consumes it — so
-    // a new spoken turn opening lets it go, or the flag would swallow the
-    // next reply from the history.
-    if (voiceStatus === REALTIME_STATUS.LISTENING) {
-      markTranscriptSpoken(false);
-    }
     // The call gone takes its half-transcribed turns with it: no completed
     // transcript can arrive to settle a preview, so none may keep streaming.
     if (!spokenAskPreviewSurvives(voiceStatus)) {
@@ -1272,7 +1249,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     ) {
       setTalkOpening(false);
     }
-  }, [markTranscriptSpoken, voiceStatus]);
+  }, [voiceStatus]);
 
   // The strip the error is drawn on takes no pointer, so nothing but time can
   // dismiss it: a fault left up would sit on the desktop all afternoon. A new
@@ -1397,9 +1374,8 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
         spokenAskPreviews,
         captions: voiceCaption.texts,
         kind: voiceCaption.kind,
-        transcriptSpoken,
       }),
-    [spokenAskPreviews, transcriptSpoken, voiceCaption],
+    [spokenAskPreviews, voiceCaption],
   );
 
   const lukeCaptions = lukeCaptionsToShow({
