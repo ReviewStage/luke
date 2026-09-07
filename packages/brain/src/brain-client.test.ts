@@ -194,3 +194,43 @@ test("the hosted client refuses an input the service would not replay, or one pa
   });
   assert.equal(calls.length, 0);
 });
+
+test("the hosted client refuses an answer carrying an item the service could not replay, before the agent sees it", async () => {
+  const { fetch } = fakeFetch([
+    Response.json({
+      output: [
+        {
+          type: "function_call",
+          call_id: "call_1",
+          name: "send_session_message",
+          arguments: "{}",
+          caller: { type: "program", caller_id: "prog_1" },
+        },
+      ],
+    }),
+    Response.json({
+      output: [
+        {
+          type: "function_call",
+          call_id: "call_1",
+          name: "send_session_message",
+          arguments: "{}",
+          caller: { type: "direct" },
+          async: false,
+        },
+      ],
+    }),
+  ]);
+  const client = new HostedBrainClient({
+    serviceBaseUrl: "https://luke.test",
+    readAccessToken: async () => "token",
+    refreshAccount: async () => undefined,
+    fetch,
+    now: () => NOW,
+    report: () => {},
+  });
+  const refused = await client.respond(INPUT, { authority: DEVELOPER, maximumOutputTokens: 1 });
+  assert.equal(refused.outcome, BRAIN_CLIENT_OUTCOME.FAILED);
+  const ordinary = await client.respond(INPUT, { authority: DEVELOPER, maximumOutputTokens: 1 });
+  assert.equal(ordinary.outcome, BRAIN_CLIENT_OUTCOME.ANSWERED);
+});

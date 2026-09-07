@@ -1,5 +1,6 @@
 export {
   resolveVoiceCapability,
+  type VoiceCapabilityApplication,
   VoiceCapabilityAssembler,
   type VoiceCapabilityAssemblerOptions,
   type VoiceCapabilityInput,

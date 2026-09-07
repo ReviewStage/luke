@@ -3,6 +3,7 @@ import {
   BRAIN_OPENAI_DEFAULTS,
   BRAIN_RESPONSES_PATH,
   brainInstructions,
+  brainOutputReplayable,
   brainResponsesOutput,
   brainResponsesRequest,
   brainToolDefinitions,
@@ -179,16 +180,17 @@ export async function handleBrainRespond(options: BrainRespondOptions): Promise<
     return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR, extra);
   }
 
-  const payload: unknown = await response.json().catch(() => undefined);
+  const parsed: unknown = await response.json().catch(() => undefined);
+  // SAFETY: response.json returns a runtime value; brainResponsesOutput and brainOutputReplayable validate the wire contract.
+  const payload = parsed as UnparsedWireValue;
   // The payload is answered as it came, once it is known to be a Responses
   // answer the desktop's reader can act on; anything else is an upstream
   // fault worded here, never the upstream's own words.
-  const output =
-    payload === undefined
-      ? undefined
-      : // SAFETY: response.json returns a runtime value; brainResponsesOutput validates the wire contract.
-        brainResponsesOutput(payload as UnparsedWireValue);
-  if (!output) {
+  const output = payload === undefined ? undefined : brainResponsesOutput(payload);
+  if (!output || !brainOutputReplayable(payload)) {
+    // An answer carrying an item this endpoint would refuse to replay next
+    // turn is not handed down: the desktop would keep it verbatim and every
+    // later turn of that memory would fail here.
     return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR);
   }
   // SAFETY: brainResponsesOutput accepted the payload as a JSON record.

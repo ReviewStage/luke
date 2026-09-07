@@ -1,8 +1,10 @@
 export {
   admitBrainInput,
   admitBrainInputItem,
+  brainOutputReplayable,
   maximumHostedBrainInputItems,
   maximumHostedBrainRequestBytes,
+  RESPONSES_CALLER_TYPE,
   RESPONSES_CONTENT_PART_TYPE,
   RESPONSES_INPUT_ITEM_TYPE,
   RESPONSES_ITEM_STATUS,

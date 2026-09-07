@@ -4,6 +4,7 @@ import type { WireRecord } from "@sidecar/wire";
 import {
   admitBrainInput,
   admitBrainInputItem,
+  brainOutputReplayable,
   maximumHostedBrainInputItems,
   maximumHostedBrainRequestBytes,
   RESPONSES_MESSAGE_PHASE,
@@ -146,4 +147,82 @@ test("the input array is bounded by count, and the request by UTF-8 bytes", () =
   // Bytes, not characters: a two-byte character weighs two.
   assert.equal(serializedRequestBytes("é"), 2);
   assert.equal(serializedRequestBytes(JSON.stringify({ text: "日本" })), 17);
+});
+
+test("the metadata the API writes on an ordinary direct call is replayed, and other execution contexts are refused", () => {
+  const call: WireRecord = {
+    type: "function_call",
+    id: "fc_2",
+    call_id: "call_2",
+    name: "send_session_message",
+    arguments: '{"text":"run"}',
+    status: "completed",
+  };
+  assert.deepEqual(admitBrainInputItem({ ...call, caller: null, async: false, namespace: null }), {
+    ...call,
+    async: false,
+  });
+  assert.deepEqual(admitBrainInputItem({ ...call, caller: { type: "direct" } }), {
+    ...call,
+    caller: { type: "direct" },
+  });
+  assert.deepEqual(admitBrainInputItem(call), call);
+  const unsupportedForms: readonly WireRecord[] = [
+    { caller: { type: "program", caller_id: "prog_1" } },
+    { caller: { type: "direct", caller_id: "x" } },
+    { caller: "direct" },
+    { async: true },
+    { async: "false" },
+    { namespace: "tools" },
+  ];
+  for (const unsupported of unsupportedForms) {
+    assert.equal(
+      admitBrainInputItem({ ...call, ...unsupported }),
+      undefined,
+      JSON.stringify(unsupported),
+    );
+  }
+});
+
+test("a compaction's output-only created_by is dropped, since the input form never takes it", () => {
+  assert.deepEqual(
+    admitBrainInputItem({
+      type: "compaction",
+      id: "cmp_2",
+      encrypted_content: "x",
+      created_by: "system",
+    }),
+    { type: "compaction", id: "cmp_2", encrypted_content: "x" },
+  );
+  assert.equal(
+    admitBrainInputItem({ type: "compaction", encrypted_content: "x", created_by: 5 }),
+    undefined,
+  );
+  assert.deepEqual(
+    admitBrainInputItem({ type: "reasoning", id: "rs_3", summary: [], encrypted_content: null }),
+    { type: "reasoning", id: "rs_3", summary: [] },
+  );
+});
+
+test("an answer is replayable only when every output item admits, and an answer with no output is not this reader's question", () => {
+  assert.equal(brainOutputReplayable({ output: REPLAYED }), true);
+  assert.equal(brainOutputReplayable({ output: [] }), true);
+  assert.equal(
+    brainOutputReplayable({
+      output: [
+        USER_MESSAGE,
+        {
+          type: "function_call",
+          call_id: "c",
+          name: "x",
+          arguments: "{}",
+          caller: { type: "program", caller_id: "p" },
+        },
+      ],
+    }),
+    false,
+  );
+  assert.equal(brainOutputReplayable({ output: [{ type: "web_search_call", id: "ws" }] }), false);
+  assert.equal(brainOutputReplayable({ id: "resp" }), true);
+  assert.equal(brainOutputReplayable("text"), true);
 });

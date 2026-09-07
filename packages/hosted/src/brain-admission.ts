@@ -72,10 +72,20 @@ const PHASE_VALUES: readonly string[] = Object.values(RESPONSES_MESSAGE_PHASE);
 const ALLOWED_KEYS = {
   USER_MESSAGE: new Set(["type", "role", "content", "id", "status"]),
   ASSISTANT_MESSAGE: new Set(["type", "role", "content", "id", "status", "phase"]),
-  FUNCTION_CALL: new Set(["type", "call_id", "name", "arguments", "id", "status"]),
+  FUNCTION_CALL: new Set([
+    "type",
+    "call_id",
+    "name",
+    "arguments",
+    "id",
+    "status",
+    "caller",
+    "async",
+    "namespace",
+  ]),
   FUNCTION_CALL_OUTPUT: new Set(["type", "call_id", "output", "id", "status"]),
   REASONING: new Set(["type", "id", "summary", "encrypted_content", "content", "status"]),
-  COMPACTION: new Set(["type", "id", "encrypted_content"]),
+  COMPACTION: new Set(["type", "id", "encrypted_content", "created_by"]),
   OUTPUT_TEXT: new Set(["type", "text", "annotations", "logprobs"]),
 } as const satisfies Record<string, ReadonlySet<string>>;
 
@@ -211,14 +221,51 @@ function admitMessage(item: WireRecord): WireRecord | undefined {
   return undefined;
 }
 
+export const RESPONSES_CALLER_TYPE = {
+  DIRECT: "direct",
+} as const;
+
+/**
+ * The execution context the API writes on a function call. The one this build
+ * replays is the direct one, a call the model made itself: absent or null is
+ * dropped, `{ type: "direct" }` is rebuilt as exactly that, and a program
+ * caller (a call issued by a tool-running program) is refused, because no
+ * program runs here.
+ */
+function directCaller(value: UnparsedWireValue): Optional<WireRecord> {
+  if (value === undefined || value === null) return ABSENT;
+  if (!isRecord(value) || value.type !== RESPONSES_CALLER_TYPE.DIRECT) return REFUSED;
+  if (!Object.keys(value).every((key) => key === "type")) return REFUSED;
+  return { ok: true, value: { type: RESPONSES_CALLER_TYPE.DIRECT } };
+}
+
+/** A flag the API writes as false on an ordinary call; true names an execution mode this build has not offered. */
+function synchronousFlag(value: UnparsedWireValue): Optional<false> {
+  if (value === undefined || value === null) return ABSENT;
+  return value === false ? { ok: true, value: false } : REFUSED;
+}
+
+/**
+ * A namespace names a tool surface (a namespaced tool family) this build
+ * never configures; the only replayable value is none. Verified against the
+ * fixed tool configuration: every brain tool is a plain function tool with no
+ * namespace, so a namespaced call could not have been one the brain offered.
+ */
+function noNamespace(value: UnparsedWireValue): boolean {
+  return value === undefined || value === null;
+}
+
 function admitFunctionCall(item: WireRecord): WireRecord | undefined {
   if (!keysWithin(item, ALLOWED_KEYS.FUNCTION_CALL)) return undefined;
   const callId = requiredText(item.call_id);
   const name = requiredText(item.name);
   if (!callId || !name || !isWireString(item.arguments)) return undefined;
+  if (!noNamespace(item.namespace)) return undefined;
   const id = optionalText(item.id);
   const status = optionalMember<StatusValue>(item.status, STATUS_VALUES);
-  if (!id.ok || !status.ok) return undefined;
+  const caller = directCaller(item.caller);
+  const asynchronous = synchronousFlag(item.async);
+  if (!id.ok || !status.ok || !caller.ok || !asynchronous.ok) return undefined;
   return {
     type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
     call_id: callId,
@@ -226,6 +273,8 @@ function admitFunctionCall(item: WireRecord): WireRecord | undefined {
     arguments: item.arguments,
     ...(id.value !== undefined ? { id: id.value } : undefined),
     ...(status.value !== undefined ? { status: status.value } : undefined),
+    ...(caller.value !== undefined ? { caller: caller.value } : undefined),
+    ...(asynchronous.value !== undefined ? { async: asynchronous.value } : undefined),
   };
 }
 
@@ -270,12 +319,20 @@ function admitReasoning(item: WireRecord): WireRecord | undefined {
   };
 }
 
+/**
+ * A compaction item comes back from the API with `created_by`, the actor that
+ * produced it, and goes back in without: the API's own input form omits the
+ * field. It is the one field admission drops rather than refuses or keeps,
+ * because it is output metadata carrying no replay content, and a request
+ * built from stored output must not fail on a field the input never took.
+ */
 function admitCompaction(item: WireRecord): WireRecord | undefined {
   if (!keysWithin(item, ALLOWED_KEYS.COMPACTION)) return undefined;
   const encrypted = requiredText(item.encrypted_content);
   if (!encrypted) return undefined;
   const id = optionalText(item.id);
-  if (!id.ok) return undefined;
+  const createdBy = optionalText(item.created_by);
+  if (!id.ok || !createdBy.ok) return undefined;
   return {
     type: RESPONSES_INPUT_ITEM_TYPE.COMPACTION,
     encrypted_content: encrypted,
@@ -323,4 +380,18 @@ export function admitBrainInput(value: UnparsedWireValue): WireRecord[] | undefi
 /** The UTF-8 weight of a serialized request, the measure both ends hold it to. */
 export function serializedRequestBytes(serialized: string): number {
   return new TextEncoder().encode(serialized).byteLength;
+}
+
+/**
+ * Whether every item a Responses answer carries is one this admission would
+ * replay. The desktop appends an answer's items to durable memory verbatim, so
+ * an answer with an item the hosted path cannot send back must be refused
+ * before any call in it is acted on or any item of it is kept: read here by
+ * the service before it answers and by the desktop before it appends. An
+ * answer with no output array is not this reader's question and is not
+ * refused by it.
+ */
+export function brainOutputReplayable(payload: UnparsedWireValue): boolean {
+  if (!isRecord(payload) || !Array.isArray(payload.output)) return true;
+  return payload.output.every((item) => admitBrainInputItem(item) !== undefined);
 }

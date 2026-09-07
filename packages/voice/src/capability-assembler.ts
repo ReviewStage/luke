@@ -73,12 +73,23 @@ export interface VoiceCapabilityAssemblerOptions {
   wrapBrainClient?: (client: BrainClient) => BrainClient;
 }
 
+/**
+ * What one `apply` answers: whether it was the latest application asked for
+ * when its reads completed. Only the latest publishes, warms, and reports; a
+ * stale one leaves the set its successor published standing and answers so,
+ * and its caller must build nothing on it.
+ */
+export interface VoiceCapabilityApplication {
+  latest: boolean;
+}
+
 export class VoiceCapabilityAssembler {
   readonly #options: VoiceCapabilityAssemblerOptions;
   #brainClient: BrainClient | undefined;
   #realtimeCredentials: RealtimeCredentialMinter | undefined;
   #unavailableDiagnostics: RealtimeDiagnostics;
   #voiceSource: VoiceSource = VOICE_SOURCE.ACCOUNT;
+  #applications = 0;
 
   constructor(options: VoiceCapabilityAssemblerOptions) {
     this.#options = options;
@@ -114,7 +125,16 @@ export class VoiceCapabilityAssembler {
     return this.#voiceSource;
   }
 
-  async apply(): Promise<void> {
+  /**
+   * Reads the chosen source, the key, the account, and the preferences, and
+   * publishes the capability set they decide as one unit, after every read
+   * has completed. Two applications can overlap — an account chosen while a
+   * key read is still out — and the older must never publish over the newer:
+   * each application takes its number before its first await and checks it
+   * after its last, and one that has been overtaken installs nothing.
+   */
+  async apply(): Promise<VoiceCapabilityApplication> {
+    const application = ++this.#applications;
     const credentialsUsable = this.#options.credentialsUsable();
     const voiceSource = await this.#options.settings.readVoiceSource();
     const apiKey =
@@ -133,23 +153,25 @@ export class VoiceCapabilityAssembler {
       refreshAccount: this.#options.refreshAccount,
       ...(this.#options.fetch ? { fetch: this.#options.fetch } : undefined),
     };
+    const [voice, speed] = await Promise.all([
+      this.#options.settings.get(APP_SETTING_SCHEMA.voice.field).catch(() => undefined),
+      this.#options.settings.get(APP_SETTING_SCHEMA.voiceSpeed.field).catch(() => undefined),
+    ]);
+    if (application !== this.#applications) return { latest: false };
+
     const builtBrainClient = policy.useKey
       ? openAiBrainClient(apiKey)
       : policy.useHosted
         ? new HostedBrainClient(seams)
         : undefined;
-    this.#brainClient =
-      builtBrainClient && this.#options.wrapBrainClient
-        ? this.#options.wrapBrainClient(builtBrainClient)
-        : builtBrainClient;
-    const [voice, speed] = await Promise.all([
-      this.#options.settings.get(APP_SETTING_SCHEMA.voice.field).catch(() => undefined),
-      this.#options.settings.get(APP_SETTING_SCHEMA.voiceSpeed.field).catch(() => undefined),
-    ]);
     const preferences = {
       ...(voice ? { voice } : undefined),
       ...(speed ? { speed } : undefined),
     };
+    this.#brainClient =
+      builtBrainClient && this.#options.wrapBrainClient
+        ? this.#options.wrapBrainClient(builtBrainClient)
+        : builtBrainClient;
     this.#realtimeCredentials = apiKey
       ? openAiRealtimeCredentials(apiKey, preferences)
       : policy.useHosted
@@ -162,6 +184,7 @@ export class VoiceCapabilityAssembler {
     this.#voiceSource = policy.source;
     if (policy.useHosted) this.#warmHostedVoice();
     this.#report(apiKey !== undefined);
+    return { latest: true };
   }
 
   #warmHostedVoice(): void {

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  admitBrainInputItem,
   BRAIN_DEFAULTS,
   BRAIN_OPENAI_DEFAULTS,
   BRAIN_REQUEST_ORIGIN,
@@ -383,19 +384,44 @@ test("a deployment model override names the model; a blank one is no override", 
   assert.equal(sentBody(calls, 1).model, BRAIN_OPENAI_DEFAULTS.MODEL);
 });
 
+interface StorageFile {
+  file: string | undefined;
+}
+
+interface Desktop {
+  agent: BrainAgent;
+  performed: Parameters<BrainActPerformer["perform"]>[0][];
+  upstreamCalls: UpstreamCall[];
+  spent: () => number;
+  storage: StorageFile;
+  ask: (question: string) => Promise<Awaited<ReturnType<BrainAgent["waitAsk"]>>>;
+}
+
+let submissions = 0;
+const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
+const abc: SessionIdentity = { providerId: claude.id, providerSessionId: "abc" };
+
+function sendAct(callId: string, metadata: WireRecord = {}): WireRecord {
+  return {
+    ...call(callId, REALTIME_TOOL.SEND_SESSION_MESSAGE, {
+      provider_id: abc.providerId,
+      provider_session_id: abc.providerSessionId,
+      text: "run the tests",
+    }),
+    ...metadata,
+  };
+}
+
 /**
  * The whole path, end to end: the real agent on the real hosted client, whose
- * fetch lands on the real handler, whose upstream is a fake Responses API that
- * first asks for an act and then answers. The act happens on the desktop and
- * only there; the service sees two inferences and performs nothing.
+ * fetch lands on the real handler, whose upstream is a fake Responses API. The
+ * storage is shared across builds so a restart is a second desktop on the
+ * same file.
  */
-test("the desktop runs the tool loop and the act while the service runs only inferences", async () => {
-  const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
-  const abc: SessionIdentity = { providerId: claude.id, providerSessionId: "abc" };
-  const roster = {
-    text: "Currently observed sessions:\n- abc",
-    identities: [abc],
-  };
+function desktopOnHostedService(
+  answers: readonly (() => Response)[],
+  storage: StorageFile = { file: undefined },
+): Desktop {
   const session = normalizeSession(claude, {
     providerSessionId: abc.providerSessionId,
     title: "Claude Code: abc",
@@ -403,22 +429,8 @@ test("the desktop runs the tool loop and the act while the service runs only inf
     lastActivityAt: NOW,
   });
   assert.ok(session);
-
-  const actCall = call("call_1", REALTIME_TOOL.SEND_SESSION_MESSAGE, {
-    provider_id: abc.providerId,
-    provider_session_id: abc.providerSessionId,
-    text: "run the tests",
-  });
-  const { fetch: upstreamFetch, calls: upstreamCalls } = upstream([
-    () =>
-      payload([
-        { type: "reasoning", id: "rs_1", summary: [], encrypted_content: "opaque" },
-        actCall,
-      ]),
-    () => payload([message("Sent.")]),
-  ]);
+  const { fetch: upstreamFetch, calls: upstreamCalls } = upstream(answers);
   let spent = 0;
-  let serverPerformed = 0;
   const service = async (url: string, init: RequestInit): Promise<Response> => {
     assert.equal(url, `https://luke.test${HOSTED_SERVICE_PATH.BRAIN_RESPOND}`);
     return handleBrainRespond({
@@ -440,23 +452,21 @@ test("the desktop runs the tool loop and the act while the service runs only inf
     fetch: service,
     report: () => undefined,
   });
-
-  let file: string | undefined;
   const store = new BrainStateStore({
     storage: {
-      read: () => file,
+      read: () => storage.file,
       write: (contents) => {
-        file = contents;
+        storage.file = contents;
         return true;
       },
       remove: () => {
-        file = undefined;
+        storage.file = undefined;
         return true;
       },
     },
     createGenerationId: () => "gen-1",
   });
-  const performed: Parameters<BrainActPerformer["perform"]>[0][] = [];
+  const performed: Desktop["performed"] = [];
   let runs = 0;
   const agent = new BrainAgent({
     client,
@@ -466,7 +476,7 @@ test("the desktop runs the tool loop and the act while the service runs only inf
         return { status: "accepted" };
       },
     },
-    roster: () => roster,
+    roster: () => ({ text: "Currently observed sessions:\n- abc", identities: [abc] }),
     standingContext: () => "Durable facts: none.",
     readTranscriptSince: async () => ({ status: "unsupported", reason: "not in this test" }),
     readTranscript: async () => ({ status: "unsupported", reason: "not in this test" }),
@@ -475,44 +485,176 @@ test("the desktop runs the tool loop and the act while the service runs only inf
     createRunId: () => `run-${runs++}`,
     report: () => undefined,
   });
-  await agent.ready();
-  const accepted = await agent.submitAsk({
-    submissionId: "submission-1",
-    question: "send the tests",
-    origin: BRAIN_REQUEST_ORIGIN.TYPED,
-  });
-  assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
-  const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
-  const record = await agent.waitAsk(runId, 60_000);
+  return {
+    agent,
+    performed,
+    upstreamCalls,
+    spent: () => spent,
+    storage,
+    ask: async (question) => {
+      await agent.ready();
+      const accepted = await agent.submitAsk({
+        // Submission ids persist with the file, so a restarted desktop must
+        // not reuse one the first desktop already spent.
+        submissionId: `submission-${submissions++}`,
+        question,
+        origin: BRAIN_REQUEST_ORIGIN.TYPED,
+      });
+      assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED, JSON.stringify(accepted));
+      const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
+      return agent.waitAsk(runId, 60_000);
+    },
+  };
+}
+
+function inputItems(calls: readonly UpstreamCall[], index: number): WireRecord[] {
+  const input = sentBody(calls, index).input;
+  assert.ok(Array.isArray(input));
+  return input.filter(isRecord);
+}
+
+test("the desktop runs the tool loop and the act while the service runs only inferences", async () => {
+  const actCall = sendAct("call_1");
+  const desktop = desktopOnHostedService([
+    () =>
+      payload([
+        { type: "reasoning", id: "rs_1", summary: [], encrypted_content: "opaque" },
+        actCall,
+      ]),
+    () => payload([message("Sent.")]),
+  ]);
+  const record = await desktop.ask("send the tests");
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.equal(record?.text, "Sent.");
   assert.equal(record?.performedActs, 1);
 
   // The act ran on the desktop, once, as the model asked.
-  assert.equal(performed.length, 1);
-  assert.equal(performed[0]?.name, REALTIME_TOOL.SEND_SESSION_MESSAGE);
-  assert.equal(serverPerformed, 0);
+  assert.equal(desktop.performed.length, 1);
+  assert.equal(desktop.performed[0]?.name, REALTIME_TOOL.SEND_SESSION_MESSAGE);
 
   // The service ran two inferences, each metered, each on the developer
   // toolset, and the second carried the desktop's own function output back.
-  assert.equal(spent, 2);
-  assert.equal(upstreamCalls.length, 2);
+  assert.equal(desktop.spent(), 2);
+  assert.equal(desktop.upstreamCalls.length, 2);
   for (const index of [0, 1]) {
-    const sent = sentBody(upstreamCalls, index);
+    const sent = sentBody(desktop.upstreamCalls, index);
     assert.deepEqual(sent.tools, brainToolDefinitions(DEVELOPER));
     assert.equal(sent.store, false);
   }
-  const secondInput = sentBody(upstreamCalls, 1).input;
-  assert.ok(Array.isArray(secondInput));
-  const second = secondInput.filter(isRecord);
-  const replayedCall = second.find((item) => item.type === "function_call");
-  assert.deepEqual(replayedCall, actCall);
+  const second = inputItems(desktop.upstreamCalls, 1);
+  assert.deepEqual(
+    second.find((item) => item.type === "function_call"),
+    actCall,
+  );
   const output = second.find((item) => item.type === "function_call_output");
   assert.equal(output?.call_id, "call_1");
   assert.match(String(output?.output), /accepted/);
   assert.ok(
     second.some((item) => item.type === "reasoning" && item.encrypted_content === "opaque"),
   );
-  serverPerformed = 0;
-  await agent.stop();
+  await desktop.agent.stop();
+});
+
+/**
+ * The metadata an ordinary direct call may come back with. Each is what the
+ * API documents for a call the model made itself; none needs a program, an
+ * asynchronous call, or a namespaced tool to appear.
+ */
+const DIRECT_CALL_METADATA: readonly { label: string; metadata: WireRecord }[] = [
+  { label: "bare", metadata: {} },
+  { label: "caller null", metadata: { caller: null } },
+  { label: "caller direct", metadata: { caller: { type: "direct" } } },
+  { label: "async false", metadata: { async: false } },
+  {
+    label: "everything the API writes",
+    metadata: { id: "fc_1", status: "completed", caller: { type: "direct" }, async: false },
+  },
+];
+
+for (const { label, metadata } of DIRECT_CALL_METADATA) {
+  test(`a direct call with ${label} metadata acts once, and the memory keeps working across a later ask, a compaction, and a restart`, async () => {
+    const storage: StorageFile = { file: undefined };
+    const actCall = sendAct("call_1", metadata);
+    const first = desktopOnHostedService(
+      [
+        () => payload([actCall]),
+        () => payload([message("Sent.")]),
+        () =>
+          payload([
+            message("Still here."),
+            { type: "compaction", id: "cmp_1", encrypted_content: "folded", created_by: "system" },
+          ]),
+      ],
+      storage,
+    );
+    const sent = await first.ask("send the tests");
+    assert.equal(sent?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+    assert.equal(sent?.performedActs, 1);
+    assert.equal(first.performed.length, 1);
+    assert.equal(first.spent(), 2);
+    // The stored memory holds the call as the API wrote it, metadata and all.
+    assert.ok(storage.file?.includes('"call_id":"call_1"'));
+
+    // A later ask replays that memory, call and metadata verbatim, through
+    // the same admission, and runs.
+    const later = await first.ask("anything else?");
+    assert.equal(later?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+    assert.equal(later?.text, "Still here.");
+    assert.equal(first.spent(), 3);
+    const replayed = inputItems(first.upstreamCalls, 2);
+    assert.deepEqual(
+      replayed.find((item) => item.type === "function_call"),
+      admitBrainInputItem(actCall),
+    );
+    assert.equal(first.performed.length, 1);
+    // The compaction that came back is kept with its output-only field.
+    assert.ok(storage.file?.includes('"created_by":"system"'));
+    await first.agent.stop();
+
+    // A restart on the same file replays from the compaction onward, without
+    // the field the input form never takes, and still runs.
+    const restarted = desktopOnHostedService([() => payload([message("Back.")])], storage);
+    const afterRestart = await restarted.ask("after the restart?");
+    assert.equal(afterRestart?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+    assert.equal(afterRestart?.text, "Back.");
+    assert.equal(restarted.performed.length, 0);
+    const restartedInput = inputItems(restarted.upstreamCalls, 0);
+    const compaction = restartedInput.find((item) => item.type === "compaction");
+    assert.ok(compaction);
+    assert.equal(compaction.encrypted_content, "folded");
+    assert.equal("created_by" in compaction, false);
+    await restarted.agent.stop();
+  });
+}
+
+test("an answer the hosted path cannot replay is refused before any act or checkpoint, and the next ask runs", async () => {
+  const storage: StorageFile = { file: undefined };
+  const desktop = desktopOnHostedService(
+    [
+      () => payload([sendAct("call_1", { caller: { type: "program", caller_id: "prog_1" } })]),
+      () => payload([sendAct("call_2", { async: true })]),
+      () => payload([sendAct("call_3", { namespace: "tools" })]),
+      () =>
+        payload([sendAct("call_4"), { type: "web_search_call", id: "ws_1", status: "completed" }]),
+      () => payload([message("Fine.")]),
+    ],
+    storage,
+  );
+  for (const question of ["program call", "async call", "namespaced call", "built-in tool"]) {
+    const record = await desktop.ask(question);
+    assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED, question);
+    assert.equal(record?.performedActs, 0, question);
+  }
+  // Nothing was performed, and no refused item reached the file.
+  assert.equal(desktop.performed.length, 0);
+  assert.equal(desktop.spent(), 4);
+  assert.equal(storage.file?.includes("call_1"), false);
+  assert.equal(storage.file?.includes("prog_1"), false);
+  assert.equal(storage.file?.includes("web_search_call"), false);
+
+  const next = await desktop.ask("and now?");
+  assert.equal(next?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  assert.equal(next?.text, "Fine.");
+  assert.equal(desktop.spent(), 5);
+  await desktop.agent.stop();
 });

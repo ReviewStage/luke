@@ -1,5 +1,6 @@
 import {
   type BrainTurnAuthority,
+  brainOutputReplayable,
   HOSTED_SERVICE_PATH,
   hostedBrainRequestFromWire,
   hostedQuotaFromWire,
@@ -319,7 +320,18 @@ export class HostedBrainClient implements BrainClient {
     if (!response) return failed("request did not complete");
     if (response.status === RATE_LIMIT_STATUS) return this.#quiet(response);
     if (!response.ok) return failed(`hosted brain turn failed with status ${response.status}`);
-    return answered(response);
+    const answer = await answered(response);
+    // An answer is refused whole before the agent acts on any call in it or
+    // keeps any item of it, when it carries an item this path could not send
+    // back next turn: kept, it would poison every later hosted turn of the
+    // generation, and the service has already refused to answer such a thing.
+    if (
+      answer.outcome === BRAIN_CLIENT_OUTCOME.ANSWERED &&
+      !brainOutputReplayable(answer.payload)
+    ) {
+      return failed("response carried an item the hosted service cannot replay");
+    }
+    return answer;
   }
 
   async #request(
