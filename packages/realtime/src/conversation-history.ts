@@ -96,6 +96,15 @@ export const storedConversationMaximumAgeMs = 14 * 24 * 60 * 60 * 1000;
 export interface ConversationEntry {
   kind: ConversationEntryKind;
   /**
+   * The line's own identity, minted once by the writer that recorded it and
+   * carried on every report of it since. It is what makes an append
+   * idempotent — the same line delivered twice is one line — while two
+   * deliberate identical utterances, each with an id of its own, stay two.
+   * Never rendered into model context. A line that reaches the store without
+   * one is identified by its value instead.
+   */
+  eventId?: string;
+  /**
    * The line's words, kept whole with their line structure: the panel draws
    * them as the Markdown they were written in, and a reply's list or code
    * block needs its newlines to be one. The model's copy is flattened to one
@@ -153,6 +162,7 @@ export function appendConversationThreadEntry(
     return entries;
   }
   const appended: ConversationEntry = { kind: entry.kind, words, recordedAt };
+  if (entry.eventId !== undefined) appended.eventId = entry.eventId;
   if (entry.identity) appended.identity = entry.identity;
   if (entry.requestId !== undefined) appended.requestId = entry.requestId;
   // A line stamped earlier than the tail goes where it happened: after the
@@ -439,6 +449,9 @@ export function storedConversationEntry(value: UnparsedWireValue): ConversationE
   if (value.requestId !== undefined && !(isWireString(value.requestId) && value.requestId)) {
     return undefined;
   }
+  if (value.eventId !== undefined && !(isWireString(value.eventId) && value.eventId)) {
+    return undefined;
+  }
   const identity = value.identity;
   const providerId = isRecord(identity) ? identity.providerId : undefined;
   const providerSessionId = isRecord(identity) ? identity.providerSessionId : undefined;
@@ -459,6 +472,7 @@ export function storedConversationEntry(value: UnparsedWireValue): ConversationE
       ? { identity: { providerId, providerSessionId } }
       : undefined),
     ...(isWireString(value.requestId) ? { requestId: value.requestId } : undefined),
+    ...(isWireString(value.eventId) ? { eventId: value.eventId } : undefined),
   };
 }
 

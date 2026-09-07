@@ -257,21 +257,65 @@ export function retainedBrainState(
   };
 }
 
-/** Where the envelope is kept: one file's worth of read and write, however the host does them. */
+/**
+ * Where the envelope is kept, as one serialized record: the shape a test's
+ * in-memory file has. Production keeps the envelope decomposed in the
+ * runtime store instead, behind {@link BrainStateRepository}; this adapter
+ * is how a record storage still satisfies that contract.
+ */
 export interface BrainStateStorage {
   read(): string | undefined | Promise<string | undefined>;
   /** Answers whether the write landed; a store that throws is read as one that did not. */
   write(contents: string): boolean | Promise<boolean>;
 }
 
-export interface BrainStateStoreOptions {
-  storage: BrainStateStorage;
+/** What a repository found: the envelope it holds, or nothing, or something it could not read. */
+export interface BrainStateLoad {
+  state?: BrainPersistedState;
+  /** The repository holds content for the generation but this build cannot vouch for it. */
+  unreadable?: boolean;
+}
+
+/**
+ * The durable owner of the envelope, whatever it decomposes it into. The
+ * store composes each envelope and asks the repository to make it the one
+ * that stands, whole and atomically: after a save that answered true the
+ * repository holds exactly the envelope given, and after one that answered
+ * false or threw it holds what it held before. A repository whose writes
+ * are asynchronous — a database on its own worker — fits the contract as
+ * well as a file does, because the store serializes every write behind the
+ * last and installs nothing in memory until the answer comes back.
+ */
+export interface BrainStateRepository {
+  load(): BrainStateLoad | Promise<BrainStateLoad>;
+  save(state: BrainPersistedState): boolean | Promise<boolean>;
+}
+
+/** A record storage as a repository: the whole envelope in one serialized record. */
+export function brainStateRepositoryFromStorage(storage: BrainStateStorage): BrainStateRepository {
+  return {
+    async load() {
+      const stored = await storage.read();
+      if (stored === undefined) return {};
+      const state = brainStateFromStored(stored);
+      return state ? { state } : { unreadable: true };
+    },
+    save(state) {
+      return storage.write(brainStateRecord(state));
+    },
+  };
+}
+
+export type BrainStateStoreOptions = (
+  | { storage: BrainStateStorage; repository?: undefined }
+  | { repository: BrainStateRepository; storage?: undefined }
+) & {
   createGenerationId: () => string;
   now?: () => number;
   bounds?: BrainStateBounds;
   /** Hears the store's own housekeeping failures: a discard or expiry the disk would not take. */
   report?: (message: string) => void;
-}
+};
 
 /**
  * Who may write through the store right now. Each agent built on the store
@@ -307,7 +351,7 @@ export interface BrainWriteCommit {
  * not complete.
  */
 export class BrainStateStore {
-  readonly #storage: BrainStateStorage;
+  readonly #repository: BrainStateRepository;
   readonly #createGenerationId: () => string;
   readonly #now: () => number;
   readonly #bounds: BrainStateBounds;
@@ -318,7 +362,7 @@ export class BrainStateStore {
   readonly #replacedListeners = new Set<(state: BrainPersistedState) => void>();
 
   constructor(options: BrainStateStoreOptions) {
-    this.#storage = options.storage;
+    this.#repository = options.repository ?? brainStateRepositoryFromStorage(options.storage);
     this.#createGenerationId = options.createGenerationId;
     this.#now = options.now ?? Date.now;
     this.#bounds = options.bounds ?? BRAIN_STATE_BOUNDS;
@@ -347,17 +391,12 @@ export class BrainStateStore {
         await this.#persistHousekeeping(fresh, "the expired generation");
         return this.#state ?? fresh;
       }
-      let stored: string | undefined;
-      try {
-        stored = await this.#storage.read();
-      } catch {
-        stored = undefined;
-      }
+      const loaded = await this.#load();
       // A Clear, expiry, or replacement that landed while the file was being
       // read is the newer truth: what the file held is not installed over
       // it, and the caller adopts what now stands.
       if (this.#state) return this.#state;
-      const admitted = this.#admit(stored);
+      const admitted = this.#admit(loaded);
       this.#state = admitted.state;
       if (admitted.rewrite) {
         this.#report(`Brain memory discarded ${admitted.rewrite}`);
@@ -367,14 +406,23 @@ export class BrainStateStore {
     });
   }
 
+  /** Reads the repository once, taking a repository that throws as one holding nothing readable. */
+  async #load(): Promise<BrainStateLoad> {
+    try {
+      return await this.#repository.load();
+    } catch {
+      return { unreadable: true };
+    }
+  }
+
   /** What a stored file becomes in memory, and whether the file must be rewritten to match. */
-  #admit(stored: string | undefined): AdmittedBrainState {
+  #admit(loaded: BrainStateLoad): AdmittedBrainState {
     const now = this.#now();
-    const read = brainStateFromStored(stored);
+    const read = loaded.state;
     if (!read) {
       return {
         state: freshBrainState(this.#createGenerationId(), now),
-        ...(stored !== undefined ? { rewrite: "an unreadable state file" } : undefined),
+        ...(loaded.unreadable ? { rewrite: "an unreadable state file" } : undefined),
       };
     }
     if (brainGenerationExpired(read, now)) {
@@ -512,7 +560,7 @@ export class BrainStateStore {
       };
       const retained = retainedBrainState(composed, this.#bounds);
       if (retained.oversized && grows(retained, held)) return false;
-      if (!(await this.#persistRecord(retained.record))) return false;
+      if (!(await this.#persist(retained.state))) return false;
       if (this.#state !== held || !this.holdsLease(lease)) return false;
       this.#state = retained.state;
       committed?.({ prunedRunIds: retained.prunedRunIds });
@@ -536,7 +584,7 @@ export class BrainStateStore {
     this.#announceReplaced(retained.state);
     return this.#serialized(async () => {
       if (this.#state !== retained.state) return false;
-      return this.#persistRecord(retained.record);
+      return this.#persist(retained.state);
     });
   }
 
@@ -566,20 +614,14 @@ export class BrainStateStore {
     return this.#serialized(async () => {
       let marker = fresh;
       if (!held && this.#state === fresh) {
-        let stored: string | undefined;
-        try {
-          stored = await this.#storage.read();
-        } catch {
-          stored = undefined;
-        }
-        const prior = brainStateFromStored(stored)?.generationId;
+        const prior = (await this.#load()).state?.generationId;
         if (prior && this.#state === fresh) {
           marker = { ...fresh, reset: { clearedAt: now, generationId: prior } };
           this.#state = marker;
         }
       }
       if (this.#state !== marker) return false;
-      return this.#persistRecord(brainStateRecord(marker));
+      return this.#persist(marker);
     });
   }
 
@@ -614,7 +656,7 @@ export class BrainStateStore {
    */
   async #persistHousekeeping(state: BrainPersistedState, what: string): Promise<void> {
     if (this.#state !== state) return;
-    if (!(await this.#persistRecord(brainStateRecord(state)))) {
+    if (!(await this.#persist(state))) {
       this.#report(`Brain memory could not replace ${what} on disk`);
     }
   }
@@ -623,9 +665,9 @@ export class BrainStateStore {
     for (const listener of [...this.#replacedListeners]) listener(state);
   }
 
-  async #persistRecord(record: string): Promise<boolean> {
+  async #persist(state: BrainPersistedState): Promise<boolean> {
     try {
-      return await this.#storage.write(record);
+      return await this.#repository.save(state);
     } catch {
       return false;
     }

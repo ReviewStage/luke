@@ -630,6 +630,50 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
+  packages/runtime-contracts:
+    dependencies:
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/runtime-store:
+    dependencies:
+      '@sidecar/acts':
+        specifier: workspace:*
+        version: link:../acts
+      '@sidecar/brain':
+        specifier: workspace:*
+        version: link:../brain
+      '@sidecar/realtime':
+        specifier: workspace:*
+        version: link:../realtime
+      '@sidecar/runtime-contracts':
+        specifier: workspace:*
+        version: link:../runtime-contracts
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
   packages/session:
     dependencies:
       '@sidecar/wire':
