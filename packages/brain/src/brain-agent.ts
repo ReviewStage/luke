@@ -18,10 +18,8 @@ import {
 } from "@sidecar/wire";
 import { BRAIN_CLIENT_OUTCOME, type BrainClient } from "./brain-client.js";
 import {
-  BRAIN_DELIVERY_SOURCE,
   BRAIN_WAKE_KIND,
   type BrainDelivery,
-  type BrainDeliverySource,
   type BrainTranscriptDelta,
   type BrainWakeEvent,
 } from "./brain-events.js";
@@ -293,7 +291,6 @@ interface TurnPlan {
   authority: BrainTurnAuthority;
   events: readonly BrainWakeEvent[];
   open: (events: readonly BrainWakeEvent[], now: number) => readonly ResponsesInputItem[];
-  deliverySource?: BrainDeliverySource;
   /** Whether a roster look's events with nothing new in their transcript are left out. */
   dropEmptyRosterDeltas?: boolean;
   run?: RunControl;
@@ -807,7 +804,6 @@ export class BrainAgent {
           ...(attached.length > 0 ? [wakeInputItem(attached, now)] : []),
           holdReleasedInputItem(held, now),
         ],
-        deliverySource: BRAIN_DELIVERY_SOURCE.HOLD_RELEASED,
       }),
     );
   }
@@ -889,7 +885,6 @@ export class BrainAgent {
         authority: BRAIN_TURN_AUTHORITY.OBSERVATION,
         events,
         open: (attached, openedAt) => [wakeInputItem(attached, openedAt, roster.text)],
-        deliverySource: BRAIN_DELIVERY_SOURCE.WAKE,
         dropEmptyRosterDeltas: true,
       }),
     );
@@ -931,7 +926,6 @@ export class BrainAgent {
         authority: BRAIN_TURN_AUTHORITY.OBSERVATION,
         events,
         open: (attached, now) => [wakeInputItem(attached, now)],
-        deliverySource: BRAIN_DELIVERY_SOURCE.WAKE,
       });
       if (
         result.outcome === TURN_OUTCOME.QUIET &&
@@ -1648,14 +1642,11 @@ export class BrainAgent {
         return { callId: call.callId, output: await this.#readWhole(named, context) };
       }
       case BRAIN_TOOL.ANNOUNCE: {
-        if (plan.deliverySource === undefined) {
-          return { callId: call.callId, output: rejection(REFUSAL_REASON.NOT_OFFERED) };
-        }
         const briefing = text(args.briefing)?.slice(0, maximumBriefingLength);
         if (!briefing) {
           return { callId: call.callId, output: rejection(REFUSAL_REASON.EMPTY_BRIEFING) };
         }
-        hooks.deliveries.push({ briefing, decidedAt: this.#now(), source: plan.deliverySource });
+        hooks.deliveries.push({ briefing, decidedAt: this.#now() });
         return { callId: call.callId, output: { status: ACT_RESULT_STATUS.ACCEPTED } };
       }
     }

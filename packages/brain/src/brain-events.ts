@@ -39,16 +39,7 @@ export interface BrainWakeEvent {
   atMs: number;
 }
 
-export const BRAIN_DELIVERY_SOURCE = {
-  WAKE: "wake",
-  HOLD_RELEASED: "hold-released",
-} as const;
-
-export type BrainDeliverySource =
-  (typeof BRAIN_DELIVERY_SOURCE)[keyof typeof BRAIN_DELIVERY_SOURCE];
-
 export interface BrainDelivery {
   briefing: string;
   decidedAt: number;
-  source: BrainDeliverySource;
 }

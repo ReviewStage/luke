@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BRAIN_DELIVERY_SOURCE, type BrainDelivery } from "@sidecar/brain";
+import type { BrainDelivery } from "@sidecar/brain";
 import type { SpeechTraceRecord } from "@sidecar/devtrace";
 import {
   ARRIVAL_SPEECH_KIND,
@@ -17,7 +17,7 @@ import {
 } from "./speech-arbiter";
 
 function delivery(briefing: string, decidedAt = 1_000): BrainDelivery {
-  return { briefing, decidedAt, source: BRAIN_DELIVERY_SOURCE.WAKE };
+  return { briefing, decidedAt };
 }
 
 interface Harness {
@@ -85,7 +85,6 @@ test("the briefing backlog sheds its oldest whole past the bound", () => {
   // The oldest went first: a backlog re-decided in one turn wants the recent few.
   assert.equal(held[0]?.briefing, "briefing 2");
   assert.equal(held.at(-1)?.briefing, `briefing ${MAXIMUM_PENDING_BRIEFINGS + 1}`);
-  assert.equal(held[0]?.source, BRAIN_DELIVERY_SOURCE.WAKE);
   assert.equal(arbiter.pendingCount, 0);
   assert.deepEqual(arbiter.takeHeldBriefings(), []);
 });
@@ -138,20 +137,18 @@ test("quiet beginning holds every pending request; quiet ending releases the bea
   assert.equal(offer.speakBy, clock.now + SPOKEN_NOTICE_MAX_AGE_MS);
 });
 
-test("held briefings are taken in order with their source intact, once", () => {
+test("held briefings are taken in order with briefing and timestamp intact, once", () => {
   const { arbiter } = harness();
   arbiter.setQuiet(true);
-  requestBriefing(arbiter, "first");
-  requestBriefing(arbiter, "second");
+  requestBriefing(arbiter, "first", 1_000);
+  requestBriefing(arbiter, "second", 2_000);
   arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
   arbiter.setQuiet(false);
 
-  const taken = arbiter.takeHeldBriefings();
-  assert.deepEqual(
-    taken.map((item) => item.briefing),
-    ["first", "second"],
-  );
-  assert.ok(taken.every((item) => item.source === BRAIN_DELIVERY_SOURCE.WAKE));
+  assert.deepEqual(arbiter.takeHeldBriefings(), [
+    { briefing: "first", decidedAt: 1_000 },
+    { briefing: "second", decidedAt: 2_000 },
+  ]);
   assert.equal(arbiter.heldBriefingCount, 0);
   assert.equal(arbiter.pendingCount, 1, "the beat is not a briefing and stays");
   assert.deepEqual(arbiter.takeHeldBriefings(), []);

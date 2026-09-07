@@ -35,10 +35,8 @@ export {
   openAiBrainClient,
 } from "./brain-client.js";
 export {
-  BRAIN_DELIVERY_SOURCE,
   BRAIN_WAKE_KIND,
   type BrainDelivery,
-  type BrainDeliverySource,
   type BrainTranscriptDelta,
   type BrainWakeEvent,
   type BrainWakeKind,
