@@ -40,6 +40,8 @@ function complete(): BrainPersistedState {
         settledAt: NOW + 2,
         text: "Nothing much.",
         performedActs: 0,
+        unknownActs: 0,
+        historyRecordedAt: NOW + 3,
       },
     ],
     journal: [

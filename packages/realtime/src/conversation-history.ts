@@ -131,12 +131,16 @@ export interface ConversationEntry {
 /**
  * Appends one flattened line to the retained thread. An entry with
  * nothing left after flattening appends nothing: an empty line says nothing
- * worth keeping or spending model-window space on.
+ * worth keeping or spending model-window space on. A line recorded after the
+ * fact — a run's end written once its record is read — may carry the moment
+ * it happened rather than the moment it was written, so the thread keeps the
+ * order things occurred in; retention still runs on `now`.
  */
 export function appendConversationThreadEntry(
   entries: readonly ConversationEntry[],
   entry: ConversationEntry,
   now: number = Date.now(),
+  recordedAt: number = now,
 ): readonly ConversationEntry[] {
   const words = flattenedEntryWords(entry.words);
   if (!words) return entries;
@@ -146,7 +150,7 @@ export function appendConversationThreadEntry(
   ) {
     return entries;
   }
-  const appended: ConversationEntry = { kind: entry.kind, words, recordedAt: now };
+  const appended: ConversationEntry = { kind: entry.kind, words, recordedAt };
   if (entry.identity) appended.identity = entry.identity;
   if (entry.requestId !== undefined) appended.requestId = entry.requestId;
   return retainedConversationEntries([...entries, appended], now);
@@ -260,6 +264,7 @@ export function insertSpokenAskThreadEntry(
   words: string,
   after: ConversationEntry | undefined,
   recordedAt: number = Date.now(),
+  requestId?: string,
 ): readonly ConversationEntry[] {
   const flattened = flattenedEntryWords(words);
   if (!flattened) return entries;
@@ -271,8 +276,27 @@ export function insertSpokenAskThreadEntry(
     kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK,
     words: flattened,
     recordedAt,
+    ...(requestId !== undefined ? { requestId } : undefined),
   });
   return placed;
+}
+
+/**
+ * Ties a line already in the thread to the run it turned out to open: a
+ * spoken ask's transcript can land before the brain has accepted the ask,
+ * and the correlation is then written onto the very entry, words untouched.
+ * A thread that does not hold the entry is returned as it was.
+ */
+export function withConversationEntryRequest(
+  entries: readonly ConversationEntry[],
+  entry: ConversationEntry,
+  requestId: string,
+): readonly ConversationEntry[] {
+  const at = entries.indexOf(entry);
+  if (at === -1 || entry.requestId === requestId) return entries;
+  const tied = [...entries];
+  tied[at] = { ...entry, requestId };
+  return tied;
 }
 
 /** Places a spoken ask into the recent model context and retires old lines. */

@@ -74,6 +74,8 @@ export const BRAIN_REQUEST_FAILURE = {
   PERSISTENCE: "persistence",
   /** The run reached its execution deadline. */
   DEADLINE: "deadline",
+  /** The model stopped before a reply formed: an incomplete output, or the tool budget spent. */
+  INCOMPLETE: "incomplete",
 } as const;
 
 export type BrainRequestFailure =
@@ -106,6 +108,15 @@ export interface BrainRequestRecord {
   failure?: BrainRequestFailure;
   /** How many acts the run performed to completion, so a failed reply still says what was done. */
   performedActs: number;
+  /**
+   * How many acts were dispatched whose result never came back: a performer
+   * that threw after the provider may have accepted the write, or a launch
+   * that found the act started and its result unrecorded. Each may have
+   * happened, so none is retried and the developer is told as much.
+   */
+  unknownActs: number;
+  /** When the host recorded the run's end in the thread, so it is recorded exactly once. */
+  historyRecordedAt?: number;
 }
 
 /** Reads a stored record, or nothing for one this build cannot vouch for. */
@@ -122,7 +133,10 @@ export function brainRequestRecordFromWire(
   if (!isBrainRequestOrigin(value.origin) || !isBrainRequestStatus(value.status)) return undefined;
   if (!isWireString(value.question)) return undefined;
   if (!finiteNumber(value.acceptedAt) || !finiteNumber(value.revision)) return undefined;
-  if (!finiteNumber(value.performedActs)) return undefined;
+  if (!finiteNumber(value.performedActs) || !finiteNumber(value.unknownActs)) return undefined;
+  if (value.historyRecordedAt !== undefined && !finiteNumber(value.historyRecordedAt)) {
+    return undefined;
+  }
   if (value.startedAt !== undefined && !finiteNumber(value.startedAt)) return undefined;
   if (value.settledAt !== undefined && !finiteNumber(value.settledAt)) return undefined;
   if (value.text !== undefined && !isWireString(value.text)) return undefined;
@@ -136,7 +150,9 @@ export function brainRequestRecordFromWire(
     revision: value.revision,
     acceptedAt: value.acceptedAt,
     performedActs: value.performedActs,
+    unknownActs: value.unknownActs,
   };
+  if (value.historyRecordedAt !== undefined) record.historyRecordedAt = value.historyRecordedAt;
   if (value.startedAt !== undefined) record.startedAt = value.startedAt;
   if (value.settledAt !== undefined) record.settledAt = value.settledAt;
   if (value.text !== undefined) record.text = value.text;
@@ -181,6 +197,8 @@ export const BRAIN_SUBMISSION_REJECTION = {
   EMPTY: "empty",
   ABSENT: "absent",
   PERSISTENCE: "persistence",
+  /** The submission id is already taken by an ask with other words or another origin. */
+  CONFLICT: "conflict",
 } as const;
 
 export type BrainSubmissionRejection =

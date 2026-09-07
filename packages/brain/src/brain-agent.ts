@@ -31,7 +31,13 @@ import {
   standingContextItem,
   wakeInputItem,
 } from "./brain-input.js";
-import { BrainJournal, type BrainJournalEntry, UNKNOWN_ACT_RESULT } from "./brain-journal.js";
+import {
+  BrainJournal,
+  type BrainJournalEntry,
+  UNCONFIRMED_ACT_RESULT,
+  UNKNOWN_ACT_RESULT,
+  unknownActCount,
+} from "./brain-journal.js";
 import { BrainMemory, pairedDanglingCalls } from "./brain-memory.js";
 import {
   type BrainFunctionCall,
@@ -226,6 +232,8 @@ const TURN_OUTCOME = {
   DONE: "done",
   QUIET: "quiet",
   FAILED: "failed",
+  /** The model stopped without a reply: an incomplete output, or the tool budget spent. */
+  INCOMPLETE: "incomplete",
   REVOKED: "revoked",
 } as const;
 
@@ -233,7 +241,27 @@ type TurnResult =
   | { outcome: typeof TURN_OUTCOME.DONE; text: string }
   | { outcome: typeof TURN_OUTCOME.QUIET; until: number }
   | { outcome: typeof TURN_OUTCOME.FAILED }
+  | { outcome: typeof TURN_OUTCOME.INCOMPLETE }
   | { outcome: typeof TURN_OUTCOME.REVOKED };
+
+/**
+ * One envelope's working copy, alive from the moment the agent adopts it to
+ * the moment the store replaces it. Every turn captures the generation it
+ * opened in and works on that object alone: a turn still awaiting a model, a
+ * read, or an act when the generation is replaced finishes against the
+ * orphaned copy, whose checkpoints the store then fences, and can neither
+ * append to nor roll back the generation that succeeded it. The signal fires
+ * on replacement and on stop, and every wait of the generation settles on it.
+ */
+interface Generation {
+  id: string;
+  memory: BrainMemory;
+  journal: BrainJournal;
+  requests: Map<string, BrainRequestRecord>;
+  /** Runs accepted in memory but not yet checkpointed; not yet acknowledged to anyone. */
+  provisional: Set<string>;
+  abort: AbortController;
+}
 
 /**
  * One developer run's live controls: the signal its model and read work are
@@ -243,7 +271,7 @@ type TurnResult =
  */
 interface RunControl {
   runId: string;
-  generationId: string;
+  generation: Generation;
   abort: AbortController;
   cancelled: boolean;
   timedOut: boolean;
@@ -251,6 +279,7 @@ interface RunControl {
   /** Whether a checkpoint failed inside this run, after which no further act may be dispatched. */
   checkpointFailed: boolean;
   performedActs: number;
+  unknownActs: number;
 }
 
 interface TurnPlan {
@@ -262,6 +291,13 @@ interface TurnPlan {
   /** Whether a roster look's events with nothing new in their transcript are left out. */
   dropEmptyRosterDeltas?: boolean;
   run?: RunControl;
+}
+
+/** The generation a turn opened in and the one signal every wait of the turn settles on. */
+interface TurnContext {
+  generation: Generation;
+  run?: RunControl;
+  signal: AbortSignal;
 }
 
 interface DispatchOutcome {
@@ -283,8 +319,40 @@ interface LoopHooks {
   onOutput: (output: BrainResponsesOutput) => void;
   onError: (reason: string) => void;
   advanceMark: () => Promise<void>;
-  revoked: () => boolean;
-  revocation: () => TurnResult;
+}
+
+/** A pending submission, held so a retry of the same id awaits the same durable answer. */
+interface PendingSubmission {
+  question: string;
+  origin: BrainSubmission["origin"];
+  result: Promise<BrainSubmissionResult>;
+}
+
+type Settled<T> = { aborted: true } | { aborted: false; value: T };
+
+/**
+ * Waits on a promise only as long as the signal stands. Once it fires the
+ * wait settles as aborted at once and the promise's eventual value is
+ * dropped unread — a late model answer or transcript can then reach nothing.
+ * The promise's own rejection still propagates.
+ */
+async function settledUnlessAborted<T>(
+  promise: Promise<T>,
+  signal: AbortSignal,
+): Promise<Settled<T>> {
+  if (signal.aborted) return { aborted: true };
+  // A rejection after the abort has already answered would otherwise be
+  // nobody's to handle; this branch takes it and the race below still sees
+  // the rejection first when the promise settles before the signal.
+  promise.catch(() => undefined);
+  const aborted = new Promise<Settled<T>>((resolve) => {
+    signal.addEventListener("abort", () => resolve({ aborted: true }), { once: true });
+  });
+  const settled = await Promise.race([
+    promise.then((value): Settled<T> => ({ aborted: false, value })),
+    aborted,
+  ]);
+  return signal.aborted ? { aborted: true } : settled;
 }
 
 /** A transcript held to a bound from the front, and whether anything was cut. */
@@ -341,6 +409,17 @@ class IdentitySet {
   }
 }
 
+function generationFrom(state: BrainPersistedState): Generation {
+  return {
+    id: state.generationId,
+    memory: new BrainMemory({ items: state.items, cursors: state.cursors }),
+    journal: new BrainJournal(state.journal),
+    requests: new Map(state.requests.map((record) => [record.runId, { ...record }])),
+    provisional: new Set(),
+    abort: new AbortController(),
+  };
+}
+
 export type BrainRequestsListener = (records: readonly BrainRequestRecord[]) => void;
 
 export class BrainAgent {
@@ -355,12 +434,10 @@ export class BrainAgent {
   readonly #executionDeadlineMs: number;
   readonly #deltaPerSessionChars: number;
   readonly #fullTranscriptChars: number;
-  #memory = new BrainMemory();
-  #journal = new BrainJournal();
-  #requests = new Map<string, BrainRequestRecord>();
+  #generation: Generation | undefined;
   readonly #runs = new Map<string, RunControl>();
+  readonly #pendingSubmissions = new Map<string, PendingSubmission>();
   readonly #listeners = new Set<BrainRequestsListener>();
-  #generationId: string | undefined;
   #turnInFlight = false;
   #restored: Promise<void> | undefined;
   #queue: Promise<unknown> = Promise.resolve();
@@ -407,13 +484,19 @@ export class BrainAgent {
     return this.#restored;
   }
 
-  /** Every run this generation holds, oldest acceptance first. */
+  /** Every acknowledged run this generation holds, oldest acceptance first. */
   requests(): readonly BrainRequestRecord[] {
-    return [...this.#requests.values()].map((record) => ({ ...record }));
+    const generation = this.#generation;
+    if (!generation) return [];
+    return [...generation.requests.values()]
+      .filter((record) => !generation.provisional.has(record.runId))
+      .map((record) => ({ ...record }));
   }
 
   request(runId: string): BrainRequestRecord | undefined {
-    const record = this.#requests.get(runId);
+    const generation = this.#generation;
+    if (!generation || generation.provisional.has(runId)) return undefined;
+    const record = generation.requests.get(runId);
     return record ? { ...record } : undefined;
   }
 
@@ -427,16 +510,18 @@ export class BrainAgent {
 
   /**
    * Accepts a developer ask into a run, or answers why not. The same
-   * submission asked twice — a transport retrying — finds the run it already
-   * has; a new submission id is a new run, however alike the words. Acceptance
-   * is answered only once the record is checkpointed, so a caller told
-   * "accepted" can find the run again after a crash. Pending wakes ride in
-   * the run's turn, so the reply knows what just changed.
+   * submission asked twice — a transport retrying — awaits the same durable
+   * answer as the first: an acceptance is acknowledged to nobody until its
+   * record is checkpointed, so no caller is told of a run that a failed write
+   * then takes away, and a retry that arrives while the write is out is given
+   * the write's own outcome. A new submission id is a new run, however alike
+   * the words; the same id with other words or another origin is refused as a
+   * conflict rather than guessed at. Pending wakes ride in the run's turn.
    */
   async submitAsk(submission: BrainSubmission): Promise<BrainSubmissionResult> {
     await this.ready();
-    const generationId = this.#generationId;
-    if (this.#stopped || generationId === undefined) {
+    const generation = this.#generation;
+    if (this.#stopped || !generation) {
       return {
         outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
         reason: BRAIN_SUBMISSION_REJECTION.ABSENT,
@@ -449,30 +534,61 @@ export class BrainAgent {
         reason: BRAIN_SUBMISSION_REJECTION.EMPTY,
       };
     }
-    const existing = [...this.#requests.values()].find(
+    const sameAsk = (held: { question: string; origin: BrainSubmission["origin"] }) =>
+      held.question === question && held.origin === submission.origin;
+    const conflict: BrainSubmissionResult = {
+      outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+      reason: BRAIN_SUBMISSION_REJECTION.CONFLICT,
+    };
+    const pending = this.#pendingSubmissions.get(submission.submissionId);
+    if (pending) return sameAsk(pending) ? pending.result : conflict;
+    const existing = this.requests().find(
       (record) => record.submissionId === submission.submissionId,
     );
     if (existing) {
-      return {
-        outcome: BRAIN_SUBMISSION_OUTCOME.ACCEPTED,
-        runId: existing.runId,
-        acceptedAt: existing.acceptedAt,
-      };
+      return sameAsk(existing)
+        ? {
+            outcome: BRAIN_SUBMISSION_OUTCOME.ACCEPTED,
+            runId: existing.runId,
+            acceptedAt: existing.acceptedAt,
+          }
+        : conflict;
     }
+    const result = this.#accept(generation, { ...submission, question });
+    this.#pendingSubmissions.set(submission.submissionId, {
+      question,
+      origin: submission.origin,
+      result,
+    });
+    try {
+      return await result;
+    } finally {
+      this.#pendingSubmissions.delete(submission.submissionId);
+    }
+  }
+
+  async #accept(
+    generation: Generation,
+    submission: BrainSubmission,
+  ): Promise<BrainSubmissionResult> {
     const acceptedAt = this.#now();
     const record: BrainRequestRecord = {
       runId: this.#options.createRunId(),
       submissionId: submission.submissionId,
       origin: submission.origin,
-      question,
+      question: submission.question,
       status: BRAIN_REQUEST_STATUS.QUEUED,
       revision: 0,
       acceptedAt,
       performedActs: 0,
+      unknownActs: 0,
     };
-    this.#requests.set(record.runId, record);
-    if (!(await this.#checkpoint(generationId))) {
-      this.#requests.delete(record.runId);
+    generation.provisional.add(record.runId);
+    generation.requests.set(record.runId, record);
+    const written = await this.#checkpoint(generation);
+    generation.provisional.delete(record.runId);
+    if (!written) {
+      generation.requests.delete(record.runId);
       return {
         outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
         reason: BRAIN_SUBMISSION_REJECTION.PERSISTENCE,
@@ -481,17 +597,18 @@ export class BrainAgent {
     this.#notify();
     const run: RunControl = {
       runId: record.runId,
-      generationId,
+      generation,
       abort: new AbortController(),
       cancelled: false,
       timedOut: false,
       checkpointFailed: false,
       performedActs: 0,
+      unknownActs: 0,
     };
     this.#runs.set(run.runId, run);
     this.#cancelFlush();
     const events = this.#takePending();
-    void this.#enqueue(() => this.#runAsk(run, question, events));
+    void this.#enqueue(() => this.#runAsk(run, submission.question, events));
     return { outcome: BRAIN_SUBMISSION_OUTCOME.ACCEPTED, runId: record.runId, acceptedAt };
   }
 
@@ -502,19 +619,18 @@ export class BrainAgent {
    */
   async waitAsk(runId: string, timeoutMs: number): Promise<BrainRequestRecord | undefined> {
     await this.ready();
-    const record = this.#requests.get(runId);
+    const record = this.request(runId);
     if (!record) return undefined;
-    if (isTerminalBrainRequestStatus(record.status)) return { ...record };
+    if (isTerminalBrainRequestStatus(record.status)) return record;
     return new Promise((resolve) => {
       let timer: ScheduledTimer | undefined;
       const finish = () => {
         unsubscribe();
         if (timer !== undefined) this.#cancel(timer);
-        const current = this.#requests.get(runId);
-        resolve(current ? { ...current } : undefined);
+        resolve(this.request(runId));
       };
       const unsubscribe = this.subscribe(() => {
-        const current = this.#requests.get(runId);
+        const current = this.request(runId);
         if (!current || isTerminalBrainRequestStatus(current.status)) finish();
       });
       timer = this.#schedule(finish, timeoutMs);
@@ -530,18 +646,33 @@ export class BrainAgent {
    */
   async cancelAsk(runId: string): Promise<BrainRequestRecord | undefined> {
     await this.ready();
-    const record = this.#requests.get(runId);
+    const record = this.request(runId);
     if (!record) return undefined;
-    if (isTerminalBrainRequestStatus(record.status)) return { ...record };
+    if (isTerminalBrainRequestStatus(record.status)) return record;
     const run = this.#runs.get(runId);
     if (run) {
       run.cancelled = true;
       run.abort.abort();
     }
-    if (record.status === BRAIN_REQUEST_STATUS.QUEUED) {
-      await this.#settleRun(runId, BRAIN_REQUEST_STATUS.CANCELLED, {});
+    if (record.status === BRAIN_REQUEST_STATUS.QUEUED && this.#generation) {
+      await this.#settleRun(this.#generation, runId, BRAIN_REQUEST_STATUS.CANCELLED, {});
     }
     return this.request(runId);
+  }
+
+  /**
+   * Marks a run's end as written into the host's thread, so a later report,
+   * a rebuilt follower, or the next launch never writes it a second time. The
+   * host calls this only after its own write succeeded; a write that failed
+   * leaves the run unmarked and the next report tries again.
+   */
+  async markHistoryRecorded(runId: string, recordedAt: number): Promise<void> {
+    await this.ready();
+    const generation = this.#generation;
+    const record = generation?.requests.get(runId);
+    if (!generation || !record || record.historyRecordedAt !== undefined) return;
+    this.#update(generation, runId, { historyRecordedAt: recordedAt });
+    await this.#checkpoint(generation);
   }
 
   /**
@@ -580,10 +711,14 @@ export class BrainAgent {
   }
 
   /**
-   * Drops pending wakes, revokes every run's execution, lets the running turn
-   * wind down, and takes nothing more. Unfinished runs are recorded as
-   * interrupted: the agent stopping — a key or account changing, the app
-   * quitting — is not the developer's cancel, and the record says which.
+   * Revokes every execution at once and takes nothing more: the generation's
+   * signal fires, so every wait the agent holds — a model answer, a
+   * transcript read, a run's own act preparation — settles, and the queue
+   * drains behind it. Unfinished runs are recorded as interrupted: the agent
+   * stopping — a key or account changing, the app quitting — is not the
+   * developer's cancel, and the record says which. Synchronous up to the
+   * revocation, so a host can withdraw the old agent's standing before its
+   * first await of a transition.
    */
   async stop(): Promise<void> {
     this.#stopped = true;
@@ -591,10 +726,14 @@ export class BrainAgent {
     this.#pending = [];
     this.#unsubscribeStore?.();
     this.#unsubscribeStore = undefined;
+    this.#generation?.abort.abort();
     for (const run of this.#runs.values()) run.abort.abort();
-    for (const record of this.requests()) {
-      if (record.status === BRAIN_REQUEST_STATUS.QUEUED) {
-        await this.#settleRun(record.runId, BRAIN_REQUEST_STATUS.INTERRUPTED, {});
+    const generation = this.#generation;
+    if (generation) {
+      for (const record of this.requests()) {
+        if (record.status === BRAIN_REQUEST_STATUS.QUEUED) {
+          await this.#settleRun(generation, record.runId, BRAIN_REQUEST_STATUS.INTERRUPTED, {});
+        }
       }
     }
     await this.#queue;
@@ -614,12 +753,13 @@ export class BrainAgent {
     if (this.#options.client.quietUntil() !== undefined) return;
     const roster = this.#options.roster();
     const now = this.#now();
+    const memory = this.#generation?.memory;
     const looks: BrainWakeEvent[] = (roster.sessions ?? []).flatMap((session) => {
       const identity: SessionIdentity = {
         providerId: session.providerId,
         providerSessionId: session.providerSessionId,
       };
-      const readBefore = this.#memory.cursor(identity) !== undefined;
+      const readBefore = memory?.cursor(identity) !== undefined;
       const live =
         session.status === SESSION_STATUS.WORKING || session.status === SESSION_STATUS.WAITING;
       if (session.location !== SESSION_LOCATION.LOCAL || !(readBefore || live)) return [];
@@ -706,51 +846,66 @@ export class BrainAgent {
       );
       return;
     }
-    this.#adopt(state);
+    const generation = generationFrom(state);
+    this.#generation = generation;
     const interrupted = interruptedUnfinishedRequests(state.requests, this.#now());
     const paired = pairedDanglingCalls(state.items, () => JSON.stringify(UNKNOWN_ACT_RESULT));
     if (interrupted === state.requests && paired === state.items) return;
-    this.#requests = new Map(interrupted.map((record) => [record.runId, record]));
-    this.#memory = new BrainMemory({ items: paired, cursors: state.cursors });
-    await this.#checkpoint(state.generationId);
+    // An act found started with no result may have happened: the interrupted
+    // run says so in its count, and its output stands as unknown, never as a
+    // call to make again.
+    const unfinished = new Set(
+      state.requests
+        .filter((record) => !isTerminalBrainRequestStatus(record.status))
+        .map((record) => record.runId),
+    );
+    generation.requests = new Map(
+      interrupted.map((record) => [
+        record.runId,
+        unfinished.has(record.runId)
+          ? {
+              ...record,
+              unknownActs: record.unknownActs + unknownActCount(state.journal, record.runId),
+            }
+          : record,
+      ]),
+    );
+    generation.memory = new BrainMemory({ items: paired, cursors: state.cursors });
+    await this.#checkpoint(generation);
     this.#notify();
-  }
-
-  /** Takes an envelope as the agent's working copy: memory, journal, and records alike. */
-  #adopt(state: BrainPersistedState): void {
-    this.#generationId = state.generationId;
-    this.#memory = new BrainMemory({ items: state.items, cursors: state.cursors });
-    this.#journal = new BrainJournal(state.journal);
-    this.#requests = new Map(state.requests.map((record) => [record.runId, { ...record }]));
   }
 
   /**
    * The store's generation changed under this agent — a reset or a
-   * replacement. Every run of the old generation loses its execution at once:
-   * its signal fires, its `isRevoked` answers true, and its late checkpoints
-   * land nowhere because the store fences them by generation. The agent then
-   * works from the new envelope, which holds no record of those runs.
+   * replacement. The old generation's signal fires, so every run and every
+   * observation turn of it loses its execution at once, and whatever they
+   * still do happens to the orphaned copy, whose checkpoints the store
+   * fences. The agent then works from the new envelope, which holds no record
+   * of those runs.
    */
   #adoptGeneration(state: BrainPersistedState): void {
-    if (state.generationId === this.#generationId) return;
+    const previous = this.#generation;
+    if (previous?.id === state.generationId) return;
+    previous?.abort.abort();
     for (const run of this.#runs.values()) {
       run.cancelled = true;
       run.abort.abort();
     }
-    this.#adopt(state);
+    this.#runs.clear();
+    this.#generation = generationFrom(state);
     this.#notify();
   }
 
   /**
-   * Writes the working copy through the store under the generation it belongs
-   * to. False means the file does not hold what memory holds — refused by the
+   * Writes one generation's working copy through the store under its own id.
+   * False means the file does not hold what that copy holds — refused by the
    * fence or by storage — and the caller decides what that forbids.
    */
-  async #checkpoint(generationId: string): Promise<boolean> {
-    const memory = this.#memory.persisted();
-    const requests = this.requests();
-    const journal: readonly BrainJournalEntry[] = this.#journal.entries();
-    const written = await this.#options.store.write(generationId, () => ({
+  async #checkpoint(generation: Generation): Promise<boolean> {
+    const memory = generation.memory.persisted();
+    const requests = [...generation.requests.values()].map((record) => ({ ...record }));
+    const journal: readonly BrainJournalEntry[] = generation.journal.entries();
+    const written = await this.#options.store.write(generation.id, () => ({
       items: memory.items,
       cursors: memory.cursors,
       requests,
@@ -761,9 +916,7 @@ export class BrainAgent {
   }
 
   #runRevoked(run: RunControl): boolean {
-    return (
-      run.cancelled || run.timedOut || this.#stopped || run.generationId !== this.#generationId
-    );
+    return run.cancelled || run.timedOut || this.#stopped || run.generation.abort.signal.aborted;
   }
 
   async #runAsk(
@@ -771,20 +924,25 @@ export class BrainAgent {
     question: string,
     events: readonly BrainWakeEvent[],
   ): Promise<void> {
-    const record = this.#requests.get(run.runId);
+    const generation = run.generation;
+    const record = generation.requests.get(run.runId);
     if (!record || record.status !== BRAIN_REQUEST_STATUS.QUEUED || this.#runRevoked(run)) {
       if (record?.status === BRAIN_REQUEST_STATUS.QUEUED) {
         await this.#settleRun(
+          generation,
           run.runId,
-          this.#stopped ? BRAIN_REQUEST_STATUS.INTERRUPTED : BRAIN_REQUEST_STATUS.CANCELLED,
+          run.cancelled ? BRAIN_REQUEST_STATUS.CANCELLED : BRAIN_REQUEST_STATUS.INTERRUPTED,
           {},
         );
       }
       this.#runs.delete(run.runId);
       return;
     }
-    this.#update(run.runId, { status: BRAIN_REQUEST_STATUS.RUNNING, startedAt: this.#now() });
-    await this.#checkpoint(run.generationId);
+    this.#update(generation, run.runId, {
+      status: BRAIN_REQUEST_STATUS.RUNNING,
+      startedAt: this.#now(),
+    });
+    await this.#checkpoint(generation);
     this.#notify();
     run.deadline = this.#schedule(() => {
       run.timedOut = true;
@@ -811,69 +969,109 @@ export class BrainAgent {
       end.failure = BRAIN_REQUEST_FAILURE.DEADLINE;
     } else if (run.cancelled) {
       status = BRAIN_REQUEST_STATUS.CANCELLED;
-    } else if (this.#stopped || run.generationId !== this.#generationId) {
+    } else if (this.#stopped || generation.abort.signal.aborted) {
       status = BRAIN_REQUEST_STATUS.INTERRUPTED;
+    } else if (run.checkpointFailed) {
+      // What the run did may be unrecorded; that outranks whatever the model
+      // did afterwards, and the reply, if one formed, still travels.
+      status = BRAIN_REQUEST_STATUS.FAILED;
+      end.failure = BRAIN_REQUEST_FAILURE.PERSISTENCE;
+      if (result.outcome === TURN_OUTCOME.DONE && result.text) end.text = result.text;
+    } else if (result.outcome === TURN_OUTCOME.INCOMPLETE) {
+      status = BRAIN_REQUEST_STATUS.FAILED;
+      end.failure = BRAIN_REQUEST_FAILURE.INCOMPLETE;
     } else if (result.outcome !== TURN_OUTCOME.DONE) {
       status = BRAIN_REQUEST_STATUS.FAILED;
       end.failure = BRAIN_REQUEST_FAILURE.MODEL;
-    } else if (run.checkpointFailed) {
-      status = BRAIN_REQUEST_STATUS.FAILED;
-      end.failure = BRAIN_REQUEST_FAILURE.PERSISTENCE;
-      if (result.text) end.text = result.text;
     } else {
       status = BRAIN_REQUEST_STATUS.SUCCEEDED;
       if (result.text) end.text = result.text;
     }
-    await this.#settleRun(run.runId, status, end, run.performedActs, run.generationId);
+    await this.#settleRun(generation, run.runId, status, end, run);
   }
 
-  #update(runId: string, changes: Partial<Omit<BrainRequestRecord, "runId" | "revision">>): void {
-    const record = this.#requests.get(runId);
+  #update(
+    generation: Generation,
+    runId: string,
+    changes: Partial<Omit<BrainRequestRecord, "runId" | "revision">>,
+  ): void {
+    const record = generation.requests.get(runId);
     if (!record) return;
-    this.#requests.set(runId, { ...record, ...changes, revision: record.revision + 1 });
+    generation.requests.set(runId, { ...record, ...changes, revision: record.revision + 1 });
   }
 
+  /**
+   * Ends a run in its record and checkpoints the end. A success whose end
+   * cannot be written is not a success anyone can find again, so it is
+   * downgraded to a persistence failure — the reply still travels — and the
+   * write is tried once more; a failed end that will not write is reported
+   * and stands in memory alone.
+   */
   async #settleRun(
+    generation: Generation,
     runId: string,
     status: BrainRequestRecord["status"],
     end: RunEnd,
-    performedActs?: number,
-    generationId = this.#generationId,
+    run?: RunControl,
   ): Promise<void> {
-    const record = this.#requests.get(runId);
+    const record = generation.requests.get(runId);
     if (!record || isTerminalBrainRequestStatus(record.status)) return;
-    this.#update(runId, {
+    this.#update(generation, runId, {
       status,
       settledAt: this.#now(),
       ...(end.text !== undefined ? { text: end.text } : undefined),
       ...(end.failure !== undefined ? { failure: end.failure } : undefined),
-      ...(performedActs !== undefined ? { performedActs } : undefined),
+      ...(run ? { performedActs: run.performedActs, unknownActs: run.unknownActs } : undefined),
     });
-    if (generationId !== undefined) await this.#checkpoint(generationId);
+    if (!(await this.#checkpoint(generation)) && status === BRAIN_REQUEST_STATUS.SUCCEEDED) {
+      this.#update(generation, runId, {
+        status: BRAIN_REQUEST_STATUS.FAILED,
+        failure: BRAIN_REQUEST_FAILURE.PERSISTENCE,
+      });
+      await this.#checkpoint(generation);
+    }
     this.#notify();
   }
 
   async #turn(plan: TurnPlan): Promise<TurnResult> {
+    await this.ready();
+    const generation = this.#generation;
+    if (!generation) return { outcome: TURN_OUTCOME.FAILED };
+    const run = plan.run;
+    const context: TurnContext = {
+      generation,
+      ...(run ? { run } : undefined),
+      signal: run
+        ? AbortSignal.any([generation.abort.signal, run.abort.signal])
+        : generation.abort.signal,
+    };
     this.#turnInFlight = true;
     let ended = false;
-    const run = plan.run;
     const execution: BrainActExecution = {
       authority: BRAIN_TURN_AUTHORITY.DEVELOPER,
-      isRevoked: () => ended || this.#stopped || (run !== undefined && this.#runRevoked(run)),
+      isRevoked: () => ended || this.#revoked(context),
     };
     try {
-      return await this.#runTurn(plan, execution);
+      return await this.#runTurn(plan, context, execution);
     } finally {
       ended = true;
       this.#turnInFlight = false;
     }
   }
 
-  async #runTurn(plan: TurnPlan, execution: BrainActExecution): Promise<TurnResult> {
-    await this.ready();
-    const run = plan.run;
+  #revoked(context: TurnContext): boolean {
+    return this.#stopped || context.signal.aborted;
+  }
+
+  async #runTurn(
+    plan: TurnPlan,
+    context: TurnContext,
+    execution: BrainActExecution,
+  ): Promise<TurnResult> {
+    const { generation, run } = context;
+    const memory = generation.memory;
     const startedAt = this.#now();
-    let mark = this.#memory.mark();
+    let mark = memory.mark();
     const appendedKinds: string[] = [];
     const toolCalls: BrainToolCallTrace[] = [];
     const deliveries: BrainDelivery[] = [];
@@ -883,73 +1081,75 @@ export class BrainAgent {
     let outputText = "";
     let error: string | undefined;
 
-    const revoked = () => run !== undefined && this.#runRevoked(run);
     const revocation = (): TurnResult => {
-      error = run?.timedOut ? "execution deadline passed" : "run revoked";
+      error = run?.timedOut ? "execution deadline passed" : "turn revoked";
       return { outcome: TURN_OUTCOME.REVOKED };
     };
-    if (revoked()) return revocation();
+    if (this.#revoked(context)) return revocation();
 
-    const attachedDeltas = await this.#attachDeltas(plan.events);
+    const attachedDeltas = await this.#attachDeltas(plan.events, context);
     const transcriptBytes = attachedDeltas.transcriptBytes;
-    const events = plan.dropEmptyRosterDeltas
-      ? attachedDeltas.events.filter(
-          (event) => event.kind !== BRAIN_WAKE_KIND.ROSTER || Boolean(event.transcriptDelta?.text),
-        )
-      : attachedDeltas.events;
-    const append = (items: readonly ResponsesInputItem[]) => {
-      this.#memory.append(items);
-      for (const item of items) appendedKinds.push(text(item.type) ?? "unknown");
-    };
-    append(plan.open(events, startedAt));
-
     let failure: TurnResult | undefined;
-    try {
-      failure = await this.#loop(plan, execution, {
-        append,
-        toolCalls,
-        deliveries,
-        onIteration: () => {
-          iterations += 1;
-        },
-        onOutput: (output) => {
-          if (output.compacted) {
-            this.#memory.dropBeforeLatestCompaction();
-            compacted = true;
-          }
-          if (output.inputTokens !== undefined) inputTokens = output.inputTokens;
-          outputText = output.outputText;
-        },
-        onError: (reason) => {
-          error = reason;
-        },
-        // Only a developer run advances its rollback point: each answered act
-        // is checkpointed and the mark moves past it, so a later failure returns
-        // the memory to the last paired state and never to before an act that
-        // already happened. An observation turn still rolls back whole, so the
-        // deltas it read are read again next time rather than skipped.
-        advanceMark: async () => {
-          if (!run) return;
-          if (!(await this.#checkpoint(run.generationId))) run.checkpointFailed = true;
-          mark = this.#memory.mark();
-        },
-        revoked,
-        revocation,
-      });
-    } catch (loopError) {
-      // A client or performer that threw instead of answering: the turn fails
-      // like one whose model failed, and rolls back to the last paired state.
-      error = loopError instanceof Error ? loopError.name : "unknown error";
-      failure = revoked() ? revocation() : { outcome: TURN_OUTCOME.FAILED };
+    if (this.#revoked(context)) {
+      // Nothing the reads gained opens an inference the developer or the
+      // host has already withdrawn; the cursors go back with the memory.
+      failure = revocation();
+    } else {
+      const events = plan.dropEmptyRosterDeltas
+        ? attachedDeltas.events.filter(
+            (event) =>
+              event.kind !== BRAIN_WAKE_KIND.ROSTER || Boolean(event.transcriptDelta?.text),
+          )
+        : attachedDeltas.events;
+      const append = (items: readonly ResponsesInputItem[]) => {
+        memory.append(items);
+        for (const item of items) appendedKinds.push(text(item.type) ?? "unknown");
+      };
+      append(plan.open(events, startedAt));
+      try {
+        failure = await this.#loop(plan, context, execution, {
+          append,
+          toolCalls,
+          deliveries,
+          onIteration: () => {
+            iterations += 1;
+          },
+          onOutput: (output) => {
+            if (output.compacted) {
+              memory.dropBeforeLatestCompaction();
+              compacted = true;
+            }
+            if (output.inputTokens !== undefined) inputTokens = output.inputTokens;
+            outputText = output.outputText;
+          },
+          onError: (reason) => {
+            error = reason;
+          },
+          // Only a developer run advances its rollback point: each answered
+          // act is checkpointed and the mark moves past it, so a later failure
+          // returns the memory to the last paired state and never to before an
+          // act that already happened. An observation turn still rolls back
+          // whole, so the deltas it read are read again rather than skipped.
+          advanceMark: async () => {
+            if (!run) return;
+            if (!(await this.#checkpoint(generation))) run.checkpointFailed = true;
+            mark = memory.mark();
+          },
+        });
+      } catch (loopError) {
+        // A client that threw instead of answering: the turn fails like one
+        // whose model failed, and rolls back to the last paired state.
+        error = loopError instanceof Error ? loopError.name : "unknown error";
+        failure = this.#revoked(context) ? revocation() : { outcome: TURN_OUTCOME.FAILED };
+      }
     }
 
     if (failure) {
-      this.#memory.rollback(mark);
+      memory.rollback(mark);
       this.#report(`Brain ${plan.trigger} turn did not complete: ${error}`);
     } else {
-      this.#memory.retainCursors(this.#options.roster().identities);
-      const generationId = run?.generationId ?? this.#generationId;
-      const written = generationId !== undefined && (await this.#checkpoint(generationId));
+      memory.retainCursors(this.#options.roster().identities);
+      const written = await this.#checkpoint(generation);
       if (!written && run) run.checkpointFailed = true;
       for (const delivery of deliveries) {
         try {
@@ -984,23 +1184,33 @@ export class BrainAgent {
   /** The model loop: answers a failure to roll back to, or nothing when the turn reached its text. */
   async #loop(
     plan: TurnPlan,
+    context: TurnContext,
     execution: BrainActExecution,
     hooks: LoopHooks,
   ): Promise<TurnResult | undefined> {
+    const { generation } = context;
+    const revocation = (): TurnResult => {
+      hooks.onError(context.run?.timedOut ? "execution deadline passed" : "turn revoked");
+      return { outcome: TURN_OUTCOME.REVOKED };
+    };
     let iterations = 0;
     for (;;) {
       const roster = this.#options.roster();
-      const context = standingContextItem(
+      const standing = standingContextItem(
         roster.text,
         this.#options.standingContext(),
         this.#now(),
       );
-      const answer = await this.#options.client.respond([...this.#memory.items(), context], {
-        authority: plan.authority,
-        maximumOutputTokens: this.#maximumOutputTokens,
-        ...(plan.run ? { signal: plan.run.abort.signal } : undefined),
-      });
-      if (hooks.revoked()) return hooks.revocation();
+      const answered = await settledUnlessAborted(
+        this.#options.client.respond([...generation.memory.items(), standing], {
+          authority: plan.authority,
+          maximumOutputTokens: this.#maximumOutputTokens,
+          signal: context.signal,
+        }),
+        context.signal,
+      );
+      if (answered.aborted || this.#revoked(context)) return revocation();
+      const answer = answered.value;
       if (answer.outcome === BRAIN_CLIENT_OUTCOME.QUIET) {
         hooks.onError("quiet");
         return { outcome: TURN_OUTCOME.QUIET, until: answer.until };
@@ -1018,7 +1228,11 @@ export class BrainAgent {
       hooks.onOutput(output);
       if (output.functionCalls.length === 0) {
         if (output.incompleteReason && !output.outputText) {
+          // The model stopped short of any words. A run says it fell short
+          // rather than claiming a reply; an observation turn has nobody to
+          // answer, and keeps what it read so the deltas are not read twice.
           hooks.onError(`${output.status ?? "incomplete"}: ${output.incompleteReason}`);
+          return context.run ? { outcome: TURN_OUTCOME.INCOMPLETE } : undefined;
         }
         return undefined;
       }
@@ -1027,7 +1241,8 @@ export class BrainAgent {
       hooks.onIteration();
       if (iterations > this.#maxToolIterations) {
         // Every call still gets its output so the memory never holds a
-        // dangling function_call; the model reads the refusals next turn.
+        // dangling function_call; the model reads the refusals next turn. The
+        // turn itself fell short of a reply, and is reported as such.
         hooks.append(
           output.functionCalls.map((call) => {
             hooks.toolCalls.push({
@@ -1043,24 +1258,26 @@ export class BrainAgent {
         );
         hooks.onError("tool iteration budget spent");
         await hooks.advanceMark();
-        return undefined;
+        return context.run ? { outcome: TURN_OUTCOME.INCOMPLETE } : undefined;
       }
 
       // Calls run in the order the model emitted them, one at a time: an act
       // is journaled and checkpointed before the next one starts, and a
       // cancel landing between two refuses the second rather than racing it.
       for (const call of output.functionCalls) {
-        const outcome = await this.#dispatch(call, roster, plan, execution, hooks.deliveries);
+        const outcome = await this.#dispatch(call, roster, plan, context, execution, hooks);
         hooks.toolCalls.push({
           name: call.name,
           argumentsChars: call.argumentsJson.length,
           outcomeStatus: text(outcome.output.status) ?? "answered",
         });
         hooks.append([functionCallOutputItem(outcome.callId, JSON.stringify(outcome.output))]);
-        if (plan.run && this.#journal.get(plan.run.runId, call.callId)) await hooks.advanceMark();
+        if (context.run && generation.journal.get(context.run.runId, call.callId)) {
+          await hooks.advanceMark();
+        }
       }
       await hooks.advanceMark();
-      if (hooks.revoked()) return hooks.revocation();
+      if (this.#revoked(context)) return revocation();
     }
   }
 
@@ -1068,38 +1285,52 @@ export class BrainAgent {
    * Reads what each woken session's transcript gained since the brain last
    * looked, once per session however many events name it, and moves the
    * cursor. The cursor moves with the memory: a turn that fails rolls both
-   * back, so the same delta is read again rather than skipped.
+   * back, so the same delta is read again rather than skipped. A read still
+   * out when the turn is revoked is left unread: the wait settles, and the
+   * turn goes on to its rollback without it.
    */
   async #attachDeltas(
     events: readonly BrainWakeEvent[],
+    context: TurnContext,
   ): Promise<{ events: readonly BrainWakeEvent[]; transcriptBytes: number }> {
     const read = new IdentitySet();
     let transcriptBytes = 0;
     const attached: BrainWakeEvent[] = [];
     for (const event of events) {
+      if (this.#revoked(context)) break;
       if (read.list().some((identity) => sameIdentity(identity, event.identity))) {
         attached.push({ ...event });
         continue;
       }
       read.add(event.identity);
-      const delta = await this.#readDelta(event.identity);
+      const delta = await this.#readDelta(event.identity, context);
+      if (!delta) break;
       transcriptBytes += delta.text.length;
       attached.push({ ...event, transcriptDelta: delta });
     }
     return { events: attached, transcriptBytes };
   }
 
-  async #readDelta(identity: SessionIdentity): Promise<BrainTranscriptDelta> {
-    let result: ProviderTranscriptSinceResult;
+  async #readDelta(
+    identity: SessionIdentity,
+    context: TurnContext,
+  ): Promise<BrainTranscriptDelta | undefined> {
+    const memory = context.generation.memory;
+    let read: Settled<ProviderTranscriptSinceResult>;
     try {
-      result = await this.#options.readTranscriptSince(identity, this.#memory.cursor(identity));
+      read = await settledUnlessAborted(
+        this.#options.readTranscriptSince(identity, memory.cursor(identity)),
+        context.signal,
+      );
     } catch {
       return { text: "", truncated: false, status: ACT_RESULT_STATUS.REJECTED };
     }
+    if (read.aborted) return undefined;
+    const result = read.value;
     if (result.status !== ACT_RESULT_STATUS.ACCEPTED) {
       return { text: "", truncated: false, status: result.status };
     }
-    if (result.cursor !== undefined) this.#memory.setCursor(identity, result.cursor);
+    if (result.cursor !== undefined) memory.setCursor(identity, result.cursor);
     const bounded = cutFront(result.text, this.#deltaPerSessionChars);
     return {
       text: bounded.text,
@@ -1128,8 +1359,9 @@ export class BrainAgent {
     call: BrainFunctionCall,
     roster: BrainRoster,
     plan: TurnPlan,
+    context: TurnContext,
     execution: BrainActExecution,
-    deliveries: BrainDelivery[],
+    hooks: LoopHooks,
   ): Promise<DispatchOutcome> {
     const refused = this.#refusalForAuthority(plan, call.name);
     if (refused) return { callId: call.callId, output: refused };
@@ -1140,12 +1372,12 @@ export class BrainAgent {
     const named = identityFromRecord(args);
 
     if (!isBrainOnlyTool(call.name)) {
-      if (plan.authority !== BRAIN_TURN_AUTHORITY.DEVELOPER || !plan.run) {
+      if (plan.authority !== BRAIN_TURN_AUTHORITY.DEVELOPER || !context.run) {
         return { callId: call.callId, output: rejection(REFUSAL_REASON.ACT_IN_OBSERVATION) };
       }
       return {
         callId: call.callId,
-        output: await this.#performJournaled(call, plan.run, execution),
+        output: await this.#performJournaled(call, context.run, execution),
       };
     }
 
@@ -1156,10 +1388,7 @@ export class BrainAgent {
         if (!named || !observed(named)) {
           return { callId: call.callId, output: rejection(REFUSAL_REASON.UNOBSERVED_SESSION) };
         }
-        if (plan.run && this.#runRevoked(plan.run)) {
-          return { callId: call.callId, output: rejection(REFUSAL_REASON.RUN_REVOKED) };
-        }
-        return { callId: call.callId, output: await this.#readWhole(named) };
+        return { callId: call.callId, output: await this.#readWhole(named, context) };
       }
       case BRAIN_TOOL.ANNOUNCE: {
         if (plan.deliverySource === undefined) {
@@ -1169,7 +1398,7 @@ export class BrainAgent {
         if (!briefing) {
           return { callId: call.callId, output: rejection(REFUSAL_REASON.EMPTY_BRIEFING) };
         }
-        deliveries.push({ briefing, decidedAt: this.#now(), source: plan.deliverySource });
+        hooks.deliveries.push({ briefing, decidedAt: this.#now(), source: plan.deliverySource });
         return { callId: call.callId, output: { status: ACT_RESULT_STATUS.ACCEPTED } };
       }
     }
@@ -1183,15 +1412,18 @@ export class BrainAgent {
    * started and checkpointed before the performer sees it, so a crash mid-act
    * is found as an act of unknown result and never replayed; a checkpoint
    * that will not land refuses the act instead, because an act nobody could
-   * find afterwards is one the developer could not account for.
+   * find afterwards is one the developer could not account for. A performer
+   * that throws after dispatch has answered nothing about the effect: the
+   * outcome is unknown, counted as such, and never a refusal.
    */
   async #performJournaled(
     call: BrainFunctionCall,
     run: RunControl,
     execution: BrainActExecution,
   ): Promise<WireRecord> {
+    const { generation } = run;
     if (this.#runRevoked(run)) return rejection(REFUSAL_REASON.RUN_REVOKED);
-    const recorded = this.#journal.get(run.runId, call.callId);
+    const recorded = generation.journal.get(run.runId, call.callId);
     if (recorded) {
       if (recorded.argumentsJson !== call.argumentsJson) {
         return rejection(REFUSAL_REASON.CALL_ID_REUSED);
@@ -1201,15 +1433,15 @@ export class BrainAgent {
         : parsedRecord(recorded.outputJson);
     }
     if (run.checkpointFailed) return rejection(REFUSAL_REASON.NOT_CHECKPOINTED);
-    this.#journal.start({
+    generation.journal.start({
       runId: run.runId,
       callId: call.callId,
       name: call.name,
       argumentsJson: call.argumentsJson,
       startedAt: this.#now(),
     });
-    if (!(await this.#checkpoint(run.generationId))) {
-      this.#journal.forget(run.runId, call.callId);
+    if (!(await this.#checkpoint(generation))) {
+      generation.journal.forget(run.runId, call.callId);
       run.checkpointFailed = true;
       return rejection(REFUSAL_REASON.NOT_CHECKPOINTED);
     }
@@ -1220,20 +1452,23 @@ export class BrainAgent {
         execution,
       );
     } catch {
-      output = rejection(REFUSAL_REASON.ACT_FAILED);
+      output = { ...UNCONFIRMED_ACT_RESULT };
     }
     if (output.status === ACT_RESULT_STATUS.ACCEPTED) run.performedActs += 1;
-    this.#journal.settle(run.runId, call.callId, JSON.stringify(output), this.#now());
+    if (output.status === UNCONFIRMED_ACT_RESULT.status) run.unknownActs += 1;
+    generation.journal.settle(run.runId, call.callId, JSON.stringify(output), this.#now());
     return output;
   }
 
-  async #readWhole(identity: SessionIdentity): Promise<WireRecord> {
-    let result: ProviderTranscriptResult;
+  async #readWhole(identity: SessionIdentity, context: TurnContext): Promise<WireRecord> {
+    let read: Settled<ProviderTranscriptResult>;
     try {
-      result = await this.#options.readTranscript(identity);
+      read = await settledUnlessAborted(this.#options.readTranscript(identity), context.signal);
     } catch {
       return rejection(REFUSAL_REASON.READ_FAILED);
     }
+    if (read.aborted) return rejection(REFUSAL_REASON.RUN_REVOKED);
+    const result = read.value;
     if (result.status !== ACT_RESULT_STATUS.ACCEPTED) {
       return { status: result.status, reason: result.reason };
     }

@@ -92,6 +92,7 @@ test("a run is waited on, cancelled, and listed by its own record shape", () => 
     acceptedAt: 1,
     startedAt: 2,
     performedActs: 0,
+    unknownActs: 0,
   };
   for (const entry of [BRIDGE.waitBrainAsk, BRIDGE.cancelBrainAsk]) {
     assert.equal(entry.kind, "invoke");

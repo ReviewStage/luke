@@ -105,6 +105,7 @@ test("records are reconciled by run, the higher revision winning whichever arriv
     revision,
     acceptedAt,
     performedActs: 0,
+    unknownActs: 0,
   });
   // The push landed first with the newer revision; the bootstrap's older read
   // must not roll it back, while a run only the bootstrap knew is kept.

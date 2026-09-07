@@ -249,7 +249,8 @@ export function ConversationHistoryPanel({
             const runId = entry.requestId;
             const pending =
               runId !== undefined &&
-              entry.kind === CONVERSATION_ENTRY_KIND.TYPED_ASK &&
+              (entry.kind === CONVERSATION_ENTRY_KIND.TYPED_ASK ||
+                entry.kind === CONVERSATION_ENTRY_KIND.SPOKEN_ASK) &&
               pendingRuns.has(runId);
             return (
               <HistoryEntryRow

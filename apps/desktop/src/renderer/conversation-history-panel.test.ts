@@ -209,6 +209,7 @@ test("an ask whose run is still going waits beside its words and offers a cancel
     revision: 1,
     acceptedAt: 1,
     performedActs: 0,
+    unknownActs: 0,
   } as const;
   const render = (status: "running" | "succeeded") =>
     renderToStaticMarkup(
@@ -230,4 +231,16 @@ test("an ask whose run is still going waits beside its words and offers a cancel
   assert.match(pending, /ph-no-capture/);
   const settled = render("succeeded");
   assert.doesNotMatch(settled, /history-cancel|history-pending/);
+  // A spoken ask is the same lifecycle: its transcript, tied to its run, waits too.
+  const spoken = renderToStaticMarkup(
+    createElement(ConversationHistoryPanel, {
+      entries: [{ kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words: "ship it", requestId: "run-1" }],
+      requests: [{ ...run, origin: "spoken", status: "running" }],
+      onCancelRequest: (runId) => cancelled.push(runId),
+      onClear: () => undefined,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
+    }),
+  );
+  assert.match(spoken, /class="history-cancel"/);
 });

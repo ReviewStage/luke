@@ -45,11 +45,29 @@ export function brainJournalEntryFromWire(value: UnparsedWireValue): BrainJourna
   return entry;
 }
 
+/** The status an act's output carries when whether it happened cannot be established. */
+export const UNKNOWN_ACT_STATUS = "unknown";
+
 /** What a model is told about a call whose act ran but whose result never reached the journal. */
 export const UNKNOWN_ACT_RESULT = {
-  status: "unknown",
+  status: UNKNOWN_ACT_STATUS,
   reason: "the act was started but its result was lost before it was recorded",
 } as const;
+
+/**
+ * What a model is told about a call whose performer threw after dispatch: the
+ * provider may have taken the write, so it is neither a refusal nor a result,
+ * and it is never retried on the model's own initiative.
+ */
+export const UNCONFIRMED_ACT_RESULT = {
+  status: UNKNOWN_ACT_STATUS,
+  reason: "the act was dispatched but did not answer; it may have happened, so do not repeat it",
+} as const;
+
+/** How many of a run's journaled acts have no recorded result. */
+export function unknownActCount(entries: readonly BrainJournalEntry[], runId: string): number {
+  return entries.filter((entry) => entry.runId === runId && entry.outputJson === undefined).length;
+}
 
 /**
  * Journal entries as one run reads them: by call id, with the two questions

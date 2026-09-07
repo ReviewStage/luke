@@ -29,6 +29,7 @@ export {
   storedConversationMaximumAgeMs,
   streamingConversationEntry,
   typedAskConversationEntry,
+  withConversationEntryRequest,
 } from "./conversation-history.js";
 export {
   type IntroductionLine,

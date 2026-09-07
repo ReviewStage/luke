@@ -18,6 +18,7 @@ import {
   retainedConversationEntries,
   storedConversationMaximumAgeMs,
   streamingConversationEntry,
+  withConversationEntryRequest,
 } from "@sidecar/realtime";
 import { SESSION_STATUS, type Session } from "@sidecar/session";
 import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyLabel } from "@sidecar/settings";
@@ -341,6 +342,19 @@ const INITIAL_SURROUNDINGS: VoiceSurroundings = {
 };
 
 /**
+ * Where one spoken turn belongs in the thread, and what it has since become:
+ * the entry its transcript settled into, and the brain run it opened, each
+ * written onto the mark when it is known so the other can find it.
+ */
+interface SpokenTurnMark {
+  after: ConversationEntry | undefined;
+  generation: number;
+  recordedAt: number;
+  entry?: ConversationEntry;
+  runId?: string;
+}
+
+/**
  * The spoken conversation, held in the hidden voice window so no panel does:
  * the session, the microphone, the talk key's latch, the mouth that lets Luke
  * speak into silence, the level meter that ends his turn, and the thread the
@@ -445,20 +459,17 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     conversationContextWaitersRef.current.clear();
   }, [surroundings.conversationContextReady]);
   /** Where each server-identified spoken turn belongs when its transcript returns. */
-  const spokenTurnMarksRef = useRef(
-    new Map<
-      string,
-      { after: ConversationEntry | undefined; generation: number; recordedAt: number }
-    >(),
-  );
+  const spokenTurnMarksRef = useRef(new Map<string, SpokenTurnMark>());
   /** Local turn-close marks waiting for the server item ids that name them. */
-  const pendingSpokenTurnMarksRef = useRef<
-    { after: ConversationEntry | undefined; generation: number; recordedAt: number }[]
-  >([]);
+  const pendingSpokenTurnMarksRef = useRef<SpokenTurnMark[]>([]);
   /** The turn opened by the current talk-key press, before it closes. */
-  const activeSpokenTurnMarkRef = useRef<
-    { after: ConversationEntry | undefined; generation: number; recordedAt: number } | undefined
-  >(undefined);
+  const activeSpokenTurnMarkRef = useRef<SpokenTurnMark | undefined>(undefined);
+  /**
+   * The spoken turn whose reply is under way — the one an `ask_brain` call
+   * inside that reply belongs to — so the run it opens can be tied to the
+   * transcript, whichever of the two lands first.
+   */
+  const latestSpokenTurnMarkRef = useRef<SpokenTurnMark | undefined>(undefined);
   /** The generation of the developer-opened turn whose reply is still in flight. */
   const activeReplyGenerationRef = useRef<number | undefined>(undefined);
   /** The History generation in which the current announcement began speaking. */
@@ -555,6 +566,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     conversationRef.current = [];
     spokenTurnMarksRef.current.clear();
     pendingSpokenTurnMarksRef.current = [];
+    latestSpokenTurnMarkRef.current = undefined;
     setConversationHistory([]);
     // The previews go with the marks: a transcription still arriving belongs
     // to a turn the press just retired.
@@ -634,15 +646,42 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
         transcript,
         mark.after,
         mark.recordedAt,
+        mark.runId,
       );
       // A transcription that came back empty ended its turn — the preview
       // and the mark are already spent — but placed no line, and a thread
       // that did not change owes the other displays no report.
       if (placed === conversationRef.current) return;
+      // The mark keeps its line, so a run accepted after the transcript can
+      // still be tied to these very words.
+      mark.entry = placed[mark.after ? placed.indexOf(mark.after) + 1 : 0];
       conversationRef.current = placed;
       publishConversation();
     },
     [dropSpokenAskPreview, publishConversation],
+  );
+
+  /**
+   * Ties the brain run a spoken ask opened to the developer's own words for
+   * it — the voice service's transcript, never the mouth's paraphrase of the
+   * question. The transcript may already stand in the thread, in which case
+   * the run is written onto that line; otherwise the mark carries the run to
+   * the transcript when it lands. Either way History can draw the ask as
+   * pending, with its cancel, beside the words actually said.
+   */
+  const tieSpokenTurnToRun = useCallback(
+    (runId: string) => {
+      const mark = latestSpokenTurnMarkRef.current;
+      if (!mark) return;
+      mark.runId = runId;
+      if (!mark.entry) return;
+      const tied = withConversationEntryRequest(conversationRef.current, mark.entry, runId);
+      if (tied === conversationRef.current) return;
+      mark.entry = tied[conversationRef.current.indexOf(mark.entry)];
+      conversationRef.current = tied;
+      publishConversation();
+    },
+    [publishConversation],
   );
 
   const ensureVoiceSession = useCallback((): RealtimeVoiceSession => {
@@ -689,6 +728,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
             reason: BRAIN_ASK_REFUSAL[submitted.reason],
           };
         }
+        tieSpokenTurnToRun(submitted.runId);
         const record = await window.sidecar.waitBrainAsk(submitted.runId);
         if (!record) {
           return { status: ACT_RESULT_STATUS.REJECTED, reason: BRAIN_ASK_REFUSAL.absent };
@@ -725,6 +765,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       onSpokenAskCommitted: (itemId) => {
         const mark = pendingSpokenTurnMarksRef.current.shift();
         if (mark) spokenTurnMarksRef.current.set(itemId, mark);
+        latestSpokenTurnMarkRef.current = mark;
       },
       onSpokenAskClosed: () => {
         const mark = activeSpokenTurnMarkRef.current;
@@ -773,6 +814,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     rememberSpokenAsk,
     setVoiceStatus,
     surroundingsNow,
+    tieSpokenTurnToRun,
   ]);
 
   /**

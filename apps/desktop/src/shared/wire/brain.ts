@@ -91,6 +91,8 @@ export const BRAIN_ASK_REFUSAL = {
   [BRAIN_SUBMISSION_REJECTION.EMPTY]: "I didn't catch an ask in that.",
   [BRAIN_SUBMISSION_REJECTION.PERSISTENCE]:
     "I couldn't write that ask down, so I haven't taken it. Ask me again in a moment.",
+  [BRAIN_SUBMISSION_REJECTION.CONFLICT]:
+    "That ask arrived under an id I already have for different words. Ask it afresh.",
 } as const satisfies Record<BrainSubmissionRejection, string>;
 
 /** What the voice says while a run is still going when its wait ran out. */
@@ -101,43 +103,65 @@ function actsPhrase(count: number): string {
 }
 
 /**
+ * What the record can vouch for about acts: what went through, and what was
+ * dispatched but never answered — which may have happened, so it is said as
+ * such and never retried on Luke's own initiative.
+ */
+function actsAccount(snapshot: BrainRequestSnapshot): string {
+  const done = snapshot.performedActs;
+  const unsure = snapshot.unknownActs;
+  const parts: string[] = [];
+  if (done > 0) parts.push(`I did ${actsPhrase(done)}`);
+  if (unsure > 0) {
+    parts.push(
+      `${unsure === 1 ? "one act" : `${unsure} acts`} may have gone through without confirming, so I won't repeat ${unsure === 1 ? "it" : "them"} on my own`,
+    );
+  }
+  return parts.join(", and ");
+}
+
+/**
  * The words a run's end leaves in the thread and in the voice's mouth, built
  * from the record alone. A reply the model reached is said as it stands; an
  * end without one is worded here in fixed sentences that say what was done
  * before it, so an act that went through is never reported as nothing having
- * happened, and a reply that failed to form is never reported as the acts
- * failing. Nothing a model or a provider wrote enters except the reply text.
+ * happened, an act nobody confirmed is never reported as refused, and a reply
+ * that failed to form is never reported as the acts failing. Nothing a model
+ * or a provider wrote enters except the reply text.
  */
 export function brainReplyWords(snapshot: BrainRequestSnapshot): string | undefined {
-  const done = snapshot.performedActs;
+  const account = actsAccount(snapshot);
+  const acted = account.length > 0;
+  const said = snapshot.text ? `${snapshot.text} ` : "";
   switch (snapshot.status) {
     case BRAIN_REQUEST_STATUS.QUEUED:
     case BRAIN_REQUEST_STATUS.RUNNING:
       return undefined;
     case BRAIN_REQUEST_STATUS.SUCCEEDED:
-      if (snapshot.text) return snapshot.text;
-      return done > 0 ? `Done: I did ${actsPhrase(done)}.` : "I had nothing to add to that.";
+      if (snapshot.text)
+        return acted && snapshot.unknownActs > 0 ? `${said}${account}.` : snapshot.text;
+      return acted ? `Done: ${account}.` : "I had nothing to add to that.";
     case BRAIN_REQUEST_STATUS.FAILED:
       if (snapshot.failure === BRAIN_REQUEST_FAILURE.PERSISTENCE) {
-        const said = snapshot.text ? `${snapshot.text} ` : "";
-        return done > 0
-          ? `${said}I did ${actsPhrase(done)}, but I couldn't save my notes about it.`
+        return acted
+          ? `${said}${account}, but I couldn't save my notes about it.`
           : `${said}I couldn't save my notes about that ask, so I stopped before doing anything.`;
       }
-      return done > 0
-        ? `I did ${actsPhrase(done)}, but I couldn't put the reply into words.`
+      if (snapshot.failure === BRAIN_REQUEST_FAILURE.INCOMPLETE) {
+        return acted
+          ? `${account}, but I ran out of room before finishing the reply.`
+          : "I ran out of room before finishing that. Ask me again, perhaps in smaller pieces.";
+      }
+      return acted
+        ? `${account}, but I couldn't put the reply into words.`
         : "I couldn't work that one out. Ask me again in a moment.";
     case BRAIN_REQUEST_STATUS.CANCELLED:
-      return done > 0
-        ? `Cancelled, though ${actsPhrase(done)} had already gone through.`
-        : "Cancelled.";
+      return acted ? `Cancelled, though ${account}.` : "Cancelled.";
     case BRAIN_REQUEST_STATUS.TIMED_OUT:
-      return done > 0
-        ? `That ask ran out of time after ${actsPhrase(done)} had gone through.`
-        : "That ask ran out of time.";
+      return acted ? `That ask ran out of time, though ${account}.` : "That ask ran out of time.";
     case BRAIN_REQUEST_STATUS.INTERRUPTED:
-      return done > 0
-        ? `That ask was interrupted after ${actsPhrase(done)} had gone through.`
+      return acted
+        ? `That ask was interrupted, though ${account}.`
         : "That ask was interrupted before I could finish it.";
   }
 }
