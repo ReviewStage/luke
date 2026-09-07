@@ -520,7 +520,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   }, [conversationHistory, publishConversation]);
 
   /**
-   * Appends one flattened line to this launch's history. A session leaving the
+   * Appends one line to this launch's history. A session leaving the
    * roster costs a line its identity at model render, never its visible words.
    */
   const rememberConversationEntry = useCallback(

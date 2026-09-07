@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CONVERSATION_ENTRY_KIND } from "@sidecar/realtime";
+import { appendConversationThreadEntry, CONVERSATION_ENTRY_KIND } from "@sidecar/realtime";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
@@ -57,6 +57,26 @@ test("an announcement shows its spoken transcript", () => {
   assert.match(markup, /data-speaker="luke"/);
   assert.match(markup, />Checkout is ready\.<\/p>/);
   assert.doesNotMatch(markup, /provider:|running:/);
+});
+
+test("a reply keeps its lines through the thread and draws as the Markdown it was written in", () => {
+  const entries = appendConversationThreadEntry([], {
+    kind: CONVERSATION_ENTRY_KIND.REPLY,
+    words: "Two things:\n\n- **lisbon-v2** is waiting\n- `deploy` finished\n\n```sh\ngit push\n```",
+  });
+  const markup = renderToStaticMarkup(
+    createElement(ConversationHistoryPanel, {
+      entries,
+      onClear: () => undefined,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
+    }),
+  );
+
+  assert.match(markup, /<p>Two things:<\/p>/);
+  assert.match(markup, /<li><strong>lisbon-v2<\/strong> is waiting<\/li>/);
+  assert.match(markup, /<li><code>deploy<\/code> finished<\/li>/);
+  assert.match(markup, /<pre><code class="language-sh">git push\n<\/code><\/pre>/);
 });
 
 test("a recorded entry shows its local time", () => {
