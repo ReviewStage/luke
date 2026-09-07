@@ -34,6 +34,8 @@ export interface BrainJournalDelta {
 }
 
 export interface BrainStateDelta {
+  /** The generation's stamp, when this save sets or changes it. */
+  checkpointFormat?: string;
   items?: BrainItemsDelta;
   cursors?: BrainTranscriptCursors;
   requests?: BrainRequestsDelta;
@@ -147,6 +149,9 @@ export function brainStateSave(
   const delta: BrainStateDelta = {};
   const items = itemsDelta(previous.items, next.items);
   if (items) delta.items = items;
+  if (next.checkpointFormat !== undefined && next.checkpointFormat !== previous.checkpointFormat) {
+    delta.checkpointFormat = next.checkpointFormat;
+  }
   if (!sameJson(previous.cursors, next.cursors)) delta.cursors = next.cursors;
   const requests = requestsDelta(previous.requests, next.requests);
   if (requests) delta.requests = requests;

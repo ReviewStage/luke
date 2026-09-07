@@ -1,7 +1,8 @@
-import { type BrainClient, HostedBrainClient, openAiBrainClient } from "@sidecar/brain";
+import { HostedModelAdapter, openAiModelAdapter } from "@sidecar/brain";
 import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { type RealtimeDiagnostics, realtimeMintExplanation } from "@sidecar/realtime";
+import type { ModelAdapter } from "@sidecar/runtime-contracts";
 import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
@@ -65,12 +66,12 @@ export interface VoiceCapabilityAssemblerOptions {
   fetch?: typeof fetch;
   report?: (message: string) => void;
   /**
-   * Decorates the brain client the policy builds, so a traced development
-   * run records every turn's request without the client learning it is being
-   * watched. The decoration may only observe: the agent still sees a
-   * `BrainClient`, and absence means the client is used as built.
+   * Decorates the model adapter the policy builds, so a traced development
+   * run records every inference without the adapter learning it is being
+   * watched. The decoration may only observe: the runtime still sees a
+   * `ModelAdapter`, and absence means the adapter is used as built.
    */
-  wrapBrainClient?: (client: BrainClient) => BrainClient;
+  wrapBrainModel?: (model: ModelAdapter) => ModelAdapter;
 }
 
 /**
@@ -88,7 +89,7 @@ export interface VoiceCapabilityApplication {
 
 export class VoiceCapabilityAssembler {
   readonly #options: VoiceCapabilityAssemblerOptions;
-  #brainClient: BrainClient | undefined;
+  #brainModel: ModelAdapter | undefined;
   #realtimeCredentials: RealtimeCredentialMinter | undefined;
   #unavailableDiagnostics: RealtimeDiagnostics;
   #voiceSource: VoiceSource = VOICE_SOURCE.ACCOUNT;
@@ -103,7 +104,7 @@ export class VoiceCapabilityAssembler {
   }
 
   /**
-   * The client the brain's turns run on, or nothing. It follows the voice
+   * The model adapter the brain's turns run on, or nothing. It follows the voice
    * source exactly: the developer's own key runs turns directly, a signed-in
    * account with the account source runs them through Luke's hosted service
    * on Luke's key, and a fixture or evidence run, or a run with neither, has
@@ -111,8 +112,8 @@ export class VoiceCapabilityAssembler {
    * The key is read only when the key source is chosen, so an account-source
    * run never spends a stored personal key.
    */
-  get brainClient(): BrainClient | undefined {
-    return this.#brainClient;
+  get brainModel(): ModelAdapter | undefined {
+    return this.#brainModel;
   }
 
   get realtimeCredentials(): RealtimeCredentialMinter | undefined {
@@ -163,19 +164,19 @@ export class VoiceCapabilityAssembler {
     ]);
     if (!isCurrent()) return { latest: false, isCurrent };
 
-    const builtBrainClient = policy.useKey
-      ? openAiBrainClient(apiKey)
+    const builtBrainModel = policy.useKey
+      ? openAiModelAdapter(apiKey)
       : policy.useHosted
-        ? new HostedBrainClient(seams)
+        ? new HostedModelAdapter(seams)
         : undefined;
     const preferences = {
       ...(voice ? { voice } : undefined),
       ...(speed ? { speed } : undefined),
     };
-    this.#brainClient =
-      builtBrainClient && this.#options.wrapBrainClient
-        ? this.#options.wrapBrainClient(builtBrainClient)
-        : builtBrainClient;
+    this.#brainModel =
+      builtBrainModel && this.#options.wrapBrainModel
+        ? this.#options.wrapBrainModel(builtBrainModel)
+        : builtBrainModel;
     this.#realtimeCredentials = apiKey
       ? openAiRealtimeCredentials(apiKey, preferences)
       : policy.useHosted
@@ -209,8 +210,8 @@ export class VoiceCapabilityAssembler {
         `Luke voice: unavailable — ${realtimeMintExplanation(this.#unavailableDiagnostics.lastOutcome)}\n`,
       );
     }
-    if (this.#brainClient) {
-      write(`Luke brain: enabled (${this.#brainClient.model ?? "model chosen by the service"})\n`);
+    if (this.#brainModel) {
+      write(`Luke brain: enabled (${this.#brainModel.model ?? "model chosen by the service"})\n`);
     } else if (apiKeyConfigured) {
       write("Luke brain: unavailable — the key was found but no client was built\n");
     } else {

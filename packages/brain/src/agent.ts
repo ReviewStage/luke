@@ -352,6 +352,25 @@ export class BrainAgent {
         reason: BRAIN_SUBMISSION_REJECTION.EMPTY,
       };
     }
+    // The generation's context is awaited before the pending checks below, so
+    // that from the check to the registration nothing is awaited and two
+    // retries of one id cannot both slip past each other into two runs.
+    await generation.ready;
+    if (generation !== this.#generation || this.#stopped) {
+      return {
+        outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+        reason: BRAIN_SUBMISSION_REJECTION.ABSENT,
+      };
+    }
+    if (generation.incompatible !== undefined) {
+      // The memory stands, whole, and nothing runs over it: an ask into it
+      // would be a run this runtime cannot give a context to.
+      this.#reportIncompatible(generation);
+      return {
+        outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+        reason: BRAIN_SUBMISSION_REJECTION.INCOMPATIBLE,
+      };
+    }
     const sameAsk = (held: { question: string; origin: BrainSubmission["origin"] }) =>
       held.question === question && held.origin === submission.origin;
     const conflict: BrainSubmissionResult = {
@@ -371,22 +390,6 @@ export class BrainAgent {
             acceptedAt: existing.acceptedAt,
           }
         : conflict;
-    }
-    await generation.ready;
-    if (generation !== this.#generation || this.#stopped) {
-      return {
-        outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
-        reason: BRAIN_SUBMISSION_REJECTION.ABSENT,
-      };
-    }
-    if (generation.incompatible !== undefined) {
-      // The memory stands, whole, and nothing runs over it: an ask into it
-      // would be a run this runtime cannot give a context to.
-      this.#reportIncompatible(generation);
-      return {
-        outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
-        reason: BRAIN_SUBMISSION_REJECTION.INCOMPATIBLE,
-      };
     }
     if (!this.#options.store.admits(generation.id)) {
       // The record count is a hard bound on the file: a run the store could

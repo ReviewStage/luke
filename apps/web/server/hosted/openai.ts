@@ -7,6 +7,8 @@
 
 import type {
   attentionResponsesRequest,
+  BrainCompactRequest,
+  BrainInputTokensRequest,
   BrainResponsesRequest,
   legacyAttentionResponsesRequest,
   realtimeClientSecretRequest,
@@ -41,7 +43,9 @@ export type OpenAiPostBody =
   | ReturnType<typeof attentionResponsesRequest>
   | ReturnType<typeof legacyAttentionResponsesRequest>
   | ReturnType<typeof subjectResponsesRequest>
-  | BrainResponsesRequest;
+  | BrainResponsesRequest
+  | BrainCompactRequest
+  | BrainInputTokensRequest;
 
 export interface OpenAiUpstreamOptions {
   apiKey: string;

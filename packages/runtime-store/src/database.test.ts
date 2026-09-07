@@ -443,3 +443,100 @@ test("a line keeps its Markdown line structure through the store and a relaunch"
   assert.equal(listHistory(relaunch, MAIN_SESSION_KEY, NOW)[0]?.words, words);
   relaunch.close();
 });
+
+test("the checkpoint stamp lives on the generation: an empty foreign checkpoint keeps it, a delta may set it, and a stray item stamp is unreadable", () => {
+  const database = openTestDatabase();
+  const foreign = "other-runtime@3:anthropic-messages/2";
+  const empty = { ...populatedState("gen-f"), checkpointFormat: foreign, items: [] };
+  assert.equal(
+    saveBrainEnvelope(database, MAIN_SESSION_KEY, { kind: SAVE_KIND.REPLACE, state: empty }),
+    true,
+  );
+  const loaded = loadBrainEnvelope(database, MAIN_SESSION_KEY);
+  assert.equal(loaded.state?.checkpointFormat, foreign);
+  assert.deepEqual(loaded.state?.items, []);
+  // A native runtime later writing into the same generation stamps it its own.
+  const native = "tool-loop@1:openai-responses-input/1";
+  assert.equal(
+    saveBrainEnvelope(database, MAIN_SESSION_KEY, {
+      kind: SAVE_KIND.AMEND,
+      generationId: "gen-f",
+      delta: {
+        checkpointFormat: native,
+        items: { keepPrefix: 0, append: [{ type: "message", role: "user", content: "hi" }] },
+      },
+    }),
+    true,
+  );
+  const restamped = loadBrainEnvelope(database, MAIN_SESSION_KEY);
+  assert.equal(restamped.state?.checkpointFormat, native);
+  assert.equal(restamped.state?.items.length, 1);
+  // An item row of another stamp than the generation's is not its checkpoint.
+  database
+    .prepare("UPDATE runtime_checkpoints SET format = ? WHERE session_id = ?")
+    .run(foreign, "gen-f");
+  assert.deepEqual(loadBrainEnvelope(database, MAIN_SESSION_KEY), {
+    unreadable: true,
+    generation: "gen-f",
+  });
+});
+
+test("a version-1 database is walked forward: its item-tagged generation gains the legacy stamp, an empty one none, and a newer database is refused", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "luke-runtime-store-"));
+  const location = path.join(directory, "agent.sqlite");
+  const raw = new DatabaseSync(location);
+  raw.exec(`CREATE TABLE schema_version (version INTEGER NOT NULL)`);
+  raw.exec(`INSERT INTO schema_version (version) VALUES (1)`);
+  raw.exec(`CREATE TABLE agents (agent_id TEXT PRIMARY KEY, created_at INTEGER NOT NULL)`);
+  raw.exec(`CREATE TABLE conversations (
+    session_key TEXT PRIMARY KEY, agent_id TEXT NOT NULL REFERENCES agents(agent_id),
+    name TEXT NOT NULL, created_at INTEGER NOT NULL,
+    next_history_sequence INTEGER NOT NULL DEFAULT 1, history_cleared_at INTEGER)`);
+  raw.exec(`CREATE TABLE conversation_sessions (
+    session_id TEXT PRIMARY KEY, session_key TEXT NOT NULL REFERENCES conversations(session_key),
+    created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
+    reset_cleared_at INTEGER, reset_generation_id TEXT)`);
+  raw.exec(`CREATE TABLE runtime_checkpoints (
+    session_id TEXT NOT NULL REFERENCES conversation_sessions(session_id) ON DELETE CASCADE,
+    sequence INTEGER NOT NULL, format TEXT NOT NULL, item TEXT NOT NULL,
+    PRIMARY KEY (session_id, sequence))`);
+  raw.prepare("INSERT INTO agents VALUES (?, ?)").run("main", NOW);
+  raw
+    .prepare(
+      "INSERT INTO conversations (session_key, agent_id, name, created_at) VALUES (?, ?, ?, ?)",
+    )
+    .run(MAIN_SESSION_KEY, "main", "main", NOW);
+  const lifetime = 14 * 24 * 60 * 60 * 1000;
+  raw
+    .prepare(
+      "INSERT INTO conversation_sessions (session_id, session_key, created_at, expires_at) VALUES (?, ?, ?, ?)",
+    )
+    .run("gen-old", MAIN_SESSION_KEY, NOW, NOW + lifetime);
+  raw
+    .prepare("INSERT INTO runtime_checkpoints VALUES (?, ?, ?, ?)")
+    .run(
+      "gen-old",
+      0,
+      "openai-responses-input/1",
+      JSON.stringify({ type: "message", role: "user", content: "x" }),
+    );
+  raw.close();
+
+  const database = RuntimeDatabase.open(location);
+  const loaded = loadBrainEnvelope(database, MAIN_SESSION_KEY);
+  assert.equal(loaded.state?.checkpointFormat, "tool-loop@1:openai-responses-input/1");
+  assert.equal(loaded.state?.items.length, 1);
+  // SAFETY: the schema_version table has one integer column.
+  const version = database.prepare("SELECT version FROM schema_version").get() as {
+    version: number;
+  };
+  assert.equal(version.version, 2);
+  database.close();
+  // Reopening at the current version is a no-op, and a newer database is refused.
+  RuntimeDatabase.open(location).close();
+  const newer = new DatabaseSync(location);
+  newer.exec("UPDATE schema_version SET version = 99");
+  newer.close();
+  assert.throws(() => RuntimeDatabase.open(location), /schema version 99/u);
+  fs.rmSync(directory, { recursive: true, force: true });
+});

@@ -4,6 +4,13 @@ import { REALTIME_TOOL, type RealtimeFunctionCall } from "@sidecar/acts";
 import { BRAIN_TURN_AUTHORITY, type BrainTurnAuthority } from "@sidecar/hosted";
 import type { ScheduledTimer } from "@sidecar/realtime";
 import {
+  MODEL_FAILURE,
+  MODEL_RESPONSE_OUTCOME,
+  type ModelAdapter,
+  type ModelRequestOptions,
+  type ModelResponse,
+} from "@sidecar/runtime-contracts";
+import {
   normalizeSession,
   type ProviderSessionObservation,
   type ProviderTranscriptResult,
@@ -22,12 +29,7 @@ import {
   wireRecord,
 } from "@sidecar/wire";
 import { BrainAgent, type BrainAgentOptions } from "./agent.js";
-import {
-  BRAIN_CLIENT_OUTCOME,
-  type BrainClient,
-  type BrainClientAnswer,
-  type BrainRespondOptions,
-} from "./client.js";
+import { ResponsesContextEngine } from "./context-engine.js";
 import { BrainGenerationClock } from "./generation-clock.js";
 import { BRAIN_INPUT_MARKER } from "./input-items.js";
 import { UNKNOWN_ACT_RESULT } from "./journal.js";
@@ -42,7 +44,13 @@ import {
   type BrainSubmissionResult,
   isTerminalBrainRequestStatus,
 } from "./requests.js";
-import { RESPONSES_ITEM_TYPE, type ResponsesInputItem } from "./responses-api.js";
+import {
+  RESPONSES_ITEM_FORMAT,
+  RESPONSES_ITEM_TYPE,
+  type ResponsesInputItem,
+  responsesModelAnswer,
+} from "./responses-api.js";
+import { TOOL_LOOP_RUNTIME_IDENTITY, ToolLoopAgentRuntime } from "./runtime.js";
 import {
   type BrainPersistedState,
   type BrainStateStorage,
@@ -50,7 +58,7 @@ import {
   brainStateFromStored,
   freshBrainState,
 } from "./state-store.js";
-import { BRAIN_TOOL } from "./tools.js";
+import { BRAIN_TOOL, isBrainOnlyTool } from "./tools.js";
 import type { BrainTurnTraceRecord } from "./trace.js";
 import { OMISSION_MARKER } from "./transcript-reads.js";
 import { BRAIN_TURN_TRIGGER } from "./turn.js";
@@ -108,11 +116,87 @@ function compaction(id: string): WireRecord {
   return { type: RESPONSES_ITEM_TYPE.COMPACTION, id, encrypted_content: "folded" };
 }
 
+/**
+ * The transport a test stands in for: what the old brain client answered,
+ * now in the model adapter's normalized shape. Tests compose the same raw
+ * Responses payloads and the normalizer reads them exactly as the adapters do.
+ */
+type BrainClientAnswer = ModelResponse;
+type BrainRespondOptions = ModelRequestOptions;
+
+interface BrainClient {
+  readonly model?: string;
+  respond(
+    input: readonly ResponsesInputItem[],
+    options: BrainRespondOptions,
+  ): Promise<BrainClientAnswer>;
+  quietUntil(): number | undefined;
+}
+
 function answered(output: readonly WireRecord[], inputTokens = 100): BrainClientAnswer {
+  const answer = responsesModelAnswer({ output, usage: { input_tokens: inputTokens } });
+  assert.ok(answer);
+  return answer;
+}
+
+function quietAnswer(until: number): BrainClientAnswer {
+  return { outcome: MODEL_RESPONSE_OUTCOME.THROTTLED, until };
+}
+
+function failedAnswer(reason: string): BrainClientAnswer {
+  return { outcome: MODEL_RESPONSE_OUTCOME.FAILED, failure: MODEL_FAILURE.UPSTREAM, reason };
+}
+
+/** The authority a request was made under, read off the toolset it was offered, as the adapters see it. */
+function authorityOf(options: BrainRespondOptions): BrainTurnAuthority {
+  return options.tools.some((tool) => !isBrainOnlyTool(tool.name))
+    ? BRAIN_TURN_AUTHORITY.DEVELOPER
+    : BRAIN_TURN_AUTHORITY.OBSERVATION;
+}
+
+const CHECKPOINT = {
+  runtime: TOOL_LOOP_RUNTIME_IDENTITY.id,
+  runtimeVersion: TOOL_LOOP_RUNTIME_IDENTITY.version,
+  format: RESPONSES_ITEM_FORMAT.FORMAT,
+  formatVersion: RESPONSES_ITEM_FORMAT.VERSION,
+} as const;
+
+/** A test's client as the full model adapter the runtime takes. */
+function adapterOf(client: BrainClient): ModelAdapter {
   return {
-    outcome: BRAIN_CLIENT_OUTCOME.ANSWERED,
-    payload: { output, usage: { input_tokens: inputTokens } },
+    ...(client.model ? { model: client.model } : undefined),
+    capabilities: async () => ({
+      outcome: MODEL_RESPONSE_OUTCOME.ANSWERED,
+      capabilities: {
+        adapter: "fake",
+        ...(client.model ? { model: client.model } : undefined),
+        checkpoint: CHECKPOINT,
+        countsInputTokens: false,
+        compacts: false,
+        maximumOutputTokens: 16_000,
+      },
+    }),
+    respond: (input, options) => client.respond(input, options),
+    countInputTokens: async () => ({
+      outcome: MODEL_RESPONSE_OUTCOME.FAILED,
+      failure: MODEL_FAILURE.UPSTREAM,
+      reason: "not counted",
+    }),
+    compact: async () => ({
+      outcome: MODEL_RESPONSE_OUTCOME.FAILED,
+      failure: MODEL_FAILURE.UPSTREAM,
+      reason: "not compacted",
+    }),
+    quietUntil: () => client.quietUntil(),
   };
+}
+
+function runtimeOver(model: ModelAdapter): ToolLoopAgentRuntime {
+  return new ToolLoopAgentRuntime({
+    model,
+    itemFormat: { format: RESPONSES_ITEM_FORMAT.FORMAT, version: RESPONSES_ITEM_FORMAT.VERSION },
+    createContext: () => new ResponsesContextEngine(TOOL_LOOP_RUNTIME_IDENTITY),
+  });
 }
 
 class FakeClient implements BrainClient {
@@ -125,7 +209,7 @@ class FakeClient implements BrainClient {
 
   respond(input: readonly ResponsesInputItem[], options: BrainRespondOptions) {
     this.inputs.push([...input]);
-    this.authorities.push(options.authority);
+    this.authorities.push(authorityOf(options));
     return Promise.resolve(this.answers.shift() ?? this.fallback);
   }
 
@@ -211,8 +295,14 @@ interface Harness {
 
 let runIds = 0;
 
-function harness(overrides: Partial<BrainAgentOptions> = {}, storage = new FakeStorage()): Harness {
+type HarnessOverrides = Partial<Omit<BrainAgentOptions, "runtime" | "model">> & {
+  client?: BrainClient;
+};
+
+function harness(overrides: HarnessOverrides = {}, storage = new FakeStorage()): Harness {
   const client = new FakeClient();
+  const { client: clientOverride, ...agentOverrides } = overrides;
+  const model = adapterOf(clientOverride ?? client);
   const clock = new FakeClock();
   const deliveries: BrainDelivery[] = [];
   const persisted: BrainPersistedState[] = [];
@@ -235,7 +325,8 @@ function harness(overrides: Partial<BrainAgentOptions> = {}, storage = new FakeS
   const sinceReads: Harness["sinceReads"] = [];
   const wholeReads: SessionIdentity[] = [];
   const agent = new BrainAgent({
-    client,
+    runtime: runtimeOver(model),
+    model,
     acts: {
       perform: async (functionCall, execution) => {
         performed.push(functionCall);
@@ -271,7 +362,7 @@ function harness(overrides: Partial<BrainAgentOptions> = {}, storage = new FakeS
     schedule: clock.schedule,
     cancel: clock.cancel,
     wakeCoalesceMs: 3_000,
-    ...overrides,
+    ...agentOverrides,
   });
   return {
     agent,
@@ -530,22 +621,25 @@ test("a wait that runs out answers the run still pending, and the same run finis
   );
 });
 
-test("the tool loop stops at its cap with every call answered, so no function_call dangles", async () => {
-  const h = harness({ maxToolIterations: 2 });
-  h.client.fallback = answered([call("loop", BRAIN_TOOL.LIST_SESSIONS, {})]);
+test("the tool loop has no iteration cap: it runs until the model answers without calls, every call paired", async () => {
+  const h = harness();
+  const rounds = 12;
+  for (let index = 0; index < rounds; index += 1) {
+    h.client.answers.push(answered([call(`loop-${index}`, BRAIN_TOOL.LIST_SESSIONS, {})]));
+  }
+  h.client.answers.push(answered([message("")]));
   h.agent.wake([edge(ABC)]);
   await h.clock.advance(NOW + 3_000);
 
-  assert.equal(h.client.inputs.length, 3);
+  assert.equal(h.client.inputs.length, rounds + 1);
   const remembered = h.persisted[0]?.items ?? [];
   const calls = itemsOfType(remembered, RESPONSES_ITEM_TYPE.FUNCTION_CALL);
   const outputs = itemsOfType(remembered, RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT);
-  assert.equal(calls.length, 3);
-  assert.equal(outputs.length, 3);
-  const last = outputs[2];
-  assert.ok(last && isWireString(last.output) && last.output.includes("tool budget"));
-  assert.equal(h.traces[0]?.iterations, 3);
-  assert.equal(h.traces[0]?.error, "tool iteration budget spent");
+  assert.equal(calls.length, rounds);
+  assert.equal(outputs.length, rounds);
+  assert.equal(h.traces[0]?.iterations, rounds);
+  assert.equal(h.traces[0]?.error, undefined);
+  assert.equal(h.traces[0]?.runtime, TOOL_LOOP_RUNTIME_IDENTITY.id);
 });
 
 test("a compaction item drops everything before it from the remembered array", async () => {
@@ -569,7 +663,7 @@ test("a compaction item drops everything before it from the remembered array", a
 
 test("a failed turn rolls the memory and cursors back and persists nothing", async () => {
   const h = harness();
-  h.client.answers.push({ outcome: BRAIN_CLIENT_OUTCOME.FAILED, reason: "boom" });
+  h.client.answers.push(failedAnswer("boom"));
   h.agent.wake([edge(ABC)]);
   await h.clock.advance(NOW + 3_000);
   assert.equal(h.persisted.length, 0);
@@ -587,10 +681,10 @@ test("a failed turn rolls the memory and cursors back and persists nothing", asy
 
 test("a call that fails mid-loop rolls back the whole turn, calls and all", async () => {
   const h = harness();
-  h.client.answers.push(answered([call("call_1", BRAIN_TOOL.LIST_SESSIONS, {})]), {
-    outcome: BRAIN_CLIENT_OUTCOME.FAILED,
-    reason: "network",
-  });
+  h.client.answers.push(
+    answered([call("call_1", BRAIN_TOOL.LIST_SESSIONS, {})]),
+    failedAnswer("network"),
+  );
   h.agent.wake([edge(ABC)]);
   await h.clock.advance(NOW + 3_000);
   assert.equal(h.persisted.length, 0);
@@ -601,7 +695,7 @@ test("a call that fails mid-loop rolls back the whole turn, calls and all", asyn
 
 test("a quiet client keeps the wakes pending and retries once the quiet ends", async () => {
   const h = harness();
-  h.client.answers.push({ outcome: BRAIN_CLIENT_OUTCOME.QUIET, until: NOW + 60_000 });
+  h.client.answers.push(quietAnswer(NOW + 60_000));
   h.agent.wake([edge(ABC), edge(DEF)]);
   await h.clock.advance(NOW + 3_000);
   assert.equal(h.client.inputs.length, 1);
@@ -1117,10 +1211,7 @@ test("a cancel between two acts keeps the first's result and refuses the second,
 
 test("an act that succeeded survives the follow-up model failing, in the record and in memory", async () => {
   const h = harness();
-  h.client.answers.push(answered([messageAct("call_1")]), {
-    outcome: BRAIN_CLIENT_OUTCOME.FAILED,
-    reason: "network",
-  });
+  h.client.answers.push(answered([messageAct("call_1")]), failedAnswer("network"));
   const record = await ask(h, "send it");
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.MODEL);
@@ -1390,7 +1481,7 @@ test("a reset while the model is thinking cannot roll old memory into the new ge
   let release: ((answer: BrainClientAnswer) => void) | undefined;
   inner.respond = (input, options) => {
     inner.inputs.push([...input]);
-    inner.authorities.push(options.authority);
+    inner.authorities.push(authorityOf(options));
     return new Promise((resolve) => {
       release = resolve;
     });
@@ -1603,10 +1694,7 @@ test("a performer that throws after dispatch leaves an unknown act, kept through
       perform: () => Promise.reject(new Error("socket closed after send")),
     },
   });
-  h.client.answers.push(answered([messageAct("call_1")]), {
-    outcome: BRAIN_CLIENT_OUTCOME.FAILED,
-    reason: "network",
-  });
+  h.client.answers.push(answered([messageAct("call_1")]), failedAnswer("network"));
   const record = await ask(h, "send it");
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.MODEL);
@@ -1651,34 +1739,18 @@ test("an interrupted run's started acts are counted unknown at the next launch",
   assert.equal(record?.performedActs, 0);
 });
 
-test("an incomplete reply, a spent tool budget, and a failed final checkpoint are not reported as success", async () => {
-  const h = harness({ maxToolIterations: 1 });
-  h.client.answers.push({
-    outcome: BRAIN_CLIENT_OUTCOME.ANSWERED,
-    payload: {
-      output: [],
-      status: "incomplete",
-      incomplete_details: { reason: "max_output_tokens" },
-    },
+test("an incomplete reply and a failed final checkpoint are not reported as success", async () => {
+  const h = harness();
+  const incompleteAnswer = responsesModelAnswer({
+    output: [],
+    status: "incomplete",
+    incomplete_details: { reason: "max_output_tokens" },
   });
+  assert.ok(incompleteAnswer);
+  h.client.answers.push(incompleteAnswer);
   const incomplete = await ask(h, "explain");
   assert.equal(incomplete?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(incomplete?.failure, BRAIN_REQUEST_FAILURE.INCOMPLETE);
-
-  h.client.answers.push(
-    answered([messageAct("call_1")]),
-    answered([messageAct("call_2", "again")]),
-  );
-  const spent = await ask(h, "send twice");
-  assert.equal(spent?.status, BRAIN_REQUEST_STATUS.FAILED);
-  assert.equal(spent?.failure, BRAIN_REQUEST_FAILURE.INCOMPLETE);
-  assert.equal(spent?.performedActs, 1);
-  // Every call is still paired in the stored memory.
-  const items = h.storage.stored()?.items ?? [];
-  assert.equal(
-    itemsOfType(items, RESPONSES_ITEM_TYPE.FUNCTION_CALL).length,
-    functionOutputs(items).length,
-  );
 
   // Only the final checkpoint fails: the reply travels, but not as a success.
   const late = harness();
@@ -1816,8 +1888,10 @@ test("stop settles only after a held acceptance, which the successor then finds 
 
   // The successor takes the store's lease: the old agent's late checkpoint
   // — here, a mark — lands nowhere, while the successor's own writes do.
+  const successorModel = adapterOf(new FakeClient());
   const successor = new BrainAgent({
-    client: new FakeClient(),
+    runtime: runtimeOver(successorModel),
+    model: successorModel,
     acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
     roster: () => ({ text: "", identities: [] }),
     standingContext: () => "",
@@ -2352,7 +2426,7 @@ test("an observation in flight is not made durable by an unrelated mark or accep
   assert.deepEqual(crashed.storage.stored()?.cursors, before?.cursors);
   // The observation fails: durable memory and cursors never advanced, and the
   // same delta is read again on the next wake.
-  inner.answers.unshift({ outcome: BRAIN_CLIENT_OUTCOME.FAILED, reason: "network" });
+  inner.answers.unshift(failedAnswer("network"));
   regate.open();
   await settle();
   const after = brainStateFromStored(observing.storage.file);
@@ -2508,7 +2582,7 @@ test("a generation dies exactly one lifetime after its birth, on the host's cloc
   let release: ((answer: BrainClientAnswer) => void) | undefined;
   inner.respond = (input, options) => {
     inner.inputs.push([...input]);
-    inner.authorities.push(options.authority);
+    inner.authorities.push(authorityOf(options));
     return new Promise((resolve) => {
       release = resolve;
     });
@@ -2794,7 +2868,7 @@ test("an ask during a client quiet ends as an honest failure with no effects, an
   const h = harness();
   await h.agent.ready();
   h.client.quiet = NOW + 60_000;
-  h.client.answers.push({ outcome: BRAIN_CLIENT_OUTCOME.QUIET, until: NOW + 60_000 });
+  h.client.answers.push(quietAnswer(NOW + 60_000));
   const first = await submit(h, "hello", "sub-quiet");
   const runId = acceptedRunId(first);
   await settle();

@@ -6,8 +6,16 @@ import {
   BRAIN_SUBMISSION_OUTCOME,
   BrainAgent,
   BrainStateStore,
+  hostedBrainToolCatalog,
+  responsesToolLoopRuntime,
 } from "@sidecar/brain";
-import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
+import {
+  HOSTED_BRAIN_CONTRACT_VERSION,
+  HOSTED_BRAIN_OPERATION,
+  HOSTED_SERVICE_PATH,
+  hostedBrainBounds,
+} from "@sidecar/hosted";
+import { REASONING_EFFORT } from "@sidecar/runtime-contracts";
 import { APP_SETTING_SCHEMA, VOICE_SOURCE, type VoiceSource } from "@sidecar/settings";
 import { VoiceCapabilityAssembler, type VoiceSettings } from "@sidecar/voice";
 import { BrainHost } from "../brain/host";
@@ -90,9 +98,21 @@ function composition() {
     refreshAccount: async () => undefined,
     fetch: async (input) => {
       const url = String(input);
-      if (url.endsWith(HOSTED_SERVICE_PATH.BRAIN_RESPOND)) {
+      // The hosted adapter speaks the second contract: it reads the
+      // capabilities and then posts each turn, which this fake holds.
+      if (url.endsWith(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES)) {
+        return Response.json({
+          contract: HOSTED_BRAIN_CONTRACT_VERSION,
+          model: "gpt-hosted",
+          operations: Object.values(HOSTED_BRAIN_OPERATION),
+          tools: [...hostedBrainToolCatalog().keys()],
+          bounds: hostedBrainBounds(),
+          reasoningEfforts: Object.values(REASONING_EFFORT),
+        });
+      }
+      if (url.endsWith(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2)) {
         await new Promise<void>((resolve) => heldTurns.push(resolve));
-        return Response.json({ output: [] });
+        return Response.json({ status: "completed", output: [] });
       }
       warms.push(url);
       return new Response(null, { status: 204 });
@@ -121,11 +141,12 @@ function composition() {
   let runs = 0;
   const rebuild = () =>
     host.replace(() => {
-      const client = assembler.brainClient;
-      if (!client) return undefined;
-      builds.push(client.model ?? "hosted");
+      const model = assembler.brainModel;
+      if (!model) return undefined;
+      builds.push(model.model ?? "hosted");
       return new BrainAgent({
-        client,
+        runtime: responsesToolLoopRuntime(model),
+        model,
         acts: { perform: async () => ({ status: "accepted" }) },
         roster: () => ({ text: "none", identities: [] }),
         standingContext: () => "",
@@ -171,13 +192,15 @@ function composition() {
 
 function assertHostedSet(c: ReturnType<typeof composition>) {
   assert.equal(c.assembler.voiceSource, VOICE_SOURCE.ACCOUNT);
-  assert.ok(c.assembler.brainClient);
-  assert.equal(c.assembler.brainClient.model, undefined);
+  assert.ok(c.assembler.brainModel);
+  // The hosted adapter knows no model until the service names one on its
+  // first turn; the developer's own key is never what it runs on.
+  assert.ok([undefined, "gpt-hosted"].includes(c.assembler.brainModel.model));
   assert.ok(c.assembler.realtimeCredentials);
 }
 
 function assertAbsentSet(c: ReturnType<typeof composition>) {
-  assert.equal(c.assembler.brainClient, undefined);
+  assert.equal(c.assembler.brainModel, undefined);
   assert.equal(c.assembler.realtimeCredentials, undefined);
   assert.equal(c.host.current(), undefined);
 }

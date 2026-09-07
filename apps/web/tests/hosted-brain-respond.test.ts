@@ -15,11 +15,12 @@ import {
   brainInstructions,
   brainToolDefinitions,
   HOSTED_SERVICE_PATH,
-  HostedBrainClient,
+  HostedModelAdapter,
   isRecord,
   maximumHostedBrainRequestBytes,
   normalizeSession,
   REALTIME_TOOL,
+  responsesToolLoopRuntime,
   SESSION_STATUS,
   type SessionIdentity,
   type SessionProvider,
@@ -27,6 +28,7 @@ import {
   type WireRecord,
 } from "../server/core";
 import { HOSTED_BRAIN_DEFAULTS, handleBrainRespond } from "../server/hosted/brain-respond";
+import { handleBrainCapabilities, handleBrainRespondV2 } from "../server/hosted/brain-v2";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import type { HostedSpend } from "../server/hosted/quota";
 
@@ -431,9 +433,18 @@ function desktopOnHostedService(
   assert.ok(session);
   const { fetch: upstreamFetch, calls: upstreamCalls } = upstream(answers);
   let spent = 0;
+  // The desktop speaks the second contract: it reads the capabilities first
+  // and then posts inferences to the v2 endpoint; the first contract's
+  // endpoint stays for installed clients and is not what this desktop calls.
   const service = async (url: string, init: RequestInit): Promise<Response> => {
-    assert.equal(url, `https://luke.test${HOSTED_SERVICE_PATH.BRAIN_RESPOND}`);
-    return handleBrainRespond({
+    const handler =
+      url === `https://luke.test${HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES}`
+        ? handleBrainCapabilities
+        : url === `https://luke.test${HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2}`
+          ? handleBrainRespondV2
+          : undefined;
+    assert.ok(handler, `the desktop called ${url}`);
+    return handler({
       request: new Request(url, init),
       apiKey: API_KEY,
       resolveUserId: async (request) =>
@@ -445,7 +456,7 @@ function desktopOnHostedService(
       fetch: upstreamFetch,
     });
   };
-  const client = new HostedBrainClient({
+  const model = new HostedModelAdapter({
     serviceBaseUrl: "https://luke.test",
     readAccessToken: async () => "account-token",
     refreshAccount: async () => undefined,
@@ -465,7 +476,8 @@ function desktopOnHostedService(
   const performed: Desktop["performed"] = [];
   let runs = 0;
   const agent = new BrainAgent({
-    client,
+    runtime: responsesToolLoopRuntime(model),
+    model,
     acts: {
       perform: async (functionCall) => {
         performed.push(functionCall);
@@ -534,7 +546,9 @@ test("the desktop runs the tool loop and the act while the service runs only inf
   assert.equal(desktop.upstreamCalls.length, 2);
   for (const index of [0, 1]) {
     const sent = sentBody(desktop.upstreamCalls, index);
+    // The desktop named the tools; the service selected its own schemas for them.
     assert.deepEqual(sent.tools, brainToolDefinitions(DEVELOPER));
+    assert.equal(sent.instructions, brainInstructions());
     assert.equal(sent.store, false);
   }
   const second = inputItems(desktop.upstreamCalls, 1);

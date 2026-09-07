@@ -93,8 +93,8 @@ export function generationFrom(
         bootstrap.reason ??
         `checkpoint ${checkpoint ? checkpointFormatTag(checkpoint.format) : "(none)"} could not be loaded`;
     })
-    .catch((error: unknown) => {
-      generation.incompatible = `the runtime could not open the context: ${error instanceof Error ? error.name : "unknown error"}`;
+    .catch((error: Error) => {
+      generation.incompatible = `the runtime could not open the context: ${error.name}`;
     });
   return generation;
 }

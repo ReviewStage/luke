@@ -26,6 +26,9 @@ import {
   BRAIN_RESPONSES_COMPACT_PATH,
   BRAIN_RESPONSES_INPUT_TOKENS_PATH,
   BRAIN_RESPONSES_PATH,
+  type BrainCompactRequest,
+  type BrainInputTokensRequest,
+  type BrainResponsesRequest,
   brainCompactRequest,
   brainInputTokensRequest,
   brainResponsesRequest,
@@ -200,7 +203,7 @@ export class OpenAiModelAdapter implements ModelAdapter {
   /** One POST on the key; a response is the caller's to read, anything else is already a normalized end. */
   async #post(
     path: string,
-    body: object,
+    body: BrainResponsesRequest | BrainCompactRequest | BrainInputTokensRequest,
     signal: AbortSignal | undefined,
   ): Promise<Response | ReturnType<typeof failed> | ReturnType<typeof throttled>> {
     let response: Response;
@@ -215,7 +218,7 @@ export class OpenAiModelAdapter implements ModelAdapter {
         signal: requestSignal(this.#requestTimeoutMs, signal),
       });
     } catch (error) {
-      return requestFault(error);
+      return requestFault(error instanceof Error ? error : undefined);
     }
     if (response.status === RATE_LIMIT_STATUS) return this.#quiet(response);
     // Status alone diagnoses credentials or an outage without writing the

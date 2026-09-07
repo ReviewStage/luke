@@ -24,7 +24,6 @@
 import "../../../packages/credentials/src/credential-providers.js";
 import "../../../packages/guide/src/index.js";
 import "../../../packages/issues/src/index.js";
-import "../../../packages/runtime-contracts/src/index.js";
 
 export * from "../../../packages/acts/src/index.js";
 export * from "../../../packages/analytics/src/index.js";
@@ -35,5 +34,6 @@ export * from "../../../packages/hosted/src/index.js";
 // carries the call id the wire hands back, and is the one server code reads.
 export type { RealtimeFunctionCall } from "../../../packages/realtime/src/index.js";
 export * from "../../../packages/realtime/src/index.js";
+export * from "../../../packages/runtime-contracts/src/index.js";
 export * from "../../../packages/session/src/index.js";
 export * from "../../../packages/wire/src/index.js";

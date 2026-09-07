@@ -200,7 +200,17 @@ and email you signed it with, and any screenshots you attached.
   call per request and stores and logs none of the request, the reply, or the
   encrypted compaction that travels in it; the compaction OpenAI hands back is
   kept only on your Mac, under the lifetime above. Each call counts against
-  your daily review allowance. On the Mac app, your conversation and Luke's durable memory are kept on your
+  your daily review allowance. When Luke runs through your account, the Mac
+  app also sends our service the standing instructions it prepared for the
+  call and the names of the tools it means to offer; the service holds the
+  tools' own definitions and chooses the model, and a request naming a tool
+  it does not know, or carrying instructions longer than its fixed bound, is
+  refused rather than trimmed. The same allowance meters a request to count
+  a call's tokens or to fold Luke's working memory, and the folded memory
+  OpenAI answers with is kept only on your Mac. Luke's working memory is
+  stamped with the version of Luke that wrote it; a newer or older Luke that
+  cannot read that stamp leaves the memory untouched and declines to think
+  over it until you clear it, rather than rewriting or discarding it. On the Mac app, your conversation and Luke's durable memory are kept on your
   Mac and sent with a call so the conversation carries across calls and across
   launches; on iOS and Apple Watch, a call also carries the list of projects
   your synced keys can create a workspace in, while the conversation itself is

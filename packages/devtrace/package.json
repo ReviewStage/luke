@@ -16,6 +16,7 @@
   "dependencies": {
     "@sidecar/brain": "workspace:*",
     "@sidecar/realtime": "workspace:*",
+    "@sidecar/runtime-contracts": "workspace:*",
     "@sidecar/wire": "workspace:*"
   },
   "devDependencies": {

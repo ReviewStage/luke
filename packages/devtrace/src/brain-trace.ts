@@ -1,57 +1,53 @@
 import {
-  BRAIN_CLIENT_OUTCOME,
-  type BrainClient,
-  type BrainClientAnswer,
-  type BrainRespondOptions,
-  type ResponsesInputItem,
-} from "@sidecar/brain";
-import { isRecord, text, type UnparsedWireValue, wholeNumber } from "@sidecar/wire";
+  MODEL_RESPONSE_OUTCOME,
+  type ModelAdapter,
+  type ModelRequestOptions,
+  type ModelResponse,
+} from "@sidecar/runtime-contracts";
+import { text, type WireRecord } from "@sidecar/wire";
 import type { BrainRequestTraceRecord } from "./trace-writer.js";
 
-interface AnsweredPayloadSummary {
+interface AnsweredSummary {
   outputItemKinds: readonly string[];
   inputTokens?: number;
   outputTokens?: number;
 }
 
 /**
- * What the trace keeps of an answered payload: the kinds of items that came
- * back and the usage the API reported, each read defensively because the
- * payload is what a service actually sent. The items' contents stay in the
- * payload; the trace never reads inside them.
+ * What the trace keeps of an answered inference: the kinds of items that came
+ * back and the usage the adapter reported. The items' contents stay in the
+ * answer; the trace never reads inside them.
  */
-function answeredPayloadSummary(payload: UnparsedWireValue): AnsweredPayloadSummary {
-  const record = isRecord(payload) ? payload : undefined;
-  const outputItemKinds = Array.isArray(record?.output)
-    ? record.output
-        .filter(isRecord)
-        .map((item) => text(item.type))
-        .filter((kind): kind is string => kind !== undefined)
-    : [];
-  const usage = isRecord(record?.usage) ? record.usage : undefined;
-  const inputTokens = wholeNumber(usage?.input_tokens);
-  const outputTokens = wholeNumber(usage?.output_tokens);
+function answeredSummary(answer: Extract<ModelResponse, { outcome: "answered" }>): AnsweredSummary {
+  const outputItemKinds = answer.items
+    .map((item) => text(item.type))
+    .filter((kind): kind is string => kind !== undefined);
   return {
     outputItemKinds,
-    ...(inputTokens !== undefined ? { inputTokens } : undefined),
-    ...(outputTokens !== undefined ? { outputTokens } : undefined),
+    ...(answer.usage?.inputTokens !== undefined
+      ? { inputTokens: answer.usage.inputTokens }
+      : undefined),
+    ...(answer.usage?.outputTokens !== undefined
+      ? { outputTokens: answer.usage.outputTokens }
+      : undefined),
   };
 }
 
 /**
- * Wraps a brain client so a traced run records what every request sent and
- * got back, keyed and hosted alike, without either client learning it is
- * being watched. The tap observes and never steers: the answer returns
- * exactly as the wrapped client produced it, a thrown request still throws,
- * and a recorder that itself fails is swallowed here, because an instrument
- * reading the client must not be able to break it. The input reaches the
- * record as its item count and JSON size alone.
+ * Wraps a model adapter so a traced run records what every inference sent and
+ * got back, keyed and hosted alike, without the adapter learning it is being
+ * watched. The tap observes and never steers: the answer returns exactly as
+ * the wrapped adapter produced it, a thrown request still throws, and a
+ * recorder that itself fails is swallowed here, because an instrument reading
+ * the adapter must not be able to break it. The input reaches the record as
+ * its item count and JSON size alone; the other operations pass through
+ * untouched.
  */
-export function tracedBrainClient(
-  client: BrainClient,
+export function tracedModelAdapter(
+  adapter: ModelAdapter,
   record: (record: BrainRequestTraceRecord) => void,
   now: () => number = Date.now,
-): BrainClient {
+): ModelAdapter {
   const recordQuietly = (entry: BrainRequestTraceRecord): void => {
     try {
       record(entry);
@@ -60,21 +56,23 @@ export function tracedBrainClient(
     }
   };
   return {
-    respond: async (input: readonly ResponsesInputItem[], options: BrainRespondOptions) => {
+    ...(adapter.model ? { model: adapter.model } : undefined),
+    capabilities: () => adapter.capabilities(),
+    respond: async (input: readonly WireRecord[], options: ModelRequestOptions) => {
       const started = now();
-      const model = client.model;
+      const model = adapter.model;
       const about = {
         inputItems: input.length,
         inputChars: JSON.stringify(input).length,
         ...(model ? { model } : undefined),
       };
-      let answer: BrainClientAnswer;
+      let answer: ModelResponse;
       try {
-        answer = await client.respond(input, options);
+        answer = await adapter.respond(input, options);
       } catch (error) {
         recordQuietly({
           ...about,
-          outcome: BRAIN_CLIENT_OUTCOME.FAILED,
+          outcome: MODEL_RESPONSE_OUTCOME.FAILED,
           elapsedMs: now() - started,
           error: error instanceof Error ? error.message : String(error),
         });
@@ -84,14 +82,17 @@ export function tracedBrainClient(
         ...about,
         outcome: answer.outcome,
         elapsedMs: now() - started,
-        ...(answer.outcome === BRAIN_CLIENT_OUTCOME.ANSWERED
-          ? answeredPayloadSummary(answer.payload)
+        ...(answer.outcome === MODEL_RESPONSE_OUTCOME.ANSWERED
+          ? answeredSummary(answer)
           : undefined),
-        ...(answer.outcome === BRAIN_CLIENT_OUTCOME.FAILED ? { error: answer.reason } : undefined),
+        ...(answer.outcome === MODEL_RESPONSE_OUTCOME.FAILED
+          ? { error: answer.reason }
+          : undefined),
       });
       return answer;
     },
-    quietUntil: () => client.quietUntil(),
-    ...(client.model ? { model: client.model } : undefined),
+    countInputTokens: (input, options) => adapter.countInputTokens(input, options),
+    compact: (input, options) => adapter.compact(input, options),
+    quietUntil: () => adapter.quietUntil(),
   };
 }

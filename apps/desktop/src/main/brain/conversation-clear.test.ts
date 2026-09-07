@@ -2,18 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_TOOL, type RealtimeFunctionCall } from "@sidecar/acts";
 import {
+  type BareResponsesModel,
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
   type BrainActExecution,
   type BrainActPerformer,
   BrainAgent,
-  type BrainClient,
-  type BrainClientAnswer,
   type BrainStateStorage,
   BrainStateStore,
+  bareModelAdapter,
   brainStateFromStored,
   brainStateRecord,
   freshBrainState,
+  responsesModelAnswer,
+  responsesToolLoopRuntime,
 } from "@sidecar/brain";
 import {
   appendConversationThreadEntry,
@@ -25,6 +27,7 @@ import {
   retainedConversationEntries,
   storedConversationEntry,
 } from "@sidecar/realtime";
+import type { ModelResponse } from "@sidecar/runtime-contracts";
 import { ACT_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import { SPEECH_OUTCOME } from "#shared/wire/speech";
 import { SpeechArbiter } from "../voice/speech-arbiter";
@@ -61,11 +64,11 @@ class MemoryStorage implements BrainStateStorage {
   }
 }
 
-function heldClient(): BrainClient & {
-  release: (answer: BrainClientAnswer) => void;
+function heldClient(): BareResponsesModel & {
+  release: (answer: ModelResponse) => void;
   inputs: string[];
 } {
-  const waiting: ((answer: BrainClientAnswer) => void)[] = [];
+  const waiting: ((answer: ModelResponse) => void)[] = [];
   const inputs: string[] = [];
   return {
     inputs,
@@ -104,16 +107,20 @@ function heldPerformer(): BrainActPerformer & { release: () => void; effects: nu
   return performer;
 }
 
-function reply(text: string, ...before: WireRecord[]): BrainClientAnswer {
-  return {
-    outcome: "answered",
-    payload: {
-      output: [
-        ...before,
-        { type: "message", role: "assistant", content: [{ type: "output_text", text }] },
-      ],
-    },
-  };
+/** A raw Responses payload as the adapter would normalize it. */
+function answerOf(payload: WireRecord): ModelResponse {
+  const answer = responsesModelAnswer(payload);
+  assert.ok(answer);
+  return answer;
+}
+
+function reply(text: string, ...before: WireRecord[]): ModelResponse {
+  return answerOf({
+    output: [
+      ...before,
+      { type: "message", role: "assistant", content: [{ type: "output_text", text }] },
+    ],
+  });
 }
 
 function act(callId: string): WireRecord {
@@ -202,9 +209,11 @@ function composed(brainDisk = new MemoryStorage()) {
       }),
     publishEmpty: () => broadcasts.push([]),
   });
-  const build = (client: BrainClient, acts?: BrainActPerformer) =>
-    new BrainAgent({
-      client,
+  const build = (client: BareResponsesModel, acts?: BrainActPerformer) => {
+    const model = bareModelAdapter(client);
+    return new BrainAgent({
+      runtime: responsesToolLoopRuntime(model),
+      model,
       acts: acts ?? { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
       roster: () => ({
         text: "- abc",
@@ -223,6 +232,7 @@ function composed(brainDisk = new MemoryStorage()) {
       report: () => {},
       now: () => clock,
     });
+  };
   const clear = () =>
     clearConversationAndBrain({
       store,

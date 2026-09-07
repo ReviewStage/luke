@@ -43,7 +43,11 @@ export {
   type LoopGuardVerdict,
 } from "./loop-guard.js";
 export { pairedDanglingCalls } from "./memory.js";
-export { BRAIN_RATE_LIMIT_COOLDOWN_MS } from "./model-adapter-shared.js";
+export {
+  type BareResponsesModel,
+  BRAIN_RATE_LIMIT_COOLDOWN_MS,
+  bareModelAdapter,
+} from "./model-adapter-shared.js";
 export {
   BRAIN_OPENAI_DEFAULTS,
   OPENAI_MODEL_ADAPTER_ID,
@@ -102,6 +106,7 @@ export {
   toolSchemaFromDefinition,
   userMessageItem,
 } from "./responses-api.js";
+export { responsesToolLoopRuntime } from "./responses-runtime.js";
 export {
   TOOL_LOOP_RUNTIME,
   TOOL_LOOP_RUNTIME_IDENTITY,

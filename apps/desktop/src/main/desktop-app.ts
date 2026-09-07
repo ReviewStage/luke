@@ -32,7 +32,7 @@ import {
   nextMeetingBoundary,
 } from "@sidecar/calendar";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
-import { AgentTraceWriter, tracedBrainClient } from "@sidecar/devtrace";
+import { AgentTraceWriter, tracedModelAdapter } from "@sidecar/devtrace";
 import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
 import { fixtureSnapshot } from "@sidecar/fixtures";
 import { type AppGuideSnapshot, appGuideContextText, EMPTY_APP_GUIDE } from "@sidecar/guide";
@@ -561,8 +561,8 @@ const voiceCapabilities = new VoiceCapabilityAssembler({
   refreshAccount: accountSession.refreshOnce,
   ...(agentTrace
     ? {
-        wrapBrainClient: (client) =>
-          tracedBrainClient(client, (record) => agentTrace.recordBrainRequest(record)),
+        wrapBrainModel: (model) =>
+          tracedModelAdapter(model, (record) => agentTrace.recordBrainRequest(record)),
       }
     : undefined),
 });
@@ -1657,7 +1657,7 @@ const brainWiring = wireBrain({
   adapterFor,
   session: (identity) => sessionRegistry.get(identity),
   deliver: deliverBriefing,
-  client: () => voiceCapabilities.brainClient,
+  model: () => voiceCapabilities.brainModel,
   runnable: () => runMode.observesProviders && runMode.sendsNetwork && accountCapabilitiesActive(),
   dropBriefings: () => speechArbiter.dropBriefings(),
 });

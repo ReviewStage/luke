@@ -1,0 +1,660 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { REALTIME_TOOL } from "@sidecar/acts";
+import {
+  HOSTED_BRAIN_CONTRACT_VERSION,
+  HOSTED_BRAIN_OPERATION,
+  HOSTED_SERVICE_PATH,
+  hostedBrainBounds,
+} from "@sidecar/hosted";
+import type { ScheduledTimer } from "@sidecar/realtime";
+import {
+  type AgentRuntime,
+  type CheckpointFormat,
+  CONTEXT_INPUT_KIND,
+  type ContextEngine,
+  type ContextOpening,
+  type ModelAdapter,
+  REASONING_EFFORT,
+  RUN_END_REASON,
+  RUNTIME_EVENT,
+  type RuntimeCheckpoint,
+  type RuntimeRun,
+  type RuntimeRunRequest,
+  type ToolExecutionContext,
+} from "@sidecar/runtime-contracts";
+import { normalizeSession, SESSION_STATUS, type SessionProvider } from "@sidecar/session";
+import {
+  ACT_RESULT_STATUS,
+  isRecord,
+  isWireString,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@sidecar/wire";
+import { BrainAgent } from "./agent.js";
+import { HostedModelAdapter } from "./hosted-model-adapter.js";
+import { OpenAiModelAdapter } from "./openai-model-adapter.js";
+import {
+  BRAIN_REQUEST_FAILURE,
+  BRAIN_REQUEST_ORIGIN,
+  BRAIN_REQUEST_STATUS,
+  BRAIN_SUBMISSION_OUTCOME,
+  BRAIN_SUBMISSION_REJECTION,
+  type BrainRequestRecord,
+} from "./requests.js";
+import { RESPONSES_ITEM_TYPE } from "./responses-api.js";
+import { responsesToolLoopRuntime } from "./responses-runtime.js";
+import {
+  type BrainPersistedState,
+  type BrainStateStorage,
+  BrainStateStore,
+  brainStateFromStored,
+} from "./state-store.js";
+import { hostedBrainToolCatalog } from "./tools.js";
+import { BRAIN_WAKE_KIND } from "./wake-events.js";
+
+/**
+ * The same execution contract, run through the real host against each
+ * transport this build ships — the keyed adapter over a fake OpenAI, and the
+ * hosted adapter over a fake service speaking the second contract — and
+ * then through a second runtime that shares nothing with OpenAI Responses,
+ * to prove the host has no Responses-specific dependency: it stores whatever
+ * stamp the runtime writes, refuses to run a compatible-looking host over a
+ * foreign stamp, and keeps the memory whole while it refuses.
+ */
+
+const NOW = 1_800_000_000_000;
+const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
+const ABC = { providerId: claude.id, providerSessionId: "abc" };
+const ENCRYPTED = "opaque-reasoning-bytes";
+
+function message(text: string): WireRecord {
+  return {
+    type: RESPONSES_ITEM_TYPE.MESSAGE,
+    id: "msg_1",
+    role: "assistant",
+    status: "completed",
+    content: [{ type: "output_text", text, annotations: [] }],
+  };
+}
+
+function reasoning(id: string): WireRecord {
+  return { type: RESPONSES_ITEM_TYPE.REASONING, id, summary: [], encrypted_content: ENCRYPTED };
+}
+
+function actCall(callId: string): WireRecord {
+  return {
+    type: RESPONSES_ITEM_TYPE.FUNCTION_CALL,
+    call_id: callId,
+    name: REALTIME_TOOL.SEND_SESSION_MESSAGE,
+    arguments: JSON.stringify({
+      provider_id: ABC.providerId,
+      provider_session_id: ABC.providerSessionId,
+      text: "run the tests",
+    }),
+  };
+}
+
+function payload(output: readonly WireRecord[]): Response {
+  return Response.json({ id: "resp", status: "completed", output, usage: { input_tokens: 9 } });
+}
+
+class FakeClock {
+  now = NOW;
+  readonly timers = new Map<ScheduledTimer, { callback: () => void; at: number }>();
+  schedule = (callback: () => void, delayMs: number): ScheduledTimer => {
+    const handle: ScheduledTimer = {};
+    this.timers.set(handle, { callback, at: this.now + delayMs });
+    return handle;
+  };
+  cancel = (timer: ScheduledTimer): void => {
+    this.timers.delete(timer);
+  };
+}
+
+class Storage implements BrainStateStorage {
+  file: string | undefined;
+  refuse = false;
+  read() {
+    return this.file;
+  }
+  write(contents: string) {
+    if (this.refuse) return false;
+    this.file = contents;
+    return true;
+  }
+  stored(): BrainPersistedState | undefined {
+    return brainStateFromStored(this.file);
+  }
+}
+
+interface UpstreamCall {
+  url: string;
+  body: WireRecord;
+}
+
+/** A fake OpenAI: each queued answer is one upstream response, in order. */
+function fakeUpstream(answers: (() => Response)[]) {
+  const calls: UpstreamCall[] = [];
+  const fetch = async (url: string, init: RequestInit): Promise<Response> => {
+    // SAFETY: every body an adapter sends is JSON.stringify output.
+    const body = JSON.parse(String(init.body)) as UnparsedWireValue;
+    assert.ok(isRecord(body));
+    calls.push({ url, body });
+    const answer = answers.shift();
+    assert.ok(answer, `unexpected upstream call to ${url}`);
+    return answer();
+  };
+  return { fetch, calls, answers };
+}
+
+/**
+ * A fake hosted service speaking the second contract as the real handlers
+ * do: capabilities on GET, the request's prompt and named tools relayed to
+ * the fake upstream as instructions and selected schemas, the allowance spent
+ * per operation, and a spent allowance answered as the real service answers
+ * it. The real handlers are tested in `apps/web`; this keeps the contract
+ * shape in view where the adapter is exercised through the host.
+ */
+function fakeService(upstream: ReturnType<typeof fakeUpstream>, allowance: { remaining: number }) {
+  const catalog = hostedBrainToolCatalog();
+  const calls: UpstreamCall[] = [];
+  const fetch = async (url: string, init: RequestInit): Promise<Response> => {
+    if (url.endsWith(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES)) {
+      return Response.json({
+        contract: HOSTED_BRAIN_CONTRACT_VERSION,
+        model: "gpt-hosted",
+        operations: Object.values(HOSTED_BRAIN_OPERATION),
+        tools: [...catalog.keys()],
+        bounds: hostedBrainBounds(),
+        reasoningEfforts: Object.values(REASONING_EFFORT),
+      });
+    }
+    assert.ok(url.endsWith(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2), url);
+    // SAFETY: the adapter sends JSON.stringify output.
+    const body = JSON.parse(String(init.body)) as UnparsedWireValue;
+    assert.ok(isRecord(body));
+    calls.push({ url, body });
+    if (allowance.remaining <= 0) {
+      return Response.json(
+        {
+          error: "quota-exhausted",
+          quota: { used: 5000, limit: 5000, remaining: 0, resetsAt: NOW + 3_600_000 },
+        },
+        { status: 429 },
+      );
+    }
+    allowance.remaining -= 1;
+    assert.ok(Array.isArray(body.tools));
+    const tools = body.tools.filter(isWireString).map((name) => catalog.get(name));
+    assert.ok(tools.every((tool) => tool !== undefined));
+    return upstream.fetch(`${"https://api.openai.com/v1"}/responses`, {
+      method: "POST",
+      body: JSON.stringify({
+        model: "gpt-hosted",
+        instructions: body.prompt,
+        tools,
+        input: body.input,
+      }),
+    });
+  };
+  return { fetch, calls };
+}
+
+interface Transport {
+  name: string;
+  model: (upstream: ReturnType<typeof fakeUpstream>) => ModelAdapter;
+  quotaExhaustion: boolean;
+}
+
+const KEYED: Transport = {
+  name: "keyed",
+  model: (upstream) =>
+    new OpenAiModelAdapter({
+      apiKey: "sk-test",
+      fetch: upstream.fetch,
+      now: () => NOW,
+      report: () => undefined,
+    }),
+  quotaExhaustion: false,
+};
+
+const allowance = { remaining: 1_000 };
+const HOSTED: Transport = {
+  name: "hosted",
+  model: (upstream) =>
+    new HostedModelAdapter({
+      serviceBaseUrl: "https://luke.test",
+      readAccessToken: async () => "account-token",
+      refreshAccount: async () => undefined,
+      fetch: fakeService(upstream, allowance).fetch,
+      now: () => NOW,
+      report: () => undefined,
+    }),
+  quotaExhaustion: true,
+};
+
+interface Host {
+  agent: BrainAgent;
+  storage: Storage;
+  store: BrainStateStore;
+  clock: FakeClock;
+  performed: string[];
+  ask: (question: string) => Promise<BrainRequestRecord | undefined>;
+}
+
+let ids = 0;
+
+function host(
+  runtimeOver: (model: ModelAdapter) => AgentRuntime,
+  model: ModelAdapter,
+  storage = new Storage(),
+  performer: () => Promise<WireRecord> = async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }),
+): Host {
+  const clock = new FakeClock();
+  const store = new BrainStateStore({
+    storage,
+    createGenerationId: () => `gen-${++ids}`,
+    now: () => clock.now,
+  });
+  const performed: string[] = [];
+  const session = normalizeSession(claude, {
+    providerSessionId: ABC.providerSessionId,
+    title: "Claude Code: abc",
+    status: SESSION_STATUS.WAITING,
+    lastActivityAt: NOW,
+  });
+  const agent = new BrainAgent({
+    runtime: runtimeOver(model),
+    model,
+    acts: {
+      perform: async (call) => {
+        performed.push(call.name);
+        return performer();
+      },
+    },
+    roster: () => ({ text: "- abc", identities: [ABC], sessions: session ? [session] : [] }),
+    standingContext: () => "Durable facts: none.",
+    readTranscriptSince: async () => ({
+      status: ACT_RESULT_STATUS.ACCEPTED,
+      text: "transcript delta",
+      cursor: "c1",
+      truncated: false,
+    }),
+    readTranscript: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED, transcript: "whole" }),
+    deliver: () => undefined,
+    store,
+    createRunId: () => `run-${++ids}`,
+    report: () => undefined,
+    now: () => clock.now,
+    schedule: clock.schedule,
+    cancel: clock.cancel,
+  });
+  return {
+    agent,
+    storage,
+    store,
+    clock,
+    performed,
+    ask: async (question) => {
+      const accepted = await agent.submitAsk({
+        submissionId: `sub-${++ids}`,
+        question,
+        origin: BRAIN_REQUEST_ORIGIN.TYPED,
+      });
+      assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED, JSON.stringify(accepted));
+      const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
+      return agent.waitAsk(runId, 60_000);
+    },
+  };
+}
+
+async function settle(): Promise<void> {
+  for (let index = 0; index < 30; index += 1) await new Promise((resolve) => setImmediate(resolve));
+}
+
+for (const transport of [KEYED, HOSTED]) {
+  test(`${transport.name}: multi-step tools run in order with encrypted items replayed, and the act is journaled before its effect`, async () => {
+    const upstream = fakeUpstream([
+      () => payload([reasoning("rs_1"), actCall("call_1")]),
+      () => payload([reasoning("rs_2"), actCall("call_2")]),
+      () => payload([message("Sent twice.")]),
+    ]);
+    const h = host(responsesToolLoopRuntime, transport.model(upstream));
+    const record = await h.ask("send the tests twice");
+    assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+    assert.equal(record?.text, "Sent twice.");
+    assert.equal(record?.performedActs, 2);
+    assert.deepEqual(h.performed, [
+      REALTIME_TOOL.SEND_SESSION_MESSAGE,
+      REALTIME_TOOL.SEND_SESSION_MESSAGE,
+    ]);
+    // The third inference replayed every encrypted reasoning item and every
+    // call with its output, in order.
+    const third = upstream.calls[2]?.body.input;
+    assert.ok(Array.isArray(third));
+    const kinds = third.filter(isRecord).map((item) => item.type);
+    assert.deepEqual(kinds.filter((kind) => kind === RESPONSES_ITEM_TYPE.REASONING).length, 2);
+    assert.ok(
+      third
+        .filter(isRecord)
+        .every(
+          (item) =>
+            item.type !== RESPONSES_ITEM_TYPE.REASONING || item.encrypted_content === ENCRYPTED,
+        ),
+    );
+    const calls = kinds.filter((kind) => kind === RESPONSES_ITEM_TYPE.FUNCTION_CALL).length;
+    const outputs = kinds.filter(
+      (kind) => kind === RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
+    ).length;
+    assert.equal(calls, 2);
+    assert.equal(outputs, 2);
+    const stored = h.storage.stored();
+    assert.equal(stored?.journal.length, 2);
+    assert.equal(stored?.checkpointFormat, "tool-loop@1:openai-responses-input/1");
+    await h.agent.stop();
+  });
+
+  test(`${transport.name}: a cancel mid-run refuses the act not yet dispatched and keeps the one that ran`, async () => {
+    let releaseSecond: (() => void) | undefined;
+    const upstream = fakeUpstream([() => payload([actCall("call_1"), actCall("call_2")])]);
+    let performedCount = 0;
+    const h = host(responsesToolLoopRuntime, transport.model(upstream), new Storage(), async () => {
+      performedCount += 1;
+      if (performedCount === 1) {
+        await new Promise<void>((resolve) => {
+          releaseSecond = resolve;
+        });
+      }
+      return { status: ACT_RESULT_STATUS.ACCEPTED };
+    });
+    const accepted = await h.agent.submitAsk({
+      submissionId: "cancel-me",
+      question: "send twice",
+      origin: BRAIN_REQUEST_ORIGIN.TYPED,
+    });
+    assert.ok(accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
+    await settle();
+    await h.agent.cancelAsk(accepted.runId);
+    releaseSecond?.();
+    const record = await h.agent.waitAsk(accepted.runId, 60_000);
+    assert.equal(record?.status, BRAIN_REQUEST_STATUS.CANCELLED);
+    assert.equal(record?.performedActs, 1);
+    assert.equal(h.performed.length, 1);
+    // Every call in the stored memory is paired, the refused one included.
+    const items = h.storage.stored()?.items ?? [];
+    const outputs = items.filter((item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT);
+    assert.equal(
+      outputs.length,
+      items.filter((item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL).length,
+    );
+    await h.agent.stop();
+  });
+
+  test(`${transport.name}: malformed output, a provider-declared failure, and a rate limit each end the run honestly with nothing done`, async () => {
+    const upstream = fakeUpstream([
+      () => new Response("<html>not json</html>", { status: 200 }),
+      () => Response.json({ status: "failed", error: { code: "server_error" }, output: [] }),
+      () => new Response("", { status: 429, headers: { "retry-after": "30" } }),
+    ]);
+    const h = host(responsesToolLoopRuntime, transport.model(upstream));
+    const malformed = await h.ask("first");
+    assert.equal(malformed?.status, BRAIN_REQUEST_STATUS.FAILED);
+    assert.equal(malformed?.failure, BRAIN_REQUEST_FAILURE.MODEL);
+    const declared = await h.ask("second");
+    assert.equal(declared?.status, BRAIN_REQUEST_STATUS.FAILED);
+    assert.equal(declared?.failure, BRAIN_REQUEST_FAILURE.MODEL);
+    const limited = await h.ask("third");
+    assert.equal(limited?.status, BRAIN_REQUEST_STATUS.FAILED);
+    assert.equal(h.performed.length, 0);
+    // The cooldown stands: a wake is held rather than spent on a refusal.
+    h.agent.wake([{ kind: BRAIN_WAKE_KIND.HOOK, identity: ABC, atMs: NOW }]);
+    await settle();
+    assert.equal(h.agent.pendingWakes(), 1);
+    await h.agent.stop();
+  });
+
+  test(`${transport.name}: persistence interrupted before an act refuses the act; interrupted after it keeps the result and blocks the next`, async () => {
+    const storage = new Storage();
+    const upstream = fakeUpstream([
+      () => payload([actCall("call_1")]),
+      () => payload([message("done")]),
+    ]);
+    const h = host(responsesToolLoopRuntime, transport.model(upstream), storage);
+    await h.agent.ready();
+    // Acceptance and start land; the checkpoint before the act is refused.
+    let writes = 0;
+    const original = storage.write.bind(storage);
+    storage.write = (contents) => {
+      writes += 1;
+      return writes === 3 ? false : original(contents);
+    };
+    const record = await h.ask("send");
+    assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
+    assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
+    assert.equal(h.performed.length, 0);
+    assert.equal(record?.performedActs, 0);
+    await h.agent.stop();
+  });
+}
+
+test("hosted: a spent allowance ends the run as a failure, holds later wakes until the day resets, and spends nothing more", async () => {
+  const upstream = fakeUpstream([]);
+  const exhausted = { remaining: 0 };
+  const model = new HostedModelAdapter({
+    serviceBaseUrl: "https://luke.test",
+    readAccessToken: async () => "account-token",
+    refreshAccount: async () => undefined,
+    fetch: fakeService(upstream, exhausted).fetch,
+    now: () => NOW,
+    report: () => undefined,
+  });
+  const h = host(responsesToolLoopRuntime, model);
+  const record = await h.ask("anything?");
+  assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.equal(model.quietUntil(), NOW + 3_600_000);
+  h.agent.wake([{ kind: BRAIN_WAKE_KIND.HOOK, identity: ABC, atMs: NOW }]);
+  await settle();
+  assert.equal(h.agent.pendingWakes(), 1);
+  assert.equal(upstream.calls.length, 0);
+  await h.agent.stop();
+});
+
+/**
+ * A second runtime that shares nothing with OpenAI Responses: its items are
+ * its own records, its stamp is its own, it answers a fixed script, and it
+ * calls the host's tools through the same executor contract. What the host
+ * does with it is the proof: the checkpoint is stored under the runtime's
+ * stamp, the acts are journaled, and the Responses runtime later refuses to
+ * run over that stamp while leaving everything in place.
+ */
+const FAKE_FORMAT: CheckpointFormat = {
+  runtime: "scripted",
+  runtimeVersion: 3,
+  format: "scripted-turns",
+  formatVersion: 1,
+};
+
+class ScriptedContext implements ContextEngine {
+  readonly checkpointFormat = FAKE_FORMAT;
+  #turns: WireRecord[] = [];
+  bootstrap(checkpoint: RuntimeCheckpoint | undefined) {
+    if (!checkpoint) return { loaded: true, repaired: 0 };
+    if (checkpoint.format.runtime !== FAKE_FORMAT.runtime) {
+      return { loaded: false, reason: "not a scripted checkpoint", repaired: 0 };
+    }
+    this.#turns = [...checkpoint.items];
+    return { loaded: true, repaired: 0 };
+  }
+  ingest(input: Parameters<ContextEngine["ingest"]>[0]) {
+    this.#turns.push({ scripted: input.kind });
+  }
+  assemble() {
+    return this.#turns;
+  }
+  compact() {
+    return 0;
+  }
+  adoptCompaction(items: readonly WireRecord[]) {
+    this.#turns = [...items];
+  }
+  afterTurn() {}
+  mark() {
+    return { items: [...this.#turns] };
+  }
+  rollback(mark: { items: readonly WireRecord[] }) {
+    this.#turns = [...mark.items];
+  }
+  checkpoint(): RuntimeCheckpoint {
+    return { format: FAKE_FORMAT, items: [...this.#turns] };
+  }
+  dispose() {}
+}
+
+class ScriptedRuntime implements AgentRuntime {
+  readonly descriptor = { id: FAKE_FORMAT.runtime, checkpoint: FAKE_FORMAT };
+  readonly contexts: ToolExecutionContext[] = [];
+  /** The tool each run calls before answering; the host's executor decides what it means. */
+  constructor(private readonly script: readonly string[]) {}
+  async openContext(checkpoint: RuntimeCheckpoint | undefined): Promise<ContextOpening> {
+    const context = new ScriptedContext();
+    return { context, bootstrap: context.bootstrap(checkpoint) };
+  }
+  async resume(checkpoint: RuntimeCheckpoint, request: Omit<RuntimeRunRequest, "context">) {
+    const opened = await this.openContext(checkpoint);
+    if (!opened.bootstrap.loaded) return { refused: opened.bootstrap.reason ?? "refused" };
+    return this.start({ ...request, context: opened.context });
+  }
+  start(request: RuntimeRunRequest): RuntimeRun {
+    const done = (async () => {
+      for (const input of request.input) await request.context.ingest(input);
+      let index = 0;
+      for (const name of this.script) {
+        const invocation = {
+          callId: `scripted-${++index}`,
+          name,
+          argumentsJson: JSON.stringify({
+            provider_id: ABC.providerId,
+            provider_session_id: ABC.providerSessionId,
+            text: "scripted",
+          }),
+        };
+        await request.onEvent({ kind: RUNTIME_EVENT.TOOL_CALL, invocation });
+        const context: ToolExecutionContext = {
+          runId: request.runId,
+          signal: request.signal,
+          isRevoked: () => request.signal.aborted,
+        };
+        this.contexts.push(context);
+        const result = await request.tools.execute(invocation, context);
+        await request.context.ingest({
+          kind: CONTEXT_INPUT_KIND.TOOL_RESULT,
+          callId: invocation.callId,
+          outputJson: result.outputJson,
+        });
+        await request.onEvent({ kind: RUNTIME_EVENT.TOOL_RESULT, invocation, result });
+      }
+      const text = `scripted reply after ${this.script.length} tools`;
+      await request.onEvent({ kind: RUNTIME_EVENT.TEXT, text });
+      const end = { reason: RUN_END_REASON.COMPLETED, text } as const;
+      await request.onEvent({ kind: RUNTIME_EVENT.ENDED, end });
+      return end;
+    })();
+    return { runId: request.runId, steer: () => false, cancel: () => undefined, done };
+  }
+}
+
+test("a runtime that is not Responses drives the same host: acts journaled through the executor, checkpoint stored under its own stamp, refusals still the host's", async () => {
+  const storage = new Storage();
+  const runtime = new ScriptedRuntime([
+    REALTIME_TOOL.SEND_SESSION_MESSAGE,
+    "read_transcript",
+    "not_a_tool",
+  ]);
+  const model = KEYED.model(fakeUpstream([]));
+  const h = host(() => runtime, model, storage);
+  const record = await h.ask("do the scripted thing");
+  assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  assert.equal(record?.text, "scripted reply after 3 tools");
+  assert.equal(record?.performedActs, 1);
+  assert.deepEqual(h.performed, [REALTIME_TOOL.SEND_SESSION_MESSAGE]);
+  const stored = storage.stored();
+  assert.equal(stored?.checkpointFormat, "scripted@3:scripted-turns/1");
+  assert.ok(stored?.items.every((item) => "scripted" in item));
+  assert.equal(stored?.journal.length, 1);
+  assert.equal(stored?.journal[0]?.name, REALTIME_TOOL.SEND_SESSION_MESSAGE);
+  // The host refused the unknown tool itself; the runtime learned it from the result.
+  const outputs = (stored?.items ?? []).filter(
+    (item) => item.scripted === CONTEXT_INPUT_KIND.TOOL_RESULT,
+  );
+  assert.equal(outputs.length, 3);
+  await h.agent.stop();
+
+  // An observation turn runs over the same runtime, with the roster's deltas
+  // read by the host and no act reachable however the script asks.
+  const observing = new ScriptedRuntime([REALTIME_TOOL.SEND_SESSION_MESSAGE]);
+  const o = host(() => observing, model, storage);
+  await o.agent.ready();
+  o.agent.wake([{ kind: BRAIN_WAKE_KIND.HOOK, identity: ABC, hookEvent: "Stop", atMs: NOW }]);
+  await settle();
+  o.clock.now += 3_000;
+  for (const timer of [...o.clock.timers.values()]) timer.callback();
+  await settle();
+  assert.equal(o.performed.length, 0);
+  assert.equal(storage.stored()?.cursors[claude.id]?.abc, "c1");
+  await o.agent.stop();
+});
+
+test("the Responses runtime refuses a valid checkpoint of the scripted runtime: turns are refused as incompatible, and the checkpoint, requests, and journal stay whole", async () => {
+  const storage = new Storage();
+  const scripted = host(
+    () => new ScriptedRuntime([REALTIME_TOOL.SEND_SESSION_MESSAGE]),
+    KEYED.model(fakeUpstream([])),
+    storage,
+  );
+  const first = await scripted.ask("scripted first");
+  assert.equal(first?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  await scripted.agent.stop();
+  const before = storage.stored();
+  assert.ok(before);
+
+  const upstream = fakeUpstream([() => payload([message("never asked")])]);
+  const responses = host(responsesToolLoopRuntime, KEYED.model(upstream), storage);
+  await responses.agent.ready();
+  assert.match(
+    (await responses.agent.incompatibility()) ?? "",
+    /scripted@3:scripted-turns\/1 is not readable by tool-loop@1/u,
+  );
+  const refused = await responses.agent.submitAsk({
+    submissionId: "over-foreign",
+    question: "hello?",
+    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+  });
+  assert.deepEqual(refused, {
+    outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+    reason: BRAIN_SUBMISSION_REJECTION.INCOMPATIBLE,
+  });
+  responses.agent.wake([{ kind: BRAIN_WAKE_KIND.HOOK, identity: ABC, atMs: NOW }]);
+  await settle();
+  responses.clock.now += 3_000;
+  for (const timer of [...responses.clock.timers.values()]) timer.callback();
+  await settle();
+  assert.equal(upstream.calls.length, 0);
+  // Nothing of the stored memory changed: same stamp, same items, same records, same journal.
+  const after = storage.stored();
+  assert.deepEqual(after?.checkpointFormat, before.checkpointFormat);
+  assert.deepEqual(after?.items, before.items);
+  assert.deepEqual(after?.requests, before.requests);
+  assert.deepEqual(after?.journal, before.journal);
+  assert.equal(responses.agent.requests().length, 1);
+  await responses.agent.stop();
+
+  // The scripted runtime reads it again, and a Clear is the other way forward.
+  const again = host(() => new ScriptedRuntime([]), KEYED.model(fakeUpstream([])), storage);
+  assert.equal(await again.agent.incompatibility(), undefined);
+  assert.equal((await again.ask("still scripted"))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  await again.store.clear(NOW + 10);
+  await settle();
+  assert.equal(storage.stored()?.checkpointFormat, undefined);
+  await again.agent.stop();
+});

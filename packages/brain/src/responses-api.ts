@@ -343,7 +343,8 @@ export function responsesCompactedWindow(
   return items;
 }
 
-/** The count a token-count answer carries, or nothing. */
+/** The count a token-count answer carries — a non-negative safe integer — or nothing. */
 export function responsesInputTokens(payload: UnparsedWireValue): number | undefined {
-  return isRecord(payload) ? wholeNumber(payload.input_tokens) : undefined;
+  const count = isRecord(payload) ? wholeNumber(payload.input_tokens) : undefined;
+  return count !== undefined && Number.isSafeInteger(count) && count >= 0 ? count : undefined;
 }

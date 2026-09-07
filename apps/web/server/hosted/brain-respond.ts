@@ -57,13 +57,13 @@ export interface BrainRespondOptions {
   timeoutMs?: number;
 }
 
-const BODY_READ = {
+export const BODY_READ = {
   READ: "read",
   TOO_LARGE: "too-large",
   UNREADABLE: "unreadable",
 } as const;
 
-type BodyRead =
+export type BodyRead =
   | { outcome: typeof BODY_READ.READ; text: string }
   | { outcome: typeof BODY_READ.TOO_LARGE }
   | { outcome: typeof BODY_READ.UNREADABLE };
@@ -73,7 +73,7 @@ type BodyRead =
  * Content-Length the sender may omit or misstate, and stops reading the
  * moment the bound is passed so an oversized request is never held whole.
  */
-async function readBoundedBody(request: Request, maximumBytes: number): Promise<BodyRead> {
+export async function readBoundedBody(request: Request, maximumBytes: number): Promise<BodyRead> {
   const stream = request.body;
   if (!stream) return { outcome: BODY_READ.UNREADABLE };
   const reader = stream.getReader();

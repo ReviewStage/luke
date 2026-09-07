@@ -443,6 +443,9 @@ importers:
       '@sidecar/realtime':
         specifier: workspace:*
         version: link:../realtime
+      '@sidecar/runtime-contracts':
+        specifier: workspace:*
+        version: link:../runtime-contracts
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
@@ -816,6 +819,9 @@ importers:
       '@sidecar/realtime':
         specifier: workspace:*
         version: link:../realtime
+      '@sidecar/runtime-contracts':
+        specifier: workspace:*
+        version: link:../runtime-contracts
       '@sidecar/settings':
         specifier: workspace:*
         version: link:../settings
