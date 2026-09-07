@@ -20,7 +20,12 @@ const OPEN_SPEND: HostedSpend = {
   quota: { used: 1, limit: 5_000, remaining: 4_999, resetsAt: NOW + 43_200_000 },
 };
 
-function mintRequest(body?: unknown): Request {
+interface RemoteMintRequestBody {
+  voice?: string;
+  speed?: number;
+}
+
+function mintRequest(body?: RemoteMintRequestBody): Request {
   const init: RequestInit = { method: "POST", headers: { authorization: "Bearer token-1" } };
   if (body !== undefined) init.body = JSON.stringify(body);
   return new Request("https://luke.test/api/voice/remote-mint", init);
