@@ -8,7 +8,7 @@ import {
   type SessionProvider,
 } from "@sidecar/session";
 import { isRecord, isWireString, unparsedWire, type WireRecord, wireRecord } from "@sidecar/wire";
-import { BRAIN_DELIVERY_SOURCE, BRAIN_WAKE_KIND, type BrainWakeEvent } from "./brain-events.js";
+import { BRAIN_WAKE_KIND, type BrainWakeEvent } from "./brain-events.js";
 import {
   askInputItem,
   BRAIN_INPUT_MARKER,
@@ -107,7 +107,6 @@ test("a hold-released item lists the held briefings", () => {
         {
           briefing: "Checkout agent wants a decision.",
           decidedAt: NOW - 60_000,
-          source: BRAIN_DELIVERY_SOURCE.WAKE,
         },
       ],
       NOW,

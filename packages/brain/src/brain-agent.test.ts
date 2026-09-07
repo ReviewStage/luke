@@ -36,12 +36,7 @@ import {
   type BrainClientAnswer,
   type BrainRespondOptions,
 } from "./brain-client.js";
-import {
-  BRAIN_DELIVERY_SOURCE,
-  BRAIN_WAKE_KIND,
-  type BrainDelivery,
-  type BrainWakeEvent,
-} from "./brain-events.js";
+import { BRAIN_WAKE_KIND, type BrainDelivery, type BrainWakeEvent } from "./brain-events.js";
 import { BRAIN_INPUT_MARKER } from "./brain-input.js";
 import { UNKNOWN_ACT_RESULT } from "./brain-journal.js";
 import { RESPONSES_ITEM_TYPE, type ResponsesInputItem } from "./brain-openai.js";
@@ -392,7 +387,6 @@ test("an announce is delivered trimmed, and every output item is remembered", as
     {
       briefing: "Checkout agent wants a decision.",
       decidedAt: NOW + 3_000,
-      source: BRAIN_DELIVERY_SOURCE.WAKE,
     },
   ]);
   const second = h.client.inputs[1] ?? [];
@@ -676,14 +670,11 @@ test("restored memory opens the next turn, and held briefings are re-decided fro
     answered([call("call_1", BRAIN_TOOL.ANNOUNCE, { briefing: "Still waiting on you." })]),
     answered([message("")]),
   );
-  h.agent.releaseHeld([
-    { briefing: "Checkout wants a decision.", decidedAt: NOW - 1, source: "wake" },
-  ]);
+  h.agent.releaseHeld([{ briefing: "Checkout wants a decision.", decidedAt: NOW - 1 }]);
   await settle();
   const input = h.client.inputs[0] ?? [];
   assert.deepEqual(input.slice(0, 2), prior);
   assert.ok(itemText(input[2]).startsWith(`${BRAIN_INPUT_MARKER.HOLD_RELEASED} `));
-  assert.equal(h.deliveries[0]?.source, BRAIN_DELIVERY_SOURCE.HOLD_RELEASED);
   assert.equal(h.deliveries[0]?.briefing, "Still waiting on you.");
   assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.HOLD_RELEASED);
   assert.equal(h.sinceReads.length, 0);
@@ -920,7 +911,7 @@ test("a roster look runs no act", async () => {
 test("a hold release runs no act", async () => {
   const h = harness();
   h.client.answers.push(answered(FORBIDDEN_ACTS), answered([message("")]));
-  h.agent.releaseHeld([{ briefing: INSTRUCTION_IN_DATA, decidedAt: NOW - 1, source: "wake" }]);
+  h.agent.releaseHeld([{ briefing: INSTRUCTION_IN_DATA, decidedAt: NOW - 1 }]);
   await settle();
   assertNoActReached(h);
   assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.HOLD_RELEASED);
@@ -1708,7 +1699,7 @@ test("work queued behind a held act opens nothing once the generation it was que
   await settle();
   // Every observation kind queues behind the held act: a hold release with an
   // old briefing, a roster look, a coalesced wake, and a quiet retry's wakes.
-  h.agent.releaseHeld([{ briefing: "OLD_SECRET_QUEUED_BRIEFING", decidedAt: NOW, source: "wake" }]);
+  h.agent.releaseHeld([{ briefing: "OLD_SECRET_QUEUED_BRIEFING", decidedAt: NOW }]);
   h.agent.wake([edge(DEF)]);
   h.agent.rosterLook();
   await h.clock.advance(NOW + 3_000);
@@ -2320,9 +2311,7 @@ test("an observation in flight is not made durable by an unrelated mark or accep
   // The pending wake rides in the hold release's turn: one observation that
   // reads a real delta, moves a cursor, and then waits on the model.
   observing.agent.wake([edge(ABC)]);
-  observing.agent.releaseHeld([
-    { briefing: "UNCOMMITTED_OBSERVATION", decidedAt: NOW, source: "wake" },
-  ]);
+  observing.agent.releaseHeld([{ briefing: "UNCOMMITTED_OBSERVATION", decidedAt: NOW }]);
   await settle();
   // The delta was read into working memory and its cursor moved; the model is held.
   assert.equal(observing.sinceReads.length, 1);
