@@ -3179,6 +3179,9 @@ export function App(): React.JSX.Element {
       // surface waits for the content it is carrying instead of leading it.
       data-leaving-panel={String(leavingPanel)}
       data-notch={String(display.notch.hasNotch)}
+      // Whether sign-in still stands between Luke and anything to watch, so the
+      // stylesheet knows the strip holds nothing while a popup is drawn.
+      data-gated={String(accountGated)}
       data-capture={String(bootstrap.captureMode)}
       style={{
         ...notchStyle(display),

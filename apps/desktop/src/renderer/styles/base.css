@@ -181,6 +181,12 @@
      reserved. */
   --capsule-width: calc(var(--notch-housing-width) + 72px);
   --capsule-height: max(var(--notch-top-inset), 32px);
+  /* The strip the wings are drawn in, and so the room every shape opened below
+     it reserves above its first row: the whole capsule beside a housing, and on
+     a display without one the capsule less the lift on both edges, restated
+     where the lift is. The pill at rest is exactly it, the wings and the press
+     target are as tall as it, and every popup and the panel pad by it. */
+  --strip-height: var(--capsule-height);
   --peek-width: max(calc(var(--notch-housing-width) + 248px), 458px);
   /* The capsule with room for the meter beside the face rather than instead of
      it. Only the left wing needs it — that is where both are drawn — so only
@@ -245,6 +251,12 @@
      fields share a line — and narrower than the panel, so the composer reads as
      the panel stood down to one thing rather than as the panel refilled. */
   --feedback-width: max(520px, calc(var(--notch-housing-width) + 340px));
+  /* A popup's one vertical inset, above its first row and below its last. The
+     same number on both edges, because the two edges are the same edge: beside
+     a housing the first row sits one inset under the strip, and where the
+     strip is nothing the row sits one inset from each curved edge of the pill,
+     so the row is centred by construction rather than by a second number. */
+  --slot-inset: 12px;
   /* The mark sits outside the field's column, so everything else in the slot is
      indented past it by the same amount. */
   --slot-mark-size: 22px;
@@ -371,13 +383,13 @@ button:disabled {
   top: 0;
   left: 50%;
   width: var(--capsule-width);
-  height: calc(var(--capsule-height) + var(--caption-growth));
+  height: calc(var(--strip-height) + var(--caption-growth));
   /* The spring undershoots on the way back, and the capsule is the floor: a
      shape that dips inside the housing's footprint opens a gap where there is
      a physical camera, not a screen. Clamping the used size lets the spring
      keep its overshoot in the direction where there is room for it. */
   min-width: var(--capsule-width);
-  min-height: var(--capsule-height);
+  min-height: var(--strip-height);
   border-radius: 0 0 var(--notch-convex-radius) var(--notch-convex-radius);
   background: var(--surface-fill);
   /* The lift off the top edge is carried here rather than by `top`, so that on a
@@ -586,18 +598,11 @@ button:disabled {
    the pointer. Without this the block belongs to the stage around the strip,
    which carries no hit region, so resting on the words read as leaving the
    shape — collapsing the peek under the cursor. Like every hover-target rule
-   it snaps rather than animating, and the pill's variant carries the lift the
-   way the pill's own height does, so the target ends where the shape ends. */
+   it snaps rather than animating, and the strip's height already carries the
+   pill's lift, so the target ends where the shape ends. */
 .app-stage[data-presentation="capsule"][data-caption="true"] .compact-hover-target,
 .app-stage[data-presentation="peek"][data-caption="true"] .compact-hover-target {
-  height: calc(var(--capsule-height) + var(--caption-growth));
-}
-
-.app-stage[data-notch="false"][data-presentation="capsule"][data-caption="true"]
-  .compact-hover-target,
-.app-stage[data-notch="false"][data-presentation="peek"][data-caption="true"]
-  .compact-hover-target {
-  height: calc(var(--capsule-height) - var(--shape-top) * 2 + var(--caption-growth));
+  height: calc(var(--strip-height) + var(--caption-growth));
 }
 
 /* Under the pointer: wide enough to spread the marks out flat. */
@@ -633,7 +638,7 @@ button:disabled {
   top: 0;
   left: 50%;
   width: var(--capsule-width);
-  height: var(--capsule-height);
+  height: var(--strip-height);
   padding: 0;
   border: 0;
   /* The same corner the capsule is drawn with, for the same reason the panel
@@ -684,7 +689,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    so every part of that band means the same thing and answers the same way. */
 .app-stage[data-presentation="panel"] .compact-hover-target {
   width: var(--panel-width);
-  height: max(var(--notch-top-inset), 32px);
   cursor: pointer;
   pointer-events: auto;
 }
@@ -703,7 +707,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   z-index: 5;
   top: var(--shape-top, 0px);
   display: flex;
-  height: calc(var(--capsule-height) - var(--shape-top, 0px) * 2);
+  height: var(--strip-height);
   align-items: center;
   overflow: hidden;
   pointer-events: none;
@@ -1153,11 +1157,23 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    strip minus 4px each side is exactly that 24. */
 .app-stage[data-notch="false"] {
   --shape-top: var(--bubble-lift);
+  --strip-height: calc(var(--capsule-height) - var(--shape-top) * 2);
+}
+
+/* Signed out, the strip above the sign-in popup holds nothing: the wings draw
+   neither the face nor the marks while the gate stands, the "Sign in" label
+   reads only in the compact shapes, and the signed-out Luke steps out of the
+   popup's way. Beside a housing the band stays black regardless, because the
+   housing sits in it; a bubble has no housing to wrap, so an empty band there
+   is only room above the words, and the popup opens on no strip at all — its
+   row one gap under the pill's edge, and the strip's press target gone with
+   the strip rather than left over the row. The open panel keeps its strip
+   even signed out, because pressing it is how the panel closes. */
+.app-stage[data-notch="false"][data-gated="true"][data-presentation="slot"] {
+  --strip-height: 0px;
 }
 
 .app-stage[data-notch="false"] .panel-surface {
-  height: calc(var(--capsule-height) - var(--shape-top) * 2 + var(--caption-growth));
-  min-height: calc(var(--capsule-height) - var(--shape-top) * 2);
   /* Half the resting strip, stated as that number rather than an overlarge
      one: at rest the two draw the same pill, but an overlarge radius scales
      with whatever box it is given, so a shape grown for captions or chips
@@ -1165,7 +1181,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
      resting corner, whose first line ran past the curve onto the desktop.
      Stated once here, the growth extends the pill downward with the corners
      it had, the same way the notch capsule keeps its convex radius. */
-  border-radius: calc((var(--capsule-height) - var(--shape-top) * 2) / 2);
+  border-radius: calc(var(--strip-height) / 2);
 }
 
 /* The panel and the slot keep the pill's lift rather than gluing themselves to
@@ -1218,18 +1234,12 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transform: translateX(-50%) translateY(var(--shape-top));
 }
 
-.app-stage[data-notch="false"] .wing {
-  top: var(--shape-top);
-  height: calc(var(--capsule-height) - var(--shape-top) * 2);
-}
-
 .app-stage[data-notch="false"] .compact-hover-target {
   top: var(--shape-top);
-  height: calc(var(--capsule-height) - var(--shape-top) * 2);
   /* The surface's own radius above, for the surface's reason: the captioned
      target grows with the shape, and an overlarge radius would round its hit
      region past the corners the shape actually draws. */
-  border-radius: calc((var(--capsule-height) - var(--shape-top) * 2) / 2);
+  border-radius: calc(var(--strip-height) / 2);
 }
 
 /* Inside an open panel the strip is surrounded by the shape rather than
@@ -1623,13 +1633,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    is over must keep taking the pointer. */
 .app-stage[data-presentation="capsule"][data-notice="true"] .compact-hover-target,
 .app-stage[data-presentation="peek"][data-notice="true"] .compact-hover-target {
-  height: calc(var(--capsule-height) + var(--caption-growth));
-}
-
-.app-stage[data-notch="false"][data-presentation="capsule"][data-notice="true"]
-  .compact-hover-target,
-.app-stage[data-notch="false"][data-presentation="peek"][data-notice="true"] .compact-hover-target {
-  height: calc(var(--capsule-height) - var(--shape-top) * 2 + var(--caption-growth));
+  height: calc(var(--strip-height) + var(--caption-growth));
 }
 
 /* The band the chips share: centred wrapped rows. In the compact states it
@@ -2052,7 +2056,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   display: flex;
   max-height: var(--panel-height-max);
   flex-direction: column;
-  padding: calc(max(var(--notch-top-inset), 32px) + 14px) var(--panel-inset) 18px;
+  padding: calc(var(--strip-height) + 14px) var(--panel-inset) 18px;
   border-radius: 0 0 var(--panel-radius) var(--panel-radius);
   /* A page lands in layout at once, while the black surface takes one spring
      to its new height. The panel follows that same edge so newly mounted rows
@@ -2325,7 +2329,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   max-height: var(--panel-height-max);
   flex-direction: column;
   gap: 8px;
-  padding: calc(max(var(--notch-top-inset), 32px) + 12px) 16px 15px;
+  padding: calc(var(--strip-height) + var(--slot-inset)) 16px var(--slot-inset);
   border-radius: 0 0 var(--slot-radius) var(--slot-radius);
 }
 
@@ -2771,7 +2775,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   width: var(--slot-width);
   flex-direction: column;
   gap: 7px;
-  padding: calc(max(var(--notch-top-inset), 32px) + 12px) 16px 15px;
+  padding: calc(var(--strip-height) + var(--slot-inset)) 16px var(--slot-inset);
   border-radius: 0 0 var(--slot-radius) var(--slot-radius);
 }
 

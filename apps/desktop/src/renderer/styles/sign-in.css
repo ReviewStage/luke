@@ -34,15 +34,16 @@
 
 /* The one signed-out Luke, like the caption a single element in every state so
    the morph carries him rather than trading two copies. At rest he stands over
-   the gate's reserved box — `--sign-in-face-rest` is that box's top, restated
-   from the panel's own padding (14px) plus the gate's (4px) and the box's
-   margin (4px) — and in the compact shapes he takes the wing spot the authed
-   face holds: against the housing, past `--wing-inset` and half his drawn
-   width, at the strip's centre. Only `transform` and `opacity` move him, on
-   the caption's own beat: leaving a state, he travels with the shape rather
-   than ahead of it. 0.3214 is 18/56 — the wing face's size over the gate's. */
+   the gate's reserved box — `--sign-in-face-rest` is that box's top: the lift
+   the panel stands off the edge, the strip, then the panel's own padding
+   (14px) plus the gate's (4px) and the box's margin (4px) — and in the compact
+   shapes he takes the wing spot the authed face holds: against the housing,
+   past `--wing-inset` and half his drawn width, at the strip's centre. Only
+   `transform` and `opacity` move him, on the caption's own beat: leaving a
+   state, he travels with the shape rather than ahead of it. 0.3214 is 18/56 —
+   the wing face's size over the gate's. */
 .sign-in-luke {
-  --sign-in-face-rest: calc(var(--capsule-height) + 22px);
+  --sign-in-face-rest: calc(var(--shape-top, 0px) + var(--strip-height) + 22px);
 
   position: absolute;
   z-index: 3;
@@ -57,12 +58,6 @@
     opacity var(--duration-exit) var(--motion-exit),
     transform var(--duration-shape) var(--spring) var(--duration-exit);
   will-change: transform;
-}
-
-/* A notchless display shifts the drawn shapes down by `--shape-top`; the rest
-   pose follows the panel it stands over. */
-.app-stage[data-notch="false"] .sign-in-luke {
-  --sign-in-face-rest: calc(var(--capsule-height) + 22px + var(--shape-top, 0px));
 }
 
 .sign-in-luke .luke-face {
