@@ -544,7 +544,7 @@ export class BrainAgent {
    */
   async submitAsk(submission: BrainSubmission): Promise<BrainSubmissionResult> {
     await this.ready();
-    await this.#expireIfDue();
+    this.#expireIfDue();
     const generation = this.#generation;
     if (this.#stopped || !generation) {
       return {
@@ -578,6 +578,14 @@ export class BrainAgent {
             acceptedAt: existing.acceptedAt,
           }
         : conflict;
+    }
+    if (!this.#options.store.admits(generation.id)) {
+      // The record count is a hard bound on the file: a run the store could
+      // not then write is refused at the door, in a word the host can say.
+      return {
+        outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+        reason: BRAIN_SUBMISSION_REJECTION.FULL,
+      };
     }
     const result = this.#accept(generation, { ...submission, question });
     this.#pendingSubmissions.set(submission.submissionId, {
@@ -1032,7 +1040,7 @@ export class BrainAgent {
     const delay = Math.max(0, generation.expiresAt - this.#now());
     const fire = () => {
       this.#expiryTimer = undefined;
-      void this.#expireIfDue();
+      this.#expireIfDue();
     };
     // On the host's own clock the timer is unreferenced: housekeeping never
     // holds a process open on its own, and the door check covers a
@@ -1048,11 +1056,16 @@ export class BrainAgent {
     this.#expiryTimer = undefined;
   }
 
-  /** Asks the store to end the generation if its time has come; the store's announcement does the rest. */
-  async #expireIfDue(): Promise<void> {
+  /**
+   * Asks the store to end the generation if its time has come. The store's
+   * fence is synchronous and its announcement adopts the successor here in
+   * the same call, so by the time this returns the dead generation's signal
+   * has fired and nothing of it can open, dispatch, or deliver.
+   */
+  #expireIfDue(): void {
     const generation = this.#generation;
     if (this.#stopped || !generation || !brainGenerationExpired(generation, this.#now())) return;
-    await this.#options.store.expireIfDue(this.#now());
+    this.#options.store.expireIfDue(this.#now());
   }
 
   /**
@@ -1091,6 +1104,7 @@ export class BrainAgent {
   async #save(generation: Generation, scope: SaveScope): Promise<boolean> {
     let owned: BrainRequestRecord | undefined;
     let missing = false;
+    let pruned = false;
     const written = await this.#options.store.write(
       this.#lease,
       generation.id,
@@ -1135,6 +1149,7 @@ export class BrainAgent {
         if (commit.prunedRunIds.length > 0) {
           for (const runId of commit.prunedRunIds) generation.requests.delete(runId);
           generation.journal.dropRuns(commit.prunedRunIds);
+          pruned = true;
         }
         if (!owned || !scope.record) return;
         const live = generation.requests.get(owned.runId);
@@ -1151,6 +1166,9 @@ export class BrainAgent {
       this.#report("Brain memory could not be checkpointed");
       return false;
     }
+    // Runs retention let go of are gone from the list every window draws,
+    // and the windows hear it now rather than on the next unrelated change.
+    if (pruned) this.#notify();
     return true;
   }
 
@@ -1316,7 +1334,7 @@ export class BrainAgent {
     // The generation's death is checked at the door of every turn, so a
     // memory that outlived its fortnight while the app sat idle is not read
     // one more time on the way out.
-    await this.#expireIfDue();
+    this.#expireIfDue();
     const generation = plan.generation;
     // Work queued in a generation since replaced opens nothing: its briefings
     // and its wakes described a memory that no longer exists.

@@ -96,7 +96,7 @@ class MemoryStorage implements BrainStateStorage {
     this.log.push("read");
     return this.file;
   }
-  write(contents: string) {
+  write(contents: string): boolean | Promise<boolean> {
     this.log.push("write");
     if (this.refuse) return false;
     this.file = contents;
@@ -283,7 +283,7 @@ test("writes and a compaction never move the expiry, and expireIfDue ends the ge
   assert.equal(await store.expireIfDue(born.expiresAt), false);
 });
 
-test("retention keeps the newest 200 ended runs, lets their journals go with them, and never touches a run still going", () => {
+test("retention keeps 200 records, oldest ended runs and their journals going first, and never touches a run still going", () => {
   const requests = [
     ...Array.from({ length: 205 }, (_, index) => terminal(index)),
     terminal(900, { status: BRAIN_REQUEST_STATUS.RUNNING, settledAt: undefined }),
@@ -291,8 +291,17 @@ test("retention keeps the newest 200 ended runs, lets their journals go with the
   ];
   const journal = requests.flatMap((record) => journalFor(record.runId));
   const retained = retainedBrainState({ ...freshBrainState("gen-1", NOW), requests, journal });
-  assert.deepEqual(retained.prunedRunIds, ["run-0", "run-1", "run-2", "run-3", "run-4"]);
-  assert.equal(retained.state.requests.length, 202);
+  // The bound counts every record, the two still going included, so seven go.
+  assert.deepEqual(retained.prunedRunIds, [
+    "run-0",
+    "run-1",
+    "run-2",
+    "run-3",
+    "run-4",
+    "run-5",
+    "run-6",
+  ]);
+  assert.equal(retained.state.requests.length, 200);
   assert.ok(retained.state.requests.some((record) => record.runId === "run-900"));
   assert.ok(retained.state.requests.some((record) => record.runId === "run-901"));
   assert.ok(!retained.state.requests.some((record) => record.runId === "run-0"));
@@ -433,4 +442,242 @@ test("a Clear whose marker the storage refuses still fences the old generation a
     generationId: "gen-1",
     clearedAt: NOW + 1,
   });
+});
+
+test("the parser refuses a lifetime other than the build's and a marker dated after its generation's birth", () => {
+  const state = complete();
+  const read = (value: WireBoundaryInput) => brainPersistedStateFromWire(unparsedWire(value));
+  assert.equal(read({ ...raw(state), expiresAt: state.expiresAt + 1 }), undefined);
+  assert.equal(read({ ...raw(state), createdAt: state.createdAt - 1 }), undefined);
+  assert.deepEqual(read({ ...raw(state), reset: { clearedAt: NOW } })?.reset, { clearedAt: NOW });
+  assert.equal(read({ ...raw(state), reset: { clearedAt: NOW + 1 } }), undefined);
+});
+
+/** Storage whose next write waits until the test releases it. */
+class HeldStorage extends MemoryStorage {
+  #release: (() => void) | undefined;
+  holdNext = false;
+  override write(contents: string) {
+    if (!this.holdNext) return super.write(contents);
+    this.holdNext = false;
+    return new Promise<boolean>((resolve) => {
+      this.#release = () => resolve(super.write(contents));
+    });
+  }
+  release() {
+    this.#release?.();
+    this.#release = undefined;
+  }
+  get holding() {
+    return this.#release !== undefined;
+  }
+}
+
+test("a Clear and an expiry fence synchronously, before any disk is waited on, and a write landing afterwards installs nothing", async () => {
+  const storage = new HeldStorage();
+  let generations = 0;
+  const store = new BrainStateStore({
+    storage,
+    createGenerationId: () => `gen-${++generations}`,
+    now: () => NOW,
+  });
+  const lease = store.lease();
+  await store.load();
+  const heard: string[] = [];
+  store.onReplaced((state) => heard.push(state.generationId));
+
+  // A write is out on disk when the Clear is asked for.
+  storage.holdNext = true;
+  let committed = 0;
+  const late = store.write(
+    lease,
+    "gen-1",
+    (state) => ({ ...state, cursors: { p: { s: "LATE_CURSOR" } } }),
+    () => {
+      committed += 1;
+    },
+  );
+  await Promise.resolve();
+  assert.ok(storage.holding, "the write is on disk");
+  const clearing = store.clear(NOW + 1);
+  // Fenced at once: nothing waited for the disk.
+  assert.equal(store.holdsGeneration("gen-1"), false);
+  assert.equal(store.generationId(), "gen-2");
+  assert.deepEqual(heard, ["gen-2"]);
+  assert.deepEqual(store.resetMarker(), { clearedAt: NOW + 1, generationId: "gen-1" });
+  storage.release();
+  assert.equal(await late, false);
+  assert.equal(committed, 0);
+  assert.deepEqual(store.current()?.cursors, {});
+  assert.equal(await clearing, true);
+  const stored = brainStateFromStored(storage.file);
+  assert.equal(stored?.generationId, "gen-2");
+  assert.ok(!String(storage.read()).includes("LATE_CURSOR"));
+
+  // The same for an expiry asked for while a write is out.
+  storage.holdNext = true;
+  const later = store.write(lease, "gen-2", (state) => ({
+    ...state,
+    cursors: { p: { s: "LATER_CURSOR" } },
+  }));
+  await Promise.resolve();
+  const expiresAt = stored?.expiresAt ?? 0;
+  assert.equal(store.expireIfDue(expiresAt), true);
+  assert.equal(store.holdsGeneration("gen-2"), false);
+  assert.deepEqual(heard, ["gen-2", "gen-3"]);
+  storage.release();
+  assert.equal(await later, false);
+  await store.flush();
+  assert.equal(brainStateFromStored(storage.file)?.generationId, "gen-3");
+  assert.ok(!String(storage.read()).includes("LATER_CURSOR"));
+  assert.equal(store.expireIfDue(expiresAt), false);
+});
+
+test("a Clear on a store that never loaded still leaves the marker, learning the erased id from the file and reading nothing else", async () => {
+  const storage = new MemoryStorage();
+  const old = {
+    ...complete(),
+    items: [{ type: "message", role: "user", content: "OLD_COLD_SECRET" }],
+  };
+  storage.file = brainStateRecord(old);
+  const store = new BrainStateStore({
+    storage,
+    createGenerationId: () => "gen-cold",
+    now: () => NOW,
+  });
+  const heard: string[] = [];
+  store.onReplaced((state) => heard.push(state.generationId));
+  const clearing = store.clear(NOW + 5);
+  assert.deepEqual(store.resetMarker(), { clearedAt: NOW + 5 });
+  assert.deepEqual(heard, ["gen-cold"]);
+  assert.equal(await clearing, true);
+  assert.deepEqual(store.resetMarker(), { clearedAt: NOW + 5, generationId: "gen-1" });
+  assert.deepEqual(brainStateFromStored(storage.file)?.reset, {
+    clearedAt: NOW + 5,
+    generationId: "gen-1",
+  });
+  assert.ok(!String(storage.read()).includes("OLD_COLD_SECRET"));
+  // The old file is never read into memory afterwards.
+  assert.equal((await store.load()).generationId, "gen-cold");
+
+  // With no brain file at all the marker still carries the instant.
+  const empty = new MemoryStorage();
+  const bare = new BrainStateStore({
+    storage: empty,
+    createGenerationId: () => "gen-bare",
+    now: () => NOW,
+  });
+  assert.equal(await bare.clear(NOW + 6), true);
+  assert.deepEqual(brainStateFromStored(empty.file)?.reset, { clearedAt: NOW + 6 });
+});
+
+test("load admits a file only within its bounds and rewrites the disk to match what it admitted", async () => {
+  const reports: string[] = [];
+  const bounds = { MAXIMUM_TERMINAL_REQUESTS: 3, MAXIMUM_SERIALIZED_BYTES: 100_000 };
+  const make = (storage: MemoryStorage, now = NOW) =>
+    new BrainStateStore({
+      storage,
+      createGenerationId: () => "gen-fresh",
+      now: () => now,
+      bounds,
+      report: (message) => reports.push(message),
+    });
+
+  // Expired: discarded and replaced on disk in the same load.
+  const expired = new MemoryStorage();
+  const stale = {
+    ...complete(),
+    items: [{ type: "message", role: "user", content: "EXPIRED_SECRET" }],
+  };
+  expired.file = brainStateRecord(stale);
+  assert.equal((await make(expired, stale.expiresAt).load()).generationId, "gen-fresh");
+  assert.ok(!String(expired.read()).includes("EXPIRED_SECRET"));
+  assert.equal(brainStateFromStored(expired.file)?.generationId, "gen-fresh");
+
+  // Unreadable and version-1: replaced likewise.
+  const broken = new MemoryStorage();
+  broken.file = '{"version":1,"items":[{"content":"V1_SECRET"}],"cursors":{}}\n';
+  await make(broken).load();
+  assert.ok(!String(broken.read()).includes("V1_SECRET"));
+
+  // Pruned at load: the admitted copy and the file both hold three.
+  const crowded = new MemoryStorage();
+  crowded.file = brainStateRecord({
+    ...freshBrainState("gen-1", NOW),
+    requests: [0, 1, 2, 3, 4].map((index) => terminal(index)),
+    journal: [0, 1, 2, 3, 4].flatMap((index) => journalFor(`run-${index}`)),
+  });
+  const pruned = await make(crowded).load();
+  assert.deepEqual(
+    pruned.requests.map((record) => record.runId),
+    ["run-2", "run-3", "run-4"],
+  );
+  assert.equal(brainStateFromStored(crowded.file)?.requests.length, 3);
+  assert.equal(brainStateFromStored(crowded.file)?.journal.length, 3);
+
+  // Past its bounds with nothing eligible: refused whole, replaced, reported.
+  const overfull = new MemoryStorage();
+  overfull.file = brainStateRecord({
+    ...freshBrainState("gen-1", NOW),
+    requests: [0, 1, 2, 3].map((index) => terminal(index, { historyRecordedAt: undefined })),
+  });
+  assert.equal((await make(overfull).load()).requests.length, 0);
+  assert.equal(brainStateFromStored(overfull.file)?.generationId, "gen-fresh");
+  assert.ok(reports.some((message) => message.includes("past its bounds")));
+
+  // A refused rewrite is reported, and the memory still holds the fresh generation.
+  const refusing = new MemoryStorage();
+  refusing.file = brainStateRecord(stale);
+  refusing.refuse = true;
+  const held = make(refusing, stale.expiresAt);
+  assert.equal((await held.load()).generationId, "gen-fresh");
+  assert.ok(reports.some((message) => message.includes("expired generation")));
+  assert.ok(String(refusing.read()).includes("EXPIRED_SECRET"));
+});
+
+test("the record count is a hard bound: admission closes at capacity and a write that would add past it is refused", async () => {
+  const storage = new MemoryStorage();
+  const store = new BrainStateStore({
+    storage,
+    createGenerationId: () => "gen-1",
+    now: () => NOW,
+    bounds: { MAXIMUM_TERMINAL_REQUESTS: 2, MAXIMUM_SERIALIZED_BYTES: 100_000 },
+  });
+  const lease = store.lease();
+  await store.load();
+  const unpublished = (index: number) => terminal(index, { historyRecordedAt: undefined });
+  assert.equal(store.admits("gen-1"), true);
+  assert.equal(
+    await store.write(lease, "gen-1", (state) => ({ ...state, requests: [unpublished(0)] })),
+    true,
+  );
+  assert.equal(store.admits("gen-1"), true);
+  assert.equal(
+    await store.write(lease, "gen-1", (state) => ({
+      ...state,
+      requests: [...state.requests, unpublished(1)],
+    })),
+    true,
+  );
+  assert.equal(store.admits("gen-1"), false);
+  assert.equal(
+    await store.write(lease, "gen-1", (state) => ({
+      ...state,
+      requests: [...state.requests, unpublished(2)],
+    })),
+    false,
+  );
+  // A write that does not add a record — an end's mark — still lands, and
+  // once an end is in the thread the room opens again.
+  assert.equal(
+    await store.write(lease, "gen-1", (state) => ({
+      ...state,
+      requests: state.requests.map((record) =>
+        record.runId === "run-0" ? { ...record, historyRecordedAt: NOW } : record,
+      ),
+    })),
+    true,
+  );
+  assert.equal(store.admits("gen-1"), true);
+  assert.equal(store.admits("gen-other"), false);
 });

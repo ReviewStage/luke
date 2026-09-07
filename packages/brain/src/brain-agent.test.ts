@@ -2644,3 +2644,96 @@ test("runs retention lets go of leave the live records and journal too, so the n
     runIds.slice(2),
   );
 });
+
+test("a generation at its record bound refuses a new ask at the door, and admits one again once an end reaches the thread", async () => {
+  const storage = new FakeStorage();
+  const store = new BrainStateStore({
+    storage,
+    createGenerationId: () => "gen-bounded",
+    now: () => NOW,
+    bounds: { MAXIMUM_TERMINAL_REQUESTS: 2, MAXIMUM_SERIALIZED_BYTES: 8 * 1024 * 1024 },
+  });
+  const h = harness({ store }, storage);
+  h.client.answers.push(answered([message("a")]), answered([message("b")]));
+  const first = await ask(h, "a");
+  const second = await ask(h, "b");
+  assert.ok(first && second);
+  assert.deepEqual(await submit(h, "c"), {
+    outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+    reason: BRAIN_SUBMISSION_REJECTION.FULL,
+  });
+  assert.equal(h.agent.requests().length, 2);
+  const heard: (readonly BrainRequestRecord[])[] = [];
+  h.agent.subscribe((records) => heard.push(records));
+  assert.equal(await h.agent.markHistoryRecorded(first.runId, NOW), true);
+  h.client.answers.push(answered([message("c")]));
+  const third = await ask(h, "c");
+  assert.equal(third?.text, "c");
+  // The subscriber heard the oldest run go when the third was admitted.
+  assert.ok(heard.some((records) => !records.some((record) => record.runId === first.runId)));
+  assert.deepEqual(
+    h.agent.requests().map((record) => record.runId),
+    [second.runId, third.runId],
+  );
+});
+
+test("a Clear or expiry asked for while a write is out on disk revokes a held act's preparation before the disk answers, and no effect dispatches", async () => {
+  for (const ending of ["clear", "expiry"] as const) {
+    let releaseWrite: (() => void) | undefined;
+    let releasePreparation: (() => void) | undefined;
+    let effects = 0;
+    const acts: BrainActPerformer = {
+      perform: async (_call, execution): Promise<WireRecord> => {
+        await new Promise<void>((resolve) => {
+          releasePreparation = resolve;
+        });
+        if (execution.isRevoked()) {
+          return { status: ACT_RESULT_STATUS.REJECTED, reason: "revoked before the effect" };
+        }
+        effects += 1;
+        return { status: ACT_RESULT_STATUS.ACCEPTED };
+      },
+    };
+    const h = harness({ acts });
+    h.client.answers.push(answered([message("first")]));
+    await ask(h, "first");
+    const born = h.store.current();
+    assert.ok(born);
+    // The act's start is durable; its preparation is held.
+    h.client.answers.push(answered([messageAct("call_1")]));
+    const runId = acceptedRunId(await submit(h, "send"));
+    await settle();
+    assert.ok(releasePreparation, "the performer holds the act");
+    assert.equal(h.storage.stored()?.journal.length, 1);
+    // A metadata write of another run is out on disk when the end is asked for.
+    const storage = h.storage;
+    const write = storage.write.bind(storage);
+    storage.write = (contents) =>
+      // SAFETY: the store accepts a promise of the write's outcome; this test holds it open.
+      new Promise<boolean>((resolve) => {
+        releaseWrite = () => resolve(write(contents));
+      }) as unknown as boolean;
+    const marking = h.agent.markHistoryRecorded(runId, NOW);
+    await settle();
+    assert.ok(releaseWrite, "a write is on disk");
+    storage.write = write;
+    if (ending === "clear") {
+      void h.store.clear(h.clock.now + 1);
+    } else {
+      await h.clock.advance(born.expiresAt);
+    }
+    // Fenced before the disk answered.
+    assert.equal(h.store.holdsGeneration(born.generationId), false);
+    assert.equal(h.agent.request(runId), undefined);
+    releasePreparation();
+    await settle();
+    releaseWrite();
+    await marking;
+    await settle();
+    await h.store.flush();
+    assert.equal(effects, 0, `${ending}: an effect dispatched after the fence`);
+    assert.equal(h.store.current()?.journal.length, 0);
+    assert.equal(h.storage.stored()?.generationId, h.store.generationId());
+    assert.equal(h.storage.stored()?.requests.length, 0);
+  }
+});

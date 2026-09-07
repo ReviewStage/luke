@@ -10,17 +10,19 @@ we collect, who we send it to, and how to turn it off.
 
 **On your Mac.** Luke reads the session files your coding agents already write,
 using the session title, status, repository, branch, model, current tool,
-errors, and the tool it is running. It writes none of this to disk. For a
+errors, and the tool it is running. It keeps none of these fields in a file
+of its own; what it does keep is the working memory described below. For a
 session running on your Mac whose agent keeps a transcript this build can read
 (Claude Code, Codex, and OMP today), Luke also reads that session's own
 transcript file — the file its agent already writes, which Luke never writes
 to — so he can notice what changed and tell you about it. He reads it at three
 moments: when an agent's hook says a turn just ended, on his own periodic look
 at the sessions that are working or waiting, and when you ask him about a
-session. On the first two he reads only what each transcript gained since he
-last looked, up to the last 20,000 characters of new text per session per
-look; on the third he reads a bounded tail of the whole transcript, up to its
-last 60,000 characters. What he reads is sent to a model as described under
+session. On the first two he reads what each transcript gained since he last
+looked, up to the last 20,000 characters of new text per session per look,
+and may also read one session's recent tail, up to its last 60,000
+characters, while deciding whether there is anything to tell you; when you
+ask, he reads the same bounded tail. What he reads is sent to a model as described under
 "Who we send it to", and what he keeps of it lives under his working memory's
 own lifetime, described below. Nothing else reads message history, file
 contents, or command output. If you run
@@ -51,14 +53,20 @@ your sessions and your conversation, so it lives under the same rule as the
 rest. The whole file is one generation, and a generation lives exactly 14
 days from the moment it began: writing into it never extends it, and when its
 time is up everything in it, the encrypted compaction included, is discarded
-and an empty generation begins, which may observe your sessions afresh. A
-generation keeps at most 200 finished asks and stays under 8 MiB, the oldest
-finished asks going first. Clearing the History tab discards the current
-generation too, along with anything Luke was still working on: both files go
-at once, with a small record, holding no content, of when the Clear happened so
-that nothing written before it can come back, and the Clear is reported done
-only when both are gone. Clearing does not touch the separate things Luke
-remembers about you, described next, and never touches your agents' own files.
+and an empty generation begins, which may observe your sessions afresh; a
+generation found expired when Luke starts is discarded then and there. A
+generation holds at most 200 asks and stays under 8 MiB: the oldest finished
+asks go first once their endings are in the History, and when nothing can go
+Luke declines a new ask rather than growing the file. Clearing the History
+tab discards the current generation too, along with anything Luke was still
+working on and anything he was about to say: the History, his context, and
+the memory are emptied the moment you press, and both files are erased with
+a small record, holding no content, of when the Clear happened so that
+nothing written before it can come back. If the disk refuses part of that
+erasure, the History and his context stay emptied, the Clear is reported as
+not finished rather than done, and the next thing Luke writes replaces what
+was left. Clearing does not touch the separate things Luke remembers about
+you, described next, and never touches your agents' own files.
 
 **Things Luke remembers about you.** During a conversation you start, Luke may
 silently save a concise preference, personal fact, goal, or recurring constraint

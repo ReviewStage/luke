@@ -209,10 +209,10 @@ Trust constraints:
   a roster look reads, for each local session that is working or waiting or
   that the brain has read before, only what its transcript gained since the
   cursor the brain last kept for it, cut from the front to 20,000 characters
-  per session per turn; a developer's ask may read a whole transcript's tail,
-  cut from the front to 60,000 characters; a cloud session, and a provider
-  whose transcript this build does not read, are read from roster fields
-  alone. The provider's file is only ever read. Everything a turn reads and
+  per session per turn, and may read one observed session's whole tail, cut
+  from the front to 60,000 characters, through the same read tool a
+  developer's ask is offered; a cloud session, and a provider whose
+  transcript this build does not read, are read from roster fields alone. The provider's file is only ever read. Everything a turn reads and
   says travels as the Responses input the agent keeps — behind a marker, as
   data — directly to OpenAI on the developer's own key, or through Luke's own
   service on the hosted tier, where the service performs one model inference
@@ -227,31 +227,39 @@ Trust constraints:
   transcript cursors, the record of every developer ask and how it ended, and
   the action journal that pairs each act with its outcome. A generation lives
   exactly fourteen days from its creation: no write, checkpoint, or
-  compaction moves its expiry, and it is judged at load, at the door of every
-  turn and submission, and by a timer armed at the instant itself, so a
-  generation that dies under a held model answer, transcript read, or act is
-  replaced beneath it and the late result lands nowhere. Expiry revokes the
-  generation's runs and withdraws its deliveries; a version-1 file, of
-  unknown age, reads as nothing rather than as a fresh lifetime; and the
-  empty generation that follows may observe the same provider files again,
-  because the rule bounds how long a reading stands, not whether the source
-  can be read. Within its life a generation keeps at most 200 ended runs,
-  each let go together with its journal and only once its end is written into
-  History, and the serialized file stays under 8 MiB: ended runs go first,
-  and a write that would still grow an oversized envelope is refused rather
-  than dropping a run still going or its journal. The History Clear reaches
-  this file as well as the conversation's, in a fixed order: the cutoff is
-  raised so every later history write and window report is judged against it;
-  the store fences the generation and writes an empty successor carrying a
-  content-free marker — the erased generation's id and the Clear's instant —
-  in the one write that also removes the old content; the briefings not yet
-  in the mouth are withdrawn; the thread's file is removed; and only then are
-  the windows told. A launch that finds the marker refuses every stored line
-  at or before its instant, so a crash between the two files cannot stand the
-  thread back up, and a step that fails leaves everything before it standing
-  and reports the erasure incomplete, never done. A Clear does not reach the
-  facts Luke separately remembers about the developer, nor any provider's
-  file. Widening what the brain reads, where it travels, how long a
+  compaction moves its expiry, a file claiming any other span reads as
+  nothing, and it is judged at load, at the door of every turn and
+  submission, and by a timer armed at the instant itself. The fence is
+  synchronous: the store forgets the dead generation and announces the
+  successor before any disk is waited on, so a turn holding a model answer,
+  a transcript read, or an act's preparation is revoked at once, a write
+  landing afterwards installs nothing, and the late result lands nowhere.
+  Expiry revokes the generation's runs and, through the host's own listener,
+  withdraws every briefing it had queued or offered but not yet spoken; a
+  version-1 file, of unknown age, reads as nothing rather than as a fresh
+  lifetime; a generation found expired, unreadable, or past its bounds at
+  load is replaced on disk in the same load rather than left for a later
+  write; and the empty generation that follows may observe the same
+  provider files again, because the rule bounds how long a reading stands,
+  not whether the source can be read. Within its life a generation holds at
+  most 200 records and its serialized file stays under 8 MiB: ended runs
+  whose ends History has taken go first, each with its journal, a new ask is
+  refused at the door when nothing can go, and a write that would still grow
+  an envelope past a bound is refused rather than dropping a run still going
+  or its journal. The History Clear reaches this file as well as the
+  conversation's, in a fixed order: the cutoff is raised, the relayed thread
+  emptied, and every window told, so no later history write, window report,
+  model context, or publication can carry a line from before the press; the
+  store fences the generation the same synchronous way and then writes an
+  empty successor carrying a content-free marker — the Clear's instant, and
+  the erased generation's id when one is known, learned from the file when
+  the store had not yet loaded — over the old content; the thread's file is
+  removed. A launch that finds the marker refuses every stored line at or
+  before its instant, so a crash between the two files cannot stand the
+  thread back up, and a step that fails leaves the fence standing and
+  reports the erasure incomplete, never done, with the next landed write
+  replacing what the disk kept. A Clear does not reach the facts Luke
+  separately remembers about the developer, nor any provider's file. Widening what the brain reads, where it travels, how long a
   generation stands, or what a Clear leaves is a product decision, not an
   implementation detail, and `PRIVACY.md` says each in as many words.
 - Counting is three streams with three different guarantees, and the

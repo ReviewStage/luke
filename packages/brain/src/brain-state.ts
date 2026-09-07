@@ -47,8 +47,9 @@ export const BRAIN_STATE_BOUNDS: BrainStateBounds = {
  * one until a later Clear or a new generation supersedes it.
  */
 export interface BrainResetMarker {
-  generationId: string;
   clearedAt: number;
+  /** The erased generation, when the store knew one; a Clear pressed before any state was read carries the instant alone. */
+  generationId?: string;
 }
 
 export type BrainTranscriptCursors = Readonly<Record<string, Readonly<Record<string, string>>>>;
@@ -95,10 +96,13 @@ export function brainPersistedStateFromWire(
   if (!isRecord(value) || value.version !== BRAIN_STATE_VERSION) return undefined;
   if (!isWireString(value.generationId) || value.generationId.length === 0) return undefined;
   if (!instant(value.createdAt) || !instant(value.expiresAt)) return undefined;
+  // The lifetime is the build's, not the file's: an envelope claiming any
+  // other span was not written by this rule and is not given one now.
+  if (value.expiresAt - value.createdAt !== BRAIN_GENERATION_LIFETIME_MS) return undefined;
   if (!Array.isArray(value.items) || !isRecord(value.cursors)) return undefined;
   if (!Array.isArray(value.requests) || !Array.isArray(value.journal)) return undefined;
   const reset = resetMarkerFromWire(value.reset);
-  if (reset === null) return undefined;
+  if (reset === null || (reset && reset.clearedAt > value.createdAt)) return undefined;
   const items: ResponsesInputItem[] = [];
   for (const item of value.items) {
     if (!isRecord(item)) return undefined;
@@ -142,10 +146,10 @@ export function brainPersistedStateFromWire(
 /** The marker as stored, nothing when absent, and null when present but unreadable. */
 function resetMarkerFromWire(value: UnparsedWireValue): BrainResetMarker | undefined | null {
   if (value === undefined) return undefined;
-  if (!isRecord(value)) return null;
+  if (!isRecord(value) || !instant(value.clearedAt)) return null;
+  if (value.generationId === undefined) return { clearedAt: value.clearedAt };
   if (!isWireString(value.generationId) || value.generationId.length === 0) return null;
-  if (!instant(value.clearedAt)) return null;
-  return { generationId: value.generationId, clearedAt: value.clearedAt };
+  return { clearedAt: value.clearedAt, generationId: value.generationId };
 }
 
 function instant(value: UnparsedWireValue): value is number {
@@ -185,7 +189,7 @@ export interface RetainedBrainState {
   /** The serialized record's size in bytes, measured once for the write that follows. */
   record: string;
   bytes: number;
-  /** Whether the envelope still exceeds the byte cap after everything eligible went. */
+  /** Whether the envelope still exceeds a bound — bytes or records — after everything eligible went. */
   oversized: boolean;
 }
 
@@ -204,11 +208,14 @@ function withoutRuns(state: BrainPersistedState, runIds: ReadonlySet<string>): B
 /**
  * Applies both bounds, oldest ended runs going first and each run's journal
  * going with its record, so a call is never left without the run it belonged
- * to. The count is applied outright; the byte cap prunes only what is
- * eligible and then reports whether that was enough, because what to do about
- * an envelope that is still too large is the writer's decision, not the
- * retention's: nothing here touches a run still going, its journal, or the
- * model's own memory items.
+ * to. Both bounds prune only what is eligible and then report whether that
+ * was enough, because what to do about an envelope that is still too large —
+ * refuse the write that would grow it, or refuse the file at load — is the
+ * writer's decision, not the retention's: nothing here touches a run still
+ * going, a run whose end the thread has not yet taken, a journal, or the
+ * model's own memory items. The count bounds records of every status
+ * together, so however many runs stand at once the file never carries more
+ * than the bound names.
  */
 export function retainedBrainState(
   state: BrainPersistedState,
@@ -222,8 +229,7 @@ export function retainedBrainState(
         left.acceptedAt - right.acceptedAt,
     );
   const pruned = new Set<string>();
-  const terminal = state.requests.filter((record) => isTerminalBrainRequestStatus(record.status));
-  let excess = terminal.length - bounds.MAXIMUM_TERMINAL_REQUESTS;
+  let excess = state.requests.length - bounds.MAXIMUM_TERMINAL_REQUESTS;
   for (const record of eligible) {
     if (excess <= 0) break;
     pruned.add(record.runId);
@@ -245,7 +251,9 @@ export function retainedBrainState(
     prunedRunIds: [...pruned],
     record,
     bytes,
-    oversized: bytes > bounds.MAXIMUM_SERIALIZED_BYTES,
+    oversized:
+      bytes > bounds.MAXIMUM_SERIALIZED_BYTES ||
+      retained.requests.length > bounds.MAXIMUM_TERMINAL_REQUESTS,
   };
 }
 
@@ -262,6 +270,8 @@ export interface BrainStateStoreOptions {
   createGenerationId: () => string;
   now?: () => number;
   bounds?: BrainStateBounds;
+  /** Hears the store's own housekeeping failures: a discard or expiry the disk would not take. */
+  report?: (message: string) => void;
 }
 
 /**
@@ -302,6 +312,7 @@ export class BrainStateStore {
   readonly #createGenerationId: () => string;
   readonly #now: () => number;
   readonly #bounds: BrainStateBounds;
+  readonly #report: (message: string) => void;
   #state: BrainPersistedState | undefined;
   #lease: BrainStoreLease | undefined;
   #queue: Promise<unknown> = Promise.resolve();
@@ -312,24 +323,30 @@ export class BrainStateStore {
     this.#createGenerationId = options.createGenerationId;
     this.#now = options.now ?? Date.now;
     this.#bounds = options.bounds ?? BRAIN_STATE_BOUNDS;
+    this.#report = options.report ?? (() => undefined);
   }
 
   /**
    * Reads the envelope once from storage; later calls answer the held copy.
-   * A missing or foreign file becomes a fresh generation in memory, written
-   * only when something is first checkpointed into it. So does a file whose
-   * generation has died: nothing of it is read into memory, its marker
-   * included, because a lifetime that ended is not extended by being found.
+   * What is read is admitted before anything sees it: a missing, foreign, or
+   * malformed file, a generation past its time, and a valid envelope that
+   * exceeds its bounds after every eligible ended run is let go all become a
+   * fresh generation — nothing of them is read into memory — and an envelope
+   * within bounds is held as retention leaves it. Whatever the file held that
+   * the store did not admit is replaced on disk in the same load, so a
+   * generation found dead or unreadable does not wait for a later write to
+   * be gone; a disk that refuses the replacement is reported. A held copy is
+   * judged again on every load, so an agent built after an idle stretch never
+   * adopts a generation that died while nothing kept its timer.
    */
   load(): Promise<BrainPersistedState> {
     return this.#serialized(async () => {
       const held = this.#state;
       if (held) {
-        // A generation held across a stretch with no agent to keep its timer
-        // is judged again here, so the agent built next never adopts a dead one.
         if (!brainGenerationExpired(held, this.#now())) return held;
-        this.#state = freshBrainState(this.#createGenerationId(), this.#now());
-        return this.#state;
+        const fresh = this.#begin(this.#now());
+        await this.#persistHousekeeping(fresh, "the expired generation");
+        return fresh;
       }
       let stored: string | undefined;
       try {
@@ -337,13 +354,46 @@ export class BrainStateStore {
       } catch {
         stored = undefined;
       }
-      const read = brainStateFromStored(stored);
-      this.#state =
-        read && !brainGenerationExpired(read, this.#now())
-          ? read
-          : freshBrainState(this.#createGenerationId(), this.#now());
-      return this.#state;
+      const admitted = this.#admit(stored);
+      this.#state = admitted.state;
+      if (admitted.rewrite) {
+        this.#report(`Brain memory discarded ${admitted.rewrite}`);
+        await this.#persistHousekeeping(admitted.state, admitted.rewrite);
+      }
+      return admitted.state;
     });
+  }
+
+  /** What a stored file becomes in memory, and whether the file must be rewritten to match. */
+  #admit(stored: string | undefined): AdmittedBrainState {
+    const now = this.#now();
+    const read = brainStateFromStored(stored);
+    if (!read) {
+      return {
+        state: freshBrainState(this.#createGenerationId(), now),
+        ...(stored !== undefined ? { rewrite: "an unreadable state file" } : undefined),
+      };
+    }
+    if (brainGenerationExpired(read, now)) {
+      return {
+        state: freshBrainState(this.#createGenerationId(), now),
+        rewrite: "the expired generation",
+      };
+    }
+    const retained = retainedBrainState(read, this.#bounds);
+    if (retained.oversized) {
+      // Nothing this build writes exceeds its bounds with nothing left to
+      // let go, so a file that does was not written under this rule; it is
+      // refused whole rather than trimmed by guesswork.
+      return {
+        state: freshBrainState(this.#createGenerationId(), now),
+        rewrite: "a state file past its bounds",
+      };
+    }
+    return {
+      state: retained.state,
+      ...(retained.prunedRunIds.length > 0 ? { rewrite: "ended runs past retention" } : undefined),
+    };
   }
 
   /** Takes the write lease, releasing whoever held it. */
@@ -369,7 +419,9 @@ export class BrainStateStore {
    * Whether the generation named is the one that stands: the fence every
    * late arrival is checked against — a model answer, an act's result, a
    * delivery claim, a history line — before it may have an effect. A
-   * generation replaced, expired, or cleared never stands again.
+   * generation replaced, expired, or cleared never stands again, and it
+   * stops standing the instant the replacement, expiry, or Clear is asked
+   * for, before any disk is waited on.
    */
   holdsGeneration(generationId: string): boolean {
     return this.#state?.generationId === generationId;
@@ -381,24 +433,36 @@ export class BrainStateStore {
   }
 
   /**
-   * Ends the standing generation if its lifetime has run out, beginning an
-   * empty one in its place, and answers whether it did. Called by the agent
-   * before it opens any turn and from the timer it arms at the generation's
-   * expiry, so a generation dies on time whether or not anything is written
-   * into it. The old content leaves the file with the same write that begins
-   * the new generation; a write the storage refuses leaves the old content on
-   * disk for the next successful write to replace, but never back in memory.
+   * Whether the generation named has room for one more record after
+   * retention has let go of what it may. The count is a hard bound on the
+   * file, so a run is refused at its door rather than accepted into an
+   * envelope the store would then refuse to write.
    */
-  expireIfDue(now: number = this.#now()): Promise<boolean> {
-    return this.#serialized(async () => {
-      const held = this.#state;
-      if (!held || !brainGenerationExpired(held, now)) return false;
-      const fresh = freshBrainState(this.#createGenerationId(), now);
-      await this.#persist(fresh);
-      this.#state = fresh;
-      this.#announceReplaced(fresh);
-      return true;
-    });
+  admits(generationId: string): boolean {
+    const held = this.#state;
+    if (!held || held.generationId !== generationId) return false;
+    const cap = this.#bounds.MAXIMUM_TERMINAL_REQUESTS;
+    const withRoom = { ...this.#bounds, MAXIMUM_TERMINAL_REQUESTS: cap - 1 };
+    return retainedBrainState(held, withRoom).state.requests.length < cap;
+  }
+
+  /**
+   * Ends the standing generation if its lifetime has run out, beginning an
+   * empty one in its place at once, and answers whether it did. The fence is
+   * synchronous: by the time this returns, the old generation stands nowhere
+   * in memory and every listener has heard the successor, so a turn holding
+   * a model answer, a read, or an act's preparation finds itself revoked
+   * before any disk is waited on. The write that carries the successor to
+   * the file, replacing the old content, is queued behind the writes already
+   * out; a disk that refuses it is reported, and the old content stays on
+   * disk only until the next write that lands.
+   */
+  expireIfDue(now: number = this.#now()): boolean {
+    const held = this.#state;
+    if (!held || !brainGenerationExpired(held, now)) return false;
+    const fresh = this.#begin(now);
+    void this.#serialized(() => this.#persistHousekeeping(fresh, "the expired generation"));
+    return true;
   }
 
   /**
@@ -412,10 +476,14 @@ export class BrainStateStore {
    * them back. Answers false without touching storage when that generation
    * is no longer the store's, or the lease has passed to a later agent — the
    * fences a Clear, an expiry, a replacement, and a rebuild raise against late
-   * writers — false when the envelope would still exceed its byte cap after
-   * every eligible ended run went and the write would grow it, and false when
+   * writers — false when the envelope would still exceed a bound after every
+   * eligible ended run went and the write would grow it, and false when
    * storage refused, leaving the held copy as it was so the caller's own
-   * memory and the file cannot silently disagree about what is known.
+   * memory and the file cannot silently disagree about what is known. A
+   * fence raised while the write was out on disk is honored the same way: the
+   * landed content is not installed over the successor, `committed` is not
+   * called, and the caller hears false, because what it wrote belongs to a
+   * generation that no longer stands.
    */
   write(
     lease: BrainStoreLease,
@@ -440,8 +508,9 @@ export class BrainStateStore {
         ...(held.reset ? { reset: held.reset } : undefined),
       };
       const retained = retainedBrainState(composed, this.#bounds);
-      if (retained.oversized && retained.bytes > recordBytes(brainStateRecord(held))) return false;
+      if (retained.oversized && grows(retained, held)) return false;
       if (!(await this.#persistRecord(retained.record))) return false;
+      if (this.#state !== held || !this.holdsLease(lease)) return false;
       this.#state = retained.state;
       committed?.({ prunedRunIds: retained.prunedRunIds });
       return true;
@@ -461,26 +530,45 @@ export class BrainStateStore {
   }
 
   /**
-   * The Clear: the standing generation is fenced and forgotten in memory
-   * first, then an empty generation carrying the marker of the erasure is
-   * written over it — one write, so the file never holds the old content
-   * beside the marker — and every listener hears the new generation so runs
-   * of the old one stand down. Answers whether the marker reached storage:
-   * when it did not, the old generation is still gone from memory and fenced
-   * against every late writer, but the file still holds it until the next
-   * successful write, and the caller must say the erasure did not complete
-   * rather than that it did.
+   * The Clear. The fence is synchronous: the standing generation is
+   * forgotten in memory and every listener hears the empty successor before
+   * this returns, so nothing of the old generation can checkpoint, publish,
+   * deliver, or dispatch from here on, whatever the disk does next. The
+   * successor carries a content-free marker of the erasure — the Clear's
+   * instant, and the erased generation's id when one is known — and is then
+   * written over the old content in one write, queued behind the writes
+   * already out. A store that had not yet read its file learns the erased
+   * generation's id from the file at that point, reading nothing else of it,
+   * so a Clear pressed before any capability loaded the state still leaves
+   * the marker behind. Answers whether the marker reached storage: when it
+   * did not, the old generation is still gone from memory and fenced against
+   * every late writer, but the file still holds it until the next write that
+   * lands, and the caller must say the erasure did not complete rather than
+   * that it did.
    */
   clear(now: number = this.#now()): Promise<boolean> {
+    const held = this.#state;
+    const fresh = this.#begin(now, {
+      clearedAt: now,
+      ...(held ? { generationId: held.generationId } : undefined),
+    });
     return this.#serialized(async () => {
-      const held = this.#state;
-      const fresh: BrainPersistedState = {
-        ...freshBrainState(this.#createGenerationId(), now),
-        ...(held ? { reset: { generationId: held.generationId, clearedAt: now } } : undefined),
-      };
-      this.#state = fresh;
-      this.#announceReplaced(fresh);
-      return this.#persist(fresh);
+      let marker = fresh;
+      if (!held && this.#state === fresh) {
+        let stored: string | undefined;
+        try {
+          stored = await this.#storage.read();
+        } catch {
+          stored = undefined;
+        }
+        const prior = brainStateFromStored(stored)?.generationId;
+        if (prior && this.#state === fresh) {
+          marker = { ...fresh, reset: { clearedAt: now, generationId: prior } };
+          this.#state = marker;
+        }
+      }
+      if (this.#state !== marker) return false;
+      return this.#persistRecord(brainStateRecord(marker));
     });
   }
 
@@ -497,12 +585,31 @@ export class BrainStateStore {
     await this.#queue;
   }
 
-  #announceReplaced(state: BrainPersistedState): void {
-    for (const listener of this.#replacedListeners) listener(state);
+  /** Begins a fresh generation in memory now and tells every listener; the disk is the caller's next step. */
+  #begin(now: number, reset?: BrainResetMarker): BrainPersistedState {
+    const fresh: BrainPersistedState = {
+      ...freshBrainState(this.#createGenerationId(), now),
+      ...(reset ? { reset } : undefined),
+    };
+    this.#state = fresh;
+    this.#announceReplaced(fresh);
+    return fresh;
   }
 
-  #persist(state: BrainPersistedState): Promise<boolean> {
-    return this.#persistRecord(brainStateRecord(state));
+  /**
+   * Writes a generation the store began on its own — at expiry, or in place
+   * of a file it did not admit — unless a later fence has already superseded
+   * it, in which case the later write carries the newer truth.
+   */
+  async #persistHousekeeping(state: BrainPersistedState, what: string): Promise<void> {
+    if (this.#state !== state) return;
+    if (!(await this.#persistRecord(brainStateRecord(state)))) {
+      this.#report(`Brain memory could not replace ${what} on disk`);
+    }
+  }
+
+  #announceReplaced(state: BrainPersistedState): void {
+    for (const listener of [...this.#replacedListeners]) listener(state);
   }
 
   async #persistRecord(record: string): Promise<boolean> {
@@ -518,4 +625,18 @@ export class BrainStateStore {
     this.#queue = run.catch(() => undefined);
     return run;
   }
+}
+
+/** What a load admitted, and what the file held instead when it must be rewritten to match. */
+interface AdmittedBrainState {
+  state: BrainPersistedState;
+  rewrite?: string;
+}
+
+/** Whether a retained envelope is larger than the one it would replace, in bytes or in records. */
+function grows(retained: RetainedBrainState, held: BrainPersistedState): boolean {
+  return (
+    retained.bytes > recordBytes(brainStateRecord(held)) ||
+    retained.state.requests.length > held.requests.length
+  );
 }

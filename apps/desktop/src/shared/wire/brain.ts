@@ -93,6 +93,8 @@ export const BRAIN_ASK_REFUSAL = {
     "I couldn't write that ask down, so I haven't taken it. Ask me again in a moment.",
   [BRAIN_SUBMISSION_REJECTION.CONFLICT]:
     "That ask arrived under an id I already have for different words. Ask it afresh.",
+  [BRAIN_SUBMISSION_REJECTION.FULL]:
+    "My notes are full of asks whose endings I haven't managed to file yet. Give me a moment and ask again.",
 } as const satisfies Record<BrainSubmissionRejection, string>;
 
 /** What the voice says while a run is still going when its wait ran out. */

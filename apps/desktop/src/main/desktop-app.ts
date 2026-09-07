@@ -1509,7 +1509,8 @@ async function applyVoiceCredential(): Promise<void> {
 const brainStatePath = () => path.join(app.getPath("userData"), BRAIN_STATE_FILE);
 
 function brainStore(): BrainStateStore {
-  brainStateStore ??= new BrainStateStore({
+  if (brainStateStore) return brainStateStore;
+  brainStateStore = new BrainStateStore({
     storage: {
       read: () => readStoredState(brainStatePath()),
       write: (contents) =>
@@ -1517,8 +1518,20 @@ function brainStore(): BrainStateStore {
       remove: () => removeStoredState(brainStatePath(), "Luke's memory of the agents"),
     },
     createGenerationId: () => randomUUID(),
+    report: (message) => process.stderr.write(`${message}\n`),
   });
+  // A generation that ends — cleared, expired, or replaced — takes its
+  // unspoken briefings with it, the one in the mouth's hand included: they
+  // are that generation's words, and an offer is not proof they were said.
+  // The agent hears the same announcement and stands its runs down itself.
+  brainStateStore.onReplaced(() => withdrawBriefings());
   return brainStateStore;
+}
+
+function withdrawBriefings(): void {
+  const offered = speechArbiter.withdrawBriefings();
+  if (offered) voiceWindow.current()?.webContents.send(channels.onSpeechWithdrawn, { id: offered });
+  offerNextSpeech();
 }
 
 /**
@@ -1620,15 +1633,16 @@ function recordMainConversationEntry(entry: ConversationEntry, recordedAt = Date
 }
 
 /**
- * The History Clear a panel pressed: the cutoff raised, the brain's
- * generation fenced and marked erased, its undelivered briefings withdrawn,
- * the stored thread deleted, and only then the relay emptied for every panel.
- * Answers whether both files went; only then is the voice window told to
- * retire its own turns, so a thread that could not be deleted is not
- * half-forgotten, while the fence and the marker stand either way. What Luke
- * separately remembers about the developer is another file under another
- * rule, and a Clear does not reach it. A fixture or capture run holds
- * nothing on disk and empties the view alone.
+ * The History Clear a panel pressed: the cutoff raised and the relay emptied
+ * for every panel first, so no context, publication, or report can carry
+ * the old lines whatever the disk does; the brain's generation fenced and
+ * marked erased, which the store's listener below answers by withdrawing
+ * the speech that generation had queued; then the stored thread deleted.
+ * Answers whether both files went, which is what the panel reports; the
+ * fence stands either way. What Luke separately remembers about the
+ * developer is another file under another rule, and a Clear does not reach
+ * it. A fixture or capture run holds nothing on disk and empties the view
+ * alone.
  */
 function clearConversationHistory(): Promise<boolean> {
   const emptyConversation = () => {
@@ -1645,10 +1659,9 @@ function clearConversationHistory(): Promise<boolean> {
     now: Date.now,
     fence: (clearedAt) => {
       conversationClearedAt = clearedAt;
+      emptyConversation();
     },
-    withdrawSpeech: () => speechArbiter.dropBriefings(),
     removeConversation: () => removeStoredState(conversationPath(), "the conversation"),
-    emptyConversation,
     report: (message) => process.stderr.write(`${message}\n`),
   });
 }
