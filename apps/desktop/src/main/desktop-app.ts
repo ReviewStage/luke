@@ -1741,13 +1741,19 @@ const brainWiring = wireBrain({
     acknowledge: (runId, deliveryId, epoch) => {
       if (brainReplyDeliveries.acknowledge(runId, deliveryId, epoch)) offerBrainReplies();
     },
-    grantOnCall: (record, epoch) =>
-      brainReplyDeliveries.grantOnCall(
+    grantOnCall: (record, epoch) => {
+      const granted = brainReplyDeliveries.grantOnCall(
         record,
         brainWiring.store().generationId() ?? "",
         epoch,
         brainReplyClaimContext(),
-      ),
+      );
+      // The grant took the run's offer out of the receiver's hand, and no
+      // acknowledgement will come for a reply said on the call: the next owed
+      // reply is offered now, for the receiver to take at its next quiet moment.
+      if (granted) offerBrainReplies();
+      return granted;
+    },
   },
   acts: {
     sessionActs: sessionActPerformer,

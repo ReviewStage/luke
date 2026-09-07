@@ -232,3 +232,64 @@ test("a delivered reply carries the origin of the ask it answers, so only a type
   await tick();
   assert.deepEqual(h.log.slice(2), ["speak run-s: Later.", "speaking spoken"]);
 });
+
+test("a grant landing after the developer took the turn is held, not spoken over them, and spoken once at the next quiet status", async () => {
+  const h = harness();
+  h.session.isConnected = true;
+  h.session.microphoneCall = true;
+  h.session.status = REALTIME_STATUS.READY;
+  h.player.offer(offer("run-1"));
+  assert.deepEqual(h.log, ["claim run-1@1"]);
+  // The developer starts a turn while the claim is out.
+  h.session.status = REALTIME_STATUS.LISTENING;
+  h.player.onStatus(REALTIME_STATUS.LISTENING);
+  h.grant(granted("Held words."));
+  await tick();
+  assert.deepEqual(h.log, ["claim run-1@1"]);
+  h.session.status = REALTIME_STATUS.RESPONDING;
+  h.player.onStatus(REALTIME_STATUS.RESPONDING);
+  await tick();
+  assert.deepEqual(h.log, ["claim run-1@1"]);
+  // Their reply ends: the held grant is spoken, with no second claim.
+  h.session.status = REALTIME_STATUS.READY;
+  h.player.onStatus(REALTIME_STATUS.READY);
+  await tick();
+  assert.deepEqual(h.log.slice(1), ["speak run-1: Held words.", "speaking typed"]);
+  assert.equal(h.player.active?.runId, "run-1");
+});
+
+test("a grant whose call opened into the developer's turn is held through the connect and spoken once later", async () => {
+  const h = harness();
+  h.player.offer(offer("run-1"));
+  h.grant(granted("Held words."));
+  await tick();
+  assert.deepEqual(h.log, ["claim run-1@1", "connect"]);
+  // The call opens, but the developer is already talking on it.
+  h.connected(true);
+  h.session.status = REALTIME_STATUS.LISTENING;
+  await tick();
+  assert.deepEqual(h.log, ["claim run-1@1", "connect"]);
+  h.player.onStatus(REALTIME_STATUS.RESPONDING);
+  h.session.status = REALTIME_STATUS.READY;
+  h.player.onStatus(REALTIME_STATUS.READY);
+  await tick();
+  assert.deepEqual(h.log.slice(2), ["speak run-1: Held words.", "speaking typed"]);
+  assert.equal(h.log.filter((line) => line.startsWith("claim")).length, 1);
+});
+
+test("a held grant is voided by a withdrawal: the next quiet status speaks nothing and acknowledges nothing", async () => {
+  const h = harness();
+  h.session.isConnected = true;
+  h.session.microphoneCall = true;
+  h.session.status = REALTIME_STATUS.READY;
+  h.player.offer(offer("run-1"));
+  h.session.status = REALTIME_STATUS.RESPONDING;
+  h.player.onStatus(REALTIME_STATUS.RESPONDING);
+  h.grant(granted("Held words."));
+  await tick();
+  h.player.withdraw();
+  h.session.status = REALTIME_STATUS.READY;
+  h.player.onStatus(REALTIME_STATUS.READY);
+  await tick();
+  assert.deepEqual(h.log, ["claim run-1@1"]);
+});

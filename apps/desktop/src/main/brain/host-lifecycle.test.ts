@@ -144,10 +144,9 @@ function composed() {
     const live = agent?.request(runId) ?? waited;
     if (live.historyRecordedAt === undefined) return { record: live, speak: false };
     const generationId = store.generationId() ?? "";
-    return {
-      record: live,
-      speak: deliveries.grantOnCall(live, generationId, epoch, claimContext()),
-    };
+    const speak = deliveries.grantOnCall(live, generationId, epoch, claimContext());
+    if (speak) offerReplies();
+    return { record: live, speak };
   };
   const build = (client: BrainClient) =>
     new BrainAgent({
@@ -646,5 +645,49 @@ test("a spoken ask's end is authorized exactly once across the call that asked a
   assert.ok(thirdOffer);
   assert.equal(thirdOffer.runId, third.runId);
   assert.equal(c.claim(thirdOffer).granted, true);
+  await c.host.replace(() => undefined);
+});
+
+test("an on-call grant that takes the offered run out of the receiver's hand offers the next owed reply at once", async () => {
+  const c = composed();
+  const client = heldClient();
+  await c.host.replace(() => c.build(client));
+  const agent = c.host.current();
+  assert.ok(agent);
+  const epoch = c.receiver.begin();
+  c.receiver.markReady(epoch);
+  // A is spoken, B is typed; both end while the renderer is busy, so neither is claimed.
+  const spoken = await submitBrainAsk(
+    agent,
+    { submissionId: "spoken-a", question: "how are they?", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
+    c.record,
+  );
+  assert.equal(spoken.outcome, "accepted");
+  if (spoken.outcome !== "accepted") return;
+  const [typed] = await submitMany(agent, c.record, 1);
+  assert.ok(typed);
+  await settle();
+  client.release(answered("A."));
+  await settle();
+  client.release(answered("B."));
+  await settle();
+  assert.deepEqual(
+    c.offers.map((offer) => offer.runId),
+    [spoken.runId],
+  );
+  const offerA = c.offers[0];
+  assert.ok(offerA);
+  // A's own call comes back from its wait and is granted the words; with no
+  // third event, B's offer follows at once, and A's old offer is dead.
+  const waited = await c.waitOnCall(spoken.runId, epoch);
+  assert.equal(waited.speak, true);
+  assert.deepEqual(
+    c.offers.map((offer) => offer.runId),
+    [spoken.runId, typed],
+  );
+  assert.deepEqual(c.claim(offerA), { granted: false });
+  const offerB = c.offers[1];
+  assert.ok(offerB);
+  assert.equal(c.claim(offerB).granted, true);
   await c.host.replace(() => undefined);
 });

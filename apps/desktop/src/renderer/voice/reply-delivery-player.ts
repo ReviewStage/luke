@@ -46,9 +46,29 @@ export interface ReplyDeliveryPlayerOptions {
  * the end, cut short by the developer, lost with the call — or at once when
  * the words could only be shown, so the next owed reply can be offered.
  */
+interface HeldGrant {
+  offer: BrainReplyOffer;
+  words: string;
+  origin: BrainRequestOrigin;
+}
+
+function busy(status: RealtimeStatus): boolean {
+  return (
+    status === REALTIME_STATUS.LISTENING ||
+    status === REALTIME_STATUS.RESPONDING ||
+    status === REALTIME_STATUS.CONNECTING
+  );
+}
+
 export class ReplyDeliveryPlayer {
   readonly #options: ReplyDeliveryPlayerOptions;
   #pending: BrainReplyOffer | undefined;
+  /**
+   * Words granted but not yet spoken: the developer took the turn, or a reply
+   * was still under way, when the grant landed. Held here until a quiet
+   * status, spoken then without a second claim, and voided by a withdrawal.
+   */
+  #granted: HeldGrant | undefined;
   #active: BrainReplyOffer | undefined;
   #withdrawals = 0;
   #attempting = false;
@@ -69,6 +89,7 @@ export class ReplyDeliveryPlayer {
   offer(offer: BrainReplyOffer): void {
     if (
       this.#pending?.deliveryId === offer.deliveryId ||
+      this.#granted?.offer.deliveryId === offer.deliveryId ||
       this.#active?.deliveryId === offer.deliveryId
     ) {
       return;
@@ -86,6 +107,7 @@ export class ReplyDeliveryPlayer {
   withdraw(): void {
     this.#withdrawals += 1;
     this.#pending = undefined;
+    this.#granted = undefined;
     this.#active = undefined;
   }
 
@@ -115,47 +137,61 @@ export class ReplyDeliveryPlayer {
     if (active) this.#options.acknowledge(active);
   }
 
+  /**
+   * One pass at the offer or the held grant, at a quiet moment. The status is
+   * read again after every await, because the developer may have taken the
+   * turn while the claim or the call was out: words granted then are held,
+   * not spoken over them, and the next quiet status speaks them.
+   */
   async #attempt(): Promise<void> {
-    if (this.#attempting || this.#active || !this.#pending) return;
-    const status = this.#options.session().status;
-    if (
-      status === REALTIME_STATUS.LISTENING ||
-      status === REALTIME_STATUS.RESPONDING ||
-      status === REALTIME_STATUS.CONNECTING
-    ) {
-      return;
-    }
-    const offer = this.#pending;
+    if (this.#attempting || this.#active) return;
+    const held = this.#granted;
+    const offer = held?.offer ?? this.#pending;
+    if (!offer || busy(this.#options.session().status)) return;
     const generation = this.#options.conversationGeneration();
     const withdrawals = this.#withdrawals;
     const moved = () =>
-      this.#pending !== offer ||
-      generation !== this.#options.conversationGeneration() ||
-      withdrawals !== this.#withdrawals;
+      generation !== this.#options.conversationGeneration() || withdrawals !== this.#withdrawals;
     this.#attempting = true;
     try {
-      const claim = await this.#options.claim(offer);
-      if (moved()) return;
-      if (!claim.granted) {
+      let grant = held;
+      if (!grant) {
+        const claim = await this.#options.claim(offer);
+        if (moved() || this.#pending !== offer) return;
+        if (!claim.granted) {
+          this.#pending = undefined;
+          return;
+        }
+        grant = { offer, words: claim.words, origin: claim.origin };
+        this.#granted = grant;
         this.#pending = undefined;
-        return;
       }
       const session = this.#options.session();
-      const connected =
-        !session.isConnected || !session.microphoneCall ? await this.#options.connect() : true;
-      if (moved()) return;
-      this.#pending = undefined;
-      if (connected && this.#options.session().speakReply(claim.words, offer.runId)) {
-        this.#active = offer;
-        this.#options.onSpeaking(claim.origin);
+      if (!session.isConnected || !session.microphoneCall) {
+        const connected = await this.#options.connect();
+        if (moved() || this.#granted !== grant) return;
+        if (!connected) {
+          this.#granted = undefined;
+          this.#options.showNotice(grant.words);
+          this.#options.acknowledge(grant.offer);
+          return;
+        }
+      }
+      // The developer may have taken the turn meanwhile: the grant waits for
+      // the next quiet status rather than speaking over them.
+      if (busy(this.#options.session().status)) return;
+      this.#granted = undefined;
+      if (this.#options.session().speakReply(grant.words, grant.offer.runId)) {
+        this.#active = grant.offer;
+        this.#options.onSpeaking(grant.origin);
         return;
       }
-      this.#options.showNotice(claim.words);
-      this.#options.acknowledge(offer);
+      this.#options.showNotice(grant.words);
+      this.#options.acknowledge(grant.offer);
     } finally {
       this.#attempting = false;
       // An offer that arrived while this attempt was out is the one in hand now.
-      if (this.#pending && this.#pending !== offer) void this.#attempt();
+      if (!this.#granted && this.#pending && this.#pending !== offer) void this.#attempt();
     }
   }
 }
