@@ -1,7 +1,6 @@
 import {
   type ConversationEntry,
   conversationEntryKey,
-  maximumStoredConversationEntries,
   storedConversationEntry,
   storedConversationMaximumAgeMs,
 } from "@sidecar/realtime";
@@ -15,11 +14,6 @@ import type { UnparsedWireValue } from "@sidecar/wire";
  * whatever else is true of it.
  */
 
-export const HISTORY_RETENTION = {
-  MAXIMUM_ENTRIES: maximumStoredConversationEntries,
-  MAXIMUM_AGE_MS: storedConversationMaximumAgeMs,
-} as const;
-
 /** Whether a line may stand now: recorded no later than now, within the age bound, and after any Clear. */
 export function historyEntryAdmitted(
   entry: ConversationEntry,
@@ -27,7 +21,7 @@ export function historyEntryAdmitted(
   clearedAt: number | undefined,
 ): entry is ConversationEntry & { recordedAt: number } {
   if (entry.recordedAt === undefined || entry.recordedAt > now) return false;
-  if (now - entry.recordedAt > HISTORY_RETENTION.MAXIMUM_AGE_MS) return false;
+  if (now - entry.recordedAt > storedConversationMaximumAgeMs) return false;
   return clearedAt === undefined || entry.recordedAt > clearedAt;
 }
 

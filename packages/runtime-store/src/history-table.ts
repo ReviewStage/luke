@@ -1,9 +1,12 @@
-import type { ConversationEntry } from "@sidecar/realtime";
+import {
+  type ConversationEntry,
+  maximumStoredConversationEntries,
+  storedConversationMaximumAgeMs,
+} from "@sidecar/realtime";
 import type { HistoryAppendOutcome, SessionKey } from "@sidecar/runtime-contracts";
 import { standingGeneration } from "./brain-envelope.js";
 import { nullable, type RuntimeDatabase } from "./database.js";
 import {
-  HISTORY_RETENTION,
   historyEntryAdmitted,
   historyEntryFromPayload,
   historyEventKey,
@@ -75,15 +78,18 @@ function appendOne(
     .get(sessionKey, eventKey) as { sequence: number; request_id: string | null } | undefined;
   if (held) {
     if (held.request_id !== null || entry.requestId === undefined) return false;
-    if (published(database, sessionKey, entry.requestId, entry.kind)) return false;
-    database
+    // The once-published index refuses the update when the run's line of this
+    // kind already stands elsewhere; OR IGNORE turns the refusal into no change.
+    const { changes } = database
       .prepare(
-        "UPDATE history_events SET request_id = ?, payload = ? WHERE session_key = ? AND sequence = ?",
+        `UPDATE OR IGNORE history_events SET request_id = ?, payload = ?
+         WHERE session_key = ? AND sequence = ?`,
       )
       .run(entry.requestId, historyPayload(entry), sessionKey, held.sequence);
-    publish(database, sessionKey, entry.requestId, entry.kind, held.sequence, entry.recordedAt);
-    return true;
+    return changes > 0;
   }
+  // Asked before the sequence is taken, so a publication the index would
+  // refuse burns no number and the sequence stays dense.
   if (
     entry.requestId !== undefined &&
     published(database, sessionKey, entry.requestId, entry.kind)
@@ -111,9 +117,6 @@ function appendOne(
       nullable(entry.identity?.providerSessionId),
       historyPayload(entry),
     );
-  if (entry.requestId !== undefined) {
-    publish(database, sessionKey, entry.requestId, entry.kind, sequence, entry.recordedAt);
-  }
   return true;
 }
 
@@ -130,6 +133,7 @@ function nextHistorySequence(database: RuntimeDatabase, sessionKey: SessionKey):
   return row.sequence;
 }
 
+/** Whether the run's line of this kind already stands, read through the once-published index. */
 function published(
   database: RuntimeDatabase,
   sessionKey: SessionKey,
@@ -138,32 +142,16 @@ function published(
 ): boolean {
   return (
     database
-      .prepare("SELECT 1 FROM publications WHERE session_key = ? AND request_id = ? AND kind = ?")
+      .prepare("SELECT 1 FROM history_events WHERE session_key = ? AND request_id = ? AND kind = ?")
       .get(sessionKey, requestId, kind) !== undefined
   );
 }
 
-function publish(
-  database: RuntimeDatabase,
-  sessionKey: SessionKey,
-  requestId: string,
-  kind: string,
-  sequence: number,
-  recordedAt: number,
-): void {
-  database
-    .prepare(
-      `INSERT OR REPLACE INTO publications (session_key, request_id, kind, event_sequence, recorded_at)
-       VALUES (?, ?, ?, ?, ?)`,
-    )
-    .run(sessionKey, requestId, kind, sequence, recordedAt);
-}
-
-/** Lets go of lines past the age bound and beyond the count, oldest first, publications with them. */
+/** Lets go of lines past the age bound and beyond the count, oldest first. */
 function retainHistory(database: RuntimeDatabase, sessionKey: SessionKey, now: number): void {
   database
     .prepare("DELETE FROM history_events WHERE session_key = ? AND recorded_at < ?")
-    .run(sessionKey, now - HISTORY_RETENTION.MAXIMUM_AGE_MS);
+    .run(sessionKey, now - storedConversationMaximumAgeMs);
   database
     .prepare(
       `DELETE FROM history_events WHERE session_key = ? AND sequence IN (
@@ -171,14 +159,7 @@ function retainHistory(database: RuntimeDatabase, sessionKey: SessionKey, now: n
          ORDER BY recorded_at DESC, sequence DESC LIMIT -1 OFFSET ?
        )`,
     )
-    .run(sessionKey, sessionKey, HISTORY_RETENTION.MAXIMUM_ENTRIES);
-  database
-    .prepare(
-      `DELETE FROM publications WHERE session_key = ? AND event_sequence NOT IN (
-         SELECT sequence FROM history_events WHERE session_key = ?
-       )`,
-    )
-    .run(sessionKey, sessionKey);
+    .run(sessionKey, sessionKey, maximumStoredConversationEntries);
 }
 
 /** The thread as the panel draws it: retained lines in the order they happened, oldest first. */
@@ -206,9 +187,9 @@ function listRetained(
     .all(
       sessionKey,
       now,
-      now - HISTORY_RETENTION.MAXIMUM_AGE_MS,
+      now - storedConversationMaximumAgeMs,
       clearedAt ?? -1,
-      HISTORY_RETENTION.MAXIMUM_ENTRIES,
+      maximumStoredConversationEntries,
     ) as { payload: string }[];
   const entries: ConversationEntry[] = [];
   for (const row of rows.reverse()) {
@@ -218,7 +199,7 @@ function listRetained(
   return entries;
 }
 
-/** The Clear's erasure of the thread: every line at or before the cutoff goes, publications with it. */
+/** The Clear's erasure of the thread: every line at or before the cutoff goes. */
 export function clearHistoryAtOrBefore(
   database: RuntimeDatabase,
   sessionKey: SessionKey,
@@ -228,9 +209,6 @@ export function clearHistoryAtOrBefore(
     database.raiseHistoryCutoff(sessionKey, clearedAt);
     database
       .prepare("DELETE FROM history_events WHERE session_key = ? AND recorded_at <= ?")
-      .run(sessionKey, clearedAt);
-    database
-      .prepare("DELETE FROM publications WHERE session_key = ? AND recorded_at <= ?")
       .run(sessionKey, clearedAt);
   });
 }

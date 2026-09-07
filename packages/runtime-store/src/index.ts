@@ -17,11 +17,7 @@ export {
   type SaveKind,
 } from "./envelope.js";
 export { personalFacts, replacePersonalFacts } from "./facts-table.js";
-export {
-  HISTORY_RETENTION,
-  historyEntryAdmitted,
-  historyEventKey,
-} from "./history.js";
+export { historyEntryAdmitted, historyEventKey } from "./history.js";
 export {
   appendHistory,
   clearHistoryAtOrBefore,

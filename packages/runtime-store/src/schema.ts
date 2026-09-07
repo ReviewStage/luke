@@ -18,7 +18,10 @@
  * cutoff is kept on the conversation row as well, written in the same
  * transaction as the generation's marker and only ever raised, so a line from
  * before a Clear stays refused after the generation that carried the marker
- * has itself expired.
+ * has itself expired. A run's ask and its end are each published once
+ * however many windows report them, and the schema itself carries that rule:
+ * a partial unique index over the run and kind of every line tied to a run,
+ * per conversation, so a second publication has no row it could occupy.
  *
  * The schema is versioned by the `schema_version` table. A database at a
  * version this build does not know is refused rather than migrated by guess.
@@ -125,14 +128,8 @@ export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
     ON history_events(session_key, event_key)`,
   `CREATE INDEX IF NOT EXISTS history_events_by_time
     ON history_events(session_key, recorded_at, sequence)`,
-  `CREATE TABLE IF NOT EXISTS publications (
-    session_key TEXT NOT NULL REFERENCES conversations(session_key),
-    request_id TEXT NOT NULL,
-    kind TEXT NOT NULL,
-    event_sequence INTEGER NOT NULL,
-    recorded_at INTEGER NOT NULL,
-    PRIMARY KEY (session_key, request_id, kind)
-  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS history_events_once_published
+    ON history_events(session_key, request_id, kind) WHERE request_id IS NOT NULL`,
   `CREATE TABLE IF NOT EXISTS personal_facts (
     id TEXT PRIMARY KEY,
     ordinal INTEGER NOT NULL,

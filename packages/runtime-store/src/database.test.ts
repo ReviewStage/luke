@@ -11,13 +11,16 @@ import {
   BrainStateStore,
   freshBrainState,
 } from "@sidecar/brain";
-import { CONVERSATION_ENTRY_KIND, maximumStoredConversationEntries } from "@sidecar/realtime";
+import {
+  CONVERSATION_ENTRY_KIND,
+  maximumStoredConversationEntries,
+  storedConversationMaximumAgeMs,
+} from "@sidecar/realtime";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import { loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
 import { RuntimeDatabase } from "./database.js";
 import { EnvelopeTracker, SAVE_KIND } from "./envelope.js";
 import { personalFacts, replacePersonalFacts } from "./facts-table.js";
-import { HISTORY_RETENTION } from "./history.js";
 import {
   appendHistory,
   clearHistoryAtOrBefore,
@@ -215,7 +218,7 @@ test("the sequence counts up and is never reused after retention or a Clear", ()
 
 test("retention keeps the 200 most recent lines and nothing older than a fortnight, judged at the append", () => {
   const database = openTestDatabase();
-  const old = line("old", NOW - HISTORY_RETENTION.MAXIMUM_AGE_MS - 1, { eventId: "old" });
+  const old = line("old", NOW - storedConversationMaximumAgeMs - 1, { eventId: "old" });
   const many = Array.from({ length: maximumStoredConversationEntries + 10 }, (_, index) =>
     line(`line ${index}`, NOW - 1000 + index, { eventId: `m${index}` }),
   );
