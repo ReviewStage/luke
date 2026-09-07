@@ -11,7 +11,6 @@ import {
 import {
   adoptConversationThread,
   announcementConversationEntry,
-  appendConversationEntry,
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
@@ -19,7 +18,6 @@ import {
   conversationHistoryText,
   enrichedConversationEntry,
   hasConversationEntryForRequest,
-  insertSpokenAskEntry,
   insertSpokenAskThreadEntry,
   isConversationEntryKind,
   maximumConversationEntries,
@@ -52,7 +50,7 @@ test("appending flattens, keeps the words whole, and retires the oldest lines", 
   // new section of the context item it will be rendered into. Length is not
   // cut here: the thread is the developer's own record, and only the model
   // render bounds its copy.
-  const appended = appendConversationEntry([], {
+  const appended = appendConversationThreadEntry([], {
     kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
     words: `  hello\n\nthere ${"x".repeat(2 * maximumConversationEntryLength)}  `,
     identity,
@@ -63,19 +61,20 @@ test("appending flattens, keeps the words whole, and retires the oldest lines", 
 
   // An entry with nothing left says nothing worth a window's space.
   assert.deepEqual(
-    appendConversationEntry([], { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "   " }),
+    appendConversationThreadEntry([], { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "   " }),
     [],
   );
 
-  // The history is a thread, not an archive: the oldest lines leave first.
+  // The history is a thread, not an archive: the oldest lines leave first,
+  // at the retained bound rather than the smaller model-context one.
   let entries: readonly ConversationEntry[] = [];
-  for (let index = 0; index < maximumConversationEntries + 3; index += 1) {
-    entries = appendConversationEntry(entries, {
+  for (let index = 0; index < maximumStoredConversationEntries + 3; index += 1) {
+    entries = appendConversationThreadEntry(entries, {
       kind: CONVERSATION_ENTRY_KIND.REPLY,
       words: `line ${index}`,
     });
   }
-  assert.equal(entries.length, maximumConversationEntries);
+  assert.equal(entries.length, maximumStoredConversationEntries);
   assert.equal(entries[0]?.words, "line 3");
 });
 
@@ -95,7 +94,7 @@ test("a streaming line is flattened like the settled line it previews", () => {
 
 test("the model render cuts a long line the retained thread keeps whole", () => {
   const longAnswer = `The checkout work is done. ${"x".repeat(2 * maximumConversationEntryLength)}`;
-  const entries = appendConversationEntry(
+  const entries = appendConversationThreadEntry(
     [],
     { kind: CONVERSATION_ENTRY_KIND.REPLY, words: longAnswer },
     OBSERVED_AT,
@@ -237,20 +236,20 @@ test("the rendering reads oldest first and says who each line speaks for", () =>
   const sessions = [rosterSession("session-a", "checkout-service")];
   const identity = { providerId: "claude-code", providerSessionId: "session-a" };
   let entries: readonly ConversationEntry[] = [];
-  entries = appendConversationEntry(entries, {
+  entries = appendConversationThreadEntry(entries, {
     kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
     words: "Claude Code finished checkout-service.",
     identity,
   });
-  entries = appendConversationEntry(entries, {
+  entries = appendConversationThreadEntry(entries, {
     kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
     words: "what did it finish?",
   });
-  entries = appendConversationEntry(entries, {
+  entries = appendConversationThreadEntry(entries, {
     kind: CONVERSATION_ENTRY_KIND.REPLY,
     words: "The checkout service work is done.",
   });
-  entries = appendConversationEntry(entries, {
+  entries = appendConversationThreadEntry(entries, {
     kind: CONVERSATION_ENTRY_KIND.ACT,
     words: 'sent a message to "checkout-service": "ship it"',
     identity,
@@ -286,7 +285,7 @@ test("an announcement's line and a reply's line are their words alone", () => {
 });
 
 test("a spoken ask reads as the developer's own words, said rather than typed", () => {
-  const entries = insertSpokenAskEntry([], "how is the checkout agent doing?", undefined);
+  const entries = insertSpokenAskThreadEntry([], "how is the checkout agent doing?", undefined);
 
   const text = conversationHistoryText(entries, []);
 
@@ -333,7 +332,7 @@ test("a spoken ask lands at its turn's own mark, not where its transcription did
     { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Sent it over." },
   ];
 
-  const placed = insertSpokenAskEntry(exchange, "ask that chat to ship it", priorReply);
+  const placed = insertSpokenAskThreadEntry(exchange, "ask that chat to ship it", priorReply);
 
   assert.deepEqual(
     placed.map((entry) => entry.words),
@@ -348,7 +347,7 @@ test("a spoken ask lands at its turn's own mark, not where its transcription did
 
   // A transcription that beats the reply finds nothing behind its mark and
   // lands at the end — the order everything was said in.
-  const onTime = insertSpokenAskEntry(exchange.slice(0, 2), "and what broke?", priorReply);
+  const onTime = insertSpokenAskThreadEntry(exchange.slice(0, 2), "and what broke?", priorReply);
   assert.deepEqual(
     onTime.map((entry) => entry.words),
     ["how is checkout going?", "The checkout work is done.", "and what broke?"],
@@ -357,9 +356,9 @@ test("a spoken ask lands at its turn's own mark, not where its transcription did
   // A turn committed against an empty history belongs at the very front, and
   // so does one whose mark the bounds have already retired: both are older
   // than everything recorded since.
-  const first = insertSpokenAskEntry(exchange, "the very first ask", undefined);
+  const first = insertSpokenAskThreadEntry(exchange, "the very first ask", undefined);
   assert.equal(first[0]?.words, "the very first ask");
-  const retired = insertSpokenAskEntry(exchange, "an ancient ask", {
+  const retired = insertSpokenAskThreadEntry(exchange, "an ancient ask", {
     kind: CONVERSATION_ENTRY_KIND.REPLY,
     words: "long evicted",
   });
@@ -369,22 +368,29 @@ test("a spoken ask lands at its turn's own mark, not where its transcription did
   // placed — and the very thread handed in, so a caller can tell an unchanged
   // history from one that owes the open call an update.
   assert.equal(insertSpokenAskThreadEntry(exchange, "   ", priorReply, OBSERVED_AT), exchange);
-  assert.deepEqual(insertSpokenAskEntry(exchange, "   ", priorReply), exchange);
+});
+
+test("a spoken ask placed into a full context window retires the oldest line from the slice", () => {
   let full: readonly ConversationEntry[] = [];
   for (let index = 0; index < maximumConversationEntries; index += 1) {
-    full = appendConversationEntry(full, {
+    full = appendConversationThreadEntry(full, {
       kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
       words: `line ${index}`,
     });
   }
-  assert.equal(
-    insertSpokenAskEntry(full, "one more", full.at(-1)).length,
-    maximumConversationEntries,
-  );
+
+  const placed = insertSpokenAskThreadEntry(full, "one more", full.at(-1), OBSERVED_AT);
+
+  // The thread keeps every line; only the model's slice pays for the new one.
+  assert.equal(placed.length, maximumConversationEntries + 1);
+  const recent = recentConversationEntries(placed);
+  assert.equal(recent.length, maximumConversationEntries);
+  assert.equal(recent[0]?.words, "line 1");
+  assert.equal(recent.at(-1)?.words, "one more");
 });
 
 test("a line whose session left the roster keeps its words and says the session is gone", () => {
-  const entries = appendConversationEntry([], {
+  const entries = appendConversationThreadEntry([], {
     kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT,
     words: "Claude Code finished checkout-service.",
     identity: { providerId: "claude-code", providerSessionId: "session-gone" },
@@ -404,7 +410,7 @@ test("a line whose session left the roster keeps its words and says the session 
 
   // A line that never named a session carries neither identity nor note.
   const aboutNoSession = conversationHistoryText(
-    appendConversationEntry([], { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "All quiet." }),
+    appendConversationThreadEntry([], { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "All quiet." }),
     [],
   );
   assert.ok(aboutNoSession);
@@ -497,7 +503,7 @@ test("the live thread obeys the same count and age retention as storage", () => 
 
 test("an appended line carries retention's clock without it reaching the model", () => {
   const now = 1_800_000_000_000;
-  const entries = appendConversationEntry(
+  const entries = appendConversationThreadEntry(
     [],
     { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "what is running" },
     now,
