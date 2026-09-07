@@ -2566,6 +2566,20 @@ test("a poll walks the store's pages to the fixed bounds and answers hasMore hon
   assert.equal(reads[2]?.searchParams.get("after"), STORED_MESSAGE_UUIDS[6]);
 });
 
+test("an incremental transcript read keeps the inherited unsupported answer and reads nothing", async () => {
+  const api = conversationApi();
+  const adapter = adapterFor(api.fetch);
+  await adapter.observe();
+  const requestsBefore = api.requests.length;
+
+  const opening = await adapter.readTranscriptSince(IDLE_SESSION_UUID);
+  const poll = await adapter.readTranscriptSince(IDLE_SESSION_UUID, STORED_MESSAGE_UUIDS[2]);
+
+  assert.equal(opening.status, "unsupported");
+  assert.equal(poll.status, "unsupported");
+  assert.equal(api.requests.length, requestsBefore);
+});
+
 test("refuses a conversation read for anything the latest pass did not stand behind", async () => {
   const api = conversationApi();
   const adapter = adapterFor(api.fetch);

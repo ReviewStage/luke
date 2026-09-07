@@ -162,8 +162,8 @@ export interface SessionProviderAdapter {
    * documented endpoint. It is one of the three places an adapter may change
    * provider state, and only ever with text a user chose to send: adapters
    * must refuse any session that did not advertise `canReceiveMessage` on its
-   * latest observation, and nothing that decides on the user's behalf — the
-   * attention evaluator above all — may reach it.
+   * latest observation, and nothing that decides on the user's behalf may
+   * reach it.
    */
   sendMessage(message: ProviderSessionMessage): Promise<ProviderMessageResult>;
 
@@ -207,6 +207,20 @@ export interface SessionProviderAdapter {
    * this build cannot render faithfully reports nothing rather than guessing.
    */
   readTranscript(providerSessionId: string): Promise<ProviderTranscriptResult>;
+
+  /**
+   * Renders what one observed session's transcript has gained since the
+   * cursor a previous read handed back, under the same bounds and the same
+   * rules as `readTranscript`: read from the provider's own record, kept
+   * nowhere, performing nothing. Without a cursor, or with one the record no
+   * longer reaches, it renders the transcript's recent tail and says so
+   * through `truncated`. The cursor is opaque to callers and meaningful only
+   * to the adapter that minted it.
+   */
+  readTranscriptSince(
+    providerSessionId: string,
+    cursor?: string,
+  ): Promise<ProviderTranscriptSinceResult>;
 
   /**
    * Reads one observed session's conversation from the provider's documented
@@ -257,6 +271,24 @@ export type ProviderMessageResult = ProviderActResult;
 
 export type ProviderTranscriptResult =
   | { status: typeof ACT_RESULT_STATUS.ACCEPTED; transcript: string }
+  | { status: typeof ACT_RESULT_STATUS.REJECTED; reason: string }
+  | { status: typeof ACT_RESULT_STATUS.UNSUPPORTED; reason: string };
+
+/**
+ * One incremental transcript reading: the lines gained since the cursor the
+ * caller held, the cursor to continue from, and whether the read fell short
+ * of everything gained. An empty `text` is an honest "nothing new". The
+ * cursor is absent only when the provider handed back no position to resume
+ * from, so the next read begins as this one did.
+ */
+export interface ProviderTranscriptSinceReading {
+  text: string;
+  cursor?: string;
+  truncated: boolean;
+}
+
+export type ProviderTranscriptSinceResult =
+  | ({ status: typeof ACT_RESULT_STATUS.ACCEPTED } & ProviderTranscriptSinceReading)
   | { status: typeof ACT_RESULT_STATUS.REJECTED; reason: string }
   | { status: typeof ACT_RESULT_STATUS.UNSUPPORTED; reason: string };
 
@@ -341,6 +373,18 @@ export async function providerTranscriptResult(
   const transcript = await rendering;
   return transcript
     ? { status: ACT_RESULT_STATUS.ACCEPTED, transcript }
+    : {
+        status: ACT_RESULT_STATUS.REJECTED,
+        reason: "That session's transcript could not be found.",
+      };
+}
+
+export async function providerTranscriptSinceResult(
+  reading: Promise<ProviderTranscriptSinceReading | undefined>,
+): Promise<ProviderTranscriptSinceResult> {
+  const read = await reading;
+  return read
+    ? { status: ACT_RESULT_STATUS.ACCEPTED, ...read }
     : {
         status: ACT_RESULT_STATUS.REJECTED,
         reason: "That session's transcript could not be found.",
@@ -745,6 +789,16 @@ export abstract class SessionProviderAdapterBase implements SessionProviderAdapt
   }
 
   async readTranscript(_providerSessionId: string): Promise<ProviderTranscriptResult> {
+    return {
+      status: ACT_RESULT_STATUS.UNSUPPORTED,
+      reason: "This provider keeps no transcript this build can read.",
+    };
+  }
+
+  async readTranscriptSince(
+    _providerSessionId: string,
+    _cursor?: string,
+  ): Promise<ProviderTranscriptSinceResult> {
     return {
       status: ACT_RESULT_STATUS.UNSUPPORTED,
       reason: "This provider keeps no transcript this build can read.",

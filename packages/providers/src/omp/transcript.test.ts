@@ -250,3 +250,35 @@ test("the adapter reads the same rendering on ask", async (t) => {
     assert.ok(rendered.transcript.includes("Developer: Fix the flaky updater test"));
   }
 });
+
+test("reads what a recording gained since the cursor an earlier read minted", async (t) => {
+  const ompHome = await temporaryOmpHome(t);
+  await writeSessionFile(ompHome, CONVERSATION.slice(0, 3));
+  const adapter = new OmpSessionAdapter({ ompHome });
+
+  const first = await adapter.readTranscriptSince(SESSION_ID);
+  assert.equal(first.status, "accepted");
+  if (first.status !== "accepted") return;
+  assert.equal(first.text, "Developer: Fix the flaky updater test");
+  assert.equal(first.truncated, false);
+
+  await fs.appendFile(
+    path.join(ompHome, OMP_SESSIONS_DIRECTORY, "luke", SESSION_FILE_NAME),
+    `${JSON.stringify({
+      type: "message",
+      id: "m9",
+      parentId: "m1",
+      timestamp: "2026-08-20T11:59:00.000Z",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Green again." }],
+      },
+    })}\n`,
+  );
+
+  const second = await adapter.readTranscriptSince(SESSION_ID, first.cursor);
+  assert.equal(second.status, "accepted");
+  if (second.status !== "accepted") return;
+  assert.equal(second.text, "OMP: Green again.");
+  assert.notEqual(second.cursor, first.cursor);
+});

@@ -7,7 +7,11 @@ export {
 export { ConductorSessionApplicationReader } from "./conductor/session-applications.js";
 export { ObservationHookRegistry } from "./hook-registry.js";
 export { type LocalPeekOptions, peekLocalSessions } from "./local-peek.js";
-export { type ProviderRegistration, providerRegistrations } from "./registrations.js";
+export {
+  type ProviderObservationSpool,
+  type ProviderRegistration,
+  providerRegistrations,
+} from "./registrations.js";
 export {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticCallback,
@@ -23,6 +27,14 @@ export {
   type SqliteModuleLoader,
   textFromRow,
 } from "./shared/local-sqlite.js";
+export {
+  type ObservationSpoolWatcher,
+  type ObservationSpoolWatcherOptions,
+  type ObservedSpoolEvent,
+  type SpoolWatch,
+  type SpoolWatchHandle,
+  watchObservationSpool,
+} from "./shared/spool-watcher.js";
 export {
   type WorkspaceHostEnrichment,
   type WorkspaceHostRegistration,

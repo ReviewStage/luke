@@ -4,9 +4,16 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
+import {
+  ACT_RESULT_STATUS,
+  CompositeSessionProviderAdapter,
+  type ProviderSessionObservation,
+  type ProviderTranscriptSinceResult,
+  SessionProviderAdapterBase,
+} from "@sidecar/session";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import type { SqliteModuleLoader } from "../shared/local-sqlite.js";
-import { CodexSessionAdapter } from "./adapter.js";
+import { CODEX_PROVIDER, CodexSessionAdapter } from "./adapter.js";
 
 async function readCodexSessionTranscript(request: {
   codexHome?: string;
@@ -309,4 +316,99 @@ test("reads nothing when Codex has no state database at all", async (t) => {
   });
 
   assert.equal(rendered, undefined);
+});
+
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+test("reads what a rollout gained since the cursor an earlier read minted", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  const adapter = new CodexSessionAdapter({ codexHome });
+  await writeSession(codexHome, [
+    {
+      timestamp: "2026-08-16T20:00:00.000Z",
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "Fix the flaky test" }],
+      },
+    },
+  ]);
+
+  const first = await adapter.readTranscriptSince(TEST_SESSION_ID);
+  assert.equal(first.status, "accepted");
+  if (first.status !== "accepted") return;
+  assert.equal(first.text, "Developer: Fix the flaky test");
+  assert.equal(first.truncated, false);
+
+  await fs.appendFile(
+    path.join(codexHome, `rollout-${TEST_SESSION_ID}.jsonl`),
+    `${JSON.stringify({
+      timestamp: "2026-08-16T20:00:05.000Z",
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "Fixed and green." }],
+      },
+    })}\n`,
+  );
+
+  const second = await adapter.readTranscriptSince(TEST_SESSION_ID, first.cursor);
+  assert.equal(second.status, "accepted");
+  if (second.status !== "accepted") return;
+  assert.equal(second.text, "Codex: Fixed and green.");
+  assert.notEqual(second.cursor, first.cursor);
+});
+
+test("an incremental read of a compressed rollout is refused in its own words, not missing", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  await writeThreadRow(
+    codexHome,
+    TEST_SESSION_ID,
+    path.join(codexHome, `rollout-${TEST_SESSION_ID}.jsonl.zst`),
+  );
+  const adapter = new CodexSessionAdapter({ codexHome });
+
+  const since = await adapter.readTranscriptSince(TEST_SESSION_ID);
+  const unknown = await adapter.readTranscriptSince("0198c1f2-4d5e-7789-abcd-000000000000");
+
+  assert.equal(since.status, "rejected");
+  if (since.status === "rejected") assert.match(since.reason, /compressed/);
+  assert.equal(unknown.status, "rejected");
+});
+
+class NeverAskedAdapter extends SessionProviderAdapterBase {
+  readonly provider = CODEX_PROVIDER;
+  readonly reads: string[] = [];
+
+  async observe(): Promise<readonly ProviderSessionObservation[]> {
+    return [];
+  }
+
+  override async readTranscriptSince(
+    providerSessionId: string,
+  ): Promise<ProviderTranscriptSinceResult> {
+    this.reads.push(providerSessionId);
+    return { status: ACT_RESULT_STATUS.ACCEPTED, text: "cloud words", truncated: false };
+  }
+}
+
+test("a compressed rollout's refusal stands at the composite instead of falling through", async (t) => {
+  const codexHome = await temporaryCodexHome(t);
+  await writeThreadRow(
+    codexHome,
+    TEST_SESSION_ID,
+    path.join(codexHome, `rollout-${TEST_SESSION_ID}.jsonl.zst`),
+  );
+  const cloud = new NeverAskedAdapter();
+  const composite = new CompositeSessionProviderAdapter({
+    provider: CODEX_PROVIDER,
+    adapters: [new CodexSessionAdapter({ codexHome }), cloud],
+  });
+
+  const since = await composite.readTranscriptSince(TEST_SESSION_ID);
+
+  assert.equal(since.status, "rejected");
+  if (since.status === "rejected") assert.match(since.reason, /compressed/);
+  assert.deepEqual(cloud.reads, []);
 });

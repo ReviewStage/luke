@@ -382,39 +382,80 @@ export async function readTextFile(filePath: string): Promise<string | undefined
 }
 
 /**
+ * One bounded window of a session file's bytes, with where it began and how
+ * large the file was when it was read, so a reader that walks a file by
+ * offset can tell a window that reached the end from one that fell short.
+ */
+export interface FileWindow {
+  bytes: Buffer;
+  offset: number;
+  fileSize: number;
+}
+
+const EMPTY_WINDOW: FileWindow = { bytes: Buffer.alloc(0), offset: 0, fileSize: 0 };
+
+/**
  * Reads a bounded region of a session file. A transcript grows without bound,
  * so no adapter may read one whole, and the file is opened for reading alone.
  */
 async function readRegion(
   filePath: string,
-  maximumBytes: number,
-  offset: (size: number, length: number) => number,
-): Promise<string> {
+  window: (size: number) => { offset: number; length: number },
+): Promise<FileWindow> {
   let handle: fs.FileHandle | undefined;
   try {
     handle = await fs.open(filePath, "r");
     const stats = await handle.stat();
-    if (!stats.isFile() || stats.size <= 0) return "";
-    const length = Math.min(stats.size, maximumBytes);
+    if (!stats.isFile() || stats.size <= 0) return EMPTY_WINDOW;
+    const { offset, length } = window(stats.size);
+    if (length <= 0) return { bytes: Buffer.alloc(0), offset, fileSize: stats.size };
     const buffer = Buffer.alloc(length);
-    await handle.read(buffer, 0, length, offset(stats.size, length));
-    return buffer.toString("utf8");
+    await handle.read(buffer, 0, length, offset);
+    return { bytes: buffer, offset, fileSize: stats.size };
   } catch (error) {
     if (!(error instanceof Error) || !canIgnoreFilesystemError(error)) throw error;
-    return "";
+    return EMPTY_WINDOW;
   } finally {
     await handle?.close();
   }
 }
 
 /** The end of a session file, where its newest records say what it is doing. */
-export function readTail(filePath: string, maximumBytes: number): Promise<string> {
-  return readRegion(filePath, maximumBytes, (size, length) => size - length);
+export async function readTail(filePath: string, maximumBytes: number): Promise<string> {
+  return (await readTailWindow(filePath, maximumBytes)).bytes.toString("utf8");
+}
+
+/** The tail as bytes, for a reader that has to account for where it began. */
+export function readTailWindow(filePath: string, maximumBytes: number): Promise<FileWindow> {
+  return readRegion(filePath, (size) => {
+    const length = Math.min(size, maximumBytes);
+    return { offset: size - length, length };
+  });
 }
 
 /** The start of a session file, for the records a provider writes only once. */
-export function readHead(filePath: string, maximumBytes: number): Promise<string> {
-  return readRegion(filePath, maximumBytes, () => 0);
+export async function readHead(filePath: string, maximumBytes: number): Promise<string> {
+  const window = await readRegion(filePath, (size) => ({
+    offset: 0,
+    length: Math.min(size, maximumBytes),
+  }));
+  return window.bytes.toString("utf8");
+}
+
+/**
+ * The bytes from `offset` forward, at most `maximumBytes` of them. An offset
+ * at or past the end reads nothing and reports the size it was measured
+ * against, which is how a caller learns its offset no longer fits the file.
+ */
+export function readRange(
+  filePath: string,
+  offset: number,
+  maximumBytes: number,
+): Promise<FileWindow> {
+  return readRegion(filePath, (size) => ({
+    offset,
+    length: Math.min(Math.max(0, size - offset), maximumBytes),
+  }));
 }
 
 function tailLines(tail: string): string[] {

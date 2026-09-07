@@ -1,4 +1,5 @@
 import path from "node:path";
+import type { ProviderTranscriptSinceReading } from "@sidecar/session";
 import {
   isRecord,
   isWireString,
@@ -15,7 +16,9 @@ import {
 } from "../shared/local-session-adapter.js";
 import {
   boundedTranscript,
+  readRecordsSince,
   TRANSCRIPT_BOUNDS,
+  type TranscriptPathCache,
   transcriptContentBlocks,
   transcriptLine,
   transcriptMessageText,
@@ -46,6 +49,11 @@ export interface ClaudeTranscriptRequest {
   providerSessionId: string;
   readTailBytes?: number;
   maximumRenderedLength?: number;
+}
+
+export interface ClaudeTranscriptSinceRequest extends ClaudeTranscriptRequest {
+  cursor?: string;
+  pathCache: TranscriptPathCache;
 }
 
 function toolLine(block: WireRecord): string | undefined {
@@ -177,4 +185,30 @@ export async function readClaudeSessionTranscript(
   const tail = await readTail(filePath, request.readTailBytes ?? TRANSCRIPT_BOUNDS.READ_TAIL_BYTES);
   const lines = tailRecords(tail).flatMap(linesFromRecord);
   return boundedTranscript(lines, request.maximumRenderedLength);
+}
+
+/**
+ * Renders what the session's transcript has gained since `cursor`, or nothing
+ * when no transcript file exists for that id. The rendering is unbounded in
+ * total, like a tail read with no maximum: the window the read loads and the
+ * per-line cuts are the bounds.
+ */
+export async function readClaudeSessionTranscriptSince(
+  request: ClaudeTranscriptSinceRequest,
+): Promise<ProviderTranscriptSinceReading | undefined> {
+  const filePath = await request.pathCache.resolve(request.providerSessionId, () =>
+    transcriptFilePath(request.claudeHome, request.providerSessionId),
+  );
+  if (!filePath) return undefined;
+
+  const since = await readRecordsSince(
+    filePath,
+    request.cursor,
+    request.readTailBytes ?? TRANSCRIPT_BOUNDS.READ_TAIL_BYTES,
+  );
+  return {
+    text: boundedTranscript(since.records.flatMap(linesFromRecord)) ?? "",
+    cursor: since.cursor,
+    truncated: since.truncated,
+  };
 }

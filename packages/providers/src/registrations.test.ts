@@ -56,6 +56,7 @@ test("every registration exposes the one total adapter interface", () => {
   for (const { adapter } of Object.values(registrations)) {
     assert.ok(adapter.observe instanceof Function);
     assert.ok(adapter.readTranscript instanceof Function);
+    assert.ok(adapter.readTranscriptSince instanceof Function);
     assert.ok(adapter.sendMessage instanceof Function);
     assert.ok(adapter.executeControl instanceof Function);
     assert.ok(adapter.createWorkspace instanceof Function);
