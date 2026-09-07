@@ -10,17 +10,22 @@ policy explains what we collect, who we send it to, and how to turn it off.
 
 **On your Mac.** Luke reads the session files your coding agents already write,
 using the session title, status, repository, branch, model, current tool,
-errors, and the tool it is running. It writes none of this to disk. For a
-session running on your Mac, Luke also reads a bounded rendering of that
-session's own conversation — the end of the transcript file its agent already
-writes (up to the last 256 KB), with each message and tool result cut short —
-to write himself a one-line phrase saying what the agent is working on,
-because a session's title is only its first message and the work usually
-moves on. That rendering is read only when Luke is about to speak about that
-session, once per announcement, sent to derive the phrase (see below), and
-kept nowhere: the phrase travels inside that one announcement and is used to
-name the session as Luke speaks about it, then discarded. Nothing else reads
-message history, file contents, or command output. If you run
+errors, and the tool it is running. It keeps none of these fields in a file
+of its own; what it does keep is the working memory described below. For a
+session running on your Mac whose agent keeps a transcript this build can read
+(Claude Code, Codex, and OMP today), Luke also reads that session's own
+transcript file — the file its agent already writes, which Luke never writes
+to — so he can notice what changed and tell you about it. He reads it at three
+moments: when an agent's hook says a turn just ended, on his own periodic look
+at the sessions that are working or waiting, and when you ask him about a
+session. On the first two he reads what each transcript gained since he last
+looked, up to the last 20,000 characters of new text per session per look,
+and may also read one session's recent tail, up to its last 60,000
+characters, while deciding whether there is anything to tell you; when you
+ask, he reads the same bounded tail. What he reads is sent to a model as described under
+"Who we send it to", and what he keeps of it lives under his working memory's
+own lifetime, described below. Nothing else reads message history, file
+contents, or command output. If you run
 agents inside the Herdr terminal manager, Luke also asks Herdr's own
 command-line tool which of those sessions it holds, so their rows can say so;
 that read never starts Herdr, reads no terminal output, and sends nothing
@@ -31,15 +36,41 @@ can say which app holds them and open there; that read opens no transcript and
 sends nothing anywhere. It stays on your Mac unless a feature below sends it.
 
 **Your conversation with Luke.** Luke keeps the conversation you have with him
-— what you typed or said, what he spoke or announced, and the actions he took
-at your request — in a file on your Mac, so it is still there the next time you
-open him. It holds the 200 most recent entries and nothing older than 14 days,
-whichever runs out first, each kept in full so the History tab shows every
-word. Only the 20 most recent are carried into a call, and each of those is
-capped at 400 characters there. Clearing the History
-tab deletes the file as well as the view. Nothing about the conversation is
-written on our servers, and a fixture or evidence run keeps no conversation at
-all.
+— what you typed or said, what he spoke or announced, the actions he took at
+your request, and the asks he is still working on — in a file on your Mac, so
+it is still there the next time you open him. It holds the 200 most recent
+entries and nothing older than 14 days, whichever runs out first, each kept in
+full so the History tab shows every word. The 20 most recent lines, each cut
+to 400 characters, ride into a conversation as context, beside the working
+memory described next. Clearing the History tab deletes the file as well as
+the view. Nothing about the conversation is written on our servers, and a
+fixture or evidence run keeps no conversation at all.
+
+**Luke's working memory.** Luke keeps a working memory of his own turns in a
+second file on your Mac, beside your settings: the model's own record of what
+he read, said, and did — the transcript excerpts described above, the
+position he last read each transcript to, a record of each ask you made and
+how it ended, and a journal of each action he took at your ask. When that
+record grows long, OpenAI folds its older part into an opaque, encrypted
+compaction item, which Luke stores in the same file; it is still derived from
+your sessions and your conversation, so it lives under the same rule as the
+rest. The whole file is one generation, and a generation lives exactly 14
+days from the moment it began: writing into it never extends it, and when its
+time is up everything in it, the encrypted compaction included, is discarded
+and an empty generation begins, which may observe your sessions afresh; a
+generation found expired when Luke starts is discarded then and there. A
+generation holds at most 200 asks and stays under 8 MiB: the oldest finished
+asks go first once their endings are in the History, and when nothing can go
+Luke declines a new ask rather than growing the file. Clearing the History
+tab discards the current generation too, along with anything Luke was still
+working on and anything he was about to say: the History, his context, and
+the memory are emptied the moment you press, and both files are erased with
+a small record, holding no content, of when the Clear happened so that
+nothing written before it can come back. If the disk refuses part of that
+erasure, the History and his context stay emptied, the Clear is reported as
+not finished rather than done, and the next thing Luke writes replaces what
+was left. Clearing does not touch the separate things Luke remembers about
+you, described next, and never touches your agents' own files.
 
 **Things Luke remembers about you.** During a conversation you start, Luke may
 silently save a concise preference, personal fact, goal, or recurring constraint
@@ -48,11 +79,11 @@ saves credentials, and saves sensitive facts only when you explicitly ask. At
 most 32 are stored on your Mac beside your settings and they do not expire. The
 iOS app keeps no such memory and does not read the Mac's. You can ask Luke what
 he remembers, correct something, or tell him to forget it.
-They are sent to OpenAI with the rest of a conversation's context so Luke can
-personalize replies: directly from the Mac app to OpenAI as released today,
-or, in a build of Luke that thinks through our service on our key (see the
-brain endpoint under "Who we send it to"), inside that one call, which our
-service performs once and stores and logs nothing of. They are not sent to a
+They travel with the rest of Luke's working memory when he thinks, so he can
+personalize replies: directly to OpenAI on your own key if you entered one, or
+through our own service on our key when you use Luke through your account, on
+the same terms as the rest of that call — one model call per request, and
+nothing of it stored or logged by our service. They are never sent to a
 coding-agent provider or a tracker, and they are never used to decide anything
 on your behalf.
 
@@ -141,43 +172,31 @@ and email you signed it with, and any screenshots you attached.
 
 ## Who we send it to
 
-- OpenAI, for voice and session summaries. A spoken turn sends its audio, a
-  typed turn sends your words, and both send the session fields listed above —
-  on the Mac app, read locally from your machine; on iOS and Apple Watch,
-  drawn from the same cloud observation your vault keys already allow
-  (titles, status, repository, and branch of your cloud sessions, as
-  described under Provider API keys above). We do not send message history, file contents, or command
-  output, and we ask OpenAI not to store the request. The one exception is the
-  subject phrase above: to derive it, only when Luke is about to announce a
-  local session and once per announcement, Luke sends the bounded transcript
-  slice of that session and its title — directly to OpenAI on
-  your own key if you entered one, otherwise through our service on our key —
-  asks OpenAI not to store the request, and our service stores and logs none
-  of it either. The phrase that comes back is spoken with that announcement
-  and kept nowhere. On the Mac app, your conversation and Luke's durable
-  memory are kept on your Mac and sent with a call so the conversation carries
-  across calls and across launches; on iOS and Apple Watch, a call also
-  carries the list of projects your synced keys can create a workspace in,
-  while the conversation itself is held in memory until the app quits or you
-  sign out, sent with a call so it carries across calls, and never stored on
-  the phone or the watch.
-  Our service also offers one further OpenAI call for a build of Luke that
-  thinks through our service on our key rather than on a key of your own: a
-  brain endpoint that runs exactly one model call per request. Such a build
-  sends the context it has assembled on your Mac — which may include bounded
-  excerpts of your local agents' transcripts, the session fields above, your
-  recent conversation with Luke, the things he remembers about you, and an
-  opaque compaction item OpenAI itself encrypted from an earlier call — and
-  the reply comes back to that build as OpenAI wrote it. The request asks
-  OpenAI not to store it, and our service performs the one call, runs no
-  tool and keeps no conversation, and stores and logs none of the request or
-  the reply. Each call counts against the same daily review allowance as the
-  attention review above. The Mac app released today does not call this
-  endpoint: it starts no automatic or background collection of your
-  transcripts for it and keeps no brain working memory; its transcript reads
-  stay what they are today, the subject phrase before an announcement and a
-  session you ask him about in conversation. A build that activates the brain
-  will say so here when it ships.
+- OpenAI, for voice and for Luke's own judgment. A spoken turn sends its
+  audio, a typed turn sends your words, and both send the session fields
+  listed above — on the Mac app, read locally from your machine; on iOS and
+  Apple Watch, drawn from the same cloud observation your vault keys already
+  allow (titles, status, repository, and branch of your cloud sessions, as
+  described under Provider API keys above). Luke's judgment is a separate call
+  to OpenAI's Responses API, made when an agent's hook or his periodic look
+  wakes him and when you ask him something: it carries his working memory —
+  the bounded transcript excerpts described above, the session fields, the 20
+  most recent lines of your conversation, and the things he remembers about
+  you — directly to OpenAI on your own key if you entered one, or through our
+  own service on our key when you use Luke through your account. Either way
+  the request asks OpenAI not to store it, and our service performs one model
+  call per request and stores and logs none of the request, the reply, or the
+  encrypted compaction that travels in it; the compaction OpenAI hands back is
+  kept only on your Mac, under the lifetime above. Each call counts against
+  your daily review allowance. On the Mac app, your conversation and Luke's durable memory are kept on your
+  Mac and sent with a call so the conversation carries across calls and across
+  launches; on iOS and Apple Watch, a call also carries the list of projects
+  your synced keys can create a workspace in, while the conversation itself is
+  held in memory until the app quits or you sign out, sent with a call so it
+  carries across calls, and never stored on the phone or the watch. A
+  development build run from a checkout can write a local trace of this
+  traffic when the developer's own shell asks for one; a packaged build has no
+  such switch and writes none.
   The one voice call that happens before you sign in is the spoken
   introduction on first launch of the Mac app: it sends its own fixed script,
   the titles of the coding agent sessions found on your Mac, and anything you
@@ -220,8 +239,9 @@ your network address, as it does for the app's recordings.
 
 ## Storage
 
-Your settings, your conversation with Luke, the things he remembers about you,
-local provider API keys, and calendar access stay on your Mac.
+Your settings, your conversation with Luke, his working memory, the things he
+remembers about you, local provider API keys, and calendar access stay on your
+Mac.
 Local keys and calendar access are encrypted in the macOS Keychain. Provider
 API keys you sync to the hosted service are stored encrypted in our own
 database, as described above. Your account information is held by our own
@@ -233,7 +253,9 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 - Delete your OpenAI key to turn voice off.
 - Delete any synced provider API key from that provider's row in Settings. Keys
   are also deleted when you delete your account.
-- Clear the History tab to delete your stored conversation from your Mac.
+- Clear the History tab to delete your stored conversation and Luke's working
+  memory from your Mac; the working memory also discards itself 14 days after
+  it began, whether or not you clear it.
 - Ask Luke what he remembers, correct a memory, or tell him to forget one.
 - Luke does not use your microphone until you start a turn.
 - Delete your account from the Account section in Settings. This erases your
