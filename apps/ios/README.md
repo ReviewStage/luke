@@ -201,6 +201,17 @@ itself. watchOS chooses the path and prefers the phone:
 the paired iPhone's connection tunneled over Bluetooth whenever the phone is
 in range, the watch's own Wi-Fi or cellular only when it is not.
 
+`LukeKit` holds every line both apps run, and a watch file exists only where
+watchOS draws or routes something differently: the credentials in
+`KeychainStore`, parameterized by the service string and the accessibility
+class that are the only things the two sandboxes differ on; the voice call's
+audio in `PCMAudioPlayer` and `PCMAudioCapturer`, parameterized by who owns
+the audio session, since on the watch that is `WatchVoiceAudioSession` for the
+whole call; and Luke's own face in `FaceArt` and `LukeMark`, with only the
+tab bar's UIKit rasterization left on the phone, where UIKit exists. A copy
+kept in step by a "change both" comment is a copy that eventually is not, so
+each of those was one file with two callers rather than two files.
+
 The settings the two apps both hold — the voice and speed the next mint asks
 for, and the New Workspace choices remembered per provider — are kept equal
 through WatchConnectivity's application context, in `DeviceSettingsSync` in

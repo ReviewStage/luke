@@ -107,7 +107,7 @@ struct WatchVoiceView: View {
             ScrollView {
                 VStack(spacing: 6) {
                     if conversation.messages.isEmpty {
-                        WatchLukeMark()
+                        LukeMark()
                             .foregroundStyle(.secondary)
                             .frame(width: 44, height: 40)
                             .frame(maxWidth: .infinity, minHeight: 80, alignment: .center)

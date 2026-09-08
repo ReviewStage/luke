@@ -1,90 +1,19 @@
-// Provider marks and the Luke face mark, matching the geometry from the web and desktop.
-// Google G keeps its four official brand colours. GitHub mark rides the view's foreground.
-// Luke's face is derived from FACE_ART in @sidecar/surface.
+// Provider marks, matching the geometry from the web and desktop, and the
+// phone-only rasterization of Luke's own face. Google G keeps its four
+// official brand colours. GitHub mark rides the view's foreground. The face
+// artwork itself is `FaceArt` and `LukeMark` in LukeKit, which the watch draws
+// too; only the UIKit rendering below is the phone's alone.
 import CoreGraphics
 import LukeKit
 import SwiftUI
 import UIKit
 
-// MARK: - Luke face art
+// MARK: - Luke face mark, rasterized
 
-/// FACE_ART constants (packages/surface/src/generated/face-art.ts), in the
-/// artwork's own 240×240 canvas coordinates. A hand copy, like every mark in
-/// this file: change both when the artwork moves.
-enum FaceArt {
-    /// The face cropped to itself (MARK_VIEW_BOX). Only for a face that never
-    /// moves: it is tight enough that any motion would leave it.
-    static let markBox = CGRect(x: 53.85, y: 62.67, width: 134.29, height: 122.37)
-    /// The square window motions play in (VIEW_BOX), with headroom to move.
-    static let motionBox = CGRect(x: 48, y: 51, width: 146, height: 146)
-    static let strokeWidth: CGFloat = 16
-    static let eyeY: CGFloat = 92
-    static let eyeRadius: CGFloat = 12
-    static let eyeXs: [CGFloat] = [78, 162]
-    private static let tiltDegrees: CGFloat = -8
-    private static let tiltPivot = CGPoint(x: 120, y: 124)
-
-    /// Smile: M 104 84 V 150 Q 104 164 118 164 Q 140 164 168 142
-    static let smile: Path = {
-        var path = Path()
-        path.move(to: CGPoint(x: 104, y: 84))
-        path.addLine(to: CGPoint(x: 104, y: 150))
-        path.addQuadCurve(to: CGPoint(x: 118, y: 164), control: CGPoint(x: 104, y: 164))
-        path.addQuadCurve(to: CGPoint(x: 168, y: 142), control: CGPoint(x: 140, y: 164))
-        return path
-    }()
-
-    /// The head's resting tilt, about the point the motions pivot on.
-    static let tilt = rotation(degrees: tiltDegrees, about: tiltPivot)
-
-    static func rotation(degrees: CGFloat, about pivot: CGPoint) -> CGAffineTransform {
-        CGAffineTransform(translationX: pivot.x, y: pivot.y)
-            .rotated(by: degrees * .pi / 180)
-            .translatedBy(x: -pivot.x, y: -pivot.y)
-    }
-
-    /// Draws the face fitted to `box`'s crop of the canvas, with `motion`
-    /// applied to the whole head in canvas coordinates outside the resting
-    /// tilt — the same nesting the desktop's layer groups give the generated
-    /// keyframes.
-    static func draw(
-        _ ctx: GraphicsContext,
-        size: CGSize,
-        box: CGRect,
-        motion: CGAffineTransform = .identity
-    ) {
-        let scale = min(size.width / box.width, size.height / box.height)
-        let placement = CGAffineTransform(scaleX: scale, y: scale)
-            .translatedBy(x: -box.minX, y: -box.minY)
-        let t = tilt.concatenating(motion).concatenating(placement)
-
-        ctx.stroke(
-            smile.applying(t), with: .foreground,
-            style: StrokeStyle(lineWidth: strokeWidth * scale, lineCap: .round, lineJoin: .round)
-        )
-        for eyeX in eyeXs {
-            let eye = CGRect(
-                x: eyeX - eyeRadius, y: eyeY - eyeRadius,
-                width: eyeRadius * 2, height: eyeRadius * 2
-            )
-            ctx.fill(Path(ellipseIn: eye).applying(t), with: .foreground)
-        }
-    }
-}
-
-// MARK: - Luke face mark
-
-struct LukeMark: View {
-    var body: some View {
-        Canvas { ctx, size in
-            FaceArt.draw(ctx, size: size, box: FaceArt.markBox)
-        }
-        .aspectRatio(FaceArt.markBox.width / FaceArt.markBox.height, contentMode: .fit)
-    }
-
+extension LukeMark {
     /// The face rasterized for the tab bar, which — like a `UIMenu` row —
     /// draws only an image beside each title and drops a custom label view,
-    /// so the Canvas above can never appear there. The template rendering
+    /// so LukeMark's Canvas can never appear there. The template rendering
     /// lets the bar ink the face selected and unselected the way it inks an
     /// SF Symbol.
     static let tabIcon: UIImage = {
