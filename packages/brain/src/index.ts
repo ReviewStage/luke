@@ -136,6 +136,7 @@ export {
   brainStateRepositoryFromStorage,
   freshBrainState,
   LEGACY_CHECKPOINT_FORMAT_TAG,
+  legacyStampOf,
   type RetainedBrainState,
   retainedBrainState,
 } from "./state-store.js";

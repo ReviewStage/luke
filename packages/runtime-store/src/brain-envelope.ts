@@ -5,6 +5,7 @@ import {
   type BrainRequestRecord,
   brainPersistedStateFromWire,
   LEGACY_CHECKPOINT_FORMAT_TAG,
+  legacyStampOf,
 } from "@sidecar/brain";
 import type { SessionKey } from "@sidecar/runtime-contracts";
 import { isWireNumber, isWireString, type WireRecord, type WireValue } from "@sidecar/wire";
@@ -88,8 +89,7 @@ export function loadBrainEnvelope(database: RuntimeDatabase, sessionKey: Session
   // every item row must say the same stamp, or the item is not this
   // generation's checkpoint and the whole is unreadable. A row still carrying
   // the version-1 item tag under the legacy stamp is that stamp's own.
-  const stamp =
-    session.checkpointFormat ?? (items.length > 0 ? LEGACY_CHECKPOINT_FORMAT_TAG : undefined);
+  const stamp = session.checkpointFormat ?? legacyStampOf(items);
   const stamped = items.every(
     (row) =>
       row.format === stamp ||
@@ -175,10 +175,10 @@ export function saveBrainEnvelope(
     if (standing?.sessionId !== save.generationId) return false;
     const { delta } = save;
     const sessionId = save.generationId;
-    if (delta.checkpointFormat !== undefined) {
+    if (delta.checkpointFormat) {
       database
         .prepare("UPDATE conversation_sessions SET checkpoint_format = ? WHERE session_id = ?")
-        .run(delta.checkpointFormat, sessionId);
+        .run(nullable(delta.checkpointFormat.stamp), sessionId);
     }
     if (delta.items) {
       database
@@ -189,7 +189,7 @@ export function saveBrainEnvelope(
         sessionId,
         delta.items.append,
         delta.items.keepPrefix,
-        delta.checkpointFormat ?? standing.checkpointFormat,
+        delta.checkpointFormat ? delta.checkpointFormat.stamp : standing.checkpointFormat,
       );
     }
     if (delta.cursors) {
@@ -248,11 +248,8 @@ function replaceGeneration(
   });
 }
 
-/** The stamp an envelope carries, or the legacy stamp for unstamped items, or nothing for an empty unstamped one. */
 function stampOf(state: BrainPersistedState): string | undefined {
-  return (
-    state.checkpointFormat ?? (state.items.length > 0 ? LEGACY_CHECKPOINT_FORMAT_TAG : undefined)
-  );
+  return state.checkpointFormat ?? legacyStampOf(state.items);
 }
 
 /** Each item row repeats the generation's stamp, so a row read on its own still says whose shape it is. */

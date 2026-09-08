@@ -27,6 +27,9 @@
  * version this build does not know is refused rather than migrated by guess.
  */
 
+import type { SQLInputValue } from "node:sqlite";
+import { LEGACY_CHECKPOINT_FORMAT_TAG } from "@sidecar/brain";
+
 export const RUNTIME_SCHEMA_VERSION = 2;
 
 /**
@@ -41,17 +44,26 @@ export const LEGACY_ITEM_FORMAT_TAG = "openai-responses-input/1";
  * step runs inside the migration's transaction; a version this build does not
  * know how to reach is refused rather than guessed at.
  */
-export const RUNTIME_SCHEMA_MIGRATIONS: ReadonlyMap<number, readonly string[]> = new Map([
-  [
-    2,
+export interface SchemaMigrationStep {
+  sql: string;
+  params: readonly SQLInputValue[];
+}
+
+export const RUNTIME_SCHEMA_MIGRATIONS: ReadonlyMap<number, readonly SchemaMigrationStep[]> =
+  new Map([
     [
-      "ALTER TABLE conversation_sessions ADD COLUMN checkpoint_format TEXT",
-      `UPDATE conversation_sessions SET checkpoint_format = 'tool-loop@1:openai-responses-input/1'
+      2,
+      [
+        { sql: "ALTER TABLE conversation_sessions ADD COLUMN checkpoint_format TEXT", params: [] },
+        {
+          sql: `UPDATE conversation_sessions SET checkpoint_format = ?
        WHERE checkpoint_format IS NULL
          AND EXISTS (SELECT 1 FROM runtime_checkpoints WHERE runtime_checkpoints.session_id = conversation_sessions.session_id)`,
+          params: [LEGACY_CHECKPOINT_FORMAT_TAG],
+        },
+      ],
     ],
-  ],
-]);
+  ]);
 
 export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS schema_version (

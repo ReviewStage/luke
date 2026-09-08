@@ -462,7 +462,7 @@ test("the checkpoint stamp lives on the generation: an empty foreign checkpoint 
       kind: SAVE_KIND.AMEND,
       generationId: "gen-f",
       delta: {
-        checkpointFormat: native,
+        checkpointFormat: { stamp: native },
         items: { keepPrefix: 0, append: [{ type: "message", role: "user", content: "hi" }] },
       },
     }),

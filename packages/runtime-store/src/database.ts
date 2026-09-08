@@ -74,7 +74,7 @@ export class RuntimeDatabase {
           if (!steps) {
             throw new Error(`runtime database cannot be migrated to schema version ${version}`);
           }
-          for (const statement of steps) this.#db.exec(statement);
+          for (const step of steps) this.#db.prepare(step.sql).run(...step.params);
         }
       }
       for (const statement of RUNTIME_SCHEMA_STATEMENTS) this.#db.exec(statement);
