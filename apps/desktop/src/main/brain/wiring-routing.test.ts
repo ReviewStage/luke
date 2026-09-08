@@ -360,6 +360,9 @@ test("a held briefing whose source conversation has stood down goes back to that
       .map((input) => itemTexts(input).join("\n"))
       .filter((text) => text.includes(BRAIN_INPUT_MARKER.HOLD_RELEASED));
   await until(() => releases().length >= 1);
+  // The release's turn ends and leaves its notice before anything is judged.
+  await until(() => !(c.wiring.current(goneKey)?.busy() ?? true));
+  await until(() => c.wiring.pendingNotices().length >= 1);
   await settle();
   // The source conversation is opened again for the briefing it decided:
   // it, not main, re-decides it, and the briefing is neither dropped nor
@@ -368,8 +371,7 @@ test("a held briefing whose source conversation has stood down goes back to that
   assert.ok(c.ensured.some((entry) => entry.sessionKey === goneKey));
   assert.equal(releases().length, 1);
   assert.ok(releases()[0]?.includes("a session that has stood down"));
-  assert.ok(!(c.wiring.current(goneKey)?.busy() ?? true));
-  // Main read nothing of it: its only input, if any, carries no release.
+  // Main read nothing of it: the one notice is the source's own turn.
   assert.equal(c.wiring.pendingNotices().length, 1);
   c.wiring.retire();
   await c.wiring.rebuild();
