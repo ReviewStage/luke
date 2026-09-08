@@ -465,13 +465,17 @@ function registeredSchema<Value extends string>(
   }, inner.jsonSchema);
 }
 
-/** A rule no combinator holds, over a value a combinator already parsed. */
-function refineSchema<Value, Narrowed extends Value>(
+/**
+ * A rule no combinator holds, over a value a combinator already parsed: a
+ * uniqueness a per-entry schema cannot see, or a field bounded by another
+ * field of the same record.
+ */
+function refineSchema<Value>(
   inner: Schema<Value>,
-  admits: (value: Value) => value is Narrowed,
+  admits: (value: Value) => boolean,
   refusal: SchemaRefusal = SCHEMA_REFUSAL.MALFORMED,
-): Schema<Narrowed> {
-  return schemaOver<Narrowed>((value) => {
+): Schema<Value> {
+  return schemaOver<Value>((value) => {
     const read = inner.read(value);
     if (!read.ok) return read;
     return admits(read.value) ? admit(read.value) : refuse(refusal);
