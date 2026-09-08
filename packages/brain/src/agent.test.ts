@@ -2992,26 +2992,39 @@ test("the final answer's text is the reply: a preface before a tool call does no
   assert.equal(h.traces[1]?.incomplete, "incomplete: max_output_tokens");
 });
 
-/** A runtime whose context never finishes opening, and whose dispose never settles. */
-function hangingRuntime(model: ModelAdapter) {
+/**
+ * A runtime whose first context open is held until the test releases it, over
+ * an engine whose dispose the test can count or hold. What the host does
+ * with an open that finishes after a stop is the point: the late context is
+ * retired, exactly once, and a dispose that never settles holds nothing.
+ */
+function heldOpenRuntime(model: ModelAdapter, disposeHangs = false) {
   const inner = runtimeOver(model);
+  let release: (() => void) | undefined;
+  let disposed = 0;
+  const context = new ResponsesContextEngine(TOOL_LOOP_RUNTIME_IDENTITY);
+  Object.defineProperty(context, "dispose", {
+    value: () => {
+      disposed += 1;
+      return disposeHangs ? new Promise<never>(() => undefined) : undefined;
+    },
+  });
   let opens = 0;
   const runtime: typeof inner = Object.create(inner);
   Object.defineProperty(runtime, "openContext", {
     value: (...args: Parameters<typeof inner.openContext>) => {
       opens += 1;
-      return opens === 1 ? new Promise<never>(() => undefined) : inner.openContext(...args);
+      if (opens > 1) return inner.openContext(...args);
+      return new Promise<Awaited<ReturnType<typeof inner.openContext>>>((resolve) => {
+        release = () => resolve({ context, bootstrap: { loaded: true, repaired: 0 } });
+      });
     },
   });
-  return { runtime, opens: () => opens };
+  return { runtime, release: () => release?.(), disposed: () => disposed };
 }
 
-test("a stop or a replacement during a held initial bootstrap settles at once, and a late-opened context is retired rather than installed", async () => {
-  const model = adapterOf(new FakeClient());
-  const { runtime } = hangingRuntime(model);
-  const storage = new FakeStorage();
-  const h = harness({}, storage);
-  const agent = new BrainAgent({
+function agentOn(runtime: ToolLoopAgentRuntime, model: ModelAdapter, h: Harness) {
+  return new BrainAgent({
     runtime,
     model,
     acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
@@ -3027,24 +3040,42 @@ test("a stop or a replacement during a held initial bootstrap settles at once, a
     schedule: h.clock.schedule,
     cancel: h.clock.cancel,
   });
-  const ready = agent.ready();
-  const pending = agent.submitAsk({
-    submissionId: "held-boot",
-    question: "hello",
-    origin: BRAIN_REQUEST_ORIGIN.TYPED,
-  });
-  await settle();
-  // Nothing has opened: the bootstrap is held. The stop does not wait for it.
-  let stopped = false;
-  const stopping = agent.stop().then(() => {
-    stopped = true;
-  });
-  await settle();
-  assert.equal(stopped, true, "stop settled while the bootstrap was still held");
-  await stopping;
-  await ready;
-  assert.equal((await pending).outcome, BRAIN_SUBMISSION_OUTCOME.REJECTED);
-  assert.match((await agent.incompatibility()) ?? "", /replaced while its context was opening/u);
+}
+
+test("a stop during a held initial bootstrap settles at once; the open finishing afterwards is retired exactly once, and a dispose that never settles holds nothing", async () => {
+  for (const disposeHangs of [false, true]) {
+    const model = adapterOf(new FakeClient());
+    const held = heldOpenRuntime(model, disposeHangs);
+    const h = harness();
+    const agent = agentOn(held.runtime, model, h);
+    const ready = agent.ready();
+    const pending = agent.submitAsk({
+      submissionId: "held-boot",
+      question: "hello",
+      origin: BRAIN_REQUEST_ORIGIN.TYPED,
+    });
+    await settle();
+    let stopped = false;
+    const stopping = agent.stop().then(() => {
+      stopped = true;
+    });
+    await settle();
+    assert.equal(stopped, true, "stop settled while the bootstrap was still held");
+    await stopping;
+    await ready;
+    assert.equal((await pending).outcome, BRAIN_SUBMISSION_OUTCOME.REJECTED);
+    assert.match((await agent.incompatibility()) ?? "", /replaced while its context was opening/u);
+    assert.equal(held.disposed(), 0);
+    // The open finishes after everything settled: the context is let go of,
+    // once, and never installed.
+    held.release();
+    await settle();
+    assert.equal(held.disposed(), 1);
+    // Still not installed: the generation stays as the stop left it.
+    assert.match((await agent.incompatibility()) ?? "", /replaced while its context was opening/u);
+    await settle();
+    assert.equal(held.disposed(), 1);
+  }
 });
 
 test("a reopen the runtime refuses re-admits nothing: the generation refuses turns as incompatible and the stored checkpoint stands as committed", async () => {
@@ -3075,6 +3106,5 @@ test("a reopen the runtime refuses re-admits nothing: the generation refuses tur
   });
   assert.deepEqual(h.storage.stored()?.items, committed.items);
   assert.equal(h.storage.stored()?.checkpointFormat, committed.checkpointFormat);
-  // A hanging dispose of the retired engine does not hold the stop.
   await h.agent.stop();
 });

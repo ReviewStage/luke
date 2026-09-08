@@ -86,12 +86,21 @@ export function generationFrom(
   // bootstrap ignores the signal cannot hold `ready` open past a stop or a
   // replacement, and a context that finishes opening after the fence is
   // retired rather than installed, so a successor never inherits it.
-  generation.ready = settledUnlessAborted(
-    runtime.openContext(checkpoint, lostResultJson, { signal: abort.signal }),
-    abort.signal,
-  )
+  const opening = runtime.openContext(checkpoint, lostResultJson, { signal: abort.signal });
+  // The race drops the open's eventual value once the signal fires, so the
+  // retirement of a context that finishes opening late is attached to the
+  // open itself, taken exactly once, only when the race went the other way.
+  let overtaken = false;
+  void opening.then(
+    ({ context }) => {
+      if (overtaken) retireContext(context);
+    },
+    () => undefined,
+  );
+  generation.ready = settledUnlessAborted(opening, abort.signal)
     .then((opened) => {
       if (opened.aborted) {
+        overtaken = true;
         generation.incompatible = "the generation was replaced while its context was opening";
         return;
       }

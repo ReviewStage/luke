@@ -1322,16 +1322,25 @@ export class BrainAgent {
     context: ContextEngine,
     mark: ContextMark,
   ): Promise<void> {
-    const reopened = await settledUnlessAborted(
-      this.#options.runtime.openContext(
-        { format: context.checkpointFormat, items: mark.items },
-        JSON.stringify(UNKNOWN_ACT_RESULT),
-        { signal: generation.abort.signal },
-      ),
-      generation.abort.signal,
+    const opening = this.#options.runtime.openContext(
+      { format: context.checkpointFormat, items: mark.items },
+      JSON.stringify(UNKNOWN_ACT_RESULT),
+      { signal: generation.abort.signal },
     );
-    if (reopened.aborted || generation !== this.#generation || generation.context !== context) {
-      if (!reopened.aborted) retireContext(reopened.value.context);
+    let overtaken = false;
+    void opening.then(
+      (opened) => {
+        if (overtaken) retireContext(opened.context);
+      },
+      () => undefined,
+    );
+    const reopened = await settledUnlessAborted(opening, generation.abort.signal);
+    if (reopened.aborted) {
+      overtaken = true;
+      return;
+    }
+    if (generation !== this.#generation || generation.context !== context) {
+      retireContext(reopened.value.context);
       return;
     }
     if (!reopened.value.bootstrap.loaded) {
