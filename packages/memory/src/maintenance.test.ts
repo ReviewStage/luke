@@ -242,15 +242,15 @@ test("a model plan is parsed against the candidates, validated against the prior
   const operations = JSON.stringify({
     operations: [{ candidateKey: durable.key, action: "added", priorEntries: [] }],
   });
-  for (const shape of [
+  for (const answer of [
     operations,
     `\`\`\`\n${operations}\n\`\`\``,
     `  \`\`\`json ${operations} \`\`\`  `,
   ]) {
     assert.equal(
-      parseConsolidationPlan(shape, promotions)?.operations.length,
+      parseConsolidationPlan(answer, promotions)?.operations.length,
       1,
-      shape.slice(0, 12),
+      answer.slice(0, 12),
     );
   }
   // An unterminated fence over a long whitespace run is answered as unreadable at once, never by backtracking over it.
