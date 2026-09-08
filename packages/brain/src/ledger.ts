@@ -1,4 +1,4 @@
-import { type ContextEngine, checkpointFormatTag } from "@sidecar/runtime-contracts";
+import { checkpointFormatTag } from "@sidecar/runtime-contracts";
 import type { Generation } from "./generation.js";
 import {
   BRAIN_REQUEST_FAILURE,
@@ -8,7 +8,7 @@ import {
   isTerminalBrainRequestStatus,
 } from "./requests.js";
 import type { BrainStateStore, BrainStoreLease } from "./state-store.js";
-import { RecordingContextEngine } from "./transcript-recorder.js";
+import type { RecordingContextEngine } from "./transcript-recorder.js";
 import type { RunControl, TurnContext } from "./turn.js";
 
 /**
@@ -58,8 +58,8 @@ export const SAVE_SCOPE = {
  * carries the context only when the runtime loaded one.
  */
 export type SaveScope =
-  | { kind: typeof SAVE_SCOPE.WORKING; context: ContextEngine; record?: RecordChange }
-  | { kind: typeof SAVE_SCOPE.WHOLE; context: ContextEngine | undefined }
+  | { kind: typeof SAVE_SCOPE.WORKING; context: RecordingContextEngine; record?: RecordChange }
+  | { kind: typeof SAVE_SCOPE.WHOLE; context: RecordingContextEngine | undefined }
   | ({ kind: typeof SAVE_SCOPE.RECORD } & RecordChange);
 
 /** What composing the requests of one save decided, read once the store has answered. */
@@ -194,7 +194,7 @@ export class BrainRequestLedger {
         // The transcript events the checkpoint carries: everything recorded
         // since the last checkpoint landed, written in the same transaction
         // so the record and the projection cannot disagree about what entered.
-        const transcript = context instanceof RecordingContextEngine ? context.pending() : [];
+        const transcript = context?.pending() ?? [];
         carried = transcript.length;
         return {
           ...(checkpointFormat !== undefined ? { checkpointFormat } : undefined),
@@ -206,7 +206,7 @@ export class BrainRequestLedger {
         };
       },
       (commit) => {
-        if (carried > 0 && context instanceof RecordingContextEngine) context.retained(carried);
+        if (carried > 0) context?.retained(carried);
         // Retention decided inside the same queue step: the runs the store
         // let go of leave the working copy too, or the next checkpoint of
         // the journal would write them straight back.

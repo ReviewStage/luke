@@ -43,11 +43,6 @@ export class RecordingContextEngine implements ContextEngine {
     this.checkpointFormat = engine.checkpointFormat;
   }
 
-  /** The engine beneath, for the compactor that must speak its own vocabulary. */
-  get engine(): ContextEngine {
-    return this.#engine;
-  }
-
   bootstrap(
     checkpoint: RuntimeCheckpoint | undefined,
     lostResultJson: string,

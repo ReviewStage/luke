@@ -58,7 +58,8 @@ export const CONTEXT_OPENING = {
 export type OpenedContext =
   | {
       kind: typeof CONTEXT_OPENING.LOADED;
-      context: ContextEngine;
+      /** The runtime's engine behind the transcript recorder, so every save can carry what the engine ingested. */
+      context: RecordingContextEngine;
       /** How many dangling tool calls the context paired at load, so the load may be checkpointed. */
       repaired: number;
     }

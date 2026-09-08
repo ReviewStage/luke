@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { AgentRuntime, ContextOpening } from "@sidecar/runtime-contracts";
+import {
+  type AgentRuntime,
+  CONTEXT_INPUT_KIND,
+  type ContextOpening,
+} from "@sidecar/runtime-contracts";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { CONTEXT_OPENING, generationFrom } from "./generation.js";
 import { TOOL_LOOP_RUNTIME } from "./runtime.js";
 import { freshBrainState } from "./state-store.js";
-import { RecordingContextEngine } from "./transcript-recorder.js";
 
 const TOOL_LOOP_IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };
 
@@ -82,13 +85,12 @@ test("an open that resolves while the generation stands installs the context and
   standing.release();
   const opened = await generation.opened;
   assert.equal(opened.kind, CONTEXT_OPENING.LOADED);
-  // The generation holds the runtime's engine behind the transcript recorder.
-  assert.equal(
-    opened.kind === CONTEXT_OPENING.LOADED && opened.context instanceof RecordingContextEngine
-      ? opened.context.engine
-      : undefined,
-    standing.context,
-  );
+  // The generation holds the runtime's engine behind the transcript recorder:
+  // what is ingested through the one lands in the other, and is on record.
+  assert.ok(opened.kind === CONTEXT_OPENING.LOADED);
+  await opened.context.ingest({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: "hello" });
+  assert.equal(standing.context.checkpoint().items.length, 1);
+  assert.equal(opened.context.pending().length, 1);
   await tick();
   assert.equal(standing.disposed(), 0);
 });
