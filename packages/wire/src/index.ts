@@ -3,6 +3,9 @@ export {
   type ActResult,
   type ActResultStatus,
   isActResult,
+  isUnknownActResult,
+  UNKNOWN_ACT_STATUS,
+  type UnknownActResult,
 } from "./act-result.js";
 export {
   type CloudFetch,

@@ -4,12 +4,20 @@ import {
   BRAIN_SUBMISSION_OUTCOME,
   BRAIN_SUBMISSION_REJECTION,
   type BrainSubmissionResult,
+  brainRequestRecordToWire,
   isBrainRequestOrigin,
   isTerminalBrainRequestStatus,
 } from "@sidecar/brain/requests";
-import { type ConversationEntry, maximumTypedAskLength } from "@sidecar/realtime";
+import {
+  type ConversationEntry,
+  conversationEntryToWire,
+  maximumTypedAskLength,
+} from "@sidecar/realtime";
 import {
   type ChildRunService,
+  deliveryRecordToWire,
+  type GatewayMethodContext,
+  type GatewayMethodHandler,
   type GatewayMethodOutcome,
   type GatewayMethodTable,
   GatewayServer,
@@ -22,13 +30,14 @@ import {
 import {
   type ChildCompletionRecord,
   type ChildRunRecord,
-  type ConversationRecord,
+  conversationRecordToWire,
   GATEWAY_ERROR,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
-  type HistoryArchiveRecord,
+  historyArchiveRecordToWire,
   isIdentifier,
   MAIN_SESSION_KEY,
+  type MaybePromise,
   NODE_CAPABILITY_STATUS,
   type SessionKey,
   sessionKey as toSessionKey,
@@ -40,13 +49,13 @@ import {
   isWireBoolean,
   isWireNumber,
   isWireString,
-  type UnparsedWireValue,
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
 import type { BrainAskWait, BrainReplyClaimResult, BrainRequestSnapshot } from "#shared/wire/brain";
 import { publishAsk } from "../brain/ipc";
 import type { BrainReplyDeliveries } from "../brain/reply-delivery";
+import type { SettableConfigurationPatch } from "../brain/wiring";
 import type { ConversationOperations } from "../conversation-operations";
 
 /**
@@ -75,26 +84,26 @@ export interface GatewayBrainAccess {
   >;
   configuration: () => ResolvedConfiguration;
   /** Republishes the configuration with the settable fields patched; answers the refusals, none on success. */
-  updateConfiguration: (patch: GatewayConfigurationPatch) => readonly string[];
+  updateConfiguration: (patch: SettableConfigurationPatch) => readonly string[];
   /** How many compact notices main has not yet read. */
   pendingNoticeCount: () => number;
-}
-
-/** The fields a client may change in the configuration; everything else is the build's or the credential policy's. */
-export interface GatewayConfigurationPatch {
-  reasoningEffort?: string;
-  maximumOutputTokens?: number;
 }
 
 export interface GatewayMemoryAccess {
   search: (
     query: string,
     maxResults: number | undefined,
-    signal: AbortSignal,
+    signal?: AbortSignal,
   ) => Promise<WireRecord>;
   get: (path: string, from: number | undefined, lines: number | undefined) => Promise<WireRecord>;
   forget: (ask: MemoryForgetAsk) => Promise<MemoryForgetReport | undefined>;
   status: () => WireRecord;
+}
+
+/** The one current voice receiver, as the client owning it reports: ready, and under which epoch. */
+export interface GatewayReceiverState {
+  isReady: () => boolean;
+  epoch: () => number;
 }
 
 export interface GatewayServiceDependencies {
@@ -104,8 +113,7 @@ export interface GatewayServiceDependencies {
   /** The observed sessions as the roster holds them now. */
   observedSessions: () => readonly Session[];
   deliveries: BrainReplyDeliveries;
-  /** The one current voice receiver, as the client owning it reports: ready, and under which epoch. */
-  receiver: { isReady: () => boolean; epoch: () => number };
+  receiver: GatewayReceiverState;
   nodes?: NodeRegistry;
   recordConversationEntry: (
     entry: ConversationEntry,
@@ -115,7 +123,14 @@ export interface GatewayServiceDependencies {
   askWaitMs?: number;
   now: () => number;
   createId: () => string;
-  report: (message: string) => void;
+  /**
+   * The host's further methods, beside the ones this service answers itself:
+   * the settings, account, integration, and client-fact vocabulary the
+   * runtime host owns. A method both name is the host's.
+   */
+  methods?: GatewayMethodTable;
+  /** Hears the operator's connection close, when the transport can tell: the client's receiver and node are gone with it. */
+  onOperatorDisconnected?: () => void;
 }
 
 export interface GatewayService {
@@ -129,116 +144,125 @@ export interface GatewayService {
   generationReplaced: (sessionKey: SessionKey) => void;
   /** The receiver reported ready under a new epoch: whatever is owed is offered to it now. */
   receiverReady: () => void;
+  /** One conversation's thread as every window should draw it, less the opaque reporter whose report produced it. */
   historyChanged: (
     sessionKey: SessionKey,
     entries: readonly ConversationEntry[],
-    reporter?: number,
+    reporter?: string,
   ) => void;
   directoryChanged: () => void;
   observationChanged: () => void;
   configurationChanged: () => void;
   childChanged: (childId: string) => void;
-  /** Whether a reply's grant may be checked against the receiver right now, for the wait and the claim. */
-  claimContext: () => {
-    receiverCurrent: (epoch: number) => boolean;
-    generationStands: (generationId: string) => boolean;
-    liveRecord: (runId: string) => BrainRequestRecord | undefined;
-  };
 }
 
 const REFUSAL = {
-  NO_BRAIN: "no brain stands for that conversation",
   NO_RUN: "no run has that id",
   NOT_LISTED: "the directory does not list that conversation",
   NO_CHILD: "no child has that id",
 } as const;
 
-function sessionKeyParam(value: UnparsedWireValue): SessionKey | undefined {
-  return isIdentifier(value) ? toSessionKey(value) : undefined;
-}
-
-function sessionKeyOrMain(value: UnparsedWireValue): SessionKey | undefined {
-  if (value === undefined) return MAIN_SESSION_KEY;
-  return sessionKeyParam(value);
-}
-
 function invalid(message: string): GatewayMethodOutcome {
   return gatewayError(GATEWAY_ERROR.INVALID_PARAMS, message);
 }
 
-export function requestRecordToWire(record: BrainRequestRecord): WireRecord {
-  return {
-    runId: record.runId,
-    submissionId: record.submissionId,
-    origin: record.origin,
-    question: record.question,
-    status: record.status,
-    revision: record.revision,
-    acceptedAt: record.acceptedAt,
-    ...(record.startedAt !== undefined ? { startedAt: record.startedAt } : undefined),
-    ...(record.settledAt !== undefined ? { settledAt: record.settledAt } : undefined),
-    ...(record.text !== undefined ? { text: record.text } : undefined),
-    ...(record.failure !== undefined ? { failure: record.failure } : undefined),
-    performedActs: record.performedActs,
-    unknownActs: record.unknownActs,
-    ...(record.askRecordedAt !== undefined ? { askRecordedAt: record.askRecordedAt } : undefined),
-    ...(record.historyRecordedAt !== undefined
-      ? { historyRecordedAt: record.historyRecordedAt }
-      : undefined),
+/** A parameter that is not the shape its method takes; the reading handler answers it as an invalid-params refusal. */
+class ParamRefusal extends Error {}
+
+/**
+ * Reads one request's parameters by name. A required read answers the value
+ * or refuses; an optional read answers nothing for an absent parameter and
+ * refuses one present in the wrong shape. Every refusal is worded the same
+ * way, so a handler says what it needs and nothing else.
+ */
+class ParamReader {
+  readonly #params: WireRecord;
+
+  constructor(params: WireRecord) {
+    this.#params = params;
+  }
+
+  identifier(name: string): string {
+    const value = this.#params[name];
+    if (isIdentifier(value)) return value;
+    throw new ParamRefusal(`${name} must be a non-empty string`);
+  }
+
+  sessionKey(name: string): SessionKey {
+    return toSessionKey(this.identifier(name));
+  }
+
+  optionalSessionKey(name: string): SessionKey | undefined {
+    return this.#params[name] === undefined ? undefined : this.sessionKey(name);
+  }
+
+  /** The conversation a request names, or main when it names none: the one every window's ask is for. */
+  sessionKeyOrMain(name: string): SessionKey {
+    return this.optionalSessionKey(name) ?? MAIN_SESSION_KEY;
+  }
+
+  string(name: string): string {
+    const value = this.#params[name];
+    if (isWireString(value)) return value;
+    throw new ParamRefusal(`${name} must be a string`);
+  }
+
+  optionalString(name: string): string | undefined {
+    return this.#params[name] === undefined ? undefined : this.string(name);
+  }
+
+  number(name: string): number {
+    const value = this.#params[name];
+    if (isWireNumber(value)) return value;
+    throw new ParamRefusal(`${name} must be a number`);
+  }
+
+  optionalNumber(name: string): number | undefined {
+    return this.#params[name] === undefined ? undefined : this.number(name);
+  }
+
+  optionalBoolean(name: string): boolean | undefined {
+    const value = this.#params[name];
+    if (value === undefined || isWireBoolean(value)) return value;
+    throw new ParamRefusal(`${name} must be a boolean`);
+  }
+
+  stringList(name: string): readonly string[] {
+    const value = this.#params[name];
+    if (Array.isArray(value) && value.every(isWireString)) return value;
+    throw new ParamRefusal(`${name} must be a list of strings`);
+  }
+
+  optionalStringList(name: string): readonly string[] | undefined {
+    return this.#params[name] === undefined ? undefined : this.stringList(name);
+  }
+
+  optionalRecord(name: string): WireRecord | undefined {
+    const value = this.#params[name];
+    if (value === undefined || isRecord(value)) return value;
+    throw new ParamRefusal(`${name} must be a record`);
+  }
+}
+
+/** A handler that reads its parameters through the reader, answering a read's refusal as the method's. */
+function reading(
+  handle: (read: ParamReader, context: GatewayMethodContext) => MaybePromise<GatewayMethodOutcome>,
+): GatewayMethodHandler {
+  return async (params, context) => {
+    try {
+      return await handle(new ParamReader(params), context);
+    } catch (error) {
+      if (error instanceof ParamRefusal) return invalid(error.message);
+      throw error;
+    }
   };
 }
 
-export function conversationEntryToWire(entry: ConversationEntry): WireRecord {
-  return {
-    kind: entry.kind,
-    words: entry.words,
-    ...(entry.eventId !== undefined ? { eventId: entry.eventId } : undefined),
-    ...(entry.identity
-      ? {
-          identity: {
-            providerId: entry.identity.providerId,
-            providerSessionId: entry.identity.providerSessionId,
-          },
-        }
-      : undefined),
-    ...(entry.recordedAt !== undefined ? { recordedAt: entry.recordedAt } : undefined),
-    ...(entry.requestId !== undefined ? { requestId: entry.requestId } : undefined),
-  };
-}
-
-function conversationRecordToWire(record: ConversationRecord): WireRecord {
-  return {
-    sessionKey: record.sessionKey,
-    kind: record.kind,
-    name: record.name,
-    createdAt: record.createdAt,
-    lastActivityAt: record.lastActivityAt,
-    ...(record.archivedAt !== undefined ? { archivedAt: record.archivedAt } : undefined),
-    ...(record.archiveReason !== undefined ? { archiveReason: record.archiveReason } : undefined),
-    ...(record.pinnedAt !== undefined ? { pinnedAt: record.pinnedAt } : undefined),
-    ...(record.sessionId !== undefined ? { sessionId: record.sessionId } : undefined),
-    ...(record.temporary !== undefined ? { temporary: record.temporary } : undefined),
-  };
-}
-
-function archiveRecordToWire(record: HistoryArchiveRecord): WireRecord {
-  return {
-    archiveId: record.archiveId,
-    sessionKey: record.sessionKey,
-    kind: record.kind,
-    name: record.name,
-    createdAt: record.createdAt,
-    deletedAt: record.deletedAt,
-    encoding: record.encoding,
-    sha256: record.sha256,
-    byteLength: record.byteLength,
-    fileName: record.fileName,
-    ...(record.publishedAt !== undefined ? { publishedAt: record.publishedAt } : undefined),
-    historyLines: record.historyLines,
-    transcriptEvents: record.transcriptEvents,
-  };
-}
-
+/**
+ * The bounded projection of a child the protocol carries: its task and its
+ * result text stay with the store, so a client sees that a result exists and
+ * never the words. Not a serialization `childRunRecordFromWire` reads back.
+ */
 function childRecordToWire(record: ChildRunRecord): WireRecord {
   return {
     childId: record.childId,
@@ -272,6 +296,7 @@ function childRecordToWire(record: ChildRunRecord): WireRecord {
   };
 }
 
+/** The bounded projection of a completion: where its delivery stands, never the result's words. */
 function completionToWire(completion: ChildCompletionRecord): WireRecord {
   return {
     completionId: completion.completionId,
@@ -340,22 +365,12 @@ function forgetReportToWire(report: MemoryForgetReport): WireRecord {
   };
 }
 
-function stringList(value: UnparsedWireValue): readonly string[] | undefined {
-  if (value === undefined) return [];
-  if (!Array.isArray(value)) return undefined;
-  const list: string[] = [];
-  for (const entry of value) {
-    if (!isWireString(entry)) return undefined;
-    list.push(entry);
-  }
-  return list;
-}
-
 export function createGatewayService(dependencies: GatewayServiceDependencies): GatewayService {
   const { brain, conversations, deliveries, receiver } = dependencies;
   const nodes = dependencies.nodes ?? new NodeRegistry();
   const askWaitMs = dependencies.askWaitMs ?? BRAIN_DEFAULTS.ASK_WAIT_MS;
 
+  /** What a grant is checked against at the moment it lands: the receiver, the store, and the live record. */
   const claimContext = () => ({
     receiverCurrent: (epoch: number) => receiver.isReady() && receiver.epoch() === epoch,
     generationStands: (generationId: string) => brain.holdsGeneration(generationId),
@@ -363,9 +378,9 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
   });
 
   const snapshot = (): WireValue => ({
-    runs: brain.allRequests().map(requestRecordToWire),
+    runs: brain.allRequests().map(brainRequestRecordToWire),
     conversations: conversations.directory().entries.map(conversationRecordToWire),
-    deliveries: deliveries.records().map((delivery) => ({ ...delivery })),
+    deliveries: deliveries.records().map(deliveryRecordToWire),
     configurationRevision: brain.configuration().revision,
     nodes: nodes.list().map(nodeSnapshotToWire),
     receiverEpoch: receiver.epoch(),
@@ -389,16 +404,37 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
     );
   };
 
+  /** The generation the run's conversation stands in now, or nothing for a run of no conversation the host holds. */
+  const runGeneration = (runId: string): string | undefined => {
+    const sessionKey = brain.conversationForRun(runId);
+    return sessionKey === undefined ? undefined : brain.generationId(sessionKey);
+  };
+
+  /**
+   * Grants the asking call the words of one ended run, under the receiver
+   * epoch it named. The grant takes the run's offer out of the receiver's
+   * hand, and no acknowledgement will come for a reply said on the call, so
+   * the next owed reply is offered at once.
+   */
+  const grantReplyOnCall = (
+    live: BrainRequestRecord,
+    generationId: string,
+    epoch: number,
+  ): boolean => {
+    const granted = deliveries.grantOnCall(live, generationId, epoch, claimContext());
+    if (granted) offerReplies();
+    return granted;
+  };
+
   const submit = async (
-    params: WireRecord,
+    read: ParamReader,
     steerRunId: string | undefined,
   ): Promise<GatewayMethodOutcome> => {
-    const sessionKey = sessionKeyOrMain(params.sessionKey);
-    if (!sessionKey) return invalid("sessionKey must be a non-empty string");
-    if (!isIdentifier(params.submissionId) || !isWireString(params.question)) {
-      return invalid("a submission needs a submissionId and a question");
-    }
-    if (!isBrainRequestOrigin(params.origin)) return invalid("origin is not one this build knows");
+    const sessionKey = read.sessionKeyOrMain("sessionKey");
+    const submissionId = read.identifier("submissionId");
+    const question = read.string("question").trim().slice(0, maximumTypedAskLength);
+    const origin = read.string("origin");
+    if (!isBrainRequestOrigin(origin)) return invalid("origin is not one this build knows");
     const agent = brain.current(sessionKey);
     if (!agent) {
       return gatewayOk(
@@ -414,94 +450,77 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
         return gatewayError(GATEWAY_ERROR.NOT_FOUND, "no run under way has that id to steer");
       }
     }
-    const question = params.question.trim().slice(0, maximumTypedAskLength);
-    const result = await agent.submitAsk({
-      submissionId: params.submissionId,
-      origin: params.origin,
-      question,
-    });
+    const result = await agent.submitAsk({ submissionId, origin, question });
     if (result.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED) {
       await publishAsk(agent, result.runId, dependencies.recordConversationEntry, sessionKey);
     }
     return gatewayOk(submissionResultToWire(result));
   };
 
+  /** Which connection a remote node was last registered on, so only that connection's closing disconnects it. */
+  const nodeOwners = new Map<string, string>();
+
   const methods: GatewayMethodTable = {
+    ...dependencies.methods,
     [GATEWAY_METHOD.CONVERSATION_LIST]: () => {
       const directory = conversations.directory();
       return gatewayOk({
         entries: directory.entries.map(conversationRecordToWire),
-        archives: directory.archives.map(archiveRecordToWire),
+        archives: directory.archives.map(historyArchiveRecordToWire),
       });
     },
-    [GATEWAY_METHOD.CONVERSATION_CREATE]: async (params) => {
-      if (params.temporary !== undefined && !isWireBoolean(params.temporary)) {
-        return invalid("temporary must be a boolean");
-      }
-      const created = await conversations.createThread(params.temporary === true);
+    [GATEWAY_METHOD.CONVERSATION_CREATE]: reading(async (read) => {
+      const temporary = read.optionalBoolean("temporary") === true;
+      const created = await conversations.createThread(temporary);
       return created
         ? gatewayOk({ sessionKey: created })
         : gatewayError(GATEWAY_ERROR.REFUSED, "the store did not create a thread");
-    },
-    [GATEWAY_METHOD.CONVERSATION_HISTORY]: (params) => {
-      const sessionKey = sessionKeyOrMain(params.sessionKey);
-      if (!sessionKey) return invalid("sessionKey must be a non-empty string");
+    }),
+    [GATEWAY_METHOD.CONVERSATION_HISTORY]: reading((read) => {
+      const sessionKey = read.sessionKeyOrMain("sessionKey");
       if (!conversations.holds(sessionKey)) {
         return gatewayError(GATEWAY_ERROR.NOT_FOUND, REFUSAL.NOT_LISTED);
       }
       return gatewayOk({ entries: conversations.history(sessionKey).map(conversationEntryToWire) });
-    },
-    [GATEWAY_METHOD.CONVERSATION_RESET]: async (params) => {
-      const sessionKey = sessionKeyOrMain(params.sessionKey);
-      if (!sessionKey) return invalid("sessionKey must be a non-empty string");
-      return gatewayOk({ reset: await conversations.startFresh(sessionKey) });
-    },
-    [GATEWAY_METHOD.CONVERSATION_ARCHIVE]: async (params) => {
-      const sessionKey = sessionKeyParam(params.sessionKey);
-      if (!sessionKey) return invalid("sessionKey must be a non-empty string");
-      return gatewayOk({ archived: await conversations.archive(sessionKey) });
-    },
-    [GATEWAY_METHOD.CONVERSATION_UNARCHIVE]: async (params) => {
-      const sessionKey = sessionKeyParam(params.sessionKey);
-      if (!sessionKey) return invalid("sessionKey must be a non-empty string");
-      return gatewayOk({ unarchived: await conversations.unarchive(sessionKey) });
-    },
-    [GATEWAY_METHOD.CONVERSATION_DELETE]: async (params) => {
-      const sessionKey = sessionKeyOrMain(params.sessionKey);
-      if (!sessionKey) return invalid("sessionKey must be a non-empty string");
-      return gatewayOk({ outcome: await conversations.deleteHistory(sessionKey) });
-    },
-    [GATEWAY_METHOD.CONVERSATION_RESTORE]: async (params) => {
-      if (!isIdentifier(params.archiveId)) return invalid("archiveId must be a non-empty string");
-      return gatewayOk({ outcome: await conversations.restoreArchive(params.archiveId) });
-    },
-    [GATEWAY_METHOD.RUN_SUBMIT]: (params) => submit(params, undefined),
-    [GATEWAY_METHOD.RUN_STEER]: (params) => {
-      if (!isIdentifier(params.runId)) return invalid("runId must be a non-empty string");
-      return submit(params, params.runId);
-    },
-    [GATEWAY_METHOD.RUN_CANCEL]: async (params) => {
-      if (!isIdentifier(params.runId)) return invalid("runId must be a non-empty string");
-      const agent = brain.agentForRun(params.runId);
+    }),
+    [GATEWAY_METHOD.CONVERSATION_RESET]: reading(async (read) =>
+      gatewayOk({ reset: await conversations.startFresh(read.sessionKeyOrMain("sessionKey")) }),
+    ),
+    [GATEWAY_METHOD.CONVERSATION_ARCHIVE]: reading(async (read) =>
+      gatewayOk({ archived: await conversations.archive(read.sessionKey("sessionKey")) }),
+    ),
+    [GATEWAY_METHOD.CONVERSATION_UNARCHIVE]: reading(async (read) =>
+      gatewayOk({ unarchived: await conversations.unarchive(read.sessionKey("sessionKey")) }),
+    ),
+    [GATEWAY_METHOD.CONVERSATION_DELETE]: reading(async (read) =>
+      gatewayOk({
+        outcome: await conversations.deleteHistory(read.sessionKeyOrMain("sessionKey")),
+      }),
+    ),
+    [GATEWAY_METHOD.CONVERSATION_RESTORE]: reading(async (read) =>
+      gatewayOk({ outcome: await conversations.restoreArchive(read.identifier("archiveId")) }),
+    ),
+    [GATEWAY_METHOD.RUN_SUBMIT]: reading((read) => submit(read, undefined)),
+    [GATEWAY_METHOD.RUN_STEER]: reading((read) => submit(read, read.identifier("runId"))),
+    [GATEWAY_METHOD.RUN_CANCEL]: reading(async (read) => {
+      const runId = read.identifier("runId");
+      const agent = brain.agentForRun(runId);
       if (!agent) return gatewayError(GATEWAY_ERROR.NOT_FOUND, REFUSAL.NO_RUN);
-      const cancelled = await agent.cancelAsk(params.runId);
-      return gatewayOk(cancelled ? { record: requestRecordToWire(cancelled) } : {});
-    },
+      const cancelled = await agent.cancelAsk(runId);
+      return gatewayOk(cancelled ? { record: brainRequestRecordToWire(cancelled) } : {});
+    }),
     // A wait that finds its run ended does not hand the words over on the
     // strength of the record alone: the followers' publication is let finish,
     // the live record is re-read for its History mark, and the grant to say
     // the words on the call is asked of the ledger — only when the caller
     // names the receiver epoch it holds, which only the voice window does.
-    [GATEWAY_METHOD.RUN_WAIT]: async (params) => {
-      if (!isIdentifier(params.runId)) return invalid("runId must be a non-empty string");
-      if (params.speakerEpoch !== undefined && !isWireNumber(params.speakerEpoch)) {
-        return invalid("speakerEpoch must be a number");
-      }
-      const runId = params.runId;
+    [GATEWAY_METHOD.RUN_WAIT]: reading(async (read) => {
+      const runId = read.identifier("runId");
+      const speakerEpoch = read.optionalNumber("speakerEpoch");
       const waited = await brain.agentForRun(runId)?.waitAsk(runId, askWaitMs);
       const answer = (wait: BrainAskWait): GatewayMethodOutcome =>
         gatewayOk({
-          ...(wait.record ? { record: requestRecordToWire(wait.record) } : undefined),
+          ...(wait.record ? { record: brainRequestRecordToWire(wait.record) } : undefined),
           speak: wait.speak,
         });
       if (!waited || !isTerminalBrainRequestStatus(waited.status)) {
@@ -509,93 +528,75 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
       }
       await brain.publicationSettled();
       const live = brain.agentForRun(runId)?.request(runId) ?? waited;
-      if (params.speakerEpoch === undefined || live.historyRecordedAt === undefined) {
+      if (speakerEpoch === undefined || live.historyRecordedAt === undefined) {
         return answer({ record: live, speak: false });
       }
-      const sessionKey = brain.conversationForRun(runId);
-      const generationId = sessionKey === undefined ? undefined : brain.generationId(sessionKey);
+      const generationId = runGeneration(runId);
       const granted =
-        generationId !== undefined &&
-        deliveries.grantOnCall(live, generationId, params.speakerEpoch, claimContext());
-      // The grant took the run's offer out of the receiver's hand, and no
-      // acknowledgement will come for a reply said on the call: the next owed
-      // reply is offered now.
-      if (granted) offerReplies();
+        generationId !== undefined && grantReplyOnCall(live, generationId, speakerEpoch);
       return answer({ record: live, speak: granted });
-    },
-    [GATEWAY_METHOD.RUN_STATUS]: (params) => {
-      if (!isIdentifier(params.runId)) return invalid("runId must be a non-empty string");
-      const record = brain.agentForRun(params.runId)?.request(params.runId);
+    }),
+    [GATEWAY_METHOD.RUN_STATUS]: reading((read) => {
+      const runId = read.identifier("runId");
+      const record = brain.agentForRun(runId)?.request(runId);
       if (!record) return gatewayError(GATEWAY_ERROR.NOT_FOUND, REFUSAL.NO_RUN);
       return gatewayOk({
-        record: requestRecordToWire(record),
-        sessionKey: brain.conversationForRun(params.runId) ?? MAIN_SESSION_KEY,
+        record: brainRequestRecordToWire(record),
+        sessionKey: brain.conversationForRun(runId) ?? MAIN_SESSION_KEY,
       });
-    },
+    }),
     [GATEWAY_METHOD.RUN_LIST]: () =>
-      gatewayOk({ runs: brain.allRequests().map(requestRecordToWire) }),
-    [GATEWAY_METHOD.CHILD_LIST]: (params) => {
-      const requester =
-        params.sessionKey === undefined ? undefined : sessionKeyParam(params.sessionKey);
-      if (params.sessionKey !== undefined && !requester) {
-        return invalid("sessionKey must be a non-empty string");
-      }
+      gatewayOk({ runs: brain.allRequests().map(brainRequestRecordToWire) }),
+    [GATEWAY_METHOD.CHILD_LIST]: reading((read) => {
+      const requester = read.optionalSessionKey("sessionKey");
       const records = requester ? brain.children.childrenOf(requester) : brain.children.children();
       return gatewayOk({ children: records.map(childRecordToWire) });
-    },
-    [GATEWAY_METHOD.CHILD_STATUS]: (params) => {
-      if (!isIdentifier(params.childId)) return invalid("childId must be a non-empty string");
-      const record = brain.children.child(params.childId);
+    }),
+    [GATEWAY_METHOD.CHILD_STATUS]: reading((read) => {
+      const childId = read.identifier("childId");
+      const record = brain.children.child(childId);
       if (!record) return gatewayError(GATEWAY_ERROR.NOT_FOUND, REFUSAL.NO_CHILD);
-      const completion = brain.children.completion(params.childId);
+      const completion = brain.children.completion(childId);
       return gatewayOk({
         child: childRecordToWire(record),
         ...(completion ? { completion: completionToWire(completion) } : undefined),
       });
-    },
-    [GATEWAY_METHOD.CHILD_CANCEL]: async (params) => {
-      if (!isIdentifier(params.childId)) return invalid("childId must be a non-empty string");
-      if (!brain.children.child(params.childId)) {
+    }),
+    [GATEWAY_METHOD.CHILD_CANCEL]: reading(async (read) => {
+      const childId = read.identifier("childId");
+      if (!brain.children.child(childId)) {
         return gatewayError(GATEWAY_ERROR.NOT_FOUND, REFUSAL.NO_CHILD);
       }
-      const cancelled = await brain.children.cancel(params.childId);
+      const cancelled = await brain.children.cancel(childId);
       return gatewayOk(
         cancelled.ok
           ? { cancelled: true }
           : { cancelled: false, remaining: [...cancelled.remaining] },
       );
-    },
+    }),
     [GATEWAY_METHOD.CHILD_COMPLETIONS]: () =>
       gatewayOk({ completions: brain.children.completions().map(completionToWire) }),
-    [GATEWAY_METHOD.MEMORY_SEARCH]: async (params) => {
-      if (!isWireString(params.query)) return invalid("query must be a string");
-      if (params.maxResults !== undefined && !isWireNumber(params.maxResults)) {
-        return invalid("maxResults must be a number");
-      }
-      return gatewayOk(
-        await dependencies.memory.search(
-          params.query,
-          params.maxResults,
-          new AbortController().signal,
+    [GATEWAY_METHOD.MEMORY_SEARCH]: reading(async (read) =>
+      gatewayOk(
+        await dependencies.memory.search(read.string("query"), read.optionalNumber("maxResults")),
+      ),
+    ),
+    [GATEWAY_METHOD.MEMORY_GET]: reading(async (read) =>
+      gatewayOk(
+        await dependencies.memory.get(
+          read.string("path"),
+          read.optionalNumber("from"),
+          read.optionalNumber("lines"),
         ),
-      );
-    },
-    [GATEWAY_METHOD.MEMORY_GET]: async (params) => {
-      if (!isWireString(params.path)) return invalid("path must be a string");
-      if (params.from !== undefined && !isWireNumber(params.from))
-        return invalid("from must be a number");
-      if (params.lines !== undefined && !isWireNumber(params.lines)) {
-        return invalid("lines must be a number");
-      }
-      return gatewayOk(await dependencies.memory.get(params.path, params.from, params.lines));
-    },
-    [GATEWAY_METHOD.MEMORY_FORGET]: async (params) => {
-      const entryIds = stringList(params.entryIds);
-      const sessionKeys = stringList(params.sessionKeys);
-      const candidateKeys = stringList(params.candidateKeys);
-      if (!entryIds || !sessionKeys || !candidateKeys || !isWireString(params.reason)) {
-        return invalid("a forget names entry ids, session keys, or candidate keys, and a reason");
-      }
+      ),
+    ),
+    // A forget names any of three kinds of source; a list it leaves out
+    // names none of that kind, so an absent list is an empty one.
+    [GATEWAY_METHOD.MEMORY_FORGET]: reading(async (read) => {
+      const entryIds = read.optionalStringList("entryIds") ?? [];
+      const sessionKeys = read.optionalStringList("sessionKeys") ?? [];
+      const candidateKeys = read.optionalStringList("candidateKeys") ?? [];
+      const reason = read.string("reason");
       if (sessionKeys.some((key) => !isIdentifier(key))) {
         return invalid("sessionKeys must be non-empty strings");
       }
@@ -603,68 +604,83 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
         entryIds,
         sessionKeys: sessionKeys.map(toSessionKey),
         candidateKeys,
-        reason: params.reason,
+        reason,
       });
       return report
         ? gatewayOk(forgetReportToWire(report))
         : gatewayError(GATEWAY_ERROR.REFUSED, "no notebook stands to forget from");
-    },
+    }),
     [GATEWAY_METHOD.MEMORY_STATUS]: () => gatewayOk(dependencies.memory.status()),
     [GATEWAY_METHOD.CONFIGURATION_SNAPSHOT]: () =>
       gatewayOk(configurationToWire(brain.configuration())),
-    [GATEWAY_METHOD.CONFIGURATION_UPDATE]: (params) => {
-      const patch: GatewayConfigurationPatch = {};
-      if (params.reasoningEffort !== undefined) {
-        if (!isWireString(params.reasoningEffort))
-          return invalid("reasoningEffort must be a string");
-        patch.reasoningEffort = params.reasoningEffort;
-      }
-      if (params.maximumOutputTokens !== undefined) {
-        if (!isWireNumber(params.maximumOutputTokens)) {
-          return invalid("maximumOutputTokens must be a number");
-        }
-        patch.maximumOutputTokens = params.maximumOutputTokens;
-      }
+    [GATEWAY_METHOD.CONFIGURATION_UPDATE]: reading((read) => {
+      const reasoningEffort = read.optionalString("reasoningEffort");
+      const maximumOutputTokens = read.optionalNumber("maximumOutputTokens");
+      const patch: SettableConfigurationPatch = {
+        ...(reasoningEffort !== undefined ? { reasoningEffort } : undefined),
+        ...(maximumOutputTokens !== undefined ? { maximumOutputTokens } : undefined),
+      };
       const refusals = brain.updateConfiguration(patch);
       if (refusals.length > 0) {
         return gatewayError(GATEWAY_ERROR.REFUSED, refusals.join(", "));
       }
       return gatewayOk(configurationToWire(brain.configuration()));
-    },
+    }),
     [GATEWAY_METHOD.OBSERVATION_STATE]: () =>
       gatewayOk({
         sessions: dependencies.observedSessions().map(sessionToWire),
         pendingNotices: brain.pendingNoticeCount(),
       }),
-    [GATEWAY_METHOD.NODE_REGISTER]: (params, context) => {
-      // A registration over the protocol names capabilities the host may ask
-      // for; each is invoked back through the registering client's own
-      // channel, which the in-process build wires directly.
-      if (!isIdentifier(params.nodeId)) return invalid("nodeId must be a non-empty string");
-      const capabilities = stringList(params.capabilities);
-      if (!capabilities || capabilities.length === 0) {
+    // A registration over the protocol names capabilities the host may ask
+    // for; each is invoked back through the registering client's own
+    // channel, which the in-process build wires directly.
+    // A registration names the capabilities the host may ask the registering
+    // connection for. Each ask travels back on that connection alone, bound
+    // to it by the invocation id its ledger holds; the connection closing
+    // marks the node disconnected, so the next ask answers unavailable, and
+    // a later registration from a new connection takes the node over whole.
+    [GATEWAY_METHOD.NODE_REGISTER]: reading((read, context) => {
+      const nodeId = read.identifier("nodeId");
+      const capabilities = read.stringList("capabilities");
+      if (capabilities.length === 0) {
         return invalid("capabilities must name at least one capability");
       }
-      const nodeId = params.nodeId;
-      const registered = nodes.list().find((node) => node.nodeId === nodeId);
-      if (registered) {
-        nodes.setConnected(nodeId, true);
-        return gatewayOk({ nodeId, connected: true, clientId: context.client.clientId });
+      const connection = context.connection;
+      if (!connection) {
+        if (nodes.has(nodeId)) {
+          nodes.setConnected(nodeId, true);
+          return gatewayOk({ nodeId, connected: true, clientId: context.client.clientId });
+        }
+        return gatewayError(
+          GATEWAY_ERROR.REFUSED,
+          "a node's capabilities are registered by the process that performs them",
+        );
       }
-      return gatewayError(
-        GATEWAY_ERROR.REFUSED,
-        "a node's capabilities are registered by the process that performs them",
-      );
-    },
-    [GATEWAY_METHOD.NODE_UNREGISTER]: (params) => {
-      if (!isIdentifier(params.nodeId)) return invalid("nodeId must be a non-empty string");
-      return gatewayOk({ disconnected: nodes.setConnected(params.nodeId, false) });
-    },
-    [GATEWAY_METHOD.NODE_INVOKE]: async (params) => {
-      if (!isWireString(params.capability)) return invalid("capability must be a string");
-      const arguments_ = params.params === undefined ? {} : params.params;
-      if (!isRecord(arguments_)) return invalid("params must be a record");
-      const result = await nodes.invoke(params.capability, arguments_);
+      nodeOwners.set(nodeId, connection.connectionId);
+      nodes.registerRemote({
+        nodeId,
+        capabilities,
+        invoke: (capability, params) =>
+          connection.invoke({
+            invocationId: dependencies.createId(),
+            nodeId,
+            capability,
+            params,
+          }),
+      });
+      connection.onClosed(() => {
+        if (nodeOwners.get(nodeId) !== connection.connectionId) return;
+        nodes.setConnected(nodeId, false);
+        dependencies.onOperatorDisconnected?.();
+      });
+      return gatewayOk({ nodeId, connected: true, clientId: context.client.clientId });
+    }),
+    [GATEWAY_METHOD.NODE_UNREGISTER]: reading((read) =>
+      gatewayOk({ disconnected: nodes.setConnected(read.identifier("nodeId"), false) }),
+    ),
+    [GATEWAY_METHOD.NODE_INVOKE]: reading(async (read) => {
+      const capability = read.string("capability");
+      const result = await nodes.invoke(capability, read.optionalRecord("params") ?? {});
       if (result.status === NODE_CAPABILITY_STATUS.OK) {
         return gatewayOk({
           status: result.status,
@@ -676,22 +692,18 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
         capability: result.capability,
         reason: result.reason,
       });
-    },
+    }),
     [GATEWAY_METHOD.DELIVERY_LIST]: () =>
       gatewayOk({
-        deliveries: deliveries.records().map((delivery) => ({ ...delivery })),
+        deliveries: deliveries.records().map(deliveryRecordToWire),
         receiverEpoch: receiver.epoch(),
         receiverReady: receiver.isReady(),
       }),
-    [GATEWAY_METHOD.DELIVERY_CLAIM]: (params) => {
-      if (!isIdentifier(params.runId) || !isIdentifier(params.deliveryId)) {
-        return invalid("a claim names a runId and a deliveryId");
-      }
-      if (!isWireNumber(params.epoch)) return invalid("epoch must be a number");
+    [GATEWAY_METHOD.DELIVERY_CLAIM]: reading((read) => {
       const claim: BrainReplyClaimResult = deliveries.claim(
-        params.runId,
-        params.deliveryId,
-        params.epoch,
+        read.identifier("runId"),
+        read.identifier("deliveryId"),
+        read.number("epoch"),
         claimContext(),
       );
       return gatewayOk(
@@ -699,38 +711,33 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
           ? { granted: true, words: claim.words, origin: claim.origin }
           : { granted: false },
       );
-    },
-    [GATEWAY_METHOD.DELIVERY_ACKNOWLEDGE]: (params) => {
-      if (!isIdentifier(params.runId) || !isIdentifier(params.deliveryId)) {
-        return invalid("an acknowledgement names a runId and a deliveryId");
-      }
-      if (!isWireNumber(params.epoch)) return invalid("epoch must be a number");
-      const emptied = deliveries.acknowledge(params.runId, params.deliveryId, params.epoch);
+    }),
+    [GATEWAY_METHOD.DELIVERY_ACKNOWLEDGE]: reading((read) => {
+      const emptied = deliveries.acknowledge(
+        read.identifier("runId"),
+        read.identifier("deliveryId"),
+        read.number("epoch"),
+      );
       if (emptied) offerReplies();
       return gatewayOk({ acknowledged: emptied });
-    },
-    [GATEWAY_METHOD.DELIVERY_GRANT_ON_CALL]: (params) => {
-      if (!isIdentifier(params.runId)) return invalid("runId must be a non-empty string");
-      if (!isWireNumber(params.epoch)) return invalid("epoch must be a number");
-      const live = brain.agentForRun(params.runId)?.request(params.runId);
-      const sessionKey = brain.conversationForRun(params.runId);
-      const generationId = sessionKey === undefined ? undefined : brain.generationId(sessionKey);
+    }),
+    [GATEWAY_METHOD.DELIVERY_GRANT_ON_CALL]: reading((read) => {
+      const runId = read.identifier("runId");
+      const epoch = read.number("epoch");
+      const live = brain.agentForRun(runId)?.request(runId);
+      const generationId = runGeneration(runId);
       if (!live || generationId === undefined) {
         return gatewayError(GATEWAY_ERROR.NOT_FOUND, REFUSAL.NO_RUN);
       }
-      const granted = deliveries.grantOnCall(live, generationId, params.epoch, claimContext());
-      if (granted) offerReplies();
-      return gatewayOk({ granted });
-    },
+      return gatewayOk({ granted: grantReplyOnCall(live, generationId, epoch) });
+    }),
   };
 
   const server = new GatewayServer({
     methods,
     configurationRevision: () => brain.configuration().revision,
-    sessionRevision: (key) => {
-      const sessionKey = sessionKeyParam(key);
-      return sessionKey ? brain.generationId(sessionKey) : undefined;
-    },
+    sessionRevision: (key) =>
+      isIdentifier(key) ? brain.generationId(toSessionKey(key)) : undefined,
     snapshot,
     now: dependencies.now,
     createEventId: dependencies.createId,
@@ -743,10 +750,9 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
   return {
     server,
     nodes,
-    claimContext,
     runsReported: (snapshots) => {
       deliveries.observe(snapshots);
-      server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: snapshots.map(requestRecordToWire) });
+      server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: snapshots.map(brainRequestRecordToWire) });
     },
     endPublished: (record, sessionKey) => {
       const generationId = brain.generationId(sessionKey);

@@ -4,7 +4,7 @@ import type { FixtureSnapshot } from "@sidecar/fixtures";
 import type { ConversationEntry } from "@sidecar/realtime";
 import type { ObservedWorkspaceProject, Session } from "@sidecar/session";
 import type { Rectangle, ResolvedNotchGeometry, WindowMode } from "@sidecar/surface";
-import type { ActResult } from "@sidecar/wire";
+import type { ActResult, UnknownActResult } from "@sidecar/wire";
 import type { MicrophoneStatus, OutputAudioState } from "./audio";
 import type { AppSettings } from "./settings";
 import type { UpdateSnapshot } from "./update";
@@ -30,7 +30,7 @@ export type { WindowMode } from "@sidecar/surface";
  * ignores the answer; a spoken ask says it aloud, and grounding that sentence
  * is why this is answered at all.
  */
-export type SessionOpenResult = ActResult;
+export type SessionOpenResult = ActResult | UnknownActResult;
 
 /**
  * Which surface a window exists to draw. Every window loads the same renderer

@@ -2,117 +2,26 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { Worker } from "node:worker_threads";
 import * as Sentry from "@sentry/electron/main";
 import {
-  AccountClient,
-  AccountSessionManager,
-  accountGateOpen,
-  HostedVaultClient,
-} from "@sidecar/account";
-import { rememberedFactsText } from "@sidecar/acts";
-import {
   PRODUCT_CREDENTIAL_SOURCE,
-  PRODUCT_DIAGNOSTIC_KIND,
   PRODUCT_EVENT,
-  PRODUCT_SUPERSET_ACT,
   PRODUCT_UPDATE_ACT,
-  type ProductDiagnosticKind,
-  ProductEventSender,
   productSessionCountBucket,
-  productSignInAge,
   type RecordProductEvent,
 } from "@sidecar/analytics";
-import type { BrainDelivery } from "@sidecar/brain";
-import {
-  activeMeetingEnd,
-  GoogleCalendarReader,
-  GoogleCalendarSignIn,
-  type MeetingInterval,
-  nextMeetingBoundary,
-} from "@sidecar/calendar";
-import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
-import { AgentTraceWriter, tracedModelAdapter } from "@sidecar/devtrace";
 import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
 import { fixtureSnapshot } from "@sidecar/fixtures";
-import { type AppGuideSnapshot, appGuideContextText, EMPTY_APP_GUIDE } from "@sidecar/guide";
-import { normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
-import { CONSOLIDATION_DEFAULTS, consolidationJob } from "@sidecar/memory";
-import {
-  ADAPTER_DIAGNOSTIC_KIND,
-  type AdapterDiagnosticKind,
-  ClaudeDesktopSessionApplicationReader,
-  CodexCloudSessionAdapter,
-  ConductorLocalWorkspaceAdapter,
-  ConductorSessionApplicationReader,
-  ObservationHookRegistry,
-  type ObservationSpoolWatcher,
-  type ProviderRegistration,
-  peekLocalSessions,
-  providerRegistrations,
-  type WorkspaceHostEnrichment,
-  type WorkspaceHostRegistration,
-  watchObservationSpool,
-  workspaceHostRegistrations,
-} from "@sidecar/providers";
-import {
-  ARRIVAL_SPEECH_KIND,
-  BRIEFING_SPEECH_KIND,
-  CALENDAR_ONBOARDING_SPEECH_KIND,
-  type ConversationEntry,
-  conversationHistoryText,
-  recentConversationEntries,
-  sessionContextText,
-  workspaceProjectContextText,
-} from "@sidecar/realtime";
-import {
-  CREDENTIAL_REFERENCE_KIND,
-  CronScheduler,
-  heartbeatJob,
-  InProcessTransport,
-  LANE,
-} from "@sidecar/runtime";
-import {
-  CONVERSATION_KIND,
-  GATEWAY_CLIENT_ROLE,
-  MAIN_SESSION_KEY,
-  NODE_CAPABILITY_STATUS,
-} from "@sidecar/runtime-contracts";
-import {
-  CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
-  CreatedWorkspaceOpenTracker,
-  isProviderId,
-  isWorkspaceProviderId,
-  normalizeObservedWorkspaceProjects,
-  ObservationLoop,
-  ObservationSupervisor,
-  type ObservedWorkspaceProject,
-  PROVIDER_ID,
-  PROVIDER_ID_LIST,
-  type ProviderId,
-  type Session,
-  type SessionProviderAdapter,
-  SessionRoster,
-  staleWorkspaceProjectDefaults,
-  type WorkspaceAgentSelection,
-  workspaceProjectSelectionId,
-} from "@sidecar/session";
-import { APP_SETTING_SCHEMA, VOICE_SOURCE } from "@sidecar/settings";
-import {
-  SupersetCli,
-  SupersetSignIn,
-  SupersetWorkspaceAdapter,
-  SupersetWorkspaceReader,
-  SupersetWorkspaceSnapshot,
-  supersetPressedLink,
-} from "@sidecar/superset";
+import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
+import { peekLocalSessions } from "@sidecar/providers";
+import { type GatewayTransport, InProcessTransport } from "@sidecar/runtime";
+import { GATEWAY_CLIENT_ROLE, MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
+import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
-import { LinearCredentials, LinearIssueTracker, LinearSignIn } from "@sidecar/trackers";
-import { IntroductionRealtimeCredentialMinter, VoiceCapabilityAssembler } from "@sidecar/voice";
+import { IntroductionRealtimeCredentialMinter } from "@sidecar/voice";
 import {
   ACT_RESULT_STATUS,
   isRecord,
-  isWireString,
   text,
   type UnparsedWireValue,
   type WireRecord,
@@ -132,62 +41,34 @@ import {
   shell,
   systemPreferences,
   type WebContents,
-  webContents,
 } from "electron";
-import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "#shared/apple-calendar";
 import { BRIDGE, channels } from "#shared/bridge";
 import {
   ACCOUNT_STATUS,
   type AccountSnapshot,
   type AppBootstrap,
+  type AppSettings,
   type BrainAppActRequest,
-  type ConversationHistoryPayload,
   type MicrophoneRoute,
   type MicrophoneStatus,
-  type ObservedAccountCalendars,
   type OutputAudioState,
   type SessionReplayBootstrap,
-  type SessionRosterPayload,
-  SUPERSET_SIGN_IN_STAGE,
-  SUPERSET_WORKSPACE_PROVIDER_ID,
   type VoiceBootstrap,
   WINDOW_ROLE,
 } from "#shared/contracts";
-import { VOICE_SOURCE_COUNTED_AS } from "#shared/product-vocabulary";
-import { SPEECH_OUTCOME, type SpeechOutcome } from "#shared/wire/speech";
+import type { SpeechOutcome } from "#shared/wire/speech";
 import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/wire/voice-view";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
-import { AppleCalendarReader } from "./apple-calendar";
-import {
-  ARRIVAL_STATE_FILE,
-  type ArrivalState,
-  arrivalBeatOwed,
-  arrivalRecord,
-  arrivalStateFromStored,
-  countsFirstAnnouncement,
-  shouldBackfillArrivalSettled,
-} from "./arrival-flow";
-import type { WorkspaceCreationDefaults } from "./brain/act-performer";
-import { wakeEventsFromHooks } from "./brain/flow";
+import { runAppleCalendarHelper } from "./apple-calendar";
 import { registerBrainIpc } from "./brain/ipc";
-import { BrainReplyDeliveries } from "./brain/reply-delivery";
-import { wireBrain } from "./brain/wiring";
-import {
-  CALENDAR_ONBOARDING_STATE_FILE,
-  type CalendarOnboardingState,
-  calendarOnboardingOwed,
-  calendarOnboardingRecord,
-  calendarOnboardingStateFromStored,
-  shouldBackfillCalendarOnboardingSettled,
-} from "./calendar-onboarding-flow";
-import { conversationOperations, startHistoryMaintenance } from "./conversation-operations";
-import {
-  DESKTOP_NATIVE_NODE_ID,
-  DESKTOP_OPERATOR_CLIENT_ID,
-  NODE_CAPABILITY,
-} from "./gateway/desktop-node";
-import { conversationEntryFromWire, createGatewayOperator } from "./gateway/operator";
-import { createGatewayService } from "./gateway/service";
+import { followReattachments, retryAttachWhileFailed, waitForHost } from "./gateway/attachment";
+import { DESKTOP_OPERATOR_CLIENT_ID } from "./gateway/desktop-node";
+import { currentBuildIdentity } from "./gateway/gateway-process";
+import type { HostBootstrap, HostSessionReplay } from "./gateway/host-operator";
+import { createGatewayLauncher } from "./gateway/launcher";
+import { gatewayStateRootArgument, registersProviderHooks } from "./gateway/process-mode";
+import { wireGateway } from "./gateway/wiring";
+import { composeRuntimeHost, type RuntimeHost } from "./host/runtime-host";
 import {
   INTRODUCTION_FADE_MS,
   INTRODUCTION_HANDOFF_READY_MS,
@@ -201,63 +82,62 @@ import {
 } from "./introduction-flow";
 import { registerAccountSessionIpc } from "./ipc/account-session";
 import { registerCalendarConnectionIpc } from "./ipc/calendar-connection";
-import { createSessionActPerformer, registerSessionActsIpc } from "./ipc/session-acts";
+import { registerSessionActsIpc } from "./ipc/session-acts";
 import { registerSettingsRowsIpc } from "./ipc/settings-rows";
 import { registerTrackerConnectionIpc } from "./ipc/tracker-connection";
 import { registerVoiceRuntimeIpc } from "./ipc/voice-runtime";
 import { registerWindowSurfaceIpc } from "./ipc/window-surface";
-import { wireMemoryMaintenance } from "./memory-maintenance";
-import { wireMemory } from "./memory-wiring";
 import { MediaDuckController } from "./native/media-duck";
 import { MicrophoneRouteWatcher } from "./native/microphone-route";
 import { OutputVolumeWatcher } from "./native/output-volume";
-import { ProviderKeyVaultSync, type VaultSyncAccount } from "./provider-key-vault-sync";
 import { type BridgeContext, registerBridge, registerBridgeEntry } from "./register-bridge";
 import { runModeFor, sentryReportingEnabled } from "./run-mode";
-import { agentRootPath, runtimeStoreWorkerPath } from "./runtime-store-path";
-import { wireRuntimeStore } from "./runtime-store-wiring";
 import { createSettingsHandler } from "./settings-handler";
-import { SettingsStore } from "./settings-store";
 import { createElectronUpdaterEngine } from "./update-installer";
-import { UPDATE_ENDPOINT, UpdateService } from "./update-service";
-import { transitionVoiceCredential } from "./voice/credential-transition";
-import { type OnboardingBeatKind, SpeechArbiter } from "./voice/speech-arbiter";
-import { VoiceReceiver } from "./voice-receiver";
+import { UPDATE_ENDPOINT, type UpdaterEngine, UpdateService } from "./update-service";
 import { DockPresence } from "./window/dock-presence";
 import { HOTKEY_RANK, HotkeyRegistrar } from "./window/hotkey-registrar";
 import { IntroductionWindow } from "./window/introduction-window";
 import { PanelManager } from "./window/panel-manager";
 import { VoiceWindow } from "./window/voice-window";
 
+/**
+ * The desktop client: the process that draws. It owns the windows, the keys,
+ * the Dock, the native helpers this machine's devices answer through, the
+ * updater that replaces this binary, and the one-time introduction; it
+ * reaches everything else — the store, the brain, the credentials, the
+ * observation, the accounts — through the Gateway protocol as one operator,
+ * and offers this machine's native capabilities back to the host as one node.
+ * A live run attaches to the Gateway process, or starts it; a fixture or
+ * capture run composes the same host in this process, memory-only and
+ * network-silent, over the in-process transport, so the client code path is
+ * one either way.
+ */
+
 // Which Luke this process is decides where its state lives and which Keychain
 // entry protects its credentials; see app-identity.ts for why a development
-// run must never share the release's. Applied before anything derives a path:
-// the single-instance lock, the settings store, and the hook spools all live
-// under this name.
+// run must never share the release's. Applied before anything derives a path.
 const appName = resolveAppName({
   packaged: app.isPackaged,
   developerIdSigned: buildCarriesDeveloperIdSigning(),
 });
 app.setName(appName);
-// `setName` renames the app, not the paths Electron already derived from the
-// manifest name, so the state directory is pointed at the chosen name by
-// hand — and session data alongside it, since its default only follows a
-// `userData` that has not been resolved yet.
-app.setPath("userData", path.join(app.getPath("appData"), appName));
-app.setPath("sessionData", path.join(app.getPath("appData"), appName));
+// The state root is Luke's application data under that name, or the one an
+// explicit `--state-root=` names: the same argument the Gateway takes, so a
+// validation run can stand a whole desktop and Gateway pair on a temporary
+// root without touching the real one or repurposing the home directory.
+const stateRoot =
+  gatewayStateRootArgument(process.argv) ?? path.join(app.getPath("appData"), appName);
+app.setPath("userData", stateRoot);
+app.setPath("sessionData", stateRoot);
 
 const captureOutput = argumentValue("--capture-evidence");
 const profile = argumentValue("--profile") ?? "idle";
 const fixtureName = argumentValue("--fixture");
-// Evidence only: the peek answers a pointer and the slot answers a press on a
-// link, neither of which a capture run has any way to produce, so both can be
-// asked for directly.
 const startPeeked = process.argv.includes("--peek");
 const startInSlot = process.argv.includes("--slot");
 const fixture = fixtureSnapshot(fixtureName ?? "smoke");
 const captureMode = captureOutput !== undefined;
-// `--fixture` is enough on its own to make a run deterministic: the panel renders
-// the fixture snapshot and no provider is observed. Capture runs always imply it.
 const fixtureMode = captureMode || fixtureName !== undefined;
 const runMode = runModeFor({ capture: captureMode, fixture: fixtureName !== undefined });
 declare const PACKAGED_SENTRY_DSN: string;
@@ -265,557 +145,51 @@ Sentry.init({
   dsn: PACKAGED_SENTRY_DSN,
   enabled: sentryReportingEnabled(runMode.sendsNetwork, PACKAGED_SENTRY_DSN),
 });
-// A development build may be pointed at a local account service; a packaged one
-// may not. The override redirects the whole sign-in — including the identity
-// request that carries the access token — so it stops at the packaging boundary
-// rather than shipping inside a signed binary.
+// The introduction's mint lives on the same origin as the account service;
+// the one development override redirects both, and stops at packaging.
 const ACCOUNT_BASE_URL =
   (app.isPackaged ? undefined : process.env.LUKE_ACCOUNT_BASE_URL) ??
   "https://tryluke.dev/api/auth";
-// The hosted voice endpoints live on the same origin as the account service,
-// so the one development override redirects both together — a build pointed
-// at a local account service mints against it too.
 const HOSTED_SERVICE_BASE_URL = ACCOUNT_BASE_URL.replace(/\/api\/auth\/?$/, "");
-const ACCOUNT_CLIENT_ID = "luke-desktop";
-const SESSION_REFRESH_INTERVAL_MS = 60_000;
-const sessionRegistry = new SessionRoster();
-// Declared before the settings store because the store's snapshot asks it
-// what the latest pass learned about the Codex CLI's login. It observes only
-// inside the codex composite the provider registrations build; a fixture or
-// evidence run never refreshes it, so there its answer stays the honest
-// "unknown".
-const codexCloudAdapter = new CodexCloudSessionAdapter({
-  onDiagnostic: (kind, error) => reportAdapterDiagnostic(PROVIDER_ID.CODEX, kind, error),
-});
-const conductorSessionApplications = new ConductorSessionApplicationReader();
-// The Claude desktop app's Code tab runs Claude Code sessions of its own and
-// keeps a record per session under its own application data; reading it is
-// what lets those rows say which app holds them and open there.
-const claudeDesktopSessionApplications = new ClaudeDesktopSessionApplicationReader();
-// The local counterpart of the cloud Conductor adapter's creation path: it
-// reads the repositories Conductor holds and creates a workspace in one by
-// handing Conductor's own creation deep link to the operating system. It
-// observes no sessions of its own, so it joins the workspace-project offer and
-// the act router rather than the observation registry.
-const conductorLocalWorkspaceAdapter = new ConductorLocalWorkspaceAdapter({
-  openExternal: (url) => shell.openExternal(url),
-});
-const supersetHomeDirectory =
-  process.env.SUPERSET_HOME_DIR ?? path.join(app.getPath("home"), ".superset");
-const supersetWorkspaces = new SupersetWorkspaceReader({
-  homeDirectory: supersetHomeDirectory,
-});
-const supersetCli = new SupersetCli({ homeDirectory: supersetHomeDirectory });
-const supersetWorkspaceAdapter = new SupersetWorkspaceAdapter(supersetCli);
-let observedSupersetWorkspaces = new SupersetWorkspaceSnapshot([]);
-let observedSupersetOrganization: string | undefined;
-const supersetWorkspaceHost: WorkspaceHostRegistration = {
-  observationFailureLabel: "Superset observation",
-  read: readSupersetWorkspaceHost,
-  // The read absorbs its own failures into an empty snapshot so the act
-  // contexts and the workspace rows move with it; a rejection would be a
-  // bug, and it costs only the enrichment rather than the pass.
-  emptyEnrichment: (_providerId, observations) => observations,
-};
-const workspaceHosts = workspaceHostRegistrations({
-  superset: supersetWorkspaceHost,
-  conductorApplications: conductorSessionApplications,
-  claudeDesktopApplications: claudeDesktopSessionApplications,
-});
-// `directory` and the cipher are read lazily so the store can be declared before
-// the Electron app is ready.
-const settingsStore = new SettingsStore({
-  directory: () => app.getPath("userData"),
-  // A fixture or evidence run refuses the credentials it resolves, so nothing is
-  // reported as available that would not actually happen.
-  credentialsUsable: runMode.observesProviders,
-  cipher: {
-    isAvailable: () => safeStorage.isEncryptionAvailable(),
-    encrypt: (plainText) => safeStorage.encryptString(plainText),
-    decrypt: (cipherText) => safeStorage.decryptString(cipherText),
-  },
-  codexCloudConnection: () => codexCloudAdapter.connection(),
-});
-const accountClient = new AccountClient({ baseUrl: ACCOUNT_BASE_URL, clientId: ACCOUNT_CLIENT_ID });
+const report = (message: string) => process.stderr.write(`${message}\n`);
+
+/**
+ * What this client last heard from the host, for the answers it must give
+ * synchronously or when the host cannot be reached: the settings the rows
+ * draw, the account the gate opens on, whether a voice stands, and the
+ * recording state. Each moves only on a host event or a bootstrap.
+ */
+let latestSettings: AppSettings | undefined;
 let account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
-const accountSession = new AccountSessionManager({
-  client: accountClient,
-  store: settingsStore,
-  hostedServiceBaseUrl: HOSTED_SERVICE_BASE_URL,
-  requiresAccount: runMode.requiresAccount,
-  openExternal: (url) => shell.openExternal(url),
-  startCapabilities: () => startAccountCapabilities(),
-  stopCapabilities: stopAccountCapabilities,
-  onChange: (next) => {
-    const signedIn = next.status === ACCOUNT_STATUS.SIGNED_IN;
-    const wasSignedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
-    account = next;
-    // The first sign-in ever observed is also where the calendar step of
-    // onboarding goes up: recorded on disk rather than derived, so quitting
-    // at the gate and relaunching finds it standing, while a record already
-    // on file — settled by a connect or backfilled for a veteran — keeps its
-    // history. Written before the account broadcast below, so the gate is
-    // already standing when the renderer learns it is signed in, rather than
-    // the roster being drawn for a beat and replaced. An install whose
-    // settings already hold a calendar has what the gate asks for, and
-    // settles as soon as the snapshot answers; the renderer's own connected
-    // check hides the gate in the meantime.
-    if (signedIn && !wasSignedIn && calendarOnboardingState === undefined) {
-      writeCalendarOnboardingState({ requiredAt: new Date().toISOString() });
-      void settleCalendarOnboardingIfConnected();
-    }
-    broadcastAccount();
-    void broadcastVoiceAvailability();
-    void broadcastSessionReplay();
-    // The transition alone: which provider signed in is already on the person
-    // from the browser's own sign-in, so nothing about it needs to travel again.
-    if (signedIn && !wasSignedIn) productEvents.record(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
-    // The first sign-in ever observed is the arrival the spoken beat
-    // addresses; the capability start that follows is what attempts to say
-    // it. A record already on file — settled, backfilled, or still owed —
-    // keeps its history: signing out and back in is not arriving twice.
-    if (signedIn && !wasSignedIn && arrivalState === undefined) {
-      writeArrivalState({ signedInAt: new Date().toISOString() });
-    }
-  },
-});
-const observationHooks = new ObservationHookRegistry(() => app.getPath("userData"));
-// Every provider this build observes, with the credential it reads and the
-// observation hook it registers, described in one place rather than assembled
-// from three parallel lists here.
-const providerRegistry = providerRegistrations({
-  readApiKey: (providerId) => settingsStore.readApiKey(providerId),
-  observationHookInstallation: (providerId) => observationHooks.installation(providerId),
-  codexCloudAdapter,
-  onDiagnostic: reportAdapterDiagnostic,
-});
-// The record enforces completeness; the shared list preserves provider order.
-const orderedRegistrations: readonly ProviderRegistration[] = PROVIDER_ID_LIST.map(
-  (providerId) => providerRegistry[providerId],
-);
-// The issue tracker is not a session provider: its issues feed the voice
-// roster rather than the registry, so it stands beside the adapters rather
-// than among them.
-// What authorizes a read is minted rather than stored ready to send: Linear's
-// access tokens last a day, so the grant behind the row is renewed here, and
-// only Linear refusing that renewal disconnects anything.
-const linearCredentials = new LinearCredentials({
-  readGrant: () => settingsStore.readGrant(CREDENTIAL_PROVIDER_ID.LINEAR),
-  writeGrant: async (grant) => {
-    await settingsStore.setGrant(CREDENTIAL_PROVIDER_ID.LINEAR, grant);
-  },
-  forgetGrant: async () => {
-    const cleared = await settingsStore.clearGrant(CREDENTIAL_PROVIDER_ID.LINEAR);
-    // Nobody pressed anything to end this connection — Linear refused the
-    // renewal — so no settings reply is on its way to say so. A row left
-    // saying connected would be a row about a grant that no longer exists.
-    broadcast(channels.onSettingsChanged, cleared.settings);
-  },
-});
-const linearTracker = new LinearIssueTracker({
-  readAccessToken: () => linearCredentials.accessToken(),
-});
-// The sign-in behind the Linear row: it opens Linear's own consent page in the
-// user's browser and hands back one grant, which the connect handler stores.
-// Offered only when this build carries an OAuth client.
-const linearSignIn = new LinearSignIn({
-  openExternal: (url) => void shell.openExternal(url),
-});
-const issueTrackers = [linearTracker] as const;
-/** A board changes at the pace of hands, not of models; a minute is current. */
-const ISSUE_REFRESH_INTERVAL_MS = 60_000;
-/** The latest roster, which is also what every spoken act is validated against. */
-let trackedIssues: readonly TrackedIssue[] | undefined;
+let voiceAvailable = false;
+let latestSessionReplay: HostSessionReplay = { permitted: runMode.sendsNetwork };
+let sessionReplayHalted = false;
+
 /**
- * Whether a pass was asked for while one was running. A key save or clear
- * must reach the roster on the very next pass, not be swallowed by an
- * interval tick that happened to be in flight — so the guard queues instead
- * of dropping.
+ * The opaque names this process gives its windows on the host, minted per
+ * WebContents and meaning nothing to anyone else: a report carries one, and
+ * the host's change event echoes it so the reporting window is skipped.
  */
-// The calendar is not a session provider either: it feeds nothing to the
-// registry or the roster. Its meetings answer one question — is the user in a
-// meeting now — and the answer gates only when announcements are spoken.
-const googleCalendar = new GoogleCalendarReader({
-  readAccounts: () => settingsStore.readCalendarAccounts(),
-});
-// The sign-in behind the calendar row: it opens Google's own consent page in
-// the user's browser and hands back one grant, which the connect handler
-// stores. Offered only when this build carries an OAuth client.
-const googleCalendarSignIn = new GoogleCalendarSignIn({
-  openExternal: (url) => void shell.openExternal(url),
-});
-// This Mac's own Calendar, read beside the Google accounts through the
-// EventKit helper. Not connected means the helper is never run at all.
-const appleCalendar = new AppleCalendarReader({
-  readConnection: () => settingsStore.readAppleCalendarConnection(),
-});
-/** A diary changes at the pace of hands too; five minutes is current. */
-const CALENDAR_REFRESH_INTERVAL_MS = 5 * 60_000;
-/**
- * How often held notices ask whether the meeting holding them has ended. The
- * question is answered from meetings already in memory, so asking often costs
- * nothing. The boundary timer is what answers on time — this tick is the net
- * behind it, for the clocks a timer cannot promise to keep: a laptop asleep
- * through the boundary, or a system clock moved by hand.
- */
-const HELD_NOTICE_RELEASE_INTERVAL_MS = 30_000;
-/**
- * The meetings as last read; `undefined` says no calendar is connected, which
- * can never hold a notice. A failed pass keeps the meetings it has — a
- * calendar that cannot answer is not an empty diary.
- */
-let calendarMeetings: readonly MeetingInterval[] | undefined;
-/**
- * The timer standing at the next meeting edge — the instant the quiet can
- * begin or end. The interval ticks bound how *stale* the quiet's answer can
- * get; this is what makes its edges *punctual*, so a meeting's first second
- * is already held and its last is already released, rather than either
- * waiting on the next half-minute tick.
- */
-let quietBoundaryTimer: NodeJS.Timeout | undefined;
-/**
- * Each connected account's calendars as last observed — what the settings
- * rows draw their choices from, and what a spoken-of or clicked selection is
- * validated against before the store keeps it.
- */
-let observedCalendars: readonly ObservedAccountCalendars[] = [];
-let heldNoticeReleaseTimer: NodeJS.Timeout | undefined;
-/**
- * How often the System Settings switch is asked about between passes. Each
- * probe is a fresh helper process on purpose: EventKit answers a running
- * process's authorization from state it read at launch, so only a fresh
- * process can be trusted about where the switch stands now. Ten seconds is
- * the longest consent taken back keeps holding anything.
- */
-const APPLE_ACCESS_POLL_INTERVAL_MS = 10_000;
-let appleAccessPollTimer: NodeJS.Timeout | undefined;
-/** Whether the last access probe failed, so only the edges reach the log. */
-let appleAccessProbeFailing = false;
-/**
- * Whether announcements are held right now, as last computed — what the
- * renderer draws Luke's sleeping face from. Kept and broadcast on change so
- * every window agrees, and false the moment neither cause stands: the
- * developer's own pause switch, or a meeting under the calendar's quiet.
- */
-let announcementsHeld = false;
-/**
- * The runtime store and the conversation it holds: one retained thread shared
- * by every panel window and persisted for the next launch. The store is the
- * writer: a window's report and the main process's own lines are appended to
- * it by their ids, and what it answers with is what every panel is shown, so
- * one display cannot erase another's line and no report can stand a stale
- * copy of the thread back up. The files an earlier build kept beside
- * `settings.json` are left where they are and never read.
- */
-const runtimeStoreWiring = wireRuntimeStore({
-  persistent: runMode.observesProviders,
-  createWorker: () => new Worker(runtimeStoreWorkerPath(__dirname), { name: "runtime-store" }),
-  agentRoot: () => agentRootPath(app.getPath("userData")),
-  workspaceDirectory: () => agentWorkspacePath(),
-  ensureDirectory: (directory) => fs.mkdirSync(directory, { recursive: true, mode: 0o700 }),
-  now: Date.now,
-  createEventId: () => randomUUID(),
-  // Every change to a thread becomes a host event; the operator client below
-  // relays main's to the windows, skipping the one whose report produced it.
-  onHistoryChanged: (sessionKey, entries, except) =>
-    gatewayService.historyChanged(sessionKey, entries, except?.id),
-  onDirectoryChanged: () => undefined,
-  report: (message) => process.stderr.write(`${message}\n`),
-});
-/**
- * Which ended runs are still owed to the developer's ear, and to which voice
- * renderer. Owned here, never persisted, and emptied with the generation: a
- * launch restores the words to History and speaks none of them.
- */
-const brainReplyDeliveries = new BrainReplyDeliveries({ nextDeliveryId: () => randomUUID() });
-/**
- * Whether the hidden voice renderer can receive, by the main process's own
- * account: an epoch per load, ready only on that renderer's report. Every
- * offer to the voice window — proactive speech and owed replies alike —
- * waits on it, and a reset takes back what the vanished renderer held.
- */
-const voiceReceiver = new VoiceReceiver();
-/** The spool watchers standing on each hooked provider's spool, closed at quit. */
-let spoolWatchers: readonly ObservationSpoolWatcher[] = [];
-/**
- * The guide as the renderer last reported it. It is what an app act the brain
- * asks for is validated against here, and what the brain is handed as the
- * app's description of itself; empty until a panel has described one.
- */
+const reporters = new WeakMap<WebContents, string>();
+const windowsByReporter = new Map<string, WebContents>();
+function reporterOf(context: BridgeContext): string {
+  const held = reporters.get(context.sender);
+  if (held) return held;
+  const minted = randomUUID();
+  reporters.set(context.sender, minted);
+  windowsByReporter.set(minted, context.sender);
+  context.sender.once("destroyed", () => windowsByReporter.delete(minted));
+  return minted;
+}
+
 let appGuide: AppGuideSnapshot = EMPTY_APP_GUIDE;
-/**
- * The app acts the brain asked a renderer to perform and is still waiting on,
- * by request id. A renderer answers within the round trip or the act is
- * refused on a clock, so the brain never hangs on a panel that went away.
- */
 const pendingBrainAppActs = new Map<string, (answer: WireRecord) => void>();
 const BRAIN_APP_ACT_TIMEOUT_MS = 10_000;
-// The workspaces Luke just created and has yet to open on screen. Entries come
-// only from the validated creation act — nothing a model decided can add one —
-// and each resolves against what observation itself reports.
-const createdWorkspaceOpens = new CreatedWorkspaceOpenTracker();
-/**
- * The development trace: Luke's own agent traffic — the realtime wire and the
- * brain's turns and requests — appended as JSONL under a directory the
- * developer's own shell named. Gated so it cannot exist for a user: a
- * packaged build never reads the variable, a fixture or evidence run has no
- * traffic to tap and constructs no writer, and everything a traced run
- * writes stays under that directory on this machine. What a trace may record
- * is a product decision, not an implementation detail.
- */
-const agentTraceDirectory =
-  app.isPackaged || !runMode.sendsNetwork ? undefined : process.env.LUKE_TRACE_DIR;
-const agentTrace = agentTraceDirectory
-  ? new AgentTraceWriter({ directory: agentTraceDirectory })
-  : undefined;
-if (agentTrace) process.stderr.write(`Agent trace: ${agentTrace.file}\n`);
-// Everything Luke says unprompted — the brain's briefings and the two
-// onboarding beats — is decided here, in the main process, which has to
-// outlive any renderer: what stands, in what order, whether now, and what
-// became of each. The mouth in the renderer holds one offer at a time and
-// reports by id. What releases a held briefing is the clock against observed
-// intervals — deterministic, like the edges that woke the brain — and the
-// release is a re-decision, never a replay.
-const speechArbiter = new SpeechArbiter({
-  now: Date.now,
-  nextId: randomUUID,
-  ...(agentTrace ? { trace: (record) => agentTrace.recordSpeechDecision(record) } : undefined),
-});
-const voiceCapabilities = new VoiceCapabilityAssembler({
-  settings: settingsStore,
-  credentialsUsable: () => runMode.sendsNetwork && accountCapabilitiesActive(),
-  fixtureRun: () => !runMode.sendsNetwork,
-  accountSignedIn: () => account.status === ACCOUNT_STATUS.SIGNED_IN,
-  hostedServiceBaseUrl: HOSTED_SERVICE_BASE_URL,
-  refreshAccount: accountSession.refreshOnce,
-  ...(agentTrace
-    ? {
-        wrapBrainModel: (model) =>
-          tracedModelAdapter(model, (record) => agentTrace.recordBrainRequest(record)),
-      }
-    : undefined),
-});
-// Quiets Music and Spotify while a spoken exchange is live. It lives here
-// rather than in the renderer because letting the players back up must survive
-// anything the renderer does — and only this process may run a helper.
+
 const mediaDuck = new MediaDuckController();
 const feedbackDelivery = feedbackDeliveryFromEnvironment();
-// Keeps the running build current: a timed check reads the release manifest,
-// a newer build downloads at once, and the install lands at the quit the
-// user asks for. It lives here rather than in a renderer because the timer
-// must survive every window, only this process may run the updater, and what
-// it learns reaches them all through the same broadcast settings use.
-// Squirrel can only replace a signed, packaged build, and a fixture or
-// evidence run must not fetch, so every other run carries no engine and its
-// row offers the browser instead. The last-run version lives in its own file
-// so the first launch after an install can say what just happened.
-const lastRunVersionPath = () => path.join(app.getPath("userData"), "last-run-version.json");
-const updateService = new UpdateService({
-  currentVersion: app.getVersion(),
-  onChange: (update) => broadcast(channels.onUpdateChanged, update),
-  engine:
-    app.isPackaged && runMode.sendsNetwork && process.platform === "darwin"
-      ? createElectronUpdaterEngine()
-      : undefined,
-  lastRunVersion: {
-    read: () => {
-      try {
-        const stored: UnparsedWireValue = JSON.parse(fs.readFileSync(lastRunVersionPath(), "utf8"));
-        return isRecord(stored) ? text(stored.version) : undefined;
-      } catch {
-        // A missing or unreadable file is the first launch: nothing to confirm.
-        return undefined;
-      }
-    },
-    write: (version) => {
-      try {
-        fs.writeFileSync(lastRunVersionPath(), `${JSON.stringify({ version })}\n`);
-      } catch (error) {
-        process.stderr.write(
-          `Could not persist the last-run version: ${error instanceof Error ? error.message : String(error)}\n`,
-        );
-      }
-    },
-  },
-});
-// Counts how Luke's own features are used. It lives here rather than in a
-// renderer because every emit site is already in this process and the timer
-// must survive every window; what it may say is fixed by the vocabulary in
-// core, and a fixture or evidence run switches it off entirely.
-const productEvents = new ProductEventSender({
-  serviceBaseUrl: HOSTED_SERVICE_BASE_URL,
-  appVersion: app.getVersion(),
-  sends: runMode.sendsNetwork,
-  readAccessToken: async () => (await settingsStore.readAccount())?.accessToken,
-  refreshAccount: accountSession.refreshOnce,
-});
-// The provider-key vault's client, on the same bearer the counting sender
-// reads fresh per ask. Constructed unconditionally because it holds nothing:
-// without a token no call leaves, and a fixture or evidence run reads no
-// token at all — the machine it happens to run on may hold a real account,
-// and the run mode is the whole of the gate here as everywhere.
-const hostedVault = new HostedVaultClient({
-  serviceBaseUrl: HOSTED_SERVICE_BASE_URL,
-  readAccessToken: async () =>
-    runMode.sendsNetwork ? (await settingsStore.readAccount())?.accessToken : undefined,
-  refreshAccount: accountSession.refreshOnce,
-  // The address, not the id: a 401 refresh is exactly when a stored account
-  // may first gain its id, and the retry guard needs the one name that holds
-  // still across that refresh. Compared in this process only, never sent.
-  readAccountKey: async () => (await settingsStore.readAccount())?.email,
-});
-// The mirror between the local key store and the vault. It lives here, beside
-// the client it drives, so the keys it reads for a sweep never leave the main
-// process.
-const providerKeyVaultSync = new ProviderKeyVaultSync({
-  vault: hostedVault,
-  readStoredApiKey: (providerId) => settingsStore.readStoredApiKey(providerId),
-  account: async () => {
-    const held = await settingsStore.readAccount();
-    if (!held) return undefined;
-    const account: VaultSyncAccount = { email: held.email };
-    if (held.id) account.id = held.id;
-    return account;
-  },
-  tenant: {
-    read: () => settingsStore.readVaultSyncAccount(),
-    write: (accountKey) => settingsStore.setVaultSyncAccount(accountKey),
-  },
-});
-/** The standing reconcile the sync switch declares; see ProviderKeyVaultSync. */
-function reconcileProviderKeyVault(): void {
-  void settingsStore
-    .snapshot()
-    .then((settings) =>
-      settings.stored.syncProviderKeys
-        ? providerKeyVaultSync.apply(true, { claim: false })
-        : undefined,
-    );
-}
-// One narrow function rather than the service itself, so an IPC module can
-// count an act without being handed anything it could flush, stop, or read.
-const recordProductEvent: RecordProductEvent = (name, properties) =>
-  productEvents.record(name, properties);
-/**
- * The diagnostic kinds' total `Record` bridge into the counting vocabulary,
- * like the ones in `#shared/product-vocabulary` but held here because the
- * renderer bundles that file and the providers vocabulary is this process's
- * reach alone.
- */
-const DIAGNOSTIC_COUNTED_AS = {
-  [ADAPTER_DIAGNOSTIC_KIND.PASS_FAILURE]: PRODUCT_DIAGNOSTIC_KIND.PASS_FAILURE,
-  [ADAPTER_DIAGNOSTIC_KIND.ACCIDENTAL_WAKE]: PRODUCT_DIAGNOSTIC_KIND.ACCIDENTAL_WAKE,
-} satisfies Record<AdapterDiagnosticKind, ProductDiagnosticKind>;
-/**
- * Both sinks of the adapters' diagnostic channel. The error's own words stop
- * at the local log, because a failure's message can carry a path, a branch,
- * or a title; only the provider and the bridged kind reach the counted event,
- * and a kind the bridge does not answer for is dropped rather than forwarded.
- */
-function reportAdapterDiagnostic(
-  providerId: ProviderId,
-  kind: AdapterDiagnosticKind,
-  error: Error,
-): void {
-  process.stderr.write(`Observation diagnostic (${providerId}, ${kind}): ${error.message}\n`);
-  const counted = DIAGNOSTIC_COUNTED_AS[kind];
-  if (!counted) return;
-  productEvents.record(PRODUCT_EVENT.SESSION_DIAGNOSTIC, {
-    provider_id: providerId,
-    diagnostic_kind: counted,
-  });
-}
-/**
- * What this run can tell the renderer about recording: whether it is the kind
- * of run that may record at all, which build it is, and whom a recording
- * would belong to. The two switches are the renderer's own to read, because it
- * is told when they move; this is re-answered whenever the account moves,
- * which is the other half of the same question.
- *
- * `sendsNetwork` is the same suppression the event sender takes — recording
- * must be off wherever counting is. An account is not among the reasons: a
- * recording begins at the first paint of an ordinary launch, before anyone
- * has signed in, because the launch and the introduction before it are where
- * a first run goes wrong and a recording that waited for a sign-in never saw
- * it. A sign-in that lands afterwards is what the id is for, and it joins the
- * session already running to the person rather than starting a new one.
- */
-async function sessionReplayBootstrap(): Promise<SessionReplayBootstrap> {
-  // The in-memory snapshot leads the stored account, and this reads the
-  // snapshot first because of it: a sign-out reports its transition before it
-  // clears the store, so a bootstrap that asked the store alone would answer
-  // with the id of the person who has just left — and `applySessionReplay`
-  // would see nothing change and leave the recording running.
-  const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
-  const accountId = signedIn ? (await settingsStore.readAccount())?.id : undefined;
-  return {
-    permitted: runMode.sendsNetwork && !sessionReplayEndedByDeletion,
-    appVersion: app.getVersion(),
-    ...(accountId ? { accountId } : undefined),
-  };
-}
-
-/**
- * Stops recording now, ahead of an act that ends the account it is filed
- * under. Both acts need it and neither can wait for their own transition:
- * a sign-out reports itself before the store clears, and a deletion awaits
- * the hosted erasure first — so a broadcast that arrived afterwards would
- * leave the renderer free to flush recordings under a person who has left,
- * or one whose erasure is already queued, recreating what was just deleted.
- *
- * The generation moves with it, so a read already in flight cannot land
- * behind this and re-arm what it just stopped.
- */
-function haltSessionReplay(): void {
-  sessionReplayBroadcastGeneration += 1;
-  broadcast(channels.onSessionReplayChanged, {
-    permitted: false,
-    appVersion: app.getVersion(),
-  });
-}
-
-/**
- * Whether an account was deleted in this run, which stands recording down for
- * the rest of it.
- *
- * A sign-out is the ordinary way back to a signed-out panel, and one recording
- * anonymously afterwards is the same thing the launch before the sign-in was.
- * A deletion is not: it is the one act this repository treats as
- * unrecoverable, and a recorder that resumed the instant the erasure landed
- * would be filing fresh recordings of the panel that erased them. Nothing is
- * re-created by it — the new session is anonymous and joins no person — but
- * the developer cannot see that, and the reading is the harm. The next launch
- * or sign-in starts one again.
- */
-let sessionReplayEndedByDeletion = false;
-
-/**
- * Stands recording down after a deletion that landed, for good this time.
- *
- * The generation moves for the same reason `haltSessionReplay`'s does, and
- * here it is load-bearing rather than defensive: the erasure reports the
- * account transition on its way out, so a `broadcastSessionReplay` is already
- * in flight when this runs and would otherwise answer after it with the
- * permission this just withdrew.
- */
-function endSessionReplay(): void {
-  sessionReplayEndedByDeletion = true;
-  haltSessionReplay();
-}
-/**
- * The output's switches as last read, and the helper that reads them. The
- * state lives here rather than in the renderer so bootstrap can carry the
- * answer a push has already delivered; `undefined` is "cannot be read", which
- * the renderer must draw as audible.
- */
 let outputAudio: OutputAudioState | undefined;
 let outputVolumeWatcher: OutputVolumeWatcher | undefined;
-/**
- * Where the developer's voice would be captured from, as last read, and the
- * helper that reads it. The state lives here so the renderer's ask can be
- * answered at once while a fresh probe rides behind it; `undefined` is
- * "cannot be read", which the renderer must take as the browser's default.
- */
 let microphoneRoute: MicrophoneRoute | undefined;
 let microphoneRouteWatcher: MicrophoneRouteWatcher | undefined;
 
@@ -829,67 +203,45 @@ const panels = new PanelManager({
   preloadPath: path.join(__dirname, "preload.js"),
   rendererHtmlPath: path.join(__dirname, "renderer", "index.html"),
   rendererUrl: rendererUrl(),
-  // The hidden voice window outlives the panels, so the panels say for
-  // themselves when the last of them is gone.
   onAllClosed: () => app.quit(),
 });
-// The one-time spoken introduction: a fullscreen takeover on the first
-// interactive launch, before any account exists. Its voice runs on the hosted
-// service's bounded, accountless introduction mint; its session detection is
-// the keyless local peek, answered only to the takeover window; and the
-// account landing is what completes it — the takeover closes, the panels
-// reconcile, and every account-gated capability releases through the ordinary
-// gate rather than around it.
 const introductionWindow = new IntroductionWindow({
   runMode,
   preloadPath: path.join(__dirname, "preload.js"),
   rendererHtmlPath: path.join(__dirname, "renderer", "index.html"),
   rendererUrl: rendererUrl(),
-  // A dead takeover renderer can ask for nothing, including its own ending,
-  // so the main process ends it: the ordinary signed-out launch stands in.
   onGone: (reason) => {
-    process.stderr.write(`Introduction abandoned: ${reason}\n`);
+    report(`Introduction abandoned: ${reason}`);
     void abandonIntroduction();
   },
   onClosed: () => quitUnlessPanelStands(),
 });
 /**
- * The hidden window that will hold the live conversation, so that no panel
- * does. It stands for the whole run on any launch that could speak — an
- * interactive one, or one that reaches the network — and never in a fixture or
- * capture run, where nothing would. A renderer that dies is stood up again by
- * the window itself, within its own bound; nothing drawn depends on it.
+ * The hidden window that holds the live conversation. Its receiver epochs are
+ * the host's: each load asks the host to begin one, and a close or reload
+ * ends it there, so a claim the renderer makes names an epoch the host issued.
  */
 const voiceWindow = new VoiceWindow({
   runMode,
-  receiver: voiceReceiver,
+  receiver: {
+    begin: () => void gateway.host.beginReceiver(),
+    reset: () => void gateway.host.resetReceiver(),
+  },
   preloadPath: path.join(__dirname, "preload.js"),
   rendererHtmlPath: path.join(__dirname, "renderer", "index.html"),
   rendererUrl: rendererUrl(),
   onGone: (reason) => {
-    process.stderr.write(`Voice window replaced: ${reason}\n`);
-    // Whatever the dead renderer last reported is no longer true: no exchange
-    // is live, no panel opening now should bootstrap into one, and every
-    // panel drawing the last snapshot is told the voice is at rest, or Escape
-    // would keep asking a window that is gone to stop. The replacement
-    // reports its own view the moment it mounts.
+    report(`Voice window replaced: ${reason}`);
     latestVoiceView = undefined;
     panels.setVoiceExchange(false);
     broadcast(channels.onVoiceViewChanged, IDLE_VOICE_VIEW);
   },
   onGaveUp: (reason) => {
-    process.stderr.write(`Voice window abandoned: ${reason}\n`);
+    report(`Voice window abandoned: ${reason}`);
   },
 });
 const voiceWindowWanted = runMode.registersGlobalKeys || runMode.sendsNetwork;
 
-/**
- * The invariant the hidden window lives under: it never keeps the process
- * alive. It is raised only once a panel stands, so it is never the only
- * window, and whenever the takeover — the one other window that can stand
- * with no panel — goes down by any route, a run with no panel ends here
- * rather than living on invisibly.
- */
 function raiseVoiceWindow(): void {
   if (voiceWindowWanted && panels.standing > 0) voiceWindow.open();
 }
@@ -898,12 +250,6 @@ function quitUnlessPanelStands(): void {
   if (panels.standing === 0) app.quit();
 }
 
-/**
- * Hands a payload to every panel and to the voice window, which reads the
- * same settings, roster, and hold the panels do. A channel the voice window
- * never subscribes to costs it nothing; the sender a reply already answered
- * is skipped exactly as `PanelManager.broadcast` skips it.
- */
 function broadcast<Payload>(channel: string, payload: Payload, except?: WebContents): void {
   panels.broadcast(channel, payload, except);
   const voice = voiceWindow.current();
@@ -912,18 +258,13 @@ function broadcast<Payload>(channel: string, payload: Payload, except?: WebConte
   voice.webContents.send(channel, payload as UnparsedWireValue);
 }
 
-/** The voice window's latest snapshot, for a panel that opens mid-exchange. */
+function sendToVoice<Payload>(channel: string, payload: Payload): void {
+  // SAFETY: as above; the voice window is one of the same windows.
+  voiceWindow.current()?.webContents.send(channel, payload as UnparsedWireValue);
+}
+
 let latestVoiceView: VoiceView | undefined;
-/**
- * Whether the takeover's renderer ever reported mounting. A takeover that
- * never draws is a fullscreen window swallowing every click with nothing on
- * it, so a missing report abandons the introduction at the deadline.
- */
 let introductionRendererReady = false;
-/**
- * Set while the handoff waits for the first panel renderer to report ready,
- * so the takeover's fade lands on a drawn gate rather than a loading window.
- */
 let resolveIntroductionPanelReady: (() => void) | undefined;
 const introductionMinter = new IntroductionRealtimeCredentialMinter({
   serviceBaseUrl: HOSTED_SERVICE_BASE_URL,
@@ -934,7 +275,6 @@ function introductionCompletedOnDisk(): boolean {
   try {
     return introductionCompleted(fs.readFileSync(introductionStatePath(), "utf8"));
   } catch {
-    // A missing or unreadable file is an introduction never finished.
     return false;
   }
 }
@@ -943,214 +283,22 @@ function markIntroductionComplete(): void {
   try {
     fs.writeFileSync(introductionStatePath(), introductionRecord(new Date().toISOString()));
   } catch (error) {
-    process.stderr.write(
-      `Could not persist the introduction record: ${error instanceof Error ? error.message : String(error)}\n`,
+    report(
+      `Could not persist the introduction record: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
 
-/**
- * The arrival record as this run knows it, loaded once at launch and written
- * through `writeArrivalState` from there on. Undefined is "no record", which
- * only a launch may turn into a backfill and only a sign-in edge into an
- * observed arrival.
- */
-let arrivalState: ArrivalState | undefined;
-const arrivalStatePath = () => path.join(app.getPath("userData"), ARRIVAL_STATE_FILE);
-
-function arrivalStateFromDisk(): ArrivalState | undefined {
-  try {
-    return arrivalStateFromStored(fs.readFileSync(arrivalStatePath(), "utf8"));
-  } catch {
-    return undefined;
-  }
-}
-
-function writeArrivalState(state: ArrivalState): void {
-  arrivalState = state;
-  try {
-    fs.writeFileSync(arrivalStatePath(), arrivalRecord(state));
-  } catch (error) {
-    process.stderr.write(
-      `Could not persist the arrival record: ${error instanceof Error ? error.message : String(error)}\n`,
-    );
-  }
-  // A settled record has nothing left to greet: a beat still waiting to be
-  // said about it is taken back rather than spoken over a settle it raced.
-  if (state.settledAt !== undefined) withdrawBeat(ARRIVAL_SPEECH_KIND);
-}
-
-/**
- * The calendar onboarding record as this run knows it, loaded once at launch
- * and written through `writeCalendarOnboardingState` from there on. Undefined
- * is "no record", which only a launch may turn into a backfill and only a
- * sign-in edge into a standing gate.
- */
-let calendarOnboardingState: CalendarOnboardingState | undefined;
-const calendarOnboardingStatePath = () =>
-  path.join(app.getPath("userData"), CALENDAR_ONBOARDING_STATE_FILE);
-
-function calendarOnboardingStateFromDisk(): CalendarOnboardingState | undefined {
-  try {
-    return calendarOnboardingStateFromStored(
-      fs.readFileSync(calendarOnboardingStatePath(), "utf8"),
-    );
-  } catch {
-    return undefined;
-  }
-}
-
-/** Whether the onboarding gate stands, as the panels should currently draw it. */
-function calendarOnboardingGateOwed(): boolean {
-  return runMode.requiresAccount && calendarOnboardingOwed(calendarOnboardingState);
-}
-
-function writeCalendarOnboardingState(state: CalendarOnboardingState): void {
-  calendarOnboardingState = state;
-  try {
-    fs.writeFileSync(calendarOnboardingStatePath(), calendarOnboardingRecord(state));
-  } catch (error) {
-    process.stderr.write(
-      `Could not persist the calendar onboarding record: ${error instanceof Error ? error.message : String(error)}\n`,
-    );
-  }
-  const owed = calendarOnboardingGateOwed();
-  // The gate standing down outruns a beat still waiting about it: a fast Done
-  // or skip must not be answered by the ask it just settled, so the beat is
-  // taken back the moment the record says the step is over, before the
-  // arrival it was holding is requested.
-  if (!owed) withdrawBeat(CALENDAR_ONBOARDING_SPEECH_KIND);
-  broadcast(channels.onCalendarOnboardingChanged, owed);
-}
-
-/**
- * Settles an owed record the settings already satisfy, at a launch or a
- * sign-in edge — never mid-run, where the gate deliberately stands over a
- * fresh connection until Done confirms it. This covers the calendar that
- * predates the record (an install that connected one before this step
- * existed, then signed in again) and the connect made at the gate but never
- * confirmed before a quit: either way the step's purpose is standing, and a
- * record left owed over it would let a later disconnect resurrect a gate
- * already passed.
- */
-async function settleCalendarOnboardingIfConnected(): Promise<void> {
-  if (!calendarOnboardingOwed(calendarOnboardingState)) return;
-  // Presence alone, not the credential-resolving snapshot: the reconcile
-  // must land fast, because until it does an owed record over a standing
-  // calendar draws the gate's review half over a step already passed.
-  const connected = await settingsStore.calendarConnectionStored();
-  // Re-checked after the await: another settle may have landed first.
-  if (!connected || !calendarOnboardingOwed(calendarOnboardingState)) return;
-  writeCalendarOnboardingState({
-    ...(calendarOnboardingState ?? {}),
-    settledAt: new Date().toISOString(),
-  });
-}
-
-/**
- * Whether the calendar gate is actually being offered: owed by the record,
- * and with at least one source this build can connect — the same two facts
- * the renderer draws the gate from. An owed record no gate can be drawn for
- * must hold nothing, or the arrival beat would wait on a step that can
- * never be answered.
- */
-async function calendarGateOfferable(): Promise<boolean> {
-  if (!calendarOnboardingGateOwed()) return false;
-  const settings = await settingsStore.snapshot();
-  // Re-checked after the await: the reconcile settling a pre-standing
-  // calendar may have landed while the snapshot resolved, and a beat about
-  // a gate no longer standing must not go out over the roster.
-  if (!calendarOnboardingGateOwed()) return false;
-  return settings.status.appleCalendarAvailable || settings.status.calendarSignInAvailable;
-}
-
-/**
- * Asks the speech arbiter for the one onboarding beat this moment owes, if
- * any. The trigger is deterministic on every side — the record the sign-in
- * edge wrote, never anything a model decided — and what is requested is only
- * the kind: the script is fixed by the build in the realtime vocabulary, and
- * its observed values are the renderer's own to read from the roster it
- * already draws. Requesting settles nothing: the record settles only when
- * the mouth reports the reply actually began, and everything short of that
- * — the quiet, a call that would not open, news gone stale — leaves the beat
- * owed for the next signed-in launch, because a moment nobody heard was not
- * the one moment this plays. The arbiter says each beat once per run however
- * many capability starts a run has, and holds one through a meeting's quiet
- * for the release rather than dropping it. The first observation pass is
- * awaited first, so the beat's suggestion can name a session the developer
- * actually has running.
- *
- * While the calendar gate stands, the calendar onboarding beat speaks in the
- * arrival's place — "you're all set" over a panel still asking for something
- * would be false — and the arrival waits for the step to settle, whose Done
- * and skip both call back here.
- */
-async function requestOnboardingBeat(): Promise<void> {
-  if (!runMode.requiresAccount || account.status !== ACCOUNT_STATUS.SIGNED_IN) return;
-  if (!voiceCapabilities.realtimeCredentials) return;
-  if (await calendarGateOfferable()) {
-    speechArbiter.request({ kind: CALENDAR_ONBOARDING_SPEECH_KIND });
-    void reconcileSpeech();
-    return;
-  }
-  if (!arrivalBeatOwed(arrivalState)) return;
-  await sessionObservationLoop.refresh().catch(() => undefined);
-  if (account.status !== ACCOUNT_STATUS.SIGNED_IN || !arrivalBeatOwed(arrivalState)) return;
-  speechArbiter.request({ kind: ARRIVAL_SPEECH_KIND });
-  void reconcileSpeech();
-}
-
-/**
- * Remembers that Luke has now announced to this account at all, and counts
- * the time from the first sign-in to this moment — as a rung, never a
- * duration. A record whose sign-in instant does not parse settles without
- * counting: a broken timestamp must not travel as a made-up rung.
- */
-function markFirstAnnouncementSpoken(): void {
-  if (!countsFirstAnnouncement(arrivalState)) return;
-  const state = arrivalState ?? {};
-  const now = Date.now();
-  const signedInAtMs = state.signedInAt !== undefined ? Date.parse(state.signedInAt) : Number.NaN;
-  if (Number.isFinite(signedInAtMs)) {
-    productEvents.record(PRODUCT_EVENT.VOICE_FIRST_ANNOUNCEMENT, {
-      sign_in_age: productSignInAge(now - signedInAtMs),
-    });
-  }
-  writeArrivalState({ ...state, firstAnnouncementAt: new Date(now).toISOString() });
-}
-
-/**
- * The introduction's ordinary end: the sign-off has been spoken, so the real
- * signed-out panel takes over exactly where the takeover's drawing stands —
- * the gate, its hover collapse, and the account landing are all the ordinary
- * panel's from here. Raise before raze, for the same reason the reconciler
- * does — all windows closed is how this process decides it is done.
- */
 async function finishIntroduction(given: boolean): Promise<void> {
   if (!introductionWindow.active) return;
-  // Completed means given to the end: the sign-off is the introduction's last
-  // word, and what follows is the same gate every later launch opens on. A
-  // glide past a voice that never stood up hands off identically but records
-  // nothing — the one moment this flow is still owed its play.
   if (given) {
     markIntroductionComplete();
-    productEvents.record(PRODUCT_EVENT.INTRODUCTION_COMPLETE, {});
+    recordProductEvent(PRODUCT_EVENT.INTRODUCTION_COMPLETE, {});
   }
-  // Retiring first revokes the takeover's standing — the introduction mint,
-  // the talk key's routing, the reconcile guards — before any panel is raised
-  // beside it; the window itself is destroyed only after the panels stand,
-  // because a swap must never pass through zero windows.
   introductionWindow.retire();
-  // The real panel stands up behind the takeover and is given until its
-  // renderer reports ready, so the fade the takeover plays on this call's
-  // answer crossfades into a drawn gate rather than a window still loading.
   const panelReady = new Promise<void>((resolve) => {
     resolveIntroductionPanelReady = resolve;
   });
-  // Compact on purpose: the takeover has already stood its drawing down to
-  // the capsule, and the panel renderer's own signed-out greeting is what
-  // expands the gate — the same morph, Luke riding from the wing spot into
-  // the gate's face, that every later signed-out launch plays.
   panels.reconcile();
   raiseVoiceWindow();
   await Promise.race([
@@ -1158,24 +306,14 @@ async function finishIntroduction(given: boolean): Promise<void> {
     new Promise((resolve) => setTimeout(resolve, INTRODUCTION_HANDOFF_READY_MS)),
   ]);
   resolveIntroductionPanelReady = undefined;
-  // The takeover fades on this function's answer; the window follows once
-  // the fade has run, and the talk key moves home with it — the account's
-  // own credential answers from here.
   setTimeout(() => {
     introductionWindow.close();
     void hotkeys.reapply(HOTKEY_RANK.TALK);
   }, INTRODUCTION_FADE_MS);
 }
 
-/**
- * The introduction's other end: it could not be given — the voice never
- * connected — so the ordinary signed-out launch stands in its place. Nothing
- * is marked completed, because a moment nobody saw should replay.
- */
 async function abandonIntroduction(): Promise<void> {
   if (!introductionWindow.active) return;
-  // Retire first for the same reason the finish does: no panel may be
-  // answered by the introduction's standing while it is being stood down.
   introductionWindow.retire();
   panels.reconcile();
   raiseVoiceWindow();
@@ -1184,37 +322,15 @@ async function abandonIntroduction(): Promise<void> {
   await hotkeys.reapply(HOTKEY_RANK.TALK);
 }
 
-const supersetSignIn = new SupersetSignIn({
-  cli: supersetCli,
-  openExternal: (url) => shell.openExternal(url),
-  onChange: (state) => {
-    broadcast(channels.onSupersetSignInChanged, state);
-    if (state.stage !== SUPERSET_SIGN_IN_STAGE.CONNECTED) return;
-    void sessionObservationLoop.refresh();
-    // The edge into connected, which is where a sign-in actually lands: the
-    // code submission only reaches `exchanging`, and the CLI answers on its
-    // own time. Counted here so a sign-in that failed after the code counts
-    // nothing at all.
-    recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
-      superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_COMPLETE,
-    });
-  },
-});
 const hotkeys = new HotkeyRegistrar({
   registersGlobalKeys: runMode.registersGlobalKeys,
   // The introduction's practice beat is the one time the talk key is claimed
-  // with no account credential behind it: the takeover holds the voice, on
-  // the bounded introduction mint, for exactly as long as it stands. The
-  // talk key alone — the takeover answers no ask or stop press, and a
-  // claimed chord nothing answers is a chord taken from every other app.
+  // with no account credential behind it; otherwise a voice stands only when
+  // the host says one does.
   hasCredentials: (rank) =>
-    voiceCapabilities.realtimeCredentials !== undefined ||
-    (rank === HOTKEY_RANK.TALK && introductionWindow.active),
-  recordProductEvent,
+    voiceAvailable || (rank === HOTKEY_RANK.TALK && introductionWindow.active),
+  recordProductEvent: (name, properties) => recordProductEvent(name, properties),
   host: {
-    // The talk and stop keys go to whichever window holds a voice: the
-    // takeover while it stands, else the hidden voice window. A panel is never
-    // a voice host; it is only where the ask key summons the composer.
     voiceHost: () => introductionWindow.current() ?? voiceWindow.current(),
     primaryPanel: () => panels.primaryPanel(),
     displayIdFor: (sender) => panels.displayIdFor(sender),
@@ -1230,27 +346,14 @@ const dock = new DockPresence({
   iconDirectory: path.join(__dirname, "icon"),
 });
 
-/**
- * Registers or removes Luke's own login item, the stored setting being the
- * source of truth every launch re-applies. Only a packaged app may: an
- * unpackaged run would hand macOS the bare Electron binary, and a fixture or
- * capture run must not touch the machine it happens to run on.
- */
 function applyLoginItem(openAtLogin: boolean): void {
   if (app.isPackaged) app.setLoginItemSettings({ openAtLogin });
 }
 
-/**
- * Starts watching whether the Mac's output would let Luke be heard. Not in a
- * fixture or capture run: evidence must not read the machine it happens to
- * run on, and a fixture run has no voice to go unheard — the muted evidence
- * profile asks the renderer for the state directly instead.
- */
 function startOutputVolumeWatch(): void {
   if (!runMode.observesProviders) return;
   const send = (state: OutputAudioState | undefined) => {
     outputAudio = state;
-    // Every display's panel captions the same voice, so every one is told.
     broadcast(channels.onOutputAudioChanged, state);
   };
   outputVolumeWatcher = new OutputVolumeWatcher({
@@ -1260,12 +363,6 @@ function startOutputVolumeWatch(): void {
   if (!outputVolumeWatcher.start()) outputVolumeWatcher = undefined;
 }
 
-/**
- * Starts watching where the developer's voice would be captured from, under
- * the same rule as the output watch: read-only, and not in a fixture or
- * capture run. What it learns decides only which device the renderer asks the
- * browser to open when a press takes a turn.
- */
 function startMicrophoneRouteWatch(): void {
   if (!runMode.observesProviders) return;
   microphoneRouteWatcher = new MicrophoneRouteWatcher({
@@ -1279,74 +376,6 @@ function startMicrophoneRouteWatch(): void {
   if (!microphoneRouteWatcher.start()) microphoneRouteWatcher = undefined;
 }
 
-let unsubscribeSessions: (() => void) | undefined;
-/**
- * The projects last announced to the renderer, serialized for comparison.
- * Undefined until the first announcement decides what there is to compare.
- */
-let lastWorkspaceProjects: string | undefined;
-/** Invalidates an older async broadcast whenever a newer pass or stop wins. */
-let workspaceProjectsBroadcastGeneration = 0;
-
-/**
- * Announces where a workspace can be created whenever the offer changes. The
- * roster announces every pass whether or not anything moved, so the offer is
- * compared against the last one announced here rather than re-sent on every
- * commit. It runs on every commit and once more when a pass completes,
- * because the offer is read from the adapters rather than from the roster —
- * a key just added with no workspaces yet, a project connected but not yet
- * worked in — and the pass's last word on them is its end, not any one
- * provider's commit.
- */
-async function broadcastWorkspaceProjects(): Promise<void> {
-  const generation = ++workspaceProjectsBroadcastGeneration;
-  const offeredProjects = offeredWorkspaceProjects();
-  const defaults = (await readWorkspaceDefaults()).defaultProjectIds;
-  if (generation !== workspaceProjectsBroadcastGeneration) return;
-  await pruneWorkspaceProjectDefaults(
-    offeredProjects,
-    defaults,
-    () => generation === workspaceProjectsBroadcastGeneration,
-  );
-  if (generation !== workspaceProjectsBroadcastGeneration) return;
-  const projects = normalizeObservedWorkspaceProjects(offeredProjects, defaults);
-  const serialized = JSON.stringify(projects);
-  if (serialized === lastWorkspaceProjects) return;
-  lastWorkspaceProjects = serialized;
-  broadcast(channels.onWorkspaceProjectsChanged, projects);
-}
-
-/**
- * Forgets a stored default project its provider has stopped offering. Every
- * path that reads one matches it against the offered list, so an unmatched
- * default steers nothing while the settings row still shows a choice; the
- * write is what makes the row and the behaviour agree again. A failed write
- * costs only the stale entry, which the next pass tries again.
- */
-async function pruneWorkspaceProjectDefaults(
-  projects: readonly ObservedWorkspaceProject[],
-  defaults: Readonly<Partial<Record<string, string>>> | undefined,
-  isCurrent: () => boolean,
-): Promise<void> {
-  try {
-    for (const providerId of staleWorkspaceProjectDefaults(projects, defaults)) {
-      if (!isCurrent()) return;
-      const expected = defaults?.[providerId];
-      if (expected === undefined) continue;
-      const saved = await settingsStore.clearEntryIfUnchanged(
-        APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-        providerId,
-        expected,
-      );
-      if (!saved.cleared) continue;
-      if (!isCurrent()) return;
-      broadcast(channels.onSettingsChanged, saved.settings);
-    }
-  } catch {
-    return;
-  }
-}
-
 function argumentValue(name: string): string | undefined {
   const index = process.argv.indexOf(name);
   return index >= 0 ? process.argv[index + 1] : undefined;
@@ -1358,11 +387,6 @@ function microphoneStatus(): MicrophoneStatus {
   return systemPreferences.getMediaAccessStatus("microphone") as MicrophoneStatus;
 }
 
-/**
- * Asks the system for the microphone where it has not yet answered, and tells
- * every window the answer: the status is the main process's to know, and no
- * panel holds a microphone to learn it from.
- */
 async function requestMicrophone(): Promise<MicrophoneStatus> {
   if (process.platform !== "darwin") return "granted";
   if (microphoneStatus() === "not-determined") {
@@ -1378,196 +402,12 @@ function trustedSender(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
   return url === rendererUrl();
 }
 
-function accountCapabilitiesActive(): boolean {
-  return accountGateOpen(runMode, account.status === ACCOUNT_STATUS.SIGNED_IN);
-}
-
-function broadcastAccount(): void {
-  broadcast(channels.onAccountChanged, account);
-}
-
-/**
- * Tells every panel what an account transition just did to the settings.
- * `voiceAvailable` rides the settings snapshot and moves with the account
- * — a sign-in carries the hosted allowance, a sign-out takes it — but the
- * transitions themselves only broadcast `accountChanged`, so without this the
- * renderer keeps drawing the voice state of the account it no longer has.
- */
-async function broadcastVoiceAvailability(): Promise<void> {
-  broadcast(channels.onSettingsChanged, await settingsStore.snapshot());
-}
-
-/**
- * Tells every panel what an account transition just did to recording, for the
- * reason directly above and one more.
- *
- * A recording belongs to an account: it is filed under the id the counted
- * events resolve to, and that is what makes deleting the account erase the
- * recordings with it. So a sign-out must end the recording rather than leave
- * it running under the account the developer just left, and a sign-in must be
- * able to start one without waiting for a relaunch — the bootstrap answer was
- * true only of the account that was signed in when the panel loaded.
- */
-let sessionReplayBroadcastGeneration = 0;
-
-async function broadcastSessionReplay(): Promise<void> {
-  // Guarded like the workspace projects' broadcast, and for a sharper reason.
-  // The account is read asynchronously, and a sign-out reports the transition
-  // before it clears the stored account — so an in-flight read can still see
-  // the old id, and a late reply would restart recording under the person who
-  // just left, after a newer answer had already stopped it.
-  const generation = ++sessionReplayBroadcastGeneration;
-  const replay = await sessionReplayBootstrap();
-  if (generation !== sessionReplayBroadcastGeneration) return;
-  broadcast(channels.onSessionReplayChanged, replay);
-}
-
-/**
- * What the settings last told the panels about the Codex CLI login. The
- * connection is not a setting anyone writes, so no save ever announces it
- * moving: the observation loop is where it changes — the user ran codex
- * login or logout in their own terminal — and without this the panels keep
- * drawing the words of whatever snapshot they loaded.
- */
-let announcedCodexCloudConnection = codexCloudAdapter.connection();
-
-async function broadcastCodexCloudConnection(): Promise<void> {
-  const connection = codexCloudAdapter.connection();
-  if (connection === announcedCodexCloudConnection) return;
-  announcedCodexCloudConnection = connection;
-  broadcast(channels.onSettingsChanged, await settingsStore.snapshot());
-}
-
-async function startAccountCapabilities(): Promise<void> {
-  if (!accountCapabilitiesActive()) return;
-  await applyVoiceCredential();
-  await broadcastVoiceAvailability();
-  if (!accountCapabilitiesActive()) return;
-  await hotkeys.reapply(HOTKEY_RANK.TALK);
-  if (!accountCapabilitiesActive()) return;
-  startSessionObservation();
-  startCalendarObservation();
-  observationSupervisor.setEnabled(true);
-  // After the credential and the observation it wants to name a session
-  // from; unawaited because the sign-in that started these capabilities must
-  // not wait on an observation pass to land.
-  void requestOnboardingBeat();
-  // The sync switch is a standing state, not a one-shot act: while it is on,
-  // the vault holds what this Mac's encrypted store holds, reconciled at the
-  // sign-in for the account the keys were last synced for. The launch that
-  // starts capabilities without passing here runs the same reconcile itself.
-  reconcileProviderKeyVault();
-}
-
-async function stopAccountCapabilities(): Promise<void> {
-  observationSupervisor.setEnabled(false);
-  stopSessionObservation();
-  stopIssueObservation();
-  stopCalendarObservation();
-  // A beat greets the account that just left; neither may speak into the
-  // signed-out panel, and neither is spent by being taken back.
-  withdrawBeat(ARRIVAL_SPEECH_KIND);
-  withdrawBeat(CALENDAR_ONBOARDING_SPEECH_KIND);
-  await applyVoiceCredential();
-  await hotkeys.reapply(HOTKEY_RANK.TALK);
-}
-
-async function applyVoiceCredential(): Promise<void> {
-  await transitionVoiceCredential({
-    retire: () => brainWiring.retire(),
-    apply: () => voiceCapabilities.apply(),
-    rebuild: () => brainWiring.rebuild(),
-  });
-}
-
-function withdrawBriefings(): void {
-  const offered = speechArbiter.withdrawBriefings();
-  if (offered) voiceWindow.current()?.webContents.send(channels.onSpeechWithdrawn, { id: offered });
-  offerNextSpeech();
-}
-
-/**
- * The roster as the brain is shown it and validates every act against: the
- * sessions still worth a row, less Luke's own voice, rendered with the same
- * bounded fields the panel draws and the identities a tool call names.
- */
-function brainRoster() {
-  const now = Date.now();
-  const sessions = sessionRegistry.list().filter((session) => session.realtimeVoice !== true);
-  return {
-    text: sessionContextText(sessions, now),
-    identities: sessions.map((session) => ({
-      providerId: session.providerId,
-      providerSessionId: session.providerSessionId,
-    })),
-    sessions,
-  };
-}
-
-/** The sessions an act the brain asks for is validated against, read at the moment of the act. */
-function brainActableSessions(): readonly Session[] {
-  return sessionRegistry.list().filter((session) => session.realtimeVoice !== true);
-}
-
-/**
- * The developer's saved creation tie-breaks, as the projects context narrates
- * them and the validator applies them. Cached beside the projects broadcast so
- * the brain's standing context — rendered synchronously each turn — and the
- * act's own validation read the same defaults.
- */
-let brainWorkspaceDefaults: WorkspaceCreationDefaults = {};
-
-async function readWorkspaceDefaults(): Promise<WorkspaceCreationDefaults> {
-  const [defaultProviderId, defaultProjectIds] = await Promise.all([
-    settingsStore.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
-    settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
-  ]);
-  const defaults: WorkspaceCreationDefaults = {};
-  if (defaultProviderId) defaults.defaultProviderId = defaultProviderId;
-  if (defaultProjectIds) defaults.defaultProjectIds = defaultProjectIds;
-  brainWorkspaceDefaults = defaults;
-  return defaults;
-}
-
-function brainWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
-  return normalizeObservedWorkspaceProjects(
-    offeredWorkspaceProjects(),
-    brainWorkspaceDefaults.defaultProjectIds,
-  );
-}
-
-/**
- * Everything the brain is handed beside the roster, rebuilt every turn and
- * remembered nowhere: where a workspace can be created and the saved
- * tie-breaks, the durable facts about the developer, the recent conversation
- * rendered against the roster as both now stand, and the app guide.
- */
-function brainStandingContext(): string {
-  const sessions = brainActableSessions();
-  const projects = brainWorkspaceProjects();
-  return [
-    workspaceProjectContextText(
-      projects,
-      brainWorkspaceDefaults.defaultProviderId,
-      brainWorkspaceDefaults.defaultProjectIds,
-    ),
-    rememberedFactsText(runtimeStoreWiring.rememberedFacts()),
-    conversationHistoryText(
-      recentConversationEntries(runtimeStoreWiring.thread().entries()),
-      sessions,
-    ),
-    appGuideContextText(appGuide),
-  ]
-    .filter((part): part is string => part !== undefined && part.trim().length > 0)
-    .join("\n\n");
-}
-
 /**
  * Carries an app act only a renderer can perform — a settings change, the
  * panel shown, the feedback composer, the Updates row's button — to the
- * primary panel, already validated here against the guide it reported, and waits for
- * its answer. A panel that does not answer within the round trip refuses the
- * act on a clock rather than holding the brain's turn open.
+ * primary panel and waits for its answer. A panel that does not answer
+ * within the round trip refuses the act on a clock rather than holding the
+ * brain's turn open in the host.
  */
 function performBrainAppAct(action: BrainAppActRequest["action"]): Promise<WireRecord> {
   const host = panels.primaryPanel();
@@ -1594,447 +434,162 @@ function performBrainAppAct(action: BrainAppActRequest["action"]): Promise<WireR
 }
 
 /**
- * Hands one briefing the brain decided to the speech arbiter, which offers it
- * to the voice or holds it while a meeting or the pause stands. Voice gone
- * means nothing to say it with, and by the time a key returns the news is
- * the panel's. It is counted when the mouth reports the reply began, never
- * here, and with nothing observed about it.
+ * The Gateway. A live run attaches to the Gateway process, which owns the
+ * runtime, or starts it; a fixture or capture run composes the same host in
+ * this process, memory-only and network-silent, and speaks to it in-process.
+ * Either way this process is one operator over one transport, and one node.
  */
-async function deliverBriefing(delivery: BrainDelivery): Promise<void> {
-  if (!voiceCapabilities.realtimeCredentials) return;
-  speechArbiter.request({ kind: BRIEFING_SPEECH_KIND, delivery });
-  await reconcileSpeech();
-}
-
-/**
- * The one entry every act on a session or an issue passes through, and the
- * opens a row press reaches without the brain. Its checks stay its own so no
- * act can inherit another act's authority.
- */
-const sessionActPerformer = createSessionActPerformer({
-  sessionRegistry,
-  openExternal: (url) => openExternalThroughNode(url),
-  adapterFor,
-  sendsNetwork: runMode.sendsNetwork,
-  settingsStore,
-  rememberWorkspaceDefaults,
-  expectCreatedWorkspace: (identity, now) => createdWorkspaceOpens.expect(identity, now),
-  openCreatedWorkspaces: () => openCreatedWorkspaces(sessionRegistry.list()),
-  trackedIssues: () => trackedIssues,
-  issueTrackers,
-  refreshIssues: () => void issueObservationLoop.refresh(),
-  supersetContext: (identity) =>
-    observedSupersetWorkspaces.actableContext(
-      identity.providerId,
-      identity.providerSessionId,
-      observedSupersetOrganization,
-    ),
-  supersetCli,
-  recordProductEvent,
-});
-
-/** The agent's identity workspace and the skills beside it, under the agent's own directory. */
-const AGENT_WORKSPACE_DIRECTORY = "workspace";
-const AGENT_SKILLS_DIRECTORY = "skills";
-const agentWorkspacePath = () =>
-  path.join(agentRootPath(app.getPath("userData")), AGENT_WORKSPACE_DIRECTORY);
-
-/**
- * The notebook's index and recall: the workspace files chunked and ranked in
- * the store's worker, embedded on whichever credential the brain runs on,
- * watched for a hand edit, and read by the brain's memory tools and by the
- * bounded recall an eligible conversation's ask earns. It reaches the brain
- * wiring below through lazy seams, since each needs the other only at run time.
- */
-const memoryWiring = wireMemory({
-  persistent: runMode.observesProviders,
-  client: runtimeStoreWiring.client,
-  embeddingAdapter: () => voiceCapabilities.embeddingAdapter,
-  onEmbeddingAdapterChanged: (listener) => voiceCapabilities.onApplied(listener),
-  workspaceDirectory: agentWorkspacePath,
-  createRuntime: () => brainWiring.createRuntime(),
-  conversationDirectory: () => runtimeStoreWiring.directory().entries,
-  isTemporary: runtimeStoreWiring.isTemporary,
-  historyLines: (sessionKey) => runtimeStoreWiring.thread(sessionKey).entries(),
-  now: Date.now,
-  createId: () => randomUUID(),
-  report: (message) => process.stderr.write(`${message}\n`),
-  onSynced: () => {
-    void runtimeStoreWiring.refreshNotebook();
-  },
-});
-/**
- * Memory maintenance: the pre-compaction flush each eligible conversation's
- * brain runs, the capture before an eligible private conversation starts
- * fresh, the daily consolidation sweep on the background lane, and
- * source-aware forgetting. A committed notebook change syncs the index and
- * clears the recall caches, so a forget is not undone by a stale recall.
- */
-const memoryMaintenance = wireMemoryMaintenance({
-  persistent: runMode.observesProviders,
-  client: runtimeStoreWiring.client,
-  createRuntime: () => brainWiring.createRuntime(),
-  workspaceDirectory: agentWorkspacePath,
-  conversationDirectory: () => runtimeStoreWiring.directory().entries,
-  isTemporary: runtimeStoreWiring.isTemporary,
-  historyLines: (sessionKey) => runtimeStoreWiring.thread(sessionKey).entries(),
-  background: (work) => brainWiring.lanes.run(LANE.BACKGROUND, work),
-  now: Date.now,
-  createId: () => randomUUID(),
-  report: (message) => process.stderr.write(`${message}\n`),
-  onNotebookChanged: () => {
-    memoryWiring.clearRecallCaches();
-    void memoryWiring.sync();
-  },
-});
-const brainWiring = wireBrain({
-  repositoryFor: (sessionKey) => runtimeStoreWiring.brainStateRepository(sessionKey),
-  ensureObservedConversation: async (sessionKey, name) => {
-    await runtimeStoreWiring.ensureConversation(sessionKey, CONVERSATION_KIND.OBSERVED, name);
-  },
-  ensureChildConversation: async (sessionKey, name) => {
-    await runtimeStoreWiring.ensureConversation(sessionKey, CONVERSATION_KIND.CHILD, name);
-  },
-  archiveConversation: (sessionKey) => runtimeStoreWiring.archive(sessionKey),
-  conversationDirectory: () => runtimeStoreWiring.directory().entries,
-  historyLines: (sessionKey) => runtimeStoreWiring.thread(sessionKey).entries(),
-  childStore: () => runtimeStoreWiring.childStore(),
-  createId: () => randomUUID(),
-  report: (message) => process.stderr.write(`${message}\n`),
-  ...(agentTrace ? { traceTurn: (record) => agentTrace.recordBrainTurn(record) } : undefined),
-  recordConversationEntry: (entry, recordedAt, sessionKey) =>
-    runtimeStoreWiring.recordConversationEntry(entry, recordedAt, sessionKey),
-  broadcastRequests: (snapshots) => gatewayService.runsReported(snapshots),
-  onEndPublished: (record, sessionKey) => gatewayService.endPublished(record, sessionKey),
-  onGenerationReplaced: (sessionKey) => {
-    // Briefings are main's alone; replies are owed for any conversation's run.
-    if (sessionKey === MAIN_SESSION_KEY) withdrawBriefings();
-    gatewayService.generationReplaced(sessionKey);
-  },
-  acts: {
-    sessionActs: sessionActPerformer,
-    sessions: brainActableSessions,
-    // A fresh pass before every session act keeps validation against the
-    // observed roster current. At 60s intervals the registry could otherwise
-    // be almost a minute stale when the act's validation and perform run.
-    refreshSessions: () => sessionObservationLoop.refresh(),
-    workspaceProjects: brainWorkspaceProjects,
-    workspaceDefaults: readWorkspaceDefaults,
-    trackedIssues: () => trackedIssues,
-    appGuide: () => appGuide,
-    rememberedFacts: runtimeStoreWiring.rememberedFacts,
-    notebook: {
-      remember: runtimeStoreWiring.rememberNotebookEntry,
-      forget: runtimeStoreWiring.forgetNotebookEntry,
-    },
-    performAppAct: (action) => invokeNodeAppAct(action),
-    recordConversationEntry: runtimeStoreWiring.recordConversationEntry,
-  },
-  roster: brainRoster,
-  standingContext: brainStandingContext,
-  adapterFor,
-  session: (identity) => sessionRegistry.get(identity),
-  deliver: deliverBriefing,
-  model: () => voiceCapabilities.brainModel,
-  // The credential by reference alone: the configuration names which source
-  // the adapter runs under, and the encrypted store keeps the value.
-  credential: () =>
-    voiceCapabilities.voiceSource === VOICE_SOURCE.KEY
-      ? { kind: CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY, providerId: CREDENTIAL_PROVIDER_ID.OPENAI }
-      : { kind: CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT },
-  workspaceDirectory: agentWorkspacePath,
-  skillRoots: () => [path.join(agentWorkspacePath(), AGENT_SKILLS_DIRECTORY)],
-  runnable: () => runMode.observesProviders && runMode.sendsNetwork && accountCapabilitiesActive(),
-  dropBriefings: () => speechArbiter.dropBriefings(),
-  memory: (sessionKey) => memoryWiring.accessFor(sessionKey),
-  recall: (sessionKey) => memoryWiring.recallFor(sessionKey),
-  beforeCompaction: (sessionKey) => memoryMaintenance.flushHookFor(sessionKey),
-  beforeReset: (sessionKey, items) => memoryMaintenance.captureBeforeReset(sessionKey, items),
-});
-
-const conversationControls = conversationOperations({
-  store: runtimeStoreWiring,
-  brain: brainWiring,
-  now: Date.now,
-  report: (message) => process.stderr.write(`${message}\n`),
-});
-let stopHistoryMaintenance: (() => void) | undefined;
-
-/**
- * The Gateway boundary. The service is the host's side: every capability the
- * protocol names, answered over the wirings above, and every change numbered
- * as an event. The operator is the desktop's own client over the in-process
- * transport, the one way the windows' IPC and this process's surfaces reach
- * the host. The two stand in one process today; the seam is what the process
- * split that follows moves across.
- */
-const gatewayService = createGatewayService({
-  brain: {
-    current: (sessionKey) => brainWiring.current(sessionKey),
-    agentForRun: (runId) => brainWiring.agentForRun(runId),
-    conversationForRun: (runId) => brainWiring.conversationForRun(runId),
-    allRequests: () => brainWiring.allRequests(),
-    generationId: (sessionKey) => brainWiring.store(sessionKey).generationId(),
-    holdsGeneration: (generationId) => brainWiring.holdsGeneration(generationId),
-    publicationSettled: () => brainWiring.publicationSettled(),
-    children: brainWiring.children,
-    configuration: () => brainWiring.configuration(),
-    updateConfiguration: (patch) => brainWiring.updateConfiguration(patch),
-    pendingNoticeCount: () => brainWiring.pendingNotices().length,
-  },
-  conversations: conversationControls,
-  memory: {
-    search: async (query, maxResults, signal) => {
-      const access = memoryWiring.accessFor(MAIN_SESSION_KEY);
-      if (!access)
-        return { status: ACT_RESULT_STATUS.REJECTED, reason: "no notebook index stands" };
-      return access.search({
-        query,
-        ...(maxResults !== undefined ? { maxResults } : undefined),
-        signal,
+const gatewayLauncher = runMode.observesProviders
+  ? createGatewayLauncher({
+      stateRoot: app.getPath("userData"),
+      build: currentBuildIdentity(appName),
+      registerProviderHooks: registersProviderHooks(process.argv),
+      report,
+    })
+  : undefined;
+let localRuntime: RuntimeHost | undefined;
+const transport: GatewayTransport = gatewayLauncher
+  ? gatewayLauncher.transport
+  : (() => {
+      localRuntime = composeRuntimeHost({
+        stateRoot: app.getPath("userData"),
+        runMode,
+        appVersion: app.getVersion(),
+        packaged: app.isPackaged,
+        homeDirectory: app.getPath("home"),
+        environment: process.env,
+        cipher: {
+          isAvailable: () => safeStorage.isEncryptionAvailable(),
+          encrypt: (plainText) => safeStorage.encryptString(plainText),
+          decrypt: (cipherText) => safeStorage.decryptString(cipherText),
+        },
+        createWorker: () => {
+          throw new Error("a fixture run keeps nothing on disk and starts no store worker");
+        },
+        registerProviderHooks: false,
+        now: Date.now,
+        createId: () => randomUUID(),
+        report,
       });
-    },
-    get: async (filePath, from, lines) => {
-      const access = memoryWiring.accessFor(MAIN_SESSION_KEY);
-      if (!access)
-        return { status: ACT_RESULT_STATUS.REJECTED, reason: "no notebook index stands" };
-      return access.get({
-        path: filePath,
-        ...(from !== undefined ? { from } : undefined),
-        ...(lines !== undefined ? { lines } : undefined),
+      return new InProcessTransport(localRuntime.service.server, {
+        clientId: DESKTOP_OPERATOR_CLIENT_ID,
+        role: GATEWAY_CLIENT_ROLE.OPERATOR,
       });
-    },
-    forget: (ask) => memoryMaintenance.forget(ask),
-    status: () => ({
-      mode: memoryWiring.mode(),
-      entries: runtimeStoreWiring.rememberedFacts().length,
-    }),
+    })();
+const gateway = wireGateway({
+  transport,
+  createId: () => randomUUID(),
+  report,
+  broadcast,
+  sendToVoice,
+  webContentsByReporter: (reporter) => windowsByReporter.get(reporter),
+  lastSettings: () => latestSettings,
+  node: {
+    openExternal: (url) => shell.openExternal(url),
+    performAppAct: performBrainAppAct,
+    runAppleCalendarHelper,
   },
-  observedSessions: () =>
-    sessionRegistry.list().filter((session) => session.realtimeVoice !== true),
-  deliveries: brainReplyDeliveries,
-  receiver: voiceReceiver,
-  recordConversationEntry: (entry, recordedAt, sessionKey) =>
-    runtimeStoreWiring.recordConversationEntry(entry, recordedAt, sessionKey),
-  now: Date.now,
-  createId: () => randomUUID(),
-  report: (message) => process.stderr.write(`${message}\n`),
 });
-const gatewayOperator = createGatewayOperator({
-  transport: new InProcessTransport(gatewayService.server, {
-    clientId: DESKTOP_OPERATOR_CLIENT_ID,
-    role: GATEWAY_CLIENT_ROLE.OPERATOR,
-  }),
-  createId: () => randomUUID(),
-  report: (message) => process.stderr.write(`${message}\n`),
-});
+const recordProductEvent: RecordProductEvent = (name, properties) =>
+  gateway.host.recordEvent(name, properties);
+
 // What the host tells its clients, relayed to the windows by the one client
-// that owns them. The runs list reaches every window; a reply offer and a
-// withdrawal reach the voice window, the one receiver; main's history reaches
-// every window but the one whose report produced it.
-gatewayOperator.onRunsChanged((runs) => broadcast(channels.onBrainRequestsChanged, runs));
-gatewayOperator.onDeliveryOffered((offer) => {
-  voiceWindow.current()?.webContents.send(channels.onBrainReplyOffered, offer);
+// that owns them, and remembered where a synchronous answer needs it.
+gateway.host.onSettingsChanged((change) => {
+  const stoodVoice = voiceAvailable;
+  latestSettings = change.settings;
+  voiceAvailable = change.settings.status.voiceAvailable;
+  broadcast(
+    channels.onSettingsChanged,
+    change.settings,
+    change.reporter === undefined ? undefined : windowsByReporter.get(change.reporter),
+  );
+  // A voice that came or went moves the talk key: claimed now that there is
+  // something to talk to, or given back to the machine now that there is not.
+  if (stoodVoice !== voiceAvailable) void hotkeys.reapply(HOTKEY_RANK.TALK);
 });
-gatewayOperator.onDeliveriesWithdrawn((epoch) => {
-  voiceWindow.current()?.webContents.send(channels.onBrainRepliesWithdrawn, epoch);
+gateway.host.onAccountChanged((next) => {
+  account = next;
+  broadcast(channels.onAccountChanged, account);
 });
-gatewayOperator.onHistoryChanged((change) => {
-  // The panel draws main alone; another conversation's thread is held by the
-  // host for its brain and its tests and reaches no window.
-  if (change.sessionKey !== MAIN_SESSION_KEY) return;
-  const entries = change.entries
-    .map((entry) => conversationEntryFromWire(entry))
-    .filter((entry): entry is ConversationEntry => entry !== undefined);
-  const payload: ConversationHistoryPayload = { entries, cleared: change.cleared };
-  broadcast(channels.onConversationHistoryChanged, payload, webContentsById(change.reporter));
-});
-/**
- * This process's native capabilities, offered to the host as one node:
- * opening an address with the operating system and carrying an app act to
- * the panel. The host asks for each by name and never reaches Electron
- * itself; while the node is disconnected — never, in one process, but the
- * seam is the point — an ask answers a typed unavailable, and the act it
- * was for is left undone rather than recorded as carried.
- */
-gatewayService.nodes.register({
-  nodeId: DESKTOP_NATIVE_NODE_ID,
-  capabilities: {
-    [NODE_CAPABILITY.OPEN_EXTERNAL]: async (params) => {
-      if (!isWireString(params.url)) throw new Error("open needs a url");
-      await shell.openExternal(params.url);
-      return undefined;
-    },
-    [NODE_CAPABILITY.PANEL_APP_ACT]: (params) => {
-      const action = isWireString(params.act) ? carriedAppActs.get(params.act) : undefined;
-      if (isWireString(params.act)) carriedAppActs.delete(params.act);
-      if (!action) throw new Error("no app act is held under that token");
-      return performBrainAppAct(action);
-    },
-  },
+gateway.host.onSessionsChanged((roster) =>
+  broadcast(channels.onSessionsChanged, { sessions: roster.sessions }),
+);
+gateway.host.onWorkspaceProjectsChanged((projects) =>
+  broadcast(channels.onWorkspaceProjectsChanged, projects),
+);
+gateway.host.onCalendarsChanged((calendars) => broadcast(channels.onCalendarsChanged, calendars));
+gateway.host.onAnnouncementsHeldChanged((held) =>
+  broadcast(channels.onAnnouncementsHeldChanged, held),
+);
+gateway.host.onSupersetSignInChanged((state) => broadcast(channels.onSupersetSignInChanged, state));
+gateway.host.onCalendarOnboardingChanged((owed) =>
+  broadcast(channels.onCalendarOnboardingChanged, owed),
+);
+gateway.host.onSpeechOffered((offer) => sendToVoice(channels.onSpeechOffered, offer));
+gateway.host.onSpeechWithdrawn((id) => sendToVoice(channels.onSpeechWithdrawn, { id }));
+gateway.host.onSessionReplayChanged((replay) => {
+  latestSessionReplay = replay;
+  sessionReplayHalted = false;
+  broadcast(channels.onSessionReplayChanged, sessionReplayBootstrap());
 });
 
-/**
- * The app acts handed to the native node and not yet performed, by token.
- * The act itself was validated against the guide by the act performer, and
- * both sides of this capability stand in one process, so the typed act is
- * held here and only its token crosses the invocation; a node on the other
- * side of a socket is where the act would be serialized, and that boundary
- * is the process split's to draw.
- */
-const carriedAppActs = new Map<string, BrainAppActRequest["action"]>();
-
-/** An app act the brain asked for, carried to the panel through the node capability it registered. */
-async function invokeNodeAppAct(action: BrainAppActRequest["action"]): Promise<WireRecord> {
-  const act = randomUUID();
-  carriedAppActs.set(act, action);
-  const result = await gatewayService.nodes.invoke(NODE_CAPABILITY.PANEL_APP_ACT, { act });
-  carriedAppActs.delete(act);
-  if (result.status === NODE_CAPABILITY_STATUS.OK && isRecord(result.value)) return result.value;
+function sessionReplayBootstrap(): SessionReplayBootstrap {
   return {
-    status: ACT_RESULT_STATUS.REJECTED,
-    reason:
-      result.status === NODE_CAPABILITY_STATUS.OK
-        ? "The panel answered in a shape this build cannot read."
-        : result.reason,
+    permitted: latestSessionReplay.permitted && !sessionReplayHalted,
+    appVersion: app.getVersion(),
+    ...(latestSessionReplay.accountId ? { accountId: latestSessionReplay.accountId } : undefined),
   };
 }
 
-/** An address the brain or a validated act asked to open, through the node capability; unavailable means not opened. */
-async function openExternalThroughNode(url: string): Promise<void> {
-  const result = await gatewayService.nodes.invoke(NODE_CAPABILITY.OPEN_EXTERNAL, { url });
-  if (result.status !== NODE_CAPABILITY_STATUS.OK) throw new Error(result.reason);
+/** Stops recording now, ahead of an act that ends the account it is filed under; the host's next replay event re-answers. */
+function haltSessionReplay(): void {
+  sessionReplayHalted = true;
+  broadcast(channels.onSessionReplayChanged, sessionReplayBootstrap());
 }
 
-function webContentsById(id: number | undefined): WebContents | undefined {
-  if (id === undefined) return undefined;
-  return webContents.fromId(id) ?? undefined;
+function resumeSessionReplay(): void {
+  sessionReplayHalted = false;
+  broadcast(channels.onSessionReplayChanged, sessionReplayBootstrap());
 }
 
-/**
- * The durable scheduler: its jobs stand in the runtime store, its ticks run
- * on the cron coordinator lane, and each job opens a heartbeat turn in the
- * conversation it names, on the cron inner lane, except the one managed
- * memory consolidation sweep at 03:00 local time, which runs on the
- * background lane. Both are installed once and kept as the store has them
- * from then on, so a relaunch adds no second copy.
- */
-const cronScheduler = new CronScheduler({
-  store: runtimeStoreWiring.scheduledJobStore(),
-  coordinate: (work) => brainWiring.lanes.run(LANE.CRON, work),
-  // The tick is over when the turn it opened is: the coordinator lane holds
-  // the tick, the turn runs on the cron inner lane, so awaiting it here
-  // cannot wait on the lane the tick itself holds. The one managed
-  // consolidation job is the sweep's, not a turn's, and runs on the
-  // background lane instead.
-  run: async (job) => {
-    if (job.id === CONSOLIDATION_DEFAULTS.JOB_ID) {
-      await memoryMaintenance.runConsolidation();
-      return;
-    }
-    await brainWiring.heartbeat(job.sessionKey);
-  },
-  report: (message) => process.stderr.write(`${message}\n`),
-});
-
-function adapterFor(providerId: string) {
-  if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return supersetWorkspaceAdapter;
-  if (providerId === CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID) return conductorLocalWorkspaceAdapter;
-  return isProviderId(providerId) ? providerRegistry[providerId].adapter : undefined;
-}
-
-function adapterForCredential(providerId: CredentialProviderId) {
-  return orderedRegistrations.find((entry) => entry.credential?.id === providerId)?.adapter;
-}
-
-/** Whether a provider is currently offering the project a default would name. */
-function workspaceProjectOffered(providerId: string, providerProjectId: string): boolean {
-  const adapter = adapterFor(providerId);
-  if (!adapter) return false;
-  return adapter
-    .workspaceProjects()
-    .some((project) => workspaceProjectSelectionId(project) === providerProjectId);
+/** Adopts one host bootstrap into the caches the synchronous answers read. */
+function adoptBootstrap(boot: HostBootstrap): void {
+  latestSettings = boot.settings;
+  account = boot.account;
+  voiceAvailable = boot.voiceAvailable;
+  latestSessionReplay = boot.sessionReplay;
 }
 
 /**
- * A renderer-supplied string that must survive its bound, or be refused.
- * Omitted stays omitted: the field was not offered.
+ * What every attachment owes the host: its stream adopted and this process's
+ * node registered on the connection that now stands, the guide the panel last
+ * reported, and a bootstrap read. A reattachment after the Gateway went away
+ * also recycles the voice window, because the epoch its renderer holds was the
+ * old host's, and tells every window what the host now holds.
  */
-async function rememberWorkspaceDefaults(
-  adapter: SessionProviderAdapter,
-  providerProjectId: string,
-  providerTargetId: string | undefined,
-  namedSelection: WorkspaceAgentSelection | undefined,
-  agent: string | undefined,
-): Promise<void> {
-  const providerId = adapter.provider.id;
-  if (!isWorkspaceProviderId(providerId)) {
-    return;
+let attachments = 0;
+async function onAttached(): Promise<void> {
+  attachments += 1;
+  await gateway.attached();
+  if (appGuide !== EMPTY_APP_GUIDE) void gateway.host.reportGuide(appGuide);
+  const boot = await gateway.host.bootstrap();
+  if (!boot) throw new Error("the host answered no bootstrap");
+  adoptBootstrap(boot);
+  if (attachments > 1) {
+    broadcast(channels.onSettingsChanged, boot.settings);
+    broadcast(channels.onAccountChanged, boot.account);
+    broadcast(channels.onSessionsChanged, { sessions: boot.sessions });
+    broadcast(channels.onWorkspaceProjectsChanged, boot.workspaceProjects);
+    broadcast(channels.onCalendarsChanged, boot.calendars);
+    broadcast(channels.onAnnouncementsHeldChanged, boot.announcementsHeld);
+    broadcast(channels.onCalendarOnboardingChanged, boot.calendarOnboardingOwed);
+    broadcast(channels.onSessionReplayChanged, sessionReplayBootstrap());
+    void hotkeys.reapply(HOTKEY_RANK.TALK);
   }
-  try {
-    if (
-      (await settingsStore.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field)) === undefined
-    ) {
-      const saved = await settingsStore.set(
-        APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
-        providerId,
-      );
-      broadcast(channels.onSettingsChanged, saved.settings);
-    }
-    if (
-      providerId === SUPERSET_WORKSPACE_PROVIDER_ID &&
-      agent !== undefined &&
-      (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
-        SUPERSET_WORKSPACE_PROVIDER_ID
-      ] === undefined
-    ) {
-      const saved = await settingsStore.setEntry(
-        APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-        SUPERSET_WORKSPACE_PROVIDER_ID,
-        { agent },
-      );
-      broadcast(channels.onSettingsChanged, saved.settings);
-    }
-    // The project the workspace landed in becomes that provider's default on
-    // the same first-choice terms, read again for the same overlap reason as
-    // the model below. The id was validated against the adapter's offered
-    // projects before the creation ran, so what is remembered is one the
-    // provider itself listed.
-    if (
-      (await settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field))?.[providerId] ===
-      undefined
-    ) {
-      const saved = await settingsStore.setEntry(
-        APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-        providerId,
-        workspaceProjectSelectionId(
-          providerTargetId ? { providerProjectId, providerTargetId } : { providerProjectId },
-        ),
-      );
-      broadcast(channels.onSettingsChanged, saved.settings);
-    }
-    // A model named for this creation becomes the default on the same
-    // first-choice terms as the provider: only while nothing is chosen.
-    // A default already held is the user's, changed by asking for the
-    // setting itself — never as a side effect of one creation. Read
-    // again here rather than trusting the pre-creation snapshot: a
-    // choice made by hand while the provider was answering is already
-    // held, and must not lose to the request it overlapped.
-    if (
-      isProviderId(providerId) &&
-      namedSelection !== undefined &&
-      (await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId] ===
-        undefined
-    ) {
-      const saved = await settingsStore.setEntry(
-        APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-        providerId,
-        namedSelection,
-      );
-      broadcast(channels.onSettingsChanged, saved.settings);
-    }
-  } catch {
-    // The reply is the creation's; a failed remember has no line in it.
+  if (attachments > 1 && voiceWindow.current()) {
+    voiceWindow.close();
+    raiseVoiceWindow();
   }
 }
 
@@ -2055,58 +610,51 @@ function registerIpc(): void {
   const registerSettingHandler = createSettingsHandler({
     ipcMain,
     trustedSender,
-    snapshot: () => settingsStore.snapshot(),
-    broadcast: (settings, except) => broadcast(channels.onSettingsChanged, settings, except),
+    snapshot: async () => latestSettings ?? (await gateway.host.settingsSnapshot()),
   });
+
+  const unreachableSettings = async (): Promise<AppSettings> => {
+    const settings = await gateway.host.settingsSnapshot();
+    if (!settings) throw new Error("Luke's runtime is not reachable right now.");
+    return settings;
+  };
+
   /**
-   * The fields the hidden voice window reads, assembled for it alone or
-   * inside a panel's bootstrap: the settings that shape a call, the roster
-   * the arrival beat is worded from, the thread the last launch left, the
-   * talk key, the microphone and output state, the trace gate, and — only
-   * for the voice window itself — the receiver epoch its readiness report
-   * must name. Nothing here waits on the Superset CLI, the account, a
-   * project default, or the recording identity, which the voice never reads.
+   * The fields the hidden voice window reads, assembled from one host
+   * bootstrap and this process's own facts: the microphone, the output, the
+   * keys, the trace gate, and — for the voice window itself — the receiver
+   * epoch the host minted for this load.
    */
-  const voiceBootstrapFields = async (context: BridgeContext): Promise<VoiceBootstrap> => ({
-    agentTraceEnabled: agentTrace !== undefined,
+  const voiceBootstrapFields = async (
+    context: BridgeContext,
+    boot: HostBootstrap | undefined,
+  ): Promise<VoiceBootstrap> => ({
+    agentTraceEnabled: boot?.agentTraceEnabled ?? false,
     microphoneStatus: microphoneStatus(),
-    ...(voiceWindow.owns(context.sender) ? { voiceEpoch: voiceReceiver.epoch() } : undefined),
-    // Both keys travel as accelerators rather than labels: the renderer needs
-    // both spellings — the keycaps' ⌥ and L drawn apart, and aria's Alt+L —
-    // and only the accelerator can produce the pair.
+    ...(voiceWindow.owns(context.sender) && boot ? { voiceEpoch: boot.receiverEpoch } : undefined),
     ...(hotkeys.talk ? { voiceHotkey: hotkeys.talk } : undefined),
     ...(outputAudio ? { outputAudio } : undefined),
-    // Bootstrapped through the same relevance gate every broadcast passes:
-    // a window that opens late must not learn of rows the roster has already
-    // let go and then hold them past the next broadcast's dedupe.
-    sessionRoster:
-      runMode.observesProviders && accountCapabilitiesActive()
-        ? { sessions: sessionRegistry.list() }
-        : { sessions: [] },
-    // Computed rather than read from the cached flag: at launch nothing
-    // has recomputed it yet, so a persisted pause would draw a waking face.
-    announcementsHeld: accountCapabilitiesActive() && (await announcementsQuietNow(Date.now())),
-    conversationHistory: runtimeStoreWiring.thread().entries(),
-    settings: await settingsStore.snapshot(),
+    sessionRoster: { sessions: boot?.sessions ?? [] },
+    announcementsHeld: boot?.announcementsHeld ?? false,
+    conversationHistory: boot?.conversationHistory ?? [],
+    settings: boot?.settings ?? latestSettings ?? (await unreachableSettings()),
   });
-  registerContextHandler(BRIDGE.getVoiceBootstrap, voiceBootstrapFields);
+  registerContextHandler(BRIDGE.getVoiceBootstrap, async (context: BridgeContext) => {
+    const boot = await gateway.host.bootstrap();
+    if (boot) adoptBootstrap(boot);
+    return voiceBootstrapFields(context, boot);
+  });
   registerContextHandler(
     BRIDGE.getBootstrap,
     async (context: BridgeContext): Promise<AppBootstrap> => {
-      // Each window bootstraps as itself: its own display, its own mode. The
-      // roster and the settings are the same everywhere.
       const displayId = panels.displayIdFor(context.sender);
-      // The voice window stands on no display and ignores the panel-only
-      // fields; everything else is fabricated a display as before.
       const display = voiceWindow.owns(context.sender)
         ? undefined
         : ((displayId !== undefined ? panels.display(displayId) : undefined) ??
           screen.getPrimaryDisplay());
-      const [supersetInstalled, supersetConnected, voiceFields] = await Promise.all([
-        supersetCli.installed(),
-        supersetCli.connected(),
-        voiceBootstrapFields(context),
-      ]);
+      const boot = await gateway.host.bootstrap();
+      if (boot) adoptBootstrap(boot);
+      const voiceFields = await voiceBootstrapFields(context, boot);
       return {
         ...voiceFields,
         mode: displayId !== undefined ? panels.modeFor(displayId) : panels.initialMode,
@@ -2116,8 +664,8 @@ function registerIpc(): void {
         fixture,
         captureMode,
         fixtureMode,
-        supersetInstalled,
-        supersetConnected,
+        supersetInstalled: boot?.supersetInstalled ?? false,
+        supersetConnected: boot?.supersetConnected ?? false,
         accountRequired: runMode.requiresAccount,
         account,
         packaged: app.isPackaged,
@@ -2127,112 +675,58 @@ function registerIpc(): void {
         ...(hotkeys.stop ? { stopHotkey: hotkeys.stop } : undefined),
         display: display ? panels.diagnostic(display) : undefined,
         update: updateService.snapshot(),
-        // A live run's roster has settled once it has been broadcast at all —
-        // the first pass publishes even an empty reading — so before that, the
-        // empty list above means "not looked yet" and the face must not sleep
-        // on it. A fixture run never broadcasts and its sessions travel in the
-        // fixture itself, so it is settled from the start.
-        sessionsSettled: !runMode.observesProviders || rosterBroadcast,
-        workspaceProjects: accountCapabilitiesActive()
-          ? normalizeObservedWorkspaceProjects(
-              offeredWorkspaceProjects(),
-              await settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
-            )
-          : [],
-        // The calendar is a capability like the rosters: nothing of it is
-        // shown, or held quiet, before the account gate opens.
-        calendars: accountCapabilitiesActive() ? observedCalendars : [],
+        // A fixture run never observes and its sessions travel in the fixture
+        // itself, so it is settled from the start; a live run settles once
+        // the host has read the roster at all.
+        sessionsSettled: !runMode.observesProviders || (boot?.sessionsSettled ?? false),
+        workspaceProjects: boot?.workspaceProjects ?? [],
+        calendars: boot?.calendars ?? [],
         voiceView: latestVoiceView,
-        calendarOnboardingOwed: calendarOnboardingGateOwed(),
-        sessionReplay: await sessionReplayBootstrap(),
+        calendarOnboardingOwed: boot?.calendarOnboardingOwed ?? false,
+        sessionReplay: sessionReplayBootstrap(),
       };
     },
   );
-  // The voice window's appends to the conversation, taken into the store
-  // here and relayed to every other panel's History.
+  // The voice window's appends to the conversation, carried to the host's
+  // store under this window's opaque reporter, and relayed back to every
+  // other panel's History by the host's change event.
   registerBridge(
     BRIDGE,
     {
       appendConversationHistory(context, entries) {
-        return runtimeStoreWiring.thread().append(entries, context.sender);
+        return gateway.host.appendHistory(entries, reporterOf(context));
       },
     },
     { ipcMain, trustedSender },
   );
-  // Only the voice window's mouth may settle an offer: the offer went to it
-  // alone, and a report from anywhere else names an id it was never handed.
   registerContextHandler(
     BRIDGE.settleSpeech,
     (context: BridgeContext, id: string, outcome: SpeechOutcome) => {
       if (!voiceWindow.owns(context.sender)) return;
-      settleSpeech(id, outcome);
+      void gateway.host.settleSpeech(id, outcome);
     },
   );
-  registerHandler(BRIDGE.skipCalendarOnboarding, () => {
-    // A skip that raced the step already settling overwrites nothing: it was
-    // answered, and a confirmed calendar answered it better than the decline.
-    if (!calendarOnboardingOwed(calendarOnboardingState)) return;
-    writeCalendarOnboardingState({
-      ...(calendarOnboardingState ?? {}),
-      skippedAt: new Date().toISOString(),
-    });
-    // The step is over, so the arrival beat it was holding may speak now.
-    void requestOnboardingBeat();
-  });
-  registerHandler(BRIDGE.completeCalendarOnboarding, () => {
-    // Done is what settles the step, not the connect before it: the gate
-    // stays standing over a fresh connection so the calendars that count can
-    // still be chosen and another account added, and this press is the
-    // developer saying the choice is right.
-    if (!calendarOnboardingOwed(calendarOnboardingState)) return;
-    writeCalendarOnboardingState({
-      ...(calendarOnboardingState ?? {}),
-      settledAt: new Date().toISOString(),
-    });
-    void requestOnboardingBeat();
-  });
-  registerHandler(BRIDGE.beginSupersetSignIn, async () => {
-    recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
-      superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_START,
-    });
-    return supersetSignIn.begin();
-  });
-  registerHandler(BRIDGE.submitSupersetSignInCode, (code: string) => {
-    return supersetSignIn.submitCode(code);
-  });
-  registerHandler(BRIDGE.chooseSupersetOrganization, async (slug: string) => {
-    return supersetSignIn.chooseOrganization(slug);
-  });
-  registerHandler(BRIDGE.reopenSupersetSignIn, supersetSignIn.reopen.bind(supersetSignIn));
-  registerHandler(BRIDGE.cancelSupersetSignIn, () => {
-    supersetSignIn.cancel();
-    recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
-      superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_CANCEL,
-    });
-  });
-  registerHandler(BRIDGE.disconnectSuperset, async () => {
-    if (!(await supersetCli.signOut())) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: "Superset could not sign out." };
-    }
-    // The sign-in machine returning to idle is what tells every renderer the
-    // login is gone; the refreshed pass retires the rows the login was buying.
-    supersetSignIn.cancel();
-    void sessionObservationLoop.refresh();
-    recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
-      superset_act: PRODUCT_SUPERSET_ACT.DISCONNECT,
-    });
-    return { status: ACT_RESULT_STATUS.ACCEPTED };
-  });
+  registerHandler(BRIDGE.skipCalendarOnboarding, () => gateway.host.skipCalendarOnboarding());
+  registerHandler(BRIDGE.completeCalendarOnboarding, () =>
+    gateway.host.completeCalendarOnboarding(),
+  );
+  registerHandler(BRIDGE.beginSupersetSignIn, () => gateway.host.beginSupersetSignIn());
+  registerHandler(BRIDGE.submitSupersetSignInCode, (code: string) =>
+    gateway.host.submitSupersetSignInCode(code),
+  );
+  registerHandler(BRIDGE.chooseSupersetOrganization, (slug: string) =>
+    gateway.host.chooseSupersetOrganization(slug),
+  );
+  registerHandler(BRIDGE.reopenSupersetSignIn, () => gateway.host.reopenSupersetSignIn());
+  registerHandler(BRIDGE.cancelSupersetSignIn, () => gateway.host.cancelSupersetSignIn());
+  registerHandler(BRIDGE.disconnectSuperset, () => gateway.host.disconnectSuperset());
 
   registerAccountSessionIpc({
     ipcMain,
     trustedSender,
-    accountSession,
-    recordProductEvent,
-    flushProductEvents: () => productEvents.flush(),
+    host: gateway.host,
     haltSessionReplay,
-    endSessionReplay,
-    resumeSessionReplay: () => void broadcastSessionReplay(),
+    resumeSessionReplay,
   });
 
   registerWindowSurfaceIpc({
@@ -2247,81 +741,46 @@ function registerIpc(): void {
 
   registerSettingsRowsIpc({
     registerSettingHandler,
-    settingsStore,
-    adapterForCredential,
-    refreshAdapter: async (adapter) => {
-      await sessionRegistry.refresh(adapter);
-    },
-    refreshIssues: () => void issueObservationLoop.refresh(),
-    applyVoiceCredential,
+    host: gateway.host,
+    reporterOf,
+    lastSettings: () => latestSettings,
     hotkeys,
     dock,
     applyLoginItem,
     panels,
-    realtimeCredentials: () => voiceCapabilities.realtimeCredentials,
     mediaDuck,
-    workspaceProjectOffered,
-    reconcileSpeech: () => void reconcileSpeech(),
     recordProductEvent,
-    vaultSync: providerKeyVaultSync,
   });
 
   registerCalendarConnectionIpc({
     ipcMain,
     trustedSender,
     registerSetting: registerSettingHandler,
-    settingsStore,
-    calendar: googleCalendar,
-    signIn: googleCalendarSignIn,
-    appleCalendar,
-    observedCalendars: () => observedCalendars,
-    refresh: () => calendarObservationLoop.refresh(),
+    host: gateway.host,
+    reporterOf,
     openExternal: (url) => void shell.openExternal(url),
-    recordProductEvent,
   });
 
   registerTrackerConnectionIpc({
     ipcMain,
     trustedSender,
     registerSetting: registerSettingHandler,
-    settingsStore,
-    credentials: linearCredentials,
-    signIn: linearSignIn,
-    refresh: () => void issueObservationLoop.refresh(),
-    recordProductEvent,
+    host: gateway.host,
+    reporterOf,
   });
 
-  // The row's button. Answered rather than fire-and-forget so the row that
-  // asked and the broadcast never disagree; a run without an engine answers
-  // with the standing snapshot rather than make a request it must not.
   registerHandler(BRIDGE.checkForUpdates, () => {
     recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.CHECK });
     return updateService.check();
   });
-
-  // The restart into a downloaded build. The service ignores the ask unless
-  // its own snapshot says one is ready — and ignores a repeat while Squirrel
-  // stages the swap — so a stray send installs nothing.
   registerHandler(BRIDGE.installUpdate, () => {
-    // Counted before the install is asked for, and flushed with it: the act
-    // schedules a restart, and a count queued behind that would be dropped by
-    // the quit rather than sent.
     recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.INSTALL });
-    void productEvents.flush();
     updateService.install();
   });
-
-  // The newest release's page, in the browser — the way to a build where
-  // installing in place is impossible or has failed. The address is fixed
-  // here like the microphone pane's, so nothing an update check read can
-  // steer where a press goes.
   registerHandler(BRIDGE.openLatestRelease, () => {
     recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.RELEASE_OPEN });
     void shell.openExternal(UPDATE_ENDPOINT.LATEST_RELEASE_PAGE_URL);
   });
-
-  // The changelog, in the browser — the Changelog row's press. The address
-  // is fixed here on the releases page's terms.
   registerHandler(BRIDGE.openChangelog, () => {
     recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.CHANGELOG_OPEN });
     void shell.openExternal(UPDATE_ENDPOINT.CHANGELOG_PAGE_URL);
@@ -2332,43 +791,50 @@ function registerIpc(): void {
     trustedSender,
     panels,
     voiceWindow,
-    receiver: voiceReceiver,
+    receiver: { markReady: (epoch) => gateway.host.readyReceiver(epoch) },
     broadcast,
     storeVoiceView: (view) => {
       latestVoiceView = view;
     },
     // The History Clear is Delete history on main: the recoverable deletion,
     // reported to the panel as refused only when the store took nothing.
-    clearConversation: () => gatewayOperator.deleteHistory(MAIN_SESSION_KEY),
+    clearConversation: () => gateway.operator.deleteHistory(MAIN_SESSION_KEY),
     setShortcutCapturing: (capturing) => hotkeys.setShortcutCapturing(capturing),
     openExternal: (url) => shell.openExternal(url),
-    // While the takeover stands and no account credential exists yet, the
+    // While the takeover stands and no voice stands on the host yet, the
     // introduction's bounded mint answers; the moment the account lands, the
-    // ordinary policy's credential wins even before the takeover has faded.
-    // The minter and its counted source travel together so the count can
-    // never name a source the credential did not come from.
-    chooseRealtimeCredentials: () => {
-      const accountMinter = voiceCapabilities.realtimeCredentials;
-      if (accountMinter) {
-        return {
-          minter: accountMinter,
-          countedSource: VOICE_SOURCE_COUNTED_AS[voiceCapabilities.voiceSource],
-        };
+    // host's own credential wins even before the takeover has faded.
+    mintRealtimeCredential: async () => {
+      if (voiceAvailable) return gateway.host.mintRealtimeCredential();
+      if (!introductionWindow.active) return undefined;
+      const credential = await introductionMinter.mint();
+      if (credential) {
+        recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
+          credential_source: PRODUCT_CREDENTIAL_SOURCE.INTRODUCTION,
+        });
       }
-      if (introductionWindow.active) {
-        return {
-          minter: introductionMinter,
-          countedSource: PRODUCT_CREDENTIAL_SOURCE.INTRODUCTION,
-        };
-      }
-      return undefined;
+      return credential;
     },
-    unavailableDiagnostics: () => voiceCapabilities.unavailableDiagnostics,
+    realtimeDiagnostics: async () => {
+      if (!voiceAvailable && introductionWindow.active) return introductionMinter.diagnostics();
+      return (await gateway.host.realtimeDiagnostics()) ?? introductionMinter.diagnostics();
+    },
     recordProductEvent,
-    recordAgentTrace: (trace) => agentTrace?.recordWire(trace),
+    // The development trace is the host's; the renderer's tapped wire events
+    // travel nowhere from this process.
+    recordAgentTrace: () => undefined,
   });
 
-  registerSessionActsIpc({ ipcMain, trustedSender, performer: sessionActPerformer });
+  registerSessionActsIpc({
+    ipcMain,
+    trustedSender,
+    performer: {
+      openSession: (identity) => gateway.host.openSession(identity),
+      openSessionApplication: (identity, applicationId) =>
+        gateway.host.openSessionApplication(identity, applicationId),
+      openSessionChange: (identity) => gateway.host.openSessionChange(identity),
+    },
+  });
   registerBrainIpc({
     ipcMain,
     trustedSender,
@@ -2376,34 +842,21 @@ function registerIpc(): void {
       panel: (sender) => panels.owns(sender),
       voice: (sender) => voiceWindow.owns(sender),
     },
-    operator: gatewayOperator,
+    operator: gateway.operator,
   });
-  // The renderer's description of the app, pushed whenever it changes: what an
-  // app act the brain asks for is validated against here, and what the brain
-  // reads as the guide.
   registerHandler(BRIDGE.reportAppGuide, (snapshot: AppGuideSnapshot) => {
     appGuide = snapshot;
+    void gateway.host.reportGuide(snapshot);
   });
   registerHandler(BRIDGE.answerBrainAppAct, (requestId: string, answer: WireRecord) => {
     pendingBrainAppActs.get(requestId)?.(answer);
   });
 
-  // A note to the founders travels one road: typed in the composer, validated
-  // here as a whole, and handed to the courier whose destination is fixed by
-  // this build. Only what the user wrote and attached crosses — no session
-  // material, no identifiers, nothing observed — and a refusal comes back as an
-  // answer for the composer rather than a throw, because sending is the user's
-  // own act and its outcome belongs beside the field it left.
   registerHandler(BRIDGE.sendFeedback, async (submission: FeedbackSubmission) => {
-    // A fixture run must be reproducible without a network, so it refuses
-    // rather than sending — and says so, because the composer still draws.
     if (!runMode.sendsNetwork) {
       return { delivered: false, reason: "A fixture run sends nothing." };
     }
     const result = await feedbackDelivery.deliver(submission);
-    // The count is of notes that actually reached the founders, and it says
-    // how many images rode along as a rung of the same ladder session counts
-    // travel on — never a filename, a caption, or a word of the note.
     if (result.delivered) {
       recordProductEvent(PRODUCT_EVENT.FEEDBACK_SEND, {
         image_count: productSessionCountBucket(submission.images.length),
@@ -2412,8 +865,6 @@ function registerIpc(): void {
     return result;
   });
 
-  // Which surface a window draws, decided by which window asked — never by
-  // anything the renderer could claim about itself.
   registerContextHandler(BRIDGE.getWindowRole, (context: BridgeContext) =>
     introductionWindow.owns(context.sender)
       ? WINDOW_ROLE.INTRODUCTION
@@ -2424,24 +875,14 @@ function registerIpc(): void {
 
   // The introduction's one-shot keyless read of this machine's local
   // sessions: the same read-only observe every pass runs, once, with no hook
-  // registration and no credential, answered only to the takeover window
-  // while it stands. It bypasses the account gate deliberately — detection is
-  // the introduction's own beat — and stays bounded to what the panel itself
-  // would show: every fresh row, in a list that scrolls like the
-  // panel's own, while what travels to the voice is bounded where the speech
-  // is composed rather than by hiding rows here.
+  // registration and no credential, answered only to the takeover window.
   registerContextHandler(BRIDGE.peekIntroductionSessions, async (context: BridgeContext) => {
     if (!introductionWindow.owns(context.sender) || !runMode.observesProviders) return [];
     const now = Date.now();
     const sessions = await peekLocalSessions();
-    // Fresher than the roster: an introduction that names last year's
-    // transcript introduces a graveyard.
     return sessions.filter((session) => now - session.lastActivityAt <= INTRODUCTION_PEEK_FRESH_MS);
   });
 
-  // The takeover reporting the sign-off has been spoken and its fade has
-  // finished: the introduction is over, and the real signed-out panel — the
-  // gate, its hover collapse, the sign-in itself — takes the screen.
   registerContextHandler(
     BRIDGE.completeIntroduction,
     async (context: BridgeContext, given: boolean) => {
@@ -2452,14 +893,10 @@ function registerIpc(): void {
 
   registerContextHandler(BRIDGE.abandonIntroduction, (context: BridgeContext, reason: string) => {
     if (!introductionWindow.owns(context.sender)) return;
-    process.stderr.write(`Introduction abandoned: ${reason}\n`);
+    report(`Introduction abandoned: ${reason}`);
     void abandonIntroduction();
   });
 
-  // The takeover surface reporting it mounted — the report its abandon
-  // deadline measures. Deliberately its own channel rather than notifyReady:
-  // the panel surface sends that one too, and a panel accidentally drawn in
-  // the takeover window must read as a takeover that never mounted.
   registerContextHandler(BRIDGE.introductionMounted, (context: BridgeContext) => {
     if (!introductionWindow.owns(context.sender)) return;
     introductionRendererReady = true;
@@ -2470,14 +907,11 @@ function registerIpc(): void {
   registerHandler(BRIDGE.quit, app.quit.bind(app));
 
   registerContextHandler(BRIDGE.notifyReady, async (context: BridgeContext) => {
-    // The introduction's handoff waits on the first panel renderer to finish
-    // bootstrapping, so its crossfade lands on a drawn gate.
     if (resolveIntroductionPanelReady && panels.owns(context.sender)) {
       resolveIntroductionPanelReady();
       resolveIntroductionPanelReady = undefined;
     }
     if (!captureOutput) return;
-    // A capture run holds a single window, and the ready message is its own.
     const window = BrowserWindow.fromWebContents(context.sender);
     if (!window || window.isDestroyed()) return;
     await new Promise((resolve) => setTimeout(resolve, 350));
@@ -2493,644 +927,7 @@ function registerIpc(): void {
   });
 }
 
-/**
- * Where a workspace can be created right now, as the adapters offer it: each
- * capable adapter's latest project list, stamped with its provider. This full
- * list is the source of truth for validating and pruning saved choices; the
- * renderer and conversation receive its separately bounded projection. A
- * fixture run offers nothing, for the same reason it observes nothing.
- */
-function offeredWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
-  if (!runMode.observesProviders) return [];
-  return [
-    ...orderedRegistrations.map(({ adapter }) => adapter),
-    supersetWorkspaceAdapter,
-    conductorLocalWorkspaceAdapter,
-  ].flatMap((adapter) =>
-    adapter.workspaceProjects().map((project) => ({
-      ...project,
-      providerId: adapter.provider.id,
-      providerName: adapter.provider.displayName,
-    })),
-  );
-}
-
-/**
- * Converges the local providers' hook registrations: each provider's script,
- * spool, and configuration entries are put in place, and spool files past the
- * observation window are dropped. Run once at every launch — the registration
- * is part of observing at all, like reading the transcripts, rather than a
- * preference — and never in a fixture or capture run: a deterministic run
- * must not touch the developer's real provider configuration. Failure costs
- * only the sharper status: the transcripts and state databases are observed
- * either way, and one provider's failure never reaches the other's — that is
- * the same independence the observation passes keep.
- */
-async function applyLocalSessionHooks(): Promise<void> {
-  if (fixtureMode || !runMode.observesProviders) return;
-  // Failures are logged under the provider they belong to and absorbed here:
-  // one provider's broken configuration must neither reach the other's
-  // registration nor the launch, and either costs only the sharper status.
-  await Promise.all(
-    orderedRegistrations.map(async ({ adapter, registerObservationHook }) => {
-      if (!registerObservationHook) return;
-      try {
-        await registerObservationHook();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        process.stderr.write(
-          `${adapter.provider.displayName} hook registration failed: ${message}\n`,
-        );
-      }
-    }),
-  );
-  watchObservationSpools();
-}
-
-/**
- * Stands one watcher on each hooked provider's spool, so a hook landing wakes
- * the brain the moment a session turns over rather than at the next pass. A
- * batch of events runs a pass first — the wake should carry the session as it
- * now stands — and then reaches the brain as hook wakes. The poll stays for
- * the panel and for the providers no hook covers; a watcher on a spool that
- * does not exist yet retries on its own clock.
- */
-function watchObservationSpools(): void {
-  if (spoolWatchers.length > 0) return;
-  spoolWatchers = orderedRegistrations.flatMap(({ adapter, observationSpool }) => {
-    if (!observationSpool) return [];
-    const providerId = adapter.provider.id;
-    return [
-      watchObservationSpool({
-        spoolDirectory: observationSpool.directory(),
-        events: observationSpool.events,
-        onEvents: (events) => {
-          void (async () => {
-            await sessionObservationLoop.refresh().catch(() => undefined);
-            brainWiring.wake(wakeEventsFromHooks(providerId, events, sessionRegistry, Date.now()));
-          })();
-        },
-      }),
-    ];
-  });
-}
-
-/**
- * The Superset entry of the workspace-host registry carries the whole
- * Superset pass, not only the enrichment: the acts a drawn row still
- * advertises resolve against this module's latest snapshot, and the chatless
- * workspace rows ride the same read, so all of it moves together.
- */
-async function readSupersetWorkspaceHost(): Promise<WorkspaceHostEnrichment> {
-  let supersetSnapshot = new SupersetWorkspaceSnapshot([]);
-  let supersetOrganization: string | undefined;
-  let supersetAgentDefault: string | undefined;
-  try {
-    supersetAgentDefault = (
-      await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field)
-    )?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
-    [supersetSnapshot, supersetOrganization] = await Promise.all([
-      supersetWorkspaces.read(),
-      supersetCli.activeOrganization(),
-    ]);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Superset observation failed: ${message}\n`);
-  }
-  // The fresh snapshot answers acts the drawn rows still advertise from
-  // before this pass's enrichment runs, so the directory matches enrichment
-  // made carry over, re-anchored to the worktrees just read.
-  supersetSnapshot.adoptDirectoryMatches(observedSupersetWorkspaces);
-  observedSupersetWorkspaces = supersetSnapshot;
-  observedSupersetOrganization = supersetOrganization;
-  // Refreshed outside the read's own try so a failed pass hands the adapter
-  // the same emptiness the act contexts just took: rows the router would
-  // refuse to act on must not keep standing on a snapshot that is gone.
-  try {
-    await supersetWorkspaceAdapter.refresh(
-      supersetAgentDefault,
-      supersetOrganization !== undefined,
-      supersetSnapshot.workspaceRowObservations(supersetOrganization),
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Superset observation failed: ${message}\n`);
-  }
-  return (providerId, observations) =>
-    supersetSnapshot.enrich(providerId, observations, supersetOrganization);
-}
-
-async function refreshProviderSessions(generation: number): Promise<void> {
-  const actionsWereEnabled = observedSupersetOrganization !== undefined;
-  // Re-reads the repositories Conductor holds so the local create offer tracks
-  // its index. A failed read empties the offer inside the adapter, so a create
-  // is never validated against repositories a later read could no longer see.
-  const conductorRepositoriesPromise = conductorLocalWorkspaceAdapter.refresh().catch((error) => {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Conductor repository observation failed: ${message}\n`);
-  });
-  const hostEnrichments = await Promise.all(
-    workspaceHosts.map((host) =>
-      host.read().catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        process.stderr.write(`${host.observationFailureLabel} failed: ${message}\n`);
-        return host.emptyEnrichment;
-      }),
-    ),
-  );
-  await conductorRepositoriesPromise;
-  const supersetActionsEnabled = observedSupersetOrganization !== undefined;
-  if (actionsWereEnabled !== supersetActionsEnabled) {
-    if (supersetActionsEnabled) {
-      broadcast(channels.onSupersetSignInChanged, {
-        stage: SUPERSET_SIGN_IN_STAGE.CONNECTED,
-      });
-    } else {
-      // The CLI withdrawing its login is also what makes a later Connect a
-      // new attempt. `cancel` returns the machine to idle and broadcasts that
-      // same state to every renderer.
-      supersetSignIn.cancel();
-    }
-  }
-  // Providers are observed concurrently and reported independently: the
-  // registry commits each provider atomically, so one that is slow or failing
-  // can neither delay nor cancel the others. A network provider would
-  // otherwise hold up the local ones for as long as its requests take.
-  await Promise.all([
-    ...orderedRegistrations.map(async ({ adapter }) => {
-      try {
-        // The fold applies the managers in registry order, which is what
-        // makes the registry's declared claim order the enrichment
-        // precedence: the first registration annotates first, and each later
-        // one sees what the earlier ones already claimed.
-        await sessionRegistry.refresh(adapter, (providerId, observations) =>
-          hostEnrichments.reduce(
-            (enriched, enrichment) => enrichment(providerId, enriched),
-            observations,
-          ),
-        );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        process.stderr.write(`Session observation failed (${adapter.provider.id}): ${message}\n`);
-      }
-    }),
-    // The chatless Superset workspaces, as rows of the workspace provider.
-    // No transform rides this refresh: the snapshot decorated them already,
-    // so an act path's plain refresh commits exactly this shape.
-    (async () => {
-      try {
-        await sessionRegistry.refresh(supersetWorkspaceAdapter);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        process.stderr.write(
-          `Session observation failed (${supersetWorkspaceAdapter.provider.id}): ${message}\n`,
-        );
-      }
-    })(),
-  ]);
-  if (!sessionObservationLoop.isCurrent(generation)) return;
-  // Every provider's observation has settled by here, committed or not, so
-  // this is the pass's last word on the offer; the broadcast dedupes itself.
-  void broadcastWorkspaceProjects();
-}
-
-/**
- * Opens each workspace Luke just created, the moment observation reports it
- * with an address. The entry behind it is the direct product of the
- * developer's own creation ask — the same turn that made the workspace asked
- * to be taken to it — and the address handed to the system is the one the
- * registry holds for that session, read the way a row press reads it: an
- * address in a scheme outside `SESSION_LINK_SCHEME` never reached the
- * registry at all. A created session that never reports an address inside
- * its window is left unopened, like any other row without one. The one thing
- * added to the address is the same per-press focus nonce a row press adds,
- * because Superset's own `workspaces open` follow-through usually has the
- * workspace on screen already before this open fires.
- */
-function openCreatedWorkspaces(sessions: readonly Session[]): void {
-  for (const created of createdWorkspaceOpens.claim(sessions, Date.now())) {
-    const link = created.detail.link;
-    if (!link) continue;
-    shell.openExternal(supersetPressedLink(link, randomUUID())).catch((error: Error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      process.stderr.write(`Created workspace could not be opened: ${message}\n`);
-    });
-  }
-}
-
-/**
- * Whether announcements should wait right now: the developer's announce
- * switch is off, or a meeting on the connected calendar covers this instant
- * under the meeting quiet. The switch is read first and the meetings before
- * the quiet setting, so the common case — announcing, no calendar — costs one
- * read; the store's answers come from its cached file either way, never the
- * keychain.
- *
- * Consulting it is also what keeps every window honest: the answer is
- * reconciled with the broadcast state on the way out, so speech can never be
- * decided against a fresher quiet than the one the face and the renderer's
- * own gate are holding. Without that, an edge landing just after a meeting's
- * end would speak over a face still drawn asleep until the next tick.
- */
-async function announcementsQuietNow(now: number): Promise<boolean> {
-  const paused = !(await settingsStore.get(APP_SETTING_SCHEMA.announceSessions.field));
-  const inMeeting =
-    !paused &&
-    calendarMeetings !== undefined &&
-    activeMeetingEnd(calendarMeetings, now) !== undefined;
-  const holding =
-    paused ||
-    (inMeeting && (await settingsStore.get(APP_SETTING_SCHEMA.quietDuringMeetings.field)));
-  if (holding !== announcementsHeld) {
-    announcementsHeld = holding;
-    broadcast(channels.onAnnouncementsHeldChanged, holding);
-  }
-  return holding;
-}
-
-/**
- * Recomputes whether announcements are held — the face sleeps beside the
- * housing for exactly as long as they are. The recompute itself broadcasts
- * any change; this name is for the caller with nothing to offer and only the
- * face to keep current: the calendar's stop, after the backlog it held is
- * gone.
- */
-async function refreshAnnouncementHold(): Promise<void> {
-  await announcementsQuietNow(Date.now());
-}
-
-/**
- * Stands the boundary timer at the next meeting edge, from the intervals
- * already in memory. On fire the quiet is recomputed and the backlog asked
- * after — the same pair every tick runs — and the timer re-arms for the edge
- * after that. Re-armed whole from every calendar pass because the pass may
- * have moved any edge; cleared with the meetings at sign-out. `unref`ed like
- * the ticks, so no meeting tomorrow holds the process open tonight.
- */
-function armQuietBoundaryTimer(): void {
-  if (quietBoundaryTimer) clearTimeout(quietBoundaryTimer);
-  quietBoundaryTimer = undefined;
-  if (!calendarMeetings) return;
-  const now = Date.now();
-  const boundary = nextMeetingBoundary(calendarMeetings, now);
-  if (boundary === undefined) return;
-  // The extra millisecond puts the firing strictly past the edge, so the
-  // recompute reads the side of it the timer was armed for.
-  quietBoundaryTimer = setTimeout(
-    () => {
-      quietBoundaryTimer = undefined;
-      void reconcileSpeech();
-      armQuietBoundaryTimer();
-    },
-    boundary - now + 1,
-  );
-  quietBoundaryTimer.unref();
-}
-
-/**
- * Brings the speech arbiter up to date with the quiet and lets it offer what
- * it may. Runs wherever the quiet can have moved — the meeting edges, the
- * ticks, either setting's toggle, a calendar pass — and whenever something
- * new is requested or settled. When the quiet ends, the briefings held
- * through it go back to the brain for one re-decision against the roster as
- * it now stands: a session that moved on while the meeting ran is no longer
- * news, and the brain, not a replay, is what knows. Voice gone while the
- * backlog waited means nothing to say it with, and by the time a key returns
- * the news is the panel's; a brain mid-rebuild under a standing credential
- * keeps them for the next tick.
- */
-async function reconcileSpeech(): Promise<void> {
-  const quiet = await announcementsQuietNow(Date.now());
-  speechArbiter.setQuiet(quiet);
-  if (!quiet && speechArbiter.heldBriefingCount > 0) {
-    if (brainWiring.current() && voiceCapabilities.realtimeCredentials) {
-      brainWiring.releaseHeld(speechArbiter.takeHeldBriefings());
-    } else if (!voiceCapabilities.realtimeCredentials) {
-      speechArbiter.dropBriefings();
-    }
-  }
-  offerNextSpeech();
-}
-
-/**
- * What became of one speech offer, by id. A reply that actually began is the
- * one moment the briefing count and the owed arrival record may settle; a
- * report that raced a settle already on file overwrites nothing.
- */
-function settleSpeech(id: string, outcome: SpeechOutcome): void {
-  const settled = speechArbiter.settle(id, outcome);
-  if (!settled) return;
-  if (settled.outcome === SPEECH_OUTCOME.SPOKEN) {
-    if (settled.kind === BRIEFING_SPEECH_KIND) {
-      productEvents.record(PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK, {});
-      markFirstAnnouncementSpoken();
-    }
-    // The reply has actually begun, which is the one moment the owed record
-    // may settle. A report that raced a settle already on file overwrites
-    // nothing.
-    if (settled.kind === ARRIVAL_SPEECH_KIND && arrivalBeatOwed(arrivalState)) {
-      writeArrivalState({ ...(arrivalState ?? {}), settledAt: new Date().toISOString() });
-    }
-  }
-  void reconcileSpeech();
-}
-
-/**
- * Hands the mouth the arbiter's head request, if one may be offered now.
- * Synchronous past the quiet's await, so two reconciles landing together
- * cannot each offer: the arbiter marks the offer outstanding in the same
- * tick it is sent.
- */
-function offerNextSpeech(): void {
-  const host = voiceWindow.current();
-  if (!host || !voiceReceiver.isReady() || !voiceCapabilities.realtimeCredentials) return;
-  const offer = speechArbiter.next();
-  if (offer) host.webContents.send(channels.onSpeechOffered, offer);
-}
-
-// The receiver reporting ready is the flush: whatever the arbiter holds and
-// every reply still owed goes to it now. Its epoch ending takes the arbiter's
-// outstanding offer back to the head, so the next renderer is offered it at
-// once rather than after the deadline; an owed reply the vanished renderer
-// never claimed is simply still unclaimed, and a claimed one stays claimed.
-voiceReceiver.onReady(() => {
-  offerNextSpeech();
-  gatewayService.receiverReady();
-});
-voiceReceiver.onReset(() => speechArbiter.reclaimOffer());
-
-/**
- * Takes a pending beat back from the arbiter and, when the mouth already
- * holds it unspoken, from the mouth as well. A reply already begun finishes.
- */
-function withdrawBeat(kind: OnboardingBeatKind): void {
-  const id = speechArbiter.retract(kind);
-  if (id) voiceWindow.current()?.webContents.send(channels.onSpeechWithdrawn, { id });
-}
-
-/**
- * Reads the meeting times from every connected account. An account that
- * cannot answer keeps standing what it last showed — the reader holds that,
- * per account, so one revoked grant never blinds the others — and a calendar
- * with no account stays absent, which is what makes the quiet impossible to
- * enter. Every pass ends by asking whether anything held can now be said: a
- * meeting deleted mid-way is over the moment the feed says so.
- */
-async function refreshCalendarMeetings(generation: number): Promise<void> {
-  try {
-    // The two sources answer side by side and neither waits on the other's
-    // failure: each already stands its own last-good observation.
-    const [observations, appleObservation] = await Promise.all([
-      googleCalendar.observe(),
-      appleCalendar.observe(),
-    ]);
-    // A pass that outlived its stop is no longer ours to report: the stop
-    // cleared the meetings, the calendars, and the quiet, and letting a read
-    // that was already in flight land would put the calendar — and a sleeping
-    // face — back after a sign-out.
-    if (!calendarObservationLoop.isCurrent(generation)) return;
-    const accounts = [...(observations ?? []), ...(appleObservation ? [appleObservation] : [])];
-    // Undefined only while nothing is connected at all — one connected source
-    // is already a calendar, and a quiet it can declare.
-    calendarMeetings =
-      observations === undefined && appleObservation === undefined
-        ? undefined
-        : accounts.flatMap((account) => [...account.meetings]);
-    observedCalendars = accounts.map(({ accountId, calendars, failure, revoked }) => ({
-      accountId,
-      calendars,
-      ...(failure ? { failure } : undefined),
-      ...(revoked ? { revoked } : undefined),
-    }));
-    broadcast(channels.onCalendarsChanged, observedCalendars);
-    for (const account of accounts) {
-      if (account.failure) {
-        process.stderr.write(`Calendar observation failed: ${account.failure}\n`);
-      }
-    }
-  } catch (error) {
-    // Nothing routine lands here — the reader answers a failing account with
-    // its last observation — so what does is a programming error, reported.
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Calendar observation failed: ${message}\n`);
-  }
-  if (!calendarObservationLoop.isCurrent(generation)) return;
-  void reconcileSpeech();
-  armQuietBoundaryTimer();
-}
-
-const observationGate = () => runMode.observesProviders && accountCapabilitiesActive();
-const sessionObservationLoop = new ObservationLoop({
-  gate: observationGate,
-  intervalMs: SESSION_REFRESH_INTERVAL_MS,
-  run: refreshProviderSessions,
-  // A pass is also when the Codex CLI login can have changed hands, and no
-  // settings save stands behind that to announce it. The brain's roster look
-  // is driven here rather than on its own timer so the two reads stay in sync:
-  // the look always follows a fresh observation, and never runs when the gate
-  // is closed (observesProviders && accountCapabilitiesActive()).
-  afterRun: () => {
-    void broadcastCodexCloudConnection();
-    brainWiring.rosterLook();
-  },
-});
-const issueObservationLoop = new ObservationLoop({
-  gate: observationGate,
-  intervalMs: ISSUE_REFRESH_INTERVAL_MS,
-  run: refreshTrackedIssues,
-});
-const calendarObservationLoop = new ObservationLoop({
-  gate: observationGate,
-  intervalMs: CALENDAR_REFRESH_INTERVAL_MS,
-  run: refreshCalendarMeetings,
-});
-const observationSupervisor = new ObservationSupervisor([
-  sessionObservationLoop,
-  issueObservationLoop,
-  calendarObservationLoop,
-]);
-
-/**
- * Notices the System Settings switch moving between passes: macOS posts no
- * notification for a consent change, so the poll is the whole mechanism — a
- * status probe that reads nothing but the access word, and a full pass run
- * whenever that word disagrees with the state the panel is drawn from. The
- * comparison is against the latest pass's own answer rather than a private
- * baseline on purpose: a baseline can start wrong and stay wrong silently,
- * where a disagreement with the drawn state is re-found every ten seconds
- * until a pass has reconciled it.
- */
-async function pollAppleCalendarAccess(): Promise<void> {
-  // Not connected, no probe — the same silence the observation keeps.
-  if (!(await settingsStore.readAppleCalendarConnection())) return;
-  let access: string | undefined;
-  try {
-    access = await appleCalendar.status();
-  } catch (error) {
-    // A probe that failed says nothing about the switch — but must say so
-    // once, or a watch that stopped watching is indistinguishable from a
-    // switch that never moved.
-    if (!appleAccessProbeFailing) {
-      const message = error instanceof Error ? error.message : String(error);
-      process.stderr.write(`Calendar access probe failed: ${message}\n`);
-    }
-  }
-  appleAccessProbeFailing = access === undefined;
-  if (access === undefined) return;
-  const drawnRevoked =
-    observedCalendars.find((account) => account.accountId === APPLE_CALENDAR_ID)?.revoked === true;
-  const probeRevoked = access !== APPLE_CALENDAR_ACCESS.FULL;
-  if (probeRevoked !== drawnRevoked) {
-    process.stderr.write(`Calendar access now reads ${access}; running a pass.\n`);
-    void calendarObservationLoop.refresh();
-  }
-}
-
-function startCalendarObservation(): void {
-  if (heldNoticeReleaseTimer) return;
-  heldNoticeReleaseTimer = setInterval(() => {
-    // The boundary timer answers the meeting edges on time; this tick is the
-    // net under it, re-asking on a cadence no missed timer can silence.
-    void reconcileSpeech();
-  }, HELD_NOTICE_RELEASE_INTERVAL_MS);
-  heldNoticeReleaseTimer.unref();
-  if (process.platform === "darwin" && runMode.observesProviders) {
-    appleAccessPollTimer = setInterval(() => {
-      void pollAppleCalendarAccess();
-    }, APPLE_ACCESS_POLL_INTERVAL_MS);
-    appleAccessPollTimer.unref();
-  }
-}
-
-/**
- * The sign-out mirror of the start: the timers go, the meetings and the
- * backlog are forgotten, and the meeting's hold ends — a quiet cannot outlive
- * the account whose calendars declared it. The developer's own pause is not
- * the calendar's to end, so the hold is recomputed rather than forced off.
- * The stored grants stay: signing back in finds the same accounts connected,
- * exactly like the provider keys.
- */
-function stopCalendarObservation(): void {
-  if (heldNoticeReleaseTimer) clearInterval(heldNoticeReleaseTimer);
-  heldNoticeReleaseTimer = undefined;
-  if (appleAccessPollTimer) clearInterval(appleAccessPollTimer);
-  appleAccessPollTimer = undefined;
-  appleAccessProbeFailing = false;
-  if (quietBoundaryTimer) clearTimeout(quietBoundaryTimer);
-  quietBoundaryTimer = undefined;
-  calendarMeetings = undefined;
-  observedCalendars = [];
-  // The readers forget what they held for failing accounts too: a pass after
-  // signing back in starts from nothing, not from an era this stop ended.
-  googleCalendar.forget();
-  appleCalendar.forget();
-  speechArbiter.dropBriefings();
-  broadcast(channels.onCalendarsChanged, observedCalendars);
-  void refreshAnnouncementHold();
-}
-
-/**
- * Whether a live run's roster has been read at all — what tells the panel's
- * empty list "not looked yet" from "nothing to watch". The first pass
- * publishes even an empty reading.
- */
-let rosterBroadcast = false;
-
-/**
- * Hands the renderer the roster as the latest pass left it, after every pass.
- * Nothing here decides whether anything moved: the roster is the poll, a
- * session a provider stopped reporting is simply gone from it, and the
- * renderer draws identical props as the same picture.
- */
-function broadcastSessions(sessions: readonly Session[]): void {
-  rosterBroadcast = true;
-  const roster: SessionRosterPayload = { sessions };
-  broadcast(channels.onSessionsChanged, roster);
-}
-
-function startSessionObservation(): void {
-  if (!runMode.observesProviders || !accountCapabilitiesActive() || unsubscribeSessions) return;
-  unsubscribeSessions = sessionRegistry.subscribe((sessions) => {
-    broadcastSessions(sessions);
-    // A commit is also the earliest a created workspace can have arrived with
-    // the address to open it by — whether on the refresh the creation itself
-    // fired or on an ordinary pass catching up.
-    openCreatedWorkspaces(sessions);
-    // A pass is the earliest a write-triggered refresh can have changed the
-    // offer, so the announcement rides it rather than waiting for the timer.
-    void broadcastWorkspaceProjects();
-    countObservedSessions(sessions);
-  });
-}
-
-/**
- * Counts what each provider is observing, once per provider per day. Every
- * pass reaches here, so counting each would measure the poll rather than use;
- * and the count itself is a rung of the shared ladder rather than a number,
- * because "137 sessions" identifies a machine where "a crowd" does not.
- */
-function countObservedSessions(sessions: readonly Session[]): void {
-  const counts = new Map<string, number>();
-  for (const session of sessions) {
-    counts.set(session.providerId, (counts.get(session.providerId) ?? 0) + 1);
-  }
-  for (const [providerId, count] of counts) {
-    if (!isProviderId(providerId)) continue;
-    productEvents.recordOncePerDay(PRODUCT_EVENT.SESSION_OBSERVE, providerId, {
-      provider_id: providerId,
-      session_count: productSessionCountBucket(count),
-    });
-  }
-}
-
-function stopSessionObservation(): void {
-  workspaceProjectsBroadcastGeneration += 1;
-  unsubscribeSessions?.();
-  unsubscribeSessions = undefined;
-  for (const { adapter } of orderedRegistrations) {
-    sessionRegistry.replaceProvider(adapter.provider, []);
-  }
-  broadcast(channels.onSessionsChanged, { sessions: [] });
-  broadcast(channels.onWorkspaceProjectsChanged, []);
-  lastWorkspaceProjects = undefined;
-}
-
-/**
- * Reads the issue roster from every connected tracker. A failing pass keeps
- * the roster it has rather than blanking it — a tracker that cannot answer is
- * not a board with nothing on it — and a tracker with no key stays absent,
- * which is how the renderer knows there is nothing to advertise.
- */
-async function refreshTrackedIssues(generation: number): Promise<void> {
-  try {
-    const collected: TrackedIssue[] = [];
-    let connected = false;
-    for (const tracker of issueTrackers) {
-      const observations = await tracker.observe();
-      if (!observations) continue;
-      connected = true;
-      for (const observation of observations) {
-        const issue = normalizeTrackedIssue(tracker.tracker, observation);
-        if (issue) collected.push(issue);
-      }
-    }
-    if (issueObservationLoop.isCurrent(generation)) {
-      trackedIssues = connected ? collected : undefined;
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`Issue observation failed: ${message}\n`);
-  }
-}
-
-function stopIssueObservation(): void {
-  trackedIssues = undefined;
-}
-
 function configurePermissions(): void {
-  // The takeover and the voice window are windows of Luke's own under the
-  // same hardening as the panels, and each speaks a real spoken turn, so they
-  // are owed the same audio-only answer.
   const ownWindow = (webContents: Electron.WebContents) =>
     panels.owns(webContents) ||
     introductionWindow.owns(webContents) ||
@@ -3160,25 +957,68 @@ function handleDisplayChange(): void {
     () =>
       void (async () => {
         await panels.refreshGeometry();
-        // While the introduction holds the screen no panel may be raised
-        // beside it; the takeover re-covers whatever the primary display now
-        // is, and the panels reconcile when it ends.
         if (introductionWindow.active) {
           introductionWindow.reposition();
           return;
         }
-        // The set of displays may have changed, not just their geometry: a chosen
-        // display arriving raises its window, one leaving takes its window down.
         panels.reconcile();
       })(),
     100,
   );
 }
 
+/**
+ * The explicit quit's stop of the Gateway, made once whichever path asks for
+ * it: Quit itself, or the updater's restart into a downloaded build. Squirrel
+ * swaps the executable at quit, and a Gateway of the old build left standing
+ * would otherwise have to be found and drained by the new build at its next
+ * launch; asking it to leave first, and waiting, is the drain.
+ */
+let gatewayStopped = gatewayLauncher === undefined;
+function stopGatewayOnce(): Promise<void> {
+  if (gatewayStopped || !gatewayLauncher) return Promise.resolve();
+  gatewayStopped = true;
+  return gatewayLauncher.stop();
+}
+function drainingEngine(engine: UpdaterEngine): UpdaterEngine {
+  return {
+    ...engine,
+    quitAndInstall: () => {
+      void stopGatewayOnce().finally(() => engine.quitAndInstall());
+    },
+  };
+}
+const lastRunVersionPath = () => path.join(app.getPath("userData"), "last-run-version.json");
+const updateService = new UpdateService({
+  currentVersion: app.getVersion(),
+  onChange: (update) => broadcast(channels.onUpdateChanged, update),
+  engine:
+    app.isPackaged && runMode.sendsNetwork && process.platform === "darwin"
+      ? drainingEngine(createElectronUpdaterEngine())
+      : undefined,
+  lastRunVersion: {
+    read: () => {
+      try {
+        const stored: UnparsedWireValue = JSON.parse(fs.readFileSync(lastRunVersionPath(), "utf8"));
+        return isRecord(stored) ? text(stored.version) : undefined;
+      } catch {
+        return undefined;
+      }
+    },
+    write: (version) => {
+      try {
+        fs.writeFileSync(lastRunVersionPath(), `${JSON.stringify({ version })}\n`);
+      } catch (error) {
+        report(
+          `Could not persist the last-run version: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    },
+  },
+});
+
 export function startDesktopApp(): void {
   if (!app.requestSingleInstanceLock()) {
-    // Luke runs as an accessory app, so a second launch otherwise exits silently
-    // and looks like the launcher did nothing.
     process.stderr.write(
       "Luke is already running; the existing panel was refreshed instead of starting a second copy.\n",
     );
@@ -3187,234 +1027,82 @@ export function startDesktopApp(): void {
     void app.whenReady().then(async () => {
       if (process.platform === "darwin") app.setActivationPolicy("accessory");
       Menu.setApplicationMenu(null);
-      // A stored refresh token is the account gate. No network request stands
-      // between an offline launch and Luke's local capabilities.
-      account = runMode.requiresAccount
-        ? await settingsStore.accountSnapshot()
-        : { status: ACCOUNT_STATUS.SIGNED_OUT };
-      accountSession.initialize(account);
-      // Decided once, from what this launch already knows: whether this is
-      // the first interactive launch, before any account exists, that the
-      // spoken introduction plays on. Everything below reads the takeover's
-      // liveness rather than this flag, because the introduction can end —
-      // completed or abandoned — while the launch is still settling.
+      // The host stands first: attached, or started, or composed here, and
+      // its first bootstrap read before anything is decided from it. The
+      // introduction plays only on a host actually reached: a launch that
+      // cannot reach its runtime knows nothing of the account and must not
+      // greet a signed-in developer as a stranger.
+      if (gatewayLauncher) {
+        const onStateChanged = (listener: Parameters<typeof gatewayLauncher.onStateChanged>[0]) =>
+          gatewayLauncher.onStateChanged(listener);
+        // The retries begin the moment an attach fails, and the launch waits
+        // on whichever attachment first reads a bootstrap; its tail below
+        // runs once, over that bootstrap, and a reattachment after it runs
+        // only the attachment work.
+        retryAttachWhileFailed({
+          onStateChanged,
+          attach: () => gatewayLauncher.attach(),
+          report,
+        });
+        const first = await waitForHost({
+          onStateChanged,
+          attach: () => gatewayLauncher.attach(),
+          onAttached,
+          report,
+        });
+        report(
+          first.result.outcome === "failed"
+            ? `Gateway attached after a failed first attempt (${first.result.failure})`
+            : `Gateway ${first.result.outcome} (pid ${first.result.pid})`,
+        );
+        followReattachments({ onStateChanged, onAttached, report });
+      } else if (localRuntime) {
+        await localRuntime.start();
+        await onAttached();
+      }
       const introductionInput = {
         requiresAccount: runMode.requiresAccount,
         signedIn: account.status === ACCOUNT_STATUS.SIGNED_IN,
         completed: introductionCompletedOnDisk(),
       };
       const giveIntroduction = shouldRunIntroduction(introductionInput);
-      // A signed-in launch that never wrote the record — an install upgrading
-      // from before the introduction existed — writes it now, so a later
-      // sign-out lands on the ordinary gate instead of a first meeting.
       if (shouldBackfillIntroductionCompletion(introductionInput)) markIntroductionComplete();
-      arrivalState = arrivalStateFromDisk();
-      // Read once, here, so the first bootstrap already carries them: a panel
-      // that opened on an empty History and filled it a beat later would read
-      // as a conversation arriving rather than one resumed.
-      if (runMode.observesProviders) {
-        await runtimeStoreWiring.open();
-        // The workspace's missing files are seeded at every live launch and
-        // never rewritten: an edit the developer or the agent made stands.
-        try {
-          await brainWiring.seedWorkspace();
-        } catch (error) {
-          process.stderr.write(
-            `Brain workspace could not be seeded: ${error instanceof Error ? error.message : String(error)}\n`,
-          );
-        }
-        // The index follows the files: synced once here and again at every
-        // change the watcher sees, so a hand edit is searchable within seconds.
-        // A seed that failed leaves the files that already stand, which are
-        // still worth indexing, so the start does not wait on the seed.
-        void memoryWiring.start();
-        // Retention runs on every live launch, key or no key: the store's
-        // load admits the envelope within its bounds and lifetime, replacing
-        // in the database what it does not admit, and the clock takes it
-        // from there. The last Clear's marker outlives the launch that made
-        // it, so a line the Clear meant to erase is refused here too.
-        await brainWiring.store().load();
-        await runtimeStoreWiring.restore();
-        stopHistoryMaintenance = startHistoryMaintenance({
-          store: runtimeStoreWiring,
-          brain: brainWiring,
-        });
-        await cronScheduler.start();
-        await cronScheduler.ensure(heartbeatJob(Date.now()));
-        await cronScheduler.ensure(consolidationJob(Date.now()));
-      }
-      // A signed-in install with no arrival record predates the beat: its
-      // sign-in was never observed, so it is settled now rather than greeted
-      // as an arrival on some later sign-in months in.
-      if (
-        shouldBackfillArrivalSettled({
-          requiresAccount: runMode.requiresAccount,
-          signedIn: introductionInput.signedIn,
-          hasRecord: arrivalState !== undefined,
-        })
-      ) {
-        writeArrivalState({ settledAt: new Date().toISOString() });
-      }
-      calendarOnboardingState = calendarOnboardingStateFromDisk();
-      // A signed-in install with no calendar onboarding record predates the
-      // mandatory step: it finished onboarding under the old terms, so it is
-      // settled now rather than gated by an update months in.
-      if (
-        shouldBackfillCalendarOnboardingSettled({
-          requiresAccount: runMode.requiresAccount,
-          signedIn: introductionInput.signedIn,
-          hasRecord: calendarOnboardingState !== undefined,
-        })
-      ) {
-        writeCalendarOnboardingState({ settledAt: new Date().toISOString() });
-      }
-      // A record left owed over a calendar that already stands — a crash
-      // between a connect's two writes, or a sign-in edge whose settle never
-      // ran — settles now rather than waiting to gate a disconnect.
-      void settleCalendarOnboardingIfConnected();
       await panels.refreshGeometry();
       registerIpc();
-      // Resolving settings touches the filesystem, and the OS keychain only for a
-      // provider that already has a stored key to decrypt. Starting it here keeps
-      // that work off the renderer's first paint, which blocks on the bootstrap
-      // reply.
-      void settingsStore.snapshot();
-      // The Dock wears Luke's own face from the start, and keeps wearing the
-      // right one as the desktop changes mode — whether the icon is shown yet
-      // is a separate question, answered by the setting below.
       dock.applyIcon();
       dock.watchTheme();
-      // The Dock icon reads the same file under the opposite default: it is
-      // opt-in, so a file that cannot be read leaves Luke out of the Dock — the
-      // accessory app the launch just asserted. Nothing to do until it says so.
-      void settingsStore.get(APP_SETTING_SCHEMA.showInDock.field).then((show) => {
-        if (show) dock.apply(true);
-      });
-      // The login item reads the same file under the opposite default: it is
-      // opt-out, so the stored setting is re-applied every launch and a login
-      // item removed outside Luke comes back until the toggle says otherwise.
-      void settingsStore.get(APP_SETTING_SCHEMA.openAtLogin.field).then(applyLoginItem);
-      // Armed from the settings file alone, like the status item, and for the
-      // same reason. A file that cannot be read leaves the duck on, the same
-      // answer a file that has never said gives. Never armed in a fixture or
-      // capture run, under the output watch's own rule: the helper stands
-      // with the setting so it can hear the players' play-state broadcasts,
-      // and evidence must not read the machine it happens to run on.
+      const settings = latestSettings ?? (await gateway.host.settingsSnapshot());
+      latestSettings = settings;
+      if (settings?.stored.showInDock) dock.apply(true);
+      applyLoginItem(settings?.stored.openAtLogin ?? APP_SETTING_SCHEMA.openAtLogin.default);
       if (runMode.observesProviders) {
-        void settingsStore
-          .get(APP_SETTING_SCHEMA.duckOtherMedia.field)
-          .then((enabled) => mediaDuck.setEnabled(enabled === true));
+        mediaDuck.setEnabled(
+          settings?.stored.duckOtherMedia ?? APP_SETTING_SCHEMA.duckOtherMedia.default,
+        );
       }
-      // Counting answers to the run and to nothing else. The sender starts
-      // knowing nothing rather than assuming, so this is the arming it waits
-      // for, and it is unconditional: `PRIVACY.md` is where a user learns
-      // this happens at all.
-      productEvents.arm();
-      productEvents.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: app.getVersion() });
-      // Luke can run for a week on one launch, so launches alone would
-      // undercount the days he was actually used.
-      productEvents.markDayActive();
-      // Always on, like the announcements: the timed check answers to no
-      // setting, only to the run — a fixture or capture run sends no network,
-      // so it never asks GitHub anything.
-      if (runMode.sendsNetwork) {
-        updateService.start();
-        productEvents.start();
-      }
-      // The hook registrations converge at every launch. Each provider's
-      // failure is logged under its own name and absorbed inside — a launch
-      // must never hang on another app's configuration file — so this catch is
-      // only the backstop for the arrangement itself failing.
-      void applyLocalSessionHooks().catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        process.stderr.write(`Local session hook registration failed: ${message}\n`);
-      });
-      // Opened before the talk key is applied, because the takeover holding
-      // the voice is what lets the key be claimed on a launch with no account
-      // credential — the practice beat needs it.
+      if (runMode.sendsNetwork) updateService.start();
       if (giveIntroduction) {
         introductionWindow.open();
         setTimeout(() => {
           if (!introductionWindow.active || introductionRendererReady) return;
-          process.stderr.write("Introduction abandoned: the takeover never reported mounting.\n");
+          report("Introduction abandoned: the takeover never reported mounting.");
           void abandonIntroduction();
         }, INTRODUCTION_RENDER_DEADLINE_MS);
       }
-      // Awaited, so the key and the voice it speaks with are both in hand before
-      // the renderer exists to ask for a credential: the first conversation must
-      // already have them. It is also what decides whether the talk key below is
-      // claimed at all.
-      await applyVoiceCredential();
-      // Awaited so the panels are created on the chosen displays in their
-      // chosen form, rather than appearing on the main display and jumping. A
-      // file that cannot be read means no choice was kept — the main display,
-      // the default form — and must not keep the panels from starting.
-      panels.setShowOnAllDisplays(
-        (await settingsStore.get(APP_SETTING_SCHEMA.showOnAllDisplays.field)) === true,
-      );
-      panels.setFormFactor(
-        (await settingsStore.get(APP_SETTING_SCHEMA.formFactor.field)) ?? DEFAULT_PANEL_FORM_FACTOR,
-      );
-      // Awaited for the same reason the voice is: the chosen chord has to be in
-      // hand before the key is registered, or the first registration would take
-      // the default away from the user who moved off it. A file that cannot be
-      // read means no choice was kept, and the defaults answer.
-      hotkeys.setChosen(
-        HOTKEY_RANK.TALK,
-        await settingsStore.get(APP_SETTING_SCHEMA.voiceHotkey.field),
-      );
-      hotkeys.setChosen(
-        HOTKEY_RANK.ASK,
-        await settingsStore.get(APP_SETTING_SCHEMA.askHotkey.field),
-      );
-      hotkeys.setChosen(
-        HOTKEY_RANK.STOP,
-        await settingsStore.get(APP_SETTING_SCHEMA.stopHotkey.field),
-      );
-      // The report is not made here: the helper answers over its own stdout a
-      // moment later, and a line printed now would state an absence that only
-      // exists because nobody has answered yet.
+      panels.setShowOnAllDisplays(settings?.stored.showOnAllDisplays === true);
+      panels.setFormFactor(settings?.stored.formFactor ?? DEFAULT_PANEL_FORM_FACTOR);
+      hotkeys.setChosen(HOTKEY_RANK.TALK, settings?.stored.voiceHotkey);
+      hotkeys.setChosen(HOTKEY_RANK.ASK, settings?.stored.askHotkey);
+      hotkeys.setChosen(HOTKEY_RANK.STOP, settings?.stored.stopHotkey);
       await hotkeys.reapply(HOTKEY_RANK.TALK);
-      // Read-only, like everything else that watches: what it learns decides
-      // what the renderer draws while Luke speaks unheard, and nothing more.
       startOutputVolumeWatch();
       startMicrophoneRouteWatch();
-      // The introduction owns the screen alone until it completes or is
-      // abandoned; both of its endings reconcile the panels themselves.
       if (!introductionWindow.active) panels.reconcile();
-      // Raised only once a panel stands; during the introduction, its ending
-      // is what raises the panels and the voice window with them.
       raiseVoiceWindow();
       configurePermissions();
-      startSessionObservation();
-      startCalendarObservation();
-      observationSupervisor.setEnabled(true);
-      // The launch-with-account edge of the sync switch's standing state:
-      // this path never enters startAccountCapabilities, so the reconcile
-      // that makes "on" true for keys stored before the switch existed has
-      // to run here as well.
-      if (account.status === ACCOUNT_STATUS.SIGNED_IN) reconcileProviderKeyVault();
-      // A beat a previous launch could not speak — signed in, but voiceless
-      // or quieted at the moment — is still owed, and this launch may be the
-      // one that can say it.
-      void requestOnboardingBeat();
-      // Reconcile in the background. Only an explicit invalid_grant removes the
-      // stored account; network failures and service outages leave it active.
-      void accountSession.refreshOnce();
 
-      // A repeat launch is usually someone checking the notch capsule, so re-assert
-      // the panel where it already is. Expanding hides the compact capsule, which is
-      // the one thing the relaunch was meant to show. An explicit `--expanded` is a
-      // stated intent rather than a side effect, so it is still honoured.
-      // Registered only now, once the launch has built what a relaunch re-asserts:
-      // the ping can arrive while this instance is still starting, where the screen
-      // module cannot be read yet — the crash — and where a reconcile would raise
-      // windows before the bootstrap handler exists to answer them. A ping that
-      // early is dropped, because startup is about to assert the panel anyway.
       app.on("second-instance", (_event, argv) => {
         void panels.refreshGeometry().then(() => {
-          // A relaunch mid-introduction re-asserts the takeover: raising
-          // panels beside it would put two Lukes on screen.
           if (introductionWindow.active) {
             introductionWindow.reposition();
             return;
@@ -3450,43 +1138,27 @@ export function startDesktopApp(): void {
   }
 
   app.on("will-quit", () => {
-    // The helper is a process of Luke's own, so it does not outlive the app that
-    // spawned it and leave a key registered against nothing. Nothing succeeds it
-    // during quit, so its exit is not waited on.
     hotkeys.release();
-    // The same rule: a process of Luke's own does not outlive the app.
     outputVolumeWatcher?.stop();
     outputVolumeWatcher = undefined;
     microphoneRouteWatcher?.stop();
     microphoneRouteWatcher = undefined;
-    // The duck helper outlives this by one fade: closing its stdin is what asks
-    // it to bring the players back up, so quitting mid-sentence costs the user
-    // nothing.
     mediaDuck.stop();
-    supersetSignIn.shutdown();
   });
 
-  app.on("before-quit", () => {
-    // Closed by the main process, never waited on: the panels closing is what
-    // decides the app is done, and this window was never one of them.
+  app.on("before-quit", (event) => {
+    // The explicit Quit is the one thing that stops the Gateway: it is asked
+    // to shut down and waited for, bounded, before this process leaves, so
+    // no runtime work of Luke's continues after an intentional quit.
+    if (!gatewayStopped && gatewayLauncher) {
+      event.preventDefault();
+      void stopGatewayOnce().finally(() => app.quit());
+      return;
+    }
     voiceWindow.closeForGood();
-    observationSupervisor.setEnabled(false);
-    stopCalendarObservation();
-    for (const watcher of spoolWatchers) watcher.close();
-    spoolWatchers = [];
-    stopHistoryMaintenance?.();
-    cronScheduler.stop();
-    brainWiring.retire();
-    memoryWiring.stop();
-    // Deliberately not a flush: a request here either delays the quit or is
-    // killed mid-flight, and an instant quit is worth the last minute of
-    // counts.
-    productEvents.stop();
+    if (localRuntime) void localRuntime.close();
     panels.clearCollapseTimers();
   });
 
-  // Fires only once every BrowserWindow is gone, the hidden voice window
-  // included, so the panels report their own last closing above; this stays
-  // for a run that never raised a voice window.
   app.on("window-all-closed", () => app.quit());
 }

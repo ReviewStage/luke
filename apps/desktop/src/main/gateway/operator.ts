@@ -1,17 +1,5 @@
-import {
-  BRAIN_SUBMISSION_OUTCOME,
-  BRAIN_SUBMISSION_REJECTION,
-  type BrainRequestRecord,
-  brainRequestRecordFromWire,
-  isBrainRequestOrigin,
-} from "@sidecar/brain/requests";
-import { type ConversationEntry, isConversationEntryKind } from "@sidecar/realtime";
-import {
-  type GatewayCallResult,
-  GatewayClient,
-  type GatewayClientOptions,
-  type GatewayTransport,
-} from "@sidecar/runtime";
+import { brainRequestRecordFromWire, isBrainRequestOrigin } from "@sidecar/brain/requests";
+import type { GatewayCallResult, GatewayClient } from "@sidecar/runtime";
 import {
   GATEWAY_EVENT,
   GATEWAY_METHOD,
@@ -31,6 +19,7 @@ import {
   isBrainReplyOffer,
 } from "#shared/wire/brain";
 import { CONVERSATION_DELETE_OUTCOME } from "../brain/conversation-deletion";
+import { REJECTED_SUBMISSION } from "../brain/ipc";
 
 /**
  * The desktop's operator client: what the windows' IPC and the main
@@ -65,71 +54,19 @@ export interface GatewayHistoryChange {
   sessionKey: string;
   entries: readonly WireValue[];
   cleared: boolean;
-  /** The window whose report produced the change, by its contents id, so the relay can skip echoing it. */
-  reporter?: number;
+  /** The opaque reporter whose report produced the change, minted by this client for one window, so the relay can skip echoing it. */
+  reporter?: string;
 }
-
-/** One History line as the host's event carried it, or nothing for a shape this build cannot draw. */
-export function conversationEntryFromWire(value: WireValue): ConversationEntry | undefined {
-  if (!isRecord(value) || !isConversationEntryKind(value.kind) || !isWireString(value.words)) {
-    return undefined;
-  }
-  const identity = value.identity;
-  if (
-    identity !== undefined &&
-    !(
-      isRecord(identity) &&
-      isWireString(identity.providerId) &&
-      isWireString(identity.providerSessionId)
-    )
-  ) {
-    return undefined;
-  }
-  return {
-    kind: value.kind,
-    words: value.words,
-    ...(isWireString(value.eventId) ? { eventId: value.eventId } : undefined),
-    ...(isRecord(identity) &&
-    isWireString(identity.providerId) &&
-    isWireString(identity.providerSessionId)
-      ? {
-          identity: {
-            providerId: identity.providerId,
-            providerSessionId: identity.providerSessionId,
-          },
-        }
-      : undefined),
-    ...(isWireNumber(value.recordedAt) ? { recordedAt: value.recordedAt } : undefined),
-    ...(isWireString(value.requestId) ? { requestId: value.requestId } : undefined),
-  };
-}
-
-const REJECTED_ABSENT: BrainAskSubmissionResult = {
-  outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
-  reason: BRAIN_SUBMISSION_REJECTION.ABSENT,
-};
 
 function runsFromWire(value: WireValue | undefined): readonly BrainRequestSnapshot[] {
   if (!isRecord(value) || !Array.isArray(value.runs)) return [];
-  const runs: BrainRequestRecord[] = [];
-  for (const entry of value.runs) {
-    const record = brainRequestRecordFromWire(entry);
-    if (record) runs.push(record);
-  }
-  return runs;
+  return value.runs.flatMap((entry) => brainRequestRecordFromWire(entry) ?? []);
 }
 
 function submissionResultFromWire(result: GatewayCallResult): BrainAskSubmissionResult {
-  if (!result.ok || !isRecord(result.result) || !isBrainAskSubmissionResult(result.result)) {
-    return REJECTED_ABSENT;
-  }
-  const value = result.result;
-  if (value.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED) {
-    if (!isWireString(value.runId) || !isWireNumber(value.acceptedAt)) return REJECTED_ABSENT;
-    return { outcome: value.outcome, runId: value.runId, acceptedAt: value.acceptedAt };
-  }
-  const reason = Object.values(BRAIN_SUBMISSION_REJECTION).find((held) => held === value.reason);
-  return reason ? { outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED, reason } : REJECTED_ABSENT;
+  return result.ok && isBrainAskSubmissionResult(result.result)
+    ? result.result
+    : REJECTED_SUBMISSION;
 }
 
 function claimFromWire(result: GatewayCallResult): BrainReplyClaimResult {
@@ -141,12 +78,13 @@ function claimFromWire(result: GatewayCallResult): BrainReplyClaimResult {
   return { granted: true, words, origin };
 }
 
-export interface GatewayOperatorOptions extends Omit<GatewayClientOptions, "transport"> {
-  transport: GatewayTransport;
+/** The operator is one typed surface over a client the desktop shares with its host operator; the client is made once. */
+export interface GatewayOperatorOptions {
+  client: GatewayClient;
 }
 
 export function createGatewayOperator(options: GatewayOperatorOptions): GatewayOperator {
-  const client = new GatewayClient(options);
+  const { client } = options;
   const on = <Payload>(
     kind: GatewayEvent["kind"],
     read: (payload: WireValue) => Payload | undefined,
@@ -215,8 +153,7 @@ export function createGatewayOperator(options: GatewayOperatorOptions): GatewayO
       on(
         GATEWAY_EVENT.DELIVERY_OFFERED,
         (payload) => (isBrainReplyOffer(payload) ? payload : undefined),
-        (offer) =>
-          listener({ runId: offer.runId, deliveryId: offer.deliveryId, epoch: offer.epoch }),
+        listener,
       ),
     onDeliveriesWithdrawn: (listener) =>
       on(
@@ -234,7 +171,7 @@ export function createGatewayOperator(options: GatewayOperatorOptions): GatewayO
             sessionKey: payload.sessionKey,
             entries: payload.entries,
             cleared: payload.cleared,
-            ...(isWireNumber(payload.reporter) ? { reporter: payload.reporter } : undefined),
+            ...(isWireString(payload.reporter) ? { reporter: payload.reporter } : undefined),
           };
         },
         listener,

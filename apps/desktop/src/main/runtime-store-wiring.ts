@@ -28,7 +28,6 @@ import {
   RuntimeStoreClient,
   type RuntimeStorePort,
 } from "@sidecar/runtime-store";
-import type { WebContents } from "electron";
 import type { CutoffBefore } from "./brain/conversation-deletion";
 import { ConversationThread, MemoryHistoryStore } from "./conversation-thread";
 
@@ -61,12 +60,20 @@ export interface RuntimeStoreWiringDependencies {
   onHistoryChanged: (
     sessionKey: SessionKey,
     entries: readonly ConversationEntry[],
-    except?: WebContents,
+    except?: HistoryReporter,
   ) => void;
   /** Hears the directory whenever a conversation is created, archived, restored, or deleted. */
   onDirectoryChanged: (directory: ConversationDirectorySnapshot) => void;
   report: (message: string) => void;
 }
+
+/**
+ * What names the window a History change came from: an opaque token the
+ * client minted for that window, carried on its report and echoed on the
+ * change so the client can skip the window that already holds the lines.
+ * The host reads nothing into it.
+ */
+export type HistoryReporter = string;
 
 /** How the store's side of a deletion ended; the archive itself stays with the store. */
 export type HistoryErasure = Pick<DeletionOutcome, "published">;
@@ -80,7 +87,7 @@ export interface RuntimeStoreWiring {
   /** The client, started on first use; the worker's answers stand behind every method below. */
   client: () => RuntimeStoreClient;
   /** One conversation's thread, relayed between windows through this process; created on first use. */
-  thread: (sessionKey?: SessionKey) => ConversationThread<WebContents>;
+  thread: (sessionKey?: SessionKey) => ConversationThread<HistoryReporter>;
   /** A conversation's envelope, for the brain wiring to build its writer on: the store's, or memory alone for a temporary thread. */
   brainStateRepository: (sessionKey?: SessionKey) => BrainStateRepository;
   /** Opens the database for this launch. */
@@ -138,6 +145,8 @@ export interface RuntimeStoreWiring {
   ) => Promise<ConversationRecord>;
   /** The scheduler's jobs; a run with nothing on disk keeps them in memory alone. */
   scheduledJobStore: () => ScheduledJobStore;
+  /** Closes the worker, once opened; the host's last act at a shutdown. */
+  close: () => Promise<void>;
   /** The child service's records and completions; a run with nothing on disk keeps them in memory alone. */
   childStore: () => ChildStore;
   archive: (sessionKey: SessionKey) => Promise<boolean>;
@@ -178,7 +187,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     return runtimeStore;
   };
 
-  const threads = new Map<SessionKey, ConversationThread<WebContents>>();
+  const threads = new Map<SessionKey, ConversationThread<HistoryReporter>>();
   const temporary = new Map<SessionKey, ConversationRecord>();
   let stored: readonly ConversationRecord[] = [];
   let archives: readonly HistoryArchiveRecord[] = [];
@@ -187,7 +196,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
   const memoryThread = (sessionKey: SessionKey) => {
     const store = new MemoryHistoryStore();
     memoryStores.set(sessionKey, store);
-    return new ConversationThread<WebContents>({
+    return new ConversationThread<HistoryReporter>({
       store,
       now: dependencies.now,
       onChanged: (entries, except) => dependencies.onHistoryChanged(sessionKey, entries, except),
@@ -195,12 +204,14 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     });
   };
 
-  const thread = (sessionKey: SessionKey = MAIN_SESSION_KEY): ConversationThread<WebContents> => {
+  const thread = (
+    sessionKey: SessionKey = MAIN_SESSION_KEY,
+  ): ConversationThread<HistoryReporter> => {
     let held = threads.get(sessionKey);
     if (held) return held;
     held =
       dependencies.persistent && !temporary.has(sessionKey)
-        ? new ConversationThread<WebContents>({
+        ? new ConversationThread<HistoryReporter>({
             store: {
               appendHistory: (entries, now) => client().appendHistory(sessionKey, entries, now),
             },
@@ -341,6 +352,12 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
   return {
     client,
     thread,
+    close: async () => {
+      if (!runtimeStore) return;
+      const held = runtimeStore;
+      runtimeStore = undefined;
+      await held.close().catch(() => undefined);
+    },
     brainStateRepository: (sessionKey = MAIN_SESSION_KEY) =>
       temporary.has(sessionKey) ? memoryRepository() : client().brainStateRepository(sessionKey),
     open: async () => {

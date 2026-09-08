@@ -1,4 +1,5 @@
 import { DELIVERY_STATE, type DeliveryState } from "@sidecar/runtime-contracts";
+import type { WireRecord } from "@sidecar/wire";
 
 /**
  * One reply owed to the ear after its words already stand in History. Never
@@ -80,8 +81,9 @@ export class DeliveryLedger<Words> {
       present.add(run.runId);
       if (!run.ended) this.#watched.add(run.runId);
     }
-    for (const runId of [...this.#watched]) if (!present.has(runId)) this.#forget(runId);
-    for (const runId of [...this.#deliveries.keys()]) if (!present.has(runId)) this.#forget(runId);
+    for (const runId of new Set([...this.#watched, ...this.#deliveries.keys()])) {
+      if (!present.has(runId)) this.#forget(runId);
+    }
   }
 
   /**
@@ -240,4 +242,15 @@ export class DeliveryLedger<Words> {
     this.#watched.delete(runId);
     this.#deliveries.delete(runId);
   }
+}
+
+/** The delivery as the protocol lists it, for a client inspecting the ledger. */
+export function deliveryRecordToWire(delivery: DeliveryRecord): WireRecord {
+  return {
+    runId: delivery.runId,
+    deliveryId: delivery.deliveryId,
+    generationId: delivery.generationId,
+    state: delivery.state,
+    ...(delivery.offeredEpoch !== undefined ? { offeredEpoch: delivery.offeredEpoch } : undefined),
+  };
 }

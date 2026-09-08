@@ -18,6 +18,7 @@ import {
   type MaybePromise,
 } from "@sidecar/runtime-contracts";
 import { isWireNumber, type WireRecord, type WireValue } from "@sidecar/wire";
+import type { GatewayHostConnection } from "./transport.js";
 
 /** What one method answers: a result, or a typed error the envelope carries back. */
 export type GatewayMethodOutcome =
@@ -35,6 +36,8 @@ export function gatewayError(code: GatewayErrorCode, message: string): GatewayMe
 export interface GatewayMethodContext {
   client: GatewayClientIdentity;
   request: GatewayRequest;
+  /** The connection the request arrived on, when the transport can be asked back through it; a node registers against this. */
+  connection?: GatewayHostConnection;
 }
 
 export type GatewayMethodHandler = (
@@ -95,40 +98,56 @@ const NODE_METHODS: ReadonlySet<GatewayMethod> = new Set<GatewayMethod>([
  */
 export class GatewayServer {
   readonly #options: GatewayServerOptions;
+  /** The host's handlers, with the two the protocol itself answers: hello and reconnect are the server's own. */
+  readonly #methods: GatewayMethodTable;
   readonly #idempotent = new Map<GatewayMethod, Map<string, IdempotentAnswer>>();
   readonly #events: GatewayEvent[] = [];
   readonly #listeners = new Set<GatewayEventListener>();
   #sequence = 0;
+  #admitting = true;
 
   constructor(options: GatewayServerOptions) {
     this.#options = options;
+    this.#methods = {
+      ...options.methods,
+      [GATEWAY_METHOD.HELLO]: () => gatewayOk(this.#hello()),
+      [GATEWAY_METHOD.RECONNECT]: (params) => this.#reconnectOutcome(params),
+    };
   }
 
   sequence(): number {
     return this.#sequence;
   }
 
+  /**
+   * Closes the door to new work: every mutating method but the shutdown
+   * itself answers shutting-down from here on, while reads, hellos, and
+   * reconnections still answer, so a client can see the host leaving rather
+   * than lose it. Nothing under way is touched; that is the coordinator's.
+   */
+  closeAdmissions(): void {
+    this.#admitting = false;
+  }
+
   revision(): GatewayRevision {
     return { configuration: this.#options.configurationRevision(), sequence: this.#sequence };
   }
 
-  async handle(request: GatewayRequest, client: GatewayClientIdentity): Promise<GatewayResponse> {
+  async handle(
+    request: GatewayRequest,
+    client: GatewayClientIdentity,
+    connection?: GatewayHostConnection,
+  ): Promise<GatewayResponse> {
     const refused = this.#admit(request, client);
     if (refused) return this.#respond(request.id, refused);
-    if (request.method === GATEWAY_METHOD.HELLO) {
-      return this.#respond(request.id, gatewayOk(this.#hello()));
-    }
-    if (request.method === GATEWAY_METHOD.RECONNECT) {
-      return this.#respond(request.id, this.#reconnectOutcome(request.params));
-    }
-    const handler = this.#options.methods[request.method];
+    const handler = this.#methods[request.method];
     if (!handler) {
       return this.#respond(
         request.id,
         gatewayError(GATEWAY_ERROR.UNKNOWN_METHOD, `no handler stands for ${request.method}`),
       );
     }
-    const outcome = await this.#answer(request, client, handler);
+    const outcome = await this.#answer(request, client, handler, connection);
     return this.#respond(request.id, outcome);
   }
 
@@ -222,6 +241,13 @@ export class GatewayServer {
         `${client.role} may not call ${request.method}`,
       );
     }
+    if (
+      !this.#admitting &&
+      isMutatingGatewayMethod(request.method) &&
+      request.method !== GATEWAY_METHOD.SHUTDOWN
+    ) {
+      return gatewayError(GATEWAY_ERROR.SHUTTING_DOWN, "the host is shutting down");
+    }
     if (isMutatingGatewayMethod(request.method) && request.idempotencyKey === undefined) {
       return gatewayError(
         GATEWAY_ERROR.MISSING_IDEMPOTENCY_KEY,
@@ -260,10 +286,17 @@ export class GatewayServer {
     request: GatewayRequest,
     client: GatewayClientIdentity,
     handler: GatewayMethodHandler,
+    connection: GatewayHostConnection | undefined,
   ): Promise<GatewayMethodOutcome> {
     const run = () =>
       Promise.resolve()
-        .then(() => handler(request.params, { client, request }))
+        .then(() =>
+          handler(request.params, {
+            client,
+            request,
+            ...(connection ? { connection } : undefined),
+          }),
+        )
         .catch((error: Error) => gatewayError(GATEWAY_ERROR.INTERNAL, error.message));
     const key = request.idempotencyKey;
     if (key === undefined || !isMutatingGatewayMethod(request.method)) return run();
@@ -286,10 +319,9 @@ export class GatewayServer {
     ledger.set(key, { paramsText, answer });
     const capacity =
       this.#options.idempotencyCapacity ?? GATEWAY_SERVER_DEFAULTS.IDEMPOTENCY_CAPACITY;
-    while (ledger.size > capacity) {
+    if (ledger.size > capacity) {
       const oldest = ledger.keys().next().value;
-      if (oldest === undefined) break;
-      ledger.delete(oldest);
+      if (oldest !== undefined) ledger.delete(oldest);
     }
     return answer;
   }

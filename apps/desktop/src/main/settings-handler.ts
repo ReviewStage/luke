@@ -16,7 +16,8 @@ export class SettingsRefusal {
 
 export interface SettingsHandlerSpec<Arguments extends readonly unknown[], Value> {
   validate: (...args: Arguments) => Value | SettingsRefusal | Promise<Value | SettingsRefusal>;
-  save: (value: Value) => Promise<SettingsUpdateResult>;
+  /** Carries the write to the host; the context names the window that asked, so the host's change event can skip echoing it. */
+  save: (value: Value, context: BridgeContext) => Promise<SettingsUpdateResult>;
   apply?: (
     result: SettingsUpdateResult,
     value: Value,
@@ -28,8 +29,8 @@ export interface SettingsHandlerSpec<Arguments extends readonly unknown[], Value
 export interface SettingsHandlerDeps {
   ipcMain: Pick<IpcMain, "handle" | "on">;
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
-  snapshot: () => Promise<AppSettings>;
-  broadcast: (settings: AppSettings, except?: Electron.WebContents) => void;
+  /** The settings a refusal is worded over; nothing when the host cannot be reached, which makes the refusal a throw. */
+  snapshot: () => Promise<AppSettings | undefined>;
 }
 
 type InvokeMethod = {
@@ -57,16 +58,15 @@ export function createSettingsHandler(deps: SettingsHandlerDeps) {
       const value = await spec.validate(...argumentsForMethod);
       if (value instanceof SettingsRefusal) return value.result;
       try {
-        const saved = await spec.save(value);
+        // The host's change event is what every other window hears; the
+        // window that asked hears the answer here and is skipped there.
+        const saved = await spec.save(value, context);
         await spec.apply?.(saved, value, context);
-        deps.broadcast(saved.settings, context.sender);
         return saved;
       } catch {
-        return {
-          status: ACT_RESULT_STATUS.REJECTED,
-          settings: await deps.snapshot(),
-          reason: spec.refusal,
-        };
+        const settings = await deps.snapshot();
+        if (!settings) throw new Error(spec.refusal);
+        return { status: ACT_RESULT_STATUS.REJECTED, settings, reason: spec.refusal };
       }
     };
     registerBridgeEntry(BRIDGE, definition, handler, deps);

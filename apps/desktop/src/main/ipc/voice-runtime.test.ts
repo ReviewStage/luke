@@ -55,9 +55,9 @@ function fixture(clearConversation: () => Promise<boolean>) {
     receiver,
     broadcast: () => undefined,
     openExternal: async () => undefined,
-    chooseRealtimeCredentials: () => undefined,
+    mintRealtimeCredential: async () => undefined,
     // SAFETY: the Clear path never reads diagnostics; an inert record stands in for a minter's.
-    unavailableDiagnostics: () => ({}) as never,
+    realtimeDiagnostics: async () => ({}) as never,
     recordProductEvent: () => undefined,
     recordAgentTrace: () => undefined,
     storeVoiceView: () => undefined,

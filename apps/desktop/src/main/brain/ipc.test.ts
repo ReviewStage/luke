@@ -10,7 +10,7 @@ import {
   maximumTypedAskLength,
 } from "@sidecar/realtime";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
-import { InProcessTransport } from "@sidecar/runtime";
+import { GatewayClient, InProcessTransport } from "@sidecar/runtime";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_EVENT, MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import { BRIDGE } from "#shared/bridge";
@@ -23,8 +23,9 @@ import {
 import type { ConversationOperations } from "../conversation-operations";
 import { createGatewayOperator } from "../gateway/operator";
 import { createGatewayService } from "../gateway/service";
+import { operatorOverBrain } from "../gateway/testing";
 import { VoiceReceiver } from "../voice-receiver";
-import { followBrainRequests, publishRuns, registerBrainIpc, submitBrainAsk } from "./ipc";
+import { followBrainRequests, publishRuns, registerBrainIpc } from "./ipc";
 import { BrainReplyDeliveries } from "./reply-delivery";
 
 const NOW = 1_800_000_000_000;
@@ -108,11 +109,15 @@ function markingBrain(
 
 test("an ask with no brain is refused in fixed words, and nothing is recorded", async () => {
   const written = thread();
-  const result = await submitBrainAsk(
-    undefined,
-    { submissionId: "sub-1", question: "what needs me?", origin: BRAIN_REQUEST_ORIGIN.TYPED },
-    written.record,
-  );
+  const operator = operatorOverBrain({
+    current: () => undefined,
+    recordConversationEntry: written.record,
+  });
+  const result = await operator.submit({
+    submissionId: "sub-1",
+    question: "what needs me?",
+    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+  });
   assert.deepEqual(result, { outcome: "rejected", reason: "absent" });
   assert.equal(BRAIN_ASK_REFUSAL.absent.includes("OpenAI key"), true);
   assert.deepEqual(written.recorded, []);
@@ -122,11 +127,16 @@ test("a typed ask is bounded, handed to the brain whole, and recorded in the acc
   const asked: BrainSubmission[] = [];
   const written = thread();
   const long = `  ${"a".repeat(maximumTypedAskLength + 50)}`;
-  const result = await submitBrainAsk(
-    acceptingBrain(asked),
-    { submissionId: "sub-1", question: long, origin: BRAIN_REQUEST_ORIGIN.TYPED },
-    written.record,
-  );
+  const brain = acceptingBrain(asked);
+  const operator = operatorOverBrain({
+    current: () => brain,
+    recordConversationEntry: written.record,
+  });
+  const result = await operator.submit({
+    submissionId: "sub-1",
+    question: long,
+    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+  });
   assert.deepEqual(result, { outcome: "accepted", runId: "run-1", acceptedAt: NOW });
   assert.equal(asked[0]?.question.length, maximumTypedAskLength);
   assert.equal(asked[0]?.submissionId, "sub-1");
@@ -148,11 +158,16 @@ test("a typed ask is bounded, handed to the brain whole, and recorded in the acc
 test("a spoken ask records nothing here: the voice service's transcript is its line", async () => {
   const asked: BrainSubmission[] = [];
   const written = thread();
-  await submitBrainAsk(
-    acceptingBrain(asked),
-    { submissionId: "call-1", question: "send it", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
-    written.record,
-  );
+  const brain = acceptingBrain(asked);
+  const operator = operatorOverBrain({
+    current: () => brain,
+    recordConversationEntry: written.record,
+  });
+  await operator.submit({
+    submissionId: "call-1",
+    question: "send it",
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+  });
   assert.equal(asked[0]?.origin, BRAIN_REQUEST_ORIGIN.SPOKEN);
   assert.deepEqual(written.recorded, []);
 });
@@ -542,14 +557,15 @@ function registered(live: () => BrainRequestRecord | undefined) {
     recordConversationEntry: () => true,
     now: () => NOW,
     createId: () => `id-${++ids}`,
-    report: () => undefined,
   });
   const operator = createGatewayOperator({
-    transport: new InProcessTransport(service.server, {
-      clientId: "test-operator",
-      role: GATEWAY_CLIENT_ROLE.OPERATOR,
+    client: new GatewayClient({
+      transport: new InProcessTransport(service.server, {
+        clientId: "test-operator",
+        role: GATEWAY_CLIENT_ROLE.OPERATOR,
+      }),
+      createId: () => `request-${++ids}`,
     }),
-    createId: () => `request-${++ids}`,
   });
   registerBrainIpc({
     ipcMain: {
