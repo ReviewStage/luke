@@ -1721,8 +1721,17 @@ const conversationOperations: ConversationOperations = {
     return restored;
   },
   deleteHistory: async (sessionKey) => {
-    const temporary = runtimeStoreWiring.isTemporary(sessionKey);
-    const outcome = await deleteConversationHistoryFlow({
+    if (runtimeStoreWiring.isTemporary(sessionKey)) {
+      // A temporary thread has nothing on disk to archive or refuse:
+      // forgetting its lines and its envelope, in the same order, is the
+      // whole deletion.
+      runtimeStoreWiring.thread(sessionKey).fence(Date.now());
+      await brainWiring.closeConversation(sessionKey);
+      await runtimeStoreWiring.eraseHistory(sessionKey, Date.now());
+      await brainWiring.openConversation(sessionKey);
+      return CONVERSATION_DELETE_OUTCOME.COMPLETE;
+    }
+    return deleteConversationHistoryFlow({
       now: Date.now,
       fence: (deletedAt) => {
         runtimeStoreWiring.thread(sessionKey).fence(deletedAt);
@@ -1733,8 +1742,6 @@ const conversationOperations: ConversationOperations = {
       rebuildBrain: () => brainWiring.openConversation(sessionKey),
       report: (message) => process.stderr.write(`${message}\n`),
     });
-    // A temporary thread has no store to refuse: forgetting its lines is the whole deletion.
-    return temporary ? CONVERSATION_DELETE_OUTCOME.COMPLETE : outcome;
   },
   restoreArchive: (archiveId) => runtimeStoreWiring.restoreArchive(archiveId),
 };
