@@ -11,9 +11,10 @@ import {
 /**
  * The agent kinds, models, and effort levels each provider's creation
  * endpoints take, fixed by this build the way the spawnable agent kinds
- * always were. Conductor documents no endpoint that lists them — its own CLI
- * ships the same table compiled in — so this is documented state rather than
- * observed state, and it is the outer bound of every choice: the settings
+ * always were. Conductor's CLI lists them from its own compiled table, but no
+ * hosted API endpoint exposes that roster for Luke to observe dynamically, so
+ * this is documented state rather than observed state, and it is the outer
+ * bound of every choice: the settings
  * rows offer only what is here, the store keeps only what is here, and an
  * adapter sends only what is here.
  *
@@ -21,7 +22,7 @@ import {
  * takes. The labels name no vendor — a model's own name already says whose it
  * is — except where the id alone says nothing, like Cursor's `auto`.
  *
- * Kept in step with `conductor models` (last read 2026-08-14). Drift is
+ * Kept in step with `conductor model` (last read 2026-09-08). Drift is
  * bounded in both directions: a model or effort Conductor adds is simply not
  * offered until this table learns it, and one Conductor retires is refused by
  * its own endpoint with a reason Luke reports. Fast mode is deliberately
@@ -32,6 +33,7 @@ export const WORKSPACE_AGENT_MODELS = {
     {
       agent: "claude",
       models: [
+        { id: "fable-5-1", label: "Fable 5.1" },
         { id: "fable-5", label: "Fable 5" },
         { id: "opus-5-1m", label: "Opus 5 (1M)" },
         { id: "opus-4-8-1m", label: "Opus 4.8 (1M)" },

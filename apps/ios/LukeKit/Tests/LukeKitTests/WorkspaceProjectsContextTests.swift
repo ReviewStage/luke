@@ -30,7 +30,10 @@ final class WorkspaceProjectsContextTests: XCTestCase {
             agentModels: [
                 WorkspaceAgentOption(
                     providerId: "conductor", agent: "claude",
-                    models: [WorkspaceAgentModelChoice(id: "opus-4", label: "Opus 4")],
+                    models: [
+                        WorkspaceAgentModelChoice(id: "fable-5-1", label: "Fable 5.1"),
+                        WorkspaceAgentModelChoice(id: "opus-4", label: "Opus 4"),
+                    ],
                     efforts: ["low", "high"]
                 )
             ]
@@ -47,7 +50,11 @@ final class WorkspaceProjectsContextTests: XCTestCase {
             lines[2],
             "- Conductor — acme/api [provider_id=conductor project_id=p2]; takes no task; names its own workspaces; the provider's default project"
         )
-        XCTAssertTrue(lines[3].contains("claude — models Opus 4 (opus-4); efforts low, high"))
+        XCTAssertTrue(
+            lines[3].contains(
+                "claude — models Fable 5.1 (fable-5-1), Opus 4 (opus-4); efforts low, high"
+            )
+        )
         XCTAssertEqual(
             lines[4],
             "An ask that names no provider creates in Conductor [provider_id=conductor]; do not ask which provider unless the ask names a different one."

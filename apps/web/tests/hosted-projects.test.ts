@@ -150,7 +150,8 @@ test("a provider that offered a project carries its agent table on the answer", 
   assert.deepEqual(agents, ["claude", "codex", "cursor"]);
   assert.ok(
     body.agentModels[0].models.some(
-      (model: { id: string; label: string }) => model.id === "fable-5" && model.label === "Fable 5",
+      (model: { id: string; label: string }) =>
+        model.id === "fable-5-1" && model.label === "Fable 5.1",
     ),
   );
 

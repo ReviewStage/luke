@@ -79,13 +79,17 @@ final class WorkspaceAgentOptionTests: XCTestCase {
             "providerId": "conductor",
             "agent": "claude",
             "models": [
+                ["id": "fable-5-1", "label": "Fable 5.1"],
                 ["id": "fable-5", "label": "Fable 5"],
                 ["id": "", "label": "nameless"],  // malformed: skipped
             ],
             "efforts": ["low", "high"],
         ])
         XCTAssertEqual(option?.id, "conductor:claude")
-        XCTAssertEqual(option?.models, [WorkspaceAgentModelChoice(id: "fable-5", label: "Fable 5")])
+        XCTAssertEqual(option?.models, [
+            WorkspaceAgentModelChoice(id: "fable-5-1", label: "Fable 5.1"),
+            WorkspaceAgentModelChoice(id: "fable-5", label: "Fable 5"),
+        ])
         XCTAssertEqual(option?.efforts, ["low", "high"])
     }
 
@@ -122,7 +126,7 @@ final class ProjectsClientTests: XCTestCase {
                     [
                         "providerId": "conductor",
                         "agent": "claude",
-                        "models": [["id": "fable-5", "label": "Fable 5"]],
+                        "models": [["id": "fable-5-1", "label": "Fable 5.1"]],
                         "efforts": ["low"],
                     ],
                     ["providerId": "conductor"],  // malformed: skipped
