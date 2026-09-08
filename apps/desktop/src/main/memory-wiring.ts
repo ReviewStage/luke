@@ -57,7 +57,7 @@ export interface MemoryWiring {
   /** Syncs once and starts watching; a run with nothing on disk does neither. */
   start: () => Promise<void>;
   stop: () => void;
-  /** One reconcile of the index against the files; concurrent calls share one pass. */
+  /** One reconcile of the index against the files; a call during a pass earns one follow-on pass under the adapter standing then. */
   sync: () => Promise<MemorySyncReport | undefined>;
   /** The brain's memory tools for one conversation. */
   accessFor: (sessionKey: SessionKey) => BrainMemoryAccess | undefined;

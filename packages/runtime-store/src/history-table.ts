@@ -215,15 +215,27 @@ function listRetained(
 
 export type HistorySearchHit = ConversationLineHit;
 
+/** How many rows past the limit one page asks for, since the substring prefilter admits rows the token match will drop. */
+const HISTORY_SEARCH_PAGE_MULTIPLIER = 4;
+/** The most prefiltered rows one search reads before it answers what it has. */
+export const HISTORY_SEARCH_MAXIMUM_SCANNED_ROWS = 2_000;
+
 /**
  * The retained lines of the conversations named that carry every token of
  * the query, most recent first and bounded by `limit`, in one query over
  * every conversation named. Matching is by token, as the score the caller
  * gives a hit is, so a multi-word or punctuated query keeps a line that
- * shares its words in another order. Each line stands only above its own
- * conversation's cutoff — the durable one on the conversation row and the
- * standing generation's marker both — so a Clear hides its lines here as it
- * does everywhere.
+ * shares its words in another order. SQL narrows the scan by substring,
+ * which admits a line holding a longer word ("deployment" for "deploy"); the
+ * token check decides admission, and it runs before the limit is spent, over
+ * pages of the prefiltered rows, so recent lines that only share a substring
+ * never crowd an older exact match out of the answer. The scan itself is
+ * bounded: past `HISTORY_SEARCH_MAXIMUM_SCANNED_ROWS` prefiltered rows the
+ * search answers what it admitted, so a match behind more substring-only
+ * lines than that is not found rather than searched for without bound. Each
+ * line stands only above its own conversation's cutoff — the durable one on
+ * the conversation row and the standing generation's marker both — so a
+ * Clear hides its lines here as it does everywhere.
  */
 export function searchHistory(
   database: RuntimeDatabase,
@@ -236,10 +248,8 @@ export function searchHistory(
   if (tokens.length === 0 || sessionKeys.length === 0 || limit <= 0) return [];
   const keyMarks = sessionKeys.map(() => "?").join(", ");
   const tokenMarks = tokens.map(() => "instr(lower(words), ?) > 0").join(" AND ");
-  // SAFETY: the query selects the two columns the row type names.
-  const rows = database
-    .prepare(
-      `SELECT session_key, payload FROM history_events h
+  const page = database.prepare(
+    `SELECT session_key, payload FROM history_events h
        WHERE session_key IN (${keyMarks})
          AND recorded_at <= ? AND recorded_at >= ?
          AND recorded_at > COALESCE(
@@ -247,19 +257,37 @@ export function searchHistory(
          AND recorded_at > COALESCE(
            (SELECT reset_cleared_at FROM conversation_sessions s WHERE s.session_key = h.session_key), -1)
          AND ${tokenMarks}
-       ORDER BY recorded_at DESC, sequence DESC LIMIT ?`,
-    )
-    .all(...sessionKeys, now, now - storedConversationMaximumAgeMs, ...tokens, limit) as {
-    session_key: string;
-    payload: string;
-  }[];
+       ORDER BY recorded_at DESC, sequence DESC LIMIT ? OFFSET ?`,
+  );
+  const pageSize = Math.min(
+    limit * HISTORY_SEARCH_PAGE_MULTIPLIER,
+    HISTORY_SEARCH_MAXIMUM_SCANNED_ROWS,
+  );
   const hits: HistorySearchHit[] = [];
-  for (const row of rows) {
-    const entry = historyEntryFromPayload(row.payload);
-    if (!entry) continue;
-    // SAFETY: the column holds one of the session keys the IN clause was given.
-    const sessionKey = row.session_key as SessionKey;
-    hits.push({ sessionKey, entry });
+  let scanned = 0;
+  while (hits.length < limit && scanned < HISTORY_SEARCH_MAXIMUM_SCANNED_ROWS) {
+    const asked = Math.min(pageSize, HISTORY_SEARCH_MAXIMUM_SCANNED_ROWS - scanned);
+    // SAFETY: the query selects the two columns the row type names.
+    const rows = page.all(
+      ...sessionKeys,
+      now,
+      now - storedConversationMaximumAgeMs,
+      ...tokens,
+      asked,
+      scanned,
+    ) as { session_key: string; payload: string }[];
+    scanned += rows.length;
+    for (const row of rows) {
+      if (hits.length >= limit) break;
+      const entry = historyEntryFromPayload(row.payload);
+      if (!entry) continue;
+      const held = tokenize(entry.words);
+      if (!tokens.every((token) => held.has(token))) continue;
+      // SAFETY: the column holds one of the session keys the IN clause was given.
+      const sessionKey = row.session_key as SessionKey;
+      hits.push({ sessionKey, entry });
+    }
+    if (rows.length < asked) break;
   }
   return hits;
 }

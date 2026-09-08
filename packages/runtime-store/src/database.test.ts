@@ -22,7 +22,13 @@ import { loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
 import { createConversation, raiseHistoryCutoff } from "./conversations-table.js";
 import { RuntimeDatabase } from "./database.js";
 import { EnvelopeTracker, SAVE_KIND } from "./envelope.js";
-import { appendHistory, historyClearedAt, listHistory, searchHistory } from "./history-table.js";
+import {
+  appendHistory,
+  HISTORY_SEARCH_MAXIMUM_SCANNED_ROWS,
+  historyClearedAt,
+  listHistory,
+  searchHistory,
+} from "./history-table.js";
 import { RUNTIME_SCHEMA_VERSION } from "./schema.js";
 import { inspectHistory, line, NOW, openTestDatabase, populatedState, request } from "./testing.js";
 
@@ -319,6 +325,78 @@ test("history search reads only the conversations named, under each one's cutoff
   assert.equal(
     searchHistory(database, [MAIN_SESSION_KEY, thread], "tuesday", 10, NOW + 3).length,
     1,
+  );
+});
+
+test("history search admits lines by exact token before the limit is spent, so recent substring-only lines cannot crowd an older match out", () => {
+  const database = openTestDatabase();
+  // SAFETY: a thread key of the documented shape, built by hand for the test.
+  const thread =
+    "agent:main:thread:11111111-1111-1111-1111-111111111111" as typeof MAIN_SESSION_KEY;
+  createConversation(database, {
+    agentId: DEFAULT_AGENT_ID,
+    sessionKey: thread,
+    name: "Thread",
+    now: NOW,
+  });
+  appendHistory(
+    database,
+    MAIN_SESSION_KEY,
+    [line("Deploy? Tuesday, we said.", NOW, { eventId: "exact" })],
+    NOW,
+  );
+  const crowd = Array.from({ length: 60 }, (_, index) =>
+    line(`deployment tuesday note ${index}`, NOW + 1 + index, { eventId: `crowd-${index}` }),
+  );
+  appendHistory(database, thread, crowd, NOW + 100);
+  appendHistory(
+    database,
+    thread,
+    [line("we redeploy TUESDAYS only", NOW + 200, { eventId: "substring" })],
+    NOW + 200,
+  );
+  const hits = searchHistory(database, [MAIN_SESSION_KEY, thread], "tuesday deploy", 6, NOW + 300);
+  assert.deepEqual(
+    hits.map((hit) => [hit.sessionKey, hit.entry.words]),
+    [[MAIN_SESSION_KEY, "Deploy? Tuesday, we said."]],
+    "only the line carrying every token as a word is a hit, in any order, case, or punctuation",
+  );
+  assert.equal(
+    searchHistory(database, [MAIN_SESSION_KEY, thread], "deployment", 6, NOW + 300).length,
+    6,
+    "the limit still bounds the whole answer across the conversations named",
+  );
+  raiseHistoryCutoff(database, MAIN_SESSION_KEY, NOW);
+  assert.equal(
+    searchHistory(database, [MAIN_SESSION_KEY, thread], "tuesday deploy", 6, NOW + 300).length,
+    0,
+    "a cleared conversation's lines are not reached by any page of the scan",
+  );
+  const many = Array.from({ length: HISTORY_SEARCH_MAXIMUM_SCANNED_ROWS }, (_, index) =>
+    line(`deployments ${index}`, NOW + 1000 + index, { eventId: `many-${index}` }),
+  );
+  appendHistory(database, thread, many, NOW + 5000);
+  appendHistory(
+    database,
+    thread,
+    [line("deploy now", NOW + 500, { eventId: "behind" })],
+    NOW + 5000,
+  );
+  assert.equal(
+    searchHistory(database, [thread], "deploy", 6, NOW + 6000).length,
+    0,
+    "a match behind more substring-only lines than the scan bound is not found: the bound is the documented limit",
+  );
+  assert.equal(
+    searchHistory(
+      database,
+      [thread],
+      "deploy",
+      6,
+      NOW + 1000 + HISTORY_SEARCH_MAXIMUM_SCANNED_ROWS - 2,
+    ).length,
+    1,
+    "and the same match is found once fewer lines stand in front of it",
   );
 });
 
