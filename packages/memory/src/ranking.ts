@@ -1,8 +1,8 @@
 import { DAY_MS } from "@sidecar/runtime-contracts";
+import { numberVector, type UnparsedWireValue } from "@sidecar/wire";
 import type { KeywordHit, MemorySearchResult, MemorySource, VectorHit } from "./contracts.js";
 import { MEMORY_SEARCH_DEFAULTS } from "./defaults.js";
 import { isNotebookRootFile } from "./notebook-markdown.js";
-import { jaccardSimilarity, textSimilarity, tokenize } from "./tokenize.js";
 
 /**
  * How the two rankings become one answer, ported from OpenClaw `b7528507`
@@ -15,6 +15,84 @@ import { jaccardSimilarity, textSimilarity, tokenize } from "./tokenize.js";
  * keyword-only hits when the window has room, and the all-lexical fallback
  * stands when nothing scores above the threshold.
  */
+
+/**
+ * The CJK-aware tokenizer and Jaccard similarity the MMR re-ranking reads,
+ * ported from the same revision's `extensions/memory-core/src/memory/tokenize.ts`.
+ */
+const CJK_RE = /[぀-ゟ゠-ヿ㐀-䶿一-鿿가-힯ᄀ-ᇿ]/u;
+
+export function tokenize(text: string): Set<string> {
+  const lower = text.toLowerCase();
+  const ascii = lower.match(/[a-z0-9_]+/g) ?? [];
+  const chars = Array.from(lower);
+  const cjk: { char: string; index: number }[] = [];
+  chars.forEach((char, index) => {
+    if (CJK_RE.test(char)) cjk.push({ char, index });
+  });
+  const bigrams: string[] = [];
+  for (let i = 1; i < cjk.length; i += 1) {
+    const previous = cjk[i - 1];
+    const next = cjk[i];
+    if (previous && next && next.index === previous.index + 1) {
+      bigrams.push(previous.char + next.char);
+    }
+  }
+  return new Set([...ascii, ...bigrams, ...cjk.map((entry) => entry.char)]);
+}
+
+export function jaccardSimilarity(left: Set<string>, right: Set<string>): number {
+  if (left.size === 0 && right.size === 0) return 1;
+  if (left.size === 0 || right.size === 0) return 0;
+  const smaller = left.size <= right.size ? left : right;
+  const larger = left.size <= right.size ? right : left;
+  let intersection = 0;
+  for (const token of smaller) if (larger.has(token)) intersection += 1;
+  const union = left.size + right.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}
+
+/** Jaccard over tokens, falling back to exact equality when neither side tokenizes at all. */
+export function textSimilarity(left: string, right: string): number {
+  const leftTokens = tokenize(left);
+  const rightTokens = tokenize(right);
+  if (leftTokens.size === 0 && rightTokens.size === 0) {
+    return left.toLowerCase() === right.toLowerCase() ? 1 : 0;
+  }
+  return jaccardSimilarity(leftTokens, rightTokens);
+}
+
+/** The similarity every vector rank reads; two vectors of unequal width are unrelated. */
+export function cosineSimilarity(left: readonly number[], right: readonly number[]): number {
+  if (left.length === 0 || left.length !== right.length) return 0;
+  let dot = 0;
+  let leftNorm = 0;
+  let rightNorm = 0;
+  for (let i = 0; i < left.length; i += 1) {
+    const a = left[i] ?? 0;
+    const b = right[i] ?? 0;
+    dot += a * b;
+    leftNorm += a * a;
+    rightNorm += b * b;
+  }
+  if (leftNorm === 0 || rightNorm === 0) return 0;
+  return dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
+}
+
+/** A stored embedding as its JSON column holds it, or nothing for a column that is not a vector. */
+export function parseEmbedding(serialized: string): number[] | undefined {
+  if (serialized.length === 0) return undefined;
+  try {
+    // SAFETY: JSON.parse returns a runtime value; every member is checked as a wire number below.
+    return numberVector(JSON.parse(serialized) as UnparsedWireValue);
+  } catch {
+    return undefined;
+  }
+}
+
+export function serializeEmbedding(vector: readonly number[]): string {
+  return JSON.stringify(vector);
+}
 
 export interface HybridRankingOptions {
   readonly vectorWeight: number;

@@ -48,7 +48,6 @@ import {
   isAppGuideSnapshot,
 } from "@sidecar/guide";
 import { ISSUE_TRACKER_ID, normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
-import { CONSOLIDATION_DEFAULTS, consolidationJob } from "@sidecar/memory";
 import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticKind,
@@ -292,6 +291,8 @@ const CALENDAR_PRIVACY_PANE_URL =
   "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars";
 
 /** The agent's identity workspace and the skills beside it, under the agent's own directory. */
+/** The cron id a build before this one gave the nightly consolidation sweep. */
+const RETIRED_CONSOLIDATION_JOB_ID = "memory-consolidation";
 const AGENT_WORKSPACE_DIRECTORY = "workspace";
 const AGENT_SKILLS_DIRECTORY = "skills";
 
@@ -1113,12 +1114,9 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     client: runtimeStoreWiring.client,
     embeddingAdapter: () => voiceCapabilities.embeddingAdapter,
     workspaceDirectory: agentWorkspacePath,
-    createRuntime: () => brainWiring.createRuntime(),
     conversationDirectory: () => runtimeStoreWiring.directory(),
     isTemporary: runtimeStoreWiring.isTemporary,
-    historyLines: (sessionKey) => runtimeStoreWiring.thread(sessionKey).entries(),
     now,
-    createId,
     report,
     onSynced: () => {
       void runtimeStoreWiring.refreshNotebook();
@@ -1129,15 +1127,11 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     client: runtimeStoreWiring.client,
     createRuntime: () => brainWiring.createRuntime(),
     workspaceDirectory: agentWorkspacePath,
-    conversationDirectory: () => runtimeStoreWiring.directory(),
     isTemporary: runtimeStoreWiring.isTemporary,
-    historyLines: (sessionKey) => runtimeStoreWiring.thread(sessionKey).entries(),
-    background: (work) => brainWiring.lanes.run(LANE.BACKGROUND, work),
     now,
     createId,
     report,
     onNotebookChanged: () => {
-      memoryWiring.clearRecallCaches();
       void memoryWiring.sync();
     },
   });
@@ -1199,7 +1193,6 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
       runMode.observesProviders && runMode.sendsNetwork && accountCapabilitiesActive(),
     dropBriefings: () => speechArbiter.dropBriefings(),
     memory: (sessionKey) => memoryWiring.accessFor(sessionKey),
-    recall: (sessionKey) => memoryWiring.recallFor(sessionKey),
     beforeCompaction: (sessionKey) => memoryMaintenance.flushHookFor(sessionKey),
     flushMarker: (sessionKey) => memoryMaintenance.flushMarkerFor(sessionKey),
     beforeReset: (sessionKey, items) => memoryMaintenance.captureBeforeReset(sessionKey, items),
@@ -1213,25 +1206,10 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
   });
   let stopHistoryMaintenance: (() => void) | undefined;
 
-  const managedJobRuns: ReadonlyMap<string, () => Promise<void>> = new Map([
-    [
-      CONSOLIDATION_DEFAULTS.JOB_ID,
-      async () => {
-        await memoryMaintenance.runConsolidation();
-      },
-    ],
-  ]);
   const cronScheduler = new CronScheduler({
     store: runtimeStoreWiring.scheduledJobStore(),
     coordinate: (work) => brainWiring.lanes.run(LANE.CRON, work),
-    run: async (job) => {
-      const managed = managedJobRuns.get(job.id);
-      if (managed) {
-        await managed();
-        return;
-      }
-      await brainWiring.heartbeat(job.sessionKey);
-    },
+    run: (job) => brainWiring.heartbeat(job.sessionKey),
     report,
   });
 
@@ -2486,7 +2464,9 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
       });
       await cronScheduler.start();
       await cronScheduler.ensure(heartbeatJob(now()));
-      await cronScheduler.ensure(consolidationJob(now()));
+      // A build before this one scheduled a nightly consolidation sweep. The
+      // job is gone; its row would otherwise fall through to the heartbeat.
+      await cronScheduler.remove(RETIRED_CONSOLIDATION_JOB_ID);
     }
     calendarOnboardingState = calendarOnboardingStateFromDisk();
     void settleCalendarOnboardingIfConnected();

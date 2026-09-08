@@ -11,7 +11,9 @@ import {
   parseNotebook,
   removeNotebookEntry,
 } from "@sidecar/memory";
+import { WORKSPACE_FILE } from "@sidecar/runtime";
 import type { RuntimeDatabase } from "./database.js";
+import { removeIndexedPath } from "./memory-index-table.js";
 import { readWorkspaceFileSync, writeWorkspaceFileSync } from "./workspace-files.js";
 
 /**
@@ -246,6 +248,42 @@ export function forgetNotebookEntry(
     return selectEntries(database);
   });
   return { ok: true, entries };
+}
+
+export interface MemoryForgetAsk {
+  /** Notebook entry ids to forget, each removed from USER.md and its provenance. */
+  readonly entryIds: readonly string[];
+}
+
+export interface MemoryForgetReport {
+  readonly forgottenEntries: number;
+  /** What could not be erased and why: an id the notebook no longer holds. */
+  readonly limitations: readonly string[];
+  readonly entries: readonly NotebookEntry[];
+}
+
+/**
+ * Forgets the notebook entries the ask names, one at a time so an id the
+ * notebook does not hold is reported rather than failing the rest, and drops
+ * USER.md's index rows so the next sync reads the file as it now stands.
+ */
+export function forgetMemorySources(
+  database: RuntimeDatabase,
+  root: string,
+  ask: MemoryForgetAsk,
+  now: number,
+): MemoryForgetReport {
+  const limitations: string[] = [];
+  let forgottenEntries = 0;
+  let entries = listNotebookEntries(database, root, now);
+  for (const id of ask.entryIds) {
+    const mutation = forgetNotebookEntry(database, root, id, now);
+    entries = mutation.entries;
+    if (mutation.ok) forgottenEntries += 1;
+    else limitations.push(`notebook entry ${id}: ${mutation.reason ?? "not forgotten"}`);
+  }
+  if (forgottenEntries > 0) removeIndexedPath(database, WORKSPACE_FILE.USER);
+  return { forgottenEntries, limitations, entries };
 }
 
 /**

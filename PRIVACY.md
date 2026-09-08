@@ -212,10 +212,9 @@ indexed: when he looks for something you said in an earlier conversation, he
 reads the lines History already keeps, only from main and the private threads
 you opened and never from the conversation he is answering in, a temporary
 thread, an observed coding session's conversation, or a child's. What such a
-look finds is context for that one reply and is written nowhere, so a recall
-can never become a memory of itself.
+look finds is context for that one reply and is written nowhere.
 
-**How Luke keeps his notebook.** Three things write to Luke's workspace
+**How Luke keeps his notebook.** Two things write to Luke's workspace
 without your asking, each on your Mac and each bounded. Before a
 conversation's working memory is folded (a soft margin ahead of it, or once
 its transcript grows past 2 MiB), Luke runs one private housekeeping turn over
@@ -223,27 +222,12 @@ a copy of that conversation, allowed only to append to today's dated note
 under `memory/`; the copy is thrown away afterwards and nothing from it enters
 the conversation, and the same turn runs once when you start main or a
 durable private thread fresh, never when you clear or delete history, and
-never for a temporary thread, an observed coding session, or a child. Once a
-day, at 03:00 in your local time, Luke consolidates: he reads the lines
-History already keeps for main and your private threads (each line once, with
-recalled snippets removed and anything that looks like a secret, an email
-address, a phone number, or a card number redacted first) and the last two
-days of dated notes, stages what recurs, and promotes into `MEMORY.md` only a
-fact that came from you or from Luke, recurred on three days under three
-distinct questions, and still reads the same at its source; a fact relayed
-from a tool, a child, or a system line is never promoted however often it
-appears. The rewrite is proposed by one tool-free call to OpenAI (on your key
-or through our service, which keeps none of it), checked against the file
-before it lands, and refused if it would drop more than a quarter of what
-`MEMORY.md` already said, if the file changed under it, or if the model's
-answer does not validate, in which case the new facts are appended and nothing
-is removed. Every version of `MEMORY.md` before a rewrite is kept in the same
-database, and a short Dream Diary of each night's sweep is written to
-`DREAMS.md` for you to read; the diary is never itself learned from. Asking
-Luke to forget removes the notebook lines you name, the promotions that came
-from them, and the search index rows, and marks the source so it is never
-relearned; a promoted line you edited by hand loses the marker that ties it to
-its source, and Luke says so rather than claiming it erased. Forgetting does
+never for a temporary thread, an observed coding session, or a child. Nothing
+else writes the notebook on its own: no nightly job reads your conversations
+to learn from them, and no model call rewrites `MEMORY.md`, which stands as
+you and Luke's own tools leave it. Asking Luke to forget removes the notebook
+lines you name and their search index rows; a line he no longer holds under
+that name he says so about rather than claiming it erased. Forgetting does
 not delete the conversation itself; Delete history is still the separate,
 recoverable act above.
 

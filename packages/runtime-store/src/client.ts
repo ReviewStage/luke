@@ -1,12 +1,5 @@
 import type { BrainPersistedState, BrainStateLoad, BrainStateRepository } from "@sidecar/brain";
-import type {
-  CandidateSeed,
-  CandidateStatus,
-  ConsolidationPhase,
-  EmbeddingModelIdentity,
-  MemoryCandidate,
-  MemoryReadResult,
-} from "@sidecar/memory";
+import type { EmbeddingModelIdentity, MemoryReadResult } from "@sidecar/memory";
 import type { ConversationEntry } from "@sidecar/realtime";
 import type { ChildStore, ScheduledJob, ScheduledJobStore } from "@sidecar/runtime";
 import type {
@@ -22,6 +15,7 @@ import type { ConversationCreation } from "./conversations-table.js";
 import { EnvelopeTracker } from "./envelope.js";
 import type { HistorySearchHit } from "./history-table.js";
 import type { MaintenanceReport } from "./maintenance-run.js";
+import type { FlushState } from "./memory-flush-table.js";
 import type {
   MemoryApplyReport,
   MemoryIndexStatus,
@@ -30,17 +24,11 @@ import type {
   MemorySearchQuery,
 } from "./memory-index-table.js";
 import type {
-  CandidateStagingReport,
-  FlushState,
-  ForgottenSource,
-  ForgottenSourceKind,
   MemoryForgetAsk,
   MemoryForgetReport,
-  MemoryRewriteAsk,
-  MemoryRewriteOutcome,
-  MemoryRewriteRecord,
-} from "./memory-maintenance-table.js";
-import type { NotebookEntry, NotebookMutation } from "./notebook-table.js";
+  NotebookEntry,
+  NotebookMutation,
+} from "./notebook-table.js";
 import {
   RUNTIME_STORE_METHOD,
   type RuntimeStoreMethod,
@@ -219,85 +207,6 @@ export class RuntimeStoreClient {
 
   memoryIndexStatus(): Promise<MemoryIndexStatus> {
     return this.request(RUNTIME_STORE_METHOD.MEMORY_STATUS, {});
-  }
-
-  stageMemoryCandidates(
-    seeds: readonly CandidateSeed[],
-    now: number,
-  ): Promise<CandidateStagingReport> {
-    return this.request(RUNTIME_STORE_METHOD.MEMORY_CANDIDATES_STAGE, { seeds, now });
-  }
-
-  listMemoryCandidates(status?: CandidateStatus): Promise<readonly MemoryCandidate[]> {
-    return this.request(RUNTIME_STORE_METHOD.MEMORY_CANDIDATES_LIST, {
-      ...(status ? { status } : undefined),
-    });
-  }
-
-  setMemoryCandidateStatus(
-    keys: readonly string[],
-    status: CandidateStatus,
-    now: number,
-  ): Promise<number> {
-    return this.request(RUNTIME_STORE_METHOD.MEMORY_CANDIDATES_STATUS, { keys, status, now });
-  }
-
-  /** Marks promoted the staged candidates whose markers MEMORY.md already carries; answers how many. */
-  reconcileMemoryPromotions(now: number): Promise<number> {
-    return this.request(RUNTIME_STORE_METHOD.MEMORY_CANDIDATES_RECONCILE, { now });
-  }
-
-  recordMemoryPhaseHits(
-    phase: ConsolidationPhase,
-    keys: readonly string[],
-    now: number,
-  ): Promise<number> {
-    return this.request(RUNTIME_STORE_METHOD.MEMORY_PHASE_HITS, { phase, keys, now });
-  }
-
-  memoryIngestionCursor(sessionKey: SessionKey): Promise<number> {
-    return this.request(RUNTIME_STORE_METHOD.MEMORY_INGESTION_CURSOR, { sessionKey });
-  }
-
-  /** Which of the hashes the conversation's ingestion already saw. */
-  memoryIngestionSeen(
-    sessionKey: SessionKey,
-    hashes: readonly string[],
-  ): Promise<readonly string[]> {
-    return this.request(RUNTIME_STORE_METHOD.MEMORY_INGESTION_SEEN, { sessionKey, hashes });
-  }
-
-  advanceMemoryIngestion(params: {
-    sessionKey: SessionKey;
-    lastRecordedAt: number;
-    hashes: readonly string[];
-    now: number;
-  }): Promise<boolean> {
-    return this.request(RUNTIME_STORE_METHOD.MEMORY_INGESTION_ADVANCE, params);
-  }
-
-  listForgottenMemorySources(): Promise<readonly ForgottenSource[]> {
-    return this.request(RUNTIME_STORE_METHOD.MEMORY_TOMBSTONES_LIST, {});
-  }
-
-  tombstoneMemorySources(
-    sources: readonly { kind: ForgottenSourceKind; id: string; reason: string }[],
-    now: number,
-  ): Promise<number> {
-    return this.request(RUNTIME_STORE_METHOD.MEMORY_TOMBSTONE, { sources, now });
-  }
-
-  /** MEMORY.md or DREAMS.md as it stands, with the hash a rewrite must be planned over. */
-  readDurableMemoryFile(name: string): Promise<{ content: string; hash: string } | undefined> {
-    return this.request(RUNTIME_STORE_METHOD.MEMORY_DURABLE_READ, { name });
-  }
-
-  publishMemoryRewrite(ask: MemoryRewriteAsk, now: number): Promise<MemoryRewriteOutcome> {
-    return this.request(RUNTIME_STORE_METHOD.MEMORY_REWRITE_PUBLISH, { ask, now });
-  }
-
-  listMemoryRewrites(): Promise<readonly MemoryRewriteRecord[]> {
-    return this.request(RUNTIME_STORE_METHOD.MEMORY_REWRITES_LIST, {});
   }
 
   memoryFlushState(sessionKey: SessionKey, generationId: string): Promise<FlushState | undefined> {

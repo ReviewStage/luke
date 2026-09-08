@@ -1,25 +1,18 @@
 import type { BrainFlushInput, BrainFlushMarkerStore } from "@sidecar/brain";
-import { completeToolFree, runMemoryHousekeeping } from "@sidecar/brain";
+import { runMemoryHousekeeping } from "@sidecar/brain";
 import {
-  CANDIDATE_ORIGIN,
-  type CandidateOrigin,
-  CONSOLIDATION_DEFAULTS,
-  type ConsolidationSweepReport,
-  DEEP_PATH,
   type HousekeepingPrompt,
   housekeepingCompleted,
-  type IngestibleHistoryLine,
   isMaintenanceEligibleConversation,
   localDayStamp,
+  MEMORY_FLUSH_DEFAULTS,
   MEMORY_HOUSEKEEPING_OUTCOME,
   type MemoryHousekeepingResult,
   memoryFlushPrompt,
   resetCapturePrompt,
-  runConsolidationSweep,
 } from "@sidecar/memory";
-import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
 import { readWorkspaceFile, writeWorkspaceFile } from "@sidecar/runtime";
-import type { AgentRuntime, ConversationRecord, SessionKey } from "@sidecar/runtime-contracts";
+import type { AgentRuntime, SessionKey } from "@sidecar/runtime-contracts";
 import type {
   MemoryForgetAsk,
   MemoryForgetReport,
@@ -30,33 +23,23 @@ import type { WireRecord } from "@sidecar/wire";
 /**
  * Memory maintenance as the desktop wires it: the pre-compaction flush hook
  * and flush marker each eligible conversation's brain is handed, the capture
- * run before an eligible private conversation starts fresh, the daily
- * consolidation sweep the memory package runs over the store, the History
- * lines, and one tool-free completion, and source-aware forgetting. Every
- * model call is a tool-free or workspace-only run over a private context
- * that is dropped at its end, on the developer's own key or through Luke's
- * service.
+ * run before an eligible private conversation starts fresh, and forgetting
+ * the notebook entries an ask names. Every model call is a workspace-only
+ * run over a private context that is dropped at its end, on the developer's
+ * own key or through Luke's service.
  */
-
-export type { ConsolidationSweepReport };
-export { DEEP_PATH };
 
 export interface MemoryMaintenanceDependencies {
   persistent: boolean;
   client: () => RuntimeStoreClient;
-  /** A runtime for the housekeeping and consolidation runs, or nothing when no brain may stand. */
+  /** A runtime for the housekeeping runs, or nothing when no brain may stand. */
   createRuntime: () => AgentRuntime | undefined;
   workspaceDirectory: () => string;
-  conversationDirectory: () => readonly ConversationRecord[];
   isTemporary: (sessionKey: SessionKey) => boolean;
-  /** One conversation's retained History lines, the light phase's source. */
-  historyLines: (sessionKey: SessionKey) => readonly ConversationEntry[];
-  /** Runs work on the background lane, the shared budget consolidation completions spend. */
-  background: <T>(work: () => Promise<T>) => Promise<T>;
   now: () => number;
   createId: () => string;
   report: (message: string) => void;
-  /** Hears every committed notebook change, so the index syncs and recall caches clear. */
+  /** Hears every committed notebook change, so the index syncs. */
   onNotebookChanged?: () => void;
 }
 
@@ -79,36 +62,8 @@ export interface MemoryMaintenance {
     sessionKey: SessionKey,
     items: readonly WireRecord[],
   ) => Promise<MemoryHousekeepingResult>;
-  /** One full sweep: light, REM, deep; nothing on a run with no store. */
-  runConsolidation: () => Promise<ConsolidationSweepReport | undefined>;
-  /** Source-aware forgetting; nothing on a run with no store. */
+  /** Forgets the notebook entries an ask names; nothing on a run with no store. */
   forget: (ask: MemoryForgetAsk) => Promise<MemoryForgetReport | undefined>;
-}
-
-function originOf(kind: ConversationEntry["kind"]): CandidateOrigin {
-  switch (kind) {
-    case CONVERSATION_ENTRY_KIND.TYPED_ASK:
-    case CONVERSATION_ENTRY_KIND.SPOKEN_ASK:
-      return CANDIDATE_ORIGIN.USER;
-    case CONVERSATION_ENTRY_KIND.REPLY:
-    case CONVERSATION_ENTRY_KIND.ANNOUNCEMENT:
-      return CANDIDATE_ORIGIN.AGENT;
-    default:
-      // An act's narration, a child's or a system's words relayed into the
-      // thread: evidence, but never trusted by repetition.
-      return CANDIDATE_ORIGIN.SYSTEM;
-  }
-}
-
-/** A History line as the sweep is handed it: the same kind and words the hash reads, and who said it. */
-function ingestibleLine(entry: ConversationEntry): IngestibleHistoryLine {
-  return {
-    kind: entry.kind,
-    words: entry.words,
-    origin: originOf(entry.kind),
-    ...(entry.eventId ? { eventId: entry.eventId } : undefined),
-    ...(entry.recordedAt !== undefined ? { recordedAt: entry.recordedAt } : undefined),
-  };
 }
 
 export function wireMemoryMaintenance(
@@ -197,44 +152,13 @@ export function wireMemoryMaintenance(
     const controller = new AbortController();
     const timer = setTimeout(
       () => controller.abort(),
-      CONSOLIDATION_DEFAULTS.CONSOLIDATION_TIMEOUT_MS,
+      MEMORY_FLUSH_DEFAULTS.RESET_CAPTURE_TIMEOUT_MS,
     );
     try {
       return await housekeeping(items, resetCapturePrompt(day), day, controller.signal);
     } finally {
       clearTimeout(timer);
     }
-  };
-
-  const runConsolidation: MemoryMaintenance["runConsolidation"] = () => {
-    if (!dependencies.persistent) return Promise.resolve(undefined);
-    return dependencies.background(async () => {
-      const runtime = dependencies.createRuntime();
-      try {
-        return await runConsolidationSweep({
-          store: dependencies.client(),
-          workspaceDirectory: dependencies.workspaceDirectory,
-          eligibleConversations: () =>
-            dependencies
-              .conversationDirectory()
-              .filter((record) => record.archivedAt === undefined && maintained(record.sessionKey))
-              .map((record) => record.sessionKey),
-          historyLines: (sessionKey) => dependencies.historyLines(sessionKey).map(ingestibleLine),
-          completeToolFree: runtime
-            ? (ask) => completeToolFree({ ...ask, runtime, runId: dependencies.createId() })
-            : undefined,
-          now: dependencies.now,
-          ...(dependencies.onNotebookChanged
-            ? { onNotebookChanged: dependencies.onNotebookChanged }
-            : undefined),
-        });
-      } catch (error) {
-        dependencies.report(
-          `Memory consolidation failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        return undefined;
-      }
-    });
   };
 
   const forget: MemoryMaintenance["forget"] = async (ask) => {
@@ -252,7 +176,6 @@ export function wireMemoryMaintenance(
     flushMarkerFor,
     capturesOnReset: eligible,
     captureBeforeReset,
-    runConsolidation,
     forget,
   };
 }

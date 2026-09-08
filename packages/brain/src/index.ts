@@ -8,7 +8,6 @@ export {
   type BrainFlushMarkerStore,
   type BrainLane,
   type BrainOpeningNotes,
-  type BrainRecallAsk,
   type BrainWorkspaceAccess,
   LOOK_SUBJECT,
   type LookSubject,
@@ -62,7 +61,6 @@ export {
   openAiModelAdapter,
 } from "./openai-model-adapter.js";
 export type { BrainActExecution, BrainActPerformer, BrainRoster } from "./performer.js";
-export { RECALL_SUBRUN_PROMPT, RECALL_SUBRUN_TOOLS, runRecallSubrun } from "./recall-subrun.js";
 export {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,

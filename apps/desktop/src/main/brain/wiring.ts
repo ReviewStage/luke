@@ -10,7 +10,6 @@ import {
   type BrainFlushMarkerStore,
   BrainGenerationClock,
   type BrainMemoryAccess,
-  type BrainRecallAsk,
   type BrainRoster,
   type BrainStateRepository,
   BrainStateStore,
@@ -149,15 +148,6 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
    */
   memory?: (sessionKey: SessionKey) => BrainMemoryAccess | undefined;
   /**
-   * Private-conversation recall for one conversation's asks: the host decides
-   * which conversations recall (main and the developer's private threads,
-   * never a temporary thread, an observed session, or a child) and answers
-   * nothing for one that does not.
-   */
-  recall?: (
-    sessionKey: SessionKey,
-  ) => ((ask: BrainRecallAsk) => Promise<string | undefined>) | undefined;
-  /**
    * The pre-compaction memory flush for one conversation: the host decides
    * which conversations flush (main and the developer's durable private
    * threads, never a temporary thread, an observed session, or a child) and
@@ -287,8 +277,8 @@ export interface BrainWiring {
   seedWorkspace: () => Promise<WorkspaceSeeding>;
   /**
    * A fresh runtime over the standing configuration and the live model, for
-   * a run outside any conversation — the recall subrun — or nothing when no
-   * brain may stand. Its context is the caller's to open and dispose.
+   * a run outside any conversation — a housekeeping turn — or nothing when
+   * no brain may stand. Its context is the caller's to open and dispose.
    */
   createRuntime: () => AgentRuntime | undefined;
 }
@@ -595,11 +585,10 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     // the child restriction at its depth, the fork it inherited if any, and
     // its own deadline when the spawn set one.
     const childRecord = childRecordOf(children.service, sessionKey);
-    // The memory tools and the recall reach the notebook through the host's
-    // one service, bound once here; a host with none leaves the agent to
-    // refuse the tools itself.
+    // The memory tools reach the notebook through the host's one service,
+    // bound once here; a host with none leaves the agent to refuse the tools
+    // itself.
     const memory = dependencies.memory?.(sessionKey);
-    const recall = dependencies.recall?.(sessionKey);
     return new BrainAgent({
       observes: observed
         ? { kind: LOOK_SUBJECT.SESSION, identity: observed }
@@ -614,7 +603,6 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         : undefined),
       children: children.accessFor(sessionKey),
       ...(memory ? { memory } : undefined),
-      ...(recall ? { recall } : undefined),
       ...(flushFor(sessionKey) ? { beforeCompaction: flushFor(sessionKey) } : undefined),
       ...(flushMarkerFor(sessionKey) ? { flushMarker: flushMarkerFor(sessionKey) } : undefined),
       runtime: runtimeDescriptor.create(model, engineDescriptor),

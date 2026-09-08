@@ -200,9 +200,7 @@ function answer(output: WireRecord): ToolResult {
 /**
  * The memory tools: reads of the notebook's index and files, bounded here
  * and validated by the host, which answers only for paths inside the
- * notebook. Neither is an effect, so neither runs through the journal. The
- * recall subrun offers the same two tools and runs them through this same
- * door, so a query is cut to one bound wherever it is asked.
+ * notebook. Neither is an effect, so neither runs through the journal.
  */
 export async function memoryToolCall(
   call: Pick<ToolInvocation, "name">,

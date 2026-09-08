@@ -12,7 +12,6 @@
  */
 
 import { DAILY_NOTES_DIRECTORY, parseDailyNoteName, WORKSPACE_FILE } from "@sidecar/runtime";
-import { DREAMS_FILE } from "./candidate.js";
 
 export const MEMORY_FLUSH_DEFAULTS = {
   /** How far under the compaction threshold the flush fires. */
@@ -27,6 +26,8 @@ export const MEMORY_FLUSH_DEFAULTS = {
    * repeated to retry a write.
    */
   MARKER_WRITE_ATTEMPTS: 3,
+  /** How long the reset capture's housekeeping turn may run before it is cut. */
+  RESET_CAPTURE_TIMEOUT_MS: 60_000,
 } as const;
 
 /** The pinned reply token a housekeeping turn answers when nothing is worth storing. */
@@ -164,7 +165,6 @@ const APPEND_ONLY_HINT = (dateStamp: string) =>
   `If ${dailyNotePathFor(dateStamp)} already exists, APPEND new content only and do not overwrite existing entries.`;
 const READ_ONLY_FILES: readonly string[] = [
   WORKSPACE_FILE.MEMORY,
-  DREAMS_FILE,
   WORKSPACE_FILE.SOUL,
   WORKSPACE_FILE.USER,
   WORKSPACE_FILE.AGENTS,

@@ -26,21 +26,20 @@ import {
   type MemorySearchQuery,
   type MemorySyncApply,
 } from "./contracts.js";
-import {
-  EMBEDDING_PROVIDER_SELECTION,
-  MEMORY_SEARCH_DEFAULTS,
-  RETRIEVAL_MODE,
-} from "./defaults.js";
+import { MEMORY_SEARCH_DEFAULTS, RETRIEVAL_MODE } from "./defaults.js";
 import {
   conversationResultPath,
   NotebookMemory,
   type NotebookMemoryOptions,
   type NotebookMemoryStore,
-  type NotebookRecallSubrunAsk,
 } from "./notebook-memory.js";
-import { defaultRankingOptions, mergeHybridResults, selectHybridSearchResults } from "./ranking.js";
-import { tokenize } from "./tokenize.js";
-import { cosineSimilarity } from "./vectors.js";
+import {
+  cosineSimilarity,
+  defaultRankingOptions,
+  mergeHybridResults,
+  selectHybridSearchResults,
+  tokenize,
+} from "./ranking.js";
 
 const NOW = 1_800_000_000_000;
 const MEMORY_FILE = "MEMORY.md";
@@ -279,13 +278,6 @@ function workspace() {
   return root;
 }
 
-/** A subrun with no model: it searches once through the tools it was handed and summarizes the first snippet. */
-async function recallingSubrun(ask: NotebookRecallSubrunAsk): Promise<string | undefined> {
-  const searched = await ask.memory.search({ query: "tuesday", signal: ask.signal });
-  const first = resultsOf(searched)[0];
-  return first ? `Recalled: ${String(first.snippet)}` : "NONE";
-}
-
 function resultsOf(answer: WireRecord): WireRecord[] {
   return Array.isArray(answer.results) ? answer.results.filter(isRecord) : [];
 }
@@ -304,7 +296,6 @@ function harness(overrides: Partial<NotebookMemoryOptions> = {}) {
   }));
   const embedding = adapter();
   const reports: string[] = [];
-  const subruns: NotebookRecallSubrunAsk[] = [];
   const memory = new NotebookMemory({
     store: () => store,
     embeddingAdapter: () => embedding,
@@ -312,16 +303,11 @@ function harness(overrides: Partial<NotebookMemoryOptions> = {}) {
     workspaceDirectory: () => root,
     conversationDirectory: () => records,
     isTemporary: (sessionKey) => sessionKey === temporary,
-    historyLines: (sessionKey) => store.history.get(sessionKey) ?? [],
-    runSubrun: (ask) => {
-      subruns.push(ask);
-      return recallingSubrun(ask);
-    },
     now: () => NOW + 10,
     report: (message) => reports.push(message),
     ...overrides,
   });
-  return { root, store, memory, thread, temporary, embedding, reports, subruns };
+  return { root, store, memory, thread, temporary, embedding, reports };
 }
 
 const signal = () => new AbortController().signal;
@@ -374,20 +360,6 @@ test("an embedding outage degrades an automatic provider to keyword-only for tha
   assert.equal(h.memory.mode(), RETRIEVAL_MODE.KEYWORD_ONLY);
 });
 
-test("an explicitly selected provider's failure leaves the search unavailable rather than degraded", async () => {
-  const h = harness({ embeddingSelection: EMBEDDING_PROVIDER_SELECTION.OPENAI });
-  h.embedding.fail = true;
-  const report = await h.memory.sync();
-  assert.equal(report?.mode, RETRIEVAL_MODE.UNAVAILABLE);
-  assert.ok(report && report.indexedChunks > 0, "keyword rows still land");
-  const searched = await h.memory.accessFor(MAIN_SESSION_KEY).search({
-    query: "frankfurt",
-    signal: signal(),
-  });
-  assert.equal(searched.mode, RETRIEVAL_MODE.UNAVAILABLE);
-  assert.equal(resultsOf(searched).length, 0);
-});
-
 test("a later batch's failure keeps every vector the earlier batches answered, and the report says the rest are missing", async () => {
   const h = harness();
   fs.writeFileSync(path.join(h.root, "memory", "note.md"), "# note\n\nEspresso thrice.\n");
@@ -399,8 +371,6 @@ test("a later batch's failure keeps every vector the earlier batches answered, a
     workspaceDirectory: () => h.root,
     conversationDirectory: () => [],
     isTemporary: () => false,
-    historyLines: () => [],
-    runSubrun: async () => undefined,
     now: () => NOW,
     report: () => undefined,
   });
@@ -417,8 +387,6 @@ test("a later batch's failure keeps every vector the earlier batches answered, a
     workspaceDirectory: () => h.root,
     conversationDirectory: () => [],
     isTemporary: () => false,
-    historyLines: () => [],
-    runSubrun: async () => undefined,
     now: () => NOW + 1,
     report: () => undefined,
   }).sync();
@@ -494,42 +462,6 @@ test("conversation hits are keyword-only fallback: they fill spare slots from el
     threadHits.map((entry) => entry.path),
     [conversationResultPath(MAIN_SESSION_KEY)],
   );
-  assert.equal(h.memory.recallFor(h.temporary), undefined, "a temporary thread runs no recall");
-});
-
-test("recall: no intent consults nothing, a trusted hit answers without a subrun, a question about the past escalates once, and nothing is written", async () => {
-  const h = harness();
-  await h.memory.sync();
-  const recall = h.memory.recallFor(MAIN_SESSION_KEY);
-  assert.ok(recall);
-  const embedsBefore = h.embedding.calls;
-  assert.equal(await recall({ query: "open the frankfurt cluster", signal: signal() }), undefined);
-  assert.equal(h.embedding.calls, embedsBefore, "an ask with no recall intent embeds nothing");
-  assert.equal(h.store.historySearches, 0, "and reads no History");
-  // The notebook says where the cluster is: trusted memory answers, no subrun runs.
-  assert.equal(
-    await recall({ query: "remind me where we put the frankfurt cluster", signal: signal() }),
-    undefined,
-  );
-  assert.equal(h.subruns.length, 0);
-  assert.equal(h.store.historySearches, 0, "the trusted lookup reads the notebook's index alone");
-  const before = fs.readFileSync(path.join(h.root, MEMORY_FILE), "utf8");
-  const summary = await recall({ query: "what did we decide about espresso?", signal: signal() });
-  assert.equal(
-    summary,
-    "Recalled: # MEMORY.md Deploys go out on Tuesday afternoons. The staging cluster lives in Frankfurt.",
-  );
-  assert.equal(h.subruns.length, 1);
-  assert.equal(h.subruns[0]?.sessionKey, MAIN_SESSION_KEY);
-  const repeated = await recall({ query: "what did we decide about espresso?", signal: signal() });
-  assert.equal(repeated, summary);
-  assert.equal(h.subruns.length, 1, "a repeated ask inside the cache window runs no subrun");
-  assert.equal(
-    fs.readFileSync(path.join(h.root, MEMORY_FILE), "utf8"),
-    before,
-    "nothing was written",
-  );
-  assert.equal(h.store.status().sources, 1, "nothing was indexed by the recall");
 });
 
 test("a launch before any credential indexes keyword-only, and the first credentialed sync backfills the vectors; one adapter read serves the whole pass", async () => {
@@ -600,58 +532,4 @@ test("a sync asked for during a pass runs one follow-on pass under the adapter t
   const idle = await h.memory.sync();
   assert.equal(idle?.indexedFiles, 0);
   assert.equal(plans, 3, "no pass runs that was not asked for");
-});
-
-test("recall signals: an ask with no intent records nothing, and an intent-bearing trusted lookup records the notebook results it retrieved exactly once", async () => {
-  const recorded: { query: string; paths: string[] }[] = [];
-  const h = harness({
-    onNotebookResults: async (query, results) => {
-      recorded.push({ query, paths: results.map((result) => result.path) });
-    },
-  });
-  await h.memory.sync();
-  const recall = h.memory.recallFor(MAIN_SESSION_KEY);
-  assert.ok(recall);
-  await recall({ query: "open the frankfurt cluster", signal: signal() });
-  assert.deepEqual(recorded, [], "no lookup, no signal");
-  await recall({ query: "remind me where we put the frankfurt cluster", signal: signal() });
-  assert.equal(h.subruns.length, 0);
-  assert.deepEqual(recorded, [
-    { query: "remind me where we put the frankfurt cluster", paths: [MEMORY_FILE] },
-  ]);
-});
-
-test("clearing the recall caches reaches a recall already bound, and a recall that began before the clear caches nothing when it lands", async () => {
-  let held: Promise<void> = Promise.resolve();
-  let subruns = 0;
-  const h = harness({
-    runSubrun: async (ask) => {
-      subruns += 1;
-      await held;
-      return recallingSubrun(ask);
-    },
-  });
-  await h.memory.sync();
-  const recall = h.memory.recallFor(MAIN_SESSION_KEY);
-  assert.ok(recall);
-  const query = "what did we decide about espresso?";
-  const first = await recall({ query, signal: signal() });
-  assert.ok(first);
-  await recall({ query, signal: signal() });
-  assert.equal(subruns, 1, "the second ask inside the window is served from the cache");
-  h.memory.clearRecallCaches();
-  await recall({ query, signal: signal() });
-  assert.equal(subruns, 2, "the same bound recall runs again after the clear");
-  let release: (() => void) | undefined;
-  held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  h.memory.clearRecallCaches();
-  const pending = recall({ query, signal: signal() });
-  while (subruns < 3) await new Promise((resolve) => setTimeout(resolve, 1));
-  h.memory.clearRecallCaches();
-  release?.();
-  assert.equal(await pending, first, "the run under way still answers its own caller");
-  await recall({ query, signal: signal() });
-  assert.equal(subruns, 4, "a run that began before the clear left no cached answer behind");
 });
