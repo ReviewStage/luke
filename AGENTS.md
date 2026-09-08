@@ -253,7 +253,11 @@ Trust constraints:
   that arrives while a conversation's turn is under way is taken under the
   queue mode (steer by default: the run reads it at its next model boundary
   after every emitted tool call has its result, and answers both; follow-up,
-  collect, and interrupt as OpenClaw names them), and a relaunch runs
+  collect, and interrupt as OpenClaw names them). An ask past the queue's
+  own depth of twenty is not dropped: the oldest waiting is folded into a
+  summary line the next turn opens with, and settles with that turn, while
+  the words the developer typed stand on their own record uncut, because the
+  summary bounds what the model reads and rewrites no history. A relaunch runs
   nothing that was only queued or steered: such records read interrupted,
   and wakes that only waited in memory are gone. The conversation an ask is
   for is captured at the submission and never retargeted; the existing
