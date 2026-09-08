@@ -65,7 +65,7 @@ export function createElectronUpdaterEngine(): UpdaterEngine {
       // electron-updater keeps the cache helper protected, so no typed access
       // exists: Reflect is the narrowest way to a property the type will not
       // name, and the annotation keeps every use of the answer checked.
-      // oxlint-disable-next-line anti-slop/no-reflect-get
+      // oxlint-disable-next-line anti-slop/no-reflect
       const helper: AppUpdaterInternals["downloadedUpdateHelper"] = Reflect.get(
         autoUpdater,
         "downloadedUpdateHelper",
