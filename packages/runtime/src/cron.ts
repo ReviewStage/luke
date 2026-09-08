@@ -156,11 +156,23 @@ export function nextRunAt(job: ScheduledJob, afterMs: number): number | undefine
   }
 }
 
+/**
+ * When the job next runs, reading each kind of schedule from where its own
+ * occurrences count from: a cron expression from the job's last run, or its
+ * creation, so an occurrence missed while the app was closed is still the
+ * next one; an interval and an instant from the floor the caller gives, which
+ * is zero when the question is whether the job is due at all and now when the
+ * question is how long to sleep.
+ */
+function dueAt(job: ScheduledJob, afterMs: number): number | undefined {
+  const anchor = job.lastRunAt ?? job.createdAt;
+  return nextRunAt(job, job.schedule.kind === CRON_SCHEDULE_KIND.CRON ? anchor : afterMs);
+}
+
 /** Whether the job is due at `nowMs`: enabled, and its next run at or before now. */
 export function jobDue(job: ScheduledJob, nowMs: number): boolean {
   if (!job.enabled) return false;
-  const anchor = job.lastRunAt ?? job.createdAt;
-  const next = nextRunAt(job, job.schedule.kind === CRON_SCHEDULE_KIND.CRON ? anchor : 0);
+  const next = dueAt(job, 0);
   return next !== undefined && next <= nowMs;
 }
 
@@ -278,10 +290,7 @@ export class CronScheduler {
     let soonest: number | undefined;
     for (const job of this.#jobs.values()) {
       if (!job.enabled) continue;
-      const next = nextRunAt(
-        job,
-        job.schedule.kind === CRON_SCHEDULE_KIND.CRON ? (job.lastRunAt ?? job.createdAt) : now,
-      );
+      const next = dueAt(job, now);
       if (next === undefined) continue;
       if (soonest === undefined || next < soonest) soonest = next;
     }

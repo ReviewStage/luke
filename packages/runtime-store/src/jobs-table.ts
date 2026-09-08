@@ -6,10 +6,11 @@ import type { RuntimeDatabase } from "./database.js";
 /**
  * The scheduler's jobs, one row each. The row's payload is the job as the
  * scheduler wrote it, read back through the same validator the scheduler
- * uses, so a row this build cannot read is left out rather than guessed at;
- * `last_run_at` is kept as a column as well because it is what a launch
- * consults first, to run a job that was due while the app was closed once
- * rather than once per missed occurrence.
+ * uses, so a row this build cannot read is left out rather than guessed at.
+ * The columns beside the payload — the session key, the last run, whether the
+ * job is enabled — are indexable projections of what the payload already
+ * says, written for a later reader to query by; nothing consults them today,
+ * and a launch reads the last run from the payload through `nextRunAt`.
  */
 
 export function listScheduledJobs(database: RuntimeDatabase): readonly ScheduledJob[] {
