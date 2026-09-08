@@ -62,6 +62,8 @@ export interface RunControl {
   deadline?: ScheduledTimer;
   /** Whether a checkpoint failed inside this run, after which no further act may be dispatched. */
   checkpointFailed: boolean;
+  /** Whether the context had to be compacted before the run could be sent and could not be; the context stands as it was. */
+  compactionFailed?: boolean;
   performedActs: number;
   unknownActs: number;
 }

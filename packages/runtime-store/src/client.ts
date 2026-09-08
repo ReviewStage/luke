@@ -1,9 +1,22 @@
 import type { RememberedFact } from "@sidecar/acts";
 import type { BrainPersistedState, BrainStateLoad, BrainStateRepository } from "@sidecar/brain";
 import type { ConversationEntry } from "@sidecar/realtime";
-import type { HistoryAppendOutcome, SessionKey } from "@sidecar/runtime-contracts";
+import type {
+  AgentId,
+  ArchiveReason,
+  ConversationKind,
+  ConversationRecord,
+  HistoryAppendOutcome,
+  HistoryArchiveRecord,
+  SessionKey,
+  StoredTranscriptEvent,
+  TranscriptEvent,
+} from "@sidecar/runtime-contracts";
 import type { UnparsedWireValue } from "@sidecar/wire";
+import type { DeletionOutcome, RestoreResult } from "./archives.js";
 import { EnvelopeTracker } from "./envelope.js";
+import type { HistoryMaintenanceConfig } from "./maintenance.js";
+import type { MaintenanceReport } from "./maintenance-run.js";
 import {
   RUNTIME_STORE_METHOD,
   type RuntimeStoreMethod,
@@ -91,8 +104,11 @@ export class RuntimeStoreClient {
         tracker.observe(loaded);
         return loaded.state ? { state: loaded.state } : { unreadable: loaded.unreadable === true };
       },
-      save: async (state: BrainPersistedState): Promise<boolean> => {
-        const save = tracker.saveFor(state);
+      save: async (
+        state: BrainPersistedState,
+        transcript?: readonly TranscriptEvent[],
+      ): Promise<boolean> => {
+        const save = tracker.saveFor(state, transcript);
         const landed = await this.request(RUNTIME_STORE_METHOD.BRAIN_SAVE, { sessionKey, save });
         if (landed) tracker.landed(state);
         return landed;
@@ -123,6 +139,100 @@ export class RuntimeStoreClient {
 
   personalFacts(): Promise<readonly RememberedFact[]> {
     return this.request(RUNTIME_STORE_METHOD.FACTS_LIST, {});
+  }
+
+  listConversations(): Promise<readonly ConversationRecord[]> {
+    return this.request(RUNTIME_STORE_METHOD.CONVERSATIONS_LIST, {});
+  }
+
+  createConversation(creation: {
+    agentId: AgentId;
+    sessionKey: SessionKey;
+    name: string;
+    kind?: ConversationKind;
+    now: number;
+  }): Promise<ConversationRecord> {
+    return this.request(RUNTIME_STORE_METHOD.CONVERSATION_CREATE, creation);
+  }
+
+  archiveConversation(
+    sessionKey: SessionKey,
+    now: number,
+    reason: ArchiveReason,
+  ): Promise<boolean> {
+    return this.request(RUNTIME_STORE_METHOD.CONVERSATION_ARCHIVE, { sessionKey, now, reason });
+  }
+
+  unarchiveConversation(sessionKey: SessionKey): Promise<boolean> {
+    return this.request(RUNTIME_STORE_METHOD.CONVERSATION_UNARCHIVE, { sessionKey });
+  }
+
+  renameConversation(sessionKey: SessionKey, name: string): Promise<boolean> {
+    return this.request(RUNTIME_STORE_METHOD.CONVERSATION_RENAME, { sessionKey, name });
+  }
+
+  pinConversation(sessionKey: SessionKey, pinnedAt: number | undefined): Promise<boolean> {
+    return this.request(RUNTIME_STORE_METHOD.CONVERSATION_PIN, { sessionKey, pinnedAt });
+  }
+
+  /** The recoverable deletion: the rows go behind a committed archive, and the answer says whether its file is published. */
+  deleteConversationHistory(
+    sessionKey: SessionKey,
+    now: number,
+    archiveId: string,
+    removeConversation = false,
+  ): Promise<DeletionOutcome | undefined> {
+    return this.request(RUNTIME_STORE_METHOD.CONVERSATION_DELETE, {
+      sessionKey,
+      now,
+      archiveId,
+      removeConversation,
+    });
+  }
+
+  listTranscript(
+    sessionKey: SessionKey,
+    options: { afterSequence?: number; limit?: number } = {},
+  ): Promise<readonly StoredTranscriptEvent[]> {
+    return this.request(RUNTIME_STORE_METHOD.TRANSCRIPT_LIST, { sessionKey, ...options });
+  }
+
+  searchTranscript(
+    sessionKey: SessionKey,
+    query: string,
+    limit?: number,
+  ): Promise<readonly StoredTranscriptEvent[]> {
+    return this.request(RUNTIME_STORE_METHOD.TRANSCRIPT_SEARCH, {
+      sessionKey,
+      query,
+      ...(limit !== undefined ? { limit } : undefined),
+    });
+  }
+
+  listCompactionBoundaries(sessionKey: SessionKey) {
+    return this.request(RUNTIME_STORE_METHOD.COMPACTIONS_LIST, { sessionKey });
+  }
+
+  listArchives(): Promise<readonly HistoryArchiveRecord[]> {
+    return this.request(RUNTIME_STORE_METHOD.ARCHIVES_LIST, {});
+  }
+
+  restoreArchive(archiveId: string, agentId: AgentId, now: number): Promise<RestoreResult> {
+    return this.request(RUNTIME_STORE_METHOD.ARCHIVE_RESTORE, { archiveId, agentId, now });
+  }
+
+  /** Retries every archive publication a crash interrupted; answers the ids still unpublished. */
+  publishPendingArchives(): Promise<readonly string[]> {
+    return this.request(RUNTIME_STORE_METHOD.ARCHIVES_PUBLISH_PENDING, {});
+  }
+
+  runMaintenance(options: {
+    now: number;
+    preserve: readonly SessionKey[];
+    config?: Partial<HistoryMaintenanceConfig>;
+    force?: boolean;
+  }): Promise<MaintenanceReport> {
+    return this.request(RUNTIME_STORE_METHOD.MAINTENANCE_RUN, options);
   }
 
   replacePersonalFacts(facts: readonly RememberedFact[]): Promise<boolean> {

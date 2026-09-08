@@ -516,6 +516,12 @@ class ScriptedContext implements ContextEngine {
 
 class ScriptedRuntime implements AgentRuntime {
   readonly descriptor = { id: FAKE_FORMAT.runtime, checkpoint: FAKE_FORMAT };
+  capabilities(): Promise<undefined> {
+    return Promise.resolve(undefined);
+  }
+  compact(): Promise<{ compacted: false; reason: string }> {
+    return Promise.resolve({ compacted: false, reason: "the scripted runtime does not compact" });
+  }
   quietUntil(): number | undefined {
     return undefined;
   }

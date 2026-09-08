@@ -1,6 +1,21 @@
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { UnparsedWireValue } from "@sidecar/wire";
+import {
+  deleteConversationHistory,
+  listArchives,
+  publishPendingArchives,
+  restoreArchive,
+} from "./archives.js";
 import { loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
+import {
+  archiveConversation,
+  createConversation,
+  listConversations,
+  pinConversation,
+  renameConversation,
+  unarchiveConversation,
+} from "./conversations-table.js";
 import { AGENT_DATABASE_FILE, RuntimeDatabase } from "./database.js";
 import { personalFacts, replacePersonalFacts } from "./facts-table.js";
 import {
@@ -9,6 +24,7 @@ import {
   historyClearedAt,
   listHistory,
 } from "./history-table.js";
+import { runHistoryMaintenance } from "./maintenance-run.js";
 import {
   RUNTIME_STORE_METHOD,
   type RuntimeStoreMethod,
@@ -18,6 +34,7 @@ import {
   type RuntimeStoreResponse,
   runtimeStoreRequestFromWire,
 } from "./protocol.js";
+import { listCompactionBoundaries, listTranscript, searchTranscript } from "./transcript-table.js";
 
 /**
  * The database's side of the channel. It answers requests one at a time in
@@ -26,10 +43,11 @@ import {
  * but an error answer with the request's id, so a caller always hears back.
  */
 
-/** What a handler runs against: the database once opened, and the open and close of it. */
+/** What a handler runs against: the database once opened, the agent directory it lives in, and the open and close of it. */
 interface RuntimeStoreHost {
   opened(): RuntimeDatabase;
-  open(location: string): void;
+  agentRoot(): string;
+  open(agentRoot: string): void;
   close(): void;
 }
 
@@ -47,7 +65,7 @@ type RuntimeStoreHandlers = {
 
 const HANDLERS: RuntimeStoreHandlers = {
   [RUNTIME_STORE_METHOD.OPEN]: (host, params) => {
-    host.open(path.join(params.agentRoot, AGENT_DATABASE_FILE));
+    host.open(params.agentRoot);
     host
       .opened()
       .ensureConversation(params.agentId, params.sessionKey, params.conversationName, params.now);
@@ -70,6 +88,48 @@ const HANDLERS: RuntimeStoreHandlers = {
   [RUNTIME_STORE_METHOD.FACTS_LIST]: (host) => personalFacts(host.opened()),
   [RUNTIME_STORE_METHOD.FACTS_REPLACE]: (host, params) =>
     replacePersonalFacts(host.opened(), params.facts),
+  [RUNTIME_STORE_METHOD.CONVERSATIONS_LIST]: (host) => listConversations(host.opened()),
+  [RUNTIME_STORE_METHOD.CONVERSATION_CREATE]: (host, params) =>
+    createConversation(host.opened(), params),
+  [RUNTIME_STORE_METHOD.CONVERSATION_ARCHIVE]: (host, params) =>
+    archiveConversation(host.opened(), params.sessionKey, params.now, params.reason),
+  [RUNTIME_STORE_METHOD.CONVERSATION_UNARCHIVE]: (host, params) =>
+    unarchiveConversation(host.opened(), params.sessionKey),
+  [RUNTIME_STORE_METHOD.CONVERSATION_RENAME]: (host, params) =>
+    renameConversation(host.opened(), params.sessionKey, params.name),
+  [RUNTIME_STORE_METHOD.CONVERSATION_PIN]: (host, params) =>
+    pinConversation(host.opened(), params.sessionKey, params.pinnedAt),
+  [RUNTIME_STORE_METHOD.CONVERSATION_DELETE]: (host, params) =>
+    deleteConversationHistory(
+      host.opened(),
+      host.agentRoot(),
+      params.sessionKey,
+      params.now,
+      params.archiveId,
+      { removeConversation: params.removeConversation },
+    ),
+  [RUNTIME_STORE_METHOD.TRANSCRIPT_LIST]: (host, params) =>
+    listTranscript(host.opened(), params.sessionKey, {
+      ...(params.afterSequence !== undefined ? { afterSequence: params.afterSequence } : undefined),
+      ...(params.limit !== undefined ? { limit: params.limit } : undefined),
+    }),
+  [RUNTIME_STORE_METHOD.TRANSCRIPT_SEARCH]: (host, params) =>
+    searchTranscript(host.opened(), params.sessionKey, params.query, params.limit),
+  [RUNTIME_STORE_METHOD.COMPACTIONS_LIST]: (host, params) =>
+    listCompactionBoundaries(host.opened(), params.sessionKey),
+  [RUNTIME_STORE_METHOD.ARCHIVES_LIST]: (host) => listArchives(host.opened()),
+  [RUNTIME_STORE_METHOD.ARCHIVE_RESTORE]: (host, params) =>
+    restoreArchive(host.opened(), host.agentRoot(), params.archiveId, params.agentId, params.now),
+  [RUNTIME_STORE_METHOD.ARCHIVES_PUBLISH_PENDING]: (host) =>
+    publishPendingArchives(host.opened(), host.agentRoot()),
+  [RUNTIME_STORE_METHOD.MAINTENANCE_RUN]: (host, params) =>
+    runHistoryMaintenance(host.opened(), host.agentRoot(), {
+      now: params.now,
+      preserve: params.preserve,
+      ...(params.config ? { config: params.config } : undefined),
+      ...(params.force !== undefined ? { force: params.force } : undefined),
+      createArchiveId: () => randomUUID(),
+    }),
   [RUNTIME_STORE_METHOD.CLOSE]: (host) => {
     host.close();
     return true;
@@ -92,18 +152,25 @@ function dispatch<Method extends RuntimeStoreMethod>(
 
 export function serveRuntimeStore(port: RuntimeStorePort): void {
   let database: RuntimeDatabase | undefined;
+  let root: string | undefined;
   const host: RuntimeStoreHost = {
     opened: () => {
       if (!database) throw new Error("runtime store is not open");
       return database;
     },
-    open: (location) => {
+    agentRoot: () => {
+      if (root === undefined) throw new Error("runtime store is not open");
+      return root;
+    },
+    open: (agentRoot) => {
       database?.close();
-      database = RuntimeDatabase.open(location);
+      root = agentRoot;
+      database = RuntimeDatabase.open(path.join(agentRoot, AGENT_DATABASE_FILE));
     },
     close: () => {
       database?.close();
       database = undefined;
+      root = undefined;
     },
   };
 

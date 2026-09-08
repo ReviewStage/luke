@@ -8,6 +8,7 @@ import {
   isTerminalBrainRequestStatus,
 } from "./requests.js";
 import type { BrainStateStore, BrainStoreLease } from "./state-store.js";
+import { RecordingContextEngine } from "./transcript-recorder.js";
 import type { RunControl, TurnContext } from "./turn.js";
 
 /**
@@ -179,25 +180,33 @@ export class BrainRequestLedger {
   async save(generation: Generation, scope: SaveScope): Promise<boolean> {
     let outcome: SaveOutcome | undefined;
     let pruned = false;
+    let carried = 0;
+    const context = scope.kind === SAVE_SCOPE.RECORD ? undefined : scope.context;
     const written = await this.#store.write(
       this.#lease,
       generation.id,
       (state) => {
-        const context = scope.kind === SAVE_SCOPE.RECORD ? undefined : scope.context;
         const checkpoint = context?.checkpoint();
         outcome = this.#requestsOf(generation, scope, state.requests);
         const checkpointFormat = checkpoint
           ? checkpointFormatTag(checkpoint.format)
           : state.checkpointFormat;
+        // The transcript events the checkpoint carries: everything recorded
+        // since the last checkpoint landed, written in the same transaction
+        // so the record and the projection cannot disagree about what entered.
+        const transcript = context instanceof RecordingContextEngine ? context.pending() : [];
+        carried = transcript.length;
         return {
           ...(checkpointFormat !== undefined ? { checkpointFormat } : undefined),
           items: checkpoint ? checkpoint.items : state.items,
           cursors: context ? generation.cursors.persisted() : state.cursors,
           journal: context ? generation.journal.entries() : state.journal,
           requests: outcome.requests,
+          ...(transcript.length > 0 ? { transcript } : undefined),
         };
       },
       (commit) => {
+        if (carried > 0 && context instanceof RecordingContextEngine) context.retained(carried);
         // Retention decided inside the same queue step: the runs the store
         // let go of leave the working copy too, or the next checkpoint of
         // the journal would write them straight back.

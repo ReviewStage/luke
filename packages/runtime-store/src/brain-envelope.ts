@@ -4,14 +4,14 @@ import {
   type BrainPersistedState,
   type BrainRequestRecord,
   brainPersistedStateFromWire,
-  LEGACY_CHECKPOINT_FORMAT_TAG,
   legacyStampOf,
 } from "@sidecar/brain";
 import type { SessionKey } from "@sidecar/runtime-contracts";
 import { isWireNumber, isWireString, type WireRecord, type WireValue } from "@sidecar/wire";
+import { touchConversation } from "./conversations-table.js";
 import { column, nullable, type RuntimeDatabase } from "./database.js";
 import { type BrainStateSave, SAVE_KIND } from "./envelope.js";
-import { LEGACY_ITEM_FORMAT_TAG } from "./schema.js";
+import { appendTranscript } from "./transcript-table.js";
 
 /**
  * The brain's envelope across its tables: the standing generation and, under
@@ -83,19 +83,11 @@ export function loadBrainEnvelope(database: RuntimeDatabase, sessionKey: Session
   const generation = session.sessionId;
   // SAFETY: each query below selects exactly the columns its row type names, typed by the schema.
   const items = database
-    .prepare("SELECT item, format FROM runtime_checkpoints WHERE session_id = ? ORDER BY sequence")
-    .all(session.sessionId) as { item: string; format: string }[];
-  // The stamp lives on the generation row so an empty checkpoint keeps it;
-  // every item row must say the same stamp, or the item is not this
-  // generation's checkpoint and the whole is unreadable. A row still carrying
-  // the version-1 item tag under the legacy stamp is that stamp's own.
+    .prepare("SELECT item FROM runtime_checkpoints WHERE session_id = ? ORDER BY sequence")
+    .all(session.sessionId) as { item: string }[];
+  // The stamp lives on the generation row alone, so an empty checkpoint keeps
+  // it and an item row says nothing about whose shape it is.
   const stamp = session.checkpointFormat ?? legacyStampOf(items);
-  const stamped = items.every(
-    (row) =>
-      row.format === stamp ||
-      (row.format === LEGACY_ITEM_FORMAT_TAG && stamp === LEGACY_CHECKPOINT_FORMAT_TAG),
-  );
-  if (!stamped) return { unreadable: true, generation };
   // SAFETY: the three text columns selected are the ones the row type names.
   const cursorRows = database
     .prepare(
@@ -170,11 +162,14 @@ export function saveBrainEnvelope(
     if (save.kind === SAVE_KIND.REPLACE) {
       if (standing?.sessionId !== save.expectGeneration) return false;
       replaceGeneration(database, sessionKey, save.state);
+      appendTranscript(database, sessionKey, save.state.generationId, save.transcript ?? []);
+      touchConversation(database, sessionKey, save.state.createdAt);
       return true;
     }
     if (standing?.sessionId !== save.generationId) return false;
     const { delta } = save;
     const sessionId = save.generationId;
+    appendTranscript(database, sessionKey, sessionId, save.transcript ?? []);
     if (delta.checkpointFormat) {
       database
         .prepare("UPDATE conversation_sessions SET checkpoint_format = ? WHERE session_id = ?")
@@ -184,13 +179,7 @@ export function saveBrainEnvelope(
       database
         .prepare("DELETE FROM runtime_checkpoints WHERE session_id = ? AND sequence >= ?")
         .run(sessionId, delta.items.keepPrefix);
-      insertItems(
-        database,
-        sessionId,
-        delta.items.append,
-        delta.items.keepPrefix,
-        delta.checkpointFormat ? delta.checkpointFormat.stamp : standing.checkpointFormat,
-      );
+      insertItems(database, sessionId, delta.items.append, delta.items.keepPrefix);
     }
     if (delta.cursors) {
       database.prepare("DELETE FROM observation_cursors WHERE session_id = ?").run(sessionId);
@@ -238,7 +227,7 @@ function replaceGeneration(
       nullable(stampOf(state)),
     );
   if (state.reset) database.raiseHistoryCutoff(sessionKey, state.reset.clearedAt);
-  insertItems(database, state.generationId, state.items, 0, stampOf(state));
+  insertItems(database, state.generationId, state.items, 0);
   insertCursors(database, state.generationId, state.cursors);
   state.requests.forEach((record, ordinal) => {
     upsertRequest(database, state.generationId, ordinal, record);
@@ -252,21 +241,18 @@ function stampOf(state: BrainPersistedState): string | undefined {
   return state.checkpointFormat ?? legacyStampOf(state.items);
 }
 
-/** Each item row repeats the generation's stamp, so a row read on its own still says whose shape it is. */
 function insertItems(
   database: RuntimeDatabase,
   sessionId: string,
   items: readonly unknown[],
   from: number,
-  stamp: string | undefined,
 ): void {
   if (items.length === 0) return;
-  const format = stamp ?? LEGACY_CHECKPOINT_FORMAT_TAG;
   const insert = database.prepare(
-    "INSERT INTO runtime_checkpoints (session_id, sequence, format, item) VALUES (?, ?, ?, ?)",
+    "INSERT INTO runtime_checkpoints (session_id, sequence, item) VALUES (?, ?, ?)",
   );
   items.forEach((item, offset) => {
-    insert.run(sessionId, from + offset, format, JSON.stringify(item));
+    insert.run(sessionId, from + offset, JSON.stringify(item));
   });
 }
 

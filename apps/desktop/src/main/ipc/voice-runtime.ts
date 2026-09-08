@@ -14,12 +14,7 @@ import type {
   WebContents,
 } from "electron";
 import { BRIDGE, channels } from "#shared/bridge";
-import {
-  VOICE_COMMAND,
-  VOICE_COMMAND_OUTCOME,
-  type VoiceView,
-  voiceExchangeActive,
-} from "#shared/wire/voice-view";
+import { isPanelVoiceCommand, type VoiceView, voiceExchangeActive } from "#shared/wire/voice-view";
 import { registerBridge } from "../register-bridge";
 import type { VoiceReceiver } from "../voice-receiver";
 import type { PanelManager } from "../window/panel-manager";
@@ -62,13 +57,6 @@ export interface VoiceRuntimeIpcDependencies {
   recordAgentTrace: (trace: AgentWireTrace) => void;
   /** The voice window's latest snapshot, kept for the next panel to bootstrap. */
   storeVoiceView: (view: VoiceView) => void;
-  /**
-   * The History Clear, carried out here before the voice window is told, and
-   * answering whether the erasure completed on disk: the view and every
-   * context are emptied either way, and a false answer is what the panel
-   * shows as a Clear that did not finish.
-   */
-  clearConversation: () => boolean | Promise<boolean>;
   /** Whether a panel is recording a chord, which holds the talk and stop presses. */
   setShortcutCapturing: (capturing: boolean) => void;
 }
@@ -80,24 +68,15 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
     {
       // A panel's command to the voice window. The bridge guard has already
       // bounded it; here it is checked to come from a panel — the voice window
-      // does not command itself — and handed on. A Clear is carried out here
-      // first, because the main process is the thread's store and every
-      // panel's relay; the voice window is told to retire its own turns at
-      // the fence, whatever the disk later answers, and the panel hears
-      // whether the erasure completed.
-      async voiceCommand(context, command) {
-        if (!panels.owns(context.sender)) return undefined;
-        // The Clear's fence is raised in the call's synchronous prefix, and
-        // the voice window is told in the same breath — before the disk is
-        // waited on — so its turns, marks, and context retire with main's.
-        // Its answer, the disk's, comes after and goes to the panel alone.
-        const erasing =
-          command === VOICE_COMMAND.CLEAR_CONVERSATION
-            ? dependencies.clearConversation()
-            : undefined;
+      // does not command itself — and handed on. The two commands that retire
+      // the voice window's turns are the main process's own to send, as the
+      // product of the History controls, and a panel asking for one directly
+      // is refused: the controls have their own bridge, with their own
+      // validation against the directory.
+      voiceCommand(context, command) {
+        if (!panels.owns(context.sender) || !isPanelVoiceCommand(command)) return undefined;
         voiceWindow.current()?.webContents.send(channels.onVoiceCommand, { command });
-        if (erasing === undefined) return undefined;
-        return (await erasing) ? VOICE_COMMAND_OUTCOME.ACCEPTED : VOICE_COMMAND_OUTCOME.REFUSED;
+        return undefined;
       },
       // The voice window's snapshot: kept for a late panel, forwarded to every
       // panel, and read for the one level the main process owns — whether an

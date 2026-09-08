@@ -22,6 +22,7 @@ import {
   type SessionIdentity,
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS, text, type WireRecord } from "@sidecar/wire";
+import { assessCompaction, COMPACTION_NEED } from "./compaction.js";
 import {
   CONTEXT_OPENING,
   claimOpenedContext,
@@ -91,6 +92,7 @@ import {
   type TurnResult,
 } from "./turn.js";
 import { BRAIN_WAKE_KIND, type BrainDelivery, type BrainWakeEvent } from "./wake-events.js";
+import { WakeQueue } from "./wake-queue.js";
 
 /**
  * The brain: one long-lived agent that is woken by the agents' hooks and by
@@ -224,12 +226,13 @@ export class BrainAgent {
   #turnInFlight = false;
   #restored: Promise<void> | undefined;
   #queue: Promise<unknown> = Promise.resolve();
-  #pending: BrainWakeEvent[] = [];
-  #flushTimer: ScheduledTimer | undefined;
+  readonly #wakes: WakeQueue;
   #stopped = false;
   #unsubscribeStore: (() => void) | undefined;
   #observationTurns = 0;
   #incompatibleReported: string | undefined;
+  /** The optional compaction queued after the last turn; a new ask, a stop, or a replacement cancels it. */
+  #maintenance: AbortController | undefined;
 
   constructor(options: BrainAgentOptions) {
     this.#options = options;
@@ -258,6 +261,14 @@ export class BrainAgent {
       report: this.#report,
       notify: () => this.#notify(),
     });
+    this.#wakes = new WakeQueue({
+      coalesceMs: this.#wakeCoalesceMs,
+      now: this.#now,
+      schedule: this.#schedule,
+      cancel: this.#cancel,
+      quietUntil: () => this.#options.runtime.quietUntil(),
+      flush: (events) => this.#flushWakes(events),
+    });
     this.#unsubscribeStore = options.store.onReplaced((state) => this.#adoptGeneration(state));
   }
 
@@ -268,7 +279,7 @@ export class BrainAgent {
 
   /** How many wakes are waiting for their turn to open. */
   pendingWakes(): number {
-    return this.#pending.length;
+    return this.#wakes.size();
   }
 
   /**
@@ -394,6 +405,9 @@ export class BrainAgent {
         reason: BRAIN_SUBMISSION_REJECTION.FULL,
       };
     }
+    // A developer's ask outranks housekeeping: maintenance still waiting its
+    // turn is cancelled so the ask does not queue behind a compaction.
+    this.#cancelMaintenance();
     const result = this.#accept(generation, { ...submission, question });
     this.#pendingSubmissions.set(submission.submissionId, {
       question,
@@ -463,8 +477,7 @@ export class BrainAgent {
       unknownActs: 0,
     };
     this.#runs.set(run.runId, run);
-    this.#cancelFlush();
-    const events = this.#takePending();
+    const events = this.#wakes.take();
     void this.#enqueue(() => this.#runAsk(run, submission.question, events));
     return accepted;
   }
@@ -545,9 +558,8 @@ export class BrainAgent {
    * it to end rather than being dropped.
    */
   wake(events: readonly BrainWakeEvent[]): void {
-    if (this.#stopped || events.length === 0) return;
-    this.#pending.push(...events);
-    this.#scheduleFlush(this.#wakeCoalesceMs);
+    if (this.#stopped) return;
+    this.#wakes.push(events);
   }
 
   /**
@@ -565,8 +577,7 @@ export class BrainAgent {
       void this.ready().then(() => this.releaseHeld(held));
       return;
     }
-    this.#cancelFlush();
-    const events = this.#takePending();
+    const events = this.#wakes.take();
     void this.#enqueue(() =>
       this.#turn({
         generation,
@@ -593,8 +604,8 @@ export class BrainAgent {
    */
   async stop(): Promise<void> {
     this.#stopped = true;
-    this.#cancelFlush();
-    this.#pending = [];
+    this.#cancelMaintenance();
+    this.#wakes.clear();
     this.#unsubscribeStore?.();
     this.#unsubscribeStore = undefined;
     this.#generation?.abort.abort();
@@ -655,8 +666,7 @@ export class BrainAgent {
       if (session.location !== SESSION_LOCATION.LOCAL || !(readBefore || live)) return [];
       return [{ kind: BRAIN_WAKE_KIND.ROSTER, identity, session, atMs: now }];
     });
-    this.#cancelFlush();
-    const events = [...this.#takePending(), ...looks];
+    const events = [...this.#wakes.take(), ...looks];
     void this.#enqueue(() =>
       this.#turn({
         generation,
@@ -669,35 +679,19 @@ export class BrainAgent {
     );
   }
 
-  #scheduleFlush(delayMs: number): void {
-    if (this.#flushTimer !== undefined) return;
-    this.#flushTimer = this.#schedule(() => {
-      this.#flushTimer = undefined;
-      this.#flush();
-    }, delayMs);
-  }
-
-  #cancelFlush(): void {
-    if (this.#flushTimer === undefined) return;
-    this.#cancel(this.#flushTimer);
-    this.#flushTimer = undefined;
-  }
-
-  #flush(): void {
+  /**
+   * Opens the turn a flush of the wake queue asks for. A generation not yet
+   * loaded sends the wakes back to wait for it; a turn that sent nothing
+   * because the model was quiet sends them back too, to open together once
+   * the quiet ends.
+   */
+  #flushWakes(events: readonly BrainWakeEvent[]): void {
     if (this.#stopped) return;
-    const quietUntil = this.#options.runtime.quietUntil();
-    if (quietUntil !== undefined) {
-      this.#scheduleFlush(Math.max(quietUntil - this.#now(), this.#wakeCoalesceMs));
-      return;
-    }
     const generation = this.#generation;
     if (!generation) {
-      // Nothing to open a turn in yet: the wakes wait for the state to load.
-      void this.ready().then(() => this.#scheduleFlush(0));
+      void this.ready().then(() => this.#wakes.requeue(events, 0));
       return;
     }
-    const events = this.#takePending();
-    if (events.length === 0) return;
     void this.#enqueue(async () => {
       const result = await this.#turn({
         generation,
@@ -711,18 +705,9 @@ export class BrainAgent {
         !this.#stopped &&
         generation === this.#generation
       ) {
-        // The turn sent nothing, so the wakes are still news: they go back
-        // to the front of the queue and open together once the quiet ends.
-        this.#pending.unshift(...events);
-        this.#scheduleFlush(Math.max(result.until - this.#now(), this.#wakeCoalesceMs));
+        this.#wakes.requeue(events, this.#wakes.quietDelay(result.until));
       }
     });
-  }
-
-  #takePending(): readonly BrainWakeEvent[] {
-    const events = this.#pending;
-    this.#pending = [];
-    return events;
   }
 
   #enqueue<T>(work: () => Promise<T>): Promise<T> {
@@ -737,7 +722,102 @@ export class BrainAgent {
   }
 
   #generationFrom(state: BrainPersistedState): Generation {
-    return generationFrom(state, this.#options.runtime, JSON.stringify(UNKNOWN_ACT_RESULT));
+    return generationFrom(
+      state,
+      this.#options.runtime,
+      JSON.stringify(UNKNOWN_ACT_RESULT),
+      this.#now,
+    );
+  }
+
+  #cancelMaintenance(): void {
+    this.#maintenance?.abort();
+    this.#maintenance = undefined;
+  }
+
+  /**
+   * Queues the one optional maintenance a turn may leave behind: a compaction
+   * of the context, decided against the window once the turn's reply is
+   * persisted and its deliveries have settled. It runs behind every turn
+   * already queued, under a signal a new ask cancels, so housekeeping never
+   * delays the developer and never folds a context a new turn is reading.
+   */
+  #scheduleMaintenance(turnContext: TurnContext, countedTokens: number | undefined): void {
+    this.#cancelMaintenance();
+    const abort = new AbortController();
+    this.#maintenance = abort;
+    void this.#enqueue(() => this.#maintain(turnContext, countedTokens, abort));
+  }
+
+  async #maintain(
+    turnContext: TurnContext,
+    countedTokens: number | undefined,
+    abort: AbortController,
+  ): Promise<void> {
+    const { generation, context } = turnContext;
+    if (
+      abort.signal.aborted ||
+      this.#stopped ||
+      generation !== this.#generation ||
+      generation.abort.signal.aborted
+    ) {
+      return;
+    }
+    const standing = await generation.opened;
+    if (standing.kind !== CONTEXT_OPENING.LOADED || standing.context !== context) return;
+    const capabilities = await this.#options.runtime.capabilities();
+    const prompt = this.#instructions();
+    const assessment = assessCompaction(
+      context.checkpoint().items,
+      prompt,
+      capabilities,
+      countedTokens,
+    );
+    if (assessment.need === COMPACTION_NEED.NONE) return;
+    const signal = AbortSignal.any([abort.signal, generation.abort.signal]);
+    if (signal.aborted) return;
+    this.#turnInFlight = true;
+    try {
+      const outcome = await this.#options.runtime.compact(context, { prompt, signal });
+      if (signal.aborted || generation !== this.#generation) return;
+      if (!outcome.compacted) {
+        this.#report(`Brain compaction did not complete: ${outcome.reason}`);
+        return;
+      }
+      if (!(await this.#ledger.checkpoint({ generation, context, signal }))) {
+        this.#report("Brain compaction could not be checkpointed");
+      }
+    } finally {
+      this.#turnInFlight = false;
+    }
+  }
+
+  /**
+   * The admission every turn passes before its first inference: a context
+   * that would cross the transport's byte bound, or the window less its
+   * reserve, is compacted first, and checkpointed, so the request that
+   * follows fits. A compaction that fails answers why; the context stands
+   * exactly as it was, and nothing is deleted or cut to make the request fit.
+   */
+  async #prepareContext(
+    turnContext: TurnContext,
+  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const { context } = turnContext;
+    const capabilities = await this.#options.runtime.capabilities();
+    if (this.#revoked(turnContext)) return { ok: true };
+    const prompt = this.#instructions();
+    const assessment = assessCompaction(context.checkpoint().items, prompt, capabilities);
+    if (assessment.need === COMPACTION_NEED.NONE) return { ok: true };
+    const outcome = await this.#options.runtime.compact(context, {
+      prompt,
+      signal: turnContext.signal,
+    });
+    if (this.#revoked(turnContext)) return { ok: true };
+    if (!outcome.compacted) return { ok: false, reason: outcome.reason };
+    if (!(await this.#ledger.checkpoint(turnContext))) {
+      return { ok: false, reason: "the compacted context could not be checkpointed" };
+    }
+    return { ok: true };
   }
 
   async #restore(): Promise<void> {
@@ -811,6 +891,7 @@ export class BrainAgent {
   #adoptGeneration(state: BrainPersistedState): void {
     const previous = this.#generation;
     if (previous?.id === state.generationId) return;
+    this.#cancelMaintenance();
     previous?.abort.abort();
     for (const run of this.#runs.values()) {
       run.cancelled = true;
@@ -820,8 +901,7 @@ export class BrainAgent {
     if (previous) retireOpenedContext(previous);
     // Wakes coalesced against the old memory — including a quiet retry's —
     // are that generation's work, and go with it.
-    this.#cancelFlush();
-    this.#pending = [];
+    this.#wakes.clear();
     this.#generation = this.#generationFrom(state);
     this.#notify();
   }
@@ -929,6 +1009,9 @@ export class BrainAgent {
       status = BRAIN_REQUEST_STATUS.FAILED;
       end.failure = BRAIN_REQUEST_FAILURE.PERSISTENCE;
       if (result.outcome === TURN_OUTCOME.DONE && result.text) end.text = result.text;
+    } else if (run.compactionFailed) {
+      status = BRAIN_REQUEST_STATUS.FAILED;
+      end.failure = BRAIN_REQUEST_FAILURE.COMPACTION;
     } else if (result.outcome === TURN_OUTCOME.INCOMPLETE) {
       status = BRAIN_REQUEST_STATUS.FAILED;
       end.failure = BRAIN_REQUEST_FAILURE.INCOMPLETE;
@@ -1038,11 +1121,27 @@ export class BrainAgent {
         cursorMark = generation.cursors.persisted();
       };
       try {
-        const end = await this.#execute(plan, turnContext, execution, gathering, {
-          opening: plan.open(events, startedAt),
-          advanceMark,
-        });
-        failure = this.#turnResultFrom(end, turnContext, gathering);
+        const prepared = await this.#prepareContext(turnContext);
+        if (this.#revoked(turnContext)) {
+          failure = revocation();
+        } else if (!prepared.ok) {
+          // The request would not fit and the context could not be folded:
+          // the run fails recoverably, and what stands is exactly what stood.
+          if (run) run.compactionFailed = true;
+          gathering.error = `compaction required: ${prepared.reason}`;
+          failure = { outcome: TURN_OUTCOME.FAILED };
+        } else {
+          // The admission's compaction, if any, is the new rollback point: a
+          // turn that then fails returns to the folded context, not before it.
+          // The cursors keep their mark from before the deltas were read, so
+          // a failed turn still reads them again.
+          contextMark = context.mark();
+          const end = await this.#execute(plan, turnContext, execution, gathering, {
+            opening: plan.open(events, startedAt),
+            advanceMark,
+          });
+          failure = this.#turnResultFrom(end, turnContext, gathering);
+        }
       } catch (runtimeError) {
         // A runtime that threw instead of ending: the turn fails like one
         // whose model failed, and rolls back to the last paired state.
@@ -1076,6 +1175,11 @@ export class BrainAgent {
             `Brain briefing could not be delivered: ${deliverError instanceof Error ? deliverError.name : "unknown error"}`,
           );
         }
+      }
+      // Housekeeping waits for the reply to be persisted and its deliveries
+      // to settle, then decides against the window the turn's own count says.
+      if (written && !this.#revoked(turnContext)) {
+        this.#scheduleMaintenance(turnContext, gathering.inputTokens);
       }
     }
 
@@ -1119,6 +1223,7 @@ export class BrainAgent {
       ),
       generation.abort.signal,
       "the runtime could not reopen its own checkpoint",
+      this.#now,
     );
     if (reopened.aborted) return;
     const standing = await generation.opened;

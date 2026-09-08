@@ -1,5 +1,6 @@
 import { SessionRow as PanelSessionRow, ProviderMark } from "@sidecar/panel";
 import type { ConversationEntry } from "@sidecar/realtime";
+import type { SessionKey } from "@sidecar/runtime-contracts";
 import {
   isSessionApplicationId,
   SESSION_APPLICATION_SCOPE,
@@ -15,7 +16,7 @@ import type { BrainRequestSnapshot } from "#shared/wire/brain";
 import type { SessionOpenResult } from "#shared/wire/session";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { CalendarGate, type CalendarGateControl } from "./calendar-gate";
-import { ConversationHistoryPanel } from "./conversation-history-panel";
+import { type ConversationControls, ConversationHistoryPanel } from "./conversation-history-panel";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import {
   type ArrangedSessions,
@@ -518,18 +519,20 @@ export interface PanelBodyProps {
   onOpenSessionApplication: (session: SessionView, applicationId: SessionApplicationId) => void;
   /** Opens the pull request a row or tray header reports; the panel writes nothing else. */
   writes: SessionWriteHandlers;
-  /** The conversation between the developer and Luke, this launch's and what survived the last. */
+  /** The thread of the conversation History is showing, this launch's and what survived the last. */
   conversationHistory: readonly ConversationEntry[];
-  /** The lines still being said, drawn under that thread while their words grow. */
+  /** The lines still being said, drawn under main's thread while their words grow. */
   liveConversationEntries: readonly ConversationEntry[];
-  /** Clears that same thread from the view, Luke's next context, and the stored file. */
-  onClearConversationHistory: () => void;
+  /** The selector and controls over every conversation Luke holds. */
+  conversations: ConversationControls;
   /** The brain's runs, so History draws an ask still being worked on beside its words. */
   brainRequests: readonly BrainRequestSnapshot[];
   /** Cancels one of those runs at the developer's press. */
   onCancelBrainRequest: (runId: string) => void;
-  /** Carries a typed ask to Luke's own conversation, answering why it could not go. */
+  /** Carries a typed ask to Luke's main conversation, answering why it could not go. */
   ask: AskHandler;
+  /** The same ask aimed at the conversation History is showing, captured at the send. */
+  askIn: (text: string, sessionKey: SessionKey) => Promise<string | undefined>;
   /** Reports someone being part-way through an ask, so the panel holds for them. */
   onAskEngaged: (engaged: boolean) => void;
   /** The registered summon key the field should teach, if the system granted one. */
@@ -579,10 +582,11 @@ export function PanelBody({
   writes,
   conversationHistory,
   liveConversationEntries,
-  onClearConversationHistory,
+  conversations,
   brainRequests,
   onCancelBrainRequest,
   ask,
+  askIn,
   onAskEngaged,
   askShortcut,
   offerOptions,
@@ -700,8 +704,8 @@ export function PanelBody({
           live={liveConversationEntries}
           requests={brainRequests}
           onCancelRequest={onCancelBrainRequest}
-          onClear={onClearConversationHistory}
-          ask={ask}
+          conversations={conversations}
+          ask={(text) => askIn(text, conversations.selected)}
           onAskEngaged={onAskEngaged}
           {...(askShortcut ? { askShortcut } : undefined)}
         />

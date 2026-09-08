@@ -30,11 +30,19 @@ import {
  * instead, from the speech arbiter that decides when it may be said.
  */
 
-/** One deliberate ask, as a renderer submits it: minted once per submission, so a retry finds the same run. */
+/**
+ * One deliberate ask, as a renderer submits it: minted once per submission,
+ * so a retry finds the same run. It names the conversation it is for by the
+ * session key the directory listed; absent, it is for main, which is where
+ * the talk key and the sessions tab's composer speak. The conversation is
+ * captured at the submission: switching the selector while an ask waits
+ * does not retarget it.
+ */
 export interface BrainAskSubmission {
   submissionId: string;
   question: string;
   origin: (typeof BRAIN_REQUEST_ORIGIN)[keyof typeof BRAIN_REQUEST_ORIGIN];
+  sessionKey?: string;
 }
 
 export function isBrainAskSubmission(value: UnparsedWireValue): boolean {
@@ -44,7 +52,9 @@ export function isBrainAskSubmission(value: UnparsedWireValue): boolean {
     value.submissionId.length > 0 &&
     isWireString(value.question) &&
     value.question.length <= maximumTypedAskLength &&
-    isBrainRequestOrigin(value.origin)
+    isBrainRequestOrigin(value.origin) &&
+    (value.sessionKey === undefined ||
+      (isWireString(value.sessionKey) && value.sessionKey.length > 0))
   );
 }
 
@@ -157,6 +167,9 @@ export function brainReplyWords(snapshot: BrainRequestSnapshot): string | undefi
         return acted
           ? `${account}, but I ran out of room before finishing the reply.`
           : "I ran out of room before finishing that. Ask me again, perhaps in smaller pieces.";
+      }
+      if (snapshot.failure === BRAIN_REQUEST_FAILURE.COMPACTION) {
+        return "My notes for this conversation have grown too long to send, and I couldn't fold them just now. Nothing was lost; ask again in a moment, or start this conversation fresh from History.";
       }
       return acted
         ? `${account}, but I couldn't put the reply into words.`

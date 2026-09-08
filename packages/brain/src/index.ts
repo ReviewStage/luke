@@ -9,6 +9,22 @@ export {
   type BrainAgentOptions,
   type BrainRequestsListener,
 } from "./agent.js";
+export {
+  assessCompaction,
+  COMPACTION_NEED,
+  COMPACTION_POLICY,
+  type CompactionAssessment,
+  type CompactionNeed,
+  type CompactionOutcome,
+  compactContext,
+  estimateTokens,
+  LOCAL_SUMMARY_INSTRUCTIONS,
+  LOCAL_SUMMARY_MARKER,
+  requestBytes,
+  reserveTokens,
+  shouldCompact,
+  transportNeedsPreparation,
+} from "./compaction.js";
 export { pairedDanglingCalls, ResponsesContextEngine } from "./context-engine.js";
 export { TranscriptCursors } from "./cursors.js";
 export { BrainGenerationClock, type BrainGenerationClockOptions } from "./generation-clock.js";
@@ -94,6 +110,7 @@ export {
   brainResponsesRequest,
   functionCallOutputItem,
   isCompactionItem,
+  isUserMessageItem,
   RESPONSES_ITEM_FORMAT,
   RESPONSES_ITEM_TYPE,
   RESPONSES_STATUS,
@@ -121,6 +138,7 @@ export {
   type BrainResetMarker,
   type BrainStateBounds,
   type BrainStateLoad,
+  type BrainStateMutation,
   type BrainStateRepository,
   type BrainStateStorage,
   BrainStateStore,
@@ -152,6 +170,7 @@ export {
 } from "./tools.js";
 export type { BrainToolCallTrace, BrainTurnTraceRecord } from "./trace.js";
 export { OMISSION_MARKER } from "./transcript-reads.js";
+export { RecordingContextEngine } from "./transcript-recorder.js";
 export { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
 export {
   BRAIN_WAKE_KIND,
@@ -160,3 +179,4 @@ export {
   type BrainWakeEvent,
   type BrainWakeKind,
 } from "./wake-events.js";
+export { WakeQueue, type WakeQueueOptions } from "./wake-queue.js";

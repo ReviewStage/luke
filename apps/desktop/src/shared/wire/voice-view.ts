@@ -37,17 +37,28 @@ export const VOICE_COMMAND = {
   DISCARD_LISTENING: "discard-listening",
   STOP_SPEAKING: "stop-speaking",
   REQUEST_MICROPHONE_ACCESS: "request-microphone-access",
+  /**
+   * Main's history was deleted: the voice window empties its copy of the
+   * thread and retires every turn in flight. Sent by the main process alone,
+   * as the direct product of the developer's press on the History controls;
+   * a panel cannot send it.
+   */
   CLEAR_CONVERSATION: "clear-conversation",
+  /**
+   * Main started fresh: the voice window retires every turn, mark, and reply
+   * in flight, and keeps its copy of the thread, because nothing was erased.
+   * Sent by the main process alone, on the same terms.
+   */
+  RETIRE_TURNS: "retire-turns",
 } as const;
 
 export type VoiceCommand = (typeof VOICE_COMMAND)[keyof typeof VOICE_COMMAND];
 
 /**
- * What became of the one command with an outcome worth answering, a Clear:
- * refused when the stored thread could not be deleted, so the panel can say
- * so. The other commands answer nothing; a typed ask is not a command at all
- * but a brain submission, whose own result tells the composer whether the
- * draft is still the developer's to retry.
+ * What became of a command the main process carries out itself before it
+ * reaches the voice window. The commands a panel may send answer nothing; a
+ * typed ask is not a command at all but a brain submission, whose own result
+ * tells the composer whether the draft is still the developer's to retry.
  */
 export const VOICE_COMMAND_OUTCOME = {
   ACCEPTED: "accepted",
@@ -87,6 +98,16 @@ const VOICE_COMMANDS: ReadonlySet<string> = new Set(Object.values(VOICE_COMMAND)
 
 export function isVoiceCommand(value: UnparsedWireValue): value is VoiceCommand {
   return isWireString(value) && VOICE_COMMANDS.has(value);
+}
+
+/** The commands only the main process may originate; a panel sending one is refused. */
+const MAIN_ONLY_VOICE_COMMANDS: ReadonlySet<VoiceCommand> = new Set<VoiceCommand>([
+  VOICE_COMMAND.CLEAR_CONVERSATION,
+  VOICE_COMMAND.RETIRE_TURNS,
+]);
+
+export function isPanelVoiceCommand(command: VoiceCommand): boolean {
+  return !MAIN_ONLY_VOICE_COMMANDS.has(command);
 }
 
 const optionalString = (value: UnparsedWireValue): boolean =>

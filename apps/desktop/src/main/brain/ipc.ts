@@ -12,6 +12,7 @@ import {
   replyConversationEntry,
   typedAskConversationEntry,
 } from "@sidecar/realtime";
+import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import { BRIDGE } from "#shared/bridge";
 import {
@@ -35,18 +36,25 @@ export interface BrainSubmitters {
 export interface BrainIpcDependencies {
   ipcMain: Pick<IpcMain, "handle" | "on">;
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
-  /** The brain as it stands now, or nothing on a run with no key to run it on. */
-  brain: () => BrainAgent | undefined;
+  /**
+   * The brain of one conversation as it stands now — main's when none is
+   * named — or nothing on a run with no key to run it on or for a
+   * conversation the directory does not list.
+   */
+  brain: (sessionKey?: SessionKey) => BrainAgent | undefined;
+  /** The brain holding the run named, whichever conversation it belongs to. */
+  brainForRun: (runId: string) => BrainAgent | undefined;
   submitters: BrainSubmitters;
   /**
-   * Records one line in the shared thread at the moment given, answering
-   * whether the thread took it; the main process is the thread's store. A
-   * line the thread already holds for that run answers true, because holding
-   * it is the whole of what was asked.
+   * Records one line in one conversation's thread at the moment given,
+   * answering whether the thread took it; the main process is the thread's
+   * store. A line the thread already holds for that run answers true,
+   * because holding it is the whole of what was asked.
    */
   recordConversationEntry: (
     entry: ConversationEntry,
     recordedAt: number,
+    sessionKey: SessionKey,
   ) => boolean | Promise<boolean>;
   /** Hands the whole list of records to every window. */
   broadcastRequests: (snapshots: readonly BrainRequestSnapshot[]) => void;
@@ -57,15 +65,17 @@ export interface BrainIpcDependencies {
    * that missed it is not owed a report that never comes; the delivery owner
    * decides what is new.
    */
-  onEndPublished?: (record: BrainRequestRecord) => void;
+  onEndPublished?: (record: BrainRequestRecord, sessionKey: SessionKey) => void;
   /**
    * Hands the standing follower's publication chain to whoever answers a
    * wait, so a wait that finds its run ended can let the end reach History
    * before the words are granted anywhere.
    */
   onPublication?: (settled: () => Promise<void>) => void;
-  /** Settles once the standing follower has published every report taken so far. */
+  /** Settles once every standing follower has published every report taken so far. */
   publicationSettled?: () => Promise<void>;
+  /** Every run every standing brain holds, for a window to reconcile against the pushes it heard. */
+  allRequests: () => readonly BrainRequestSnapshot[];
   /**
    * The one owner of every grant to speak a run's end, reached only by the
    * voice window: the claim on an offered delivery, its acknowledgement, and
@@ -108,12 +118,17 @@ export async function submitBrainAsk(
   brain: BrainAgent | undefined,
   submission: BrainAskSubmission,
   record: BrainIpcDependencies["recordConversationEntry"],
+  sessionKey: SessionKey = MAIN_SESSION_KEY,
 ): Promise<BrainAskSubmissionResult> {
   if (!brain) return REJECTED_SUBMISSION;
   const question = submission.question.trim().slice(0, maximumTypedAskLength);
-  const result = await brain.submitAsk({ ...submission, question });
+  const result = await brain.submitAsk({
+    submissionId: submission.submissionId,
+    origin: submission.origin,
+    question,
+  });
   if (result.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED) {
-    await publishAsk(brain, result.runId, record);
+    await publishAsk(brain, result.runId, record, sessionKey);
   }
   return result;
 }
@@ -123,12 +138,17 @@ async function publishAsk(
   agent: BrainPublicationAgent,
   runId: string,
   record: BrainIpcDependencies["recordConversationEntry"],
+  sessionKey: SessionKey,
 ): Promise<void> {
   const current = agent.request(runId);
   if (!current || current.origin !== BRAIN_REQUEST_ORIGIN.TYPED) return;
   if (current.askRecordedAt !== undefined) return;
   if (
-    !(await record(typedAskConversationEntry(current.question, current.runId), current.acceptedAt))
+    !(await record(
+      typedAskConversationEntry(current.question, current.runId),
+      current.acceptedAt,
+      sessionKey,
+    ))
   ) {
     return;
   }
@@ -147,6 +167,7 @@ async function publishEnd(
   agent: BrainPublicationAgent,
   runId: string,
   record: BrainIpcDependencies["recordConversationEntry"],
+  sessionKey: SessionKey,
 ): Promise<BrainRequestRecord | undefined> {
   const current = agent.request(runId);
   if (!current || !isTerminalBrainRequestStatus(current.status)) return undefined;
@@ -154,7 +175,9 @@ async function publishEnd(
   const words = brainReplyWords(current);
   if (!words) return undefined;
   const at = current.settledAt ?? current.acceptedAt;
-  if (!(await record(replyConversationEntry(words, current.runId), at))) return undefined;
+  if (!(await record(replyConversationEntry(words, current.runId), at, sessionKey))) {
+    return undefined;
+  }
   if (!(await agent.markHistoryRecorded(runId, at))) return undefined;
   // Re-read rather than patched: the mark landed on the live record, and a
   // Clear or a replacement in the meantime has taken the record with it.
@@ -180,13 +203,14 @@ export async function publishRuns(
   record: BrainIpcDependencies["recordConversationEntry"],
   stillFollowing: () => boolean = () => true,
   onEndPublished: BrainIpcDependencies["onEndPublished"] = undefined,
+  sessionKey: SessionKey = MAIN_SESSION_KEY,
 ): Promise<void> {
   for (const snapshot of snapshots) {
     if (!stillFollowing()) return;
-    await publishAsk(agent, snapshot.runId, record);
+    await publishAsk(agent, snapshot.runId, record, sessionKey);
     if (!stillFollowing()) return;
-    const published = await publishEnd(agent, snapshot.runId, record);
-    if (published && stillFollowing()) onEndPublished?.(published);
+    const published = await publishEnd(agent, snapshot.runId, record, sessionKey);
+    if (published && stillFollowing()) onEndPublished?.(published, sessionKey);
   }
 }
 
@@ -206,6 +230,7 @@ export function followBrainRequests(
     BrainIpcDependencies,
     "recordConversationEntry" | "broadcastRequests" | "onEndPublished" | "onPublication"
   >,
+  sessionKey: SessionKey = MAIN_SESSION_KEY,
 ): () => Promise<void> {
   let accepting = true;
   let following = true;
@@ -223,6 +248,7 @@ export function followBrainRequests(
         dependencies.recordConversationEntry,
         () => following,
         dependencies.onEndPublished,
+        sessionKey,
       ),
     );
   };
@@ -253,7 +279,21 @@ export function registerBrainIpc(dependencies: BrainIpcDependencies): void {
     {
       submitBrainAsk(context, submission) {
         if (!originAllowed(context.sender, submission)) return REJECTED_SUBMISSION;
-        return submitBrainAsk(brain(), submission, dependencies.recordConversationEntry);
+        // The conversation is captured here, at the submission: a spoken ask
+        // is main's, a typed one names the conversation its composer stood
+        // in, and switching the selector afterwards retargets nothing. A key
+        // the directory does not list answers no brain and is refused.
+        const sessionKey =
+          submission.origin === BRAIN_REQUEST_ORIGIN.TYPED && submission.sessionKey !== undefined
+            ? // SAFETY: the bridge guard admitted a non-empty string, which is what the session key constructor admits.
+              (submission.sessionKey as SessionKey)
+            : MAIN_SESSION_KEY;
+        return submitBrainAsk(
+          brain(sessionKey),
+          submission,
+          dependencies.recordConversationEntry,
+          sessionKey,
+        );
       },
       // A wait that finds its run ended does not hand the words over on the
       // strength of the record alone: the follower's publication is let
@@ -265,19 +305,19 @@ export function registerBrainIpc(dependencies: BrainIpcDependencies): void {
       // comes back with the record and no grant, and the eventual delivery
       // says the words instead.
       async waitBrainAsk(context, runId, epoch): Promise<BrainAskWait> {
-        const waited = await brain()?.waitAsk(runId, askWaitMs);
+        const waited = await dependencies.brainForRun(runId)?.waitAsk(runId, askWaitMs);
         if (!waited || !isTerminalBrainRequestStatus(waited.status)) {
           return { record: waited, speak: false };
         }
         await dependencies.publicationSettled?.();
-        const live = brain()?.request(runId) ?? waited;
+        const live = dependencies.brainForRun(runId)?.request(runId) ?? waited;
         if (!submitters.voice(context.sender) || live.historyRecordedAt === undefined) {
           return { record: live, speak: false };
         }
         return { record: live, speak: dependencies.replies?.grantOnCall(live, epoch) === true };
       },
-      cancelBrainAsk: (_context, runId) => brain()?.cancelAsk(runId),
-      brainRequestSnapshots: () => brain()?.requests() ?? [],
+      cancelBrainAsk: (_context, runId) => dependencies.brainForRun(runId)?.cancelAsk(runId),
+      brainRequestSnapshots: () => dependencies.allRequests(),
       claimBrainReply(context, runId, deliveryId, epoch): BrainReplyClaimResult {
         if (!submitters.voice(context.sender) || !dependencies.replies) return { granted: false };
         return dependencies.replies.claim(runId, deliveryId, epoch);

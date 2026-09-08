@@ -27,6 +27,7 @@ import {
   historyClearedAt,
   listHistory,
 } from "./history-table.js";
+import { RUNTIME_SCHEMA_VERSION } from "./schema.js";
 import { inspectHistory, line, NOW, openTestDatabase, populatedState, request } from "./testing.js";
 
 /** A repository over the database in-thread, tracking the last envelope it saw land as the client does. */
@@ -444,7 +445,7 @@ test("a line keeps its Markdown line structure through the store and a relaunch"
   relaunch.close();
 });
 
-test("the checkpoint stamp lives on the generation: an empty foreign checkpoint keeps it, a delta may set it, and a stray item stamp is unreadable", () => {
+test("the checkpoint stamp lives on the generation: an empty foreign checkpoint keeps it, a delta may set it, and no item row carries one", () => {
   const database = openTestDatabase();
   const foreign = "other-runtime@3:anthropic-messages/2";
   const empty = { ...populatedState("gen-f"), checkpointFormat: foreign, items: [] };
@@ -471,14 +472,15 @@ test("the checkpoint stamp lives on the generation: an empty foreign checkpoint 
   const restamped = loadBrainEnvelope(database, MAIN_SESSION_KEY);
   assert.equal(restamped.state?.checkpointFormat, native);
   assert.equal(restamped.state?.items.length, 1);
-  // An item row of another stamp than the generation's is not its checkpoint.
-  database
-    .prepare("UPDATE runtime_checkpoints SET format = ? WHERE session_id = ?")
-    .run(foreign, "gen-f");
-  assert.deepEqual(loadBrainEnvelope(database, MAIN_SESSION_KEY), {
-    unreadable: true,
-    generation: "gen-f",
-  });
+  // The stamp is the generation's alone: an item row carries none of its own.
+  // SAFETY: PRAGMA table_info answers one text column named name per column of the table.
+  const columns = database.prepare("PRAGMA table_info(runtime_checkpoints)").all() as {
+    name: string;
+  }[];
+  assert.equal(
+    columns.some((column) => column.name === "format"),
+    false,
+  );
 });
 
 test("a version-1 database is walked forward: its item-tagged generation gains the legacy stamp, an empty one none, and a newer database is refused", () => {
@@ -530,7 +532,13 @@ test("a version-1 database is walked forward: its item-tagged generation gains t
   const version = database.prepare("SELECT version FROM schema_version").get() as {
     version: number;
   };
-  assert.equal(version.version, 2);
+  assert.equal(version.version, RUNTIME_SCHEMA_VERSION);
+  // SAFETY: the columns version 3 added to the conversation row.
+  const migrated = database
+    .prepare("SELECT kind, last_activity_at FROM conversations WHERE session_key = ?")
+    .get(MAIN_SESSION_KEY) as { kind: string; last_activity_at: number };
+  assert.equal(migrated.kind, "main");
+  assert.equal(migrated.last_activity_at, NOW);
   database.close();
   // Reopening at the current version is a no-op, and a newer database is refused.
   RuntimeDatabase.open(location).close();

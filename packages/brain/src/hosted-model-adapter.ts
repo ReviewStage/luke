@@ -44,6 +44,7 @@ import {
   requestSignal,
   withoutTrailingSlash,
 } from "./model-adapter-shared.js";
+import { BRAIN_OPENAI_DEFAULTS } from "./openai-model-adapter.js";
 import { responsesCompactedWindow, responsesModelAnswer } from "./responses-api.js";
 import {
   type Admission,
@@ -134,6 +135,8 @@ class HostedTransport implements ResponsesTransport<HostedBrainCapabilities> {
       compacts: capabilities.operations.includes(RESPONSES_OPERATION.COMPACT),
       maximumOutputTokens: capabilities.bounds.maximumOutputTokens,
       tools: capabilities.tools,
+      contextWindowTokens: BRAIN_OPENAI_DEFAULTS.CONTEXT_WINDOW_TOKENS,
+      maximumRequestBytes: capabilities.bounds.requestBytes,
     };
   }
 

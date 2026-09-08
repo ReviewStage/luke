@@ -5,6 +5,7 @@ import { ResponsesContextEngine } from "./context-engine.js";
 import { CONTEXT_OPENING, generationFrom } from "./generation.js";
 import { TOOL_LOOP_RUNTIME } from "./runtime.js";
 import { freshBrainState } from "./state-store.js";
+import { RecordingContextEngine } from "./transcript-recorder.js";
 
 const TOOL_LOOP_IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };
 
@@ -25,6 +26,8 @@ function heldRuntime() {
   const runtime: AgentRuntime = {
     descriptor: { id: "held", checkpoint: context.checkpointFormat },
     quietUntil: () => undefined,
+    capabilities: () => Promise.resolve(undefined),
+    compact: () => Promise.resolve({ compacted: false, reason: "not compacted here" }),
     openContext: () => opening,
     start: () => {
       throw new Error("not started here");
@@ -79,8 +82,11 @@ test("an open that resolves while the generation stands installs the context and
   standing.release();
   const opened = await generation.opened;
   assert.equal(opened.kind, CONTEXT_OPENING.LOADED);
+  // The generation holds the runtime's engine behind the transcript recorder.
   assert.equal(
-    opened.kind === CONTEXT_OPENING.LOADED ? opened.context : undefined,
+    opened.kind === CONTEXT_OPENING.LOADED && opened.context instanceof RecordingContextEngine
+      ? opened.context.engine
+      : undefined,
     standing.context,
   );
   await tick();

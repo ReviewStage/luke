@@ -20,6 +20,7 @@ import {
   streamingConversationEntry,
   withConversationEntryRequest,
 } from "@sidecar/realtime";
+import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import { SESSION_STATUS, type Session } from "@sidecar/session";
 import { TALK_KEY_RELEASE, talkKeyRelease, voiceHotkeyLabel } from "@sidecar/settings";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
@@ -628,22 +629,18 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   );
 
   /**
-   * The Clear a panel pressed, already carried out by the main process — the
-   * file deleted, every panel told — arriving here to retire this window's
+   * Main started fresh or lost its history, already carried out by the main
+   * process — every panel told — arriving here to retire this window's
    * in-flight turns the way the press would have. The talk key's latch goes
    * with them: a turn the press just retired is not one the next press ends.
+   * A Start fresh keeps this window's copy of the thread, because nothing was
+   * erased; only a deletion empties it.
    */
-  const clearConversation = useCallback(() => {
+  const retireTurns = useCallback((eraseThread: boolean) => {
     conversationGenerationRef.current += 1;
-    // Seeded even if the bootstrap has not landed, so one still in flight
-    // cannot deliver the very thread this press just cleared.
-    conversationSeeded.current = true;
-    conversationRef.current = [];
-    reporterRef.current.reset();
     spokenTurnMarksRef.current.clear();
     pendingSpokenTurnMarksRef.current = [];
     latestSpokenTurnMarkRef.current = undefined;
-    setConversationHistory([]);
     // The previews go with the marks: a transcription still arriving belongs
     // to a turn the press just retired.
     setSpokenAskPreviews(NO_SPOKEN_ASK_PREVIEWS);
@@ -651,11 +648,19 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     talkPressedAt.current = undefined;
     activeReplyGenerationRef.current = undefined;
     activeAnnouncementGenerationRef.current = undefined;
-    // A reply offered or granted before the press belongs to the cleared
-    // thread: not spoken, not shown, not acknowledged.
+    // A reply offered or granted before the press belongs to the retired
+    // lifetime: not spoken, not shown, not acknowledged.
     replyWithdrawalsRef.current += 1;
     replyPlayer.current?.withdraw();
+    if (!eraseThread) return;
+    // Seeded even if the bootstrap has not landed, so one still in flight
+    // cannot deliver the very thread this press just deleted.
+    conversationSeeded.current = true;
+    conversationRef.current = [];
+    reporterRef.current.reset();
+    setConversationHistory([]);
   }, []);
+  const clearConversation = useCallback(() => retireTurns(true), [retireTurns]);
 
   /**
    * The stored thread, placed once from the bootstrap that carries it. Turns
@@ -694,7 +699,9 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   useEffect(
     () =>
       window.sidecar.onConversationHistoryChanged((payload) => {
-        if (payload.cleared) return;
+        // This window speaks into main alone; another conversation's relay is
+        // a panel's business, and a deletion travels on its own command.
+        if (payload.sessionKey !== MAIN_SESSION_KEY || payload.cleared) return;
         noteReported(payload.entries);
         // The relay is the store's thread as another writer left it; a line of
         // this window's still awaiting the store's acknowledgement is kept.
@@ -1382,13 +1389,14 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       else if (command === VOICE_COMMAND.STOP_SPEAKING) voiceSession.current?.stopSpeaking();
       else if (command === VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS) void requestMicrophoneAccess();
       else if (command === VOICE_COMMAND.CLEAR_CONVERSATION) clearConversation();
+      else if (command === VOICE_COMMAND.RETIRE_TURNS) retireTurns(false);
     });
     readiness.current?.installed(VOICE_READINESS_PART.COMMANDS);
     return () => {
       readiness.current?.uninstalled(VOICE_READINESS_PART.COMMANDS);
       unsubscribe();
     };
-  }, [clearConversation, discardListening, requestMicrophoneAccess]);
+  }, [clearConversation, discardListening, requestMicrophoneAccess, retireTurns]);
 
   const heardSpeed = useRef<RealtimeVoiceSpeed | undefined>(undefined);
   const voiceSpeed = surroundings.settings?.voiceSpeed;

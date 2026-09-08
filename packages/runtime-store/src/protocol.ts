@@ -1,9 +1,22 @@
 import type { RememberedFact } from "@sidecar/acts";
 import type { ConversationEntry } from "@sidecar/realtime";
-import type { AgentId, HistoryAppendOutcome, SessionKey } from "@sidecar/runtime-contracts";
+import type {
+  AgentId,
+  ArchiveReason,
+  ConversationKind,
+  ConversationRecord,
+  HistoryAppendOutcome,
+  HistoryArchiveRecord,
+  SessionKey,
+  StoredTranscriptEvent,
+} from "@sidecar/runtime-contracts";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import type { DeletionOutcome, RestoreResult } from "./archives.js";
 import type { EnvelopeRead } from "./brain-envelope.js";
 import type { BrainStateSave } from "./envelope.js";
+import type { HistoryMaintenanceConfig } from "./maintenance.js";
+import type { MaintenanceReport } from "./maintenance-run.js";
+import type { StoredCompactionBoundary } from "./transcript-table.js";
 
 /**
  * What crosses between the store's client on the main thread and the worker
@@ -23,6 +36,20 @@ export const RUNTIME_STORE_METHOD = {
   HISTORY_CUTOFF: "history.cutoff",
   FACTS_LIST: "facts.list",
   FACTS_REPLACE: "facts.replace",
+  CONVERSATIONS_LIST: "conversations.list",
+  CONVERSATION_CREATE: "conversations.create",
+  CONVERSATION_ARCHIVE: "conversations.archive",
+  CONVERSATION_UNARCHIVE: "conversations.unarchive",
+  CONVERSATION_RENAME: "conversations.rename",
+  CONVERSATION_PIN: "conversations.pin",
+  CONVERSATION_DELETE: "conversations.delete",
+  TRANSCRIPT_LIST: "transcript.list",
+  TRANSCRIPT_SEARCH: "transcript.search",
+  COMPACTIONS_LIST: "compactions.list",
+  ARCHIVES_LIST: "archives.list",
+  ARCHIVE_RESTORE: "archives.restore",
+  ARCHIVES_PUBLISH_PENDING: "archives.publish-pending",
+  MAINTENANCE_RUN: "maintenance.run",
   CLOSE: "close",
 } as const;
 
@@ -70,6 +97,73 @@ export interface RuntimeStoreMethods {
   [RUNTIME_STORE_METHOD.FACTS_REPLACE]: {
     params: { facts: readonly RememberedFact[] };
     result: boolean;
+  };
+  [RUNTIME_STORE_METHOD.CONVERSATIONS_LIST]: {
+    params: Record<string, never>;
+    result: readonly ConversationRecord[];
+  };
+  [RUNTIME_STORE_METHOD.CONVERSATION_CREATE]: {
+    params: {
+      agentId: AgentId;
+      sessionKey: SessionKey;
+      name: string;
+      kind?: ConversationKind;
+      now: number;
+    };
+    result: ConversationRecord;
+  };
+  [RUNTIME_STORE_METHOD.CONVERSATION_ARCHIVE]: {
+    params: { sessionKey: SessionKey; now: number; reason: ArchiveReason };
+    result: boolean;
+  };
+  [RUNTIME_STORE_METHOD.CONVERSATION_UNARCHIVE]: {
+    params: { sessionKey: SessionKey };
+    result: boolean;
+  };
+  [RUNTIME_STORE_METHOD.CONVERSATION_RENAME]: {
+    params: { sessionKey: SessionKey; name: string };
+    result: boolean;
+  };
+  [RUNTIME_STORE_METHOD.CONVERSATION_PIN]: {
+    params: { sessionKey: SessionKey; pinnedAt: number | undefined };
+    result: boolean;
+  };
+  [RUNTIME_STORE_METHOD.CONVERSATION_DELETE]: {
+    params: { sessionKey: SessionKey; now: number; archiveId: string; removeConversation: boolean };
+    result: DeletionOutcome | undefined;
+  };
+  [RUNTIME_STORE_METHOD.TRANSCRIPT_LIST]: {
+    params: { sessionKey: SessionKey; afterSequence?: number; limit?: number };
+    result: readonly StoredTranscriptEvent[];
+  };
+  [RUNTIME_STORE_METHOD.TRANSCRIPT_SEARCH]: {
+    params: { sessionKey: SessionKey; query: string; limit?: number };
+    result: readonly StoredTranscriptEvent[];
+  };
+  [RUNTIME_STORE_METHOD.COMPACTIONS_LIST]: {
+    params: { sessionKey: SessionKey };
+    result: readonly StoredCompactionBoundary[];
+  };
+  [RUNTIME_STORE_METHOD.ARCHIVES_LIST]: {
+    params: Record<string, never>;
+    result: readonly HistoryArchiveRecord[];
+  };
+  [RUNTIME_STORE_METHOD.ARCHIVE_RESTORE]: {
+    params: { archiveId: string; agentId: AgentId; now: number };
+    result: RestoreResult;
+  };
+  [RUNTIME_STORE_METHOD.ARCHIVES_PUBLISH_PENDING]: {
+    params: Record<string, never>;
+    result: readonly string[];
+  };
+  [RUNTIME_STORE_METHOD.MAINTENANCE_RUN]: {
+    params: {
+      now: number;
+      preserve: readonly SessionKey[];
+      config?: Partial<HistoryMaintenanceConfig>;
+      force?: boolean;
+    };
+    result: MaintenanceReport;
   };
   [RUNTIME_STORE_METHOD.CLOSE]: { params: Record<string, never>; result: boolean };
 }

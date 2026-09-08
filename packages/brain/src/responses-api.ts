@@ -61,7 +61,6 @@ const RESPONSES_CONTENT_TYPE = {
 } as const;
 
 const RESPONSES_TOOL_CHOICE_AUTO = "auto";
-const RESPONSES_CONTEXT_MANAGEMENT_COMPACTION = "compaction";
 const RESPONSES_INCLUDE_ENCRYPTED_REASONING = "reasoning.encrypted_content";
 
 export const BRAIN_REASONING_EFFORT = {
@@ -87,10 +86,11 @@ export interface BrainResponsesOptions {
 }
 
 /**
- * Builds the Responses request body one brain turn is run with. Compaction is
- * asked for with no threshold of this build's, so the API's own default
- * decides when the memory is folded, and reasoning items come back encrypted
- * so the memory can carry them without the API storing anything.
+ * Builds the Responses request body one brain turn is run with. No automatic
+ * compaction is asked of the API: the host schedules compaction itself, so
+ * two policies never compete over one window, and an explicit compaction is
+ * a request of its own. Reasoning items come back encrypted so the memory
+ * can carry them without the API storing anything.
  */
 export function brainResponsesRequest(
   input: readonly ResponsesInputItem[],
@@ -106,7 +106,6 @@ export function brainResponsesRequest(
     store: false,
     include: [RESPONSES_INCLUDE_ENCRYPTED_REASONING],
     reasoning: { effort: options.reasoningEffort },
-    context_management: [{ type: RESPONSES_CONTEXT_MANAGEMENT_COMPACTION }],
     max_output_tokens: options.maximumOutputTokens,
   };
 }
@@ -131,9 +130,14 @@ export function functionCallOutputItem(callId: string, output: string): Response
   };
 }
 
-/** Whether an input item is a compaction item, the one kind the memory reads the type of. */
+/** Whether an input item is a compaction item, one of the two kinds the memory reads the type of. */
 export function isCompactionItem(item: ResponsesInputItem): boolean {
   return item.type === RESPONSES_ITEM_TYPE.COMPACTION;
+}
+
+/** Whether an input item is a user message, the boundary a local fold may cut at. */
+export function isUserMessageItem(item: ResponsesInputItem): boolean {
+  return item.type === RESPONSES_ITEM_TYPE.MESSAGE && item.role === RESPONSES_MESSAGE_ROLE.USER;
 }
 
 export interface BrainFunctionCall {
