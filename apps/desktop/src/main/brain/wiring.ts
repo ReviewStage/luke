@@ -887,15 +887,22 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       );
     });
 
+  // Conversations standing down, until their store is let go.
+  const closings = new Map<SessionKey, Promise<void>>();
   const rebuild = async (): Promise<void> => {
     const model = liveModel();
     // Main's conversation is opened the moment a brain may stand on it, and
     // not before: a launch with nothing to run leaves the store untouched.
     if (model) openConversation(MAIN_SESSION_KEY);
+    // A conversation standing down is left to its close: a rebuild landing
+    // while its drain is awaited would be the newer transition, and would
+    // install a live agent on a host the close is about to drop from the
+    // directory, where nothing could ever retire it. The reopen that follows
+    // the close builds on the model then standing.
     await Promise.all(
-      [...conversations.entries()].map(([sessionKey, opened]) =>
-        rebuildOne(sessionKey, opened, model),
-      ),
+      [...conversations.entries()]
+        .filter(([sessionKey]) => !closings.has(sessionKey))
+        .map(([sessionKey, opened]) => rebuildOne(sessionKey, opened, model)),
     );
     // Recovery of what the last launch left waits for a model to stand: a
     // launch with none has nothing to run a child on, and a child marked
@@ -914,8 +921,6 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
    * one conversation, not two.
    */
   const observedOpenings = new Map<SessionKey, Promise<BrainAgent | undefined>>();
-  // Conversations standing down, until their store is let go.
-  const closings = new Map<SessionKey, Promise<void>>();
   const openObserved = (identity: SessionIdentity): Promise<BrainAgent | undefined> => {
     const sessionKey = observedSessionKey(identity);
     const standing = conversations.get(sessionKey)?.host.current();
@@ -1087,6 +1092,10 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     rebuild,
     retire,
     openConversation: async (sessionKey) => {
+      // The same wait an observed opening keeps: a conversation still
+      // standing down is let go of before it is opened again, so the reopen
+      // never builds onto the host the close will discard.
+      await closings.get(sessionKey);
       const opened = openConversation(sessionKey);
       if (!opened.host.current()) await rebuildOne(sessionKey, opened, liveModel());
     },
