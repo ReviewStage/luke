@@ -1,4 +1,10 @@
-import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import {
+  isRecord,
+  isWireNumber,
+  isWireString,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@sidecar/wire";
 import type { ContextInput } from "./execution.js";
 import {
   type ConversationKind,
@@ -180,6 +186,22 @@ export function conversationRecordFromWire(
   return record;
 }
 
+/** The record as the protocol carries it; `conversationRecordFromWire` reads it back whole. */
+export function conversationRecordToWire(record: ConversationRecord): WireRecord {
+  return {
+    sessionKey: record.sessionKey,
+    kind: record.kind,
+    name: record.name,
+    createdAt: record.createdAt,
+    lastActivityAt: record.lastActivityAt,
+    ...(record.archivedAt !== undefined ? { archivedAt: record.archivedAt } : undefined),
+    ...(record.archiveReason !== undefined ? { archiveReason: record.archiveReason } : undefined),
+    ...(record.pinnedAt !== undefined ? { pinnedAt: record.pinnedAt } : undefined),
+    ...(record.sessionId !== undefined ? { sessionId: record.sessionId } : undefined),
+    ...(record.temporary !== undefined ? { temporary: record.temporary } : undefined),
+  };
+}
+
 /**
  * How an archive's bytes are encoded on disk: zstd through `node:zlib` where
  * the runtime has it, the plain JSONL otherwise. A reader that finds a zstd
@@ -246,6 +268,25 @@ export function historyArchiveRecordFromWire(
     ...(value.publishedAt !== undefined ? { publishedAt: value.publishedAt } : undefined),
     historyLines: value.historyLines,
     transcriptEvents: value.transcriptEvents,
+  };
+}
+
+/** The record as the protocol carries it; `historyArchiveRecordFromWire` reads it back whole. */
+export function historyArchiveRecordToWire(record: HistoryArchiveRecord): WireRecord {
+  return {
+    archiveId: record.archiveId,
+    sessionKey: record.sessionKey,
+    kind: record.kind,
+    name: record.name,
+    createdAt: record.createdAt,
+    deletedAt: record.deletedAt,
+    encoding: record.encoding,
+    sha256: record.sha256,
+    byteLength: record.byteLength,
+    fileName: record.fileName,
+    ...(record.publishedAt !== undefined ? { publishedAt: record.publishedAt } : undefined),
+    historyLines: record.historyLines,
+    transcriptEvents: record.transcriptEvents,
   };
 }
 

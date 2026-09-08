@@ -45,6 +45,11 @@ export class NodeRegistry {
     return removed;
   }
 
+  /** Whether a node of that id is registered, connected or not. */
+  has(nodeId: string): boolean {
+    return this.#nodes.has(nodeId);
+  }
+
   setConnected(nodeId: string, connected: boolean): boolean {
     const held = this.#nodes.get(nodeId);
     if (!held || held.connected === connected) return false;

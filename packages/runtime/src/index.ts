@@ -62,6 +62,7 @@ export {
   type DeliveryLedgerOptions,
   type DeliveryOffer,
   type DeliveryRecord,
+  deliveryRecordToWire,
 } from "./gateway/delivery.js";
 export {
   createGatewayToken,

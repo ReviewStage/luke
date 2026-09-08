@@ -32,7 +32,13 @@
 
 import { actNarration, type CarriedSessionAction } from "@sidecar/acts";
 import type { Session, SessionIdentity } from "@sidecar/session";
-import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import {
+  isRecord,
+  isWireNumber,
+  isWireString,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@sidecar/wire";
 import { SESSION_NO_LONGER_OBSERVED_NOTE } from "./realtime-protocol.js";
 
 /** What one history line records, which also says who it speaks for. */
@@ -139,6 +145,53 @@ export interface ConversationEntry {
    * into model context.
    */
   requestId?: string;
+}
+
+/** The line as the Gateway protocol carries it; `conversationEntryFromWire` reads it back whole. */
+export function conversationEntryToWire(entry: ConversationEntry): WireRecord {
+  return {
+    kind: entry.kind,
+    words: entry.words,
+    ...(entry.eventId !== undefined ? { eventId: entry.eventId } : undefined),
+    ...(entry.identity
+      ? {
+          identity: {
+            providerId: entry.identity.providerId,
+            providerSessionId: entry.identity.providerSessionId,
+          },
+        }
+      : undefined),
+    ...(entry.recordedAt !== undefined ? { recordedAt: entry.recordedAt } : undefined),
+    ...(entry.requestId !== undefined ? { requestId: entry.requestId } : undefined),
+  };
+}
+
+/**
+ * One History line as a Gateway event carried it, or nothing for a shape this
+ * build cannot draw. Unlike {@link storedConversationEntry}, which reads a
+ * line back from disk, this reads a line another process of the same build
+ * just wrote, so every optional field is taken as it was sent.
+ */
+export function conversationEntryFromWire(value: UnparsedWireValue): ConversationEntry | undefined {
+  if (!isRecord(value) || !isConversationEntryKind(value.kind) || !isWireString(value.words)) {
+    return undefined;
+  }
+  const identity = value.identity;
+  const providerId = isRecord(identity) ? identity.providerId : undefined;
+  const providerSessionId = isRecord(identity) ? identity.providerSessionId : undefined;
+  if (identity !== undefined && !(isWireString(providerId) && isWireString(providerSessionId))) {
+    return undefined;
+  }
+  return {
+    kind: value.kind,
+    words: value.words,
+    ...(isWireString(value.eventId) ? { eventId: value.eventId } : undefined),
+    ...(isWireString(providerId) && isWireString(providerSessionId)
+      ? { identity: { providerId, providerSessionId } }
+      : undefined),
+    ...(isWireNumber(value.recordedAt) ? { recordedAt: value.recordedAt } : undefined),
+    ...(isWireString(value.requestId) ? { requestId: value.requestId } : undefined),
+  };
 }
 
 /**
