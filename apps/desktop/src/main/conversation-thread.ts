@@ -135,11 +135,6 @@ export class ConversationThread<Reporter = never> {
    * the thread with what it held before. Everything the store does about the
    * Clear happens after this returns.
    */
-  /** The cutoff the thread stands behind, for a deletion to record what stood before its own fence. */
-  clearedAt(): number | undefined {
-    return this.#clearedAt;
-  }
-
   fence(clearedAt: number): void {
     this.#epoch += 1;
     this.#clearedAt = clearedAt;

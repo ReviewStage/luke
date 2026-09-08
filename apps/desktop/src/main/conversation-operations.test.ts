@@ -22,7 +22,10 @@ const THREAD = threadSessionKey("t-1");
 /** The cutoff an earlier Clear left, which the deletion's archive must record as the one before its own. */
 const EARLIER_CUTOFF = NOW - 5;
 
-function harness(erasePublished = true, { archives = true, marks = true } = {}) {
+function harness(
+  erasePublished = true,
+  { archives = true, marks = true, readsCutoff = true } = {},
+) {
   const calls: string[] = [];
   let generation = "gen-1";
   const record = (sessionKey: SessionKey): ConversationRecord => ({
@@ -37,11 +40,10 @@ function harness(erasePublished = true, { archives = true, marks = true } = {}) 
     store: {
       directory: () => ({ entries: [record(THREAD)], archives: [] }),
       holds: (sessionKey) => sessionKey === THREAD || sessionKey === MAIN_SESSION_KEY,
-      // SAFETY: the operations reach the thread for its lines, its fence, and its standing cutoff alone.
+      // SAFETY: the operations reach the thread for its lines and its fence alone.
       thread: (sessionKey) =>
         ({
           entries: () => entries,
-          clearedAt: () => EARLIER_CUTOFF,
           fence: (deletedAt: number) => {
             calls.push(`fence:${sessionKey}:${deletedAt}`);
           },
@@ -57,6 +59,10 @@ function harness(erasePublished = true, { archives = true, marks = true } = {}) 
       unarchive: async (sessionKey) => {
         calls.push(`unarchive:${sessionKey}`);
         return true;
+      },
+      historyCutoff: async (sessionKey) => {
+        calls.push(`cutoff:${sessionKey}`);
+        return readsCutoff ? { value: EARLIER_CUTOFF } : undefined;
       },
       eraseHistory: async (sessionKey, now, keepSessionId, cutoffBefore) => {
         calls.push(`erase:${sessionKey}:${now}:${keepSessionId}:${cutoffBefore}`);
@@ -131,6 +137,7 @@ test("Delete history fences the thread and the brain's generation, then erases w
   assert.equal(await operations.deleteHistory(THREAD), CONVERSATION_DELETE_OUTCOME.COMPLETE);
   assert.deepEqual(calls, [
     `fence:${THREAD}:${NOW}`,
+    `cutoff:${THREAD}`,
     `clear:${THREAD}:${NOW}`,
     `erase:${THREAD}:${NOW}:gen-2:${EARLIER_CUTOFF}`,
   ]);
@@ -147,9 +154,19 @@ test("a marker the store will not write refuses the deletion with the fences sta
   assert.equal(await operations.deleteHistory(THREAD), CONVERSATION_DELETE_OUTCOME.REFUSED);
   assert.deepEqual(
     calls.filter((call) => !call.startsWith("report:")),
-    [`fence:${THREAD}:${NOW}`, `clear:${THREAD}:${NOW}`],
+    [`fence:${THREAD}:${NOW}`, `cutoff:${THREAD}`, `clear:${THREAD}:${NOW}`],
   );
   assert.ok(calls.some((call) => call.includes("could not be marked erased")));
+});
+
+test("a cutoff the store cannot read refuses the deletion after the marker, with nothing erased: an archive never records a guessed cutoff", async () => {
+  const { operations, calls } = harness(true, { readsCutoff: false });
+  assert.equal(await operations.deleteHistory(THREAD), CONVERSATION_DELETE_OUTCOME.REFUSED);
+  assert.deepEqual(
+    calls.filter((call) => !call.startsWith("report:")),
+    [`fence:${THREAD}:${NOW}`, `cutoff:${THREAD}`, `clear:${THREAD}:${NOW}`],
+  );
+  assert.ok(calls.some((call) => call.includes("earlier cutoff could not be read")));
 });
 
 test("maintenance runs at once and then on its clock, preserving the busy conversations, until stopped", () => {

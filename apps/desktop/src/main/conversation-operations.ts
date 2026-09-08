@@ -39,6 +39,7 @@ export interface ConversationOperationsDependencies {
     | "createThread"
     | "archive"
     | "unarchive"
+    | "historyCutoff"
     | "eraseHistory"
     | "restoreArchive"
   >;
@@ -79,21 +80,17 @@ export function conversationOperations(
     },
     deleteHistory: (sessionKey) => {
       const generations = brain.store(sessionKey);
-      const thread = store.thread(sessionKey);
-      // The cutoff as it stands before this press: the marker the brain's
-      // fence writes raises the durable one to the press itself, and an
-      // archive recording that would make its restore hide its own lines.
-      const cutoffBefore = thread.clearedAt();
       return deleteConversationHistoryFlow({
         now: dependencies.now,
         // The voice window is told of main's Clear by the voice IPC that
         // carried the press, in its own synchronous prefix; nothing here
         // sends that command a second time.
-        fence: (deletedAt) => thread.fence(deletedAt),
+        fence: (deletedAt) => store.thread(sessionKey).fence(deletedAt),
+        readCutoffBefore: () => store.historyCutoff(sessionKey),
         fenceBrain: (deletedAt) => generations.clear(deletedAt),
         // The successor the fence began stands; the deletion takes every
         // lifetime before it and nothing recorded after the press.
-        erase: (deletedAt) =>
+        erase: (deletedAt, cutoffBefore) =>
           store.eraseHistory(sessionKey, deletedAt, generations.generationId(), cutoffBefore),
         report: dependencies.report,
       });

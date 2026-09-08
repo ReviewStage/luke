@@ -26,6 +26,11 @@ import type { HistoryErasure } from "../runtime-store-wiring";
  * disk kept, so the developer sees an emptied History and is told the
  * erasure did not finish, never that it did.
  */
+/** The durable cutoff as read, which may itself be absent when no deletion ever raised one. */
+export interface CutoffBefore {
+  value: number | undefined;
+}
+
 export interface ConversationDeletionDependencies {
   now: () => number;
   /** Empties the relayed thread and tells every window, before anything is awaited. */
@@ -36,8 +41,20 @@ export interface ConversationDeletionDependencies {
    * itself is synchronous inside the call, before its first await.
    */
   fenceBrain: (deletedAt: number) => Promise<boolean>;
+  /**
+   * Reads the conversation's durable cutoff as the store holds it, for the
+   * archive to record as the cutoff before this press. Called before the
+   * brain is fenced, so the store answers it ahead of the marker that raises
+   * the cutoff to the press itself; the thread's own fence is no substitute,
+   * since it advances whether or not an earlier marker reached the disk.
+   * Answers nothing when the store could not be read.
+   */
+  readCutoffBefore: () => Promise<CutoffBefore | undefined>;
   /** The store's deletion of what stood at or before the instant, behind a committed archive; publication attempted. */
-  erase: (deletedAt: number) => Promise<HistoryErasure | undefined>;
+  erase: (
+    deletedAt: number,
+    cutoffBefore: number | undefined,
+  ) => Promise<HistoryErasure | undefined>;
   report: (message: string) => void;
 }
 
@@ -59,6 +76,7 @@ export type ConversationDeleteOutcome =
 
 export const CONVERSATION_DELETION_INCOMPLETE = {
   MARKER: "the brain's memory could not be marked erased on disk",
+  CUTOFF: "the conversation's earlier cutoff could not be read for the recovery archive",
   ROWS: "the stored conversation could not be removed",
   ARCHIVE: "the recovery archive is committed but not yet published; the next launch retries",
 } as const;
@@ -68,6 +86,7 @@ export async function deleteConversationHistoryFlow(
 ): Promise<ConversationDeleteOutcome> {
   const deletedAt = dependencies.now();
   dependencies.fence(deletedAt);
+  const cutoffRead = dependencies.readCutoffBefore();
   const marked = await dependencies.fenceBrain(deletedAt);
   if (!marked) {
     // No durable marker, so the rows are left for the next landed write to
@@ -77,7 +96,14 @@ export async function deleteConversationHistoryFlow(
     dependencies.report(`Delete history incomplete: ${CONVERSATION_DELETION_INCOMPLETE.MARKER}`);
     return CONVERSATION_DELETE_OUTCOME.REFUSED;
   }
-  const outcome = await dependencies.erase(deletedAt);
+  const cutoffBefore = await cutoffRead;
+  if (!cutoffBefore) {
+    // An archive recording a guessed cutoff would make its restore hide
+    // lines it brings back; the rows stay, behind the fences and the marker.
+    dependencies.report(`Delete history incomplete: ${CONVERSATION_DELETION_INCOMPLETE.CUTOFF}`);
+    return CONVERSATION_DELETE_OUTCOME.REFUSED;
+  }
+  const outcome = await dependencies.erase(deletedAt, cutoffBefore.value);
   if (!outcome) {
     dependencies.report(`Delete history incomplete: ${CONVERSATION_DELETION_INCOMPLETE.ROWS}`);
     return CONVERSATION_DELETE_OUTCOME.REFUSED;

@@ -29,6 +29,7 @@ import {
   MAIN_CONVERSATION_NAME,
   MAIN_SESSION_KEY,
   type ModelResponse,
+  RESTORE_OUTCOME,
   type TranscriptEvent,
 } from "@sidecar/runtime-contracts";
 import {
@@ -181,13 +182,15 @@ function composed() {
     deleteConversationHistoryFlow({
       now: () => clock,
       fence: (at) => thread.fence(at),
+      readCutoffBefore: async () => ({ value: await client.historyClearedAt(MAIN_SESSION_KEY) }),
       fenceBrain: (at) => store.clear(at),
-      erase: async (at) => {
+      erase: async (at, cutoffBefore) => {
         await eraseGate;
         if (refuseErase) return undefined;
         const outcome = await client.deleteConversationHistory(MAIN_SESSION_KEY, at, {
           archiveId: `archive-${++ids}`,
           keepSessionId: store.generationId(),
+          cutoffBefore: { value: cutoffBefore },
         });
         return outcome ? { published: outcome.published } : undefined;
       },
@@ -318,6 +321,20 @@ async function seeded(c: ReturnType<typeof composed>) {
   assert.ok(c.thread.entries().some((entry) => entry.words === OLD_REPLY));
   for (const word of [OLD_ASK, OLD_REPLY, OLD_COMPACTION]) assert.ok(c.rows().includes(word));
   return { agent, client };
+}
+
+/** The cutoff the archive's registry row recorded as standing before its deletion. */
+function previousCutoffOf(root: string, archiveId: string): number | null | undefined {
+  const raw = new DatabaseSync(path.join(root, "agent.sqlite"), { readOnly: true });
+  try {
+    // SAFETY: the one column selected is the nullable integer the schema names.
+    const row = raw
+      .prepare("SELECT previous_cutoff FROM history_archives WHERE archive_id = ?")
+      .get(archiveId) as { previous_cutoff: number | null } | undefined;
+    return row?.previous_cutoff;
+  } finally {
+    raw.close();
+  }
 }
 
 function assertNoneOf(words: readonly string[], surface: string): void {
@@ -479,4 +496,35 @@ test("a credential rebuild landing while the deletion waits on the disk builds o
   assert.equal(c.standing()?.session_id, c.store.generationId());
   assert.equal(client.inputs.length, 1);
   await c.stop(rebuilt);
+});
+
+test("a Clear whose marker the disk refused, followed by a Clear that lands, archives the lines still on disk under the durable cutoff, so their restore shows them again", async (t) => {
+  const c = composed();
+  t.after(() => c.close());
+  const { agent } = await seeded(c);
+  await c.stop(agent);
+  // The first press: fenced in memory, marker refused, the lines still on disk.
+  c.repo.refuse = true;
+  const firstAt = c.tick();
+  assert.equal(await c.clear(), CONVERSATION_DELETE_OUTCOME.REFUSED);
+  assert.equal(await c.client.historyClearedAt(MAIN_SESSION_KEY), undefined);
+  c.repo.refuse = false;
+  // The second press lands. Its archive must record the cutoff the disk
+  // held before it — none — and not the first press's in-memory fence.
+  const secondAt = c.tick();
+  assert.equal(await c.clear(), CONVERSATION_DELETE_OUTCOME.COMPLETE);
+  assert.equal(await c.client.historyClearedAt(MAIN_SESSION_KEY), secondAt);
+  const [archive] = await c.client.listArchives();
+  assert.ok(archive);
+  assert.equal(archive.historyLines, 2);
+  assert.equal(previousCutoffOf(c.root, archive.archiveId), null);
+  c.tick();
+  const restored = await c.client.restoreArchive(archive.archiveId, DEFAULT_AGENT_ID, c.now());
+  assert.equal(restored.outcome, RESTORE_OUTCOME.RESTORED);
+  const cutoff = await c.client.historyClearedAt(MAIN_SESSION_KEY);
+  assert.ok(cutoff === undefined || cutoff < firstAt, `cutoff ${cutoff} hides the restored lines`);
+  assert.deepEqual(
+    (await c.client.listHistory(MAIN_SESSION_KEY, c.now())).map((entry) => entry.words),
+    [OLD_ASK, OLD_REPLY],
+  );
 });

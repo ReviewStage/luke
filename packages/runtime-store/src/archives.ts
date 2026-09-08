@@ -534,6 +534,16 @@ export function restoreArchive(
         .prepare("UPDATE conversations SET history_cleared_at = ? WHERE session_key = ?")
         .run(row.previous_cutoff, sessionKey);
     }
+    // The deletion's marker on the standing lifetime is the same cutoff by
+    // another name, and a restore releases it the same way: a marker left at
+    // the deletion's instant would hide every line brought back.
+    database
+      .prepare(
+        `UPDATE conversation_sessions SET reset_cleared_at = ?
+         WHERE session_key = ? AND reset_cleared_at IS NOT NULL
+           AND (? IS NULL OR reset_cleared_at > ?)`,
+      )
+      .run(row.previous_cutoff, sessionKey, row.previous_cutoff, row.previous_cutoff);
     let historyLines = 0;
     let transcriptEvents = 0;
     let latest = 0;

@@ -21,6 +21,7 @@ import {
   type RuntimeStorePort,
 } from "@sidecar/runtime-store";
 import type { WebContents } from "electron";
+import type { CutoffBefore } from "./brain/conversation-deletion";
 import { ConversationThread, MemoryHistoryStore } from "./conversation-thread";
 
 /**
@@ -115,6 +116,13 @@ export interface RuntimeStoreWiring {
    * on disk to archive, so forgetting its lines is the whole erasure and
    * answers as published.
    */
+  /**
+   * The conversation's durable Clear cutoff as the store holds it now, in
+   * the store's own order behind every request already sent and ahead of
+   * every one sent after; nothing when the store could not answer. A thread
+   * held in memory alone has no durable cutoff and answers an absent one.
+   */
+  historyCutoff: (sessionKey: SessionKey) => Promise<CutoffBefore | undefined>;
   eraseHistory: (
     sessionKey: SessionKey,
     now: number,
@@ -339,6 +347,17 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
       if (restored) await restoreThread(sessionKey);
       await refreshDirectory();
       return restored;
+    },
+    historyCutoff: async (sessionKey) => {
+      if (temporary.has(sessionKey) || !dependencies.persistent) return { value: undefined };
+      try {
+        return { value: await client().historyClearedAt(sessionKey) };
+      } catch (error) {
+        dependencies.report(
+          `Could not read the conversation's cutoff: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return undefined;
+      }
     },
     eraseHistory: async (sessionKey, now, keepSessionId, cutoffBefore) => {
       if (temporary.has(sessionKey) || !dependencies.persistent) {
