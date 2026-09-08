@@ -10,6 +10,9 @@
     },
     "api/brain/v2/compact.ts": {
       "maxDuration": 120
+    },
+    "api/brain/v2/count-tokens.ts": {
+      "maxDuration": 120
     }
   },
   "routes": [
