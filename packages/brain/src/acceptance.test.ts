@@ -603,7 +603,8 @@ test("a runtime that is not Responses drives the same host: acts journaled throu
   await h.agent.stop();
 
   // An observation turn runs over the same runtime, with the roster's deltas
-  // read by the host and no act reachable however the script asks.
+  // read by the host and the act the policy allows carried through the same
+  // executor, journaled while it ran and let go of once the turn committed.
   const observing = new ScriptedRuntime([REALTIME_TOOL.SEND_SESSION_MESSAGE]);
   const o = host(() => observing, model, storage);
   await o.agent.ready();
@@ -612,8 +613,9 @@ test("a runtime that is not Responses drives the same host: acts journaled throu
   o.clock.now += 3_000;
   for (const timer of [...o.clock.timers.values()]) timer.callback();
   await settle();
-  assert.equal(o.performed.length, 0);
+  assert.deepEqual(o.performed, [REALTIME_TOOL.SEND_SESSION_MESSAGE]);
   assert.equal(storage.stored()?.cursors[claude.id]?.abc, "c1");
+  assert.equal(storage.stored()?.journal.length, 1, "the ask's journal alone stays");
   await o.agent.stop();
 });
 

@@ -13,20 +13,24 @@ import {
   sessionToolAction,
 } from "@sidecar/acts";
 import {
-  BRAIN_TURN_AUTHORITY,
   type BrainActExecution,
   type BrainActPerformer,
   settledUnlessAborted,
 } from "@sidecar/brain";
 import type { AppGuideSnapshot } from "@sidecar/guide";
 import type { TrackedIssue } from "@sidecar/issues";
-import { type ConversationEntry, sessionActConversationEntry } from "@sidecar/realtime";
+import {
+  CONVERSATION_ENTRY_KIND,
+  type ConversationEntry,
+  sessionActConversationEntry,
+} from "@sidecar/realtime";
+import { isRunOrigin, RUN_ORIGIN } from "@sidecar/runtime-contracts";
 import {
   type ObservedWorkspaceProject,
   type Session,
   workspaceAgentModels,
 } from "@sidecar/session";
-import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, isWireString, type WireRecord } from "@sidecar/wire";
 import type { BrainAppActRequest } from "#shared/contracts";
 import {
   forgetRememberedFact,
@@ -76,7 +80,7 @@ export interface BrainActPerformerDependencies {
 
 const REFUSAL = {
   NO_SUCH_TOOL: "No such tool exists.",
-  NO_AUTHORITY: "Not run: an act needs a turn the developer opened.",
+  NO_EXECUTION: "Not run: an act needs the standing of a turn.",
   TURN_OVER: "Not run: the turn that asked for this act is over.",
   NO_TRACKER: "No issue tracker is connected.",
   MEMORY_NOT_SAVED: "That memory could not be saved.",
@@ -97,14 +101,16 @@ function rejection(reason: string): WireRecord {
  * project no adapter offers, or a setting the guide does not list is refused
  * with a reason the brain can read.
  *
- * Before any of that, the act has to arrive with the developer's own standing:
- * an execution context the brain built for a turn the developer opened, and
- * only for such a turn. A call with no context, a malformed one, or one whose
- * authority is anything but the developer's is refused before a validator
- * runs, so the shape of the context, not the words of the call, is what opens
- * the gate. The context is asked again after every step awaited here and once
- * more just before the effect, so an act whose turn ended while the roster
- * was refreshing is refused rather than dispatched.
+ * Before any of that, the act has to arrive with a turn's standing: an
+ * execution context the brain built for the turn that emitted the call,
+ * naming the run and who opened it. Whether the act may run at all was the
+ * tool policy's decision before the call left the brain; here the context is
+ * what says the turn still stands, and it is asked again after every step
+ * awaited and once more just before the effect, so an act whose turn ended
+ * while the roster was refreshing is refused rather than dispatched. A call
+ * with no context or a malformed one is refused before a validator runs. The
+ * origin decides only how History records the act: at the developer's ask,
+ * or as Luke's own judgment in a turn nobody asked him anything in.
  */
 export function createBrainActPerformer(
   dependencies: BrainActPerformerDependencies,
@@ -135,7 +141,15 @@ export function createBrainActPerformer(
     // the developer having asked it, and the reply voicing the outcome is
     // recorded as what Luke said.
     if (execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
-    dependencies.recordConversationEntry(sessionActConversationEntry(action, sessions));
+    dependencies.recordConversationEntry(
+      sessionActConversationEntry(
+        action,
+        sessions,
+        execution.origin === RUN_ORIGIN.USER
+          ? CONVERSATION_ENTRY_KIND.ACT
+          : CONVERSATION_ENTRY_KIND.OWN_ACT,
+      ),
+    );
     // The performer awaits once more of its own before a create or a spawn,
     // so the execution rides along to be asked again there.
     return dependencies.sessionActs.perform(action, execution);
@@ -205,7 +219,7 @@ export function createBrainActPerformer(
 
   return {
     async perform(call: RealtimeFunctionCall, execution: BrainActExecution) {
-      if (!isDeveloperExecution(execution)) return rejection(REFUSAL.NO_AUTHORITY);
+      if (!isExecution(execution)) return rejection(REFUSAL.NO_EXECUTION);
       if (execution.isRevoked()) return rejection(REFUSAL.TURN_OVER);
       const family = realtimeToolFamily(call.name);
       if (family === undefined) return rejection(REFUSAL.NO_SUCH_TOOL);
@@ -216,14 +230,17 @@ export function createBrainActPerformer(
 
 /**
  * Read as untrusted even though the type says otherwise: the main process is
- * the last gate before an effect, and a context missing, mis-shaped, or of any
- * authority but the developer's must refuse here rather than trust its type.
+ * the last gate before an effect, and a context missing or mis-shaped must
+ * refuse here rather than trust its type.
  */
-function isDeveloperExecution(
-  execution: BrainActExecution | undefined,
-): execution is BrainActExecution {
+function isExecution(execution: BrainActExecution | undefined): execution is BrainActExecution {
   return (
-    execution?.authority === BRAIN_TURN_AUTHORITY.DEVELOPER &&
-    execution.isRevoked instanceof Function
+    execution !== undefined &&
+    execution !== null &&
+    isWireString(execution.runId) &&
+    execution.runId.length > 0 &&
+    isRunOrigin(execution.origin) &&
+    execution.isRevoked instanceof Function &&
+    execution.signal instanceof AbortSignal
   );
 }

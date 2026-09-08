@@ -35,6 +35,8 @@ export function historyEntryPresentation(kind: ConversationEntryKind): HistoryEn
       return { speaker: HISTORY_ENTRY_SPEAKER.LUKE, label: "Luke" };
     case CONVERSATION_ENTRY_KIND.ACT:
       return { speaker: HISTORY_ENTRY_SPEAKER.EVENT, label: "At your request" };
+    case CONVERSATION_ENTRY_KIND.OWN_ACT:
+      return { speaker: HISTORY_ENTRY_SPEAKER.EVENT, label: "On his own" };
   }
 }
 

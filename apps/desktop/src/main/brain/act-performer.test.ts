@@ -6,9 +6,10 @@ import {
   REALTIME_TOOL,
   type RememberedFact,
 } from "@sidecar/acts";
-import { BRAIN_TURN_AUTHORITY, type BrainActExecution } from "@sidecar/brain";
+import type { BrainActExecution } from "@sidecar/brain";
 import { APP_SETTING_KIND, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import type { ConversationEntry } from "@sidecar/realtime";
+import { RUN_ORIGIN } from "@sidecar/runtime-contracts";
 import { normalizeSession, SESSION_STATUS, type Session } from "@sidecar/session";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import type { BrainAppActRequest } from "#shared/contracts";
@@ -19,8 +20,19 @@ const NOW = 1_800_000_000_000;
 /** A developer-opened turn still standing, or one revoked from the moment `revoked()` first says so. */
 function developerTurn(revoked: () => boolean = () => false): BrainActExecution {
   return {
-    authority: BRAIN_TURN_AUTHORITY.DEVELOPER,
+    runId: "run-1",
+    origin: RUN_ORIGIN.USER,
     isRevoked: revoked,
+    signal: new AbortController().signal,
+  };
+}
+
+/** An observation turn's standing: the same shape, attributed to Luke's own judgment. */
+function observationTurn(): BrainActExecution {
+  return {
+    runId: "wake-1",
+    origin: RUN_ORIGIN.OBSERVATION,
+    isRevoked: () => false,
     signal: new AbortController().signal,
   };
 }
@@ -262,7 +274,16 @@ test("an app act is validated against the reported guide before a renderer carri
   assert.equal(appActs.length, 1);
 });
 
-test("an act with no developer standing is refused in main before any validator or effect", async () => {
+test("an act in a turn Luke opened himself runs under the same validators and is recorded as his own", async () => {
+  const { acts, performed, recorded } = performer();
+  const outcome = await acts.perform(MESSAGE_CALL, observationTurn());
+  assert.equal(outcome.status, ACT_RESULT_STATUS.ACCEPTED);
+  assert.equal(performed.length, 1);
+  assert.equal(recorded.length, 1);
+  assert.equal(recorded[0]?.kind, "own-act");
+});
+
+test("an act with no turn standing is refused in main before any validator or effect", async () => {
   const { acts, performed, recorded, appActs, facts } = performer({
     appGuide: () => CAPTIONS_GUIDE,
   });
@@ -272,16 +293,26 @@ test("an act with no developer standing is refused in main before any validator 
     undefined,
     null,
     {},
-    { authority: BRAIN_TURN_AUTHORITY.OBSERVATION, isRevoked: () => false },
-    { authority: "root", isRevoked: () => false },
-    { authority: BRAIN_TURN_AUTHORITY.DEVELOPER },
-    { authority: BRAIN_TURN_AUTHORITY.DEVELOPER, isRevoked: true },
+    {
+      runId: "run-1",
+      origin: "root",
+      isRevoked: () => false,
+      signal: new AbortController().signal,
+    },
+    { runId: "run-1", origin: RUN_ORIGIN.USER, signal: new AbortController().signal },
+    {
+      runId: "run-1",
+      origin: RUN_ORIGIN.USER,
+      isRevoked: true,
+      signal: new AbortController().signal,
+    },
+    { origin: RUN_ORIGIN.USER, isRevoked: () => false, signal: new AbortController().signal },
   ] as unknown as BrainActExecution[];
   for (const execution of malformed) {
     for (const call of [MESSAGE_CALL, REMEMBER_CALL, SETTING_CALL]) {
       const refused = await acts.perform(call, execution);
       assert.equal(refused.status, ACT_RESULT_STATUS.REJECTED);
-      assert.ok(String(refused.reason).includes("developer opened"));
+      assert.ok(String(refused.reason).includes("standing of a turn"));
     }
   }
   assert.deepEqual(performed, []);
@@ -363,7 +394,8 @@ test("a cancel during the roster refresh or the defaults read settles the act, a
     });
     const controller = new AbortController();
     const execution: BrainActExecution = {
-      authority: BRAIN_TURN_AUTHORITY.DEVELOPER,
+      runId: "run-1",
+      origin: RUN_ORIGIN.USER,
       isRevoked: () => controller.signal.aborted,
       signal: controller.signal,
     };

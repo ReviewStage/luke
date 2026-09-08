@@ -13,12 +13,7 @@
  * itself, never the export.
  */
 
-import {
-  BRAIN_TURN_AUTHORITY,
-  type BrainTurnAuthority,
-  brainToolDefinitions,
-  brainTurnAuthorityFromWire,
-} from "@sidecar/brain";
+import { hostedBrainToolCatalog } from "@sidecar/brain";
 import { REALTIME_CLIENT_EVENT, REALTIME_SERVER_EVENT } from "@sidecar/realtime";
 import {
   isRecord,
@@ -223,14 +218,23 @@ function applyWireEntry(state: ExportState, entry: WireRecord, atMs: number | un
 }
 
 /**
- * The brain's own tool definitions for the turn's authority, in the viewer's
- * shape. They are already the Responses API's function-tool form, the same one
- * a realtime session update carries, so the JSON round trip lets the wire
- * reader above render them the way it renders the session's. A trace written
- * before turns carried an authority is drawn with the narrower set.
+ * The tools the turn was offered, in the viewer's shape: the names the trace
+ * recorded, each resolved against the catalog the build fixes. They are
+ * already the Responses API's function-tool form, the same one a realtime
+ * session update carries, so the JSON round trip lets the wire reader above
+ * render them the way it renders the session's. A name the catalog no longer
+ * holds is left out rather than invented.
  */
-function brainAvailableTools(authority: BrainTurnAuthority): readonly WireRecord[] {
-  return toolDefinitions(unparsedWire(JSON.parse(JSON.stringify(brainToolDefinitions(authority)))));
+function brainAvailableTools(entry: WireRecord): readonly WireRecord[] {
+  const catalog = hostedBrainToolCatalog();
+  const names = Array.isArray(entry.tools)
+    ? entry.tools.map((name) => text(name)).filter((name) => name !== undefined)
+    : [];
+  const definitions = names.flatMap((name) => {
+    const tool = catalog.get(name);
+    return tool ? [tool] : [];
+  });
+  return toolDefinitions(unparsedWire(JSON.parse(JSON.stringify(definitions))));
 }
 
 /**
@@ -286,9 +290,7 @@ function applyBrainEntry(state: ExportState, entry: WireRecord): void {
       tokens: { input: inputTokens, output: 0 },
       cost: 0,
     },
-    available_tools: brainAvailableTools(
-      brainTurnAuthorityFromWire(entry.authority) ?? BRAIN_TURN_AUTHORITY.OBSERVATION,
-    ),
+    available_tools: brainAvailableTools(entry),
     messages: [
       { role: "user", content: brainInputText(entry) },
       { role: "assistant", content: brainOutputText(entry) },

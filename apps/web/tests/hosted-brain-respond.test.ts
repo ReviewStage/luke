@@ -14,9 +14,10 @@ import {
   BrainAgent,
   BrainStateStore,
   brainInstructions,
-  brainToolDefinitions,
   HOSTED_SERVICE_PATH,
   HostedModelAdapter,
+  hostedBrainToolCatalog,
+  hostedBrainV1ToolDefinitions,
   isRecord,
   maximumHostedBrainRequestBytes,
   normalizeSession,
@@ -123,7 +124,7 @@ test("one request is one inference on the build's fixed settings, answered as th
   assert.equal(sent.model, BRAIN_OPENAI_DEFAULTS.MODEL);
   assert.equal(HOSTED_BRAIN_DEFAULTS.MODEL, "gpt-5.6-terra");
   assert.equal(sent.instructions, brainInstructions());
-  assert.deepEqual(sent.tools, brainToolDefinitions(DEVELOPER));
+  assert.deepEqual(sent.tools, hostedBrainV1ToolDefinitions(DEVELOPER));
   assert.equal(sent.store, false);
   assert.equal(sent.max_output_tokens, BRAIN_DEFAULTS.MAXIMUM_OUTPUT_TOKENS);
   assert.equal(sent.max_output_tokens, 16_000);
@@ -152,7 +153,7 @@ test("the toolset follows the request's authority, and a request naming none is 
   );
   assert.equal(observed.status, 200);
   const tools = sentBody(calls, 0).tools;
-  assert.deepEqual(tools, brainToolDefinitions(OBSERVATION));
+  assert.deepEqual(tools, hostedBrainV1ToolDefinitions(OBSERVATION));
   assert.ok(Array.isArray(tools));
   const names = tools.map((tool) => (isRecord(tool) ? tool.name : undefined));
   assert.ok(names.includes(BRAIN_TOOL.ANNOUNCE));
@@ -548,8 +549,12 @@ test("the desktop runs the tool loop and the act while the service runs only inf
   assert.equal(desktop.upstreamCalls.length, 2);
   for (const index of [0, 1]) {
     const sent = sentBody(desktop.upstreamCalls, index);
-    // The desktop named the tools; the service selected its own schemas for them.
-    assert.deepEqual(sent.tools, brainToolDefinitions(DEVELOPER));
+    // The desktop named the tools its policy offers an ask — the whole catalog
+    // but the briefing — and the service selected its own schemas for them.
+    assert.deepEqual(
+      sent.tools,
+      [...hostedBrainToolCatalog().values()].filter((tool) => tool.name !== BRAIN_TOOL.ANNOUNCE),
+    );
     assert.equal(sent.instructions, brainInstructions());
     assert.equal(sent.store, false);
   }

@@ -1,5 +1,6 @@
-import type { BrainTurnAuthority } from "@sidecar/hosted";
 import type { ScheduledTimer } from "@sidecar/realtime";
+import type { EffectiveToolPolicy } from "@sidecar/runtime";
+import type { RunOrigin } from "@sidecar/runtime-contracts";
 import type { WireRecord } from "@sidecar/wire";
 import type { Generation } from "./generation.js";
 import type { RecordingContextEngine } from "./transcript-recorder.js";
@@ -17,8 +18,7 @@ export type BrainTurnTrigger = (typeof BRAIN_TURN_TRIGGER)[keyof typeof BRAIN_TU
 export const REFUSAL_REASON = {
   UNOBSERVED_SESSION: "not an observed session",
   ANNOUNCE_IN_ASK: "reply in text: this is a developer ask, and your final text is the speech",
-  ACT_IN_OBSERVATION:
-    "not run: an act needs a turn the developer opened, and this one was opened by observation",
+  NOT_ALLOWED: "not run: the tool policy does not offer this tool in this turn",
   NOT_OFFERED: "not run: no such tool in this turn",
   EMPTY_BRIEFING: "a briefing needs words",
   ACT_FAILED: "the act did not complete",
@@ -26,6 +26,7 @@ export const REFUSAL_REASON = {
   RUN_REVOKED: "not run: this ask was cancelled or its run ended",
   NOT_CHECKPOINTED: "not run: the act could not be recorded before running, so it was not run",
   CALL_ID_REUSED: "not run: this call id was already used with different arguments",
+  NO_WORKSPACE: "not run: this agent has no workspace",
 } as const;
 
 export const TURN_OUTCOME = {
@@ -55,6 +56,8 @@ export type TurnResult =
  */
 export interface RunControl {
   runId: string;
+  /** Whether a request record stands behind this run, for the checkpoint to carry its accounting. */
+  recorded: boolean;
   generation: Generation;
   abort: AbortController;
   cancelled: boolean;
@@ -70,7 +73,8 @@ export interface RunControl {
 
 export interface TurnPlan {
   trigger: BrainTurnTrigger;
-  authority: BrainTurnAuthority;
+  /** Who or what opened the turn: attribution for the record and the trace, never a permission. */
+  origin: RunOrigin;
   events: readonly BrainWakeEvent[];
   /** The words the turn opens with, each ingested as the developer's or the host's, in order. */
   open: (events: readonly BrainWakeEvent[], now: number) => readonly string[];
@@ -89,8 +93,21 @@ export interface TurnPlan {
 export interface TurnContext {
   generation: Generation;
   context: RecordingContextEngine;
-  run?: RunControl;
+  run: RunControl;
   signal: AbortSignal;
+}
+
+/** What a turn was prepared with: the prompt the model reads and the policy that fixed its tools. */
+export interface BrainTurnPreparation {
+  readonly prompt: string;
+  readonly policy: EffectiveToolPolicy;
+}
+
+/** What a host is asked to prepare a turn for. */
+export interface BrainTurnDescription {
+  /** What opened the turn; absent for a preparation taken outside any turn, such as maintenance's. */
+  readonly trigger?: BrainTurnTrigger;
+  readonly origin: RunOrigin;
 }
 
 export interface DispatchOutcome {

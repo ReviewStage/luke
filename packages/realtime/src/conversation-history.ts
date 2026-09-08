@@ -47,6 +47,8 @@ export const CONVERSATION_ENTRY_KIND = {
   ANNOUNCEMENT: "announcement",
   /** An act Luke carried at the developer's ask, recorded as the ask itself. */
   ACT: "act",
+  /** An act Luke took on his own judgment, in a turn the developer did not open, recorded as his. */
+  OWN_ACT: "own-act",
 } as const;
 
 export type ConversationEntryKind =
@@ -368,9 +370,12 @@ export function withConversationEntryRequest(
 export function sessionActConversationEntry(
   action: CarriedSessionAction,
   sessions: readonly Session[],
+  kind:
+    | typeof CONVERSATION_ENTRY_KIND.ACT
+    | typeof CONVERSATION_ENTRY_KIND.OWN_ACT = CONVERSATION_ENTRY_KIND.ACT,
 ): ConversationEntry {
   const words = actNarration(action, sessions);
-  const entry: ConversationEntry = { kind: CONVERSATION_ENTRY_KIND.ACT, words };
+  const entry: ConversationEntry = { kind, words };
   if ("identity" in action) entry.identity = action.identity;
   return entry;
 }
@@ -408,6 +413,7 @@ const CONVERSATION_ENTRY_LEAD = {
   [CONVERSATION_ENTRY_KIND.REPLY]: "Luke said",
   [CONVERSATION_ENTRY_KIND.ANNOUNCEMENT]: "Luke announced",
   [CONVERSATION_ENTRY_KIND.ACT]: "at the developer's ask, Luke",
+  [CONVERSATION_ENTRY_KIND.OWN_ACT]: "on his own judgment, Luke",
 } satisfies Record<ConversationEntryKind, string>;
 
 /**
@@ -440,7 +446,9 @@ export function conversationHistoryText(
       const lead = CONVERSATION_ENTRY_LEAD[entry.kind];
       const words = entry.words.replace(/\s+/g, " ").slice(0, maximumConversationEntryLength);
       const line =
-        entry.kind === CONVERSATION_ENTRY_KIND.ACT ? `- ${lead} ${words}` : `- ${lead}: "${words}"`;
+        entry.kind === CONVERSATION_ENTRY_KIND.ACT || entry.kind === CONVERSATION_ENTRY_KIND.OWN_ACT
+          ? `- ${lead} ${words}`
+          : `- ${lead}: "${words}"`;
       const identity = entry.identity;
       if (!identity) return line;
       const observed = sessions.some(

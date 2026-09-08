@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BRAIN_TURN_AUTHORITY } from "@sidecar/hosted";
 import { MODEL_FAILURE, MODEL_RESPONSE_OUTCOME } from "@sidecar/runtime-contracts";
 import {
   BRAIN_REASONING_EFFORT,
@@ -11,13 +10,13 @@ import {
   responsesModelAnswer,
   userMessageItem,
 } from "./responses-api.js";
-import { BRAIN_TOOL, brainToolDefinitions } from "./tools.js";
+import { BRAIN_TOOL, brainOnlyToolDefinitions } from "./tools.js";
 
 test("the request asks the API for no compaction of its own, stores nothing, and replays reasoning", () => {
   const request = brainResponsesRequest([userMessageItem("hello")], {
     model: "gpt-test",
     instructions: "be Luke",
-    tools: brainToolDefinitions(BRAIN_TURN_AUTHORITY.OBSERVATION),
+    tools: brainOnlyToolDefinitions(),
     maximumOutputTokens: 1234,
     reasoningEffort: BRAIN_REASONING_EFFORT.MEDIUM,
   });

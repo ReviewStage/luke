@@ -1,16 +1,49 @@
 import {
+  BRAIN_INPUT_MARKER,
+  BRAIN_TURN_TRIGGER,
   BrainAgent,
   type BrainDelivery,
   BrainGenerationClock,
   type BrainRoster,
   type BrainStateRepository,
   BrainStateStore,
+  type BrainTurnDescription,
+  type BrainTurnPreparation,
   type BrainTurnTraceRecord,
-  responsesToolLoopRuntime,
+  type BrainWorkspaceAccess,
+  brainToolNotes,
+  HOSTED_MODEL_ADAPTER_ID,
+  OPENAI_MODEL_ADAPTER_ID,
+  RESPONSES_CONTEXT_ENGINE_ID,
+  registerBrainBuiltIns,
+  TOOL_LOOP_RUNTIME,
+  turnToolPolicy,
 } from "@sidecar/brain";
 import type { ConversationEntry } from "@sidecar/realtime";
+import {
+  type BuiltPrompt,
+  buildSystemPrompt,
+  ConfigurationStore,
+  CREDENTIAL_REFERENCE_KIND,
+  type CredentialReference,
+  createRuntimeRegistries,
+  defaultAgentConfiguration,
+  discoverSkills,
+  eligibleSkills,
+  gatherPromptFacts,
+  loadSkill,
+  type ResolvedConfiguration,
+  type RunDescription,
+  type RuntimeRegistries,
+  readWorkspaceFile,
+  recentDailyNotes,
+  resolveToolPolicy,
+  seedWorkspace,
+  type ToolPolicyLayers,
+  writeWorkspaceFile,
+} from "@sidecar/runtime";
 import type { ModelAdapter } from "@sidecar/runtime-contracts";
-import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
+import { MAIN_SESSION_KEY, RUN_ORIGIN, type SessionKey } from "@sidecar/runtime-contracts";
 import {
   type ProviderTranscriptResult,
   type ProviderTranscriptSinceResult,
@@ -65,6 +98,14 @@ export interface BrainWiringDependencies {
   deliver: (delivery: BrainDelivery) => Promise<void>;
   /** The model adapter the credential policy built, or nothing when it built none. */
   model: () => ModelAdapter | undefined;
+  /** Which credential the policy built the adapter under, by reference; the value never enters a configuration. */
+  credential: () => CredentialReference | undefined;
+  /** The agent's identity workspace: seeded once, edited by the developer or by the agent's own tools. */
+  workspaceDirectory: () => string;
+  /** The roots skills are discovered under. */
+  skillRoots: () => readonly string[];
+  /** The configured tool policy layers; empty means the whole catalog under the turn's own layer. */
+  toolPolicy?: () => ToolPolicyLayers;
   /** Whether a brain may stand at all: observing, on the network, and past the account gate. */
   runnable: () => boolean;
   dropBriefings: () => void;
@@ -120,6 +161,19 @@ export interface BrainWiring {
   /** Start fresh: a new lifetime for the conversation, its history and transcript untouched. */
   resetConversation: (sessionKey: SessionKey) => Promise<boolean>;
   registerIpc: (registration: BrainIpcRegistration) => void;
+  /** The registries every configuration resolves against, for inspection. */
+  readonly registries: RuntimeRegistries;
+  /** The standing configuration snapshot, or nothing before the credential policy has chosen a source. */
+  configuration: () => ResolvedConfiguration | undefined;
+  /**
+   * The prompt a turn of this kind would run under right now, built by the
+   * same three stages a live turn uses — the standing configuration, the
+   * facts gathered from the workspace, the pure builder — so what a
+   * diagnostics view shows is what the model is sent.
+   */
+  inspectPrompt: (run: RunDescription) => Promise<BuiltPrompt | undefined>;
+  /** Seeds the workspace's missing files; safe to run at every launch. */
+  seedWorkspace: () => Promise<void>;
 }
 
 interface OpenConversation {
@@ -230,16 +284,115 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
    */
   const acts = createBrainActPerformer(dependencies.acts);
 
-  // The runtime this build ships is composed here, once per agent: the tool
-  // loop over the Responses context engine on whichever adapter the policy
-  // chose. A different runtime would be a different composition at this line
-  // and nothing else in the host.
-  const build = (model: ModelAdapter, store: BrainStateStore): BrainAgent =>
-    new BrainAgent({
-      runtime: responsesToolLoopRuntime(model),
+  // The registries hold what this build compiled in; the configuration names
+  // entries by id and is republished, atomically, whenever the credential
+  // policy chooses a source. Every turn takes the snapshot standing when it
+  // is prepared and reads nothing else.
+  const registries = registerBrainBuiltIns(createRuntimeRegistries());
+  let configurationStore: ConfigurationStore | undefined;
+  const configurationFor = (credential: CredentialReference) =>
+    defaultAgentConfiguration({
+      agentRuntimeId: TOOL_LOOP_RUNTIME.ID,
+      modelAdapterId:
+        credential.kind === CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY
+          ? OPENAI_MODEL_ADAPTER_ID
+          : HOSTED_MODEL_ADAPTER_ID,
+      contextEngineId: RESPONSES_CONTEXT_ENGINE_ID,
+      credential,
+      workspaceDirectory: dependencies.workspaceDirectory(),
+      skillRoots: dependencies.skillRoots(),
+      toolPolicy: dependencies.toolPolicy?.() ?? {},
+    });
+  const publishConfiguration = (credential: CredentialReference): ResolvedConfiguration => {
+    const configuration = configurationFor(credential);
+    if (!configurationStore) {
+      configurationStore = new ConfigurationStore(registries, configuration);
+    } else {
+      const published = configurationStore.publish(configuration);
+      if (!published.ok) {
+        dependencies.report(`Brain configuration refused: ${published.refusals.join(", ")}`);
+      }
+    }
+    return configurationStore.snapshot();
+  };
+
+  const workspaceFor = (snapshot: ResolvedConfiguration): BrainWorkspaceAccess => {
+    const directory = snapshot.configuration.workspaceDirectory;
+    return {
+      read: (name) => readWorkspaceFile(directory, name),
+      write: (name, content) => writeWorkspaceFile(directory, name, content),
+      loadSkill: async (location) => {
+        const skills = eligibleSkills(
+          await discoverSkills(snapshot.configuration.skillRoots),
+          snapshot.configuration.agentId,
+        );
+        return loadSkill(location, skills);
+      },
+    };
+  };
+
+  /**
+   * The three stages of one turn's prompt: the configuration already
+   * resolved, the facts gathered from the workspace and the skill roots under
+   * it, and the pure builder. The tool policy is resolved from the same
+   * snapshot's layers over the registry's catalog, plus the turn's own layer.
+   */
+  const prepare = async (
+    snapshot: ResolvedConfiguration,
+    model: ModelAdapter,
+    turn: BrainTurnDescription,
+  ): Promise<BrainTurnPreparation & { built: BuiltPrompt }> => {
+    const policy = resolveToolPolicy(registries.tools.entries(), {
+      ...snapshot.configuration.toolPolicy,
+      session: {
+        ...snapshot.configuration.toolPolicy.session,
+        deny: [
+          ...(snapshot.configuration.toolPolicy.session?.deny ?? []),
+          ...(turnToolPolicy(turn.trigger).deny ?? []),
+        ],
+      },
+    });
+    const facts = await gatherPromptFacts({
+      configuration: snapshot,
+      run: { origin: turn.origin },
+      tools: policy.allowed.map((tool) => tool.schema),
+      toolNotes: brainToolNotes(),
+      runtimeContextMarker: BRAIN_INPUT_MARKER.STANDING_CONTEXT,
+      runtimeId: TOOL_LOOP_RUNTIME.ID,
+      ...(model.model ? { model: model.model } : undefined),
+    });
+    const built = buildSystemPrompt(facts);
+    return { prompt: built.text, policy, built };
+  };
+
+  // The runtime is composed here, once per agent, from the entries the
+  // resolved configuration names: the tool loop over the Responses context
+  // engine on whichever adapter the policy chose. A different runtime is a
+  // different registration and configuration, not a change to the host.
+  const build = (
+    model: ModelAdapter,
+    snapshot: ResolvedConfiguration,
+    store: BrainStateStore,
+  ): BrainAgent => {
+    const runtimeDescriptor = registries.agentRuntimes.get(snapshot.configuration.agentRuntimeId);
+    const engineDescriptor = registries.contextEngines.get(snapshot.configuration.contextEngineId);
+    if (!runtimeDescriptor || !engineDescriptor) {
+      throw new Error("the resolved configuration names entries the registries do not hold");
+    }
+    return new BrainAgent({
+      runtime: runtimeDescriptor.create(model, engineDescriptor),
       acts,
       roster: dependencies.roster,
       standingContext: dependencies.standingContext,
+      prepareTurn: (turn) => prepare(snapshot, model, turn),
+      workspace: workspaceFor(snapshot),
+      // Today's and yesterday's notes, primed once into a conversation that
+      // just started fresh and read on no ordinary turn.
+      primeFreshContext: async () => {
+        const notes = await recentDailyNotes(snapshot.configuration.workspaceDirectory, Date.now());
+        if (notes.length === 0) return undefined;
+        return notes.map((note) => `## ${note.name}\n\n${note.content}`).join("\n\n");
+      },
       readTranscriptSince: (identity, cursor) => {
         const adapter = dependencies.adapterFor(identity.providerId);
         if (!adapter) {
@@ -273,6 +426,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       ...(dependencies.traceTurn ? { trace: dependencies.traceTurn } : undefined),
       report: dependencies.report,
     });
+  };
 
   /** The model the policy chose, or nothing when no brain may stand: no key, no account, a run off the network. */
   const liveModel = (): ModelAdapter | undefined => {
@@ -286,11 +440,12 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     model: ModelAdapter | undefined,
   ): Promise<void> =>
     opened.host.replace(() => {
-      if (!model) {
+      const credential = dependencies.credential();
+      if (!model || !credential) {
         if (sessionKey === MAIN_SESSION_KEY) dependencies.dropBriefings();
         return undefined;
       }
-      return build(model, opened.store);
+      return build(model, publishConfiguration(credential), opened.store);
     });
 
   const rebuild = async (): Promise<void> => {
@@ -361,5 +516,19 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     },
     resetConversation: (sessionKey) => openConversation(sessionKey).store.reset(),
     registerIpc,
+    registries,
+    configuration: () => configurationStore?.snapshot(),
+    inspectPrompt: async (run) => {
+      const snapshot = configurationStore?.snapshot();
+      const model = liveModel();
+      if (!snapshot || !model) return undefined;
+      const trigger =
+        run.origin === RUN_ORIGIN.USER ? BRAIN_TURN_TRIGGER.ASK : BRAIN_TURN_TRIGGER.WAKE;
+      const prepared = await prepare(snapshot, model, { trigger, origin: run.origin });
+      return prepared.built;
+    },
+    seedWorkspace: async () => {
+      await seedWorkspace(dependencies.workspaceDirectory());
+    },
   };
 }

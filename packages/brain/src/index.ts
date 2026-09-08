@@ -1,15 +1,22 @@
 export {
-  BRAIN_TURN_AUTHORITY,
-  type BrainTurnAuthority,
-  brainTurnAuthorityFromWire,
-} from "@sidecar/hosted";
-export {
   BRAIN_DEFAULTS,
   BrainAgent,
+  type BrainAgentOptions,
+  type BrainWorkspaceAccess,
 } from "./agent.js";
+export {
+  type BrainBuiltInOptions,
+  hostedModelAdapterDescriptor,
+  openAiModelAdapterDescriptor,
+  RESPONSES_CONTEXT_ENGINE_ID,
+  registerBrainBuiltIns,
+  responsesContextEngineDescriptor,
+  toolLoopRuntimeDescriptor,
+} from "./builtins.js";
 export { BrainGenerationClock } from "./generation-clock.js";
-export { HostedModelAdapter } from "./hosted-model-adapter.js";
-export { brainInstructions } from "./instructions.js";
+export { HOSTED_MODEL_ADAPTER_ID, HostedModelAdapter } from "./hosted-model-adapter.js";
+export { BRAIN_INPUT_MARKER, primedNotesInputText } from "./input-items.js";
+export { brainInstructions, brainToolNotes } from "./instructions.js";
 export type { BrainJournalEntry } from "./journal.js";
 export {
   BRAIN_RATE_LIMIT_COOLDOWN_MS,
@@ -19,6 +26,7 @@ export {
 } from "./model-adapter-shared.js";
 export {
   BRAIN_OPENAI_DEFAULTS,
+  OPENAI_MODEL_ADAPTER_ID,
   openAiModelAdapter,
 } from "./openai-model-adapter.js";
 export type { BrainActExecution, BrainActPerformer, BrainRoster } from "./performer.js";
@@ -68,11 +76,21 @@ export {
 } from "./state-store.js";
 export {
   BRAIN_TOOL,
-  brainToolDefinitions,
+  brainOnlyToolDefinitions,
+  brainToolCatalog,
+  brainToolSchemas,
+  defaultTurnToolPolicy,
   hostedBrainToolCatalog,
+  hostedBrainV1ToolDefinitions,
+  TOOL_GROUP,
+  turnToolPolicy,
 } from "./tools.js";
 export type { BrainTurnTraceRecord } from "./trace.js";
-export { BRAIN_TURN_TRIGGER } from "./turn.js";
+export {
+  BRAIN_TURN_TRIGGER,
+  type BrainTurnDescription,
+  type BrainTurnPreparation,
+} from "./turn.js";
 export {
   BRAIN_WAKE_KIND,
   type BrainDelivery,

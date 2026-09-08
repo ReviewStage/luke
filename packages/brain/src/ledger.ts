@@ -161,12 +161,12 @@ export class BrainRequestLedger {
    * record stays as committed, so a request accepted or marked meanwhile is
    * untouched and a request still provisional is not published.
    */
-  checkpoint(turnContext: TurnContext): Promise<boolean> {
+  checkpoint(turnContext: Omit<TurnContext, "run"> & { run?: RunControl }): Promise<boolean> {
     const { generation, context, run } = turnContext;
     return this.save(generation, {
       kind: SAVE_SCOPE.WORKING,
       context,
-      ...(run
+      ...(run?.recorded
         ? {
             record: {
               runId: run.runId,
