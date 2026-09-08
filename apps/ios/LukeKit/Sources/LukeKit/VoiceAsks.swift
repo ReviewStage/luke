@@ -311,13 +311,16 @@ public enum VoiceAsks {
     /// Validates a creation ask against the projects the conversation was
     /// shown, settling only what the ask left unnamed from this device's own
     /// defaults: no provider named sends a still-ambiguous ask to the default
-    /// provider while it is offering, and no project named sends it on to
-    /// that provider's chosen project. Neither step can leave the listed set.
+    /// provider while it is offering, no project named sends it on to that
+    /// provider's chosen project, and no agent/model named uses that
+    /// provider's saved agent selection while it is still listed. No default
+    /// can leave the listed set.
     public static func workspaceCreation(
         _ arguments: [String: Any],
         projects answer: ProjectsAnswer,
         defaultProviderId: String?,
-        defaultProjectIds: [String: String]
+        defaultProjectIds: [String: String],
+        defaultAgentDefaults: [String: WorkspaceAgentDefault] = [:]
     ) -> Result<WorkspaceCreationAsk, VoiceAskRefusal> {
         let providerId = text(arguments, "provider_id")
         let projectId = text(arguments, "project_id")
@@ -402,6 +405,12 @@ public enum VoiceAsks {
             // agent named alone runs the first model its table lists — the
             // same one the New Workspace sheet preselects for it.
             selection = AgentSelection(agent: agent, model: first.id, effort: nil)
+        } else if agent == nil,
+            let stored = WorkspaceProjectsContext.validAgentDefault(
+                defaultAgentDefaults[project.providerId], in: options
+            )
+        {
+            selection = AgentSelection(agent: stored.agent, model: stored.model, effort: stored.effort)
         }
 
         return .success(

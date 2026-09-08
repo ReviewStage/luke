@@ -167,7 +167,8 @@ final class WatchVoiceSessionModel {
                         WorkspaceProjectsContext.item(
                             answer: projects,
                             defaultProviderId: self.defaults.lastProviderId,
-                            defaultProjectIds: self.defaults.lastProjectIds
+                            defaultProjectIds: self.defaults.lastProjectIds,
+                            defaultAgentDefaults: self.defaults.agentDefaults
                         )
                     )
                 }

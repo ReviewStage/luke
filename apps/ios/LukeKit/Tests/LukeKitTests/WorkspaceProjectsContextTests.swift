@@ -90,6 +90,37 @@ final class WorkspaceProjectsContextTests: XCTestCase {
         XCTAssertTrue(text.contains("codex — models GPT-6 Astra (gpt-6-astra); efforts ultra"))
     }
 
+    func testTheSavedAgentSelectionIsSaidOnlyWhileItIsListed() {
+        let answer = ProjectsAnswer(
+            projects: [project("p1", repository: "acme/web")],
+            agentModels: [
+                WorkspaceAgentOption(
+                    providerId: "conductor", agent: "claude",
+                    models: [WorkspaceAgentModelChoice(id: "opus-4", label: "Opus 4")],
+                    efforts: ["low", "high"]
+                )
+            ]
+        )
+        XCTAssertTrue(
+            WorkspaceProjectsContext.text(
+                answer: answer, defaultProviderId: "conductor", defaultProjectIds: [:],
+                defaultAgentDefaults: [
+                    "conductor": WorkspaceAgentDefault(agent: "claude", model: "opus-4", effort: "high")
+                ])
+                .contains(
+                    "Omitted, the saved default agent selection starts: claude with Opus 4 (opus-4), effort high."
+                )
+        )
+        XCTAssertFalse(
+            WorkspaceProjectsContext.text(
+                answer: answer, defaultProviderId: "conductor", defaultProjectIds: [:],
+                defaultAgentDefaults: [
+                    "conductor": WorkspaceAgentDefault(agent: "claude", model: "missing", effort: "high")
+                ])
+                .contains("saved default agent selection")
+        )
+    }
+
     func testTheCapKeepsTheDefaultProjectPastTheCut() {
         let projects = (0 ..< 12).map { project("p\($0)", repository: "repo-\($0)") }
         let listed = WorkspaceProjectsContext.listedProjects(projects, defaultProjectIds: ["conductor": "p11"])
