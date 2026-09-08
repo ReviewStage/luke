@@ -17,10 +17,8 @@ import {
   responsesModelAnswer,
 } from "@sidecar/brain";
 import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
-import { type ChildStore, CREDENTIAL_REFERENCE_KIND } from "@sidecar/runtime";
+import { CREDENTIAL_REFERENCE_KIND, memoryChildStore } from "@sidecar/runtime";
 import {
-  type ChildCompletionRecord,
-  type ChildRunRecord,
   CONVERSATION_KIND,
   conversationKindOf,
   observedSessionKey,
@@ -36,26 +34,6 @@ import {
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
 import { type BrainWiring, wireBrain } from "./wiring";
-
-/** Child records and completions held in this process, as a run with nothing on disk keeps them. */
-function memoryChildStore(): ChildStore {
-  const children = new Map<string, ChildRunRecord>();
-  const completions = new Map<string, ChildCompletionRecord>();
-  return {
-    listChildren: async () => [...children.values()],
-    putChild: async (record) => {
-      children.set(record.childId, record);
-      return true;
-    },
-    deleteChild: async (childId) => children.delete(childId),
-    listCompletions: async () => [...completions.values()],
-    putCompletion: async (completion) => {
-      completions.set(completion.completionId, completion);
-      return true;
-    },
-    deleteCompletion: async (completionId) => completions.delete(completionId),
-  };
-}
 
 /**
  * The wiring as the main process composes it, with the model, the disk, and

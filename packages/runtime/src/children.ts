@@ -73,6 +73,26 @@ export interface ChildStore {
   deleteCompletion(completionId: string): Promise<boolean>;
 }
 
+/** A store that forgets at exit: the non-persistent run's, and every test's. */
+export function memoryChildStore(): ChildStore {
+  const children = new Map<string, ChildRunRecord>();
+  const completions = new Map<string, ChildCompletionRecord>();
+  return {
+    listChildren: async () => [...children.values()],
+    putChild: async (record) => {
+      children.set(record.childId, record);
+      return true;
+    },
+    deleteChild: async (childId) => children.delete(childId),
+    listCompletions: async () => [...completions.values()],
+    putCompletion: async (record) => {
+      completions.set(record.completionId, record);
+      return true;
+    },
+    deleteCompletion: async (completionId) => completions.delete(completionId),
+  };
+}
+
 /** How a child's run ended, as the executor reports it. */
 export interface ChildEnd {
   readonly status: ChildRunStatus;
@@ -201,6 +221,15 @@ const FORK_NO_CONTEXT_NOTE =
 
 function forkCapNote(estimated: number, cap: number): string {
   return `the requester's context (~${estimated} tokens) exceeds the ${cap}-token fork cap; the child started isolated`;
+}
+
+/** An executor or deliverer call whose throw is an answer, never a crash of the service. */
+async function attempt<T>(work: () => Promise<T>, fallback: (error: Error) => T): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    return fallback(error instanceof Error ? error : new Error(String(error)));
+  }
 }
 
 /** OpenClaw's delivery backoff: 15 seconds doubling to a five-minute cap. */
@@ -338,12 +367,10 @@ export class ChildRunService {
       });
       return;
     }
-    let start: ChildStart;
-    try {
-      start = await this.#options.executor.resume(record);
-    } catch (error) {
-      start = { started: false, reason: error instanceof Error ? error.name : "resume threw" };
-    }
+    const start = await attempt(
+      () => this.#options.executor.resume(record),
+      (error): ChildStart => ({ started: false, reason: error.name }),
+    );
     if (!start.started) {
       this.#recoveryFailures += 1;
       this.#report(`Child ${record.childId} could not be recovered: ${start.reason}`);
@@ -354,14 +381,7 @@ export class ChildRunService {
       return;
     }
     this.#recoveryFailures = 0;
-    void start.done.then(
-      (end) => this.#complete(record.childId, end),
-      (error: Error) =>
-        this.#complete(record.childId, {
-          status: CHILD_RUN_STATUS.UNKNOWN,
-          failureDetail: `the child's run did not report its end: ${error.name}`,
-        }),
-    );
+    this.#follow(record.childId, start.done);
   }
 
   /** Stops every timer; nothing is delivered or archived after this, and what stands is on disk. */
@@ -493,12 +513,10 @@ export class ChildRunService {
   }
 
   async #launch(record: ChildRunRecord, fork: readonly WireRecord[] | undefined): Promise<void> {
-    let start: ChildStart;
-    try {
-      start = await this.#options.executor.start(record, fork);
-    } catch (error) {
-      start = { started: false, reason: error instanceof Error ? error.name : "start threw" };
-    }
+    const start = await attempt(
+      () => this.#options.executor.start(record, fork),
+      (error): ChildStart => ({ started: false, reason: error.name }),
+    );
     if (this.#ended(record.childId)) {
       // Cancelled while starting: the cancel found no run to stop, so the run
       // that has just begun is stopped here, and the terminal row stands.
@@ -518,10 +536,15 @@ export class ChildRunService {
       status: CHILD_RUN_STATUS.RUNNING,
       startedAt: this.#now(),
     }));
-    void start.done.then(
-      (end) => this.#complete(record.childId, end),
+    this.#follow(record.childId, start.done);
+  }
+
+  /** A started run's end becomes the child's completion; a run that never reports one ends unknown. */
+  #follow(childId: string, done: Promise<ChildEnd>): void {
+    void done.then(
+      (end) => this.#complete(childId, end),
       (error: Error) =>
-        this.#complete(record.childId, {
+        this.#complete(childId, {
           status: CHILD_RUN_STATUS.UNKNOWN,
           failureDetail: `the child's run did not report its end: ${error.name}`,
         }),
@@ -536,13 +559,11 @@ export class ChildRunService {
 
   /** A run that began after its child was cancelled is stopped; its end, when it comes, changes nothing. */
   async #stopLateStart(record: ChildRunRecord): Promise<void> {
-    try {
-      if (!(await this.#options.executor.cancel(record))) {
-        this.#report(
-          `Child ${record.childId} started after its cancellation and could not be stopped`,
-        );
-      }
-    } catch {
+    const stopped = await attempt(
+      () => this.#options.executor.cancel(record),
+      () => false,
+    );
+    if (!stopped) {
       this.#report(
         `Child ${record.childId} started after its cancellation and could not be stopped`,
       );
@@ -662,12 +683,10 @@ export class ChildRunService {
   async #archive(childId: string): Promise<void> {
     const record = this.#children.get(childId);
     if (!record || record.archivedAt !== undefined || this.#stopped) return;
-    let archived: boolean;
-    try {
-      archived = await this.#options.executor.archive(record);
-    } catch {
-      archived = false;
-    }
+    const archived = await attempt(
+      () => this.#options.executor.archive(record),
+      () => false,
+    );
     if (!archived) {
       this.#report(`Child ${childId}'s conversation could not be archived`);
       return;
@@ -723,12 +742,10 @@ export class ChildRunService {
     if (completion.delivery !== COMPLETION_DELIVERY_STATUS.PENDING) return;
     const now = this.#now();
     const firstAttemptAt = completion.firstAttemptAt ?? now;
-    let outcome: CompletionDeliveryOutcome;
-    try {
-      outcome = await this.#options.deliverer.deliver(completion, record);
-    } catch (error) {
-      outcome = { delivered: false, reason: error instanceof Error ? error.name : "deliver threw" };
-    }
+    const outcome = await attempt(
+      () => this.#options.deliverer.deliver(completion, record),
+      (error): CompletionDeliveryOutcome => ({ delivered: false, reason: error.name }),
+    );
     const latest = this.#completions.get(completionId);
     if (!latest || latest.delivery !== COMPLETION_DELIVERY_STATUS.PENDING) return;
     const attempts = latest.attempts + 1;

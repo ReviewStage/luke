@@ -1,13 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { BrainStateRepository } from "@sidecar/brain";
-import { type ChildStore, CREDENTIAL_REFERENCE_KIND } from "@sidecar/runtime";
-import {
-  type ChildCompletionRecord,
-  type ChildRunRecord,
-  MAIN_SESSION_KEY,
-  threadSessionKey,
-} from "@sidecar/runtime-contracts";
+import { CREDENTIAL_REFERENCE_KIND, memoryChildStore } from "@sidecar/runtime";
+import { MAIN_SESSION_KEY, threadSessionKey } from "@sidecar/runtime-contracts";
 import { type BrainWiringDependencies, wireBrain } from "./wiring";
 
 /**
@@ -25,22 +20,7 @@ function dependencies(overrides: Partial<BrainWiringDependencies> = {}) {
     },
     save: () => true,
   });
-  const childRecords = new Map<string, ChildRunRecord>();
-  const completionRecords = new Map<string, ChildCompletionRecord>();
-  const childStore: ChildStore = {
-    listChildren: async () => [...childRecords.values()],
-    putChild: async (record) => {
-      childRecords.set(record.childId, record);
-      return true;
-    },
-    deleteChild: async (childId) => childRecords.delete(childId),
-    listCompletions: async () => [...completionRecords.values()],
-    putCompletion: async (completion) => {
-      completionRecords.set(completion.completionId, completion);
-      return true;
-    },
-    deleteCompletion: async (completionId) => completionRecords.delete(completionId),
-  };
+  const childStore = memoryChildStore();
   const wiring: BrainWiringDependencies = {
     repositoryFor: (sessionKey) => repository(sessionKey),
     ensureChildConversation: async () => undefined,

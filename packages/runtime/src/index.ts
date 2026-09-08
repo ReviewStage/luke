@@ -15,6 +15,7 @@ export {
   type CompletionDeliveryOutcome,
   deliveryBackoffMs,
   type ForkSnapshot,
+  memoryChildStore,
 } from "./children.js";
 export {
   type AgentConfiguration,

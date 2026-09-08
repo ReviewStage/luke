@@ -453,6 +453,7 @@ test("a relaunch adopts unfinished children through the executor's recovery and 
   const relaunch = harness({ store, createId: () => `later-${++later}` });
   relaunch.executor.refuseResume = "no model";
   await relaunch.service.start();
+  await settle();
   assert.equal(relaunch.executor.resumed.length, CHILD_DEFAULTS.RECOVERY_FAILURE_BUDGET);
   assert.equal(relaunch.service.recoveryFailures(), CHILD_DEFAULTS.RECOVERY_FAILURE_BUDGET);
   for (const record of relaunch.service.children()) {
