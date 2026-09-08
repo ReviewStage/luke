@@ -53,7 +53,9 @@ export type BrainAskSubmissionResult =
   | { outcome: typeof BRAIN_SUBMISSION_OUTCOME.ACCEPTED; runId: string; acceptedAt: number }
   | { outcome: typeof BRAIN_SUBMISSION_OUTCOME.REJECTED; reason: BrainSubmissionRejection };
 
-export function isBrainAskSubmissionResult(value: UnparsedWireValue): boolean {
+export function isBrainAskSubmissionResult(
+  value: UnparsedWireValue,
+): value is BrainAskSubmissionResult {
   if (!isRecord(value)) return false;
   if (value.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED) {
     return isWireString(value.runId) && isWireNumber(value.acceptedAt);

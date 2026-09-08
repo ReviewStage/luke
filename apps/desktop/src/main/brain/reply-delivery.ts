@@ -7,23 +7,6 @@ import { DeliveryLedger, type DeliveryOffer, type DeliveryRecord } from "@sideca
 import { DELIVERY_STATE, type DeliveryState } from "@sidecar/runtime-contracts";
 import { type BrainReplyClaimResult, brainReplyWords } from "#shared/wire/brain";
 
-/**
- * One reply owed to the developer's ear, after the run that produced it has
- * ended and its words already stand in History, with the state the shared
- * ledger holds it in. Never persisted: a claimed delivery may already have
- * been audible, so a launch never replays one, and an unclaimed one is worth
- * nothing to a launch that did not watch the run.
- */
-export interface BrainReplyDelivery {
-  runId: string;
-  deliveryId: string;
-  /** The generation the run ended in; a claim from any other generation is refused. */
-  generationId: string;
-  state: DeliveryState;
-  /** The receiver epoch the offer went to, if it was sent at all. */
-  offeredEpoch?: number;
-}
-
 export interface BrainReplyDeliveriesOptions {
   nextDeliveryId: () => string;
 }
@@ -74,10 +57,9 @@ export class BrainReplyDeliveries {
    * nothing: a run this process never watched running, one already owed,
    * claimed, or granted on its own call, adds nothing.
    */
-  published(record: BrainRequestRecord, generationId: string): BrainReplyDelivery | undefined {
+  published(record: BrainRequestRecord, generationId: string): DeliveryRecord | undefined {
     if (!this.#deliverable(record)) return undefined;
-    const delivery = this.#ledger.published(record.runId, generationId);
-    return delivery ? toReplyDelivery(delivery) : undefined;
+    return this.#ledger.published(record.runId, generationId);
   }
 
   /**
@@ -96,19 +78,18 @@ export class BrainReplyDeliveries {
   }
 
   /** The deliveries not yet claimed — queued or offered — in the order their runs ended. */
-  unclaimed(): readonly BrainReplyDelivery[] {
+  unclaimed(): readonly DeliveryRecord[] {
     return this.#ledger
       .records()
       .filter(
         (delivery) =>
           delivery.state === DELIVERY_STATE.QUEUED || delivery.state === DELIVERY_STATE.OFFERED,
-      )
-      .map(toReplyDelivery);
+      );
   }
 
   /** Every delivery the ledger holds, with its state, for inspection through the protocol. */
-  records(): readonly BrainReplyDelivery[] {
-    return this.#ledger.records().map(toReplyDelivery);
+  records(): readonly DeliveryRecord[] {
+    return this.#ledger.records();
   }
 
   state(runId: string): DeliveryState | undefined {
@@ -168,14 +149,4 @@ export class BrainReplyDeliveries {
       brainReplyWords(record) !== undefined
     );
   }
-}
-
-function toReplyDelivery(delivery: DeliveryRecord): BrainReplyDelivery {
-  return {
-    runId: delivery.runId,
-    deliveryId: delivery.deliveryId,
-    generationId: delivery.generationId,
-    state: delivery.state,
-    ...(delivery.offeredEpoch !== undefined ? { offeredEpoch: delivery.offeredEpoch } : undefined),
-  };
 }

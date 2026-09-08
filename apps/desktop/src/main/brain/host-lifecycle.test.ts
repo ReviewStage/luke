@@ -30,9 +30,10 @@ import {
   type BrainRequestSnapshot,
   brainReplyWords,
 } from "#shared/wire/brain";
+import { operatorOverBrain } from "../gateway/testing";
 import { VoiceReceiver } from "../voice-receiver";
 import { BrainHost } from "./host";
-import { followBrainRequests, submitBrainAsk } from "./ipc";
+import { followBrainRequests } from "./ipc";
 import { BrainReplyDeliveries } from "./reply-delivery";
 
 /**
@@ -125,6 +126,11 @@ function composed() {
       }),
     publishEmpty: () => broadcasts.push([]),
   });
+  /** Submits as a window does, through the operator over the standing brain; the ask's own line is written here. */
+  const { submit } = operatorOverBrain({
+    current: () => host.current(),
+    recordConversationEntry: record,
+  });
   const claimContext = () => ({
     receiverCurrent: (epoch: number) => receiver.isReady() && receiver.epoch() === epoch,
     generationStands: (generationId: string) => store.holdsGeneration(generationId),
@@ -184,6 +190,7 @@ function composed() {
     host,
     build,
     record,
+    submit,
     thread: () => thread,
     broadcasts,
     deliveries,
@@ -215,22 +222,14 @@ function replies(thread: readonly ConversationEntry[], runId: string) {
   return thread.filter((e) => e.kind === CONVERSATION_ENTRY_KIND.REPLY && e.requestId === runId);
 }
 
-async function submitMany(
-  agent: BrainAgent,
-  record: ReturnType<typeof composed>["record"],
-  count: number,
-) {
+async function submitMany(submit: ReturnType<typeof composed>["submit"], count: number) {
   const runIds: string[] = [];
   for (let index = 0; index < count; index += 1) {
-    const result = await submitBrainAsk(
-      agent,
-      {
-        submissionId: `sub-${index}`,
-        question: `ask ${index}`,
-        origin: BRAIN_REQUEST_ORIGIN.TYPED,
-      },
-      record,
-    );
+    const result = await submit({
+      submissionId: `sub-${index}`,
+      question: `ask ${index}`,
+      origin: BRAIN_REQUEST_ORIGIN.TYPED,
+    });
     assert.equal(result.outcome, "accepted");
     if (result.outcome === "accepted") runIds.push(result.runId);
   }
@@ -243,7 +242,7 @@ test("removing the capability under five outstanding runs leaves every run inter
   await c.host.replace(() => c.build(client));
   const agent = c.host.current();
   assert.ok(agent);
-  const runIds = await submitMany(agent, c.record, 5);
+  const runIds = await submitMany(c.submit, 5);
   await settle();
   assert.equal(c.thread().filter((e) => e.kind === CONVERSATION_ENTRY_KIND.TYPED_ASK).length, 5);
 
@@ -291,7 +290,7 @@ test("a successor replacing the agent under outstanding runs inherits a thread w
   await c.host.replace(() => c.build(first));
   const agent = c.host.current();
   assert.ok(agent);
-  const runIds = await submitMany(agent, c.record, 5);
+  const runIds = await submitMany(c.submit, 5);
   // An earlier publication is held: the thread refuses until the handoff.
   c.refuse(true);
   await settle();
@@ -310,11 +309,11 @@ test("a successor replacing the agent under outstanding runs inherits a thread w
     );
   }
   // The successor's own run proceeds and is the only writer.
-  const result = await submitBrainAsk(
-    successor,
-    { submissionId: "fresh", question: "new ask", origin: BRAIN_REQUEST_ORIGIN.TYPED },
-    c.record,
-  );
+  const result = await c.submit({
+    submissionId: "fresh",
+    question: "new ask",
+    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+  });
   assert.equal(result.outcome, "accepted");
   // The host reaches its first inference only after the run's own
   // bookkeeping; the answer is released once the model has been asked.
@@ -354,7 +353,7 @@ test("a reset under outstanding runs discards them without publishing, and the s
   await c.host.replace(() => c.build(client));
   const agent = c.host.current();
   assert.ok(agent);
-  await submitMany(agent, c.record, 3);
+  await submitMany(c.submit, 3);
   await settle();
   assert.equal(await c.store.clear(), true);
   await settle();
@@ -377,7 +376,7 @@ test("a run ending long after its wait is offered once, to a ready receiver, onl
   assert.ok(agent);
   const epoch = c.receiver.begin();
   c.receiver.markReady(epoch);
-  const [runId] = await submitMany(agent, c.record, 1);
+  const [runId] = await submitMany(c.submit, 1);
   assert.ok(runId);
   // The wait comes back pending — the ask outlived its thirty seconds — and
   // the developer's call is released with no grant. Nothing is owed yet.
@@ -421,11 +420,11 @@ test("a refused History write keeps the reply unoffered and ungranted until the 
   assert.ok(agent);
   const epoch = c.receiver.begin();
   c.receiver.markReady(epoch);
-  const spoken = await submitBrainAsk(
-    agent,
-    { submissionId: "spoken-1", question: "how are they?", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
-    c.record,
-  );
+  const spoken = await c.submit({
+    submissionId: "spoken-1",
+    question: "how are they?",
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+  });
   assert.equal(spoken.outcome, "accepted");
   if (spoken.outcome !== "accepted") return;
   await settle();
@@ -446,7 +445,7 @@ test("a refused History write keeps the reply unoffered and ungranted until the 
   c.refuse(false);
   await settle();
   assert.equal(c.offers.length, 0);
-  await submitMany(agent, c.record, 1);
+  await submitMany(c.submit, 1);
   await settle();
   assert.equal(replies(c.thread(), spoken.runId).length, 1);
   assert.deepEqual(
@@ -470,7 +469,7 @@ test("two completions flushed together are offered one at a time, the second onl
   await c.host.replace(() => c.build(client, { queueMode: QUEUE_MODE.FOLLOWUP }));
   const agent = c.host.current();
   assert.ok(agent);
-  const [runA, runB] = await submitMany(agent, c.record, 2);
+  const [runA, runB] = await submitMany(c.submit, 2);
   assert.ok(runA && runB);
   client.release(answered("Answer."));
   await settle();
@@ -506,7 +505,7 @@ test("an offer the renderer never claimed is offered again to the next epoch; a 
   assert.ok(agent);
   const first = c.receiver.begin();
   c.receiver.markReady(first);
-  const [runA, runB] = await submitMany(agent, c.record, 2);
+  const [runA, runB] = await submitMany(c.submit, 2);
   assert.ok(runA && runB);
   client.release(answered("Answer."));
   await settle();
@@ -544,7 +543,7 @@ test("a Clear invalidates every delivery: an unclaimed offer is refused, a late 
   assert.ok(agent);
   const epoch = c.receiver.begin();
   c.receiver.markReady(epoch);
-  const [runId] = await submitMany(agent, c.record, 1);
+  const [runId] = await submitMany(c.submit, 1);
   assert.ok(runId);
   await settle();
   client.release(answered("Before the clear."));
@@ -571,7 +570,7 @@ test("a launch that finds ended runs restores their words and speaks none of the
   await c.host.replace(() => c.build(client));
   const agent = c.host.current();
   assert.ok(agent);
-  await submitMany(agent, c.record, 2);
+  await submitMany(c.submit, 2);
   await c.host.replace(() => undefined);
   await settle();
   assert.equal(c.thread().filter((e) => e.kind === CONVERSATION_ENTRY_KIND.REPLY).length, 2);
@@ -601,11 +600,11 @@ test("a spoken ask's end is authorized exactly once across the call that asked a
   assert.ok(agent);
   const epoch = c.receiver.begin();
   c.receiver.markReady(epoch);
-  const spoken = await submitBrainAsk(
-    agent,
-    { submissionId: "spoken-1", question: "how are they?", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
-    c.record,
-  );
+  const spoken = await c.submit({
+    submissionId: "spoken-1",
+    question: "how are they?",
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+  });
   assert.equal(spoken.outcome, "accepted");
   if (spoken.outcome !== "accepted") return;
   await settle();
@@ -623,11 +622,11 @@ test("a spoken ask's end is authorized exactly once across the call that asked a
   assert.equal(replies(c.thread(), spoken.runId).length, 1);
 
   // The reverse order: the offer is claimed first, and the wait is refused.
-  const second = await submitBrainAsk(
-    agent,
-    { submissionId: "spoken-2", question: "and now?", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
-    c.record,
-  );
+  const second = await c.submit({
+    submissionId: "spoken-2",
+    question: "and now?",
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+  });
   assert.equal(second.outcome, "accepted");
   if (second.outcome !== "accepted") return;
   await settle();
@@ -642,11 +641,11 @@ test("a spoken ask's end is authorized exactly once across the call that asked a
 
   // An abandoned wait from a reloaded renderer names a stale epoch: refused,
   // and the run stays deliverable to the renderer that stands.
-  const third = await submitBrainAsk(
-    agent,
-    { submissionId: "spoken-3", question: "later?", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
-    c.record,
-  );
+  const third = await c.submit({
+    submissionId: "spoken-3",
+    question: "later?",
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+  });
   assert.equal(third.outcome, "accepted");
   if (third.outcome !== "accepted") return;
   c.acknowledge(secondOffer);
@@ -670,18 +669,21 @@ test("an on-call grant that takes the offered run out of the receiver's hand off
   assert.ok(agent);
   const epoch = c.receiver.begin();
   c.receiver.markReady(epoch);
-  // A is spoken, B is typed; both end while the renderer is busy, so neither is claimed.
-  const spoken = await submitBrainAsk(
-    agent,
-    { submissionId: "spoken-a", question: "how are they?", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
-    c.record,
-  );
+  // A is spoken, B is typed; both end while the renderer is busy, so neither
+  // is claimed. B is submitted once A has ended, so it is a run of its own
+  // rather than an ask steered into A's turn.
+  const spoken = await c.submit({
+    submissionId: "spoken-a",
+    question: "how are they?",
+    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+  });
   assert.equal(spoken.outcome, "accepted");
   if (spoken.outcome !== "accepted") return;
-  const [typed] = await submitMany(agent, c.record, 1);
-  assert.ok(typed);
   await settle();
   client.release(answered("A."));
+  await settle();
+  const [typed] = await submitMany(c.submit, 1);
+  assert.ok(typed);
   await settle();
   client.release(answered("B."));
   await settle();
