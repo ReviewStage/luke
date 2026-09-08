@@ -1,8 +1,13 @@
-import { HostedModelAdapter, openAiModelAdapter } from "@sidecar/brain";
+import {
+  HostedEmbeddingAdapter,
+  HostedModelAdapter,
+  OpenAiEmbeddingAdapter,
+  openAiModelAdapter,
+} from "@sidecar/brain";
 import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
 import { type RealtimeDiagnostics, realtimeMintExplanation } from "@sidecar/realtime";
-import type { ModelAdapter } from "@sidecar/runtime-contracts";
+import type { EmbeddingAdapter, ModelAdapter } from "@sidecar/runtime-contracts";
 import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
@@ -90,6 +95,7 @@ export interface VoiceCapabilityApplication {
 export class VoiceCapabilityAssembler {
   readonly #options: VoiceCapabilityAssemblerOptions;
   #brainModel: ModelAdapter | undefined;
+  #embeddingAdapter: EmbeddingAdapter | undefined;
   #realtimeCredentials: RealtimeCredentialMinter | undefined;
   #unavailableDiagnostics: RealtimeDiagnostics;
   #voiceSource: VoiceSource = VOICE_SOURCE.ACCOUNT;
@@ -114,6 +120,16 @@ export class VoiceCapabilityAssembler {
    */
   get brainModel(): ModelAdapter | undefined {
     return this.#brainModel;
+  }
+
+  /**
+   * The embedding adapter the notebook index runs on, following the same
+   * source as the brain's model: the developer's key straight to OpenAI's
+   * embeddings, or Luke's hosted service on the account. Nothing when no
+   * brain may stand, and the index then searches by keyword alone.
+   */
+  get embeddingAdapter(): EmbeddingAdapter | undefined {
+    return this.#embeddingAdapter;
   }
 
   get realtimeCredentials(): RealtimeCredentialMinter | undefined {
@@ -177,6 +193,15 @@ export class VoiceCapabilityAssembler {
       builtBrainModel && this.#options.wrapBrainModel
         ? this.#options.wrapBrainModel(builtBrainModel)
         : builtBrainModel;
+    this.#embeddingAdapter =
+      policy.useKey && apiKey
+        ? new OpenAiEmbeddingAdapter({
+            apiKey,
+            ...(this.#options.fetch ? { fetch: this.#options.fetch } : undefined),
+          })
+        : policy.useHosted
+          ? new HostedEmbeddingAdapter(seams)
+          : undefined;
     this.#realtimeCredentials = apiKey
       ? openAiRealtimeCredentials(apiKey, preferences)
       : policy.useHosted

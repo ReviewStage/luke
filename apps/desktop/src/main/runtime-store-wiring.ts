@@ -21,6 +21,7 @@ import {
   type SessionKey,
   threadSessionKey,
 } from "@sidecar/runtime-contracts";
+import type { NotebookEntry } from "@sidecar/runtime-store";
 import {
   type DeletionOutcome,
   type MaintenanceReport,
@@ -35,11 +36,11 @@ import { ConversationThread, MemoryHistoryStore } from "./conversation-thread";
  * The runtime store as the desktop composes it: one database under the
  * agent's own directory, spoken to on its own worker thread so the main
  * thread never waits on the disk. It holds every conversation's envelope,
- * thread, and transcript, the remembered facts, and the archives of deleted
- * history, and it is opened once at launch in every run that observes
- * providers. A fixture or capture run has nothing on disk: its threads live
- * in memory under the same append rule, the facts are empty and refuse every
- * write, and nothing is recorded from this process.
+ * thread, and transcript, the notebook's provenance and search index, and
+ * the archives of deleted history, and it is opened once at launch in every
+ * run that observes providers. A fixture or capture run has nothing on disk:
+ * its threads live in memory under the same append rule, the notebook is
+ * empty and refuses every write, and nothing is recorded from this process.
  *
  * The conversation directory is held here too: what the store lists, and
  * beside it the temporary threads that exist in this process alone and are
@@ -51,6 +52,8 @@ export interface RuntimeStoreWiringDependencies {
   createWorker: () => RuntimeStorePort;
   /** The agent's directory under Luke's application data, created on open. */
   agentRoot: () => string;
+  /** The agent's identity workspace, the notebook's root; the worker writes USER.md there. */
+  workspaceDirectory: () => string;
   ensureDirectory: (directory: string) => void;
   now: () => number;
   createEventId: () => string;
@@ -82,23 +85,29 @@ export interface RuntimeStoreWiring {
   brainStateRepository: (sessionKey?: SessionKey) => BrainStateRepository;
   /** Opens the database for this launch. */
   open: () => Promise<void>;
-  /** Restores every stored conversation's thread, its cutoff, and the remembered facts, once opened. */
+  /** Restores every stored conversation's thread, its cutoff, and the notebook's entries, once opened. */
   restore: () => Promise<void>;
-  rememberedFacts: () => readonly RememberedFact[];
   /**
-   * One mutation of the remembered facts, read and replaced under one queue.
-   * Two conversations may run turns at once, so a remember in one and a
-   * forget in another must not each read the list, compute, and replace it
-   * past the other; `work` is handed the list as it stands when its turn in
-   * the queue comes and the store's own writer, and what it answers is the
-   * list that then stands.
+   * The notebook's entries as last read from the worker — the facts Luke
+   * remembers about the developer, each with the id the model may name — for
+   * the standing context and the validators. Refreshed after every write and
+   * whenever the notebook's files are reconciled.
    */
-  mutateRememberedFacts: (
-    work: (
-      current: readonly RememberedFact[],
-      write: (facts: readonly RememberedFact[]) => Promise<boolean>,
-    ) => Promise<readonly RememberedFact[]>,
-  ) => Promise<readonly RememberedFact[]>;
+  rememberedFacts: () => readonly RememberedFact[];
+  /** Reads the notebook again, reconciling a hand edit, and answers its entries. */
+  refreshNotebook: () => Promise<readonly NotebookEntry[]>;
+  /**
+   * The notebook's two writes. Each is one request to the worker, which
+   * serializes every mutation of the workspace, so two conversations
+   * remembering at once cannot drop each other's entry; the answer says
+   * whether the words now stand or the entry is gone.
+   */
+  rememberNotebookEntry: (ask: {
+    id: string;
+    words: string;
+    replaces?: string;
+  }) => Promise<boolean>;
+  forgetNotebookEntry: (id: string) => Promise<boolean>;
   /**
    * Records a line in one conversation from the main process — the ask a
    * carried act was, a typed ask the brain accepted, a run's end — minting
@@ -114,6 +123,8 @@ export interface RuntimeStoreWiring {
   /** Whether the key names a conversation the directory lists right now. */
   holds: (sessionKey: SessionKey) => boolean;
   createThread: (temporary: boolean) => Promise<ConversationRecord>;
+  /** Whether the key names a temporary thread of this run: held in memory alone, and never a recall source. */
+  isTemporary: (sessionKey: SessionKey) => boolean;
   /**
    * Lists a runtime-owned conversation — an observed session's — creating
    * its row when none stands and bringing an archived one back, so the
@@ -227,8 +238,9 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     thread(sessionKey).restore(entries, clearedAt);
   };
 
-  let rememberedFacts: readonly RememberedFact[] = [];
-  let factMutations: Promise<unknown> = Promise.resolve();
+  let notebookEntries: readonly NotebookEntry[] = [];
+  const rememberedFacts = (): readonly RememberedFact[] =>
+    notebookEntries.map((entry) => ({ id: entry.id, words: entry.words }));
 
   // A run with nothing on disk still lists main, so the selector has a conversation to stand on.
   if (!dependencies.persistent) {
@@ -291,20 +303,46 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
   const holds = (sessionKey: SessionKey) =>
     temporary.has(sessionKey) || stored.some((record) => record.sessionKey === sessionKey);
 
-  const writeRememberedFacts = async (facts: readonly RememberedFact[]): Promise<boolean> => {
-    if (!dependencies.persistent) return false;
-    let persisted: boolean;
+  const refreshNotebook = async (): Promise<readonly NotebookEntry[]> => {
+    if (!dependencies.persistent) return notebookEntries;
     try {
-      persisted = await client().replacePersonalFacts(facts);
+      notebookEntries = await client().listNotebookEntries(dependencies.now());
     } catch (error) {
       dependencies.report(
-        `Could not persist Luke's memory: ${error instanceof Error ? error.message : String(error)}`,
+        `Could not read Luke's notebook: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    return notebookEntries;
+  };
+  const rememberNotebookEntry = async (ask: {
+    id: string;
+    words: string;
+    replaces?: string;
+  }): Promise<boolean> => {
+    if (!dependencies.persistent) return false;
+    try {
+      const mutation = await client().rememberNotebookEntry({ ...ask, now: dependencies.now() });
+      notebookEntries = mutation.entries;
+      return mutation.ok;
+    } catch (error) {
+      dependencies.report(
+        `Could not write Luke's notebook: ${error instanceof Error ? error.message : String(error)}`,
       );
       return false;
     }
-    if (!persisted) return false;
-    rememberedFacts = facts;
-    return true;
+  };
+  const forgetNotebookEntry = async (id: string): Promise<boolean> => {
+    if (!dependencies.persistent) return false;
+    try {
+      const mutation = await client().forgetNotebookEntry(id, dependencies.now());
+      notebookEntries = mutation.entries;
+      return mutation.ok;
+    } catch (error) {
+      dependencies.report(
+        `Could not write Luke's notebook: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return false;
+    }
   };
 
   const memoryJobs = memoryScheduledJobStore();
@@ -321,6 +359,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
       dependencies.ensureDirectory(agentRoot);
       await client().open({
         agentRoot,
+        workspaceDirectory: dependencies.workspaceDirectory(),
         agentId: DEFAULT_AGENT_ID,
         sessionKey: MAIN_SESSION_KEY,
         conversationName: MAIN_CONVERSATION_NAME,
@@ -332,17 +371,12 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
       // Every conversation's thread, archived ones included: an archived
       // thread is still shown, read-only, when the developer selects it.
       await Promise.all(stored.map((record) => restoreThread(record.sessionKey)));
-      rememberedFacts = await client().personalFacts();
+      await refreshNotebook();
     },
-    rememberedFacts: () => rememberedFacts,
-    mutateRememberedFacts: (work) => {
-      const mutation = factMutations.then(
-        () => work(rememberedFacts, writeRememberedFacts),
-        () => work(rememberedFacts, writeRememberedFacts),
-      );
-      factMutations = mutation.catch(() => undefined);
-      return mutation;
-    },
+    rememberedFacts,
+    refreshNotebook,
+    rememberNotebookEntry,
+    forgetNotebookEntry,
     recordConversationEntry: (
       entry,
       recordedAt = dependencies.now(),
@@ -356,6 +390,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     },
     directory,
     holds,
+    isTemporary: (sessionKey) => temporary.has(sessionKey),
     createThread: async (isTemporary) => {
       const now = dependencies.now();
       const ordinal =

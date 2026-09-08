@@ -68,6 +68,7 @@ function executor(trigger: BrainTurnTrigger = BRAIN_TURN_TRIGGER.WAKE) {
     roster: () => ({ text: "roster", identities: [] }),
     acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
     children: undefined,
+    memory: undefined,
     workspace: {
       read: async (name) => ({ ok: true, content: `content of ${name}` }),
       write: async (name, content) => {

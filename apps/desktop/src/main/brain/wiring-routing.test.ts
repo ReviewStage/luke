@@ -222,7 +222,7 @@ function composed(gate?: Gate): Composed {
       trackedIssues: () => undefined,
       appGuide: () => ({ facts: [], settings: [] }),
       rememberedFacts: () => [],
-      mutateRememberedFacts: async (mutate) => mutate([], async () => true),
+      notebook: { remember: async () => true, forget: async () => true },
       performAppAct: async (): Promise<WireRecord> => ({ status: ACT_RESULT_STATUS.REJECTED }),
       recordConversationEntry: () => undefined,
     },

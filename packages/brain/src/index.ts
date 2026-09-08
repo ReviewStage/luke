@@ -6,12 +6,20 @@ export {
   type BrainCompletionDelivery,
   type BrainLane,
   type BrainOpeningNotes,
+  type BrainRecallAsk,
   type BrainWorkspaceAccess,
   LOOK_SUBJECT,
   type LookSubject,
   type LookSubjectKind,
 } from "./agent.js";
 export { RESPONSES_CONTEXT_ENGINE_ID, registerBrainBuiltIns } from "./builtins.js";
+export {
+  EMBEDDING_BATCH_SIZE,
+  HOSTED_EMBEDDING_ADAPTER_ID,
+  HostedEmbeddingAdapter,
+  OPENAI_EMBEDDING_ADAPTER_ID,
+  OpenAiEmbeddingAdapter,
+} from "./embedding-adapters.js";
 export { BrainGenerationClock } from "./generation-clock.js";
 export { HOSTED_MODEL_ADAPTER_ID, HostedModelAdapter } from "./hosted-model-adapter.js";
 export { BRAIN_INPUT_MARKER, primedNotesInputText } from "./input-items.js";
@@ -36,6 +44,7 @@ export {
   openAiModelAdapter,
 } from "./openai-model-adapter.js";
 export type { BrainActExecution, BrainActPerformer, BrainRoster } from "./performer.js";
+export { RECALL_SUBRUN_PROMPT, RECALL_SUBRUN_TOOLS, runRecallSubrun } from "./recall-subrun.js";
 export {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
@@ -44,16 +53,21 @@ export {
   type BrainSubmission,
 } from "./requests.js";
 export {
+  BRAIN_EMBEDDING_MODEL,
+  BRAIN_EMBEDDINGS_PATH,
   BRAIN_RESPONSES_COMPACT_PATH,
   BRAIN_RESPONSES_INPUT_TOKENS_PATH,
   BRAIN_RESPONSES_PATH,
   type BrainCompactRequest,
+  type BrainEmbeddingsRequest,
   type BrainInputTokensRequest,
   type BrainResponsesRequest,
   brainCompactRequest,
+  brainEmbeddingsRequest,
   brainInputTokensRequest,
   brainResponsesOutput,
   brainResponsesRequest,
+  embeddingsVectors,
   RESPONSES_ITEM_TYPE,
   type ResponsesFunctionTool,
   type ResponsesInputItem,
@@ -80,7 +94,11 @@ export {
   LEGACY_CHECKPOINT_FORMAT_TAG,
   legacyStampOf,
 } from "./state-store.js";
-export type { BrainChildAccess, BrainChildSpawnAsk } from "./tool-executor.js";
+export type {
+  BrainChildAccess,
+  BrainChildSpawnAsk,
+  BrainMemoryAccess,
+} from "./tool-executor.js";
 export {
   BRAIN_TOOL,
   brainToolCatalog,

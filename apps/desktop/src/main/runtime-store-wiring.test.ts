@@ -39,6 +39,7 @@ function wiring(root: string) {
       return channel.port1 as unknown as RuntimeStorePort;
     },
     agentRoot: () => root,
+    workspaceDirectory: () => path.join(root, "workspace"),
     ensureDirectory: (directory) => fs.mkdirSync(directory, { recursive: true }),
     now: () => clock,
     createEventId: () => `id-${++ids}`,

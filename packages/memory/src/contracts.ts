@@ -6,9 +6,14 @@ import type { RetrievalMode } from "./defaults.js";
  * that drives it runs in the main process and never touches SQLite itself.
  */
 
-/** Where an indexed chunk came from. Only the notebook's files are indexed today. */
+/**
+ * Where a search result came from: the notebook's indexed files, or a line
+ * already said in an eligible past private conversation, read from the
+ * retained history rather than from any index. Nothing merges the two.
+ */
 export const MEMORY_SOURCE = {
   MEMORY: "memory",
+  CONVERSATIONS: "conversations",
 } as const;
 
 export type MemorySource = (typeof MEMORY_SOURCE)[keyof typeof MEMORY_SOURCE];

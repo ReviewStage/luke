@@ -1,5 +1,6 @@
 export {
   HOSTED_BRAIN_CONTRACT_VERSION,
+  HOSTED_BRAIN_EMBED_BOUNDS,
   HOSTED_BRAIN_OPERATION,
   HOSTED_BRAIN_OPTION_BOUNDS,
   HOSTED_BRAIN_PROMPT_BOUNDS,
@@ -10,6 +11,8 @@ export {
   type HostedBrainCompactRequest,
   type HostedBrainCountTokensAnswer,
   type HostedBrainCountTokensRequest,
+  type HostedBrainEmbedAnswer,
+  type HostedBrainEmbedRequest,
   type HostedBrainOperation,
   type HostedBrainRequestOptions,
   type HostedBrainRequestRead,
@@ -20,6 +23,8 @@ export {
   hostedBrainCompactRequestFromWire,
   hostedBrainCountTokensAnswerFromWire,
   hostedBrainCountTokensRequestFromWire,
+  hostedBrainEmbedAnswerFromWire,
+  hostedBrainEmbedRequestFromWire,
   hostedBrainRespondRequestFromWire,
 } from "./brain-contract.js";
 export {

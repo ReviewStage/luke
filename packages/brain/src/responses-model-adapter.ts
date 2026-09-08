@@ -32,9 +32,13 @@ import { TOOL_LOOP_RUNTIME } from "./runtime.js";
  * body is composed, and how each answer is read.
  */
 
-/** The three operations, named as the hosted contract names them; the keyed transport addresses the same three on the provider. */
-export const RESPONSES_OPERATION = HOSTED_BRAIN_OPERATION;
-export type ResponsesOperation = HostedBrainOperation;
+/** The three Responses operations, named as the hosted contract names them; the keyed transport addresses the same three on the provider. Embedding is the embedding adapters' own. */
+export const RESPONSES_OPERATION = {
+  RESPOND: HOSTED_BRAIN_OPERATION.RESPOND,
+  COUNT_TOKENS: HOSTED_BRAIN_OPERATION.COUNT_TOKENS,
+  COMPACT: HOSTED_BRAIN_OPERATION.COMPACT,
+} as const satisfies Partial<Record<string, HostedBrainOperation>>;
+export type ResponsesOperation = (typeof RESPONSES_OPERATION)[keyof typeof RESPONSES_OPERATION];
 
 /** The checkpoint every Responses transport writes: the tool loop over the Responses input array. */
 export const RESPONSES_CHECKPOINT = {

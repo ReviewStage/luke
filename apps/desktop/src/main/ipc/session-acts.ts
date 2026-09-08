@@ -3,13 +3,8 @@ import {
   type CarriedIssueAction,
   type CarriedSessionAction,
   dispatchByKind,
-  holdsRememberedFact,
   ISSUE_TOOL_KIND,
-  maximumRememberedFacts,
-  type RememberedFact,
-  rememberedFactText,
   SESSION_TOOL_KIND,
-  withoutRememberedFact,
 } from "@sidecar/acts";
 import {
   PRODUCT_EVENT,
@@ -141,40 +136,6 @@ export interface SessionActPerformer {
     applicationId: SessionApplicationId,
   ): Promise<SessionOpenResult>;
   openSessionChange(identity: SessionIdentity): Promise<SessionOpenResult>;
-}
-
-/** Makes the list given the remembered facts, answering whether it landed; the runtime store is the writer. */
-export type RememberedFactsWriter = (
-  facts: readonly RememberedFact[],
-) => boolean | Promise<boolean>;
-
-export async function saveRememberedFact(
-  held: readonly RememberedFact[],
-  words: string,
-  replaces: string | undefined,
-  id: string,
-  write: RememberedFactsWriter,
-): Promise<readonly RememberedFact[]> {
-  const remembered = rememberedFactText(words);
-  if (!remembered) return held;
-  if (replaces !== undefined && !holdsRememberedFact(held, replaces)) return held;
-  const retained = replaces ? withoutRememberedFact(held, replaces) : held;
-  if (retained.some((fact) => fact.words === remembered)) {
-    return retained.length === held.length || !(await write(retained)) ? held : retained;
-  }
-  if (replaces === undefined && held.length >= maximumRememberedFacts) return held;
-  const next = [...retained, { id, words: remembered }];
-  return (await write(next)) ? next : held;
-}
-
-export async function forgetRememberedFact(
-  held: readonly RememberedFact[],
-  id: string,
-  write: RememberedFactsWriter,
-): Promise<readonly RememberedFact[]> {
-  if (!holdsRememberedFact(held, id)) return held;
-  const next = withoutRememberedFact(held, id);
-  return (await write(next)) ? next : held;
 }
 
 const REFUSAL = {
