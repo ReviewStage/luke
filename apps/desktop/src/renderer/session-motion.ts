@@ -71,9 +71,7 @@ export const WORKSPACE_TRAY_ID_ATTRIBUTE = "data-tray-id";
 export const LEAVING_ATTRIBUTE = "data-leaving";
 
 const MOTION_TOKEN = {
-  SPRING: "--spring",
   SPRING_FAST: "--spring-fast",
-  SURFACE_DURATION: "--duration-shape",
   FAST_DURATION: "--duration-fast",
   EXIT_DURATION: "--duration-exit",
   EXIT_EASING: "--motion-exit",
@@ -112,10 +110,19 @@ interface ReorderList {
    */
   origin?: (container: HTMLElement) => number;
   /**
+   * The basis the offsets are read in, when a list has more than one. The
+   * wing's strip reads its marks stacked or spread, and a measurement in one
+   * basis says nothing about the last one taken in the other: the flip moves
+   * no mark a reader saw — the stylesheet's own transition carries each to
+   * its seat — so a travel planned across it would replay that journey on top.
+   * A changed basis re-baselines the list instead of planning against it.
+   */
+  basis?: (container: HTMLElement) => string;
+  /**
    * Whether an arrival also travels in from one `--row-fan` step back, the way
    * the row stack arrives. The wing's marks do not: an arriving mark already
-   * slides in on the stylesheet's own `@starting-style` gesture — the same
-   * unfold the whole wing makes — so the hook only holds its fade to the beat.
+   * slides in on the stylesheet's own mount animation — the same unfold the
+   * whole wing makes — so the hook only holds its fade to the beat.
    */
   arrivesFromFan: boolean;
 }
@@ -143,6 +150,10 @@ const SESSION_LIST: ReorderList = {
  */
 export const WING_SPREAD_ATTRIBUTE = "data-spread";
 
+function wingSpread(container: HTMLElement): boolean {
+  return container.getAttribute(WING_SPREAD_ATTRIBUTE) === "true";
+}
+
 /**
  * Where a mark is drawn along the wing. Flat, that is `offsetLeft`: the marks
  * are anchored beside the housing, which is the wing's own left edge, so it is
@@ -164,9 +175,9 @@ export function wingSlotOffset(element: HTMLElement, spread: boolean): number {
 /** The wing's strip: marks laid along the wing, anchored beside the housing. */
 const WING_STRIP: ReorderList = {
   idAttribute: WING_SLOT_ID_ATTRIBUTE,
-  offset: (element, container) =>
-    wingSlotOffset(element, container.getAttribute(WING_SPREAD_ATTRIBUTE) === "true"),
+  offset: (element, container) => wingSlotOffset(element, wingSpread(container)),
   translate: (px) => `translateX(${px}px)`,
+  basis: (container) => String(wingSpread(container)),
   arrivesFromFan: false,
 };
 
@@ -236,22 +247,22 @@ export function planReorder(
   return { travels, arrivals };
 }
 
+/**
+ * The positions this measurement is compared against: the last ones taken,
+ * unless they were taken in another basis, in which case there is nothing to
+ * compare and the list is simply where it is.
+ */
+export function comparableBaseline<T>(
+  baseline: T | undefined,
+  previousBasis: string | undefined,
+  basis: string | undefined,
+): T | undefined {
+  return previousBasis === basis ? baseline : undefined;
+}
+
 /** Only elements a reader can see are worth moving; hidden ones just take their place. */
 function elementVisible(element: HTMLElement): boolean {
   return element.checkVisibility({ opacityProperty: true });
-}
-
-/**
- * Whether a planned travel animates for an element in this visibility. A slot
- * hop leaves a hidden element to take its place unseen — nothing a reader
- * watches moved. A travel the bound caused is the shape's own motion and
- * carries every element it displaced, seen or not: a mark resting under the
- * pile is transparent on the frame of the morph and visible before the spring
- * settles, and one left untravelled would appear at its new seat without ever
- * having crossed to it.
- */
-export function travelApplies(input: { boundMoved: boolean; visible: boolean }): boolean {
-  return input.boundMoved || input.visible;
 }
 
 /**
@@ -265,7 +276,7 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
   const listRef = useRef<T | null>(null);
   const baseline = useRef<Map<string, number> | undefined>(undefined);
   const groupBaseline = useRef<Map<string, number> | undefined>(undefined);
-  const baselineWidth = useRef<number | undefined>(undefined);
+  const baselineBasis = useRef<string | undefined>(undefined);
   const baselineOrigin = useRef<number | undefined>(undefined);
   const wasLeaving = useRef<Set<string>>(new Set());
   const exitFades = useRef<Map<string, Animation>>(new Map());
@@ -278,7 +289,7 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
     if (container === null) {
       baseline.current = undefined;
       groupBaseline.current = undefined;
-      baselineWidth.current = undefined;
+      baselineBasis.current = undefined;
       baselineOrigin.current = undefined;
       wasLeaving.current = new Set();
       exitFades.current.clear();
@@ -330,26 +341,17 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
       if (!elements.has(id)) exitFades.current.delete(id);
     }
 
-    const plan = planReorder(baseline.current, positions);
+    const basis = list.basis?.(container);
+    const plan = planReorder(
+      comparableBaseline(baseline.current, baselineBasis.current, basis),
+      positions,
+    );
     baseline.current = positions;
+    baselineBasis.current = basis;
     // A group with no baseline is chrome that just appeared — its rows carry
     // their own entrances — so only its travels are ever animated.
     const groupPlan = planReorder(groupBaseline.current ?? new Map(), groupPositions);
     groupBaseline.current = groupPositions;
-    // Whether this commit moved the list's bound out from under it — the
-    // wing's `--wing-bound` changing with the presentation is the one thing
-    // that does. Elements measured against the anchored edge read that as the
-    // travel it truly is, and it is a different gesture from a slot hop: the
-    // surface is what moved, so they ride the surface's spring. The bound is
-    // the box the offsets are measured against — the container's own
-    // `offsetParent`, the same node the elements report theirs from — never
-    // the container, which shrink-wraps its contents and holds its width
-    // while the bound beneath it moves.
-    const width = (container.offsetParent ?? container).clientWidth;
-    const boundMoved =
-      baselineWidth.current !== undefined &&
-      Math.abs(width - baselineWidth.current) > TRAVEL_EPSILON;
-    baselineWidth.current = width;
     // The container's own seat, for a list that asked to ride its shoves as
     // one object. The first measurement is a baseline like every other: a
     // freshly built list simply is where it is.
@@ -380,19 +382,11 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
     const quickDuration = parseMilliseconds(token(MOTION_TOKEN.QUICK_DURATION));
     const exitEasing = token(MOTION_TOKEN.EXIT_EASING).trim() || "ease";
     const fan = parsePixels(token(MOTION_TOKEN.ROW_FAN));
-    // A travel the bound caused rides the shape's spring for the shape's whole
-    // beat: the same curve over the same time holds a mark the same distance
-    // inside the surface's edge for every frame of the morph, where the fast
-    // spring would carry it past the edge onto the desktop.
-    const travelDuration = boundMoved
-      ? parseMilliseconds(token(MOTION_TOKEN.SURFACE_DURATION))
-      : fastDuration;
-    const travelSpring = boundMoved ? token(MOTION_TOKEN.SPRING).trim() || "ease" : springFast;
 
     const travel = (element: HTMLElement, from: number, delay: number) => {
       element.animate([{ transform: list.translate(from) }, { transform: list.translate(0) }], {
-        duration: travelDuration,
-        easing: travelSpring,
+        duration: fastDuration,
+        easing: springFast,
         delay,
         fill: "backwards",
         composite: "add",
@@ -453,8 +447,7 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
       };
       for (const [id, from] of plan.travels) {
         const element = elements.get(id);
-        if (element === undefined) continue;
-        if (!travelApplies({ boundMoved, visible: elementVisible(element) })) continue;
+        if (element === undefined || !elementVisible(element)) continue;
         const within = from - groupTravelOf(element);
         if (Math.abs(within) > TRAVEL_EPSILON) travel(element, within, 0);
       }

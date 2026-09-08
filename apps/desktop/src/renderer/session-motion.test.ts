@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  comparableBaseline,
   nextDepartures,
   parseMilliseconds,
   parsePixels,
   planReorder,
   rosterRows,
-  travelApplies,
   wingSlotOffset,
   withoutDeparture,
 } from "./session-motion";
@@ -22,21 +22,15 @@ test("a row found somewhere new travels back by exactly the distance it moved", 
   assert.equal(plan.travels.get("b"), 75);
 });
 
-test("a slot hop leaves a hidden element to take its place", () => {
-  assert.equal(travelApplies({ boundMoved: false, visible: false }), false);
-});
-
-test("a bound-moved travel carries an element still transparent mid-entrance", () => {
-  // The wing's marks enter behind the shape's travel, so a panel opened
-  // before their fade begins finds them at opacity zero — and they will be
-  // visible before the spring settles. Skipped, they would fade in at their
-  // new seat while the surface's edge is still on its way there.
-  assert.equal(travelApplies({ boundMoved: true, visible: false }), true);
-});
-
-test("a visible element travels whichever gesture moved it", () => {
-  assert.equal(travelApplies({ boundMoved: false, visible: true }), true);
-  assert.equal(travelApplies({ boundMoved: true, visible: true }), true);
+test("a measurement in a new basis compares against nothing", () => {
+  // The wing's strip stacked reads every mark at one seat and spread reads
+  // each at its own, so the capsule unfolding into the peek would otherwise
+  // plan a travel for the lead mark by the strip's own inset — a hop to the
+  // left and back that nothing on screen had made.
+  const stacked = tops({ a: 0, b: 0 });
+  assert.equal(comparableBaseline(stacked, "false", "true"), undefined);
+  assert.equal(comparableBaseline(stacked, "false", "false"), stacked);
+  assert.equal(comparableBaseline(stacked, undefined, undefined), stacked);
 });
 
 test("a row that kept its place is left alone", () => {
