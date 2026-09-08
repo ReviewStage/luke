@@ -187,7 +187,7 @@ import {
   NODE_CAPABILITY,
 } from "./gateway/desktop-node";
 import { currentBuildIdentity } from "./gateway/gateway-process";
-import { createGatewayLauncher, type GatewayLauncher } from "./gateway/launcher";
+import { createGatewayLauncher } from "./gateway/launcher";
 import { conversationEntryFromWire, createGatewayOperator } from "./gateway/operator";
 import { createGatewayService } from "./gateway/service";
 import {
@@ -1839,7 +1839,7 @@ const gatewayOperator = createGatewayOperator({
  * client that crashes, is found again by the next, and leaves only at the
  * explicit Quit below, which asks it to shut down and waits for it.
  */
-const gatewayLauncher: GatewayLauncher | undefined = runMode.observesProviders
+const gatewayLauncher = runMode.observesProviders
   ? createGatewayLauncher({
       stateRoot: app.getPath("userData"),
       build: currentBuildIdentity(appName),

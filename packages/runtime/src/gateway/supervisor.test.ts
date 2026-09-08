@@ -121,6 +121,9 @@ function supervisor(w: World, options: { restartLimit?: number } = {}): GatewayS
     },
     discover: async () => w.record,
     isAlive: (pid) => w.alive.has(pid),
+    kill: (pid) => {
+      w.alive.delete(pid);
+    },
     connect: async (found) => {
       const custom = w.connectAnswer?.(found);
       if (custom) return custom;
@@ -346,4 +349,65 @@ test("an explicit stop asks the Gateway to shut down, waits for it to leave, and
   assert.equal(w.spawns, 1);
   const after = await s.attach();
   assert.equal(after.outcome, GATEWAY_ATTACH_OUTCOME.FAILED);
+});
+
+test("a stop that lands while a Gateway is being started kills it rather than adopting it after the quit", async () => {
+  const w = world();
+  let release: (() => void) | undefined;
+  w.connectAnswer = (found) => {
+    // The handshake is under way when the quit arrives; it completes afterwards.
+    const connection = new FakeConnection();
+    w.connections.push(connection);
+    void found;
+    return { ok: true, connection };
+  };
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const s = new GatewaySupervisor({
+    build: BUILD,
+    createId: () => "id",
+    discover: async () => w.record,
+    isAlive: (pid) => w.alive.has(pid),
+    kill: (pid) => {
+      w.alive.delete(pid);
+    },
+    connect: async (found) => {
+      await gate;
+      return (
+        w.connectAnswer?.(found) ?? { ok: false, failure: GATEWAY_CONNECT_FAILURE.UNREACHABLE }
+      );
+    },
+    spawn: async (): Promise<GatewaySpawnedProcess> => {
+      w.spawns += 1;
+      w.nextPid += 1;
+      const pid = w.nextPid;
+      w.alive.add(pid);
+      w.record = record(pid);
+      return {
+        pid,
+        exited: new Promise(() => undefined),
+        kill: () => {
+          w.alive.delete(pid);
+        },
+      };
+    },
+    now: () => w.clock.now,
+    setTimeout: (work, delay) => {
+      w.clock.now += delay;
+      queueMicrotask(work);
+      return 0;
+    },
+    discoveryWaitMs: 1_000,
+    stopWaitMs: 500,
+  });
+  const attaching = s.attach();
+  await settle();
+  const stopping = s.stop();
+  release?.();
+  const [attached] = await Promise.all([attaching, stopping]);
+  assert.equal(attached.outcome, GATEWAY_ATTACH_OUTCOME.FAILED);
+  assert.equal(s.state(), GATEWAY_ATTACHMENT.STOPPED);
+  assert.equal(s.transport.connected(), false);
+  assert.equal(w.connections[0]?.connected(), false);
 });

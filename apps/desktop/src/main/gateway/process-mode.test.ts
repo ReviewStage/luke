@@ -19,10 +19,7 @@ test("the Gateway mode is one argument, and the state root travels beside it", (
   assert.equal(gatewayStateRootArgument(argv), "/state/Luke Dev");
   assert.equal(isGatewayProcess(["electron", "."]), false);
   assert.equal(gatewayStateRootArgument(["electron", "."]), undefined);
-  assert.equal(
-    gatewayStateRootArgument([GATEWAY_PROCESS_ARGUMENT, "--state-root", "/root"]),
-    "/root",
-  );
+  assert.equal(gatewayStateRootArgument([GATEWAY_PROCESS_ARGUMENT, "--state-root="]), undefined);
 });
 
 test("the Gateway's profile and state files sit under the state root, apart from each other", () => {

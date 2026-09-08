@@ -45,7 +45,7 @@ export interface LocalGatewayHostOptions {
   server: GatewayServer;
   token: string;
   build: GatewayBuildIdentity;
-  /** The largest frame a client may send; a larger one closes the connection. */
+  /** The largest frame a client may send; `ws` closes the connection on a larger one. */
   maximumFrameBytes?: number;
   report?: (message: string) => void;
 }
@@ -98,14 +98,17 @@ export class LocalGatewayHost {
   readonly #http = http.createServer((_request, response) => {
     response.writeHead(404).end();
   });
-  readonly #sockets = new WebSocketServer({ noServer: true });
+  readonly #sockets: WebSocketServer;
   readonly #clients = new Map<WebSocket, AdmittedClient>();
   #unsubscribe: (() => void) | undefined;
   #admitting = true;
-  #port: number | undefined;
 
   constructor(options: LocalGatewayHostOptions) {
     this.#options = options;
+    this.#sockets = new WebSocketServer({
+      noServer: true,
+      maxPayload: options.maximumFrameBytes ?? LOCAL_GATEWAY_DEFAULTS.MAXIMUM_FRAME_BYTES,
+    });
     this.#http.on("upgrade", (request, socket, head) => this.#upgrade(request, socket, head));
     this.#sockets.on("headers", (headers) => {
       for (const [name, value] of Object.entries(this.handshakeHeaders())) {
@@ -122,7 +125,6 @@ export class LocalGatewayHost {
         this.#http.off("error", reject);
         // SAFETY: a TCP server that is listening answers an AddressInfo, never a pipe path.
         const address = this.#http.address() as AddressInfo;
-        this.#port = address.port;
         this.#unsubscribe = this.#options.server.subscribe((event) => {
           const frame = JSON.stringify({
             kind: LOCAL_GATEWAY_FRAME.EVENT,
@@ -136,10 +138,6 @@ export class LocalGatewayHost {
         resolve(address.port);
       });
     });
-  }
-
-  port(): number | undefined {
-    return this.#port;
   }
 
   connections(): number {
@@ -219,12 +217,9 @@ export class LocalGatewayHost {
 
   #admit(socket: WebSocket, client: AdmittedClient): void {
     this.#clients.set(socket, client);
-    const maximum = this.#options.maximumFrameBytes ?? LOCAL_GATEWAY_DEFAULTS.MAXIMUM_FRAME_BYTES;
     socket.on("message", (data, isBinary) => {
       if (isBinary) return socket.close(1003, "text frames only");
-      const text = data.toString();
-      if (text.length > maximum) return socket.close(1009, "frame too large");
-      void this.#take(socket, client, text);
+      void this.#take(socket, client, data.toString());
     });
     socket.on("close", () => {
       this.#clients.delete(socket);

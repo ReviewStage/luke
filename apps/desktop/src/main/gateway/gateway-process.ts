@@ -52,7 +52,7 @@ export function currentBuildIdentity(appName: string): GatewayBuildIdentity {
     appName,
     version: app.getVersion(),
     packaged: app.isPackaged,
-    ...(app.isPackaged ? undefined : { developmentStamp: developmentBundleStamp() }),
+    developmentStamp: developmentBundleStamp(),
   });
 }
 

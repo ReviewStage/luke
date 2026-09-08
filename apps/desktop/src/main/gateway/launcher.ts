@@ -1,11 +1,5 @@
 import { spawn } from "node:child_process";
-import {
-  type GatewayAttachResult,
-  GatewaySupervisor,
-  type GatewayTransport,
-  processIsAlive,
-  readGatewayDiscovery,
-} from "@sidecar/runtime";
+import { GatewaySupervisor, processIsAlive, readGatewayDiscovery } from "@sidecar/runtime";
 import { connectLocalGateway } from "@sidecar/runtime/local-gateway";
 import {
   GATEWAY_CLIENT_ROLE,
@@ -31,25 +25,26 @@ export interface GatewayLauncherOptions {
   report: (message: string) => void;
 }
 
-export interface GatewayLauncher {
-  readonly transport: GatewayTransport;
-  attach: () => Promise<GatewayAttachResult>;
-  /** The explicit quit: the Gateway is asked to leave and waited for. */
-  stop: () => Promise<void>;
-  supervisor: GatewaySupervisor;
+function killProcess(pid: number): void {
+  try {
+    process.kill(pid);
+  } catch {
+    // Already gone between the check and the signal.
+  }
 }
 
-export function createGatewayLauncher(options: GatewayLauncherOptions): GatewayLauncher {
+export function createGatewayLauncher(options: GatewayLauncherOptions): GatewaySupervisor {
   const client: GatewayClientIdentity = {
     clientId: DESKTOP_OPERATOR_CLIENT_ID,
     role: GATEWAY_CLIENT_ROLE.OPERATOR,
   };
-  const supervisor = new GatewaySupervisor({
+  return new GatewaySupervisor({
     build: options.build,
     createId: () => crypto.randomUUID(),
     discover: () => readGatewayDiscovery(gatewayDiscoveryPath(options.stateRoot)),
     connect: (record) => connectLocalGateway({ record, client, build: options.build }),
     isAlive: processIsAlive,
+    kill: killProcess,
     spawn: async () => {
       // An unpackaged run is the Electron binary given the app directory; a
       // packaged one is the bundle's own executable and takes no path.
@@ -74,21 +69,9 @@ export function createGatewayLauncher(options: GatewayLauncherOptions): GatewayL
           child.once("exit", (code) => resolve(code ?? undefined));
           child.once("error", () => resolve(undefined));
         }),
-        kill: () => {
-          try {
-            process.kill(pid);
-          } catch {
-            // Already gone.
-          }
-        },
+        kill: () => killProcess(pid),
       };
     },
     report: options.report,
   });
-  return {
-    transport: supervisor.transport,
-    attach: () => supervisor.attach(),
-    stop: () => supervisor.stop(),
-    supervisor,
-  };
 }

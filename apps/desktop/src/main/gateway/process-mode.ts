@@ -24,10 +24,9 @@ export function isGatewayProcess(argv: readonly string[]): boolean {
 
 /** The state root a Gateway was told to own, or nothing when it should derive the default. */
 export function gatewayStateRootArgument(argv: readonly string[]): string | undefined {
-  const inline = argv.find((argument) => argument.startsWith(`${GATEWAY_STATE_ROOT_ARGUMENT}=`));
-  if (inline) return inline.slice(GATEWAY_STATE_ROOT_ARGUMENT.length + 1) || undefined;
-  const index = argv.indexOf(GATEWAY_STATE_ROOT_ARGUMENT);
-  return index >= 0 ? argv[index + 1] : undefined;
+  const prefix = `${GATEWAY_STATE_ROOT_ARGUMENT}=`;
+  const inline = argv.find((argument) => argument.startsWith(prefix));
+  return inline?.slice(prefix.length) || undefined;
 }
 
 export function gatewayProfilePath(stateRoot: string): string {

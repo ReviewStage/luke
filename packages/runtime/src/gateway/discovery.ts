@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { GATEWAY_PROTOCOL_VERSION, type GatewayBuildIdentity } from "@sidecar/runtime-contracts";
+import type { GatewayBuildIdentity } from "@sidecar/runtime-contracts";
 import {
   isRecord,
   isWireNumber,
@@ -140,7 +140,6 @@ export function discoveryMatchesBuild(
 ): boolean {
   return (
     record.protocolVersion === expected.protocolVersion &&
-    record.protocolVersion === GATEWAY_PROTOCOL_VERSION &&
     record.buildVersion === expected.buildVersion
   );
 }

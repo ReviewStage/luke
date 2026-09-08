@@ -128,7 +128,6 @@ export {
   type GatewaySpawnedProcess,
   GatewaySupervisor,
   type GatewaySupervisorPorts,
-  refusalOfConnectFailure,
 } from "./gateway/supervisor.js";
 export {
   type GatewayEventSink,

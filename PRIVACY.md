@@ -160,8 +160,9 @@ you quit. The two processes speak over a connection that never leaves your Mac
 (the loopback address, on a port chosen at each start), authenticated by a
 random token made fresh each time the Gateway starts. The token is written to
 one file under Luke's application data (`gateway/discovery.json`) that only
-your user account can read, is never put in an address or a log, and is gone
-when the Gateway stops. In this version the Gateway process holds no
+your user account can read, is never put in an address or a log, and is
+withdrawn when the Gateway stops; a record a crash left behind names a process
+that no longer exists, and is ignored. In this version the Gateway process holds no
 conversation, memory, or credential of yours; those stay where the sections
 above describe.
 

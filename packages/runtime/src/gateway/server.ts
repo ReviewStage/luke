@@ -119,10 +119,6 @@ export class GatewayServer {
     this.#admitting = false;
   }
 
-  admitting(): boolean {
-    return this.#admitting;
-  }
-
   revision(): GatewayRevision {
     return { configuration: this.#options.configurationRevision(), sequence: this.#sequence };
   }

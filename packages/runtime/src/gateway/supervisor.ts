@@ -4,7 +4,6 @@ import {
   GATEWAY_METHOD,
   GATEWAY_PROTOCOL_VERSION,
   type GatewayBuildIdentity,
-  type GatewayHandshakeRefusal,
   type GatewayRequest,
   type GatewayResponse,
 } from "@sidecar/runtime-contracts";
@@ -107,11 +106,12 @@ export interface GatewaySupervisorPorts {
   connect: (record: GatewayDiscoveryRecord) => Promise<GatewayConnectResult>;
   spawn: () => Promise<GatewaySpawnedProcess>;
   isAlive: (pid: number) => boolean;
+  /** Ends a Gateway that did not leave when asked; reached only past the stop's wait. */
+  kill: (pid: number) => void;
   build: GatewayBuildIdentity;
   createId: () => string;
   now?: () => number;
   setTimeout?: (work: () => void, delayMs: number) => ScheduledTimer;
-  clearTimeout?: (handle: ScheduledTimer) => void;
   report?: (message: string) => void;
   restartLimit?: number;
   restartWindowMs?: number;
@@ -216,11 +216,7 @@ export class GatewaySupervisor {
     );
     if (!left) {
       this.#ports.report?.("the Gateway did not leave in time and was killed");
-      try {
-        process.kill(pid);
-      } catch {
-        // Already gone between the check and the signal.
-      }
+      this.#ports.kill(pid);
     }
   }
 
@@ -263,8 +259,12 @@ export class GatewaySupervisor {
     }
     const connection = result.connection;
     if (discoveryMatchesBuild(connection.hostBuild, this.#ports.build)) {
-      this.#adopt(connection, record.pid);
-      return { outcome: GATEWAY_ATTACH_OUTCOME.REATTACHED, pid: record.pid };
+      return (
+        this.#adopt(connection, record.pid) ?? {
+          outcome: GATEWAY_ATTACH_OUTCOME.REATTACHED,
+          pid: record.pid,
+        }
+      );
     }
     // Another build's Gateway stands, usually the one an update replaced:
     // it is drained before this build starts its own, never run beside.
@@ -309,8 +309,12 @@ export class GatewaySupervisor {
             spawned.kill();
             return this.#failed(GATEWAY_ATTACH_FAILURE.INCOMPATIBLE_BUILD);
           }
-          this.#adopt(result.connection, spawned.pid);
-          return { outcome: GATEWAY_ATTACH_OUTCOME.STARTED, pid: spawned.pid };
+          return (
+            this.#adopt(result.connection, spawned.pid) ?? {
+              outcome: GATEWAY_ATTACH_OUTCOME.STARTED,
+              pid: spawned.pid,
+            }
+          );
         }
         if (result.failure === GATEWAY_CONNECT_FAILURE.UNAUTHORIZED) {
           return this.#failed(GATEWAY_ATTACH_FAILURE.UNAUTHORIZED);
@@ -323,7 +327,12 @@ export class GatewaySupervisor {
     return this.#failed(GATEWAY_ATTACH_FAILURE.NOT_READY);
   }
 
-  #adopt(connection: GatewayConnection, pid: number): void {
+  /** Holds the connection as the attached Gateway's, unless a stop arrived while it was being made. */
+  #adopt(connection: GatewayConnection, pid: number): GatewayAttachResult | undefined {
+    if (this.#state === GATEWAY_ATTACHMENT.STOPPED) {
+      connection.close();
+      return this.#failed(GATEWAY_ATTACH_FAILURE.UNREACHABLE);
+    }
     this.#dropConnection();
     this.#connection = connection;
     this.#pid = pid;
@@ -340,6 +349,7 @@ export class GatewaySupervisor {
       unsubscribeClosed();
     };
     this.#setState(GATEWAY_ATTACHMENT.ATTACHED);
+    return undefined;
   }
 
   #dropConnection(): void {
@@ -413,11 +423,4 @@ export class GatewaySupervisor {
       schedule(resolve, ms);
     });
   }
-}
-
-/** The handshake refusal a connect failure carries, or nothing for a failure that was not a refusal. */
-export function refusalOfConnectFailure(
-  failure: GatewayConnectFailure,
-): GatewayHandshakeRefusal | undefined {
-  return failure === GATEWAY_CONNECT_FAILURE.UNREACHABLE ? undefined : failure;
 }
