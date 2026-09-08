@@ -130,6 +130,7 @@ function agentWith(hook: (input: BrainFlushInput) => Promise<MemoryHousekeepingR
   });
   const agent = new BrainAgent({
     runtime,
+    prepareTurn: () => ({ prompt: "flush test", layers: {} }),
     acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
     roster: () => ({ text: "", identities: [] }),
     standingContext: () => "",
