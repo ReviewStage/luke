@@ -10,7 +10,7 @@ import {
 import type { WireRecord } from "@sidecar/wire";
 import { RECALL_SUBRUN_TOOLS, runRecallSubrun } from "./recall-subrun.js";
 import type { BrainMemoryAccess } from "./tool-executor.js";
-import { BRAIN_TOOL } from "./tools.js";
+import { BRAIN_TOOL, maximumMemoryQueryLength, maximumMemorySearchResults } from "./tools.js";
 import { REFUSAL_REASON } from "./turn.js";
 
 /** A runtime that runs no model: it calls the tools the request offers and answers with what they said. */
@@ -120,6 +120,58 @@ test("the subrun is offered the two memory tools alone, runs them, and its conte
   assert.ok(opening.text.includes("when do we deploy?"));
   assert.ok(opening.text.includes("earlier ask"));
   assert.equal(disposed.length, 1);
+});
+
+test("the subrun's memory tools run under the turn's own bounds", async () => {
+  const notebook = memory();
+  const asked: (number | undefined)[] = [];
+  const access = {
+    ...notebook.access,
+    search: async (ask: { query: string; maxResults?: number }) => {
+      asked.push(ask.maxResults);
+      return notebook.access.search({ query: ask.query, signal: new AbortController().signal });
+    },
+  };
+  const { runtime } = fakeRuntime(async (request) => {
+    const context = {
+      runId: "recall-2",
+      isRevoked: () => false,
+      signal: new AbortController().signal,
+    };
+    await request.tools.execute(
+      {
+        callId: "c1",
+        name: BRAIN_TOOL.MEMORY_SEARCH,
+        argumentsJson: JSON.stringify({ query: `${"x".repeat(1_000)} deploys`, max_results: 99 }),
+      },
+      context,
+    );
+    const empty = await request.tools.execute(
+      {
+        callId: "c2",
+        name: BRAIN_TOOL.MEMORY_SEARCH,
+        argumentsJson: JSON.stringify({ query: "  " }),
+      },
+      context,
+    );
+    const unparsed = await request.tools.execute(
+      { callId: "c3", name: BRAIN_TOOL.MEMORY_GET, argumentsJson: "not json" },
+      context,
+    );
+    assert.ok(empty.outputJson.includes(REFUSAL_REASON.EMPTY_QUERY));
+    assert.ok(unparsed.outputJson.includes(REFUSAL_REASON.NOT_MEMORY_PATH));
+    return "NONE";
+  });
+  await runRecallSubrun({
+    runtime,
+    memory: access,
+    query: "q",
+    recentTurns: [],
+    signal: new AbortController().signal,
+    runId: "recall-2",
+  });
+  assert.equal(notebook.searches[0]?.length, maximumMemoryQueryLength);
+  assert.deepEqual(asked, [maximumMemorySearchResults]);
 });
 
 test("a subrun that does not complete answers nothing", async () => {

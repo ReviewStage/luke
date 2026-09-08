@@ -6,8 +6,9 @@ import {
   type ToolExecutor,
   type ToolResult,
 } from "@sidecar/runtime-contracts";
-import { isWireNumber, text, type WireRecord, wireRecord } from "@sidecar/wire";
-import type { BrainMemoryAccess } from "./tool-executor.js";
+import type { WireRecord } from "@sidecar/wire";
+import { parsedRecord, rejection } from "./generation.js";
+import { type BrainMemoryAccess, memoryToolCall } from "./tool-executor.js";
 import { BRAIN_TOOL, brainToolCatalog } from "./tools.js";
 import { REFUSAL_REASON } from "./turn.js";
 
@@ -62,32 +63,15 @@ export async function runRecallSubrun(options: RecallSubrunOptions): Promise<str
     .map((tool) => tool.schema);
   const answer = (output: WireRecord): ToolResult => ({ outputJson: JSON.stringify(output) });
   const tools: ToolExecutor = {
-    execute: async (call, context) => {
-      if (!RECALL_SUBRUN_TOOLS.has(call.name)) {
-        return answer({ status: "rejected", reason: REFUSAL_REASON.NOT_OFFERED });
-      }
-      if (context.isRevoked()) {
-        return answer({ status: "rejected", reason: REFUSAL_REASON.RUN_REVOKED });
-      }
-      let args: WireRecord = {};
-      try {
-        args = wireRecord(JSON.parse(call.argumentsJson)) ?? {};
-      } catch {
-        args = {};
-      }
-      if (call.name === BRAIN_TOOL.MEMORY_SEARCH) {
-        const query = text(args.query);
-        if (!query) return answer({ status: "rejected", reason: REFUSAL_REASON.EMPTY_QUERY });
-        return answer(await options.memory.search({ query, signal: options.signal }));
-      }
-      return answer(
-        await options.memory.get({
-          path: text(args.path) ?? "",
-          ...(isWireNumber(args.from) ? { from: args.from } : undefined),
-          ...(isWireNumber(args.lines) ? { lines: args.lines } : undefined),
-        }),
-      );
-    },
+    execute: async (call, context) =>
+      answer(
+        RECALL_SUBRUN_TOOLS.has(call.name)
+          ? await memoryToolCall(call, parsedRecord(call.argumentsJson), options.memory, {
+              isRevoked: () => context.isRevoked(),
+              signal: options.signal,
+            })
+          : rejection(REFUSAL_REASON.NOT_OFFERED),
+      ),
   };
   const opened = await options.runtime.openContext(undefined, JSON.stringify({}));
   try {

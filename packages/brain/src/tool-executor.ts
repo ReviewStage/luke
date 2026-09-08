@@ -173,6 +173,44 @@ function answer(output: WireRecord): ToolResult {
   return { outputJson: JSON.stringify(output), ...(status ? { status } : undefined) };
 }
 
+/**
+ * The memory tools: reads of the notebook's index and files, bounded here
+ * and validated by the host, which answers only for paths inside the
+ * notebook. Neither is an effect, so neither runs through the journal. The
+ * recall subrun offers the same two tools and runs them through this same
+ * door, so a query is cut to one bound wherever it is asked.
+ */
+export async function memoryToolCall(
+  call: Pick<ToolInvocation, "name">,
+  args: WireRecord,
+  memory: BrainMemoryAccess,
+  execution: Pick<BrainActExecution, "isRevoked" | "signal">,
+): Promise<WireRecord> {
+  if (execution.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
+  if (call.name === BRAIN_TOOL.MEMORY_SEARCH) {
+    const query = text(args.query)?.replace(/\s+/g, " ").trim().slice(0, maximumMemoryQueryLength);
+    if (!query) return rejection(REFUSAL_REASON.EMPTY_QUERY);
+    const maxResults =
+      isWireNumber(args.max_results) && args.max_results > 0
+        ? Math.min(Math.floor(args.max_results), maximumMemorySearchResults)
+        : undefined;
+    return memory.search({
+      query,
+      ...(maxResults !== undefined ? { maxResults } : undefined),
+      signal: execution.signal,
+    });
+  }
+  const filePath = text(args.path)?.trim();
+  if (!filePath) return rejection(REFUSAL_REASON.NOT_MEMORY_PATH);
+  const from = isWireNumber(args.from) && args.from >= 1 ? Math.floor(args.from) : undefined;
+  const lines = isWireNumber(args.lines) && args.lines >= 1 ? Math.floor(args.lines) : undefined;
+  return memory.get({
+    path: filePath,
+    ...(from !== undefined ? { from } : undefined),
+    ...(lines !== undefined ? { lines } : undefined),
+  });
+}
+
 export function createTurnToolExecutor(
   dependencies: ToolExecutorDependencies,
   turn: ToolExecutorTurn,
@@ -357,45 +395,10 @@ export function createTurnToolExecutor(
     }
   };
 
-  /**
-   * The memory tools: reads of the notebook's index and files, bounded here
-   * and validated by the host, which answers only for paths inside the
-   * notebook. Neither is an effect, so neither runs through the journal.
-   */
-  const memoryTool = async (
-    call: ToolInvocation,
-    args: WireRecord,
-    execution: BrainActExecution,
-  ): Promise<WireRecord> => {
-    const memory = dependencies.memory;
-    if (!memory) return rejection(REFUSAL_REASON.NO_MEMORY);
-    if (execution.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
-    if (call.name === BRAIN_TOOL.MEMORY_SEARCH) {
-      const query = text(args.query)
-        ?.replace(/\s+/g, " ")
-        .trim()
-        .slice(0, maximumMemoryQueryLength);
-      if (!query) return rejection(REFUSAL_REASON.EMPTY_QUERY);
-      const maxResults =
-        isWireNumber(args.max_results) && args.max_results > 0
-          ? Math.min(Math.floor(args.max_results), maximumMemorySearchResults)
-          : undefined;
-      return memory.search({
-        query,
-        ...(maxResults !== undefined ? { maxResults } : undefined),
-        signal: execution.signal,
-      });
-    }
-    const filePath = text(args.path)?.trim();
-    if (!filePath) return rejection(REFUSAL_REASON.NOT_MEMORY_PATH);
-    const from = isWireNumber(args.from) && args.from >= 1 ? Math.floor(args.from) : undefined;
-    const lines = isWireNumber(args.lines) && args.lines >= 1 ? Math.floor(args.lines) : undefined;
-    return memory.get({
-      path: filePath,
-      ...(from !== undefined ? { from } : undefined),
-      ...(lines !== undefined ? { lines } : undefined),
-    });
-  };
+  const memoryTool = (call: ToolInvocation, args: WireRecord, execution: BrainActExecution) =>
+    dependencies.memory
+      ? memoryToolCall(call, args, dependencies.memory, execution)
+      : rejection(REFUSAL_REASON.NO_MEMORY);
 
   return {
     execute: async (call: ToolInvocation, runtimeContext: ToolExecutionContext) => {
