@@ -124,6 +124,7 @@ import {
   type TranscriptDeltasAttached,
 } from "./transcript-reads.js";
 import {
+  type AskTurnPlan,
   BRAIN_TURN_KIND,
   BRAIN_TURN_TRIGGER,
   type BrainTurnDescription,
@@ -1949,19 +1950,25 @@ export class BrainAgent {
       const childTask = generation.requests.get(run.runId)?.origin === BRAIN_REQUEST_ORIGIN.CHILD;
       let result: TurnResult;
       try {
+        const opened = {
+          generation,
+          deliveries: new SteeredDeliveries(),
+          events: this.#inboxEvents(generation),
+          run,
+        };
         result = await this.#turn(
-          {
-            generation,
-            trigger: childTask ? BRAIN_TURN_TRIGGER.CHILD_TASK : BRAIN_TURN_TRIGGER.ASK,
-            deliveries: new SteeredDeliveries(),
-            events: this.#inboxEvents(generation),
-            open: (attached, now) =>
-              childTask
-                ? [subagentTaskInputText(question, now)]
-                : [askInputText(question, attached, now)],
-            ...(childTask ? undefined : { question }),
-            run,
-          },
+          childTask
+            ? {
+                ...opened,
+                trigger: BRAIN_TURN_TRIGGER.CHILD_TASK,
+                open: (_attached, now) => [subagentTaskInputText(question, now)],
+              }
+            : {
+                ...opened,
+                trigger: BRAIN_TURN_TRIGGER.ASK,
+                question,
+                open: (attached, now) => [askInputText(question, attached, now)],
+              },
           riders,
         );
       } catch {
@@ -2247,7 +2254,7 @@ export class BrainAgent {
           // Awaited only where a recall stands: an extra tick before every
           // turn would reorder the inferences the routing tests count.
           const recalled =
-            this.#options.recall && plan.trigger === BRAIN_TURN_TRIGGER.ASK
+            plan.trigger === BRAIN_TURN_TRIGGER.ASK
               ? await this.#recallFor(plan, turnContext)
               : undefined;
           const end = await this.#execute(turnContext, execution, gathering, {
@@ -2434,19 +2441,18 @@ export class BrainAgent {
    * it had been said. A recall that fails, times out, or is revoked is no
    * summary; the turn goes on without it.
    */
-  async #recallFor(plan: TurnPlan, turnContext: TurnContext): Promise<string | undefined> {
+  async #recallFor(plan: AskTurnPlan, turnContext: TurnContext): Promise<string | undefined> {
     const recall = this.#options.recall;
-    if (!recall || plan.trigger !== BRAIN_TURN_TRIGGER.ASK) return undefined;
-    const question = plan.question;
-    if (!question) return undefined;
+    if (!recall) return undefined;
     const settled = await settledUnlessAborted(
-      recall({ query: question, runId: turnContext.run.runId, signal: turnContext.signal }).catch(
-        () => undefined,
-      ),
+      recall({
+        query: plan.question,
+        runId: turnContext.run.runId,
+        signal: turnContext.signal,
+      }).catch(() => undefined),
       turnContext.signal,
     );
-    if (settled.aborted || !settled.value) return undefined;
-    return settled.value;
+    return settled.aborted ? undefined : settled.value || undefined;
   }
 
   /**

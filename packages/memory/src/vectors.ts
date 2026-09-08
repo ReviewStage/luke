@@ -1,4 +1,4 @@
-import { isWireNumber, type UnparsedWireValue } from "@sidecar/wire";
+import { numberVector, type UnparsedWireValue } from "@sidecar/wire";
 
 /** The similarity every vector rank reads; two vectors of unequal width are unrelated. */
 export function cosineSimilarity(left: readonly number[], right: readonly number[]): number {
@@ -22,14 +22,7 @@ export function parseEmbedding(serialized: string): number[] | undefined {
   if (serialized.length === 0) return undefined;
   try {
     // SAFETY: JSON.parse returns a runtime value; every member is checked as a wire number below.
-    const parsed = JSON.parse(serialized) as UnparsedWireValue;
-    if (!Array.isArray(parsed) || parsed.length === 0) return undefined;
-    const vector: number[] = [];
-    for (const entry of parsed) {
-      if (!isWireNumber(entry)) return undefined;
-      vector.push(entry);
-    }
-    return vector;
+    return numberVector(JSON.parse(serialized) as UnparsedWireValue);
   } catch {
     return undefined;
   }

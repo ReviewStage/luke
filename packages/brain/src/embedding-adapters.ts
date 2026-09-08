@@ -3,7 +3,6 @@ import {
   HOSTED_BRAIN_EMBED_BOUNDS,
   HOSTED_BRAIN_OPERATION,
   HOSTED_SERVICE_PATH,
-  hostedBrainCapabilitiesFromWire,
   hostedBrainEmbedAnswerFromWire,
   hostedBrainEmbedRequestFromWire,
 } from "@sidecar/hosted";
@@ -19,13 +18,15 @@ import {
   BRAIN_REQUEST_TIMEOUT_MS,
   type FetchLike,
   failed,
+  HostedServiceCalls,
+  HTTP_METHOD,
   HTTP_STATUS,
+  notServed,
   payloadOf,
   RETRY_AFTER_HEADER,
   rateLimitWaitMs,
   requestSignal,
   throttled,
-  withoutTrailingSlash,
 } from "./model-adapter-shared.js";
 import { BRAIN_OPENAI_DEFAULTS } from "./openai-model-adapter.js";
 import {
@@ -54,17 +55,14 @@ export const EMBEDDING_BATCH_SIZE = HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXTS;
 
 export interface OpenAiEmbeddingAdapterOptions {
   apiKey: string;
-  model?: string;
-  baseUrl?: string;
   fetch?: FetchLike;
   now?: () => number;
   requestTimeoutMs?: number;
 }
 
+/** The model and endpoint are fixed by the build: the index stores vectors under one model, and a key chooses none. */
 export class OpenAiEmbeddingAdapter implements EmbeddingAdapter {
   readonly #apiKey: string;
-  readonly #model: string;
-  readonly #baseUrl: string;
   readonly #fetch: FetchLike;
   readonly #now: () => number;
   readonly #timeoutMs: number;
@@ -74,8 +72,6 @@ export class OpenAiEmbeddingAdapter implements EmbeddingAdapter {
     const apiKey = text(options.apiKey);
     if (!apiKey) throw new Error("OpenAI API key must not be empty");
     this.#apiKey = apiKey;
-    this.#model = text(options.model) ?? BRAIN_EMBEDDING_MODEL;
-    this.#baseUrl = withoutTrailingSlash(text(options.baseUrl) ?? BRAIN_OPENAI_DEFAULTS.BASE_URL);
     this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
     this.#now = options.now ?? Date.now;
     this.#timeoutMs = positiveInteger(options.requestTimeoutMs, BRAIN_REQUEST_TIMEOUT_MS);
@@ -84,7 +80,7 @@ export class OpenAiEmbeddingAdapter implements EmbeddingAdapter {
   identity(): Promise<EmbeddingIdentity> {
     return Promise.resolve({
       provider: OPENAI_EMBEDDING_ADAPTER_ID,
-      model: this.#model,
+      model: BRAIN_EMBEDDING_MODEL,
       dimensions: this.#dimensions ?? 0,
     });
   }
@@ -102,13 +98,13 @@ export class OpenAiEmbeddingAdapter implements EmbeddingAdapter {
     }
     let response: Response;
     try {
-      response = await this.#fetch(`${this.#baseUrl}${BRAIN_EMBEDDINGS_PATH}`, {
-        method: "POST",
+      response = await this.#fetch(`${BRAIN_OPENAI_DEFAULTS.BASE_URL}${BRAIN_EMBEDDINGS_PATH}`, {
+        method: HTTP_METHOD.POST,
         headers: {
           authorization: `Bearer ${this.#apiKey}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify(brainEmbeddingsRequest(texts, { model: this.#model })),
+        body: JSON.stringify(brainEmbeddingsRequest(texts, { model: BRAIN_EMBEDDING_MODEL })),
         signal: requestSignal(this.#timeoutMs, options?.signal),
       });
     } catch (error) {
@@ -145,25 +141,15 @@ export interface HostedEmbeddingAdapterOptions {
 }
 
 export class HostedEmbeddingAdapter implements EmbeddingAdapter {
-  readonly #baseUrl: string;
-  readonly #readAccessToken: () => Promise<string | undefined>;
-  readonly #refreshAccount: () => Promise<void>;
-  readonly #fetch: FetchLike;
+  readonly #calls: HostedServiceCalls;
   readonly #now: () => number;
-  readonly #timeoutMs: number;
   #model: string | undefined;
   #dimensions: number | undefined;
   #offered: boolean | undefined;
 
   constructor(options: HostedEmbeddingAdapterOptions) {
-    const baseUrl = text(options.serviceBaseUrl);
-    if (!baseUrl) throw new Error("Hosted service base URL must not be empty");
-    this.#baseUrl = withoutTrailingSlash(baseUrl);
-    this.#readAccessToken = options.readAccessToken;
-    this.#refreshAccount = options.refreshAccount;
-    this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
+    this.#calls = new HostedServiceCalls(options);
     this.#now = options.now ?? Date.now;
-    this.#timeoutMs = positiveInteger(options.requestTimeoutMs, BRAIN_REQUEST_TIMEOUT_MS);
   }
 
   identity(): Promise<EmbeddingIdentity> {
@@ -174,58 +160,12 @@ export class HostedEmbeddingAdapter implements EmbeddingAdapter {
     });
   }
 
-  async #send(
-    path: string,
-    method: "GET" | "POST",
-    token: string,
-    body?: string,
-    signal?: AbortSignal,
-  ) {
-    try {
-      return await this.#fetch(`${this.#baseUrl}${path}`, {
-        method,
-        headers: {
-          authorization: `Bearer ${token}`,
-          ...(body !== undefined ? { "content-type": "application/json" } : undefined),
-        },
-        ...(body !== undefined ? { body } : undefined),
-        signal: requestSignal(this.#timeoutMs, signal),
-      });
-    } catch {
-      return undefined;
-    }
-  }
-
-  async #authorized(call: (token: string) => Promise<Response | undefined>) {
-    const token = await this.#readAccessToken();
-    if (!token) return failed(MODEL_FAILURE.CREDENTIAL, "no account token");
-    const response = await call(token);
-    if (response?.status !== HTTP_STATUS.UNAUTHORIZED) return response;
-    await this.#refreshAccount().catch(() => undefined);
-    const refreshed = await this.#readAccessToken();
-    if (refreshed && refreshed !== token) return call(refreshed);
-    return response;
-  }
-
   /** Reads the capabilities once: a service that does not list the embed operation offers no embeddings. */
   async #offers(): Promise<EmbeddingBatch | undefined> {
     if (this.#offered === true) return undefined;
-    const response = await this.#authorized((token) =>
-      this.#send(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES, "GET", token),
-    );
-    if (!(response instanceof Response)) {
-      return response ?? failed(MODEL_FAILURE.NETWORK, "capabilities request did not complete");
-    }
-    if (!response.ok) {
-      return failed(
-        response.status === HTTP_STATUS.UNAUTHORIZED
-          ? MODEL_FAILURE.CREDENTIAL
-          : MODEL_FAILURE.COMPATIBILITY,
-        `the hosted service's capabilities answered ${response.status}`,
-      );
-    }
-    const capabilities = hostedBrainCapabilitiesFromWire(await payloadOf(response));
-    if (!capabilities?.operations.includes(HOSTED_BRAIN_OPERATION.EMBED)) {
+    const capabilities = await this.#calls.capabilities();
+    if ("outcome" in capabilities) return capabilities;
+    if (!capabilities.operations.includes(HOSTED_BRAIN_OPERATION.EMBED)) {
       this.#offered = false;
       return failed(
         MODEL_FAILURE.COMPATIBILITY,
@@ -248,14 +188,11 @@ export class HostedEmbeddingAdapter implements EmbeddingAdapter {
       texts,
     });
     if (!read.ok) return failed(MODEL_FAILURE.BOUNDS, `embed request refused: ${read.refusal}`);
-    const response = await this.#authorized((token) =>
-      this.#send(
-        HOSTED_SERVICE_PATH.BRAIN_EMBED,
-        "POST",
-        token,
-        JSON.stringify(read.request),
-        options?.signal,
-      ),
+    const response = await this.#calls.request(
+      HOSTED_SERVICE_PATH.BRAIN_EMBED,
+      HTTP_METHOD.POST,
+      JSON.stringify(read.request),
+      options?.signal,
     );
     if (!(response instanceof Response)) {
       return response ?? failed(MODEL_FAILURE.NETWORK, "embed request did not complete");
@@ -266,10 +203,7 @@ export class HostedEmbeddingAdapter implements EmbeddingAdapter {
     if (response.status === HTTP_STATUS.UNAUTHORIZED) {
       return failed(MODEL_FAILURE.CREDENTIAL, "the account token was refused");
     }
-    if (
-      response.status === HTTP_STATUS.NOT_FOUND ||
-      response.status === HTTP_STATUS.METHOD_NOT_ALLOWED
-    ) {
+    if (notServed(response)) {
       return failed(MODEL_FAILURE.COMPATIBILITY, "the hosted service does not serve embeddings");
     }
     if (!response.ok) {

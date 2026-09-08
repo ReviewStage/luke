@@ -1,3 +1,4 @@
+import { maximumRememberedFactLength, rememberedFactText } from "@sidecar/acts";
 import { WORKSPACE_FILE } from "@sidecar/runtime";
 
 /**
@@ -17,17 +18,24 @@ export const NOTEBOOK_FILE = {
 
 export type NotebookFile = (typeof NOTEBOOK_FILE)[keyof typeof NOTEBOOK_FILE];
 
+/** The evergreen files at the notebook's root: indexed whole, never aged, read by relative path. */
+export const NOTEBOOK_ROOT_FILES: readonly NotebookFile[] = Object.values(NOTEBOOK_FILE);
+
+export function isNotebookRootFile(relativePath: string): boolean {
+  const files: readonly string[] = NOTEBOOK_ROOT_FILES;
+  return files.includes(relativePath);
+}
+
 /** The heading remembered facts live under in USER.md; text above it is the developer's own. */
 export const REMEMBERED_HEADING = "## Remembered";
 
 const BULLET_RE = /^\s*[-*]\s+(.*\S)\s*$/u;
 
-/** One flattening and bound for a fact's words, the same one every entry point applies. */
-export const maximumNotebookEntryLength = 240;
+/** One flattening and bound for a fact's words: the acts package's, the same one a remember act applies at the door. */
+export const maximumNotebookEntryLength = maximumRememberedFactLength;
 
 export function notebookEntryText(value: string): string | undefined {
-  const words = value.replace(/\s+/g, " ").trim().slice(0, maximumNotebookEntryLength);
-  return words.length > 0 ? words : undefined;
+  return rememberedFactText(value);
 }
 
 export interface ParsedNotebookEntry {

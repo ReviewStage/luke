@@ -5,8 +5,8 @@ import {
 } from "@sidecar/runtime-contracts";
 import {
   isRecord,
-  isWireNumber,
   isWireString,
+  numberVectors,
   type UnparsedWireValue,
   type WireRecord,
   wholeNumber,
@@ -383,18 +383,9 @@ export function hostedBrainEmbedAnswerFromWire(
   if (!isRecord(value)) return undefined;
   const model = isWireString(value.model) && value.model.length > 0 ? value.model : undefined;
   const dimensions = positiveWhole(value.dimensions);
-  if (!model || !dimensions || !Array.isArray(value.vectors)) return undefined;
-  const vectors: number[][] = [];
-  for (const entry of value.vectors) {
-    if (!Array.isArray(entry) || entry.length !== dimensions) return undefined;
-    const vector: number[] = [];
-    for (const component of entry) {
-      if (!isWireNumber(component)) return undefined;
-      vector.push(component);
-    }
-    vectors.push(vector);
-  }
-  return { model, dimensions, vectors };
+  if (!model || !dimensions) return undefined;
+  const vectors = numberVectors(value.vectors, dimensions);
+  return vectors ? { model, dimensions, vectors } : undefined;
 }
 
 export interface HostedBrainCountTokensAnswer {

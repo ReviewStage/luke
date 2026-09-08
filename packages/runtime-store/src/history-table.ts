@@ -1,3 +1,4 @@
+import { type ConversationLineHit, tokenize } from "@sidecar/memory";
 import {
   type ConversationEntry,
   maximumStoredConversationEntries,
@@ -212,17 +213,17 @@ function listRetained(
   return entries;
 }
 
-export interface HistorySearchHit {
-  readonly sessionKey: SessionKey;
-  readonly entry: ConversationEntry;
-}
+export type HistorySearchHit = ConversationLineHit;
 
 /**
- * The retained lines of the conversations named that carry the words asked
- * for, most recent first, each under its own conversation's cutoff and the
- * same retention the panel draws. A recall over past conversations reads
- * these and never a merged transcript: the lines already said, in the
- * conversations the caller decided were eligible, and nothing indexed.
+ * The retained lines of the conversations named that carry every token of
+ * the query, most recent first and bounded by `limit`, in one query over
+ * every conversation named. Matching is by token, as the score the caller
+ * gives a hit is, so a multi-word or punctuated query keeps a line that
+ * shares its words in another order. Each line stands only above its own
+ * conversation's cutoff — the durable one on the conversation row and the
+ * standing generation's marker both — so a Clear hides its lines here as it
+ * does everywhere.
  */
 export function searchHistory(
   database: RuntimeDatabase,
@@ -231,30 +232,34 @@ export function searchHistory(
   limit: number,
   now: number,
 ): readonly HistorySearchHit[] {
-  const needle = query.replace(/\s+/g, " ").trim().toLowerCase();
-  if (!needle || sessionKeys.length === 0) return [];
+  const tokens = [...tokenize(query)];
+  if (tokens.length === 0 || sessionKeys.length === 0 || limit <= 0) return [];
+  const keyMarks = sessionKeys.map(() => "?").join(", ");
+  const tokenMarks = tokens.map(() => "instr(lower(words), ?) > 0").join(" AND ");
+  // SAFETY: the query selects the two columns the row type names.
+  const rows = database
+    .prepare(
+      `SELECT session_key, payload FROM history_events h
+       WHERE session_key IN (${keyMarks})
+         AND recorded_at <= ? AND recorded_at >= ?
+         AND recorded_at > COALESCE(
+           (SELECT history_cleared_at FROM conversations c WHERE c.session_key = h.session_key), -1)
+         AND recorded_at > COALESCE(
+           (SELECT reset_cleared_at FROM conversation_sessions s WHERE s.session_key = h.session_key), -1)
+         AND ${tokenMarks}
+       ORDER BY recorded_at DESC, sequence DESC LIMIT ?`,
+    )
+    .all(...sessionKeys, now, now - storedConversationMaximumAgeMs, ...tokens, limit) as {
+    session_key: string;
+    payload: string;
+  }[];
   const hits: HistorySearchHit[] = [];
-  for (const sessionKey of sessionKeys) {
-    // SAFETY: the query selects the one text column the row type names.
-    const rows = database
-      .prepare(
-        `SELECT payload FROM history_events
-         WHERE session_key = ? AND recorded_at <= ? AND recorded_at >= ? AND recorded_at > ?
-           AND instr(lower(words), ?) > 0
-         ORDER BY recorded_at DESC, sequence DESC LIMIT ?`,
-      )
-      .all(
-        sessionKey,
-        now,
-        now - storedConversationMaximumAgeMs,
-        historyClearedAt(database, sessionKey) ?? -1,
-        needle,
-        limit,
-      ) as { payload: string }[];
-    for (const row of rows) {
-      const entry = historyEntryFromPayload(row.payload);
-      if (entry) hits.push({ sessionKey, entry });
-    }
+  for (const row of rows) {
+    const entry = historyEntryFromPayload(row.payload);
+    if (!entry) continue;
+    // SAFETY: the column holds one of the session keys the IN clause was given.
+    const sessionKey = row.session_key as SessionKey;
+    hits.push({ sessionKey, entry });
   }
-  return hits.sort((a, b) => (b.entry.recordedAt ?? 0) - (a.entry.recordedAt ?? 0)).slice(0, limit);
+  return hits;
 }

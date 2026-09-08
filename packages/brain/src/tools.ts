@@ -4,6 +4,7 @@ import {
   realtimeToolFamily,
 } from "@sidecar/acts";
 import { BRAIN_TURN_AUTHORITY, type BrainTurnAuthority } from "@sidecar/hosted";
+import { RECALL_DEFAULTS } from "@sidecar/memory";
 import {
   type ChildPolicyContext,
   type EffectiveToolPolicy,
@@ -84,7 +85,7 @@ export const TOOL_GROUP = {
 
 /** The most results one memory search answers, and the longest query it takes. */
 export const maximumMemorySearchResults = 20;
-export const maximumMemoryQueryLength = 480;
+export const maximumMemoryQueryLength = RECALL_DEFAULTS.MAXIMUM_QUERY_CHARS;
 
 /** The most of a child task's words a spawn carries; a task is a brief, not a transcript. */
 export const maximumChildTaskLength = 8_000;

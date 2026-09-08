@@ -425,3 +425,27 @@ test("recall: trusted hit answers without a subrun, intent escalates, cache hold
   const recovered = await recall.recall({ ...ask, query: "what did we say earlier 10" });
   assert.equal(recovered.status, RECALL_STATUS.OK);
 });
+
+test("a subrun that returns nothing because the timeout cut it counts as a timeout, not as nothing found", async () => {
+  let lookups = 0;
+  const recall = new ConversationRecall({
+    timeoutMs: 20,
+    trustedMemory: async () => {
+      lookups += 1;
+      return { strongHit: false };
+    },
+    // A cancelled tool loop ends quietly with no text rather than throwing.
+    subrun: ({ signal }) =>
+      new Promise<string | undefined>((resolve) =>
+        signal.addEventListener("abort", () => resolve(undefined), { once: true }),
+      ),
+  });
+  const ask = { sessionKey: MAIN_SESSION_KEY, agentId: "main", recentTurns: [] };
+  const quiet = await recall.recall({ ...ask, query: "what did we decide about deploys?" });
+  assert.equal(quiet.status, RECALL_STATUS.TIMEOUT);
+  assert.equal(recall.consecutiveTimeouts(), 1);
+  assert.equal(lookups, 1);
+  const plain = await recall.recall({ ...ask, query: "open the first session" });
+  assert.equal(plain.decision, RECALL_DECISION.NO_RECALL_INTENT);
+  assert.equal(lookups, 1, "an ask with no recall intent consults trusted memory not at all");
+});

@@ -21,7 +21,7 @@ import {
   type SessionKey,
   threadSessionKey,
 } from "@sidecar/runtime-contracts";
-import type { NotebookEntry } from "@sidecar/runtime-store";
+import type { NotebookEntry, NotebookMutation } from "@sidecar/runtime-store";
 import {
   type DeletionOutcome,
   type MaintenanceReport,
@@ -314,14 +314,12 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     }
     return notebookEntries;
   };
-  const rememberNotebookEntry = async (ask: {
-    id: string;
-    words: string;
-    replaces?: string;
-  }): Promise<boolean> => {
+  const mutateNotebook = async (
+    request: (store: RuntimeStoreClient, now: number) => Promise<NotebookMutation>,
+  ): Promise<boolean> => {
     if (!dependencies.persistent) return false;
     try {
-      const mutation = await client().rememberNotebookEntry({ ...ask, now: dependencies.now() });
+      const mutation = await request(client(), dependencies.now());
       notebookEntries = mutation.entries;
       return mutation.ok;
     } catch (error) {
@@ -331,19 +329,10 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
       return false;
     }
   };
-  const forgetNotebookEntry = async (id: string): Promise<boolean> => {
-    if (!dependencies.persistent) return false;
-    try {
-      const mutation = await client().forgetNotebookEntry(id, dependencies.now());
-      notebookEntries = mutation.entries;
-      return mutation.ok;
-    } catch (error) {
-      dependencies.report(
-        `Could not write Luke's notebook: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      return false;
-    }
-  };
+  const rememberNotebookEntry = (ask: { id: string; words: string; replaces?: string }) =>
+    mutateNotebook((store, now) => store.rememberNotebookEntry({ ...ask, now }));
+  const forgetNotebookEntry = (id: string) =>
+    mutateNotebook((store, now) => store.forgetNotebookEntry(id, now));
 
   const memoryJobs = memoryScheduledJobStore();
 

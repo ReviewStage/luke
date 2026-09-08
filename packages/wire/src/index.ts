@@ -14,6 +14,8 @@ export {
   isWireNumber,
   isWireString,
   nonNegativeNumber,
+  numberVector,
+  numberVectors,
   oneLine,
   positiveInteger,
   recordFromJsonLine,

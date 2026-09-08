@@ -1,3 +1,5 @@
+import type { ConversationEntry } from "@sidecar/realtime";
+import type { SessionKey } from "@sidecar/runtime-contracts";
 import type { RetrievalMode } from "./defaults.js";
 
 /**
@@ -113,6 +115,58 @@ export interface VectorHit {
   readonly snippet: string;
   readonly vectorScore: number;
   readonly provenance: MemoryProvenance;
+}
+
+/** One chunk's vector as a sync hands it to the store. */
+export interface EmbeddingWrite {
+  readonly hash: string;
+  readonly vector: readonly number[];
+}
+
+/** What the store plans for one sync: the files to write, the paths to drop, and the chunk texts still without a vector. */
+export interface MemoryScanPlan {
+  readonly changed: readonly IndexedFileWrite[];
+  readonly removed: readonly string[];
+  /** Chunk hashes among the changed files with no vector cached under the identity given. */
+  readonly missingEmbeddings: readonly { hash: string; text: string }[];
+  readonly unchanged: number;
+}
+
+/** A planned sync with its vectors, as the store applies it in one transaction. */
+export interface MemorySyncApply {
+  readonly changed: readonly IndexedFileWrite[];
+  readonly removed: readonly string[];
+  readonly embeddings: readonly EmbeddingWrite[];
+  readonly identity?: EmbeddingModelIdentity;
+  readonly now: number;
+}
+
+export interface MemoryApplyReport {
+  readonly indexedFiles: number;
+  readonly removedFiles: number;
+  readonly indexedChunks: number;
+  readonly embeddedChunks: number;
+}
+
+export interface MemorySearchQuery {
+  readonly query: string;
+  readonly queryVector?: readonly number[];
+  readonly identity?: EmbeddingModelIdentity;
+  readonly maxResults?: number;
+  readonly minScore?: number;
+  readonly now: number;
+}
+
+export interface MemorySearchOutcome {
+  readonly results: readonly MemorySearchResult[];
+  readonly keywordHits: number;
+  readonly vectorHits: number;
+}
+
+/** A retained History line that carries a search's words, with the conversation it was said in. */
+export interface ConversationLineHit {
+  readonly sessionKey: SessionKey;
+  readonly entry: ConversationEntry;
 }
 
 /** What a read of one file's lines answers with. */

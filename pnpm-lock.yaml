@@ -563,6 +563,12 @@ importers:
 
   packages/memory:
     dependencies:
+      '@sidecar/acts':
+        specifier: workspace:*
+        version: link:../acts
+      '@sidecar/realtime':
+        specifier: workspace:*
+        version: link:../realtime
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
