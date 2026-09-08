@@ -59,7 +59,7 @@ export function claimedUnlessAborted<T>(
         signal.removeEventListener("abort", abort);
         resolve({ aborted: false, value });
       },
-      (error: unknown) => {
+      (error: Error) => {
         if (decided) return;
         decided = true;
         signal.removeEventListener("abort", abort);
