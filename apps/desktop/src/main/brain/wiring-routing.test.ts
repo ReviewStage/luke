@@ -410,6 +410,7 @@ test("a hook for a session whose conversation is standing down waits for the clo
   const abcKey = observedSessionKey(ABC);
   c.wiring.rosterLook();
   await until(() => c.wiring.pendingNotices().length === 2);
+  await until(() => !(c.wiring.current(abcKey)?.busy() ?? true));
   assert.equal(c.repositories.get(abcKey), 1);
   // abc leaves the roster: the look stands its conversation down, and a hook
   // for it lands in the same tick, while the close is still draining.
