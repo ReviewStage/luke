@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CLI_CONNECTION, SESSION_LOCATION, SESSION_STATUS } from "@sidecar/session";
+import { ACT_KIND, CLI_CONNECTION, SESSION_LOCATION, SESSION_STATUS } from "@sidecar/session";
 import type { JsonObject } from "@sidecar/wire/testing";
 import {
   ADAPTER_DIAGNOSTIC_KIND,
@@ -345,7 +345,7 @@ test("answers unsupported for every act but the creation its provider documents"
   assert.deepEqual(
     await adapter.executeControl({
       providerSessionId: "task-1",
-      control: { id: "stop", label: "Stop" },
+      control: { kind: ACT_KIND.CONTROL, id: "stop", label: "Stop" },
     }),
     { status: "unsupported", reason: "This provider has no such control." },
   );

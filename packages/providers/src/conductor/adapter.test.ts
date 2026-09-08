@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ACT_KIND,
+  type AdvertisedControl,
   advertisedActDisagreements,
   normalizeSession,
   SESSION_STATUS,
-  type SessionControl,
 } from "@sidecar/session";
 import type { JsonObject, JsonValue } from "@sidecar/wire/testing";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
@@ -1708,7 +1709,12 @@ test("stops a working turn through Conductor's cancel endpoint, sending no body"
 
   const result = await adapter.executeControl({
     providerSessionId: "session-working",
-    control: { id: "cancel-turn", label: "Stop this turn", kind: "stop" },
+    control: {
+      kind: ACT_KIND.CONTROL,
+      id: "cancel-turn",
+      label: "Stop this turn",
+      controlKind: "stop",
+    },
   });
 
   assert.deepEqual(result, { status: "accepted" });
@@ -1742,7 +1748,7 @@ test("archives the workspace the user saw through Conductor's archive endpoint, 
   // the adapter itself advertised, never from the caller's copy of it.
   const result = await adapter.executeControl({
     providerSessionId: "session-idle",
-    control: { id: "archive-workspace", label: "Archive" },
+    control: { kind: ACT_KIND.CONTROL, id: "archive-workspace", label: "Archive" },
   });
 
   assert.deepEqual(result, { status: "accepted" });
@@ -1762,7 +1768,7 @@ test("asks the slow deadline for an archive, whose answer waits on the workspace
   // shorter than the act reports an archive that landed as one that may not
   // have.
   class ControlRouteProbe extends ConductorSessionAdapter {
-    deadlineFor(control: SessionControl): number | undefined {
+    deadlineFor(control: AdvertisedControl): number | undefined {
       return this.controlRoute("session-idle", control)?.timeoutMs;
     }
   }
@@ -1773,11 +1779,19 @@ test("asks the slow deadline for an archive, whose answer waits on the workspace
   });
 
   assert.equal(
-    probe.deadlineFor({ id: "archive-workspace", label: "Archive", target: "workspace-active" }),
+    probe.deadlineFor({
+      kind: ACT_KIND.CONTROL,
+      id: "archive-workspace",
+      label: "Archive",
+      target: "workspace-active",
+    }),
     CLOUD_ADAPTER_DEFAULTS.SLOW_REQUEST_TIMEOUT_MS,
   );
   // The turn's stop answers at once, so it rides the shared bound.
-  assert.equal(probe.deadlineFor({ id: "cancel-turn", label: "Stop this turn" }), undefined);
+  assert.equal(
+    probe.deadlineFor({ kind: ACT_KIND.CONTROL, id: "cancel-turn", label: "Stop this turn" }),
+    undefined,
+  );
 });
 
 test("refuses to archive a workspace no row advertised, before any request exists", async () => {
@@ -1805,6 +1819,7 @@ test("refuses to archive a workspace no row advertised, before any request exist
   const result = await adapter.executeControl({
     providerSessionId: "session-working",
     control: {
+      kind: ACT_KIND.CONTROL,
       id: "archive-workspace",
       label: "Archive",
       target: "workspace-active",

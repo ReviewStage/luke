@@ -47,6 +47,10 @@ import {
   type TrackedIssue,
 } from "@sidecar/issues";
 import {
+  ACT_KIND,
+  type AdvertisedControl,
+  advertisedActFor,
+  advertisedControl,
   isSessionApplicationId,
   matchesFilterSelection,
   maximumSessionMessageLength,
@@ -58,10 +62,8 @@ import {
   SESSION_STATUS,
   type Session,
   type SessionApplicationId,
-  type SessionControl,
   type SessionIdentity,
   sessionMessageText,
-  supportsSessionControl,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentModels,
   type WorkspaceAgentSelection,
@@ -174,7 +176,11 @@ const REMOTE_SESSION_LIST_FILTER_DESCRIPTION =
 /** What one validated tool call asks for, ready for the bridge that carries it. */
 type CarriedSessionActionFields =
   | { kind: typeof SESSION_TOOL_KIND.MESSAGE; identity: SessionIdentity; text: string }
-  | { kind: typeof SESSION_TOOL_KIND.CONTROL; identity: SessionIdentity; control: SessionControl }
+  | {
+      kind: typeof SESSION_TOOL_KIND.CONTROL;
+      identity: SessionIdentity;
+      control: AdvertisedControl;
+    }
   | {
       kind: typeof SESSION_TOOL_KIND.OPEN;
       identity: SessionIdentity;
@@ -554,7 +560,7 @@ function validateSendSessionMessage(
   const found = sessionFromArguments(parsed, context.sessions);
   if ("status" in found) return found;
   const { session, identity } = found;
-  if (!session.canReceiveMessage) {
+  if (!advertisedActFor(session, ACT_KIND.MESSAGE)) {
     return {
       status: ACT_RESULT_STATUS.REJECTED,
       reason: "That session does not take messages right now.",
@@ -578,8 +584,8 @@ function validateRunSessionControl(
   if ("status" in found) return found;
   const { session, identity } = found;
   const controlId = textArgument(parsed, "control_id");
-  const control = session.controls.find((candidate) => candidate.id === controlId);
-  if (!controlId || !control || !supportsSessionControl(session, controlId)) {
+  const control = controlId ? advertisedControl(session, controlId) : undefined;
+  if (!control) {
     return {
       status: ACT_RESULT_STATUS.REJECTED,
       reason: "That session advertises no such control.",
@@ -788,7 +794,7 @@ function validateAddWorkspaceAgent(
   // is the provider's word for what its endpoint takes, so an ask outside it
   // is refused rather than forwarded to be refused.
   const agent = textArgument(parsed, "agent");
-  if (!agent || !session.spawnableAgents.includes(agent)) {
+  if (!agent || !advertisedActFor(session, ACT_KIND.ADD_AGENT)?.agents.includes(agent)) {
     return {
       status: ACT_RESULT_STATUS.REJECTED,
       reason: "That session lists no such agent to add.",
@@ -864,7 +870,7 @@ function validateRenameWorkspace(
   // rename can land on. The action carries the identity and the name, never
   // the target: the main process resolves the workspace from its own
   // registry, the same way an open never carries an address.
-  if (!session.renameTarget) {
+  if (!advertisedActFor(session, ACT_KIND.RENAME_WORKSPACE)) {
     return {
       status: ACT_RESULT_STATUS.REJECTED,
       reason: "That session's workspace cannot be renamed.",
@@ -884,7 +890,7 @@ function validateRenameSession(parsed: WireRecord, context: SessionToolContext):
   const found = sessionFromArguments(parsed, context.sessions);
   if ("status" in found) return found;
   const { session, identity } = found;
-  if (!session.canRename) {
+  if (!advertisedActFor(session, ACT_KIND.RENAME_SESSION)) {
     return { status: ACT_RESULT_STATUS.REJECTED, reason: "That chat cannot be renamed." };
   }
   const name = workspaceNameText(parsed.name);

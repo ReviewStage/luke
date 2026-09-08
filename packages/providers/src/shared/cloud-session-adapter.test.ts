@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ACT_KIND,
   ACT_RESULT_STATUS,
+  type AdvertisedControl,
   agedStatus,
   OBSERVATION_WINDOW,
   type ProviderSessionObservation,
   SESSION_LOCATION,
   SESSION_STATUS,
-  type SessionControl,
 } from "@sidecar/session";
 import { isWireString } from "@sidecar/wire";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
@@ -46,10 +47,18 @@ function observation(
   };
 }
 
-const STUB_APPROVE_CONTROL = { id: "approve", label: "Approve" } as const;
+const STUB_APPROVE_CONTROL = {
+  kind: ACT_KIND.CONTROL,
+  id: "approve",
+  label: "Approve",
+} as const;
 
 /** An act whose provider answers only once it is done, on its route's own deadline. */
-const STUB_SLOW_ACT_CONTROL = { id: "file-away", label: "File away" } as const;
+const STUB_SLOW_ACT_CONTROL = {
+  kind: ACT_KIND.CONTROL,
+  id: "file-away",
+  label: "File away",
+} as const;
 /** Short enough for a test to overrun; what matters is that it is the route's own. */
 const STUB_SLOW_ACT_DEADLINE_MS = 25;
 
@@ -76,7 +85,7 @@ class StubCloudAdapter extends CloudSessionAdapter {
     };
   }
 
-  protected override controlRoute(providerSessionId: string, control: SessionControl) {
+  protected override controlRoute(providerSessionId: string, control: AdvertisedControl) {
     if (control.id === STUB_SLOW_ACT_CONTROL.id) {
       return {
         segments: ["v0", "sessions", providerSessionId, "file-away"],
@@ -485,7 +494,7 @@ test("issues no request at all when the credential cannot be read", async () => 
 test("sends a user message through the route and body the provider documents", async () => {
   const stub = stubFetch();
   const adapter = adapterFor(stub.fetch);
-  adapter.collected = [observation("session-one", { canReceiveMessage: true })];
+  adapter.collected = [observation("session-one", { advertises: [{ kind: ACT_KIND.MESSAGE }] })];
   await adapter.observe();
 
   const result = await adapter.sendMessage({ providerSessionId: "session-one", text: "  go on  " });
@@ -533,7 +542,7 @@ test("refuses a message for any session that did not advertise taking one", asyn
 test("refuses text outside the message bound without spending a request", async () => {
   const stub = stubFetch();
   const adapter = adapterFor(stub.fetch);
-  adapter.collected = [observation("session-one", { canReceiveMessage: true })];
+  adapter.collected = [observation("session-one", { advertises: [{ kind: ACT_KIND.MESSAGE }] })];
   await adapter.observe();
   const observationRequests = stub.requests.length;
 
@@ -552,7 +561,7 @@ test("refuses to send once the credential is gone, whatever was observed with it
   const stub = stubFetch();
   let apiKey: string | undefined = TEST_API_KEY;
   const adapter = adapterFor(stub.fetch, { readApiKey: async () => apiKey });
-  adapter.collected = [observation("session-one", { canReceiveMessage: true })];
+  adapter.collected = [observation("session-one", { advertises: [{ kind: ACT_KIND.MESSAGE }] })];
   await adapter.observe();
   const observationRequests = stub.requests.length;
 
@@ -572,7 +581,7 @@ test("reports what became of a send the provider refused", async () => {
   let status: number = HTTP_STATUS.OK;
   const stub = stubFetch(() => status);
   const adapter = adapterFor(stub.fetch);
-  adapter.collected = [observation("session-one", { canReceiveMessage: true })];
+  adapter.collected = [observation("session-one", { advertises: [{ kind: ACT_KIND.MESSAGE }] })];
   await adapter.observe();
   const message = { providerSessionId: "session-one", text: "go on" };
 
@@ -602,7 +611,7 @@ test("reports an unanswered send as indeterminate and makes the next refresh ask
     return jsonResponse({});
   });
   const adapter = adapterFor(fetch, { minimumRefreshIntervalMs: 60_000 });
-  adapter.collected = [observation("session-one", { canReceiveMessage: true })];
+  adapter.collected = [observation("session-one", { advertises: [{ kind: ACT_KIND.MESSAGE }] })];
   await adapter.observe();
 
   failWrites = true;
@@ -623,7 +632,7 @@ test("a write answered with an unnamed status makes the next refresh ask", async
   let status: number = HTTP_STATUS.OK;
   const stub = stubFetch(() => status);
   const adapter = adapterFor(stub.fetch, { minimumRefreshIntervalMs: 60_000 });
-  adapter.collected = [observation("session-one", { canReceiveMessage: true })];
+  adapter.collected = [observation("session-one", { advertises: [{ kind: ACT_KIND.MESSAGE }] })];
   await adapter.observe();
 
   status = HTTP_STATUS.SERVER_ERROR;
@@ -647,7 +656,7 @@ test("a write runs on the deadline its own route asked for", async () => {
     });
   });
   const adapter = adapterFor(fetch, { minimumRefreshIntervalMs: 60_000 });
-  adapter.collected = [observation("session-slow", { controls: [STUB_SLOW_ACT_CONTROL] })];
+  adapter.collected = [observation("session-slow", { advertises: [STUB_SLOW_ACT_CONTROL] })];
   await adapter.observe();
 
   const startedAt = performance.now();
@@ -684,7 +693,7 @@ test("runs an advertised control through its documented route, sending no body",
   const stub = stubFetch();
   const adapter = adapterFor(stub.fetch);
   adapter.collected = [
-    observation("session-plan", { controls: [STUB_APPROVE_CONTROL] }),
+    observation("session-plan", { advertises: [STUB_APPROVE_CONTROL] }),
     observation("session-quiet"),
   ];
   await adapter.observe();
@@ -700,7 +709,7 @@ test("runs an advertised control through its documented route, sending no body",
   });
   const unknown = await adapter.executeControl({
     providerSessionId: "session-plan",
-    control: { id: "terminate", label: "Terminate" },
+    control: { kind: ACT_KIND.CONTROL, id: "terminate", label: "Terminate" },
   });
 
   assert.deepEqual(approved, { status: "accepted" });

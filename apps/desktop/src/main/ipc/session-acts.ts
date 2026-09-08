@@ -22,6 +22,10 @@ import {
   type TrackerActionResult,
 } from "@sidecar/issues";
 import {
+  ACT_KIND,
+  advertisedActFor,
+  advertisedControl,
+  advertisedControls,
   ExternalOpenAnswerLostError,
   isListedWorkspaceAgentModel,
   isProviderId,
@@ -339,7 +343,7 @@ export function createSessionActPerformer(
     const messageText = message.value;
     const session = sessionRegistry.get(identity);
     if (!session) return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_SESSION };
-    if (!session.canReceiveMessage) {
+    if (!advertisedActFor(session, ACT_KIND.MESSAGE)) {
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
         reason: "That session does not take messages right now.",
@@ -368,14 +372,15 @@ export function createSessionActPerformer(
   ): Promise<WireRecord> => {
     const session = sessionRegistry.get(identity);
     if (!session) return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_SESSION };
-    const control = session.controls.find((candidate) => candidate.id === controlId);
+    const control = advertisedControl(session, controlId);
     // The labels travel with the roster the caller already read, so naming
     // what still stands surfaces nothing the roster withheld.
     if (!control) {
+      const advertised = advertisedControls(session);
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: session.controls.length
-          ? `That session advertises no such control, only ${session.controls.map((candidate) => candidate.label).join(", ")}.`
+        reason: advertised.length
+          ? `That session advertises no such control, only ${advertised.map((candidate) => candidate.label).join(", ")}.`
           : "That session advertises no controls right now.",
       };
     }
@@ -547,12 +552,13 @@ export function createSessionActPerformer(
   ): Promise<WireRecord> => {
     const session = sessionRegistry.get(identity);
     if (!session) return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_SESSION };
-    const advertised = session.spawnableAgents.find((candidate) => candidate === agent.trim());
+    const agents = advertisedActFor(session, ACT_KIND.ADD_AGENT)?.agents ?? [];
+    const advertised = agents.find((candidate) => candidate === agent.trim());
     if (!advertised) {
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
-        reason: session.spawnableAgents.length
-          ? `That session lists no such agent to add, only ${session.spawnableAgents.join(", ")}.`
+        reason: agents.length
+          ? `That session lists no such agent to add, only ${agents.join(", ")}.`
           : "That session lists no agent to add.",
       };
     }
@@ -632,7 +638,7 @@ export function createSessionActPerformer(
     }
     const session = sessionRegistry.get(identity);
     if (!session) return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_SESSION };
-    if (!session.renameTarget) {
+    if (!advertisedActFor(session, ACT_KIND.RENAME_WORKSPACE)) {
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
         reason: "That session's workspace cannot be renamed.",
@@ -655,8 +661,9 @@ export function createSessionActPerformer(
   };
 
   // Renaming a chat itself runs the same gauntlet one notch narrower: only a
-  // session whose latest observation advertised `canRename` takes one, and
-  // the registry that advertised it is what answers whether it stands.
+  // session whose latest observation advertised a `rename-session` act takes
+  // one, and the registry that advertised it is what answers whether it
+  // stands.
   const renameSession = async (identity: SessionIdentity, name: string): Promise<WireRecord> => {
     const sessionName = workspaceNameText(name);
     if (!sessionName) {
@@ -667,7 +674,7 @@ export function createSessionActPerformer(
     }
     const session = sessionRegistry.get(identity);
     if (!session) return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_SESSION };
-    if (!session.canRename) {
+    if (!advertisedActFor(session, ACT_KIND.RENAME_SESSION)) {
       return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: "That chat cannot be renamed." };
     }
     return performSessionAct(identity, PRODUCT_SESSION_ACT.SESSION_RENAME, (adapter) =>

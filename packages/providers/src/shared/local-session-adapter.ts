@@ -2,7 +2,9 @@ import type { Dirent, Stats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
+  ACT_KIND,
   ACT_RESULT_STATUS,
+  advertisedActFor,
   agedStatus,
   OBSERVATION_WINDOW,
   type ProviderMessageResult,
@@ -223,7 +225,7 @@ export abstract class LocalSessionAdapter extends SessionProviderAdapterBase {
     const observation = this.#observations.find(
       (candidate) => candidate.providerSessionId === message.providerSessionId,
     );
-    if (!observation?.canReceiveMessage) {
+    if (!observation || !advertisedActFor(observation, ACT_KIND.MESSAGE)) {
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
         reason: "That act is not supported by the latest observation.",

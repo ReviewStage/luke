@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { type CarriedSessionAction, SESSION_TOOL_KIND } from "@sidecar/acts";
 import {
+  ACT_KIND,
   PROVIDER_ID,
   type ProviderSessionObservation,
   type ProviderWorkspaceAgentRequest,
@@ -114,7 +115,7 @@ const WORKSPACE_OBSERVATION: ProviderSessionObservation = {
   title: "Fix the flaky test",
   status: SESSION_STATUS.WAITING,
   lastActivityAt: NOW_DEEP,
-  spawnableAgents: ["claude"],
+  advertises: [{ kind: ACT_KIND.ADD_AGENT, agents: ["claude"] }],
 };
 const CREATE: CarriedSessionAction = {
   kind: SESSION_TOOL_KIND.CREATE_WORKSPACE,

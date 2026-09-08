@@ -9,7 +9,6 @@ import {
   advertisedControl,
   advertisedControls,
   normalizeSession,
-  observedActFor,
   SESSION_CONTROL_KIND,
   SESSION_STATUS,
   type Session,
@@ -81,9 +80,12 @@ test("controls keep the order their adapter listed them in", () => {
   assert.equal(advertisedControl(session, "nothing-here"), undefined);
 });
 
-test("an observation is read through the same lookup, advertisement or none", () => {
-  assert.deepEqual(observedActFor({ advertises: [{ kind: ACT_KIND.MESSAGE }] }, ACT_KIND.MESSAGE), {
-    kind: ACT_KIND.MESSAGE,
-  });
-  assert.equal(observedActFor({}, ACT_KIND.MESSAGE), undefined);
+test("an unnormalized observation is read through the same lookup", () => {
+  // The advertisement is the same list before normalization, so a reader that
+  // had to be told which moment it was looking at would be two readers.
+  assert.deepEqual(
+    advertisedActFor({ advertises: [{ kind: ACT_KIND.MESSAGE }] }, ACT_KIND.MESSAGE),
+    { kind: ACT_KIND.MESSAGE },
+  );
+  assert.equal(advertisedActFor({}, ACT_KIND.MESSAGE), undefined);
 });

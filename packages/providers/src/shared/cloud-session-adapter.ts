@@ -1,5 +1,9 @@
 import {
+  ACT_KIND,
   ACT_RESULT_STATUS,
+  type AdvertisedControl,
+  advertisedActFor,
+  advertisedControl,
   type ProviderActResult,
   type ProviderControlRequest,
   type ProviderControlResult,
@@ -12,7 +16,6 @@ import {
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
   SESSION_LOCATION,
-  type SessionControl,
   type SessionProvider,
   SessionProviderAdapterBase,
   sessionMessageText,
@@ -375,7 +378,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
    * Sends one user-typed message to one observed session, through the
    * provider's documented message endpoint. Everything that could make this a
    * different kind of write is refused before a request exists: a session the
-   * last pass did not observe, one that did not advertise `canReceiveMessage`,
+   * last pass did not observe, one that advertised no `message` act,
    * text outside the message bound, and a missing credential all answer
    * without touching the network.
    */
@@ -383,7 +386,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     const observation = this.#observations.find(
       (candidate) => candidate.providerSessionId === message.providerSessionId,
     );
-    if (!observation?.canReceiveMessage) {
+    if (!observation || !advertisedActFor(observation, ACT_KIND.MESSAGE)) {
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
         reason: "That act is not supported by the latest observation.",
@@ -436,7 +439,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     // The advertised control — not the caller's copy of it — is what the route
     // is built from, so whatever it targets is the thing the last pass actually
     // saw, and nothing a caller sends can redirect it.
-    const advertised = observation?.controls?.find((control) => control.id === request.control.id);
+    const advertised = observation && advertisedControl(observation, request.control.id);
     if (!advertised)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
@@ -475,7 +478,8 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
       };
     // The advertised list — not the caller's word — is what the route is
     // built from, so an agent kind is only ever one the last pass promised.
-    const agent = observation.spawnableAgents?.find((candidate) => candidate === request.agent);
+    const addAgent = advertisedActFor(observation, ACT_KIND.ADD_AGENT);
+    const agent = addAgent?.agents.find((candidate) => candidate === request.agent);
     if (!agent)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
@@ -500,7 +504,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     // The route is built in the same synchronous step as the validation, from
     // the observation's own spawn target: a pass landing while the key is read
     // must not be able to swap the snapshot between the check and the route.
-    const route = this.workspaceAgentRoute(observation.spawnTarget ?? request.providerSessionId, {
+    const route = this.workspaceAgentRoute(addAgent?.target ?? request.providerSessionId, {
       ...request,
       agent,
       name,
@@ -548,7 +552,8 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     // The advertised target — not the caller's word — is what the route is
     // built from, so a rename only ever lands on the workspace the last pass
     // promised.
-    if (!observation?.renameTarget)
+    const renameWorkspace = observation && advertisedActFor(observation, ACT_KIND.RENAME_WORKSPACE);
+    if (!renameWorkspace)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
         reason: "That act is not supported by the latest observation.",
@@ -566,7 +571,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     // the observation's own rename target: a pass landing while the key is
     // read must not be able to swap the snapshot between the check and the
     // route.
-    const route = this.workspaceRenameRoute(observation.renameTarget, name);
+    const route = this.workspaceRenameRoute(renameWorkspace.target, name);
     if (!route)
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
@@ -596,7 +601,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
    * Renames one observed session itself — the chat, where `renameWorkspace`
    * renames the workspace around it — through the provider's documented
    * endpoint. The same refusals guard it: a session the last pass did not
-   * observe, one whose observation did not advertise `canRename`, a name
+   * observe, one whose observation advertised no `rename-session` act, a name
    * outside its bound, and a missing credential all answer without touching
    * the network.
    */
@@ -604,7 +609,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     const observation = this.#observations.find(
       (candidate) => candidate.providerSessionId === request.providerSessionId,
     );
-    if (!observation?.canRename)
+    if (!observation || !advertisedActFor(observation, ACT_KIND.RENAME_SESSION))
       return {
         status: ACT_RESULT_STATUS.UNSUPPORTED,
         reason: "That act is not supported by the latest observation.",
@@ -811,7 +816,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
    */
   protected controlRoute(
     _providerSessionId: string,
-    _control: SessionControl,
+    _control: AdvertisedControl,
   ): CloudWriteRoute | undefined {
     return undefined;
   }

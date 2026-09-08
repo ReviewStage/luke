@@ -1,6 +1,9 @@
 import type { CloudFetch } from "../../../../packages/providers/src/shared/cloud-session-adapter.js";
 import type { ProviderSessionObservation } from "../core.js";
 import {
+  ACT_KIND,
+  advertisedActFor,
+  advertisedControls,
   normalizeSessionDetail,
   type ObservedSession,
   type ObservedSessionControl,
@@ -144,21 +147,23 @@ export function observedSessionForResponse(
   // promised. Each is presence-only where it can be: what a control targets,
   // or which workspace a rename lands on, never travels — the act endpoints
   // re-observe and rebuild every write from their own fresh advertisement.
-  if (obs.canReceiveMessage) session.canReceiveMessage = true;
-  const controls = obs.controls
-    ?.map((control): ObservedSessionControl => {
+  if (advertisedActFor(obs, ACT_KIND.MESSAGE)) session.canReceiveMessage = true;
+  const controls = advertisedControls(obs)
+    .map((control): ObservedSessionControl => {
       const wireControl: ObservedSessionControl = { id: control.id, label: control.label };
-      if (control.kind) wireControl.kind = control.kind;
+      if (control.controlKind) wireControl.kind = control.controlKind;
       return wireControl;
     })
     .filter((control) => control.id && control.label);
-  if (controls && controls.length > 0) session.controls = controls;
-  const spawnableAgents = obs.spawnableAgents?.filter((agent) => agent.length > 0);
+  if (controls.length > 0) session.controls = controls;
+  const spawnableAgents = advertisedActFor(obs, ACT_KIND.ADD_AGENT)?.agents.filter(
+    (agent) => agent.length > 0,
+  );
   if (spawnableAgents && spawnableAgents.length > 0) {
     session.spawnableAgents = [...spawnableAgents];
   }
-  if (obs.canRename) session.canRename = true;
-  if (obs.renameTarget) session.canRenameWorkspace = true;
+  if (advertisedActFor(obs, ACT_KIND.RENAME_SESSION)) session.canRename = true;
+  if (advertisedActFor(obs, ACT_KIND.RENAME_WORKSPACE)) session.canRenameWorkspace = true;
   // A capability of the provider's documented transcript read, advertised so
   // a screen offers the fetch only where the messages endpoint could answer.
   if (providerReadsConversation(providerId)) session.canReadConversation = true;

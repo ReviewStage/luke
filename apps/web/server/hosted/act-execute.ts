@@ -1,5 +1,8 @@
 import {
+  ACT_KIND,
   ACT_RESULT_STATUS,
+  advertisedActFor,
+  advertisedControl,
   type CloudFetch,
   HOSTED_ACT_RESULT,
   type HostedActResult,
@@ -194,7 +197,7 @@ export async function executeMessageAct(options: {
       reason: missingTargetReason(providerId, pass, "Session not found."),
     };
   }
-  if (!observation.canReceiveMessage) {
+  if (!advertisedActFor(observation, ACT_KIND.MESSAGE)) {
     return {
       result: HOSTED_ACT_RESULT.REJECTED,
       reason: "Session is not currently accepting messages.",
@@ -226,7 +229,7 @@ export async function executeControlAct(options: {
   }
   // The advertised control — never the caller's copy — is what reaches the
   // adapter, and the adapter re-finds it in its own snapshot besides.
-  const advertised = observation.controls?.find((control) => control.id === controlId);
+  const advertised = advertisedControl(observation, controlId);
   if (!advertised) {
     return {
       result: HOSTED_ACT_RESULT.REJECTED,
@@ -261,7 +264,7 @@ export async function executeAgentAct(options: {
       reason: missingTargetReason(providerId, pass, "Session not found."),
     };
   }
-  if (!observation.spawnableAgents?.includes(agent)) {
+  if (!advertisedActFor(observation, ACT_KIND.ADD_AGENT)?.agents.includes(agent)) {
     return {
       result: HOSTED_ACT_RESULT.REJECTED,
       reason: "That agent kind is not currently offered for this session's workspace.",
@@ -293,7 +296,7 @@ export async function executeRenameSessionAct(options: {
       reason: missingTargetReason(providerId, pass, "Session not found."),
     };
   }
-  if (!observation.canRename) {
+  if (!advertisedActFor(observation, ACT_KIND.RENAME_SESSION)) {
     return {
       result: HOSTED_ACT_RESULT.REJECTED,
       reason: "Renaming this session is not currently offered.",
@@ -323,7 +326,7 @@ export async function executeRenameWorkspaceAct(options: {
       reason: missingTargetReason(providerId, pass, "Session not found."),
     };
   }
-  if (!observation.renameTarget) {
+  if (!advertisedActFor(observation, ACT_KIND.RENAME_WORKSPACE)) {
     return {
       result: HOSTED_ACT_RESULT.REJECTED,
       reason: "Renaming this session's workspace is not currently offered.",

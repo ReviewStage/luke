@@ -10,7 +10,7 @@ import type { BrainActExecution } from "@sidecar/brain";
 import { APP_SETTING_KIND, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import type { ConversationEntry } from "@sidecar/realtime";
 import { RUN_ORIGIN } from "@sidecar/runtime-contracts";
-import { normalizeSession, SESSION_STATUS, type Session } from "@sidecar/session";
+import { ACT_KIND, normalizeSession, SESSION_STATUS, type Session } from "@sidecar/session";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import type { BrainAppActRequest } from "#shared/contracts";
 import { type BrainActPerformerDependencies, createBrainActPerformer } from "./act-performer";
@@ -74,7 +74,7 @@ const observed = normalizeSession(
     title: "Fix the flaky test",
     status: SESSION_STATUS.WAITING,
     lastActivityAt: NOW,
-    canReceiveMessage: true,
+    advertises: [{ kind: ACT_KIND.MESSAGE }],
   },
 );
 

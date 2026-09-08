@@ -128,37 +128,32 @@ export type AdvertisedActOf<Kind extends AdvertisedActKind> = Extract<
   { kind: Kind }
 >;
 
-/** The advertisement a normalized session holds for one kind, or nothing. */
-export function advertisedActFor<Kind extends AdvertisedActKind>(
-  session: Pick<Session, "advertises">,
-  kind: Kind,
-): AdvertisedActOf<Kind> | undefined {
-  return observedActFor(session, kind);
-}
-
 /**
- * The same read over an observation, whose advertisement has not been
- * normalized yet and may be absent altogether.
+ * The advertisement one session holds for one kind, or nothing. It reads a
+ * normalized session and a raw observation alike, because the advertisement is
+ * the same list at both moments — normalization bounds its entries and fills
+ * in the empty one, and neither changes how it is asked a question.
  */
-export function observedActFor<Kind extends AdvertisedActKind>(
-  fields: Pick<SessionFields, "advertises">,
+export function advertisedActFor<Kind extends AdvertisedActKind>(
+  session: Pick<SessionFields, "advertises">,
   kind: Kind,
 ): AdvertisedActOf<Kind> | undefined {
-  return fields.advertises?.find((act): act is AdvertisedActOf<Kind> => act.kind === kind);
+  return session.advertises?.find((act): act is AdvertisedActOf<Kind> => act.kind === kind);
 }
 
 /** Every control a session advertises, in the order its adapter listed them. */
 export function advertisedControls(
-  session: Pick<Session, "advertises">,
+  session: Pick<SessionFields, "advertises">,
 ): readonly AdvertisedControl[] {
-  return session.advertises.filter(
-    (act): act is AdvertisedControl => act.kind === ACT_KIND.CONTROL,
+  return (
+    session.advertises?.filter((act): act is AdvertisedControl => act.kind === ACT_KIND.CONTROL) ??
+    []
   );
 }
 
 /** The control a session advertises under one id, or nothing. */
 export function advertisedControl(
-  session: Pick<Session, "advertises">,
+  session: Pick<SessionFields, "advertises">,
   controlId: string,
 ): AdvertisedControl | undefined {
   return advertisedControls(session).find((control) => control.id === controlId);

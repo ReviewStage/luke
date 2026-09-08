@@ -1,4 +1,7 @@
 import {
+  ACT_KIND,
+  advertisedActFor,
+  advertisedControls,
   CONTEXT_ITEM_KIND,
   contextItemId,
   type ObservedSession,
@@ -177,21 +180,26 @@ async function observeCloudSessions(
         session.lastActivityAt = obs.lastActivityAt;
         session.observedAt = obs.lastActivityAt;
       }
-      if (obs.canReceiveMessage) session.canReceiveMessage = true;
-      const controls = obs.controls
-        ?.map((c): ObservedSessionControl => {
-          const control: ObservedSessionControl = { id: c.id, label: c.label };
-          if (c.kind) control.kind = c.kind;
+      if (advertisedActFor(obs, ACT_KIND.MESSAGE)) session.canReceiveMessage = true;
+      const controls = advertisedControls(obs)
+        .map((advertised): ObservedSessionControl => {
+          const control: ObservedSessionControl = {
+            id: advertised.id,
+            label: advertised.label,
+          };
+          if (advertised.controlKind) control.kind = advertised.controlKind;
           return control;
         })
-        .filter((c) => c.id && c.label);
-      if (controls && controls.length > 0) session.controls = controls;
-      const spawnableAgents = obs.spawnableAgents?.filter((a) => a.length > 0);
+        .filter((control) => control.id && control.label);
+      if (controls.length > 0) session.controls = controls;
+      const spawnableAgents = advertisedActFor(obs, ACT_KIND.ADD_AGENT)?.agents.filter(
+        (agent) => agent.length > 0,
+      );
       if (spawnableAgents && spawnableAgents.length > 0) {
         session.spawnableAgents = [...spawnableAgents];
       }
-      if (obs.canRename) session.canRename = true;
-      if (obs.renameTarget) session.canRenameWorkspace = true;
+      if (advertisedActFor(obs, ACT_KIND.RENAME_SESSION)) session.canRename = true;
+      if (advertisedActFor(obs, ACT_KIND.RENAME_WORKSPACE)) session.canRenameWorkspace = true;
       sessions.push(session);
     }
   }

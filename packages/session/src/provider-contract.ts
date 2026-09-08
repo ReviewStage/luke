@@ -8,7 +8,7 @@ import type {
   ProviderTranscriptSinceResult,
   ProviderWorkspaceResult,
 } from "./act-results.js";
-import type { SessionControl } from "./advertised-acts.js";
+import type { AdvertisedControl } from "./advertised-acts.js";
 import type { SessionProvider } from "./session-identity.js";
 import type { ProviderSessionObservation } from "./session-shape.js";
 import type { WorkspaceAgentSelection } from "./workspace-agents.js";
@@ -37,7 +37,7 @@ export interface SessionProviderAdapter {
    * Hands a message to an already-observed session through the provider's own
    * documented endpoint. It is one of the three places an adapter may change
    * provider state, and only ever with text a user chose to send: adapters
-   * must refuse any session that did not advertise `canReceiveMessage` on its
+   * must refuse any session that did not advertise a `message` act on its
    * latest observation, and nothing that decides on the user's behalf may
    * reach it.
    */
@@ -56,23 +56,24 @@ export interface SessionProviderAdapter {
 
   /**
    * Starts another agent in the workspace an observed session already runs in,
-   * under the same rules and one more: the agent must be one of the kinds that
-   * session's latest observation listed.
+   * under the same rules and one more: the agent must be one of the kinds
+   * that session's own `add-agent` advertisement listed.
    */
   spawnWorkspaceAgent(request: ProviderWorkspaceAgentRequest): Promise<ProviderWorkspaceResult>;
 
   /**
    * Renames the workspace an observed session already runs in, under the same
-   * rules and one more: the session's latest observation must have advertised
-   * a rename target, so a rename only ever lands on a workspace its provider
-   * documents renaming.
+   * rules and one more: the session's latest observation must have carried a
+   * `rename-workspace` advertisement, whose target is what the rename lands
+   * on, so a rename only ever lands on a workspace its provider documents
+   * renaming.
    */
   renameWorkspace(request: ProviderWorkspaceRenameRequest): Promise<ProviderActResult>;
 
   /**
    * Renames an observed session itself — the chat, where `renameWorkspace`
    * renames the workspace around it — only for a session whose latest
-   * observation advertised `canRename`.
+   * observation advertised a `rename-session` act.
    */
   renameSession(request: ProviderSessionRenameRequest): Promise<ProviderActResult>;
 
@@ -113,7 +114,7 @@ export interface SessionProviderAdapter {
 /** A provider-local request for a control that was previously exposed by observation. */
 export interface ProviderControlRequest {
   providerSessionId: string;
-  control: SessionControl;
+  control: AdvertisedControl;
 }
 
 /** A user-authored message for one session the adapter has already observed. */

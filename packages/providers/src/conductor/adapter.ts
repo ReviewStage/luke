@@ -897,7 +897,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
 
   protected override controlRoute(
     providerSessionId: string,
-    control: SessionControl,
+    control: AdvertisedControl,
   ): CloudWriteRoute | undefined {
     if (control.id === CONDUCTOR_CANCEL_CONTROL.id) {
       return {
