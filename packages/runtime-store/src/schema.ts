@@ -23,17 +23,17 @@
  * a partial unique index over the run and kind of every line tied to a run,
  * per conversation, so a second publication has no row it could occupy.
  *
- * Version 3 separates what is stored from what the model is shown. The
+ * The stored record and the model's projection are two different tables. The
  * transcript table keeps every input the context engine ingested and every
  * point at which the projection folded, per conversation and never cascading
  * with a lifetime, so a compaction or a Start fresh changes the projection
- * and erases no record; the checkpoint rows stay the projection, and lose
- * the per-row stamp version 2 had already moved onto the generation. The
- * conversation row learns its kind and where it stands in its lifecycle —
- * archived, pinned, last active — which is what maintenance reads, and the
- * archive registry holds each deleted conversation's compressed recovery
- * payload, committed in the transaction that removed the rows and cleared
- * only once the file it names is published and verified.
+ * and erases no record; the checkpoint rows are the projection, stamped once
+ * on the generation rather than per row. The conversation row carries its
+ * kind and where it stands in its lifecycle — archived, pinned, last active —
+ * which is what maintenance reads, and the archive registry holds each
+ * deleted conversation's compressed recovery payload, committed in the
+ * transaction that removed the rows and cleared only once the file it names
+ * is published and verified.
  *
  * The schema is versioned by the `schema_version` table. A database at a
  * version this build does not know is refused rather than migrated by guess.
