@@ -1459,12 +1459,7 @@ async function applyVoiceCredential(): Promise<void> {
   await transitionVoiceCredential({
     retire: () => brainWiring.retire(),
     apply: () => voiceCapabilities.apply(),
-    rebuild: async () => {
-      await brainWiring.rebuild();
-      // A new credential is a new embedding adapter: the index is synced again
-      // so chunks indexed keyword-only gain their vectors.
-      void memoryWiring.sync();
-    },
+    rebuild: () => brainWiring.rebuild(),
   });
 }
 
@@ -1638,6 +1633,7 @@ const memoryWiring = wireMemory({
   persistent: runMode.observesProviders,
   client: runtimeStoreWiring.client,
   embeddingAdapter: () => voiceCapabilities.embeddingAdapter,
+  onEmbeddingAdapterChanged: (listener) => voiceCapabilities.onApplied(listener),
   workspaceDirectory: agentWorkspacePath,
   createRuntime: () => brainWiring.createRuntime(),
   conversationDirectory: () => runtimeStoreWiring.directory().entries,
@@ -3132,14 +3128,16 @@ export function startDesktopApp(): void {
         // never rewritten: an edit the developer or the agent made stands.
         try {
           await brainWiring.seedWorkspace();
-          // The index follows the files: synced once here and again at every
-          // change the watcher sees, so a hand edit is searchable within seconds.
-          void memoryWiring.start();
         } catch (error) {
           process.stderr.write(
             `Brain workspace could not be seeded: ${error instanceof Error ? error.message : String(error)}\n`,
           );
         }
+        // The index follows the files: synced once here and again at every
+        // change the watcher sees, so a hand edit is searchable within seconds.
+        // A seed that failed leaves the files that already stand, which are
+        // still worth indexing, so the start does not wait on the seed.
+        void memoryWiring.start();
         // Retention runs on every live launch, key or no key: the store's
         // load admits the envelope within its bounds and lifetime, replacing
         // in the database what it does not admit, and the clock takes it

@@ -6,7 +6,6 @@ import {
   HOSTED_SERVICE_PATH,
   type HostedBrainCapabilities,
   type HostedBrainRequestRead,
-  hostedBrainCapabilitiesFromWire,
   hostedBrainCompactRequestFromWire,
   hostedBrainCountTokensAnswerFromWire,
   hostedBrainCountTokensRequestFromWire,
@@ -23,27 +22,20 @@ import {
   type ModelResponse,
   type ModelTokenCount,
 } from "@sidecar/runtime-contracts";
-import {
-  positiveInteger,
-  text,
-  type UnparsedWireValue,
-  unparsedWire,
-  type WireRecord,
-  wireRecord,
-} from "@sidecar/wire";
+import { type UnparsedWireValue, unparsedWire, type WireRecord, wireRecord } from "@sidecar/wire";
 import { COMPACTION_POLICY } from "./compaction.js";
 import {
-  BRAIN_REQUEST_TIMEOUT_MS,
   type Failure,
   type FetchLike,
   failed,
+  HostedServiceCalls,
+  HTTP_METHOD,
   HTTP_STATUS,
   type Normalized,
+  notServed,
   payloadOf,
   RETRY_AFTER_HEADER,
   rateLimitWaitMs,
-  requestSignal,
-  withoutTrailingSlash,
 } from "./model-adapter-shared.js";
 import { responsesCompactedWindow, responsesModelAnswer } from "./responses-api.js";
 import {
@@ -75,13 +67,6 @@ const HOSTED_PATH = {
   [RESPONSES_OPERATION.COMPACT]: HOSTED_SERVICE_PATH.BRAIN_COMPACT,
 } as const satisfies Record<ResponsesOperation, string>;
 
-const HTTP_METHOD = {
-  GET: "GET",
-  POST: "POST",
-} as const;
-
-type HttpMethod = (typeof HTTP_METHOD)[keyof typeof HTTP_METHOD];
-
 /**
  * Luke's hosted service on the signed-in account, speaking the second hosted
  * brain contract and nothing older. It reads the service's capabilities once
@@ -92,23 +77,13 @@ type HttpMethod = (typeof HTTP_METHOD)[keyof typeof HTTP_METHOD];
  */
 class HostedTransport implements ResponsesTransport<HostedBrainCapabilities> {
   readonly adapter = HOSTED_MODEL_ADAPTER_ID;
-  readonly #baseUrl: string;
-  readonly #readAccessToken: () => Promise<string | undefined>;
-  readonly #refreshAccount: () => Promise<void>;
-  readonly #fetch: FetchLike;
+  readonly #calls: HostedServiceCalls;
   readonly #now: () => number;
-  readonly #requestTimeoutMs: number;
   #capabilities: HostedBrainCapabilities | undefined;
 
   constructor(options: HostedModelAdapterOptions) {
-    const baseUrl = text(options.serviceBaseUrl);
-    if (!baseUrl) throw new Error("Hosted service base URL must not be empty");
-    this.#baseUrl = withoutTrailingSlash(baseUrl);
-    this.#readAccessToken = options.readAccessToken;
-    this.#refreshAccount = options.refreshAccount;
-    this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
+    this.#calls = new HostedServiceCalls(options);
     this.#now = options.now ?? Date.now;
-    this.#requestTimeoutMs = positiveInteger(options.requestTimeoutMs, BRAIN_REQUEST_TIMEOUT_MS);
   }
 
   /** The service's model, once capabilities have been read; the service's to know until then. */
@@ -218,8 +193,11 @@ class HostedTransport implements ResponsesTransport<HostedBrainCapabilities> {
     body: string,
     signal: AbortSignal | undefined,
   ): Promise<Response | Normalized> {
-    const response = await this.#authorized((token) =>
-      this.#send(HOSTED_PATH[operation], HTTP_METHOD.POST, token, body, signal),
+    const response = await this.#calls.request(
+      HOSTED_PATH[operation],
+      HTTP_METHOD.POST,
+      body,
+      signal,
     );
     if (!response) return failed(MODEL_FAILURE.NETWORK, "request did not complete");
     return response;
@@ -270,74 +248,9 @@ class HostedTransport implements ResponsesTransport<HostedBrainCapabilities> {
 
   /** Reads the capabilities once per adapter; a service that has none, or names another contract, is incompatible. */
   async #discover(): Promise<HostedBrainCapabilities | Failure> {
-    const response = await this.#authorized((token) =>
-      this.#send(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES, HTTP_METHOD.GET, token),
-    );
-    if (!(response instanceof Response)) {
-      return response ?? failed(MODEL_FAILURE.NETWORK, "capabilities request did not complete");
-    }
-    if (notServed(response)) {
-      return failed(
-        MODEL_FAILURE.COMPATIBILITY,
-        `the hosted service does not offer brain contract ${HOSTED_BRAIN_CONTRACT_VERSION}`,
-      );
-    }
-    if (response.status === HTTP_STATUS.UNAUTHORIZED) {
-      return failed(MODEL_FAILURE.CREDENTIAL, "the account token was refused");
-    }
-    if (!response.ok) {
-      return failed(MODEL_FAILURE.UPSTREAM, `capabilities failed with status ${response.status}`);
-    }
-    const capabilities = hostedBrainCapabilitiesFromWire(await payloadOf(response));
-    if (!capabilities) {
-      return failed(
-        MODEL_FAILURE.COMPATIBILITY,
-        `the hosted service's capabilities are not brain contract ${HOSTED_BRAIN_CONTRACT_VERSION}`,
-      );
-    }
-    this.#capabilities = capabilities;
+    const capabilities = await this.#calls.capabilities();
+    if (!("outcome" in capabilities)) this.#capabilities = capabilities;
     return capabilities;
-  }
-
-  /**
-   * One call under the account's token, retried once on a refreshed token
-   * when the first is refused: the routine expiry of an hour-lived token
-   * inside a day-lived app, handled like the hosted mint handles it. No
-   * token at all is a credential failure before anything is sent.
-   */
-  async #authorized(
-    call: (token: string) => Promise<Response | undefined>,
-  ): Promise<Response | Failure | undefined> {
-    const token = await this.#readAccessToken();
-    if (!token) return failed(MODEL_FAILURE.CREDENTIAL, "no account token");
-    const response = await call(token);
-    if (response?.status !== HTTP_STATUS.UNAUTHORIZED) return response;
-    await this.#refreshAccount().catch(() => undefined);
-    const refreshed = await this.#readAccessToken();
-    if (refreshed && refreshed !== token) return call(refreshed);
-    return response;
-  }
-
-  async #send(
-    path: string,
-    method: HttpMethod,
-    token: string,
-    body?: string,
-    signal?: AbortSignal,
-  ): Promise<Response | undefined> {
-    try {
-      return await this.#fetch(`${this.#baseUrl}${path}`, {
-        method,
-        headers: {
-          authorization: `Bearer ${token}`,
-          ...(body !== undefined ? { "content-type": "application/json" } : undefined),
-        },
-        ...(body !== undefined ? { body } : undefined),
-        signal: requestSignal(this.#requestTimeoutMs, signal),
-      });
-    } catch {
-      return undefined;
-    }
   }
 }
 
@@ -350,12 +263,6 @@ function replayable(payload: UnparsedWireValue | undefined, answer: string): Fai
   return brainOutputReplayable(payload)
     ? undefined
     : failed(MODEL_FAILURE.MALFORMED, `${answer} carried an item the hosted service cannot replay`);
-}
-
-function notServed(response: Response): boolean {
-  return (
-    response.status === HTTP_STATUS.NOT_FOUND || response.status === HTTP_STATUS.METHOD_NOT_ALLOWED
-  );
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   isRecord,
   isWireNumber,
   isWireString,
+  numberVectors,
   text,
   type UnparsedWireValue,
   type WireRecord,
@@ -299,23 +300,14 @@ export function embeddingsVectors(
   if (!isRecord(payload) || !Array.isArray(payload.data)) return undefined;
   const model = isWireString(payload.model) && payload.model.length > 0 ? payload.model : undefined;
   if (!model) return undefined;
-  const indexed: { index: number; vector: number[] }[] = [];
-  let width: number | undefined;
+  const indexed: { index: number; embedding: UnparsedWireValue }[] = [];
   for (const entry of payload.data) {
-    if (!isRecord(entry) || !Array.isArray(entry.embedding) || !isWireNumber(entry.index)) {
-      return undefined;
-    }
-    const vector: number[] = [];
-    for (const component of entry.embedding) {
-      if (!isWireNumber(component)) return undefined;
-      vector.push(component);
-    }
-    if (vector.length === 0 || (width !== undefined && width !== vector.length)) return undefined;
-    width = vector.length;
-    indexed.push({ index: entry.index, vector });
+    if (!isRecord(entry) || !isWireNumber(entry.index)) return undefined;
+    indexed.push({ index: entry.index, embedding: entry.embedding });
   }
   indexed.sort((a, b) => a.index - b.index);
-  return { model, vectors: indexed.map((entry) => entry.vector) };
+  const vectors = numberVectors(indexed.map((entry) => entry.embedding));
+  return vectors ? { model, vectors } : undefined;
 }
 
 /** The states a Responses object may be in; only two carry a reply. */

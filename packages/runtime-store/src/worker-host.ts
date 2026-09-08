@@ -123,20 +123,16 @@ const HANDLERS: RuntimeStoreHandlers = {
   [RUNTIME_STORE_METHOD.NOTEBOOK_LIST]: (host, params) =>
     listNotebookEntries(host.opened(), host.workspace(), params.now),
   [RUNTIME_STORE_METHOD.NOTEBOOK_REMEMBER]: (host, params) =>
-    rememberNotebookEntry(
-      host.opened(),
-      host.workspace(),
-      {
-        id: params.id,
-        words: params.words,
-        ...(params.replaces !== undefined ? { replaces: params.replaces } : undefined),
-      },
-      params.now,
-    ),
+    rememberNotebookEntry(host.opened(), host.workspace(), params, params.now),
   [RUNTIME_STORE_METHOD.NOTEBOOK_FORGET]: (host, params) =>
     forgetNotebookEntry(host.opened(), host.workspace(), params.id, params.now),
   [RUNTIME_STORE_METHOD.MEMORY_PLAN_SYNC]: (host, params) =>
-    planMemorySync(host.opened(), host.workspace(), params.identity, params.now),
+    planMemorySync(
+      host.opened(),
+      host.workspace(),
+      params.identity,
+      listNotebookEntries(host.opened(), host.workspace(), params.now),
+    ),
   [RUNTIME_STORE_METHOD.MEMORY_APPLY_SYNC]: (host, params) =>
     applyMemorySync(
       host.opened(),

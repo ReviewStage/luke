@@ -489,23 +489,6 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     return configurationStore.snapshot();
   };
 
-  // The memory tools reach the notebook's index through the host's one
-  // service; a host with none, or one not yet open, refuses them in the agent.
-  const memoryAccessFor = (sessionKey: SessionKey): BrainMemoryAccess => ({
-    search: async (ask) => {
-      const memory = dependencies.memory?.(sessionKey);
-      if (!memory)
-        return { status: ACT_RESULT_STATUS.REJECTED, reason: "no notebook index stands" };
-      return memory.search(ask);
-    },
-    get: async (ask) => {
-      const memory = dependencies.memory?.(sessionKey);
-      if (!memory)
-        return { status: ACT_RESULT_STATUS.REJECTED, reason: "no notebook index stands" };
-      return memory.get(ask);
-    },
-  });
-  const recallFor = (sessionKey: SessionKey) => dependencies.recall?.(sessionKey);
   const flushFor = (sessionKey: SessionKey) => dependencies.beforeCompaction?.(sessionKey);
 
   /** The skills the latest preparation listed to the model: the only ones `load_skill` may load. */
@@ -594,6 +577,11 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     // the child restriction at its depth, the fork it inherited if any, and
     // its own deadline when the spawn set one.
     const childRecord = childRecordOf(children.service, sessionKey);
+    // The memory tools and the recall reach the notebook through the host's
+    // one service, bound once here; a host with none leaves the agent to
+    // refuse the tools itself.
+    const memory = dependencies.memory?.(sessionKey);
+    const recall = dependencies.recall?.(sessionKey);
     return new BrainAgent({
       observes: observed
         ? { kind: LOOK_SUBJECT.SESSION, identity: observed }
@@ -607,8 +595,8 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         ? { executionDeadlineMs: childRecord.timeoutMs }
         : undefined),
       children: children.accessFor(sessionKey),
-      ...(dependencies.memory ? { memory: memoryAccessFor(sessionKey) } : undefined),
-      ...(recallFor(sessionKey) ? { recall: recallFor(sessionKey) } : undefined),
+      ...(memory ? { memory } : undefined),
+      ...(recall ? { recall } : undefined),
       ...(flushFor(sessionKey) ? { beforeCompaction: flushFor(sessionKey) } : undefined),
       runtime: runtimeDescriptor.create(model, engineDescriptor),
       acts,

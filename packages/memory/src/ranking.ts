@@ -1,5 +1,6 @@
 import type { KeywordHit, MemorySearchResult, MemorySource, VectorHit } from "./contracts.js";
 import { MEMORY_SEARCH_DEFAULTS } from "./defaults.js";
+import { isNotebookRootFile } from "./notebook-markdown.js";
 import { jaccardSimilarity, textSimilarity, tokenize } from "./tokenize.js";
 
 /**
@@ -77,7 +78,7 @@ export function datedNoteDay(path: string): Date | undefined {
 /** MEMORY.md, USER.md, and an undated note are knowledge that stands; only a dated note ages. */
 export function isEvergreenMemoryPath(path: string): boolean {
   const normalized = path.replaceAll("\\", "/").replace(/^\.\//, "");
-  if (normalized === "MEMORY.md" || normalized === "USER.md") return true;
+  if (isNotebookRootFile(normalized)) return true;
   if (!normalized.startsWith("memory/")) return false;
   return !DATED_MEMORY_PATH_RE.test(normalized);
 }
@@ -235,8 +236,33 @@ export function mergeHybridResults(
   }));
 }
 
-function rangeKey(entry: Pick<MemorySearchResult, "path" | "startLine" | "endLine">): string {
-  return `${entry.path}:${entry.startLine}:${entry.endLine}`;
+type LineRange = Pick<MemorySearchResult, "path" | "startLine" | "endLine">;
+
+/** The ranges seen so far, by path, start, and end, so no key is ever composed from them. */
+class RangeSet {
+  readonly #ranges = new Map<string, Map<number, Set<number>>>();
+
+  constructor(ranges: readonly LineRange[] = []) {
+    for (const range of ranges) this.add(range);
+  }
+
+  add(range: LineRange): void {
+    let starts = this.#ranges.get(range.path);
+    if (!starts) {
+      starts = new Map();
+      this.#ranges.set(range.path, starts);
+    }
+    let ends = starts.get(range.startLine);
+    if (!ends) {
+      ends = new Set();
+      starts.set(range.startLine, ends);
+    }
+    ends.add(range.endLine);
+  }
+
+  has(range: LineRange): boolean {
+    return this.#ranges.get(range.path)?.get(range.startLine)?.has(range.endLine) ?? false;
+  }
 }
 
 /**
@@ -253,23 +279,22 @@ export function selectHybridSearchResults(params: {
   const strict = params.merged.filter((entry) => entry.score >= params.minScore);
   const selected = strict.slice(0, params.maxResults);
   if (params.keyword.length === 0 || selected.length === params.maxResults) return selected;
-  const keywordKeys = new Set(params.keyword.map(rangeKey));
+  const keywordRanges = new RangeSet(params.keyword);
   if (strict.length === 0) {
     return params.merged
-      .filter((entry) => entry.score >= 0 && keywordKeys.has(rangeKey(entry)))
+      .filter((entry) => entry.score >= 0 && keywordRanges.has(entry))
       .slice(0, params.maxResults);
   }
-  const seen = new Set(selected.map(rangeKey));
+  const seen = new RangeSet(selected);
   for (const entry of params.merged) {
     if (selected.length === params.maxResults) break;
-    const key = rangeKey(entry);
     if (
       entry.score < params.minScore &&
       entry.vectorScore === 0 &&
-      keywordKeys.has(key) &&
-      !seen.has(key)
+      keywordRanges.has(entry) &&
+      !seen.has(entry)
     ) {
-      seen.add(key);
+      seen.add(entry);
       selected.push(entry);
     }
   }

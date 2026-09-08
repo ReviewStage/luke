@@ -100,6 +100,7 @@ export class VoiceCapabilityAssembler {
   #unavailableDiagnostics: RealtimeDiagnostics;
   #voiceSource: VoiceSource = VOICE_SOURCE.ACCOUNT;
   #applications = 0;
+  readonly #applied = new Set<() => void>();
 
   constructor(options: VoiceCapabilityAssemblerOptions) {
     this.#options = options;
@@ -130,6 +131,18 @@ export class VoiceCapabilityAssembler {
    */
   get embeddingAdapter(): EmbeddingAdapter | undefined {
     return this.#embeddingAdapter;
+  }
+
+  /**
+   * Hears every application that published, after its capability set stands,
+   * so a reader of the adapters can follow a credential change without
+   * polling. Answers the unsubscribe.
+   */
+  onApplied(listener: () => void): () => void {
+    this.#applied.add(listener);
+    return () => {
+      this.#applied.delete(listener);
+    };
   }
 
   get realtimeCredentials(): RealtimeCredentialMinter | undefined {
@@ -214,6 +227,7 @@ export class VoiceCapabilityAssembler {
     this.#voiceSource = policy.source;
     if (policy.useHosted) this.#warmHostedVoice();
     this.#report(apiKey !== undefined);
+    for (const listener of this.#applied) listener();
     return { latest: true, isCurrent };
   }
 

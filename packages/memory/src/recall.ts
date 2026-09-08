@@ -91,20 +91,44 @@ export function resolveRecallEscalation(params: {
     : RECALL_DECISION.NO_RECALL_INTENT;
 }
 
+/**
+ * The same decision, with the intent read first: an ask that does not read
+ * like a question about the past is settled before trusted memory is
+ * consulted at all, so the lookup — which embeds the query when embeddings
+ * stand — is spent only on an ask that could escalate. Trusted memory still
+ * answers before any subrun.
+ */
+export async function decideRecall(
+  message: string,
+  trustedMemory: () => Promise<TrustedMemoryLookup>,
+): Promise<RecallDecision> {
+  if (!hasRecallIntent(message)) return RECALL_DECISION.NO_RECALL_INTENT;
+  const trusted = await trustedMemory().catch(() => ({ strongHit: false }));
+  return resolveRecallEscalation({ message, hasStrongTrustedHit: trusted.strongHit });
+}
+
+/** Who said a line of the recent exchange the recall reads. */
+export const RECALL_TURN_ROLE = {
+  USER: "user",
+  ASSISTANT: "assistant",
+} as const;
+
+export type RecallTurnRole = (typeof RECALL_TURN_ROLE)[keyof typeof RECALL_TURN_ROLE];
+
 /** One line of the recent exchange the recall reads, already bounded by the caller. */
 export interface RecallRecentTurn {
-  readonly role: "user" | "assistant";
+  readonly role: RecallTurnRole;
   readonly text: string;
 }
 
 /** The small recent-turn input the pinned source hands a recall: two asks and one reply, each cut. */
 export function boundRecentTurns(turns: readonly RecallRecentTurn[]): RecallRecentTurn[] {
   const users = turns
-    .filter((turn) => turn.role === "user")
+    .filter((turn) => turn.role === RECALL_TURN_ROLE.USER)
     .slice(-RECALL_DEFAULTS.RECENT_USER_TURNS)
     .map((turn) => ({ ...turn, text: turn.text.slice(0, RECALL_DEFAULTS.RECENT_USER_CHARS) }));
   const assistants = turns
-    .filter((turn) => turn.role === "assistant")
+    .filter((turn) => turn.role === RECALL_TURN_ROLE.ASSISTANT)
     .slice(-RECALL_DEFAULTS.RECENT_ASSISTANT_TURNS)
     .map((turn) => ({
       ...turn,
@@ -198,9 +222,11 @@ export class ConversationRecall {
     this.#now = options.now ?? Date.now;
   }
 
+  /** One digest over the asking conversation and the query, so the cache never composes identifiers itself. */
   #cacheKey(ask: RecallAsk): string {
-    const hash = createHash("sha256").update(ask.query).digest("hex");
-    return `${ask.agentId}:${ask.sessionKey}:${hash}`;
+    return createHash("sha256")
+      .update(JSON.stringify([ask.agentId, ask.sessionKey, ask.query]))
+      .digest("hex");
   }
 
   #breakerOpen(): boolean {
@@ -252,13 +278,9 @@ export class ConversationRecall {
   async #run(ask: RecallAsk, key: string): Promise<RecallResult> {
     const startedAt = this.#now();
     const elapsed = () => this.#now() - startedAt;
-    const trusted = await this.#options.trustedMemory(ask.query, ask.signal).catch(() => ({
-      strongHit: false,
-    }));
-    const decision = resolveRecallEscalation({
-      message: ask.query,
-      hasStrongTrustedHit: trusted.strongHit,
-    });
+    const decision = await decideRecall(ask.query, () =>
+      this.#options.trustedMemory(ask.query, ask.signal),
+    );
     if (decision !== RECALL_DECISION.RECALL) {
       return {
         status: RECALL_STATUS.SKIPPED,
@@ -281,6 +303,18 @@ export class ConversationRecall {
     const timeout = new AbortController();
     const timer = setTimeout(() => timeout.abort(), timeoutMs);
     const signal = ask.signal ? AbortSignal.any([ask.signal, timeout.signal]) : timeout.signal;
+    const timedOut = () => timeout.signal.aborted && !ask.signal?.aborted;
+    const timeoutResult = (): RecallResult => {
+      this.#consecutiveTimeouts += 1;
+      this.#lastTimeoutAt = this.#now();
+      return {
+        status: RECALL_STATUS.TIMEOUT,
+        summary: "",
+        decision,
+        elapsedMs: elapsed(),
+        cached: false,
+      };
+    };
     let result: RecallResult;
     try {
       const reply = await this.#options.subrun({
@@ -288,26 +322,25 @@ export class ConversationRecall {
         recentTurns: boundRecentTurns(ask.recentTurns),
         signal,
       });
-      const summary = summarizeRecallReply(reply);
-      this.#consecutiveTimeouts = 0;
-      result = {
-        status: summary.length > 0 ? RECALL_STATUS.OK : RECALL_STATUS.NONE,
-        summary,
-        decision,
-        elapsedMs: elapsed(),
-        cached: false,
-      };
-    } catch (error) {
-      if (timeout.signal.aborted && !ask.signal?.aborted) {
-        this.#consecutiveTimeouts += 1;
-        this.#lastTimeoutAt = this.#now();
+      // A subrun that answers nothing because the timeout cut it is a timeout
+      // whether it threw or returned: a run cancelled by its signal ends
+      // quietly, and the breaker has to count it all the same.
+      if (timedOut()) {
+        result = timeoutResult();
+      } else {
+        const summary = summarizeRecallReply(reply);
+        this.#consecutiveTimeouts = 0;
         result = {
-          status: RECALL_STATUS.TIMEOUT,
-          summary: "",
+          status: summary.length > 0 ? RECALL_STATUS.OK : RECALL_STATUS.NONE,
+          summary,
           decision,
           elapsedMs: elapsed(),
           cached: false,
         };
+      }
+    } catch (error) {
+      if (timedOut()) {
+        result = timeoutResult();
       } else {
         this.#options.report?.(
           `Recall subrun failed: ${error instanceof Error ? error.message : String(error)}`,

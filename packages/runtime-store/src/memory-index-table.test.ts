@@ -15,7 +15,7 @@ import {
   resolveMemoryPath,
   searchMemoryIndex,
 } from "./memory-index-table.js";
-import { rememberNotebookEntry } from "./notebook-table.js";
+import { listNotebookEntries, rememberNotebookEntry } from "./notebook-table.js";
 import { NOW, openTestDatabase } from "./testing.js";
 
 const IDENTITY = { provider: "openai", model: "text-embedding-3-small" };
@@ -42,7 +42,7 @@ function embed(text: string): number[] {
 }
 
 function sync(database: ReturnType<typeof openTestDatabase>, root: string, now = NOW) {
-  const plan = planMemorySync(database, root, IDENTITY, now);
+  const plan = planMemorySync(database, root, IDENTITY, listNotebookEntries(database, root, now));
   const embeddings = plan.missingEmbeddings.map((missing) => ({
     hash: missing.hash,
     vector: embed(missing.text),
@@ -134,7 +134,7 @@ test("a file edit re-indexes only that file, a deletion removes its rows, and a 
 test("without an embedding identity the index is keyword-only and says so in its counts", () => {
   const database = openTestDatabase();
   const root = workspace();
-  const plan = planMemorySync(database, root, undefined, NOW);
+  const plan = planMemorySync(database, root, undefined, listNotebookEntries(database, root, NOW));
   assert.equal(plan.missingEmbeddings.length, 0);
   const report = applyMemorySync(database, plan, [], undefined, NOW);
   assert.equal(report.embeddedChunks, 0);
@@ -214,11 +214,21 @@ test("two agents are two databases over two workspaces: neither sees the other's
 test("a file indexed keyword-only is planned again once an embedding identity stands, until every chunk has a vector", () => {
   const database = openTestDatabase();
   const root = workspace();
-  const keywordOnly = planMemorySync(database, root, undefined, NOW);
+  const keywordOnly = planMemorySync(
+    database,
+    root,
+    undefined,
+    listNotebookEntries(database, root, NOW),
+  );
   applyMemorySync(database, keywordOnly, [], undefined, NOW);
   assert.equal(memoryIndexStatus(database).embeddedChunks, 0);
   // The provider failed on the first credentialed pass: the plan asked for vectors, none came.
-  const failed = planMemorySync(database, root, IDENTITY, NOW + 1);
+  const failed = planMemorySync(
+    database,
+    root,
+    IDENTITY,
+    listNotebookEntries(database, root, NOW + 1),
+  );
   assert.equal(
     failed.changed.length,
     2,
@@ -231,7 +241,12 @@ test("a file indexed keyword-only is planned again once an embedding identity st
   const backfilled = sync(database, root, NOW + 2);
   assert.equal(backfilled.plan.changed.length, 2);
   assert.equal(memoryIndexStatus(database).embeddedChunks, memoryIndexStatus(database).chunks);
-  const settled = planMemorySync(database, root, IDENTITY, NOW + 3);
+  const settled = planMemorySync(
+    database,
+    root,
+    IDENTITY,
+    listNotebookEntries(database, root, NOW + 3),
+  );
   assert.equal(settled.changed.length, 0);
   assert.equal(settled.unchanged, 2);
 });

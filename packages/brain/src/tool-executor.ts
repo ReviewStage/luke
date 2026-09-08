@@ -1,3 +1,4 @@
+import type { NotebookMemoryAccess } from "@sidecar/memory";
 import {
   type ChildCancellation,
   type ChildSpawnOutcome,
@@ -68,19 +69,8 @@ import type { BrainDelivery } from "./wake-events.js";
  * turn's: an act prepared inside a run the runtime has ended is refused.
  */
 
-/** How the memory tools reach the notebook's index: bounded and validated by the host that supplies it. */
-export interface BrainMemoryAccess {
-  search(ask: {
-    readonly query: string;
-    readonly maxResults?: number;
-    readonly signal: AbortSignal;
-  }): Promise<WireRecord>;
-  get(ask: {
-    readonly path: string;
-    readonly from?: number;
-    readonly lines?: number;
-  }): Promise<WireRecord>;
-}
+/** How the memory tools reach the notebook's index: the memory host's own access, bounded and validated by the host that supplies it. */
+export type BrainMemoryAccess = NotebookMemoryAccess;
 
 /** How the workspace tools reach the agent's own files: bounded to the workspace by the host that supplies it. */
 export interface BrainWorkspaceAccess {

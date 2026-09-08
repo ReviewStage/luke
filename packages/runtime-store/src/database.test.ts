@@ -305,6 +305,16 @@ test("history search reads only the conversations named, under each one's cutoff
   );
   assert.equal(searchHistory(database, [thread], "tuesday", 10, NOW + 3).length, 1);
   assert.equal(searchHistory(database, [], "tuesday", 10, NOW + 3).length, 0);
+  assert.equal(
+    searchHistory(database, [MAIN_SESSION_KEY, thread], "deploys, tuesday?", 10, NOW + 3).length,
+    1,
+    "a line is matched by its tokens, in any order and past punctuation, never as one phrase",
+  );
+  assert.equal(
+    searchHistory(database, [MAIN_SESSION_KEY, thread], "tuesday", 1, NOW + 3).length,
+    1,
+    "the limit bounds the whole answer across every conversation named",
+  );
   raiseHistoryCutoff(database, MAIN_SESSION_KEY, NOW);
   assert.equal(
     searchHistory(database, [MAIN_SESSION_KEY, thread], "tuesday", 10, NOW + 3).length,

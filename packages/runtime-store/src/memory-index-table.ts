@@ -7,18 +7,24 @@ import {
   cosineSimilarity,
   defaultRankingOptions,
   type EmbeddingModelIdentity,
+  type EmbeddingWrite,
   hashText,
   type IndexedFileWrite,
   type IndexedSourceRecord,
+  isNotebookRootFile,
   type KeywordHit,
   MEMORY_ORIGIN,
   MEMORY_SEARCH_DEFAULTS,
   MEMORY_SOURCE,
+  type MemoryApplyReport,
   type MemoryOrigin,
   type MemoryProvenance,
   type MemoryReadResult,
-  type MemorySearchResult,
+  type MemoryScanPlan,
+  type MemorySearchOutcome,
+  type MemorySearchQuery,
   mergeHybridResults,
+  NOTEBOOK_ROOT_FILES,
   parseEmbedding,
   parseNotebook,
   selectHybridSearchResults,
@@ -28,7 +34,15 @@ import {
 import { DAILY_NOTES_DIRECTORY, WORKSPACE_FILE } from "@sidecar/runtime";
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import type { RuntimeDatabase } from "./database.js";
-import { listNotebookEntries } from "./notebook-table.js";
+import type { NotebookEntry } from "./notebook-table.js";
+
+export type {
+  EmbeddingWrite,
+  MemoryApplyReport,
+  MemoryScanPlan,
+  MemorySearchOutcome,
+  MemorySearchQuery,
+} from "@sidecar/memory";
 
 /**
  * The disposable search index over the notebook's Markdown files, in the
@@ -42,7 +56,7 @@ import { listNotebookEntries } from "./notebook-table.js";
  * indexes everything again from the files alone.
  */
 
-export const MEMORY_ROOT_FILES: readonly string[] = [WORKSPACE_FILE.MEMORY, WORKSPACE_FILE.USER];
+export const MEMORY_ROOT_FILES: readonly string[] = NOTEBOOK_ROOT_FILES;
 
 /** A chunk's id names its place and content, so an unchanged chunk keeps its id across scans. */
 function chunkId(filePath: string, startLine: number, endLine: number, hash: string): string {
@@ -56,7 +70,7 @@ function normalizedRelative(root: string, absolute: string): string {
 /** Whether a relative path names a file the index may hold or a read may open: the two root files, or a Markdown note under memory/. */
 export function isMemoryPath(relative: string): boolean {
   if (relative.includes("..") || path.isAbsolute(relative) || relative.includes("\\")) return false;
-  if (MEMORY_ROOT_FILES.includes(relative)) return true;
+  if (isNotebookRootFile(relative)) return true;
   if (!relative.startsWith(`${DAILY_NOTES_DIRECTORY}/`)) return false;
   return relative.endsWith(".md") && !relative.includes("/./") && !relative.includes("//");
 }
@@ -89,7 +103,7 @@ function readIfFile(
   }
 }
 
-function walkNotes(root: string, directory: string, found: string[]): void {
+function walkNotes(directory: string, found: string[]): void {
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(directory, { withFileTypes: true });
@@ -99,7 +113,7 @@ function walkNotes(root: string, directory: string, found: string[]): void {
   for (const entry of entries) {
     const absolute = path.join(directory, entry.name);
     if (entry.isDirectory()) {
-      walkNotes(root, absolute, found);
+      walkNotes(absolute, found);
     } else if (entry.isFile() && entry.name.endsWith(".md")) {
       found.push(absolute);
     }
@@ -109,7 +123,7 @@ function walkNotes(root: string, directory: string, found: string[]): void {
 /** Every file the notebook root holds that the index may carry, read whole. */
 export function scanMemoryFiles(root: string): readonly ScannedFile[] {
   const absolutes = MEMORY_ROOT_FILES.map((name) => path.join(root, name));
-  walkNotes(root, path.join(root, DAILY_NOTES_DIRECTORY), absolutes);
+  walkNotes(path.join(root, DAILY_NOTES_DIRECTORY), absolutes);
   const files: ScannedFile[] = [];
   for (const absolute of absolutes) {
     const relative = normalizedRelative(root, absolute);
@@ -141,30 +155,23 @@ export function listIndexedSources(database: RuntimeDatabase): readonly IndexedS
   }));
 }
 
-export interface MemoryScanPlan {
-  readonly changed: readonly IndexedFileWrite[];
-  readonly removed: readonly string[];
-  /** Chunk hashes among the changed files with no vector cached under the identity given. */
-  readonly missingEmbeddings: readonly { hash: string; text: string }[];
-  readonly unchanged: number;
-}
-
 /**
  * Compares the files on disk with the index and plans the apply: files whose
  * hash moved (or were never indexed) are chunked, files the index holds but
  * the disk no longer does are removed, and the chunk texts with no cached
  * vector are listed for the main thread to embed. USER.md chunks carry the
- * ids of the notebook entries whose lines they cover.
+ * ids of the notebook entries whose lines they cover, read from the entries
+ * handed in: the plan itself writes nothing, so the caller reconciles the
+ * notebook first.
  */
 export function planMemorySync(
   database: RuntimeDatabase,
   root: string,
   identity: EmbeddingModelIdentity | undefined,
-  now: number,
+  entries: readonly Pick<NotebookEntry, "id" | "words">[],
 ): MemoryScanPlan {
   const files = scanMemoryFiles(root);
   const indexed = new Map(listIndexedSources(database).map((record) => [record.path, record]));
-  const entries = listNotebookEntries(database, root, now);
   const changed: IndexedFileWrite[] = [];
   let unchanged = 0;
   for (const file of files) {
@@ -191,14 +198,13 @@ export function planMemorySync(
             }),
           )
         : new Map<number, string>();
-    const origin: MemoryOrigin = MEMORY_ORIGIN.AGENT;
     changed.push({
       path: file.path,
       source: MEMORY_SOURCE.MEMORY,
       hash: file.hash,
       mtimeMs: file.mtimeMs,
       size: file.size,
-      origin,
+      origin: MEMORY_ORIGIN.AGENT,
       chunks: chunkMarkdown(file.content).map((chunk) => {
         const ids = [...entryLines.entries()]
           .filter(([line]) => line >= chunk.startLine && line <= chunk.endLine)
@@ -269,11 +275,6 @@ export function cachedEmbeddings(
   return found;
 }
 
-export interface EmbeddingWrite {
-  readonly hash: string;
-  readonly vector: readonly number[];
-}
-
 function putCachedEmbeddings(
   database: RuntimeDatabase,
   identity: EmbeddingModelIdentity,
@@ -304,13 +305,6 @@ function putCachedEmbeddings(
        )`,
     )
     .run(MEMORY_SEARCH_DEFAULTS.EMBEDDING_CACHE_MAXIMUM_ENTRIES);
-}
-
-export interface MemoryApplyReport {
-  readonly indexedFiles: number;
-  readonly removedFiles: number;
-  readonly indexedChunks: number;
-  readonly embeddedChunks: number;
 }
 
 export function removeIndexedPath(database: RuntimeDatabase, filePath: string): void {
@@ -519,21 +513,6 @@ export function vectorSearch(
     });
   }
   return scored.sort((a, b) => b.vectorScore - a.vectorScore).slice(0, limit);
-}
-
-export interface MemorySearchQuery {
-  readonly query: string;
-  readonly queryVector?: readonly number[];
-  readonly identity?: EmbeddingModelIdentity;
-  readonly maxResults?: number;
-  readonly minScore?: number;
-  readonly now: number;
-}
-
-export interface MemorySearchOutcome {
-  readonly results: readonly MemorySearchResult[];
-  readonly keywordHits: number;
-  readonly vectorHits: number;
 }
 
 /** One hybrid search: candidates from both rankings under the multiplier, merged, decayed, diversified, and windowed. */

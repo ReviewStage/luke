@@ -33,6 +33,35 @@ export function isWireNumber(value: UnparsedWireValue): value is number {
   return runtimeTag(value) === "[object Number]";
 }
 
+/** A non-empty array of wire numbers, or nothing; `width` pins the length when the caller knows it. */
+export function numberVector(value: UnparsedWireValue, width?: number): number[] | undefined {
+  if (!Array.isArray(value) || value.length === 0) return undefined;
+  if (width !== undefined && value.length !== width) return undefined;
+  const vector: number[] = [];
+  for (const component of value) {
+    if (!isWireNumber(component)) return undefined;
+    vector.push(component);
+  }
+  return vector;
+}
+
+/** Vectors of one width: the width given, or the first vector's when none is. */
+export function numberVectors(
+  value: UnparsedWireValue | readonly UnparsedWireValue[],
+  width?: number,
+): number[][] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const vectors: number[][] = [];
+  let expected = width;
+  for (const entry of value) {
+    const vector = numberVector(entry, expected);
+    if (!vector) return undefined;
+    expected = vector.length;
+    vectors.push(vector);
+  }
+  return vectors;
+}
+
 /** Narrows a wire value to boolean without trusting a runtime typeof check. */
 export function isWireBoolean(value: UnparsedWireValue): value is boolean {
   return runtimeTag(value) === "[object Boolean]";

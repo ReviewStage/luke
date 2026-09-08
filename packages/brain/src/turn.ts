@@ -132,13 +132,10 @@ export interface RunControl {
   unknownActs: number;
 }
 
-export interface TurnPlan {
-  trigger: BrainTurnTrigger;
+interface TurnPlanBase {
   events: readonly BrainWakeEvent[];
   /** The words the turn opens with, each ingested as the developer's or the host's, in order. */
   open: (events: readonly BrainWakeEvent[], now: number) => readonly string[];
-  /** The developer's own words when the turn is their ask, for the recall that precedes the inference. */
-  question?: string;
   /**
    * What the turn owes about the words in it: its opening words, and the
    * words steered into its run. Answered by the checkpoints that land and by
@@ -154,6 +151,18 @@ export interface TurnPlan {
    */
   generation: Generation;
 }
+
+/** A developer's ask carries their own words, for the recall that precedes the inference; no other turn has any. */
+export interface AskTurnPlan extends TurnPlanBase {
+  trigger: typeof BRAIN_TURN_TRIGGER.ASK;
+  question: string;
+}
+
+export interface OtherTurnPlan extends TurnPlanBase {
+  trigger: Exclude<BrainTurnTrigger, typeof BRAIN_TURN_TRIGGER.ASK>;
+}
+
+export type TurnPlan = AskTurnPlan | OtherTurnPlan;
 
 /** The generation a turn opened in, the context it runs over, and the one signal every wait of the turn settles on. */
 export interface TurnContext {
