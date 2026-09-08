@@ -534,3 +534,45 @@ test("the flush marker is kept per conversation under the generation the brain n
   assert.equal(await marker.read("gen-1"), 2);
   h.close();
 });
+
+test("a completed dated note is staged beside a full History budget rather than starved past the lookback, and the budget is spent only once per note line", async () => {
+  const h = await harness();
+  const lines: ConversationEntry[] = [];
+  for (let index = 0; index < 250; index += 1) {
+    lines.push({
+      kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
+      words: `Distinct decision number ${index} about the deployment schedule for service ${index}`,
+      eventId: `line-${index}`,
+      recordedAt: NOW - 10_000 + index,
+    });
+  }
+  h.history.set(MAIN_SESSION_KEY, lines);
+  const note = Array.from(
+    { length: 20 },
+    (_, index) => `- Yesterday's note line ${index} about the release train for team ${index}`,
+  );
+  fs.writeFileSync(
+    path.join(h.workspace, "memory", `${YESTERDAY}.md`),
+    `# ${YESTERDAY}\n\n${note.join("\n")}\n`,
+  );
+  const notePath = `memory/${YESTERDAY}.md`;
+  const fromNote = (candidates: readonly { path: string }[]) =>
+    candidates.filter((candidate) => candidate.path === notePath).length;
+  const fromMain = (candidates: readonly { sourceSessionKey?: string }[]) =>
+    candidates.filter((candidate) => candidate.sourceSessionKey === MAIN_SESSION_KEY).length;
+  assert.ok(await h.maintenance.runConsolidation());
+  let candidates = await h.store.listMemoryCandidates();
+  assert.equal(fromNote(candidates), 20, "the note takes its share ahead of the conversations");
+  assert.equal(fromMain(candidates), 80, "the conversations take the rest of the limit");
+  assert.ok(await h.maintenance.runConsolidation());
+  candidates = await h.store.listMemoryCandidates();
+  assert.equal(
+    fromNote(candidates),
+    20,
+    "a note line already held costs no budget and is learned once",
+  );
+  assert.equal(fromMain(candidates), 180, "the whole limit goes to the lines the first sweep left");
+  assert.ok(await h.maintenance.runConsolidation());
+  assert.equal(fromMain(await h.store.listMemoryCandidates()), 250);
+  h.close();
+});
