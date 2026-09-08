@@ -31,6 +31,7 @@ import {
   identityFromRecord,
   parsedRecord,
   rejection,
+  retireContext,
   sameIdentity,
 } from "./generation.js";
 import {
@@ -660,7 +661,8 @@ export class BrainAgent {
       }
     }
     await this.#queue;
-    await this.#generation?.context?.dispose();
+    const context = this.#generation?.context;
+    if (context) retireContext(context);
   }
 
   /**
@@ -852,6 +854,7 @@ export class BrainAgent {
       run.abort.abort();
     }
     this.#runs.clear();
+    if (previous?.context) retireContext(previous.context);
     // Wakes coalesced against the old memory — including a quiet retry's —
     // are that generation's work, and go with it.
     this.#cancelFlush();
@@ -1311,7 +1314,8 @@ export class BrainAgent {
    * under the generation's own signal and installs nothing once the
    * generation has been replaced: the successor's context is never touched.
    * A reopen the runtime refuses — which its own stamp should never be —
-   * leaves the old engine rolled back in place rather than none at all.
+   * re-admits nothing: the generation stands without a context and refuses
+   * turns, its stored checkpoint untouched.
    */
   async #restoreContext(
     generation: Generation,
@@ -1327,14 +1331,24 @@ export class BrainAgent {
       generation.abort.signal,
     );
     if (reopened.aborted || generation !== this.#generation || generation.context !== context) {
+      if (!reopened.aborted) retireContext(reopened.value.context);
       return;
     }
     if (!reopened.value.bootstrap.loaded) {
-      context.rollback(mark);
+      // The engine the turn used is not re-admitted: it may hold what a late
+      // hook applied. The generation stands with no context, every turn over
+      // it refused as incompatible, and the stored checkpoint — the last
+      // committed boundary — kept whole for a Clear or a runtime that reads it.
+      retireContext(reopened.value.context);
+      retireContext(context);
+      generation.context = undefined;
+      generation.incompatible =
+        reopened.value.bootstrap.reason ?? "the runtime could not reopen its own checkpoint";
+      this.#reportIncompatible(generation);
       return;
     }
     generation.context = reopened.value.context;
-    void Promise.resolve(context.dispose()).catch(() => undefined);
+    retireContext(context);
   }
 
   /**

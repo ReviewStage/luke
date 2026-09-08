@@ -233,6 +233,12 @@ export const HOSTED_API_ERROR = {
   UNAVAILABLE: "unavailable",
   /** The upstream refused or failed; the status travels, the bodies never do. */
   UPSTREAM_ERROR: "upstream-error",
+  /**
+   * The upstream itself is rate limiting; nothing was answered. Distinct from
+   * a spent allowance: the caller cools down for the bounded wait the
+   * `Retry-After` header names rather than for the day.
+   */
+  UPSTREAM_THROTTLED: "upstream-throttled",
   /** The request body weighs more than the endpoint's fixed byte bound; nothing of it was read. */
   REQUEST_TOO_LARGE: "request-too-large",
   /** The prepared prompt is longer than the contract's own prompt envelope; nothing was sent upstream. */

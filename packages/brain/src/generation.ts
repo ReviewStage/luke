@@ -16,6 +16,7 @@ import {
 import { TranscriptCursors } from "./cursors.js";
 import { BrainJournal } from "./journal.js";
 import type { BrainRequestRecord } from "./requests.js";
+import { settledUnlessAborted } from "./settled.js";
 import type { BrainPersistedState } from "./state-store.js";
 
 /**
@@ -81,14 +82,31 @@ export function generationFrom(
     generation.incompatible = `checkpoint stamp ${state.checkpointFormat} is not one this build reads`;
     return generation;
   }
-  generation.ready = runtime
-    .openContext(checkpoint, lostResultJson, { signal: abort.signal })
-    .then(({ context, bootstrap }) => {
+  // The open is raced against the generation's own signal: a runtime whose
+  // bootstrap ignores the signal cannot hold `ready` open past a stop or a
+  // replacement, and a context that finishes opening after the fence is
+  // retired rather than installed, so a successor never inherits it.
+  generation.ready = settledUnlessAborted(
+    runtime.openContext(checkpoint, lostResultJson, { signal: abort.signal }),
+    abort.signal,
+  )
+    .then((opened) => {
+      if (opened.aborted) {
+        generation.incompatible = "the generation was replaced while its context was opening";
+        return;
+      }
+      const { context, bootstrap } = opened.value;
+      if (abort.signal.aborted) {
+        retireContext(context);
+        generation.incompatible = "the generation was replaced while its context was opening";
+        return;
+      }
       if (bootstrap.loaded) {
         generation.context = context;
         generation.repaired = bootstrap.repaired;
         return;
       }
+      retireContext(context);
       generation.incompatible =
         bootstrap.reason ??
         `checkpoint ${checkpoint ? checkpointFormatTag(checkpoint.format) : "(none)"} could not be loaded`;
@@ -97,6 +115,17 @@ export function generationFrom(
       generation.incompatible = `the runtime could not open the context: ${error.name}`;
     });
   return generation;
+}
+
+/**
+ * Lets go of a context nothing will read again. Its dispose is not awaited:
+ * an engine whose dispose hangs must not hold a stop, a replacement, or a
+ * successor's first turn, and a dispose that throws has nothing to tell.
+ */
+export function retireContext(context: ContextEngine): void {
+  void Promise.resolve()
+    .then(() => context.dispose())
+    .catch(() => undefined);
 }
 
 export function parsedRecord(json: string): WireRecord {

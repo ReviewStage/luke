@@ -12,11 +12,11 @@ import {
 } from "@sidecar/runtime-contracts";
 import { positiveInteger, text, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import {
-  BRAIN_RATE_LIMIT_COOLDOWN_MS,
   type FetchLike,
   failed,
   RATE_LIMIT_STATUS,
   RETRY_AFTER_HEADER,
+  rateLimitWaitMs,
   requestFault,
   requestSignal,
   throttled,
@@ -233,11 +233,7 @@ export class OpenAiModelAdapter implements ModelAdapter {
   }
 
   #quiet(response: Response) {
-    const retryAfterSeconds = Number(response.headers.get(RETRY_AFTER_HEADER));
-    const waitMs =
-      Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
-        ? retryAfterSeconds * 1000
-        : BRAIN_RATE_LIMIT_COOLDOWN_MS;
+    const waitMs = rateLimitWaitMs(response.headers.get(RETRY_AFTER_HEADER));
     this.#quietUntil = this.#now() + waitMs;
     this.#report(`OpenAI brain turns are rate limited; pausing for ${Math.round(waitMs / 1000)}s`);
     return throttled(this.#quietUntil);

@@ -1,5 +1,6 @@
 import {
   brainOutputReplayable,
+  HOSTED_API_ERROR,
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_OPERATION,
   HOSTED_BRAIN_REQUEST_REFUSAL,
@@ -36,10 +37,11 @@ import {
   wireRecord,
 } from "@sidecar/wire";
 import {
-  BRAIN_RATE_LIMIT_COOLDOWN_MS,
   type FetchLike,
   failed,
   RATE_LIMIT_STATUS,
+  RETRY_AFTER_HEADER,
+  rateLimitWaitMs,
   requestSignal,
   throttled,
   UNAUTHORIZED_STATUS,
@@ -363,18 +365,30 @@ export class HostedModelAdapter implements ModelAdapter {
     }
   }
 
+  /**
+   * Two quiets wear the same status. A spent allowance names the day's reset
+   * in its quota and stands the adapter down until then; the provider rate
+   * limiting behind the service names a bounded wait in `Retry-After`, or
+   * earns the same fixed cooldown the keyed adapter takes, so a hosted
+   * developer and a keyed one wait the same way for the same limit.
+   */
   async #quiet(response: Response) {
     const record = wireRecord(unparsedWire(await payloadOf(response)));
-    const quota = record ? hostedQuotaFromWire(unparsedWire(record.quota)) : undefined;
+    const quota =
+      record?.error === HOSTED_API_ERROR.QUOTA_EXHAUSTED
+        ? hostedQuotaFromWire(unparsedWire(record.quota))
+        : undefined;
     const resetsAt = quota?.resetsAt;
-    this.#quietUntil =
-      resetsAt !== undefined && resetsAt > this.#now()
-        ? resetsAt
-        : this.#now() + BRAIN_RATE_LIMIT_COOLDOWN_MS;
-    const waitMs = Math.max(0, this.#quietUntil - this.#now());
-    this.#report(
-      `Hosted brain turns are out of today's allowance; pausing for ${Math.round(waitMs / 1000)}s`,
-    );
+    if (resetsAt !== undefined && resetsAt > this.#now()) {
+      this.#quietUntil = resetsAt;
+      this.#report(
+        `Hosted brain turns are out of today's allowance; pausing for ${Math.round((resetsAt - this.#now()) / 1000)}s`,
+      );
+      return throttled(this.#quietUntil);
+    }
+    const waitMs = rateLimitWaitMs(response.headers.get(RETRY_AFTER_HEADER));
+    this.#quietUntil = this.#now() + waitMs;
+    this.#report(`Hosted brain turns are rate limited; pausing for ${Math.round(waitMs / 1000)}s`);
     return throttled(this.#quietUntil);
   }
 }

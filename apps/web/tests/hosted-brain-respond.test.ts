@@ -9,6 +9,7 @@ import {
   BRAIN_SUBMISSION_OUTCOME,
   BRAIN_TOOL,
   BRAIN_TURN_AUTHORITY,
+  BRAIN_WAKE_KIND,
   type BrainActPerformer,
   BrainAgent,
   BrainStateStore,
@@ -391,6 +392,7 @@ interface StorageFile {
 }
 
 interface Desktop {
+  model: HostedModelAdapter;
   agent: BrainAgent;
   performed: Parameters<BrainActPerformer["perform"]>[0][];
   upstreamCalls: UpstreamCall[];
@@ -495,6 +497,7 @@ function desktopOnHostedService(
   });
   return {
     agent,
+    model,
     performed,
     upstreamCalls,
     spent: () => spent,
@@ -666,5 +669,22 @@ test("an answer the hosted path cannot replay is refused before any act or check
   assert.equal(next?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.equal(next?.text, "Fine.");
   assert.equal(desktop.spent(), 5);
+  await desktop.agent.stop();
+});
+
+test("a provider rate limit behind the real v2 handler stands the desktop's hosted adapter down for the bounded wait, as a keyed desktop would, and the allowance was spent once", async () => {
+  const desktop = desktopOnHostedService([
+    () => new Response("", { status: 429, headers: { "retry-after": "9" } }),
+  ]);
+  const record = await desktop.ask("anything?");
+  assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.equal(desktop.spent(), 1);
+  assert.equal(desktop.model.quietUntil() !== undefined, true);
+  assert.ok((desktop.model.quietUntil() ?? 0) <= Date.now() + 9_000 + 1_000);
+  assert.ok((desktop.model.quietUntil() ?? 0) > Date.now());
+  // The cooldown holds the next wake rather than spending another inference on it.
+  desktop.agent.wake([{ kind: BRAIN_WAKE_KIND.HOOK, identity: abc, atMs: NOW }]);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(desktop.upstreamCalls.length, 1);
   await desktop.agent.stop();
 });

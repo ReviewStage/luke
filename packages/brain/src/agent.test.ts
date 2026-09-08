@@ -280,6 +280,7 @@ class FakeStorage implements BrainStateStorage {
 
 interface Harness {
   agent: BrainAgent;
+  runtime: ToolLoopAgentRuntime;
   client: FakeClient;
   clock: FakeClock;
   storage: FakeStorage;
@@ -303,6 +304,7 @@ function harness(overrides: HarnessOverrides = {}, storage = new FakeStorage()):
   const client = new FakeClient();
   const { client: clientOverride, ...agentOverrides } = overrides;
   const model = adapterOf(clientOverride ?? client);
+  const runtime = runtimeOver(model);
   const clock = new FakeClock();
   const deliveries: BrainDelivery[] = [];
   const persisted: BrainPersistedState[] = [];
@@ -325,7 +327,7 @@ function harness(overrides: HarnessOverrides = {}, storage = new FakeStorage()):
   const sinceReads: Harness["sinceReads"] = [];
   const wholeReads: SessionIdentity[] = [];
   const agent = new BrainAgent({
-    runtime: runtimeOver(model),
+    runtime,
     model,
     acts: {
       perform: async (functionCall, execution) => {
@@ -366,6 +368,7 @@ function harness(overrides: HarnessOverrides = {}, storage = new FakeStorage()):
   });
   return {
     agent,
+    runtime,
     client,
     clock,
     storage,
@@ -2987,4 +2990,91 @@ test("the final answer's text is the reply: a preface before a tool call does no
   assert.equal(short?.text, "Half of");
   assert.equal(h.traces[1]?.outputText, "Half of");
   assert.equal(h.traces[1]?.incomplete, "incomplete: max_output_tokens");
+});
+
+/** A runtime whose context never finishes opening, and whose dispose never settles. */
+function hangingRuntime(model: ModelAdapter) {
+  const inner = runtimeOver(model);
+  let opens = 0;
+  const runtime: typeof inner = Object.create(inner);
+  Object.defineProperty(runtime, "openContext", {
+    value: (...args: Parameters<typeof inner.openContext>) => {
+      opens += 1;
+      return opens === 1 ? new Promise<never>(() => undefined) : inner.openContext(...args);
+    },
+  });
+  return { runtime, opens: () => opens };
+}
+
+test("a stop or a replacement during a held initial bootstrap settles at once, and a late-opened context is retired rather than installed", async () => {
+  const model = adapterOf(new FakeClient());
+  const { runtime } = hangingRuntime(model);
+  const storage = new FakeStorage();
+  const h = harness({}, storage);
+  const agent = new BrainAgent({
+    runtime,
+    model,
+    acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
+    roster: () => ({ text: "", identities: [] }),
+    standingContext: () => "",
+    readTranscriptSince: async () => ({ status: ACT_RESULT_STATUS.REJECTED, reason: "no" }),
+    readTranscript: async () => ({ status: ACT_RESULT_STATUS.REJECTED, reason: "no" }),
+    deliver: () => undefined,
+    store: h.store,
+    createRunId: () => `run-${runIds++}`,
+    report: () => {},
+    now: () => h.clock.now,
+    schedule: h.clock.schedule,
+    cancel: h.clock.cancel,
+  });
+  const ready = agent.ready();
+  const pending = agent.submitAsk({
+    submissionId: "held-boot",
+    question: "hello",
+    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+  });
+  await settle();
+  // Nothing has opened: the bootstrap is held. The stop does not wait for it.
+  let stopped = false;
+  const stopping = agent.stop().then(() => {
+    stopped = true;
+  });
+  await settle();
+  assert.equal(stopped, true, "stop settled while the bootstrap was still held");
+  await stopping;
+  await ready;
+  assert.equal((await pending).outcome, BRAIN_SUBMISSION_OUTCOME.REJECTED);
+  assert.match((await agent.incompatibility()) ?? "", /replaced while its context was opening/u);
+});
+
+test("a reopen the runtime refuses re-admits nothing: the generation refuses turns as incompatible and the stored checkpoint stands as committed", async () => {
+  const h = harness();
+  h.client.answers.push(answered([message("first")]), failedAnswer("boom"));
+  assert.equal((await ask(h, "one"))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  const committed = h.storage.stored();
+  assert.ok(committed && committed.items.length > 0);
+  // The runtime's own reopen refuses from here on.
+  const original = Object.getPrototypeOf(h.runtime).openContext;
+  Object.defineProperty(h.runtime, "openContext", {
+    configurable: true,
+    value: async (...args: Parameters<typeof original>) => {
+      const opened = await original.apply(h.runtime, args);
+      return {
+        context: opened.context,
+        bootstrap: { loaded: false, reason: "refused reopen", repaired: 0 },
+      };
+    },
+  });
+  const failed = await ask(h, "two");
+  assert.equal(failed?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.match((await h.agent.incompatibility()) ?? "", /refused reopen/u);
+  const refused = await submit(h, "three");
+  assert.deepEqual(refused, {
+    outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+    reason: BRAIN_SUBMISSION_REJECTION.INCOMPATIBLE,
+  });
+  assert.deepEqual(h.storage.stored()?.items, committed.items);
+  assert.equal(h.storage.stored()?.checkpointFormat, committed.checkpointFormat);
+  // A hanging dispose of the retired engine does not hold the stop.
+  await h.agent.stop();
 });

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   BRAIN_OPENAI_DEFAULTS,
+  BRAIN_RATE_LIMIT_COOLDOWN_MS,
+  BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS,
   BRAIN_TOOL,
   BRAIN_TURN_AUTHORITY,
   brainToolDefinitions,
@@ -374,4 +376,34 @@ test("compact posts the window and the prompt, and answers the whole compacted w
     }),
   );
   assert.equal(refused.status, 502);
+});
+
+test("a provider rate limit behind the service answers 429 as the provider's throttle with a bounded Retry-After, apart from a spent allowance", async () => {
+  const { fetch } = upstream([
+    () => new Response("", { status: 429, headers: { "retry-after": "12" } }),
+    () => new Response("", { status: 429, headers: { "retry-after": "86400" } }),
+    () => new Response("", { status: 429 }),
+  ]);
+  const throttled = await handleBrainRespondV2(
+    options({ request: request(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()), fetch }),
+  );
+  assert.equal(throttled.status, 429);
+  assert.equal(throttled.headers.get("retry-after"), "12");
+  // SAFETY: response.json returns a runtime value; the record check below validates it as wire.
+  const body = (await throttled.json()) as UnparsedWireValue;
+  assert.ok(isRecord(body));
+  assert.equal(body.error, HOSTED_API_ERROR.UPSTREAM_THROTTLED);
+  assert.equal(body.upstreamStatus, 429);
+  assert.ok(!("quota" in body));
+  const bounded = await handleBrainRespondV2(
+    options({ request: request(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()), fetch }),
+  );
+  assert.equal(
+    bounded.headers.get("retry-after"),
+    String(BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS / 1000),
+  );
+  const bare = await handleBrainRespondV2(
+    options({ request: request(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()), fetch }),
+  );
+  assert.equal(bare.headers.get("retry-after"), String(BRAIN_RATE_LIMIT_COOLDOWN_MS / 1000));
 });

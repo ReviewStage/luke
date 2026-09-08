@@ -46,7 +46,9 @@ export { pairedDanglingCalls } from "./memory.js";
 export {
   type BareResponsesModel,
   BRAIN_RATE_LIMIT_COOLDOWN_MS,
+  BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS,
   bareModelAdapter,
+  rateLimitWaitMs,
 } from "./model-adapter-shared.js";
 export {
   BRAIN_OPENAI_DEFAULTS,

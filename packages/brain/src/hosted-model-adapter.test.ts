@@ -14,6 +14,10 @@ import {
 } from "@sidecar/runtime-contracts";
 import { isRecord, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import { HostedModelAdapter } from "./hosted-model-adapter.js";
+import {
+  BRAIN_RATE_LIMIT_COOLDOWN_MS,
+  BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS,
+} from "./model-adapter-shared.js";
 import { userMessageItem } from "./responses-api.js";
 import { brainToolSchemas } from "./tools.js";
 
@@ -254,4 +258,64 @@ test("count and compact travel on their own endpoints and adopt exactly what the
   const compactCall = calls.find((call) => call.url.endsWith(HOSTED_SERVICE_PATH.BRAIN_COMPACT));
   assert.ok(compactCall && isRecord(compactCall.body));
   assert.deepEqual(Object.keys(compactCall.body).sort(), ["contract", "input", "prompt"]);
+});
+
+test("a 429 that names the day's quota waits for the reset; a 429 that names the provider's throttle waits the bounded Retry-After or the fixed cooldown", async () => {
+  const resetsAt = NOW + 3_600_000;
+  const quotaService = service({
+    [HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES]: [() => Response.json(capabilities())],
+    [HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2]: [
+      () =>
+        Response.json(
+          { error: "quota-exhausted", quota: { used: 5000, limit: 5000, remaining: 0, resetsAt } },
+          { status: 429, headers: { "retry-after": "5" } },
+        ),
+    ],
+  });
+  const quota = adapter(quotaService.fetch);
+  assert.deepEqual(await quota.respond(INPUT, OPTIONS), {
+    outcome: MODEL_RESPONSE_OUTCOME.THROTTLED,
+    until: resetsAt,
+  });
+
+  const throttledService = service({
+    [HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES]: [() => Response.json(capabilities())],
+    [HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2]: [
+      () =>
+        Response.json(
+          { error: "upstream-throttled", upstreamStatus: 429 },
+          { status: 429, headers: { "retry-after": "7" } },
+        ),
+    ],
+  });
+  const provider = adapter(throttledService.fetch);
+  assert.deepEqual(await provider.respond(INPUT, OPTIONS), {
+    outcome: MODEL_RESPONSE_OUTCOME.THROTTLED,
+    until: NOW + 7_000,
+  });
+
+  const unbounded = service({
+    [HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES]: [
+      () => Response.json(capabilities()),
+      () => Response.json(capabilities()),
+    ],
+    [HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2]: [
+      () =>
+        Response.json(
+          { error: "upstream-throttled", upstreamStatus: 429 },
+          { status: 429, headers: { "retry-after": "86400" } },
+        ),
+      () => Response.json({ error: "upstream-throttled", upstreamStatus: 429 }, { status: 429 }),
+    ],
+  });
+  const bounded = adapter(unbounded.fetch);
+  assert.deepEqual(await bounded.respond(INPUT, OPTIONS), {
+    outcome: MODEL_RESPONSE_OUTCOME.THROTTLED,
+    until: NOW + BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS,
+  });
+  const fresh = adapter(unbounded.fetch);
+  assert.deepEqual(await fresh.respond(INPUT, OPTIONS), {
+    outcome: MODEL_RESPONSE_OUTCOME.THROTTLED,
+    until: NOW + BRAIN_RATE_LIMIT_COOLDOWN_MS,
+  });
 });

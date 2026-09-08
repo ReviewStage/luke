@@ -29,6 +29,20 @@ export const RETRY_AFTER_HEADER = "retry-after";
  */
 export const BRAIN_RATE_LIMIT_COOLDOWN_MS = 60_000;
 
+/**
+ * The longest a `Retry-After` may stand the adapter down: a provider's header
+ * is honored, but a header naming an hour is not a reason to sit an hour, and
+ * one naming nothing readable earns the fixed cooldown instead.
+ */
+export const BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS = 10 * 60 * 1000;
+
+/** The wait a rate limit earns from its header, bounded, or the fixed cooldown when the header says nothing usable. */
+export function rateLimitWaitMs(retryAfter: string | null): number {
+  const seconds = Number(retryAfter);
+  if (!Number.isFinite(seconds) || seconds <= 0) return BRAIN_RATE_LIMIT_COOLDOWN_MS;
+  return Math.min(Math.round(seconds * 1000), BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS);
+}
+
 export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
 export function withoutTrailingSlash(value: string): string {

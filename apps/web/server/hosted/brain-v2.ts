@@ -22,6 +22,7 @@ import {
   maximumHostedBrainRequestBytes,
   REASONING_EFFORT,
   type ResponsesFunctionTool,
+  rateLimitWaitMs,
   responsesCompactedWindow,
   responsesInputTokens,
   text as trimmedText,
@@ -53,6 +54,8 @@ import type { HostedSpend } from "./quota.js";
  * tool, keeps no conversation, and stores and logs none of the request, the
  * reply, or the encrypted items that travel in them.
  */
+
+const RETRY_AFTER_HEADER = "retry-after";
 
 export interface BrainV2Options {
   request: Request;
@@ -183,6 +186,19 @@ async function upstream(
     timeoutMs: options.timeoutMs ?? HOSTED_BRAIN_DEFAULTS.UPSTREAM_TIMEOUT_MS,
     signal: options.request.signal,
   });
+  if (response?.status === HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS) {
+    // The provider itself is rate limiting: the desktop cools down for the
+    // bounded wait the header names, as a keyed desktop would, and never
+    // mistakes it for a spent allowance. The allowance was still spent.
+    const waitMs = rateLimitWaitMs(response.headers.get(RETRY_AFTER_HEADER));
+    const throttledResponse = errorResponse(
+      HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS,
+      HOSTED_API_ERROR.UPSTREAM_THROTTLED,
+      { upstreamStatus: response.status },
+    );
+    throttledResponse.headers.set(RETRY_AFTER_HEADER, String(Math.ceil(waitMs / 1000)));
+    return throttledResponse;
+  }
   if (!response?.ok) {
     const extra: HostedErrorFields = {};
     if (response) extra.upstreamStatus = response.status;
