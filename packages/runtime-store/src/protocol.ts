@@ -1,5 +1,6 @@
 import type { RememberedFact } from "@sidecar/acts";
 import type { ConversationEntry } from "@sidecar/realtime";
+import type { ScheduledJob } from "@sidecar/runtime";
 import type {
   AgentId,
   ArchiveReason,
@@ -41,6 +42,9 @@ export const RUNTIME_STORE_METHOD = {
   ARCHIVES_LIST: "archives.list",
   ARCHIVE_RESTORE: "archives.restore",
   MAINTENANCE_RUN: "maintenance.run",
+  JOBS_LIST: "jobs.list",
+  JOB_PUT: "jobs.put",
+  JOB_DELETE: "jobs.delete",
   CLOSE: "close",
 } as const;
 
@@ -121,6 +125,12 @@ export interface RuntimeStoreMethods {
     params: { now: number; preserve: readonly SessionKey[] };
     result: MaintenanceReport;
   };
+  [RUNTIME_STORE_METHOD.JOBS_LIST]: {
+    params: Record<string, never>;
+    result: readonly ScheduledJob[];
+  };
+  [RUNTIME_STORE_METHOD.JOB_PUT]: { params: { job: ScheduledJob }; result: boolean };
+  [RUNTIME_STORE_METHOD.JOB_DELETE]: { params: { id: string }; result: boolean };
   [RUNTIME_STORE_METHOD.CLOSE]: { params: Record<string, never>; result: boolean };
 }
 

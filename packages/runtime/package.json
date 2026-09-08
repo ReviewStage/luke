@@ -12,7 +12,9 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@sidecar/runtime-contracts": "workspace:*"
+    "@sidecar/runtime-contracts": "workspace:*",
+    "@sidecar/wire": "workspace:*",
+    "croner": "10.0.1"
   },
   "devDependencies": {
     "@types/node": "26.2.0",

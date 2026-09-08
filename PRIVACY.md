@@ -22,9 +22,21 @@ session. On the first two he reads what each transcript gained since he last
 looked, up to the last 20,000 characters of new text per session per look,
 and may also read one session's recent tail, up to its last 60,000
 characters, while deciding whether there is anything to tell you; when you
-ask, he reads the same bounded tail. What he reads is sent to a model as described under
+ask, he reads the same bounded tail. Each observed session is followed by a
+conversation of Luke's own, kept inside his application data: that
+conversation is the one that reads the session's transcript and briefs you
+about it, and no other conversation of his — the main one included — is
+handed those excerpts. What the main conversation
+learns of them is a short notice in Luke's own words and counts (which
+session a turn looked at, what he briefed, how many actions he took), never
+the transcript's text. What he reads is written down first — the new text, with the
+session's title and status and the position it was read to — in that
+conversation's own inbox on your Mac, so that a turn interrupted by a
+throttle, a failure, or a quit picks it up rather than rereading or losing
+it; an entry leaves the inbox when a turn has consumed it, and the inbox
+holds at most 20 entries. What he reads is sent to a model as described under
 "Who we send it to", and what he keeps of it lives under his working memory's
-own lifetime, described below. Nothing else reads message history, file
+own lifetime, described below, one memory per conversation. Nothing else reads message history, file
 contents, or command output. If you run
 agents inside the Herdr terminal manager, Luke also asks Herdr's own
 command-line tool which of those sessions it holds, so their rows can say so;
@@ -69,9 +81,11 @@ coding agent's transcript or session state is never written, and a write whose
 arguments are malformed is refused rather than filled in.
 
 **Luke's working memory.** For each conversation Luke keeps a working memory
-of his own turns in the same database, in its own tables: the model's record
+of his own turns in the same database, in its own tables — main's, each
+private thread's, and each observed session's: the model's record
 of what he read, said, and did — the transcript excerpts described above, the
-position he last read each transcript to, a record of each ask you made and
+position he last read each transcript to and the position he last wrote one
+down to, the inbox of excerpts written down and not yet read, a record of each ask you made and
 how it ended, and a receipt for each action he took at your ask. When that
 record grows long, Luke folds its older part: he asks OpenAI to compact it,
 which answers an opaque, encrypted compaction item he stores in place of the
@@ -228,7 +242,10 @@ and email you signed it with, and any screenshots you attached.
   allow (titles, status, repository, and branch of your cloud sessions, as
   described under Provider API keys above). Luke's judgment is a separate call
   to OpenAI's Responses API, made when an agent's hook or his periodic look
-  wakes him and when you ask him something: it carries his working memory —
+  wakes the conversation following that session, on his own scheduled review
+  of the main conversation (every thirty minutes by default, following the
+  review instructions in his workspace, and usually saying nothing), and when
+  you ask him something: it carries that conversation's working memory —
   the bounded transcript excerpts described above, the session fields, the 20
   most recent lines of your conversation, and the things he remembers about
   you — directly to OpenAI on your own key if you entered one, or through our
@@ -320,8 +337,12 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 - Edit or delete any of Luke's workspace files yourself; Luke never overwrites
   your edit, and clearing the History tab does not touch them.
 - Luke may act on his own judgment in a turn you did not open — answering a
-  coding agent, keeping his notes — within the tool policy his configuration
-  sets; the History tab records such an act as his own, never as your request.
+  coding agent, keeping his notes, on a hook, a look, or his scheduled review
+  — within the tool policy his configuration sets; the History tab records
+  such an act as his own, never as your request.
+- What you type or say to Luke goes to his main conversation; the
+  conversation an ask is for is fixed at the moment you send it and never
+  moved afterwards.
 - Luke does not use your microphone until you start a turn.
 - Delete your account from the Account section in Settings. This erases your
   account, your sign-in records, your usage counts, and any provider API keys

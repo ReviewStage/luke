@@ -212,16 +212,53 @@ Trust constraints:
   and which History keeps as Luke's words under the thread's own retention.
 - The brain's transcript reads are the one place transcript content reaches
   a model unbidden, and both the read and what it leaves behind are bounded
-  on every side. Luke's judgment is one long-lived agent in the main process,
-  woken by a provider's hook, by its own look at the roster on the
-  observation pass, by a hold's release, and by a developer's ask. A wake or
-  a roster look reads, for each local session that is working or waiting or
-  that the brain has read before, only what its transcript gained since the
-  cursor the brain last kept for it, cut from the front to 20,000 characters
-  per session per turn, and may read one observed session's whole tail, cut
-  from the front to 60,000 characters, through the same read tool a
-  developer's ask is offered; a cloud session, and a provider whose
-  transcript this build does not read, are read from roster fields alone. The provider's file is only ever read. Everything a turn reads and
+  on every side. Luke's judgment is one agent with several conversations in
+  the main process: main (`agent:main:main`), the developer's private
+  threads, and one conversation per observed coding session
+  (`agent:main:observed:<provider>:<session>`, each provider id run through
+  the reversible component encoder in `runtime-contracts`, never
+  concatenated raw). A provider's hook and the roster look on the
+  observation pass route to the observed session's own conversation, which
+  keeps its own transcript cursor, context, and generation; main is woken by
+  a developer's ask, by the scheduled heartbeat (every thirty minutes by
+  default, on the ordinary main conversation under `HEARTBEAT.md`, normally
+  briefing nothing), and by a hold's release of a briefing it decided, and
+  is handed no transcript on any look. What main learns of the observed
+  conversations is a compact notice in the host's own counts and Luke's own
+  briefing words, consumed on its next turn and never a transcript's text.
+  An observed conversation's wake or roster look reads only what its one
+  session's transcript gained since the capture cursor it last kept, cut
+  from the front to 20,000 characters, and writes it down before any turn is
+  scheduled: the observation entry and the advanced capture cursor land in
+  one save into the conversation's durable inbox, and the turn that follows
+  consumes the entries it opened with at its checkpoint, moving the consumed
+  cursor there and only there. The two cursors are two on purpose: a
+  throttled or failed inference leaves every entry standing for the next
+  turn, a crash between capture and run loses nothing and reads nothing
+  twice, and a relaunch runs what was captured without touching a
+  transcript. A repeated look that finds nothing gained and the session
+  unchanged captures nothing and opens no inference, a hook delivered twice
+  is one entry, and the inbox holds at most 20 entries. The conversation
+  may also read one observed session's whole
+  tail, cut from the front to 60,000 characters, through the same read tool
+  a developer's ask is offered; a cloud session, and a provider whose
+  transcript this build does not read, are read from roster fields alone.
+  An observed conversation's `announce` reaches the voice directly; main
+  neither approves nor rewords it. Every conversation runs one execution at
+  a time and all of them share the execution lanes ported from OpenClaw
+  `b7528507` (`packages/runtime/src/lanes.ts`: an agent lane of
+  `min(16, max(8, availableParallelism()))`, a hook-dispatch lane sharing
+  the cron inner budget of 8 with one slot reserved, and the rest as that
+  source has them), separate budgets and never one cap over Luke. An ask
+  that arrives while a conversation's turn is under way is taken under the
+  queue mode (steer by default: the run reads it at its next model boundary
+  after every emitted tool call has its result, and answers both; follow-up,
+  collect, and interrupt as OpenClaw names them), and a relaunch runs
+  nothing that was only queued or steered: such records read interrupted,
+  and wakes that only waited in memory are gone. The conversation an ask is
+  for is captured at the submission and never retargeted; the existing
+  composer and talk key submit to main, and no conversation, selector,
+  control, or label is drawn for any of this. The provider's file is only ever read. Everything a turn reads and
   says travels as the Responses input the agent keeps — behind a marker, as
   data — directly to OpenAI on the developer's own key, or through Luke's own
   service on the hosted tier, where the service performs one model inference

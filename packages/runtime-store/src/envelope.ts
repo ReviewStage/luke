@@ -1,5 +1,6 @@
 import type {
   BrainJournalEntry,
+  BrainObservationEntry,
   BrainPersistedState,
   BrainRequestRecord,
   BrainTranscriptCursors,
@@ -39,6 +40,9 @@ export interface BrainStateDelta {
   checkpointFormat?: { stamp: string | undefined };
   items?: BrainItemsDelta;
   cursors?: BrainTranscriptCursors;
+  captureCursors?: BrainTranscriptCursors;
+  /** The inbox whole, when it changed; it is small by construction and replaced rather than diffed. */
+  inbox?: readonly BrainObservationEntry[];
   requests?: BrainRequestsDelta;
   journal?: BrainJournalDelta;
 }
@@ -163,6 +167,10 @@ export function brainStateSave(
     delta.checkpointFormat = { stamp: next.checkpointFormat };
   }
   if (!sameJson(previous.cursors, next.cursors)) delta.cursors = next.cursors;
+  if (!sameJson(previous.captureCursors, next.captureCursors)) {
+    delta.captureCursors = next.captureCursors;
+  }
+  if (!sameJson(previous.inbox, next.inbox)) delta.inbox = next.inbox;
   const requests = requestsDelta(previous.requests, next.requests);
   if (requests) delta.requests = requests;
   const journal = journalDelta(previous.journal, next.journal);

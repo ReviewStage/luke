@@ -347,9 +347,10 @@ function harness(overrides: HarnessOverrides = {}, storage = new FakeStorage()):
     standingContext: () => "Durable facts: none.",
     readTranscriptSince: async (identity, cursor): Promise<ProviderTranscriptSinceResult> => {
       sinceReads.push({ identity, cursor });
+      // The transcript grows once: a read from its cursor finds nothing new.
       return {
         status: ACT_RESULT_STATUS.ACCEPTED,
-        text: `${TRANSCRIPT_SECRET} for ${identity.providerSessionId}`,
+        text: cursor === undefined ? `${TRANSCRIPT_SECRET} for ${identity.providerSessionId}` : "",
         cursor: `${identity.providerSessionId}-cursor`,
         truncated: false,
       };
@@ -429,8 +430,8 @@ function itemsOfType(items: readonly ResponsesInputItem[], type: string) {
 
 test("wakes inside the window open one turn, with each session's delta read once and the context last", async () => {
   const h = harness();
-  h.agent.wake([edge(ABC)]);
-  h.agent.wake([edge(ABC, NOW + 500), edge(DEF, NOW + 1_000)]);
+  await h.agent.wake([edge(ABC)]);
+  await h.agent.wake([edge(ABC, NOW + 500), edge(DEF, NOW + 1_000)]);
   assert.equal(h.client.inputs.length, 0);
   await h.clock.advance(NOW + 3_000);
 
@@ -443,16 +444,21 @@ test("wakes inside the window open one turn, with each session's delta read once
   assert.equal(wake.split(`${TRANSCRIPT_SECRET} for def`).length - 1, 1);
   assert.ok(itemText(input[1]).startsWith(`${BRAIN_INPUT_MARKER.STANDING_CONTEXT} `));
   assert.ok(itemText(input[1]).includes("Durable facts: none."));
+  // Each batch captures from the capture cursor: the second hook for abc reads
+  // from where the first left off and finds nothing new, so the turn carries
+  // abc's delta once.
   assert.deepEqual(h.sinceReads, [
     { identity: ABC, cursor: undefined },
+    { identity: ABC, cursor: "abc-cursor" },
     { identity: DEF, cursor: undefined },
   ]);
 
-  assert.equal(h.persisted.length, 1);
-  assert.deepEqual(h.persisted[0]?.cursors, {
+  // Two captures, then the turn's checkpoint.
+  assert.equal(h.persisted.length, 3);
+  assert.deepEqual(h.persisted.at(-1)?.cursors, {
     "claude-code": { abc: "abc-cursor", def: "def-cursor" },
   });
-  const remembered = h.persisted[0]?.items ?? [];
+  const remembered = h.persisted.at(-1)?.items ?? [];
   assert.equal(remembered.length, 2);
   assert.ok(
     !remembered.some((item) => itemText(item).startsWith(BRAIN_INPUT_MARKER.STANDING_CONTEXT)),
@@ -468,7 +474,7 @@ test("the same session id under two providers is two identities, each read once"
   const h = harness({
     roster: () => ({ text: "roster", identities: [ABC, codexAbc] }),
   });
-  h.agent.wake([edge(ABC), edge(codexAbc), edge(ABC, NOW + 500)]);
+  await h.agent.wake([edge(ABC), edge(codexAbc), edge(ABC, NOW + 500)]);
   await h.clock.advance(NOW + 3_000);
 
   assert.equal(h.client.inputs.length, 1);
@@ -476,7 +482,7 @@ test("the same session id under two providers is two identities, each read once"
     { identity: ABC, cursor: undefined },
     { identity: codexAbc, cursor: undefined },
   ]);
-  assert.deepEqual(h.persisted[0]?.cursors, {
+  assert.deepEqual(h.persisted.at(-1)?.cursors, {
     "claude-code": { abc: "abc-cursor" },
     codex: { abc: "abc-cursor" },
   });
@@ -499,7 +505,7 @@ test("an announce is delivered trimmed, and every output item is remembered", as
     ]),
     answered([reasoning("rs_2"), message("said it")]),
   );
-  h.agent.wake([edge(ABC)]);
+  await h.agent.wake([edge(ABC)]);
   await h.clock.advance(NOW + 3_000);
 
   assert.equal(h.client.inputs.length, 2);
@@ -515,7 +521,7 @@ test("an announce is delivered trimmed, and every output item is remembered", as
   assert.equal(outputs[0]?.call_id, "call_1");
   assert.equal(itemsOfType(second, RESPONSES_ITEM_TYPE.REASONING).length, 1);
   assert.equal(itemsOfType(second, RESPONSES_ITEM_TYPE.FUNCTION_CALL).length, 1);
-  const remembered = h.persisted[0]?.items ?? [];
+  const remembered = h.persisted.at(-1)?.items ?? [];
   assert.deepEqual(
     remembered.map((item) => item.type),
     ["message", "reasoning", "function_call", "function_call_output", "reasoning", "message"],
@@ -532,7 +538,7 @@ test("an announce is delivered trimmed, and every output item is remembered", as
 
 test("an ask returns the final text, carries pending wakes, and refuses announce", async () => {
   const h = harness();
-  h.agent.wake([edge(DEF)]);
+  await h.agent.wake([edge(DEF)]);
   h.client.answers.push(
     answered([
       call("call_a", BRAIN_TOOL.ANNOUNCE, { briefing: "nope" }),
@@ -637,11 +643,11 @@ test("the tool loop has no iteration cap: it runs until the model answers withou
     h.client.answers.push(answered([call(`loop-${index}`, BRAIN_TOOL.LIST_SESSIONS, {})]));
   }
   h.client.answers.push(answered([message("")]));
-  h.agent.wake([edge(ABC)]);
+  await h.agent.wake([edge(ABC)]);
   await h.clock.advance(NOW + 3_000);
 
   assert.equal(h.client.inputs.length, rounds + 1);
-  const remembered = h.persisted[0]?.items ?? [];
+  const remembered = h.persisted.at(-1)?.items ?? [];
   const calls = itemsOfType(remembered, RESPONSES_ITEM_TYPE.FUNCTION_CALL);
   const outputs = itemsOfType(remembered, RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT);
   assert.equal(calls.length, rounds);
@@ -654,14 +660,14 @@ test("the tool loop has no iteration cap: it runs until the model answers withou
 test("a compaction item drops everything before it from the remembered array", async () => {
   const h = harness();
   h.client.answers.push(answered([message("first turn")]));
-  h.agent.wake([edge(ABC)]);
+  await h.agent.wake([edge(ABC)]);
   await h.clock.advance(NOW + 3_000);
-  assert.equal(h.persisted[0]?.items.length, 2);
+  assert.equal(h.persisted.at(-1)?.items.length, 2);
 
   h.client.answers.push(answered([compaction("cmp_1"), reasoning("rs"), message("folded")]));
-  h.agent.wake([edge(DEF)]);
+  await h.agent.wake([edge(DEF)]);
   await h.clock.advance(NOW + 6_000);
-  const remembered = h.persisted[1]?.items ?? [];
+  const remembered = h.persisted.at(-1)?.items ?? [];
   assert.deepEqual(
     remembered.map((item) => item.type),
     ["compaction", "reasoning", "message"],
@@ -673,19 +679,26 @@ test("a compaction item drops everything before it from the remembered array", a
 test("a failed turn rolls the memory and cursors back and persists nothing", async () => {
   const h = harness();
   h.client.answers.push(failedAnswer("boom"));
-  h.agent.wake([edge(ABC)]);
+  await h.agent.wake([edge(ABC)]);
   await h.clock.advance(NOW + 3_000);
-  assert.equal(h.persisted.length, 0);
+  // The capture stands on disk; the failed inference left it unconsumed.
+  assert.equal(h.persisted.length, 1);
+  assert.equal(h.storage.stored()?.inbox.length, 1);
+  assert.deepEqual(h.storage.stored()?.cursors, {});
   assert.equal(h.traces[0]?.error, "boom");
 
-  h.agent.wake([edge(ABC)]);
+  // The same hook again is one observation, read once: the standing entry is
+  // tried again rather than the transcript read twice.
+  await h.agent.wake([edge(ABC)]);
   await h.clock.advance(NOW + 6_000);
   assert.equal(h.client.inputs[1]?.length, 2);
   assert.deepEqual(
     h.sinceReads.map((read) => read.cursor),
-    [undefined, undefined],
+    [undefined],
   );
-  assert.equal(h.persisted.length, 1);
+  assert.equal(h.persisted.length, 2);
+  assert.equal(h.storage.stored()?.inbox.length, 0);
+  assert.deepEqual(h.storage.stored()?.cursors, { [claude.id]: { abc: "abc-cursor" } });
 });
 
 test("a call that fails mid-loop rolls back the whole turn, calls and all", async () => {
@@ -694,10 +707,10 @@ test("a call that fails mid-loop rolls back the whole turn, calls and all", asyn
     answered([call("call_1", BRAIN_TOOL.LIST_SESSIONS, {})]),
     failedAnswer("network"),
   );
-  h.agent.wake([edge(ABC)]);
+  await h.agent.wake([edge(ABC)]);
   await h.clock.advance(NOW + 3_000);
-  assert.equal(h.persisted.length, 0);
-  h.agent.wake([edge(DEF)]);
+  assert.equal(h.persisted.length, 1);
+  await h.agent.wake([edge(DEF)]);
   await h.clock.advance(NOW + 6_000);
   assert.equal(itemsOfType(h.client.inputs[2] ?? [], RESPONSES_ITEM_TYPE.FUNCTION_CALL).length, 0);
 });
@@ -705,11 +718,18 @@ test("a call that fails mid-loop rolls back the whole turn, calls and all", asyn
 test("a quiet client keeps the wakes pending and retries once the quiet ends", async () => {
   const h = harness();
   h.client.answers.push(quietAnswer(NOW + 60_000));
-  h.agent.wake([edge(ABC), edge(DEF)]);
+  await h.agent.wake([edge(ABC), edge(DEF)]);
   await h.clock.advance(NOW + 3_000);
   assert.equal(h.client.inputs.length, 1);
   assert.equal(h.agent.pendingWakes(), 2);
-  assert.equal(h.persisted.length, 0);
+  // The throttled turn consumed nothing: both captured entries stand on disk
+  // with their capture cursors, and no consumed cursor moved.
+  assert.equal(h.persisted.length, 1);
+  assert.equal(h.storage.stored()?.inbox.length, 2);
+  assert.deepEqual(h.storage.stored()?.captureCursors, {
+    [claude.id]: { abc: "abc-cursor", def: "def-cursor" },
+  });
+  assert.deepEqual(h.storage.stored()?.cursors, {});
 
   h.client.quiet = NOW + 60_000;
   await h.clock.advance(NOW + 30_000);
@@ -718,7 +738,11 @@ test("a quiet client keeps the wakes pending and retries once the quiet ends", a
   await h.clock.advance(NOW + 70_000);
   assert.equal(h.client.inputs.length, 2);
   assert.equal(h.agent.pendingWakes(), 0);
-  assert.equal(h.persisted.length, 1);
+  assert.equal(h.persisted.length, 2);
+  // The retry read no transcript twice: the entries were consumed as captured.
+  assert.equal(h.sinceReads.length, 2);
+  assert.equal(h.storage.stored()?.inbox.length, 0);
+  assert.deepEqual(h.storage.stored()?.cursors, h.storage.stored()?.captureCursors);
 });
 
 test("read_transcript answers a bounded tail for an observed session and refuses the rest", async () => {
@@ -742,7 +766,7 @@ test("read_transcript answers a bounded tail for an observed session and refuses
     ]),
     answered([message("")]),
   );
-  h.agent.wake([edge(ABC)]);
+  await h.agent.wake([edge(ABC)]);
   await h.clock.advance(NOW + 3_000);
   const outputs = itemsOfType(h.client.inputs[1] ?? [], RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT);
   const read = outputs.find((item) => item.call_id === "call_1");
@@ -768,14 +792,14 @@ test("a delta longer than its bound is cut from the front and marked truncated",
       truncated: false,
     }),
   });
-  h.agent.wake([edge(ABC)]);
+  await h.agent.wake([edge(ABC)]);
   await h.clock.advance(NOW + 3_000);
   const wake = itemText(h.client.inputs[0]?.[0]);
   assert.ok(wake.includes(OMISSION_MARKER));
   assert.ok(wake.includes('"truncated":true'));
   assert.ok(wake.includes("TAIL"));
   assert.ok(!wake.includes("y".repeat(60)));
-  assert.deepEqual(h.persisted[0]?.cursors, {});
+  assert.deepEqual(h.persisted.at(-1)?.cursors, {});
 });
 
 test("restored memory opens the next turn, and held briefings are re-decided from their own item", async () => {
@@ -802,11 +826,12 @@ test("restored memory opens the next turn, and held briefings are re-decided fro
   assert.equal(h.sinceReads.length, 0);
 });
 
-test("stop drops pending wakes and takes nothing more", async () => {
+test("stop opens nothing more, and a captured observation stays for the next agent", async () => {
   const h = harness();
-  h.agent.wake([edge(ABC)]);
+  await h.agent.wake([edge(ABC)]);
   await h.agent.stop();
-  assert.equal(h.agent.pendingWakes(), 0);
+  assert.equal(h.agent.pendingWakes(), 1);
+  assert.equal(h.storage.stored()?.inbox.length, 1);
   await h.clock.advance(NOW + 10_000);
   assert.equal(h.client.inputs.length, 0);
   assert.deepEqual(await submit(h, "hello?"), {
@@ -985,7 +1010,7 @@ test("a wake turn runs the acts the policy allows, journaled and attributed as L
       truncated: false,
     }),
   });
-  h.agent.wake([edge(ABC)]);
+  await h.agent.wake([edge(ABC)]);
   h.client.answers.push(
     answered([
       ...OBSERVATION_ACTS,
@@ -1036,7 +1061,7 @@ test("an observation turn's run id never repeats across a rebuild, and a journal
   const h = harness({}, storage);
   await h.agent.ready();
   assert.deepEqual(h.storage.stored()?.journal, [], "the orphaned row went with the restore");
-  h.agent.wake([edge(ABC)]);
+  await h.agent.wake([edge(ABC)]);
   h.client.answers.push(answered([messageAct]), answered([message("")]));
   await h.clock.advance(NOW + 3_000);
   // The act ran: the stale row was not mistaken for this turn's own result.
@@ -1046,7 +1071,7 @@ test("an observation turn's run id never repeats across a rebuild, and a journal
   // A second agent over the same store mints a different id for its first wake.
   await h.agent.stop();
   const successor = harness({}, storage);
-  successor.agent.wake([edge(ABC)]);
+  await successor.agent.wake([edge(ABC)]);
   successor.client.answers.push(answered([messageAct]), answered([message("")]));
   await successor.clock.advance(NOW + 3_000);
   assert.equal(successor.performed.length, 1);
@@ -1065,7 +1090,7 @@ test("an observation turn whose model never answers ends at the execution deadli
     quietUntil: () => undefined,
   };
   const h = harness({ client: hung, executionDeadlineMs: 60_000 });
-  h.agent.wake([edge(ABC)]);
+  await h.agent.wake([edge(ABC)]);
   await h.clock.advance(NOW + 3_000);
   await settle();
   assert.equal(h.traces.length, 0, "the turn is still holding the model");
@@ -1096,7 +1121,7 @@ test("a wake turn under a policy denying acts runs none, however the transcript,
       transcript: INSTRUCTION_IN_DATA,
     }),
   });
-  h.agent.wake([edge(ABC)]);
+  await h.agent.wake([edge(ABC)]);
   h.client.answers.push(
     // The model reads the whole transcript first, and its answer carries the
     // same instruction; the next emission is every act plus a briefing.
@@ -1641,8 +1666,8 @@ test("a reset during a transcript read or an act's result cannot write into the 
       }),
   });
   h.client.answers.push(answered([message("seen")]));
-  h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 3_000);
+  const capture = h.agent.wake([edge(ABC)]);
+  await settle();
   assert.ok(releaseRead);
   assert.equal(await h.store.clear(), true);
   releaseRead({
@@ -1651,10 +1676,14 @@ test("a reset during a transcript read or an act's result cannot write into the 
     cursor: "old-cursor",
     truncated: false,
   });
-  await settle();
-  // No inference opened on a withdrawn turn, and the new generation holds no cursor from it.
+  await capture;
+  await h.clock.advance(NOW + 3_000);
+  // The late read captures nothing into the new generation: no entry, no
+  // cursor of either kind, no inference, no briefing.
   assert.equal(h.client.inputs.length, 0);
   assert.deepEqual(h.store.current()?.cursors, {});
+  assert.deepEqual(h.store.current()?.captureCursors, {});
+  assert.deepEqual(h.store.current()?.inbox, []);
   assert.deepEqual(h.deliveries, []);
 
   // Held act result on a developer run, then a new ask in the new generation.
@@ -1786,33 +1815,36 @@ test("a cancel, a deadline, or a stop settles a held read at once, and the next 
   assert.equal(h.agent.request(first)?.status, BRAIN_REQUEST_STATUS.CANCELLED);
   assert.equal(h.client.inputs.length, 1);
 
-  // Deadline while the opening delta read is out: no inference follows it.
-  h.agent.wake([edge(DEF)]);
-  h.client.answers.push(answered([message("never sent")]));
+  // A capture whose delta read is held blocks no ask: the capture is not the
+  // run's, so the ask opens on the inbox as it stands and answers.
+  const capture = h.agent.wake([edge(DEF)]);
+  h.client.answers.push(answered([message("proceeding")]));
   const second = acceptedRunId(await submit(h, "and this?"));
-  await settle();
   assert.equal(deltas.length, 1);
-  await h.clock.advance(NOW + 60_000);
   await settle();
-  assert.equal(h.agent.request(second)?.status, BRAIN_REQUEST_STATUS.TIMED_OUT);
-  assert.equal(h.client.inputs.length, 1);
-  // The late read lands on nothing: no cursor, no inference.
+  assert.equal((await h.agent.waitAsk(second, 1))?.text, "proceeding");
+  assert.equal(h.client.inputs.length, 2);
+  // The late read lands as a capture — an inbox entry and a capture cursor,
+  // never a consumed cursor — and the turn it arms reads it from there.
   deltas[0]?.({ status: ACT_RESULT_STATUS.ACCEPTED, text: "late", cursor: "c", truncated: false });
   reads[0]?.({ status: ACT_RESULT_STATUS.ACCEPTED, transcript: "late" });
-  await settle();
+  await capture;
+  assert.deepEqual(h.storage.stored()?.captureCursors, { [claude.id]: { def: "c" } });
+  assert.equal(h.storage.stored()?.inbox.length, 1);
   assert.deepEqual(h.storage.stored()?.cursors, {});
-  assert.equal(h.client.inputs.length, 1);
+  h.client.answers.push(answered([message("")]));
+  await h.clock.advance(NOW + 3_000);
+  assert.equal(h.client.inputs.length, 3);
+  assert.deepEqual(h.storage.stored()?.cursors, { [claude.id]: { def: "c" } });
+  assert.equal(h.storage.stored()?.inbox.length, 0);
 
-  // The next valid ask runs on the same queue without waiting on either read.
-  h.client.answers.shift();
-  h.client.answers.push(answered([message("proceeding")]));
-  assert.equal((await ask(h, "still there?"))?.text, "proceeding");
-
-  // A stop settles a held read too, and the queue drains behind it.
-  h.agent.wake([edge(ABC)]);
-  await h.clock.advance(NOW + 70_000);
+  // A stop settles a held capture read too: nothing is captured, and the queue drains behind it.
+  const held = h.agent.wake([edge(ABC)]);
+  await settle();
   assert.equal(deltas.length, 2);
   await h.agent.stop();
+  await held;
+  assert.equal(h.storage.stored()?.inbox.length, 0);
 });
 
 test("a performer that throws after dispatch leaves an unknown act, kept through a later model failure and a restart", async () => {
@@ -1918,7 +1950,7 @@ test("work queued behind a held act opens nothing once the generation it was que
   // Every observation kind queues behind the held act: a hold release with an
   // old briefing, a roster look, a coalesced wake, and a quiet retry's wakes.
   h.agent.releaseHeld([{ briefing: "OLD_SECRET_QUEUED_BRIEFING", decidedAt: NOW }]);
-  h.agent.wake([edge(DEF)]);
+  await h.agent.wake([edge(DEF)]);
   h.agent.rosterLook();
   await h.clock.advance(NOW + 3_000);
   assert.equal(await h.store.clear(), true);
@@ -1950,12 +1982,13 @@ test("a briefing is not delivered after a stop or reset that lands during the tu
     ]),
     answered([message("")]),
   );
+  // The capture lands first; it is the turn's final write that is held.
+  await h.agent.wake([edge(ABC)]);
   storage.write = (contents) =>
     // SAFETY: the store accepts a promise of the write's outcome; this test holds it open.
     new Promise<boolean>((resolve) => {
       releaseWrite = () => resolve(write(contents));
     }) as unknown as boolean;
-  h.agent.wake([edge(ABC)]);
   await h.clock.advance(NOW + 3_000);
   assert.ok(releaseWrite, "the turn is in its final write");
   const stopping = h.agent.stop();
@@ -1979,7 +2012,7 @@ test("a briefing is not delivered after a stop or reset that lands during the tu
     ]),
     answered([message("")]),
   );
-  later.agent.wake([edge(ABC)]);
+  await later.agent.wake([edge(ABC)]);
   await later.clock.advance(NOW + 3_000);
   assert.deepEqual(
     later.deliveries.map((delivery) => delivery.briefing),
@@ -2358,7 +2391,7 @@ test("a terminal end and its marks overlapping a new submission and a checkpoint
     h.agent.waitAsk(first, 60_000).then(() => h.agent.markHistoryRecorded(first, NOW + 9)),
     h.agent.markAskRecorded(first, NOW),
   ]);
-  h.agent.wake([edge(ABC)]);
+  await h.agent.wake([edge(ABC)]);
   await h.clock.advance(h.clock.now + 3_000);
   assert.equal(second.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   assert.equal(end?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
@@ -2517,7 +2550,7 @@ test("two overlapping submissions, one refused, leave no ghost run and execute t
   );
 });
 
-test("an observation in flight is not made durable by an unrelated mark or acceptance, and its failed delta is reread", async () => {
+test("an observation in flight enters no memory through an unrelated mark or acceptance, and its failed turn retries the captured entry", async () => {
   const inner = new FakeClient();
   const gated = gatedClient(inner);
   const h = harness({ client: gated.client });
@@ -2530,13 +2563,16 @@ test("an observation in flight is not made durable by an unrelated mark or accep
   await observing.agent.ready();
   // The pending wake rides in the hold release's turn: one observation that
   // reads a real delta, moves a cursor, and then waits on the model.
-  observing.agent.wake([edge(ABC)]);
+  await observing.agent.wake([edge(ABC)]);
   observing.agent.releaseHeld([{ briefing: "UNCOMMITTED_OBSERVATION", decidedAt: NOW }]);
   await settle();
-  // The delta was read into working memory and its cursor moved; the model is held.
+  // The delta was captured — an inbox entry and a capture cursor — and read
+  // into working memory; the consumed cursor has not moved; the model is held.
   assert.equal(observing.sinceReads.length, 1);
   const before = brainStateFromStored(observing.storage.file);
   assert.ok(!JSON.stringify(before?.items).includes("UNCOMMITTED_OBSERVATION"));
+  assert.equal(before?.inbox.length, 1);
+  assert.deepEqual(before?.captureCursors, { [claude.id]: { abc: "abc-cursor" } });
   // Unrelated publication and acceptance land while the observation is out.
   assert.equal(await observing.agent.markHistoryRecorded(a, NOW + 1), true);
   inner.answers.push(answered([message("later")]));
@@ -2551,23 +2587,24 @@ test("an observation in flight is not made durable by an unrelated mark or accep
   await crashed.agent.ready();
   assert.ok(!JSON.stringify(crashed.storage.file).includes("UNCOMMITTED_OBSERVATION"));
   assert.deepEqual(crashed.storage.stored()?.cursors, before?.cursors);
-  // The observation fails: durable memory and cursors never advanced, and the
-  // same delta is read again on the next wake.
+  // The observation fails: memory and the consumed cursor never advanced,
+  // and the captured entry stands for the next turn.
   inner.answers.unshift(failedAnswer("network"));
   regate.open();
   await settle();
   const after = brainStateFromStored(observing.storage.file);
   assert.ok(!JSON.stringify(after?.items).includes("UNCOMMITTED_OBSERVATION"));
   assert.deepEqual(after?.cursors, before?.cursors);
-  // The success control: the next observation reads the same delta again
-  // and, answered, commits the cursor it owns.
+  assert.equal(after?.inbox.length, 1);
+  // The success control: the same hook again reads nothing twice; the next
+  // turn consumes the standing entry and, answered, commits the cursor it owns.
   inner.answers.push(answered([message("seen")]));
-  observing.agent.wake([edge(ABC)]);
+  await observing.agent.wake([edge(ABC)]);
   await observing.clock.advance(observing.clock.now + 3_000);
   await settle();
   assert.deepEqual(
     observing.sinceReads.map((read) => read.cursor),
-    [undefined, undefined],
+    [undefined],
   );
   assert.equal(
     brainStateFromStored(observing.storage.file)?.cursors["claude-code"]?.abc,
@@ -2759,7 +2796,7 @@ test("an expiry is enforced at the door of a turn and a submission even when no 
   assert.ok(!generationSurface(h, h.client).includes(OLD_SECRET));
   // The cursor died with the generation: the next look reads from the start.
   h.client.answers.push(answered([message("")]));
-  h.agent.wake([edge(ABC)]);
+  await h.agent.wake([edge(ABC)]);
   await h.clock.advance(h.clock.now + 3_000);
   assert.equal(h.sinceReads.at(-1)?.cursor, undefined);
 
@@ -2773,7 +2810,7 @@ test("an expiry is enforced at the door of a turn and a submission even when no 
   for (const timer of idle.clock.timers.keys()) idle.clock.timers.delete(timer);
   idle.clock.now = born.expiresAt;
   idle.client.answers.push(answered([message("")]));
-  idle.agent.wake([edge(ABC)]);
+  await idle.agent.wake([edge(ABC)]);
   await idle.clock.advance(idle.clock.now + 3_000);
   assert.notEqual(idle.store.generationId(), born.generationId);
   assert.equal(idle.store.current()?.requests.length, 0);
@@ -2844,7 +2881,7 @@ test("runs retention lets go of leave the live records and journal too, so the n
   // A later working checkpoint — an observation turn's — writes the agent's
   // journal again, and the pruned runs stay gone.
   h.client.answers.push(answered([message("")]));
-  h.agent.wake([edge(ABC)]);
+  await h.agent.wake([edge(ABC)]);
   await h.clock.advance(h.clock.now + 3_000);
   const after = h.storage.stored();
   assert.deepEqual(new Set(after?.journal.map((entry) => entry.runId)), new Set(runIds.slice(2)));
@@ -3271,4 +3308,271 @@ test("a reopen claimed just before a stop installs nothing: the stop's signal is
   await stopping;
   await settle();
   assert.equal(disposed, 1);
+});
+
+test("an ask arriving while the model is thinking is steered into that run and answered by its reply", async () => {
+  const inner = new FakeClient();
+  const gated = gatedClient(inner);
+  const h = harness({ client: gated.client });
+  inner.answers.push(answered([message("First alone.")]), answered([message("Both answered.")]));
+  const first = acceptedRunId(await submit(h, "first?"));
+  await settle();
+  const second = acceptedRunId(await submit(h, "second?"));
+  await settle();
+  // The second ask is running inside the first's execution, not queued behind it.
+  assert.equal(h.agent.request(second)?.status, BRAIN_REQUEST_STATUS.RUNNING);
+  gated.open();
+  await settle();
+  // Words steered in after the model had already answered are not lost: the
+  // run asks once more with them, and that reply is the run's.
+  assert.equal((await h.agent.waitAsk(first, 1))?.text, "Both answered.");
+  assert.equal((await h.agent.waitAsk(second, 1))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  assert.equal(h.agent.request(second)?.text, "Both answered.");
+  assert.equal(inner.inputs.length, 2);
+  const asks = (inner.inputs[1] ?? []).filter(
+    (item) =>
+      item.type === RESPONSES_ITEM_TYPE.MESSAGE && itemText(item).includes("[developer ask]"),
+  );
+  assert.equal(asks.length, 2);
+  assert.equal(h.storage.stored()?.requests.length, 2);
+});
+
+test("steering lands between tool calls: every emitted call is answered before the steered words are read", async () => {
+  const held = heldPerformer();
+  const h = harness({ acts: held.acts });
+  h.client.answers.push(answered([messageAct("call_1")]), answered([message("Done both.")]));
+  const first = acceptedRunId(await submit(h, "send"));
+  await settle();
+  assert.equal(held.performed.length, 1);
+  const second = acceptedRunId(await submit(h, "and this?"));
+  await settle();
+  assert.equal(h.agent.request(second)?.status, BRAIN_REQUEST_STATUS.RUNNING);
+  held.releases[0]?.();
+  await settle();
+  assert.equal((await h.agent.waitAsk(first, 1))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  assert.equal((await h.agent.waitAsk(second, 1))?.text, "Done both.");
+  const secondInput = h.client.inputs[1] ?? [];
+  const callIndex = secondInput.findIndex(
+    (item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL,
+  );
+  const outputIndex = secondInput.findIndex(
+    (item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
+  );
+  const steeredIndex = secondInput.findIndex(
+    (item) => item.type === RESPONSES_ITEM_TYPE.MESSAGE && itemText(item).includes("and this?"),
+  );
+  assert.ok(callIndex >= 0 && outputIndex > callIndex && steeredIndex > outputIndex);
+  assert.equal(functionOutputs(h.storage.stored()?.items ?? []).length, 1);
+});
+
+test("a steered ask cancelled before the run ends is settled cancelled and takes no reply", async () => {
+  const inner = new FakeClient();
+  const gated = gatedClient(inner);
+  const h = harness({ client: gated.client });
+  // The steered words were already said to the model, so the run still reads
+  // them once more before it ends; cancelling withdraws only the second
+  // record's claim on the reply.
+  inner.answers.push(answered([message("First.")]), answered([message("Reply.")]));
+  const first = acceptedRunId(await submit(h, "first?"));
+  await settle();
+  const second = acceptedRunId(await submit(h, "second?"));
+  await settle();
+  assert.equal((await h.agent.cancelAsk(second))?.status, BRAIN_REQUEST_STATUS.CANCELLED);
+  gated.open();
+  await settle();
+  assert.equal((await h.agent.waitAsk(first, 1))?.text, "Reply.");
+  assert.equal(h.agent.request(second)?.status, BRAIN_REQUEST_STATUS.CANCELLED);
+  assert.equal(h.agent.request(second)?.text, undefined);
+});
+
+test("interrupt mode cancels the run under way, whose pending call is paired, and opens the new ask next", async () => {
+  const { QUEUE_MODE } = await import("@sidecar/runtime");
+  const held = heldPerformer();
+  const h = harness({ acts: held.acts, queueMode: QUEUE_MODE.INTERRUPT });
+  h.client.answers.push(answered([messageAct("call_1")]), answered([message("Second reply.")]));
+  const first = acceptedRunId(await submit(h, "send"));
+  await settle();
+  assert.equal(held.performed.length, 1);
+  const second = acceptedRunId(await submit(h, "stop, do this instead"));
+  await settle();
+  held.releases[0]?.();
+  await settle();
+  assert.equal((await h.agent.waitAsk(first, 1))?.status, BRAIN_REQUEST_STATUS.CANCELLED);
+  assert.equal((await h.agent.waitAsk(second, 1))?.text, "Second reply.");
+  // The interrupted run's call left no dangling function_call in what the next turn read or kept.
+  const items = h.storage.stored()?.items ?? [];
+  const calls = itemsOfType(items, RESPONSES_ITEM_TYPE.FUNCTION_CALL);
+  const outputs = functionOutputs(items);
+  assert.equal(calls.length, outputs.length);
+  for (const input of h.client.inputs) {
+    const callIds = itemsOfType(input, RESPONSES_ITEM_TYPE.FUNCTION_CALL).map(
+      (item) => item.call_id,
+    );
+    const answeredIds = new Set(functionOutputs(input).map((item) => item.callId));
+    assert.ok(callIds.every((id) => answeredIds.has(id)));
+  }
+});
+
+test("collect mode opens one turn for the asks that arrive within the debounce, each settled with its reply", async () => {
+  const { QUEUE_MODE } = await import("@sidecar/runtime");
+  const h = harness({ queueMode: QUEUE_MODE.COLLECT, queueDebounceMs: 500 });
+  h.client.answers.push(answered([message("One reply for both.")]));
+  const first = acceptedRunId(await submit(h, "first?"));
+  const second = acceptedRunId(await submit(h, "second?"));
+  await settle();
+  assert.equal(h.client.inputs.length, 0);
+  await h.clock.advance(NOW + 500);
+  await settle();
+  assert.equal(h.client.inputs.length, 1);
+  assert.ok(itemText((h.client.inputs[0] ?? [])[0]).includes("first?"));
+  assert.ok(itemText((h.client.inputs[0] ?? [])[0]).includes("second?"));
+  assert.equal((await h.agent.waitAsk(first, 1))?.text, "One reply for both.");
+  assert.equal((await h.agent.waitAsk(second, 1))?.text, "One reply for both.");
+});
+
+test("a heartbeat opens a turn under its own marker, may announce, and reports a notice; its text is not a reply", async () => {
+  const notices: import("./wake-events.js").BrainTurnNotice[] = [];
+  const h = harness({ notice: (notice) => notices.push(notice) });
+  h.client.answers.push(
+    answered([call("call_1", BRAIN_TOOL.ANNOUNCE, { briefing: "One thing needs you." })]),
+    answered([message("nothing spoken")]),
+  );
+  h.agent.heartbeat();
+  await settle();
+  assert.equal(h.client.inputs.length, 2);
+  assert.ok(itemText((h.client.inputs[0] ?? [])[0]).startsWith(BRAIN_INPUT_MARKER.HEARTBEAT));
+  assert.deepEqual(
+    h.deliveries.map((delivery) => delivery.briefing),
+    ["One thing needs you."],
+  );
+  assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.HEARTBEAT);
+  assert.equal(h.traces[0]?.origin, RUN_ORIGIN.HEARTBEAT);
+  assert.equal(notices.length, 1);
+  assert.deepEqual(notices[0]?.briefings, ["One thing needs you."]);
+  assert.equal(notices[0]?.trigger, BRAIN_TURN_TRIGGER.HEARTBEAT);
+  // A quiet heartbeat is the ordinary one: no delivery, a notice with no briefing.
+  h.client.answers.push(answered([message("")]));
+  h.agent.heartbeat();
+  await settle();
+  assert.equal(h.deliveries.length, 1);
+  assert.deepEqual(notices[1]?.briefings, []);
+});
+
+test("opening notes are read once by the next turn and handed back when that turn fails", async () => {
+  let held = ["session abc: briefed 'done'"];
+  const h = harness({
+    openingNotes: {
+      take: () => {
+        const taken = held;
+        held = [];
+        return taken;
+      },
+      restore: (notes) => {
+        held = [...notes, ...held];
+      },
+    },
+  });
+  h.client.answers.push(failedAnswer("down"));
+  await ask(h, "what happened?");
+  assert.deepEqual(held, ["session abc: briefed 'done'"]);
+  h.client.answers.push(answered([message("abc finished.")]));
+  await ask(h, "and now?");
+  assert.deepEqual(held, []);
+  const opening = (h.client.inputs[1] ?? []).map((item) =>
+    item.type === RESPONSES_ITEM_TYPE.MESSAGE ? itemText(item) : "",
+  );
+  assert.ok(opening.some((text) => text.startsWith(BRAIN_INPUT_MARKER.ACTIVITY_NOTICES)));
+  h.client.answers.push(answered([message("ok")]));
+  await ask(h, "again?");
+  const later = (h.client.inputs[2] ?? []).map((item) =>
+    item.type === RESPONSES_ITEM_TYPE.MESSAGE ? itemText(item) : "",
+  );
+  assert.equal(
+    later.filter((text) => text.startsWith(BRAIN_INPUT_MARKER.ACTIVITY_NOTICES)).length,
+    1,
+  );
+});
+
+test("a hook delivered twice is one wake, and the pending wakes are bounded", async () => {
+  const h = harness();
+  await h.agent.wake([edge(ABC), edge(ABC)]);
+  assert.equal(h.agent.pendingWakes(), 1);
+  await h.agent.wake(Array.from({ length: 40 }, (_, index) => edge(DEF, NOW + index)));
+  assert.equal(h.agent.pendingWakes(), 20);
+});
+
+test("a conversation that looks at one session reads only it, and a repeated unchanged look opens no inference", async () => {
+  const notices: import("./wake-events.js").BrainTurnNotice[] = [];
+  let text = `${TRANSCRIPT_SECRET} for abc`;
+  const h = harness({
+    looksAt: () => [ABC],
+    notice: (notice) => notices.push(notice),
+    roster: () => ({
+      text: "roster",
+      identities: [ABC, DEF],
+      sessions: [
+        session("abc", { status: SESSION_STATUS.WORKING }),
+        session("def", { status: SESSION_STATUS.WORKING }),
+      ],
+    }),
+    readTranscriptSince: async (identity) => ({
+      status: ACT_RESULT_STATUS.ACCEPTED,
+      text: identity.providerSessionId === "abc" ? text : "never read",
+      cursor: `${identity.providerSessionId}-${text.length}`,
+      truncated: false,
+    }),
+  });
+  h.client.answers.push(answered([message("")]));
+  h.agent.rosterLook();
+  await settle();
+  assert.equal(h.client.inputs.length, 1);
+  assert.deepEqual(notices[0]?.identities, [ABC]);
+  assert.ok(!itemText((h.client.inputs[0] ?? [])[0]).includes("for def"));
+  assert.equal(h.storage.stored()?.cursors.codex, undefined);
+  assert.deepEqual(Object.keys(h.storage.stored()?.cursors["claude-code"] ?? {}), ["abc"]);
+  // Nothing gained and the session unchanged: the look is suppressed, deterministically.
+  text = "";
+  h.agent.rosterLook();
+  await settle();
+  h.agent.rosterLook();
+  await settle();
+  assert.equal(h.client.inputs.length, 1);
+  assert.equal(notices.length, 1);
+  // The transcript growing opens a look again.
+  text = "more words";
+  h.client.answers.push(answered([message("")]));
+  h.agent.rosterLook();
+  await settle();
+  assert.equal(h.client.inputs.length, 2);
+});
+
+test("a relaunch does not run an ask that was only queued, and runs a captured observation without rereading it", async () => {
+  const inner = new FakeClient();
+  const gated = gatedClient(inner);
+  const h = harness({ client: gated.client });
+  acceptedRunId(await submit(h, "first?"));
+  await settle();
+  const queued = acceptedRunId(await submit(h, "second, queued"));
+  await h.agent.wake([edge(DEF)]);
+  await settle();
+  assert.equal(h.agent.pendingWakes(), 1);
+  // The process dies with the first running, the second steered or queued, and a captured observation waiting.
+  const relaunched = harness({}, new FakeStorage(h.storage.file));
+  await relaunched.agent.ready();
+  assert.equal(relaunched.agent.request(queued)?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
+  assert.equal(relaunched.agent.pendingWakes(), 1);
+  relaunched.client.answers.push(answered([message("")]));
+  await relaunched.clock.advance(NOW + 10_000);
+  // The captured observation is the one thing that runs: an observation turn
+  // over the stored entry, reading no transcript, replaying no ask.
+  assert.equal(relaunched.client.inputs.length, 1);
+  assert.deepEqual(relaunched.sinceReads, []);
+  assert.ok(
+    itemText((relaunched.client.inputs[0] ?? [])[0]).includes(`${TRANSCRIPT_SECRET} for def`),
+  );
+  assert.equal(relaunched.agent.pendingWakes(), 0);
+  assert.deepEqual(relaunched.storage.stored()?.cursors, { [claude.id]: { def: "def-cursor" } });
+  for (const record of relaunched.agent.requests()) {
+    assert.equal(record.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
+  }
 });

@@ -1,5 +1,6 @@
 import { checkpointFormatTag } from "@sidecar/runtime-contracts";
 import type { Generation } from "./generation.js";
+import type { BrainObservationEntry } from "./observation-inbox.js";
 import {
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_STATUS,
@@ -49,7 +50,12 @@ export const SAVE_SCOPE = {
   WORKING: "working",
   WHOLE: "whole",
   RECORD: "record",
+  /** Observations captured into the inbox, with the capture cursors they advanced. */
+  CAPTURE: "capture",
 } as const;
+
+/** The most entries the inbox holds; past it the oldest go, since the delta read covers what they said. */
+export const INBOX_CAPACITY = 20;
 
 /**
  * What one save owns. A working scope commits the turn's context, cursors,
@@ -58,9 +64,16 @@ export const SAVE_SCOPE = {
  * carries the context only when the runtime loaded one.
  */
 export type SaveScope =
-  | { kind: typeof SAVE_SCOPE.WORKING; context: RecordingContextEngine; record?: RecordChange }
+  | {
+      kind: typeof SAVE_SCOPE.WORKING;
+      context: RecordingContextEngine;
+      record?: RecordChange;
+      /** The inbox entries the turn consumed, gone from the inbox in the same write as the checkpoint. */
+      consumes?: readonly string[];
+    }
   | { kind: typeof SAVE_SCOPE.WHOLE; context: RecordingContextEngine | undefined }
-  | ({ kind: typeof SAVE_SCOPE.RECORD } & RecordChange);
+  | ({ kind: typeof SAVE_SCOPE.RECORD } & RecordChange)
+  | { kind: typeof SAVE_SCOPE.CAPTURE; entries: readonly BrainObservationEntry[] };
 
 /** What composing the requests of one save decided, read once the store has answered. */
 interface SaveOutcome {
@@ -71,10 +84,9 @@ interface SaveOutcome {
   missing: boolean;
 }
 
-function recordChangeOf(
-  scope: Exclude<SaveScope, { kind: typeof SAVE_SCOPE.WHOLE }>,
-): RecordChange | undefined {
-  return scope.kind === SAVE_SCOPE.RECORD ? scope : scope.record;
+function recordChangeOf(scope: SaveScope): RecordChange | undefined {
+  if (scope.kind === SAVE_SCOPE.RECORD) return scope;
+  return scope.kind === SAVE_SCOPE.WORKING ? scope.record : undefined;
 }
 
 /** What a run's end carries into its record beyond the status. */
@@ -162,10 +174,11 @@ export class BrainRequestLedger {
    * untouched and a request still provisional is not published.
    */
   checkpoint(turnContext: Omit<TurnContext, "run"> & { run?: RunControl }): Promise<boolean> {
-    const { generation, context, run } = turnContext;
+    const { generation, context, run, consumes } = turnContext;
     return this.save(generation, {
       kind: SAVE_SCOPE.WORKING,
       context,
+      ...(consumes && consumes.length > 0 ? { consumes } : undefined),
       ...(run?.recorded
         ? {
             record: {
@@ -181,7 +194,11 @@ export class BrainRequestLedger {
     let outcome: SaveOutcome | undefined;
     let pruned = false;
     let carried = 0;
-    const context = scope.kind === SAVE_SCOPE.RECORD ? undefined : scope.context;
+    let inbox: readonly BrainObservationEntry[] | undefined;
+    const context =
+      scope.kind === SAVE_SCOPE.RECORD || scope.kind === SAVE_SCOPE.CAPTURE
+        ? undefined
+        : scope.context;
     const written = await this.#store.write(
       this.#lease,
       generation.id,
@@ -196,10 +213,24 @@ export class BrainRequestLedger {
         // so the record and the projection cannot disagree about what entered.
         const transcript = context?.pending() ?? [];
         carried = transcript.length;
+        // The inbox is composed from the committed list: a capture appends
+        // to it and a checkpoint removes what its turn consumed, so a
+        // capture landing during a turn is neither lost nor consumed early.
+        if (scope.kind === SAVE_SCOPE.CAPTURE) {
+          inbox = [...state.inbox, ...scope.entries].slice(-INBOX_CAPACITY);
+        } else if (scope.kind === SAVE_SCOPE.WORKING && scope.consumes) {
+          const consumed = new Set(scope.consumes);
+          inbox = state.inbox.filter((entry) => !consumed.has(entry.id));
+        }
         return {
           ...(checkpointFormat !== undefined ? { checkpointFormat } : undefined),
           items: checkpoint ? checkpoint.items : state.items,
           cursors: context ? generation.cursors.persisted() : state.cursors,
+          captureCursors:
+            scope.kind === SAVE_SCOPE.CAPTURE || scope.kind === SAVE_SCOPE.WHOLE
+              ? generation.captureCursors.persisted()
+              : state.captureCursors,
+          inbox: inbox ?? state.inbox,
           journal: context ? generation.journal.entries() : state.journal,
           requests: outcome.requests,
           ...(transcript.length > 0 ? { transcript } : undefined),
@@ -207,6 +238,7 @@ export class BrainRequestLedger {
       },
       (commit) => {
         if (carried > 0) context?.retained(carried);
+        if (inbox) generation.inbox = inbox;
         // Retention decided inside the same queue step: the runs the store
         // let go of leave the working copy too, or the next checkpoint of
         // the journal would write them straight back.
@@ -216,7 +248,7 @@ export class BrainRequestLedger {
           pruned = true;
         }
         const owned = outcome?.owned;
-        const change = scope.kind === SAVE_SCOPE.WHOLE ? undefined : recordChangeOf(scope);
+        const change = recordChangeOf(scope);
         if (!owned || !change) return;
         const live = generation.requests.get(owned.runId);
         if (live) {

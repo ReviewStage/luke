@@ -63,8 +63,8 @@ import {
   sessionContextText,
   workspaceProjectContextText,
 } from "@sidecar/realtime";
-import { CREDENTIAL_REFERENCE_KIND } from "@sidecar/runtime";
-import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
+import { CREDENTIAL_REFERENCE_KIND, CronScheduler, heartbeatJob, LANE } from "@sidecar/runtime";
+import { CONVERSATION_KIND, MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   CreatedWorkspaceOpenTracker,
@@ -1620,6 +1620,9 @@ const agentWorkspacePath = () =>
 
 const brainWiring = wireBrain({
   repositoryFor: (sessionKey) => runtimeStoreWiring.brainStateRepository(sessionKey),
+  ensureObservedConversation: async (sessionKey, name) => {
+    await runtimeStoreWiring.ensureConversation(sessionKey, CONVERSATION_KIND.OBSERVED, name);
+  },
   createId: () => randomUUID(),
   report: (message) => process.stderr.write(`${message}\n`),
   ...(agentTrace ? { traceTurn: (record) => agentTrace.recordBrainTurn(record) } : undefined),
@@ -1693,6 +1696,21 @@ const conversationControls = conversationOperations({
   report: (message) => process.stderr.write(`${message}\n`),
 });
 let stopHistoryMaintenance: (() => void) | undefined;
+
+/**
+ * The durable scheduler: its jobs stand in the runtime store, its ticks run
+ * on the cron coordinator lane, and each job opens a heartbeat turn in the
+ * conversation it names, on the cron inner lane. Main's every-thirty-minutes
+ * heartbeat is installed once and kept as the store has it from then on.
+ */
+const cronScheduler = new CronScheduler({
+  store: runtimeStoreWiring.scheduledJobStore(),
+  coordinate: (work) => brainWiring.lanes.run(LANE.CRON, work),
+  run: async (job) => {
+    brainWiring.heartbeat(job.sessionKey);
+  },
+  report: (message) => process.stderr.write(`${message}\n`),
+});
 
 function adapterFor(providerId: string) {
   if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return supersetWorkspaceAdapter;
@@ -2325,9 +2343,7 @@ function watchObservationSpools(): void {
         onEvents: (events) => {
           void (async () => {
             await sessionObservationLoop.refresh().catch(() => undefined);
-            brainWiring
-              .current()
-              ?.wake(wakeEventsFromHooks(providerId, events, sessionRegistry, Date.now()));
+            brainWiring.wake(wakeEventsFromHooks(providerId, events, sessionRegistry, Date.now()));
           })();
         },
       }),
@@ -2565,7 +2581,7 @@ async function reconcileSpeech(): Promise<void> {
   if (!quiet && speechArbiter.heldBriefingCount > 0) {
     const standing = brainWiring.current();
     if (standing && voiceCapabilities.realtimeCredentials) {
-      standing.releaseHeld(speechArbiter.takeHeldBriefings());
+      brainWiring.releaseHeld(speechArbiter.takeHeldBriefings());
     } else if (!voiceCapabilities.realtimeCredentials) {
       speechArbiter.dropBriefings();
     }
@@ -2749,7 +2765,7 @@ const sessionObservationLoop = new ObservationLoop({
   // is closed (observesProviders && accountCapabilitiesActive()).
   afterRun: () => {
     void broadcastCodexCloudConnection();
-    brainWiring.current()?.rosterLook();
+    brainWiring.rosterLook();
   },
 });
 const issueObservationLoop = new ObservationLoop({
@@ -3052,6 +3068,10 @@ export function startDesktopApp(): void {
           store: runtimeStoreWiring,
           brain: brainWiring,
         });
+        await cronScheduler.start();
+        await cronScheduler.ensure(heartbeatJob(Date.now()));
+        await cronScheduler.start();
+        await cronScheduler.ensure(heartbeatJob(Date.now()));
       }
       // A signed-in install with no arrival record predates the beat: its
       // sign-in was never observed, so it is settled now rather than greeted
@@ -3285,6 +3305,7 @@ export function startDesktopApp(): void {
     for (const watcher of spoolWatchers) watcher.close();
     spoolWatchers = [];
     stopHistoryMaintenance?.();
+    cronScheduler.stop();
     brainWiring.retire();
     // Deliberately not a flush: a request here either delays the quit or is
     // killed mid-flight, and an instant quit is worth the last minute of

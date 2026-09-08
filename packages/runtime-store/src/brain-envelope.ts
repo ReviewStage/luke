@@ -1,8 +1,10 @@
 import type { SQLInputValue } from "node:sqlite";
 import {
   type BrainJournalEntry,
+  type BrainObservationEntry,
   type BrainPersistedState,
   type BrainRequestRecord,
+  type BrainTranscriptCursors,
   brainPersistedStateFromWire,
   legacyStampOf,
 } from "@sidecar/brain";
@@ -106,16 +108,29 @@ export function loadBrainEnvelope(database: RuntimeDatabase, sessionKey: Session
   const journalRows = database
     .prepare("SELECT * FROM action_receipts WHERE session_id = ? ORDER BY ordinal")
     .all(session.sessionId) as Record<string, SQLInputValue>[];
-  const cursors: Record<string, Record<string, string>> = {};
-  for (const row of cursorRows) {
-    cursors[row.provider_id] ??= {};
-    const provider = cursors[row.provider_id];
-    if (provider) provider[row.provider_session_id] = row.cursor;
-  }
+  // SAFETY: the same three text columns, from the capture cursors' table.
+  const captureRows = database
+    .prepare(
+      "SELECT provider_id, provider_session_id, cursor FROM observation_capture_cursors WHERE session_id = ?",
+    )
+    .all(session.sessionId) as {
+    provider_id: string;
+    provider_session_id: string;
+    cursor: string;
+  }[];
+  // SAFETY: the payload column is text; the envelope reader admits each entry or refuses the whole.
+  const inboxRows = database
+    .prepare("SELECT payload FROM observation_inbox WHERE session_id = ? ORDER BY ordinal")
+    .all(session.sessionId) as { payload: string }[];
+  const cursors = cursorsFromRows(cursorRows);
+  const captureCursors = cursorsFromRows(captureRows);
   let parsedItems: WireValue[];
+  let inbox: WireValue[];
   try {
     // SAFETY: JSON.parse returns a wire value; the envelope reader below is the validation.
     parsedItems = items.map((row) => JSON.parse(row.item) as WireValue);
+    // SAFETY: as above, for the inbox entries.
+    inbox = inboxRows.map((row) => JSON.parse(row.payload) as WireValue);
   } catch {
     return { unreadable: true, generation };
   }
@@ -127,6 +142,8 @@ export function loadBrainEnvelope(database: RuntimeDatabase, sessionKey: Session
     ...(stamp !== undefined ? { checkpointFormat: stamp } : undefined),
     items: parsedItems,
     cursors,
+    captureCursors,
+    inbox,
     requests: requestRows.map(requestWire),
     journal: journalRows.map(journalWire),
     ...(session.resetClearedAt !== undefined
@@ -185,6 +202,16 @@ export function saveBrainEnvelope(
       database.prepare("DELETE FROM observation_cursors WHERE session_id = ?").run(sessionId);
       insertCursors(database, sessionId, delta.cursors);
     }
+    if (delta.captureCursors) {
+      database
+        .prepare("DELETE FROM observation_capture_cursors WHERE session_id = ?")
+        .run(sessionId);
+      insertCaptureCursors(database, sessionId, delta.captureCursors);
+    }
+    if (delta.inbox) {
+      database.prepare("DELETE FROM observation_inbox WHERE session_id = ?").run(sessionId);
+      insertInbox(database, sessionId, delta.inbox);
+    }
     if (delta.requests) {
       const remove = database.prepare("DELETE FROM requests WHERE run_id = ?");
       for (const runId of delta.requests.remove) remove.run(runId);
@@ -229,6 +256,8 @@ function replaceGeneration(
   if (state.reset) raiseHistoryCutoff(database, sessionKey, state.reset.clearedAt);
   insertItems(database, state.generationId, state.items, 0);
   insertCursors(database, state.generationId, state.cursors);
+  insertCaptureCursors(database, state.generationId, state.captureCursors);
+  insertInbox(database, state.generationId, state.inbox);
   state.requests.forEach((record, ordinal) => {
     upsertRequest(database, state.generationId, ordinal, record);
   });
@@ -269,6 +298,47 @@ function insertCursors(
       insert.run(sessionId, providerId, providerSessionId, cursor);
     }
   }
+}
+
+function insertCaptureCursors(
+  database: RuntimeDatabase,
+  sessionId: string,
+  cursors: BrainPersistedState["captureCursors"],
+): void {
+  const insert = database.prepare(
+    "INSERT INTO observation_capture_cursors (session_id, provider_id, provider_session_id, cursor) VALUES (?, ?, ?, ?)",
+  );
+  for (const [providerId, sessions] of Object.entries(cursors)) {
+    for (const [providerSessionId, cursor] of Object.entries(sessions)) {
+      insert.run(sessionId, providerId, providerSessionId, cursor);
+    }
+  }
+}
+
+function insertInbox(
+  database: RuntimeDatabase,
+  sessionId: string,
+  inbox: readonly BrainObservationEntry[],
+): void {
+  if (inbox.length === 0) return;
+  const insert = database.prepare(
+    "INSERT INTO observation_inbox (session_id, ordinal, entry_id, payload) VALUES (?, ?, ?, ?)",
+  );
+  inbox.forEach((entry, ordinal) => {
+    insert.run(sessionId, ordinal, entry.id, JSON.stringify(entry));
+  });
+}
+
+function cursorsFromRows(
+  rows: readonly { provider_id: string; provider_session_id: string; cursor: string }[],
+): BrainTranscriptCursors {
+  const cursors: Record<string, Record<string, string>> = {};
+  for (const row of rows) {
+    cursors[row.provider_id] ??= {};
+    const provider = cursors[row.provider_id];
+    if (provider) provider[row.provider_session_id] = row.cursor;
+  }
+  return cursors;
 }
 
 function upsertRequest(

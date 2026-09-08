@@ -16,6 +16,7 @@ import {
 } from "@sidecar/wire";
 import { TranscriptCursors } from "./cursors.js";
 import { BrainJournal } from "./journal.js";
+import type { BrainObservationEntry } from "./observation-inbox.js";
 import type { BrainRequestRecord } from "./requests.js";
 import { claimedUnlessAborted, type Settled } from "./settled.js";
 import type { BrainPersistedState } from "./state-store.js";
@@ -43,6 +44,10 @@ export interface Generation {
   /** Settles once the checkpoint has been offered to the runtime, with the context it gave or the reason it gave none. */
   opened: Promise<OpenedContext>;
   cursors: TranscriptCursors;
+  /** Where the inbox has captured each transcript to; moves at capture, never with a turn. */
+  captureCursors: TranscriptCursors;
+  /** The observations captured and not yet consumed, as last committed. */
+  inbox: readonly BrainObservationEntry[];
   journal: BrainJournal;
   requests: Map<string, BrainRequestRecord>;
   /** Runs accepted in memory but not yet checkpointed; not yet acknowledged to anyone. */
@@ -151,6 +156,8 @@ export function generationFrom(
     expiresAt: state.expiresAt,
     opened,
     cursors: new TranscriptCursors(state.cursors),
+    captureCursors: new TranscriptCursors(state.captureCursors),
+    inbox: [...state.inbox],
     journal: new BrainJournal(state.journal),
     requests: new Map(state.requests.map((record) => [record.runId, { ...record }])),
     provisional: new Set(),

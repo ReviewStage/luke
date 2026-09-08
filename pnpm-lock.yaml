@@ -656,6 +656,12 @@ importers:
       '@sidecar/runtime-contracts':
         specifier: workspace:*
         version: link:../runtime-contracts
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+      croner:
+        specifier: 10.0.1
+        version: 10.0.1
     devDependencies:
       '@types/node':
         specifier: 26.2.0
@@ -694,6 +700,9 @@ importers:
       '@sidecar/realtime':
         specifier: workspace:*
         version: link:../realtime
+      '@sidecar/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       '@sidecar/runtime-contracts':
         specifier: workspace:*
         version: link:../runtime-contracts
@@ -3193,6 +3202,10 @@ packages:
 
   crc@3.8.0:
     resolution: {integrity: sha512-iX3mfgcTMIq3ZKLIsVFAbv7+Mc10kxabAGQb8HvjA1o3T1PIYprbakQ65d3I+2HGHt6nSKkM9PYjgoJO2KcFBQ==}
+
+  croner@10.0.1:
+    resolution: {integrity: sha512-ixNtAJndqh173VQ4KodSdJEI6nuioBWI0V1ITNKhZZsO0pEMoDxz539T4FTTbSZ/xIOSuDnzxLVRqBVSvPNE2g==}
+    engines: {node: '>=18.0'}
 
   cross-dirname@0.1.0:
     resolution: {integrity: sha512-+R08/oI0nl3vfPcqftZRpytksBXDzOUveBq/NBVx0sUp1axwzPQrKinNx5yd5sxPu8j1wIy8AfnVQ+5eFdha6Q==}
@@ -6800,6 +6813,8 @@ snapshots:
     dependencies:
       buffer: 5.7.1
     optional: true
+
+  croner@10.0.1: {}
 
   cross-dirname@0.1.0:
     optional: true

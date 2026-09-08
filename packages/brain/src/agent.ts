@@ -1,6 +1,11 @@
 import { HOSTED_BRAIN_OPTION_BOUNDS } from "@sidecar/hosted";
 import type { ScheduledTimer } from "@sidecar/realtime";
-import type { EffectiveToolPolicy } from "@sidecar/runtime";
+import {
+  type EffectiveToolPolicy,
+  QUEUE_DEFAULTS,
+  QUEUE_MODE,
+  type QueueMode,
+} from "@sidecar/runtime";
 import {
   type AgentRuntime,
   CONTEXT_INPUT_KIND,
@@ -9,6 +14,7 @@ import {
   RUN_END_REASON,
   RUNTIME_EVENT,
   type RuntimeEvent,
+  type RuntimeRun,
   type RuntimeRunEnd,
 } from "@sidecar/runtime-contracts";
 import {
@@ -18,7 +24,7 @@ import {
   SESSION_STATUS,
   type SessionIdentity,
 } from "@sidecar/session";
-import type { WireRecord } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { assessCompaction, COMPACTION_NEED } from "./compaction.js";
 import {
   CONTEXT_OPENING,
@@ -27,9 +33,12 @@ import {
   generationFrom,
   retireContext,
   retireOpenedContext,
+  sameIdentity,
 } from "./generation.js";
 import {
+  activityNoticesInputText,
   askInputText,
+  heartbeatInputText,
   holdReleasedInputText,
   primedNotesInputText,
   standingContextText,
@@ -43,6 +52,12 @@ import {
   type RunEnd,
   SAVE_SCOPE,
 } from "./ledger.js";
+import {
+  type BrainObservationEntry,
+  entryFromEvent,
+  eventFromEntry,
+  sameObservation,
+} from "./observation-inbox.js";
 import type { BrainActExecution, BrainActPerformer, BrainRoster } from "./performer.js";
 import {
   BRAIN_REQUEST_FAILURE,
@@ -72,6 +87,7 @@ import { brainToolCatalog, brainToolSchemas, resolveTurnToolPolicy } from "./too
 import type { BrainToolCallTrace, BrainTurnTraceRecord } from "./trace.js";
 import {
   attachTranscriptDeltas,
+  readTranscriptDelta,
   readWholeTranscript,
   type TranscriptDeltasAttached,
 } from "./transcript-reads.js";
@@ -88,7 +104,13 @@ import {
   type TurnPlan,
   type TurnResult,
 } from "./turn.js";
-import { BRAIN_WAKE_KIND, type BrainDelivery, type BrainWakeEvent } from "./wake-events.js";
+import {
+  BRAIN_WAKE_KIND,
+  type BrainDelivery,
+  type BrainTranscriptDelta,
+  type BrainTurnNotice,
+  type BrainWakeEvent,
+} from "./wake-events.js";
 import { WakeQueue } from "./wake-queue.js";
 
 /**
@@ -148,7 +170,28 @@ export const BRAIN_DEFAULTS = {
   DELTA_PER_SESSION_CHARS: 20_000,
   /** The most of a whole transcript one read answers with, cut from the front. */
   FULL_TRANSCRIPT_CHARS: 60_000,
+  /** The most wakes held for one turn; past it the oldest go, since the delta read covers what they said. */
+  PENDING_WAKE_CAPACITY: QUEUE_DEFAULTS.CAPACITY,
 } as const;
+
+/** Runs a turn's work under the host's lane for its trigger, so conversations share the lanes' budgets and nothing wider. */
+export type BrainLane = <T>(trigger: BrainTurnTrigger, work: () => Promise<T>) => Promise<T>;
+
+/**
+ * Words the host owes this conversation's next turn — the compact notices of
+ * what sibling conversations did — taken when a turn opens and handed back
+ * when that turn fails, so nothing is consumed by a turn that never ran.
+ */
+export interface BrainOpeningNotes {
+  take(): readonly string[];
+  restore(notes: readonly string[]): void;
+}
+
+/** How a run ended, as its record takes it: the status and what rides beside it. */
+interface RunOutcome {
+  status: BrainRequestRecord["status"];
+  end: RunEnd;
+}
 
 export interface BrainAgentOptions {
   /** The execution the host runs turns on; it decides how a model and its tools loop, and it alone reaches the model. */
@@ -179,6 +222,22 @@ export interface BrainAgentOptions {
   ) => Promise<ProviderTranscriptSinceResult>;
   readTranscript: (identity: SessionIdentity) => Promise<ProviderTranscriptResult>;
   deliver: (delivery: BrainDelivery) => void | Promise<void>;
+  /** Hears what each observation, hold-release, or heartbeat turn amounted to, in the host's own counts. */
+  notice?: (notice: BrainTurnNotice) => void;
+  /** The lane each turn runs under; absent, turns are bounded only by this conversation's own serial queue. */
+  lane?: BrainLane;
+  openingNotes?: BrainOpeningNotes;
+  /**
+   * Which sessions this conversation's roster look reads: an observed
+   * conversation names its one session, so two conversations never read each
+   * other's transcript. Absent, the look reads every local session that is
+   * working, waiting, or read before.
+   */
+  looksAt?: () => readonly SessionIdentity[];
+  /** How an ask arriving while a turn is under way is taken; steer by default, as OpenClaw has it. */
+  queueMode?: QueueMode;
+  /** How long collect mode waits for more asks before opening one turn for them all. */
+  queueDebounceMs?: number;
   /** The one writer of the brain's state, owned by the host and outliving any one agent. */
   store: BrainStateStore;
   createRunId: () => string;
@@ -255,6 +314,14 @@ export class BrainAgent {
   readonly #pendingSubmissions = new Map<string, PendingSubmission>();
   readonly #listeners = new Set<BrainRequestsListener>();
   #turnInFlight = false;
+  /** The execution under way, for an ask to steer into or interrupt. */
+  #active: { run: RunControl; started: RuntimeRun; plan: TurnPlan } | undefined;
+  /** Asks collected for one turn, and the timer that opens it. */
+  #collecting: { runs: RunControl[]; questions: string[]; timer: ScheduledTimer } | undefined;
+  /** Each session as it last looked when an observation was captured, for the unchanged-look suppression. */
+  readonly #lastLook = new Map<string, string>();
+  /** Captures run one after another, so two reads of one session never race each other's cursor. */
+  #capturing: Promise<unknown> = Promise.resolve();
   #restored: Promise<void> | undefined;
   #queue: Promise<unknown> = Promise.resolve();
   readonly #wakes: WakeQueue;
@@ -293,6 +360,7 @@ export class BrainAgent {
     });
     this.#wakes = new WakeQueue({
       coalesceMs: this.#wakeCoalesceMs,
+      capacity: BRAIN_DEFAULTS.PENDING_WAKE_CAPACITY,
       now: this.#now,
       schedule: this.#schedule,
       cancel: this.#cancel,
@@ -307,9 +375,9 @@ export class BrainAgent {
     return this.#lease;
   }
 
-  /** How many wakes are waiting for their turn to open. */
+  /** How many captured observations are waiting for a turn to consume them. */
   pendingWakes(): number {
-    return this.#wakes.size();
+    return this.#generation?.inbox.length ?? this.#wakes.size();
   }
 
   /**
@@ -498,9 +566,66 @@ export class BrainAgent {
     }
     const run = newRunControl(record.runId, generation, true);
     this.#runs.set(run.runId, run);
-    const events = this.#wakes.take();
-    void this.#enqueue(() => this.#runAsk(run, submission.question, events));
+    this.#admitAsk(run, submission.question);
     return accepted;
+  }
+
+  /**
+   * Where an accepted ask goes, by the queue mode. Steer hands it to the
+   * execution under way at its next model boundary — every tool call already
+   * emitted still gets its result first — and the ask ends with that run.
+   * Interrupt cancels the execution under way and opens the ask next.
+   * Collect holds asks for the debounce and opens one turn for them all.
+   * Follow-up, and every mode when nothing is under way, queues the ask
+   * behind the turns ahead of it.
+   */
+  #admitAsk(run: RunControl, question: string): void {
+    const mode = this.#options.queueMode ?? QUEUE_DEFAULTS.MODE;
+    const active = this.#active;
+    if (mode === QUEUE_MODE.STEER && active && !this.#runRevoked(active.run)) {
+      const text = askInputText(question, [], this.#now());
+      if (active.started.steer({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text })) {
+        active.plan.companions = [...(active.plan.companions ?? []), run];
+        void this.#ledger
+          .commit(run.generation, run.runId, {
+            status: BRAIN_REQUEST_STATUS.RUNNING,
+            startedAt: this.#now(),
+          })
+          .then(() => this.#notify());
+        return;
+      }
+    }
+    if (mode === QUEUE_MODE.INTERRUPT && active && !this.#runRevoked(active.run)) {
+      active.run.cancelled = true;
+      active.run.abort.abort();
+    }
+    if (mode === QUEUE_MODE.COLLECT) {
+      if (this.#collecting) {
+        this.#collecting.runs.push(run);
+        this.#collecting.questions.push(question);
+        return;
+      }
+      const collecting = {
+        runs: [run],
+        questions: [question],
+        timer: this.#schedule(() => {
+          if (this.#collecting !== collecting) return;
+          this.#collecting = undefined;
+          const [first, ...rest] = collecting.runs;
+          if (!first) return;
+          this.#wakes.take();
+          void this.#queueTurn(BRAIN_TURN_TRIGGER.ASK, () =>
+            this.#runAsk(first, collecting.questions.join("\n\n"), rest),
+          );
+        }, this.#options.queueDebounceMs ?? QUEUE_DEFAULTS.DEBOUNCE_MS),
+      };
+      this.#collecting = collecting;
+      return;
+    }
+    // The ask's turn opens with the inbox as it stands, so the window a wake
+    // armed has nothing left to open and is disarmed.
+    this.#wakes.take();
+    void this.#queueTurn(BRAIN_TURN_TRIGGER.ASK, () => this.#runAsk(run, question));
   }
 
   /**
@@ -545,6 +670,16 @@ export class BrainAgent {
       run.cancelled = true;
       run.abort.abort();
     }
+    const active = this.#active;
+    if (run && active?.plan.companions?.includes(run)) {
+      // An ask steered into another run has said its words to the model
+      // already; what cancelling withdraws is its record's claim on that
+      // run's reply, which it no longer waits for.
+      active.plan.companions = active.plan.companions.filter((held) => held !== run);
+      this.#runs.delete(runId);
+      await this.#ledger.settleRun(run.generation, runId, BRAIN_REQUEST_STATUS.CANCELLED, {});
+      return this.request(runId);
+    }
     if (record.status === BRAIN_REQUEST_STATUS.QUEUED && this.#generation) {
       await this.#ledger.settleRun(this.#generation, runId, BRAIN_REQUEST_STATUS.CANCELLED, {});
     }
@@ -574,13 +709,146 @@ export class BrainAgent {
   }
 
   /**
-   * Queues wake events. Nothing is sent yet: wakes inside the coalescing
-   * window open one turn together, and wakes during a model's quiet wait for
-   * it to end rather than being dropped.
+   * Captures wake events into the durable inbox and arms the coalescing
+   * window. Nothing is sent yet, and nothing opens until the capture has
+   * landed: each session's transcript is read from its capture cursor, the
+   * entry and the moved cursor are written in one save, and only then does
+   * the window arm — so a turn is scheduled over input that already stands
+   * on disk. Wakes inside the window open one turn together, and wakes
+   * during a model's quiet wait for it to end rather than being dropped.
+   * Settles once the capture has landed or been refused.
    */
-  wake(events: readonly BrainWakeEvent[]): void {
+  wake(events: readonly BrainWakeEvent[]): Promise<void> {
+    if (this.#stopped || events.length === 0) return Promise.resolve();
+    return this.#capture(events).then((captured) => {
+      if (this.#stopped) return;
+      const generation = this.#generation;
+      if (!generation) return;
+      if (captured > 0 || generation.inbox.length > 0) {
+        this.#wakes.push(this.#inboxEvents(generation));
+      }
+    });
+  }
+
+  /**
+   * The capture itself, one batch at a time. Each distinct session in the
+   * batch is read once from its capture cursor; an event that names a hook
+   * the inbox already holds — the same hook, session, and instant delivered
+   * twice — is not captured again; a roster edge that gained nothing over a
+   * session standing exactly as it last stood is not captured at all. What
+   * remains is written with the advanced capture cursors in one save, and a
+   * save the store refuses moves no cursor in memory either. Answers how many
+   * entries were captured.
+   */
+  #capture(events: readonly BrainWakeEvent[]): Promise<number> {
+    const work = async (): Promise<number> => {
+      await this.ready();
+      const generation = this.#generation;
+      if (!generation || this.#stopped || generation.abort.signal.aborted) return 0;
+      const fresh = events.filter(
+        (event, index) =>
+          !generation.inbox.some((entry) => sameObservation(entry, event)) &&
+          !events.slice(0, index).some((earlier) => sameWake(earlier, event)),
+      );
+      if (fresh.length === 0) return 0;
+      const mark = generation.captureCursors.persisted();
+      const reads = new Map<
+        string,
+        { delta: BrainTranscriptDelta | undefined; cursor: string | undefined }
+      >();
+      const entries: BrainObservationEntry[] = [];
+      const now = this.#now();
+      for (const event of fresh) {
+        const key = lookKey(event.identity);
+        let read = reads.get(key);
+        if (!read) {
+          const delta = await readTranscriptDelta(event.identity, {
+            cursors: generation.captureCursors,
+            read: (identity, cursor) => this.#options.readTranscriptSince(identity, cursor),
+            signal: generation.abort.signal,
+            maximumChars: this.#deltaPerSessionChars,
+          });
+          if (!delta) {
+            generation.captureCursors.rollback(mark);
+            return 0;
+          }
+          read = { delta, cursor: generation.captureCursors.cursor(event.identity) };
+          reads.set(key, read);
+        } else {
+          // A second event for the same session in one batch carries no
+          // second delta: the first read covers both.
+          read = {
+            delta: {
+              text: "",
+              truncated: false,
+              status: read.delta?.status ?? ACT_RESULT_STATUS.ACCEPTED,
+            },
+            cursor: read.cursor,
+          };
+        }
+        if (
+          event.kind === BRAIN_WAKE_KIND.ROSTER &&
+          !read.delta?.text &&
+          this.#lastLook.get(key) === lookFingerprint(event)
+        ) {
+          continue;
+        }
+        entries.push(
+          entryFromEvent(event, this.#options.createRunId(), now, read.delta, read.cursor),
+        );
+      }
+      if (entries.length === 0) {
+        generation.captureCursors.rollback(mark);
+        return 0;
+      }
+      const written = await this.#ledger.save(generation, { kind: SAVE_SCOPE.CAPTURE, entries });
+      if (!written) {
+        generation.captureCursors.rollback(mark);
+        this.#report("Brain observation could not be captured");
+        return 0;
+      }
+      for (const event of fresh) {
+        if (event.kind === BRAIN_WAKE_KIND.ROSTER) {
+          this.#lastLook.set(lookKey(event.identity), lookFingerprint(event));
+        }
+      }
+      return entries.length;
+    };
+    const run = this.#capturing.then(work, work);
+    this.#capturing = run.catch(() => undefined);
+    return run;
+  }
+
+  /** Every captured observation as the events a turn opens with, oldest first. */
+  #inboxEvents(generation: Generation): readonly BrainWakeEvent[] {
+    return generation.inbox.map(eventFromEntry);
+  }
+
+  /**
+   * The scheduled review: a turn under the full prompt whose instructions are
+   * the workspace's HEARTBEAT.md, opened on no signal at all. Pending
+   * observations ride along. The ordinary outcome is a turn that briefs nothing.
+   */
+  heartbeat(): void {
     if (this.#stopped) return;
-    this.#wakes.push(events);
+    const generation = this.#generation;
+    if (!generation) {
+      void this.ready().then(() => this.heartbeat());
+      return;
+    }
+    if (this.#options.runtime.quietUntil() !== undefined) return;
+    this.#wakes.take();
+    void this.#queueTurn(BRAIN_TURN_TRIGGER.HEARTBEAT, () =>
+      this.#turn({
+        generation,
+        trigger: BRAIN_TURN_TRIGGER.HEARTBEAT,
+        events: this.#inboxEvents(generation),
+        open: (attached, now) => [
+          ...(attached.length > 0 ? [wakeInputText(attached, now)] : []),
+          heartbeatInputText(now),
+        ],
+      }),
+    );
   }
 
   /**
@@ -598,12 +866,12 @@ export class BrainAgent {
       void this.ready().then(() => this.releaseHeld(held));
       return;
     }
-    const events = this.#wakes.take();
-    void this.#enqueue(() =>
+    this.#wakes.take();
+    void this.#queueTurn(BRAIN_TURN_TRIGGER.HOLD_RELEASED, () =>
       this.#turn({
         generation,
         trigger: BRAIN_TURN_TRIGGER.HOLD_RELEASED,
-        events,
+        events: this.#inboxEvents(generation),
         open: (attached, now) => [
           ...(attached.length > 0 ? [wakeInputText(attached, now)] : []),
           holdReleasedInputText(held, now),
@@ -626,6 +894,7 @@ export class BrainAgent {
     this.#stopped = true;
     this.#cancelMaintenance();
     this.#wakes.clear();
+    this.#cancelCollecting();
     this.#unsubscribeStore?.();
     this.#unsubscribeStore = undefined;
     this.#generation?.abort.abort();
@@ -664,38 +933,60 @@ export class BrainAgent {
    * quiet, because the next look reads the same deltas; pending hook wakes
    * ride along rather than waiting for their own.
    */
-  rosterLook(): void {
-    if (this.#stopped || this.#turnInFlight) return;
+  rosterLook(): Promise<void> {
+    if (this.#stopped) return Promise.resolve();
     const generation = this.#generation;
-    if (!generation) {
-      void this.ready().then(() => this.rosterLook());
-      return;
-    }
-    if (this.#options.runtime.quietUntil() !== undefined) return;
+    if (!generation) return this.ready().then(() => this.rosterLook());
     const roster = this.#options.roster();
     const now = this.#now();
-    const cursors = generation.cursors;
+    const cursors = generation.captureCursors;
+    const looksAt = this.#options.looksAt?.();
     const looks: BrainWakeEvent[] = (roster.sessions ?? []).flatMap((session) => {
       const identity: SessionIdentity = {
         providerId: session.providerId,
         providerSessionId: session.providerSessionId,
       };
+      if (looksAt && !looksAt.some((own) => sameIdentity(own, identity))) return [];
       const readBefore = cursors.cursor(identity) !== undefined;
       const live =
         session.status === SESSION_STATUS.WORKING || session.status === SESSION_STATUS.WAITING;
       if (session.location !== SESSION_LOCATION.LOCAL || !(readBefore || live)) return [];
       return [{ kind: BRAIN_WAKE_KIND.ROSTER, identity, session, atMs: now }];
     });
-    const events = [...this.#wakes.take(), ...looks];
-    void this.#enqueue(() =>
-      this.#turn({
-        generation,
-        trigger: BRAIN_TURN_TRIGGER.ROSTER,
-        events,
-        open: (attached, openedAt) => [wakeInputText(attached, openedAt, roster.text)],
-        dropEmptyRosterDeltas: true,
-      }),
-    );
+    // The look is captured before anything opens, like a hook: what each
+    // session gained stands in the inbox with its cursor, and the turn that
+    // follows — now, or the next one if the model is quiet or a turn is in
+    // flight — consumes it from there.
+    return this.#capture(looks).then((captured) => {
+      if (this.#stopped || this.#turnInFlight || generation !== this.#generation) return;
+      if (this.#options.runtime.quietUntil() !== undefined) return;
+      // A conversation looking at everything still opens its look with no
+      // events, as the scheduled roster look it is; one looking at its own
+      // session opens nothing when nothing was captured and nothing waits.
+      if (looksAt && captured === 0 && generation.inbox.length === 0) return;
+      this.#wakes.take();
+      void this.#queueTurn(BRAIN_TURN_TRIGGER.ROSTER, () =>
+        this.#turn({
+          generation,
+          trigger: BRAIN_TURN_TRIGGER.ROSTER,
+          events: this.#inboxEvents(generation),
+          open: (attached, openedAt) => [wakeInputText(attached, openedAt, roster.text)],
+          dropEmptyRosterDeltas: true,
+        }),
+      );
+    });
+  }
+
+  #cancelCollecting(): void {
+    if (!this.#collecting) return;
+    this.#cancel(this.#collecting.timer);
+    this.#collecting = undefined;
+  }
+
+  /** Queues a turn behind this conversation's own, and runs it under the host's lane for its trigger. */
+  #queueTurn<T>(trigger: BrainTurnTrigger, work: () => Promise<T>): Promise<T> {
+    const lane = this.#options.lane;
+    return this.#enqueue(() => (lane ? lane(trigger, work) : work()));
   }
 
   /**
@@ -711,11 +1002,16 @@ export class BrainAgent {
       void this.ready().then(() => this.#wakes.requeue(events, 0));
       return;
     }
-    void this.#enqueue(async () => {
+    void this.#queueTurn(BRAIN_TURN_TRIGGER.WAKE, async () => {
+      // The turn opens with the inbox as it stands, not the wakes that armed
+      // the window: a capture that landed since rides along, and one a
+      // failed turn left standing is tried again.
+      const inbox = this.#inboxEvents(generation);
+      if (inbox.length === 0) return;
       const result = await this.#turn({
         generation,
         trigger: BRAIN_TURN_TRIGGER.WAKE,
-        events,
+        events: inbox,
         open: (attached, now) => [wakeInputText(attached, now)],
       });
       if (
@@ -723,7 +1019,7 @@ export class BrainAgent {
         !this.#stopped &&
         generation === this.#generation
       ) {
-        this.#wakes.requeue(events, this.#wakes.quietDelay(result.until));
+        this.#wakes.requeue(inbox, this.#wakes.quietDelay(result.until));
       }
     });
   }
@@ -856,6 +1152,7 @@ export class BrainAgent {
     this.#generation = generation;
     const opened = await generation.opened;
     if (generation !== this.#generation) return;
+    this.#armInbox(generation);
     if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
       this.#reportIncompatible(generation, opened.reason);
     }
@@ -898,6 +1195,16 @@ export class BrainAgent {
     this.#notify();
   }
 
+  /**
+   * Observations captured before the last launch ended, or left standing by a
+   * turn that failed, open a turn once the state is read: they were written
+   * down to be read, and a relaunch reads them without touching a transcript.
+   */
+  #armInbox(generation: Generation): void {
+    if (this.#stopped || generation.inbox.length === 0) return;
+    this.#wakes.push(this.#inboxEvents(generation));
+  }
+
   #reportIncompatible(generation: Generation, reason: string): void {
     if (this.#incompatibleReported === generation.id) return;
     this.#incompatibleReported = generation.id;
@@ -926,7 +1233,9 @@ export class BrainAgent {
     // Wakes coalesced against the old memory — including a quiet retry's —
     // are that generation's work, and go with it.
     this.#wakes.clear();
+    this.#cancelCollecting();
     this.#generation = this.#generationFrom(state);
+    this.#armInbox(this.#generation);
     this.#notify();
   }
 
@@ -954,7 +1263,7 @@ export class BrainAgent {
   async #runAsk(
     run: RunControl,
     question: string,
-    events: readonly BrainWakeEvent[],
+    companions: readonly RunControl[] = [],
   ): Promise<void> {
     const generation = run.generation;
     const record = generation.requests.get(run.runId);
@@ -968,6 +1277,9 @@ export class BrainAgent {
         );
       }
       this.#runs.delete(run.runId);
+      // The asks collected behind it are not lost: they open a turn of their own.
+      const [next, ...rest] = companions;
+      if (next) await this.#runAsk(next, question, rest);
       return;
     }
     // The start is durable before any work opens: a run the file does not
@@ -1007,18 +1319,34 @@ export class BrainAgent {
     }, this.#executionDeadlineMs);
     let result: TurnResult;
     try {
-      result = await this.#turn({
+      const plan: TurnPlan = {
         generation,
         trigger: BRAIN_TURN_TRIGGER.ASK,
-        events,
+        events: this.#inboxEvents(generation),
         open: (attached, now) => [askInputText(question, attached, now)],
         run,
-      });
+        companions: [...companions],
+      };
+      for (const companion of companions) {
+        await this.#ledger.commit(generation, companion.runId, {
+          status: BRAIN_REQUEST_STATUS.RUNNING,
+          startedAt: this.#now(),
+        });
+      }
+      if (companions.length > 0) this.#notify();
+      result = await this.#turn(plan);
     } catch {
       result = { outcome: TURN_OUTCOME.FAILED };
     }
     if (run.deadline !== undefined) this.#cancel(run.deadline);
     this.#runs.delete(run.runId);
+    const { status, end } = this.#endOf(run, result);
+    await this.#ledger.settleRun(generation, run.runId, status, end, run);
+  }
+
+  /** How a run's turn result reads as its record's end. */
+  #endOf(run: RunControl, result: TurnResult): RunOutcome {
+    const generation = run.generation;
     const end: RunEnd = {};
     let status: BrainRequestRecord["status"];
     if (run.timedOut) {
@@ -1047,7 +1375,24 @@ export class BrainAgent {
       status = BRAIN_REQUEST_STATUS.SUCCEEDED;
       if (result.text) end.text = result.text;
     }
-    await this.#ledger.settleRun(generation, run.runId, status, end, run);
+    return { status, end };
+  }
+
+  /**
+   * Settles the asks that rode inside another turn — steered into it, or
+   * collected with it — with that turn's own end: the reply the turn reached
+   * is their reply, and its failure is theirs. Each keeps its own record and
+   * its own acceptance; only the execution was shared.
+   */
+  async #settleCompanions(plan: TurnPlan, run: RunControl, result: TurnResult): Promise<void> {
+    for (const companion of plan.companions ?? []) {
+      this.#runs.delete(companion.runId);
+      const { status, end } = this.#endOf(
+        { ...companion, cancelled: run.cancelled, timedOut: run.timedOut, checkpointFailed: false },
+        result,
+      );
+      await this.#ledger.settleRun(run.generation, companion.runId, status, end);
+    }
   }
 
   async #turn(plan: TurnPlan): Promise<TurnResult> {
@@ -1089,11 +1434,13 @@ export class BrainAgent {
         run.abort.abort();
       }, this.#executionDeadlineMs);
     }
+    const consumes = plan.events.flatMap((event) => (event.entryId ? [event.entryId] : []));
     const turnContext: TurnContext = {
       generation,
       context,
       run,
       signal: AbortSignal.any([generation.abort.signal, run.abort.signal]),
+      ...(consumes.length > 0 ? { consumes } : undefined),
     };
     this.#turnInFlight = true;
     let ended = false;
@@ -1103,13 +1450,30 @@ export class BrainAgent {
       isRevoked: () => ended || this.#revoked(turnContext),
       signal: turnContext.signal,
     };
+    let result: TurnResult;
     try {
-      return await this.#runTurn(plan, turnContext, execution);
+      result = await this.#runTurn(plan, turnContext, execution);
     } finally {
       ended = true;
       if (!plan.run && run.deadline !== undefined) this.#cancel(run.deadline);
       this.#turnInFlight = false;
+      this.#active = undefined;
     }
+    await this.#settleCompanions(plan, run, result);
+    if (
+      plan.trigger !== BRAIN_TURN_TRIGGER.ASK &&
+      result.outcome !== TURN_OUTCOME.REVOKED &&
+      result.outcome !== TURN_OUTCOME.INCOMPATIBLE
+    ) {
+      this.#options.notice?.({
+        trigger: plan.trigger,
+        identities: uniqueIdentities(plan.events),
+        briefings: result.outcome === TURN_OUTCOME.DONE ? (result.briefings ?? []) : [],
+        performedActs: run.performedActs,
+        at: this.#now(),
+      });
+    }
+    return result;
   }
 
   #revoked(context: Pick<TurnContext, "signal">): boolean {
@@ -1134,12 +1498,24 @@ export class BrainAgent {
     };
     let preparation: BrainTurnPreparation | undefined;
     let policy: EffectiveToolPolicy | undefined;
+    let notes: readonly string[] = [];
     const revocation = (): TurnResult => {
       gathering.error = run.timedOut ? "execution deadline passed" : "turn revoked";
       return { outcome: TURN_OUTCOME.REVOKED };
     };
     if (this.#revoked(turnContext)) return revocation();
 
+    // The consumed cursor moves to where each entry's capture read, in
+    // memory now and on disk with the checkpoint; a turn that fails rolls it
+    // back with the context, and the entries stand for the next one.
+    for (const entry of generation.inbox) {
+      if (entry.cursor !== undefined && turnContext.consumes?.includes(entry.id)) {
+        generation.cursors.setCursor(
+          { providerId: entry.providerId, providerSessionId: entry.providerSessionId },
+          entry.cursor,
+        );
+      }
+    }
     const attachedDeltas = await this.#attachDeltas(plan.events, turnContext);
     const transcriptBytes = attachedDeltas.transcriptBytes;
     let failure: TurnResult | undefined;
@@ -1188,10 +1564,16 @@ export class BrainAgent {
           // a failed turn still reads them again.
           contextMark = context.mark();
           const primed = await this.#primeIfFresh(turnContext);
+          notes = this.#options.openingNotes?.take() ?? [];
           const end = await this.#execute(turnContext, execution, gathering, {
             prompt: preparation.prompt,
             policy,
-            opening: [...primed, ...plan.open(events, startedAt)],
+            plan,
+            opening: [
+              ...primed,
+              ...(notes.length > 0 ? [activityNoticesInputText(notes, startedAt)] : []),
+              ...plan.open(events, startedAt),
+            ],
             advanceMark,
           });
           failure = this.#turnResultFrom(end, turnContext, gathering);
@@ -1212,9 +1594,11 @@ export class BrainAgent {
     if (failure) {
       await this.#restoreContext(turnContext, contextMark);
       generation.cursors.rollback(cursorMark);
+      if (notes.length > 0) this.#options.openingNotes?.restore(notes);
       this.#report(`Brain ${plan.trigger} turn did not complete: ${gathering.error}`);
     } else {
       generation.cursors.retain(this.#options.roster().identities);
+      generation.captureCursors.retain(this.#options.roster().identities);
       const written = await this.#ledger.checkpoint(turnContext);
       if (!written) run.checkpointFailed = true;
       if (written) await context.afterTurn({ signal: turnContext.signal });
@@ -1264,7 +1648,13 @@ export class BrainAgent {
       ...(gathering.error ? { error: gathering.error } : undefined),
     });
 
-    return failure ?? { outcome: TURN_OUTCOME.DONE, text: gathering.outputText };
+    return (
+      failure ?? {
+        outcome: TURN_OUTCOME.DONE,
+        text: gathering.outputText,
+        briefings: gathering.deliveries.map((delivery) => delivery.briefing),
+      }
+    );
   }
 
   /**
@@ -1346,6 +1736,7 @@ export class BrainAgent {
     turn: {
       prompt: string;
       policy: EffectiveToolPolicy;
+      plan: TurnPlan;
       opening: readonly string[];
       advanceMark: () => Promise<void>;
     },
@@ -1425,6 +1816,7 @@ export class BrainAgent {
       signal: turnContext.signal,
       onEvent,
     });
+    this.#active = { run, started, plan: turn.plan };
     return started.done;
   }
 
@@ -1494,4 +1886,42 @@ export class BrainAgent {
       maximumChars: this.#fullTranscriptChars,
     });
   }
+}
+
+function uniqueIdentities(events: readonly BrainWakeEvent[]): readonly SessionIdentity[] {
+  const seen: SessionIdentity[] = [];
+  for (const event of events) {
+    if (!seen.some((identity) => sameIdentity(identity, event.identity))) {
+      seen.push({ ...event.identity });
+    }
+  }
+  return seen;
+}
+
+function sameWake(first: BrainWakeEvent, second: BrainWakeEvent): boolean {
+  return (
+    first.kind === second.kind &&
+    first.hookEvent === second.hookEvent &&
+    first.atMs === second.atMs &&
+    sameIdentity(first.identity, second.identity)
+  );
+}
+
+function lookKey(identity: SessionIdentity): string {
+  return JSON.stringify([identity.providerId, identity.providerSessionId]);
+}
+
+/** A session as the roster showed it at a look, in the fields a change would move; never a transcript. */
+function lookFingerprint(event: BrainWakeEvent): string {
+  const session = event.session;
+  return JSON.stringify(
+    session
+      ? [
+          session.status,
+          session.lastActivityAt,
+          session.detail.activity ?? null,
+          session.detail.error ?? null,
+        ]
+      : null,
+  );
 }

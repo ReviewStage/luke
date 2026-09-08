@@ -416,6 +416,8 @@ test("a required compaction that fails ends the run recoverably and leaves the c
     checkpointFormat: "tool-loop@1:openai-responses-input/1",
     items: [userMessageItem("x".repeat(500))],
     cursors: {},
+    captureCursors: {},
+    inbox: [],
     requests: [],
     journal: [],
   };

@@ -1,5 +1,5 @@
 import type { Session, SessionIdentity } from "@sidecar/session";
-import type { ActResultStatus } from "@sidecar/wire";
+import type { ActResultStatus, WireRecord } from "@sidecar/wire";
 
 /**
  * What wakes the brain, and what it hands back. A wake is a provider's hook
@@ -35,11 +35,38 @@ export interface BrainWakeEvent {
   hookEvent?: string;
   /** The session as the roster held it at the wake, when it still held it. */
   session?: Session;
+  /** The session's fields as an inbox entry kept them, for a wake replayed from the durable inbox. */
+  sessionSummary?: WireRecord;
   transcriptDelta?: BrainTranscriptDelta;
   atMs: number;
+  /** The inbox entry this wake was captured as, so the turn that opens with it consumes it. */
+  entryId?: string;
 }
 
 export interface BrainDelivery {
   briefing: string;
   decidedAt: number;
+  /**
+   * The conversation that decided the briefing, set by the host that routes
+   * deliveries, so a briefing held through a meeting goes back to the
+   * conversation that knows the session it was about, never to another.
+   */
+  sessionKey?: string;
+}
+
+/**
+ * What one observation or heartbeat turn amounted to, in the host's own
+ * counts and never a transcript's words: which sessions it looked at, whether
+ * it briefed the developer and with what, and how many acts it carried. An
+ * observed conversation hands one to the host after each of its turns, for
+ * the host to record as a compact attributable notice that main reads on its
+ * next turn, so main learns what its sibling conversations did without ever
+ * being handed their raw context.
+ */
+export interface BrainTurnNotice {
+  trigger: string;
+  identities: readonly SessionIdentity[];
+  briefings: readonly string[];
+  performedActs: number;
+  at: number;
 }

@@ -1,9 +1,11 @@
 import type { RememberedFact } from "@sidecar/acts";
 import { type BrainStateRepository, brainStateRepositoryFromStorage } from "@sidecar/brain";
 import type { ConversationEntry } from "@sidecar/realtime";
+import type { ScheduledJobStore } from "@sidecar/runtime";
 import {
   ARCHIVE_REASON,
   CONVERSATION_KIND,
+  type ConversationKind,
   type ConversationRecord,
   DEFAULT_AGENT_ID,
   type HistoryArchiveRecord,
@@ -107,6 +109,19 @@ export interface RuntimeStoreWiring {
   /** Whether the key names a conversation the directory lists right now. */
   holds: (sessionKey: SessionKey) => boolean;
   createThread: (temporary: boolean) => Promise<ConversationRecord>;
+  /**
+   * Lists a runtime-owned conversation — an observed session's — creating
+   * its row when none stands and bringing an archived one back, so the
+   * selector shows it and its thread takes lines. In a run with nothing on
+   * disk it stands beside the temporary threads and is gone at the next launch.
+   */
+  ensureConversation: (
+    sessionKey: SessionKey,
+    kind: ConversationKind,
+    name: string,
+  ) => Promise<ConversationRecord>;
+  /** The scheduler's jobs; a run with nothing on disk keeps them in memory alone. */
+  scheduledJobStore: () => ScheduledJobStore;
   archive: (sessionKey: SessionKey) => Promise<boolean>;
   unarchive: (sessionKey: SessionKey) => Promise<boolean>;
   /**
@@ -252,6 +267,16 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     return true;
   };
 
+  const memoryJobs = new Map<string, import("@sidecar/runtime").ScheduledJob>();
+  const memoryJobStore: ScheduledJobStore = {
+    list: async () => [...memoryJobs.values()],
+    put: async (job) => {
+      memoryJobs.set(job.id, job);
+      return true;
+    },
+    delete: async (id) => memoryJobs.delete(id),
+  };
+
   return {
     client,
     thread,
@@ -329,6 +354,43 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
       await refreshDirectory();
       return created;
     },
+    ensureConversation: async (sessionKey, kind, name) => {
+      const now = dependencies.now();
+      const held =
+        temporary.get(sessionKey) ?? stored.find((record) => record.sessionKey === sessionKey);
+      if (held && held.archivedAt === undefined) return held;
+      if (!dependencies.persistent) {
+        const record: ConversationRecord = {
+          sessionKey,
+          kind,
+          name,
+          createdAt: now,
+          lastActivityAt: now,
+          temporary: true,
+        };
+        temporary.set(sessionKey, record);
+        threads.set(sessionKey, memoryThread(sessionKey));
+        announce();
+        return record;
+      }
+      if (held) {
+        await client().unarchiveConversation(sessionKey);
+        await restoreThread(sessionKey);
+        await refreshDirectory();
+        return stored.find((record) => record.sessionKey === sessionKey) ?? held;
+      }
+      const created = await client().createConversation({
+        agentId: DEFAULT_AGENT_ID,
+        sessionKey,
+        name,
+        kind,
+        now,
+      });
+      await refreshDirectory();
+      return created;
+    },
+    scheduledJobStore: () =>
+      dependencies.persistent ? client().scheduledJobStore() : memoryJobStore,
     archive: async (sessionKey) => {
       // Archiving preserves history, and a temporary thread has nowhere to
       // preserve it: the ask is refused and the thread left exactly as it was.

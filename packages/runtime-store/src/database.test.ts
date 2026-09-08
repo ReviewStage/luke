@@ -547,3 +547,54 @@ test("a version-1 database is walked forward: its item-tagged generation gains t
   assert.throws(() => RuntimeDatabase.open(location), /schema version 99/u);
   fs.rmSync(directory, { recursive: true, force: true });
 });
+
+test("the observation inbox and capture cursors round-trip, amend whole, and cascade with the generation", () => {
+  const database = openTestDatabase();
+  const state = populatedState("gen-inbox");
+  const entry = {
+    id: "entry-1",
+    kind: "hook" as const,
+    providerId: "claude-code",
+    providerSessionId: "abc",
+    hookEvent: "Stop",
+    atMs: NOW,
+    capturedAt: NOW + 1,
+    session: { title: "synthetic session", status: "waiting" },
+    delta: { text: "synthetic delta", truncated: false, status: "accepted" as const },
+    cursor: "abc-2",
+  };
+  const captured: BrainPersistedState = {
+    ...state,
+    captureCursors: { "claude-code": { abc: "abc-2" } },
+    inbox: [entry],
+  };
+  assert.equal(
+    saveBrainEnvelope(database, MAIN_SESSION_KEY, { kind: SAVE_KIND.REPLACE, state: captured }),
+    true,
+  );
+  assert.deepEqual(loadBrainEnvelope(database, MAIN_SESSION_KEY).state, captured);
+  // Consumption: the inbox emptied and the consumed cursor moved, in one amendment.
+  const consumed: BrainPersistedState = {
+    ...captured,
+    cursors: { "claude-code": { abc: "abc-2" } },
+    inbox: [],
+  };
+  const tracker = new EnvelopeTracker();
+  tracker.observe(loadBrainEnvelope(database, MAIN_SESSION_KEY));
+  const save = tracker.saveFor(consumed);
+  assert.equal(save.kind, SAVE_KIND.AMEND);
+  if (save.kind === SAVE_KIND.AMEND) {
+    assert.deepEqual(save.delta.inbox, []);
+    assert.deepEqual(save.delta.cursors, { "claude-code": { abc: "abc-2" } });
+    assert.equal(save.delta.captureCursors, undefined);
+  }
+  assert.equal(saveBrainEnvelope(database, MAIN_SESSION_KEY, save), true);
+  assert.deepEqual(loadBrainEnvelope(database, MAIN_SESSION_KEY).state, consumed);
+  // An entry this build cannot read makes the generation unreadable rather than half-read.
+  database
+    .prepare(
+      "INSERT INTO observation_inbox (session_id, ordinal, entry_id, payload) VALUES (?, ?, ?, ?)",
+    )
+    .run("gen-inbox", 0, "bad", JSON.stringify({ id: "bad" }));
+  assert.equal(loadBrainEnvelope(database, MAIN_SESSION_KEY).unreadable, true);
+});

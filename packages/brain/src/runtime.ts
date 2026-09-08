@@ -273,6 +273,12 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
       }
       const continued = await this.#absorb(answer, request, emit, ingest, lifecycle);
       if (signal.aborted) return cancelled();
+      if (!continued && steered.length > 0) {
+        // Words steered in while the model was answering are still unread: the
+        // run is not over until the model has read them, so the loop goes
+        // round once more with them rather than ending on a reply that never saw them.
+        continue;
+      }
       if (!continued) {
         // An answer that stopped short with no words is a run that fell short;
         // one that stopped short with words still ends completed, its words

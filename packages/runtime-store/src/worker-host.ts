@@ -12,6 +12,7 @@ import {
 import { AGENT_DATABASE_FILE, RuntimeDatabase } from "./database.js";
 import { personalFacts, replacePersonalFacts } from "./facts-table.js";
 import { appendHistory, historyClearedAt, listHistory } from "./history-table.js";
+import { deleteScheduledJob, listScheduledJobs, putScheduledJob } from "./jobs-table.js";
 import { runHistoryMaintenance } from "./maintenance-run.js";
 import {
   RUNTIME_STORE_METHOD,
@@ -96,6 +97,9 @@ const HANDLERS: RuntimeStoreHandlers = {
     restoreArchive(host.opened(), host.agentRoot(), params.archiveId, params.agentId, params.now),
   [RUNTIME_STORE_METHOD.MAINTENANCE_RUN]: (host, params) =>
     runHistoryMaintenance(host.opened(), host.agentRoot(), params),
+  [RUNTIME_STORE_METHOD.JOBS_LIST]: (host) => listScheduledJobs(host.opened()),
+  [RUNTIME_STORE_METHOD.JOB_PUT]: (host, params) => putScheduledJob(host.opened(), params.job),
+  [RUNTIME_STORE_METHOD.JOB_DELETE]: (host, params) => deleteScheduledJob(host.opened(), params.id),
   [RUNTIME_STORE_METHOD.CLOSE]: (host) => {
     host.close();
     return true;
