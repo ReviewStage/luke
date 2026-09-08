@@ -7,6 +7,7 @@ import {
   ConversationHistoryPanel,
   HISTORY_ENTRY_SPEAKER,
   HISTORY_PENDING_LABEL,
+  HistoryClearButton,
   historyEntryPresentation,
 } from "./conversation-history-panel";
 
@@ -60,7 +61,6 @@ test("an announcement shows its spoken transcript", () => {
         },
       ],
       now: NOW,
-      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
@@ -80,7 +80,6 @@ test("a reply keeps its lines through the thread and draws as the Markdown it wa
     createElement(ConversationHistoryPanel, {
       entries,
       now: NOW,
-      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
@@ -103,7 +102,6 @@ test("a recorded entry keeps its local time at the row's edge, outside the bubbl
         },
       ],
       now: NOW,
-      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
@@ -127,7 +125,6 @@ test("conversation history is blocked from optional panel recordings", () => {
     createElement(ConversationHistoryPanel, {
       entries: [{ kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "private words" }],
       now: NOW,
-      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
@@ -147,7 +144,6 @@ test("messages offer a copy control while quiet events offer none", () => {
         { kind: CONVERSATION_ENTRY_KIND.ACT, words: "Sent to Codex." },
       ],
       now: NOW,
-      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
@@ -170,7 +166,6 @@ test("a line still being said draws as the bubble it will settle into", () => {
       ],
       live: [{ kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT, words: "Checkout is" }],
       now: NOW,
-      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
@@ -190,7 +185,6 @@ test("words still arriving stand the thread up without a settled line", () => {
       entries: [],
       live: [{ kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Looking now." }],
       now: NOW,
-      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
@@ -198,8 +192,8 @@ test("words still arriving stand the thread up without a settled line", () => {
 
   assert.match(markup, />Looking now\.</);
   assert.doesNotMatch(markup, />No messages yet</);
-  // Clear retires recorded lines, and nothing here is recorded yet.
-  assert.doesNotMatch(markup, /history-header/);
+  // The clear rides the tab bar beside the panel, never a row of the thread's own.
+  assert.doesNotMatch(markup, /history-clear/);
 });
 
 test("the empty history reports only its state", () => {
@@ -207,14 +201,25 @@ test("the empty history reports only its state", () => {
     createElement(ConversationHistoryPanel, {
       entries: [],
       now: NOW,
-      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
   );
 
   assert.match(markup, />No messages yet</);
-  assert.doesNotMatch(markup, /history-header|next typed|stays in memory/);
+  assert.doesNotMatch(markup, /history-clear|next typed|stays in memory/);
+});
+
+test("the clear control opens as one quiet button, its confirmation not yet asked", () => {
+  const markup = renderToStaticMarkup(
+    createElement(HistoryClearButton, { onClear: () => undefined }),
+  );
+
+  assert.match(markup, /<span class="history-clear-controls">/);
+  assert.match(markup, /class="history-clear"[^>]*>Clear</);
+  // The second press's words, and the way to stand down, arrive only with the
+  // first press.
+  assert.doesNotMatch(markup, /history-clear-cancel|Clear history/);
 });
 
 test("the composer stands at the foot of the thread, empty or not", () => {
@@ -222,7 +227,6 @@ test("the composer stands at the foot of the thread, empty or not", () => {
     createElement(ConversationHistoryPanel, {
       entries: [],
       now: NOW,
-      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
@@ -235,7 +239,6 @@ test("the composer stands at the foot of the thread, empty or not", () => {
     createElement(ConversationHistoryPanel, {
       entries: [{ kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "ship it" }],
       now: NOW,
-      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
       askShortcut: "Alt+Space",
@@ -268,7 +271,6 @@ test("an ask whose run is still going waits beside its words and offers a cancel
         requests: [{ ...run, status }],
         onCancelRequest: (runId) => cancelled.push(runId),
         now: NOW,
-        onClear: () => undefined,
         ask: async () => undefined,
         onAskEngaged: () => undefined,
       }),
@@ -290,7 +292,6 @@ test("an ask whose run is still going waits beside its words and offers a cancel
       requests: [{ ...run, origin: "spoken", status: "running" }],
       onCancelRequest: (runId) => cancelled.push(runId),
       now: NOW,
-      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
@@ -317,7 +318,6 @@ test("a line that followed a long silence is dated over it, in the quiet event v
         { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Quiet.", recordedAt: NOW - HOUR_MS / 4 },
       ],
       now: NOW,
-      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
@@ -363,7 +363,6 @@ test("lines with no stamp draw no date over them", () => {
       ],
       live: [{ kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Still" }],
       now: NOW,
-      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),

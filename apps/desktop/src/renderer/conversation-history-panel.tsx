@@ -176,13 +176,47 @@ const STREAM_FOLLOW_SLACK_PX = 48;
  */
 const HISTORY_COMPOSER_ROW_INDEX = 1;
 
+/**
+ * The thread's one control, seated beside the tab bar the way each tab's
+ * search is, so every tab's control is opened from the same place. Clearing
+ * is the recoverable deletion, but it still asks twice: the second press
+ * names what the first one meant, with a way to stand down beside it. The
+ * confirmation needs no reset of its own — the button is drawn only over a
+ * thread with recorded lines, so the clear that empties them unmounts it,
+ * exactly as leaving the tab does.
+ */
+export function HistoryClearButton({ onClear }: { onClear: () => void }): React.JSX.Element {
+  const [confirming, setConfirming] = useState(false);
+  return (
+    <span className="history-clear-controls">
+      {confirming ? (
+        <button type="button" className="history-clear-cancel" onClick={() => setConfirming(false)}>
+          Cancel
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className="history-clear"
+        onClick={() => {
+          if (!confirming) {
+            setConfirming(true);
+            return;
+          }
+          onClear();
+        }}
+      >
+        {confirming ? "Clear history" : "Clear"}
+      </button>
+    </span>
+  );
+}
+
 export function ConversationHistoryPanel({
   entries,
   live = [],
   requests = [],
   now,
   onCancelRequest,
-  onClear,
   ask,
   onAskEngaged,
   askShortcut,
@@ -206,13 +240,11 @@ export function ConversationHistoryPanel({
    * bubbles they will settle into — words growing, no timestamp, no copy.
    */
   live?: readonly ConversationEntry[];
-  onClear: () => void;
   /** The same ask the sessions tab's composer carries: one conversation, reached from either tab. */
   ask: AskHandler;
   onAskEngaged: (engaged: boolean) => void;
   askShortcut?: string;
 }): React.JSX.Element {
-  const [confirmingClear, setConfirmingClear] = useState(false);
   const list = useRef<HTMLDivElement | null>(null);
   const entryCount = entries.length;
   const liveLength = live.reduce((total, entry) => total + entry.words.length, 0);
@@ -238,10 +270,6 @@ export function ConversationHistoryPanel({
     if (fromTail <= STREAM_FOLLOW_SLACK_PX) element.scrollTop = element.scrollHeight;
   }, [liveLength]);
 
-  useEffect(() => {
-    if (entries.length === 0) setConfirmingClear(false);
-  }, [entries.length]);
-
   const thread = entries.length > 0 || live.length > 0;
 
   return (
@@ -253,34 +281,6 @@ export function ConversationHistoryPanel({
       id={panelPanelId(PANEL_TAB.HISTORY)}
       aria-labelledby={panelTabId(PANEL_TAB.HISTORY)}
     >
-      {entries.length > 0 ? (
-        <header className="history-header">
-          <span className="history-clear-controls">
-            {confirmingClear ? (
-              <button
-                type="button"
-                className="history-clear-cancel"
-                onClick={() => setConfirmingClear(false)}
-              >
-                Cancel
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="history-clear"
-              onClick={() => {
-                if (!confirmingClear) {
-                  setConfirmingClear(true);
-                  return;
-                }
-                onClear();
-              }}
-            >
-              {confirmingClear ? "Clear history" : "Clear"}
-            </button>
-          </span>
-        </header>
-      ) : null}
       {thread ? (
         <div className="history-scroll" ref={list}>
           {/* The pull is the thread's own sideways scroll, on a scroller of its

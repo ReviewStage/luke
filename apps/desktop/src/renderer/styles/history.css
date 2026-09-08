@@ -14,14 +14,8 @@
   margin-top: 0;
 }
 
-.history-header {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 0 2px;
-}
-
+/* The clear rides the tab bar's line beside the other header controls, the
+   way each tab's search does, rather than taking a row of the thread's own. */
 .history-clear-controls {
   display: inline-flex;
   flex: 0 0 auto;
