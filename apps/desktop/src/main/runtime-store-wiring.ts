@@ -232,11 +232,9 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     restore: async () => {
       stored = await client().listConversations();
       archives = await client().listArchives();
-      for (const record of stored) {
-        if (record.archivedAt === undefined || record.kind === CONVERSATION_KIND.MAIN) {
-          await restoreThread(record.sessionKey);
-        }
-      }
+      // Every conversation's thread, archived ones included: an archived
+      // thread is still shown, read-only, when the developer selects it.
+      for (const record of stored) await restoreThread(record.sessionKey);
       rememberedFacts = await client().personalFacts();
       announce();
     },

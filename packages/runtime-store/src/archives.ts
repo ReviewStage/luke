@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
+  type AgentId,
   type ArchiveEncoding,
   CONVERSATION_KIND,
   type ConversationKind,
@@ -435,7 +436,7 @@ export function restoreArchive(
   database: RuntimeDatabase,
   agentRoot: string,
   archiveId: string,
-  agentId: string,
+  agentId: AgentId,
   now: number,
 ): RestoreResult {
   const row = archiveRow(database, archiveId);
@@ -461,9 +462,8 @@ export function restoreArchive(
     const kind: ConversationKind = isConversationKind(header.kind)
       ? header.kind
       : conversationKindOf(sessionKey);
-    // SAFETY: the agent id column holds what the constructor admitted at creation.
     createConversation(database, {
-      agentId: agentId as Parameters<typeof createConversation>[1]["agentId"],
+      agentId,
       sessionKey,
       kind,
       name: isWireString(header.name) ? header.name : row.name,

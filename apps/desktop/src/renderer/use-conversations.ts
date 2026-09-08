@@ -91,12 +91,11 @@ export function useConversations(): ConversationsState {
       .catch(() => undefined);
   }, []);
 
-  // A conversation that leaves the directory — archived elsewhere, deleted,
-  // gone with a temporary thread — cannot stay selected.
+  // A conversation that leaves the directory — deleted for good, or gone with
+  // a temporary thread — cannot stay selected; an archived one can, read-only.
   useEffect(() => {
-    if (selected === MAIN_SESSION_KEY) return;
-    const record = directory.entries.find((entry) => entry.sessionKey === selected);
-    if (!record || record.archivedAt !== undefined) select(MAIN_SESSION_KEY);
+    if (selected === MAIN_SESSION_KEY || directory.entries.length === 0) return;
+    if (!directory.entries.some((entry) => entry.sessionKey === selected)) select(MAIN_SESSION_KEY);
   }, [directory, selected, select]);
 
   const acceptBootstrap = useCallback((bootstrap: Pick<AppBootstrap, "conversationHistory">) => {
