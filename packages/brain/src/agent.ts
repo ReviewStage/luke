@@ -1332,7 +1332,16 @@ export class BrainAgent {
       (opened) => retireContext(opened.context),
     );
     if (reopened.aborted) return;
-    if (generation !== this.#generation || generation.context !== context) {
+    // The value was claimed while the signal stood, but this continuation
+    // runs later: a stop that landed between the two keeps the same
+    // generation and context, so the signal is checked here as well as the
+    // identities, and a context claimed for a generation since revoked is
+    // retired rather than installed.
+    if (
+      generation.abort.signal.aborted ||
+      generation !== this.#generation ||
+      generation.context !== context
+    ) {
       retireContext(reopened.value.context);
       return;
     }

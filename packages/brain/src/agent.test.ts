@@ -3108,3 +3108,41 @@ test("a reopen the runtime refuses re-admits nothing: the generation refuses tur
   assert.equal(h.storage.stored()?.checkpointFormat, committed.checkpointFormat);
   await h.agent.stop();
 });
+
+test("a reopen claimed just before a stop installs nothing: the stop's signal is checked after the wait, and the claimed context is retired", async () => {
+  const h = harness();
+  let disposed = 0;
+  let releaseReopen: (() => void) | undefined;
+  const original = Object.getPrototypeOf(h.runtime).openContext;
+  let opens = 0;
+  Object.defineProperty(h.runtime, "openContext", {
+    configurable: true,
+    value: async (...args: Parameters<typeof original>) => {
+      opens += 1;
+      const opened = await original.apply(h.runtime, args);
+      if (opens === 1) return opened;
+      Object.defineProperty(opened.context, "dispose", {
+        value: () => {
+          disposed += 1;
+        },
+      });
+      // The reopen's value is ready, but it is handed over only after the
+      // test has stopped the agent, so the claim lands before the signal and
+      // the host's continuation after it.
+      await new Promise<void>((resolve) => {
+        releaseReopen = resolve;
+      });
+      return opened;
+    },
+  });
+  h.client.answers.push(failedAnswer("boom"));
+  const accepted = await submit(h, "fail");
+  assert.ok(accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
+  await settle();
+  assert.ok(releaseReopen, "the failed turn is reopening its context");
+  const stopping = h.agent.stop();
+  releaseReopen?.();
+  await stopping;
+  await settle();
+  assert.equal(disposed, 1);
+});
