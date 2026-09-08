@@ -5,6 +5,7 @@ import {
 } from "@sidecar/runtime-contracts";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { type BrainJournalEntry, brainJournalEntryFromWire } from "./journal.js";
+import { type BrainObservationEntry, brainObservationEntryFromWire } from "./observation-inbox.js";
 import {
   type BrainRequestRecord,
   brainRequestRecordFromWire,
@@ -91,8 +92,12 @@ export interface BrainPersistedState {
    */
   checkpointFormat?: string;
   items: readonly ResponsesInputItem[];
-  /** Keyed by provider id, then by provider session id. */
+  /** Where a model has read each transcript to, keyed by provider id, then by provider session id. */
   cursors: BrainTranscriptCursors;
+  /** Where the inbox has captured each transcript to; ahead of `cursors` while entries wait. */
+  captureCursors: BrainTranscriptCursors;
+  /** Observations captured and not yet consumed by a turn, oldest first. */
+  inbox: readonly BrainObservationEntry[];
   requests: readonly BrainRequestRecord[];
   journal: readonly BrainJournalEntry[];
   reset?: BrainResetMarker;
@@ -115,6 +120,8 @@ export function freshBrainState(generationId: string, now: number): BrainPersist
     expiresAt: now + BRAIN_GENERATION_LIFETIME_MS,
     items: [],
     cursors: {},
+    captureCursors: {},
+    inbox: [],
     requests: [],
     journal: [],
   };
@@ -141,15 +148,21 @@ export function brainPersistedStateFromWire(
     if (!isRecord(item)) return undefined;
     items.push(item);
   }
-  const cursors: Record<string, Record<string, string>> = {};
-  for (const [providerId, sessions] of Object.entries(value.cursors)) {
-    if (!isRecord(sessions)) return undefined;
-    const provider: Record<string, string> = {};
-    for (const [providerSessionId, cursor] of Object.entries(sessions)) {
-      if (!isWireString(cursor)) return undefined;
-      provider[providerSessionId] = cursor;
+  const cursors = cursorsFromWire(value.cursors);
+  if (!cursors) return undefined;
+  // An envelope written before the inbox existed has captured nothing and
+  // holds nothing waiting; both read as empty rather than as unreadable.
+  const captureCursors =
+    value.captureCursors === undefined ? {} : cursorsFromWire(value.captureCursors);
+  if (!captureCursors) return undefined;
+  const inbox: BrainObservationEntry[] = [];
+  if (value.inbox !== undefined) {
+    if (!Array.isArray(value.inbox)) return undefined;
+    for (const entry of value.inbox) {
+      const parsed = brainObservationEntryFromWire(entry);
+      if (!parsed) return undefined;
+      inbox.push(parsed);
     }
-    cursors[providerId] = provider;
   }
   const requests: BrainRequestRecord[] = [];
   for (const request of value.requests) {
@@ -171,10 +184,29 @@ export function brainPersistedStateFromWire(
     ...(checkpointFormat !== undefined ? { checkpointFormat } : undefined),
     items,
     cursors,
+    captureCursors,
+    inbox,
     requests,
     journal,
     ...(reset ? { reset } : undefined),
   };
+}
+
+function cursorsFromWire(
+  value: UnparsedWireValue,
+): Record<string, Record<string, string>> | undefined {
+  if (!isRecord(value)) return undefined;
+  const cursors: Record<string, Record<string, string>> = {};
+  for (const [providerId, sessions] of Object.entries(value)) {
+    if (!isRecord(sessions)) return undefined;
+    const provider: Record<string, string> = {};
+    for (const [providerSessionId, cursor] of Object.entries(sessions)) {
+      if (!isWireString(cursor)) return undefined;
+      provider[providerSessionId] = cursor;
+    }
+    cursors[providerId] = provider;
+  }
+  return cursors;
 }
 
 /**

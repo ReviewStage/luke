@@ -2,7 +2,12 @@ export {
   BRAIN_DEFAULTS,
   BrainAgent,
   type BrainAgentOptions,
+  type BrainLane,
+  type BrainOpeningNotes,
   type BrainWorkspaceAccess,
+  LOOK_SUBJECT,
+  type LookSubject,
+  type LookSubjectKind,
 } from "./agent.js";
 export { RESPONSES_CONTEXT_ENGINE_ID, registerBrainBuiltIns } from "./builtins.js";
 export { BrainGenerationClock } from "./generation-clock.js";
@@ -16,6 +21,13 @@ export {
   RETRY_AFTER_HEADER,
   rateLimitWaitMs,
 } from "./model-adapter-shared.js";
+export {
+  type BrainObservationEntry,
+  brainObservationEntryFromWire,
+  entryFromEvent,
+  eventFromEntry,
+  sessionSummary,
+} from "./observation-inbox.js";
 export {
   BRAIN_OPENAI_DEFAULTS,
   OPENAI_MODEL_ADAPTER_ID,
@@ -40,6 +52,7 @@ export {
   brainInputTokensRequest,
   brainResponsesOutput,
   brainResponsesRequest,
+  RESPONSES_ITEM_TYPE,
   type ResponsesFunctionTool,
   type ResponsesInputItem,
   responsesCompactedWindow,
@@ -81,11 +94,14 @@ export {
   BRAIN_TURN_TRIGGER,
   type BrainTurnDescription,
   type BrainTurnPreparation,
+  type BrainTurnTrigger,
   runOriginOf,
 } from "./turn.js";
 export {
   BRAIN_WAKE_KIND,
   type BrainDelivery,
+  type BrainTurnNotice,
+  type BrainTurnReport,
   type BrainWakeEvent,
 } from "./wake-events.js";
 export { BRAIN_IDENTITY_LINE, BRAIN_WORKSPACE_SEEDS } from "./workspace-seeds.js";

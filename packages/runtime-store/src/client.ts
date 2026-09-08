@@ -1,6 +1,7 @@
 import type { RememberedFact } from "@sidecar/acts";
 import type { BrainPersistedState, BrainStateLoad, BrainStateRepository } from "@sidecar/brain";
 import type { ConversationEntry } from "@sidecar/realtime";
+import type { ScheduledJob, ScheduledJobStore } from "@sidecar/runtime";
 import type {
   AgentId,
   ArchiveReason,
@@ -186,6 +187,15 @@ export class RuntimeStoreClient {
 
   replacePersonalFacts(facts: readonly RememberedFact[]): Promise<boolean> {
     return this.request(RUNTIME_STORE_METHOD.FACTS_REPLACE, { facts });
+  }
+
+  /** The scheduler's jobs as a store: listed, written whole, and deleted through the worker. */
+  scheduledJobStore(): ScheduledJobStore {
+    return {
+      list: () => this.request(RUNTIME_STORE_METHOD.JOBS_LIST, {}),
+      put: (job: ScheduledJob) => this.request(RUNTIME_STORE_METHOD.JOB_PUT, { job }),
+      delete: (id: string) => this.request(RUNTIME_STORE_METHOD.JOB_DELETE, { id }),
+    };
   }
 
   close(): Promise<boolean> {

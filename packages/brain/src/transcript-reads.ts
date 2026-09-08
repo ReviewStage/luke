@@ -59,6 +59,13 @@ export async function attachTranscriptDeltas(
   const attached: BrainWakeEvent[] = [];
   for (const event of events) {
     if (options.revoked()) break;
+    // A wake replayed from the durable inbox carries the delta its capture
+    // read; nothing is read again for it.
+    if (event.transcriptDelta) {
+      transcriptBytes += event.transcriptDelta.text.length;
+      attached.push({ ...event });
+      continue;
+    }
     if (read.some((identity) => sameIdentity(identity, event.identity))) {
       attached.push({ ...event });
       continue;

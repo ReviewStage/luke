@@ -12,6 +12,38 @@ export {
   resolveConfiguration,
 } from "./configuration.js";
 export {
+  CRON_DEFAULTS,
+  CRON_SCHEDULE_KIND,
+  type CronSchedule,
+  type CronScheduleKind,
+  CronScheduler,
+  type CronSchedulerOptions,
+  cronScheduleFromWire,
+  jobDue,
+  memoryScheduledJobStore,
+  nextRunAt,
+  type ScheduledJob,
+  type ScheduledJobStore,
+  scheduledJobFromWire,
+  validCronExpression,
+} from "./cron.js";
+export { HEARTBEAT_DEFAULTS, heartbeatJob } from "./heartbeat.js";
+export {
+  agentLaneWidth,
+  CRON_HOOK_GROUP,
+  LANE,
+  LANE_DEFAULTS,
+  LANE_LIST,
+  type Lane,
+  type LaneConfiguration,
+  type LaneConfigurationInputs,
+  type LaneGroup,
+  LaneScheduler,
+  type LaneSnapshot,
+  type LaneWidths,
+  laneConfiguration,
+} from "./lanes.js";
+export {
   type BuiltPrompt,
   bootstrapFilesForProfile,
   buildSystemPrompt,
@@ -28,6 +60,25 @@ export {
   type PromptSection,
   type PromptSectionId,
 } from "./prompt.js";
+export {
+  admitToQueue,
+  DEFAULT_QUEUE_SETTINGS,
+  drainQueue,
+  EMPTY_QUEUE,
+  PendingInputQueue,
+  type PendingInputQueueOptions,
+  type PendingQueueState,
+  QUEUE_DEFAULTS,
+  QUEUE_MODE,
+  QUEUE_OVERFLOW,
+  type QueueAdmission,
+  type QueueBatch,
+  type QueuedInput,
+  type QueueMode,
+  type QueueOverflow,
+  type QueueSettings,
+  queueSummaryText,
+} from "./queue.js";
 export {
   type AgentRuntimeDescriptor,
   type CompatibilityRule,
@@ -74,6 +125,7 @@ export {
   type SkillLoad,
   skillDescriptorFrom,
 } from "./skills.js";
+export type { ScheduledTimer } from "./timers.js";
 export {
   CHILD_DEPTH_CAP,
   CHILD_TOOL_EXCLUSIONS,

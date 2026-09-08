@@ -35,6 +35,15 @@
  * transaction that removed the rows and cleared only once the file it names
  * is published and verified.
  *
+ * Version 4 adds the scheduler's jobs: one row per job, its payload the job
+ * as the scheduler wrote it, so a launch finds what was scheduled and when it
+ * last ran without a second store beside the database.
+ *
+ * Version 5 adds the durable observation inbox: the observations captured
+ * for a conversation and not yet consumed by a turn, and the capture cursors
+ * that say how far each transcript has been written down — kept apart from
+ * the consumed cursors, which say how far a model has read.
+ *
  * The schema is versioned by the `schema_version` table. A database at a
  * version this build does not know is refused rather than migrated by guess.
  */
@@ -42,7 +51,7 @@
 import type { SQLInputValue } from "node:sqlite";
 import { LEGACY_CHECKPOINT_FORMAT_TAG } from "@sidecar/brain";
 
-export const RUNTIME_SCHEMA_VERSION = 3;
+export const RUNTIME_SCHEMA_VERSION = 5;
 
 /**
  * How a database at an earlier version is brought to this one, in order. Each
@@ -97,6 +106,8 @@ export const RUNTIME_SCHEMA_MIGRATIONS: ReadonlyMap<number, readonly SchemaMigra
         },
       ],
     ],
+    [4, []],
+    [5, []],
   ]);
 
 export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
@@ -144,6 +155,20 @@ export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
     provider_session_id TEXT NOT NULL,
     cursor TEXT NOT NULL,
     PRIMARY KEY (session_id, provider_id, provider_session_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS observation_capture_cursors (
+    session_id TEXT NOT NULL REFERENCES conversation_sessions(session_id) ON DELETE CASCADE,
+    provider_id TEXT NOT NULL,
+    provider_session_id TEXT NOT NULL,
+    cursor TEXT NOT NULL,
+    PRIMARY KEY (session_id, provider_id, provider_session_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS observation_inbox (
+    session_id TEXT NOT NULL REFERENCES conversation_sessions(session_id) ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL,
+    entry_id TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (session_id, ordinal)
   )`,
   `CREATE TABLE IF NOT EXISTS requests (
     run_id TEXT PRIMARY KEY,
@@ -233,6 +258,14 @@ export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
     transcript_events INTEGER NOT NULL,
     previous_cutoff INTEGER,
     payload BLOB
+  )`,
+  `CREATE TABLE IF NOT EXISTS scheduled_jobs (
+    job_id TEXT PRIMARY KEY,
+    session_key TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    last_run_at INTEGER,
+    enabled INTEGER NOT NULL,
+    payload TEXT NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS personal_facts (
     id TEXT PRIMARY KEY,

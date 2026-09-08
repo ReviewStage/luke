@@ -4,6 +4,7 @@ import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
   BrainAgent,
+  type BrainAgentOptions,
   type BrainRequestRecord,
   type BrainStateStorage,
   BrainStateStore,
@@ -21,6 +22,7 @@ import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
 } from "@sidecar/realtime";
+import { QUEUE_MODE } from "@sidecar/runtime";
 import type { ModelResponse } from "@sidecar/runtime-contracts";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import {
@@ -149,9 +151,10 @@ function composed() {
     if (speak) offerReplies();
     return { record: live, speak };
   };
-  const build = (client: BareResponsesModel) => {
+  const build = (client: BareResponsesModel, options: Partial<BrainAgentOptions> = {}) => {
     const model = bareModelAdapter(client);
     return new BrainAgent({
+      ...options,
       runtime: toolLoopRuntimeOver(model),
       prepareTurn: () => ({ prompt: "instructions", layers: {} }),
       acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
@@ -463,7 +466,8 @@ test("a refused History write keeps the reply unoffered and ungranted until the 
 test("two completions flushed together are offered one at a time, the second only after the first is acknowledged", async () => {
   const c = composed();
   const client = heldClient();
-  await c.host.replace(() => c.build(client));
+  // Follow-up mode: two asks are two runs with two completions, where steer would answer both in one.
+  await c.host.replace(() => c.build(client, { queueMode: QUEUE_MODE.FOLLOWUP }));
   const agent = c.host.current();
   assert.ok(agent);
   const [runA, runB] = await submitMany(agent, c.record, 2);
@@ -497,7 +501,7 @@ test("two completions flushed together are offered one at a time, the second onl
 test("an offer the renderer never claimed is offered again to the next epoch; a claimed one is not, and old-epoch claims are refused", async () => {
   const c = composed();
   const client = heldClient();
-  await c.host.replace(() => c.build(client));
+  await c.host.replace(() => c.build(client, { queueMode: QUEUE_MODE.FOLLOWUP }));
   const agent = c.host.current();
   assert.ok(agent);
   const first = c.receiver.begin();

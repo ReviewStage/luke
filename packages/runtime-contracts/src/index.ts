@@ -56,6 +56,7 @@ export {
 export {
   type AgentId,
   agentId,
+  agentIdOf,
   type CallId,
   CONVERSATION_KIND,
   type ConversationKind,
@@ -63,13 +64,17 @@ export {
   conversationKindOf,
   DEFAULT_AGENT_ID,
   type DeliveryId,
+  decodeKeyComponent,
   deliveryId,
+  encodeKeyComponent,
   isConversationKind,
   isIdentifier,
   isRunOrigin,
   MAIN_CONVERSATION_NAME,
   MAIN_SESSION_KEY,
   mainSessionKey,
+  observedSessionKey,
+  observedSessionRefOf,
   RUN_ORIGIN,
   type RunId,
   type RunOrigin,
@@ -107,3 +112,4 @@ export {
   TRANSCRIPT_EVENT_KIND,
   type TranscriptEvent,
 } from "./storage.js";
+export type { ScheduledTimer } from "./timers.js";

@@ -18,7 +18,13 @@ and `compression.ts` follow the shape of its transcript archives
 (`session-accessor.sqlite-archive.ts`, `archive-compression.ts`); and
 `packages/brain/src/compaction.ts` takes its reserve and recent-tail policy
 from `packages/agent-core/src/harness/compaction/compaction.ts` and
-`branch-summarization.ts`.
+`branch-summarization.ts`. `packages/runtime/src/lanes.ts`,
+`packages/runtime/src/queue.ts`, and `packages/runtime/src/cron.ts` port, at
+the same commit, its execution lanes and their defaults
+(`src/config/agent-limits.ts`, `src/config/cron-limits.ts`,
+`src/gateway/server-lanes.ts`), its reply queue modes and bounds
+(`src/auto-reply/reply/queue/`), and the shape of its cron scheduling over
+the `croner` version it pins.
 
 MIT License
 

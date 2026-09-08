@@ -2,6 +2,7 @@ import {
   BRAIN_IDENTITY_LINE,
   BRAIN_INPUT_MARKER,
   BRAIN_TURN_KIND,
+  BRAIN_TURN_TRIGGER,
   BRAIN_WORKSPACE_SEEDS,
   BrainAgent,
   type BrainDelivery,
@@ -10,11 +11,16 @@ import {
   type BrainStateRepository,
   BrainStateStore,
   type BrainTurnDescription,
+  type BrainTurnNotice,
   type BrainTurnPreparation,
+  type BrainTurnReport,
   type BrainTurnTraceRecord,
+  type BrainTurnTrigger,
+  type BrainWakeEvent,
   type BrainWorkspaceAccess,
   brainToolNotes,
   HOSTED_MODEL_ADAPTER_ID,
+  LOOK_SUBJECT,
   OPENAI_MODEL_ADAPTER_ID,
   RESPONSES_CONTEXT_ENGINE_ID,
   registerBrainBuiltIns,
@@ -34,6 +40,10 @@ import {
   discoverSkills,
   eligibleSkills,
   gatherPromptFacts,
+  LANE,
+  type Lane,
+  LaneScheduler,
+  laneConfiguration,
   loadSkill,
   type ResolvedConfiguration,
   type RuntimeRegistries,
@@ -45,11 +55,18 @@ import {
   writeWorkspaceFile,
 } from "@sidecar/runtime";
 import type { ModelAdapter } from "@sidecar/runtime-contracts";
-import { MAIN_SESSION_KEY, RUN_ORIGIN, type SessionKey } from "@sidecar/runtime-contracts";
+import {
+  MAIN_SESSION_KEY,
+  observedSessionKey,
+  observedSessionRefOf,
+  RUN_ORIGIN,
+  type SessionKey,
+} from "@sidecar/runtime-contracts";
 import {
   type ProviderTranscriptResult,
   type ProviderTranscriptSinceResult,
   SESSION_LOCATION,
+  SESSION_STATUS,
   type Session,
   type SessionIdentity,
 } from "@sidecar/session";
@@ -77,6 +94,10 @@ interface TranscriptReader {
 export interface BrainWiringDependencies {
   /** A conversation's envelope, read and written only through the store built here; a temporary thread's lives in memory alone. */
   repositoryFor: (sessionKey: SessionKey) => BrainStateRepository;
+  /** Lists an observed session's conversation in the store, creating its row when none stands; absent, the row is not kept. */
+  ensureObservedConversation?: (sessionKey: SessionKey, name: string) => Promise<void>;
+  /** The machine's parallelism, for the agent lane's width; absent means the host asks the OS. */
+  parallelism?: () => number;
   createId: () => string;
   report: (message: string) => void;
   traceTurn?: (record: BrainTurnTraceRecord) => void;
@@ -118,8 +139,29 @@ export interface BrainIpcRegistration {
 }
 
 export interface BrainWiring {
-  /** Main's host, the one every observation reaches. */
+  /** Main's host. */
   readonly host: BrainHost;
+  /** The lanes every conversation's turns run under. */
+  readonly lanes: LaneScheduler;
+  /**
+   * Routes provider hooks to the conversations of the sessions they name:
+   * each observed session has a conversation of its own, opened here on its
+   * first wake, and main is handed none of them.
+   */
+  wake: (events: readonly BrainWakeEvent[]) => void;
+  /**
+   * The roster look after an observation pass: each live local session's
+   * conversation looks at its own session alone, a session gone from the
+   * roster has its conversation stood down once idle, and main looks at no
+   * transcript at all.
+   */
+  rosterLook: () => void;
+  /** Hands held briefings back to the conversations that decided them, main's for one with no source. */
+  releaseHeld: (held: readonly BrainDelivery[]) => void;
+  /** Opens the scheduled review in a conversation, main's by default; settles when its turn has. */
+  heartbeat: (sessionKey?: SessionKey) => Promise<void>;
+  /** The compact notices main has not yet read, for inspection. */
+  pendingNotices: () => readonly BrainTurnNotice[];
   /** The brain of one conversation as it stands now, main's by default; nothing between transitions and on a run with no key. */
   current: (sessionKey?: SessionKey) => BrainAgent | undefined;
   /** The brain holding the run named, whichever conversation it is in. */
@@ -184,11 +226,39 @@ interface OpenConversation {
   unsubscribe: () => void;
 }
 
+/** How many notices main keeps unread before the oldest go; each is one line about one turn. */
+const MAXIMUM_PENDING_NOTICES = 50;
+
+/** What a conversation that is not main is handed: main alone reads the notices its siblings leave. */
+const NO_OPENING_NOTES = {
+  take: () => [],
+  restore: () => {},
+};
+
+/** The lane a turn runs under, by what opened it: hooks share the cron inner budget, heartbeats are cron work, the rest is the agent's. */
+function laneFor(trigger: BrainTurnTrigger): Lane {
+  switch (trigger) {
+    case BRAIN_TURN_TRIGGER.WAKE:
+      return LANE.HOOK_DISPATCH;
+    case BRAIN_TURN_TRIGGER.HEARTBEAT:
+      return LANE.CRON_NESTED;
+    default:
+      return LANE.AGENT;
+  }
+}
+
+function observedName(session: Session | undefined, identity: SessionIdentity): string {
+  return session?.title ?? `${identity.providerId} ${identity.providerSessionId}`;
+}
+
 /**
- * The brains: one long-lived agent per open conversation, main's woken by
- * the hooks and by its own scheduled look at the roster, every one asked
- * things by the developer, and answering with briefings for the voice and
- * acts for the performer. Nothing here detects a change for a brain — no
+ * The brains: one long-lived agent per open conversation. Each observed
+ * coding session has a conversation of its own, opened on its first hook or
+ * roster look, which reads that session's transcript, briefs the developer
+ * about it directly, and leaves main a compact notice of what it did; main
+ * is asked things by the developer and runs the scheduled heartbeat, and
+ * never reads a provider's transcript on a look. Every conversation's turns
+ * run under the shared lanes, one execution per conversation at a time. Nothing here detects a change for a brain — no
  * status edge, no notice — because the brain notices changes itself,
  * against its own memory. Built by `rebuild` whenever the credential policy
  * is applied, on whichever model adapter the policy chose: the developer's
@@ -286,6 +356,45 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
    */
   const acts = createBrainActPerformer(dependencies.acts);
 
+  // The lanes are one scheduler over every conversation: hooks are enabled
+  // in every observing build, so the hook reservation stands inside the cron
+  // budget from the start.
+  const lanes = new LaneScheduler(
+    laneConfiguration({
+      hooksEnabled: true,
+      ...(dependencies.parallelism ? { parallelism: dependencies.parallelism() } : undefined),
+    }),
+  );
+
+  // What the observed conversations did, for main's next turn: taken when
+  // that turn opens, handed back if it fails, bounded so a quiet main never
+  // accumulates a day of notices.
+  let notices: readonly BrainTurnNotice[] = [];
+  /** The one place the bound is applied, so a record and a hand-back cannot each trim differently. */
+  const holdNotices = (held: readonly BrainTurnNotice[]) => {
+    notices = held.slice(-MAXIMUM_PENDING_NOTICES);
+  };
+  const openingNotes = {
+    take: () => {
+      const taken = notices;
+      notices = [];
+      return taken;
+    },
+    restore: (returned: readonly BrainTurnNotice[]) => holdNotices([...returned, ...notices]),
+  };
+  /**
+   * What one of main's siblings did, as main will read it: the conversation's
+   * own counts, and the name this host resolved for the session the turn
+   * looked at — its own session when the turn named none.
+   */
+  const recordNotice = (report: BrainTurnReport, observed: SessionIdentity) => {
+    const identity = report.identities[0] ?? observed;
+    holdNotices([
+      ...notices,
+      { ...report, label: observedName(dependencies.session(identity), identity) },
+    ]);
+  };
+
   // The registries hold what this build compiled in; the configuration names
   // entries by id and is republished, atomically, whenever the credential
   // policy chooses a source. Every turn takes the snapshot standing when it
@@ -377,6 +486,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     model: ModelAdapter,
     snapshot: ResolvedConfiguration,
     store: BrainStateStore,
+    sessionKey: SessionKey,
   ): BrainAgent => {
     const runtimeDescriptor = registries.agentRuntimes.get(snapshot.configuration.agentRuntimeId);
     const engineDescriptor = registries.contextEngines.get(snapshot.configuration.contextEngineId);
@@ -385,7 +495,19 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     }
     const listed: ListedSkills = { skills: [] };
     const { reasoningEffort, maximumOutputTokens } = snapshot.configuration;
+    // An observed conversation looks at its one session and reports each
+    // turn as a notice; every other conversation looks at no transcript on
+    // a roster look, and main is the one that reads the notices. Which
+    // conversation this is is the host's own routing, so the agent is handed
+    // the same fields whichever it is.
+    const observed = observedSessionRefOf(sessionKey);
     return new BrainAgent({
+      observes: observed
+        ? { kind: LOOK_SUBJECT.SESSION, identity: observed }
+        : { kind: LOOK_SUBJECT.NONE },
+      lane: (trigger, work) => lanes.run(laneFor(trigger), work),
+      notice: observed ? (report) => recordNotice(report, observed) : () => {},
+      openingNotes: sessionKey === MAIN_SESSION_KEY ? openingNotes : NO_OPENING_NOTES,
       runtime: runtimeDescriptor.create(model, engineDescriptor),
       acts,
       roster: dependencies.roster,
@@ -428,7 +550,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         }
         return adapter.readTranscript(identity.providerSessionId);
       },
-      deliver: dependencies.deliver,
+      deliver: (delivery) => dependencies.deliver({ ...delivery, sessionKey }),
       store,
       createRunId: dependencies.createId,
       ...(dependencies.traceTurn ? { trace: dependencies.traceTurn } : undefined),
@@ -452,7 +574,12 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         if (sessionKey === MAIN_SESSION_KEY) dependencies.dropBriefings();
         return undefined;
       }
-      return build(model, publishConfiguration(dependencies.credential()), opened.store);
+      return build(
+        model,
+        publishConfiguration(dependencies.credential()),
+        opened.store,
+        sessionKey,
+      );
     });
 
   const rebuild = async (): Promise<void> => {
@@ -469,6 +596,156 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
 
   const retire = (): void => {
     for (const opened of conversations.values()) opened.host.retire();
+  };
+
+  /**
+   * The conversation of one observed session, opened on first use: its row
+   * in the directory, its store, and — when a model stands — its brain.
+   * Openings of one key are serialized so two hooks landing together build
+   * one conversation, not two.
+   */
+  const observedOpenings = new Map<SessionKey, Promise<BrainAgent | undefined>>();
+  // Conversations standing down, until their store is let go.
+  const closings = new Map<SessionKey, Promise<void>>();
+  const openObserved = (identity: SessionIdentity): Promise<BrainAgent | undefined> => {
+    const sessionKey = observedSessionKey(identity);
+    const standing = conversations.get(sessionKey)?.host.current();
+    if (standing && !closings.has(sessionKey)) return Promise.resolve(standing);
+    const pending = observedOpenings.get(sessionKey);
+    if (pending) return pending;
+    const opening = (async () => {
+      try {
+        // A conversation still standing down finishes first: its store is
+        // let go of before another is built on the same envelope, so two
+        // writers never hold one repository.
+        await closings.get(sessionKey);
+        await dependencies.ensureObservedConversation?.(
+          sessionKey,
+          observedName(dependencies.session(identity), identity),
+        );
+        const opened = openConversation(sessionKey);
+        if (!opened.host.current()) await rebuildOne(sessionKey, opened, liveModel());
+        return opened.host.current();
+      } catch (error) {
+        dependencies.report(
+          `Observed conversation could not be opened: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return undefined;
+      } finally {
+        observedOpenings.delete(sessionKey);
+      }
+    })();
+    observedOpenings.set(sessionKey, opening);
+    return opening;
+  };
+
+  const wake = (events: readonly BrainWakeEvent[]): void => {
+    if (!liveModel()) return;
+    const bySession = new Map<
+      SessionKey,
+      { identity: SessionIdentity; events: BrainWakeEvent[] }
+    >();
+    for (const event of events) {
+      const key = observedSessionKey(event.identity);
+      const held = bySession.get(key) ?? { identity: event.identity, events: [] };
+      held.events.push(event);
+      bySession.set(key, held);
+    }
+    for (const { identity, events: own } of bySession.values()) {
+      void openObserved(identity).then((agent) => agent?.wake(own));
+    }
+  };
+
+  // A conversation is busy while any run of it is pending in History's view,
+  // or while its brain has anything under way or owed: a turn running or
+  // queued, a capture landing, an observation captured and not yet read, an
+  // ask waiting. An unrecorded analysis is work too, and is never cut because
+  // its session left the roster.
+  const busy = (sessionKey: SessionKey) =>
+    (latestRecords.get(sessionKey) ?? []).some(brainRequestPending) ||
+    (conversations.get(sessionKey)?.host.current()?.busy() ?? false);
+
+  const rosterLook = (): void => {
+    if (!liveModel()) return;
+    const roster = dependencies.roster();
+    const present = new Set<SessionKey>();
+    for (const session of roster.sessions ?? []) {
+      const identity: SessionIdentity = {
+        providerId: session.providerId,
+        providerSessionId: session.providerSessionId,
+      };
+      const sessionKey = observedSessionKey(identity);
+      present.add(sessionKey);
+      const live =
+        session.status === SESSION_STATUS.WORKING || session.status === SESSION_STATUS.WAITING;
+      const open = conversations.has(sessionKey);
+      if (session.location !== SESSION_LOCATION.LOCAL || !(live || open)) continue;
+      void openObserved(identity).then((agent) => agent?.rosterLook());
+    }
+    // A session the roster no longer holds has nothing left to observe: its
+    // conversation stands down once no run is under way in it, and its
+    // history stays in the store for the selector and for maintenance.
+    for (const sessionKey of [...conversations.keys()]) {
+      if (!observedSessionRefOf(sessionKey) || present.has(sessionKey) || busy(sessionKey))
+        continue;
+      void closeConversation(sessionKey);
+    }
+  };
+
+  // A held briefing goes back to the conversation that decided it, because
+  // that conversation is the one that knows the session it was about. An
+  // observed conversation that has stood down meanwhile is reopened for it
+  // rather than the briefing being re-decided in main, which never read that
+  // session; only a source that cannot be reopened at all falls to main, and
+  // says so.
+  const releaseHeld = (held: readonly BrainDelivery[]): void => {
+    const bySource = new Map<SessionKey, BrainDelivery[]>();
+    for (const delivery of held) {
+      const source = delivery.sessionKey ?? MAIN_SESSION_KEY;
+      bySource.set(source, [...(bySource.get(source) ?? []), delivery]);
+    }
+    for (const [sessionKey, own] of bySource) {
+      const observed = observedSessionRefOf(sessionKey);
+      const opening = observed
+        ? openObserved(observed)
+        : Promise.resolve(current(sessionKey) ?? current(MAIN_SESSION_KEY));
+      void opening.then((agent) => {
+        if (agent) {
+          agent.releaseHeld(own);
+          return;
+        }
+        dependencies.report(
+          `Held briefings of ${sessionKey} could not return to their conversation and are re-decided in main`,
+        );
+        current(MAIN_SESSION_KEY)?.releaseHeld(own);
+      });
+    }
+  };
+
+  const closeConversation = (sessionKey: SessionKey): Promise<void> => {
+    const closing = closings.get(sessionKey);
+    if (closing) return closing;
+    const opened = conversations.get(sessionKey);
+    if (!opened) return Promise.resolve();
+    const work = (async () => {
+      // The replacement with nothing awaits every retirement's drain, so the
+      // follower has written its last interruption before the store is let
+      // go. The entry stays in the directory until then: an open that lands
+      // meanwhile waits on this closing rather than building a second store
+      // on the same envelope.
+      opened.host.retire();
+      await opened.host.replace(() => undefined);
+      opened.clock.stop();
+      opened.unsubscribe();
+      conversations.delete(sessionKey);
+      latestRecords.delete(sessionKey);
+      publications.delete(sessionKey);
+      broadcast();
+    })().finally(() => {
+      closings.delete(sessionKey);
+    });
+    closings.set(sessionKey, work);
+    return work;
   };
 
   const registerIpc = (registration: BrainIpcRegistration): void => {
@@ -497,30 +774,21 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     holdsGeneration: (generationId) =>
       [...conversations.values()].some((opened) => opened.store.holdsGeneration(generationId)),
     allRequests,
-    busyConversations: () =>
-      [...latestRecords.entries()]
-        .filter(([, records]) => records.some(brainRequestPending))
-        .map(([sessionKey]) => sessionKey),
+    busyConversations: () => [...latestRecords.keys()].filter(busy),
     rebuild,
     retire,
     openConversation: async (sessionKey) => {
       const opened = openConversation(sessionKey);
       if (!opened.host.current()) await rebuildOne(sessionKey, opened, liveModel());
     },
-    closeConversation: async (sessionKey) => {
-      const opened = conversations.get(sessionKey);
-      if (!opened) return;
-      conversations.delete(sessionKey);
-      // The replacement with nothing awaits every retirement's drain, so the
-      // follower has written its last interruption before the store is let go.
-      opened.host.retire();
-      await opened.host.replace(() => undefined);
-      opened.clock.stop();
-      opened.unsubscribe();
-      latestRecords.delete(sessionKey);
-      publications.delete(sessionKey);
-      broadcast();
-    },
+    closeConversation,
+    lanes,
+    wake,
+    rosterLook,
+    releaseHeld,
+    heartbeat: (sessionKey = MAIN_SESSION_KEY) =>
+      current(sessionKey)?.heartbeat() ?? Promise.resolve(),
+    pendingNotices: () => notices,
     resetConversation: (sessionKey) => openConversation(sessionKey).store.reset(),
     registerIpc,
     registries,

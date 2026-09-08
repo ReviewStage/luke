@@ -71,13 +71,15 @@ export const MAIN_SESSION_KEY: SessionKey = mainSessionKey();
 
 /**
  * What kind of conversation a session key addresses. Main is the agent's
- * ordinary conversation, and a thread is one the developer opened beside it.
- * A key this build cannot classify is kept by maintenance and never a
- * victim, because losing history is the worse failure.
+ * ordinary conversation; a thread is one the developer opened beside it; an
+ * observed conversation follows one coding session. A key this build cannot
+ * classify is kept by maintenance and never a victim, because losing history
+ * is the worse failure.
  */
 export const CONVERSATION_KIND = {
   MAIN: "main",
   THREAD: "thread",
+  OBSERVED: "observed",
   UNKNOWN: "unknown",
 } as const;
 
@@ -91,12 +93,13 @@ export function isConversationKind(value: UnparsedWireValue): value is Conversat
 }
 
 const THREAD_SEGMENT = "thread";
+const OBSERVED_SEGMENT = "observed";
 
 /**
  * A private thread's stable address: `agent:<agentId>:thread:<threadId>`.
  * The thread id is minted by the host as a UUID, so nothing untrusted enters
- * the key; a reversible encoder for arbitrary provider ids arrives with the
- * observed conversations that need one.
+ * the key; an observed conversation's provider ids go through the encoder
+ * below instead.
  */
 export function threadSessionKey(threadId: string, agent: AgentId = DEFAULT_AGENT_ID): SessionKey {
   if (!isIdentifier(threadId) || threadId.includes(SESSION_KEY_SEPARATOR)) {
@@ -105,6 +108,73 @@ export function threadSessionKey(threadId: string, agent: AgentId = DEFAULT_AGEN
   return sessionKey(
     [SESSION_KEY_PREFIX, agent, THREAD_SEGMENT, threadId].join(SESSION_KEY_SEPARATOR),
   );
+}
+
+/**
+ * The reversible encoding a provider's own identifiers take inside a session
+ * key. A provider id or a provider's session id is untrusted text that may
+ * carry the key's own separator or anything else; each is percent-encoded so
+ * that only unreserved characters stand bare, the key splits on its separator
+ * exactly as a key with fixed segments does, and the original is read back
+ * with no ambiguity. Encoding twice never collides with encoding once: the
+ * percent sign is itself encoded.
+ */
+export function encodeKeyComponent(value: string): string {
+  return encodeURIComponent(value).replace(
+    /[!'()*]/g,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
+/** The component as it was before encoding, or nothing for text the encoder never produced. */
+export function decodeKeyComponent(encoded: string): string | undefined {
+  if (encoded.length === 0 || /[^A-Za-z0-9._~%-]/.test(encoded)) return undefined;
+  try {
+    const decoded = decodeURIComponent(encoded);
+    return encodeKeyComponent(decoded) === encoded ? decoded : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * An observed coding session's conversation:
+ * `agent:<agentId>:observed:<encoded-provider-id>:<encoded-session-id>`. The
+ * two provider components go through the encoder, never straight into the
+ * key, and come back out of it through `observedSessionRefOf`.
+ */
+export function observedSessionKey(
+  source: SourceSessionRef,
+  agent: AgentId = DEFAULT_AGENT_ID,
+): SessionKey {
+  if (!isIdentifier(source.providerId) || !isIdentifier(source.providerSessionId)) {
+    throw new TypeError("an observed session needs a provider id and a provider session id");
+  }
+  return sessionKey(
+    [
+      SESSION_KEY_PREFIX,
+      agent,
+      OBSERVED_SEGMENT,
+      encodeKeyComponent(source.providerId),
+      encodeKeyComponent(source.providerSessionId),
+    ].join(SESSION_KEY_SEPARATOR),
+  );
+}
+
+/** The observed session a key addresses, or nothing for a key of any other shape. */
+export function observedSessionRefOf(key: SessionKey | string): SourceSessionRef | undefined {
+  const parsed = parsedSessionKey(key);
+  if (parsed?.rest.length !== 3 || parsed.rest[0] !== OBSERVED_SEGMENT) return undefined;
+  const providerId = decodeKeyComponent(parsed.rest[1] ?? "");
+  const providerSessionId = decodeKeyComponent(parsed.rest[2] ?? "");
+  if (providerId === undefined || providerSessionId === undefined) return undefined;
+  return { providerId, providerSessionId };
+}
+
+/** The agent a key belongs to, for a key of the `agent:<id>:...` shape. */
+export function agentIdOf(key: SessionKey | string): AgentId | undefined {
+  const parsed = parsedSessionKey(key);
+  return parsed ? agentId(parsed.agent) : undefined;
 }
 
 /** The agent and the segments after it, for a key of the `agent:<id>:...` shape; nothing for any other. */
@@ -121,6 +191,9 @@ export function conversationKindOf(key: SessionKey | string): ConversationKind {
   const [head] = parsed.rest;
   if (parsed.rest.length === 1 && head === MAIN_CONVERSATION_NAME) return CONVERSATION_KIND.MAIN;
   if (head === THREAD_SEGMENT && parsed.rest.length === 2) return CONVERSATION_KIND.THREAD;
+  if (head === OBSERVED_SEGMENT) {
+    return observedSessionRefOf(key) ? CONVERSATION_KIND.OBSERVED : CONVERSATION_KIND.UNKNOWN;
+  }
   return CONVERSATION_KIND.UNKNOWN;
 }
 

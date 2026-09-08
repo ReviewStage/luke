@@ -1,6 +1,6 @@
-import type { Session } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import type { BrainDelivery, BrainWakeEvent } from "./wake-events.js";
+import { sessionSummary } from "./observation-inbox.js";
+import type { BrainDelivery, BrainTurnNotice, BrainWakeEvent } from "./wake-events.js";
 
 /**
  * The words a turn opens with, each a marker naming what kind of turn it is
@@ -18,25 +18,16 @@ export const BRAIN_INPUT_MARKER = {
   STANDING_CONTEXT: "[standing context]",
   /** Words primed once into a conversation that just started fresh: the recent daily notes, as data. */
   PRIMED_NOTES: "[primed notes]",
+  /** The scheduled review's opening: nothing changed for certain, and HEARTBEAT.md says what to look at. */
+  HEARTBEAT: "[heartbeat]",
+  /** What sibling conversations did since this one last ran, as the host's own counts. */
+  ACTIVITY_NOTICES: "[activity notices]",
 } as const;
 
 export type BrainInputMarker = (typeof BRAIN_INPUT_MARKER)[keyof typeof BRAIN_INPUT_MARKER];
 
 function marked(marker: BrainInputMarker, now: number, body: string): string {
   return `${marker} ${new Date(now).toISOString()}\n${body}`;
-}
-
-function sessionSummary(session: Session): WireRecord {
-  return {
-    provider_name: session.provider.displayName,
-    title: session.title,
-    status: session.status,
-    ...(session.workspace?.name ? { workspace: session.workspace.name } : undefined),
-    ...(session.detail.error ? { error: session.detail.error } : undefined),
-    ...(session.detail.activity ? { activity: session.detail.activity } : undefined),
-    ...(session.detail.branch ? { branch: session.detail.branch } : undefined),
-    updated_at: new Date(session.lastActivityAt).toISOString(),
-  };
 }
 
 function eventRecord(event: BrainWakeEvent): WireRecord {
@@ -46,7 +37,11 @@ function eventRecord(event: BrainWakeEvent): WireRecord {
     ...(event.hookEvent ? { hook: event.hookEvent } : undefined),
     provider_id: event.identity.providerId,
     provider_session_id: event.identity.providerSessionId,
-    ...(event.session ? { session: sessionSummary(event.session) } : undefined),
+    ...(event.session
+      ? { session: sessionSummary(event.session) }
+      : event.sessionSummary
+        ? { session: event.sessionSummary }
+        : undefined),
     ...(event.transcriptDelta
       ? {
           transcript_delta: {
@@ -142,4 +137,50 @@ export function primedNotesInputText(notes: string): string {
     "",
     notes,
   ].join("\n");
+}
+
+/**
+ * The words a heartbeat turn opens with. Nothing detected a change: the turn
+ * is the scheduled review the workspace's HEARTBEAT.md describes, and the
+ * ordinary answer to it is silence.
+ */
+export function heartbeatInputText(now: number): string {
+  return marked(
+    BRAIN_INPUT_MARKER.HEARTBEAT,
+    now,
+    JSON.stringify({ scheduled_review: true, instructions_file: "HEARTBEAT.md" }),
+  );
+}
+
+/**
+ * The words that carry sibling conversations' activity into a turn: one line
+ * per notice, each the host's own compact account and never a transcript's
+ * text, so main can say what its observed conversations did without having
+ * read what the agents wrote.
+ */
+/**
+ * One compact line about a sibling conversation's turn, from the host's own
+ * counts, the name it resolved for the session, and the words Luke himself
+ * chose to say: never a transcript's text.
+ */
+function noticeLine(notice: BrainTurnNotice): string {
+  const identity = notice.identities[0];
+  const who = identity
+    ? `${identity.providerId} session ${JSON.stringify(notice.label)}`
+    : notice.label;
+  const said =
+    notice.briefings.length > 0
+      ? `briefed: ${notice.briefings.map((briefing) => JSON.stringify(briefing)).join(" ")}`
+      : "briefed nothing";
+  const acts = notice.performedActs > 0 ? `; acts: ${notice.performedActs}` : "";
+  return `${new Date(notice.at).toISOString()} ${who}: ${notice.trigger} turn, ${said}${acts}`;
+}
+
+/** What the sibling conversations did since this one last ran, one line each. */
+export function activityNoticesInputText(notices: readonly BrainTurnNotice[], now: number): string {
+  return marked(
+    BRAIN_INPUT_MARKER.ACTIVITY_NOTICES,
+    now,
+    JSON.stringify({ notices: notices.map(noticeLine) }),
+  );
 }

@@ -9,12 +9,7 @@ import {
 } from "@sidecar/wire";
 import { PRESS_AUDIO_SAMPLE_RATE } from "./press-audio.js";
 
-/**
- * What a scheduler hands back so the same schedule can be cancelled. A browser
- * answers with a number, Node with a timer object, and a test with whatever it
- * keys its own map by — so the handle is only ever handed back, never read.
- */
-export type ScheduledTimer = number | object;
+export type { ScheduledTimer } from "@sidecar/runtime-contracts";
 
 /**
  * The Realtime protocol: how far a call has progressed, the events both sides

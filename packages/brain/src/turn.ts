@@ -11,13 +11,22 @@ export const BRAIN_TURN_TRIGGER = {
   ROSTER: "roster",
   ASK: "ask",
   HOLD_RELEASED: "hold-released",
+  /** The scheduled review: the workspace's HEARTBEAT.md instructions, under the full prompt, normally saying nothing. */
+  HEARTBEAT: "heartbeat",
 } as const;
 
 export type BrainTurnTrigger = (typeof BRAIN_TURN_TRIGGER)[keyof typeof BRAIN_TURN_TRIGGER];
 
 /** Who or what opened a turn of this kind: attribution for the record and the trace, never a permission. */
 export function runOriginOf(trigger: BrainTurnTrigger): RunOrigin {
-  return trigger === BRAIN_TURN_TRIGGER.ASK ? RUN_ORIGIN.USER : RUN_ORIGIN.OBSERVATION;
+  switch (trigger) {
+    case BRAIN_TURN_TRIGGER.ASK:
+      return RUN_ORIGIN.USER;
+    case BRAIN_TURN_TRIGGER.HEARTBEAT:
+      return RUN_ORIGIN.HEARTBEAT;
+    default:
+      return RUN_ORIGIN.OBSERVATION;
+  }
 }
 
 export const REFUSAL_REASON = {
@@ -46,8 +55,18 @@ export const TURN_OUTCOME = {
   INCOMPATIBLE: "incompatible",
 } as const;
 
+export type TurnOutcome = (typeof TURN_OUTCOME)[keyof typeof TURN_OUTCOME];
+
+/** The outcomes a turn's own conversation reports to the host as a notice; the rest never ran. */
+export const REPORTED_OUTCOMES: ReadonlySet<TurnOutcome> = new Set([
+  TURN_OUTCOME.DONE,
+  TURN_OUTCOME.QUIET,
+  TURN_OUTCOME.FAILED,
+  TURN_OUTCOME.INCOMPLETE,
+]);
+
 export type TurnResult =
-  | { outcome: typeof TURN_OUTCOME.DONE; text: string }
+  | { outcome: typeof TURN_OUTCOME.DONE; text: string; briefings: readonly string[] }
   | { outcome: typeof TURN_OUTCOME.QUIET; until: number }
   | { outcome: typeof TURN_OUTCOME.FAILED }
   | { outcome: typeof TURN_OUTCOME.INCOMPLETE }
@@ -82,8 +101,6 @@ export interface TurnPlan {
   events: readonly BrainWakeEvent[];
   /** The words the turn opens with, each ingested as the developer's or the host's, in order. */
   open: (events: readonly BrainWakeEvent[], now: number) => readonly string[];
-  /** Whether a roster look's events with nothing new in their transcript are left out. */
-  dropEmptyRosterDeltas?: boolean;
   run?: RunControl;
   /**
    * The generation the work was queued in. A turn that reaches the front of
@@ -99,6 +116,8 @@ export interface TurnContext {
   context: RecordingContextEngine;
   run: RunControl;
   signal: AbortSignal;
+  /** The inbox entries this turn opened with, consumed by its checkpoint and by nothing sooner. */
+  consumes?: readonly string[];
 }
 
 /**

@@ -11,6 +11,8 @@ import type { BrainWakeEvent } from "./wake-events.js";
  */
 export interface WakeQueueOptions {
   coalesceMs: number;
+  /** The most wakes held for one turn. */
+  capacity: number;
   now: () => number;
   schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
   cancel: (timer: ScheduledTimer) => void;
@@ -34,10 +36,27 @@ export class WakeQueue {
     return this.#pending.length;
   }
 
-  /** Queues wakes and arms the coalescing window, once. */
+  /**
+   * Queues wakes and arms the coalescing window, once. The same hook for the
+   * same session at the same instant, delivered twice before the turn opened,
+   * is one wake: the delta read covers both, and two entries would only say
+   * the same thing twice. Past the capacity the oldest go, since the delta
+   * read covers what they said too.
+   */
   push(events: readonly BrainWakeEvent[]): void {
     if (events.length === 0) return;
-    this.#pending.push(...events);
+    for (const event of events) {
+      const duplicate = this.#pending.some(
+        (held) =>
+          held.kind === event.kind &&
+          held.hookEvent === event.hookEvent &&
+          held.atMs === event.atMs &&
+          held.identity.providerId === event.identity.providerId &&
+          held.identity.providerSessionId === event.identity.providerSessionId,
+      );
+      if (!duplicate) this.#pending.push(event);
+    }
+    while (this.#pending.length > this.#options.capacity) this.#pending.shift();
     this.#arm(this.#options.coalesceMs);
   }
 
