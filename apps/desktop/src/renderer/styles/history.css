@@ -57,8 +57,10 @@
    the vertical scroll the thread always had, with its thin scrollbar and the
    edge fade; the inner one is the pull. */
 .history-scroll {
+  display: flex;
   min-height: 0;
   flex: 1;
+  flex-direction: column;
   padding: 4px 4px 8px;
   overflow-x: clip;
   overflow-y: auto;
@@ -78,8 +80,10 @@
    sees it, so the motion here is the browser's snap rather than a transition
    on the tokens, the one native motion docs/DESIGN.md admits. A swipe over a
    code block or table wider than its bubble stays the block's: each contains
-   its own overscroll. */
+   its own overscroll. The pull fills the thread's height, not the list's, so
+   a swipe in the empty room under a short thread pulls too. */
 .history-pull {
+  flex: 1 0 auto;
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
