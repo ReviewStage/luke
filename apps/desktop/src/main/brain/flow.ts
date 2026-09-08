@@ -3,18 +3,10 @@ import type { ObservedSpoolEvent } from "@sidecar/providers";
 import type { Session, SessionIdentity } from "@sidecar/session";
 
 /**
- * What the brain keeps across launches, and how a hook's spool event becomes
- * a wake. The decisions are pure so they can be tested without Electron, on
- * the memory flow's own pattern; the wiring that reads and writes the file and
- * watches the spools lives in desktop-app.
- *
- * The state file is the brain's one envelope — its Responses memory, cursors,
- * request records, and action journal — written only through the store the
- * main process owns. It lives in Luke's own application data beside the
- * conversation, never in a provider's file.
+ * How a hook's spool event becomes a wake. The decision is pure so it can be
+ * tested without Electron; the wiring that watches the spools lives in
+ * desktop-app.
  */
-
-export const BRAIN_STATE_FILE = "brain-state.json";
 
 /**
  * Turns one provider's batch of spool events into wakes. Every hook event

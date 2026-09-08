@@ -44,7 +44,10 @@ export interface BrainIpcDependencies {
    * line the thread already holds for that run answers true, because holding
    * it is the whole of what was asked.
    */
-  recordConversationEntry: (entry: ConversationEntry, recordedAt: number) => boolean;
+  recordConversationEntry: (
+    entry: ConversationEntry,
+    recordedAt: number,
+  ) => boolean | Promise<boolean>;
   /** Hands the whole list of records to every window. */
   broadcastRequests: (snapshots: readonly BrainRequestSnapshot[]) => void;
   /**
@@ -124,7 +127,9 @@ async function publishAsk(
   const current = agent.request(runId);
   if (!current || current.origin !== BRAIN_REQUEST_ORIGIN.TYPED) return;
   if (current.askRecordedAt !== undefined) return;
-  if (!record(typedAskConversationEntry(current.question, current.runId), current.acceptedAt)) {
+  if (
+    !(await record(typedAskConversationEntry(current.question, current.runId), current.acceptedAt))
+  ) {
     return;
   }
   await agent.markAskRecorded(runId, current.acceptedAt);
@@ -149,7 +154,7 @@ async function publishEnd(
   const words = brainReplyWords(current);
   if (!words) return undefined;
   const at = current.settledAt ?? current.acceptedAt;
-  if (!record(replyConversationEntry(words, current.runId), at)) return undefined;
+  if (!(await record(replyConversationEntry(words, current.runId), at))) return undefined;
   if (!(await agent.markHistoryRecorded(runId, at))) return undefined;
   // Re-read rather than patched: the mark landed on the live record, and a
   // Clear or a replacement in the meantime has taken the record with it.

@@ -143,35 +143,36 @@ export interface SessionActPerformer {
   openSessionChange(identity: SessionIdentity): Promise<SessionOpenResult>;
 }
 
-type MemoryWriter = (facts: readonly RememberedFact[]) => boolean;
+/** Makes the list given the remembered facts, answering whether it landed; the runtime store is the writer. */
+type MemoryWriter = (facts: readonly RememberedFact[]) => boolean | Promise<boolean>;
 
-export function saveRememberedFact(
+export async function saveRememberedFact(
   held: readonly RememberedFact[],
   words: string,
   replaces: string | undefined,
   id: string,
   write: MemoryWriter,
-): readonly RememberedFact[] {
+): Promise<readonly RememberedFact[]> {
   const remembered = rememberedFactText(words);
   if (!remembered) return held;
   if (replaces !== undefined && !holdsRememberedFact(held, replaces)) return held;
   const retained = replaces ? withoutRememberedFact(held, replaces) : held;
   if (retained.some((fact) => fact.words === remembered)) {
-    return retained.length === held.length || !write(retained) ? held : retained;
+    return retained.length === held.length || !(await write(retained)) ? held : retained;
   }
   if (replaces === undefined && held.length >= maximumRememberedFacts) return held;
   const next = [...retained, { id, words: remembered }];
-  return write(next) ? next : held;
+  return (await write(next)) ? next : held;
 }
 
-export function forgetRememberedFact(
+export async function forgetRememberedFact(
   held: readonly RememberedFact[],
   id: string,
   write: MemoryWriter,
-): readonly RememberedFact[] {
+): Promise<readonly RememberedFact[]> {
   if (!holdsRememberedFact(held, id)) return held;
   const next = withoutRememberedFact(held, id);
-  return write(next) ? next : held;
+  return (await write(next)) ? next : held;
 }
 
 const REFUSAL = {

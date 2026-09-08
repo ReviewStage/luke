@@ -19,7 +19,7 @@ test("act bridge entries reject legacy and malformed outcomes", () => {
 });
 
 test("a conversation history report carries only well-formed history lines", () => {
-  const guard = BRIDGE.reportConversationHistory.args;
+  const guard = BRIDGE.appendConversationHistory.args;
   const ask = { kind: "typed-ask", words: "how is it going?", recordedAt: 1 };
   const announcement = {
     kind: "announcement",

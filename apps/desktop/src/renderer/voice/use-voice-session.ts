@@ -44,6 +44,7 @@ import {
 import { hostedVoiceUnavailableNote } from "../microphone-access";
 import { useStateWithRef } from "../use-state-with-ref";
 import { outputSilent } from "../volume-hint";
+import { HistoryReporter, withPendingLines } from "./history-reporter";
 import { openPreferredMicrophone } from "./microphone-choice";
 import { REPLY_KIND, RealtimeVoiceSession, type ReplyKind } from "./realtime-session";
 import { ReplyDeliveryPlayer } from "./reply-delivery-player";
@@ -553,18 +554,43 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   }, []);
 
   /**
-   * Persists the retained thread. This window is the thread's one writer: the
-   * main process stores what it reports, relays it to every panel's History,
-   * and reads the recent slice for the brain, so nothing is re-fed to a call
-   * here. Before the restore this thread is only part of itself, and a write
-   * then would stand in for a thread nobody has.
+   * Which lines the main process's store has acknowledged, so a publish sends
+   * only what is new — a line not yet acknowledged, or one that has since
+   * learned its run — and a report can only add to the thread the store owns,
+   * never stand a stale copy of it back up.
    */
-  const publishConversation = useCallback(() => {
+  const reporterRef = useRef(new HistoryReporter());
+  const noteReported = useCallback((entries: readonly ConversationEntry[]) => {
+    reporterRef.current.adopt(entries);
+  }, []);
+
+  /**
+   * Persists what this window appended. The main process's store takes each
+   * line by its id, relays the thread to every panel's History, and reads the
+   * recent slice for the brain, so nothing is re-fed to a call here. A line is
+   * marked reported only once the store said it took it; one it refused is
+   * sent again on the next publish. Before the restore this thread is only
+   * part of itself, and a report then would name lines the store already
+   * holds as though they were new.
+   */
+  const publishConversation = useCallback(function publish() {
     conversationRef.current = retainedConversationEntries(conversationRef.current, Date.now());
     setConversationHistory(conversationRef.current);
-    if (conversationSeeded.current) {
-      window.sidecar.reportConversationHistory(conversationRef.current);
-    }
+    if (!conversationSeeded.current) return;
+    const reporter = reporterRef.current;
+    const taken = reporter.take(conversationRef.current);
+    if (taken.entries.length === 0) return;
+    window.sidecar.appendConversationHistory(taken.entries).then(
+      (acknowledged) => {
+        reporter.settle(taken, acknowledged);
+        // A line that learned its run while its append was out is owed once
+        // more; an acknowledgement is what makes it sendable, so it is sent
+        // now rather than waiting for the next line. A refusal is not
+        // followed up here: the next publish retries, and nothing spins.
+        if (acknowledged) publish();
+      },
+      () => reporter.settle(taken, false),
+    );
   }, []);
 
   useEffect(() => {
@@ -592,7 +618,10 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       ) {
         return;
       }
-      conversationRef.current = appendConversationThreadEntry(conversationRef.current, entry);
+      conversationRef.current = appendConversationThreadEntry(conversationRef.current, {
+        ...entry,
+        eventId: entry.eventId ?? crypto.randomUUID(),
+      });
       publishConversation();
     },
     [publishConversation],
@@ -610,6 +639,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     // cannot deliver the very thread this press just cleared.
     conversationSeeded.current = true;
     conversationRef.current = [];
+    reporterRef.current.reset();
     spokenTurnMarksRef.current.clear();
     pendingSpokenTurnMarksRef.current = [];
     latestSpokenTurnMarkRef.current = undefined;
@@ -647,13 +677,14 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           restoredTail,
         );
       }
+      noteReported(entries);
       conversationRef.current = adoptConversationThread(conversationRef.current, [
         ...entries,
         ...conversationRef.current,
       ]);
       publishConversation();
     },
-    [publishConversation],
+    [noteReported, publishConversation],
   );
 
   // The main process's own lines in the thread — the ask a carried act was —
@@ -664,10 +695,18 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     () =>
       window.sidecar.onConversationHistoryChanged((payload) => {
         if (payload.cleared) return;
-        conversationRef.current = adoptConversationThread(conversationRef.current, payload.entries);
+        noteReported(payload.entries);
+        // The relay is the store's thread as another writer left it; a line of
+        // this window's still awaiting the store's acknowledgement is kept.
+        const reporter = reporterRef.current;
+        conversationRef.current = withPendingLines(
+          adoptConversationThread(conversationRef.current, payload.entries),
+          conversationRef.current,
+          (entry) => reporter.pending(entry),
+        );
         setConversationHistory(conversationRef.current);
       }),
-    [],
+    [noteReported],
   );
 
   /**
@@ -697,6 +736,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
         mark.after,
         mark.recordedAt,
         mark.runId,
+        crypto.randomUUID(),
       );
       // A transcription that came back empty ended its turn — the preview
       // and the mark are already spent — but placed no line, and a thread

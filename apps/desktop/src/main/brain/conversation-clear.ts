@@ -19,7 +19,7 @@ import type { BrainStateStore } from "@sidecar/brain";
  * over a disk that kept them.
  */
 export interface ConversationClearDependencies {
-  /** The one writer of the brain's state; its Clear fences the generation and writes the marker. */
+  /** The one writer of the brain's envelope; its Clear fences the generation and writes the marker. */
   store: Pick<BrainStateStore, "clear">;
   now: () => number;
   /** Raises the cutoff, empties the relayed thread, and tells every window, before anything is erased. */
@@ -29,7 +29,7 @@ export interface ConversationClearDependencies {
    * is durable: what the thread holds now — only lines recorded after the
    * fence, if any — is what the file keeps. Answers whether the write landed.
    */
-  eraseConversation: () => boolean;
+  eraseConversation: () => boolean | Promise<boolean>;
   report: (message: string) => void;
 }
 
@@ -52,7 +52,7 @@ export async function clearConversationAndBrain(
     dependencies.report(`History Clear incomplete: ${CONVERSATION_CLEAR_INCOMPLETE.MARKER}`);
     return false;
   }
-  const erased = dependencies.eraseConversation();
+  const erased = await dependencies.eraseConversation();
   if (!erased) {
     dependencies.report(`History Clear incomplete: ${CONVERSATION_CLEAR_INCOMPLETE.THREAD}`);
   }

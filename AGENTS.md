@@ -216,8 +216,20 @@ Trust constraints:
   keeps and logs none of the request body, the output, or the compaction
   inside it. The development trace records a turn's about-fields and byte
   counts under its own gate, never a transcript's text.
-- What the brain keeps is one generation, in one file under one writer, and
-  the generation's shape is the retention rule. The envelope holds the
+- What the brain keeps is one generation, in one database under one writer,
+  and the generation's shape is the retention rule. The database is the
+  runtime store: one SQLite file per agent under Luke's own application data
+  (`agents/main/agent.sqlite`), written only from its own worker thread, with
+  a table for each kind of thing the envelope holds — the model's checkpoint
+  items, the transcript cursors, the requests, the action receipts — beside
+  the conversation's own lines and the facts Luke remembers, so the main
+  thread never waits on the disk and no second writer exists. The files an
+  earlier build kept beside `settings.json` are left in place and never
+  read: nothing draws or writes them any more. Every save is a
+  compare-and-set against the generation the writer last observed standing,
+  so a stale writer can neither refill nor replace a newer generation, and a
+  generation whose rows this build cannot read is replaced by the store that
+  observed it and by nothing else. The envelope holds the
   Responses input from the latest compaction onward — the API's encrypted
   compaction item included, which is user-derived data however opaque — the
   transcript cursors, the record of every developer ask and how it ended, and
@@ -230,6 +242,10 @@ Trust constraints:
   successor before any disk is waited on, so a turn holding a model answer,
   a transcript read, or an act's preparation is revoked at once, a write
   landing afterwards installs nothing, and the late result lands nowhere.
+  The conversation's lines answer to their own retention, not the
+  generation's: each line is stamped with the generation that stood when it
+  was written, for attribution alone, and a generation's expiry erases no
+  line; only the Clear reaches both.
   Expiry revokes the generation's runs and, through the host's own listener,
   withdraws every briefing it had queued or offered but not yet spoken; a
   version-1 file, of unknown age, reads as nothing rather than as a fresh
@@ -248,13 +264,18 @@ Trust constraints:
   model context, or publication can carry a line from before the press; the
   store fences the generation the same synchronous way and then writes an
   empty successor carrying a content-free marker — the Clear's instant, and
-  the erased generation's id when one is known, learned from the file when
-  the store had not yet loaded — over the old content; the thread's file is
-  removed. A launch that finds the marker refuses every stored line at or
-  before its instant, so a crash between the two files cannot stand the
-  thread back up, and a step that fails leaves the fence standing and
-  reports the erasure incomplete, never done, with the next landed write
-  replacing what the disk kept. A Clear does not reach the facts Luke
+  the erased generation's id when one is known, learned from the database
+  when the store had not yet loaded — over the old content; the thread's
+  lines at or before the instant are deleted. The cutoff is also kept on the conversation's own
+  row, written in the marker's transaction and only ever raised, so a line
+  from before a Clear stays refused after the generation that carried the
+  marker has itself expired, whatever the disk did about the erasure. The main process's own thread carries an epoch
+  the fence moves, so a store answer still out when the Clear landed installs
+  nothing and broadcasts nothing. A launch that finds the marker refuses
+  every stored line at or before its instant, so a crash between the two
+  steps cannot stand the thread back up, and a step that fails leaves the
+  fence standing and reports the erasure incomplete, never done, with the
+  next landed write replacing what the disk kept. A Clear does not reach the facts Luke
   separately remembers about the developer, nor any provider's file. Widening what the brain reads, where it travels, how long a
   generation stands, or what a Clear leaves is a product decision, not an
   implementation detail, and `PRIVACY.md` says each in as many words.
@@ -380,12 +401,16 @@ Trust constraints:
   so storing it changes only how long it stands, not what it is. It lives in
   Luke's own application data, never a provider's file, under a real retention
   policy replacing the old "dies with the app": the 200 most recent lines,
-  nothing older than a fortnight. What the thread hands a model is the same
-  bounded recent slice, riding beside the brain's own working memory, and the
-  panel's Clear reaches the file as well as the screen, because a Clear that
-  emptied only the view would leave the words on the machine with nothing
-  left to draw them; it reaches the brain's generation too, under the rule
-  above. The narrower thing is a durable
+  nothing older than a fortnight, in the runtime store's own table. Each line
+  carries an id its writer minted, and the store's append is idempotent on
+  it: a window reports only the lines it added, never the whole thread, so a
+  report can add to the thread and never replace it, a line delivered twice
+  is one line, and two deliberate identical utterances are two. What the
+  thread hands a model is the same bounded recent slice, riding beside the
+  brain's own working memory, and the panel's Clear reaches the stored lines
+  as well as the screen, because a Clear that emptied only the view would
+  leave the words on the machine with nothing left to draw them; it reaches
+  the brain's generation too, under the rule above. The narrower thing is a durable
   fact about the developer themselves. During a turn the developer opened,
   Luke may silently keep a concise stable preference, personal fact, goal, or
   recurring constraint. He skips transient details and uncertain inferences,
@@ -395,8 +420,9 @@ Trust constraints:
   developer-opened turn. A changed fact names the entry it replaces so
   contradictions do not stand together; duplicates add nothing; and a request
   to forget names one of the ids the conversation received. At most 32 bounded
-  facts stand in Luke's own application data and the complete list enters each
-  conversation as reply context. It is never drawn, never reaches a provider
+  facts stand in the runtime store's own table, written whole by the same
+  worker and by nothing else, and the complete list enters each conversation
+  as reply context. It is never drawn, never reaches a provider
   file, never reaches a write path, and never reaches the attention evaluator,
   whose input stays what a provider wrote about a session. Widening either —
   what may be stored, how long it stands, or where it may travel — is a
