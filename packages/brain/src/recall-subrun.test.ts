@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   type AgentRuntime,
+  CONTEXT_INPUT_KIND,
   type ContextEngine,
   RUN_END_REASON,
   type RuntimeRunRequest,
@@ -106,8 +107,10 @@ test("the subrun is offered the two memory tools alone, runs them, and its conte
     [...RECALL_SUBRUN_TOOLS].toSorted(),
   );
   assert.deepEqual(requests[0]?.ephemeral(), []);
-  assert.ok(requests[0]?.input[0]?.text.includes("when do we deploy?"));
-  assert.ok(requests[0]?.input[0]?.text.includes("earlier ask"));
+  const opening = requests[0]?.input[0];
+  assert.ok(opening && opening.kind === CONTEXT_INPUT_KIND.USER_TEXT);
+  assert.ok(opening.text.includes("when do we deploy?"));
+  assert.ok(opening.text.includes("earlier ask"));
   assert.equal(disposed.length, 1);
 });
 
