@@ -92,6 +92,7 @@ export {
 export {
   alreadyFlushedForCompaction,
   dailyNotePathFor,
+  failedHousekeeping,
   type HousekeepingPrompt,
   housekeepingCompleted,
   housekeepingFellShort,
@@ -141,6 +142,7 @@ export {
   type ConversationRecallOptions,
   conversationRunsRecall,
   hasRecallIntent,
+  isMaintenanceEligibleConversation,
   isRecallEligibleConversation,
   RECALL_DECISION,
   RECALL_ELIGIBLE_KINDS,
@@ -164,6 +166,32 @@ export {
   redactSensitiveText,
   stripRecalledContext,
 } from "./redaction.js";
-export { jaccardSimilarity, textSimilarity, tokenize } from "./tokenize.js";
+export {
+  boundNoteLine,
+  type DedupedSeeds,
+  dedupe,
+  historyLineHash,
+  type IngestibleHistoryLine,
+  type IngestibleLine,
+  INGESTION_SCORE,
+  ingestibleLines,
+  NOTE_LINE_MAX_CHARS,
+  type NoteFile,
+  noteSeeds,
+  recentHistoryLines,
+} from "./ingestion.js";
+export {
+  type ConsolidationSweepDependencies,
+  type ConsolidationSweepReport,
+  type ConsolidationSweepStore,
+  DEEP_PATH,
+  type DeepPath,
+  type DeepRewriteDecision,
+  decideDeepRewrite,
+  NOTE_BUDGET_SHARE,
+  runConsolidationSweep,
+  type ToolFreeAsk,
+} from "./sweep.js";
+export { jaccardSimilarity, stripBullet, textSimilarity, tokenize } from "./tokenize.js";
 export { cosineSimilarity, parseEmbedding, serializeEmbedding } from "./vectors.js";
 export { type MemoryWatcher, type MemoryWatchOptions, watchMemoryFiles } from "./watch.js";

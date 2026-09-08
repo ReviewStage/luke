@@ -30,7 +30,6 @@ import {
  * worker that owns the database and the disk applies them.
  */
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const GIB = 1024 * 1024 * 1024;
 
 export interface HistoryMaintenanceConfig {

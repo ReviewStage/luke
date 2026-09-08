@@ -44,9 +44,22 @@ export function isRecallEligibleConversation(
   return RECALL_ELIGIBLE_KINDS.has(conversationKindOf(candidate.sessionKey));
 }
 
+/**
+ * Whether a conversation's memory is maintained at all — flushed before a
+ * compaction, captured before a reset, swept by consolidation: main and the
+ * developer's durable private threads, never a temporary thread, an observed
+ * session, a child, or a cron conversation. The same set recall reads.
+ */
+export function isMaintenanceEligibleConversation(
+  sessionKey: SessionKey,
+  input: { readonly temporary: boolean },
+): boolean {
+  return !input.temporary && RECALL_ELIGIBLE_KINDS.has(conversationKindOf(sessionKey));
+}
+
 /** Whether a conversation's asks run recall at all: the same set, since a child, an observed session, or a temporary thread neither recalls nor is recalled. */
 export function conversationRunsRecall(input: RecallEligibilityInput): boolean {
-  return !input.temporary && RECALL_ELIGIBLE_KINDS.has(conversationKindOf(input.sessionKey));
+  return isMaintenanceEligibleConversation(input.sessionKey, input);
 }
 
 const RECALL_INTENT_PATTERNS: readonly RegExp[] = [

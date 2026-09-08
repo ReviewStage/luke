@@ -27,6 +27,7 @@ import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import type { RuntimeDatabase } from "./database.js";
 import { removeIndexedPath } from "./memory-index-table.js";
 import { forgetNotebookEntry, type NotebookEntry } from "./notebook-table.js";
+import { readWorkspaceFileSync, writeWorkspaceFileSync } from "./workspace-files.js";
 
 /**
  * The store's side of memory maintenance, on the database worker. It holds
@@ -45,20 +46,21 @@ type CandidateRow = { payload: string };
 const PHASES: readonly ConsolidationPhase[] = Object.values(CONSOLIDATION_PHASE);
 const OUTCOMES: readonly MemoryHousekeepingOutcome[] = Object.values(MEMORY_HOUSEKEEPING_OUTCOME);
 
-function readCandidates(rows: readonly CandidateRow[]): MemoryCandidate[] {
-  const candidates: MemoryCandidate[] = [];
-  for (const row of rows) {
-    let parsed: UnparsedWireValue;
-    try {
-      // SAFETY: JSON.parse returns a wire value; the reader is the validation.
-      parsed = JSON.parse(row.payload) as UnparsedWireValue;
-    } catch {
-      continue;
-    }
-    const candidate = memoryCandidateFromWire(parsed);
-    if (candidate) candidates.push(candidate);
+/** A row's payload as a candidate, or nothing for one this build cannot read. */
+function readCandidate(row: CandidateRow): MemoryCandidate | undefined {
+  try {
+    // SAFETY: JSON.parse returns a wire value; the reader is the validation.
+    return memoryCandidateFromWire(JSON.parse(row.payload) as UnparsedWireValue);
+  } catch {
+    return undefined;
   }
-  return candidates;
+}
+
+function readCandidates(rows: readonly CandidateRow[]): MemoryCandidate[] {
+  return rows.flatMap((row) => {
+    const candidate = readCandidate(row);
+    return candidate ? [candidate] : [];
+  });
 }
 
 function putCandidate(database: RuntimeDatabase, candidate: MemoryCandidate): void {
@@ -420,24 +422,6 @@ export function listMemoryRewrites(database: RuntimeDatabase): readonly MemoryRe
 
 const DURABLE_FILES: readonly string[] = [WORKSPACE_FILE.MEMORY, DREAMS_FILE];
 
-function readWorkspaceFile(root: string, name: string): string {
-  try {
-    return fs.readFileSync(path.join(root, name), "utf8");
-  } catch (error) {
-    // SAFETY: fs throws an ErrnoException; only its code is read, and any other error is rethrown.
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
-    throw error;
-  }
-}
-
-function writeWorkspaceFileWhole(root: string, name: string, content: string): void {
-  fs.mkdirSync(root, { recursive: true, mode: 0o700 });
-  const file = path.join(root, name);
-  const temporary = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(temporary, content, { mode: 0o600 });
-  fs.renameSync(temporary, file);
-}
-
 export interface MemoryRewriteAsk {
   readonly path: string;
   readonly phase: ConsolidationPhase;
@@ -478,7 +462,7 @@ export function publishMemoryRewrite(
   if (ask.next.length > CONSOLIDATION_DEFAULTS.MEMORY_FILE_MAX_CHARS) {
     return { ok: false, reason: MEMORY_REWRITE_REFUSAL.TOO_LARGE };
   }
-  const previous = readWorkspaceFile(root, ask.path);
+  const previous = readWorkspaceFileSync(root, ask.path);
   if (hashText(previous) !== ask.expectedHash) {
     return { ok: false, reason: MEMORY_REWRITE_REFUSAL.CONFLICT };
   }
@@ -489,7 +473,7 @@ export function publishMemoryRewrite(
   // between the two leaves the file ahead of the table, which the sweep's
   // reconciliation reads back from the file's own promotion markers.
   try {
-    writeWorkspaceFileWhole(root, ask.path, ask.next);
+    writeWorkspaceFileSync(root, ask.path, ask.next);
   } catch (error) {
     return {
       ok: false,
@@ -518,7 +502,7 @@ export function publishMemoryRewrite(
       removeIndexedPath(database, ask.path);
     });
   } catch (error) {
-    writeWorkspaceFileWhole(root, ask.path, previous);
+    writeWorkspaceFileSync(root, ask.path, previous);
     return {
       ok: false,
       reason: `${MEMORY_REWRITE_REFUSAL.NOT_RECORDED}: ${error instanceof Error ? error.message : String(error)}`,
@@ -550,7 +534,7 @@ export function readDurableMemoryFile(
   name: string,
 ): { content: string; hash: string } | undefined {
   if (!DURABLE_FILES.includes(name)) return undefined;
-  const content = readWorkspaceFile(root, name);
+  const content = readWorkspaceFileSync(root, name);
   return { content, hash: hashText(content) };
 }
 
