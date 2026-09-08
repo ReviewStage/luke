@@ -54,7 +54,13 @@ export const SAVE_SCOPE = {
   CAPTURE: "capture",
 } as const;
 
-/** The most entries the inbox holds; past it the oldest go, since the delta read covers what they said. */
+/**
+ * How many captured observations one turn opens with. It bounds what a
+ * model reads, never what the store keeps: every capture stands in the inbox
+ * until a turn consumes it, because each entry carries the transcript delta
+ * read for it and the capture cursor has already moved past that text, so a
+ * dropped entry would be words no later read could recover.
+ */
 export const INBOX_CAPACITY = 20;
 
 /**
@@ -215,9 +221,10 @@ export class BrainRequestLedger {
         carried = transcript.length;
         // The inbox is composed from the committed list: a capture appends
         // to it and a checkpoint removes what its turn consumed, so a
-        // capture landing during a turn is neither lost nor consumed early.
+        // capture landing during a turn is neither lost nor consumed early,
+        // and nothing captured is let go of before a turn has read it.
         if (scope.kind === SAVE_SCOPE.CAPTURE) {
-          inbox = [...state.inbox, ...scope.entries].slice(-INBOX_CAPACITY);
+          inbox = [...state.inbox, ...scope.entries];
         } else if (scope.kind === SAVE_SCOPE.WORKING && scope.consumes) {
           const consumed = new Set(scope.consumes);
           inbox = state.inbox.filter((entry) => !consumed.has(entry.id));
