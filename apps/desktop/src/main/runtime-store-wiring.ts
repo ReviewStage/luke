@@ -1,9 +1,11 @@
 import type { RememberedFact } from "@sidecar/acts";
 import { type BrainStateRepository, brainStateRepositoryFromStorage } from "@sidecar/brain";
 import type { ConversationEntry } from "@sidecar/realtime";
-import { memoryScheduledJobStore, type ScheduledJobStore } from "@sidecar/runtime";
+import { type ChildStore, memoryScheduledJobStore, type ScheduledJobStore } from "@sidecar/runtime";
 import {
   ARCHIVE_REASON,
+  type ChildCompletionRecord,
+  type ChildRunRecord,
   CONVERSATION_KIND,
   type ConversationKind,
   type ConversationRecord,
@@ -122,6 +124,8 @@ export interface RuntimeStoreWiring {
   ) => Promise<ConversationRecord>;
   /** The scheduler's jobs; a run with nothing on disk keeps them in memory alone. */
   scheduledJobStore: () => ScheduledJobStore;
+  /** The child service's records and completions; a run with nothing on disk keeps them in memory alone. */
+  childStore: () => ChildStore;
   archive: (sessionKey: SessionKey) => Promise<boolean>;
   unarchive: (sessionKey: SessionKey) => Promise<boolean>;
   /**
@@ -302,6 +306,23 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
 
   const memoryJobs = memoryScheduledJobStore();
 
+  const memoryChildren = new Map<string, ChildRunRecord>();
+  const memoryCompletions = new Map<string, ChildCompletionRecord>();
+  const memoryChildStore: ChildStore = {
+    listChildren: async () => [...memoryChildren.values()],
+    putChild: async (record) => {
+      memoryChildren.set(record.childId, record);
+      return true;
+    },
+    deleteChild: async (childId) => memoryChildren.delete(childId),
+    listCompletions: async () => [...memoryCompletions.values()],
+    putCompletion: async (completion) => {
+      memoryCompletions.set(completion.completionId, completion);
+      return true;
+    },
+    deleteCompletion: async (completionId) => memoryCompletions.delete(completionId),
+  };
+
   return {
     client,
     thread,
@@ -389,6 +410,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
       return created;
     },
     scheduledJobStore: () => (dependencies.persistent ? client().scheduledJobStore() : memoryJobs),
+    childStore: () => (dependencies.persistent ? client().childStore() : memoryChildStore),
     archive: async (sessionKey) => {
       // Archiving preserves history, and a temporary thread has nowhere to
       // preserve it: the ask is refused and the thread left exactly as it was.

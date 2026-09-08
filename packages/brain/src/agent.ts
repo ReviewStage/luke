@@ -1,6 +1,7 @@
 import { HOSTED_BRAIN_OPTION_BOUNDS } from "@sidecar/hosted";
 import type { ScheduledTimer } from "@sidecar/realtime";
 import {
+  type ChildPolicyContext,
   type EffectiveToolPolicy,
   PendingInputQueue,
   QUEUE_DEFAULTS,
@@ -11,6 +12,8 @@ import {
 } from "@sidecar/runtime";
 import {
   type AgentRuntime,
+  CHILD_RUN_STATUS,
+  type ChildRunStatus,
   CONTEXT_INPUT_KIND,
   type ContextMark,
   type ReasoningEffort,
@@ -43,10 +46,13 @@ import {
 import {
   activityNoticesInputText,
   askInputText,
+  type ChildCompletionInput,
+  childCompletionInputText,
   heartbeatInputText,
   holdReleasedInputText,
   primedNotesInputText,
   standingContextText,
+  subagentTaskInputText,
   wakeInputText,
 } from "./input-items.js";
 import { journalActCounts, UNKNOWN_ACT_RESULT } from "./journal.js";
@@ -67,6 +73,7 @@ import {
 import type { BrainActExecution, BrainActPerformer, BrainRoster } from "./performer.js";
 import {
   BRAIN_REQUEST_FAILURE,
+  BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
   BRAIN_SUBMISSION_OUTCOME,
   BRAIN_SUBMISSION_REJECTION,
@@ -85,6 +92,7 @@ import {
   brainGenerationExpired,
 } from "./state-store.js";
 import {
+  type BrainChildAccess,
   type BrainWorkspaceAccess,
   createTurnToolExecutor,
   journaledEffect,
@@ -285,6 +293,20 @@ export interface BrainAgentOptions {
   queueMode?: QueueMode;
   /** How long collect mode waits for more asks before opening one turn for them all. */
   queueDebounceMs?: number;
+  /**
+   * Set when this conversation is a child's: how deep it is. Every turn is
+   * then prepared as a child's — the minimal profile, the child restriction
+   * on top of the configured layers — and a spawn from it counts one deeper.
+   */
+  child?: ChildPolicyContext;
+  /** Delegation, supplied by the host that owns the conversations; absent, the session tools refuse. */
+  children?: BrainChildAccess;
+  /**
+   * The requester's active context a forked child starts over, adopted
+   * whole into this conversation's empty context on its first turn and
+   * recorded as a fork boundary; never read once the context holds anything.
+   */
+  inheritedContext?: readonly WireRecord[];
   /** The one writer of the brain's state, owned by the host and outliving any one agent. */
   store: BrainStateStore;
   createRunId: () => string;
@@ -316,6 +338,21 @@ function newRunControl(runId: string, generation: Generation, recorded: boolean)
     performedActs: 0,
     unknownActs: 0,
   };
+}
+
+/** How a child's run ended, as its requester's service takes it. */
+export interface BrainChildRunEnd {
+  readonly status: ChildRunStatus;
+  readonly resultText?: string;
+  readonly failureDetail?: string;
+  readonly performedActs: number;
+  readonly unknownActs: number;
+}
+
+/** Whether a completion reached this conversation, and how. */
+export interface BrainCompletionDelivery {
+  readonly delivered: boolean;
+  readonly reason?: string;
 }
 
 /** What one turn gathers as it runs, for its trace and its deliveries. */
@@ -389,6 +426,8 @@ export class BrainAgent {
   #incompatibleReported: string | undefined;
   /** The optional compaction queued after the last turn; a new ask, a stop, or a replacement cancels it. */
   #maintenance: AbortController | undefined;
+  /** Completions this conversation has taken, by their stable id, so a retried delivery is one item. */
+  readonly #deliveredCompletions = new Set<string>();
 
   constructor(options: BrainAgentOptions) {
     this.#options = options;
@@ -1086,6 +1125,124 @@ export class BrainAgent {
   }
 
   /**
+   * Runs a delegated task in this conversation, as the child it is: a
+   * recorded run under the child origin, its submission id the child run's
+   * id the requester's service minted, so the same child asked twice is one
+   * run. Settles with the run's end, as the service takes it: a completed
+   * run's final text is the result, and an interrupted one — the run a
+   * relaunch found unfinished — is the honest unknown with the acts its
+   * journal established.
+   */
+  async runChildTask(
+    task: string,
+    childRunId: string,
+  ): Promise<
+    { readonly runId: string; readonly done: Promise<BrainChildRunEnd | undefined> } | undefined
+  > {
+    const submitted = await this.submitAsk({
+      submissionId: childRunId,
+      question: task,
+      origin: BRAIN_REQUEST_ORIGIN.CHILD,
+    });
+    if (submitted.outcome !== BRAIN_SUBMISSION_OUTCOME.ACCEPTED) return undefined;
+    return {
+      runId: submitted.runId,
+      done: this.#awaitTerminal(submitted.runId).then((record) =>
+        record ? childRunEnd(record) : undefined,
+      ),
+    };
+  }
+
+  /**
+   * The end of a child run this conversation already holds — the one a
+   * relaunch found and marked interrupted, or one that ended before the
+   * requester's service asked — or nothing when no run stands for the id.
+   * Nothing is run: a child whose record was never written is not started
+   * again on the strength of its requester's receipt.
+   */
+  async adoptChildRun(childRunId: string): Promise<BrainChildRunEnd | undefined> {
+    await this.ready();
+    const record = this.requests().find(
+      (held) => held.submissionId === childRunId && held.origin === BRAIN_REQUEST_ORIGIN.CHILD,
+    );
+    if (!record) return undefined;
+    const settled = await this.#awaitTerminal(record.runId);
+    return settled ? childRunEnd(settled) : undefined;
+  }
+
+  /** The run named as a child's, for a requester's service to cancel by the child run id it minted. */
+  async cancelChildRun(childRunId: string): Promise<boolean> {
+    await this.ready();
+    const record = this.requests().find((held) => held.submissionId === childRunId);
+    if (!record) return true;
+    const cancelled = await this.cancelAsk(record.runId);
+    return cancelled === undefined || isTerminalBrainRequestStatus(cancelled.status);
+  }
+
+  async #awaitTerminal(runId: string): Promise<BrainRequestRecord | undefined> {
+    for (;;) {
+      const record = await this.waitAsk(runId, BRAIN_DEFAULTS.ASK_WAIT_MS);
+      if (!record || isTerminalBrainRequestStatus(record.status)) return record;
+      if (this.#stopped) return this.request(runId);
+    }
+  }
+
+  /**
+   * A child's completion, handed to this conversation as the one that asked
+   * for it. An execution under way takes it at its next model boundary, as an
+   * ask would be steered; otherwise a turn of its own opens for it, offered
+   * `announce`, so the requester reviews the result and decides whether the
+   * developer hears anything. The same completion id is taken once however
+   * many times delivery is retried. Answers whether the completion reached the
+   * model, so a delivery this conversation could not take is retried later
+   * rather than lost.
+   */
+  async deliverChildCompletion(completion: ChildCompletionInput): Promise<BrainCompletionDelivery> {
+    await this.ready();
+    this.#expireIfDue();
+    const generation = this.#generation;
+    if (this.#stopped || !generation) return { delivered: false, reason: "no conversation stands" };
+    if (this.#deliveredCompletions.has(completion.completionId)) return { delivered: true };
+    const opened = await generation.opened;
+    if (generation !== this.#generation || this.#stopped) {
+      return { delivered: false, reason: "the conversation was replaced" };
+    }
+    if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
+      return { delivered: false, reason: "the conversation's memory cannot be run" };
+    }
+    const text = childCompletionInputText(completion, this.#now());
+    const active = this.#active;
+    if (
+      active &&
+      active.run.generation === generation &&
+      !this.#runRevoked(active.run) &&
+      active.started.steer({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text })
+    ) {
+      this.#deliveredCompletions.add(completion.completionId);
+      return { delivered: true };
+    }
+    const result = await this.#queueTurn(BRAIN_TURN_TRIGGER.CHILD_COMPLETION, () =>
+      this.#turn({
+        generation,
+        trigger: BRAIN_TURN_TRIGGER.CHILD_COMPLETION,
+        events: this.#inboxEvents(generation),
+        open: (attached, now) => [
+          ...(attached.length > 0 ? [wakeInputText(attached, now)] : []),
+          text,
+        ],
+      }),
+    );
+    if (result.outcome === TURN_OUTCOME.DONE) {
+      this.#deliveredCompletions.add(completion.completionId);
+      return { delivered: true };
+    }
+    if (result.outcome === TURN_OUTCOME.QUIET) {
+      return { delivered: false, reason: "the model is quiet" };
+    }
+    return { delivered: false, reason: `the completion turn ended ${result.outcome}` };
+  }
+
+  /**
    * Revokes every execution at once and takes nothing more: the generation's
    * signal fires, so every wait the agent holds — a model answer, a
    * transcript read, a run's own act preparation — settles, and the queue
@@ -1546,14 +1703,21 @@ export class BrainAgent {
         run.timedOut = true;
         run.abort.abort();
       }, this.#executionDeadlineMs);
+      // A child's task runs under its own trigger: the words open as the
+      // delegated task rather than the developer's ask, and the final text is
+      // the result its requester is handed rather than speech.
+      const childTask = generation.requests.get(run.runId)?.origin === BRAIN_REQUEST_ORIGIN.CHILD;
       let result: TurnResult;
       try {
         result = await this.#turn(
           {
             generation,
-            trigger: BRAIN_TURN_TRIGGER.ASK,
+            trigger: childTask ? BRAIN_TURN_TRIGGER.CHILD_TASK : BRAIN_TURN_TRIGGER.ASK,
             events: this.#inboxEvents(generation),
-            open: (attached, now) => [askInputText(question, attached, now)],
+            open: (attached, now) =>
+              childTask
+                ? [subagentTaskInputText(question, now)]
+                : [askInputText(question, attached, now)],
             run,
           },
           riders,
@@ -1971,8 +2135,21 @@ export class BrainAgent {
    * says it is data. An ordinary turn over a context with items reads none.
    */
   async #primeIfFresh(turnContext: TurnContext): Promise<readonly string[]> {
+    const context = turnContext.context;
+    if (context.checkpoint().items.length > 0) return [];
+    const inherited = this.#options.inheritedContext;
+    if (inherited && inherited.length > 0) {
+      // A forked child: the requester's context is the child's opening
+      // history, adopted whole and recorded as a fork boundary, and the task
+      // then follows it as the first words of the child's own.
+      await settledUnlessAborted(
+        Promise.resolve(context.adoptFork(inherited, { signal: turnContext.signal })),
+        turnContext.signal,
+      );
+      return [];
+    }
     const primer = this.#options.primeFreshContext;
-    if (!primer || turnContext.context.checkpoint().items.length > 0) return [];
+    if (!primer) return [];
     const settled = await settledUnlessAborted(primer(), turnContext.signal);
     if (settled.aborted || !settled.value) return [];
     return [primedNotesInputText(settled.value)];
@@ -1991,6 +2168,7 @@ export class BrainAgent {
       preparation.catalog ?? brainToolCatalog(),
       preparation.layers,
       trigger,
+      this.#options.child,
     );
   }
 
@@ -2020,6 +2198,7 @@ export class BrainAgent {
         roster: this.#options.roster,
         acts: this.#options.acts,
         workspace: this.#options.workspace,
+        children: this.#options.children,
         readWhole: (identity, readContext) => this.#readWhole(identity, readContext),
         checkpoint: (checkpointContext) => this.#ledger.checkpoint(checkpointContext),
         runRevoked: (checked) => this.#runRevoked(checked),
@@ -2157,6 +2336,44 @@ export class BrainAgent {
       signal: context.signal,
       maximumChars: this.#fullTranscriptChars,
     });
+  }
+}
+
+/** A child's run record as its requester's service reads its end. */
+function childRunEnd(record: BrainRequestRecord): BrainChildRunEnd {
+  const counts = { performedActs: record.performedActs, unknownActs: record.unknownActs };
+  switch (record.status) {
+    case BRAIN_REQUEST_STATUS.SUCCEEDED:
+      return {
+        status: CHILD_RUN_STATUS.COMPLETED,
+        ...(record.text !== undefined ? { resultText: record.text } : undefined),
+        ...counts,
+      };
+    case BRAIN_REQUEST_STATUS.CANCELLED:
+      return { status: CHILD_RUN_STATUS.CANCELLED, ...counts };
+    case BRAIN_REQUEST_STATUS.TIMED_OUT:
+      return { status: CHILD_RUN_STATUS.TIMED_OUT, ...counts };
+    case BRAIN_REQUEST_STATUS.INTERRUPTED:
+      return {
+        status: CHILD_RUN_STATUS.UNKNOWN,
+        failureDetail:
+          "the child's run was interrupted; what it did before is what its journal kept",
+        ...counts,
+      };
+    case BRAIN_REQUEST_STATUS.FAILED:
+      return {
+        status: CHILD_RUN_STATUS.FAILED,
+        ...(record.failure !== undefined ? { failureDetail: record.failure } : undefined),
+        ...(record.text !== undefined ? { resultText: record.text } : undefined),
+        ...counts,
+      };
+    case BRAIN_REQUEST_STATUS.QUEUED:
+    case BRAIN_REQUEST_STATUS.RUNNING:
+      return {
+        status: CHILD_RUN_STATUS.UNKNOWN,
+        failureDetail: "the child's run has not ended",
+        ...counts,
+      };
   }
 }
 

@@ -3,6 +3,14 @@ import type { UnparsedWireValue } from "@sidecar/wire";
 import { deleteConversationHistory, listArchives, restoreArchive } from "./archives.js";
 import { loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
 import {
+  deleteChildCompletion,
+  deleteChildRun,
+  listChildCompletions,
+  listChildRuns,
+  putChildCompletion,
+  putChildRun,
+} from "./children-table.js";
+import {
   archiveConversation,
   createConversation,
   listConversations,
@@ -100,6 +108,15 @@ const HANDLERS: RuntimeStoreHandlers = {
   [RUNTIME_STORE_METHOD.JOBS_LIST]: (host) => listScheduledJobs(host.opened()),
   [RUNTIME_STORE_METHOD.JOB_PUT]: (host, params) => putScheduledJob(host.opened(), params.job),
   [RUNTIME_STORE_METHOD.JOB_DELETE]: (host, params) => deleteScheduledJob(host.opened(), params.id),
+  [RUNTIME_STORE_METHOD.CHILDREN_LIST]: (host) => listChildRuns(host.opened()),
+  [RUNTIME_STORE_METHOD.CHILD_PUT]: (host, params) => putChildRun(host.opened(), params.record),
+  [RUNTIME_STORE_METHOD.CHILD_DELETE]: (host, params) =>
+    deleteChildRun(host.opened(), params.childId),
+  [RUNTIME_STORE_METHOD.COMPLETIONS_LIST]: (host) => listChildCompletions(host.opened()),
+  [RUNTIME_STORE_METHOD.COMPLETION_PUT]: (host, params) =>
+    putChildCompletion(host.opened(), params.completion),
+  [RUNTIME_STORE_METHOD.COMPLETION_DELETE]: (host, params) =>
+    deleteChildCompletion(host.opened(), params.completionId),
   [RUNTIME_STORE_METHOD.CLOSE]: (host) => {
     host.close();
     return true;

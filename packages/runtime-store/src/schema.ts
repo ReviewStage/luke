@@ -44,6 +44,12 @@
  * that say how far each transcript has been written down — kept apart from
  * the consumed cursors, which say how far a model has read.
  *
+ * Version 6 adds delegation: one row per child run and one per completion,
+ * each its record as the child service wrote it. A completion is written
+ * before its delivery is tried and stands apart from the child's row, so a
+ * child's result survives a delivery that could not land, and a launch finds
+ * both what was still running and what was still owed.
+ *
  * The schema is versioned by the `schema_version` table. A database at a
  * version this build does not know is refused rather than migrated by guess.
  */
@@ -51,7 +57,7 @@
 import type { SQLInputValue } from "node:sqlite";
 import { LEGACY_CHECKPOINT_FORMAT_TAG } from "@sidecar/brain";
 
-export const RUNTIME_SCHEMA_VERSION = 5;
+export const RUNTIME_SCHEMA_VERSION = 6;
 
 /**
  * How a database at an earlier version is brought to this one, in order. Each
@@ -108,6 +114,7 @@ export const RUNTIME_SCHEMA_MIGRATIONS: ReadonlyMap<number, readonly SchemaMigra
     ],
     [4, []],
     [5, []],
+    [6, []],
   ]);
 
 export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
@@ -265,6 +272,26 @@ export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
     created_at INTEGER NOT NULL,
     last_run_at INTEGER,
     enabled INTEGER NOT NULL,
+    payload TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS child_runs (
+    child_id TEXT PRIMARY KEY,
+    requester_session_key TEXT NOT NULL,
+    child_session_key TEXT NOT NULL,
+    status TEXT NOT NULL,
+    accepted_at INTEGER NOT NULL,
+    settled_at INTEGER,
+    archived_at INTEGER,
+    payload TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS child_runs_by_requester ON child_runs(requester_session_key, accepted_at)`,
+  `CREATE TABLE IF NOT EXISTS child_completions (
+    completion_id TEXT PRIMARY KEY,
+    child_id TEXT NOT NULL,
+    destination_session_key TEXT NOT NULL,
+    delivery_status TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    next_attempt_at INTEGER,
     payload TEXT NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS personal_facts (

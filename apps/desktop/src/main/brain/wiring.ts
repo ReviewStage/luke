@@ -5,6 +5,7 @@ import {
   BRAIN_TURN_TRIGGER,
   BRAIN_WORKSPACE_SEEDS,
   BrainAgent,
+  type BrainChildAccess,
   type BrainDelivery,
   BrainGenerationClock,
   type BrainRoster,
@@ -32,6 +33,11 @@ import type { ConversationEntry } from "@sidecar/realtime";
 import {
   type BuiltPrompt,
   buildSystemPrompt,
+  CHILD_SPAWN_REFUSAL,
+  type ChildEnd,
+  type ChildPolicyContext,
+  ChildRunService,
+  type ChildStore,
   ConfigurationStore,
   CREDENTIAL_REFERENCE_KIND,
   type CredentialReference,
@@ -56,6 +62,12 @@ import {
 } from "@sidecar/runtime";
 import type { ModelAdapter } from "@sidecar/runtime-contracts";
 import {
+  CHILD_RUN_STATUS,
+  type ChildCompletionRecord,
+  type ChildRunRecord,
+  type ConversationRecord,
+  childIdOf,
+  DEFAULT_AGENT_ID,
   MAIN_SESSION_KEY,
   observedSessionKey,
   observedSessionRefOf,
@@ -70,7 +82,7 @@ import {
   type Session,
   type SessionIdentity,
 } from "@sidecar/session";
-import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { type BrainRequestSnapshot, brainRequestPending } from "#shared/wire/brain";
 import { type BrainActPerformerDependencies, createBrainActPerformer } from "./act-performer";
@@ -96,6 +108,16 @@ export interface BrainWiringDependencies {
   repositoryFor: (sessionKey: SessionKey) => BrainStateRepository;
   /** Lists an observed session's conversation in the store, creating its row when none stands; absent, the row is not kept. */
   ensureObservedConversation?: (sessionKey: SessionKey, name: string) => Promise<void>;
+  /** Lists a child's conversation in the directory, creating its row when none stands. */
+  ensureChildConversation: (sessionKey: SessionKey, name: string) => Promise<void>;
+  /** Archives a conversation in the directory, its history kept; a completed child's, on its clock. */
+  archiveConversation: (sessionKey: SessionKey) => Promise<boolean>;
+  /** The directory as it stands, for `sessions_list`. */
+  conversationDirectory: () => readonly ConversationRecord[];
+  /** One conversation's thread as it stands, for `sessions_history` over a child. */
+  historyLines: (sessionKey: SessionKey) => readonly ConversationEntry[];
+  /** Where child records and completions stand between launches. */
+  childStore: () => ChildStore;
   /** The machine's parallelism, for the agent lane's width; absent means the host asks the OS. */
   parallelism?: () => number;
   createId: () => string;
@@ -200,8 +222,15 @@ export interface BrainWiring {
    * opens it again over the emptied rows.
    */
   closeConversation: (sessionKey: SessionKey) => Promise<void>;
-  /** Start fresh: a new lifetime for the conversation, its history and transcript untouched. */
+  /**
+   * Start fresh: a new lifetime for the conversation, its history and
+   * transcript untouched. Every child the conversation asked for, and theirs,
+   * is cancelled first; a cancellation that did not land refuses the reset
+   * rather than reporting a success over a child still running.
+   */
   resetConversation: (sessionKey: SessionKey) => Promise<boolean>;
+  /** Delegation: the child records, completions, and their lifecycle, for inspection and tests. */
+  readonly children: ChildRunService;
   registerIpc: (registration: BrainIpcRegistration) => void;
   /** The registries every configuration resolves against, for the diagnostics view. */
   readonly registries: RuntimeRegistries;
@@ -242,8 +271,34 @@ function laneFor(trigger: BrainTurnTrigger): Lane {
       return LANE.HOOK_DISPATCH;
     case BRAIN_TURN_TRIGGER.HEARTBEAT:
       return LANE.CRON_NESTED;
+    case BRAIN_TURN_TRIGGER.CHILD_TASK:
+      return LANE.CHILD;
     default:
       return LANE.AGENT;
+  }
+}
+
+/** A spawn refusal in the words the model reads. */
+function spawnRefusalWords(
+  reason: (typeof CHILD_SPAWN_REFUSAL)[keyof typeof CHILD_SPAWN_REFUSAL],
+): string {
+  switch (reason) {
+    case CHILD_SPAWN_REFUSAL.EMPTY_TASK:
+      return "a task needs words";
+    case CHILD_SPAWN_REFUSAL.DEPTH_CAP:
+      return "not run: the delegation depth cap is reached";
+    case CHILD_SPAWN_REFUSAL.REQUESTER_LIMIT:
+      return "not run: this conversation already has its limit of active children";
+    case CHILD_SPAWN_REFUSAL.GLOBAL_LIMIT:
+      return "not run: every child execution slot is taken";
+    case CHILD_SPAWN_REFUSAL.BLOCKED_COMPLETIONS:
+      return "not run: too many completions are blocked awaiting delivery";
+    case CHILD_SPAWN_REFUSAL.FORK_OTHER_AGENT:
+      return "not run: a fork must stay within the same agent";
+    case CHILD_SPAWN_REFUSAL.PERSISTENCE:
+      return "not run: the child's record could not be written";
+    case CHILD_SPAWN_REFUSAL.STOPPED:
+      return "not run: delegation is stopped";
   }
 }
 
@@ -453,11 +508,12 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     model: ModelAdapter,
     turn: BrainTurnDescription,
     listed: ListedSkills,
+    child?: ChildPolicyContext,
   ): Promise<BrainTurnPreparation & { built: BuiltPrompt }> => {
     const layers = snapshot.configuration.toolPolicy;
     const catalog = registries.tools.entries();
     const trigger = turn.kind === BRAIN_TURN_KIND.TURN ? turn.trigger : undefined;
-    const policy = resolveTurnToolPolicy(catalog, layers, trigger);
+    const policy = resolveTurnToolPolicy(catalog, layers, trigger, child);
     const discovered = eligibleSkills(
       await discoverSkills(snapshot.configuration.skillRoots),
       snapshot.configuration.agentId,
@@ -465,7 +521,10 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     listed.skills = discovered;
     const facts = await gatherPromptFacts({
       configuration: snapshot,
-      run: { origin: trigger === undefined ? RUN_ORIGIN.MAINTENANCE : runOriginOf(trigger) },
+      run: {
+        origin: trigger === undefined ? RUN_ORIGIN.MAINTENANCE : runOriginOf(trigger),
+        ...(child ? { child } : undefined),
+      },
       identity: BRAIN_IDENTITY_LINE,
       tools: policy.allowed.map((tool) => tool.schema),
       toolNotes: brainToolNotes(),
@@ -501,6 +560,12 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     // conversation this is is the host's own routing, so the agent is handed
     // the same fields whichever it is.
     const observed = observedSessionRefOf(sessionKey);
+    // A child's conversation is prepared as a child's: the minimal profile,
+    // the child restriction at its depth, the fork it inherited if any, and
+    // its own deadline when the spawn set one.
+    const childRecord = childRecordOf(sessionKey);
+    const fork = pendingForks.get(sessionKey);
+    pendingForks.delete(sessionKey);
     return new BrainAgent({
       observes: observed
         ? { kind: LOOK_SUBJECT.SESSION, identity: observed }
@@ -508,11 +573,24 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       lane: (trigger, work) => lanes.run(laneFor(trigger), work),
       notice: observed ? (report) => recordNotice(report, observed) : () => {},
       openingNotes: sessionKey === MAIN_SESSION_KEY ? openingNotes : NO_OPENING_NOTES,
+      ...(childRecord ? { child: { depth: childRecord.depth } } : undefined),
+      ...(fork ? { inheritedContext: fork } : undefined),
+      ...(childRecord && childRecord.timeoutMs > 0
+        ? { executionDeadlineMs: childRecord.timeoutMs }
+        : undefined),
+      children: childAccessFor(sessionKey),
       runtime: runtimeDescriptor.create(model, engineDescriptor),
       acts,
       roster: dependencies.roster,
       standingContext: dependencies.standingContext,
-      prepareTurn: (turn) => prepare(snapshot, model, turn, listed),
+      prepareTurn: (turn) =>
+        prepare(
+          snapshot,
+          model,
+          turn,
+          listed,
+          childRecord ? { depth: childRecord.depth } : undefined,
+        ),
       workspace: workspaceFor(snapshot, listed),
       ...(reasoningEffort ? { reasoningEffort } : undefined),
       ...(maximumOutputTokens !== undefined ? { maximumOutputTokens } : undefined),
@@ -558,6 +636,233 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     });
   };
 
+  /**
+   * Delegation. The service owns the records and the completion schedule;
+   * this wiring runs a child as one more conversation of the same agent, on
+   * the child lane, and hands each completion to the conversation that asked,
+   * whichever kind it is — steered into its run under way or opened as a turn
+   * of its own — so no conversation ever polls for a result.
+   */
+  const pendingForks = new Map<SessionKey, readonly WireRecord[]>();
+  const childRecordOf = (sessionKey: SessionKey): ChildRunRecord | undefined => {
+    const childId = childIdOf(sessionKey);
+    return childId === undefined ? undefined : children.child(childId);
+  };
+  const childName = (record: ChildRunRecord) => record.label ?? `Child ${record.childId}`;
+  const openChild = async (record: ChildRunRecord): Promise<BrainAgent | undefined> => {
+    const model = liveModel();
+    if (!model) return undefined;
+    await dependencies.ensureChildConversation(record.childSessionKey, childName(record));
+    const opened = openConversation(record.childSessionKey);
+    if (!opened.host.current()) await rebuildOne(record.childSessionKey, opened, model);
+    return opened.host.current();
+  };
+  const childEnd = (end: Awaited<ReturnType<BrainAgent["runChildTask"]>>): ChildEnd =>
+    end?.done
+      ? { status: CHILD_RUN_STATUS.UNKNOWN, failureDetail: "the child's run did not end" }
+      : { status: CHILD_RUN_STATUS.UNKNOWN, failureDetail: "the child's run was not accepted" };
+  const children = new ChildRunService({
+    store: dependencies.childStore(),
+    createId: dependencies.createId,
+    report: dependencies.report,
+    executor: {
+      start: async (record, fork) => {
+        if (fork) pendingForks.set(record.childSessionKey, fork);
+        const agent = await openChild(record);
+        pendingForks.delete(record.childSessionKey);
+        if (!agent) return { started: false, reason: "no model stands to run the child" };
+        const run = await agent.runChildTask(record.task, record.childRunId);
+        if (!run) return { started: false, reason: "the child's run was refused" };
+        return { started: true, done: run.done.then((end) => end ?? childEnd(run)) };
+      },
+      resume: async (record) => {
+        const agent = await openChild(record);
+        if (!agent) return { started: false, reason: "no model stands to recover the child" };
+        // Nothing is run again: the child's own record, marked interrupted
+        // at its conversation's load, is the end the runtime can vouch for;
+        // a child whose run was never recorded ends unknown on the strength
+        // of its requester's receipt alone.
+        const adopted = await agent.adoptChildRun(record.childRunId);
+        return {
+          started: true,
+          done: Promise.resolve(
+            adopted ?? {
+              status: CHILD_RUN_STATUS.UNKNOWN,
+              failureDetail: "the child's run was never recorded before the relaunch",
+            },
+          ),
+        };
+      },
+      cancel: async (record) => {
+        const agent = conversations.get(record.childSessionKey)?.host.current();
+        if (!agent) return true;
+        return agent.cancelChildRun(record.childRunId);
+      },
+      archive: async (record) => {
+        await closeConversation(record.childSessionKey);
+        return dependencies.archiveConversation(record.childSessionKey);
+      },
+      history: async (record, limit) =>
+        dependencies
+          .historyLines(record.childSessionKey)
+          .slice(-limit)
+          .map((entry) => `${entry.kind}: ${entry.words}`),
+    },
+    deliverer: {
+      deliver: async (completion, record) => {
+        const agent = await openDestination(completion.destination);
+        if (!agent) return { delivered: false, reason: "no brain stands for the requester" };
+        return agent.deliverChildCompletion({
+          completionId: completion.completionId,
+          childId: completion.childId,
+          ...(record.label !== undefined ? { label: record.label } : undefined),
+          status: completion.status,
+          ...(completion.resultText !== undefined
+            ? { resultText: completion.resultText }
+            : undefined),
+          ...(completion.failureDetail !== undefined
+            ? { failureDetail: completion.failureDetail }
+            : undefined),
+          ...(record.performedActs !== undefined
+            ? { performedActs: record.performedActs }
+            : undefined),
+          ...(record.unknownActs !== undefined ? { unknownActs: record.unknownActs } : undefined),
+        });
+      },
+    },
+  });
+
+  /**
+   * The conversation a completion is for, opened again if it was stood down:
+   * an observed session's conversation whose session left the roster, a
+   * child requester already archived, or a thread with no brain yet. The
+   * completion is owed to that conversation and no other, so main is never
+   * handed a sibling's result.
+   */
+  const openDestination = async (destination: SessionKey): Promise<BrainAgent | undefined> => {
+    const standing = conversations.get(destination)?.host.current();
+    if (standing) return standing;
+    const model = liveModel();
+    if (!model) return undefined;
+    const observed = observedSessionRefOf(destination);
+    if (observed) return openObserved(observed);
+    const child = childRecordOf(destination);
+    if (child) return openChild(child);
+    const opened = openConversation(destination);
+    if (!opened.host.current()) await rebuildOne(destination, opened, model);
+    return opened.host.current();
+  };
+
+  const childSummary = (record: ChildRunRecord): WireRecord => ({
+    child_id: record.childId,
+    ...(record.label !== undefined ? { label: record.label } : undefined),
+    status: record.status,
+    depth: record.depth,
+    context: record.context,
+    accepted_at: new Date(record.acceptedAt).toISOString(),
+    ...(record.settledAt !== undefined
+      ? { settled_at: new Date(record.settledAt).toISOString() }
+      : undefined),
+    ...(record.resultText !== undefined ? { has_result: true } : undefined),
+  });
+  const completionSummary = (completion: ChildCompletionRecord | undefined) =>
+    completion ? { delivery: completion.delivery, attempts: completion.attempts } : undefined;
+
+  const notOwnChild = (): WireRecord => ({
+    status: ACT_RESULT_STATUS.REJECTED,
+    reason: "no child of this conversation has that id",
+  });
+
+  /** The session tools of one conversation: a child named here must be its own. */
+  const childAccessFor = (sessionKey: SessionKey): BrainChildAccess => {
+    const own = (childId: string): ChildRunRecord | undefined => {
+      const record = children.child(childId);
+      return record && record.requesterSessionKey === sessionKey ? record : undefined;
+    };
+    return {
+      spawn: async (ask) => {
+        const outcome = await children.spawn({
+          agentId: DEFAULT_AGENT_ID,
+          requesterSessionKey: sessionKey,
+          requesterRunId: ask.requesterRunId,
+          requesterDepth: childRecordOf(sessionKey)?.depth ?? 0,
+          task: ask.task,
+          ...(ask.label !== undefined ? { label: ask.label } : undefined),
+          ...(dependencies.model()?.model ? { model: dependencies.model()?.model } : undefined),
+          ...(ask.context !== undefined ? { context: ask.context } : undefined),
+          ...(ask.cleanup !== undefined ? { cleanup: ask.cleanup } : undefined),
+          ...(ask.timeoutMs !== undefined ? { timeoutMs: ask.timeoutMs } : undefined),
+          ...(ask.expectsCompletion !== undefined
+            ? { expectsCompletion: ask.expectsCompletion }
+            : undefined),
+          policy: ask.policy,
+          sameAgent: true,
+          fork: ask.fork,
+        });
+        if (!outcome.accepted) {
+          const refused: WireRecord = {
+            status: ACT_RESULT_STATUS.REJECTED,
+            reason: outcome.detail
+              ? `${spawnRefusalWords(outcome.reason)}: ${outcome.detail}`
+              : spawnRefusalWords(outcome.reason),
+          };
+          return refused;
+        }
+        const receipt: WireRecord = {
+          status: ACT_RESULT_STATUS.ACCEPTED,
+          accepted: true,
+          completed: false,
+          child_id: outcome.receipt.childId,
+          child_session_key: outcome.receipt.childSessionKey,
+          child_run_id: outcome.receipt.childRunId,
+          ...(outcome.receipt.model ? { model: outcome.receipt.model } : undefined),
+          context: outcome.receipt.context,
+          ...(outcome.receipt.contextNote
+            ? { context_note: outcome.receipt.contextNote }
+            : undefined),
+          depth: outcome.receipt.depth,
+          completion:
+            "arrives in this conversation as its own item when the child ends; do not poll for it",
+        };
+        return receipt;
+      },
+      list: async () => ({
+        status: ACT_RESULT_STATUS.ACCEPTED,
+        children: children.childrenOf(sessionKey).map((record) => ({
+          ...childSummary(record),
+          ...(completionSummary(children.completion(record.childId)) ?? {}),
+        })),
+      }),
+      cancel: async (childId): Promise<WireRecord> => {
+        if (!own(childId)) return notOwnChild();
+        const cancelled = await children.cancel(childId);
+        if (cancelled.ok) return { status: ACT_RESULT_STATUS.ACCEPTED, cancelled: [childId] };
+        return {
+          status: ACT_RESULT_STATUS.REJECTED,
+          reason: `not every child could be cancelled: ${cancelled.remaining.join(", ")}`,
+        };
+      },
+      conversations: async () => ({
+        status: ACT_RESULT_STATUS.ACCEPTED,
+        conversations: dependencies
+          .conversationDirectory()
+          .filter((record) => record.archivedAt === undefined)
+          .map((record) => ({
+            session_key: record.sessionKey,
+            kind: record.kind,
+            name: record.name,
+            last_activity_at: new Date(record.lastActivityAt).toISOString(),
+            ...(record.sessionKey === sessionKey ? { current: true } : undefined),
+          })),
+      }),
+      history: async (childId, limit): Promise<WireRecord> => {
+        if (!own(childId)) return notOwnChild();
+        const lines = (await children.history(childId, limit)) ?? [];
+        return { status: ACT_RESULT_STATUS.ACCEPTED, lines: [...lines] };
+      },
+    };
+  };
+
   /** The model the policy chose, or nothing when no brain may stand: no key, no account, a run off the network. */
   const liveModel = (): ModelAdapter | undefined => {
     const model = dependencies.model();
@@ -592,6 +897,10 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         rebuildOne(sessionKey, opened, model),
       ),
     );
+    // Recovery of what the last launch left waits for a model to stand: a
+    // launch with none has nothing to run a child on, and a child marked
+    // unknown for that alone would be a budget spent on nothing.
+    if (model) await children.start();
   };
 
   const retire = (): void => {
@@ -789,7 +1098,17 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     heartbeat: (sessionKey = MAIN_SESSION_KEY) =>
       current(sessionKey)?.heartbeat() ?? Promise.resolve(),
     pendingNotices: () => notices,
-    resetConversation: (sessionKey) => openConversation(sessionKey).store.reset(),
+    resetConversation: async (sessionKey) => {
+      const cancelled = await children.cancelDescendantsOf(sessionKey);
+      if (!cancelled.ok) {
+        dependencies.report(
+          `Start fresh refused: ${cancelled.remaining.length} child run(s) could not be cancelled first`,
+        );
+        return false;
+      }
+      return openConversation(sessionKey).store.reset();
+    },
+    children,
     registerIpc,
     registries,
     configuration: () => configurationStore.snapshot(),

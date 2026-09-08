@@ -1,4 +1,22 @@
 export {
+  CHILD_DEFAULTS,
+  CHILD_SPAWN_REFUSAL,
+  type ChildCancellation,
+  type ChildEnd,
+  type ChildExecutor,
+  ChildRunService,
+  type ChildRunServiceOptions,
+  type ChildSpawnOutcome,
+  type ChildSpawnRefusal,
+  type ChildSpawnRequest,
+  type ChildStart,
+  type ChildStore,
+  type CompletionDeliverer,
+  type CompletionDeliveryOutcome,
+  deliveryBackoffMs,
+  type ForkSnapshot,
+} from "./children.js";
+export {
   type AgentConfiguration,
   CONFIGURATION_REFUSAL,
   type ConfigurationRefusal,

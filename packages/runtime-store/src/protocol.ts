@@ -4,6 +4,8 @@ import type { ScheduledJob } from "@sidecar/runtime";
 import type {
   AgentId,
   ArchiveReason,
+  ChildCompletionRecord,
+  ChildRunRecord,
   ConversationRecord,
   HistoryAppendOutcome,
   HistoryArchiveRecord,
@@ -45,6 +47,12 @@ export const RUNTIME_STORE_METHOD = {
   JOBS_LIST: "jobs.list",
   JOB_PUT: "jobs.put",
   JOB_DELETE: "jobs.delete",
+  CHILDREN_LIST: "children.list",
+  CHILD_PUT: "children.put",
+  CHILD_DELETE: "children.delete",
+  COMPLETIONS_LIST: "completions.list",
+  COMPLETION_PUT: "completions.put",
+  COMPLETION_DELETE: "completions.delete",
   CLOSE: "close",
 } as const;
 
@@ -131,6 +139,24 @@ export interface RuntimeStoreMethods {
   };
   [RUNTIME_STORE_METHOD.JOB_PUT]: { params: { job: ScheduledJob }; result: boolean };
   [RUNTIME_STORE_METHOD.JOB_DELETE]: { params: { id: string }; result: boolean };
+  [RUNTIME_STORE_METHOD.CHILDREN_LIST]: {
+    params: Record<string, never>;
+    result: readonly ChildRunRecord[];
+  };
+  [RUNTIME_STORE_METHOD.CHILD_PUT]: { params: { record: ChildRunRecord }; result: boolean };
+  [RUNTIME_STORE_METHOD.CHILD_DELETE]: { params: { childId: string }; result: boolean };
+  [RUNTIME_STORE_METHOD.COMPLETIONS_LIST]: {
+    params: Record<string, never>;
+    result: readonly ChildCompletionRecord[];
+  };
+  [RUNTIME_STORE_METHOD.COMPLETION_PUT]: {
+    params: { completion: ChildCompletionRecord };
+    result: boolean;
+  };
+  [RUNTIME_STORE_METHOD.COMPLETION_DELETE]: {
+    params: { completionId: string };
+    result: boolean;
+  };
   [RUNTIME_STORE_METHOD.CLOSE]: { params: Record<string, never>; result: boolean };
 }
 

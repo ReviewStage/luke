@@ -80,6 +80,8 @@ export const CONVERSATION_KIND = {
   MAIN: "main",
   THREAD: "thread",
   OBSERVED: "observed",
+  /** A child's conversation: delegated work of the same agent, archived on the child service's clock. */
+  CHILD: "child",
   UNKNOWN: "unknown",
 } as const;
 
@@ -94,6 +96,7 @@ export function isConversationKind(value: UnparsedWireValue): value is Conversat
 
 const THREAD_SEGMENT = "thread";
 const OBSERVED_SEGMENT = "observed";
+const SUBAGENT_SEGMENT = "subagent";
 
 /**
  * A private thread's stable address: `agent:<agentId>:thread:<threadId>`.
@@ -194,6 +197,7 @@ export function conversationKindOf(key: SessionKey | string): ConversationKind {
   if (head === OBSERVED_SEGMENT) {
     return observedSessionRefOf(key) ? CONVERSATION_KIND.OBSERVED : CONVERSATION_KIND.UNKNOWN;
   }
+  if (head === SUBAGENT_SEGMENT && parsed.rest.length === 2) return CONVERSATION_KIND.CHILD;
   return CONVERSATION_KIND.UNKNOWN;
 }
 
@@ -207,6 +211,8 @@ export const RUN_ORIGIN = {
   OBSERVATION: "observation",
   HEARTBEAT: "heartbeat",
   CRON: "cron",
+  /** A child's own run, opened by its requester's spawn. */
+  CHILD: "child",
   CHILD_COMPLETION: "child_completion",
   MAINTENANCE: "maintenance",
 } as const;

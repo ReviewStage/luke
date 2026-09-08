@@ -2,6 +2,8 @@ export {
   BRAIN_DEFAULTS,
   BrainAgent,
   type BrainAgentOptions,
+  type BrainChildRunEnd,
+  type BrainCompletionDelivery,
   type BrainLane,
   type BrainOpeningNotes,
   type BrainWorkspaceAccess,
@@ -78,6 +80,7 @@ export {
   LEGACY_CHECKPOINT_FORMAT_TAG,
   legacyStampOf,
 } from "./state-store.js";
+export type { BrainChildAccess, BrainChildSpawnAsk } from "./tool-executor.js";
 export {
   BRAIN_TOOL,
   brainToolCatalog,
