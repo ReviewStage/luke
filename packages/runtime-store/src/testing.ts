@@ -120,3 +120,23 @@ export function inspectHistory(
     count: sequences.length,
   };
 }
+
+/** How many rows each table beneath a conversation still holds; what a removal must bring to zero. */
+export function countConversationRows(
+  database: RuntimeDatabase,
+  sessionKey: SessionKey,
+): { history: number; transcript: number; boundaries: number; sessions: number } {
+  const count = (table: string) => {
+    // SAFETY: COUNT(*) is one integer column named `count`; the table name is one of the four fixed below.
+    const row = database
+      .prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE session_key = ?`)
+      .get(sessionKey) as { count: number };
+    return row.count;
+  };
+  return {
+    history: count("history_events"),
+    transcript: count("transcript_events"),
+    boundaries: count("compaction_boundaries"),
+    sessions: count("conversation_sessions"),
+  };
+}

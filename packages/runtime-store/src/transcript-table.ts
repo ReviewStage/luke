@@ -219,11 +219,20 @@ export function transcriptEventFromRow(
 ): TranscriptEvent | undefined {
   let parsed: UnparsedWireValue;
   try {
-    // SAFETY: JSON.parse returns a wire value; the readers below are the validation.
+    // SAFETY: JSON.parse returns a wire value; the payload reader is the validation.
     parsed = JSON.parse(payload) as UnparsedWireValue;
   } catch {
     return undefined;
   }
+  return transcriptEventFromPayload(kind, recordedAt, parsed);
+}
+
+/** The event a parsed payload describes: the row's `{ input }` or `{ boundary }`, or an archive line carrying the same fields. */
+export function transcriptEventFromPayload(
+  kind: string,
+  recordedAt: number,
+  parsed: UnparsedWireValue,
+): TranscriptEvent | undefined {
   if (!isRecord(parsed)) return undefined;
   if (kind === TRANSCRIPT_EVENT_KIND.CONTEXT_INPUT) {
     const input = contextInputFromWire(parsed.input);
@@ -271,10 +280,4 @@ export function contextInputFromWire(value: UnparsedWireValue): ContextInput | u
     default:
       return undefined;
   }
-}
-
-/** Every transcript row and boundary of the conversation, for the deletion's archive and its tests. */
-export function removeTranscript(database: RuntimeDatabase, sessionKey: SessionKey): void {
-  database.prepare("DELETE FROM compaction_boundaries WHERE session_key = ?").run(sessionKey);
-  database.prepare("DELETE FROM transcript_events WHERE session_key = ?").run(sessionKey);
 }

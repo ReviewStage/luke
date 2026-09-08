@@ -48,7 +48,7 @@ import {
   staleVictims,
 } from "./maintenance.js";
 import { runHistoryMaintenance } from "./maintenance-run.js";
-import { inspectHistory, line, NOW } from "./testing.js";
+import { countConversationRows, inspectHistory, line, NOW } from "./testing.js";
 import { listCompactionBoundaries, listTranscript, searchTranscript } from "./transcript-table.js";
 
 /**
@@ -287,6 +287,38 @@ test("Delete history commits the archive with the removal, publishes and verifie
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test("a restored line carries the event key the live append writes, so a late re-report of it is one row", () => {
+  const root = agentRoot();
+  const database = openAt(root);
+  // A line without an id is keyed on its value, where a hand-built key could differ from the live one.
+  const reported = line("words", NOW - 10);
+  appendHistory(database, MAIN_SESSION_KEY, [reported], NOW);
+  // SAFETY: the query selects the one text column the row type names.
+  const keyOf = () =>
+    (
+      database
+        .prepare("SELECT event_key FROM history_events WHERE session_key = ? ORDER BY sequence")
+        .all(MAIN_SESSION_KEY) as { event_key: string }[]
+    ).map((row) => row.event_key);
+  const liveKeys = keyOf();
+  assert.ok(deleteConversationHistory(database, root, MAIN_SESSION_KEY, NOW, "archive-3"));
+  assert.deepEqual(countConversationRows(database, MAIN_SESSION_KEY), {
+    history: 0,
+    transcript: 0,
+    boundaries: 0,
+    sessions: 0,
+  });
+  assert.equal(
+    restoreArchive(database, root, "archive-3", DEFAULT_AGENT_ID, NOW + 1).outcome,
+    RESTORE_OUTCOME.RESTORED,
+  );
+  assert.deepEqual(keyOf(), liveKeys);
+  appendHistory(database, MAIN_SESSION_KEY, [reported], NOW + 2);
+  assert.equal(inspectHistory(database, MAIN_SESSION_KEY).count, 1);
+  database.close();
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 test("a publication a crash interrupted keeps its payload in the registry and is published at the next launch", () => {
   const root = agentRoot();
   const database = openAt(root);
@@ -482,6 +514,12 @@ test("a maintenance pass archives idle and stale threads in place, removes autom
   assert.equal(byKey.get(pinned)?.archivedAt, undefined);
   assert.equal(byKey.get(MAIN_SESSION_KEY)?.archivedAt, undefined);
   assert.equal(byKey.has(cron), false);
+  assert.deepEqual(countConversationRows(database, cron), {
+    history: 0,
+    transcript: 0,
+    boundaries: 0,
+    sessions: 0,
+  });
   // Archived in place: the history rows are still there, whatever the thread's own age retention shows.
   assert.equal(inspectHistory(database, stale).count, 1);
 

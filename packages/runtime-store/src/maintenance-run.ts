@@ -19,6 +19,7 @@ import {
   archiveConversation,
   listConversations,
   removeConversationRow,
+  removeConversationRows,
 } from "./conversations-table.js";
 import { AGENT_DATABASE_FILE, type RuntimeDatabase } from "./database.js";
 import {
@@ -33,7 +34,6 @@ import {
   shouldRunEntryMaintenance,
   staleVictims,
 } from "./maintenance.js";
-import { removeTranscript } from "./transcript-table.js";
 
 /**
  * One maintenance pass over the agent's history, in the order the pinned
@@ -152,11 +152,7 @@ export function runHistoryMaintenance(
   const removeAll = (victims: readonly ConversationRecord[]) =>
     database.transaction(() => {
       for (const victim of victims) {
-        database.prepare("DELETE FROM history_events WHERE session_key = ?").run(victim.sessionKey);
-        removeTranscript(database, victim.sessionKey);
-        database
-          .prepare("DELETE FROM conversation_sessions WHERE session_key = ?")
-          .run(victim.sessionKey);
+        removeConversationRows(database, victim.sessionKey);
         removeConversationRow(database, victim.sessionKey);
       }
       return victims.length;

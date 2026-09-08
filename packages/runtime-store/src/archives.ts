@@ -12,8 +12,6 @@ import {
   isArchiveEncoding,
   isConversationKind,
   type SessionKey,
-  TRANSCRIPT_EVENT_KIND,
-  type TranscriptEvent,
 } from "@sidecar/runtime-contracts";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { standingGeneration } from "./brain-envelope.js";
@@ -26,11 +24,17 @@ import {
   conversationRecord,
   createConversation,
   removeConversationRow,
+  removeConversationRows,
   touchConversation,
 } from "./conversations-table.js";
 import { nullable, type RuntimeDatabase } from "./database.js";
 import { historyEntryFromPayload } from "./history.js";
-import { listTranscript, removeTranscript, transcriptEventFromRow } from "./transcript-table.js";
+import { restoreHistoryLine } from "./history-table.js";
+import {
+  appendTranscript,
+  listTranscript,
+  transcriptEventFromPayload,
+} from "./transcript-table.js";
 
 /**
  * The recoverable deletion of a conversation's history, ported in shape from
@@ -266,9 +270,7 @@ export function deleteConversationHistory(
         encoded.bytes,
       );
     database.raiseHistoryCutoff(sessionKey, now);
-    database.prepare("DELETE FROM history_events WHERE session_key = ?").run(sessionKey);
-    removeTranscript(database, sessionKey);
-    database.prepare("DELETE FROM conversation_sessions WHERE session_key = ?").run(sessionKey);
+    removeConversationRows(database, sessionKey);
     if (options.removeConversation && record.kind !== CONVERSATION_KIND.MAIN) {
       removeConversationRow(database, sessionKey);
     }
@@ -486,7 +488,7 @@ export function restoreArchive(
       if (line.type === ARCHIVE_LINE.HISTORY) {
         const entry = historyEntryFromPayload(JSON.stringify(line.entry));
         if (!entry || entry.recordedAt === undefined) continue;
-        insertHistoryLine(
+        restoreHistoryLine(
           database,
           sessionKey,
           isWireString(line.sessionId) ? line.sessionId : undefined,
@@ -495,21 +497,17 @@ export function restoreArchive(
         historyLines += 1;
         latest = Math.max(latest, entry.recordedAt);
       } else if (line.type === ARCHIVE_LINE.TRANSCRIPT && isRecord(line.event)) {
-        const event = transcriptEventFromRow(
+        const event = transcriptEventFromPayload(
           isWireString(line.event.kind) ? line.event.kind : "",
           isWireNumber(line.event.recordedAt) ? line.event.recordedAt : 0,
-          JSON.stringify(
-            line.event.kind === TRANSCRIPT_EVENT_KIND.COMPACTION
-              ? { boundary: line.event.boundary }
-              : { input: line.event.input },
-          ),
+          line.event,
         );
         if (!event) continue;
-        insertTranscriptLine(
+        appendTranscript(
           database,
           sessionKey,
           isWireString(line.sessionId) ? line.sessionId : undefined,
-          event,
+          [event],
         );
         transcriptEvents += 1;
         latest = Math.max(latest, event.recordedAt);
@@ -518,91 +516,6 @@ export function restoreArchive(
     touchConversation(database, sessionKey, Math.max(latest, now));
     return { outcome: RESTORE_OUTCOME.RESTORED, sessionKey, historyLines, transcriptEvents };
   });
-}
-
-function insertHistoryLine(
-  database: RuntimeDatabase,
-  sessionKey: SessionKey,
-  sessionId: string | undefined,
-  entry: ReturnType<typeof historyEntryFromPayload> & { recordedAt: number },
-): void {
-  // SAFETY: RETURNING yields the one integer expression named `sequence`.
-  const row = database
-    .prepare(
-      `UPDATE conversations SET next_history_sequence = next_history_sequence + 1
-       WHERE session_key = ? RETURNING next_history_sequence - 1 AS sequence`,
-    )
-    .get(sessionKey) as { sequence: number };
-  const eventKey = entry.eventId !== undefined ? `event:${entry.eventId}` : `value:${row.sequence}`;
-  database
-    .prepare(
-      `INSERT OR IGNORE INTO history_events
-         (session_key, sequence, session_id, event_key, kind, words, recorded_at, request_id,
-          provider_id, provider_session_id, payload)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      sessionKey,
-      row.sequence,
-      nullable(sessionId),
-      eventKey,
-      entry.kind,
-      entry.words,
-      entry.recordedAt,
-      nullable(entry.requestId),
-      nullable(entry.identity?.providerId),
-      nullable(entry.identity?.providerSessionId),
-      JSON.stringify(entry),
-    );
-}
-
-function insertTranscriptLine(
-  database: RuntimeDatabase,
-  sessionKey: SessionKey,
-  sessionId: string | undefined,
-  event: TranscriptEvent,
-): void {
-  // SAFETY: RETURNING yields the one integer expression named `sequence`.
-  const row = database
-    .prepare(
-      `UPDATE conversations SET next_transcript_sequence = next_transcript_sequence + 1
-       WHERE session_key = ? RETURNING next_transcript_sequence - 1 AS sequence`,
-    )
-    .get(sessionKey) as { sequence: number };
-  database
-    .prepare(
-      `INSERT INTO transcript_events (session_key, sequence, session_id, kind, recorded_at, payload)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      sessionKey,
-      row.sequence,
-      nullable(sessionId),
-      event.kind,
-      event.recordedAt,
-      JSON.stringify(
-        event.kind === TRANSCRIPT_EVENT_KIND.CONTEXT_INPUT
-          ? { input: event.input }
-          : { boundary: event.boundary },
-      ),
-    );
-  if (event.kind === TRANSCRIPT_EVENT_KIND.COMPACTION) {
-    database
-      .prepare(
-        `INSERT INTO compaction_boundaries
-           (session_key, transcript_sequence, session_id, source, dropped, checkpoint_format, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        sessionKey,
-        row.sequence,
-        nullable(sessionId),
-        event.boundary.source,
-        event.boundary.dropped,
-        nullable(event.boundary.checkpointFormat),
-        event.recordedAt,
-      );
-  }
 }
 
 /** Forgets one archive's registry row and removes its file; the disk budget's own removal path. */

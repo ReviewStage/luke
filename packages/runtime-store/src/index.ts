@@ -107,6 +107,7 @@ export {
   listTranscript,
   type StoredCompactionBoundary,
   searchTranscript,
+  transcriptEventFromPayload,
   transcriptEventFromRow,
 } from "./transcript-table.js";
 export { serveRuntimeStore } from "./worker-host.js";

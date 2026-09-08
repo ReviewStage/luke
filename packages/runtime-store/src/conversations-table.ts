@@ -176,7 +176,22 @@ export function renameConversation(
   return changes > 0;
 }
 
-/** Removes the conversation row itself; only the recoverable deletion calls it, after the rows under it are gone. */
+/**
+ * Removes everything a conversation holds beneath its row: its history
+ * lines, its transcript and the boundaries folded into it, and the standing
+ * lifetime with the checkpoints, cursors, requests, and receipts that cascade
+ * from it. The row itself stays unless the caller removes it too; the
+ * recoverable deletion and maintenance are the two callers, and each has
+ * committed or needs no archive by the time it gets here.
+ */
+export function removeConversationRows(database: RuntimeDatabase, sessionKey: SessionKey): void {
+  database.prepare("DELETE FROM history_events WHERE session_key = ?").run(sessionKey);
+  database.prepare("DELETE FROM compaction_boundaries WHERE session_key = ?").run(sessionKey);
+  database.prepare("DELETE FROM transcript_events WHERE session_key = ?").run(sessionKey);
+  database.prepare("DELETE FROM conversation_sessions WHERE session_key = ?").run(sessionKey);
+}
+
+/** Removes the conversation row itself, after the rows under it are gone. */
 export function removeConversationRow(database: RuntimeDatabase, sessionKey: SessionKey): void {
   database.prepare("DELETE FROM conversations WHERE session_key = ?").run(sessionKey);
 }
