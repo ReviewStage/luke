@@ -1316,6 +1316,148 @@ test("ignores a stored or environment pace this build does not offer", async (t)
   assert.equal(appSettingsView(await store.snapshot()).voiceSpeed, REALTIME_DEFAULTS.SPEED);
 });
 
+test("account preferences extraction excludes resolved defaults and local-only preferences", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory, {
+    environment: {
+      LUKE_REALTIME_VOICE: REALTIME_VOICE.SAGE,
+      LUKE_REALTIME_SPEED: String(REALTIME_VOICE_SPEED.SLOW),
+    },
+  });
+
+  await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
+  await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, VOICE_HOTKEY_NONE);
+  await store.set(APP_SETTING_SCHEMA.voiceSpeed.field, REALTIME_VOICE_SPEED.FAST);
+
+  assert.deepEqual(await store.accountPreferences(), {
+    voiceSpeed: REALTIME_VOICE_SPEED.FAST,
+  });
+});
+
+test("applies account preferences to disk and restores them from a new store", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
+  await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, VOICE_HOTKEY_NONE);
+  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.SAGE);
+  await store.set(APP_SETTING_SCHEMA.voiceSpeed.field, REALTIME_VOICE_SPEED.FAST);
+  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "project-local");
+
+  const result = await store.applyAccountPreferences({
+    voice: REALTIME_VOICE.MARIN,
+    workspaceAgentDefaults: { conductor: { agent: "codex", model: "gpt-5.6-sol" } },
+  });
+
+  assert.deepEqual(result.changed, [
+    APP_SETTING_SCHEMA.voice.field,
+    APP_SETTING_SCHEMA.voiceSpeed.field,
+    APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+    APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
+  ]);
+  const reopened = storeIn(directory);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.showInDock.field), true);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voiceHotkey.field), VOICE_HOTKEY_NONE);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voice.field), REALTIME_VOICE.MARIN);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voiceSpeed.field), undefined);
+  assert.equal(await readWorkspaceProjectDefault(reopened, PROVIDER_ID.CONDUCTOR), undefined);
+  assert.deepEqual(await readWorkspaceAgentDefault(reopened, PROVIDER_ID.CONDUCTOR), {
+    agent: "codex",
+    model: "gpt-5.6-sol",
+  });
+});
+
+test("merges hosted account preferences around concurrent local preference edits", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  const account = {
+    accessToken: "access-token-secret",
+    refreshToken: "refresh-token-secret",
+    email: "developer@example.com",
+    name: "Developer",
+    provider: "github" as const,
+  };
+  await store.setAccount(account);
+  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.SAGE);
+  const expected = await store.accountPreferences();
+
+  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.ECHO);
+  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "local-project");
+  const result = await store.applyAccountPreferences(
+    {
+      voice: REALTIME_VOICE.MARIN,
+      voiceSpeed: REALTIME_VOICE_SPEED.FAST,
+      workspaceProjectDefaults: { [PROVIDER_ID.CODEX]: "remote-project" },
+    },
+    { accountEmail: account.email, preferences: expected },
+  );
+
+  assert.deepEqual(result.changed, [
+    APP_SETTING_SCHEMA.voiceSpeed.field,
+    APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+  ]);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), REALTIME_VOICE.ECHO);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.voiceSpeed.field), REALTIME_VOICE_SPEED.FAST);
+  assert.equal(await readWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR), "local-project");
+  assert.equal(await readWorkspaceProjectDefault(store, PROVIDER_ID.CODEX), "remote-project");
+});
+
+test("keeps local account preference edits across a failed hosted write and restart", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const account = {
+    accessToken: "access-token-secret",
+    refreshToken: "refresh-token-secret",
+    email: "developer@example.com",
+    name: "Developer",
+    provider: "github" as const,
+  };
+  const store = storeIn(directory);
+  await store.setAccount(account);
+  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.SAGE);
+  await store.setAccountPreferencesSyncBaseline(account.email, await store.accountPreferences());
+
+  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.ECHO);
+  const reopened = storeIn(directory);
+  const baseline = await reopened.accountPreferencesSyncBaseline(account.email);
+  assert.deepEqual(baseline, { voice: REALTIME_VOICE.SAGE });
+  const result = await reopened.applyAccountPreferences(
+    { voice: REALTIME_VOICE.SAGE, voiceSpeed: REALTIME_VOICE_SPEED.FAST },
+    { accountEmail: account.email, preferences: baseline ?? {} },
+  );
+
+  assert.deepEqual(result.changed, [APP_SETTING_SCHEMA.voiceSpeed.field]);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voice.field), REALTIME_VOICE.ECHO);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voiceSpeed.field), REALTIME_VOICE_SPEED.FAST);
+});
+
+test("skips a guarded account preference apply after account sign-out", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  const account = {
+    accessToken: "access-token-secret",
+    refreshToken: "refresh-token-secret",
+    email: "developer@example.com",
+    name: "Developer",
+    provider: "github" as const,
+  };
+  await store.setAccount(account);
+  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.SAGE);
+  await store.set(APP_SETTING_SCHEMA.voiceSpeed.field, REALTIME_VOICE_SPEED.FAST);
+  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "local-project");
+  const expected = await store.accountPreferences();
+
+  await store.clearAccount();
+  const result = await store.applyAccountPreferences(
+    { voice: REALTIME_VOICE.MARIN },
+    { accountEmail: account.email, preferences: expected },
+  );
+
+  assert.deepEqual(result.changed, []);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.voiceSpeed.field), undefined);
+  assert.equal(await readWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
+  assert.equal(await store.accountPreferencesSyncBaseline(account.email), undefined);
+});
+
 test("reports no talk-key chord until one is chosen", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);

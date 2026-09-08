@@ -26,6 +26,11 @@ export {
   startAccountLoopback,
 } from "./loopback.js";
 export {
+  type AccountPreferencesAnswer,
+  AccountPreferencesClient,
+  type AccountPreferencesClientOptions,
+} from "./preferences.js";
+export {
   AccountSessionManager,
   type AccountSessionManagerOptions,
   type AccountSessionStore,

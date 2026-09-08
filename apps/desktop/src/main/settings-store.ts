@@ -21,6 +21,7 @@ import {
   type UnparsedWireValue,
   unparsedWire,
   type WireRecord,
+  type WireValue,
 } from "@sidecar/wire";
 import { APPLE_CALENDAR_ID } from "#shared/apple-calendar";
 import {
@@ -52,10 +53,14 @@ import type { StoredAccount } from "@sidecar/account";
 import type { CalendarAccountCredential } from "@sidecar/calendar";
 import { googleCalendarSignInConfig } from "@sidecar/calendar";
 import {
+  ACCOUNT_PREFERENCE_FIELDS,
+  type AccountPreferenceField,
+  type AccountPreferences,
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
   type AppSettingField,
   type AppSettingValue,
+  accountPreferencesFromStored,
   type KeyedAppSettingField,
   type SettingEntryValue,
   type StoredAppSettings,
@@ -84,6 +89,7 @@ const SETTINGS_FIELD = {
   GRANTS: "grants",
   LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
   LEGACY_SUPERSET_AGENT_DEFAULT: "supersetAgentDefault",
+  ACCOUNT_PREFERENCES_SYNC: "accountPreferencesSync",
   VAULT_SYNC_ACCOUNT: "vaultSyncAccount",
   VERSION: "version",
 } as const;
@@ -171,6 +177,17 @@ interface PersistedSettings extends StoredAppSettings {
    * Absent from the file while none are connected.
    */
   calendarAccounts?: readonly PersistedCalendarAccount[];
+  /**
+   * Last account-preference baseline used for hosted sync. It is local
+   * bookkeeping only: when the hosted write fails and the app restarts, this
+   * is what lets the next hosted read keep local edits made since the last
+   * successful baseline instead of treating the current local file as already
+   * synced.
+   */
+  accountPreferencesSync?: {
+    accountEmail: string;
+    preferences: AccountPreferences;
+  };
   /**
    * The Apple Calendar connection: present exactly while connected, holding
    * only the calendar ids the user chose to count. No credential rides with
@@ -436,6 +453,84 @@ function storedSettingsFromPersisted(persisted: PersistedSettings): StoredAppSet
   return entries as StoredAppSettings;
 }
 
+function sameAccountPreferenceValue(current: UnparsedWireValue, next: UnparsedWireValue): boolean {
+  return JSON.stringify(current) === JSON.stringify(next);
+}
+
+function accountPreferenceRecord(value: UnparsedWireValue): WireRecord {
+  return isRecord(value) ? value : {};
+}
+
+function accountPreferenceWithLocalChanges(
+  field: AccountPreferenceField,
+  remote: UnparsedWireValue,
+  current: UnparsedWireValue,
+  expected: UnparsedWireValue,
+): UnparsedWireValue {
+  if (
+    field === APP_SETTING_SCHEMA.workspaceAgentDefaults.field ||
+    field === APP_SETTING_SCHEMA.workspaceProjectDefaults.field
+  ) {
+    const entries = { ...accountPreferenceRecord(remote) };
+    const currentEntries = accountPreferenceRecord(current);
+    const expectedEntries = accountPreferenceRecord(expected);
+    const keys = new Set<string>();
+    for (const key of Object.keys(currentEntries)) keys.add(key);
+    for (const key of Object.keys(expectedEntries)) keys.add(key);
+    for (const key of keys) {
+      const currentEntry = currentEntries[key];
+      if (sameAccountPreferenceValue(currentEntry, expectedEntries[key])) continue;
+      if (currentEntry === undefined) delete entries[key];
+      else entries[key] = currentEntry;
+    }
+    return Object.keys(entries).length > 0 ? entries : undefined;
+  }
+  return sameAccountPreferenceValue(current, expected) ? remote : current;
+}
+
+function accountPreferencesWithLocalChanges(
+  remote: AccountPreferences,
+  current: AccountPreferences,
+  expected: AccountPreferences,
+): AccountPreferences {
+  const settings: Record<string, WireValue> = {};
+  for (const field of ACCOUNT_PREFERENCE_FIELDS) {
+    const value = accountPreferenceWithLocalChanges(
+      field,
+      // SAFETY: AccountPreferenceField selects JSON-compatible account preference values.
+      remote[field] as UnparsedWireValue,
+      // SAFETY: AccountPreferenceField selects JSON-compatible account preference values.
+      current[field] as UnparsedWireValue,
+      // SAFETY: AccountPreferenceField selects JSON-compatible account preference values.
+      expected[field] as UnparsedWireValue,
+    );
+    if (value !== undefined) settings[field] = value;
+  }
+  return accountPreferencesFromStored(settings) ?? {};
+}
+
+function accountPreferencesFromPersisted(persisted: PersistedSettings): AccountPreferences {
+  const settings: Record<string, WireValue> = {};
+  for (const field of ACCOUNT_PREFERENCE_FIELDS) {
+    // SAFETY: AccountPreferenceField selects JSON-compatible stored app settings.
+    const value = persisted[field] as UnparsedWireValue;
+    if (value !== undefined) settings[field] = value;
+  }
+  return accountPreferencesFromStored(settings) ?? {};
+}
+
+function storedAccountPreferencesSync(
+  record: WireRecord,
+): PersistedSettings["accountPreferencesSync"] {
+  const held = readWireRecord(record[SETTINGS_FIELD.ACCOUNT_PREFERENCES_SYNC]);
+  if (!held || !isWireString(held.accountEmail) || !held.accountEmail) return undefined;
+  const storedPreferences = readWireRecord(held.preferences);
+  if (!storedPreferences) return undefined;
+  const preferences = accountPreferencesFromStored(storedPreferences);
+  if (preferences === undefined) return undefined;
+  return { accountEmail: held.accountEmail, preferences };
+}
+
 function defaultPersistedSettings(): PersistedSettings {
   return {
     version: SETTINGS_FILE_VERSION,
@@ -459,12 +554,17 @@ function parsePersistedSettings(
   const grants = storedGrants(record);
   const settings = withLegacySupersetAgentDefault(readStoredSettings(record), record);
   const vaultSyncAccount = record[SETTINGS_FIELD.VAULT_SYNC_ACCOUNT];
+  const account = storedAccount(record);
+  const accountPreferencesSync = storedAccountPreferencesSync(record);
   const persisted = {
     ...settings,
     version: isWireNumber(version) ? version : SETTINGS_FILE_VERSION,
     apiKeys: storedApiKeys(record, providers),
     ...(Object.keys(grants).length > 0 ? { grants } : undefined),
-    ...(storedAccount(record) ? { account: storedAccount(record) } : undefined),
+    ...(account ? { account } : undefined),
+    ...(account && accountPreferencesSync?.accountEmail === account.email
+      ? { accountPreferencesSync }
+      : undefined),
     ...(calendarAccounts.length > 0 ? { calendarAccounts } : undefined),
     ...(appleCalendar ? { appleCalendar } : undefined),
     ...(isWireString(vaultSyncAccount) && vaultSyncAccount ? { vaultSyncAccount } : undefined),
@@ -556,6 +656,81 @@ export class SettingsStore {
       else delete next[field];
       return next;
     });
+  }
+
+  async accountPreferences(): Promise<AccountPreferences> {
+    return accountPreferencesFromPersisted(await this.#load());
+  }
+
+  async applyAccountPreferences(
+    settings: AccountPreferences,
+    expected?: { accountEmail: string; preferences: AccountPreferences },
+  ): Promise<SettingsUpdateResult & { changed: readonly AccountPreferenceField[] }> {
+    const changed: AccountPreferenceField[] = [];
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (expected && persisted.account?.email !== expected.accountEmail) return;
+      const nextSettings = expected
+        ? accountPreferencesWithLocalChanges(
+            settings,
+            accountPreferencesFromPersisted(persisted),
+            expected.preferences,
+          )
+        : settings;
+      const next: PersistedSettings = { ...persisted, version: SETTINGS_FILE_VERSION };
+      for (const field of ACCOUNT_PREFERENCE_FIELDS) {
+        // SAFETY: AccountPreferences is the parsed subset of JSON-compatible stored app settings.
+        const value = nextSettings[field] as UnparsedWireValue;
+        // SAFETY: AccountPreferenceField selects the same persisted JSON-compatible setting value.
+        if (!sameAccountPreferenceValue(persisted[field] as UnparsedWireValue, value)) {
+          changed.push(field);
+        }
+        if (value === undefined) delete next[field];
+        else Object.assign(next, { [field]: value });
+      }
+      if (changed.length === 0) return;
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+    });
+    return {
+      status: ACT_RESULT_STATUS.ACCEPTED,
+      settings: await this.snapshot(),
+      changed,
+    };
+  }
+
+  async accountPreferencesSyncBaseline(
+    accountEmail: string,
+  ): Promise<AccountPreferences | undefined> {
+    const sync = (await this.#load()).accountPreferencesSync;
+    return sync?.accountEmail === accountEmail ? sync.preferences : undefined;
+  }
+
+  async setAccountPreferencesSyncBaseline(
+    accountEmail: string,
+    preferences: AccountPreferences,
+  ): Promise<boolean> {
+    let saved = false;
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      if (persisted.account?.email !== accountEmail) return;
+      if (
+        persisted.accountPreferencesSync?.accountEmail === accountEmail &&
+        JSON.stringify(persisted.accountPreferencesSync.preferences) === JSON.stringify(preferences)
+      ) {
+        saved = true;
+        return;
+      }
+      const next: PersistedSettings = {
+        ...persisted,
+        version: SETTINGS_FILE_VERSION,
+        accountPreferencesSync: { accountEmail, preferences },
+      };
+      await this.#write(next);
+      this.#loading = Promise.resolve(next);
+      saved = true;
+    });
+    return saved;
   }
 
   /** Clears one map entry only if it still holds the value the caller read. */
@@ -740,6 +915,12 @@ export class SettingsStore {
           provider: account.provider,
         },
       };
+      if (persisted.account?.email && persisted.account.email !== account.email) {
+        for (const field of ACCOUNT_PREFERENCE_FIELDS) {
+          delete next[field];
+        }
+        delete next.accountPreferencesSync;
+      }
       await this.#write(next);
       this.#loading = Promise.resolve(next);
     });
@@ -752,6 +933,10 @@ export class SettingsStore {
       if (!persisted.account) return;
       const { account: _account, ...withoutAccount } = persisted;
       const next: PersistedSettings = { ...withoutAccount, version: SETTINGS_FILE_VERSION };
+      for (const field of ACCOUNT_PREFERENCE_FIELDS) {
+        delete next[field];
+      }
+      delete next.accountPreferencesSync;
       await this.#write(next);
       this.#loading = Promise.resolve(next);
     });
