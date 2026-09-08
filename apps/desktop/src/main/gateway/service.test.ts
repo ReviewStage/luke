@@ -123,7 +123,7 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
       },
       holds: () => true,
       history: () => [],
-      directory: () => ({ entries: [] }),
+      directory: () => [],
     } as unknown as ConversationOperations,
     memory: { status: () => ({}) },
     observedSessionCount: () => 0,

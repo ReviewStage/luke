@@ -117,7 +117,7 @@ function fakeHost(options: { persistCancellations?: boolean } = {}) {
       deleteHistory: async () => CONVERSATION_DELETE_OUTCOME.COMPLETE,
       holds: () => true,
       history: () => history,
-      directory: () => ({ entries: [] }),
+      directory: () => [],
     } as unknown as ConversationOperations,
     memory: { status: () => ({}) },
     observedSessionCount: () => 0,

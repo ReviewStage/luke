@@ -7,13 +7,14 @@ import { MessageChannel } from "node:worker_threads";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
 import {
   CONVERSATION_KIND,
+  type ConversationRecord,
   MAIN_SESSION_KEY,
   type SessionKey,
   sessionKey,
   threadSessionKey,
 } from "@sidecar/runtime-contracts";
 import { type RuntimeStorePort, serveRuntimeStore } from "@sidecar/runtime-store";
-import { type ConversationDirectorySnapshot, wireRuntimeStore } from "./runtime-store-wiring";
+import { wireRuntimeStore } from "./runtime-store-wiring";
 
 /**
  * The store wiring over a real database served in-thread: a conversation the
@@ -27,7 +28,7 @@ const OTHER = threadSessionKey("other");
 
 function wiring(root: string) {
   const changed: { sessionKey: SessionKey; entries: readonly ConversationEntry[] }[] = [];
-  const directories: ConversationDirectorySnapshot[] = [];
+  const directories: (readonly ConversationRecord[])[] = [];
   let ids = 0;
   let clock = NOW;
   const channel = new MessageChannel();
@@ -47,8 +48,8 @@ function wiring(root: string) {
     onHistoryChanged: (sessionKey, entries) => {
       changed.push({ sessionKey, entries });
     },
-    onDirectoryChanged: (directory) => {
-      directories.push(directory);
+    onDirectoryChanged: (entries) => {
+      directories.push(entries);
     },
     report: () => undefined,
   });
@@ -87,7 +88,7 @@ test("a listed conversation and its lines survive the next launch; archiving kee
   assert.deepEqual(
     first.wired
       .directory()
-      .entries.map((entry) => entry.sessionKey)
+      .map((entry) => entry.sessionKey)
       .toSorted(),
     [MAIN_SESSION_KEY, DURABLE].toSorted(),
   );
@@ -112,7 +113,7 @@ test("a listed conversation and its lines survive the next launch; archiving kee
   // Archiving keeps the thread readable; the directory says so.
   assert.equal(await relaunched.wired.archive(DURABLE), true);
   assert.equal(
-    relaunched.wired.directory().entries.find((entry) => entry.sessionKey === DURABLE)?.archivedAt,
+    relaunched.wired.directory().find((entry) => entry.sessionKey === DURABLE)?.archivedAt,
     NOW,
   );
   assert.equal(relaunched.wired.thread(DURABLE).entries().length, 1);
@@ -120,7 +121,7 @@ test("a listed conversation and its lines survive the next launch; archiving kee
   // Listing it again brings the archived row back, so its thread takes lines.
   await relaunched.wired.ensureConversation(DURABLE, CONVERSATION_KIND.THREAD, "Thread");
   assert.equal(
-    relaunched.wired.directory().entries.find((entry) => entry.sessionKey === DURABLE)?.archivedAt,
+    relaunched.wired.directory().find((entry) => entry.sessionKey === DURABLE)?.archivedAt,
     undefined,
   );
 });

@@ -1,11 +1,11 @@
 import type { ConversationEntry } from "@sidecar/realtime";
-import type { SessionKey } from "@sidecar/runtime-contracts";
+import type { ConversationRecord, SessionKey } from "@sidecar/runtime-contracts";
 import {
   type ConversationDeleteOutcome,
   deleteConversationHistoryFlow,
 } from "./brain/conversation-deletion";
 import type { BrainWiring } from "./brain/wiring";
-import type { ConversationDirectorySnapshot, RuntimeStoreWiring } from "./runtime-store-wiring";
+import type { RuntimeStoreWiring } from "./runtime-store-wiring";
 
 /**
  * The conversation operations the desktop carries out over the two wirings,
@@ -14,7 +14,7 @@ import type { ConversationDirectorySnapshot, RuntimeStoreWiring } from "./runtim
  * in the order its own module states.
  */
 export interface ConversationOperations {
-  directory: () => ConversationDirectorySnapshot;
+  directory: () => readonly ConversationRecord[];
   holds: (sessionKey: SessionKey) => boolean;
   history: (sessionKey: SessionKey) => readonly ConversationEntry[];
   deleteHistory: (sessionKey: SessionKey) => Promise<ConversationDeleteOutcome>;

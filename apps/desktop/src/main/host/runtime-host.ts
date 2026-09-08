@@ -978,7 +978,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     embeddingAdapter: () => voiceCapabilities.embeddingAdapter,
     workspaceDirectory: agentWorkspacePath,
     createRuntime: () => brainWiring.createRuntime(),
-    conversationDirectory: () => runtimeStoreWiring.directory().entries,
+    conversationDirectory: () => runtimeStoreWiring.directory(),
     isTemporary: runtimeStoreWiring.isTemporary,
     historyLines: (sessionKey) => runtimeStoreWiring.thread(sessionKey).entries(),
     now,
@@ -993,7 +993,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     client: runtimeStoreWiring.client,
     createRuntime: () => brainWiring.createRuntime(),
     workspaceDirectory: agentWorkspacePath,
-    conversationDirectory: () => runtimeStoreWiring.directory().entries,
+    conversationDirectory: () => runtimeStoreWiring.directory(),
     isTemporary: runtimeStoreWiring.isTemporary,
     historyLines: (sessionKey) => runtimeStoreWiring.thread(sessionKey).entries(),
     background: (work) => brainWiring.lanes.run(LANE.BACKGROUND, work),
@@ -1014,7 +1014,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
       await runtimeStoreWiring.ensureConversation(sessionKey, CONVERSATION_KIND.CHILD, name);
     },
     archiveConversation: (sessionKey) => runtimeStoreWiring.archive(sessionKey),
-    conversationDirectory: () => runtimeStoreWiring.directory().entries,
+    conversationDirectory: () => runtimeStoreWiring.directory(),
     historyLines: (sessionKey) => runtimeStoreWiring.thread(sessionKey).entries(),
     childStore: () => runtimeStoreWiring.childStore(),
     createId,
@@ -2404,7 +2404,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         // never replays, so it is counted here as unresolved.
         const keys = new Set<SessionKey>([
           MAIN_SESSION_KEY,
-          ...runtimeStoreWiring.directory().entries.map((entry) => entry.sessionKey),
+          ...runtimeStoreWiring.directory().map((entry) => entry.sessionKey),
         ]);
         let unresolved = 0;
         for (const key of keys) {

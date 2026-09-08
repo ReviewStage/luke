@@ -91,11 +91,6 @@ export class ConversationThread<Reporter = never> {
     this.#clearedAt = clearedAt;
   }
 
-  /** Tells every window the thread as it stands, for a restore that changed it outside any append. */
-  announce(): void {
-    this.#onChanged(this.#entries);
-  }
-
   /**
    * Appends lines and tells every window but `except` the thread as it now
    * stands. Answers whether the thread holds everything it was asked to: a

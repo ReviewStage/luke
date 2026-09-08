@@ -312,7 +312,7 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
 
   const snapshot = (): WireValue => ({
     runs: brain.allRequests().map(brainRequestRecordToWire),
-    conversations: conversations.directory().entries.map(conversationRecordToWire),
+    conversations: conversations.directory().map(conversationRecordToWire),
     deliveries: deliveries.records().map(deliveryRecordToWire),
     configurationRevision: brain.configuration().revision,
     nodes: nodes.list().map(nodeSnapshotToWire),
@@ -586,7 +586,7 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
     },
     directoryChanged: () => {
       server.emit(GATEWAY_EVENT.DIRECTORY_CHANGED, {
-        entries: conversations.directory().entries.map(conversationRecordToWire),
+        entries: conversations.directory().map(conversationRecordToWire),
       });
     },
     observationChanged: () => {

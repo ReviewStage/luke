@@ -34,7 +34,7 @@ function harness(erasePublished = true, { marks = true, readsCutoff = true } = {
   const entries: readonly ConversationEntry[] = [];
   const dependencies: ConversationOperationsDependencies = {
     store: {
-      directory: () => ({ entries: [record(THREAD)] }),
+      directory: () => [record(THREAD)],
       holds: (sessionKey) => sessionKey === THREAD || sessionKey === MAIN_SESSION_KEY,
       // SAFETY: the operations reach the thread for its lines and its fence alone.
       thread: (sessionKey) =>

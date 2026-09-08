@@ -59,7 +59,7 @@ export interface RuntimeStoreWiringDependencies {
     except?: HistoryReporter,
   ) => void;
   /** Hears the directory whenever a conversation is created, archived, or deleted. */
-  onDirectoryChanged: (directory: ConversationDirectorySnapshot) => void;
+  onDirectoryChanged: (entries: readonly ConversationRecord[]) => void;
   report: (message: string) => void;
 }
 
@@ -73,10 +73,6 @@ export type HistoryReporter = string;
 
 /** How the store's side of a deletion ended; the archive itself stays with the store. */
 export type HistoryErasure = Pick<DeletionOutcome, "published">;
-
-export interface ConversationDirectorySnapshot {
-  entries: readonly ConversationRecord[];
-}
 
 export interface RuntimeStoreWiring {
   /** The client, started on first use; the worker's answers stand behind every method below. */
@@ -121,7 +117,7 @@ export interface RuntimeStoreWiring {
     sessionKey?: SessionKey,
   ) => Promise<boolean>;
   /** The directory as this process holds it: stored conversations and the memory-held ones of this run. */
-  directory: () => ConversationDirectorySnapshot;
+  directory: () => readonly ConversationRecord[];
   /** Whether the key names a conversation the directory lists right now. */
   holds: (sessionKey: SessionKey) => boolean;
   /** Whether the key names a conversation held in memory alone for this run, which is never a recall source. */
@@ -215,9 +211,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     return held;
   };
 
-  const directory = (): ConversationDirectorySnapshot => ({
-    entries: [...stored, ...temporary.values()],
-  });
+  const directory = (): readonly ConversationRecord[] => [...stored, ...temporary.values()];
   const announce = () => dependencies.onDirectoryChanged(directory());
 
   const refreshDirectory = async (): Promise<void> => {
