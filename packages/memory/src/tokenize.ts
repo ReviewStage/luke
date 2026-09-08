@@ -44,3 +44,75 @@ export function textSimilarity(left: string, right: string): number {
   }
   return jaccardSimilarity(leftTokens, rightTokens);
 }
+
+const STOP_WORDS = new Set([
+  "the",
+  "and",
+  "that",
+  "with",
+  "this",
+  "from",
+  "have",
+  "will",
+  "your",
+  "about",
+  "into",
+  "there",
+  "their",
+  "they",
+  "them",
+  "then",
+  "than",
+  "what",
+  "when",
+  "which",
+  "would",
+  "could",
+  "should",
+  "these",
+  "those",
+  "were",
+  "been",
+  "being",
+  "also",
+  "just",
+  "like",
+  "only",
+  "over",
+  "some",
+  "such",
+  "very",
+  "more",
+  "most",
+  "much",
+  "every",
+  "because",
+  "while",
+  "where",
+  "after",
+  "before",
+  "does",
+  "done",
+  "doing",
+  "luke",
+]);
+
+/** Up to three concept tags: the longest distinct words that are not stop words. */
+export function conceptTags(text: string, limit = 3): string[] {
+  const seen = new Set<string>();
+  const words: string[] = [];
+  for (const token of tokenize(text)) {
+    if (token.length < 4 || STOP_WORDS.has(token) || /^\d+$/u.test(token)) continue;
+    if (seen.has(token)) continue;
+    seen.add(token);
+    words.push(token);
+  }
+  return words.sort((a, b) => b.length - a.length || a.localeCompare(b)).slice(0, limit);
+}
+
+const BULLET = /^[-*+]\s+/u;
+
+/** The line without its leading Markdown bullet, when it has one. */
+export function stripBullet(line: string): string {
+  return line.replace(BULLET, "");
+}
