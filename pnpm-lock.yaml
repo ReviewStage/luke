@@ -653,15 +653,9 @@ importers:
 
   packages/runtime:
     dependencies:
-      '@sidecar/guide':
-        specifier: workspace:*
-        version: link:../guide
       '@sidecar/runtime-contracts':
         specifier: workspace:*
         version: link:../runtime-contracts
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../wire
     devDependencies:
       '@types/node':
         specifier: 26.2.0
