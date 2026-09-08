@@ -1,6 +1,7 @@
 import { HOSTED_BRAIN_OPTION_BOUNDS } from "@sidecar/hosted";
 import {
   housekeepingCompleted,
+  MEMORY_FLUSH_DEFAULTS,
   MEMORY_HOUSEKEEPING_OUTCOME,
   type MemoryHousekeepingResult,
   shouldRunMemoryFlush,
@@ -25,7 +26,6 @@ import {
   type ChildCompletionRecord,
   type ChildRunRecord,
   CONTEXT_INPUT_KIND,
-  type ContextEngine,
   type ContextMark,
   type ReasoningEffort,
   RUN_END_REASON,
@@ -100,7 +100,7 @@ import {
   isTerminalBrainRequestStatus,
 } from "./requests.js";
 import { incompleteDetail, TOOL_RESULT_STATUS } from "./runtime.js";
-import { settledUnlessAborted } from "./settled.js";
+import { type Settled, settledUnlessAborted } from "./settled.js";
 import {
   type BrainPersistedState,
   type BrainStateStore,
@@ -300,6 +300,13 @@ export interface BrainAgentOptions {
    * flushed, so an interrupted flush runs again at the next assessment.
    */
   beforeCompaction?: (input: BrainFlushInput) => Promise<MemoryHousekeepingResult>;
+  /**
+   * Where the flush marker outlives this process: read once per generation
+   * before the first assessment, written after each completed flush, keyed
+   * by the generation so a marker from an earlier lifetime is never read as
+   * this cycle's. Absent, the marker stands in memory alone.
+   */
+  flushMarker?: BrainFlushMarkerStore;
   readTranscriptSince: (
     identity: SessionIdentity,
     cursor: string | undefined,
@@ -373,6 +380,19 @@ export interface BrainFlushInput {
 export interface BrainFlushCycle {
   readonly compactionCount: number;
   readonly lastFlushCompactionCount?: number;
+}
+
+/**
+ * The durable side of the flush gate. The compaction count is the
+ * generation's own and rides on its envelope; the marker saying which count
+ * was flushed is maintenance state, kept here under the generation's id. A
+ * write that rejects did not land, and the caller leaves the cycle unflushed.
+ */
+export interface BrainFlushMarkerStore {
+  /** The compaction count the generation's last completed flush ran under, or nothing when none has. */
+  read(generationId: string): Promise<number | undefined>;
+  /** Records that a flush completed under this compaction count of this generation. */
+  write(generationId: string, compactionCount: number): Promise<void>;
 }
 
 export type { BrainWorkspaceAccess } from "./tool-executor.js";
@@ -482,9 +502,6 @@ export class BrainAgent {
   readonly #pendingSubmissions = new Map<string, PendingSubmission>();
   readonly #listeners = new Set<BrainRequestsListener>();
   #turnInFlight = false;
-  /** How many times this conversation's context has folded since the agent stood up; the flush runs once per count. */
-  #compactionCount = 0;
-  #lastFlushCompactionCount: number | undefined;
   /** The execution under way, for an ask to steer into or interrupt, and the asks riding inside it. */
   #active: ActiveExecution | undefined;
   /** Where an ask that arrives while this conversation is busy waits, under the queue's own mode and bounds. */
@@ -1656,13 +1673,13 @@ export class BrainAgent {
     // The flush fires a soft margin ahead of the fold, so in maintenance it
     // usually runs on a context not yet over the reserve; at admission it
     // runs right before the compaction the request needs.
-    await this.#flushBeforeCompaction(context, assessment, signal);
+    await this.#flushBeforeCompaction(turnContext, assessment);
     if (this.#revoked(turnContext)) return { ok: true };
     if (assessment.need === COMPACTION_NEED.NONE) return { ok: true };
     const outcome = await this.#options.runtime.compact(context, { prompt, signal });
     if (this.#revoked(turnContext)) return { ok: true };
     if (!outcome.compacted) return { ok: false, reason: outcome.reason };
-    this.#compactionCount += 1;
+    turnContext.generation.compactionCount += 1;
     if (!(await this.#ledger.checkpoint(turnContext))) {
       return { ok: false, reason: "the compacted context could not be checkpointed" };
     }
@@ -1677,27 +1694,34 @@ export class BrainAgent {
    * that says it ran to its end marks the cycle flushed, and any other
    * answer — interrupted, failed, or the signal firing first — leaves the
    * cycle unflushed so the next assessment runs it again. What the hook
-   * wrote before then stands either way.
+   * wrote before then stands either way. The cycle is the generation's own
+   * compaction count, and the marker of the last completed flush is read
+   * from the marker store once per generation and written to it after each
+   * completion, so a relaunch neither flushes a cycle twice nor skips one;
+   * a marker that cannot be read defers the flush, and one that cannot be
+   * written after its bounded attempts is reported and leaves the cycle
+   * unflushed, never silently done.
    */
   async #flushBeforeCompaction(
-    context: ContextEngine,
+    turnContext: Omit<TurnContext, "run"> & { run?: RunControl },
     assessment: CompactionAssessment,
-    signal: AbortSignal,
   ): Promise<void> {
+    const { generation, context, signal } = turnContext;
     const hook = this.#options.beforeCompaction;
     if (!hook || signal.aborted) return;
+    if (!(await this.#readFlushMarker(turnContext))) return;
     const due = shouldRunMemoryFlush({
       contextTokens: assessment.contextTokens,
       contextWindowTokens: assessment.contextWindowTokens,
       reserveTokens: reserveTokens(assessment.contextWindowTokens),
       transcriptBytes: assessment.bytes,
-      compactionCount: this.#compactionCount,
-      ...(this.#lastFlushCompactionCount !== undefined
-        ? { lastFlushCompactionCount: this.#lastFlushCompactionCount }
+      compactionCount: generation.compactionCount,
+      ...(generation.flush.lastCompactionCount !== undefined
+        ? { lastFlushCompactionCount: generation.flush.lastCompactionCount }
         : undefined),
     });
     if (!due) return;
-    const cycle = this.#compactionCount;
+    const cycle = generation.compactionCount;
     const settled = await settledUnlessAborted(
       hook({
         items: [...context.checkpoint().items],
@@ -1715,22 +1739,90 @@ export class BrainAgent {
       ),
       signal,
     );
-    if (settled.aborted) return;
-    if (housekeepingCompleted(settled.value.outcome)) {
-      this.#lastFlushCompactionCount = cycle;
+    if (settled.aborted || this.#revoked(turnContext)) return;
+    if (!housekeepingCompleted(settled.value.outcome)) {
+      this.#report(
+        `Memory flush did not complete (${settled.value.outcome}${settled.value.reason ? `: ${settled.value.reason}` : ""}); it runs again at the next assessment`,
+      );
       return;
     }
-    this.#report(
-      `Memory flush did not complete (${settled.value.outcome}${settled.value.reason ? `: ${settled.value.reason}` : ""}); it runs again at the next assessment`,
-    );
+    const marked = await this.#writeFlushMarker(turnContext, cycle);
+    if (marked.aborted || this.#revoked(turnContext)) return;
+    if (!marked.value.ok) {
+      this.#report(
+        `Memory flush completed but its marker could not be recorded after ${MEMORY_FLUSH_DEFAULTS.MARKER_WRITE_ATTEMPTS} attempt(s) (${marked.value.reason}); the cycle stays unflushed and runs again at the next assessment`,
+      );
+      return;
+    }
+    generation.flush.lastCompactionCount = cycle;
   }
 
-  /** How many times the context has folded since this agent stood up, and the cycle the last completed flush ran under. */
+  /**
+   * Fills the generation's flush marker from the store the first time it is
+   * needed. Answers whether the gate may be read: a store that cannot answer
+   * defers the flush to the next assessment rather than guessing, since a
+   * guess of "unflushed" repeats a housekeeping turn and a guess of
+   * "flushed" loses one.
+   */
+  async #readFlushMarker(
+    turnContext: Pick<TurnContext, "generation" | "signal">,
+  ): Promise<boolean> {
+    const { generation, signal } = turnContext;
+    if (generation.flush.read) return true;
+    const store = this.#options.flushMarker;
+    if (!store) {
+      generation.flush.read = true;
+      return true;
+    }
+    const read = await settledUnlessAborted(
+      store.read(generation.id).then(
+        (lastCompactionCount) => ({ ok: true as const, lastCompactionCount }),
+        (error: Error) => ({ ok: false as const, reason: error.message }),
+      ),
+      signal,
+    );
+    if (read.aborted || this.#revoked(turnContext)) return false;
+    if (!read.value.ok) {
+      this.#report(
+        `Memory flush marker could not be read (${read.value.reason}); the flush waits for the next assessment`,
+      );
+      return false;
+    }
+    generation.flush = { read: true, lastCompactionCount: read.value.lastCompactionCount };
+    return true;
+  }
+
+  /** Offers the completed flush's marker to the store, a bounded number of times; the turn itself is never rerun to retry. */
+  async #writeFlushMarker(
+    turnContext: Pick<TurnContext, "generation" | "signal">,
+    cycle: number,
+  ): Promise<Settled<{ ok: true } | { ok: false; reason: string }>> {
+    const store = this.#options.flushMarker;
+    if (!store) return { aborted: false, value: { ok: true } };
+    const attempts = async (): Promise<{ ok: true } | { ok: false; reason: string }> => {
+      let reason = "";
+      for (let attempt = 0; attempt < MEMORY_FLUSH_DEFAULTS.MARKER_WRITE_ATTEMPTS; attempt += 1) {
+        if (turnContext.signal.aborted) return { ok: false, reason: "the turn was revoked" };
+        try {
+          await store.write(turnContext.generation.id, cycle);
+          return { ok: true };
+        } catch (error) {
+          reason = error instanceof Error ? error.message : String(error);
+        }
+      }
+      return { ok: false, reason };
+    };
+    return settledUnlessAborted(attempts(), turnContext.signal);
+  }
+
+  /** Where the standing generation is in its compaction cycles, and the cycle the last completed flush ran under, as read so far. */
   flushCycle(): BrainFlushCycle {
+    const generation = this.#generation;
+    if (!generation) return { compactionCount: 0 };
     return {
-      compactionCount: this.#compactionCount,
-      ...(this.#lastFlushCompactionCount !== undefined
-        ? { lastFlushCompactionCount: this.#lastFlushCompactionCount }
+      compactionCount: generation.compactionCount,
+      ...(generation.flush.lastCompactionCount !== undefined
+        ? { lastFlushCompactionCount: generation.flush.lastCompactionCount }
         : undefined),
     };
   }
@@ -2512,7 +2604,7 @@ export class BrainAgent {
           return;
         case RUNTIME_EVENT.COMPACTED:
           gathering.compacted = true;
-          this.#compactionCount += 1;
+          turnContext.generation.compactionCount += 1;
           return;
         case RUNTIME_EVENT.STEERED:
           turn.plan.deliveries.ingested();

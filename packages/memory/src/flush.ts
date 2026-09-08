@@ -18,6 +18,12 @@ export const MEMORY_FLUSH_DEFAULTS = {
   FORCE_TRANSCRIPT_BYTES: 2 * 1024 * 1024,
   /** The most output tokens a housekeeping turn may spend. */
   MAXIMUM_OUTPUT_TOKENS: 2_000,
+  /**
+   * How many times the marker of a completed flush is offered to its store
+   * before the cycle is left unflushed; the housekeeping turn itself is never
+   * repeated to retry a write.
+   */
+  MARKER_WRITE_ATTEMPTS: 3,
 } as const;
 
 /** The pinned reply token a housekeeping turn answers when nothing is worth storing. */
@@ -58,6 +64,19 @@ export function housekeepingCompleted(outcome: MemoryHousekeepingOutcome): boole
   return (
     outcome === MEMORY_HOUSEKEEPING_OUTCOME.COMPLETED ||
     outcome === MEMORY_HOUSEKEEPING_OUTCOME.NOTHING_TO_STORE
+  );
+}
+
+/**
+ * Whether a housekeeping turn's end is worth reporting: it was started and
+ * did not run to its end. A skipped turn — a conversation that never
+ * captures, or no brain standing to run one — is the expected answer, not a
+ * shortfall, and is not reported as one.
+ */
+export function housekeepingFellShort(outcome: MemoryHousekeepingOutcome): boolean {
+  return (
+    outcome === MEMORY_HOUSEKEEPING_OUTCOME.INTERRUPTED ||
+    outcome === MEMORY_HOUSEKEEPING_OUTCOME.FAILED
   );
 }
 

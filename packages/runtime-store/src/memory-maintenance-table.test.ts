@@ -165,19 +165,35 @@ test("a rewrite is published only over the content it was planned on, with its p
   );
 });
 
-test("flush state is recorded per conversation", () => {
+test("the flush marker is recorded per conversation and answers only for the generation it was written under", () => {
   const database = openTestDatabase();
-  assert.equal(flushState(database, MAIN_SESSION_KEY), undefined);
+  assert.equal(flushState(database, MAIN_SESSION_KEY, "gen-1"), undefined);
   recordFlush(database, MAIN_SESSION_KEY, {
+    generationId: "gen-1",
     compactionCount: 2,
-    outcome: MEMORY_HOUSEKEEPING_OUTCOME.INTERRUPTED,
+    outcome: MEMORY_HOUSEKEEPING_OUTCOME.COMPLETED,
     flushedAt: NOW,
   });
-  assert.deepEqual(flushState(database, MAIN_SESSION_KEY), {
+  assert.deepEqual(flushState(database, MAIN_SESSION_KEY, "gen-1"), {
+    generationId: "gen-1",
     compactionCount: 2,
-    outcome: MEMORY_HOUSEKEEPING_OUTCOME.INTERRUPTED,
+    outcome: MEMORY_HOUSEKEEPING_OUTCOME.COMPLETED,
     flushedAt: NOW,
   });
+  // A generation that replaced gen-1 reads no marker from it: its cycles start unflushed.
+  assert.equal(flushState(database, MAIN_SESSION_KEY, "gen-2"), undefined);
+  recordFlush(database, MAIN_SESSION_KEY, {
+    generationId: "gen-2",
+    compactionCount: 0,
+    outcome: MEMORY_HOUSEKEEPING_OUTCOME.NOTHING_TO_STORE,
+    flushedAt: NOW + 1,
+  });
+  assert.equal(flushState(database, MAIN_SESSION_KEY, "gen-2")?.compactionCount, 0);
+  assert.equal(
+    flushState(database, MAIN_SESSION_KEY, "gen-1"),
+    undefined,
+    "one marker per conversation",
+  );
 });
 
 test("forgetting a source removes its candidates and the MEMORY.md entries they produced, tombstones it against relearning, and reports what a hand edit left unattributable", () => {
@@ -253,7 +269,7 @@ test("forgetting a source removes its candidates and the MEMORY.md entries they 
   assert.equal(listMemoryRewrites(database).length, 1, "the scrub kept its preimage");
 });
 
-test("a schema 7 database gains the maintenance tables at open and reads as schema 8", () => {
+test("a schema 7 database gains the maintenance tables and the compaction count at open and reads as schema 9", () => {
   const file = path.join(workspace(), "agent.sqlite");
   const seven = RuntimeDatabase.open(file);
   seven.exec("DROP TABLE memory_candidates");
@@ -262,13 +278,28 @@ test("a schema 7 database gains the maintenance tables at open and reads as sche
   seven.exec("DROP TABLE memory_forgotten_sources");
   seven.exec("DROP TABLE memory_rewrites");
   seven.exec("DROP TABLE memory_flush_state");
+  seven.exec("ALTER TABLE conversation_sessions DROP COLUMN compaction_count");
   seven.exec("UPDATE schema_version SET version = 7");
   seven.close();
   const eight = RuntimeDatabase.open(file);
   // SAFETY: the schema_version table has one integer column.
   const version = eight.prepare("SELECT version FROM schema_version").get() as { version: number };
   assert.equal(version.version, RUNTIME_SCHEMA_VERSION);
-  assert.equal(RUNTIME_SCHEMA_VERSION, 8);
+  assert.equal(RUNTIME_SCHEMA_VERSION, 9);
+  // SAFETY: pragma table_info answers one row per column with its name as text.
+  const columns = (
+    eight.prepare("SELECT name FROM pragma_table_info('conversation_sessions')").all() as {
+      name: string;
+    }[]
+  ).map((row) => row.name);
+  assert.ok(columns.includes("compaction_count"));
+  // SAFETY: as above, for the flush-state table.
+  const flushColumns = (
+    eight.prepare("SELECT name FROM pragma_table_info('memory_flush_state')").all() as {
+      name: string;
+    }[]
+  ).map((row) => row.name);
+  assert.ok(flushColumns.includes("generation_id"));
   // SAFETY: sqlite_master's name column is text.
   const tables = (
     eight

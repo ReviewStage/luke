@@ -101,6 +101,7 @@ export {
   dailyNotePathFor,
   type HousekeepingPrompt,
   housekeepingCompleted,
+  housekeepingFellShort,
   isAppendOnlyRewrite,
   isDailyNotePathForDay,
   localDayStamp,

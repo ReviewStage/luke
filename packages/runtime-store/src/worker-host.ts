@@ -179,7 +179,7 @@ const HANDLERS: RuntimeStoreHandlers = {
     publishMemoryRewrite(host.opened(), host.workspace(), params.ask, params.now),
   [RUNTIME_STORE_METHOD.MEMORY_REWRITES_LIST]: (host) => listMemoryRewrites(host.opened()),
   [RUNTIME_STORE_METHOD.MEMORY_FLUSH_STATE_GET]: (host, params) =>
-    flushState(host.opened(), params.sessionKey),
+    flushState(host.opened(), params.sessionKey, params.generationId),
   [RUNTIME_STORE_METHOD.MEMORY_FLUSH_STATE_PUT]: (host, params) => {
     recordFlush(host.opened(), params.sessionKey, params.state);
     return true;

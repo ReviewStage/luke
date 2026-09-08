@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { BrainFlushInput } from "@sidecar/brain";
+import type { BrainFlushInput, BrainFlushMarkerStore } from "@sidecar/brain";
 import { REFUSAL_REASON, runMemoryHousekeeping } from "@sidecar/brain";
 import {
   appendOnlyPromotion,
@@ -23,6 +23,7 @@ import {
   dreamDiaryEntry,
   type HousekeepingPrompt,
   hashText,
+  housekeepingCompleted,
   ingestionQuery,
   isConversationCandidate,
   localDayStamp,
@@ -111,6 +112,13 @@ export interface MemoryMaintenance {
   flushHookFor: (
     sessionKey: SessionKey,
   ) => ((input: BrainFlushInput) => Promise<MemoryHousekeepingResult>) | undefined;
+  /**
+   * Where one conversation's flush marker outlives the process: the store's
+   * flush-state row, read and written under the generation the brain names,
+   * so a relaunch knows which cycle was flushed and a new lifetime reads none.
+   * Nothing for a conversation that never flushes.
+   */
+  flushMarkerFor: (sessionKey: SessionKey) => BrainFlushMarkerStore | undefined;
   /** Whether a conversation's reset captures first: main and the developer's durable private threads. */
   capturesOnReset: (sessionKey: SessionKey) => boolean;
   /** The capture run before a reset, over a copy of the conversation's context; never blocks the reset's outcome. */
@@ -144,6 +152,19 @@ export const DEEP_PATH = {
 
 /** How much a day's ingestion counts for; three recurring days pass the score gate, one does not. */
 const INGESTION_SCORE = 0.8;
+/**
+ * The most of one raw note line the light phase reads before scrubbing it;
+ * a candidate is cut to its own text bound afterwards anyway, and the
+ * redaction treats a key armor the cut removed as an unterminated key.
+ */
+const NOTE_LINE_MAX_CHARS = 4_000;
+/**
+ * The share of the light limit the dated notes may take ahead of the
+ * conversations, so a full History budget cannot keep a completed note from
+ * being staged until it ages out of the lookback; whatever either side
+ * leaves goes to the other.
+ */
+const NOTE_BUDGET_SHARE = 0.5;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DIARY_OUTPUT_TOKENS = 400;
 const CONSOLIDATION_OUTPUT_TOKENS = 4_000;
@@ -181,7 +202,6 @@ export function wireMemoryMaintenance(
     dependencies.persistent && interactive(sessionKey) && !dependencies.isTemporary(sessionKey);
 
   const housekeeping = async (
-    sessionKey: SessionKey,
     items: readonly WireRecord[],
     prompt: HousekeepingPrompt,
     dateStamp: string,
@@ -210,27 +230,28 @@ export function wireMemoryMaintenance(
 
   const flushHookFor: MemoryMaintenance["flushHookFor"] = (sessionKey) => {
     if (!eligible(sessionKey)) return undefined;
-    return async (input) => {
+    return (input) => {
       const day = localDayStamp(dependencies.now());
-      const result = await housekeeping(
-        sessionKey,
-        input.items,
-        memoryFlushPrompt(day),
-        day,
-        input.signal,
-      );
-      try {
-        await dependencies.client().recordMemoryFlush(sessionKey, {
-          compactionCount: input.compactionCount,
-          outcome: result.outcome,
+      return housekeeping(input.items, memoryFlushPrompt(day), day, input.signal);
+    };
+  };
+
+  const flushMarkerFor: MemoryMaintenance["flushMarkerFor"] = (sessionKey) => {
+    if (!eligible(sessionKey)) return undefined;
+    return {
+      read: async (generationId) => {
+        const state = await dependencies.client().memoryFlushState(sessionKey, generationId);
+        return state && housekeepingCompleted(state.outcome) ? state.compactionCount : undefined;
+      },
+      write: async (generationId, compactionCount) => {
+        const recorded = await dependencies.client().recordMemoryFlush(sessionKey, {
+          generationId,
+          compactionCount,
+          outcome: MEMORY_HOUSEKEEPING_OUTCOME.COMPLETED,
           flushedAt: dependencies.now(),
         });
-      } catch (error) {
-        dependencies.report(
-          `Memory flush state could not be recorded: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-      return result;
+        if (!recorded) throw new Error("the store refused the flush marker");
+      },
     };
   };
 
@@ -252,7 +273,7 @@ export function wireMemoryMaintenance(
       CONSOLIDATION_DEFAULTS.CONSOLIDATION_TIMEOUT_MS,
     );
     try {
-      return await housekeeping(sessionKey, items, resetCapturePrompt(day), day, controller.signal);
+      return await housekeeping(items, resetCapturePrompt(day), day, controller.signal);
     } finally {
       clearTimeout(timer);
     }
@@ -438,7 +459,9 @@ export function wireMemoryMaintenance(
       content.split("\n").forEach((line, index) => {
         const trimmed = line.trim();
         if (trimmed.length === 0 || trimmed.startsWith("#") || trimmed.startsWith("<!--")) return;
-        const prepared = prepareForIngestion(trimmed.replace(/^[-*+]\s+/u, ""));
+        const prepared = prepareForIngestion(
+          trimmed.replace(/^[-*+]\s+/u, "").slice(0, NOTE_LINE_MAX_CHARS),
+        );
         if (!prepared || prepared.text.length < 12) return;
         seeds.push({
           text: prepared.text,
@@ -474,7 +497,9 @@ export function wireMemoryMaintenance(
     const slice = lines
       .slice(Math.max(0, candidate.startLine - 1), Math.max(candidate.startLine, candidate.endLine))
       .join(" ");
-    const prepared = prepareForIngestion(slice.replace(/^[-*+]\s+/u, ""));
+    const prepared = prepareForIngestion(
+      slice.replace(/^[-*+]\s+/u, "").slice(0, NOTE_LINE_MAX_CHARS),
+    );
     return (
       prepared !== undefined &&
       candidatesDuplicate(boundCandidateText(prepared.text), candidate.text)
@@ -498,10 +523,20 @@ export function wireMemoryMaintenance(
         const held = await client.listMemoryCandidates();
         // The light limit bounds what one sweep stages; the cursor and the
         // seen hashes advance only over the lines actually consumed, so what
-        // the budget left behind is read by the next sweep, never lost.
-        let budget: number = CONSOLIDATION_DEFAULTS.LIGHT_LIMIT;
+        // the budget left behind is read by the next sweep, never lost. The
+        // notes have no cursor — a note line already held costs no budget,
+        // and one not yet held is read again next sweep — so they take their
+        // share first, and the conversations the rest.
+        const noteCandidates = (await noteSeeds(now)).filter(
+          (seed) => !held.some((candidate) => candidatesDuplicate(candidate.text, seed.text)),
+        );
+        const noteShare = Math.min(
+          noteCandidates.length,
+          Math.floor(CONSOLIDATION_DEFAULTS.LIGHT_LIMIT * NOTE_BUDGET_SHARE),
+        );
+        let budget: number = CONSOLIDATION_DEFAULTS.LIGHT_LIMIT - noteShare;
         const advances: { sessionKey: SessionKey; latest: number; hashes: string[] }[] = [];
-        let gathered: CandidateSeed[] = [];
+        let gathered: CandidateSeed[] = noteCandidates.slice(0, noteShare);
         for (const sessionKey of eligibleConversations()) {
           const lines = await conversationLines(client, sessionKey, now);
           const hashes: string[] = [];
@@ -517,7 +552,9 @@ export function wireMemoryMaintenance(
           }
           if (hashes.length > 0) advances.push({ sessionKey, latest, hashes });
         }
-        gathered = gathered.concat((await noteSeeds(now)).slice(0, Math.max(0, budget)));
+        gathered = gathered.concat(
+          noteCandidates.slice(noteShare, noteShare + Math.max(0, budget)),
+        );
         const { seeds, deduped } = dedupe(gathered, held);
         const staging = await client.stageMemoryCandidates(seeds, now);
         for (const advance of advances) {
@@ -716,6 +753,7 @@ export function wireMemoryMaintenance(
 
   return {
     flushHookFor,
+    flushMarkerFor,
     capturesOnReset: eligible,
     captureBeforeReset,
     runConsolidation,

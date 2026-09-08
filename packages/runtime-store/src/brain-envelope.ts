@@ -38,6 +38,7 @@ export interface StandingGeneration {
   expiresAt: number;
   resetClearedAt: number | undefined;
   resetGenerationId: string | undefined;
+  compactionCount: number;
 }
 
 export function standingGeneration(
@@ -47,7 +48,7 @@ export function standingGeneration(
   // SAFETY: the columns selected are the ones the row type names, typed by the schema.
   const row = database
     .prepare(
-      `SELECT session_id, created_at, expires_at, reset_cleared_at, reset_generation_id, checkpoint_format
+      `SELECT session_id, created_at, expires_at, reset_cleared_at, reset_generation_id, checkpoint_format, compaction_count
        FROM conversation_sessions WHERE session_key = ?`,
     )
     .get(sessionKey) as
@@ -58,6 +59,7 @@ export function standingGeneration(
         reset_cleared_at: number | null;
         reset_generation_id: string | null;
         checkpoint_format: string | null;
+        compaction_count: number;
       }
     | undefined;
   if (!row) return undefined;
@@ -68,6 +70,7 @@ export function standingGeneration(
     expiresAt: row.expires_at,
     resetClearedAt: row.reset_cleared_at ?? undefined,
     resetGenerationId: row.reset_generation_id ?? undefined,
+    compactionCount: row.compaction_count,
   };
 }
 
@@ -141,6 +144,7 @@ export function loadBrainEnvelope(database: RuntimeDatabase, sessionKey: Session
     expiresAt: session.expiresAt,
     ...(stamp !== undefined ? { checkpointFormat: stamp } : undefined),
     items: parsedItems,
+    compactionCount: session.compactionCount,
     cursors,
     captureCursors,
     inbox,
@@ -192,6 +196,11 @@ export function saveBrainEnvelope(
         .prepare("UPDATE conversation_sessions SET checkpoint_format = ? WHERE session_id = ?")
         .run(nullable(delta.checkpointFormat.stamp), sessionId);
     }
+    if (delta.compactionCount !== undefined) {
+      database
+        .prepare("UPDATE conversation_sessions SET compaction_count = ? WHERE session_id = ?")
+        .run(delta.compactionCount, sessionId);
+    }
     if (delta.items) {
       database
         .prepare("DELETE FROM runtime_checkpoints WHERE session_id = ? AND sequence >= ?")
@@ -241,8 +250,8 @@ function replaceGeneration(
   database
     .prepare(
       `INSERT INTO conversation_sessions
-         (session_id, session_key, created_at, expires_at, reset_cleared_at, reset_generation_id, checkpoint_format)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         (session_id, session_key, created_at, expires_at, reset_cleared_at, reset_generation_id, checkpoint_format, compaction_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       state.generationId,
@@ -252,6 +261,7 @@ function replaceGeneration(
       nullable(state.reset?.clearedAt),
       nullable(state.reset?.generationId),
       nullable(stampOf(state)),
+      state.compactionCount,
     );
   if (state.reset) raiseHistoryCutoff(database, sessionKey, state.reset.clearedAt);
   insertItems(database, state.generationId, state.items, 0);

@@ -49,8 +49,44 @@ const SENSITIVE_PATTERNS: readonly RegExp[] = [
   /\b(?:password|passwd|secret|token|api[_-]?key)\s*[:=]\s*\S+/giu,
   /\b(?:\d[ -]?){13,19}\b/gu,
   /\+?\b\d{1,3}[ .-]?\(?\d{2,4}\)?[ .-]?\d{3,4}[ .-]?\d{3,4}\b/gu,
-  /-----BEGIN [A-Z ]+PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+PRIVATE KEY-----/gu,
 ];
+
+const PEM_BEGIN = "-----BEGIN ";
+const PEM_END = "-----END ";
+const PEM_HEADER_REST = /^[A-Z ]{1,64}PRIVATE KEY-----/u;
+
+/**
+ * Redacts private-key blocks by scanning for their armor rather than
+ * matching across their body: from each `BEGIN ... PRIVATE KEY` header to
+ * the end of the matching `END` header, or, when no END follows — the block
+ * truncated, or a line cut before it — conservatively to the end of the
+ * text, so a key body never passes because its closing armor did not.
+ */
+function redactPrivateKeys(text: string): RedactionResult {
+  let redactions = 0;
+  let result = "";
+  let from = 0;
+  for (;;) {
+    const begin = text.indexOf(PEM_BEGIN, from);
+    if (begin === -1) return { text: result + text.slice(from), redactions };
+    const header = PEM_HEADER_REST.exec(text.slice(begin + PEM_BEGIN.length, begin + 128));
+    if (!header) {
+      result += text.slice(from, begin + PEM_BEGIN.length);
+      from = begin + PEM_BEGIN.length;
+      continue;
+    }
+    const bodyFrom = begin + PEM_BEGIN.length + header[0].length;
+    let end = text.indexOf(PEM_END, bodyFrom);
+    while (end !== -1 && !PEM_HEADER_REST.test(text.slice(end + PEM_END.length, end + 128))) {
+      end = text.indexOf(PEM_END, end + PEM_END.length);
+    }
+    redactions += 1;
+    result += `${text.slice(from, begin)}${REDACTED_TOKEN}`;
+    if (end === -1) return { text: result, redactions };
+    const closing = PEM_HEADER_REST.exec(text.slice(end + PEM_END.length, end + 128));
+    from = end + PEM_END.length + (closing?.[0].length ?? 0);
+  }
+}
 
 export interface RedactionResult {
   readonly text: string;
@@ -59,8 +95,9 @@ export interface RedactionResult {
 
 /** Replaces every sensitive match with the fixed token and counts the replacements. */
 export function redactSensitiveText(text: string): RedactionResult {
-  let redactions = 0;
-  let scrubbed = text;
+  const keys = redactPrivateKeys(text);
+  let redactions = keys.redactions;
+  let scrubbed = keys.text;
   for (const pattern of SENSITIVE_PATTERNS) {
     scrubbed = scrubbed.replace(pattern, () => {
       redactions += 1;
