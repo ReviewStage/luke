@@ -138,7 +138,7 @@ composed by the client: `callsUrl` is the calls endpoint at
 transports. Clients predating this field ignore `wsUrl`; clients predating
 this server receive a connection without it and must handle its absence.
 
-The endpoints need one secret: `OPENAI_API_KEY`. Without it both answer 503
+The endpoint needs one secret: `OPENAI_API_KEY`. Without it it answers 503
 and the hosted tier is simply off, the same kill switch as the feedback
 endpoint, which is the intended state for Preview deployments, so a preview
 never spends the production key. `LUKE_REALTIME_MODEL` optionally overrides
@@ -188,8 +188,8 @@ backstop and should be configured with it.
 `api/brain/respond.ts` runs one inference of Luke's brain on the deployment's
 own OpenAI key for a signed-in client that carries none of its own. It is an
 exact-path file like the voice route, resolved to a user through the same
-bearer seam, and it is the one hosted route with a raised
-function duration: `vercel.json` gives it 120 seconds so the 90-second
+bearer seam, and it is the one hosted route with a raised function duration:
+`vercel.json` gives it 120 seconds so the 90-second
 upstream ceiling the brain shares with its keyed client can pass, and that
 `functions` entry names this route alone.
 

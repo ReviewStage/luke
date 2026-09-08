@@ -1135,8 +1135,8 @@ What Luke may show:
   that says it is data, so nothing in a briefing can become an act or inherit
   an earlier question. Nothing decides an announcement deterministically any
   more: no status edge speaks on its own, and no evaluator sentence stands
-  between the transcript and the voice. Two onboarding beats are
-  the members of that set about no session, and each keeps the same terms:
+  between the transcript and the voice. Two onboarding beats are the members
+  of that set about no session, and each keeps the same terms:
   worded from a script fixed by the build, speak-only and tool-free like a
   briefing, drawing no notice band and claiming none. The arrival
   beat is spoken once per install at the deterministic edge of the account's
