@@ -605,14 +605,20 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
    * one conversation, not two.
    */
   const observedOpenings = new Map<SessionKey, Promise<BrainAgent | undefined>>();
+  // Conversations standing down, until their store is let go.
+  const closings = new Map<SessionKey, Promise<void>>();
   const openObserved = (identity: SessionIdentity): Promise<BrainAgent | undefined> => {
     const sessionKey = observedSessionKey(identity);
     const standing = conversations.get(sessionKey)?.host.current();
-    if (standing) return Promise.resolve(standing);
+    if (standing && !closings.has(sessionKey)) return Promise.resolve(standing);
     const pending = observedOpenings.get(sessionKey);
     if (pending) return pending;
     const opening = (async () => {
       try {
+        // A conversation still standing down finishes first: its store is
+        // let go of before another is built on the same envelope, so two
+        // writers never hold one repository.
+        await closings.get(sessionKey);
         await dependencies.ensureObservedConversation?.(
           sessionKey,
           observedName(dependencies.session(identity), identity),
@@ -650,8 +656,14 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     }
   };
 
+  // A conversation is busy while any run of it is pending in History's view,
+  // or while its brain has anything under way or owed: a turn running or
+  // queued, a capture landing, an observation captured and not yet read, an
+  // ask waiting. An unrecorded analysis is work too, and is never cut because
+  // its session left the roster.
   const busy = (sessionKey: SessionKey) =>
-    (latestRecords.get(sessionKey) ?? []).some(brainRequestPending);
+    (latestRecords.get(sessionKey) ?? []).some(brainRequestPending) ||
+    (conversations.get(sessionKey)?.host.current()?.busy() ?? false);
 
   const rosterLook = (): void => {
     if (!liveModel()) return;
@@ -680,29 +692,60 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     }
   };
 
+  // A held briefing goes back to the conversation that decided it, because
+  // that conversation is the one that knows the session it was about. An
+  // observed conversation that has stood down meanwhile is reopened for it
+  // rather than the briefing being re-decided in main, which never read that
+  // session; only a source that cannot be reopened at all falls to main, and
+  // says so.
   const releaseHeld = (held: readonly BrainDelivery[]): void => {
     const bySource = new Map<SessionKey, BrainDelivery[]>();
     for (const delivery of held) {
       const source = delivery.sessionKey ?? MAIN_SESSION_KEY;
-      const key = conversations.get(source)?.host.current() ? source : MAIN_SESSION_KEY;
-      bySource.set(key, [...(bySource.get(key) ?? []), delivery]);
+      bySource.set(source, [...(bySource.get(source) ?? []), delivery]);
     }
-    for (const [sessionKey, own] of bySource) current(sessionKey)?.releaseHeld(own);
+    for (const [sessionKey, own] of bySource) {
+      const observed = observedSessionRefOf(sessionKey);
+      const opening = observed
+        ? openObserved(observed)
+        : Promise.resolve(current(sessionKey) ?? current(MAIN_SESSION_KEY));
+      void opening.then((agent) => {
+        if (agent) {
+          agent.releaseHeld(own);
+          return;
+        }
+        dependencies.report(
+          `Held briefings of ${sessionKey} could not return to their conversation and are re-decided in main`,
+        );
+        current(MAIN_SESSION_KEY)?.releaseHeld(own);
+      });
+    }
   };
 
-  const closeConversation = async (sessionKey: SessionKey): Promise<void> => {
+  const closeConversation = (sessionKey: SessionKey): Promise<void> => {
+    const closing = closings.get(sessionKey);
+    if (closing) return closing;
     const opened = conversations.get(sessionKey);
-    if (!opened) return;
-    conversations.delete(sessionKey);
-    // The replacement with nothing awaits every retirement's drain, so the
-    // follower has written its last interruption before the store is let go.
-    opened.host.retire();
-    await opened.host.replace(() => undefined);
-    opened.clock.stop();
-    opened.unsubscribe();
-    latestRecords.delete(sessionKey);
-    publications.delete(sessionKey);
-    broadcast();
+    if (!opened) return Promise.resolve();
+    const work = (async () => {
+      // The replacement with nothing awaits every retirement's drain, so the
+      // follower has written its last interruption before the store is let
+      // go. The entry stays in the directory until then: an open that lands
+      // meanwhile waits on this closing rather than building a second store
+      // on the same envelope.
+      opened.host.retire();
+      await opened.host.replace(() => undefined);
+      opened.clock.stop();
+      opened.unsubscribe();
+      conversations.delete(sessionKey);
+      latestRecords.delete(sessionKey);
+      publications.delete(sessionKey);
+      broadcast();
+    })().finally(() => {
+      closings.delete(sessionKey);
+    });
+    closings.set(sessionKey, work);
+    return work;
   };
 
   const registerIpc = (registration: BrainIpcRegistration): void => {

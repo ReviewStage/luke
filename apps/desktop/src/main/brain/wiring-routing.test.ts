@@ -125,6 +125,8 @@ interface Composed {
   reads: SessionIdentity[];
   roster: Session[];
   recorded: { sessionKey: SessionKey; kind: string }[];
+  /** How many stores were built per conversation. */
+  repositories: Map<SessionKey, number>;
 }
 
 interface Gate {
@@ -155,6 +157,7 @@ function composed(gate?: Gate): Composed {
   }
   const model = bareModelAdapter(client);
   const storages = new Map<SessionKey, MemoryStorage>();
+  const repositories = new Map<SessionKey, number>();
   const ensured: Composed["ensured"] = [];
   const deliveries: BrainDelivery[] = [];
   const reads: SessionIdentity[] = [];
@@ -164,6 +167,7 @@ function composed(gate?: Gate): Composed {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "luke-wiring-"));
   const wiring = wireBrain({
     repositoryFor: (sessionKey) => {
+      repositories.set(sessionKey, (repositories.get(sessionKey) ?? 0) + 1);
       let storage = storages.get(sessionKey);
       if (!storage) {
         storage = new MemoryStorage();
@@ -235,7 +239,7 @@ function composed(gate?: Gate): Composed {
     runnable: () => true,
     dropBriefings: () => undefined,
   });
-  return { wiring, inputs, ensured, deliveries, reads, roster, recorded };
+  return { wiring, inputs, ensured, deliveries, reads, roster, recorded, repositories };
 }
 
 test("a roster look opens one conversation per observed session, each reading only its own transcript, and main reads notices instead", async () => {
@@ -344,7 +348,7 @@ test("hooks route to the session's own conversation, main is never woken by one,
   await c.wiring.rebuild();
 });
 
-test("a held briefing whose source conversation has stood down is re-decided in main, never lost", async () => {
+test("a held briefing whose source conversation has stood down goes back to that conversation, reopened for it, never to main", async () => {
   const c = composed();
   await c.wiring.rebuild();
   const goneKey = observedSessionKey({ providerId: claude.id, providerSessionId: "gone" });
@@ -357,11 +361,78 @@ test("a held briefing whose source conversation has stood down is re-decided in 
       .filter((text) => text.includes(BRAIN_INPUT_MARKER.HOLD_RELEASED));
   await until(() => releases().length >= 1);
   await settle();
-  // No conversation was opened for the source: main re-decides it, and the
-  // briefing is neither dropped nor sent to another session's conversation.
-  assert.equal(c.wiring.current(goneKey), undefined);
+  // The source conversation is opened again for the briefing it decided:
+  // it, not main, re-decides it, and the briefing is neither dropped nor
+  // sent to another session's conversation.
+  assert.ok(c.wiring.current(goneKey));
+  assert.ok(c.ensured.some((entry) => entry.sessionKey === goneKey));
   assert.equal(releases().length, 1);
   assert.ok(releases()[0]?.includes("a session that has stood down"));
+  assert.ok(!(c.wiring.current(goneKey)?.busy() ?? true));
+  // Main read nothing of it: its only input, if any, carries no release.
+  assert.equal(c.wiring.pendingNotices().length, 1);
+  c.wiring.retire();
+  await c.wiring.rebuild();
+});
+
+test("a session that leaves the roster while its analysis is held keeps its conversation until the analysis ends", async () => {
+  const gate: Gate = { holds: (texts) => texts.includes(SECRET("abc")), release: () => undefined };
+  const c = composed(gate);
+  await c.wiring.rebuild();
+  const abcKey = observedSessionKey(ABC);
+  c.wiring.rosterLook();
+  await until(() => c.inputs.some((input) => itemTexts(input).join("\n").includes(SECRET("abc"))));
+  // The analysis is out at the model, an unrecorded observation turn.
+  assert.ok(c.wiring.current(abcKey)?.busy());
+  // The session disappears from the roster and the look runs again.
+  c.roster.splice(
+    c.roster.findIndex((held) => held.providerSessionId === "abc"),
+    1,
+  );
+  c.wiring.rosterLook();
+  await settle();
+  await pause(20);
+  // Still standing: an analysis in flight is never cut mid-thought.
+  assert.ok(c.wiring.current(abcKey));
+  gate.release();
+  await until(() => !(c.wiring.current(abcKey)?.busy() ?? false));
+  await until(() => c.wiring.pendingNotices().some((notice) => notice.label.includes("abc")));
+  // The next look, with the analysis over and nothing owed, stands it down.
+  c.wiring.rosterLook();
+  await until(() => c.wiring.current(abcKey) === undefined);
+  c.wiring.retire();
+  await c.wiring.rebuild();
+});
+
+test("a hook for a session whose conversation is standing down waits for the close and builds one store, never a second on the same envelope", async () => {
+  const c = composed();
+  await c.wiring.rebuild();
+  const abcKey = observedSessionKey(ABC);
+  c.wiring.rosterLook();
+  await until(() => c.wiring.pendingNotices().length === 2);
+  assert.equal(c.repositories.get(abcKey), 1);
+  // abc leaves the roster: the look stands its conversation down, and a hook
+  // for it lands in the same tick, while the close is still draining.
+  c.roster.splice(
+    c.roster.findIndex((held) => held.providerSessionId === "abc"),
+    1,
+  );
+  c.wiring.rosterLook();
+  c.wiring.wake([
+    {
+      kind: BRAIN_WAKE_KIND.HOOK,
+      hookEvent: "Stop",
+      identity: ABC,
+      session: session("abc"),
+      atMs: 2,
+    },
+  ]);
+  await until(() => c.wiring.pendingNotices().length === 3);
+  await settle();
+  // One conversation stands for abc, on the second store built for it; the
+  // first was let go of before the second was opened.
+  assert.ok(c.wiring.current(abcKey));
+  assert.equal(c.repositories.get(abcKey), 2);
   c.wiring.retire();
   await c.wiring.rebuild();
 });
