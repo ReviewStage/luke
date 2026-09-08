@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeSession, SESSION_STATUS } from "@sidecar/session";
+import {
+  ACT_KIND,
+  type AdvertisedAct,
+  advertisedActDisagreements,
+  advertisedActFor,
+  advertisedControls,
+  maximumSessionDetailLength,
+  normalizeSession,
+  SESSION_CONTROL_KIND,
+  SESSION_STATUS,
+  type Session,
+} from "@sidecar/session";
 
 const TEST_NOW = Date.parse("2026-08-16T12:00:00.000Z");
 
@@ -226,4 +237,146 @@ test("a developer hold rides a waiting session and is dropped on any other statu
     },
   );
   assert.equal(working.holdingForDeveloper, undefined);
+});
+
+function advertising(advertises: readonly AdvertisedAct[]): Session {
+  return normalizeSession(
+    { id: "conductor", displayName: "Conductor" },
+    {
+      providerSessionId: "chat-1",
+      title: "Advertised acts",
+      status: SESSION_STATUS.WAITING,
+      lastActivityAt: TEST_NOW,
+      advertises,
+    },
+  );
+}
+
+test("a control needs an id, and the same id twice is a contradiction", () => {
+  assert.throws(() => advertising([{ kind: ACT_KIND.CONTROL, id: "  ", label: "Stop" }]), {
+    message: "control id must not be empty",
+  });
+  assert.throws(
+    () =>
+      advertising([
+        { kind: ACT_KIND.CONTROL, id: "stop", label: "Stop" },
+        { kind: ACT_KIND.CONTROL, id: "stop", label: "Halt" },
+      ]),
+    { message: "Duplicate session control: stop" },
+  );
+});
+
+test("a control's label falls back to its id, and its target is bounded", () => {
+  const [control] = advertisedControls(
+    advertising([{ kind: ACT_KIND.CONTROL, id: "stop", label: "   ", target: "t".repeat(400) }]),
+  );
+
+  assert.equal(control?.label, "stop");
+  assert.equal(control?.target?.length, maximumSessionDetailLength);
+});
+
+test("a control kind this build does not know is dropped, the control kept", () => {
+  const [control] = advertisedControls(
+    advertising([
+      // SAFETY: a provider naming a kind this build never learned is exactly
+      // what the drop exists for, so the test has to be able to say one.
+      { kind: ACT_KIND.CONTROL, id: "stop", label: "Stop", controlKind: "detonate" as never },
+    ]),
+  );
+
+  assert.deepEqual(control, { kind: ACT_KIND.CONTROL, id: "stop", label: "Stop" });
+});
+
+test("an add-agent whose kinds all fall outside their bound advertises nothing", () => {
+  assert.equal(
+    advertisedActFor(
+      advertising([{ kind: ACT_KIND.ADD_AGENT, agents: ["   "] }]),
+      ACT_KIND.ADD_AGENT,
+    ),
+    undefined,
+  );
+  assert.deepEqual(
+    advertisedActFor(
+      advertising([{ kind: ACT_KIND.ADD_AGENT, agents: ["claude", "a".repeat(80)] }]),
+      ACT_KIND.ADD_AGENT,
+    ),
+    { kind: ACT_KIND.ADD_AGENT, agents: ["claude"] },
+  );
+});
+
+test("a workspace rename with nothing to rename advertises nothing", () => {
+  assert.equal(
+    advertisedActFor(
+      advertising([{ kind: ACT_KIND.RENAME_WORKSPACE, target: "   " }]),
+      ACT_KIND.RENAME_WORKSPACE,
+    ),
+    undefined,
+  );
+});
+
+test("a singleton kind advertised twice keeps the first, and carries nothing else", () => {
+  const session = advertising([
+    { kind: ACT_KIND.RENAME_SESSION },
+    { kind: ACT_KIND.RENAME_SESSION },
+    { kind: ACT_KIND.MESSAGE },
+    { kind: ACT_KIND.ADD_AGENT, agents: ["claude"] },
+    { kind: ACT_KIND.ADD_AGENT, agents: ["codex"] },
+  ]);
+
+  assert.deepEqual(session.advertises, [
+    { kind: ACT_KIND.RENAME_SESSION },
+    { kind: ACT_KIND.MESSAGE },
+    { kind: ACT_KIND.ADD_AGENT, agents: ["claude"] },
+  ]);
+});
+
+test("an unadvertised session advertises nothing rather than nothing at all", () => {
+  assert.deepEqual(
+    normalizeSession(
+      { id: "codex", displayName: "Codex" },
+      {
+        providerSessionId: "run-1",
+        title: "Nothing advertised",
+        status: SESSION_STATUS.WORKING,
+        lastActivityAt: TEST_NOW,
+      },
+    ).advertises,
+    [],
+  );
+});
+
+test("an observation writing both says the same thing twice, or is reported", () => {
+  const both = normalizeSession(
+    { id: "conductor", displayName: "Conductor" },
+    {
+      providerSessionId: "chat-1",
+      title: "Both written",
+      status: SESSION_STATUS.WAITING,
+      lastActivityAt: TEST_NOW,
+      advertises: [
+        { kind: ACT_KIND.MESSAGE },
+        { kind: ACT_KIND.RENAME_SESSION },
+        { kind: ACT_KIND.RENAME_WORKSPACE, target: "ws-1" },
+        { kind: ACT_KIND.ADD_AGENT, agents: ["claude"], target: "ws-1" },
+        {
+          kind: ACT_KIND.CONTROL,
+          id: "stop",
+          label: "Stop",
+          controlKind: SESSION_CONTROL_KIND.STOP,
+        },
+      ],
+      canReceiveMessage: true,
+      canRename: true,
+      renameTarget: "ws-1",
+      spawnableAgents: ["claude"],
+      spawnTarget: "ws-1",
+      controls: [{ id: "stop", label: "Stop", kind: SESSION_CONTROL_KIND.STOP }],
+    },
+  );
+  assert.deepEqual(advertisedActDisagreements(both), []);
+
+  const advertisementOnly = advertising([{ kind: ACT_KIND.MESSAGE }]);
+  assert.deepEqual(advertisedActDisagreements(advertisementOnly), [
+    "canReceiveMessage: advertised true, kept false",
+  ]);
 });

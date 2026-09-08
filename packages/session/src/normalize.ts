@@ -1,5 +1,12 @@
 import type { SessionControl } from "./advertised-acts.js";
-import { SESSION_CONTROL_KIND } from "./advertised-acts.js";
+import {
+  ACT_KIND,
+  type AdvertisedAct,
+  type AdvertisedActKind,
+  type AdvertisedAddAgent,
+  type AdvertisedControl,
+  SESSION_CONTROL_KIND,
+} from "./advertised-acts.js";
 import {
   boundedAgentKinds,
   boundedText,
@@ -197,6 +204,67 @@ function normalizeAgent(
   return { id, displayName: boundedText(agent?.displayName, maximumSessionTitleLength) ?? id };
 }
 
+/**
+ * Bounds the acts an observation advertised, under the rules each kind was
+ * always held to. A control needs an id, and a repeated one is a provider
+ * contradicting itself about what a press means, so it throws where every
+ * other malformed entry is dropped; a singleton kind advertised twice keeps
+ * the first; an add-agent whose kinds all fall outside their bound advertises
+ * nothing rather than an empty list an ask could not be held to; and a
+ * workspace rename with no target names nothing to rename. The adapter's own
+ * order is kept, because it is the order a surface draws.
+ */
+export function normalizeAdvertisedActs(
+  advertises: readonly AdvertisedAct[] | undefined,
+): readonly AdvertisedAct[] {
+  if (!advertises) return [];
+
+  const controlIds = new Set<string>();
+  const singletonKinds = new Set<AdvertisedActKind>();
+  const normalized: AdvertisedAct[] = [];
+  for (const act of advertises) {
+    if (act.kind === ACT_KIND.CONTROL) {
+      const id = requiredText(act.id, "control id");
+      if (controlIds.has(id)) throw new Error(`Duplicate session control: ${id}`);
+      controlIds.add(id);
+      // A kind this build does not know is dropped rather than passed through:
+      // the control still works, drawn as a plain action by its label.
+      const controlKind = Object.values(SESSION_CONTROL_KIND).find(
+        (candidate) => candidate === act.controlKind,
+      );
+      const target = boundedText(act.target, maximumSessionDetailLength);
+      const control: AdvertisedControl = {
+        kind: ACT_KIND.CONTROL,
+        id,
+        label: boundedText(act.label, maximumSessionTitleLength) ?? id,
+      };
+      if (controlKind) control.controlKind = controlKind;
+      if (target) control.target = target;
+      normalized.push(control);
+      continue;
+    }
+    if (singletonKinds.has(act.kind)) continue;
+    singletonKinds.add(act.kind);
+    if (act.kind === ACT_KIND.ADD_AGENT) {
+      const agents = boundedAgentKinds(act.agents);
+      if (agents.length === 0) continue;
+      const target = boundedText(act.target, maximumSessionDetailLength);
+      const addAgent: AdvertisedAddAgent = { kind: ACT_KIND.ADD_AGENT, agents };
+      if (target) addAgent.target = target;
+      normalized.push(addAgent);
+      continue;
+    }
+    if (act.kind === ACT_KIND.RENAME_WORKSPACE) {
+      const target = boundedText(act.target, maximumSessionDetailLength);
+      if (!target) continue;
+      normalized.push({ kind: ACT_KIND.RENAME_WORKSPACE, target });
+      continue;
+    }
+    normalized.push({ kind: act.kind });
+  }
+  return normalized;
+}
+
 /** Normalizes the two-part identity used to locate a session in the registry. */
 export function normalizeSessionIdentity(identity: SessionIdentity): SessionIdentity {
   return {
@@ -251,6 +319,7 @@ export function normalizeSession(
     location: normalizeLocation(observation.location),
     detail,
     applications,
+    advertises: normalizeAdvertisedActs(observation.advertises),
     controls: normalizeControls(observation.controls),
     // Anything but an explicit yes is a no, so an adapter that has not thought
     // about messaging reports a session that cannot be messaged.

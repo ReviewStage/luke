@@ -1,4 +1,4 @@
-import type { SessionControl } from "./advertised-acts.js";
+import type { AdvertisedAct, SessionControl } from "./advertised-acts.js";
 import type {
   SessionApplication,
   SessionIdentity,
@@ -74,12 +74,15 @@ export interface SessionWorkspace {
 }
 
 /**
- * Provider-owned data observed for a session. Provider adapters are responsible
- * for observing without writing provider files, and for bounding every field
- * they report so one session cannot crowd out the rest of the panel.
+ * Everything a session is, declared once. An observation and a normalized
+ * session are the same facts at two moments — what a provider reported, and
+ * what survived normalization — so they are one declaration with two
+ * derivations rather than two lists that drift apart a field at a time.
+ * Every field is optional here because no provider reports all of them, and
+ * the fields normalization always answers are made required on `Session`
+ * below.
  */
-export interface ProviderSessionObservation {
-  providerSessionId: string;
+export interface SessionFields {
   /**
    * The provider-owned id of the session that directly spawned this one,
    * when the provider persists that relationship. It is identity only: the
@@ -120,36 +123,6 @@ export interface ProviderSessionObservation {
    * old. Absent means the row is history like any other.
    */
   standing?: boolean;
-  /** Omitted by an adapter that reads sessions off this machine. */
-  location?: SessionLocation;
-  /**
-   * The working directory the provider itself recorded for a local session,
-   * as the absolute path it wrote. Identity for grouping only: a workspace
-   * manager that recorded no session id for a chat (Superset's OpenCode
-   * terminals today) can still claim the chat by the worktree both sides
-   * named independently. Never reported for a cloud session, and never
-   * drawn — the bounded `detail.repository` label is what a surface shows.
-   */
-  directory?: string;
-  /**
-   * The agent having the conversation, when the session's provider hosts
-   * agents rather than being one — a Conductor chat is a Claude Code or Codex
-   * conversation before it is a Conductor one. Identity only: the provider
-   * stays the thing observed, credentialed, and written through, and a host
-   * that did not say which agent runs a chat reports none rather than a guess.
-   */
-  agent?: SessionProvider;
-  detail?: SessionDetail;
-  /** Apps on this machine that independently associate themselves with the session. */
-  applications?: readonly SessionApplication[];
-  controls?: readonly SessionControl[];
-  /**
-   * Set only by an adapter whose provider documents taking a message for this
-   * session in its current state, through the provider's own API. Absent means
-   * no: a session that cannot be messaged is reported as such rather than
-   * offered a control that would have to be improvised.
-   */
-  canReceiveMessage?: boolean;
   /**
    * Whether a waiting session is holding for the developer to act — a
    * permission, an approval, or a question the provider itself reported.
@@ -158,6 +131,37 @@ export interface ProviderSessionObservation {
    * a banner's to read as an ask.
    */
   holdingForDeveloper?: boolean;
+  /**
+   * The agent having the conversation, when the session's provider hosts
+   * agents rather than being one — a Conductor chat is a Claude Code or Codex
+   * conversation before it is a Conductor one. Identity only: the provider
+   * stays the thing observed, credentialed, and written through, and a host
+   * that did not say which agent runs a chat reports none rather than a guess.
+   */
+  agent?: SessionProvider;
+  /** The workspace this session is one chat of, when its provider nests them. */
+  workspace?: SessionWorkspace;
+  /** Omitted by an adapter that reads sessions off this machine. */
+  location?: SessionLocation;
+  detail?: SessionDetail;
+  /** Apps on this machine that independently associate themselves with the session. */
+  applications?: readonly SessionApplication[];
+  /**
+   * The acts this session's provider documents for it right now, exactly as
+   * its latest observation advertised them. Absent means none: an act nothing
+   * advertised is one that would have to be improvised. The list is replaced
+   * whole by every observation, so nothing an adapter promised can outlive
+   * the snapshot that promised it.
+   */
+  advertises?: readonly AdvertisedAct[];
+  controls?: readonly SessionControl[];
+  /**
+   * Set only by an adapter whose provider documents taking a message for this
+   * session in its current state, through the provider's own API. Absent means
+   * no: a session that cannot be messaged is reported as such rather than
+   * offered a control that would have to be improvised.
+   */
+  canReceiveMessage?: boolean;
   /**
    * Set only by an adapter whose provider documents renaming this session
    * itself, through the provider's own API, under the same absent-means-no
@@ -189,51 +193,44 @@ export interface ProviderSessionObservation {
    * it, the way state an adapter kept on the side could.
    */
   renameTarget?: string;
-  /** The workspace this session is one chat of, when its provider nests them. */
-  workspace?: SessionWorkspace;
+}
+
+/**
+ * The fields normalization always answers, so a reader never has to ask
+ * whether a normalized session merely left one out.
+ */
+type NormalizedSessionField =
+  | "location"
+  | "detail"
+  | "applications"
+  | "advertises"
+  | "controls"
+  | "canReceiveMessage"
+  | "canRename"
+  | "spawnableAgents";
+
+/**
+ * Provider-owned data observed for a session. Provider adapters are responsible
+ * for observing without writing provider files, and for bounding every field
+ * they report so one session cannot crowd out the rest of the panel.
+ */
+export interface ProviderSessionObservation extends SessionFields {
+  providerSessionId: string;
+  /**
+   * The working directory the provider itself recorded for a local session,
+   * as the absolute path it wrote. Identity for grouping only: a workspace
+   * manager that recorded no session id for a chat (Superset's OpenCode
+   * terminals today) can still claim the chat by the worktree both sides
+   * named independently. Never reported for a cloud session, and never
+   * drawn — the bounded `detail.repository` label is what a surface shows.
+   */
+  directory?: string;
 }
 
 /**
  * The normalized model shared by observers, the UI, and any future
  * capability-gated controls.
  */
-export interface Session extends SessionIdentity {
-  provider: SessionProvider;
-  /** The immediate provider-owned parent of this independently observed session. */
-  parentProviderSessionId?: string;
-  title: string;
-  status: SessionStatus;
-  completionCause?: SessionCompletionCause;
-  /** When the provider last wrote anything about this session; see `Session.lastActivityAt`. */
-  lastActivityAt: number;
-  /** Whether this session is a realtime voice/delegation chat. */
-  realtimeVoice?: boolean;
-  /** Whether a realtime voice conversation is live over this session right now. */
-  realtimeVoiceLive?: boolean;
-  /** Whether this row reports a thing that currently stands rather than a conversation that happened. */
-  standing?: boolean;
-  location: SessionLocation;
-  /** The agent behind this session, when its provider hosts rather than is it. */
-  agent?: SessionProvider;
-  detail: SessionDetail;
-  /** Apps on this machine that independently associate themselves with the session. */
-  applications: readonly SessionApplication[];
-  controls: readonly SessionControl[];
-  /** Whether this session's provider will take a message for it right now. */
-  canReceiveMessage: boolean;
-  /**
-   * Whether a waiting session is holding for the developer to act. Absent
-   * means the adapter could not tell.
-   */
-  holdingForDeveloper?: boolean;
-  /** Whether this session's provider documents renaming the chat itself. */
-  canRename: boolean;
-  /** The agents that can be started alongside this session, or none. */
-  spawnableAgents: readonly string[];
-  /** Where a started agent lands, when narrower than the session itself. */
-  spawnTarget?: string;
-  /** The workspace a rename lands on, when its provider documents renaming it. */
-  renameTarget?: string;
-  /** The workspace this session is one chat of, when its provider nests them. */
-  workspace?: SessionWorkspace;
-}
+export type Session = SessionIdentity &
+  Omit<SessionFields, NormalizedSessionField> &
+  Required<Pick<SessionFields, NormalizedSessionField>> & { provider: SessionProvider };
