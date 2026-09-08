@@ -3576,3 +3576,89 @@ test("a relaunch does not run an ask that was only queued, and runs a captured o
     assert.equal(record.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
   }
 });
+
+test("a steered companion shares the run's persistence failure: a final write that failed is no success for it", async () => {
+  const inner = new FakeClient();
+  const gated = gatedClient(inner);
+  const h = harness({ client: gated.client });
+  // The steered words make the run ask once more; the second answer is the run's reply.
+  inner.answers.push(answered([message("First alone.")]), answered([message("Reply for both.")]));
+  const first = acceptedRunId(await submit(h, "first?"));
+  await settle();
+  const second = acceptedRunId(await submit(h, "second?"));
+  await settle();
+  assert.equal(h.agent.request(second)?.status, BRAIN_REQUEST_STATUS.RUNNING);
+  // The disk refuses from here: the run's final checkpoint cannot land.
+  h.storage.failWrites = true;
+  gated.open();
+  await settle();
+  const primary = h.agent.request(first);
+  const companion = h.agent.request(second);
+  assert.equal(primary?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.equal(primary?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
+  assert.equal(companion?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.equal(companion?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
+  // The reply that formed still travels on both, as the record's own words.
+  assert.equal(primary?.text, "Reply for both.");
+  assert.equal(companion?.text, "Reply for both.");
+});
+
+test("asks collected behind a primary that is cancelled or whose start the store refuses still open their own turn", async () => {
+  const { QUEUE_MODE } = await import("@sidecar/runtime");
+  const h = harness({ queueMode: QUEUE_MODE.COLLECT, queueDebounceMs: 500 });
+  h.client.answers.push(answered([message("second answered")]));
+  const first = acceptedRunId(await submit(h, "first?"));
+  const second = acceptedRunId(await submit(h, "second?"));
+  // The primary is cancelled while the collection window is still open.
+  assert.equal((await h.agent.cancelAsk(first))?.status, BRAIN_REQUEST_STATUS.CANCELLED);
+  await h.clock.advance(NOW + 500);
+  await settle();
+  assert.equal((await h.agent.waitAsk(second, 1))?.text, "second answered");
+  assert.equal(h.client.inputs.length, 1);
+
+  // A primary whose start write the store refuses: it fails, and the collected ask behind it still runs.
+  const refusing = harness({ queueMode: QUEUE_MODE.COLLECT, queueDebounceMs: 500 });
+  refusing.client.answers.push(answered([message("fourth answered")]));
+  const third = acceptedRunId(await submit(refusing, "third?"));
+  const fourth = acceptedRunId(await submit(refusing, "fourth?"));
+  refusing.storage.failWrites = true;
+  await refusing.clock.advance(NOW + 500);
+  await settle();
+  assert.equal(refusing.agent.request(third)?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.equal(refusing.agent.request(third)?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
+  // The fourth's own start write is refused too, so it fails the same way rather than waiting forever.
+  const fourthRecord = await refusing.agent.waitAsk(fourth, 1);
+  assert.ok(fourthRecord && isTerminalBrainRequestStatus(fourthRecord.status));
+  assert.equal(fourthRecord.status, BRAIN_REQUEST_STATUS.FAILED);
+});
+
+test("a heartbeat asked of a quiet model is not lost: the review opens once the quiet ends", async () => {
+  const h = harness();
+  h.client.quiet = NOW + 60_000;
+  h.agent.heartbeat();
+  await settle();
+  assert.equal(h.client.inputs.length, 0);
+  // Asked again while still quiet: one retry stands, not two.
+  h.agent.heartbeat();
+  await settle();
+  assert.equal(h.clock.timers.size, 1);
+  h.client.answers.push(answered([message("")]));
+  await h.clock.advance(NOW + 30_000);
+  assert.equal(h.client.inputs.length, 0);
+  h.client.quiet = undefined;
+  await h.clock.advance(NOW + 60_000);
+  await settle();
+  assert.equal(h.client.inputs.length, 1);
+  assert.ok(itemText((h.client.inputs[0] ?? [])[0]).startsWith(BRAIN_INPUT_MARKER.HEARTBEAT));
+  assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.HEARTBEAT);
+
+  // A throttle answered mid-run retries the same way.
+  const throttled = harness();
+  throttled.client.answers.push(quietAnswer(NOW + 10_000), answered([message("")]));
+  throttled.agent.heartbeat();
+  await settle();
+  assert.equal(throttled.client.inputs.length, 1);
+  await throttled.clock.advance(NOW + 10_000);
+  await settle();
+  assert.equal(throttled.client.inputs.length, 2);
+});

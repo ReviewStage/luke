@@ -3070,8 +3070,6 @@ export function startDesktopApp(): void {
         });
         await cronScheduler.start();
         await cronScheduler.ensure(heartbeatJob(Date.now()));
-        await cronScheduler.start();
-        await cronScheduler.ensure(heartbeatJob(Date.now()));
       }
       // A signed-in install with no arrival record predates the beat: its
       // sign-in was never observed, so it is settled now rather than greeted

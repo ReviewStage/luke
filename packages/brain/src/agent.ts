@@ -322,6 +322,8 @@ export class BrainAgent {
   readonly #lastLook = new Map<string, string>();
   /** Captures run one after another, so two reads of one session never race each other's cursor. */
   #capturing: Promise<unknown> = Promise.resolve();
+  /** The review's retry, armed while the model is quiet and the scheduler's occurrence already taken. */
+  #heartbeatRetry: ScheduledTimer | undefined;
   #restored: Promise<void> | undefined;
   #queue: Promise<unknown> = Promise.resolve();
   readonly #wakes: WakeQueue;
@@ -836,10 +838,17 @@ export class BrainAgent {
       void this.ready().then(() => this.heartbeat());
       return;
     }
-    if (this.#options.runtime.quietUntil() !== undefined) return;
+    // The scheduler has recorded this occurrence as taken: a model that is
+    // quiet now does not lose it, the review opens once the quiet ends.
+    const quietUntil = this.#options.runtime.quietUntil();
+    if (quietUntil !== undefined) {
+      this.#retryHeartbeat(quietUntil);
+      return;
+    }
+    this.#cancelHeartbeatRetry();
     this.#wakes.take();
-    void this.#queueTurn(BRAIN_TURN_TRIGGER.HEARTBEAT, () =>
-      this.#turn({
+    void this.#queueTurn(BRAIN_TURN_TRIGGER.HEARTBEAT, async () => {
+      const result = await this.#turn({
         generation,
         trigger: BRAIN_TURN_TRIGGER.HEARTBEAT,
         events: this.#inboxEvents(generation),
@@ -847,8 +856,29 @@ export class BrainAgent {
           ...(attached.length > 0 ? [wakeInputText(attached, now)] : []),
           heartbeatInputText(now),
         ],
-      }),
+      });
+      if (result.outcome === TURN_OUTCOME.QUIET && generation === this.#generation) {
+        this.#retryHeartbeat(result.until);
+      }
+    });
+  }
+
+  /** Arms one retry of the review for when the quiet ends; a retry already armed stands. */
+  #retryHeartbeat(until: number): void {
+    if (this.#stopped || this.#heartbeatRetry !== undefined) return;
+    this.#heartbeatRetry = this.#schedule(
+      () => {
+        this.#heartbeatRetry = undefined;
+        this.heartbeat();
+      },
+      Math.max(until - this.#now(), this.#wakeCoalesceMs),
     );
+  }
+
+  #cancelHeartbeatRetry(): void {
+    if (this.#heartbeatRetry === undefined) return;
+    this.#cancel(this.#heartbeatRetry);
+    this.#heartbeatRetry = undefined;
   }
 
   /**
@@ -895,6 +925,7 @@ export class BrainAgent {
     this.#cancelMaintenance();
     this.#wakes.clear();
     this.#cancelCollecting();
+    this.#cancelHeartbeatRetry();
     this.#unsubscribeStore?.();
     this.#unsubscribeStore = undefined;
     this.#generation?.abort.abort();
@@ -1234,6 +1265,7 @@ export class BrainAgent {
     // are that generation's work, and go with it.
     this.#wakes.clear();
     this.#cancelCollecting();
+    this.#cancelHeartbeatRetry();
     this.#generation = this.#generationFrom(state);
     this.#armInbox(this.#generation);
     this.#notify();
@@ -1267,6 +1299,12 @@ export class BrainAgent {
   ): Promise<void> {
     const generation = run.generation;
     const record = generation.requests.get(run.runId);
+    // The asks collected behind a run that never opens are not lost: the
+    // next of them opens a turn of its own, with the rest behind it.
+    const handOn = async () => {
+      const [next, ...rest] = companions;
+      if (next) await this.#runAsk(next, question, rest);
+    };
     if (!record || record.status !== BRAIN_REQUEST_STATUS.QUEUED || this.#runRevoked(run)) {
       if (record?.status === BRAIN_REQUEST_STATUS.QUEUED) {
         await this.#ledger.settleRun(
@@ -1277,9 +1315,7 @@ export class BrainAgent {
         );
       }
       this.#runs.delete(run.runId);
-      // The asks collected behind it are not lost: they open a turn of their own.
-      const [next, ...rest] = companions;
-      if (next) await this.#runAsk(next, question, rest);
+      await handOn();
       return;
     }
     // The start is durable before any work opens: a run the file does not
@@ -1302,15 +1338,16 @@ export class BrainAgent {
           run.cancelled ? BRAIN_REQUEST_STATUS.CANCELLED : BRAIN_REQUEST_STATUS.INTERRUPTED,
           {},
         );
-        return;
+      } else {
+        await this.#ledger.settleRun(
+          generation,
+          run.runId,
+          BRAIN_REQUEST_STATUS.FAILED,
+          { failure: BRAIN_REQUEST_FAILURE.PERSISTENCE },
+          run,
+        );
       }
-      await this.#ledger.settleRun(
-        generation,
-        run.runId,
-        BRAIN_REQUEST_STATUS.FAILED,
-        { failure: BRAIN_REQUEST_FAILURE.PERSISTENCE },
-        run,
-      );
+      await handOn();
       return;
     }
     run.deadline = this.#schedule(() => {
@@ -1387,8 +1424,18 @@ export class BrainAgent {
   async #settleCompanions(plan: TurnPlan, run: RunControl, result: TurnResult): Promise<void> {
     for (const companion of plan.companions ?? []) {
       this.#runs.delete(companion.runId);
+      // The shared run's end is theirs whole: a final write that failed or a
+      // compaction that could not fold is not a success for a companion either.
       const { status, end } = this.#endOf(
-        { ...companion, cancelled: run.cancelled, timedOut: run.timedOut, checkpointFailed: false },
+        {
+          ...companion,
+          cancelled: run.cancelled,
+          timedOut: run.timedOut,
+          checkpointFailed: run.checkpointFailed,
+          ...(run.compactionFailed !== undefined
+            ? { compactionFailed: run.compactionFailed }
+            : undefined),
+        },
         result,
       );
       await this.#ledger.settleRun(run.generation, companion.runId, status, end);
