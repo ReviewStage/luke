@@ -52,7 +52,7 @@ const HTTP_METHOD = {
  * authenticates some other way is not supported rather than approximated.
  */
 function authorizationHeaders(apiKey: string) {
-  return { Authorization: `Bearer ${apiKey}` } as const;
+  return { Authorization: `Bearer ${apiKey}` };
 }
 
 const DEFAULT_REQUEST_HEADERS = {

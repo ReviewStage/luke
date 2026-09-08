@@ -208,10 +208,7 @@ mv -f "$TEMPORARY_FILE" "$SPOOL_DIRECTORY/$SESSION_ID${HOOK_EVENT_FILE_EXTENSION
  * machine — and always exiting zero, so no provider can read a missing spool
  * as a decision.
  */
-function observationHookCommand<Event extends string>(
-  hookScriptPath: string,
-  event: Event,
-): string {
+function observationHookCommand(hookScriptPath: string, event: string): string {
   return `[ -x "${hookScriptPath}" ] && "${hookScriptPath}" ${event} || true`;
 }
 
@@ -337,8 +334,8 @@ export function configurationWithObservationHooks<Event extends string>(
  * there is nothing to change — including a file that cannot be parsed, which
  * is left exactly as found for the same reason the merge leaves it.
  *
- * @internal The uninstall story, reached only through {@link observationHooksFor};
- * nothing outside this package removes a registration.
+ * @internal Part of the removal path, reached through
+ * {@link removeObservationHooks} and never exported from the package barrel.
  */
 export function configurationWithoutObservationHooks<Event extends string>(
   spec: ObservationHookSpec<Event>,
@@ -467,8 +464,9 @@ export async function installObservationHooks<Event extends string>(
  * the relationship backwards — and a file that cannot be parsed is left as
  * found.
  *
- * @internal The uninstall story, reached only through {@link observationHooksFor};
- * nothing outside this package removes a registration.
+ * @internal The uninstall story, reached through {@link observationHooksFor}
+ * and never exported from the package barrel: nothing outside this package
+ * takes a registration back out.
  */
 export async function removeObservationHooks<Event extends string>(
   spec: ObservationHookSpec<Event>,
