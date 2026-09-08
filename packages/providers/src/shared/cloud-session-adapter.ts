@@ -47,30 +47,13 @@ const HTTP_METHOD = {
   POST: "POST",
 } as const;
 
-/** HTTP statuses the adapter names when a response is not simply ok. */
 /**
- * How a provider expects its credential to be presented. Every provider so far
- * takes a bearer token; Google's alpha APIs take the key in their own header
- * instead, and a provider that authenticates some third way is not supported
- * rather than approximated.
+ * How every provider observed here presents its credential. A provider that
+ * authenticates some other way is not supported rather than approximated.
  */
-export const CLOUD_AUTH_SCHEME = {
-  BEARER: "bearer",
-  GOOGLE_API_KEY_HEADER: "google-api-key-header",
-} as const;
-
-export type CloudAuthScheme = (typeof CLOUD_AUTH_SCHEME)[keyof typeof CLOUD_AUTH_SCHEME];
-
-const GOOGLE_API_KEY_HEADER = "X-Goog-Api-Key";
-
-const AUTHORIZATION_HEADERS = {
-  [CLOUD_AUTH_SCHEME.BEARER]: (apiKey: string) => ({ Authorization: `Bearer ${apiKey}` }),
-  [CLOUD_AUTH_SCHEME.GOOGLE_API_KEY_HEADER]: (apiKey: string) => ({
-    [GOOGLE_API_KEY_HEADER]: apiKey,
-  }),
-} as const satisfies Readonly<
-  Record<CloudAuthScheme, (apiKey: string) => Readonly<Record<string, string>>>
->;
+function authorizationHeaders(apiKey: string) {
+  return { Authorization: `Bearer ${apiKey}` } as const;
+}
 
 const DEFAULT_REQUEST_HEADERS = {
   Accept: "application/json",
@@ -148,8 +131,6 @@ export interface CloudAdapterProfile {
   provider: SessionProvider;
   defaultBaseUrl: string;
   baseUrlEnvironmentVariable?: string;
-  /** Defaults to a bearer token, which is what every other provider takes. */
-  authScheme?: CloudAuthScheme;
 }
 
 /**
@@ -285,7 +266,6 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
   readonly #readApiKey: () => Promise<string | undefined>;
   readonly #baseUrl: string;
   readonly #fetch: CloudFetch;
-  readonly #authorizationHeaders: (apiKey: string) => Readonly<Record<string, string>>;
   readonly #now: () => number;
   readonly #minimumRefreshIntervalMs: number;
   readonly #onDiagnostic: AdapterDiagnosticCallback | undefined;
@@ -308,8 +288,6 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
     this.#readApiKey = options.readApiKey;
     this.#baseUrl = resolveBaseUrl(profile, options.baseUrl);
     this.#fetch = options.fetch ?? defaultFetch;
-    this.#authorizationHeaders =
-      AUTHORIZATION_HEADERS[profile.authScheme ?? CLOUD_AUTH_SCHEME.BEARER];
     this.#now = options.now ?? Date.now;
     const { minimumRefreshIntervalMs } = resolveOptions(
       options,
@@ -992,7 +970,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
         // credential after them so no override can replace it.
         headers: {
           ...this.requestHeaders(),
-          ...this.#authorizationHeaders(apiKey),
+          ...authorizationHeaders(apiKey),
           // An endpoint that documents an empty request gets exactly that,
           // not an empty JSON object it never asked for.
           ...(route.body === undefined ? undefined : { "Content-Type": "application/json" }),
@@ -1086,7 +1064,7 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
         method: document === undefined ? HTTP_METHOD.GET : HTTP_METHOD.POST,
         headers: {
           ...this.requestHeaders(),
-          ...this.#authorizationHeaders(apiKey),
+          ...authorizationHeaders(apiKey),
           ...(document === undefined ? undefined : { "Content-Type": "application/json" }),
         },
         ...(document === undefined

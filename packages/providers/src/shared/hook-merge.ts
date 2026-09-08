@@ -36,6 +36,20 @@ import { canIgnoreFilesystemError } from "./local-session-adapter.js";
  * this module only keeps the widened set to one discipline.
  */
 
+/**
+ * The fixed vocabulary every command-backed observation hook may write into
+ * Luke's spool. Providers select the subset their documented hook surface can
+ * actually emit; sharing the words does not add an event to any provider.
+ */
+export const HOOK_EVENT = {
+  SESSION_START: "session-start",
+  PROMPT: "prompt",
+  STOP: "stop",
+  STOP_FAILURE: "stop-failure",
+  NOTIFICATION: "notification",
+  SESSION_END: "session-end",
+} as const;
+
 /** The spool file holds one fixed token, so anything longer is not ours. */
 const HOOK_EVENT_FILE_READ_BYTES = 256;
 
@@ -55,18 +69,6 @@ export interface ObservationHookRegistration<Event extends string> {
   /** The provider-defined matcher narrowing which occurrences fire at all. */
   matcher?: string;
 }
-
-/**
- * How a provider's configuration file shapes one registered entry. Claude Code
- * and Codex nest commands inside a `hooks` list per entry; Cursor's entries
- * are the command records themselves.
- */
-export const HOOK_ENTRY_NESTING = {
-  NESTED: "nested",
-  FLAT: "flat",
-} as const;
-
-export type HookEntryNesting = (typeof HOOK_ENTRY_NESTING)[keyof typeof HOOK_ENTRY_NESTING];
 
 /**
  * Everything one provider decides about its observation hooks. The guarantees
@@ -92,16 +94,9 @@ export interface ObservationHookSpec<Event extends string> {
   registration: Readonly<Record<string, ObservationHookRegistration<Event>>>;
   /**
    * How long the provider lets the spool write run before giving up on it,
-   * for a provider whose entries take a timeout at all.
+   * in the seconds its configuration documents.
    */
   timeoutSeconds?: number;
-  /**
-   * The same bound for a provider whose configuration documents the entry
-   * timeout in milliseconds (Gemini CLI) rather than seconds. Both land on
-   * the same `timeout` key — only the provider knows its unit — so a spec
-   * declares exactly one of the two.
-   */
-  timeoutMilliseconds?: number;
   /** The envelope field naming the session the event belongs to. */
   sessionIdField: string;
   /**
@@ -115,20 +110,6 @@ export interface ObservationHookSpec<Event extends string> {
    * recording them would flap the row.
    */
   subagentField?: string;
-  /** How the provider's configuration file shapes one registered entry. */
-  entryNesting: HookEntryNesting;
-  /**
-   * Whether the provider reads the hook's stdout as its JSON answer. The
-   * script then prints the empty decision on every path out, so an observer
-   * that decides nothing is never mistaken for a hook that failed to answer.
-   */
-  repliesWithJson?: boolean;
-  /**
-   * Root fields the provider's configuration documents beside `hooks`, filled
-   * in only where the file does not already carry them — a file being created
-   * gets the documented shape, and the user's own values are never rewritten.
-   */
-  rootDefaults?: Readonly<Record<string, WireValue>>;
 }
 
 /** Where one installed arrangement lives: the provider's home, and Luke's own. */
@@ -167,16 +148,6 @@ function observationHookScript<Event extends string>(
   spec: ObservationHookSpec<Event>,
   spoolDirectory: string,
 ): string {
-  // A provider that reads stdout as the hook's JSON answer is handed the
-  // empty decision on every path out; every other provider gets a plain exit.
-  const leave = spec.repliesWithJson ? "reply_and_leave" : "exit 0";
-  const replyFunction = spec.repliesWithJson
-    ? `
-# The provider reads stdout as the hook's JSON answer, so every path out
-# replies with the empty decision — observing decides nothing.
-reply_and_leave() { printf '{}'; exit 0; }
-`
-    : "";
   const subagentSkip = spec.subagentField
     ? `
 # A subagent's turns are not the session's: they start and stop while the
@@ -186,7 +157,7 @@ reply_and_leave() { printf '{}'; exit 0; }
 # that turn.
 if printf '%s' "$ENVELOPE" \\
   | grep -qE '"${spec.subagentField}"[[:space:]]*:[[:space:]]*"[^"]+"'; then
-  ${leave}
+  exit 0
 fi
 `
     : "";
@@ -197,18 +168,18 @@ fi
 # status token into Luke's own spool — never into any provider file — naming
 # the file by the session's own id. The envelope handed in is read only for
 # that id; its text never reaches disk. Luke installs and removes this file.
-${replyFunction}
+
 SPOOL_DIRECTORY="${spoolDirectory}"
 
 # The token is fixed at registration, one per hook entry, so nothing handed in
 # can choose what is written.
 case "$1" in
   ${eventTokens(spec).join("|")}) EVENT_TOKEN="$1" ;;
-  *) ${leave} ;;
+  *) exit 0 ;;
 esac
 
 # No spool means observation hooks are off or Luke is gone; leave quietly.
-[ -d "$SPOOL_DIRECTORY" ] || ${leave}
+[ -d "$SPOOL_DIRECTORY" ] || exit 0
 
 # The envelope rides in as the argument after the token where the provider
 # passes one, and on stdin where it pipes instead.
@@ -219,15 +190,15 @@ ${subagentSkip}
 SESSION_ID=$(printf '%s' "$ENVELOPE" \\
   | grep -oE '"${spec.sessionIdField}"[[:space:]]*:[[:space:]]*"${spec.sessionIdPattern}"' \\
   | head -n 1 | grep -oE '${spec.sessionIdPattern}')
-[ -n "$SESSION_ID" ] || ${leave}
+[ -n "$SESSION_ID" ] || exit 0
 
 # One tiny file per session, replaced on every event: only the newest event
 # matters, and replacement is what bounds the spool. Writing beside the spool
 # file and moving over it keeps a concurrent reader off half a write.
 TEMPORARY_FILE="$SPOOL_DIRECTORY/.$SESSION_ID.$$.tmp"
-printf '{"event":"%s"}' "$EVENT_TOKEN" > "$TEMPORARY_FILE" || ${leave}
+printf '{"event":"%s"}' "$EVENT_TOKEN" > "$TEMPORARY_FILE" || exit 0
 mv -f "$TEMPORARY_FILE" "$SPOOL_DIRECTORY/$SESSION_ID${HOOK_EVENT_FILE_EXTENSION}"
-${spec.repliesWithJson ? "reply_and_leave\n" : ""}`;
+`;
 }
 
 /**
@@ -235,17 +206,13 @@ ${spec.repliesWithJson ? "reply_and_leave\n" : ""}`;
  * script being present and executable, so an entry outliving an uninstalled
  * Luke is an instant no-op rather than a "not found" in every session on the
  * machine — and always exiting zero, so no provider can read a missing spool
- * as a decision. Where the provider reads stdout as the hook's JSON answer,
- * the guard's own fallback drains the piped envelope and replies with the
- * empty decision, exactly as the script itself would have.
+ * as a decision.
  */
 function observationHookCommand<Event extends string>(
   hookScriptPath: string,
   event: Event,
-  repliesWithJson: boolean,
 ): string {
-  const fallback = repliesWithJson ? `{ cat >/dev/null 2>&1; printf '{}'; }` : "true";
-  return `[ -x "${hookScriptPath}" ] && "${hookScriptPath}" ${event} || ${fallback}`;
+  return `[ -x "${hookScriptPath}" ] && "${hookScriptPath}" ${event} || true`;
 }
 
 /**
@@ -295,23 +262,13 @@ function mutableHooks(root: MutableWireRecord): MutableWireRecord {
   return hooks ? { ...hooks } : createMutableWireRecord();
 }
 
-function stripLukeEntries(
-  events: MutableWireRecord,
-  scriptName: string,
-  entryNesting: HookEntryNesting,
-): boolean {
+function stripLukeEntries(events: MutableWireRecord, scriptName: string): boolean {
   let stripped = false;
   for (const [eventName, entries] of Object.entries(events)) {
     if (!Array.isArray(entries)) continue;
     let strippedHere = false;
     const kept = entries.flatMap((entry) => {
       if (!isRecord(entry)) return [entry];
-      if (entryNesting === HOOK_ENTRY_NESTING.FLAT) {
-        // A flat entry is the command record itself, so ours is dropped whole.
-        if (!isLukeHookCommand(entry.command, scriptName)) return [entry];
-        strippedHere = true;
-        return [];
-      }
       const cleaned = withoutLukeHooks(entry, scriptName);
       if (cleaned !== entry) strippedHere = true;
       return cleaned === undefined ? [] : [cleaned];
@@ -332,16 +289,8 @@ function registrationEntry<Event extends string>(
 ): WireValue {
   const matcher =
     registration.matcher !== undefined ? { matcher: registration.matcher } : undefined;
-  const command = observationHookCommand(
-    hookScriptPath,
-    registration.event,
-    spec.repliesWithJson === true,
-  );
-  const timeoutValue = spec.timeoutSeconds ?? spec.timeoutMilliseconds;
-  const timeout = timeoutValue !== undefined ? { timeout: timeoutValue } : undefined;
-  if (spec.entryNesting === HOOK_ENTRY_NESTING.FLAT) {
-    return { ...matcher, command, ...timeout };
-  }
+  const command = observationHookCommand(hookScriptPath, registration.event);
+  const timeout = spec.timeoutSeconds !== undefined ? { timeout: spec.timeoutSeconds } : undefined;
   return { ...matcher, hooks: [{ type: "command", command, ...timeout }] };
 }
 
@@ -370,14 +319,9 @@ export function configurationWithObservationHooks<Event extends string>(
     root = { ...record };
   }
 
-  if (spec.rootDefaults) {
-    for (const [key, value] of Object.entries(spec.rootDefaults)) {
-      if (!(key in root)) root[key] = value;
-    }
-  }
   const events = mutableHooks(root);
   root.hooks = events;
-  stripLukeEntries(events, spec.scriptName, spec.entryNesting);
+  stripLukeEntries(events, spec.scriptName);
 
   for (const [eventName, registration] of Object.entries(spec.registration)) {
     const existing = events[eventName];
@@ -392,6 +336,9 @@ export function configurationWithObservationHooks<Event extends string>(
  * The configuration content with every Luke entry stripped, or nothing when
  * there is nothing to change — including a file that cannot be parsed, which
  * is left exactly as found for the same reason the merge leaves it.
+ *
+ * @internal The uninstall story, reached only through {@link observationHooksFor};
+ * nothing outside this package removes a registration.
  */
 export function configurationWithoutObservationHooks<Event extends string>(
   spec: ObservationHookSpec<Event>,
@@ -409,7 +356,7 @@ export function configurationWithoutObservationHooks<Event extends string>(
   const root = { ...parsedRecord };
   const events = mutableHooks(root);
   if (!readWireRecord(unparsedWire(root.hooks))) return undefined;
-  if (!stripLukeEntries(events, spec.scriptName, spec.entryNesting)) return undefined;
+  if (!stripLukeEntries(events, spec.scriptName)) return undefined;
   if (Object.keys(events).length === 0) delete root.hooks;
   else root.hooks = events;
 
@@ -519,6 +466,9 @@ export async function installObservationHooks<Event extends string>(
  * one thing never created here — a teardown that leaves new files behind has
  * the relationship backwards — and a file that cannot be parsed is left as
  * found.
+ *
+ * @internal The uninstall story, reached only through {@link observationHooksFor};
+ * nothing outside this package removes a registration.
  */
 export async function removeObservationHooks<Event extends string>(
   spec: ObservationHookSpec<Event>,
