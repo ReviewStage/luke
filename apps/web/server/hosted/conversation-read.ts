@@ -65,7 +65,7 @@ function parseBeforeOffset(value: string): number | undefined {
 
 /**
  * Read-a-conversation-on-demand: one GET per ask from an opened conversation
- * screen, sharing the act endpoints' gates — bearer auth, a vault provider
+ * screen, sharing the act endpoints' gates — bearer auth, a cloud-agent provider
  * id, a bounded session id and cursor, and the stored key decrypted only for
  * a request that passed everything else. The executor re-observes before
  * reading, exactly as a write would, and the server stores nothing after

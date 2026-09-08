@@ -39,7 +39,7 @@ function trimmedSecretOrUnavailable(secret: string | undefined): { secret: strin
 
 /**
  * One session-scoped act request: every act a mobile row asks of an observed
- * session shares these gates — bearer auth, a vault provider id, a bounded
+ * session shares these gates — bearer auth, a cloud-agent provider id, a bounded
  * session id, the act's own bounded fields, the unsupported answer before a
  * key is required, and the stored key decrypted only for a request that
  * passed everything else. Only the fields and the executor differ per act,

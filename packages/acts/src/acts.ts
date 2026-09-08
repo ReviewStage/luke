@@ -87,10 +87,8 @@ import {
 
 /**
  * One tool call as a validator is handed it: the act's own name and its
- * arguments as the model wrote them, unparsed. The id an answer travels back
- * under belongs to the transport that carried the call, not to the act, so
- * `ParsedRealtimeFunctionCall` in `@sidecar/realtime` extends this with one
- * and nothing here reads it.
+ * arguments as the model wrote them. No call id — the id an answer travels
+ * back under belongs to the transport, which extends this with one.
  */
 export interface RealtimeFunctionCall {
   name: string;

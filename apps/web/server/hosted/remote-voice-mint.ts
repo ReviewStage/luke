@@ -147,9 +147,9 @@ async function observeCloudSessions(
     };
   }
 
-  const vaultProviders = Object.values(CLOUD_AGENT_PROVIDER_ID);
+  const cloudProviders = Object.values(CLOUD_AGENT_PROVIDER_ID);
   const results = await Promise.allSettled(
-    vaultProviders.map((providerId: CloudAgentProviderId) =>
+    cloudProviders.map((providerId: CloudAgentProviderId) =>
       cloudSessionAdapterFor(providerId, {
         readApiKey: readApiKeyFor(providerId),
         ...(options.fetch ? { fetch: options.fetch } : undefined),
@@ -159,7 +159,7 @@ async function observeCloudSessions(
   );
 
   const sessions: ObservedSession[] = [];
-  for (const [i, providerId] of vaultProviders.entries()) {
+  for (const [i, providerId] of cloudProviders.entries()) {
     const result = results[i];
     if (result?.status !== "fulfilled") continue;
     for (const obs of result.value) {
