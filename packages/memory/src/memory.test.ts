@@ -6,6 +6,14 @@ import { MEMORY_ORIGIN, MEMORY_SOURCE, type MemoryProvenance } from "./contracts
 import { MEMORY_QUERY_MAXIMUM_CHARS, MEMORY_SEARCH_DEFAULTS } from "./defaults.js";
 import { isMaintenanceEligibleConversation, isRecallEligibleConversation } from "./eligibility.js";
 import {
+  isAppendOnlyRewrite,
+  isDailyNotePathForDay,
+  MEMORY_FLUSH_DEFAULTS,
+  memoryFlushPrompt,
+  memoryFlushThreshold,
+  shouldRunMemoryFlush,
+} from "./flush.js";
+import {
   appendNotebookEntry,
   parseNotebook,
   REMEMBERED_HEADING,
@@ -301,4 +309,68 @@ test("search eligibility: main and private threads of the same agent, never the 
     assert.equal(isMaintenanceEligibleConversation(ineligibleKey, false), false, key);
   }
   assert.equal(isMaintenanceEligibleConversation(MAIN_SESSION_KEY, false), true);
+});
+
+test("the pinned flush defaults match OpenClaw b7528507", () => {
+  assert.deepEqual(
+    [
+      MEMORY_FLUSH_DEFAULTS.SOFT_THRESHOLD_TOKENS,
+      MEMORY_FLUSH_DEFAULTS.FORCE_TRANSCRIPT_BYTES,
+      MEMORY_FLUSH_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
+    ],
+    [4_000, 2 * 1024 * 1024, 2_000],
+  );
+});
+
+test("the flush fires a soft margin under the compaction threshold, on the byte trigger, and once per cycle", () => {
+  assert.equal(memoryFlushThreshold(400_000, 20_000), 376_000);
+  assert.equal(memoryFlushThreshold(10_000, 2_500), 7_500 - 3_750);
+  const base = {
+    contextWindowTokens: 400_000,
+    reserveTokens: 20_000,
+    transcriptBytes: 1_000,
+    compactionCount: 0,
+  };
+  assert.equal(shouldRunMemoryFlush({ ...base, contextTokens: 375_999 }), false);
+  assert.equal(shouldRunMemoryFlush({ ...base, contextTokens: 376_000 }), true);
+  assert.equal(
+    shouldRunMemoryFlush({ ...base, contextTokens: 376_000, lastFlushCompactionCount: 0 }),
+    false,
+    "flushed already in this cycle",
+  );
+  assert.equal(
+    shouldRunMemoryFlush({
+      ...base,
+      contextTokens: 376_000,
+      compactionCount: 1,
+      lastFlushCompactionCount: 0,
+    }),
+    true,
+    "a new cycle flushes again",
+  );
+  assert.equal(
+    shouldRunMemoryFlush({ ...base, contextTokens: 100, transcriptBytes: 2 * 1024 * 1024 }),
+    true,
+    "the byte trigger flushes whatever the count",
+  );
+});
+
+test("a housekeeping write is bounded to today's note and to appending", () => {
+  assert.equal(isDailyNotePathForDay("memory/2026-09-08.md", "2026-09-08"), true);
+  assert.equal(isDailyNotePathForDay("memory/2026-09-08-standup.md", "2026-09-08"), true);
+  assert.equal(isDailyNotePathForDay("memory/2026-09-07.md", "2026-09-08"), false);
+  assert.equal(isDailyNotePathForDay("MEMORY.md", "2026-09-08"), false);
+  assert.equal(isAppendOnlyRewrite("", "- new\n"), true);
+  assert.equal(isAppendOnlyRewrite("- old\n", "- old\n- new\n"), true);
+  assert.equal(isAppendOnlyRewrite("- old", "- old\n- new\n"), true);
+  assert.equal(isAppendOnlyRewrite("- old\n", "- new\n"), false);
+  assert.equal(isAppendOnlyRewrite("- old\n", "- ol"), false);
+  const prompt = memoryFlushPrompt("2026-09-08");
+  assert.equal(prompt.notePath, "memory/2026-09-08.md");
+  assert.match(prompt.ask, /memory\/2026-09-08\.md/u);
+  assert.ok(
+    prompt.system.includes(
+      "Treat workspace bootstrap and reference files such as MEMORY.md, SOUL.md, USER.md, and AGENTS.md as read-only during this turn; never overwrite, replace, or edit them.",
+    ),
+  );
 });
