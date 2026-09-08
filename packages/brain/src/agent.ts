@@ -7,6 +7,7 @@ import {
 } from "@sidecar/memory";
 import type { ScheduledTimer } from "@sidecar/realtime";
 import {
+  type ChildEnd,
   type ChildPolicyContext,
   type EffectiveToolPolicy,
   PendingInputQueue,
@@ -21,7 +22,8 @@ import {
 import {
   type AgentRuntime,
   CHILD_RUN_STATUS,
-  type ChildRunStatus,
+  type ChildCompletionRecord,
+  type ChildRunRecord,
   CONTEXT_INPUT_KIND,
   type ContextEngine,
   type ContextMark,
@@ -60,7 +62,6 @@ import {
 import {
   activityNoticesInputText,
   askInputText,
-  type ChildCompletionInput,
   childCompletionInputText,
   heartbeatInputText,
   holdReleasedInputText,
@@ -394,15 +395,6 @@ export interface BrainRecallAsk {
   readonly query: string;
   readonly runId: string;
   readonly signal: AbortSignal;
-}
-
-/** How a child's run ended, as its requester's service takes it. */
-export interface BrainChildRunEnd {
-  readonly status: ChildRunStatus;
-  readonly resultText?: string;
-  readonly failureDetail?: string;
-  readonly performedActs: number;
-  readonly unknownActs: number;
 }
 
 /** Whether a completion reached this conversation, and how. */
@@ -1252,28 +1244,28 @@ export class BrainAgent {
    * recorded run under the child origin, its submission id the child run's
    * id the requester's service minted, so the same child asked twice is one
    * run. Settles with the run's end, as the service takes it: a completed
-   * run's final text is the result, and an interrupted one — the run a
-   * relaunch found unfinished — is the honest unknown with the acts its
-   * journal established.
+   * run's final text is the result, an interrupted one — the run a relaunch
+   * found unfinished — is the honest unknown with the acts its journal
+   * established, and a run its generation forgot before it ended is the
+   * same unknown, decided here rather than left to the requester to guess.
    */
   async runChildTask(
     task: string,
     childRunId: string,
-  ): Promise<
-    { readonly runId: string; readonly done: Promise<BrainChildRunEnd | undefined> } | undefined
-  > {
+  ): Promise<{ readonly runId: string; readonly done: Promise<ChildEnd> } | undefined> {
     const submitted = await this.submitAsk({
       submissionId: childRunId,
       question: task,
       origin: BRAIN_REQUEST_ORIGIN.CHILD,
     });
     if (submitted.outcome !== BRAIN_SUBMISSION_OUTCOME.ACCEPTED) return undefined;
-    return {
-      runId: submitted.runId,
-      done: this.#awaitTerminal(submitted.runId).then((record) =>
-        record ? childRunEnd(record) : undefined,
-      ),
-    };
+    return { runId: submitted.runId, done: this.#childRunEnd(submitted.runId) };
+  }
+
+  /** A child run's end once it is terminal, or the unknown end of a run its generation forgot first. */
+  async #childRunEnd(runId: string): Promise<ChildEnd> {
+    const record = await this.#awaitTerminal(runId);
+    return record ? childRunEnd(record) : RUN_FORGOTTEN;
   }
 
   /**
@@ -1283,14 +1275,13 @@ export class BrainAgent {
    * Nothing is run: a child whose record was never written is not started
    * again on the strength of its requester's receipt.
    */
-  async adoptChildRun(childRunId: string): Promise<BrainChildRunEnd | undefined> {
+  async adoptChildRun(childRunId: string): Promise<ChildEnd | undefined> {
     await this.ready();
     const record = this.requests().find(
       (held) => held.submissionId === childRunId && held.origin === BRAIN_REQUEST_ORIGIN.CHILD,
     );
     if (!record) return undefined;
-    const settled = await this.#awaitTerminal(record.runId);
-    return settled ? childRunEnd(settled) : undefined;
+    return this.#childRunEnd(record.runId);
   }
 
   /**
@@ -1328,17 +1319,23 @@ export class BrainAgent {
    * model, so a delivery this conversation could not take is retried later
    * rather than lost.
    */
-  deliverChildCompletion(completion: ChildCompletionInput): Promise<BrainCompletionDelivery> {
+  deliverChildCompletion(
+    completion: ChildCompletionRecord,
+    record: ChildRunRecord,
+  ): Promise<BrainCompletionDelivery> {
     const pending = this.#pendingCompletions.get(completion.completionId);
     if (pending) return pending;
-    const deciding = this.#deliverCompletion(completion).finally(() => {
+    const deciding = this.#deliverCompletion(completion, record).finally(() => {
       this.#pendingCompletions.delete(completion.completionId);
     });
     this.#pendingCompletions.set(completion.completionId, deciding);
     return deciding;
   }
 
-  async #deliverCompletion(completion: ChildCompletionInput): Promise<BrainCompletionDelivery> {
+  async #deliverCompletion(
+    completion: ChildCompletionRecord,
+    record: ChildRunRecord,
+  ): Promise<BrainCompletionDelivery> {
     await this.ready();
     this.#expireIfDue();
     const generation = this.#generation;
@@ -1351,7 +1348,7 @@ export class BrainAgent {
     if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
       return { delivered: false, reason: "the conversation's memory cannot be run" };
     }
-    const text = childCompletionInputText(completion, this.#now());
+    const text = childCompletionInputText(completion, record, this.#now());
     const active = this.#active;
     if (
       active &&
@@ -2665,8 +2662,18 @@ export class BrainAgent {
   }
 }
 
+/**
+ * The end of a child run whose record its generation no longer holds — a
+ * wait that returned nothing because the generation was replaced under it.
+ * What the run did is unknown; nothing about it can be vouched for.
+ */
+const RUN_FORGOTTEN: ChildEnd = {
+  status: CHILD_RUN_STATUS.UNKNOWN,
+  failureDetail: "the child's run was forgotten by its generation before it ended",
+};
+
 /** A child's run record as its requester's service reads its end. */
-function childRunEnd(record: BrainRequestRecord): BrainChildRunEnd {
+function childRunEnd(record: BrainRequestRecord): ChildEnd {
   const counts = { performedActs: record.performedActs, unknownActs: record.unknownActs };
   switch (record.status) {
     case BRAIN_REQUEST_STATUS.SUCCEEDED:

@@ -1,11 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_TOOL } from "@sidecar/acts";
-import { TOOL_POLICY_LAYER } from "@sidecar/runtime";
-import { RUN_ORIGIN, type ToolInvocation } from "@sidecar/runtime-contracts";
+import { CHILD_SPAWN_REFUSAL, TOOL_POLICY_LAYER } from "@sidecar/runtime";
+import {
+  CHILD_CLEANUP,
+  CHILD_CONTEXT_MODE,
+  CHILD_RUN_STATUS,
+  type ChildCompletionRecord,
+  type ChildRunRecord,
+  COMPLETION_DELIVERY_STATUS,
+  CONVERSATION_KIND,
+  childSessionKey,
+  DEFAULT_AGENT_ID,
+  MAIN_SESSION_KEY,
+  RUN_ORIGIN,
+  type ToolInvocation,
+} from "@sidecar/runtime-contracts";
 import { ACT_RESULT_STATUS, isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { BrainJournal } from "./journal.js";
 import {
+  type BrainChildAccess,
   createTurnToolExecutor,
   journaledEffect,
   refusalForPolicy,
@@ -42,7 +56,10 @@ function parsed(outputJson: string) {
   return value;
 }
 
-function executor(trigger: BrainTurnTrigger = BRAIN_TURN_TRIGGER.WAKE) {
+function executor(
+  trigger: BrainTurnTrigger = BRAIN_TURN_TRIGGER.WAKE,
+  children: BrainChildAccess | undefined = undefined,
+) {
   const policy = resolveTurnToolPolicy(CATALOG, {}, trigger);
   const journal = new BrainJournal();
   const written: [string, string][] = [];
@@ -67,7 +84,7 @@ function executor(trigger: BrainTurnTrigger = BRAIN_TURN_TRIGGER.WAKE) {
   const dependencies: ToolExecutorDependencies = {
     roster: () => ({ text: "roster", identities: [] }),
     acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
-    children: undefined,
+    children,
     memory: undefined,
     workspace: {
       read: async (name) => ({ ok: true, content: `content of ${name}` }),
@@ -188,4 +205,167 @@ test("an effect is journaled by what the catalog says the tool is: every act and
   // A tool the policy removed is refused, not journaled.
   const noActs = resolveTurnToolPolicy(CATALOG, { agent: { deny: ["group:acts"] } });
   assert.ok(!journaledEffect(noActs, REALTIME_TOOL.SEND_SESSION_MESSAGE));
+});
+
+const NOW = 1_800_000_000_000;
+
+function childRecord(childId: string, label?: string): ChildRunRecord {
+  return {
+    childId,
+    agentId: DEFAULT_AGENT_ID,
+    requesterSessionKey: MAIN_SESSION_KEY,
+    childSessionKey: childSessionKey(childId),
+    childRunId: `${childId}-run`,
+    task: "look",
+    ...(label !== undefined ? { label } : undefined),
+    depth: 1,
+    requestedContext: CHILD_CONTEXT_MODE.ISOLATED,
+    context: CHILD_CONTEXT_MODE.ISOLATED,
+    policy: { allowed: [], denied: [] },
+    timeoutMs: 0,
+    cleanup: CHILD_CLEANUP.KEEP,
+    completionDestination: MAIN_SESSION_KEY,
+    expectsCompletion: true,
+    status: CHILD_RUN_STATUS.COMPLETED,
+    acceptedAt: NOW,
+    settledAt: NOW + 1_000,
+    resultText: "done",
+  };
+}
+
+test("the session tools render the host's typed answers in the records the model reads, and a child that is not this conversation's is refused", async () => {
+  const record = childRecord("child-1", "summary");
+  const completion: ChildCompletionRecord = {
+    completionId: "completion:child-1",
+    childId: "child-1",
+    destination: MAIN_SESSION_KEY,
+    status: CHILD_RUN_STATUS.COMPLETED,
+    createdAt: NOW + 1_000,
+    delivery: COMPLETION_DELIVERY_STATUS.DELIVERED,
+    attempts: 1,
+  };
+  const cancelled: string[] = [];
+  const children: BrainChildAccess = {
+    sessionKey: MAIN_SESSION_KEY,
+    spawn: async (ask) =>
+      ask.label === "refused"
+        ? { accepted: false, reason: CHILD_SPAWN_REFUSAL.REQUESTER_LIMIT, detail: "5 active" }
+        : {
+            accepted: true,
+            receipt: {
+              childId: "child-2",
+              childSessionKey: childSessionKey("child-2"),
+              childRunId: "child-2-run",
+              context: CHILD_CONTEXT_MODE.ISOLATED,
+              contextNote: "started isolated",
+              depth: 1,
+            },
+          },
+    list: async () => [{ record, completion }],
+    cancel: async (childId) => {
+      if (childId !== "child-1") return undefined;
+      cancelled.push(childId);
+      return { ok: true, remaining: [] };
+    },
+    conversations: async () => [
+      {
+        sessionKey: MAIN_SESSION_KEY,
+        kind: CONVERSATION_KIND.MAIN,
+        name: "main",
+        createdAt: NOW,
+        lastActivityAt: NOW,
+      },
+      {
+        sessionKey: childSessionKey("child-0"),
+        kind: CONVERSATION_KIND.CHILD,
+        name: "archived",
+        createdAt: NOW,
+        lastActivityAt: NOW,
+        archivedAt: NOW,
+      },
+    ],
+    history: async (childId) => (childId === "child-1" ? ["ask: hi", "reply: done"] : undefined),
+  };
+  const h = executor(BRAIN_TURN_TRIGGER.ASK, children);
+
+  const receipt = await h.execute(call(BRAIN_TOOL.SESSIONS_SPAWN, { task: "look" }));
+  assert.deepEqual(receipt, {
+    status: ACT_RESULT_STATUS.ACCEPTED,
+    accepted: true,
+    completed: false,
+    child_id: "child-2",
+    child_session_key: childSessionKey("child-2"),
+    child_run_id: "child-2-run",
+    context: CHILD_CONTEXT_MODE.ISOLATED,
+    context_note: "started isolated",
+    depth: 1,
+    completion:
+      "arrives in this conversation as its own item when the child ends; do not poll for it",
+  });
+  const refused = await h.execute(
+    call(BRAIN_TOOL.SESSIONS_SPAWN, { task: "look", label: "refused" }, "call-refused"),
+  );
+  assert.deepEqual(refused, {
+    status: ACT_RESULT_STATUS.REJECTED,
+    reason: "not run: this conversation already has its limit of active children: 5 active",
+  });
+
+  const listed = await h.execute(call(BRAIN_TOOL.SUBAGENTS, { action: "list" }));
+  assert.deepEqual(listed, {
+    status: ACT_RESULT_STATUS.ACCEPTED,
+    children: [
+      {
+        child_id: "child-1",
+        label: "summary",
+        status: CHILD_RUN_STATUS.COMPLETED,
+        depth: 1,
+        context: CHILD_CONTEXT_MODE.ISOLATED,
+        accepted_at: new Date(NOW).toISOString(),
+        settled_at: new Date(NOW + 1_000).toISOString(),
+        has_result: true,
+        delivery: COMPLETION_DELIVERY_STATUS.DELIVERED,
+        attempts: 1,
+      },
+    ],
+  });
+
+  const conversations = await h.execute(call(BRAIN_TOOL.SESSIONS_LIST, {}));
+  assert.deepEqual(conversations, {
+    status: ACT_RESULT_STATUS.ACCEPTED,
+    conversations: [
+      {
+        session_key: MAIN_SESSION_KEY,
+        kind: CONVERSATION_KIND.MAIN,
+        name: "main",
+        last_activity_at: new Date(NOW).toISOString(),
+        current: true,
+      },
+    ],
+  });
+
+  const history = await h.execute(call(BRAIN_TOOL.SESSIONS_HISTORY, { child_id: "child-1" }));
+  assert.deepEqual(history, {
+    status: ACT_RESULT_STATUS.ACCEPTED,
+    lines: ["ask: hi", "reply: done"],
+  });
+  const notOwn = await h.execute(
+    call(BRAIN_TOOL.SESSIONS_HISTORY, { child_id: "someone-elses" }, "call-other-history"),
+  );
+  assert.deepEqual(notOwn, {
+    status: ACT_RESULT_STATUS.REJECTED,
+    reason: REFUSAL_REASON.UNKNOWN_CHILD,
+  });
+
+  const cancel = await h.execute(
+    call(BRAIN_TOOL.SUBAGENTS, { action: "cancel", child_id: "child-1" }, "call-cancel"),
+  );
+  assert.deepEqual(cancel, { status: ACT_RESULT_STATUS.ACCEPTED, cancelled: ["child-1"] });
+  const cancelOther = await h.execute(
+    call(BRAIN_TOOL.SUBAGENTS, { action: "cancel", child_id: "someone-elses" }, "call-cancel-2"),
+  );
+  assert.deepEqual(cancelOther, {
+    status: ACT_RESULT_STATUS.REJECTED,
+    reason: REFUSAL_REASON.UNKNOWN_CHILD,
+  });
+  assert.deepEqual(cancelled, ["child-1"]);
 });
