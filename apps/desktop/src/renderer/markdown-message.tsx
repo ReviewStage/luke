@@ -63,24 +63,20 @@ function safeUrl(url: string): string {
  * headings, lists, quotes, fenced code, tables, rules — composed around it.
  * Raw HTML in the words is text. Every size in the stylesheet is in `em`, so
  * the same component reads at the caption's ten pixels and the thread's
- * twelve and a half. `trailing` is the stamp a chat puts under a message,
- * drawn on a line of its own after the words.
+ * twelve and a half.
  */
 export function MarkdownMessage({
   words,
   className,
-  trailing,
 }: {
   words: string;
   className?: string;
-  trailing?: ReactNode;
 }): React.JSX.Element {
   return (
     <div className={className === undefined ? "markdown" : `markdown ${className}`}>
       <Markdown remarkPlugins={REMARK_PLUGINS} components={COMPONENTS} urlTransform={safeUrl}>
         {words}
       </Markdown>
-      {trailing === undefined ? null : <p className="markdown-trailing">{trailing}</p>}
     </div>
   );
 }

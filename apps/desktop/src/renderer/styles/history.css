@@ -53,30 +53,106 @@
   color: var(--danger);
 }
 
-.history-list {
+/* The thread scrolls on two nested scrollers, one per axis. The outer one is
+   the vertical scroll the thread always had, with its thin scrollbar and the
+   edge fade; the inner one is the pull. */
+.history-scroll {
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  gap: 4px;
-  margin: 0;
   padding: 4px 4px 8px;
   overflow-x: clip;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
   scrollbar-width: thin;
-  list-style: none;
   animation: scroll-edge-fade linear both;
   animation-timeline: scroll(self block);
+}
+
+/* The pull is the thread's own sideways scroll, the way iMessage uncovers a
+   message's time. The list is one stamp column wider than the view, so a
+   sideways swipe scrolls the column in and the fingers hold it wherever they
+   rest; snapping to the list's start puts it back the moment they lift. That
+   lift is the one thing a wheel listener never learns — Chromium hands the
+   page no gesture phase, only the steps — while the browser's own scroll
+   sees it, so the motion here is the browser's snap rather than a transition
+   on the tokens, the one native motion docs/DESIGN.md admits. A swipe over a
+   code block or table wider than its bubble stays the block's: each contains
+   its own overscroll. The pull fills the thread's height, not the list's, so
+   a swipe in the empty room under a short thread pulls too. */
+.history-pull {
+  flex: 1 0 auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.history-list {
+  /* Room for the widest stamp a twelve-hour clock draws, with its own inset
+     from the thread's edge. */
+  --history-time-column: 56px;
+
+  position: relative;
+  display: flex;
+  width: calc(100% + var(--history-time-column));
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The one place the pull may rest. It is a point at the list's start rather
+   than the list itself, because a snap area wider than the view makes every
+   position that still covers the view a valid rest, and the list is wider
+   than the view by exactly the column it exists to uncover. */
+.history-list::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  scroll-snap-align: start;
 }
 
 .history-entry {
   position: relative;
   display: flex;
-  max-width: min(82%, 58ch);
+  width: 100%;
   flex: 0 0 auto;
-  flex-direction: column;
+}
+
+/* The message fills the view's width and leaves the column to the stamp. A
+   sent message rides the scroll, moving left to make the room the way a sent
+   bubble does in iMessage; Luke's words and the quiet events stand still,
+   stuck to the view's left edge, so nothing of his is ever pushed off the
+   screen: the room the column takes is room those rows already had spare.
+   A row whose copy control holds keyboard focus makes the same travel on its
+   own, so the times are reachable without a trackpad. */
+.history-message {
+  display: flex;
+  width: calc(100% - var(--history-time-column));
+  min-width: 0;
+  transition: transform var(--duration-fast) var(--spring);
+}
+
+.history-entry[data-speaker="luke"] .history-message,
+.history-entry[data-speaker="event"] .history-message {
+  position: sticky;
+  left: 0;
+}
+
+.history-entry[data-speaker="you"]:has(.history-copy:focus-visible) .history-message {
+  transform: translateX(calc(-1 * var(--history-time-column)));
+}
+
+.history-entry:has(.history-copy:focus-visible) .history-time {
+  transform: translate(calc(-1 * var(--history-time-column)), -50%);
 }
 
 /* The bubble is the copy control's anchor. It stacks: the words, then the
@@ -86,16 +162,8 @@
   position: relative;
   display: flex;
   min-width: 0;
-  max-width: 100%;
+  max-width: min(82%, 58ch);
   flex-direction: column;
-}
-
-.history-entry[data-speaker="you"] .history-bubble {
-  align-items: flex-end;
-}
-
-.history-entry[data-speaker="luke"] .history-bubble {
-  align-items: flex-start;
 }
 
 /* Copy sits in the bubble's free margin, absolutely positioned so a thread
@@ -179,21 +247,27 @@
   overflow-wrap: anywhere;
 }
 
-/* The stamp rides inside the bubble, on a line of its own under the words,
-   so the copy control stays anchored to one bubble. It inherits the bubble's
-   own colour because the sent bubble's ground is the accent, where a fixed
-   secondary grey would not be readable. */
+/* The stamp stands in the column past the view's edge, which the pull brings
+   in, and takes no room of the message's: a thread with times lays out
+   exactly like one without. It hangs off the row rather than the bubble so
+   the sent side's stamps and the received side's stand in one column. */
 .history-time {
-  color: inherit;
-  opacity: 0.75;
-  font-size: 9.5px;
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: var(--history-time-column);
+  padding-right: 6px;
+  transform: translateY(-50%);
+  transition: transform var(--duration-fast) var(--spring);
+  color: var(--text-secondary);
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
+  text-align: right;
   white-space: nowrap;
 }
 
-.history-entry[data-speaker="you"] {
-  align-self: flex-end;
-  align-items: flex-end;
+.history-entry[data-speaker="you"] .history-message {
+  justify-content: flex-end;
 }
 
 .history-entry[data-speaker="you"] .history-words {
@@ -202,23 +276,20 @@
   color: rgba(255, 255, 255, 0.98);
 }
 
-.history-entry[data-speaker="luke"] {
-  align-self: flex-start;
-  /* Shrink-wrapped, not stretched: the bubble is the copy control's anchor. */
-  align-items: flex-start;
-}
-
 .history-entry[data-speaker="luke"] .history-words {
   border-radius: 15px 15px 15px 5px;
   background: var(--raised-strong);
 }
 
-.history-entry[data-speaker="event"] {
-  max-width: 84%;
-  align-self: center;
-  align-items: center;
+.history-entry[data-speaker="event"] .history-message {
+  justify-content: center;
   padding: 8px 12px;
   text-align: center;
+}
+
+.history-entry[data-speaker="event"] .history-bubble {
+  max-width: 84%;
+  align-items: center;
 }
 
 .history-entry[data-speaker="event"] .history-words {

@@ -108,15 +108,3 @@ test("fenced code, quotes, lists, tables, and rules compose around the paragraph
   assert.match(markup, /<td style="text-align:left">1<\/td><td style="text-align:right">2<\/td>/);
   assert.match(markup, /<hr\/><\/div>$/);
 });
-
-test("the trailing node stands on its own line after the words", () => {
-  const stamp = createElement("time", { className: "history-time" }, "3:04");
-  assert.equal(
-    renderToStaticMarkup(createElement(MarkdownMessage, { words: "Done.", trailing: stamp })),
-    '<div class="markdown"><p>Done.</p><p class="markdown-trailing"><time class="history-time">3:04</time></p></div>',
-  );
-  assert.equal(
-    renderToStaticMarkup(createElement(MarkdownMessage, { words: "Done." })),
-    '<div class="markdown"><p>Done.</p></div>',
-  );
-});

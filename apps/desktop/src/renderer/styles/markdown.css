@@ -58,6 +58,9 @@
   border-radius: 0.7em;
   background: var(--markdown-tint);
   overflow-x: auto;
+  /* A line's end is read by the same sideways swipe that pulls the History
+     thread; at the block's edge the swipe stays the block's. */
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
   text-align: left;
 }
@@ -117,6 +120,7 @@
   max-width: 100%;
   border-collapse: collapse;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
   font-variant-numeric: tabular-nums;
   text-align: left;
@@ -152,9 +156,4 @@
   text-decoration-color: var(--markdown-edge);
   text-decoration-thickness: 1px;
   text-underline-offset: 0.15em;
-}
-
-/* The stamp under a message, on a line of its own. */
-.markdown-trailing {
-  text-align: right;
 }

@@ -76,50 +76,48 @@ function HistoryEntryRow({
       data-streaming={streaming ? "true" : undefined}
     >
       <small className="visually-hidden">{presentation.label}</small>
-      <span className="history-bubble">
-        <MarkdownMessage
-          words={words}
-          className="history-words"
-          {...(recordedAt
-            ? {
-                trailing: (
-                  <time className="history-time" dateTime={recordedAt.toISOString()}>
-                    {ENTRY_TIME.format(recordedAt)}
-                  </time>
-                ),
-              }
-            : undefined)}
-        />
-        {pending ? (
-          <span className="history-pending" role="status">
-            <span className="history-pending-label">{HISTORY_PENDING_LABEL}</span>
-            {onCancel ? (
-              <button type="button" className="history-cancel" onClick={onCancel}>
-                Cancel
-              </button>
-            ) : null}
-          </span>
-        ) : null}
-        {/* Copying words still arriving would copy half a sentence; the control
+      <div className="history-message">
+        <span className="history-bubble">
+          <MarkdownMessage words={words} className="history-words" />
+          {pending ? (
+            <span className="history-pending" role="status">
+              <span className="history-pending-label">{HISTORY_PENDING_LABEL}</span>
+              {onCancel ? (
+                <button type="button" className="history-cancel" onClick={onCancel}>
+                  Cancel
+                </button>
+              ) : null}
+            </span>
+          ) : null}
+          {/* Copying words still arriving would copy half a sentence; the control
             appears with the settled line the same words become. */}
-        {presentation.speaker === HISTORY_ENTRY_SPEAKER.EVENT || streaming ? null : (
-          <button
-            type="button"
-            className="history-copy"
-            data-copied={copied ? "true" : undefined}
-            aria-label={copied ? "Copied" : "Copy message"}
-            onClick={() => {
-              // The line's own words as written, Markdown marks included, so
-              // a paste carries the structure the bubble drew — and never the
-              // structured model context behind an announcement.
-              window.sidecar.copyText(words);
-              setCopied(true);
-            }}
-          >
-            {copied ? <CheckIcon /> : <CopyIcon />}
-          </button>
-        )}
-      </span>
+          {presentation.speaker === HISTORY_ENTRY_SPEAKER.EVENT || streaming ? null : (
+            <button
+              type="button"
+              className="history-copy"
+              data-copied={copied ? "true" : undefined}
+              aria-label={copied ? "Copied" : "Copy message"}
+              onClick={() => {
+                // The line's own words as written, Markdown marks included, so
+                // a paste carries the structure the bubble drew — and never the
+                // structured model context behind an announcement.
+                window.sidecar.copyText(words);
+                setCopied(true);
+              }}
+            >
+              {copied ? <CheckIcon /> : <CopyIcon />}
+            </button>
+          )}
+        </span>
+      </div>
+      {/* The stamp is the row's, not the bubble's: it stands in one column
+          past the thread's visible edge, sent and received alike, which the
+          thread's own sideways scroll brings into view. */}
+      {recordedAt ? (
+        <time className="history-time" dateTime={recordedAt.toISOString()}>
+          {ENTRY_TIME.format(recordedAt)}
+        </time>
+      ) : null}
     </li>
   );
 }
@@ -180,7 +178,7 @@ export function ConversationHistoryPanel({
   askShortcut?: string;
 }): React.JSX.Element {
   const [confirmingClear, setConfirmingClear] = useState(false);
-  const list = useRef<HTMLOListElement | null>(null);
+  const list = useRef<HTMLDivElement | null>(null);
   const entryCount = entries.length;
   const liveLength = live.reduce((total, entry) => total + entry.words.length, 0);
   const pendingRuns = new Set(
@@ -208,6 +206,8 @@ export function ConversationHistoryPanel({
   useEffect(() => {
     if (entries.length === 0) setConfirmingClear(false);
   }, [entries.length]);
+
+  const thread = entries.length > 0 || live.length > 0;
 
   return (
     <section
@@ -246,39 +246,47 @@ export function ConversationHistoryPanel({
           </span>
         </header>
       ) : null}
-      {entries.length === 0 && live.length === 0 ? (
+      {thread ? (
+        <div className="history-scroll" ref={list}>
+          {/* The pull is the thread's own sideways scroll, on a scroller of its
+              own so the vertical one keeps its scrollbar: the list is one
+              stamp column wider than the view, and snapping puts it back the
+              moment the fingers lift, which only the browser can see. */}
+          <div className="history-pull">
+            <ol className="history-list">
+              {keyedHistoryEntries(entries).map(({ entry, key }) => {
+                const runId = entry.requestId;
+                const pending =
+                  runId !== undefined &&
+                  (entry.kind === CONVERSATION_ENTRY_KIND.TYPED_ASK ||
+                    entry.kind === CONVERSATION_ENTRY_KIND.SPOKEN_ASK) &&
+                  pendingRuns.has(runId);
+                return (
+                  <HistoryEntryRow
+                    key={key}
+                    entry={entry}
+                    pending={pending}
+                    {...(pending && runId !== undefined && onCancelRequest
+                      ? { onCancel: () => onCancelRequest(runId) }
+                      : undefined)}
+                  />
+                );
+              })}
+              {live.map((entry, index) => (
+                <HistoryEntryRow
+                  // biome-ignore lint/suspicious/noArrayIndexKey: A line still being said has no durable id, and its words change on every delta — a key made of either would remount the bubble mid-sentence, while its position holds still for exactly as long as the line does.
+                  key={`live:${entry.kind}:${index}`}
+                  entry={entry}
+                  streaming
+                />
+              ))}
+            </ol>
+          </div>
+        </div>
+      ) : (
         <div className="history-empty">
           <strong>No messages yet</strong>
         </div>
-      ) : (
-        <ol className="history-list" ref={list}>
-          {keyedHistoryEntries(entries).map(({ entry, key }) => {
-            const runId = entry.requestId;
-            const pending =
-              runId !== undefined &&
-              (entry.kind === CONVERSATION_ENTRY_KIND.TYPED_ASK ||
-                entry.kind === CONVERSATION_ENTRY_KIND.SPOKEN_ASK) &&
-              pendingRuns.has(runId);
-            return (
-              <HistoryEntryRow
-                key={key}
-                entry={entry}
-                pending={pending}
-                {...(pending && runId !== undefined && onCancelRequest
-                  ? { onCancel: () => onCancelRequest(runId) }
-                  : undefined)}
-              />
-            );
-          })}
-          {live.map((entry, index) => (
-            <HistoryEntryRow
-              // biome-ignore lint/suspicious/noArrayIndexKey: A line still being said has no durable id, and its words change on every delta — a key made of either would remount the bubble mid-sentence, while its position holds still for exactly as long as the line does.
-              key={`live:${entry.kind}:${index}`}
-              entry={entry}
-              streaming
-            />
-          ))}
-        </ol>
       )}
       {/* The thread is where a typed ask's reply lands as a bubble, so the field
           that asks stands at its foot — the same composer the sessions tab
