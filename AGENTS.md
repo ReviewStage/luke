@@ -516,6 +516,57 @@ Trust constraints:
   how long a generation stands, what a deletion leaves, or what maintenance
   may remove is a product decision, not an implementation detail, and
   `PRIVACY.md` says each in as many words.
+- The notebook maintains itself, and every maintenance write is bounded,
+  reviewable, and reversible. Three things write it without an ask. The
+  pre-compaction flush, following OpenClaw `b7528507`'s memory flush: once
+  per compaction cycle, 4,000 tokens under the compaction threshold or once
+  the retained transcript crosses 2 MiB, an eligible conversation (main or a
+  durable private thread; never a temporary thread, an observed session, or
+  a child) runs one housekeeping turn over a private copy of its context,
+  offered the workspace read and a write narrowed to today's dated note (or
+  a slugged variant of it) and to appending, so no bootstrap file and no
+  earlier entry can be overwritten; the copy is disposed at the turn's end
+  and nothing it said enters the conversation; a write stands as soon as it
+  is made, and only a turn that ran to its end marks the cycle flushed, so
+  an interrupted flush runs again. The reset capture: Start fresh on an
+  eligible conversation runs the same turn first, its outcome reported
+  honestly and never deciding the reset, which proceeds either way; Clear,
+  Delete history, Archive, and a forget run no capture. The consolidation
+  sweep: one managed daily job at 03:00 local time, on the background lane,
+  runs light, REM, and deep phases following OpenClaw's dreaming design.
+  Light stages the History lines of eligible conversations since each
+  conversation's cursor, each line hashed so it is learned once, recalled
+  context stripped and secrets and identifiers redacted first, with its
+  origin kept (the developer's ask, Luke's reply, or system: an act's
+  narration or a child's relayed words), beside the lines of the recent
+  dated notes; REM reflects on recurring themes and writes nothing durable;
+  deep ranks the staged candidates by the pinned six weighted signals and
+  gates (score 0.75, three recalls, three distinct queries, at most ten
+  promotions, 14-day recency half-life, 30-day maximum age), re-reads each
+  candidate's source immediately before publishing and skips one that is
+  gone, asks one tool-free model call for additions, merges, and
+  supersessions, validates the answer (one operation per candidate, prior
+  entries exact and unique, a merge only of an entry saying the same thing,
+  a supersession only along a named lineage, every candidate's source
+  reference present, at most 25% of prior entries lost, the file within its
+  20,000-character bootstrap budget), and falls back to the deterministic
+  append-only path when the model is unavailable or the plan fails. An
+  external or system origin never promotes however often it recurs. Only
+  `MEMORY.md` takes promotions, written on the store's worker behind a check
+  that the file still reads as the plan was built over it, with the preimage
+  recorded first, and the Dream Diary goes to `DREAMS.md`, which is never a
+  promotion source. Candidates, cursors, seen hashes, tombstones, rewrite
+  preimages, and flush state live in the runtime store's own tables.
+  Forgetting is source-aware: naming notebook entries, candidate keys, or
+  conversations removes the entries, the candidates, the `MEMORY.md`
+  promotions their markers attribute to them, and the index rows, tombstones
+  the sources so no later scan relearns them, and clears the recall caches;
+  a promoted entry whose marker a hand edit removed cannot be attributed and
+  is reported as a limitation rather than claimed erased. Deleting a
+  conversation's history stays the separate, recoverable operation. Widening
+  what the flush may write, what consolidation ingests or promotes, or what
+  a forget reaches is a product decision, not an implementation detail, and
+  `PRIVACY.md` says each in as many words.
 - Counting is three streams with three different guarantees, and the
   difference is the thing to keep straight. Only the first carries the
   guarantee, and the other two must never be described as though they

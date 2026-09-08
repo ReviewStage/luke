@@ -7,6 +7,7 @@ import {
   type EmbeddingModelIdentity,
   type EmbeddingProviderSelection,
   isRecallEligibleConversation,
+  localDayStamp,
   MEMORY_ORIGIN,
   MEMORY_SEARCH_DEFAULTS,
   MEMORY_SOURCE,
@@ -15,11 +16,13 @@ import {
   RETRIEVAL_MODE,
   type RecallRecentTurn,
   type RetrievalMode,
+  recallSignalSeeds,
   selectHybridSearchResults,
   tokenize,
   watchMemoryFiles,
 } from "@sidecar/memory";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
+import { DAILY_NOTES_DIRECTORY } from "@sidecar/runtime";
 import {
   type AgentRuntime,
   type ConversationRecord,
@@ -93,6 +96,8 @@ export interface MemoryWiring {
   ) => ((ask: BrainRecallAsk) => Promise<string | undefined>) | undefined;
   /** The retrieval mode the last search or sync actually ran in. */
   mode: () => RetrievalMode;
+  /** Forgets every cached recall, after a forget or a durable rewrite changed what a recall would say. */
+  clearRecallCaches: () => void;
 }
 
 const RECENT_TURNS_READ = 6;
@@ -317,6 +322,7 @@ export function wireMemory(dependencies: MemoryWiringDependencies): MemoryWiring
       (a, b) => b.score - a.score || a.path.localeCompare(b.path) || a.startLine - b.startLine,
     );
     const keywordBacked = merged.filter((result) => result.textScore > 0);
+    void recordRecallSignals(client, ask.query, outcome.results);
     return {
       mode,
       results: selectHybridSearchResults({
@@ -327,6 +333,35 @@ export function wireMemory(dependencies: MemoryWiringDependencies): MemoryWiring
       }),
       ...(modeNote ? { note: modeNote } : undefined),
     };
+  };
+
+  /**
+   * A search that surfaces a dated note's lines is a recall signal for
+   * consolidation: the snippet is staged as a short-term candidate under the
+   * query that found it, so a fact recalled on several days under several
+   * questions can earn promotion. Curated files are already durable and stage
+   * nothing; nothing here changes what the search answered.
+   */
+  const recordRecallSignals = async (
+    client: RuntimeStoreClient,
+    query: string,
+    results: readonly MemorySearchResult[],
+  ): Promise<void> => {
+    const now = dependencies.now();
+    const seeds = recallSignalSeeds(
+      query,
+      results.filter((result) => result.source === MEMORY_SOURCE.MEMORY),
+      localDayStamp(now),
+      DAILY_NOTES_DIRECTORY,
+    );
+    if (seeds.length === 0) return;
+    try {
+      await client.stageMemoryCandidates(seeds, now);
+    } catch (error) {
+      dependencies.report(
+        `Recall signal could not be recorded: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   };
 
   const resultRecord = (result: MemorySearchResult): WireRecord => ({
@@ -475,5 +510,8 @@ export function wireMemory(dependencies: MemoryWiringDependencies): MemoryWiring
     accessFor,
     recallFor,
     mode: () => mode,
+    clearRecallCaches: () => {
+      recalls.clear();
+    },
   };
 }

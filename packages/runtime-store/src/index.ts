@@ -10,6 +10,19 @@ export type {
   MemorySearchOutcome,
   MemorySearchQuery,
 } from "./memory-index-table.js";
+export {
+  type CandidateStagingReport,
+  type FlushState,
+  FORGOTTEN_SOURCE_KIND,
+  type ForgottenSource,
+  type ForgottenSourceKind,
+  MEMORY_REWRITE_REFUSAL,
+  type MemoryForgetAsk,
+  type MemoryForgetReport,
+  type MemoryRewriteAsk,
+  type MemoryRewriteOutcome,
+  type MemoryRewriteRecord,
+} from "./memory-maintenance-table.js";
 export type { NotebookEntry, NotebookMutation } from "./notebook-table.js";
 export type { RuntimeStorePort } from "./protocol.js";
 export { serveRuntimeStore } from "./worker-host.js";

@@ -37,6 +37,7 @@ import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidec
 import { fixtureSnapshot } from "@sidecar/fixtures";
 import { type AppGuideSnapshot, appGuideContextText, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { normalizeTrackedIssue, type TrackedIssue } from "@sidecar/issues";
+import { CONSOLIDATION_DEFAULTS, consolidationJob } from "@sidecar/memory";
 import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticKind,
@@ -185,6 +186,7 @@ import { registerSettingsRowsIpc } from "./ipc/settings-rows";
 import { registerTrackerConnectionIpc } from "./ipc/tracker-connection";
 import { registerVoiceRuntimeIpc } from "./ipc/voice-runtime";
 import { registerWindowSurfaceIpc } from "./ipc/window-surface";
+import { wireMemoryMaintenance } from "./memory-maintenance";
 import { wireMemory } from "./memory-wiring";
 import { MediaDuckController } from "./native/media-duck";
 import { MicrophoneRouteWatcher } from "./native/microphone-route";
@@ -1648,6 +1650,30 @@ const memoryWiring = wireMemory({
     void runtimeStoreWiring.refreshNotebook();
   },
 });
+/**
+ * Memory maintenance: the pre-compaction flush each eligible conversation's
+ * brain runs, the capture before an eligible private conversation starts
+ * fresh, the daily consolidation sweep on the background lane, and
+ * source-aware forgetting. A committed notebook change syncs the index and
+ * clears the recall caches, so a forget is not undone by a stale recall.
+ */
+const memoryMaintenance = wireMemoryMaintenance({
+  persistent: runMode.observesProviders,
+  client: runtimeStoreWiring.client,
+  createRuntime: () => brainWiring.createRuntime(),
+  workspaceDirectory: agentWorkspacePath,
+  conversationDirectory: () => runtimeStoreWiring.directory().entries,
+  isTemporary: runtimeStoreWiring.isTemporary,
+  historyLines: (sessionKey) => runtimeStoreWiring.thread(sessionKey).entries(),
+  background: (work) => brainWiring.lanes.run(LANE.BACKGROUND, work),
+  now: Date.now,
+  createId: () => randomUUID(),
+  report: (message) => process.stderr.write(`${message}\n`),
+  onNotebookChanged: () => {
+    memoryWiring.clearRecallCaches();
+    void memoryWiring.sync();
+  },
+});
 const brainWiring = wireBrain({
   repositoryFor: (sessionKey) => runtimeStoreWiring.brainStateRepository(sessionKey),
   ensureObservedConversation: async (sessionKey, name) => {
@@ -1729,6 +1755,8 @@ const brainWiring = wireBrain({
   dropBriefings: () => speechArbiter.dropBriefings(),
   memory: (sessionKey) => memoryWiring.accessFor(sessionKey),
   recall: (sessionKey) => memoryWiring.recallFor(sessionKey),
+  beforeCompaction: (sessionKey) => memoryMaintenance.flushHookFor(sessionKey),
+  beforeReset: (sessionKey, items) => memoryMaintenance.captureBeforeReset(sessionKey, items),
 });
 
 const conversationControls = conversationOperations({
@@ -1742,16 +1770,26 @@ let stopHistoryMaintenance: (() => void) | undefined;
 /**
  * The durable scheduler: its jobs stand in the runtime store, its ticks run
  * on the cron coordinator lane, and each job opens a heartbeat turn in the
- * conversation it names, on the cron inner lane. Main's every-thirty-minutes
- * heartbeat is installed once and kept as the store has it from then on.
+ * conversation it names, on the cron inner lane, except the one managed
+ * memory consolidation sweep at 03:00 local time, which runs on the
+ * background lane. Both are installed once and kept as the store has them
+ * from then on, so a relaunch adds no second copy.
  */
 const cronScheduler = new CronScheduler({
   store: runtimeStoreWiring.scheduledJobStore(),
   coordinate: (work) => brainWiring.lanes.run(LANE.CRON, work),
   // The tick is over when the turn it opened is: the coordinator lane holds
   // the tick, the turn runs on the cron inner lane, so awaiting it here
-  // cannot wait on the lane the tick itself holds.
-  run: (job) => brainWiring.heartbeat(job.sessionKey),
+  // cannot wait on the lane the tick itself holds. The one managed
+  // consolidation job is the sweep's, not a turn's, and runs on the
+  // background lane instead.
+  run: async (job) => {
+    if (job.id === CONSOLIDATION_DEFAULTS.JOB_ID) {
+      await memoryMaintenance.runConsolidation();
+      return;
+    }
+    await brainWiring.heartbeat(job.sessionKey);
+  },
   report: (message) => process.stderr.write(`${message}\n`),
 });
 
@@ -3115,6 +3153,7 @@ export function startDesktopApp(): void {
         });
         await cronScheduler.start();
         await cronScheduler.ensure(heartbeatJob(Date.now()));
+        await cronScheduler.ensure(consolidationJob(Date.now()));
       }
       // A signed-in install with no arrival record predates the beat: its
       // sign-in was never observed, so it is settled now rather than greeted

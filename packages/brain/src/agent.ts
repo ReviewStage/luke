@@ -1,4 +1,10 @@
 import { HOSTED_BRAIN_OPTION_BOUNDS } from "@sidecar/hosted";
+import {
+  housekeepingCompleted,
+  MEMORY_HOUSEKEEPING_OUTCOME,
+  type MemoryHousekeepingResult,
+  shouldRunMemoryFlush,
+} from "@sidecar/memory";
 import type { ScheduledTimer } from "@sidecar/realtime";
 import {
   type ChildPolicyContext,
@@ -17,6 +23,7 @@ import {
   CHILD_RUN_STATUS,
   type ChildRunStatus,
   CONTEXT_INPUT_KIND,
+  type ContextEngine,
   type ContextMark,
   type ReasoningEffort,
   RUN_END_REASON,
@@ -34,7 +41,12 @@ import {
   type SessionIdentity,
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { assessCompaction, COMPACTION_NEED } from "./compaction.js";
+import {
+  assessCompaction,
+  COMPACTION_NEED,
+  type CompactionAssessment,
+  reserveTokens,
+} from "./compaction.js";
 import type { TranscriptCursors } from "./cursors.js";
 import {
   CONTEXT_OPENING,
@@ -276,6 +288,15 @@ export interface BrainAgentOptions {
    * context opens, and never on an ordinary turn.
    */
   primeFreshContext?: () => Promise<string | undefined>;
+  /**
+   * The memory lifecycle hook run before a compaction: handed a private copy
+   * of the context and the counts the flush gate read, once per compaction
+   * cycle, a soft margin before the context would fold or once the retained
+   * transcript crosses the byte trigger. What it writes stands whatever it
+   * answers; only an answer that says it ran to its end marks the cycle
+   * flushed, so an interrupted flush runs again at the next assessment.
+   */
+  beforeCompaction?: (input: BrainFlushInput) => Promise<MemoryHousekeepingResult>;
   readTranscriptSince: (
     identity: SessionIdentity,
     cursor: string | undefined,
@@ -333,6 +354,22 @@ export interface BrainAgentOptions {
   executionDeadlineMs?: number;
   deltaPerSessionChars?: number;
   fullTranscriptChars?: number;
+}
+
+/** What the pre-compaction flush is handed: a copy of the context, never the engine itself, and the counts its gate read. */
+export interface BrainFlushInput {
+  readonly items: readonly WireRecord[];
+  readonly contextTokens: number;
+  readonly contextWindowTokens: number;
+  readonly transcriptBytes: number;
+  readonly compactionCount: number;
+  readonly signal: AbortSignal;
+}
+
+/** Where a conversation stands in its compaction cycles, and the cycle its last completed flush ran under. */
+export interface BrainFlushCycle {
+  readonly compactionCount: number;
+  readonly lastFlushCompactionCount?: number;
 }
 
 export type { BrainWorkspaceAccess } from "./tool-executor.js";
@@ -462,6 +499,9 @@ export class BrainAgent {
   readonly #pendingSubmissions = new Map<string, PendingSubmission>();
   readonly #listeners = new Set<BrainRequestsListener>();
   #turnInFlight = false;
+  /** How many times this conversation's context has folded since the agent stood up; the flush runs once per count. */
+  #compactionCount = 0;
+  #lastFlushCompactionCount: number | undefined;
   /** The execution under way, for an ask to steer into or interrupt, and the asks riding inside it. */
   #active: ActiveExecution | undefined;
   /** Where an ask that arrives while this conversation is busy waits, under the queue's own mode and bounds. */
@@ -1625,14 +1665,99 @@ export class BrainAgent {
       capabilities,
       countedTokens,
     );
+    // The flush fires a soft margin ahead of the fold, so in maintenance it
+    // usually runs on a context not yet over the reserve; at admission it
+    // runs right before the compaction the request needs.
+    await this.#flushBeforeCompaction(context, assessment, signal);
+    if (this.#revoked(turnContext)) return { ok: true };
     if (assessment.need === COMPACTION_NEED.NONE) return { ok: true };
     const outcome = await this.#options.runtime.compact(context, { prompt, signal });
     if (this.#revoked(turnContext)) return { ok: true };
     if (!outcome.compacted) return { ok: false, reason: outcome.reason };
+    this.#compactionCount += 1;
     if (!(await this.#ledger.checkpoint(turnContext))) {
       return { ok: false, reason: "the compacted context could not be checkpointed" };
     }
     return { ok: true };
+  }
+
+  /**
+   * The pre-compaction memory flush, under the pinned gate: over the soft
+   * threshold or the byte trigger, and not yet flushed in this compaction
+   * cycle. The hook is handed a copy of the items and never the engine, so
+   * the housekeeping turn cannot reach the conversation's context; a hook
+   * that says it ran to its end marks the cycle flushed, and any other
+   * answer — interrupted, failed, or the signal firing first — leaves the
+   * cycle unflushed so the next assessment runs it again. What the hook
+   * wrote before then stands either way.
+   */
+  async #flushBeforeCompaction(
+    context: ContextEngine,
+    assessment: CompactionAssessment,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const hook = this.#options.beforeCompaction;
+    if (!hook || signal.aborted) return;
+    const due = shouldRunMemoryFlush({
+      contextTokens: assessment.contextTokens,
+      contextWindowTokens: assessment.contextWindowTokens,
+      reserveTokens: reserveTokens(assessment.contextWindowTokens),
+      transcriptBytes: assessment.bytes,
+      compactionCount: this.#compactionCount,
+      ...(this.#lastFlushCompactionCount !== undefined
+        ? { lastFlushCompactionCount: this.#lastFlushCompactionCount }
+        : undefined),
+    });
+    if (!due) return;
+    const cycle = this.#compactionCount;
+    const settled = await settledUnlessAborted(
+      hook({
+        items: [...context.checkpoint().items],
+        contextTokens: assessment.contextTokens,
+        contextWindowTokens: assessment.contextWindowTokens,
+        transcriptBytes: assessment.bytes,
+        compactionCount: cycle,
+        signal,
+      }).catch(
+        (error: Error): MemoryHousekeepingResult => ({
+          outcome: MEMORY_HOUSEKEEPING_OUTCOME.FAILED,
+          writes: 0,
+          reason: error.message,
+        }),
+      ),
+      signal,
+    );
+    if (settled.aborted) return;
+    if (housekeepingCompleted(settled.value.outcome)) {
+      this.#lastFlushCompactionCount = cycle;
+      return;
+    }
+    this.#report(
+      `Memory flush did not complete (${settled.value.outcome}${settled.value.reason ? `: ${settled.value.reason}` : ""}); it runs again at the next assessment`,
+    );
+  }
+
+  /** How many times the context has folded since this agent stood up, and the cycle the last completed flush ran under. */
+  flushCycle(): BrainFlushCycle {
+    return {
+      compactionCount: this.#compactionCount,
+      ...(this.#lastFlushCompactionCount !== undefined
+        ? { lastFlushCompactionCount: this.#lastFlushCompactionCount }
+        : undefined),
+    };
+  }
+
+  /**
+   * A copy of the conversation's context items as they stand, for the host's
+   * reset capture; nothing when no context is loaded. The engine itself is
+   * never handed out.
+   */
+  async contextSnapshot(): Promise<readonly WireRecord[] | undefined> {
+    const generation = this.#generation;
+    if (!generation) return undefined;
+    const standing = await generation.opened;
+    if (standing.kind !== CONTEXT_OPENING.LOADED) return undefined;
+    return [...standing.context.checkpoint().items];
   }
 
   async #restore(): Promise<void> {
@@ -2407,6 +2532,7 @@ export class BrainAgent {
           return;
         case RUNTIME_EVENT.COMPACTED:
           gathering.compacted = true;
+          this.#compactionCount += 1;
           return;
         case RUNTIME_EVENT.STEERED:
           for (const steered of this.#active?.steered ?? []) steered.ingested = true;
