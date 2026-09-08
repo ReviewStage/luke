@@ -558,27 +558,27 @@ Trust constraints:
   journal, a new ask is refused at the door when nothing can go, and a write
   that would still grow an envelope past a bound is refused rather than
   dropping a run still going or its journal.
-- The conversations are a directory, and the main process carries five
-  distinct operations over it, none of which a window can name: no bridge
-  entry lists, creates, resets, archives, or restores a conversation. The
+- The conversations are a directory, and the one operation the main process
+  carries over it is Delete history, which no window can name either: the
   History tab draws exactly what it drew before — one thread and its Clear —
-  and the Clear is Delete history on main; the selector, threads, Start
-  fresh, Archive, and Restore reach no control and no bridge until a product
-  decision draws them, and stand exercised by their tests. Main is the
+  and the Clear is Delete history on main. Nothing lists, creates, resets,
+  archives, or restores a conversation over the Gateway, and nothing on any
+  surface does; a conversation is listed by the runtime that owns it (an
+  observed session's, a child's) and archived only by the brain's own
+  cleanup of an ended child and by history maintenance below. Main is the
   agent's ordinary conversation, the one the talk key, both composers, and
   every observation reach; a private thread (`agent:<agentId>:thread:<uuid>`)
   is another logical conversation of the same agent with its own generation,
   history, and transcript, and only main's thread is relayed to a window. A
-  temporary thread is held in memory alone — its history and its envelope
-  both — and is gone at the next launch; nothing said in it is remembered
-  automatically, and its explicit `remember` writes are the same act as
-  anywhere. **Start fresh** replaces a conversation's generation with an
-  empty one under the same synchronous fence, with no marker, because
-  nothing is erased: the history and transcript stand, attributed to the
-  lifetime that wrote them, and the facts Luke remembers are untouched;
-  resetting never means forgetting the notebook, and the control says so.
-  **Archive** takes a thread off the active list, retires its brain, and
-  keeps everything; main cannot be archived. **Delete history** is the
+  run that keeps nothing on disk holds its conversations in memory alone —
+  their history and their envelopes both — and they are gone at the next
+  launch. **Start fresh** replaces a conversation's generation with an empty
+  one under the same synchronous fence, with no marker, because nothing is
+  erased: the history and transcript stand, attributed to the lifetime that
+  wrote them, and the facts Luke remembers are untouched; resetting never
+  means forgetting the notebook. It is the brain wiring's own reset, reached
+  by no control and no method, and stands exercised by its tests.
+  **Delete history** is the
   recoverable deletion, in a fixed order: the relayed thread is fenced and
   every window told, the conversation's brain retired and its publication
   drained, and then the store removes the conversation's lines, transcript,
@@ -594,11 +594,10 @@ Trust constraints:
   the conversation's row outlives any generation and is only ever raised by
   a deletion, so a late line from before it is refused whatever the disk did;
   the main process's thread carries an epoch the fence moves, so a store
-  answer still out installs nothing. **Restore** brings an archive back
-  into its own conversation with the same key, creation instant, and line
-  ids, releasing the cutoff the deletion raised to what stood before it, and
-  refuses when the conversation already holds newer lines: a live
-  conversation is never overwritten by an older copy of itself. A deletion
+  answer still out installs nothing. Nothing reads an archive back: it
+  stands on the developer's own disk for the developer alone, and a build
+  that would restore one is a product decision, not an implementation
+  detail. A deletion
   reaches neither the facts Luke separately remembers nor any provider's
   file.
 - History maintenance is OpenClaw's, ported from `store-maintenance.ts` at

@@ -53,9 +53,9 @@ function harness(replayWindow = 500): Harness {
         return gatewayOk({ outcome: "accepted", runId: `run-${effects.length}` });
       },
       [GATEWAY_METHOD.RUN_LIST]: () => gatewayOk({ runs: [] }),
-      [GATEWAY_METHOD.CONVERSATION_RESET]: () => {
-        effects.push("reset");
-        return gatewayOk({ reset: true });
+      [GATEWAY_METHOD.CONVERSATION_DELETE]: () => {
+        effects.push("delete");
+        return gatewayOk({ outcome: "complete" });
       },
       [GATEWAY_METHOD.NODE_INVOKE]: async (params) => {
         const result = await nodes.invoke(String(params.capability), {});
@@ -160,7 +160,7 @@ for (const kind of ["in-process", "loopback"] as const) {
     const bare = await transportFor(kind, h.server).request({
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
       id: "raw-1",
-      method: GATEWAY_METHOD.CONVERSATION_RESET,
+      method: GATEWAY_METHOD.CONVERSATION_DELETE,
       params: {},
     });
     assert.equal(bare.ok, false);
@@ -183,14 +183,14 @@ for (const kind of ["in-process", "loopback"] as const) {
     const h = harness();
     const c = client(transportFor(kind, h.server));
     const stale = await c.call(
-      GATEWAY_METHOD.CONVERSATION_RESET,
+      GATEWAY_METHOD.CONVERSATION_DELETE,
       {},
       { expectedRevision: { sessionKey: "agent:main:main", sessionRevision: "gen-0" } },
     );
     assert.equal(stale.ok, false);
     if (!stale.ok) assert.equal(stale.error.code, GATEWAY_ERROR.REVISION_MISMATCH);
     const current = await c.call(
-      GATEWAY_METHOD.CONVERSATION_RESET,
+      GATEWAY_METHOD.CONVERSATION_DELETE,
       {},
       { expectedRevision: { sessionKey: "agent:main:main", sessionRevision: "gen-1" } },
     );
@@ -204,7 +204,7 @@ for (const kind of ["in-process", "loopback"] as const) {
     assert.equal(oldConfiguration.ok, false);
     if (!oldConfiguration.ok)
       assert.equal(oldConfiguration.error.code, GATEWAY_ERROR.REVISION_MISMATCH);
-    assert.deepEqual(h.effects, ["reset"]);
+    assert.deepEqual(h.effects, ["delete"]);
   });
 
   test(`[${kind}] unknown methods, unsupported versions, thrown handlers, and typed refusals all answer as errors`, async () => {

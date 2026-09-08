@@ -100,7 +100,6 @@ test("the protocol answers every request once and serves the brain store, the th
   const deleted = await client.deleteConversationHistory(MAIN_SESSION_KEY, NOW);
   assert.equal(deleted?.published, true);
   assert.deepEqual(await client.listHistory(MAIN_SESSION_KEY, NOW), []);
-  assert.equal((await client.listArchives()).length, 1);
   assert.equal(await client.close(), true);
   // A request against a closed database is an error answer, not a hang.
   await assert.rejects(client.listHistory(MAIN_SESSION_KEY, NOW), /not open/);

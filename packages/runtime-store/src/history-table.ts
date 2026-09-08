@@ -103,23 +103,6 @@ function appendOne(
   return true;
 }
 
-/**
- * Writes a line back from its archive under the identity it left with: the
- * same event key the live append writes for the entry, so a late re-report
- * of a restored line finds its row instead of standing beside it. Admission,
- * retention, and the once-published check are the live append's concerns; a
- * restore lands only in a conversation holding nothing newer, and the lines
- * it writes already stood together under the same index.
- */
-export function restoreHistoryLine(
-  database: RuntimeDatabase,
-  sessionKey: SessionKey,
-  sessionId: string | undefined,
-  entry: ConversationEntry & { recordedAt: number },
-): void {
-  insertLine(database, sessionKey, sessionId, entry);
-}
-
 function insertLine(
   database: RuntimeDatabase,
   sessionKey: SessionKey,

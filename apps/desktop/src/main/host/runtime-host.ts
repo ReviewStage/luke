@@ -2271,38 +2271,16 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
       children: brainWiring.children,
       configuration: () => brainWiring.configuration(),
       updateConfiguration: (patch) => brainWiring.updateConfiguration(patch),
-      pendingNoticeCount: () => brainWiring.pendingNotices().length,
     },
     conversations: conversationControls,
     memory: {
-      search: async (query, maxResults, signal = new AbortController().signal) => {
-        const access = memoryWiring.accessFor(MAIN_SESSION_KEY);
-        if (!access)
-          return { status: ACT_RESULT_STATUS.REJECTED, reason: "no notebook index stands" };
-        return access.search({
-          query,
-          ...(maxResults !== undefined ? { maxResults } : undefined),
-          signal,
-        });
-      },
-      get: async (filePath, from, lines) => {
-        const access = memoryWiring.accessFor(MAIN_SESSION_KEY);
-        if (!access)
-          return { status: ACT_RESULT_STATUS.REJECTED, reason: "no notebook index stands" };
-        return access.get({
-          path: filePath,
-          ...(from !== undefined ? { from } : undefined),
-          ...(lines !== undefined ? { lines } : undefined),
-        });
-      },
-      forget: (ask) => memoryMaintenance.forget(ask),
       status: () => ({
         mode: memoryWiring.mode(),
         entries: runtimeStoreWiring.rememberedFacts().length,
       }),
     },
-    observedSessions: () =>
-      sessionRegistry.list().filter((session) => session.realtimeVoice !== true),
+    observedSessionCount: () =>
+      sessionRegistry.list().filter((session) => session.realtimeVoice !== true).length,
     deliveries: brainReplyDeliveries,
     receiver: voiceReceiver,
     nodes,

@@ -222,7 +222,8 @@ export function isArchiveEncoding(value: UnparsedWireValue): value is ArchiveEnc
  * One deleted conversation's recoverable archive as the registry lists it.
  * The payload was committed in the same transaction that removed the rows,
  * then published to a file named here and verified by hash; a registry row
- * with no publication yet is one a launch retries.
+ * with no publication yet is one a launch retries. Nothing reads the file
+ * back: the record is what the store's own maintenance lists it by.
  */
 export interface HistoryArchiveRecord {
   readonly archiveId: string;
@@ -269,42 +270,4 @@ export function historyArchiveRecordFromWire(
     historyLines: value.historyLines,
     transcriptEvents: value.transcriptEvents,
   };
-}
-
-/** The record as the protocol carries it; `historyArchiveRecordFromWire` reads it back whole. */
-export function historyArchiveRecordToWire(record: HistoryArchiveRecord): WireRecord {
-  return {
-    archiveId: record.archiveId,
-    sessionKey: record.sessionKey,
-    kind: record.kind,
-    name: record.name,
-    createdAt: record.createdAt,
-    deletedAt: record.deletedAt,
-    encoding: record.encoding,
-    sha256: record.sha256,
-    byteLength: record.byteLength,
-    fileName: record.fileName,
-    ...(record.publishedAt !== undefined ? { publishedAt: record.publishedAt } : undefined),
-    historyLines: record.historyLines,
-    transcriptEvents: record.transcriptEvents,
-  };
-}
-
-/** How a restore of a deleted conversation's archive ended. */
-export const RESTORE_OUTCOME = {
-  RESTORED: "restored",
-  /** The conversation already holds lines newer than the archive; nothing was changed. */
-  NEWER_LIVE: "newer-live",
-  MISSING: "missing",
-  /** The file is gone or does not match its hash and the registry no longer holds the payload. */
-  UNREADABLE: "unreadable",
-} as const;
-
-export type RestoreOutcome = (typeof RESTORE_OUTCOME)[keyof typeof RESTORE_OUTCOME];
-
-const RESTORE_OUTCOME_LIST: readonly RestoreOutcome[] = Object.values(RESTORE_OUTCOME);
-
-export function isRestoreOutcome(value: UnparsedWireValue): value is RestoreOutcome {
-  // SAFETY: value is a string; list membership is the vocabulary check.
-  return isWireString(value) && RESTORE_OUTCOME_LIST.includes(value as RestoreOutcome);
 }

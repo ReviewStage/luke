@@ -13,13 +13,9 @@ import {
   type ConversationKind,
   type ConversationRecord,
   DEFAULT_AGENT_ID,
-  type HistoryArchiveRecord,
   MAIN_CONVERSATION_NAME,
   MAIN_SESSION_KEY,
-  RESTORE_OUTCOME,
-  type RestoreOutcome,
   type SessionKey,
-  threadSessionKey,
 } from "@sidecar/runtime-contracts";
 import type { NotebookEntry, NotebookMutation } from "@sidecar/runtime-store";
 import {
@@ -42,8 +38,8 @@ import { ConversationThread, MemoryHistoryStore } from "./conversation-thread";
  * empty and refuses every write, and nothing is recorded from this process.
  *
  * The conversation directory is held here too: what the store lists, and
- * beside it the temporary threads that exist in this process alone and are
- * gone at the next launch.
+ * beside it the conversations a run with nothing on disk holds in this
+ * process alone, which are gone at the next launch.
  */
 export interface RuntimeStoreWiringDependencies {
   /** Whether this run keeps anything on disk; a fixture or capture run does not. */
@@ -62,7 +58,7 @@ export interface RuntimeStoreWiringDependencies {
     entries: readonly ConversationEntry[],
     except?: HistoryReporter,
   ) => void;
-  /** Hears the directory whenever a conversation is created, archived, restored, or deleted. */
+  /** Hears the directory whenever a conversation is created, archived, or deleted. */
   onDirectoryChanged: (directory: ConversationDirectorySnapshot) => void;
   report: (message: string) => void;
 }
@@ -80,7 +76,6 @@ export type HistoryErasure = Pick<DeletionOutcome, "published">;
 
 export interface ConversationDirectorySnapshot {
   entries: readonly ConversationRecord[];
-  archives: readonly HistoryArchiveRecord[];
 }
 
 export interface RuntimeStoreWiring {
@@ -88,7 +83,7 @@ export interface RuntimeStoreWiring {
   client: () => RuntimeStoreClient;
   /** One conversation's thread, relayed between windows through this process; created on first use. */
   thread: (sessionKey?: SessionKey) => ConversationThread<HistoryReporter>;
-  /** A conversation's envelope, for the brain wiring to build its writer on: the store's, or memory alone for a temporary thread. */
+  /** A conversation's envelope, for the brain wiring to build its writer on: the store's, or memory alone where nothing is kept on disk. */
   brainStateRepository: (sessionKey?: SessionKey) => BrainStateRepository;
   /** Opens the database for this launch. */
   open: () => Promise<void>;
@@ -125,18 +120,17 @@ export interface RuntimeStoreWiring {
     recordedAt?: number,
     sessionKey?: SessionKey,
   ) => Promise<boolean>;
-  /** The directory as this process holds it: stored conversations and the temporary threads of this run. */
+  /** The directory as this process holds it: stored conversations and the memory-held ones of this run. */
   directory: () => ConversationDirectorySnapshot;
   /** Whether the key names a conversation the directory lists right now. */
   holds: (sessionKey: SessionKey) => boolean;
-  createThread: (temporary: boolean) => Promise<ConversationRecord>;
-  /** Whether the key names a temporary thread of this run: held in memory alone, and never a recall source. */
+  /** Whether the key names a conversation held in memory alone for this run, which is never a recall source. */
   isTemporary: (sessionKey: SessionKey) => boolean;
   /**
    * Lists a runtime-owned conversation — an observed session's — creating
    * its row when none stands and bringing an archived one back, so the
    * selector shows it and its thread takes lines. In a run with nothing on
-   * disk it stands beside the temporary threads and is gone at the next launch.
+   * disk it is held in memory alone and is gone at the next launch.
    */
   ensureConversation: (
     sessionKey: SessionKey,
@@ -149,15 +143,8 @@ export interface RuntimeStoreWiring {
   close: () => Promise<void>;
   /** The child service's records and completions; a run with nothing on disk keeps them in memory alone. */
   childStore: () => ChildStore;
+  /** Retires a conversation's row, keeping its history: the brain's own cleanup of an ended child. */
   archive: (sessionKey: SessionKey) => Promise<boolean>;
-  unarchive: (sessionKey: SessionKey) => Promise<boolean>;
-  /**
-   * The store side of Delete history, called once the thread is fenced and
-   * the conversation's brain retired: the rows go behind a committed archive
-   * and the archive is published. A thread held in memory alone has nothing
-   * on disk to archive, so forgetting its lines is the whole erasure and
-   * answers as published.
-   */
   /**
    * The conversation's durable Clear cutoff as the store holds it now, in
    * the store's own order behind every request already sent and ahead of
@@ -165,20 +152,24 @@ export interface RuntimeStoreWiring {
    * held in memory alone has no durable cutoff and answers an absent one.
    */
   historyCutoff: (sessionKey: SessionKey) => Promise<CutoffBefore | undefined>;
+  /**
+   * The store side of Delete history, called once the thread is fenced and
+   * the conversation's brain retired: the rows go behind a committed archive
+   * and the archive is published. A thread held in memory alone has nothing
+   * on disk to archive, so forgetting its lines is the whole erasure and
+   * answers as published.
+   */
   eraseHistory: (
     sessionKey: SessionKey,
     now: number,
     keepSessionId: string | undefined,
     cutoffBefore: number | undefined,
   ) => Promise<HistoryErasure | undefined>;
-  restoreArchive: (archiveId: string) => Promise<RestoreOutcome>;
   /** One maintenance pass, with the conversations that must be kept whatever their age. */
   runMaintenance: (preserve: readonly SessionKey[]) => Promise<MaintenanceReport | undefined>;
   /** Refreshes the directory from the store and tells every window. */
   refreshDirectory: () => Promise<void>;
 }
-
-const THREAD_NAME_PREFIX = "Thread";
 
 export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): RuntimeStoreWiring {
   let runtimeStore: RuntimeStoreClient | undefined;
@@ -190,7 +181,6 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
   const threads = new Map<SessionKey, ConversationThread<HistoryReporter>>();
   const temporary = new Map<SessionKey, ConversationRecord>();
   let stored: readonly ConversationRecord[] = [];
-  let archives: readonly HistoryArchiveRecord[] = [];
 
   const memoryStores = new Map<SessionKey, MemoryHistoryStore>();
   const memoryThread = (sessionKey: SessionKey) => {
@@ -227,17 +217,11 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
 
   const directory = (): ConversationDirectorySnapshot => ({
     entries: [...stored, ...temporary.values()],
-    archives,
   });
   const announce = () => dependencies.onDirectoryChanged(directory());
 
   const refreshDirectory = async (): Promise<void> => {
-    if (dependencies.persistent) {
-      [stored, archives] = await Promise.all([
-        client().listConversations(),
-        client().listArchives(),
-      ]);
-    }
+    if (dependencies.persistent) stored = await client().listConversations();
     announce();
   };
 
@@ -266,7 +250,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     ];
   }
 
-  /** A temporary thread's envelope: held in this process for as long as the brain over it stands, and gone with it. */
+  /** A memory-held conversation's envelope: kept for as long as the brain over it stands, and gone with it. */
   const memoryRepository = (): BrainStateRepository => {
     let record: string | undefined;
     return brainStateRepositoryFromStorage({
@@ -279,9 +263,9 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
   };
 
   /**
-   * A conversation this process holds alone: a temporary thread, and every
-   * conversation of a run that keeps nothing on disk. Its history lives in
-   * memory with it and is gone at the next launch.
+   * A conversation this process holds alone: every conversation of a run
+   * that keeps nothing on disk. Its history lives in memory with it and is
+   * gone at the next launch.
    */
   const temporaryRecord = (
     sessionKey: SessionKey,
@@ -397,27 +381,6 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     directory,
     holds,
     isTemporary: (sessionKey) => temporary.has(sessionKey),
-    createThread: async (isTemporary) => {
-      const now = dependencies.now();
-      const ordinal =
-        stored.filter((record) => record.kind === CONVERSATION_KIND.THREAD).length +
-        temporary.size +
-        1;
-      const name = `${THREAD_NAME_PREFIX} ${ordinal}`;
-      const sessionKey = threadSessionKey(dependencies.createEventId());
-      if (isTemporary || !dependencies.persistent) {
-        return temporaryRecord(sessionKey, CONVERSATION_KIND.THREAD, name, now);
-      }
-      const created = await client().createConversation({
-        agentId: DEFAULT_AGENT_ID,
-        sessionKey,
-        name,
-        kind: CONVERSATION_KIND.THREAD,
-        now,
-      });
-      await refreshDirectory();
-      return created;
-    },
     ensureConversation: async (sessionKey, kind, name) => {
       const now = dependencies.now();
       const held =
@@ -441,8 +404,8 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     scheduledJobStore: () => (dependencies.persistent ? client().scheduledJobStore() : memoryJobs),
     childStore: () => (dependencies.persistent ? client().childStore() : childStore),
     archive: async (sessionKey) => {
-      // Archiving preserves history, and a temporary thread has nowhere to
-      // preserve it: the ask is refused and the thread left exactly as it was.
+      // Archiving preserves history, and a memory-held conversation has
+      // nowhere to preserve it: the ask is refused and it is left as it was.
       if (temporary.has(sessionKey) || !dependencies.persistent) return false;
       const archived = await client().archiveConversation(
         sessionKey,
@@ -452,7 +415,6 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
       await refreshDirectory();
       return archived;
     },
-    unarchive,
     historyCutoff: async (sessionKey) => {
       if (temporary.has(sessionKey) || !dependencies.persistent) return { value: undefined };
       try {
@@ -482,16 +444,6 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
       } finally {
         await refreshDirectory();
       }
-    },
-    restoreArchive: async (archiveId) => {
-      if (!dependencies.persistent) return RESTORE_OUTCOME.MISSING;
-      const result = await client().restoreArchive(archiveId, DEFAULT_AGENT_ID, dependencies.now());
-      if (result.outcome === RESTORE_OUTCOME.RESTORED && result.sessionKey) {
-        await restoreThread(result.sessionKey);
-        thread(result.sessionKey).announce();
-      }
-      await refreshDirectory();
-      return result.outcome;
     },
     runMaintenance: async (preserve) => {
       if (!dependencies.persistent) return undefined;

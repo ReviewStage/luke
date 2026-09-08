@@ -5,7 +5,6 @@ import {
   CONVERSATION_KIND,
   type ConversationRecord,
   MAIN_SESSION_KEY,
-  RESTORE_OUTCOME,
   type SessionKey,
   threadSessionKey,
 } from "@sidecar/runtime-contracts";
@@ -22,10 +21,7 @@ const THREAD = threadSessionKey("t-1");
 /** The cutoff an earlier Clear left, which the deletion's archive must record as the one before its own. */
 const EARLIER_CUTOFF = NOW - 5;
 
-function harness(
-  erasePublished = true,
-  { archives = true, marks = true, readsCutoff = true } = {},
-) {
+function harness(erasePublished = true, { marks = true, readsCutoff = true } = {}) {
   const calls: string[] = [];
   let generation = "gen-1";
   const record = (sessionKey: SessionKey): ConversationRecord => ({
@@ -38,7 +34,7 @@ function harness(
   const entries: readonly ConversationEntry[] = [];
   const dependencies: ConversationOperationsDependencies = {
     store: {
-      directory: () => ({ entries: [record(THREAD)], archives: [] }),
+      directory: () => ({ entries: [record(THREAD)] }),
       holds: (sessionKey) => sessionKey === THREAD || sessionKey === MAIN_SESSION_KEY,
       // SAFETY: the operations reach the thread for its lines and its fence alone.
       thread: (sessionKey) =>
@@ -48,18 +44,6 @@ function harness(
             calls.push(`fence:${sessionKey}:${deletedAt}`);
           },
         }) as unknown as ReturnType<ConversationOperationsDependencies["store"]["thread"]>,
-      createThread: async (temporary) => {
-        calls.push(`create:${temporary}`);
-        return record(THREAD);
-      },
-      archive: async (sessionKey) => {
-        calls.push(`archive:${sessionKey}`);
-        return archives;
-      },
-      unarchive: async (sessionKey) => {
-        calls.push(`unarchive:${sessionKey}`);
-        return true;
-      },
       historyCutoff: async (sessionKey) => {
         calls.push(`cutoff:${sessionKey}`);
         return readsCutoff ? { value: EARLIER_CUTOFF } : undefined;
@@ -68,22 +52,8 @@ function harness(
         calls.push(`erase:${sessionKey}:${now}:${keepSessionId}:${cutoffBefore}`);
         return { published: erasePublished };
       },
-      restoreArchive: async (archiveId) => {
-        calls.push(`restore:${archiveId}`);
-        return RESTORE_OUTCOME.RESTORED;
-      },
     },
     brain: {
-      openConversation: async (sessionKey) => {
-        calls.push(`open:${sessionKey}`);
-      },
-      closeConversation: async (sessionKey) => {
-        calls.push(`close:${sessionKey}`);
-      },
-      resetConversation: async (sessionKey) => {
-        calls.push(`reset:${sessionKey}`);
-        return true;
-      },
       // SAFETY: the deletion reaches the store for its synchronous fence and the successor's id alone.
       store: (sessionKey) =>
         ({
@@ -102,35 +72,6 @@ function harness(
   };
   return { operations: conversationOperations(dependencies), calls };
 }
-
-test("a new thread opens a brain over it, and archiving retires the brain only once the store archived; main cannot be archived", async () => {
-  const { operations, calls } = harness();
-  assert.equal(await operations.createThread(false), THREAD);
-  assert.equal(await operations.archive(THREAD), true);
-  assert.equal(await operations.archive(MAIN_SESSION_KEY), false);
-  assert.equal(await operations.unarchive(THREAD), true);
-  assert.deepEqual(calls, [
-    "create:false",
-    `open:${THREAD}`,
-    `archive:${THREAD}`,
-    `close:${THREAD}`,
-    `unarchive:${THREAD}`,
-    `open:${THREAD}`,
-  ]);
-});
-
-test("an archive the store refuses leaves the thread's brain standing: an active record is never left with nothing to answer it", async () => {
-  const { operations, calls } = harness(true, { archives: false });
-  assert.equal(await operations.archive(THREAD), false);
-  assert.deepEqual(calls, [`archive:${THREAD}`]);
-});
-
-test("Start fresh replaces a conversation's lifetime and tells the voice window nothing: no history was erased", async () => {
-  const { operations, calls } = harness();
-  assert.equal(await operations.startFresh(THREAD), true);
-  assert.equal(await operations.startFresh(MAIN_SESSION_KEY), true);
-  assert.deepEqual(calls, [`reset:${THREAD}`, `reset:${MAIN_SESSION_KEY}`]);
-});
 
 test("Delete history fences the thread and the brain's generation, then erases what stood at or before the press while the successor lifetime stands; nothing is retired or reopened", async () => {
   const { operations, calls } = harness();

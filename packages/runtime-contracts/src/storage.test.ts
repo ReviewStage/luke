@@ -10,7 +10,6 @@ import {
   conversationRecordToWire,
   type HistoryArchiveRecord,
   historyArchiveRecordFromWire,
-  historyArchiveRecordToWire,
 } from "./storage.js";
 
 const NOW = 1_800_000_000_000;
@@ -47,7 +46,7 @@ test("a conversation record survives the wire whole, with every optional field p
   }
 });
 
-test("an archive record survives the wire whole, published or not yet", () => {
+test("an archive record reads back whole from its stored row, published or not yet", () => {
   const published: HistoryArchiveRecord = {
     archiveId: "archive-1",
     sessionKey: sessionKey("agent:main:main"),
@@ -65,7 +64,6 @@ test("an archive record survives the wire whole, published or not yet", () => {
   };
   const { publishedAt: _published, ...pending } = published;
   for (const record of [published, pending]) {
-    const wire = throughText(historyArchiveRecordToWire(record));
-    assert.deepEqual(historyArchiveRecordFromWire(wire), record);
+    assert.deepEqual(historyArchiveRecordFromWire(throughText({ ...record })), record);
   }
 });

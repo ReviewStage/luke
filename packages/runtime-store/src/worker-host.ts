@@ -1,6 +1,6 @@
 import path from "node:path";
 import type { UnparsedWireValue } from "@sidecar/wire";
-import { deleteConversationHistory, listArchives, restoreArchive } from "./archives.js";
+import { deleteConversationHistory } from "./archives.js";
 import { loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
 import {
   deleteChildCompletion,
@@ -203,9 +203,6 @@ const HANDLERS: RuntimeStoreHandlers = {
       params.now,
       params,
     ),
-  [RUNTIME_STORE_METHOD.ARCHIVES_LIST]: (host) => listArchives(host.opened()),
-  [RUNTIME_STORE_METHOD.ARCHIVE_RESTORE]: (host, params) =>
-    restoreArchive(host.opened(), host.agentRoot(), params.archiveId, params.agentId, params.now),
   [RUNTIME_STORE_METHOD.MAINTENANCE_RUN]: (host, params) =>
     runHistoryMaintenance(host.opened(), host.agentRoot(), params),
   [RUNTIME_STORE_METHOD.JOBS_LIST]: (host) => listScheduledJobs(host.opened()),

@@ -32,7 +32,6 @@ import {
   MAIN_CONVERSATION_NAME,
   MAIN_SESSION_KEY,
   type ModelResponse,
-  RESTORE_OUTCOME,
   type TranscriptEvent,
 } from "@sidecar/runtime-contracts";
 import {
@@ -335,6 +334,31 @@ async function seeded(c: ReturnType<typeof composed>) {
   return { agent, client };
 }
 
+/** One archive as the registry row holds it, read from the database the worker owns. */
+type ArchiveRegistryRow = {
+  archiveId: string;
+  fileName: string;
+  encoding: string;
+  historyLines: number;
+  publishedAt: number | null;
+};
+
+function archivesOf(root: string): ArchiveRegistryRow[] {
+  const raw = new DatabaseSync(path.join(root, "agent.sqlite"), { readOnly: true });
+  try {
+    // SAFETY: the columns selected are the ones the row type names, typed by the schema.
+    return raw
+      .prepare(
+        `SELECT archive_id AS archiveId, file_name AS fileName, encoding,
+                history_lines AS historyLines, published_at AS publishedAt
+         FROM history_archives ORDER BY deleted_at DESC, archive_id`,
+      )
+      .all() as ArchiveRegistryRow[];
+  } finally {
+    raw.close();
+  }
+}
+
 /** The cutoff the archive's registry row recorded as standing before its deletion. */
 function previousCutoffOf(root: string, archiveId: string): number | null | undefined {
   const raw = new DatabaseSync(path.join(root, "agent.sqlite"), { readOnly: true });
@@ -396,8 +420,9 @@ test("a Clear under a held model answer fences the brain and the thread before a
   );
   assert.equal(await c.client.historyClearedAt(MAIN_SESSION_KEY), pressedAt);
   // The archive holds exactly what stood at the press, compressed on disk.
-  const [archive] = await c.client.listArchives();
-  assert.ok(archive?.publishedAt !== undefined);
+  const [archive] = archivesOf(c.root);
+  assert.ok(archive);
+  assert.notEqual(archive.publishedAt, null);
   // The two seeded lines and the second ask, which stood at the press; its answer never landed.
   assert.equal(archive.historyLines, 3);
   const bytes = fs.readFileSync(path.join(c.root, "archives", archive.fileName));
@@ -463,7 +488,7 @@ test("a Clear whose marker the disk refuses answers refused without touching the
   assert.ok(c.reports.some((report) => report.includes("could not be marked erased")));
   // Nothing was erased on disk, and no archive was made.
   assert.ok(c.rows().includes(OLD_REPLY));
-  assert.deepEqual(await c.client.listArchives(), []);
+  assert.deepEqual(archivesOf(c.root), []);
   // In memory the old generation stands nowhere: the store holds the marker
   // successor, the thread is fenced, and the agent's next ask sees no old word.
   assert.equal(c.store.resetMarker()?.clearedAt, pressedAt);
@@ -510,14 +535,14 @@ test("a credential rebuild landing while the deletion waits on the disk builds o
   await c.stop(rebuilt);
 });
 
-test("a Clear whose marker the disk refused, followed by a Clear that lands, archives the lines still on disk under the durable cutoff, so their restore shows them again", async (t) => {
+test("a Clear whose marker the disk refused, followed by a Clear that lands, archives the lines still on disk under the cutoff the disk held before the press, never the refused press's own fence", async (t) => {
   const c = composed();
   t.after(() => c.close());
   const { agent } = await seeded(c);
   await c.stop(agent);
   // The first press: fenced in memory, marker refused, the lines still on disk.
   c.repo.refuse = true;
-  const firstAt = c.tick();
+  c.tick();
   assert.equal(await c.clear(), CONVERSATION_DELETE_OUTCOME.REFUSED);
   assert.equal(await c.client.historyClearedAt(MAIN_SESSION_KEY), undefined);
   c.repo.refuse = false;
@@ -526,17 +551,8 @@ test("a Clear whose marker the disk refused, followed by a Clear that lands, arc
   const secondAt = c.tick();
   assert.equal(await c.clear(), CONVERSATION_DELETE_OUTCOME.COMPLETE);
   assert.equal(await c.client.historyClearedAt(MAIN_SESSION_KEY), secondAt);
-  const [archive] = await c.client.listArchives();
+  const [archive] = archivesOf(c.root);
   assert.ok(archive);
   assert.equal(archive.historyLines, 2);
   assert.equal(previousCutoffOf(c.root, archive.archiveId), null);
-  c.tick();
-  const restored = await c.client.restoreArchive(archive.archiveId, DEFAULT_AGENT_ID, c.now());
-  assert.equal(restored.outcome, RESTORE_OUTCOME.RESTORED);
-  const cutoff = await c.client.historyClearedAt(MAIN_SESSION_KEY);
-  assert.ok(cutoff === undefined || cutoff < firstAt, `cutoff ${cutoff} hides the restored lines`);
-  assert.deepEqual(
-    (await c.client.listHistory(MAIN_SESSION_KEY, c.now())).map((entry) => entry.words),
-    [OLD_ASK, OLD_REPLY],
-  );
 });
