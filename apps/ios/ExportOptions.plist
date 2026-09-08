@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- xcodebuild -exportArchive reads this to sign the archive for App Store
+	     Connect and upload it in the same step. It names no team: the archive
+	     already carries the project's DEVELOPMENT_TEAM, and the App Store
+	     Connect API key passed on the command line is what authorizes the
+	     signing and the upload. The build number is the archive's own, set by
+	     CURRENT_PROJECT_VERSION at archive time, so App Store Connect is told
+	     not to rewrite it. -->
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>destination</key>
+	<string>upload</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<key>uploadSymbols</key>
+	<true/>
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+</dict>
+</plist>

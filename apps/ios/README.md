@@ -36,6 +36,69 @@ pick up an SPM test target from this app scheme — neither as a testable
 reference nor through a test plan — so a scheme entry would claim coverage the
 simulator run does not deliver.
 
+## TestFlight
+
+The iPhone app and the Watch app inside it ship as one archive, and the
+project keeps everything the archive needs that does not name a team:
+
+- **One version for both apps.** `MARKETING_VERSION` and
+  `CURRENT_PROJECT_VERSION` are set once, on the project, and inherited by
+  every target, because watchOS refuses an embedded Watch app whose version
+  differs from its companion's. The marketing version is the phone's own,
+  independent of the desktop's, and is bumped by hand in the project. The
+  build number checked in is `1` and is meant to be overridden at archive time,
+  since App Store Connect refuses a build number it has already seen under
+  the same version, and `ExportOptions.plist` tells it not to rewrite the one
+  the archive carries.
+- **Export compliance answered in the build.** Both apps set
+  `ITSAppUsesNonExemptEncryption` to `NO`: they use only TLS through the
+  system's own networking, which is exempt, and without the key every upload
+  waits on the same question in App Store Connect before anyone can install
+  it.
+- **A privacy manifest in each app.** `Luke/PrivacyInfo.xcprivacy` and
+  `LukeWatch/PrivacyInfo.xcprivacy` declare the required-reason APIs the apps
+  and `LukeKit` call, and `scripts/ios-project.test.mjs` holds the
+  declarations equal to what the sources actually call.
+
+What the archive still needs from outside the tree is the team: the
+`DEVELOPMENT_TEAM` in the project must be the team that holds the App Store
+Connect record for `dev.tryluke.ios`, and the upload is authorized by an App
+Store Connect API key of that team with the App Manager role, passed on the
+command line and never committed. With Xcode 26 selected, from the repository
+root:
+
+```sh
+xcodebuild \
+  -project apps/ios/Luke.xcodeproj \
+  -scheme Luke \
+  -configuration Release \
+  -destination 'generic/platform=iOS' \
+  -archivePath artifacts/ios/Luke.xcarchive \
+  -allowProvisioningUpdates \
+  -authenticationKeyPath /path/to/AuthKey_KEYID.p8 \
+  -authenticationKeyID KEYID \
+  -authenticationKeyIssuerID ISSUER_UUID \
+  CURRENT_PROJECT_VERSION=42 \
+  POSTHOG_PROJECT_API_KEY=phc_your_project_key \
+  archive
+
+xcodebuild -exportArchive \
+  -archivePath artifacts/ios/Luke.xcarchive \
+  -exportOptionsPlist apps/ios/ExportOptions.plist \
+  -exportPath artifacts/ios/export \
+  -allowProvisioningUpdates \
+  -authenticationKeyPath /path/to/AuthKey_KEYID.p8 \
+  -authenticationKeyID KEYID \
+  -authenticationKeyIssuerID ISSUER_UUID
+```
+
+The first command builds and signs the archive, creating the distribution
+certificate and profiles through the API key if the team has none yet. The
+second signs it for App Store Connect and uploads it. Once App Store Connect
+finishes processing, the build is offered to internal testers at once and to
+external groups after Beta App Review. The Watch app installs on a paired
+watch with the iPhone build; it needs no record or upload of its own.
+
 ## Voice acts
 
 The voice screen carries the same acts the desktop's conversation does,
