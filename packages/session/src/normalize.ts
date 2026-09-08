@@ -187,7 +187,7 @@ function normalizeAgent(
  * workspace rename with no target names nothing to rename. The adapter's own
  * order is kept, because it is the order a surface draws.
  */
-export function normalizeAdvertisedActs(
+function normalizeAdvertisedActs(
   advertises: readonly AdvertisedAct[] | undefined,
 ): readonly AdvertisedAct[] {
   if (!advertises) return [];
