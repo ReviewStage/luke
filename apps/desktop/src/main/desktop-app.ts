@@ -59,25 +59,13 @@ import {
   ARRIVAL_SPEECH_KIND,
   BRIEFING_SPEECH_KIND,
   CALENDAR_ONBOARDING_SPEECH_KIND,
-  type ConversationEntry,
   conversationHistoryText,
   recentConversationEntries,
   sessionContextText,
   workspaceProjectContextText,
 } from "@sidecar/realtime";
-import {
-  CREDENTIAL_REFERENCE_KIND,
-  CronScheduler,
-  heartbeatJob,
-  InProcessTransport,
-  LANE,
-} from "@sidecar/runtime";
-import {
-  CONVERSATION_KIND,
-  GATEWAY_CLIENT_ROLE,
-  MAIN_SESSION_KEY,
-  NODE_CAPABILITY_STATUS,
-} from "@sidecar/runtime-contracts";
+import { CREDENTIAL_REFERENCE_KIND, CronScheduler, heartbeatJob, LANE } from "@sidecar/runtime";
+import { CONVERSATION_KIND, MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   CreatedWorkspaceOpenTracker,
@@ -112,7 +100,6 @@ import { IntroductionRealtimeCredentialMinter, VoiceCapabilityAssembler } from "
 import {
   ACT_RESULT_STATUS,
   isRecord,
-  isWireString,
   text,
   type UnparsedWireValue,
   type WireRecord,
@@ -141,7 +128,6 @@ import {
   type AccountSnapshot,
   type AppBootstrap,
   type BrainAppActRequest,
-  type ConversationHistoryPayload,
   type MicrophoneRoute,
   type MicrophoneStatus,
   type ObservedAccountCalendars,
@@ -181,15 +167,9 @@ import {
   shouldBackfillCalendarOnboardingSettled,
 } from "./calendar-onboarding-flow";
 import { conversationOperations, startHistoryMaintenance } from "./conversation-operations";
-import {
-  DESKTOP_NATIVE_NODE_ID,
-  DESKTOP_OPERATOR_CLIENT_ID,
-  NODE_CAPABILITY,
-} from "./gateway/desktop-node";
 import { currentBuildIdentity } from "./gateway/gateway-process";
 import { createGatewayLauncher } from "./gateway/launcher";
-import { conversationEntryFromWire, createGatewayOperator } from "./gateway/operator";
-import { createGatewayService } from "./gateway/service";
+import { wireGateway } from "./gateway/wiring";
 import {
   INTRODUCTION_FADE_MS,
   INTRODUCTION_HANDOFF_READY_MS,
@@ -520,7 +500,7 @@ const runtimeStoreWiring = wireRuntimeStore({
   // Every change to a thread becomes a host event; the operator client below
   // relays main's to the windows, skipping the one whose report produced it.
   onHistoryChanged: (sessionKey, entries, except) =>
-    gatewayService.historyChanged(sessionKey, entries, except?.id),
+    gatewayWiring.service.historyChanged(sessionKey, entries, except?.id),
   onDirectoryChanged: () => undefined,
   report: (message) => process.stderr.write(`${message}\n`),
 });
@@ -1615,7 +1595,7 @@ async function deliverBriefing(delivery: BrainDelivery): Promise<void> {
  */
 const sessionActPerformer = createSessionActPerformer({
   sessionRegistry,
-  openExternal: (url) => openExternalThroughNode(url),
+  openExternal: (url) => gatewayWiring.openExternalThroughNode(url),
   adapterFor,
   sendsNetwork: runMode.sendsNetwork,
   settingsStore,
@@ -1706,12 +1686,12 @@ const brainWiring = wireBrain({
   ...(agentTrace ? { traceTurn: (record) => agentTrace.recordBrainTurn(record) } : undefined),
   recordConversationEntry: (entry, recordedAt, sessionKey) =>
     runtimeStoreWiring.recordConversationEntry(entry, recordedAt, sessionKey),
-  broadcastRequests: (snapshots) => gatewayService.runsReported(snapshots),
-  onEndPublished: (record, sessionKey) => gatewayService.endPublished(record, sessionKey),
+  broadcastRequests: (snapshots) => gatewayWiring.service.runsReported(snapshots),
+  onEndPublished: (record, sessionKey) => gatewayWiring.service.endPublished(record, sessionKey),
   onGenerationReplaced: (sessionKey) => {
     // Briefings are main's alone; replies are owed for any conversation's run.
     if (sessionKey === MAIN_SESSION_KEY) withdrawBriefings();
-    gatewayService.generationReplaced(sessionKey);
+    gatewayWiring.service.generationReplaced(sessionKey);
   },
   acts: {
     sessionActs: sessionActPerformer,
@@ -1729,7 +1709,7 @@ const brainWiring = wireBrain({
       remember: runtimeStoreWiring.rememberNotebookEntry,
       forget: runtimeStoreWiring.forgetNotebookEntry,
     },
-    performAppAct: (action) => invokeNodeAppAct(action),
+    performAppAct: (action) => gatewayWiring.invokeNodeAppAct(action),
     recordConversationEntry: runtimeStoreWiring.recordConversationEntry,
   },
   roster: brainRoster,
@@ -1763,14 +1743,12 @@ const conversationControls = conversationOperations({
 let stopHistoryMaintenance: (() => void) | undefined;
 
 /**
- * The Gateway boundary. The service is the host's side: every capability the
- * protocol names, answered over the wirings above, and every change numbered
- * as an event. The operator is the desktop's own client over the in-process
- * transport, the one way the windows' IPC and this process's surfaces reach
- * the host. The two stand in one process today; the seam is what the process
- * split that follows moves across.
+ * The Gateway boundary: the host's service over the wirings above, and the
+ * desktop's own operator client over the in-process transport, with this
+ * process's native capabilities registered as one node. Every window's IPC
+ * and this process's own surfaces reach the host through the operator.
  */
-const gatewayService = createGatewayService({
+const gatewayWiring = wireGateway({
   brain: {
     current: (sessionKey) => brainWiring.current(sessionKey),
     agentForRun: (runId) => brainWiring.agentForRun(runId),
@@ -1786,7 +1764,7 @@ const gatewayService = createGatewayService({
   },
   conversations: conversationControls,
   memory: {
-    search: async (query, maxResults, signal) => {
+    search: async (query, maxResults, signal = new AbortController().signal) => {
       const access = memoryWiring.accessFor(MAIN_SESSION_KEY);
       if (!access)
         return { status: ACT_RESULT_STATUS.REJECTED, reason: "no notebook index stands" };
@@ -1821,14 +1799,11 @@ const gatewayService = createGatewayService({
   now: Date.now,
   createId: () => randomUUID(),
   report: (message) => process.stderr.write(`${message}\n`),
-});
-const gatewayOperator = createGatewayOperator({
-  transport: new InProcessTransport(gatewayService.server, {
-    clientId: DESKTOP_OPERATOR_CLIENT_ID,
-    role: GATEWAY_CLIENT_ROLE.OPERATOR,
-  }),
-  createId: () => randomUUID(),
-  report: (message) => process.stderr.write(`${message}\n`),
+  broadcast,
+  sendToVoice: (channel, payload) => voiceWindow.current()?.webContents.send(channel, payload),
+  webContentsById: (id) => webContents.fromId(id) ?? undefined,
+  openExternal: (url) => shell.openExternal(url),
+  performAppAct: performBrainAppAct,
 });
 /**
  * The Gateway process. A live run starts it (or finds the one a previous
@@ -1846,88 +1821,6 @@ const gatewayLauncher = runMode.observesProviders
       report: (message) => process.stderr.write(`${message}\n`),
     })
   : undefined;
-// What the host tells its clients, relayed to the windows by the one client
-// that owns them. The runs list reaches every window; a reply offer and a
-// withdrawal reach the voice window, the one receiver; main's history reaches
-// every window but the one whose report produced it.
-gatewayOperator.onRunsChanged((runs) => broadcast(channels.onBrainRequestsChanged, runs));
-gatewayOperator.onDeliveryOffered((offer) => {
-  voiceWindow.current()?.webContents.send(channels.onBrainReplyOffered, offer);
-});
-gatewayOperator.onDeliveriesWithdrawn((epoch) => {
-  voiceWindow.current()?.webContents.send(channels.onBrainRepliesWithdrawn, epoch);
-});
-gatewayOperator.onHistoryChanged((change) => {
-  // The panel draws main alone; another conversation's thread is held by the
-  // host for its brain and its tests and reaches no window.
-  if (change.sessionKey !== MAIN_SESSION_KEY) return;
-  const entries = change.entries
-    .map((entry) => conversationEntryFromWire(entry))
-    .filter((entry): entry is ConversationEntry => entry !== undefined);
-  const payload: ConversationHistoryPayload = { entries, cleared: change.cleared };
-  broadcast(channels.onConversationHistoryChanged, payload, webContentsById(change.reporter));
-});
-/**
- * This process's native capabilities, offered to the host as one node:
- * opening an address with the operating system and carrying an app act to
- * the panel. The host asks for each by name and never reaches Electron
- * itself; while the node is disconnected — never, in one process, but the
- * seam is the point — an ask answers a typed unavailable, and the act it
- * was for is left undone rather than recorded as carried.
- */
-gatewayService.nodes.register({
-  nodeId: DESKTOP_NATIVE_NODE_ID,
-  capabilities: {
-    [NODE_CAPABILITY.OPEN_EXTERNAL]: async (params) => {
-      if (!isWireString(params.url)) throw new Error("open needs a url");
-      await shell.openExternal(params.url);
-      return undefined;
-    },
-    [NODE_CAPABILITY.PANEL_APP_ACT]: (params) => {
-      const action = isWireString(params.act) ? carriedAppActs.get(params.act) : undefined;
-      if (isWireString(params.act)) carriedAppActs.delete(params.act);
-      if (!action) throw new Error("no app act is held under that token");
-      return performBrainAppAct(action);
-    },
-  },
-});
-
-/**
- * The app acts handed to the native node and not yet performed, by token.
- * The act itself was validated against the guide by the act performer, and
- * both sides of this capability stand in one process, so the typed act is
- * held here and only its token crosses the invocation; a node on the other
- * side of a socket is where the act would be serialized, and that boundary
- * is the process split's to draw.
- */
-const carriedAppActs = new Map<string, BrainAppActRequest["action"]>();
-
-/** An app act the brain asked for, carried to the panel through the node capability it registered. */
-async function invokeNodeAppAct(action: BrainAppActRequest["action"]): Promise<WireRecord> {
-  const act = randomUUID();
-  carriedAppActs.set(act, action);
-  const result = await gatewayService.nodes.invoke(NODE_CAPABILITY.PANEL_APP_ACT, { act });
-  carriedAppActs.delete(act);
-  if (result.status === NODE_CAPABILITY_STATUS.OK && isRecord(result.value)) return result.value;
-  return {
-    status: ACT_RESULT_STATUS.REJECTED,
-    reason:
-      result.status === NODE_CAPABILITY_STATUS.OK
-        ? "The panel answered in a shape this build cannot read."
-        : result.reason,
-  };
-}
-
-/** An address the brain or a validated act asked to open, through the node capability; unavailable means not opened. */
-async function openExternalThroughNode(url: string): Promise<void> {
-  const result = await gatewayService.nodes.invoke(NODE_CAPABILITY.OPEN_EXTERNAL, { url });
-  if (result.status !== NODE_CAPABILITY_STATUS.OK) throw new Error(result.reason);
-}
-
-function webContentsById(id: number | undefined): WebContents | undefined {
-  if (id === undefined) return undefined;
-  return webContents.fromId(id) ?? undefined;
-}
 
 /**
  * The durable scheduler: its jobs stand in the runtime store, its ticks run
@@ -2357,7 +2250,7 @@ function registerIpc(): void {
     },
     // The History Clear is Delete history on main: the recoverable deletion,
     // reported to the panel as refused only when the store took nothing.
-    clearConversation: () => gatewayOperator.deleteHistory(MAIN_SESSION_KEY),
+    clearConversation: () => gatewayWiring.operator.deleteHistory(MAIN_SESSION_KEY),
     setShortcutCapturing: (capturing) => hotkeys.setShortcutCapturing(capturing),
     openExternal: (url) => shell.openExternal(url),
     // While the takeover stands and no account credential exists yet, the
@@ -2394,7 +2287,7 @@ function registerIpc(): void {
       panel: (sender) => panels.owns(sender),
       voice: (sender) => voiceWindow.owns(sender),
     },
-    operator: gatewayOperator,
+    operator: gatewayWiring.operator,
   });
   // The renderer's description of the app, pushed whenever it changes: what an
   // app act the brain asks for is validated against here, and what the brain
@@ -2873,7 +2766,7 @@ function offerNextSpeech(): void {
 // never claimed is simply still unclaimed, and a claimed one stays claimed.
 voiceReceiver.onReady(() => {
   offerNextSpeech();
-  gatewayService.receiverReady();
+  gatewayWiring.service.receiverReady();
 });
 voiceReceiver.onReset(() => speechArbiter.reclaimOffer());
 

@@ -42,11 +42,12 @@ import {
 } from "@sidecar/runtime-store";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { ConversationThread } from "../conversation-thread";
+import { operatorOverBrain } from "../gateway/testing";
 import {
   CONVERSATION_DELETE_OUTCOME,
   deleteConversationHistoryFlow,
 } from "./conversation-deletion";
-import { followBrainRequests, submitBrainAsk } from "./ipc";
+import { followBrainRequests } from "./ipc";
 
 /**
  * The Clear composed as the main process composes it: the real database and
@@ -200,13 +201,20 @@ function composed() {
       },
       report: (message) => reports.push(message),
     });
+  // The operator stands over whichever agent the ask names, as the host's
+  // current brain would, so a rebuilt agent is submitted to like the first.
+  let asking: BrainAgent | undefined;
+  const operator = operatorOverBrain({
+    current: () => asking,
+    recordConversationEntry: (entry, at) => record(entry, at),
+  });
   const submit = async (agent: BrainAgent, question: string) => {
-    const result = await submitBrainAsk(
-      agent,
-      { submissionId: `sub-${++ids}`, question, origin: BRAIN_REQUEST_ORIGIN.TYPED },
-      record,
-      MAIN_SESSION_KEY,
-    );
+    asking = agent;
+    const result = await operator.submit({
+      submissionId: `sub-${++ids}`,
+      question,
+      origin: BRAIN_REQUEST_ORIGIN.TYPED,
+    });
     assert.equal(result.outcome, "accepted");
     return result.outcome === "accepted" ? result.runId : "";
   };

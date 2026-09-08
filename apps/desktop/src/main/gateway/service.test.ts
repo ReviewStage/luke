@@ -142,7 +142,6 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
     },
     now: () => NOW,
     createId: () => `id-${++ids}`,
-    report: () => undefined,
   });
   const identity = { clientId: "operator", role: GATEWAY_CLIENT_ROLE.OPERATOR };
   const transport =

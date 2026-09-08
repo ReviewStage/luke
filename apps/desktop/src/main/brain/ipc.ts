@@ -7,7 +7,6 @@ import {
 } from "@sidecar/brain/requests";
 import {
   type ConversationEntry,
-  maximumTypedAskLength,
   replyConversationEntry,
   typedAskConversationEntry,
 } from "@sidecar/realtime";
@@ -64,7 +63,8 @@ export interface BrainIpcDependencies {
   onPublication?: (settled: () => Promise<void>) => void;
 }
 
-const REJECTED_SUBMISSION: BrainAskSubmissionResult = {
+/** The one refusal a window is answered when no brain can take its ask, and what the operator reads for an answer it cannot. */
+export const REJECTED_SUBMISSION: BrainAskSubmissionResult = {
   outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
   reason: BRAIN_SUBMISSION_REJECTION.ABSENT,
 };
@@ -74,37 +74,6 @@ export type BrainPublicationAgent = Pick<
   BrainAgent,
   "request" | "markHistoryRecorded" | "markAskRecorded"
 >;
-
-/**
- * Submits one ask to the brain. The words are bounded like a typed one, the
- * origin is checked against the window that sent it — a panel types, the voice
- * window speaks, and neither may claim the other — and the brain's own answer
- * is what comes back. A typed ask the brain accepted is written into the
- * thread here, in the words the accepted record holds and at the moment it
- * was accepted, because the panel that typed it holds no thread of its own;
- * a write the thread refused leaves the run unmarked, and the follower's next
- * report writes it. The acceptance itself stands whatever the thread did. A
- * spoken ask's words are the voice service's transcript, recorded by the voice
- * window where they were heard, so nothing is recorded for one here.
- */
-export async function submitBrainAsk(
-  brain: BrainAgent | undefined,
-  submission: BrainAskSubmission,
-  record: BrainIpcDependencies["recordConversationEntry"],
-  sessionKey: SessionKey = MAIN_SESSION_KEY,
-): Promise<BrainAskSubmissionResult> {
-  if (!brain) return REJECTED_SUBMISSION;
-  const question = submission.question.trim().slice(0, maximumTypedAskLength);
-  const result = await brain.submitAsk({
-    submissionId: submission.submissionId,
-    origin: submission.origin,
-    question,
-  });
-  if (result.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED) {
-    await publishAsk(brain, result.runId, record, sessionKey);
-  }
-  return result;
-}
 
 /** Writes a typed ask's own line once, at its acceptance, and marks the run when the thread took it. */
 export async function publishAsk(
