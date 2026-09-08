@@ -13,6 +13,7 @@ import {
   hostedBrainCompactRequestFromWire,
   hostedBrainCountTokensAnswerFromWire,
   hostedBrainCountTokensRequestFromWire,
+  hostedBrainEmbedAnswerFromWire,
   hostedBrainRespondRequestFromWire,
 } from "./brain-contract.js";
 
@@ -155,5 +156,37 @@ test("capabilities read whole, and any field off the contract reads as no capabi
   assert.equal(
     hostedBrainCapabilitiesFromWire({ ...capabilities, reasoningEfforts: ["max"] }),
     undefined,
+  );
+});
+
+test("a text of nothing but whitespace carries nothing, wherever the contract reads one", () => {
+  const read = hostedBrainRespondRequestFromWire(respond({ tools: [" "] }), CATALOG);
+  assert.ok(!read.ok && read.refusal === HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
+  assert.equal(
+    hostedBrainEmbedAnswerFromWire({ model: " ", dimensions: 1, vectors: [[1]] }),
+    undefined,
+  );
+});
+
+test("a vector component that is not a finite number is no answer at all", () => {
+  assert.equal(
+    hostedBrainEmbedAnswerFromWire({ model: "m", dimensions: 2, vectors: [[Number.NaN, 1]] }),
+    undefined,
+  );
+  assert.equal(
+    hostedBrainEmbedAnswerFromWire({
+      model: "m",
+      dimensions: 1,
+      vectors: [[Number.POSITIVE_INFINITY]],
+    }),
+    undefined,
+  );
+  assert.deepEqual(
+    hostedBrainEmbedAnswerFromWire({ model: "m", dimensions: 2, vectors: [[1, 2]] }),
+    {
+      model: "m",
+      dimensions: 2,
+      vectors: [[1, 2]],
+    },
   );
 });
