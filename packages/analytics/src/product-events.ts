@@ -578,15 +578,10 @@ type PropertyReader = {
   ) => ProductEventPropertyValue[Property] | undefined;
 };
 
-function memberReader<Value extends string>(
-  values: readonly string[],
-): (value: UnparsedWireValue) => Value | undefined {
+function memberReader(values: readonly string[]): (value: UnparsedWireValue) => string | undefined {
   const members: ReadonlySet<string> = new Set(values);
-  return (value: UnparsedWireValue) => {
-    if (!isWireString(value) || !members.has(value)) return undefined;
-    // SAFETY: the value is a member of this property's own declared set.
-    return value as Value;
-  };
+  return (value: UnparsedWireValue) =>
+    isWireString(value) && members.has(value) ? value : undefined;
 }
 
 const COUNT_BUCKETS: ReadonlySet<number> = new Set(Object.values(PRODUCT_SESSION_COUNT_BUCKET));
@@ -607,8 +602,9 @@ function bucketReader(value: UnparsedWireValue): ProductSessionCountBucket | und
  */
 const PRODUCT_EVENT_PROPERTY_READER: PropertyReader = {
   // SAFETY: the source is keyed by exactly the enumerable properties, and each
-  // reader is built from the set filed under the key it lands on; the cast
-  // restores only what `Object.entries` and `Object.fromEntries` widen away.
+  // reader answers a member of the set filed under the key it lands on, which
+  // is that property's own value type; the cast restores what `Object.entries`
+  // and `Object.fromEntries` widen away.
   ...(Object.fromEntries(
     Object.entries(PRODUCT_EVENT_PROPERTY_VALUES).map(([property, values]) => [
       property,
