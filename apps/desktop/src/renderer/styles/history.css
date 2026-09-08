@@ -308,14 +308,17 @@
   display: flex;
   width: 100%;
   flex: 0 0 auto;
-  justify-content: center;
-  padding: 10px 12px 4px;
 }
 
+/* The label starts at the view's left edge, exactly as Luke's rows do, and
+   centers its words within itself: a label centered by its row instead would
+   begin half a column in, and the pull would carry it that far before sticky
+   could take hold. */
 .history-break-time {
   position: sticky;
   left: 0;
   width: calc(100% - var(--history-time-column));
+  padding: 10px 12px 4px;
   color: var(--text-secondary);
   font-size: 10.5px;
   font-variant-numeric: tabular-nums;
@@ -329,7 +332,7 @@
 }
 
 /* The thread's first date needs no pause above it. */
-.history-list > .history-break:first-child {
+.history-list > .history-break:first-child .history-break-time {
   padding-top: 2px;
 }
 
