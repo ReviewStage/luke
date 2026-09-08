@@ -139,7 +139,6 @@ import {
 } from "#shared/contracts";
 import { VOICE_SOURCE_COUNTED_AS } from "#shared/product-vocabulary";
 import type { BrainRequestSnapshot } from "#shared/wire/brain";
-import { CONVERSATION_DELETE_OUTCOME } from "#shared/wire/conversation";
 import { SPEECH_OUTCOME, type SpeechOutcome } from "#shared/wire/speech";
 import { IDLE_VOICE_VIEW, VOICE_COMMAND, type VoiceView } from "#shared/wire/voice-view";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
@@ -1720,18 +1719,8 @@ const conversationOperations: ConversationOperations = {
     if (restored) await brainWiring.openConversation(sessionKey);
     return restored;
   },
-  deleteHistory: async (sessionKey) => {
-    if (runtimeStoreWiring.isTemporary(sessionKey)) {
-      // A temporary thread has nothing on disk to archive or refuse:
-      // forgetting its lines and its envelope, in the same order, is the
-      // whole deletion.
-      runtimeStoreWiring.thread(sessionKey).fence(Date.now());
-      await brainWiring.closeConversation(sessionKey);
-      await runtimeStoreWiring.eraseHistory(sessionKey, Date.now());
-      await brainWiring.openConversation(sessionKey);
-      return CONVERSATION_DELETE_OUTCOME.COMPLETE;
-    }
-    return deleteConversationHistoryFlow({
+  deleteHistory: (sessionKey) =>
+    deleteConversationHistoryFlow({
       now: Date.now,
       fence: (deletedAt) => {
         runtimeStoreWiring.thread(sessionKey).fence(deletedAt);
@@ -1741,8 +1730,7 @@ const conversationOperations: ConversationOperations = {
       erase: (deletedAt) => runtimeStoreWiring.eraseHistory(sessionKey, deletedAt),
       rebuildBrain: () => brainWiring.openConversation(sessionKey),
       report: (message) => process.stderr.write(`${message}\n`),
-    });
-  },
+    }),
   restoreArchive: (archiveId) => runtimeStoreWiring.restoreArchive(archiveId),
 };
 

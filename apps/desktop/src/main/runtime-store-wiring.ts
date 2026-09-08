@@ -57,6 +57,9 @@ export interface RuntimeStoreWiringDependencies {
   report: (message: string) => void;
 }
 
+/** How the store's side of a deletion ended; the archive itself stays with the store. */
+export type HistoryErasure = Pick<DeletionOutcome, "published">;
+
 export interface ConversationDirectorySnapshot {
   entries: readonly ConversationRecord[];
   archives: readonly HistoryArchiveRecord[];
@@ -107,9 +110,11 @@ export interface RuntimeStoreWiring {
   /**
    * The store side of Delete history, called once the thread is fenced and
    * the conversation's brain retired: the rows go behind a committed archive
-   * and the archive is published. A temporary thread simply forgets its lines.
+   * and the archive is published. A thread held in memory alone has nothing
+   * on disk to archive, so forgetting its lines is the whole erasure and
+   * answers as published.
    */
-  eraseHistory: (sessionKey: SessionKey, now: number) => Promise<DeletionOutcome | undefined>;
+  eraseHistory: (sessionKey: SessionKey, now: number) => Promise<HistoryErasure | undefined>;
   restoreArchive: (archiveId: string) => Promise<RestoreOutcome>;
   /** One maintenance pass, with the conversations that must be kept whatever their age. */
   runMaintenance: (preserve: readonly SessionKey[]) => Promise<MaintenanceReport | undefined>;
@@ -320,7 +325,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     eraseHistory: async (sessionKey, now) => {
       if (temporary.has(sessionKey) || !dependencies.persistent) {
         threads.set(sessionKey, memoryThread(sessionKey));
-        return undefined;
+        return { published: true };
       }
       try {
         return await client().deleteConversationHistory(

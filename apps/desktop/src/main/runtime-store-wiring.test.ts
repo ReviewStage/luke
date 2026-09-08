@@ -76,6 +76,13 @@ test("a temporary thread keeps its lines in memory alone and is gone at the next
     true,
   );
   assert.equal(first.wired.thread(temporary.sessionKey).entries().length, 1);
+  // Erasing a temporary thread's history is the same act as a durable one's
+  // to the deletion flow: it answers as published, having nothing to publish.
+  const other = await first.wired.createThread(true);
+  assert.equal(await first.wired.recordConversationEntry(line, NOW, other.sessionKey), true);
+  assert.deepEqual(await first.wired.eraseHistory(other.sessionKey, NOW), { published: true });
+  assert.deepEqual(first.wired.thread(other.sessionKey).entries(), []);
+  assert.equal(await first.wired.archive(other.sessionKey), true);
   assert.deepEqual(
     first.wired
       .directory()

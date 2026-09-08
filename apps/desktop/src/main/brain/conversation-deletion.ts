@@ -1,4 +1,4 @@
-import type { DeletionOutcome } from "@sidecar/runtime-store";
+import type { HistoryErasure } from "../runtime-store-wiring";
 
 /**
  * Delete history, in the order that makes a late arrival harmless and the
@@ -25,8 +25,8 @@ export interface ConversationDeletionDependencies {
   fence: (deletedAt: number) => void;
   /** Stops the conversation's brain and drains its publication; settles once nothing of it can write. */
   retireBrain: () => Promise<void>;
-  /** The store's deletion: rows removed behind a committed archive, publication attempted. */
-  erase: (deletedAt: number) => Promise<DeletionOutcome | undefined>;
+  /** The store's deletion: rows removed behind a committed archive, publication attempted; a memory thread has nothing to publish. */
+  erase: (deletedAt: number) => Promise<HistoryErasure | undefined>;
   /** Stands a fresh brain up over the emptied conversation. */
   rebuildBrain: () => Promise<void>;
   report: (message: string) => void;
@@ -47,7 +47,7 @@ export async function deleteConversationHistoryFlow(
   const deletedAt = dependencies.now();
   dependencies.fence(deletedAt);
   await dependencies.retireBrain();
-  let outcome: DeletionOutcome | undefined;
+  let outcome: HistoryErasure | undefined;
   try {
     outcome = await dependencies.erase(deletedAt);
   } finally {
