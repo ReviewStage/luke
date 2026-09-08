@@ -55,7 +55,7 @@ import {
   interruptedUnfinishedRequests,
   isTerminalBrainRequestStatus,
 } from "./requests.js";
-import { settledUnlessAborted } from "./settled.js";
+import { claimedUnlessAborted } from "./settled.js";
 import {
   type BrainPersistedState,
   type BrainStateStore,
@@ -1322,23 +1322,16 @@ export class BrainAgent {
     context: ContextEngine,
     mark: ContextMark,
   ): Promise<void> {
-    const opening = this.#options.runtime.openContext(
-      { format: context.checkpointFormat, items: mark.items },
-      JSON.stringify(UNKNOWN_ACT_RESULT),
-      { signal: generation.abort.signal },
+    const reopened = await claimedUnlessAborted(
+      this.#options.runtime.openContext(
+        { format: context.checkpointFormat, items: mark.items },
+        JSON.stringify(UNKNOWN_ACT_RESULT),
+        { signal: generation.abort.signal },
+      ),
+      generation.abort.signal,
+      (opened) => retireContext(opened.context),
     );
-    let overtaken = false;
-    void opening.then(
-      (opened) => {
-        if (overtaken) retireContext(opened.context);
-      },
-      () => undefined,
-    );
-    const reopened = await settledUnlessAborted(opening, generation.abort.signal);
-    if (reopened.aborted) {
-      overtaken = true;
-      return;
-    }
+    if (reopened.aborted) return;
     if (generation !== this.#generation || generation.context !== context) {
       retireContext(reopened.value.context);
       return;

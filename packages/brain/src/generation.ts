@@ -16,7 +16,7 @@ import {
 import { TranscriptCursors } from "./cursors.js";
 import { BrainJournal } from "./journal.js";
 import type { BrainRequestRecord } from "./requests.js";
-import { settledUnlessAborted } from "./settled.js";
+import { claimedUnlessAborted } from "./settled.js";
 import type { BrainPersistedState } from "./state-store.js";
 
 /**
@@ -84,23 +84,16 @@ export function generationFrom(
   }
   // The open is raced against the generation's own signal: a runtime whose
   // bootstrap ignores the signal cannot hold `ready` open past a stop or a
-  // replacement, and a context that finishes opening after the fence is
-  // retired rather than installed, so a successor never inherits it.
-  const opening = runtime.openContext(checkpoint, lostResultJson, { signal: abort.signal });
-  // The race drops the open's eventual value once the signal fires, so the
-  // retirement of a context that finishes opening late is attached to the
-  // open itself, taken exactly once, only when the race went the other way.
-  let overtaken = false;
-  void opening.then(
-    ({ context }) => {
-      if (overtaken) retireContext(context);
-    },
-    () => undefined,
-  );
-  generation.ready = settledUnlessAborted(opening, abort.signal)
+  // replacement, and a context that finishes opening once the signal has
+  // fired — in the same turn or later — is discarded by the race itself,
+  // exactly once, so a successor never inherits it.
+  generation.ready = claimedUnlessAborted(
+    runtime.openContext(checkpoint, lostResultJson, { signal: abort.signal }),
+    abort.signal,
+    ({ context }) => retireContext(context),
+  )
     .then((opened) => {
       if (opened.aborted) {
-        overtaken = true;
         generation.incompatible = "the generation was replaced while its context was opening";
         return;
       }
