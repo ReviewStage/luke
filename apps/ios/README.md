@@ -36,6 +36,16 @@ pick up an SPM test target from this app scheme — neither as a testable
 reference nor through a test plan — so a scheme entry would claim coverage the
 simulator run does not deliver.
 
+A third suite needs no Xcode and runs with the rest of the repository:
+`tools/ios-parity` diffs every Swift enum that transcribes a TypeScript
+vocabulary against the vocabulary itself, so a value added in `packages/` and
+forgotten here fails `./scripts/check.sh` rather than reaching a device as a
+refusal the phone cannot name.
+
+```sh
+pnpm --filter @luke/ios-parity test
+```
+
 ## TestFlight
 
 The iPhone app and the Watch app inside it ship as one archive, and the
