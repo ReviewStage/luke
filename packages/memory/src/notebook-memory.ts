@@ -261,6 +261,7 @@ export class NotebookMemory {
   #standing: RetrievalStanding = { mode: RETRIEVAL_MODE.KEYWORD_ONLY };
   #watcher: MemoryWatcher | undefined;
   #syncing: Promise<MemorySyncReport | undefined> | undefined;
+  #followOn: Promise<MemorySyncReport | undefined> | undefined;
 
   constructor(options: NotebookMemoryOptions) {
     this.#options = options;
@@ -290,10 +291,33 @@ export class NotebookMemory {
     this.#watcher = undefined;
   }
 
-  /** One reconcile of the index against the files; concurrent calls share one pass. */
+  /**
+   * One reconcile of the index against the files. A call while no pass runs
+   * starts one and answers its report. A call during a pass answers the one
+   * follow-on pass that starts when the running one ends, because the running
+   * pass read the adapter once when it began and a credential published
+   * meanwhile is what the caller is asking to be seen; every call during the
+   * same pass shares that follow-on, and a call during the follow-on
+   * schedules one more, so requests coalesce and a pass runs only when one
+   * was asked for. A pass that fails reports and answers nothing without
+   * cancelling the follow-on it owes; stop() closes the watcher and leaves a
+   * pass already promised to finish.
+   */
   sync(): Promise<MemorySyncReport | undefined> {
-    if (this.#syncing) return this.#syncing;
-    this.#syncing = this.#syncOnce()
+    if (!this.#syncing) {
+      this.#syncing = this.#runPass();
+      return this.#syncing;
+    }
+    this.#followOn ??= this.#syncing.then(() => {
+      this.#followOn = undefined;
+      this.#syncing ??= this.#runPass();
+      return this.#syncing;
+    });
+    return this.#followOn;
+  }
+
+  #runPass(): Promise<MemorySyncReport | undefined> {
+    return this.#syncOnce()
       .then((report) => {
         this.#options.onSynced?.();
         return report;
@@ -307,7 +331,6 @@ export class NotebookMemory {
       .finally(() => {
         this.#syncing = undefined;
       });
-    return this.#syncing;
   }
 
   /** The brain's memory tools for one conversation. */
@@ -345,9 +368,15 @@ export class NotebookMemory {
     };
   }
 
-  /** Forgets every cached recall, after a forget or a durable rewrite changed what a recall would say. */
+  /**
+   * Forgets every cached recall, after a forget or a durable rewrite changed
+   * what a recall would say. The recalls stay where the conversations that
+   * bound them can reach them; each drops its cached answers and refuses to
+   * cache a run that began before the clear, so a recall still in flight
+   * settles for its own callers and leaves nothing stale behind.
+   */
   clearRecallCaches(): void {
-    this.#recalls.clear();
+    for (const recall of this.#recalls.values()) recall.invalidate();
   }
 
   /** The recall an eligible conversation's asks run, or nothing for one that does not recall. */
@@ -444,6 +473,10 @@ export class NotebookMemory {
       embedding,
       MEMORY_SEARCH_DEFAULTS.MAXIMUM_RESULTS,
     );
+    // The lookup is a real retrieval from the notebook, so what it surfaced is
+    // a recall signal like any search's; the conversation fallback never runs
+    // here, so no line of History can be mistaken for one.
+    void this.#options.onNotebookResults?.(query, notebook.results);
     return {
       strongHit: notebook.results.some(
         (result) => result.score >= MEMORY_SEARCH_DEFAULTS.MINIMUM_SCORE,

@@ -557,3 +557,101 @@ test("a launch before any credential indexes keyword-only, and the first credent
   const third = await h.memory.sync();
   assert.equal(third?.indexedFiles, 0, "once every chunk has a vector the files are left alone");
 });
+
+test("a sync asked for during a pass runs one follow-on pass under the adapter that stands then, and every request during the pass shares it", async () => {
+  let credential: EmbeddingAdapter | undefined;
+  let synced = 0;
+  const h = harness({
+    embeddingAdapter: () => credential,
+    onSynced: () => {
+      synced += 1;
+    },
+  });
+  const plan = h.store.planMemorySync.bind(h.store);
+  let release: (() => void) | undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let plans = 0;
+  h.store.planMemorySync = async (identity: EmbeddingModelIdentity | undefined) => {
+    plans += 1;
+    if (plans === 1) await gate;
+    return plan(identity);
+  };
+  const launch = h.memory.sync();
+  credential = h.embedding;
+  const requested = h.memory.sync();
+  const again = h.memory.sync();
+  assert.equal(requested, again, "requests during one pass share the follow-on");
+  assert.notEqual(requested, launch);
+  release?.();
+  const first = await launch;
+  assert.equal(
+    first?.mode,
+    RETRIEVAL_MODE.KEYWORD_ONLY,
+    "the pass under way kept its adapter read",
+  );
+  const second = await requested;
+  assert.equal(second?.mode, RETRIEVAL_MODE.HYBRID);
+  assert.ok(second && second.embeddedChunks > 0);
+  assert.equal(h.store.status().embeddedChunks, h.store.status().chunks);
+  assert.equal(plans, 2, "exactly one follow-on pass ran");
+  assert.equal(synced, 2);
+  const idle = await h.memory.sync();
+  assert.equal(idle?.indexedFiles, 0);
+  assert.equal(plans, 3, "no pass runs that was not asked for");
+});
+
+test("recall signals: an ask with no intent records nothing, and an intent-bearing trusted lookup records the notebook results it retrieved exactly once", async () => {
+  const recorded: { query: string; paths: string[] }[] = [];
+  const h = harness({
+    onNotebookResults: async (query, results) => {
+      recorded.push({ query, paths: results.map((result) => result.path) });
+    },
+  });
+  await h.memory.sync();
+  const recall = h.memory.recallFor(MAIN_SESSION_KEY);
+  assert.ok(recall);
+  await recall({ query: "open the frankfurt cluster", signal: signal() });
+  assert.deepEqual(recorded, [], "no lookup, no signal");
+  await recall({ query: "remind me where we put the frankfurt cluster", signal: signal() });
+  assert.equal(h.subruns.length, 0);
+  assert.deepEqual(recorded, [
+    { query: "remind me where we put the frankfurt cluster", paths: [MEMORY_FILE] },
+  ]);
+});
+
+test("clearing the recall caches reaches a recall already bound, and a recall that began before the clear caches nothing when it lands", async () => {
+  let held: Promise<void> = Promise.resolve();
+  let subruns = 0;
+  const h = harness({
+    runSubrun: async (ask) => {
+      subruns += 1;
+      await held;
+      return recallingSubrun(ask);
+    },
+  });
+  await h.memory.sync();
+  const recall = h.memory.recallFor(MAIN_SESSION_KEY);
+  assert.ok(recall);
+  const query = "what did we decide about espresso?";
+  const first = await recall({ query, signal: signal() });
+  assert.ok(first);
+  await recall({ query, signal: signal() });
+  assert.equal(subruns, 1, "the second ask inside the window is served from the cache");
+  h.memory.clearRecallCaches();
+  await recall({ query, signal: signal() });
+  assert.equal(subruns, 2, "the same bound recall runs again after the clear");
+  let release: (() => void) | undefined;
+  held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  h.memory.clearRecallCaches();
+  const pending = recall({ query, signal: signal() });
+  while (subruns < 3) await new Promise((resolve) => setTimeout(resolve, 1));
+  h.memory.clearRecallCaches();
+  release?.();
+  assert.equal(await pending, first, "the run under way still answers its own caller");
+  await recall({ query, signal: signal() });
+  assert.equal(subruns, 4, "a run that began before the clear left no cached answer behind");
+});

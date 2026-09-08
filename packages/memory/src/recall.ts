@@ -216,6 +216,7 @@ export class ConversationRecall {
   readonly #inFlight = new Map<string, Promise<RecallResult>>();
   #consecutiveTimeouts = 0;
   #lastTimeoutAt = 0;
+  #cacheEpoch = 0;
 
   constructor(options: ConversationRecallOptions) {
     this.#options = options;
@@ -241,6 +242,18 @@ export class ConversationRecall {
       return false;
     }
     return true;
+  }
+
+  /**
+   * Drops every cached answer and every run still shared, and fences the
+   * runs under way: one that finishes after this call answers its own callers
+   * and caches nothing, because what it read may no longer stand. The
+   * breaker's count is untouched; a forget says nothing about timeouts.
+   */
+  invalidate(): void {
+    this.#cacheEpoch += 1;
+    this.#cache.clear();
+    this.#inFlight.clear();
   }
 
   /** For inspection: how many timeouts in a row the breaker has counted. */
@@ -277,6 +290,7 @@ export class ConversationRecall {
 
   async #run(ask: RecallAsk, key: string): Promise<RecallResult> {
     const startedAt = this.#now();
+    const epoch = this.#cacheEpoch;
     const elapsed = () => this.#now() - startedAt;
     const decision = await decideRecall(ask.query, () =>
       this.#options.trustedMemory(ask.query, ask.signal),
@@ -356,7 +370,7 @@ export class ConversationRecall {
     } finally {
       clearTimeout(timer);
     }
-    if (result.status === RECALL_STATUS.OK) {
+    if (result.status === RECALL_STATUS.OK && epoch === this.#cacheEpoch) {
       const ttl = this.#options.cacheTtlMs ?? RECALL_DEFAULTS.CACHE_TTL_MS;
       this.#cache.set(key, { expiresAt: this.#now() + ttl, result });
       while (this.#cache.size > RECALL_DEFAULTS.MAXIMUM_CACHE_ENTRIES) {
