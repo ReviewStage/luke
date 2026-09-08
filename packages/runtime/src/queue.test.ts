@@ -178,3 +178,21 @@ test("clear forgets the queue and its timer", () => {
   clock.fire();
   assert.deepEqual(flushed, []);
 });
+
+test("withdraw takes one queued input back before the drain, and disarms the timer when nothing is left", () => {
+  const clock = fakeClock();
+  const { queue, flushed } = queueWith(clock, () => false, QUEUE_MODE.COLLECT);
+  queue.push(input("a"));
+  queue.push(input("b"));
+  assert.equal(queue.withdraw("a"), true);
+  assert.equal(queue.withdraw("a"), false);
+  assert.equal(queue.withdraw("never-queued"), false);
+  assert.equal(clock.timers.size, 1);
+  clock.fire();
+  assert.deepEqual(flushed, [["b"]]);
+  queue.push(input("c"));
+  assert.equal(clock.timers.size, 1);
+  assert.equal(queue.withdraw("c"), true);
+  assert.equal(clock.timers.size, 0);
+  assert.deepEqual(flushed, [["b"]]);
+});

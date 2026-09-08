@@ -84,7 +84,8 @@ export interface QueueAdmission {
   readonly evicted: readonly QueuedInput[];
 }
 
-function summaryLine(input: QueuedInput): string {
+/** The one line an input folded by the overflow keeps: the head of its words, whitespace collapsed. */
+export function queueSummaryLine(input: QueuedInput): string {
   const head = input.text.replace(/\s+/g, " ").trim();
   return head.length > QUEUE_DEFAULTS.SUMMARY_HEAD_CHARS
     ? `${head.slice(0, QUEUE_DEFAULTS.SUMMARY_HEAD_CHARS)}…`
@@ -126,7 +127,7 @@ export function admitToQueue(
       return {
         state: {
           entries: [...rest, input],
-          summaryLines: [...state.summaryLines, summaryLine(oldest)],
+          summaryLines: [...state.summaryLines, queueSummaryLine(oldest)],
           summarizedCount: state.summarizedCount + 1,
         },
         admitted: true,
@@ -239,6 +240,19 @@ export class PendingInputQueue {
   /** Drains everything now, in the mode given; a caller uses it when a run ends with input waiting. */
   flush(mode: QueueMode = this.#settings.mode): void {
     this.#flushNow(mode);
+  }
+
+  /**
+   * Withdraws one queued input before it is drained, so words the developer
+   * took back never open a turn. Answers whether it was still waiting here;
+   * an input already steered or drained is past withdrawing.
+   */
+  withdraw(id: string): boolean {
+    const entries = this.#state.entries.filter((entry) => entry.id !== id);
+    if (entries.length === this.#state.entries.length) return false;
+    this.#state = { ...this.#state, entries };
+    if (entries.length === 0 && this.#state.summarizedCount === 0) this.#disarm();
+    return true;
   }
 
   /** Forgets everything queued; the timer goes with it. */
