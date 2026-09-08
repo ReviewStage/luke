@@ -366,6 +366,28 @@ test("a held briefing whose source conversation has stood down is re-decided in 
   await c.wiring.rebuild();
 });
 
+test("a heartbeat settles only when its turn has, so a scheduler's tick is over when its work is", async () => {
+  const gate: Gate = {
+    holds: (texts) => texts.includes(BRAIN_INPUT_MARKER.HEARTBEAT),
+    release: () => undefined,
+  };
+  const c = composed(gate);
+  await c.wiring.rebuild();
+  let settled = false;
+  const tick = c.wiring.heartbeat().then(() => {
+    settled = true;
+  });
+  await until(() => c.inputs.length >= 1);
+  await settle();
+  // The review is under way and the tick still open.
+  assert.equal(settled, false);
+  gate.release();
+  await tick;
+  assert.equal(settled, true);
+  c.wiring.retire();
+  await c.wiring.rebuild();
+});
+
 test("one observed conversation waiting on its model neither blocks another nor main", async () => {
   const gate: Gate = { holds: (texts) => texts.includes(SECRET("def")), release: () => undefined };
   const c = composed(gate);

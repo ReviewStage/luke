@@ -3803,11 +3803,14 @@ test("a stop with an ask still queued records it interrupted and opens nothing",
 test("a heartbeat asked of a quiet model is not lost: the review opens once the quiet ends", async () => {
   const h = harness();
   h.client.quiet = NOW + 60_000;
-  h.agent.heartbeat();
+  // The occurrence the scheduler recorded settles at once, with the retry
+  // armed: the tick is not held open for as long as the quiet lasts.
+  await h.agent.heartbeat();
   await settle();
   assert.equal(h.client.inputs.length, 0);
+  assert.equal(h.clock.timers.size, 1);
   // Asked again while still quiet: one retry stands, not two.
-  h.agent.heartbeat();
+  await h.agent.heartbeat();
   await settle();
   assert.equal(h.clock.timers.size, 1);
   h.client.answers.push(answered([message("")]));
@@ -3823,8 +3826,9 @@ test("a heartbeat asked of a quiet model is not lost: the review opens once the 
   // A throttle answered mid-run retries the same way.
   const throttled = harness();
   throttled.client.answers.push(quietAnswer(NOW + 10_000), answered([message("")]));
-  throttled.agent.heartbeat();
-  await settle();
+  // A throttle answered mid-run is still this occurrence's turn: the promise
+  // settles with it, quiet and all, and the retry stands behind it.
+  await throttled.agent.heartbeat();
   assert.equal(throttled.client.inputs.length, 1);
   await throttled.clock.advance(NOW + 10_000);
   await settle();

@@ -1706,9 +1706,10 @@ let stopHistoryMaintenance: (() => void) | undefined;
 const cronScheduler = new CronScheduler({
   store: runtimeStoreWiring.scheduledJobStore(),
   coordinate: (work) => brainWiring.lanes.run(LANE.CRON, work),
-  run: async (job) => {
-    brainWiring.heartbeat(job.sessionKey);
-  },
+  // The tick is over when the turn it opened is: the coordinator lane holds
+  // the tick, the turn runs on the cron inner lane, so awaiting it here
+  // cannot wait on the lane the tick itself holds.
+  run: (job) => brainWiring.heartbeat(job.sessionKey),
   report: (message) => process.stderr.write(`${message}\n`),
 });
 
@@ -2579,8 +2580,7 @@ async function reconcileSpeech(): Promise<void> {
   const quiet = await announcementsQuietNow(Date.now());
   speechArbiter.setQuiet(quiet);
   if (!quiet && speechArbiter.heldBriefingCount > 0) {
-    const standing = brainWiring.current();
-    if (standing && voiceCapabilities.realtimeCredentials) {
+    if (brainWiring.current() && voiceCapabilities.realtimeCredentials) {
       brainWiring.releaseHeld(speechArbiter.takeHeldBriefings());
     } else if (!voiceCapabilities.realtimeCredentials) {
       speechArbiter.dropBriefings();

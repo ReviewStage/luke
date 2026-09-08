@@ -961,25 +961,26 @@ export class BrainAgent {
   /**
    * The scheduled review: a turn under the full prompt whose instructions are
    * the workspace's HEARTBEAT.md, opened on no signal at all. Pending
-   * observations ride along. The ordinary outcome is a turn that briefs nothing.
+   * observations ride along. The ordinary outcome is a turn that briefs
+   * nothing. Settles when the turn this occurrence opened has, so the
+   * scheduler's tick is over when the work it started is, and a review the
+   * quiet postponed settles at once with its retry armed rather than holding
+   * the tick open for as long as the quiet lasts.
    */
-  heartbeat(): void {
-    if (this.#stopped) return;
+  heartbeat(): Promise<void> {
+    if (this.#stopped) return Promise.resolve();
     const generation = this.#generation;
-    if (!generation) {
-      void this.ready().then(() => this.heartbeat());
-      return;
-    }
+    if (!generation) return this.ready().then(() => this.heartbeat());
     // The scheduler has recorded this occurrence as taken: a model that is
     // quiet now does not lose it, the review opens once the quiet ends.
     const quietUntil = this.#options.runtime.quietUntil();
     if (quietUntil !== undefined) {
       this.#retryHeartbeat(quietUntil);
-      return;
+      return Promise.resolve();
     }
     this.#cancelHeartbeatRetry();
     this.#wakes.take();
-    void this.#queueTurn(BRAIN_TURN_TRIGGER.HEARTBEAT, async () => {
+    return this.#queueTurn(BRAIN_TURN_TRIGGER.HEARTBEAT, async () => {
       const result = await this.#turn({
         generation,
         trigger: BRAIN_TURN_TRIGGER.HEARTBEAT,
@@ -1001,7 +1002,7 @@ export class BrainAgent {
     this.#heartbeatRetry = this.#schedule(
       () => {
         this.#heartbeatRetry = undefined;
-        this.heartbeat();
+        void this.heartbeat();
       },
       Math.max(until - this.#now(), this.#wakeCoalesceMs),
     );

@@ -158,8 +158,8 @@ export interface BrainWiring {
   rosterLook: () => void;
   /** Hands held briefings back to the conversations that decided them, main's for one with no source. */
   releaseHeld: (held: readonly BrainDelivery[]) => void;
-  /** Opens the scheduled review in a conversation, main's by default. */
-  heartbeat: (sessionKey?: SessionKey) => void;
+  /** Opens the scheduled review in a conversation, main's by default; settles when its turn has. */
+  heartbeat: (sessionKey?: SessionKey) => Promise<void>;
   /** The compact notices main has not yet read, for inspection. */
   pendingNotices: () => readonly BrainTurnNotice[];
   /** The brain of one conversation as it stands now, main's by default; nothing between transitions and on a run with no key. */
@@ -743,7 +743,8 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     wake,
     rosterLook,
     releaseHeld,
-    heartbeat: (sessionKey = MAIN_SESSION_KEY) => current(sessionKey)?.heartbeat(),
+    heartbeat: (sessionKey = MAIN_SESSION_KEY) =>
+      current(sessionKey)?.heartbeat() ?? Promise.resolve(),
     pendingNotices: () => notices,
     resetConversation: (sessionKey) => openConversation(sessionKey).store.reset(),
     registerIpc,
