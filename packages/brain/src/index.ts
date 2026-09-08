@@ -5,6 +5,9 @@ export {
   type BrainLane,
   type BrainOpeningNotes,
   type BrainWorkspaceAccess,
+  LOOK_SUBJECT,
+  type LookSubject,
+  type LookSubjectKind,
 } from "./agent.js";
 export { RESPONSES_CONTEXT_ENGINE_ID, registerBrainBuiltIns } from "./builtins.js";
 export { BrainGenerationClock } from "./generation-clock.js";

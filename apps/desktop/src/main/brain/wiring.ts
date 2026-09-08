@@ -19,6 +19,7 @@ import {
   type BrainWorkspaceAccess,
   brainToolNotes,
   HOSTED_MODEL_ADAPTER_ID,
+  LOOK_SUBJECT,
   OPENAI_MODEL_ADAPTER_ID,
   RESPONSES_CONTEXT_ENGINE_ID,
   registerBrainBuiltIns,
@@ -226,6 +227,12 @@ interface OpenConversation {
 
 /** How many notices main keeps unread before the oldest go; each is one line about one turn. */
 const MAXIMUM_PENDING_NOTICES = 50;
+
+/** What a conversation that is not main is handed: main alone reads the notices its siblings leave. */
+const NO_OPENING_NOTES = {
+  take: () => [],
+  restore: () => {},
+};
 
 /** The lane a turn runs under, by what opened it: hooks share the cron inner budget, heartbeats are cron work, the rest is the agent's. */
 function laneFor(trigger: BrainTurnTrigger): Lane {
@@ -500,14 +507,17 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     const { reasoningEffort, maximumOutputTokens } = snapshot.configuration;
     // An observed conversation looks at its one session and reports each
     // turn as a notice; every other conversation looks at no transcript on
-    // a roster look, and main is the one that reads the notices.
+    // a roster look, and main is the one that reads the notices. Which
+    // conversation this is is the host's own routing, so the agent is handed
+    // the same fields whichever it is.
     const observed = observedSessionRefOf(sessionKey);
-    const looksAt = (): readonly SessionIdentity[] => (observed ? [observed] : []);
     return new BrainAgent({
-      looksAt,
+      observes: observed
+        ? { kind: LOOK_SUBJECT.SESSION, identity: observed }
+        : { kind: LOOK_SUBJECT.NONE },
       lane: (trigger, work) => lanes.run(laneFor(trigger), work),
-      ...(observed ? { notice: recordNotice } : undefined),
-      ...(sessionKey === MAIN_SESSION_KEY ? { openingNotes } : undefined),
+      notice: observed ? recordNotice : () => {},
+      openingNotes: sessionKey === MAIN_SESSION_KEY ? openingNotes : NO_OPENING_NOTES,
       runtime: runtimeDescriptor.create(model, engineDescriptor),
       acts,
       roster: dependencies.roster,

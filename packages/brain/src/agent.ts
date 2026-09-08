@@ -30,6 +30,7 @@ import {
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { assessCompaction, COMPACTION_NEED } from "./compaction.js";
+import type { TranscriptCursors } from "./cursors.js";
 import {
   CONTEXT_OPENING,
   claimOpenedContext,
@@ -183,6 +184,26 @@ export const BRAIN_DEFAULTS = {
   PENDING_WAKE_CAPACITY: 20,
 } as const;
 
+/**
+ * Which sessions a conversation's own roster look reads. It is a fact of the
+ * conversation, fixed when its agent is built: an observed conversation names
+ * its one session and can read no other's transcript, main's ordinary
+ * conversation reads none on a look at all, and the whole local roster is
+ * what a conversation with no host to narrow it reads.
+ */
+export const LOOK_SUBJECT = {
+  ROSTER: "roster",
+  NONE: "none",
+  SESSION: "session",
+} as const;
+
+export type LookSubjectKind = (typeof LOOK_SUBJECT)[keyof typeof LOOK_SUBJECT];
+
+export type LookSubject =
+  | { readonly kind: typeof LOOK_SUBJECT.ROSTER }
+  | { readonly kind: typeof LOOK_SUBJECT.NONE }
+  | { readonly kind: typeof LOOK_SUBJECT.SESSION; readonly identity: SessionIdentity };
+
 /** Runs a turn's work under the host's lane for its trigger, so conversations share the lanes' budgets and nothing wider. */
 export type BrainLane = <T>(trigger: BrainTurnTrigger, work: () => Promise<T>) => Promise<T>;
 
@@ -247,12 +268,11 @@ export interface BrainAgentOptions {
   lane?: BrainLane;
   openingNotes?: BrainOpeningNotes;
   /**
-   * Which sessions this conversation's roster look reads: an observed
-   * conversation names its one session, so two conversations never read each
-   * other's transcript. Absent, the look reads every local session that is
-   * working, waiting, or read before.
+   * Which sessions this conversation's roster look reads, so two
+   * conversations never read each other's transcript. Absent, the look reads
+   * every local session that is working, waiting, or read before.
    */
-  looksAt?: () => readonly SessionIdentity[];
+  observes?: LookSubject;
   /** How an ask arriving while a turn is under way is taken; steer by default, as OpenClaw has it. */
   queueMode?: QueueMode;
   /** How long collect mode waits for more asks before opening one turn for them all. */
@@ -344,8 +364,9 @@ export class BrainAgent {
    * as that line, and their records settle with the turn that carries it.
    */
   #summarized: RunControl[] = [];
+  readonly #subject: LookSubject;
   /** Each session as it last looked when an observation was captured, for the unchanged-look suppression. */
-  readonly #lastLook = new Map<string, string>();
+  readonly #lastLook = new BySession<string>();
   /** Captures run one after another, so two reads of one session never race each other's cursor. */
   #capturing: Promise<unknown> = Promise.resolve();
   /** The review's retry, armed while the model is quiet and the scheduler's occurrence already taken. */
@@ -378,6 +399,7 @@ export class BrainAgent {
     this.#deltaPerSessionChars =
       options.deltaPerSessionChars ?? BRAIN_DEFAULTS.DELTA_PER_SESSION_CHARS;
     this.#fullTranscriptChars = options.fullTranscriptChars ?? BRAIN_DEFAULTS.FULL_TRANSCRIPT_CHARS;
+    this.#subject = options.observes ?? { kind: LOOK_SUBJECT.ROSTER };
     this.#lease = options.store.lease();
     this.#ledger = new BrainRequestLedger({
       store: options.store,
@@ -864,15 +886,14 @@ export class BrainAgent {
       );
       if (fresh.length === 0) return 0;
       const mark = generation.captureCursors.persisted();
-      const reads = new Map<
-        string,
-        { delta: BrainTranscriptDelta | undefined; cursor: string | undefined }
-      >();
+      const reads = new BySession<{
+        delta: BrainTranscriptDelta | undefined;
+        cursor: string | undefined;
+      }>();
       const entries: BrainObservationEntry[] = [];
       const now = this.#now();
       for (const event of fresh) {
-        const key = lookKey(event.identity);
-        let read = reads.get(key);
+        let read = reads.get(event.identity);
         if (!read) {
           const delta = await readTranscriptDelta(event.identity, {
             cursors: generation.captureCursors,
@@ -885,7 +906,7 @@ export class BrainAgent {
             return 0;
           }
           read = { delta, cursor: generation.captureCursors.cursor(event.identity) };
-          reads.set(key, read);
+          reads.set(event.identity, read);
         } else {
           // A second event for the same session in one batch carries no
           // second delta: the first read covers both.
@@ -901,7 +922,7 @@ export class BrainAgent {
         if (
           event.kind === BRAIN_WAKE_KIND.ROSTER &&
           !read.delta?.text &&
-          this.#lastLook.get(key) === lookFingerprint(event)
+          this.#lastLook.get(event.identity) === lookFingerprint(event)
         ) {
           continue;
         }
@@ -921,7 +942,7 @@ export class BrainAgent {
       }
       for (const event of fresh) {
         if (event.kind === BRAIN_WAKE_KIND.ROSTER) {
-          this.#lastLook.set(lookKey(event.identity), lookFingerprint(event));
+          this.#lastLook.set(event.identity, lookFingerprint(event));
         }
       }
       return entries.length;
@@ -1080,21 +1101,7 @@ export class BrainAgent {
     const generation = this.#generation;
     if (!generation) return this.ready().then(() => this.rosterLook());
     const roster = this.#options.roster();
-    const now = this.#now();
-    const cursors = generation.captureCursors;
-    const looksAt = this.#options.looksAt?.();
-    const looks: BrainWakeEvent[] = (roster.sessions ?? []).flatMap((session) => {
-      const identity: SessionIdentity = {
-        providerId: session.providerId,
-        providerSessionId: session.providerSessionId,
-      };
-      if (looksAt && !looksAt.some((own) => sameIdentity(own, identity))) return [];
-      const readBefore = cursors.cursor(identity) !== undefined;
-      const live =
-        session.status === SESSION_STATUS.WORKING || session.status === SESSION_STATUS.WAITING;
-      if (session.location !== SESSION_LOCATION.LOCAL || !(readBefore || live)) return [];
-      return [{ kind: BRAIN_WAKE_KIND.ROSTER, identity, session, atMs: now }];
-    });
+    const looks = this.#ownLooks(roster, generation.captureCursors, this.#now());
     // The look is captured before anything opens, like a hook: what each
     // session gained stands in the inbox with its cursor, and the turn that
     // follows — now, or the next one if the model is quiet or a turn is in
@@ -1105,7 +1112,13 @@ export class BrainAgent {
       // A conversation looking at everything still opens its look with no
       // events, as the scheduled roster look it is; one looking at its own
       // session opens nothing when nothing was captured and nothing waits.
-      if (looksAt && captured === 0 && generation.inbox.length === 0) return;
+      if (
+        this.#subject.kind !== LOOK_SUBJECT.ROSTER &&
+        captured === 0 &&
+        generation.inbox.length === 0
+      ) {
+        return;
+      }
       this.#wakes.take();
       void this.#queueTurn(BRAIN_TURN_TRIGGER.ROSTER, () =>
         this.#turn({
@@ -1113,9 +1126,37 @@ export class BrainAgent {
           trigger: BRAIN_TURN_TRIGGER.ROSTER,
           events: this.#inboxEvents(generation),
           open: (attached, openedAt) => [wakeInputText(attached, openedAt, roster.text)],
-          dropEmptyRosterDeltas: true,
         }),
       );
+    });
+  }
+
+  /**
+   * The sessions this conversation's own look reads, by its subject: its one
+   * observed session, every local session it has read before or that is live
+   * now, or nothing at all. A session another conversation observes is never
+   * among them, whatever the roster holds.
+   */
+  #ownLooks(
+    roster: BrainRoster,
+    cursors: TranscriptCursors,
+    now: number,
+  ): readonly BrainWakeEvent[] {
+    const subject = this.#subject;
+    if (subject.kind === LOOK_SUBJECT.NONE) return [];
+    return (roster.sessions ?? []).flatMap((session) => {
+      const identity: SessionIdentity = {
+        providerId: session.providerId,
+        providerSessionId: session.providerSessionId,
+      };
+      if (subject.kind === LOOK_SUBJECT.SESSION && !sameIdentity(subject.identity, identity)) {
+        return [];
+      }
+      const readBefore = cursors.cursor(identity) !== undefined;
+      const live =
+        session.status === SESSION_STATUS.WORKING || session.status === SESSION_STATUS.WAITING;
+      if (session.location !== SESSION_LOCATION.LOCAL || !(readBefore || live)) return [];
+      return [{ kind: BRAIN_WAKE_KIND.ROSTER, identity, session, atMs: now }];
     });
   }
 
@@ -1681,12 +1722,16 @@ export class BrainAgent {
       // host has already withdrawn; the cursors go back with the context.
       failure = revocation();
     } else {
-      const events = plan.dropEmptyRosterDeltas
-        ? attachedDeltas.events.filter(
-            (event) =>
-              event.kind !== BRAIN_WAKE_KIND.ROSTER || Boolean(event.transcriptDelta?.text),
-          )
-        : attachedDeltas.events;
+      // A scheduled look carries the whole roster in its own words, so a
+      // session whose transcript gained nothing is left out of the events
+      // rather than repeated as an empty delta.
+      const events =
+        plan.trigger === BRAIN_TURN_TRIGGER.ROSTER
+          ? attachedDeltas.events.filter(
+              (event) =>
+                event.kind !== BRAIN_WAKE_KIND.ROSTER || Boolean(event.transcriptDelta?.text),
+            )
+          : attachedDeltas.events;
       // Every turn advances its rollback point: each answered effect is
       // checkpointed and the mark moves past it, so a later failure returns
       // the context to the last paired state and never to before an act that
@@ -2066,8 +2111,26 @@ function sameWake(first: BrainWakeEvent, second: BrainWakeEvent): boolean {
   );
 }
 
-function lookKey(identity: SessionIdentity): string {
-  return JSON.stringify([identity.providerId, identity.providerSessionId]);
+/**
+ * A value per observed session, keyed by provider and then by the provider's
+ * own session id, the way the cursors are: two identifiers, never one string
+ * composed of both.
+ */
+class BySession<T> {
+  readonly #providers = new Map<string, Map<string, T>>();
+
+  get(identity: SessionIdentity): T | undefined {
+    return this.#providers.get(identity.providerId)?.get(identity.providerSessionId);
+  }
+
+  set(identity: SessionIdentity, value: T): void {
+    let sessions = this.#providers.get(identity.providerId);
+    if (!sessions) {
+      sessions = new Map();
+      this.#providers.set(identity.providerId, sessions);
+    }
+    sessions.set(identity.providerSessionId, value);
+  }
 }
 
 /** A session as the roster showed it at a look, in the fields a change would move; never a transcript. */

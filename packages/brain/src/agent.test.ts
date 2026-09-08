@@ -28,7 +28,7 @@ import {
   type WireRecord,
   wireRecord,
 } from "@sidecar/wire";
-import { BrainAgent, type BrainAgentOptions } from "./agent.js";
+import { BrainAgent, type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { BrainGenerationClock } from "./generation-clock.js";
 import { BRAIN_INPUT_MARKER } from "./input-items.js";
@@ -3493,6 +3493,27 @@ test("opening notes are read once by the next turn and handed back when that tur
   );
 });
 
+test("a conversation that observes no session opens no look, however the roster stands", async () => {
+  const h = harness({
+    observes: { kind: LOOK_SUBJECT.NONE },
+    roster: () => ({
+      text: "roster",
+      identities: [ABC, DEF],
+      sessions: [
+        session("abc", { status: SESSION_STATUS.WORKING }),
+        session("def", { status: SESSION_STATUS.WORKING }),
+      ],
+    }),
+  });
+  h.agent.rosterLook();
+  await settle();
+  // No transcript is read and no inference opens: this conversation's turns
+  // are the developer's asks and its own scheduled review.
+  assert.equal(h.client.inputs.length, 0);
+  assert.deepEqual(h.sinceReads, []);
+  assert.equal(h.agent.pendingWakes(), 0);
+});
+
 test("a hook delivered twice is one wake, and the pending wakes are bounded", async () => {
   const h = harness();
   await h.agent.wake([edge(ABC), edge(ABC)]);
@@ -3505,7 +3526,7 @@ test("a conversation that looks at one session reads only it, and a repeated unc
   const notices: import("./wake-events.js").BrainTurnNotice[] = [];
   let text = `${TRANSCRIPT_SECRET} for abc`;
   const h = harness({
-    looksAt: () => [ABC],
+    observes: { kind: LOOK_SUBJECT.SESSION, identity: ABC },
     notice: (notice) => notices.push(notice),
     roster: () => ({
       text: "roster",

@@ -101,8 +101,6 @@ export interface TurnPlan {
   events: readonly BrainWakeEvent[];
   /** The words the turn opens with, each ingested as the developer's or the host's, in order. */
   open: (events: readonly BrainWakeEvent[], now: number) => readonly string[];
-  /** Whether a roster look's events with nothing new in their transcript are left out. */
-  dropEmptyRosterDeltas?: boolean;
   run?: RunControl;
   /**
    * The generation the work was queued in. A turn that reaches the front of
