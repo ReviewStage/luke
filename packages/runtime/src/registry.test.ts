@@ -52,12 +52,6 @@ function engine(id: string, itemFormat: ItemFormatIdentity = RESPONSES): Context
     create: () => {
       throw new Error("not built in this test");
     },
-    checkpointFormatFor: (runtime) => ({
-      runtime: runtime.id,
-      runtimeVersion: runtime.version,
-      format: itemFormat.format,
-      formatVersion: itemFormat.version,
-    }),
   };
 }
 
@@ -76,13 +70,11 @@ function populated(): RuntimeRegistries {
     id: "keyed",
     itemFormat: RESPONSES,
     credentialKind: CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY,
-    fixedToolCatalog: false,
   });
   registries.modelAdapters.register({
     id: "hosted",
     itemFormat: RESPONSES,
     credentialKind: CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT,
-    fixedToolCatalog: true,
   });
   registries.tools.register(tool("read_thing"));
   return registries;
@@ -141,8 +133,14 @@ test("a registry refuses a duplicate id, an empty id, and an incompatible entry,
     capabilities: [MEMORY_CAPABILITY.VECTOR],
     embeddingAdapterId: "embed",
   });
-  assert.deepEqual(registries.tools.ids(), ["read_thing"]);
-  assert.deepEqual(registries.memoryProviders.ids(), ["vectors"]);
+  assert.deepEqual(
+    registries.tools.entries().map((entry) => entry.id),
+    ["read_thing"],
+  );
+  assert.deepEqual(
+    registries.memoryProviders.entries().map((entry) => entry.id),
+    ["vectors"],
+  );
 });
 
 test("resolution checks every name and pairing and answers a frozen configuration", () => {
@@ -182,13 +180,10 @@ test("a store publishes atomically: a refused publish leaves the snapshot standi
   const registries = populated();
   const store = new ConfigurationStore(registries, configuration());
   const first = store.snapshot();
-  const seen: number[] = [];
-  store.subscribe((snapshot) => seen.push(snapshot.revision));
 
   const refused = store.publish(configuration({ contextEngineId: "other-engine" }));
   assert.ok(!refused.ok);
   assert.strictEqual(store.snapshot(), first);
-  assert.deepEqual(seen, []);
 
   const accepted = store.publish(
     configuration({
@@ -203,7 +198,6 @@ test("a store publishes atomically: a refused publish leaves the snapshot standi
   assert.equal(second.configuration.modelAdapterId, "hosted");
   assert.deepEqual(second.configuration.toolPolicy, { agent: { deny: ["read_thing"] } });
   assert.deepEqual(first.configuration.toolPolicy, {});
-  assert.deepEqual(seen, [2]);
   // The credential travels as a reference alone: no secret has a field to live in.
   assert.deepEqual(Object.keys(second.configuration.credential), ["kind"]);
 });

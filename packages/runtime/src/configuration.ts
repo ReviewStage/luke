@@ -1,9 +1,4 @@
-import {
-  type AgentId,
-  DEFAULT_AGENT_ID,
-  isReasoningEffort,
-  type ReasoningEffort,
-} from "@sidecar/runtime-contracts";
+import { type AgentId, DEFAULT_AGENT_ID, type ReasoningEffort } from "@sidecar/runtime-contracts";
 import { type RuntimeRegistries, sameItemFormat } from "./registry.js";
 import type { ToolPolicyLayers } from "./tool-policy.js";
 
@@ -16,7 +11,8 @@ import type { ToolPolicyLayers } from "./tool-policy.js";
  * store publishes snapshots atomically: a run takes the snapshot standing
  * when it opens and reads it alone to its end, a publish replaces the whole
  * snapshot at once, and a configuration that fails to resolve replaces
- * nothing. The credential itself never enters a configuration: the reference
+ * nothing; a caller reads the snapshot it needs after its publish, and
+ * nothing is notified. The credential itself never enters a configuration: the reference
  * says which credential, and the encrypted credential store keeps the value.
  */
 
@@ -59,7 +55,6 @@ export const CONFIGURATION_REFUSAL = {
   UNKNOWN_LIFECYCLE_SERVICE: "unknown-lifecycle-service",
   ITEM_FORMAT_MISMATCH: "item-format-mismatch",
   CREDENTIAL_KIND_MISMATCH: "credential-kind-mismatch",
-  INVALID_REASONING_EFFORT: "invalid-reasoning-effort",
   INVALID_OUTPUT_TOKENS: "invalid-output-tokens",
   EMPTY_WORKSPACE: "empty-workspace",
 } as const;
@@ -119,12 +114,6 @@ export function resolveConfiguration(
     refusals.push(CONFIGURATION_REFUSAL.UNKNOWN_LIFECYCLE_SERVICE);
   }
   if (
-    configuration.reasoningEffort !== undefined &&
-    !isReasoningEffort(configuration.reasoningEffort)
-  ) {
-    refusals.push(CONFIGURATION_REFUSAL.INVALID_REASONING_EFFORT);
-  }
-  if (
     configuration.maximumOutputTokens !== undefined &&
     !(
       Number.isSafeInteger(configuration.maximumOutputTokens) &&
@@ -140,18 +129,15 @@ export function resolveConfiguration(
   return { ok: true, configuration: deepFreeze(structuredClone(configuration)) };
 }
 
-export type ConfigurationListener = (snapshot: ResolvedConfiguration) => void;
-
 /**
  * One agent's standing configuration. `publish` resolves and, only when the
- * whole configuration resolves, replaces the snapshot in one assignment and
- * tells every listener; a refused publish leaves the standing snapshot
- * exactly as it was. Two agents are two stores, so a test can stand two
- * isolated agents beside each other with nothing shared but the registries.
+ * whole configuration resolves, replaces the snapshot in one assignment; a
+ * refused publish leaves the standing snapshot exactly as it was. Two agents
+ * are two stores, so a test can stand two isolated agents beside each other
+ * with nothing shared but the registries.
  */
 export class ConfigurationStore {
   readonly #registries: RuntimeRegistries;
-  readonly #listeners = new Set<ConfigurationListener>();
   #snapshot: ResolvedConfiguration;
 
   constructor(registries: RuntimeRegistries, initial: AgentConfiguration) {
@@ -174,15 +160,7 @@ export class ConfigurationStore {
       revision: this.#snapshot.revision + 1,
       configuration: resolved.configuration,
     });
-    for (const listener of [...this.#listeners]) listener(this.#snapshot);
     return resolved;
-  }
-
-  subscribe(listener: ConfigurationListener): () => void {
-    this.#listeners.add(listener);
-    return () => {
-      this.#listeners.delete(listener);
-    };
   }
 }
 

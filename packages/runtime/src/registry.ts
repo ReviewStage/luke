@@ -1,6 +1,5 @@
 import type {
   AgentRuntime,
-  CheckpointFormat,
   ContextEngine,
   ModelAdapter,
   ToolSchema,
@@ -101,10 +100,6 @@ export class Registry<Entry extends Registered> {
     return this.#entries.has(id);
   }
 
-  ids(): readonly string[] {
-    return [...this.#entries.keys()];
-  }
-
   entries(): readonly Entry[] {
     return [...this.#entries.values()];
   }
@@ -127,14 +122,11 @@ export interface ModelAdapterDescriptor extends Registered {
   readonly itemFormat: ItemFormatIdentity;
   /** The kind of credential the adapter runs under, by reference: the value stays in the credential store. */
   readonly credentialKind: string;
-  /** Whether the adapter's transport fixes the tool catalog it carries; a name outside it refuses the request. */
-  readonly fixedToolCatalog: boolean;
 }
 
 export interface ContextEngineDescriptor extends Registered {
   readonly itemFormat: ItemFormatIdentity;
   readonly create: (writer: { id: string; version: number }) => ContextEngine;
-  readonly checkpointFormatFor: (runtime: { id: string; version: number }) => CheckpointFormat;
 }
 
 export const MEMORY_CAPABILITY = {
@@ -200,14 +192,12 @@ export interface LifecycleServiceDescriptor extends Registered {
   readonly hooks: readonly LifecycleHook[];
 }
 
-function sameItemFormat(left: ItemFormatIdentity, right: ItemFormatIdentity): boolean {
+export function sameItemFormat(left: ItemFormatIdentity, right: ItemFormatIdentity): boolean {
   return left.format === right.format && left.version === right.version;
 }
 
-export { sameItemFormat };
-
 /** A tool's schema name is its id: a descriptor whose two names disagree would be offered under one and dispatched under the other. */
-const toolCompatible: CompatibilityRule<ToolDescriptor> = (entry, held) => {
+const toolCompatible: CompatibilityRule<ToolDescriptor> = (entry) => {
   if (entry.schema.name !== entry.id) return "schema name differs from id";
   if (entry.execution === TOOL_EXECUTION.PERFORMER && entry.effect === TOOL_EFFECT.SPEAK) {
     return "a performer tool cannot speak";
@@ -215,9 +205,7 @@ const toolCompatible: CompatibilityRule<ToolDescriptor> = (entry, held) => {
   if (entry.execution === TOOL_EXECUTION.WORKSPACE && entry.effect === TOOL_EFFECT.SPEAK) {
     return "a workspace tool cannot speak";
   }
-  return held.some((other) => other.schema.name === entry.schema.name)
-    ? "schema name already registered"
-    : undefined;
+  return undefined;
 };
 
 const memoryCompatible: CompatibilityRule<MemoryProviderDescriptor> = (entry) =>

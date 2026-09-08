@@ -18,7 +18,26 @@ import {
 } from "./prompt.js";
 import { createRuntimeRegistries } from "./registry.js";
 import { gatherPromptFacts, promptProfileFor } from "./runtime-facts.js";
-import { boundBootstrapFiles, seedWorkspace, WORKSPACE_FILE } from "./workspace.js";
+import {
+  BOOTSTRAP_BOUNDS,
+  boundBootstrapFiles,
+  seedWorkspace,
+  WORKSPACE_FILE,
+  type WorkspaceFile,
+  type WorkspaceSeeds,
+} from "./workspace.js";
+
+/** Seeds for these tests alone: the runtime knows the files, never their words. */
+const testSeed = (name: WorkspaceFile) => `# ${name}\n\nseeded for the test\n`;
+const TEST_SEEDS: WorkspaceSeeds = {
+  [WORKSPACE_FILE.AGENTS]: testSeed(WORKSPACE_FILE.AGENTS),
+  [WORKSPACE_FILE.SOUL]: testSeed(WORKSPACE_FILE.SOUL),
+  [WORKSPACE_FILE.IDENTITY]: testSeed(WORKSPACE_FILE.IDENTITY),
+  [WORKSPACE_FILE.USER]: testSeed(WORKSPACE_FILE.USER),
+  [WORKSPACE_FILE.MEMORY]: testSeed(WORKSPACE_FILE.MEMORY),
+  [WORKSPACE_FILE.BOOTSTRAP]: testSeed(WORKSPACE_FILE.BOOTSTRAP),
+  [WORKSPACE_FILE.HEARTBEAT]: testSeed(WORKSPACE_FILE.HEARTBEAT),
+};
 
 const FILES = boundBootstrapFiles([
   { name: WORKSPACE_FILE.AGENTS, path: "/w/AGENTS.md", content: "# AGENTS.md\n\nBe brief." },
@@ -32,6 +51,7 @@ const FILES = boundBootstrapFiles([
 function facts(overrides: Partial<PromptFacts> = {}): PromptFacts {
   return {
     profile: PROMPT_PROFILE.FULL,
+    identity: "You are the agent under test.",
     tools: [
       { name: "list_sessions", description: "the roster", parameters: {} },
       { name: "announce", description: "a briefing", parameters: {} },
@@ -126,16 +146,14 @@ test("the minimal profile carries AGENTS.md alone and no persona, identity, user
 });
 
 test("a truncated or missing file is named in the notice and the diagnostics", () => {
-  const bounded = boundBootstrapFiles(
-    [
-      { name: WORKSPACE_FILE.AGENTS, path: "/w/AGENTS.md", content: "a".repeat(50) },
-      { name: WORKSPACE_FILE.SOUL, path: "/w/SOUL.md", content: undefined },
-    ],
-    { maximumCharsPerFile: 10, maximumTotalChars: 100 },
-  );
+  const perFile = BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE;
+  const bounded = boundBootstrapFiles([
+    { name: WORKSPACE_FILE.AGENTS, path: "/w/AGENTS.md", content: "a".repeat(perFile + 50) },
+    { name: WORKSPACE_FILE.SOUL, path: "/w/SOUL.md", content: undefined },
+  ]);
   const built = buildSystemPrompt(facts({ bootstrapFiles: bounded, skills: [] }));
   const notice = built.sections.find((section) => section.id === PROMPT_SECTION.BOOTSTRAP_NOTICE);
-  assert.ok(notice?.text.includes("AGENTS.md: 10 of 50 characters shown"));
+  assert.ok(notice?.text.includes(`AGENTS.md: ${perFile} of ${perFile + 50} characters shown`));
   assert.ok(notice?.text.includes("Read the affected file directly"));
   assert.deepEqual(
     built.diagnostics.map((diagnostic) => [diagnostic.kind, diagnostic.subject]),
@@ -160,7 +178,7 @@ test("gathering reads the workspace under the configuration, lists eligible skil
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "luke-prompt-"));
   const workspace = path.join(root, "workspace");
   const skills = path.join(root, "skills");
-  await seedWorkspace(workspace);
+  await seedWorkspace(workspace, TEST_SEEDS);
   await fs.mkdir(path.join(skills, "deploy"), { recursive: true });
   await fs.writeFile(
     path.join(skills, "deploy", "SKILL.md"),
@@ -187,18 +205,11 @@ test("gathering reads the workspace under the configuration, lists eligible skil
     create: () => {
       throw new Error("unused");
     },
-    checkpointFormatFor: () => ({
-      runtime: "loop",
-      runtimeVersion: 1,
-      format: "f",
-      formatVersion: 1,
-    }),
   });
   registries.modelAdapters.register({
     id: "adapter",
     itemFormat: { format: "f", version: 1 },
     credentialKind: CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT,
-    fixedToolCatalog: true,
   });
   const store = new ConfigurationStore(
     registries,
@@ -213,6 +224,7 @@ test("gathering reads the workspace under the configuration, lists eligible skil
   );
   const common = {
     configuration: store.snapshot(),
+    identity: "You are the agent under test.",
     tools: [],
     toolNotes: [],
     runtimeContextMarker: "[context]",
@@ -235,6 +247,7 @@ test("gathering reads the workspace under the configuration, lists eligible skil
   );
   const built = buildSystemPrompt(child);
   assert.equal(built.profile, PROMPT_PROFILE.MINIMAL);
-  assert.ok(built.text.includes("Operating instructions for Luke's own agent"));
+  assert.ok(built.text.includes(TEST_SEEDS[WORKSPACE_FILE.AGENTS].trimEnd()));
+  assert.ok(built.text.startsWith("# Identity\n\nYou are the agent under test."));
   assert.ok(!built.text.includes("# IDENTITY.md"));
 });

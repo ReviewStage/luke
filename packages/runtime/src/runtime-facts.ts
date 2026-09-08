@@ -7,11 +7,10 @@ import type { SkillDescriptor } from "./registry.js";
 import { discoverSkills, eligibleSkills } from "./skills.js";
 import type { ChildPolicyContext } from "./tool-policy.js";
 import {
+  BOOTSTRAP_BOUNDS,
   BOOTSTRAP_FILE_ORDER,
-  type BootstrapBounds,
   type BootstrapFile,
   CHILD_BOOTSTRAP_FILES,
-  DEFAULT_BOOTSTRAP_BOUNDS,
   readBootstrapFiles,
 } from "./workspace.js";
 
@@ -48,14 +47,15 @@ export function promptProfileFor(run: RunDescription): PromptProfile {
 export interface GatherOptions {
   readonly configuration: ResolvedConfiguration;
   readonly run: RunDescription;
+  /** The identity line the prompt opens with: the product's words, handed in rather than known here. */
+  readonly identity: string;
   readonly tools: readonly ToolSchema[];
   readonly toolNotes: readonly string[];
   readonly runtimeContextMarker: string;
   readonly runtimeId: string;
   readonly model?: string;
   readonly executionDirectory?: string;
-  readonly bounds?: BootstrapBounds;
-  /** Skills already discovered for this configuration, when the caller caches them between turns. */
+  /** Skills already discovered under this configuration's roots, when the caller discovered them itself. */
   readonly skills?: readonly SkillDescriptor[];
 }
 
@@ -63,11 +63,13 @@ const EXECUTION_INSTRUCTIONS_FILE = "AGENTS.md";
 
 async function executionDirectoryFacts(
   directory: string,
-  bounds: BootstrapBounds,
 ): Promise<PromptFacts["executionDirectory"]> {
   try {
     const text = await fs.readFile(path.join(directory, EXECUTION_INSTRUCTIONS_FILE), "utf8");
-    return { path: directory, instructions: text.slice(0, bounds.maximumCharsPerFile) };
+    return {
+      path: directory,
+      instructions: text.slice(0, BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE),
+    };
   } catch {
     return { path: directory };
   }
@@ -80,24 +82,20 @@ export function bootstrapNamesFor(run: RunDescription) {
 
 export async function gatherPromptFacts(options: GatherOptions): Promise<PromptFacts> {
   const configuration: AgentConfiguration = options.configuration.configuration;
-  const bounds = options.bounds ?? DEFAULT_BOOTSTRAP_BOUNDS;
   const profile = promptProfileFor(options.run);
   const bootstrapFiles: readonly BootstrapFile[] =
     profile === PROMPT_PROFILE.NONE
       ? []
-      : await readBootstrapFiles(
-          configuration.workspaceDirectory,
-          bootstrapNamesFor(options.run),
-          bounds,
-        );
+      : await readBootstrapFiles(configuration.workspaceDirectory, bootstrapNamesFor(options.run));
   const discovered = options.skills ?? (await discoverSkills(configuration.skillRoots));
   const skills = eligibleSkills(discovered, configuration.agentId);
   const executionDirectory =
     options.executionDirectory !== undefined
-      ? await executionDirectoryFacts(options.executionDirectory, bounds)
+      ? await executionDirectoryFacts(options.executionDirectory)
       : undefined;
   return {
     profile,
+    identity: options.identity,
     tools: options.tools,
     toolNotes: options.toolNotes,
     runtimeContextMarker: options.runtimeContextMarker,

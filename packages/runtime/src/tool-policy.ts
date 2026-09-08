@@ -4,8 +4,9 @@ import type { ToolDescriptor } from "./registry.js";
  * What a run may call, decided by policy rather than by who opened it. A
  * policy is an allow list, a deny list, or both; layers apply in OpenClaw's
  * order — global, then the agent's, then the provider's, then the session's,
- * then the child restriction when the run is a child's — and at every layer
- * deny wins over allow. An allow list narrows the catalog to what it names
+ * then the child restriction when the run is a child's, then the turn's own
+ * layer, the one fact about a turn's kind the host adds beneath the
+ * configuration — and at every layer deny wins over allow. An allow list narrows the catalog to what it names
  * (a name outside the catalog is ignored, never invented); a deny list
  * removes what it names; a layer naming neither leaves the set as it stood.
  * A group name (`group:read`) stands for every tool the registry filed
@@ -31,20 +32,18 @@ export const TOOL_POLICY_LAYER = {
   PROVIDER: "provider",
   SESSION: "session",
   CHILD: "child",
+  TURN: "turn",
 } as const;
 
 export type ToolPolicyLayer = (typeof TOOL_POLICY_LAYER)[keyof typeof TOOL_POLICY_LAYER];
 
-/** The order the layers apply in, fixed by the pinned OpenClaw pipeline. */
-export const TOOL_POLICY_ORDER: readonly ToolPolicyLayer[] = [
-  TOOL_POLICY_LAYER.GLOBAL,
-  TOOL_POLICY_LAYER.AGENT,
-  TOOL_POLICY_LAYER.PROVIDER,
-  TOOL_POLICY_LAYER.SESSION,
-  TOOL_POLICY_LAYER.CHILD,
-];
+/** The order the layers apply in, fixed by the pinned OpenClaw pipeline: the declaration order above. */
+export const TOOL_POLICY_ORDER: readonly ToolPolicyLayer[] = Object.values(TOOL_POLICY_LAYER);
 
-export type ToolPolicyLayers = Partial<Record<ToolPolicyLayer, ToolPolicy>>;
+/** The configured layers: everything but the turn's own, which the host supplies per turn. */
+export type ConfiguredToolPolicyLayer = Exclude<ToolPolicyLayer, typeof TOOL_POLICY_LAYER.TURN>;
+
+export type ToolPolicyLayers = Partial<Record<ConfiguredToolPolicyLayer, ToolPolicy>>;
 
 /**
  * The tools a child run always loses, whatever any allow list says, from
@@ -100,6 +99,8 @@ export interface EffectiveToolPolicy {
   /** Every tool the layers removed, with the layer that removed it first. */
   readonly denied: readonly ToolDenial[];
   allows(name: string): boolean;
+  /** The layer that removed the tool named, or nothing when it stands or was never in the catalog. */
+  deniedBy(name: string): ToolPolicyLayer | undefined;
 }
 
 export interface ChildPolicyContext {
@@ -145,35 +146,36 @@ function applyLayer(
 
 /**
  * Resolves the layers over the catalog into the effective policy. A child
- * context adds the child restriction as the last layer, after whatever the
- * configuration's own child layer said, because the exclusions are not a
- * configuration: nothing an allow list says can restore them.
+ * context adds the child restriction after whatever the configuration's own
+ * child layer said, because the exclusions are not a configuration: nothing
+ * an allow list says can restore them. The turn's own layer comes last, for
+ * the same reason: it states a fact about the turn's kind, not a preference.
  */
 export function resolveToolPolicy(
   catalog: readonly ToolDescriptor[],
   layers: ToolPolicyLayers,
   child?: ChildPolicyContext,
+  turn?: ToolPolicy,
 ): EffectiveToolPolicy {
   const denied: ToolDenial[] = [];
   let standing: ReadonlySet<string> = new Set(catalog.map((tool) => tool.id));
   for (const layer of TOOL_POLICY_ORDER) {
-    const policy = layers[layer];
+    const policy = layer === TOOL_POLICY_LAYER.TURN ? turn : layers[layer];
     if (policy) standing = applyLayer(standing, policy, layer, catalog, denied);
-  }
-  if (child) {
-    standing = applyLayer(
-      standing,
-      childToolPolicy(child),
-      TOOL_POLICY_LAYER.CHILD,
-      catalog,
-      denied,
-    );
+    if (layer === TOOL_POLICY_LAYER.CHILD && child) {
+      standing = applyLayer(standing, childToolPolicy(child), layer, catalog, denied);
+    }
   }
   const allowed = catalog.filter((tool) => standing.has(tool.id));
   const names = new Set(allowed.map((tool) => tool.id));
+  const deniedBy = new Map<string, ToolPolicyLayer>();
+  for (const denial of denied) {
+    if (!deniedBy.has(denial.tool)) deniedBy.set(denial.tool, denial.layer);
+  }
   return {
     allowed,
     denied,
     allows: (name) => names.has(name),
+    deniedBy: (name) => deniedBy.get(name),
   };
 }

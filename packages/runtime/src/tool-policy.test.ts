@@ -43,7 +43,7 @@ test("no layers offer the whole catalog in order", () => {
 });
 
 test("layers apply in the pinned order, allow narrows, deny wins, and groups expand", () => {
-  assert.deepEqual(TOOL_POLICY_ORDER, ["global", "agent", "provider", "session", "child"]);
+  assert.deepEqual(TOOL_POLICY_ORDER, ["global", "agent", "provider", "session", "child", "turn"]);
   const policy = resolveToolPolicy(CATALOG, {
     global: { deny: ["message"] },
     agent: { allow: ["group:read", "group:acts", "announce", "conversations_*"] },
@@ -65,6 +65,26 @@ test("layers apply in the pinned order, allow narrows, deny wins, and groups exp
   assert.ok(policy.allows("send_session_message"));
   assert.ok(!policy.allows("open_session"));
   assert.ok(!policy.allows("not_a_tool"));
+});
+
+test("the turn's own layer applies last, after every configured layer, and names itself in the denial", () => {
+  const policy = resolveToolPolicy(
+    CATALOG,
+    { agent: { allow: ["group:read", "announce"] } },
+    undefined,
+    { deny: ["announce"] },
+  );
+  assert.deepEqual(names(policy), ["list_sessions", "read_transcript"]);
+  assert.equal(policy.deniedBy("announce"), TOOL_POLICY_LAYER.TURN);
+  assert.equal(policy.deniedBy("send_session_message"), TOOL_POLICY_LAYER.AGENT);
+  assert.equal(policy.deniedBy("list_sessions"), undefined);
+  assert.equal(policy.deniedBy("not_a_tool"), undefined);
+  // A configured deny of the same tool is the layer named, not the turn's.
+  const configured = resolveToolPolicy(CATALOG, { session: { deny: ["announce"] } }, undefined, {
+    deny: ["announce"],
+  });
+  assert.equal(configured.deniedBy("announce"), TOOL_POLICY_LAYER.SESSION);
+  assert.deepEqual(configured.denied, [{ tool: "announce", layer: TOOL_POLICY_LAYER.SESSION }]);
 });
 
 test("a later allow cannot restore what an earlier layer denied", () => {
