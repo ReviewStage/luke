@@ -481,3 +481,31 @@ test("a scheduler restart keeps one consolidation job and one heartbeat, never a
   assert.equal(jobs.size, 1);
   second.stop();
 });
+
+test("the light limit bounds one sweep and the cursor advances only over the lines consumed, so the rest is staged by the next sweep rather than lost", async () => {
+  const h = await harness();
+  const lines: ConversationEntry[] = [];
+  for (let index = 0; index < 105; index += 1) {
+    lines.push({
+      kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
+      words: `Distinct decision number ${index} about the deployment schedule for service ${index}`,
+      eventId: `line-${index}`,
+      recordedAt: NOW - 10_000 + index,
+    });
+  }
+  h.history.set(MAIN_SESSION_KEY, lines);
+  const first = await h.maintenance.runConsolidation();
+  assert.ok(first);
+  const fromMain = (candidates: readonly { sourceSessionKey?: string }[]) =>
+    candidates.filter((candidate) => candidate.sourceSessionKey === MAIN_SESSION_KEY).length;
+  assert.equal(fromMain(await h.store.listMemoryCandidates()), 100);
+  assert.equal(await h.store.memoryIngestionCursor(MAIN_SESSION_KEY), NOW - 10_000 + 99);
+  const second = await h.maintenance.runConsolidation();
+  assert.ok(second);
+  assert.equal(fromMain(await h.store.listMemoryCandidates()), 105);
+  assert.equal(await h.store.memoryIngestionCursor(MAIN_SESSION_KEY), NOW - 10_000 + 104);
+  const third = await h.maintenance.runConsolidation();
+  assert.ok(third);
+  assert.equal(fromMain(await h.store.listMemoryCandidates()), 105, "nothing learned twice");
+  h.close();
+});

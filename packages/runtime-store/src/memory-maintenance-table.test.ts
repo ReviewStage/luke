@@ -31,6 +31,7 @@ import {
   messageIngested,
   publishMemoryRewrite,
   readDurableMemoryFile,
+  reconcilePromotions,
   recordFlush,
   recordPhaseHits,
   stageMemoryCandidates,
@@ -286,4 +287,83 @@ test("a schema 7 database gains the maintenance tables at open and reads as sche
   }
   assert.deepEqual(listMemoryCandidates(eight), []);
   eight.close();
+});
+
+test("a rewrite the disk refuses records nothing and leaves the candidates staged; a file ahead of the table is reconciled from its markers", () => {
+  const database = openTestDatabase();
+  const root = workspace();
+  fs.writeFileSync(path.join(root, WORKSPACE_FILE.MEMORY), "# MEMORY.md\n\n- one\n");
+  stageMemoryCandidates(database, [seed()], NOW);
+  const [candidate] = listMemoryCandidates(database);
+  assert.ok(candidate);
+  const read = readDurableMemoryFile(root, WORKSPACE_FILE.MEMORY);
+  assert.ok(read);
+  // The staging file's name is taken by a directory, so the write itself fails.
+  const staging = path.join(root, `${WORKSPACE_FILE.MEMORY}.${process.pid}.tmp`);
+  fs.mkdirSync(staging);
+  const refused = publishMemoryRewrite(
+    database,
+    root,
+    {
+      path: WORKSPACE_FILE.MEMORY,
+      phase: CONSOLIDATION_PHASE.DEEP,
+      expectedHash: read.hash,
+      next: "# MEMORY.md\n\n- one\n- promoted\n",
+      candidateKeys: [candidate.key],
+    },
+    NOW,
+  );
+  assert.equal(refused.ok, false);
+  assert.match(refused.ok ? "" : refused.reason, /could not be written/u);
+  fs.rmdirSync(staging);
+  assert.equal(
+    fs.readFileSync(path.join(root, WORKSPACE_FILE.MEMORY), "utf8"),
+    "# MEMORY.md\n\n- one\n",
+  );
+  assert.deepEqual(listMemoryRewrites(database), []);
+  assert.equal(listMemoryCandidates(database)[0]?.status, CANDIDATE_STATUS.STAGED);
+
+  // The file carries the marker but the table never heard: the sweep's reconciliation repairs it.
+  fs.writeFileSync(
+    path.join(root, WORKSPACE_FILE.MEMORY),
+    `# MEMORY.md\n\n- one\n${promotionMarker(candidate.key)}\n- promoted\n`,
+  );
+  assert.equal(reconcilePromotions(database, root, NOW), 1);
+  assert.equal(listMemoryCandidates(database)[0]?.status, CANDIDATE_STATUS.PROMOTED);
+  assert.equal(reconcilePromotions(database, root, NOW), 0);
+});
+
+test("a forgotten candidate with long words is refused when its source is scanned again, because the tombstone and the stored key agree on the bounded text", () => {
+  const database = openTestDatabase();
+  const root = workspace();
+  const long = `The developer prefers ${"very ".repeat(200)}long lines in notes`;
+  const longSeed = seed({
+    text: long,
+    sourceSessionKey: undefined,
+    sourceEventId: undefined,
+    path: "memory/2026-09-05.md",
+    startLine: 2,
+    endLine: 2,
+  });
+  assert.deepEqual(stageMemoryCandidates(database, [longSeed], NOW), {
+    staged: 1,
+    reinforced: 0,
+    refused: 0,
+  });
+  const [candidate] = listMemoryCandidates(database);
+  assert.ok(candidate);
+  assert.ok(candidate.text.length < long.length, "the stored text is bounded");
+  const report = forgetMemorySources(
+    database,
+    root,
+    { candidateKeys: [candidate.key], reason: "asked" },
+    NOW,
+  );
+  assert.equal(report.removedCandidates, 1);
+  assert.deepEqual(stageMemoryCandidates(database, [longSeed], NOW + 1), {
+    staged: 0,
+    reinforced: 0,
+    refused: 1,
+  });
+  assert.deepEqual(listMemoryCandidates(database), []);
 });

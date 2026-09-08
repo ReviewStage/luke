@@ -24,6 +24,7 @@ import {
   promotionMarker,
   type RankedCandidate,
   rankCandidate,
+  recallSignalSeeds,
   reinforceCandidate,
   removePromotedEntries,
   remReflections,
@@ -411,4 +412,45 @@ test("REM reflections name themes that recur across candidates and nothing from 
     false,
   );
   assert.equal(candidates[0]?.status, CANDIDATE_STATUS.STAGED);
+});
+
+test("recall signals pass through the same scrub as ingestion: recalled context and secrets never reach a candidate", () => {
+  const results = [
+    {
+      path: "memory/2026-09-07.md",
+      startLine: 2,
+      endLine: 2,
+      snippet: "The token is sk-abcdefghijklmnopqrstuvwxyz and mail dev@example.com",
+      score: 0.9,
+    },
+    {
+      path: "memory/2026-09-07.md",
+      startLine: 4,
+      endLine: 4,
+      snippet: `${RECALLED_CONTEXT_MARKER}\nonly recalled words here`,
+      score: 0.8,
+    },
+    {
+      path: "MEMORY.md",
+      startLine: 1,
+      endLine: 1,
+      snippet: "curated, already durable",
+      score: 0.9,
+    },
+    {
+      path: "memory/2026-09-07.md",
+      startLine: 6,
+      endLine: 6,
+      snippet: "We deploy on Tuesdays",
+      score: 0.7,
+    },
+  ];
+  const seeds = recallSignalSeeds("  When do we  deploy? ", results, "2026-09-08");
+  assert.equal(seeds.length, 2);
+  assert.ok(seeds[0]?.text.includes(REDACTED_TOKEN));
+  assert.equal(seeds[0]?.text.includes("sk-abc"), false);
+  assert.equal(seeds[0]?.text.includes("dev@example.com"), false);
+  assert.equal(seeds[1]?.text, "We deploy on Tuesdays");
+  assert.equal(seeds[1]?.query, "when do we deploy?");
+  assert.deepEqual(recallSignalSeeds("   ", results, "2026-09-08"), []);
 });

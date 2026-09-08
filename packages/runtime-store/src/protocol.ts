@@ -75,6 +75,7 @@ export const RUNTIME_STORE_METHOD = {
   MEMORY_CANDIDATES_STAGE: "memory.candidates.stage",
   MEMORY_CANDIDATES_LIST: "memory.candidates.list",
   MEMORY_CANDIDATES_STATUS: "memory.candidates.status",
+  MEMORY_CANDIDATES_RECONCILE: "memory.candidates.reconcile",
   MEMORY_PHASE_HITS: "memory.phase-hits",
   MEMORY_INGESTION_CURSOR: "memory.ingestion.cursor",
   MEMORY_INGESTION_SEEN: "memory.ingestion.seen",
@@ -196,6 +197,10 @@ export interface RuntimeStoreMethods {
   };
   [RUNTIME_STORE_METHOD.MEMORY_CANDIDATES_STATUS]: {
     params: { keys: readonly string[]; status: CandidateStatus; now: number };
+    result: number;
+  };
+  [RUNTIME_STORE_METHOD.MEMORY_CANDIDATES_RECONCILE]: {
+    params: { now: number };
     result: number;
   };
   [RUNTIME_STORE_METHOD.MEMORY_PHASE_HITS]: {

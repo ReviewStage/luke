@@ -121,6 +121,13 @@ export interface MemoryMaintenance {
   forget: (ask: MemoryForgetAsk) => Promise<MemoryForgetReport | undefined>;
 }
 
+/** One History line as the light phase reads it: its hash, when it was said, and the seed it yields, if any. */
+interface IngestibleLine {
+  readonly hash: string;
+  readonly recordedAt: number;
+  readonly seed?: CandidateSeed;
+}
+
 interface DedupedSeeds {
   readonly seeds: CandidateSeed[];
   readonly deduped: number;
@@ -309,6 +316,11 @@ export function wireMemoryMaintenance(
     let deduped = 0;
     for (const seed of seeds) {
       const existing = held.find((candidate) => candidatesDuplicate(candidate.text, seed.text));
+      if (existing?.queries.includes(seed.query)) {
+        // The same day's signal for a candidate already holding it adds no evidence.
+        deduped += 1;
+        continue;
+      }
       if (existing) {
         kept.push({
           ...seed,
@@ -337,17 +349,24 @@ export function wireMemoryMaintenance(
     return { seeds: kept, deduped };
   };
 
-  /** The light phase's conversation seeds: lines since the cursor, redacted, never one seen before. */
-  const conversationSeeds = async (
+  /**
+   * The light phase's conversation lines since the cursor, oldest first, each
+   * with its hash and the seed it yields (none when redaction empties it or
+   * the line was seen before). The sweep consumes them under its budget and
+   * advances the cursor only over the lines it consumed, so a line the
+   * budget left behind is read again by the next sweep rather than lost.
+   */
+  const conversationLines = async (
     client: RuntimeStoreClient,
     sessionKey: SessionKey,
     now: number,
-  ): Promise<{ seeds: CandidateSeed[]; hashes: string[]; latest: number }> => {
+  ): Promise<IngestibleLine[]> => {
     const cursor = await client.memoryIngestionCursor(sessionKey);
     const since = Math.max(cursor, now - CONSOLIDATION_DEFAULTS.LIGHT_LOOKBACK_DAYS * DAY_MS);
     const lines = dependencies
       .historyLines(sessionKey)
-      .filter((entry) => (entry.recordedAt ?? 0) > since);
+      .filter((entry) => (entry.recordedAt ?? 0) > since)
+      .sort((a, b) => (a.recordedAt ?? 0) - (b.recordedAt ?? 0));
     const hashed = lines.map((entry) => ({
       entry,
       hash: hashText(`${entry.kind}\n${entry.words}`),
@@ -358,31 +377,37 @@ export function wireMemoryMaintenance(
         hashed.map((line) => line.hash),
       ),
     );
-    const seeds: CandidateSeed[] = [];
-    const hashes: string[] = [];
-    let latest = cursor;
+    const result: IngestibleLine[] = [];
     for (const { entry, hash } of hashed) {
-      latest = Math.max(latest, entry.recordedAt ?? 0);
-      if (seen.has(hash)) continue;
-      hashes.push(hash);
-      const prepared = prepareForIngestion(entry.words);
-      if (!prepared) continue;
       const recordedAt = entry.recordedAt ?? now;
-      seeds.push({
-        text: prepared.text,
-        path: conversationCandidatePath(sessionKey),
-        startLine: 0,
-        endLine: 0,
-        origin: originOf(entry.kind),
-        sessionKind: CANDIDATE_SESSION_KIND.INTERACTIVE,
-        sourceSessionKey: sessionKey,
-        ...(entry.eventId ? { sourceEventId: entry.eventId } : undefined),
-        query: `ingest:${localDayStamp(recordedAt)}`,
-        score: INGESTION_SCORE,
-        day: localDayStamp(recordedAt),
+      if (seen.has(hash)) {
+        result.push({ hash, recordedAt });
+        continue;
+      }
+      const prepared = prepareForIngestion(entry.words);
+      if (!prepared) {
+        result.push({ hash, recordedAt });
+        continue;
+      }
+      result.push({
+        hash,
+        recordedAt,
+        seed: {
+          text: prepared.text,
+          path: conversationCandidatePath(sessionKey),
+          startLine: 0,
+          endLine: 0,
+          origin: originOf(entry.kind),
+          sessionKind: CANDIDATE_SESSION_KIND.INTERACTIVE,
+          sourceSessionKey: sessionKey,
+          ...(entry.eventId ? { sourceEventId: entry.eventId } : undefined),
+          query: `ingest:${localDayStamp(recordedAt)}`,
+          score: INGESTION_SCORE,
+          day: localDayStamp(recordedAt),
+        },
       });
     }
-    return { seeds, hashes, latest };
+    return result;
   };
 
   /** The light phase's note seeds: each bullet or line of the recent dated notes, the diary excluded. */
@@ -473,21 +498,31 @@ export function wireMemoryMaintenance(
       try {
         // Light: stage and dedupe recent short-term material; nothing durable is written.
         const held = await client.listMemoryCandidates();
+        // The light limit bounds what one sweep stages; the cursor and the
+        // seen hashes advance only over the lines actually consumed, so what
+        // the budget left behind is read by the next sweep, never lost.
+        let budget: number = CONSOLIDATION_DEFAULTS.LIGHT_LIMIT;
         const advances: { sessionKey: SessionKey; latest: number; hashes: string[] }[] = [];
         let gathered: CandidateSeed[] = [];
         for (const sessionKey of eligibleConversations()) {
-          const read = await conversationSeeds(client, sessionKey, now);
-          gathered = gathered.concat(read.seeds);
-          advances.push({ sessionKey, latest: read.latest, hashes: read.hashes });
+          const lines = await conversationLines(client, sessionKey, now);
+          const hashes: string[] = [];
+          let latest = 0;
+          for (const line of lines) {
+            if (line.seed && budget <= 0) break;
+            hashes.push(line.hash);
+            latest = Math.max(latest, line.recordedAt);
+            if (line.seed) {
+              gathered.push(line.seed);
+              budget -= 1;
+            }
+          }
+          if (hashes.length > 0) advances.push({ sessionKey, latest, hashes });
         }
-        gathered = gathered.concat(await noteSeeds(now));
-        const { seeds, deduped } = dedupe(
-          gathered.slice(0, CONSOLIDATION_DEFAULTS.LIGHT_LIMIT),
-          held,
-        );
+        gathered = gathered.concat((await noteSeeds(now)).slice(0, Math.max(0, budget)));
+        const { seeds, deduped } = dedupe(gathered, held);
         const staging = await client.stageMemoryCandidates(seeds, now);
         for (const advance of advances) {
-          if (advance.hashes.length === 0 && advance.latest === 0) continue;
           await client.advanceMemoryIngestion({
             sessionKey: advance.sessionKey,
             lastRecordedAt: advance.latest,
@@ -495,6 +530,7 @@ export function wireMemoryMaintenance(
             now,
           });
         }
+        await client.reconcileMemoryPromotions(now);
         const staged = await client.listMemoryCandidates(CANDIDATE_STATUS.STAGED);
         await client.recordMemoryPhaseHits(
           CONSOLIDATION_PHASE.LIGHT,

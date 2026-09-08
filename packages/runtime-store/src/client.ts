@@ -244,6 +244,11 @@ export class RuntimeStoreClient {
     return this.request(RUNTIME_STORE_METHOD.MEMORY_CANDIDATES_STATUS, { keys, status, now });
   }
 
+  /** Marks promoted the staged candidates whose markers MEMORY.md already carries; answers how many. */
+  reconcileMemoryPromotions(now: number): Promise<number> {
+    return this.request(RUNTIME_STORE_METHOD.MEMORY_CANDIDATES_RECONCILE, { now });
+  }
+
   recordMemoryPhaseHits(
     phase: ConsolidationPhase,
     keys: readonly string[],

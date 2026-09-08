@@ -40,6 +40,7 @@ import {
   messageIngested,
   publishMemoryRewrite,
   readDurableMemoryFile,
+  reconcilePromotions,
   recordFlush,
   recordPhaseHits,
   setCandidateStatus,
@@ -155,6 +156,8 @@ const HANDLERS: RuntimeStoreHandlers = {
     listMemoryCandidates(host.opened(), params.status),
   [RUNTIME_STORE_METHOD.MEMORY_CANDIDATES_STATUS]: (host, params) =>
     setCandidateStatus(host.opened(), params.keys, params.status, params.now),
+  [RUNTIME_STORE_METHOD.MEMORY_CANDIDATES_RECONCILE]: (host, params) =>
+    reconcilePromotions(host.opened(), host.workspace(), params.now),
   [RUNTIME_STORE_METHOD.MEMORY_PHASE_HITS]: (host, params) =>
     recordPhaseHits(host.opened(), params.phase, params.keys, params.now),
   [RUNTIME_STORE_METHOD.MEMORY_INGESTION_CURSOR]: (host, params) =>

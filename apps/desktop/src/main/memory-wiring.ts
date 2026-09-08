@@ -1,9 +1,6 @@
 import type { BrainMemoryAccess, BrainRecallAsk } from "@sidecar/brain";
 import { EMBEDDING_BATCH_SIZE, runRecallSubrun } from "@sidecar/brain";
 import {
-  CANDIDATE_ORIGIN,
-  CANDIDATE_SESSION_KIND,
-  type CandidateSeed,
   ConversationRecall,
   conversationRunsRecall,
   EMBEDDING_PROVIDER_SELECTION,
@@ -19,6 +16,7 @@ import {
   RETRIEVAL_MODE,
   type RecallRecentTurn,
   type RetrievalMode,
+  recallSignalSeeds,
   selectHybridSearchResults,
   tokenize,
   watchMemoryFiles,
@@ -350,24 +348,12 @@ export function wireMemory(dependencies: MemoryWiringDependencies): MemoryWiring
     results: readonly MemorySearchResult[],
   ): Promise<void> => {
     const now = dependencies.now();
-    const seeds: CandidateSeed[] = results
-      .filter(
-        (result) =>
-          result.source === MEMORY_SOURCE.MEMORY &&
-          result.path.startsWith(`${DAILY_NOTES_DIRECTORY}/`) &&
-          result.snippet.trim().length > 0,
-      )
-      .map((result) => ({
-        text: result.snippet,
-        path: result.path,
-        startLine: result.startLine,
-        endLine: result.endLine,
-        origin: CANDIDATE_ORIGIN.AGENT,
-        sessionKind: CANDIDATE_SESSION_KIND.INTERACTIVE,
-        query: query.replace(/\s+/g, " ").trim().toLowerCase(),
-        score: result.score,
-        day: localDayStamp(now),
-      }));
+    const seeds = recallSignalSeeds(
+      query,
+      results.filter((result) => result.source === MEMORY_SOURCE.MEMORY),
+      localDayStamp(now),
+      DAILY_NOTES_DIRECTORY,
+    );
     if (seeds.length === 0) return;
     try {
       await client.stageMemoryCandidates(seeds, now);

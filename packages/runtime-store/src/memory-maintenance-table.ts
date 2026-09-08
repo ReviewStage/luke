@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
+  boundCandidateText,
   CANDIDATE_STATUS,
   type CandidateSeed,
   type CandidateStatus,
@@ -344,7 +345,7 @@ function seedForgotten(database: RuntimeDatabase, seed: CandidateSeed): boolean 
   return isForgottenSource(
     database,
     FORGOTTEN_SOURCE_KIND.CANDIDATE,
-    candidateKeyFor(seed.path, seed.text),
+    candidateKeyFor(seed.path, boundCandidateText(seed.text)),
   );
 }
 
@@ -430,6 +431,8 @@ export const MEMORY_REWRITE_REFUSAL = {
   NOT_DURABLE_FILE: "only MEMORY.md and DREAMS.md are rewritten this way",
   CONFLICT: "the file changed since the rewrite was planned",
   TOO_LARGE: "the rewrite exceeds the file's budget",
+  NOT_WRITTEN: "the file could not be written",
+  NOT_RECORDED: "the rewrite could not be recorded; the file was put back",
 } as const;
 
 export type MemoryRewriteOutcome =
@@ -460,28 +463,65 @@ export function publishMemoryRewrite(
     return { ok: false, reason: MEMORY_REWRITE_REFUSAL.CONFLICT };
   }
   const rewriteId = randomUUID();
-  database.transaction(() => {
-    database
-      .prepare(
-        `INSERT INTO memory_rewrites (id, path, phase, previous, next_hash, candidate_keys, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        rewriteId,
-        ask.path,
-        ask.phase,
-        previous,
-        hashText(ask.next),
-        JSON.stringify(ask.candidateKeys),
-        now,
-      );
-    if (ask.path === WORKSPACE_FILE.MEMORY) {
-      setCandidateStatus(database, ask.candidateKeys, CANDIDATE_STATUS.PROMOTED, now);
-    }
-    removeIndexedPath(database, ask.path);
-  });
-  writeWorkspaceFileWhole(root, ask.path, ask.next);
+  // The file lands first: a write the disk refuses leaves the table saying
+  // nothing was promoted, so the candidates are ranked again next sweep. A
+  // table write that then fails puts the previous content back, and a crash
+  // between the two leaves the file ahead of the table, which the sweep's
+  // reconciliation reads back from the file's own promotion markers.
+  try {
+    writeWorkspaceFileWhole(root, ask.path, ask.next);
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `${MEMORY_REWRITE_REFUSAL.NOT_WRITTEN}: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+  try {
+    database.transaction(() => {
+      database
+        .prepare(
+          `INSERT INTO memory_rewrites (id, path, phase, previous, next_hash, candidate_keys, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          rewriteId,
+          ask.path,
+          ask.phase,
+          previous,
+          hashText(ask.next),
+          JSON.stringify(ask.candidateKeys),
+          now,
+        );
+      if (ask.path === WORKSPACE_FILE.MEMORY) {
+        setCandidateStatus(database, ask.candidateKeys, CANDIDATE_STATUS.PROMOTED, now);
+      }
+      removeIndexedPath(database, ask.path);
+    });
+  } catch (error) {
+    writeWorkspaceFileWhole(root, ask.path, previous);
+    return {
+      ok: false,
+      reason: `${MEMORY_REWRITE_REFUSAL.NOT_RECORDED}: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
   return { ok: true, rewriteId };
+}
+
+/**
+ * Marks promoted every staged candidate whose promotion marker MEMORY.md
+ * already carries: the repair for a rewrite that reached the file but not
+ * the table, so the candidate is neither ranked again nor refused forever
+ * for a marker the plan would find already present.
+ */
+export function reconcilePromotions(database: RuntimeDatabase, root: string, now: number): number {
+  const memory = readDurableMemoryFile(root, WORKSPACE_FILE.MEMORY);
+  if (!memory) return 0;
+  const promoted = new Set(promotedCandidateKeys(memory.content));
+  if (promoted.size === 0) return 0;
+  const stale = listMemoryCandidates(database, CANDIDATE_STATUS.STAGED)
+    .filter((candidate) => promoted.has(candidate.key))
+    .map((candidate) => candidate.key);
+  return setCandidateStatus(database, stale, CANDIDATE_STATUS.PROMOTED, now);
 }
 
 /** The current content and hash of a durable file, for a plan to be built over. */
