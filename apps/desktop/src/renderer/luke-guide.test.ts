@@ -396,15 +396,17 @@ test("the guide offers what a new Conductor agent runs, by the names people know
   assert.equal(unset.value, "Conductor's default");
   assert.equal(unset.adjustable, true);
   assert.equal(unset.choices?.[0], "Conductor's default");
+  assert.ok(unset.choices?.includes("Fable 5.1"));
   assert.ok(unset.choices?.includes("Fable 5"));
   assert.ok(unset.choices?.includes("GPT-5.6 Sol"));
-  assert.equal(unset.choices?.includes("fable-5"), false);
+  assert.equal(unset.choices?.includes("fable-5-1"), false);
   // The by-hand path names the provider's own row, not the Preferences list.
   assert.match(unset.manual, /Conductor row under Providers/);
 
   // The levels each model takes ride the model entry itself, keyed by the
   // labels the choices are said by, so a model and its effort can be asked
   // for in one change even while nothing is chosen yet.
+  assert.deepEqual(unset.efforts?.["Fable 5.1"], ["low", "medium", "high", "xhigh", "max"]);
   assert.deepEqual(unset.efforts?.["Fable 5"], ["low", "medium", "high", "xhigh", "max"]);
   assert.deepEqual(unset.efforts?.["GPT-5.6 Sol"], [
     "none",
