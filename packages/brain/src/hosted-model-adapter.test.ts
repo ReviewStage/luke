@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  BRAIN_TURN_AUTHORITY,
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_OPERATION,
   HOSTED_SERVICE_PATH,
@@ -19,12 +18,15 @@ import {
   BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS,
 } from "./model-adapter-shared.js";
 import { userMessageItem } from "./responses-api.js";
-import { brainToolSchemas } from "./tools.js";
+import { brainToolCatalog, brainToolSchemas, resolveTurnToolPolicy } from "./tools.js";
+import { BRAIN_TURN_TRIGGER } from "./turn.js";
 
 const NOW = 1_800_000_000_000;
 const BASE = "https://luke.test";
 const INPUT = [userMessageItem("[developer ask] hi")];
-const TOOLS = brainToolSchemas(BRAIN_TURN_AUTHORITY.DEVELOPER);
+const TOOLS = brainToolSchemas(
+  resolveTurnToolPolicy(brainToolCatalog(), {}, BRAIN_TURN_TRIGGER.ASK),
+);
 const OPTIONS = { prompt: "instructions", tools: TOOLS, maximumOutputTokens: 500 };
 
 function capabilities(overrides: WireRecord = {}): WireRecord {

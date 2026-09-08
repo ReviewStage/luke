@@ -39,6 +39,13 @@ test("session acts remain quiet events between messages", () => {
   );
 });
 
+test("an act Luke took on his own judgment is drawn as his own line, never as the developer's request", () => {
+  assert.deepEqual(historyEntryPresentation(CONVERSATION_ENTRY_KIND.OWN_ACT), {
+    speaker: HISTORY_ENTRY_SPEAKER.LUKE,
+    label: "Luke",
+  });
+});
+
 test("an announcement shows its spoken transcript", () => {
   const markup = renderToStaticMarkup(
     createElement(ConversationHistoryPanel, {

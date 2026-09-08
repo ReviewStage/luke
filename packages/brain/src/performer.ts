@@ -1,5 +1,5 @@
 import type { RealtimeFunctionCall } from "@sidecar/acts";
-import type { BRAIN_TURN_AUTHORITY } from "@sidecar/hosted";
+import type { RunOrigin } from "@sidecar/runtime-contracts";
 import type { Session, SessionIdentity } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 
@@ -15,16 +15,18 @@ export interface BrainRoster {
 }
 
 /**
- * The standing a developer-opened turn hands the performer with each act: its
- * authority, which can only ever be the developer's because no other turn
- * reaches a performer, and whether the turn it belongs to still stands. The
- * performer asks `isRevoked()` after each step it awaited and once more just
- * before the effect, so an act prepared inside a turn that has since ended
- * is refused rather than dispatched. Today a turn's execution is revoked when
- * the turn ends or the agent stops; a request lifecycle may bind it tighter.
+ * The standing a turn hands the performer with each act: which run it
+ * belongs to and who opened it — attribution, so History can say whether the
+ * developer asked for the act or Luke took it on his own judgment — and
+ * whether the turn still stands. The performer asks `isRevoked()` after each
+ * step it awaited and once more just before the effect, so an act prepared
+ * inside a turn that has since ended is refused rather than dispatched.
+ * Whether the act may run at all was decided by the tool policy before the
+ * call reached the performer; the performer validates what it is aimed at.
  */
 export interface BrainActExecution {
-  readonly authority: typeof BRAIN_TURN_AUTHORITY.DEVELOPER;
+  readonly runId: string;
+  readonly origin: RunOrigin;
   isRevoked(): boolean;
   /**
    * Fires the moment the standing is revoked, so a performer can settle a

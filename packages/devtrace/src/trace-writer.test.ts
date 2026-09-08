@@ -3,8 +3,8 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { BRAIN_TURN_AUTHORITY, BRAIN_TURN_TRIGGER, TOOL_LOOP_RUNTIME } from "@sidecar/brain";
-import { MODEL_RESPONSE_OUTCOME } from "@sidecar/runtime-contracts";
+import { BRAIN_TURN_TRIGGER, hostedBrainToolCatalog, TOOL_LOOP_RUNTIME } from "@sidecar/brain";
+import { MODEL_RESPONSE_OUTCOME, RUN_ORIGIN } from "@sidecar/runtime-contracts";
 import { isRecord, isWireString, recordFromJsonLine } from "@sidecar/wire";
 import { AgentTraceWriter, TRACE_ENTRY_KIND } from "./trace-writer.js";
 import { TRACE_DIRECTION } from "./vocabulary.js";
@@ -35,8 +35,10 @@ test("lines land in the named file, stamped, in the order they were recorded", a
   });
   writer.recordBrainTurn({
     trigger: BRAIN_TURN_TRIGGER.WAKE,
-    authority: BRAIN_TURN_AUTHORITY.OBSERVATION,
+    origin: RUN_ORIGIN.OBSERVATION,
     runtime: TOOL_LOOP_RUNTIME.ID,
+    tools: [...hostedBrainToolCatalog().keys()],
+    promptChars: 12_000,
     inputTokens: 1_500,
     transcriptBytes: 4_096,
     toolCalls: [{ name: "announce", argumentsChars: 120, outcomeStatus: "accepted" }],

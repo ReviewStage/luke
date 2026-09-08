@@ -1,15 +1,14 @@
 export {
-  BRAIN_TURN_AUTHORITY,
-  type BrainTurnAuthority,
-  brainTurnAuthorityFromWire,
-} from "@sidecar/hosted";
-export {
   BRAIN_DEFAULTS,
   BrainAgent,
+  type BrainAgentOptions,
+  type BrainWorkspaceAccess,
 } from "./agent.js";
+export { RESPONSES_CONTEXT_ENGINE_ID, registerBrainBuiltIns } from "./builtins.js";
 export { BrainGenerationClock } from "./generation-clock.js";
-export { HostedModelAdapter } from "./hosted-model-adapter.js";
-export { brainInstructions } from "./instructions.js";
+export { HOSTED_MODEL_ADAPTER_ID, HostedModelAdapter } from "./hosted-model-adapter.js";
+export { BRAIN_INPUT_MARKER, primedNotesInputText } from "./input-items.js";
+export { brainInstructions, brainToolNotes } from "./instructions.js";
 export type { BrainJournalEntry } from "./journal.js";
 export {
   BRAIN_RATE_LIMIT_COOLDOWN_MS,
@@ -19,6 +18,7 @@ export {
 } from "./model-adapter-shared.js";
 export {
   BRAIN_OPENAI_DEFAULTS,
+  OPENAI_MODEL_ADAPTER_ID,
   openAiModelAdapter,
 } from "./openai-model-adapter.js";
 export type { BrainActExecution, BrainActPerformer, BrainRoster } from "./performer.js";
@@ -47,7 +47,6 @@ export {
   responsesModelAnswer,
   userMessageItem,
 } from "./responses-api.js";
-export { responsesToolLoopRuntime } from "./responses-runtime.js";
 export { TOOL_LOOP_RUNTIME } from "./runtime.js";
 export { settledUnlessAborted } from "./settled.js";
 export {
@@ -68,13 +67,25 @@ export {
 } from "./state-store.js";
 export {
   BRAIN_TOOL,
-  brainToolDefinitions,
+  brainToolCatalog,
+  brainToolSchemas,
   hostedBrainToolCatalog,
+  hostedBrainV1ToolDefinitions,
+  resolveTurnToolPolicy,
+  TOOL_GROUP,
+  turnToolPolicy,
 } from "./tools.js";
 export type { BrainTurnTraceRecord } from "./trace.js";
-export { BRAIN_TURN_TRIGGER } from "./turn.js";
+export {
+  BRAIN_TURN_KIND,
+  BRAIN_TURN_TRIGGER,
+  type BrainTurnDescription,
+  type BrainTurnPreparation,
+  runOriginOf,
+} from "./turn.js";
 export {
   BRAIN_WAKE_KIND,
   type BrainDelivery,
   type BrainWakeEvent,
 } from "./wake-events.js";
+export { BRAIN_IDENTITY_LINE, BRAIN_WORKSPACE_SEEDS } from "./workspace-seeds.js";

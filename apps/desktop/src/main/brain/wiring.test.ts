@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { BrainStateRepository } from "@sidecar/brain";
+import { CREDENTIAL_REFERENCE_KIND } from "@sidecar/runtime";
 import { MAIN_SESSION_KEY, threadSessionKey } from "@sidecar/runtime-contracts";
 import { type BrainWiringDependencies, wireBrain } from "./wiring";
 
@@ -50,6 +51,9 @@ function dependencies(overrides: Partial<BrainWiringDependencies> = {}) {
     session: () => undefined,
     deliver: async () => undefined,
     model: () => undefined,
+    credential: () => ({ kind: CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT }),
+    workspaceDirectory: () => "/tmp/luke-wiring-test-workspace",
+    skillRoots: () => [],
     runnable: () => false,
     dropBriefings: () => undefined,
     ...overrides,

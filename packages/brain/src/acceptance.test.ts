@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { REALTIME_TOOL } from "@sidecar/acts";
 import {
@@ -8,6 +11,16 @@ import {
   hostedBrainBounds,
 } from "@sidecar/hosted";
 import type { ScheduledTimer } from "@sidecar/realtime";
+import {
+  buildSystemPrompt,
+  ConfigurationStore,
+  CREDENTIAL_REFERENCE_KIND,
+  createRuntimeRegistries,
+  defaultAgentConfiguration,
+  gatherPromptFacts,
+  recentDailyNotes,
+  seedWorkspace,
+} from "@sidecar/runtime";
 import {
   type AgentRuntime,
   type CheckpointFormat,
@@ -19,6 +32,7 @@ import {
   type ModelAdapter,
   REASONING_EFFORT,
   RUN_END_REASON,
+  RUN_ORIGIN,
   RUNTIME_EVENT,
   type RuntimeCheckpoint,
   type RuntimeRun,
@@ -33,10 +47,13 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import { BrainAgent } from "./agent.js";
+import { BrainAgent, type BrainAgentOptions } from "./agent.js";
+import { RESPONSES_CONTEXT_ENGINE_ID, registerBrainBuiltIns } from "./builtins.js";
 import { ResponsesContextEngine } from "./context-engine.js";
-import { HostedModelAdapter } from "./hosted-model-adapter.js";
-import { OpenAiModelAdapter } from "./openai-model-adapter.js";
+import { HOSTED_MODEL_ADAPTER_ID, HostedModelAdapter } from "./hosted-model-adapter.js";
+import { BRAIN_INPUT_MARKER } from "./input-items.js";
+import { brainToolNotes } from "./instructions.js";
+import { OPENAI_MODEL_ADAPTER_ID, OpenAiModelAdapter } from "./openai-model-adapter.js";
 import {
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_ORIGIN,
@@ -46,16 +63,18 @@ import {
   type BrainRequestRecord,
 } from "./requests.js";
 import { RESPONSES_ITEM_FORMAT, RESPONSES_ITEM_TYPE } from "./responses-api.js";
-import { responsesToolLoopRuntime } from "./responses-runtime.js";
-import { ToolLoopAgentRuntime } from "./runtime.js";
+import { TOOL_LOOP_RUNTIME, ToolLoopAgentRuntime } from "./runtime.js";
 import {
   type BrainPersistedState,
   type BrainStateStorage,
   BrainStateStore,
   brainStateFromStored,
 } from "./state-store.js";
-import { hostedBrainToolCatalog } from "./tools.js";
+import { toolLoopRuntimeOver } from "./testing.js";
+import { hostedBrainToolCatalog, resolveTurnToolPolicy } from "./tools.js";
+import { BRAIN_TURN_KIND, runOriginOf } from "./turn.js";
 import { BRAIN_WAKE_KIND } from "./wake-events.js";
+import { BRAIN_IDENTITY_LINE, BRAIN_WORKSPACE_SEEDS } from "./workspace-seeds.js";
 
 /**
  * The same execution contract, run through the real host against each
@@ -254,6 +273,7 @@ function host(
   model: ModelAdapter,
   storage = new Storage(),
   performer: () => Promise<WireRecord> = async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }),
+  overrides: Partial<BrainAgentOptions> = {},
 ): Host {
   const clock = new FakeClock();
   const store = new BrainStateStore({
@@ -270,6 +290,7 @@ function host(
   });
   const agent = new BrainAgent({
     runtime: runtimeOver(model),
+    prepareTurn: () => ({ prompt: "instructions", layers: {} }),
     acts: {
       perform: async (call) => {
         performed.push(call.name);
@@ -292,6 +313,7 @@ function host(
     now: () => clock.now,
     schedule: clock.schedule,
     cancel: clock.cancel,
+    ...overrides,
   });
   return {
     agent,
@@ -323,7 +345,7 @@ for (const transport of [KEYED, HOSTED]) {
       () => payload([reasoning("rs_2"), actCall("call_2")]),
       () => payload([message("Sent twice.")]),
     ]);
-    const h = host(responsesToolLoopRuntime, transport.model(upstream));
+    const h = host(toolLoopRuntimeOver, transport.model(upstream));
     const record = await h.ask("send the tests twice");
     assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
     assert.equal(record?.text, "Sent twice.");
@@ -362,7 +384,7 @@ for (const transport of [KEYED, HOSTED]) {
     let releaseSecond: (() => void) | undefined;
     const upstream = fakeUpstream([() => payload([actCall("call_1"), actCall("call_2")])]);
     let performedCount = 0;
-    const h = host(responsesToolLoopRuntime, transport.model(upstream), new Storage(), async () => {
+    const h = host(toolLoopRuntimeOver, transport.model(upstream), new Storage(), async () => {
       performedCount += 1;
       if (performedCount === 1) {
         await new Promise<void>((resolve) => {
@@ -400,7 +422,7 @@ for (const transport of [KEYED, HOSTED]) {
       () => Response.json({ status: "failed", error: { code: "server_error" }, output: [] }),
       () => new Response("", { status: 429, headers: { "retry-after": "30" } }),
     ]);
-    const h = host(responsesToolLoopRuntime, transport.model(upstream));
+    const h = host(toolLoopRuntimeOver, transport.model(upstream));
     const malformed = await h.ask("first");
     assert.equal(malformed?.status, BRAIN_REQUEST_STATUS.FAILED);
     assert.equal(malformed?.failure, BRAIN_REQUEST_FAILURE.MODEL);
@@ -423,7 +445,7 @@ for (const transport of [KEYED, HOSTED]) {
       () => payload([actCall("call_1")]),
       () => payload([message("done")]),
     ]);
-    const h = host(responsesToolLoopRuntime, transport.model(upstream), storage);
+    const h = host(toolLoopRuntimeOver, transport.model(upstream), storage);
     await h.agent.ready();
     // Acceptance and start land; the checkpoint before the act is refused.
     let writes = 0;
@@ -452,7 +474,7 @@ test("hosted: a spent allowance ends the run as a failure, holds later wakes unt
     now: () => NOW,
     report: () => undefined,
   });
-  const h = host(responsesToolLoopRuntime, model);
+  const h = host(toolLoopRuntimeOver, model);
   const record = await h.ask("anything?");
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(model.quietUntil(), NOW + 3_600_000);
@@ -603,7 +625,8 @@ test("a runtime that is not Responses drives the same host: acts journaled throu
   await h.agent.stop();
 
   // An observation turn runs over the same runtime, with the roster's deltas
-  // read by the host and no act reachable however the script asks.
+  // read by the host and the act the policy allows carried through the same
+  // executor, journaled while it ran and let go of once the turn committed.
   const observing = new ScriptedRuntime([REALTIME_TOOL.SEND_SESSION_MESSAGE]);
   const o = host(() => observing, model, storage);
   await o.agent.ready();
@@ -612,8 +635,9 @@ test("a runtime that is not Responses drives the same host: acts journaled throu
   o.clock.now += 3_000;
   for (const timer of [...o.clock.timers.values()]) timer.callback();
   await settle();
-  assert.equal(o.performed.length, 0);
+  assert.deepEqual(o.performed, [REALTIME_TOOL.SEND_SESSION_MESSAGE]);
   assert.equal(storage.stored()?.cursors[claude.id]?.abc, "c1");
+  assert.equal(storage.stored()?.journal.length, 1, "the ask's journal alone stays");
   await o.agent.stop();
 });
 
@@ -631,7 +655,7 @@ test("the Responses runtime refuses a valid checkpoint of the scripted runtime: 
   assert.ok(before);
 
   const upstream = fakeUpstream([() => payload([message("never asked")])]);
-  const responses = host(responsesToolLoopRuntime, KEYED.model(upstream), storage);
+  const responses = host(toolLoopRuntimeOver, KEYED.model(upstream), storage);
   await responses.agent.ready();
   assert.match(
     (await responses.agent.incompatibility()) ?? "",
@@ -751,7 +775,7 @@ test("a model failure after a recorded act restores the context to the act's com
     () => new Response("", { status: 500 }),
     () => payload([message("after")]),
   ]);
-  const h = host(responsesToolLoopRuntime, KEYED.model(upstream), storage);
+  const h = host(toolLoopRuntimeOver, KEYED.model(upstream), storage);
   const failed = await h.ask("send then fail");
   assert.equal(failed?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(failed?.failure, BRAIN_REQUEST_FAILURE.MODEL);
@@ -781,6 +805,130 @@ test("a model failure after a recorded act restores the context to the act's com
   assert.ok(
     items.some(
       (item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT && item.call_id === "call_1",
+    ),
+  );
+  await h.agent.stop();
+});
+
+/**
+ * The desktop's own preparation, as `wiring.ts` composes it: the built-in
+ * registries, a configuration over a real workspace, the facts gathered under
+ * it, and the pure builder. Stood up here so the prompt a keyed turn and a
+ * hosted turn send upstream can be compared byte for byte.
+ */
+async function workspacePreparation(
+  adapterId: string,
+  credential: Parameters<typeof defaultAgentConfiguration>[0]["credential"],
+) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "luke-acceptance-"));
+  const workspace = path.join(root, "workspace");
+  await seedWorkspace(workspace, BRAIN_WORKSPACE_SEEDS);
+  const registries = registerBrainBuiltIns(createRuntimeRegistries());
+  const store = new ConfigurationStore(
+    registries,
+    defaultAgentConfiguration({
+      agentRuntimeId: TOOL_LOOP_RUNTIME.ID,
+      modelAdapterId: adapterId,
+      contextEngineId: RESPONSES_CONTEXT_ENGINE_ID,
+      credential,
+      workspaceDirectory: workspace,
+    }),
+  );
+  const prepareTurn: BrainAgentOptions["prepareTurn"] = async (turn) => {
+    const trigger = turn.kind === BRAIN_TURN_KIND.TURN ? turn.trigger : undefined;
+    const policy = resolveTurnToolPolicy(registries.tools.entries(), {}, trigger);
+    const facts = await gatherPromptFacts({
+      configuration: store.snapshot(),
+      run: { origin: trigger === undefined ? RUN_ORIGIN.MAINTENANCE : runOriginOf(trigger) },
+      identity: BRAIN_IDENTITY_LINE,
+      tools: policy.allowed.map((tool) => tool.schema),
+      toolNotes: brainToolNotes(),
+      runtimeContextMarker: BRAIN_INPUT_MARKER.STANDING_CONTEXT,
+      runtimeId: TOOL_LOOP_RUNTIME.ID,
+    });
+    return { prompt: buildSystemPrompt(facts).text, layers: {} };
+  };
+  return { workspace, prepareTurn };
+}
+
+test("a keyed turn and a hosted turn send the same prompt upstream, built from the same workspace by the same three stages", async () => {
+  const keyedPreparation = await workspacePreparation(OPENAI_MODEL_ADAPTER_ID, {
+    kind: CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY,
+    providerId: "openai",
+  });
+  const hostedPreparation = await workspacePreparation(HOSTED_MODEL_ADAPTER_ID, {
+    kind: CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT,
+  });
+  const sent: string[] = [];
+  for (const [transport, preparation] of [
+    [KEYED, keyedPreparation],
+    [HOSTED, hostedPreparation],
+  ] as const) {
+    const upstream = fakeUpstream([() => payload([message("Hello.")])]);
+    const h = host(toolLoopRuntimeOver, transport.model(upstream), new Storage(), undefined, {
+      prepareTurn: preparation.prepareTurn,
+    });
+    const record = await h.ask("hello");
+    assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+    const [call] = upstream.calls;
+    assert.ok(call && isWireString(call.body.instructions));
+    sent.push(call.body.instructions);
+    await h.agent.stop();
+  }
+  const [keyed, hosted] = sent;
+  assert.ok(keyed && hosted);
+  // The two workspaces were seeded from the same build; only their paths differ.
+  const pathless = (prompt: string, workspace: string) =>
+    prompt.split(workspace).join("<workspace>");
+  assert.equal(
+    pathless(keyed, keyedPreparation.workspace),
+    pathless(hosted, hostedPreparation.workspace),
+  );
+  assert.ok(keyed.includes("# Workspace Files"));
+  assert.ok(keyed.includes("## SOUL.md"));
+  assert.ok(keyed.includes("# Tooling"));
+  assert.ok(!keyed.includes("- announce:"), "an ask is not offered the briefing");
+});
+
+test("a conversation that starts fresh is primed once with the recent daily notes, and an ordinary turn reads none", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "luke-notes-"));
+  await seedWorkspace(root, BRAIN_WORKSPACE_SEEDS);
+  await fs.writeFile(path.join(root, "memory", "2027-01-15.md"), "Shipped the release.");
+  const now = Date.UTC(2027, 0, 15, 12);
+  const primeFreshContext = async () => {
+    const notes = await recentDailyNotes(root, now);
+    return notes.length > 0
+      ? notes.map((note) => `## ${note.name}\n\n${note.content}`).join("\n\n")
+      : undefined;
+  };
+  const upstream = fakeUpstream([
+    () => payload([message("Noted.")]),
+    () => payload([message("Again.")]),
+  ]);
+  const h = host(toolLoopRuntimeOver, KEYED.model(upstream), new Storage(), undefined, {
+    primeFreshContext,
+  });
+  assert.equal((await h.ask("first"))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  assert.equal((await h.ask("second"))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  const opening = (index: number) => {
+    const call = upstream.calls[index];
+    assert.ok(call && Array.isArray(call.body.input));
+    return call.body.input
+      .filter(isRecord)
+      .filter((item) => item.type === "message" && item.role === "user")
+      .map((item) => JSON.stringify(item));
+  };
+  const first = opening(0);
+  assert.ok(first[0]?.includes(BRAIN_INPUT_MARKER.PRIMED_NOTES));
+  assert.ok(first[0]?.includes("Shipped the release."));
+  assert.ok(first[1]?.includes(BRAIN_INPUT_MARKER.DEVELOPER_ASK));
+  // The second turn's input still carries the one primed item from the first
+  // turn's context and adds none: priming is one-shot, not per turn.
+  const second = opening(1);
+  assert.equal(second.filter((item) => item.includes(BRAIN_INPUT_MARKER.PRIMED_NOTES)).length, 1);
+  assert.ok(
+    second.some(
+      (item) => item.includes(BRAIN_INPUT_MARKER.DEVELOPER_ASK) && item.includes("second"),
     ),
   );
   await h.agent.stop();

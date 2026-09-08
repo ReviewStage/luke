@@ -63,6 +63,7 @@ import {
   sessionContextText,
   workspaceProjectContextText,
 } from "@sidecar/realtime";
+import { CREDENTIAL_REFERENCE_KIND } from "@sidecar/runtime";
 import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
@@ -83,7 +84,7 @@ import {
   type WorkspaceAgentSelection,
   workspaceProjectSelectionId,
 } from "@sidecar/session";
-import { APP_SETTING_SCHEMA } from "@sidecar/settings";
+import { APP_SETTING_SCHEMA, VOICE_SOURCE } from "@sidecar/settings";
 import {
   SupersetCli,
   SupersetSignIn,
@@ -1611,6 +1612,12 @@ const sessionActPerformer = createSessionActPerformer({
   recordProductEvent,
 });
 
+/** The agent's identity workspace and the skills beside it, under the agent's own directory. */
+const AGENT_WORKSPACE_DIRECTORY = "workspace";
+const AGENT_SKILLS_DIRECTORY = "skills";
+const agentWorkspacePath = () =>
+  path.join(agentRootPath(app.getPath("userData")), AGENT_WORKSPACE_DIRECTORY);
+
 const brainWiring = wireBrain({
   repositoryFor: (sessionKey) => runtimeStoreWiring.brainStateRepository(sessionKey),
   createId: () => randomUUID(),
@@ -1667,6 +1674,14 @@ const brainWiring = wireBrain({
   session: (identity) => sessionRegistry.get(identity),
   deliver: deliverBriefing,
   model: () => voiceCapabilities.brainModel,
+  // The credential by reference alone: the configuration names which source
+  // the adapter runs under, and the encrypted store keeps the value.
+  credential: () =>
+    voiceCapabilities.voiceSource === VOICE_SOURCE.KEY
+      ? { kind: CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY, providerId: CREDENTIAL_PROVIDER_ID.OPENAI }
+      : { kind: CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT },
+  workspaceDirectory: agentWorkspacePath,
+  skillRoots: () => [path.join(agentWorkspacePath(), AGENT_SKILLS_DIRECTORY)],
   runnable: () => runMode.observesProviders && runMode.sendsNetwork && accountCapabilitiesActive(),
   dropBriefings: () => speechArbiter.dropBriefings(),
 });
@@ -3017,6 +3032,15 @@ export function startDesktopApp(): void {
       // as a conversation arriving rather than one resumed.
       if (runMode.observesProviders) {
         await runtimeStoreWiring.open();
+        // The workspace's missing files are seeded at every live launch and
+        // never rewritten: an edit the developer or the agent made stands.
+        try {
+          await brainWiring.seedWorkspace();
+        } catch (error) {
+          process.stderr.write(
+            `Brain workspace could not be seeded: ${error instanceof Error ? error.message : String(error)}\n`,
+          );
+        }
         // Retention runs on every live launch, key or no key: the store's
         // load admits the envelope within its bounds and lifetime, replacing
         // in the database what it does not admit, and the clock takes it

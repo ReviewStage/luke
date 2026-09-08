@@ -1,20 +1,40 @@
-import { type RealtimeToolWireDefinition, realtimeToolDefinitions } from "@sidecar/acts";
+import {
+  type RealtimeToolWireDefinition,
+  realtimeToolDefinitions,
+  realtimeToolFamily,
+} from "@sidecar/acts";
 import { BRAIN_TURN_AUTHORITY, type BrainTurnAuthority } from "@sidecar/hosted";
+import {
+  type EffectiveToolPolicy,
+  resolveToolPolicy,
+  TOOL_EFFECT,
+  TOOL_EXECUTION,
+  type ToolDescriptor,
+  type ToolPolicy,
+  type ToolPolicyLayers,
+} from "@sidecar/runtime";
 import type { ToolSchema } from "@sidecar/runtime-contracts";
-import { toolSchemaFromDefinition } from "./responses-api.js";
+import {
+  type ResponsesFunctionTool,
+  responsesToolDefinition,
+  toolSchemaFromDefinition,
+} from "./responses-api.js";
+import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
 
 /**
- * The tools the brain is offered, fixed by the authority of the turn. A
- * developer turn — an ask they typed or spoke — is offered every act the voice
- * model could carry, plus the two reads that exist only for a brain: the roster in full and a whole transcript. An
- * observation turn — a wake, a roster look, a hold release — is offered the
- * two reads and `announce`, and no act at all: nothing a transcript said, a
- * standing ask implied, or a tool answered can widen it, because the toolset
- * is chosen from how the turn was invoked and never from its content.
- *
- * The act rows come from the same table the Realtime session was configured
- * from, so the brain can ask for nothing the acts package does not validate;
- * the brain-only tools are dispatched inside the agent and reach no act path.
+ * The brain's tool catalog: every tool a turn could be offered, as the
+ * registry describes it. The act rows come from the same table the Realtime
+ * session was configured from, so the brain can ask for nothing the acts
+ * package does not validate; the brain's own tools — the roster in full, a
+ * whole transcript, the briefing, the workspace files, a skill's
+ * instructions — are dispatched inside the agent and reach no act path.
+ * Which of the catalog a turn is offered is the effective tool policy's
+ * decision, resolved from the configuration's layers and enforced twice by
+ * the host: when the schemas are built and again at every dispatch. The one
+ * rule fixed by the turn's kind rather than by configuration is the
+ * briefing's: `announce` is the voice's channel out of a turn nobody is
+ * listening to, so a developer's ask, whose reply is the speech, is not
+ * offered it.
  */
 
 const BRAIN_TOOL_TYPE = "function";
@@ -30,12 +50,23 @@ export const BRAIN_TOOL = {
   LIST_SESSIONS: "list_sessions",
   READ_TRANSCRIPT: "read_transcript",
   ANNOUNCE: "announce",
+  READ_WORKSPACE_FILE: "read_workspace_file",
+  WRITE_WORKSPACE_FILE: "write_workspace_file",
+  LOAD_SKILL: "load_skill",
 } as const;
 
 export type BrainToolName = (typeof BRAIN_TOOL)[keyof typeof BRAIN_TOOL];
 
 /** The longest briefing the mouth is handed; a briefing is a breath, not a report. */
 export const maximumBriefingLength = 600;
+
+export const TOOL_GROUP = {
+  READ: "read",
+  ACTS: "acts",
+  SPEAK: "speak",
+  WORKSPACE: "workspace",
+  SKILLS: "skills",
+} as const;
 
 const BRAIN_ONLY_TOOLS: readonly RealtimeToolWireDefinition[] = [
   {
@@ -80,40 +111,52 @@ const BRAIN_ONLY_TOOLS: readonly RealtimeToolWireDefinition[] = [
       required: ["briefing"],
     },
   },
+  {
+    type: BRAIN_TOOL_TYPE,
+    name: BRAIN_TOOL.READ_WORKSPACE_FILE,
+    description:
+      "Read one of your own workspace files whole: AGENTS.md, SOUL.md, IDENTITY.md, USER.md, " +
+      "MEMORY.md, BOOTSTRAP.md, HEARTBEAT.md, or a dated note as memory/YYYY-MM-DD.md. Nothing " +
+      "outside the workspace can be named.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "The file's name relative to the workspace." },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    type: BRAIN_TOOL_TYPE,
+    name: BRAIN_TOOL.WRITE_WORKSPACE_FILE,
+    description:
+      "Replace one of your own workspace files with new content, whole. Use it to keep " +
+      "MEMORY.md, USER.md, and dated notes current; read the file first so nothing is lost. " +
+      "Content past the per-file bound is refused rather than cut.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "The file's name relative to the workspace." },
+        content: { type: "string", description: "The file's whole new content." },
+      },
+      required: ["name", "content"],
+    },
+  },
+  {
+    type: BRAIN_TOOL_TYPE,
+    name: BRAIN_TOOL.LOAD_SKILL,
+    description:
+      "Load one skill's full instructions by the location the available skills list gave. Only " +
+      "a listed location answers.",
+    parameters: {
+      type: "object",
+      properties: {
+        location: { type: "string", description: "The SKILL.md location exactly as listed." },
+      },
+      required: ["location"],
+    },
+  },
 ];
-
-const BRAIN_ONLY_TOOLS_BY_AUTHORITY = {
-  [BRAIN_TURN_AUTHORITY.DEVELOPER]: new Set<string>([
-    BRAIN_TOOL.LIST_SESSIONS,
-    BRAIN_TOOL.READ_TRANSCRIPT,
-  ]),
-  [BRAIN_TURN_AUTHORITY.OBSERVATION]: new Set<string>([
-    BRAIN_TOOL.LIST_SESSIONS,
-    BRAIN_TOOL.READ_TRANSCRIPT,
-    BRAIN_TOOL.ANNOUNCE,
-  ]),
-} as const satisfies Record<BrainTurnAuthority, ReadonlySet<string>>;
-
-/** The tool schemas one brain turn is configured with, fixed by the turn's authority. */
-export function brainToolDefinitions(
-  authority: BrainTurnAuthority,
-): readonly RealtimeToolWireDefinition[] {
-  const own = BRAIN_ONLY_TOOLS.filter((tool) =>
-    BRAIN_ONLY_TOOLS_BY_AUTHORITY[authority].has(tool.name),
-  );
-  return authority === BRAIN_TURN_AUTHORITY.DEVELOPER
-    ? [...realtimeToolDefinitions(), ...own]
-    : own;
-}
-
-/**
- * Whether a turn of this authority may run a tool of this name at all. It is
- * the runtime side of `brainToolDefinitions`: a model that emits a call for a
- * tool it was never offered is refused here before any performer sees it.
- */
-export function brainToolAllowed(authority: BrainTurnAuthority, name: string): boolean {
-  return brainToolDefinitions(authority).some((tool) => tool.name === name);
-}
 
 const BRAIN_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(BRAIN_TOOL));
 
@@ -122,19 +165,127 @@ export function isBrainOnlyTool(name: string): name is BrainToolName {
   return BRAIN_ONLY_TOOL_NAMES.has(name);
 }
 
-/** The same toolset in the brain's contract shape, for a runtime that knows no provider. */
-export function brainToolSchemas(authority: BrainTurnAuthority): readonly ToolSchema[] {
-  return brainToolDefinitions(authority).map(toolSchemaFromDefinition);
+const BRAIN_ONLY_DESCRIPTORS = {
+  [BRAIN_TOOL.LIST_SESSIONS]: {
+    execution: TOOL_EXECUTION.HOST,
+    effect: TOOL_EFFECT.READ,
+    groups: [TOOL_GROUP.READ],
+  },
+  [BRAIN_TOOL.READ_TRANSCRIPT]: {
+    execution: TOOL_EXECUTION.HOST,
+    effect: TOOL_EFFECT.READ,
+    groups: [TOOL_GROUP.READ],
+  },
+  [BRAIN_TOOL.ANNOUNCE]: {
+    execution: TOOL_EXECUTION.HOST,
+    effect: TOOL_EFFECT.SPEAK,
+    groups: [TOOL_GROUP.SPEAK],
+  },
+  [BRAIN_TOOL.READ_WORKSPACE_FILE]: {
+    execution: TOOL_EXECUTION.WORKSPACE,
+    effect: TOOL_EFFECT.READ,
+    groups: [TOOL_GROUP.WORKSPACE, TOOL_GROUP.READ],
+  },
+  [BRAIN_TOOL.WRITE_WORKSPACE_FILE]: {
+    execution: TOOL_EXECUTION.WORKSPACE,
+    effect: TOOL_EFFECT.WRITE,
+    groups: [TOOL_GROUP.WORKSPACE],
+  },
+  [BRAIN_TOOL.LOAD_SKILL]: {
+    execution: TOOL_EXECUTION.WORKSPACE,
+    effect: TOOL_EFFECT.READ,
+    groups: [TOOL_GROUP.SKILLS, TOOL_GROUP.READ],
+  },
+} as const satisfies Record<BrainToolName, Pick<ToolDescriptor, "execution" | "effect" | "groups">>;
+
+function actDescriptor(definition: RealtimeToolWireDefinition): ToolDescriptor {
+  const family = realtimeToolFamily(definition.name);
+  if (family === undefined) throw new TypeError(`${definition.name} is not an act`);
+  return {
+    id: definition.name,
+    schema: toolSchemaFromDefinition(definition),
+    execution: TOOL_EXECUTION.PERFORMER,
+    effect: TOOL_EFFECT.WRITE,
+    groups: [TOOL_GROUP.ACTS, family],
+  };
+}
+
+function brainOnlyDescriptor(definition: RealtimeToolWireDefinition): ToolDescriptor {
+  const name = definition.name;
+  if (!isBrainOnlyTool(name)) throw new TypeError(`${name} is not a brain tool`);
+  return {
+    id: name,
+    schema: toolSchemaFromDefinition(definition),
+    ...BRAIN_ONLY_DESCRIPTORS[name],
+  };
+}
+
+/** The whole catalog as descriptors: every act, then the brain's own tools, in a fixed order. */
+export function brainToolCatalog(): readonly ToolDescriptor[] {
+  return [
+    ...realtimeToolDefinitions().map(actDescriptor),
+    ...BRAIN_ONLY_TOOLS.map(brainOnlyDescriptor),
+  ];
 }
 
 /**
- * Every tool a hosted request may select by name: the acts table's rows and
- * the brain's own three. The service selects schemas from this catalog and
- * nothing a caller sends; a desktop checks the names it means to send against
- * the catalog the service advertised.
+ * The layer a turn's kind adds beneath the configured policy: the briefing
+ * channel is offered only where the reply is not itself the speech. It is a
+ * fact about the voice, not a permission decided from who opened the turn.
  */
-export function hostedBrainToolCatalog(): ReadonlyMap<string, RealtimeToolWireDefinition> {
-  return new Map(
-    [...realtimeToolDefinitions(), ...BRAIN_ONLY_TOOLS].map((tool) => [tool.name, tool]),
+export function turnToolPolicy(trigger: BrainTurnTrigger): ToolPolicy {
+  return trigger === BRAIN_TURN_TRIGGER.ASK ? { deny: [BRAIN_TOOL.ANNOUNCE] } : {};
+}
+
+/**
+ * The one resolution a turn's tools get: the configured layers over the
+ * catalog, then the turn's own layer. Maintenance names no trigger and adds
+ * no layer of its own, because it runs no tools.
+ */
+export function resolveTurnToolPolicy(
+  catalog: readonly ToolDescriptor[],
+  layers: ToolPolicyLayers,
+  trigger?: BrainTurnTrigger,
+): EffectiveToolPolicy {
+  return resolveToolPolicy(
+    catalog,
+    layers,
+    undefined,
+    trigger === undefined ? undefined : turnToolPolicy(trigger),
   );
+}
+
+/** The schemas an effective policy leaves, in catalog order. */
+export function brainToolSchemas(policy: EffectiveToolPolicy): readonly ToolSchema[] {
+  return policy.allowed.map((tool) => tool.schema);
+}
+
+/**
+ * Every tool a hosted request may select by name, in the Responses
+ * function-tool form: the catalog's own schemas, act and brain tool alike.
+ * The service selects schemas from this catalog and nothing a caller sends;
+ * a desktop checks the names it means to send against the catalog the
+ * service advertised; the trace viewer renders a turn's tools from it.
+ */
+export function hostedBrainToolCatalog(): ReadonlyMap<string, ResponsesFunctionTool> {
+  return new Map(brainToolCatalog().map((tool) => [tool.id, responsesToolDefinition(tool.schema)]));
+}
+
+/**
+ * The toolsets the first hosted contract fixed from a turn's authority, kept
+ * for installed clients still speaking it: a developer turn was offered every
+ * act and the two reads, an observation turn the two reads and the briefing.
+ * The current desktop names its tools itself under the second contract and
+ * never sends an authority; nothing new is built on this table.
+ */
+export function hostedBrainV1ToolDefinitions(
+  authority: BrainTurnAuthority,
+): readonly RealtimeToolWireDefinition[] {
+  const reads = BRAIN_ONLY_TOOLS.filter(
+    (tool) => tool.name === BRAIN_TOOL.LIST_SESSIONS || tool.name === BRAIN_TOOL.READ_TRANSCRIPT,
+  );
+  if (authority === BRAIN_TURN_AUTHORITY.DEVELOPER) {
+    return [...realtimeToolDefinitions(), ...reads];
+  }
+  return [...reads, ...BRAIN_ONLY_TOOLS.filter((tool) => tool.name === BRAIN_TOOL.ANNOUNCE)];
 }

@@ -1,5 +1,6 @@
-import type { BrainTurnAuthority } from "@sidecar/hosted";
 import type { ScheduledTimer } from "@sidecar/realtime";
+import type { ToolDescriptor, ToolPolicyLayers } from "@sidecar/runtime";
+import { RUN_ORIGIN, type RunOrigin } from "@sidecar/runtime-contracts";
 import type { WireRecord } from "@sidecar/wire";
 import type { Generation } from "./generation.js";
 import type { RecordingContextEngine } from "./transcript-recorder.js";
@@ -14,11 +15,15 @@ export const BRAIN_TURN_TRIGGER = {
 
 export type BrainTurnTrigger = (typeof BRAIN_TURN_TRIGGER)[keyof typeof BRAIN_TURN_TRIGGER];
 
+/** Who or what opened a turn of this kind: attribution for the record and the trace, never a permission. */
+export function runOriginOf(trigger: BrainTurnTrigger): RunOrigin {
+  return trigger === BRAIN_TURN_TRIGGER.ASK ? RUN_ORIGIN.USER : RUN_ORIGIN.OBSERVATION;
+}
+
 export const REFUSAL_REASON = {
   UNOBSERVED_SESSION: "not an observed session",
   ANNOUNCE_IN_ASK: "reply in text: this is a developer ask, and your final text is the speech",
-  ACT_IN_OBSERVATION:
-    "not run: an act needs a turn the developer opened, and this one was opened by observation",
+  NOT_ALLOWED: "not run: the tool policy does not offer this tool in this turn",
   NOT_OFFERED: "not run: no such tool in this turn",
   EMPTY_BRIEFING: "a briefing needs words",
   ACT_FAILED: "the act did not complete",
@@ -26,6 +31,8 @@ export const REFUSAL_REASON = {
   RUN_REVOKED: "not run: this ask was cancelled or its run ended",
   NOT_CHECKPOINTED: "not run: the act could not be recorded before running, so it was not run",
   CALL_ID_REUSED: "not run: this call id was already used with different arguments",
+  NO_WORKSPACE: "not run: this agent has no workspace",
+  MALFORMED_ARGUMENTS: "not run: the call's arguments are not the strings the tool takes",
 } as const;
 
 export const TURN_OUTCOME = {
@@ -55,6 +62,8 @@ export type TurnResult =
  */
 export interface RunControl {
   runId: string;
+  /** Whether a request record stands behind this run, for the checkpoint to carry its accounting. */
+  recorded: boolean;
   generation: Generation;
   abort: AbortController;
   cancelled: boolean;
@@ -70,7 +79,6 @@ export interface RunControl {
 
 export interface TurnPlan {
   trigger: BrainTurnTrigger;
-  authority: BrainTurnAuthority;
   events: readonly BrainWakeEvent[];
   /** The words the turn opens with, each ingested as the developer's or the host's, in order. */
   open: (events: readonly BrainWakeEvent[], now: number) => readonly string[];
@@ -89,9 +97,35 @@ export interface TurnPlan {
 export interface TurnContext {
   generation: Generation;
   context: RecordingContextEngine;
-  run?: RunControl;
+  run: RunControl;
   signal: AbortSignal;
 }
+
+/**
+ * What a host prepared a turn with: the prompt the model reads, the
+ * configured policy layers, and the catalog they resolve over. The host
+ * never resolves the policy itself; the agent does, once, adding the turn's
+ * own layer, so the schemas the model is offered and the gate every dispatch
+ * meets come from one resolution.
+ */
+export interface BrainTurnPreparation {
+  readonly prompt: string;
+  readonly layers: ToolPolicyLayers;
+  /** The catalog the layers resolve over; the brain's own catalog when absent. */
+  readonly catalog?: readonly ToolDescriptor[];
+}
+
+export const BRAIN_TURN_KIND = {
+  /** A turn a model runs: an ask, a wake, a roster look, or a hold's release. */
+  TURN: "turn",
+  /** The housekeeping compaction after a turn, which reads the prompt and runs no tools. */
+  MAINTENANCE: "maintenance",
+} as const;
+
+/** What a host is asked to prepare a turn for. */
+export type BrainTurnDescription =
+  | { readonly kind: typeof BRAIN_TURN_KIND.TURN; readonly trigger: BrainTurnTrigger }
+  | { readonly kind: typeof BRAIN_TURN_KIND.MAINTENANCE };
 
 export interface DispatchOutcome {
   callId: string;
