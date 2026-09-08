@@ -991,8 +991,9 @@ export const FACE_ART = {
   /** A square window centred on the face. Loud motions leave it, and may. */
   VIEW_BOX: "${box.map(fmt).join(" ")}",
   /**
-   * The face cropped to itself, the way the static mark SVGs are cut. Only for
-   * a mark that never moves: it is tight enough that any motion would leave it.
+   * The face cropped to itself, the tight crop the square marks square off.
+   * Only for a mark that never moves: it is tight enough that any motion
+   * would leave it.
    */
   MARK_VIEW_BOX: "${markBox().map(fmt).join(" ")}",
   /** The head's resting tilt, about the point the motions pivot on. */
@@ -1189,12 +1190,14 @@ const svgOpenAt = (x, y, w, h) =>
 const svgOpen = (w, h) => svgOpenAt(0, 0, w, h);
 // Motion marks keep the full animation canvas; static artwork is cropped tight.
 const markSvg = (body) => `${svgOpen(240, 240)}${body}</svg>`;
-/** The static mark's own window: the face's bounding box with a little air. */
-const MARK_PAD = 6;
-
+/**
+ * The window the app draws the still face through: the face's bounding box
+ * with a little air, the same crop the square marks square off.
+ */
 function markBox() {
+  const pad = 6;
   const b = faceBBox();
-  return [b.x - MARK_PAD, b.y - MARK_PAD, b.w + 2 * MARK_PAD, b.h + 2 * MARK_PAD];
+  return [b.x - pad, b.y - pad, b.w + 2 * pad, b.h + 2 * pad];
 }
 
 // Words are trimmed vertically to the taller of the face and the letters.
@@ -1293,9 +1296,9 @@ emit(
   "Luke app icon",
 );
 
-// Square mark: the static mark's own tight fill — the face's bounding box
-// padded by the same 6 units, squared by its larger side — with the corners
-// left square, one per mode, tiled and transparent. The tiled pair carries
+// Square mark: the face's own tight fill — its bounding box padded by the
+// same 6 units, squared by its larger side — with the corners left square,
+// one per mode, tiled and transparent. The tiled pair carries
 // the icon's gradient full-bleed and is the avatar shape for surfaces that
 // round their own tiles — GitHub among them, where a pre-rounded tile would
 // show seams in the corners. The transparent pair is the same crop with no
