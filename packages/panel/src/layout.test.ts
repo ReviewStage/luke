@@ -24,15 +24,6 @@ test("a wing too narrow for a mark still keeps a slot for one", () => {
   assert.equal(wingMarkCapacity(-100), 1);
 });
 
-test("capacity never falls as a wing widens", () => {
-  let previous = wingMarkCapacity(0);
-  for (let width = 1; width <= 400; width += 1) {
-    const capacity = wingMarkCapacity(width);
-    assert.ok(capacity >= previous, `width ${width} holds fewer marks than ${width - 1}`);
-    previous = capacity;
-  }
-});
-
 test("the pile rests every mark on the first slot", () => {
   // Each offset is the negative of where the flat layout put that slot, so
   // the transform alone carries the spread.

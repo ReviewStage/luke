@@ -33,12 +33,7 @@ const MARK_IDS: readonly MarkId[] = [
 ];
 
 function mark(providerId: string, className?: string): string {
-  return renderToStaticMarkup(
-    createElement(
-      ProviderMark,
-      className === undefined ? { providerId } : { providerId, className },
-    ),
-  );
+  return renderToStaticMarkup(createElement(ProviderMark, { providerId, className }));
 }
 
 const UNKNOWN_MARK = mark("a-provider-luke-has-no-mark-for");

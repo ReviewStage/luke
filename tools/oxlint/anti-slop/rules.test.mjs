@@ -60,6 +60,10 @@ function reportedRules() {
 const RULES = ruleNames(path.join(REPOSITORY_ROOT, ".oxlintrc.json"));
 const REPORTED = reportedRules();
 
+test("the fixture run enables exactly the rules the repository does", () => {
+  assert.deepEqual(ruleNames(FIXTURE_CONFIG), RULES);
+});
+
 test("the repository enables every rule the plugin registers, and no other", () => {
   const registered = readdirSync(path.join(PLUGIN_DIRECTORY, "rules"))
     .filter((entry) => entry.endsWith(".ts"))
