@@ -2,6 +2,7 @@ import type { AccountProvider, AccountSnapshot } from "@sidecar/account/snapshot
 import type { ProductEventName, ProductEventPropertiesFor } from "@sidecar/analytics";
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { CredentialProviderId } from "@sidecar/credentials";
+import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import type { AppGuideSnapshot } from "@sidecar/guide";
 import type { ConversationEntry, RealtimeConnection, RealtimeDiagnostics } from "@sidecar/realtime";
 import type { GatewayCallResult, GatewayClient } from "@sidecar/runtime";
@@ -142,6 +143,8 @@ export interface HostOperator {
   resetReceiver(): Promise<void>;
   mintRealtimeCredential(): Promise<RealtimeConnection | undefined>;
   realtimeDiagnostics(): Promise<RealtimeDiagnostics | undefined>;
+  /** One tapped wire event for the host's development trace; the host drops it where no writer stands. */
+  recordAgentTrace(trace: AgentWireTrace): void;
   reportGuide(guide: AppGuideSnapshot): Promise<void>;
   recordEvent<Name extends ProductEventName>(
     name: Name,
@@ -399,6 +402,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       answered<RealtimeDiagnostics>(
         record(await client.call(GATEWAY_METHOD.VOICE_DIAGNOSTICS))?.diagnostics,
       ),
+    recordAgentTrace: (trace) => {
+      void client.call(GATEWAY_METHOD.VOICE_RECORD_TRACE, { trace: carried(trace) });
+    },
     reportGuide: (guide) =>
       fire(client.call(GATEWAY_METHOD.GUIDE_REPORT, { guide: carried(guide) })),
     recordEvent: (name, properties) => {

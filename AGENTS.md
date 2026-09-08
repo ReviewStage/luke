@@ -471,8 +471,11 @@ Trust constraints:
   `settings`, `credential`, `account`, `calendar`, `tracker`, `superset`,
   `session`, `workspace`, `speech`, `receiver`, `voice`, `guide`,
   `analytics`, `conversation.append`, and `onboarding` methods, and the
-  change events beside them); no credential or account secret travels in any
-  answer or event, and the one secret that reaches the voice client is the
+  change events beside them; `voice.recordTrace` carries the renderer's
+  tapped realtime events to the development trace writer the Gateway owns,
+  under the same gate, so an untraced run drops them at the host); no
+  credential or account secret travels in any answer or event, and the one
+  secret that reaches the voice client is the
   ephemeral realtime credential the host minted. Widening the method
   vocabulary, the event set, or what a node may be asked is a product
   decision, not an implementation detail. The same protocol suite runs over the in-process transport, the
@@ -897,7 +900,7 @@ Trust constraints:
   JSONL under the developer's chosen directory and
   sent nowhere; `pnpm trace:export` turns one file into a document a local
   viewer opens. The tap only observes: nothing reads its result, and the
-  main process drops the renderer's tapped events whenever no writer stands.
+  Gateway drops the renderer's tapped events whenever no writer stands.
   A trace carries real titles, branches, and spoken words, so trace files are
   never committed, for the same reason fixtures stay synthetic. Widening what
   a trace records is a product decision, not an implementation detail.
