@@ -1,4 +1,7 @@
 export {
+  ACCOUNT_PREFERENCE_FIELDS,
+  type AccountPreferenceField,
+  type AccountPreferences,
   APP_SETTING_DEFAULTS,
   APP_SETTING_FIELDS,
   APP_SETTING_ID,
@@ -6,6 +9,8 @@ export {
   type AppSettingField,
   type AppSettingId,
   type AppSettingValue,
+  accountPreferencesFromStored,
+  accountPreferencesFromWire,
   isAppSettingField,
   isAppSettingId,
   isKeyedAppSettingField,

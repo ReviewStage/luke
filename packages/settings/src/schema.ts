@@ -921,6 +921,92 @@ export function isAppSettingField(value: UnparsedWireValue): value is AppSetting
   return isWireString(value) && value in APP_SETTING_SCHEMA;
 }
 
+/**
+ * Account preferences are the settings shared by desktop, phone, and watch.
+ * Machine-local controls — launch at login, Dock, display layout, hotkeys,
+ * microphone routing, local list filters, credentials, and calendar grants —
+ * stay in each device's own store.
+ */
+export const ACCOUNT_PREFERENCE_FIELDS = [
+  APP_SETTING_SCHEMA.voice.field,
+  APP_SETTING_SCHEMA.voiceSpeed.field,
+  APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
+  APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+  APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
+] as const satisfies readonly AppSettingField[];
+
+export type AccountPreferenceField = (typeof ACCOUNT_PREFERENCE_FIELDS)[number];
+export type AccountPreferences = Partial<Pick<StoredAppSettings, AccountPreferenceField>>;
+
+const ACCOUNT_PREFERENCE_FIELD_SET: ReadonlySet<string> = new Set(ACCOUNT_PREFERENCE_FIELDS);
+
+function isAccountPreferenceField(value: UnparsedWireValue): value is AccountPreferenceField {
+  return isWireString(value) && ACCOUNT_PREFERENCE_FIELD_SET.has(value);
+}
+
+function accountPreferenceDroppedMapEntries(
+  field: AccountPreferenceField,
+  rawValue: UnparsedWireValue,
+  parsedValue: UnparsedWireValue,
+): boolean {
+  if (
+    (field !== APP_SETTING_SCHEMA.workspaceProjectDefaults.field &&
+      field !== APP_SETTING_SCHEMA.workspaceAgentDefaults.field) ||
+    !isRecord(rawValue)
+  ) {
+    return false;
+  }
+  const rawCount = Object.keys(rawValue).length;
+  if (rawCount === 0) return false;
+  return !isRecord(parsedValue) || Object.keys(parsedValue).length !== rawCount;
+}
+
+function parseAccountPreferences(
+  value: UnparsedWireValue,
+  source: "stored" | "wire",
+): AccountPreferences | undefined {
+  if (!isRecord(value)) return undefined;
+  const preferences: Record<string, UnparsedWireValue> = {};
+  for (const [field, rawValue] of Object.entries(value)) {
+    if (!isAccountPreferenceField(field)) {
+      if (source === "wire") return undefined;
+      continue;
+    }
+    const wireValue = rawValue === null ? undefined : rawValue;
+    const parsed = APP_SETTING_SCHEMA[field].guard(wireValue);
+    if (!parsed.valid) {
+      if (source === "wire") return undefined;
+      continue;
+    }
+    // SAFETY: The account-preference guard accepted this value as that setting's stored JSON shape.
+    const parsedValue = parsed.value as UnparsedWireValue;
+    if (
+      source === "wire" &&
+      wireValue !== undefined &&
+      accountPreferenceDroppedMapEntries(field, wireValue, parsedValue)
+    ) {
+      return undefined;
+    }
+    if (parsedValue !== undefined) {
+      preferences[field] = parsedValue;
+    }
+  }
+  // SAFETY: Every key came from ACCOUNT_PREFERENCE_FIELDS and every value passed that field's guard.
+  return preferences as AccountPreferences;
+}
+
+export function accountPreferencesFromWire(
+  value: UnparsedWireValue,
+): AccountPreferences | undefined {
+  return parseAccountPreferences(value, "wire");
+}
+
+export function accountPreferencesFromStored(
+  value: UnparsedWireValue,
+): AccountPreferences | undefined {
+  return parseAccountPreferences(value, "stored");
+}
+
 /** The settings whose value is a map, and so can be written one entry at a time. */
 export type KeyedAppSettingField = {
   [Field in AppSettingField]: "entry" extends keyof (typeof APP_SETTING_SCHEMA)[Field]
