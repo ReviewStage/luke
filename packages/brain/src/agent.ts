@@ -26,12 +26,15 @@ import {
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS, text, type WireRecord } from "@sidecar/wire";
 import {
+  CONTEXT_OPENING,
+  claimOpenedContext,
   type Generation,
   generationFrom,
   identityFromRecord,
   parsedRecord,
   rejection,
   retireContext,
+  retireOpenedContext,
   sameIdentity,
 } from "./generation.js";
 import {
@@ -56,7 +59,6 @@ import {
   isTerminalBrainRequestStatus,
 } from "./requests.js";
 import { incompleteDetail, TOOL_RESULT_STATUS } from "./runtime.js";
-import { claimedUnlessAborted } from "./settled.js";
 import {
   type BrainPersistedState,
   type BrainStateStore,
@@ -188,16 +190,43 @@ const PENDING_MARK_FIELD = {
 
 type PendingMarkField = (typeof PENDING_MARK_FIELD)[keyof typeof PENDING_MARK_FIELD];
 
+/** One record's fields over the committed record — or the record itself, for its own acceptance. */
+interface RecordChange {
+  runId: string;
+  changes: RecordChanges;
+  insert?: BrainRequestRecord;
+}
+
+const SAVE_SCOPE = {
+  WORKING: "working",
+  WHOLE: "whole",
+  RECORD: "record",
+} as const;
+
 /**
- * What one save owns. A record scope changes one record's fields over the
- * committed record — or inserts the record, for its own acceptance. A working
- * scope commits the turn's context, cursors, and journal. The whole scope is
- * the restore's alone.
+ * What one save owns. A working scope commits the turn's context, cursors,
+ * and journal, and the owning run's accounting beside them. A record scope
+ * changes one record alone. The whole scope is the restore's alone, and
+ * carries the context only when the runtime loaded one.
  */
-interface SaveScope {
-  working?: boolean;
-  whole?: boolean;
-  record?: { runId: string; changes: RecordChanges; insert?: BrainRequestRecord };
+type SaveScope =
+  | { kind: typeof SAVE_SCOPE.WORKING; context: ContextEngine; record?: RecordChange }
+  | { kind: typeof SAVE_SCOPE.WHOLE; context: ContextEngine | undefined }
+  | ({ kind: typeof SAVE_SCOPE.RECORD } & RecordChange);
+
+/** What composing the requests of one save decided, read once the store has answered. */
+interface SaveOutcome {
+  requests: readonly BrainRequestRecord[];
+  /** The record as written, when the scope owned one. */
+  owned?: BrainRequestRecord;
+  /** The scope named a record the committed state does not hold, and inserted none. */
+  missing: boolean;
+}
+
+function recordChangeOf(
+  scope: Exclude<SaveScope, { kind: typeof SAVE_SCOPE.WHOLE }>,
+): RecordChange | undefined {
+  return scope.kind === SAVE_SCOPE.RECORD ? scope : scope.record;
 }
 
 /** What a run's end carries into its record beyond the status. */
@@ -310,8 +339,8 @@ export class BrainAgent {
     await this.ready();
     const generation = this.#generation;
     if (!generation) return undefined;
-    await generation.ready;
-    return generation.incompatible;
+    const opened = await generation.opened;
+    return opened.kind === CONTEXT_OPENING.INCOMPATIBLE ? opened.reason : undefined;
   }
 
   /** Every acknowledged run this generation holds, oldest acceptance first. */
@@ -368,17 +397,17 @@ export class BrainAgent {
     // The generation's context is awaited before the pending checks below, so
     // that from the check to the registration nothing is awaited and two
     // retries of one id cannot both slip past each other into two runs.
-    await generation.ready;
+    const opened = await generation.opened;
     if (generation !== this.#generation || this.#stopped) {
       return {
         outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
         reason: BRAIN_SUBMISSION_REJECTION.ABSENT,
       };
     }
-    if (generation.incompatible !== undefined) {
+    if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
       // The memory stands, whole, and nothing runs over it: an ask into it
       // would be a run this runtime cannot give a context to.
-      this.#reportIncompatible(generation);
+      this.#reportIncompatible(generation, opened.reason);
       return {
         outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
         reason: BRAIN_SUBMISSION_REJECTION.INCOMPATIBLE,
@@ -444,7 +473,10 @@ export class BrainAgent {
     generation.provisional.add(record.runId);
     generation.requests.set(record.runId, record);
     const written = await this.#save(generation, {
-      record: { runId: record.runId, changes: {}, insert: record },
+      kind: SAVE_SCOPE.RECORD,
+      runId: record.runId,
+      changes: {},
+      insert: record,
     });
     generation.provisional.delete(record.runId);
     if (!written) {
@@ -588,7 +620,7 @@ export class BrainAgent {
    * other record or of a turn still in flight rides along.
    */
   #commit(generation: Generation, runId: string, changes: RecordChanges): Promise<boolean> {
-    return this.#save(generation, { record: { runId, changes } });
+    return this.#save(generation, { kind: SAVE_SCOPE.RECORD, runId, changes });
   }
 
   /**
@@ -668,8 +700,7 @@ export class BrainAgent {
       }
     }
     await this.#queue;
-    const context = this.#generation?.context;
-    if (context) retireContext(context);
+    if (this.#generation) retireOpenedContext(this.#generation);
   }
 
   /**
@@ -807,14 +838,17 @@ export class BrainAgent {
     state = current;
     const generation = this.#generationFrom(state);
     this.#generation = generation;
-    await generation.ready;
+    const opened = await generation.opened;
     if (generation !== this.#generation) return;
-    if (generation.incompatible !== undefined) this.#reportIncompatible(generation);
+    if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
+      this.#reportIncompatible(generation, opened.reason);
+    }
     const interrupted = interruptedUnfinishedRequests(state.requests, this.#now());
     // An act found started with no result may have happened: the runtime's
     // context paired it as unknown at load, and the interrupted run says so
     // in its count; neither is ever a call to make again.
-    if (interrupted === state.requests && generation.repaired === 0) return;
+    const repaired = opened.kind === CONTEXT_OPENING.LOADED ? opened.repaired : 0;
+    if (interrupted === state.requests && repaired === 0) return;
     const unfinished = new Set(
       state.requests
         .filter((record) => !isTerminalBrainRequestStatus(record.status))
@@ -832,16 +866,17 @@ export class BrainAgent {
           : record,
       ]),
     );
-    await this.#save(generation, { whole: true });
+    await this.#save(generation, {
+      kind: SAVE_SCOPE.WHOLE,
+      context: opened.kind === CONTEXT_OPENING.LOADED ? opened.context : undefined,
+    });
     this.#notify();
   }
 
-  #reportIncompatible(generation: Generation): void {
+  #reportIncompatible(generation: Generation, reason: string): void {
     if (this.#incompatibleReported === generation.id) return;
     this.#incompatibleReported = generation.id;
-    this.#report(
-      `Brain memory is kept but cannot be run: ${generation.incompatible ?? "incompatible checkpoint"}`,
-    );
+    this.#report(`Brain memory is kept but cannot be run: ${reason}`);
   }
 
   /**
@@ -861,7 +896,7 @@ export class BrainAgent {
       run.abort.abort();
     }
     this.#runs.clear();
-    if (previous?.context) retireContext(previous.context);
+    if (previous) retireOpenedContext(previous);
     // Wakes coalesced against the old memory — including a quiet retry's —
     // are that generation's work, and go with it.
     this.#cancelFlush();
@@ -892,9 +927,11 @@ export class BrainAgent {
    * record stays as committed, so a request accepted or marked meanwhile is
    * untouched and a request still provisional is not published.
    */
-  #checkpoint(generation: Generation, run?: RunControl): Promise<boolean> {
+  #checkpoint(turnContext: TurnContext): Promise<boolean> {
+    const { generation, context, run } = turnContext;
     return this.#save(generation, {
-      working: true,
+      kind: SAVE_SCOPE.WORKING,
+      context,
       ...(run
         ? {
             record: {
@@ -923,49 +960,24 @@ export class BrainAgent {
    * runtime that cannot read it.
    */
   async #save(generation: Generation, scope: SaveScope): Promise<boolean> {
-    let owned: BrainRequestRecord | undefined;
-    let missing = false;
+    let outcome: SaveOutcome | undefined;
     let pruned = false;
     const written = await this.#options.store.write(
       this.#lease,
       generation.id,
       (state) => {
-        const context = generation.context;
-        const working = (scope.working === true || scope.whole === true) && context !== undefined;
-        const checkpoint = working && context ? context.checkpoint() : undefined;
-        let requests: readonly BrainRequestRecord[];
-        if (scope.whole) {
-          requests = [...generation.requests.values()].map((record) => ({ ...record }));
-        } else if (scope.record) {
-          const { runId, changes } = scope.record;
-          const committed = state.requests.find((record) => record.runId === runId);
-          if (committed) {
-            const changed: BrainRequestRecord = {
-              ...committed,
-              ...changes,
-              revision: committed.revision + 1,
-            };
-            owned = changed;
-            requests = state.requests.map((record) => (record.runId === runId ? changed : record));
-          } else if (scope.record.insert) {
-            owned = { ...scope.record.insert };
-            requests = [...state.requests, owned];
-          } else {
-            missing = true;
-            requests = state.requests;
-          }
-        } else {
-          requests = state.requests;
-        }
+        const context = scope.kind === SAVE_SCOPE.RECORD ? undefined : scope.context;
+        const checkpoint = context?.checkpoint();
+        outcome = this.#requestsOf(generation, scope, state.requests);
         const checkpointFormat = checkpoint
           ? checkpointFormatTag(checkpoint.format)
           : state.checkpointFormat;
         return {
           ...(checkpointFormat !== undefined ? { checkpointFormat } : undefined),
           items: checkpoint ? checkpoint.items : state.items,
-          cursors: working ? generation.cursors.persisted() : state.cursors,
-          journal: working ? generation.journal.entries() : state.journal,
-          requests,
+          cursors: context ? generation.cursors.persisted() : state.cursors,
+          journal: context ? generation.journal.entries() : state.journal,
+          requests: outcome.requests,
         };
       },
       (commit) => {
@@ -977,18 +989,20 @@ export class BrainAgent {
           generation.journal.dropRuns(commit.prunedRunIds);
           pruned = true;
         }
-        if (!owned || !scope.record) return;
+        const owned = outcome?.owned;
+        const change = scope.kind === SAVE_SCOPE.WHOLE ? undefined : recordChangeOf(scope);
+        if (!owned || !change) return;
         const live = generation.requests.get(owned.runId);
         if (live) {
           generation.requests.set(owned.runId, {
             ...live,
-            ...scope.record.changes,
+            ...change.changes,
             revision: owned.revision,
           });
         }
       },
     );
-    if (!written || missing) {
+    if (!written || outcome?.missing) {
       this.#report("Brain memory could not be checkpointed");
       return false;
     }
@@ -996,6 +1010,40 @@ export class BrainAgent {
     // and the windows hear it now rather than on the next unrelated change.
     if (pruned) this.#notify();
     return true;
+  }
+
+  /** The requests a save writes: the working copy whole, or the committed list with the scope's one record changed or inserted. */
+  #requestsOf(
+    generation: Generation,
+    scope: SaveScope,
+    committed: readonly BrainRequestRecord[],
+  ): SaveOutcome {
+    if (scope.kind === SAVE_SCOPE.WHOLE) {
+      return {
+        requests: [...generation.requests.values()].map((record) => ({ ...record })),
+        missing: false,
+      };
+    }
+    const change = recordChangeOf(scope);
+    if (!change) return { requests: committed, missing: false };
+    const existing = committed.find((record) => record.runId === change.runId);
+    if (existing) {
+      const changed: BrainRequestRecord = {
+        ...existing,
+        ...change.changes,
+        revision: existing.revision + 1,
+      };
+      return {
+        requests: committed.map((record) => (record.runId === change.runId ? changed : record)),
+        owned: changed,
+        missing: false,
+      };
+    }
+    if (change.insert) {
+      const owned = { ...change.insert };
+      return { requests: [...committed, owned], owned, missing: false };
+    }
+    return { requests: committed, missing: true };
   }
 
   #runRevoked(run: RunControl): boolean {
@@ -1160,19 +1208,20 @@ export class BrainAgent {
     if (generation !== this.#generation || generation.abort.signal.aborted) {
       return { outcome: TURN_OUTCOME.REVOKED };
     }
-    await generation.ready;
+    const opened = await generation.opened;
     if (generation !== this.#generation || generation.abort.signal.aborted) {
       return { outcome: TURN_OUTCOME.REVOKED };
     }
-    const context = generation.context;
-    if (!context) {
+    if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
       // The memory is kept as it is and nothing is read or written over it.
-      this.#reportIncompatible(generation);
+      this.#reportIncompatible(generation, opened.reason);
       return { outcome: TURN_OUTCOME.INCOMPATIBLE };
     }
+    const context = opened.context;
     const run = plan.run;
     const turnContext: TurnContext = {
       generation,
+      context,
       ...(run ? { run } : undefined),
       signal: run
         ? AbortSignal.any([generation.abort.signal, run.abort.signal])
@@ -1186,7 +1235,7 @@ export class BrainAgent {
       signal: turnContext.signal,
     };
     try {
-      return await this.#runTurn(plan, turnContext, context, execution);
+      return await this.#runTurn(plan, turnContext, execution);
     } finally {
       ended = true;
       this.#turnInFlight = false;
@@ -1200,10 +1249,9 @@ export class BrainAgent {
   async #runTurn(
     plan: TurnPlan,
     turnContext: TurnContext,
-    context: ContextEngine,
     execution: BrainActExecution,
   ): Promise<TurnResult> {
-    const { generation, run } = turnContext;
+    const { generation, context, run } = turnContext;
     const startedAt = this.#now();
     let contextMark: ContextMark = context.mark();
     let cursorMark = generation.cursors.persisted();
@@ -1239,12 +1287,12 @@ export class BrainAgent {
       // an observation turn rolls back whole and reads its deltas again.
       const advanceMark = async () => {
         if (!run) return;
-        if (!(await this.#checkpoint(generation, run))) run.checkpointFailed = true;
+        if (!(await this.#checkpoint(turnContext))) run.checkpointFailed = true;
         contextMark = context.mark();
         cursorMark = generation.cursors.persisted();
       };
       try {
-        const end = await this.#execute(plan, turnContext, context, execution, gathering, {
+        const end = await this.#execute(plan, turnContext, execution, gathering, {
           opening: plan.open(events, startedAt),
           advanceMark,
         });
@@ -1258,12 +1306,12 @@ export class BrainAgent {
     }
 
     if (failure) {
-      await this.#restoreContext(generation, context, contextMark);
+      await this.#restoreContext(turnContext, contextMark);
       generation.cursors.rollback(cursorMark);
       this.#report(`Brain ${plan.trigger} turn did not complete: ${gathering.error}`);
     } else {
       generation.cursors.retain(this.#options.roster().identities);
-      const written = await this.#checkpoint(generation, run);
+      const written = await this.#checkpoint(turnContext);
       if (!written && run) run.checkpointFailed = true;
       if (written) await context.afterTurn({ signal: turnContext.signal });
       // A briefing leaves only from a turn that still stands: the stop or the
@@ -1315,40 +1363,32 @@ export class BrainAgent {
    * old engine may still apply to it. A reopen the runtime refuses leaves the
    * generation standing without a context, its stored checkpoint untouched.
    */
-  async #restoreContext(
-    generation: Generation,
-    context: ContextEngine,
-    mark: ContextMark,
-  ): Promise<void> {
-    const reopened = await claimedUnlessAborted(
+  async #restoreContext(turnContext: TurnContext, mark: ContextMark): Promise<void> {
+    const { generation, context } = turnContext;
+    const reopened = await claimOpenedContext(
       this.#options.runtime.openContext(
         { format: context.checkpointFormat, items: mark.items },
         JSON.stringify(UNKNOWN_ACT_RESULT),
         { signal: generation.abort.signal },
       ),
       generation.abort.signal,
-      (opened) => retireContext(opened.context),
+      "the runtime could not reopen its own checkpoint",
     );
     if (reopened.aborted) return;
-    if (
-      generation.abort.signal.aborted ||
-      generation !== this.#generation ||
-      generation.context !== context
-    ) {
-      retireContext(reopened.value.context);
+    const standing = await generation.opened;
+    const stillUsed = standing.kind === CONTEXT_OPENING.LOADED && standing.context === context;
+    if (generation !== this.#generation || !stillUsed) {
+      if (reopened.value.kind === CONTEXT_OPENING.LOADED) retireContext(reopened.value.context);
       return;
     }
-    if (!reopened.value.bootstrap.loaded) {
-      retireContext(reopened.value.context);
-      retireContext(context);
-      generation.context = undefined;
-      generation.incompatible =
-        reopened.value.bootstrap.reason ?? "the runtime could not reopen its own checkpoint";
-      this.#reportIncompatible(generation);
-      return;
-    }
-    generation.context = reopened.value.context;
+    // The engine the turn used is not re-admitted either way: it may hold
+    // what a late hook applied. A refused reopen leaves the generation
+    // standing without a context, every turn over it refused as incompatible.
+    generation.opened = Promise.resolve(reopened.value);
     retireContext(context);
+    if (reopened.value.kind === CONTEXT_OPENING.INCOMPATIBLE) {
+      this.#reportIncompatible(generation, reopened.value.reason);
+    }
   }
 
   /**
@@ -1360,12 +1400,11 @@ export class BrainAgent {
   #execute(
     plan: TurnPlan,
     turnContext: TurnContext,
-    context: ContextEngine,
     execution: BrainActExecution,
     gathering: TurnGathering,
     turn: { opening: readonly string[]; advanceMark: () => Promise<void> },
   ): Promise<RuntimeRunEnd> {
-    const { run } = turnContext;
+    const { context, run } = turnContext;
     const runId = run?.runId ?? `${plan.trigger}-${++this.#observationTurns}`;
     const tools = this.#executor(plan, turnContext, execution, gathering);
     const onEvent = async (event: RuntimeEvent) => {
@@ -1525,7 +1564,7 @@ export class BrainAgent {
             isRevoked: () => execution.isRevoked() || runtimeContext.isRevoked(),
             signal: execution.signal,
           };
-          return answer(await this.#performJournaled(call, turnContext.run, joined));
+          return answer(await this.#performJournaled(call, turnContext, turnContext.run, joined));
         }
         switch (call.name) {
           case BRAIN_TOOL.LIST_SESSIONS:
@@ -1561,6 +1600,7 @@ export class BrainAgent {
    */
   async #performJournaled(
     call: ToolInvocation,
+    turnContext: TurnContext,
     run: RunControl,
     execution: BrainActExecution,
   ): Promise<WireRecord> {
@@ -1585,7 +1625,7 @@ export class BrainAgent {
       argumentsJson: call.argumentsJson,
       startedAt: this.#now(),
     });
-    if (!(await this.#checkpoint(generation, run))) {
+    if (!(await this.#checkpoint(turnContext))) {
       generation.journal.forget(run.runId, call.callId);
       run.checkpointFailed = true;
       return rejection(REFUSAL_REASON.NOT_CHECKPOINTED);

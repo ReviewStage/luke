@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { AgentRuntime, ContextOpening } from "@sidecar/runtime-contracts";
 import { ResponsesContextEngine } from "./context-engine.js";
-import { generationFrom } from "./generation.js";
+import { CONTEXT_OPENING, generationFrom } from "./generation.js";
 import { TOOL_LOOP_RUNTIME } from "./runtime.js";
 import { freshBrainState } from "./state-store.js";
 
@@ -42,26 +42,28 @@ test("an abort and the open's resolution in the same turn leave the context disc
   const first = generationFrom(freshBrainState("gen-1", NOW), abortFirst.runtime, "{}");
   first.abort.abort();
   abortFirst.release();
-  await first.ready;
+  const firstOpened = await first.opened;
   await tick();
-  assert.equal(first.context, undefined);
+  assert.equal(firstOpened.kind, CONTEXT_OPENING.INCOMPATIBLE);
   assert.equal(abortFirst.disposed(), 1);
-  assert.match(first.incompatible ?? "", /replaced while its context was opening/u);
+  assert.match(
+    firstOpened.kind === CONTEXT_OPENING.INCOMPATIBLE ? firstOpened.reason : "",
+    /replaced while its context was opening/u,
+  );
 
   const releaseFirst = heldRuntime();
   const second = generationFrom(freshBrainState("gen-2", NOW), releaseFirst.runtime, "{}");
   releaseFirst.release();
   second.abort.abort();
-  await second.ready;
+  assert.equal((await second.opened).kind, CONTEXT_OPENING.INCOMPATIBLE);
   await tick();
-  assert.equal(second.context, undefined);
   assert.equal(releaseFirst.disposed(), 1);
 
   // Released later, across turns: still discarded, still once.
   const later = heldRuntime();
   const third = generationFrom(freshBrainState("gen-3", NOW), later.runtime, "{}");
   third.abort.abort();
-  await third.ready;
+  await third.opened;
   assert.equal(later.disposed(), 0);
   later.release();
   await tick();
@@ -74,9 +76,12 @@ test("an open that resolves while the generation stands installs the context and
   const standing = heldRuntime();
   const generation = generationFrom(freshBrainState("gen-4", NOW), standing.runtime, "{}");
   standing.release();
-  await generation.ready;
-  assert.equal(generation.context, standing.context);
-  assert.equal(generation.incompatible, undefined);
+  const opened = await generation.opened;
+  assert.equal(opened.kind, CONTEXT_OPENING.LOADED);
+  assert.equal(
+    opened.kind === CONTEXT_OPENING.LOADED ? opened.context : undefined,
+    standing.context,
+  );
   await tick();
   assert.equal(standing.disposed(), 0);
 });

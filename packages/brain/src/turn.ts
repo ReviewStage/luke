@@ -1,5 +1,6 @@
 import type { BrainTurnAuthority } from "@sidecar/hosted";
 import type { ScheduledTimer } from "@sidecar/realtime";
+import type { ContextEngine } from "@sidecar/runtime-contracts";
 import type { WireRecord } from "@sidecar/wire";
 import type { Generation } from "./generation.js";
 import type { BrainWakeEvent } from "./wake-events.js";
@@ -82,9 +83,10 @@ export interface TurnPlan {
   generation: Generation;
 }
 
-/** The generation a turn opened in and the one signal every wait of the turn settles on. */
+/** The generation a turn opened in, the context it runs over, and the one signal every wait of the turn settles on. */
 export interface TurnContext {
   generation: Generation;
+  context: ContextEngine;
   run?: RunControl;
   signal: AbortSignal;
 }
