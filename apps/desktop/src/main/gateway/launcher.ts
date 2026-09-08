@@ -8,7 +8,7 @@ import {
 } from "@sidecar/runtime-contracts";
 import { app } from "electron";
 import { DESKTOP_OPERATOR_CLIENT_ID } from "./desktop-node";
-import { gatewayDiscoveryPath, gatewayProcessArguments } from "./process-mode";
+import { forceKillGateway, gatewayDiscoveryPath, gatewayProcessArguments } from "./process-mode";
 
 /**
  * The desktop's side of the process split: the supervisor's ports filled with
@@ -27,14 +27,6 @@ export interface GatewayLauncherOptions {
   report: (message: string) => void;
 }
 
-function killProcess(pid: number): void {
-  try {
-    process.kill(pid);
-  } catch {
-    // Already gone between the check and the signal.
-  }
-}
-
 export function createGatewayLauncher(options: GatewayLauncherOptions): GatewaySupervisor {
   const client: GatewayClientIdentity = {
     clientId: DESKTOP_OPERATOR_CLIENT_ID,
@@ -46,7 +38,7 @@ export function createGatewayLauncher(options: GatewayLauncherOptions): GatewayS
     discover: () => readGatewayDiscovery(gatewayDiscoveryPath(options.stateRoot)),
     connect: (record) => connectLocalGateway({ record, client, build: options.build }),
     isAlive: processIsAlive,
-    kill: killProcess,
+    kill: forceKillGateway,
     spawn: async () => {
       // An unpackaged run is the Electron binary given the app directory; a
       // packaged one is the bundle's own executable and takes no path.
@@ -73,7 +65,7 @@ export function createGatewayLauncher(options: GatewayLauncherOptions): GatewayS
           child.once("exit", (code) => resolve(code ?? undefined));
           child.once("error", () => resolve(undefined));
         }),
-        kill: () => killProcess(pid),
+        kill: () => forceKillGateway(pid),
       };
     },
     report: options.report,

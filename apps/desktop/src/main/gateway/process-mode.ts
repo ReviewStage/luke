@@ -86,3 +86,22 @@ export function gatewayBuildIdentity(context: GatewayBuildContext): GatewayBuild
     buildVersion: `${context.appName}@${context.version}${stamp}`,
   };
 }
+
+/**
+ * The force stop the supervisor reaches only past its waits: the graceful
+ * shutdown was asked over the protocol and waited for, so what is left is a
+ * Gateway that cannot act on a signal at all (stopped, or stuck in the
+ * runtime), and only SIGKILL ends that. A gentler signal here would be a
+ * second ask of a process that already failed to answer the first.
+ */
+export function forceKillGateway(
+  pid: number,
+  kill: (pid: number, signal: NodeJS.Signals) => void = (target, signal) =>
+    process.kill(target, signal),
+): void {
+  try {
+    kill(pid, "SIGKILL");
+  } catch {
+    // Already gone between the check and the signal.
+  }
+}

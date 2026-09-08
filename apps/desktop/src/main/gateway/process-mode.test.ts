@@ -3,6 +3,7 @@ import path from "node:path";
 import test from "node:test";
 import { GATEWAY_PROTOCOL_VERSION } from "@sidecar/runtime-contracts";
 import {
+  forceKillGateway,
   GATEWAY_PROCESS_ARGUMENT,
   gatewayBuildIdentity,
   gatewayDiscoveryPath,
@@ -48,4 +49,14 @@ test("a packaged build is its name and version; a development run carries its bu
     }),
     { protocolVersion: GATEWAY_PROTOCOL_VERSION, buildVersion: "Luke Dev@0.5.0+dev.1700000000" },
   );
+});
+
+test("the force stop past the waits is SIGKILL, the one signal a stopped or stuck Gateway cannot ignore", () => {
+  const sent: Array<{ pid: number; signal: NodeJS.Signals }> = [];
+  forceKillGateway(4242, (pid, signal) => sent.push({ pid, signal }));
+  assert.deepEqual(sent, [{ pid: 4242, signal: "SIGKILL" }]);
+  // A process already gone is not an error.
+  forceKillGateway(4243, () => {
+    throw new Error("ESRCH");
+  });
 });
