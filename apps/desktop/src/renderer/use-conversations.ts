@@ -4,6 +4,7 @@ import {
   type HistoryArchiveRecord,
   MAIN_SESSION_KEY,
   type SessionKey,
+  sessionKey,
 } from "@sidecar/runtime-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -109,8 +110,7 @@ export function useConversations(): ConversationsState {
       const created = await window.sidecar
         .createConversationThread({ temporary })
         .catch(() => undefined);
-      // SAFETY: the bridge guard admitted a non-empty string, which is what the session key constructor admits.
-      if (created) select(created as SessionKey);
+      if (created) select(sessionKey(created));
     },
     [select],
   );

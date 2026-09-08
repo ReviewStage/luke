@@ -12,7 +12,7 @@ import {
   replyConversationEntry,
   typedAskConversationEntry,
 } from "@sidecar/realtime";
-import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
+import { MAIN_SESSION_KEY, type SessionKey, sessionKey } from "@sidecar/runtime-contracts";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import { BRIDGE } from "#shared/bridge";
 import {
@@ -283,16 +283,15 @@ export function registerBrainIpc(dependencies: BrainIpcDependencies): void {
         // is main's, a typed one names the conversation its composer stood
         // in, and switching the selector afterwards retargets nothing. A key
         // the directory does not list answers no brain and is refused.
-        const sessionKey =
+        const target =
           submission.origin === BRAIN_REQUEST_ORIGIN.TYPED && submission.sessionKey !== undefined
-            ? // SAFETY: the bridge guard admitted a non-empty string, which is what the session key constructor admits.
-              (submission.sessionKey as SessionKey)
+            ? sessionKey(submission.sessionKey)
             : MAIN_SESSION_KEY;
         return submitBrainAsk(
-          brain(sessionKey),
+          brain(target),
           submission,
           dependencies.recordConversationEntry,
-          sessionKey,
+          target,
         );
       },
       // A wait that finds its run ended does not hand the words over on the

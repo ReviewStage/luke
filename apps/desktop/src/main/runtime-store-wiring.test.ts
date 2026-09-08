@@ -5,7 +5,12 @@ import path from "node:path";
 import test from "node:test";
 import { MessageChannel } from "node:worker_threads";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
-import { CONVERSATION_KIND, MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
+import {
+  CONVERSATION_KIND,
+  MAIN_SESSION_KEY,
+  type SessionKey,
+  sessionKey,
+} from "@sidecar/runtime-contracts";
 import { type RuntimeStorePort, serveRuntimeStore } from "@sidecar/runtime-store";
 import { type ConversationDirectorySnapshot, wireRuntimeStore } from "./runtime-store-wiring";
 
@@ -80,7 +85,7 @@ test("a temporary thread keeps its lines in memory alone and is gone at the next
   );
   // A key the directory does not list takes no line.
   assert.equal(
-    await first.wired.recordConversationEntry(line, NOW, "agent:main:thread:nope" as SessionKey),
+    await first.wired.recordConversationEntry(line, NOW, sessionKey("agent:main:thread:nope")),
     false,
   );
   await first.close();

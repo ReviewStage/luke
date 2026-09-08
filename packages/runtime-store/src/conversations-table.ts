@@ -21,7 +21,7 @@ import { nullable, type RuntimeDatabase } from "./database.js";
  * archive behind it.
  */
 
-interface ConversationRow {
+type ConversationRow = {
   session_key: string;
   kind: string;
   name: string;
@@ -31,7 +31,7 @@ interface ConversationRow {
   archive_reason: string | null;
   pinned_at: number | null;
   session_id: string | null;
-}
+};
 
 const CONVERSATION_COLUMNS = `c.session_key, c.kind, c.name, c.created_at, c.last_activity_at,
        c.archived_at, c.archive_reason, c.pinned_at, s.session_id`;
@@ -65,7 +65,7 @@ export function listConversations(database: RuntimeDatabase): readonly Conversat
     .prepare(
       `SELECT ${CONVERSATION_COLUMNS} ${CONVERSATION_FROM} ORDER BY c.created_at, c.session_key`,
     )
-    .all() as unknown as ConversationRow[];
+    .all() as ConversationRow[];
   return rows.map(recordFromRow);
 }
 
@@ -76,7 +76,7 @@ export function conversationRecord(
   // SAFETY: as above, for one row or none.
   const row = database
     .prepare(`SELECT ${CONVERSATION_COLUMNS} ${CONVERSATION_FROM} WHERE c.session_key = ?`)
-    .get(sessionKey) as unknown as ConversationRow | undefined;
+    .get(sessionKey) as ConversationRow | undefined;
   return row ? recordFromRow(row) : undefined;
 }
 

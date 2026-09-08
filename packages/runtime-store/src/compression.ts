@@ -21,19 +21,11 @@ interface ZstdCodec {
 function resolveZstdCodec(): ZstdCodec | undefined {
   // node:zlib ships zstd since Node 22.15; the build's runtime has it, and the
   // check keeps a runtime that does not on the plain path instead of throwing.
-  const candidate = zlib as Partial<{
-    zstdCompressSync: (data: Buffer) => Buffer;
-    zstdDecompressSync: (data: Buffer) => Buffer;
-  }>;
-  if (
-    typeof candidate.zstdCompressSync !== "function" ||
-    typeof candidate.zstdDecompressSync !== "function"
-  ) {
-    return undefined;
-  }
+  const { zstdCompressSync, zstdDecompressSync } = zlib;
+  if (!zstdCompressSync || !zstdDecompressSync) return undefined;
   return {
-    compress: candidate.zstdCompressSync.bind(zlib),
-    decompress: candidate.zstdDecompressSync.bind(zlib),
+    compress: (data) => zstdCompressSync(data),
+    decompress: (data) => zstdDecompressSync(data),
   };
 }
 

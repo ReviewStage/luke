@@ -110,7 +110,7 @@ function hashBytes(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-interface ArchiveRow {
+type ArchiveRow = {
   archive_id: string;
   session_key: string;
   kind: string;
@@ -125,7 +125,7 @@ interface ArchiveRow {
   history_lines: number;
   transcript_events: number;
   previous_cutoff: number | null;
-}
+};
 
 const ARCHIVE_COLUMNS = `archive_id, session_key, kind, name, created_at, deleted_at, encoding, sha256,
   byte_length, file_name, published_at, history_lines, transcript_events, previous_cutoff`;
@@ -152,7 +152,7 @@ export function listArchives(database: RuntimeDatabase): readonly HistoryArchive
   // SAFETY: the columns selected are the ones the row type names, typed by the schema.
   const rows = database
     .prepare(`SELECT ${ARCHIVE_COLUMNS} FROM history_archives ORDER BY deleted_at DESC, archive_id`)
-    .all() as unknown as ArchiveRow[];
+    .all() as ArchiveRow[];
   const records: HistoryArchiveRecord[] = [];
   for (const row of rows) {
     const record = recordFromRow(row);
@@ -165,7 +165,7 @@ function archiveRow(database: RuntimeDatabase, archiveId: string): ArchiveRow | 
   // SAFETY: as above, for one row or none.
   return database
     .prepare(`SELECT ${ARCHIVE_COLUMNS} FROM history_archives WHERE archive_id = ?`)
-    .get(archiveId) as unknown as ArchiveRow | undefined;
+    .get(archiveId) as ArchiveRow | undefined;
 }
 
 export interface DeletionOptions {

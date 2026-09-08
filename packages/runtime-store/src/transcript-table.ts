@@ -23,13 +23,13 @@ import { nullable, type RuntimeDatabase } from "./database.js";
  * the opaque records it arrived as.
  */
 
-interface TranscriptRow {
+type TranscriptRow = {
   sequence: number;
   session_id: string | null;
   kind: string;
   recorded_at: number;
   payload: string;
-}
+};
 
 /** Appends events under the lifetime named, taking the next sequences from the conversation's counter. */
 export function appendTranscript(
@@ -124,7 +124,7 @@ export function listTranscript(
       sessionKey,
       options.afterSequence ?? -1,
       options.limit ?? DEFAULT_TRANSCRIPT_LIMIT,
-    ) as unknown as TranscriptRow[];
+    ) as TranscriptRow[];
   return storedEvents(rows);
 }
 
@@ -148,7 +148,7 @@ export function searchTranscript(
       `SELECT sequence, session_id, kind, recorded_at, payload FROM transcript_events
        WHERE session_key = ? AND instr(payload, ?) > 0 ORDER BY sequence DESC LIMIT ?`,
     )
-    .all(sessionKey, needle, limit) as unknown as TranscriptRow[];
+    .all(sessionKey, needle, limit) as TranscriptRow[];
   return storedEvents(rows);
 }
 

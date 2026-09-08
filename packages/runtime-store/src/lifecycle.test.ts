@@ -299,6 +299,7 @@ test("a publication a crash interrupted keeps its payload in the registry and is
   assert.equal(deleted.archive.publishedAt, undefined);
   assert.deepEqual(listHistory(database, MAIN_SESSION_KEY, NOW), []);
   // The registry still holds the bytes, so a restore works from them alone.
+  // SAFETY: length() of the payload column is one integer column named bytes.
   const held = database
     .prepare("SELECT length(payload) AS bytes FROM history_archives WHERE archive_id = ?")
     .get("archive-2") as { bytes: number };
@@ -311,6 +312,7 @@ test("a publication a crash interrupted keeps its payload in the registry and is
   const [archive] = listArchives(relaunched);
   assert.ok(archive?.publishedAt !== undefined);
   assert.equal(fs.existsSync(path.join(archiveDirectory(root), archive.fileName)), true);
+  // SAFETY: the payload column is the BLOB the deletion wrote, or NULL once published.
   const cleared = relaunched
     .prepare("SELECT payload FROM history_archives WHERE archive_id = ?")
     .get("archive-2") as { payload: Uint8Array | null };
