@@ -31,10 +31,14 @@ export {
 export { BrainGenerationClock } from "./generation-clock.js";
 export { HOSTED_MODEL_ADAPTER_ID, HostedModelAdapter } from "./hosted-model-adapter.js";
 export {
+  completeToolFree,
   HOUSEKEEPING_REFUSAL,
   HOUSEKEEPING_TOOLS,
   type MemoryHousekeepingOptions,
+  type PrivateTurnOptions,
   runMemoryHousekeeping,
+  runPrivateTurn,
+  type ToolFreeCompletionOptions,
 } from "./housekeeping.js";
 export { BRAIN_INPUT_MARKER, primedNotesInputText } from "./input-items.js";
 export { brainInstructions, brainToolNotes } from "./instructions.js";

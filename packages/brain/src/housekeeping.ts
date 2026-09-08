@@ -11,8 +11,10 @@ import {
   type AgentRuntime,
   CONTEXT_INPUT_KIND,
   RUN_END_REASON,
+  type RuntimeRunEnd,
   type ToolExecutor,
   type ToolResult,
+  type ToolSchema,
 } from "@sidecar/runtime-contracts";
 import { ACT_RESULT_STATUS, isWireString, type WireRecord, wireRecord } from "@sidecar/wire";
 import type { BrainWorkspaceAccess } from "./tool-executor.js";
@@ -54,6 +56,86 @@ export interface MemoryHousekeepingOptions {
   readonly workspace: Pick<BrainWorkspaceAccess, "read" | "write">;
   readonly signal: AbortSignal;
   readonly runId: string;
+}
+
+export interface PrivateTurnOptions {
+  readonly runtime: AgentRuntime;
+  /** A conversation's context as it stands, copied into the private context; none for a turn over nothing. */
+  readonly items?: readonly WireRecord[];
+  readonly tools: ToolExecutor;
+  readonly toolSchemas: readonly ToolSchema[];
+  readonly prompt: string;
+  readonly ask: string;
+  readonly maximumOutputTokens: number;
+  readonly signal: AbortSignal;
+  readonly runId: string;
+}
+
+/**
+ * One run over a private context of the runtime's own format: opened for
+ * the turn, given a copy of the items when there are any, run to its end
+ * with an inert event sink, and disposed whatever happened, so nothing the
+ * turn read or said outlives it or reaches a conversation.
+ */
+export async function runPrivateTurn(options: PrivateTurnOptions): Promise<RuntimeRunEnd> {
+  const opened = await options.runtime.openContext(undefined, JSON.stringify({}));
+  try {
+    if (options.items && options.items.length > 0) {
+      await opened.context.adoptCompaction([...options.items], { signal: options.signal });
+    }
+    const run = options.runtime.start({
+      runId: options.runId,
+      context: opened.context,
+      tools: options.tools,
+      toolSchemas: options.toolSchemas,
+      prompt: options.prompt,
+      input: [{ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: options.ask }],
+      ephemeral: () => [],
+      maximumOutputTokens: options.maximumOutputTokens,
+      signal: options.signal,
+      onEvent: () => undefined,
+    });
+    return await run.done;
+  } finally {
+    await Promise.resolve(opened.context.dispose()).catch(() => undefined);
+  }
+}
+
+export interface ToolFreeCompletionOptions {
+  readonly runtime: AgentRuntime;
+  readonly prompt: string;
+  readonly input: string;
+  readonly maximumOutputTokens: number;
+  readonly signal: AbortSignal;
+  readonly runId: string;
+}
+
+/** The refusal every call a tool-free turn still emits is answered with. */
+const TOOL_FREE_EXECUTOR: ToolExecutor = {
+  execute: async () => rejection(REFUSAL_REASON.NOT_OFFERED),
+};
+
+/**
+ * One tool-free completion over a fresh, dropped context: no schema is
+ * offered and any call the model emits anyway is refused, so the answer is
+ * words and nothing else. Nothing when the run did not complete with text.
+ */
+export async function completeToolFree(
+  options: ToolFreeCompletionOptions,
+): Promise<string | undefined> {
+  const end = await runPrivateTurn({
+    runtime: options.runtime,
+    tools: TOOL_FREE_EXECUTOR,
+    toolSchemas: [],
+    prompt: options.prompt,
+    ask: options.input,
+    maximumOutputTokens: options.maximumOutputTokens,
+    signal: options.signal,
+    runId: options.runId,
+  });
+  return end.reason === RUN_END_REASON.COMPLETED && end.text.trim().length > 0
+    ? end.text
+    : undefined;
 }
 
 function answer(output: WireRecord): ToolResult {
@@ -111,22 +193,18 @@ export async function runMemoryHousekeeping(
       return answer({ status: ACT_RESULT_STATUS.ACCEPTED, name, chars: written.chars });
     },
   };
-  const opened = await options.runtime.openContext(undefined, JSON.stringify({}));
   try {
-    await opened.context.adoptCompaction([...options.items], { signal: options.signal });
-    const run = options.runtime.start({
-      runId: options.runId,
-      context: opened.context,
+    const end = await runPrivateTurn({
+      runtime: options.runtime,
+      items: options.items,
       tools,
       toolSchemas: schemas,
       prompt: options.prompt.system,
-      input: [{ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: options.prompt.ask }],
-      ephemeral: () => [],
+      ask: options.prompt.ask,
       maximumOutputTokens: MEMORY_FLUSH_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
       signal: options.signal,
-      onEvent: () => undefined,
+      runId: options.runId,
     });
-    const end = await run.done;
     switch (end.reason) {
       case RUN_END_REASON.COMPLETED:
         return {
@@ -162,7 +240,5 @@ export async function runMemoryHousekeeping(
       writes,
       reason: error instanceof Error ? error.message : String(error),
     };
-  } finally {
-    await Promise.resolve(opened.context.dispose()).catch(() => undefined);
   }
 }
