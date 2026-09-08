@@ -115,7 +115,12 @@ export interface RuntimeStoreWiring {
    * on disk to archive, so forgetting its lines is the whole erasure and
    * answers as published.
    */
-  eraseHistory: (sessionKey: SessionKey, now: number) => Promise<HistoryErasure | undefined>;
+  eraseHistory: (
+    sessionKey: SessionKey,
+    now: number,
+    keepSessionId: string | undefined,
+    cutoffBefore: number | undefined,
+  ) => Promise<HistoryErasure | undefined>;
   restoreArchive: (archiveId: string) => Promise<RestoreOutcome>;
   /** One maintenance pass, with the conversations that must be kept whatever their age. */
   runMaintenance: (preserve: readonly SessionKey[]) => Promise<MaintenanceReport | undefined>;
@@ -137,13 +142,17 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
   let stored: readonly ConversationRecord[] = [];
   let archives: readonly HistoryArchiveRecord[] = [];
 
-  const memoryThread = (sessionKey: SessionKey) =>
-    new ConversationThread<WebContents>({
-      store: new MemoryHistoryStore(),
+  const memoryStores = new Map<SessionKey, MemoryHistoryStore>();
+  const memoryThread = (sessionKey: SessionKey) => {
+    const store = new MemoryHistoryStore();
+    memoryStores.set(sessionKey, store);
+    return new ConversationThread<WebContents>({
+      store,
       now: dependencies.now,
       onChanged: (entries, except) => dependencies.onHistoryChanged(sessionKey, entries, except),
       report: dependencies.report,
     });
+  };
 
   const thread = (sessionKey: SessionKey = MAIN_SESSION_KEY): ConversationThread<WebContents> => {
     let held = threads.get(sessionKey);
@@ -313,13 +322,9 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
       return created;
     },
     archive: async (sessionKey) => {
-      if (temporary.has(sessionKey)) {
-        temporary.delete(sessionKey);
-        threads.delete(sessionKey);
-        announce();
-        return true;
-      }
-      if (!dependencies.persistent) return false;
+      // Archiving preserves history, and a temporary thread has nowhere to
+      // preserve it: the ask is refused and the thread left exactly as it was.
+      if (temporary.has(sessionKey) || !dependencies.persistent) return false;
       const archived = await client().archiveConversation(
         sessionKey,
         dependencies.now(),
@@ -329,19 +334,22 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
       return archived;
     },
     unarchive: async (sessionKey) => {
-      if (!dependencies.persistent) return false;
+      if (temporary.has(sessionKey) || !dependencies.persistent) return false;
       const restored = await client().unarchiveConversation(sessionKey);
       if (restored) await restoreThread(sessionKey);
       await refreshDirectory();
       return restored;
     },
-    eraseHistory: async (sessionKey, now) => {
+    eraseHistory: async (sessionKey, now, keepSessionId, cutoffBefore) => {
       if (temporary.has(sessionKey) || !dependencies.persistent) {
-        threads.set(sessionKey, memoryThread(sessionKey));
+        memoryStores.get(sessionKey)?.eraseAtOrBefore(now);
         return { published: true };
       }
       try {
-        return await client().deleteConversationHistory(sessionKey, now);
+        return await client().deleteConversationHistory(sessionKey, now, {
+          keepSessionId,
+          cutoffBefore: { value: cutoffBefore },
+        });
       } catch (error) {
         dependencies.report(
           `Could not delete the conversation's history: ${error instanceof Error ? error.message : String(error)}`,

@@ -158,9 +158,6 @@ export function brainReplyWords(snapshot: BrainRequestSnapshot): string | undefi
           ? `${account}, but I ran out of room before finishing the reply.`
           : "I ran out of room before finishing that. Ask me again, perhaps in smaller pieces.";
       }
-      if (snapshot.failure === BRAIN_REQUEST_FAILURE.COMPACTION) {
-        return "My notes for this conversation have grown too long to send, and I couldn't fold them just now. Nothing was lost; ask again in a moment.";
-      }
       return acted
         ? `${account}, but I couldn't put the reply into words.`
         : "I couldn't work that one out. Ask me again in a moment.";

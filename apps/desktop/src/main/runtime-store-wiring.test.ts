@@ -28,6 +28,7 @@ function wiring(root: string) {
   const changed: { sessionKey: SessionKey; entries: readonly ConversationEntry[] }[] = [];
   const directories: ConversationDirectorySnapshot[] = [];
   let ids = 0;
+  let clock = NOW;
   const channel = new MessageChannel();
   const wired = wireRuntimeStore({
     persistent: true,
@@ -39,7 +40,7 @@ function wiring(root: string) {
     },
     agentRoot: () => root,
     ensureDirectory: (directory) => fs.mkdirSync(directory, { recursive: true }),
-    now: () => NOW,
+    now: () => clock,
     createEventId: () => `id-${++ids}`,
     onHistoryChanged: (sessionKey, entries) => {
       changed.push({ sessionKey, entries });
@@ -54,7 +55,16 @@ function wiring(root: string) {
     channel.port1.close();
     channel.port2.close();
   };
-  return { wired, changed, directories, close };
+  return {
+    wired,
+    changed,
+    directories,
+    close,
+    tick: () => {
+      clock += 1;
+      return clock;
+    },
+  };
 }
 
 test("a temporary thread keeps its lines in memory alone and is gone at the next launch; a durable thread and its lines survive", async () => {
@@ -79,12 +89,33 @@ test("a temporary thread keeps its lines in memory alone and is gone at the next
   );
   assert.equal(first.wired.thread(temporary.sessionKey).entries().length, 1);
   // Erasing a temporary thread's history is the same act as a durable one's
-  // to the deletion flow: it answers as published, having nothing to publish.
+  // to the deletion flow: bounded by the instant, answering as published,
+  // having nothing to publish. A line recorded after the press stays.
   const other = await first.wired.createThread(true);
   assert.equal(await first.wired.recordConversationEntry(line, NOW, other.sessionKey), true);
-  assert.deepEqual(await first.wired.eraseHistory(other.sessionKey, NOW), { published: true });
-  assert.deepEqual(first.wired.thread(other.sessionKey).entries(), []);
-  assert.equal(await first.wired.archive(other.sessionKey), true);
+  first.wired.thread(other.sessionKey).fence(NOW);
+  // The press was at NOW; a line the voice lands a beat later is the conversation's next line.
+  const after = first.tick();
+  assert.equal(
+    await first.wired.recordConversationEntry({ ...line, words: "after" }, after, other.sessionKey),
+    true,
+  );
+  assert.deepEqual(await first.wired.eraseHistory(other.sessionKey, NOW, undefined), {
+    published: true,
+  });
+  assert.deepEqual(
+    first.wired
+      .thread(other.sessionKey)
+      .entries()
+      .map((entry) => entry.words),
+    ["after"],
+  );
+  // Archiving preserves history, and a temporary thread has nowhere to keep
+  // it: the ask is refused and the thread stands untouched, unarchived.
+  assert.equal(await first.wired.archive(other.sessionKey), false);
+  assert.equal(await first.wired.unarchive(other.sessionKey), false);
+  assert.equal(first.wired.holds(other.sessionKey), true);
+  assert.equal(first.wired.thread(other.sessionKey).entries().length, 1);
   // A temporary thread's envelope is answered from memory: nothing of it reaches the database.
   const memory = first.wired.brainStateRepository(temporary.sessionKey);
   assert.deepEqual(await memory.load(), {});
@@ -95,7 +126,7 @@ test("a temporary thread keeps its lines in memory alone and is gone at the next
       .directory()
       .entries.map((entry) => entry.sessionKey)
       .toSorted(),
-    [MAIN_SESSION_KEY, durable.sessionKey, temporary.sessionKey].toSorted(),
+    [MAIN_SESSION_KEY, durable.sessionKey, temporary.sessionKey, other.sessionKey].toSorted(),
   );
   // A key the directory does not list takes no line.
   assert.equal(

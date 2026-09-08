@@ -42,9 +42,10 @@ export interface ConversationOperationsDependencies {
     | "eraseHistory"
     | "restoreArchive"
   >;
-  brain: Pick<BrainWiring, "openConversation" | "closeConversation" | "resetConversation">;
-  /** Tells the voice window main's history is gone, so it retires its turns and empties its copy of the thread. */
-  retireVoiceTurns: () => void;
+  brain: Pick<
+    BrainWiring,
+    "openConversation" | "closeConversation" | "resetConversation" | "store"
+  >;
   now: () => number;
   report: (message: string) => void;
 }
@@ -65,26 +66,32 @@ export function conversationOperations(
     startFresh: (sessionKey) => brain.resetConversation(sessionKey),
     archive: async (sessionKey) => {
       if (sessionKey === MAIN_SESSION_KEY) return false;
-      await brain.closeConversation(sessionKey);
-      return store.archive(sessionKey);
+      // The store decides first: a thread it refuses to archive keeps its
+      // brain, so an active record never stands with nothing to answer it.
+      const archived = await store.archive(sessionKey);
+      if (archived) await brain.closeConversation(sessionKey);
+      return archived;
     },
     unarchive: async (sessionKey) => {
       const restored = await store.unarchive(sessionKey);
       if (restored) await brain.openConversation(sessionKey);
       return restored;
     },
-    deleteHistory: (sessionKey) =>
-      deleteConversationHistoryFlow({
+    deleteHistory: (sessionKey) => {
+      const generations = brain.store(sessionKey);
+      return deleteConversationHistoryFlow({
         now: dependencies.now,
-        fence: (deletedAt) => {
-          store.thread(sessionKey).fence(deletedAt);
-          if (sessionKey === MAIN_SESSION_KEY) dependencies.retireVoiceTurns();
-        },
-        retireBrain: () => brain.closeConversation(sessionKey),
-        erase: (deletedAt) => store.eraseHistory(sessionKey, deletedAt),
-        rebuildBrain: () => brain.openConversation(sessionKey),
+        // The voice window is told of main's Clear by the voice IPC that
+        // carried the press, in its own synchronous prefix; nothing here
+        // sends that command a second time.
+        fence: (deletedAt) => store.thread(sessionKey).fence(deletedAt),
+        fenceBrain: (deletedAt) => generations.clear(deletedAt),
+        // The successor the fence began stands; the deletion takes every
+        // lifetime before it and nothing recorded after the press.
+        erase: (deletedAt) => store.eraseHistory(sessionKey, deletedAt, generations.generationId()),
         report: dependencies.report,
-      }),
+      });
+    },
     restoreArchive: (archiveId) => store.restoreArchive(archiveId),
   };
 }

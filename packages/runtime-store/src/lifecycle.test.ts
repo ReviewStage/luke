@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { BrainStateStore, freshBrainState } from "@sidecar/brain";
+import { BrainStateStore, freshBrainState, userMessageItem } from "@sidecar/brain";
 import { CONVERSATION_ENTRY_KIND } from "@sidecar/realtime";
 import {
   ARCHIVE_REASON,
@@ -421,6 +421,58 @@ test("a directory sync that fails is a publication that failed: the rows are gon
     restoreArchive(database, root, "archive-4", DEFAULT_AGENT_ID, NOW + 1).outcome,
     RESTORE_OUTCOME.RESTORED,
   );
+  database.close();
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("a deletion takes what stood at or before its instant and every lifetime but the one named, so a line and a lifetime begun after the press survive it", () => {
+  const root = agentRoot();
+  const database = openAt(root);
+  const repo = repository(database);
+  assert.equal(
+    repo.save({ ...freshBrainState("gen-old", NOW - 10), items: [userMessageItem(SECRET)] }),
+    true,
+  );
+  appendHistory(
+    database,
+    MAIN_SESSION_KEY,
+    [line("before", NOW - 5, { eventId: "h-before" })],
+    NOW - 5,
+  );
+  // The fence at NOW: the successor lifetime carrying the marker replaces the old one...
+  assert.equal(
+    repo.save({
+      ...freshBrainState("gen-new", NOW),
+      reset: { clearedAt: NOW, generationId: "gen-old" },
+    }),
+    true,
+  );
+  // ...and a line lands a beat after the press, while the deletion waits.
+  appendHistory(
+    database,
+    MAIN_SESSION_KEY,
+    [line("after", NOW + 1, { eventId: "h-after" })],
+    NOW + 1,
+  );
+  const deleted = deleteConversationHistory(database, root, MAIN_SESSION_KEY, NOW, {
+    archiveId: "archive-5",
+    keepSessionId: "gen-new",
+  });
+  assert.ok(deleted);
+  assert.equal(deleted.archive.historyLines, 1);
+  assert.deepEqual(
+    listHistory(database, MAIN_SESSION_KEY, NOW + 1).map((entry) => entry.words),
+    ["after"],
+  );
+  assert.equal(loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.generationId, "gen-new");
+  assert.equal(historyClearedAt(database, MAIN_SESSION_KEY), NOW);
+  // Unnamed, every lifetime goes: the maintenance removal of a conversation nobody is in.
+  assert.ok(
+    deleteConversationHistory(database, root, MAIN_SESSION_KEY, NOW + 2, {
+      archiveId: "archive-6",
+    }),
+  );
+  assert.deepEqual(loadBrainEnvelope(database, MAIN_SESSION_KEY), {});
   database.close();
   fs.rmSync(root, { recursive: true, force: true });
 });

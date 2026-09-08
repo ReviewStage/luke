@@ -49,6 +49,11 @@ export class MemoryHistoryStore implements ConversationThreadStore {
     this.#entries = thread;
     return Promise.resolve({ changed, entries: thread });
   }
+
+  /** The deletion's erasure, bounded like the store's: lines recorded at or before the instant go, later ones stay. */
+  eraseAtOrBefore(instant: number): void {
+    this.#entries = this.#entries.filter((entry) => (entry.recordedAt ?? 0) > instant);
+  }
 }
 
 export interface ConversationThreadOptions<Reporter> {
@@ -130,6 +135,11 @@ export class ConversationThread<Reporter = never> {
    * the thread with what it held before. Everything the store does about the
    * Clear happens after this returns.
    */
+  /** The cutoff the thread stands behind, for a deletion to record what stood before its own fence. */
+  clearedAt(): number | undefined {
+    return this.#clearedAt;
+  }
+
   fence(clearedAt: number): void {
     this.#epoch += 1;
     this.#clearedAt = clearedAt;
