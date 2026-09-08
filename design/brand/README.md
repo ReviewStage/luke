@@ -16,11 +16,10 @@ with `rsvg-convert`):
 
 ```sh
 cd design/brand
-for m in light dark; do
-  for s in 16 32 64 128 256 512 1024; do
-    rsvg-convert -w $s -h $s icon/luke-icon-$m.svg -o icon/luke-icon-$m-$s.png
-  done
+for s in 16 32 64 128 256 512 1024; do
+  rsvg-convert -w $s -h $s icon/luke-icon-dark.svg -o icon/luke-icon-dark-$s.png
 done
+rsvg-convert -w 512 -h 512 icon/luke-icon-light.svg -o icon/luke-icon-light-512.png
 for m in light dark; do
   rsvg-convert -w 1024 -h 1024 mark/luke-mark-square-$m.svg -o mark/luke-mark-square-$m-1024.png
   rsvg-convert -w 1024 -h 1024 mark/luke-mark-square-transparent-$m.svg -o mark/luke-mark-square-transparent-$m-1024.png
@@ -77,7 +76,7 @@ Dock image between the two.
 ## Sizing
 
 Asset viewBoxes are computed from the artwork's bounding box, not the drawing canvas:
-static marks and wordmarks are trimmed tight (+6 units padding), and the app-icon glyph
+static wordmarks are trimmed tight (+6 units padding), and the app-icon glyph
 spans ~58% of the tile width (typical macOS glyph-in-tile proportion). Only the animated
 `motion/` marks keep the full 240×240 canvas, because they need headroom to move.
 
@@ -85,14 +84,11 @@ spans ~58% of the tile width (typical macOS glyph-in-tile proportion). Only the 
 
 | File | Use |
 |---|---|
-| `luke-mark-{light,dark}.svg` | The static face mark, tight-cropped on a transparent background |
 | `luke-wordmark-{light,dark}.svg` | Face-first caps LUKE wordmark |
-| `luke-wordmark-talking-{light,dark}.svg` | Animated hero: the face talks mid-word |
-| `luke-wordmark-signature-{light,dark}.svg` | Animated hero: the word signs itself on — the face's stroke draws first, the eyes blink open, then U·K·E are written stroke by stroke the way a hand would write them |
-| `icon/luke-icon-{light,dark}.svg` + `luke-icon-{light,dark}-{16…1024}.png` | App icon (squircle tile), per mode |
+| `icon/luke-icon-{light,dark}.svg` + `luke-icon-dark-{16…1024}.png` + `luke-icon-light-512.png` | App icon (squircle tile), per mode. The dark set is cut at every size because the `.icns` is cut from it; the light mode needs the one size the running app swaps into the Dock |
 | `icon/luke-icon-ios-{light,dark,tinted}.svg` | The iPhone app icon, per iOS appearance, full-bleed: iOS masks every icon to its own rounded rectangle, so a tile with baked corners and margin would draw a second border inside the system's. The tinted appearance is grayscale — white on true black — because iOS maps its luminance onto the user's accent color. The 1024 PNGs are cut outside this directory, into `apps/ios/Luke/Assets.xcassets/AppIcon.appiconset/`, where Xcode reads them. The dark cut is also the Apple Watch app's one icon, cut to `apps/ios/LukeWatch/Assets.xcassets/AppIcon.appiconset/AppIcon.png`: watchOS masks every icon to a circle and takes a single appearance, and space black is the tile that reads on the watch's black home screen, the same call the packaged `.icns` makes |
 | `dmg/luke-dmg-background.svg` + `luke-dmg-background{,@2x}.png` | Neutral installer background with a branded drag-and-drop arrow |
-| `mark/luke-mark-square{,-transparent}-{light,dark}.svg` + `-1024.png` | The face at the static mark's tight fill on a square canvas, per mode: over the icon's gradient with square corners (the avatar shape for surfaces that round their own tiles, GitHub among them), and the same crop with no tile. A transparent avatar shows GitHub's badge background color instead, so pair the dark set with `#1c1c1e`, the space-black end of the dark icon tile, which reads on either GitHub theme |
+| `mark/luke-mark-square{,-transparent}-{light,dark}.svg` + `-1024.png` | The face at its own tight crop on a square canvas, per mode: over the icon's gradient with square corners (the avatar shape for surfaces that round their own tiles, GitHub among them), and the same crop with no tile. A transparent avatar shows GitHub's badge background color instead, so pair the dark set with `#1c1c1e`, the space-black end of the dark icon tile, which reads on either GitHub theme |
 | `mark/luke-mark-square-black.svg` + `-1024.png` | The dark mark once more over flat pure black (`#000000`) instead of the tile's gradient, for surfaces that want the mark on true black |
 | `logo/luke-logo-{light,dark}.svg` + `-{256,512}.png` | The wordmark lockup as a shareable logo set, per mode: transparent background, no tile and no rounded corners. The PNGs are cut at 256 and 512 wide, because a lockup goes into headers and docs, not a 1024 avatar tile |
 | `social/luke-og-card.svg` | The 1200×630 link-preview card the web pages' `og:image` points at: the wordmark on the landing page's dark ground. One card, dark only: a link preview follows no UI theme. Its PNG is the one derivative cut outside this directory, into `apps/web/public/luke-og-card.png`, because Vite serves `public/` at the site root and scrapers fetch the card from `https://tryluke.dev/luke-og-card.png` |
