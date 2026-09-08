@@ -81,6 +81,10 @@ export function throttled(until: number) {
   return { outcome: MODEL_RESPONSE_OUTCOME.THROTTLED, until } as const;
 }
 
+export type Failure = ReturnType<typeof failed>;
+/** An end already normalized for the host: a failure by kind, or a throttle with the moment to resume. */
+export type Normalized = Failure | ReturnType<typeof throttled>;
+
 /** A network fault or a timeout, named by the error's kind alone, never its words, which could carry a key. */
 export function requestFault(error: Error | undefined) {
   return failed(

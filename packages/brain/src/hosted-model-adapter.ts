@@ -2,14 +2,10 @@ import {
   brainOutputReplayable,
   HOSTED_API_ERROR,
   HOSTED_BRAIN_CONTRACT_VERSION,
-  HOSTED_BRAIN_OPERATION,
   HOSTED_BRAIN_REQUEST_REFUSAL,
   HOSTED_SERVICE_PATH,
   type HostedBrainCapabilities,
-  type HostedBrainCompactRequest,
-  type HostedBrainCountTokensRequest,
-  type HostedBrainOperation,
-  type HostedBrainRespondRequest,
+  type HostedBrainRequestRead,
   hostedBrainCapabilitiesFromWire,
   hostedBrainCompactRequestFromWire,
   hostedBrainCountTokensAnswerFromWire,
@@ -22,8 +18,6 @@ import {
 import {
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
-  type ModelAdapter,
-  type ModelCapabilitiesAnswer,
   type ModelCompaction,
   type ModelRequestOptions,
   type ModelResponse,
@@ -39,22 +33,27 @@ import {
 } from "@sidecar/wire";
 import {
   BRAIN_REQUEST_TIMEOUT_MS,
+  type Failure,
   type FetchLike,
   failed,
   HTTP_STATUS,
+  type Normalized,
   payloadOf,
   RETRY_AFTER_HEADER,
   rateLimitWaitMs,
   requestSignal,
-  throttled,
   withoutTrailingSlash,
 } from "./model-adapter-shared.js";
+import { responsesCompactedWindow, responsesModelAnswer } from "./responses-api.js";
 import {
-  RESPONSES_ITEM_FORMAT,
-  responsesCompactedWindow,
-  responsesModelAnswer,
-} from "./responses-api.js";
-import { TOOL_LOOP_RUNTIME } from "./runtime.js";
+  type Admission,
+  type PreparedOperation,
+  type Quiet,
+  RESPONSES_OPERATION,
+  ResponsesModelAdapter,
+  type ResponsesOperation,
+  type ResponsesTransport,
+} from "./responses-model-adapter.js";
 
 export const HOSTED_MODEL_ADAPTER_ID = "hosted-responses";
 
@@ -69,29 +68,35 @@ export interface HostedModelAdapterOptions {
   report?: (message: string) => void;
 }
 
-type Normalized = ReturnType<typeof failed> | ReturnType<typeof throttled>;
+const HOSTED_PATH = {
+  [RESPONSES_OPERATION.RESPOND]: HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2,
+  [RESPONSES_OPERATION.COUNT_TOKENS]: HOSTED_SERVICE_PATH.BRAIN_COUNT_TOKENS,
+  [RESPONSES_OPERATION.COMPACT]: HOSTED_SERVICE_PATH.BRAIN_COMPACT,
+} as const satisfies Record<ResponsesOperation, string>;
+
+const HTTP_METHOD = {
+  GET: "GET",
+  POST: "POST",
+} as const;
+
+type HttpMethod = (typeof HTTP_METHOD)[keyof typeof HTTP_METHOD];
 
 /**
- * Carries inferences through Luke's hosted service on the signed-in account,
- * for a developer with no OpenAI key of their own, speaking the second
- * hosted brain contract and nothing older. Before the first call it reads
- * the service's capabilities — the model, the operations, the registered
- * tool names, the bounds — and every request is admitted against them here
- * exactly as the service admits it there, so a service that lacks the
- * contract, an operation, or a tool is an explicit compatibility failure
- * rather than a fall back to the shape an installed client still speaks.
- * A spent allowance stands the adapter down until the day's counters reset
- * rather than spending refusals on it.
+ * Luke's hosted service on the signed-in account, speaking the second hosted
+ * brain contract and nothing older. It reads the service's capabilities once
+ * and admits every request against them here exactly as the service admits
+ * it there, so a service that lacks the contract, an operation, or a tool is
+ * an explicit compatibility failure rather than a fall back to the shape an
+ * installed client still speaks.
  */
-export class HostedModelAdapter implements ModelAdapter {
+class HostedTransport implements ResponsesTransport<HostedBrainCapabilities> {
+  readonly adapter = HOSTED_MODEL_ADAPTER_ID;
   readonly #baseUrl: string;
   readonly #readAccessToken: () => Promise<string | undefined>;
   readonly #refreshAccount: () => Promise<void>;
   readonly #fetch: FetchLike;
   readonly #now: () => number;
   readonly #requestTimeoutMs: number;
-  readonly #report: (message: string) => void;
-  #quietUntil = 0;
   #capabilities: HostedBrainCapabilities | undefined;
 
   constructor(options: HostedModelAdapterOptions) {
@@ -103,174 +108,172 @@ export class HostedModelAdapter implements ModelAdapter {
     this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
     this.#now = options.now ?? Date.now;
     this.#requestTimeoutMs = positiveInteger(options.requestTimeoutMs, BRAIN_REQUEST_TIMEOUT_MS);
-    this.#report = options.report ?? ((message) => process.stderr.write(`${message}\n`));
   }
 
   /** The service's model, once capabilities have been read; the service's to know until then. */
-  get model(): string | undefined {
+  model(): string | undefined {
     return this.#capabilities?.model;
   }
 
-  quietUntil(): number | undefined {
-    return this.#quietUntil > this.#now() ? this.#quietUntil : undefined;
+  async admit(operation?: ResponsesOperation): Promise<Admission<HostedBrainCapabilities>> {
+    const capabilities = this.#capabilities ?? (await this.#discover());
+    if ("outcome" in capabilities) return capabilities;
+    if (operation && !capabilities.operations.includes(operation)) {
+      return failed(
+        MODEL_FAILURE.COMPATIBILITY,
+        `the hosted service does not offer the ${operation} operation`,
+      );
+    }
+    return { admitted: capabilities };
   }
 
-  async capabilities(): Promise<ModelCapabilitiesAnswer> {
-    const read = await this.#discover();
-    if (!("contract" in read)) return read;
+  capabilitiesOf(capabilities: HostedBrainCapabilities) {
     return {
-      outcome: MODEL_RESPONSE_OUTCOME.ANSWERED,
-      capabilities: {
-        adapter: HOSTED_MODEL_ADAPTER_ID,
-        model: read.model,
-        checkpoint: {
-          runtime: TOOL_LOOP_RUNTIME.ID,
-          runtimeVersion: TOOL_LOOP_RUNTIME.VERSION,
-          format: RESPONSES_ITEM_FORMAT.FORMAT,
-          formatVersion: RESPONSES_ITEM_FORMAT.VERSION,
-        },
-        countsInputTokens: read.operations.includes(HOSTED_BRAIN_OPERATION.COUNT_TOKENS),
-        compacts: read.operations.includes(HOSTED_BRAIN_OPERATION.COMPACT),
-        maximumOutputTokens: read.bounds.maximumOutputTokens,
-        tools: read.tools,
-      },
+      model: capabilities.model,
+      countsInputTokens: capabilities.operations.includes(RESPONSES_OPERATION.COUNT_TOKENS),
+      compacts: capabilities.operations.includes(RESPONSES_OPERATION.COMPACT),
+      maximumOutputTokens: capabilities.bounds.maximumOutputTokens,
+      tools: capabilities.tools,
     };
   }
 
-  async respond(
+  respond(
+    capabilities: HostedBrainCapabilities,
     items: readonly WireRecord[],
     options: ModelRequestOptions,
-  ): Promise<ModelResponse> {
-    const quietUntil = this.quietUntil();
-    if (quietUntil !== undefined) return throttled(quietUntil);
-    const capabilities = await this.#discover();
-    if (!("contract" in capabilities)) return capabilities;
-    if (!capabilities.operations.includes(HOSTED_BRAIN_OPERATION.RESPOND)) {
-      return unsupported(HOSTED_BRAIN_OPERATION.RESPOND);
-    }
-    const catalog = new Set(capabilities.tools);
-    const read = hostedBrainRespondRequestFromWire(
-      {
-        contract: HOSTED_BRAIN_CONTRACT_VERSION,
-        prompt: options.prompt,
-        tools: options.tools.map((tool) => tool.name),
-        options: {
-          maximumOutputTokens: options.maximumOutputTokens,
-          ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : undefined),
+  ): PreparedOperation<ModelResponse> | Normalized {
+    return prepared(
+      hostedBrainRespondRequestFromWire(
+        {
+          contract: HOSTED_BRAIN_CONTRACT_VERSION,
+          prompt: options.prompt,
+          tools: options.tools.map((tool) => tool.name),
+          options: {
+            maximumOutputTokens: options.maximumOutputTokens,
+            ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : undefined),
+          },
+          input: items,
         },
-        input: items,
-      },
-      catalog,
-    );
-    if (!read.ok) return refusedLocally(read.refusal);
-    const answer = await this.#send(
-      HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2,
-      read.request,
-      options.signal,
-    );
-    if (!("payload" in answer)) return answer;
-    // An answer is refused whole before the host acts on any call in it or
-    // keeps any item of it, when it carries an item this path could not send
-    // back next turn: kept, it would poison every later hosted turn of the
-    // generation, and the service has already refused to answer such a thing.
-    if (!brainOutputReplayable(answer.payload)) {
-      return failed(
-        MODEL_FAILURE.MALFORMED,
-        "response carried an item the hosted service cannot replay",
-      );
-    }
-    return (
-      responsesModelAnswer(answer.payload) ??
-      failed(MODEL_FAILURE.MALFORMED, "response carried no output")
+        new Set(capabilities.tools),
+      ),
+      (payload) =>
+        replayable(payload, "response") ??
+        responsesModelAnswer(payload) ??
+        failed(MODEL_FAILURE.MALFORMED, "response carried no output"),
     );
   }
 
-  async countInputTokens(
+  countInputTokens(
+    capabilities: HostedBrainCapabilities,
     items: readonly WireRecord[],
-    options: Pick<ModelRequestOptions, "prompt" | "tools" | "signal">,
-  ): Promise<ModelTokenCount> {
-    const quietUntil = this.quietUntil();
-    if (quietUntil !== undefined) return throttled(quietUntil);
-    const capabilities = await this.#discover();
-    if (!("contract" in capabilities)) return capabilities;
-    if (!capabilities.operations.includes(HOSTED_BRAIN_OPERATION.COUNT_TOKENS)) {
-      return unsupported(HOSTED_BRAIN_OPERATION.COUNT_TOKENS);
-    }
-    const read = hostedBrainCountTokensRequestFromWire(
-      {
+    options: Pick<ModelRequestOptions, "prompt" | "tools">,
+  ): PreparedOperation<ModelTokenCount> | Normalized {
+    return prepared(
+      hostedBrainCountTokensRequestFromWire(
+        {
+          contract: HOSTED_BRAIN_CONTRACT_VERSION,
+          prompt: options.prompt,
+          tools: options.tools.map((tool) => tool.name),
+          input: items,
+        },
+        new Set(capabilities.tools),
+      ),
+      (payload) => {
+        const count = hostedBrainCountTokensAnswerFromWire(payload);
+        return count
+          ? { outcome: MODEL_RESPONSE_OUTCOME.ANSWERED, inputTokens: count.inputTokens }
+          : failed(MODEL_FAILURE.MALFORMED, "count carried no inputTokens");
+      },
+    );
+  }
+
+  compact(
+    _: HostedBrainCapabilities,
+    items: readonly WireRecord[],
+    options: Pick<ModelRequestOptions, "prompt">,
+  ): PreparedOperation<ModelCompaction> | Normalized {
+    return prepared(
+      hostedBrainCompactRequestFromWire({
         contract: HOSTED_BRAIN_CONTRACT_VERSION,
         prompt: options.prompt,
-        tools: options.tools.map((tool) => tool.name),
         input: items,
+      }),
+      (payload) => {
+        const window = responsesCompactedWindow(payload);
+        return (
+          replayable(payload, "compaction") ??
+          (window
+            ? { outcome: MODEL_RESPONSE_OUTCOME.ANSWERED, items: window }
+            : failed(MODEL_FAILURE.MALFORMED, "compaction carried no output"))
+        );
       },
-      new Set(capabilities.tools),
     );
-    if (!read.ok) return refusedLocally(read.refusal);
-    const answer = await this.#send(
-      HOSTED_SERVICE_PATH.BRAIN_COUNT_TOKENS,
-      read.request,
-      options.signal,
-    );
-    if (!("payload" in answer)) return answer;
-    const count = hostedBrainCountTokensAnswerFromWire(answer.payload);
-    return count
-      ? { outcome: MODEL_RESPONSE_OUTCOME.ANSWERED, inputTokens: count.inputTokens }
-      : failed(MODEL_FAILURE.MALFORMED, "count carried no inputTokens");
   }
 
-  async compact(
-    items: readonly WireRecord[],
-    options: Pick<ModelRequestOptions, "prompt" | "signal">,
-  ): Promise<ModelCompaction> {
-    const quietUntil = this.quietUntil();
-    if (quietUntil !== undefined) return throttled(quietUntil);
-    const capabilities = await this.#discover();
-    if (!("contract" in capabilities)) return capabilities;
-    if (!capabilities.operations.includes(HOSTED_BRAIN_OPERATION.COMPACT)) {
-      return unsupported(HOSTED_BRAIN_OPERATION.COMPACT);
-    }
-    const read = hostedBrainCompactRequestFromWire({
-      contract: HOSTED_BRAIN_CONTRACT_VERSION,
-      prompt: options.prompt,
-      input: items,
-    });
-    if (!read.ok) return refusedLocally(read.refusal);
-    const answer = await this.#send(
-      HOSTED_SERVICE_PATH.BRAIN_COMPACT,
-      read.request,
-      options.signal,
+  async request(
+    operation: ResponsesOperation,
+    body: string,
+    signal: AbortSignal | undefined,
+  ): Promise<Response | Normalized> {
+    const response = await this.#authorized((token) =>
+      this.#send(HOSTED_PATH[operation], HTTP_METHOD.POST, token, body, signal),
     );
-    if (!("payload" in answer)) return answer;
-    if (!brainOutputReplayable(answer.payload)) {
+    if (!response) return failed(MODEL_FAILURE.NETWORK, "request did not complete");
+    return response;
+  }
+
+  /**
+   * Two quiets wear the same status. A spent allowance names the day's reset
+   * in its quota and stands the adapter down until then; the provider rate
+   * limiting behind the service names a bounded wait in `Retry-After`, or
+   * earns the same fixed cooldown the keyed adapter takes, so a hosted
+   * developer and a keyed one wait the same way for the same limit.
+   */
+  async quiet(response: Response): Promise<Quiet> {
+    const record = wireRecord(unparsedWire(await payloadOf(response)));
+    const quota =
+      record?.error === HOSTED_API_ERROR.QUOTA_EXHAUSTED
+        ? hostedQuotaFromWire(unparsedWire(record.quota))
+        : undefined;
+    const resetsAt = quota?.resetsAt;
+    if (resetsAt !== undefined && resetsAt > this.#now()) {
+      return {
+        until: resetsAt,
+        message: `Hosted brain turns are out of today's allowance; pausing for ${Math.round((resetsAt - this.#now()) / 1000)}s`,
+      };
+    }
+    const waitMs = rateLimitWaitMs(response.headers.get(RETRY_AFTER_HEADER));
+    return {
+      until: this.#now() + waitMs,
+      message: `Hosted brain turns are rate limited; pausing for ${Math.round(waitMs / 1000)}s`,
+    };
+  }
+
+  failureFor(response: Response, operation: ResponsesOperation): Failure {
+    if (response.status === HTTP_STATUS.UNAUTHORIZED) {
+      return failed(MODEL_FAILURE.CREDENTIAL, "the account token was refused");
+    }
+    if (notServed(response)) {
       return failed(
-        MODEL_FAILURE.MALFORMED,
-        "compaction carried an item the hosted service cannot replay",
+        MODEL_FAILURE.COMPATIBILITY,
+        `the hosted service does not serve ${HOSTED_PATH[operation]}`,
       );
     }
-    const window = responsesCompactedWindow(answer.payload);
-    return window
-      ? { outcome: MODEL_RESPONSE_OUTCOME.ANSWERED, items: window }
-      : failed(MODEL_FAILURE.MALFORMED, "compaction carried no output");
+    return failed(
+      MODEL_FAILURE.UPSTREAM,
+      `hosted brain call failed with status ${response.status}`,
+    );
   }
 
   /** Reads the capabilities once per adapter; a service that has none, or names another contract, is incompatible. */
-  async #discover(): Promise<HostedBrainCapabilities | ReturnType<typeof failed>> {
-    if (this.#capabilities) return this.#capabilities;
-    const token = await this.#readAccessToken();
-    if (!token) return failed(MODEL_FAILURE.CREDENTIAL, "no account token");
-    let response = await this.#request(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES, "GET", token);
-    if (response?.status === HTTP_STATUS.UNAUTHORIZED) {
-      response = await this.#retryRefreshed(
-        token,
-        (refreshed) => this.#request(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES, "GET", refreshed),
-        response,
-      );
+  async #discover(): Promise<HostedBrainCapabilities | Failure> {
+    const response = await this.#authorized((token) =>
+      this.#send(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES, HTTP_METHOD.GET, token),
+    );
+    if (!(response instanceof Response)) {
+      return response ?? failed(MODEL_FAILURE.NETWORK, "capabilities request did not complete");
     }
-    if (!response) return failed(MODEL_FAILURE.NETWORK, "capabilities request did not complete");
-    if (
-      response.status === HTTP_STATUS.NOT_FOUND ||
-      response.status === HTTP_STATUS.METHOD_NOT_ALLOWED
-    ) {
+    if (notServed(response)) {
       return failed(
         MODEL_FAILURE.COMPATIBILITY,
         `the hosted service does not offer brain contract ${HOSTED_BRAIN_CONTRACT_VERSION}`,
@@ -293,63 +296,28 @@ export class HostedModelAdapter implements ModelAdapter {
     return capabilities;
   }
 
-  async #send(
-    path: string,
-    request: HostedBrainRespondRequest | HostedBrainCountTokensRequest | HostedBrainCompactRequest,
-    signal: AbortSignal | undefined,
-  ): Promise<{ payload: UnparsedWireValue } | Normalized> {
-    // The same admission the service runs, before the token is even read: an
-    // oversized request is an explicit bounded failure here rather than a
-    // truncation or a retry, so the host reports it and rolls the turn back.
-    const serialized = JSON.stringify(request);
-    if (serializedRequestBytes(serialized) > maximumHostedBrainRequestBytes) {
-      return failed(MODEL_FAILURE.BOUNDS, "request exceeds the hosted request size bound");
-    }
+  /**
+   * One call under the account's token, retried once on a refreshed token
+   * when the first is refused: the routine expiry of an hour-lived token
+   * inside a day-lived app, handled like the hosted mint handles it. No
+   * token at all is a credential failure before anything is sent.
+   */
+  async #authorized(
+    call: (token: string) => Promise<Response | undefined>,
+  ): Promise<Response | Failure | undefined> {
     const token = await this.#readAccessToken();
     if (!token) return failed(MODEL_FAILURE.CREDENTIAL, "no account token");
-    let response = await this.#request(path, "POST", token, serialized, signal);
-    if (response?.status === HTTP_STATUS.UNAUTHORIZED) {
-      response = await this.#retryRefreshed(
-        token,
-        (refreshed) => this.#request(path, "POST", refreshed, serialized, signal),
-        response,
-      );
-    }
-    if (!response) return failed(MODEL_FAILURE.NETWORK, "request did not complete");
-    if (response.status === HTTP_STATUS.TOO_MANY_REQUESTS) return this.#quiet(response);
-    if (response.status === HTTP_STATUS.UNAUTHORIZED) {
-      return failed(MODEL_FAILURE.CREDENTIAL, "the account token was refused");
-    }
-    if (
-      response.status === HTTP_STATUS.NOT_FOUND ||
-      response.status === HTTP_STATUS.METHOD_NOT_ALLOWED
-    ) {
-      return failed(MODEL_FAILURE.COMPATIBILITY, `the hosted service does not serve ${path}`);
-    }
-    if (!response.ok) {
-      return failed(
-        MODEL_FAILURE.UPSTREAM,
-        `hosted brain call failed with status ${response.status}`,
-      );
-    }
-    return { payload: await payloadOf(response) };
-  }
-
-  /** Routine expiry of an hour-lived token inside a day-lived app: refresh and retry once, like the hosted mint. */
-  async #retryRefreshed(
-    token: string,
-    retry: (refreshed: string) => Promise<Response | undefined>,
-    original: Response,
-  ): Promise<Response | undefined> {
+    const response = await call(token);
+    if (response?.status !== HTTP_STATUS.UNAUTHORIZED) return response;
     await this.#refreshAccount().catch(() => undefined);
     const refreshed = await this.#readAccessToken();
-    if (refreshed && refreshed !== token) return retry(refreshed);
-    return original;
+    if (refreshed && refreshed !== token) return call(refreshed);
+    return response;
   }
 
-  async #request(
+  async #send(
     path: string,
-    method: "GET" | "POST",
+    method: HttpMethod,
     token: string,
     body?: string,
     signal?: AbortSignal,
@@ -368,44 +336,45 @@ export class HostedModelAdapter implements ModelAdapter {
       return undefined;
     }
   }
-
-  /**
-   * Two quiets wear the same status. A spent allowance names the day's reset
-   * in its quota and stands the adapter down until then; the provider rate
-   * limiting behind the service names a bounded wait in `Retry-After`, or
-   * earns the same fixed cooldown the keyed adapter takes, so a hosted
-   * developer and a keyed one wait the same way for the same limit.
-   */
-  async #quiet(response: Response) {
-    const record = wireRecord(unparsedWire(await payloadOf(response)));
-    const quota =
-      record?.error === HOSTED_API_ERROR.QUOTA_EXHAUSTED
-        ? hostedQuotaFromWire(unparsedWire(record.quota))
-        : undefined;
-    const resetsAt = quota?.resetsAt;
-    if (resetsAt !== undefined && resetsAt > this.#now()) {
-      this.#quietUntil = resetsAt;
-      this.#report(
-        `Hosted brain turns are out of today's allowance; pausing for ${Math.round((resetsAt - this.#now()) / 1000)}s`,
-      );
-      return throttled(this.#quietUntil);
-    }
-    const waitMs = rateLimitWaitMs(response.headers.get(RETRY_AFTER_HEADER));
-    this.#quietUntil = this.#now() + waitMs;
-    this.#report(`Hosted brain turns are rate limited; pausing for ${Math.round(waitMs / 1000)}s`);
-    return throttled(this.#quietUntil);
-  }
 }
 
-function unsupported(operation: HostedBrainOperation) {
-  return failed(
-    MODEL_FAILURE.COMPATIBILITY,
-    `the hosted service does not offer the ${operation} operation`,
+/**
+ * An answer carrying an item this path could not send back next turn is
+ * refused whole before the host acts on any call in it or keeps any item of
+ * it: kept, it would poison every later hosted turn of the generation.
+ */
+function replayable(payload: UnparsedWireValue | undefined, answer: string): Failure | undefined {
+  return brainOutputReplayable(payload)
+    ? undefined
+    : failed(MODEL_FAILURE.MALFORMED, `${answer} carried an item the hosted service cannot replay`);
+}
+
+function notServed(response: Response): boolean {
+  return (
+    response.status === HTTP_STATUS.NOT_FOUND || response.status === HTTP_STATUS.METHOD_NOT_ALLOWED
   );
 }
 
+/**
+ * A request the contract's own reader admitted, serialized and held to the
+ * same byte bound the service enforces, before the token is even read: an
+ * oversized request is an explicit bounded failure here rather than a
+ * truncation or a retry, so the host reports it and rolls the turn back.
+ */
+function prepared<Request, Result>(
+  read: HostedBrainRequestRead<Request>,
+  readAnswer: (payload: UnparsedWireValue | undefined) => Result,
+): PreparedOperation<Result> | Normalized {
+  if (!read.ok) return refusedLocally(read.refusal);
+  const body = JSON.stringify(read.request);
+  if (serializedRequestBytes(body) > maximumHostedBrainRequestBytes) {
+    return failed(MODEL_FAILURE.BOUNDS, "request exceeds the hosted request size bound");
+  }
+  return { body, read: readAnswer };
+}
+
 /** A request this adapter itself would not send: worded as the service would refuse it. */
-function refusedLocally(refusal: string) {
+function refusedLocally(refusal: string): Failure {
   switch (refusal) {
     case HOSTED_BRAIN_REQUEST_REFUSAL.PROMPT_TOO_LARGE:
       return failed(MODEL_FAILURE.BOUNDS, "the prepared prompt exceeds the hosted prompt envelope");
@@ -421,5 +390,16 @@ function refusedLocally(refusal: string) {
         MODEL_FAILURE.BOUNDS,
         "input carries an item the hosted service does not replay",
       );
+  }
+}
+
+/**
+ * Carries inferences through Luke's hosted service on the signed-in account.
+ * A spent allowance stands the adapter down until the day's counters reset
+ * rather than spending refusals on it.
+ */
+export class HostedModelAdapter extends ResponsesModelAdapter<HostedBrainCapabilities> {
+  constructor(options: HostedModelAdapterOptions) {
+    super(new HostedTransport(options), options);
   }
 }

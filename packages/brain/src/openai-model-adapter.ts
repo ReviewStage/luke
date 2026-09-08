@@ -1,12 +1,7 @@
 import {
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
-  type ModelAdapter,
-  type ModelCapabilitiesAnswer,
-  type ModelCompaction,
   type ModelRequestOptions,
-  type ModelResponse,
-  type ModelTokenCount,
   REASONING_EFFORT,
   type ReasoningEffort,
 } from "@sidecar/runtime-contracts";
@@ -17,31 +12,33 @@ import {
   type FetchLike,
   failed,
   HTTP_STATUS,
-  payloadOf,
   RETRY_AFTER_HEADER,
   rateLimitWaitMs,
   requestFault,
   requestSignal,
-  throttled,
   withoutTrailingSlash,
 } from "./model-adapter-shared.js";
 import {
   BRAIN_RESPONSES_COMPACT_PATH,
   BRAIN_RESPONSES_INPUT_TOKENS_PATH,
   BRAIN_RESPONSES_PATH,
-  type BrainCompactRequest,
-  type BrainInputTokensRequest,
-  type BrainResponsesRequest,
   brainCompactRequest,
   brainInputTokensRequest,
   brainResponsesRequest,
-  RESPONSES_ITEM_FORMAT,
   responsesCompactedWindow,
   responsesInputTokens,
   responsesModelAnswer,
   responsesToolDefinition,
 } from "./responses-api.js";
-import { TOOL_LOOP_RUNTIME } from "./runtime.js";
+import {
+  type Admission,
+  type PreparedOperation,
+  type Quiet,
+  RESPONSES_OPERATION,
+  ResponsesModelAdapter,
+  type ResponsesOperation,
+  type ResponsesTransport,
+} from "./responses-model-adapter.js";
 
 /* The key is not read here: it is the stored credential the settings store
    resolves, which reads `OPENAI_API_KEY` as its own fallback. */
@@ -60,6 +57,12 @@ export const BRAIN_OPENAI_DEFAULTS = {
 
 export const OPENAI_MODEL_ADAPTER_ID = "openai-responses";
 
+const OPENAI_PATH = {
+  [RESPONSES_OPERATION.RESPOND]: BRAIN_RESPONSES_PATH,
+  [RESPONSES_OPERATION.COUNT_TOKENS]: BRAIN_RESPONSES_INPUT_TOKENS_PATH,
+  [RESPONSES_OPERATION.COMPACT]: BRAIN_RESPONSES_COMPACT_PATH,
+} as const satisfies Record<ResponsesOperation, string>;
+
 export interface OpenAiModelAdapterOptions {
   apiKey: string;
   model?: string;
@@ -73,29 +76,28 @@ export interface OpenAiModelAdapterOptions {
 
 export type OpenAiModelOptions = Omit<OpenAiModelAdapterOptions, "apiKey">;
 
+const ADMITTED: Admission<undefined> = { admitted: undefined };
+
 /**
- * Carries inferences to the OpenAI Responses API on the developer's own key.
- * It never asks the API to retain a request, and it answers normalized: the
- * items, text, and calls of an answer; a throttle with the moment to resume;
- * or a failure named by kind. Reading inside an item is the context engine's
- * job, and deciding what to do with a call is the host's.
+ * The OpenAI Responses API on the developer's own key. It never asks the API
+ * to retain a request, and nothing stands between the adapter and the
+ * provider: every operation is admitted, and the key alone authorizes it.
  */
-export class OpenAiModelAdapter implements ModelAdapter {
-  readonly model: string;
+class OpenAiTransport implements ResponsesTransport<undefined> {
+  readonly adapter = OPENAI_MODEL_ADAPTER_ID;
+  readonly #model: string;
   readonly #apiKey: string;
   readonly #baseUrl: string;
   readonly #reasoningEffort: ReasoningEffort;
   readonly #fetch: FetchLike;
   readonly #now: () => number;
   readonly #requestTimeoutMs: number;
-  readonly #report: (message: string) => void;
-  #quietUntil = 0;
 
   constructor(options: OpenAiModelAdapterOptions) {
     const apiKey = text(options.apiKey);
     if (!apiKey) throw new Error("OpenAI API key must not be empty");
     this.#apiKey = apiKey;
-    this.model = text(options.model) ?? BRAIN_OPENAI_DEFAULTS.MODEL;
+    this.#model = text(options.model) ?? BRAIN_OPENAI_DEFAULTS.MODEL;
     this.#baseUrl = withoutTrailingSlash(text(options.baseUrl) ?? BRAIN_OPENAI_DEFAULTS.BASE_URL);
     this.#reasoningEffort = options.reasoningEffort ?? BRAIN_OPENAI_DEFAULTS.REASONING_EFFORT;
     this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
@@ -104,132 +106,136 @@ export class OpenAiModelAdapter implements ModelAdapter {
       options.requestTimeoutMs,
       BRAIN_OPENAI_DEFAULTS.REQUEST_TIMEOUT_MS,
     );
-    this.#report = options.report ?? ((message) => process.stderr.write(`${message}\n`));
   }
 
-  capabilities(): Promise<ModelCapabilitiesAnswer> {
-    return Promise.resolve({
-      outcome: MODEL_RESPONSE_OUTCOME.ANSWERED,
-      capabilities: {
-        adapter: OPENAI_MODEL_ADAPTER_ID,
-        model: this.model,
-        checkpoint: {
-          runtime: TOOL_LOOP_RUNTIME.ID,
-          runtimeVersion: TOOL_LOOP_RUNTIME.VERSION,
-          format: RESPONSES_ITEM_FORMAT.FORMAT,
-          formatVersion: RESPONSES_ITEM_FORMAT.VERSION,
-        },
-        countsInputTokens: true,
-        compacts: true,
-        maximumOutputTokens: BRAIN_OPENAI_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
-      },
-    });
+  model(): string {
+    return this.#model;
   }
 
-  quietUntil(): number | undefined {
-    return this.#quietUntil > this.#now() ? this.#quietUntil : undefined;
+  admit(): Promise<Admission<undefined>> {
+    return Promise.resolve(ADMITTED);
   }
 
-  async respond(
-    items: readonly WireRecord[],
-    options: ModelRequestOptions,
-  ): Promise<ModelResponse> {
-    const quietUntil = this.quietUntil();
-    if (quietUntil !== undefined) return throttled(quietUntil);
-    const response = await this.#post(
-      BRAIN_RESPONSES_PATH,
+  capabilitiesOf() {
+    return {
+      model: this.#model,
+      countsInputTokens: true,
+      compacts: true,
+      maximumOutputTokens: BRAIN_OPENAI_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
+    };
+  }
+
+  respond(_: undefined, items: readonly WireRecord[], options: ModelRequestOptions) {
+    return prepared(
       brainResponsesRequest(items, {
-        model: this.model,
+        model: this.#model,
         instructions: options.prompt,
         tools: options.tools.map(responsesToolDefinition),
         maximumOutputTokens: options.maximumOutputTokens,
         reasoningEffort: options.reasoningEffort ?? this.#reasoningEffort,
       }),
-      options.signal,
+      (payload) =>
+        responsesModelAnswer(payload) ??
+        failed(MODEL_FAILURE.MALFORMED, "response carried no output"),
     );
-    if (!(response instanceof Response)) return response;
-    const answer = responsesModelAnswer(await payloadOf(response));
-    return answer ?? failed(MODEL_FAILURE.MALFORMED, "response carried no output");
   }
 
-  async countInputTokens(
+  countInputTokens(
+    _: undefined,
     items: readonly WireRecord[],
-    options: Pick<ModelRequestOptions, "prompt" | "tools" | "signal">,
-  ): Promise<ModelTokenCount> {
-    const quietUntil = this.quietUntil();
-    if (quietUntil !== undefined) return throttled(quietUntil);
-    const response = await this.#post(
-      BRAIN_RESPONSES_INPUT_TOKENS_PATH,
+    options: Pick<ModelRequestOptions, "prompt" | "tools">,
+  ) {
+    return prepared(
       brainInputTokensRequest(items, {
-        model: this.model,
+        model: this.#model,
         instructions: options.prompt,
         tools: options.tools.map(responsesToolDefinition),
       }),
-      options.signal,
+      (payload) => {
+        const inputTokens = responsesInputTokens(payload);
+        return inputTokens === undefined
+          ? failed(MODEL_FAILURE.MALFORMED, "count carried no input_tokens")
+          : { outcome: MODEL_RESPONSE_OUTCOME.ANSWERED, inputTokens };
+      },
     );
-    if (!(response instanceof Response)) return response;
-    const inputTokens = responsesInputTokens(await payloadOf(response));
-    return inputTokens === undefined
-      ? failed(MODEL_FAILURE.MALFORMED, "count carried no input_tokens")
-      : { outcome: MODEL_RESPONSE_OUTCOME.ANSWERED, inputTokens };
   }
 
-  /** The explicit compaction: the whole window the API answers is the next context, adopted as it came. */
-  async compact(
+  compact(
+    _: undefined,
     items: readonly WireRecord[],
-    options: Pick<ModelRequestOptions, "prompt" | "signal">,
-  ): Promise<ModelCompaction> {
-    const quietUntil = this.quietUntil();
-    if (quietUntil !== undefined) return throttled(quietUntil);
-    const response = await this.#post(
-      BRAIN_RESPONSES_COMPACT_PATH,
-      brainCompactRequest(items, { model: this.model, instructions: options.prompt }),
-      options.signal,
+    options: Pick<ModelRequestOptions, "prompt">,
+  ) {
+    return prepared(
+      brainCompactRequest(items, { model: this.#model, instructions: options.prompt }),
+      (payload) => {
+        const window = responsesCompactedWindow(payload);
+        return window
+          ? { outcome: MODEL_RESPONSE_OUTCOME.ANSWERED, items: window }
+          : failed(MODEL_FAILURE.MALFORMED, "compaction carried no output");
+      },
     );
-    if (!(response instanceof Response)) return response;
-    const window = responsesCompactedWindow(await payloadOf(response));
-    return window
-      ? { outcome: MODEL_RESPONSE_OUTCOME.ANSWERED, items: window }
-      : failed(MODEL_FAILURE.MALFORMED, "compaction carried no output");
   }
 
-  /** One POST on the key; a response is the caller's to read, anything else is already a normalized end. */
-  async #post(
-    path: string,
-    body: BrainResponsesRequest | BrainCompactRequest | BrainInputTokensRequest,
-    signal: AbortSignal | undefined,
-  ): Promise<Response | ReturnType<typeof failed> | ReturnType<typeof throttled>> {
-    let response: Response;
+  async request(operation: ResponsesOperation, body: string, signal: AbortSignal | undefined) {
     try {
-      response = await this.#fetch(`${this.#baseUrl}${path}`, {
+      return await this.#fetch(`${this.#baseUrl}${OPENAI_PATH[operation]}`, {
         method: "POST",
         headers: {
           authorization: `Bearer ${this.#apiKey}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify(body),
+        body,
         signal: requestSignal(this.#requestTimeoutMs, signal),
       });
     } catch (error) {
       return requestFault(error instanceof Error ? error : undefined);
     }
-    if (response.status === HTTP_STATUS.TOO_MANY_REQUESTS) return this.#quiet(response);
-    // Status alone diagnoses credentials or an outage without writing the
-    // request, the key, or any session material to the log.
-    if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
-      return failed(MODEL_FAILURE.CREDENTIAL, `request failed with status ${response.status}`);
-    }
-    if (!response.ok) {
-      return failed(MODEL_FAILURE.UPSTREAM, `request failed with status ${response.status}`);
-    }
-    return response;
   }
 
-  #quiet(response: Response) {
+  quiet(response: Response): Promise<Quiet> {
     const waitMs = rateLimitWaitMs(response.headers.get(RETRY_AFTER_HEADER));
-    this.#quietUntil = this.#now() + waitMs;
-    this.#report(`OpenAI brain turns are rate limited; pausing for ${Math.round(waitMs / 1000)}s`);
-    return throttled(this.#quietUntil);
+    return Promise.resolve({
+      until: this.#now() + waitMs,
+      message: `OpenAI brain turns are rate limited; pausing for ${Math.round(waitMs / 1000)}s`,
+    });
+  }
+
+  /** Status alone diagnoses credentials or an outage, without writing the request, the key, or any session material to the log. */
+  failureFor(response: Response) {
+    const credential =
+      response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN;
+    return failed(
+      credential ? MODEL_FAILURE.CREDENTIAL : MODEL_FAILURE.UPSTREAM,
+      `request failed with status ${response.status}`,
+    );
+  }
+}
+
+function prepared<Result>(
+  request: object,
+  read: PreparedOperation<Result>["read"],
+): PreparedOperation<Result> {
+  return { body: JSON.stringify(request), read };
+}
+
+/**
+ * Carries inferences to the OpenAI Responses API on the developer's own key,
+ * answered normalized: the items, text, and calls of an answer; a throttle
+ * with the moment to resume; or a failure named by kind. Reading inside an
+ * item is the context engine's job, and deciding what to do with a call is
+ * the host's.
+ */
+export class OpenAiModelAdapter extends ResponsesModelAdapter<undefined> {
+  readonly #transport: OpenAiTransport;
+
+  constructor(options: OpenAiModelAdapterOptions) {
+    const transport = new OpenAiTransport(options);
+    super(transport, options);
+    this.#transport = transport;
+  }
+
+  override get model(): string {
+    return this.#transport.model();
   }
 }
 
