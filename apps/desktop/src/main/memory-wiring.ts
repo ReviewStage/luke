@@ -15,6 +15,8 @@ import {
   RETRIEVAL_MODE,
   type RecallRecentTurn,
   type RetrievalMode,
+  selectHybridSearchResults,
+  tokenize,
   watchMemoryFiles,
 } from "@sidecar/memory";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
@@ -93,7 +95,6 @@ export interface MemoryWiring {
   mode: () => RetrievalMode;
 }
 
-const CONVERSATION_RESULT_MINIMUM = 2;
 const RECENT_TURNS_READ = 6;
 
 export function wireMemory(dependencies: MemoryWiringDependencies): MemoryWiring {
@@ -223,33 +224,44 @@ export function wireMemory(dependencies: MemoryWiringDependencies): MemoryWiring
       )
       .map((record) => record.sessionKey);
 
+  /** A line's keyword score: the share of the query's tokens it carries; a search has no bm25 over History. */
+  const lexicalScore = (query: string, words: string): number => {
+    const asked = [...tokenize(query)];
+    if (asked.length === 0) return 0;
+    const held = tokenize(words);
+    return asked.filter((token) => held.has(token)).length / asked.length;
+  };
+
   const conversationResults = async (
     current: SessionKey,
     query: string,
-    room: number,
+    limit: number,
   ): Promise<MemorySearchResult[]> => {
     const keys = eligibleKeys(current);
-    if (keys.length === 0 || room <= 0) return [];
-    const hits = await dependencies.client().searchHistory(keys, query, room, dependencies.now());
-    return hits.map((hit) => ({
-      path: `conversation:${hit.sessionKey}`,
-      startLine: 0,
-      endLine: 0,
-      score: MEMORY_SEARCH_DEFAULTS.TEXT_WEIGHT,
-      vectorScore: 0,
-      textScore: 1,
-      snippet: `${hit.entry.kind}: ${hit.entry.words}`,
-      source: MEMORY_SOURCE.CONVERSATIONS,
-      provenance: {
-        origin:
-          hit.entry.kind === CONVERSATION_ENTRY_KIND.TYPED_ASK ||
-          hit.entry.kind === CONVERSATION_ENTRY_KIND.SPOKEN_ASK
-            ? MEMORY_ORIGIN.USER
-            : MEMORY_ORIGIN.AGENT,
-        path: hit.sessionKey,
-        indexedAt: hit.entry.recordedAt ?? 0,
-      },
-    }));
+    if (keys.length === 0 || limit <= 0) return [];
+    const hits = await dependencies.client().searchHistory(keys, query, limit, dependencies.now());
+    return hits.map((hit) => {
+      const textScore = lexicalScore(query, hit.entry.words);
+      return {
+        path: `conversation:${hit.sessionKey}`,
+        startLine: 0,
+        endLine: 0,
+        score: MEMORY_SEARCH_DEFAULTS.TEXT_WEIGHT * textScore,
+        vectorScore: 0,
+        textScore,
+        snippet: `${hit.entry.kind}: ${hit.entry.words}`,
+        source: MEMORY_SOURCE.CONVERSATIONS,
+        provenance: {
+          origin:
+            hit.entry.kind === CONVERSATION_ENTRY_KIND.TYPED_ASK ||
+            hit.entry.kind === CONVERSATION_ENTRY_KIND.SPOKEN_ASK
+              ? MEMORY_ORIGIN.USER
+              : MEMORY_ORIGIN.AGENT,
+          path: hit.sessionKey,
+          indexedAt: hit.entry.recordedAt ?? 0,
+        },
+      };
+    });
   };
 
   const search = async (
@@ -290,11 +302,27 @@ export function wireMemory(dependencies: MemoryWiringDependencies): MemoryWiring
       maxResults,
       now: dependencies.now(),
     });
-    const room = Math.max(CONVERSATION_RESULT_MINIMUM, maxResults - outcome.results.length);
-    const conversations = await conversationResults(current, ask.query, room);
+    // Conversation lines rank inside the same window as the notebook's
+    // chunks, under the same weights and the same threshold: they are keyword
+    // hits, so they enter the strict window only when their words match well
+    // and otherwise fill spare room the way any keyword-only hit does.
+    const conversations = await conversationResults(
+      current,
+      ask.query,
+      maxResults * MEMORY_SEARCH_DEFAULTS.CANDIDATE_MULTIPLIER,
+    );
+    const merged = [...outcome.results, ...conversations].sort(
+      (a, b) => b.score - a.score || a.path.localeCompare(b.path) || a.startLine - b.startLine,
+    );
+    const keywordBacked = merged.filter((result) => result.textScore > 0);
     return {
       mode,
-      results: [...outcome.results, ...conversations],
+      results: selectHybridSearchResults({
+        merged,
+        keyword: keywordBacked,
+        maxResults,
+        minScore: MEMORY_SEARCH_DEFAULTS.MINIMUM_SCORE,
+      }),
       ...(modeNote ? { note: modeNote } : undefined),
     };
   };

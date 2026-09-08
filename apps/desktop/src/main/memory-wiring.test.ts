@@ -62,13 +62,16 @@ function embed(text: string): number[] {
   return words.map((word) => (lower.includes(word) ? 1 : 0));
 }
 
-function adapter(behaviour: { fail?: boolean } = {}): EmbeddingAdapter & { calls: number } {
+function adapter(
+  behaviour: { fail?: boolean } = {},
+): EmbeddingAdapter & { calls: number; fail: boolean } {
   const built = {
     calls: 0,
+    fail: behaviour.fail ?? false,
     identity: async () => ({ provider: "fake-embeddings", model: "toy", dimensions: 5 }),
     embed: async (texts: readonly string[]) => {
       built.calls += 1;
-      if (behaviour.fail) {
+      if (built.fail) {
         return {
           outcome: MODEL_RESPONSE_OUTCOME.FAILED,
           failure: MODEL_FAILURE.UPSTREAM,
@@ -338,5 +341,49 @@ test("recall: a trusted hit answers without a subrun, a question about the past 
     0,
     "no entry was remembered by the recall",
   );
+  h.close();
+});
+
+test("a launch before any credential indexes keyword-only, and the first credentialed sync backfills the vectors without an edit", async () => {
+  const embedding = adapter();
+  let credential: EmbeddingAdapter | undefined;
+  const h = await harness({ embeddingAdapter: () => credential });
+  const first = await h.wiring.sync();
+  assert.equal(first?.mode, RETRIEVAL_MODE.KEYWORD_ONLY);
+  assert.equal(first?.embeddedChunks, 0);
+  assert.equal((await h.store.memoryIndexStatus()).embeddedChunks, 0);
+  credential = embedding;
+  const second = await h.wiring.sync();
+  assert.equal(second?.mode, RETRIEVAL_MODE.HYBRID);
+  assert.ok(
+    second && second.indexedFiles > 0,
+    "unchanged files are planned again for their vectors",
+  );
+  const status = await h.store.memoryIndexStatus();
+  assert.ok(status.embeddedChunks > 0 && status.embeddedChunks === status.chunks);
+  const third = await h.wiring.sync();
+  assert.equal(third?.indexedFiles, 0, "once every chunk has a vector the files are left alone");
+  h.close();
+});
+
+test("a transient embedding failure leaves keyword rows searchable and the next sync retries the vectors", async () => {
+  const embedding = adapter({ fail: true });
+  const h = await harness({ embeddingAdapter: () => embedding });
+  const failed = await h.wiring.sync();
+  assert.equal(failed?.mode, RETRIEVAL_MODE.KEYWORD_ONLY);
+  assert.equal((await h.store.memoryIndexStatus()).embeddedChunks, 0);
+  const access = h.wiring.accessFor(MAIN_SESSION_KEY);
+  assert.ok(access);
+  assert.equal(
+    resultsOf(await access.search({ query: "frankfurt", signal: new AbortController().signal }))
+      .length,
+    1,
+    "the notebook stays searchable by keyword meanwhile",
+  );
+  embedding.fail = false;
+  const retried = await h.wiring.sync();
+  assert.equal(retried?.mode, RETRIEVAL_MODE.HYBRID);
+  const status = await h.store.memoryIndexStatus();
+  assert.ok(status.embeddedChunks > 0 && status.embeddedChunks === status.chunks);
   h.close();
 });

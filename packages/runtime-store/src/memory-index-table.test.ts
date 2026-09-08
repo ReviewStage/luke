@@ -210,3 +210,28 @@ test("two agents are two databases over two workspaces: neither sees the other's
   );
   assert.equal(memoryIndexStatus(second).sources, 2, "only its own MEMORY.md and note");
 });
+
+test("a file indexed keyword-only is planned again once an embedding identity stands, until every chunk has a vector", () => {
+  const database = openTestDatabase();
+  const root = workspace();
+  const keywordOnly = planMemorySync(database, root, undefined, NOW);
+  applyMemorySync(database, keywordOnly, [], undefined, NOW);
+  assert.equal(memoryIndexStatus(database).embeddedChunks, 0);
+  // The provider failed on the first credentialed pass: the plan asked for vectors, none came.
+  const failed = planMemorySync(database, root, IDENTITY, NOW + 1);
+  assert.equal(
+    failed.changed.length,
+    2,
+    "unchanged content still plans while its vectors are missing",
+  );
+  assert.ok(failed.missingEmbeddings.length > 0);
+  applyMemorySync(database, failed, [], undefined, NOW + 1);
+  assert.equal(memoryIndexStatus(database).embeddedChunks, 0);
+  // The next pass embeds and lands them; after that the files are unchanged and done.
+  const backfilled = sync(database, root, NOW + 2);
+  assert.equal(backfilled.plan.changed.length, 2);
+  assert.equal(memoryIndexStatus(database).embeddedChunks, memoryIndexStatus(database).chunks);
+  const settled = planMemorySync(database, root, IDENTITY, NOW + 3);
+  assert.equal(settled.changed.length, 0);
+  assert.equal(settled.unchanged, 2);
+});

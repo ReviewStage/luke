@@ -12,7 +12,12 @@ export {
   type LookSubject,
   type LookSubjectKind,
 } from "./agent.js";
-export { RESPONSES_CONTEXT_ENGINE_ID, registerBrainBuiltIns } from "./builtins.js";
+export {
+  NOTEBOOK_MEMORY_PROVIDER_ID,
+  notebookMemoryProviderFor,
+  RESPONSES_CONTEXT_ENGINE_ID,
+  registerBrainBuiltIns,
+} from "./builtins.js";
 export {
   EMBEDDING_BATCH_SIZE,
   HOSTED_EMBEDDING_ADAPTER_ID,

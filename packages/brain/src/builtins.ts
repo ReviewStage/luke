@@ -2,10 +2,13 @@ import {
   type AgentRuntimeDescriptor,
   type ContextEngineDescriptor,
   CREDENTIAL_REFERENCE_KIND,
+  MEMORY_CAPABILITY,
+  type MemoryProviderDescriptor,
   type ModelAdapterDescriptor,
   type RuntimeRegistries,
 } from "@sidecar/runtime";
 import { ResponsesContextEngine } from "./context-engine.js";
+import { HOSTED_EMBEDDING_ADAPTER_ID, OPENAI_EMBEDDING_ADAPTER_ID } from "./embedding-adapters.js";
 import { HOSTED_MODEL_ADAPTER_ID } from "./hosted-model-adapter.js";
 import { OPENAI_MODEL_ADAPTER_ID } from "./openai-model-adapter.js";
 import { RESPONSES_ITEM_FORMAT } from "./responses-api.js";
@@ -60,6 +63,50 @@ const HOSTED_MODEL_ADAPTER_DESCRIPTOR: ModelAdapterDescriptor = {
   credentialKind: CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT,
 };
 
+/**
+ * The notebook index as a memory provider, one registration per embedding
+ * adapter it may run vectors on: keyword search over the FTS5 shadow, vector
+ * search over the stored embeddings, and the notebook's own writes. A
+ * configuration names the one matching its credential, as it names the
+ * model adapter, and the registry refuses a vector provider that names no
+ * embedding adapter.
+ */
+export const NOTEBOOK_MEMORY_PROVIDER_ID = {
+  OPENAI: "notebook-index-openai",
+  HOSTED: "notebook-index-hosted",
+} as const;
+
+export type NotebookMemoryProviderId =
+  (typeof NOTEBOOK_MEMORY_PROVIDER_ID)[keyof typeof NOTEBOOK_MEMORY_PROVIDER_ID];
+
+const NOTEBOOK_MEMORY_CAPABILITIES = [
+  MEMORY_CAPABILITY.KEYWORD,
+  MEMORY_CAPABILITY.VECTOR,
+  MEMORY_CAPABILITY.NOTEBOOK,
+] as const;
+
+export function notebookMemoryProviderDescriptors(): readonly MemoryProviderDescriptor[] {
+  return [
+    {
+      id: NOTEBOOK_MEMORY_PROVIDER_ID.OPENAI,
+      capabilities: NOTEBOOK_MEMORY_CAPABILITIES,
+      embeddingAdapterId: OPENAI_EMBEDDING_ADAPTER_ID,
+    },
+    {
+      id: NOTEBOOK_MEMORY_PROVIDER_ID.HOSTED,
+      capabilities: NOTEBOOK_MEMORY_CAPABILITIES,
+      embeddingAdapterId: HOSTED_EMBEDDING_ADAPTER_ID,
+    },
+  ];
+}
+
+/** The notebook provider a credential runs on: the same split the model adapter makes. */
+export function notebookMemoryProviderFor(credentialKind: string): NotebookMemoryProviderId {
+  return credentialKind === CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY
+    ? NOTEBOOK_MEMORY_PROVIDER_ID.OPENAI
+    : NOTEBOOK_MEMORY_PROVIDER_ID.HOSTED;
+}
+
 /** Registers every built-in into the registries given; answers them for chaining. */
 export function registerBrainBuiltIns(registries: RuntimeRegistries): RuntimeRegistries {
   registries.agentRuntimes.register(TOOL_LOOP_RUNTIME_DESCRIPTOR);
@@ -67,5 +114,8 @@ export function registerBrainBuiltIns(registries: RuntimeRegistries): RuntimeReg
   registries.modelAdapters.register(OPENAI_MODEL_ADAPTER_DESCRIPTOR);
   registries.modelAdapters.register(HOSTED_MODEL_ADAPTER_DESCRIPTOR);
   for (const tool of brainToolCatalog()) registries.tools.register(tool);
+  for (const provider of notebookMemoryProviderDescriptors()) {
+    registries.memoryProviders.register(provider);
+  }
   return registries;
 }

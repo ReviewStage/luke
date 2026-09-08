@@ -170,7 +170,15 @@ export function planMemorySync(
   for (const file of files) {
     const known = indexed.get(file.path);
     indexed.delete(file.path);
-    if (known && known.hash === file.hash) {
+    // An unchanged file is done only when every chunk of it already carries a
+    // vector under the identity asked for: a file indexed before a credential
+    // stood, or while the embedding provider was failing, is planned again so
+    // its vectors are backfilled without waiting for the developer to edit it.
+    if (
+      known &&
+      known.hash === file.hash &&
+      !(identity && lacksVectors(database, file.path, identity))
+    ) {
       unchanged += 1;
       continue;
     }
@@ -223,6 +231,22 @@ export function planMemorySync(
     missingEmbeddings: [...missing.entries()].map(([hash, text]) => ({ hash, text })),
     unchanged,
   };
+}
+
+/** Whether any indexed chunk of the path has no vector under the model given. */
+function lacksVectors(
+  database: RuntimeDatabase,
+  filePath: string,
+  identity: EmbeddingModelIdentity,
+): boolean {
+  // SAFETY: COUNT(*) is one integer column named `count`.
+  const row = database
+    .prepare(
+      `SELECT COUNT(*) AS count FROM memory_index_chunks
+       WHERE path = ? AND (embedding = '' OR model <> ?)`,
+    )
+    .get(filePath, identity.model) as { count: number };
+  return row.count > 0;
 }
 
 export function cachedEmbeddings(

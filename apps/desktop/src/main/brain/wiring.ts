@@ -24,6 +24,7 @@ import {
   brainToolNotes,
   HOSTED_MODEL_ADAPTER_ID,
   LOOK_SUBJECT,
+  notebookMemoryProviderFor,
   OPENAI_MODEL_ADAPTER_ID,
   RESPONSES_CONTEXT_ENGINE_ID,
   registerBrainBuiltIns,
@@ -492,6 +493,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
           ? OPENAI_MODEL_ADAPTER_ID
           : HOSTED_MODEL_ADAPTER_ID,
       contextEngineId: RESPONSES_CONTEXT_ENGINE_ID,
+      memoryProviderId: notebookMemoryProviderFor(credential.kind),
       credential,
       workspaceDirectory: dependencies.workspaceDirectory(),
       skillRoots: dependencies.skillRoots(),
