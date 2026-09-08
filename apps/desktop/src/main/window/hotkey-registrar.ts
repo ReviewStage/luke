@@ -22,6 +22,12 @@ export const HOTKEY_RANK = {
 
 export type HotkeyRank = (typeof HOTKEY_RANK)[keyof typeof HOTKEY_RANK];
 
+/**
+ * The pecking order, stated once. Every operation below reads it rather than
+ * spelling out who yields to whom.
+ */
+const RANK_ORDER: readonly HotkeyRank[] = [HOTKEY_RANK.TALK, HOTKEY_RANK.ASK, HOTKEY_RANK.STOP];
+
 /** Only the shortcut surface this needs, so a test can supply one. */
 export interface ShortcutSurface {
   register(accelerator: string, callback: () => void): boolean;
@@ -66,6 +72,31 @@ export interface HotkeyRegistrarOptions {
   createTalkKeyWatcher?: (edges: TalkKeyEdges) => TalkKeyHandle;
 }
 
+/** One Luke key: the chords it may sit on, what a press does, what moves say. */
+interface KeyState {
+  /**
+   * `taken` is the exclusion list the registrar assembles from the ranks above
+   * this one. The talk key's own function takes no such argument: nothing
+   * outranks talk.
+   */
+  readonly candidates: (
+    chosen: string | undefined,
+    taken: readonly (string | undefined)[],
+  ) => readonly string[];
+  readonly onPress: () => void;
+  readonly changedChannel: string;
+  /** A thunk, because the talk key's payload carries `#held`, which moves. */
+  readonly changedPayload: () => UnparsedWireValue;
+  /**
+   * The stored choice: a chord, the none token for a key deleted outright, or
+   * absent while the defaults stand. The token needs no reading here — it
+   * empties the rank's candidate list at the source, so registration finds
+   * nothing to try and reservation nothing to defend.
+   */
+  chosen: string | undefined;
+  accelerator: string | undefined;
+}
+
 /**
  * Owns the talk, ask, and stop keys and the pecking order between them.
  *
@@ -83,8 +114,8 @@ export class HotkeyRegistrar {
   readonly #shortcut: ShortcutSurface;
   readonly #createTalkKeyWatcher: (edges: TalkKeyEdges) => TalkKeyHandle;
 
-  #talk: string | undefined;
-  #chosenTalk: string | undefined;
+  readonly #keys: Map<HotkeyRank, KeyState>;
+
   #talkKeyWatcher: TalkKeyHandle | undefined;
   /**
    * Whether the key reports being let go of. The helper does and the Electron
@@ -94,10 +125,6 @@ export class HotkeyRegistrar {
    */
   #held = true;
 
-  #ask: string | undefined;
-  #chosenAsk: string | undefined;
-  #stop: string | undefined;
-  #chosenStop: string | undefined;
   /**
    * True while a settings row is recording a chord. Both Luke keys stay
    * registered through a recording — the recording is how one gets replaced —
@@ -116,10 +143,54 @@ export class HotkeyRegistrar {
     this.#shortcut = options.shortcut ?? globalShortcut;
     this.#createTalkKeyWatcher =
       options.createTalkKeyWatcher ?? ((edges) => new TalkKeyWatcher(edges));
+    this.#keys = new Map<HotkeyRank, KeyState>([
+      [
+        HOTKEY_RANK.TALK,
+        {
+          candidates: voiceHotkeyCandidates,
+          onPress: () => {
+            this.#sendPress(channels.onVoiceHotkeyPress);
+            // A toggle has only the one edge, so it reports a release immediately
+            // and one short enough to read as a tap. Every press then latches or
+            // ends a turn.
+            this.#sendTo(this.#voiceHostContents(), channels.onVoiceHotkeyRelease);
+          },
+          changedChannel: channels.onVoiceHotkeyChanged,
+          changedPayload: () => ({
+            ...(this.talk ? { hotkey: this.talk } : undefined),
+            held: this.#held,
+          }),
+          chosen: undefined,
+          accelerator: undefined,
+        },
+      ],
+      [
+        HOTKEY_RANK.ASK,
+        {
+          candidates: askHotkeyCandidates,
+          onPress: () => this.#summonAskField(),
+          changedChannel: channels.onAskHotkeyChanged,
+          changedPayload: () => this.ask,
+          chosen: undefined,
+          accelerator: undefined,
+        },
+      ],
+      [
+        HOTKEY_RANK.STOP,
+        {
+          candidates: stopHotkeyCandidates,
+          onPress: () => this.#sendPress(channels.onStopHotkeyPress),
+          changedChannel: channels.onStopHotkeyChanged,
+          changedPayload: () => this.stop,
+          chosen: undefined,
+          accelerator: undefined,
+        },
+      ],
+    ]);
   }
 
   get talk(): string | undefined {
-    return this.#talk;
+    return this.#key(HOTKEY_RANK.TALK).accelerator;
   }
 
   get held(): boolean {
@@ -127,39 +198,29 @@ export class HotkeyRegistrar {
   }
 
   get ask(): string | undefined {
-    return this.#ask;
+    return this.#key(HOTKEY_RANK.ASK).accelerator;
   }
 
   get stop(): string | undefined {
-    return this.#stop;
+    return this.#key(HOTKEY_RANK.STOP).accelerator;
   }
 
   setShortcutCapturing(capturing: boolean): void {
     this.#shortcutCapturing = capturing;
   }
 
-  /**
-   * The stored choice for a rank: a chord, the none token for a key deleted
-   * outright, or absent while the defaults stand. The token needs no reading
-   * here — it empties the rank's candidate list at the source, so registration
-   * finds nothing to try and reservation nothing to defend.
-   */
   setChosen(rank: HotkeyRank, chord: string | undefined): void {
-    if (rank === HOTKEY_RANK.TALK) this.#chosenTalk = chord;
-    else if (rank === HOTKEY_RANK.ASK) this.#chosenAsk = chord;
-    else this.#chosenStop = chord;
+    this.#key(rank).chosen = chord;
   }
 
   /**
-   * Whether `chord` is spoken for by a key that outranks `forKey`. Talk's
-   * whole candidate list is reserved, not just the chord it holds now: its
-   * helper may fall back to any of them on a later launch. Ask's candidates
-   * are reserved the same way for the stop key.
+   * Whether `chord` is spoken for by a key that outranks `forKey`. A rank's
+   * whole candidate list is reserved, not just the chord it holds now: the talk
+   * key's helper may fall back to any of them on a later launch, and the ask
+   * key re-registers behind it.
    */
   reserve(chord: string, forKey: HotkeyRank): HotkeyRank | undefined {
-    if (forKey !== HOTKEY_RANK.TALK && this.#talkOwns(chord)) return HOTKEY_RANK.TALK;
-    if (forKey === HOTKEY_RANK.STOP && this.#askOwns(chord)) return HOTKEY_RANK.ASK;
-    return undefined;
+    return this.#above(forKey).find((rank) => this.#owns(rank, chord));
   }
 
   /**
@@ -169,15 +230,7 @@ export class HotkeyRegistrar {
    * go; stop lets only itself go, because nothing yields to it.
    */
   async reapply(fromRank: HotkeyRank): Promise<void> {
-    if (fromRank === HOTKEY_RANK.TALK) {
-      await this.#applyTalk();
-      return;
-    }
-    if (fromRank === HOTKEY_RANK.ASK) {
-      this.#applyAsk();
-      return;
-    }
-    this.#applyStop();
+    await this.#apply(fromRank);
   }
 
   /**
@@ -191,15 +244,43 @@ export class HotkeyRegistrar {
     this.#talkKeyWatcher = undefined;
   }
 
-  #talkOwns(chord: string): boolean {
-    return voiceHotkeyCandidates(this.#chosenTalk).includes(chord) || chord === this.#talk;
+  #key(rank: HotkeyRank): KeyState {
+    const state = this.#keys.get(rank);
+    // SAFETY: the map is built over RANK_ORDER, which is total over HotkeyRank.
+    if (!state) throw new Error(`No hotkey state for ${rank}`);
+    return state;
   }
 
-  #askOwns(chord: string): boolean {
-    return askHotkeyCandidates(this.#chosenAsk, []).includes(chord) || chord === this.#ask;
+  #above(rank: HotkeyRank): readonly HotkeyRank[] {
+    return RANK_ORDER.slice(0, RANK_ORDER.indexOf(rank));
   }
 
-  #send(webContents: WebContents | undefined, channel: string, payload?: UnparsedWireValue): void {
+  /**
+   * Every chord the ranks above `rank` could sit on, not just the ones they
+   * have announced: the talk key's helper falls back through its own candidates
+   * on its own clock and the ask key re-registers behind it, so a chord a
+   * higher rank merely might take is already not this one's to have — the Luke
+   * keys must never compete.
+   */
+  #taken(rank: HotkeyRank): readonly (string | undefined)[] {
+    const taken: (string | undefined)[] = [];
+    for (const above of this.#above(rank)) {
+      const state = this.#key(above);
+      taken.push(...state.candidates(state.chosen, []), state.accelerator);
+    }
+    return taken;
+  }
+
+  #owns(rank: HotkeyRank, chord: string): boolean {
+    const state = this.#key(rank);
+    return state.candidates(state.chosen, []).includes(chord) || chord === state.accelerator;
+  }
+
+  #sendTo(
+    webContents: WebContents | undefined,
+    channel: string,
+    payload?: UnparsedWireValue,
+  ): void {
     if (!webContents) return;
     if (payload === undefined) webContents.send(channel);
     else webContents.send(channel, payload);
@@ -212,243 +293,142 @@ export class HotkeyRegistrar {
   /** A press the recording row is owed rather than the voice host. */
   #sendPress(channel: string): void {
     if (this.#shortcutCapturing) return;
-    this.#send(this.#voiceHostContents(), channel);
+    this.#sendTo(this.#voiceHostContents(), channel);
   }
 
   /**
-   * Registers the talk key with the system so it answers from whatever app is
-   * frontmost. Electron reports only the press and never the release, so the key
-   * is a toggle rather than a hold — which is also what lets one key interrupt a
-   * reply that is already playing.
+   * The panel stands up focused, then the renderer is asked to put the caret in
+   * the field — or, when the caret is already there, it reads the same press as
+   * the dismissal, so one key summons and puts away like every launcher does.
+   * The panel is the primary one, where every other app-level act lands.
    */
-  #registerTalk(): void {
+  #summonAskField(): void {
+    const host = this.#host.primaryPanel();
+    const displayId = host ? this.#host.displayIdFor(host.webContents) : undefined;
+    if (displayId === undefined) return;
+    const opening = this.#host.modeFor(displayId) !== "expanded";
+    this.#host.setMode(displayId, "expanded", true);
+    this.#sendTo(host?.webContents, channels.onLifecycle, "ask:focus");
+    // The key summons the field wherever the panel already stood, so only the
+    // press that actually opened one is an opening.
+    if (opening) {
+      this.#recordProductEvent(PRODUCT_EVENT.PANEL_OPEN, {
+        panel_source: PRODUCT_PANEL_SOURCE.HOTKEY,
+      });
+    }
+  }
+
+  /**
+   * Takes the named key from the system so it answers from whatever app is
+   * frontmost, re-runnably: the chord is dropped first, because a key that
+   * could not be re-taken must not still be claimed anywhere.
+   *
+   * Taking a system-wide key for a feature that cannot run would make every
+   * press somewhere else in macOS do nothing, visibly, so a capture run and a
+   * rank with no credential take nothing at all. The talk key asks its helper
+   * before Electron, because the helper is the only one of the two that reports
+   * the key being let go of, and a key you hold is the whole point; a summons
+   * and a stop have no release edge to hear, so Electron is enough for them.
+   */
+  #register(rank: HotkeyRank): void {
+    const state = this.#key(rank);
+    state.accelerator = undefined;
     if (!this.#registersGlobalKeys) return;
-    // Taking a system-wide key for a feature that cannot run would make every
-    // press somewhere else in macOS do nothing, visibly.
-    if (!this.#hasCredentials(HOTKEY_RANK.TALK)) return;
-    // A deleted key has no candidates at all, so there is nothing to spawn a
-    // helper for: the honest answer is the absence the panel already shows.
-    const candidates = voiceHotkeyCandidates(this.#chosenTalk);
-    if (candidates.length === 0) return;
-    // The helper first, because it is the only one of the two that reports the
-    // key being let go of, and a key you hold is the whole point.
+    if (!this.#hasCredentials(rank)) return;
+    if (rank === HOTKEY_RANK.TALK && this.#startTalkHelper()) return;
+    this.#registerWithElectron(rank);
+  }
+
+  /**
+   * The candidate loop against Electron. For the talk key it is a toggle rather
+   * than a hold, because Electron reports only the press: a lesser thing than
+   * the helper rather than a broken one, and what lets one key interrupt a
+   * reply already playing.
+   */
+  #registerWithElectron(rank: HotkeyRank): void {
+    const state = this.#key(rank);
+    for (const accelerator of state.candidates(state.chosen, this.#taken(rank))) {
+      if (!this.#shortcut.register(accelerator, state.onPress)) continue;
+      state.accelerator = accelerator;
+      if (rank === HOTKEY_RANK.TALK) this.#held = false;
+      return;
+    }
+  }
+
+  /**
+   * Spawns the talk key's helper, answering whether it stood up. A deleted key
+   * has no candidates, so there is nothing to spawn one for: the honest answer
+   * is the absence the panel already shows.
+   */
+  #startTalkHelper(): boolean {
+    const state = this.#key(HOTKEY_RANK.TALK);
+    const candidates = state.candidates(state.chosen, this.#taken(HOTKEY_RANK.TALK));
+    if (candidates.length === 0) return false;
     this.#talkKeyWatcher = this.#createTalkKeyWatcher({
       onPress: () => this.#sendPress(channels.onVoiceHotkeyPress),
-      onRelease: () => this.#send(this.#voiceHostContents(), channels.onVoiceHotkeyRelease),
+      onRelease: () => this.#sendTo(this.#voiceHostContents(), channels.onVoiceHotkeyRelease),
       onRegistered: (accelerator) => {
-        this.#talk = accelerator;
-        this.#sendTalk();
+        state.accelerator = accelerator;
+        this.#send(HOTKEY_RANK.TALK);
       },
       onUnavailable: () => {
         this.#talkKeyWatcher = undefined;
-        this.#registerToggle();
-        this.#sendTalk();
+        this.#registerWithElectron(HOTKEY_RANK.TALK);
+        this.#send(HOTKEY_RANK.TALK);
       },
     });
-    if (this.#talkKeyWatcher.start(candidates)) return;
+    if (this.#talkKeyWatcher.start(candidates)) return true;
     this.#talkKeyWatcher = undefined;
-    this.#registerToggle();
+    return false;
   }
 
   /**
-   * The talk key without a release: a press toggles the turn instead of holding
-   * it. This is what answers when the helper cannot — another platform, a build
-   * without it — and it is a lesser thing rather than a broken one, so it is
-   * worth standing up rather than leaving the user with no key at all.
+   * Tells every renderer the key it should be teaching. The raw accelerator
+   * travels, as in bootstrap: the renderer draws the chord as its separate keys
+   * and says it as one word, and only the accelerator produces both. An absence
+   * travels too, for the guide's sake: a chord that answers nothing must not be
+   * one Luke claims to have.
    */
-  #registerToggle(): void {
-    for (const accelerator of voiceHotkeyCandidates(this.#chosenTalk)) {
-      const registered = this.#shortcut.register(accelerator, () => {
-        this.#sendPress(channels.onVoiceHotkeyPress);
-        // A toggle has only the one edge, so it reports a release immediately and
-        // one short enough to read as a tap. Every press then latches or ends a
-        // turn.
-        this.#send(this.#voiceHostContents(), channels.onVoiceHotkeyRelease);
-      });
-      if (!registered) continue;
-      this.#talk = accelerator;
-      this.#held = false;
-      return;
+  #send(rank: HotkeyRank): void {
+    const state = this.#key(rank);
+    this.#host.broadcast(state.changedChannel, state.changedPayload());
+  }
+
+  /**
+   * Re-registers `fromRank` and every rank below it, in order. Moving the talk
+   * key lets everything go, because `unregisterAll` is exactly that; a lower
+   * rank lets go only of itself and the ranks under it, so a change that is
+   * none of the talk key's business cannot make its registration flicker. Each
+   * is then taken afresh from the top down, because the chord a lower key may
+   * have is decided by where the higher ones landed: a talk key moving onto
+   * Option-S must win it, and one moving off must give it back.
+   */
+  async #apply(fromRank: HotkeyRank): Promise<void> {
+    const ranks = RANK_ORDER.slice(RANK_ORDER.indexOf(fromRank));
+    if (fromRank === HOTKEY_RANK.TALK) {
+      const released = this.#talkKeyWatcher?.stop();
+      this.#talkKeyWatcher = undefined;
+      this.#shortcut.unregisterAll();
+      // The system releases the old helper's chord when its process exits, not
+      // when the kill is asked for, and the defaults sit in both helpers'
+      // candidate lists — a successor that starts too early is refused the very
+      // fallback it was promised.
+      await released;
+      this.#key(HOTKEY_RANK.TALK).accelerator = undefined;
+      this.#held = true;
+    } else {
+      for (const rank of ranks) {
+        const accelerator = this.#key(rank).accelerator;
+        if (accelerator) this.#shortcut.unregister(accelerator);
+      }
     }
-  }
-
-  /**
-   * Registers the key that summons the ask field from whatever app is frontmost,
-   * on the talk key's own terms: never during a capture run, and never for a
-   * conversation that cannot open — a system-wide key that answers nothing is a
-   * key taken from every other app for no reason. Electron's registration is
-   * enough here, because a summons has no release edge to hear.
-   *
-   * The press does two things in order: stands the panel up focused, then asks
-   * the renderer to put the caret in the field — or, when the caret is already
-   * there, the renderer reads the same press as the dismissal, so one key
-   * summons and puts away like every launcher does. The panel that answers is
-   * the primary one, the same window every other app-level act lands in.
-   */
-  #registerAsk(): void {
-    // Re-runnable: moving the talk key lets everything go and registers afresh,
-    // and a key that could not be re-taken must not still be claimed anywhere.
-    this.#ask = undefined;
-    if (!this.#registersGlobalKeys) return;
-    if (!this.#hasCredentials(HOTKEY_RANK.ASK)) return;
-    // Every chord the talk key could sit on is taken, not just the one it has
-    // announced: its helper falls back through its own candidates after this
-    // runs, so a chord it merely might take is already not the ask key's to
-    // have — the two Luke keys must never compete.
-    for (const accelerator of askHotkeyCandidates(this.#chosenAsk, [
-      ...voiceHotkeyCandidates(this.#chosenTalk),
-      this.#talk,
-    ])) {
-      const registered = this.#shortcut.register(accelerator, () => {
-        const host = this.#host.primaryPanel();
-        const displayId = host ? this.#host.displayIdFor(host.webContents) : undefined;
-        if (displayId === undefined) return;
-        const opening = this.#host.modeFor(displayId) !== "expanded";
-        this.#host.setMode(displayId, "expanded", true);
-        this.#send(host?.webContents, channels.onLifecycle, "ask:focus");
-        // The key summons the field wherever the panel already stood, so only
-        // the press that actually opened one is an opening.
-        if (opening) {
-          this.#recordProductEvent(PRODUCT_EVENT.PANEL_OPEN, {
-            panel_source: PRODUCT_PANEL_SOURCE.HOTKEY,
-          });
-        }
-      });
-      if (!registered) continue;
-      this.#ask = accelerator;
-      return;
+    for (const rank of ranks) {
+      this.#register(rank);
+      // The panel keeps showing the old talk key until the new one actually
+      // answers: the helper announces its own registration over stdout, and
+      // every path without a helper is decided by the time `#register` returns.
+      if (rank === HOTKEY_RANK.TALK && this.#talkKeyWatcher) continue;
+      this.#send(rank);
     }
-  }
-
-  /**
-   * Registers the key that stops a reply mid-sentence from whatever app is
-   * frontmost, on the ask key's exact terms: never during a capture run, never
-   * without a credential, and never on a chord the other two Luke keys could
-   * sit on — three keys must not compete any more than two, and the stop key
-   * is the one that yields, because it alone has Escape standing behind it.
-   * Electron's registration is enough here, because a stop has no release edge
-   * to hear. The press carries no decision of its own: the renderer's session
-   * answers whether there is a reply to stop, exactly as it answers Escape.
-   */
-  #registerStop(): void {
-    // Re-runnable on the ask key's terms: moving another key registers afresh,
-    // and a chord that could not be re-taken must not still be claimed anywhere.
-    this.#stop = undefined;
-    if (!this.#registersGlobalKeys) return;
-    if (!this.#hasCredentials(HOTKEY_RANK.STOP)) return;
-    // Every chord the other two keys could sit on is taken, not just the ones
-    // they have announced: the talk key's helper falls back through its own
-    // candidates on its own clock, and the ask key re-registers behind it.
-    for (const accelerator of stopHotkeyCandidates(this.#chosenStop, [
-      ...voiceHotkeyCandidates(this.#chosenTalk),
-      this.#talk,
-      ...askHotkeyCandidates(this.#chosenAsk, []),
-      this.#ask,
-    ])) {
-      const registered = this.#shortcut.register(accelerator, () => {
-        this.#sendPress(channels.onStopHotkeyPress);
-      });
-      if (!registered) continue;
-      this.#stop = accelerator;
-      return;
-    }
-  }
-
-  /**
-   * Tells every renderer the ask key it should be teaching, whenever that
-   * changes. The raw accelerator travels, as in bootstrap: the renderer needs
-   * both its spellings, and an absent key clears the hint rather than leaving a
-   * keycap up for a chord that answers nothing.
-   */
-  #sendAsk(): void {
-    this.#host.broadcast(channels.onAskHotkeyChanged, this.#ask);
-  }
-
-  /**
-   * Tells every renderer the stop key it should be describing, whenever that
-   * changes. An absence travels too, for the guide's sake: a chord that answers
-   * nothing must not be one Luke claims to have.
-   */
-  #sendStop(): void {
-    this.#host.broadcast(channels.onStopHotkeyChanged, this.#stop);
-  }
-
-  /**
-   * Tells every renderer the key it should be showing, whenever that changes.
-   * The accelerator rather than its label, on the ask key's terms: the renderer
-   * draws the chord as its separate keys and says it as one word, and only the
-   * accelerator produces both.
-   */
-  #sendTalk(): void {
-    this.#host.broadcast(channels.onVoiceHotkeyChanged, {
-      ...(this.#talk ? { hotkey: this.#talk } : undefined),
-      held: this.#held,
-    });
-  }
-
-  /**
-   * Moves the talk key to whatever the stored choice now says, while the app
-   * is running. The old key is let go of in full before the new one is asked
-   * for, so the two can never race for the same chord — and letting everything
-   * go takes the ask key down with it, because `unregisterAll` is exactly that,
-   * so the ask key is registered afresh once the talk key has settled. Letting
-   * go means waiting: the system releases the old helper's chord when its
-   * process exits, not when the kill is asked for, and the defaults sit in both
-   * helpers' candidate lists — a successor that starts too early is refused the
-   * very fallback it was promised. The panel keeps showing the old key until
-   * the new one actually answers: the helper announces its own registration
-   * over stdout, and every path without a helper is decided by the time
-   * `#registerTalk` returns.
-   */
-  async #applyTalk(): Promise<void> {
-    const released = this.#talkKeyWatcher?.stop();
-    this.#talkKeyWatcher = undefined;
-    this.#shortcut.unregisterAll();
-    await released;
-    this.#talk = undefined;
-    this.#held = true;
-    this.#registerTalk();
-    if (!this.#talkKeyWatcher) this.#sendTalk();
-    // The ask key went down with `unregisterAll`, and the chord it can have may
-    // itself have changed — the talk key may have moved onto or off of one of
-    // its candidates — so it is re-taken now and the panel told what it teaches.
-    this.#registerAsk();
-    this.#sendAsk();
-    // The stop key went down with it and yields to both, so it goes last: a
-    // talk key moving onto Option-S must win the chord, and one moving off must
-    // give it back.
-    this.#registerStop();
-    this.#sendStop();
-  }
-
-  /**
-   * Moves the ask key to whatever the stored choice now says, while the app is
-   * running. Only the ask key's own chord is let go of — the talk key's
-   * registration must not flicker for a change that is none of its business —
-   * and unlike the talk key there is no helper exit to wait for: Electron
-   * releases a chord the moment it is asked to. The stop key is let go of and
-   * re-taken behind it, because the chord it may have is decided by where the
-   * ask key lands: an ask key moving onto Option-S must win it, and one moving
-   * off must give it back.
-   */
-  #applyAsk(): void {
-    if (this.#ask) this.#shortcut.unregister(this.#ask);
-    if (this.#stop) this.#shortcut.unregister(this.#stop);
-    this.#registerAsk();
-    this.#sendAsk();
-    this.#registerStop();
-    this.#sendStop();
-  }
-
-  /**
-   * Moves the stop key to whatever the stored choice now says, while the app
-   * is running. Only its own chord is let go of: the stop key is the bottom of
-   * the pecking order, so where it lands is decided by the other two keys and
-   * moving it can never oblige either of them to move.
-   */
-  #applyStop(): void {
-    if (this.#stop) this.#shortcut.unregister(this.#stop);
-    this.#registerStop();
-    this.#sendStop();
   }
 }
