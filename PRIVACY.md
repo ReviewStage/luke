@@ -224,8 +224,12 @@ the conversation, and the same turn runs once when you start main or a
 durable private thread fresh, never when you clear or delete history, and
 never for a temporary thread, an observed coding session, or a child. Nothing
 else writes the notebook on its own: no nightly job reads your conversations
-to learn from them, and no model call rewrites `MEMORY.md`, which stands as
-you and Luke's own tools leave it. Asking Luke to forget removes the notebook
+to learn from them, and no model call rewrites `MEMORY.md`, which from here
+changes only when you edit it or ask Luke to. An earlier version of Luke
+promoted lines into that file behind HTML markers, and wrote a `DREAMS.md`
+beside it. Both are left exactly where they are, for you to keep or delete:
+`MEMORY.md` is still read as your notebook, markers and all, and nothing
+reads `DREAMS.md` at all. Asking Luke to forget removes the notebook
 lines you name and their search index rows; a line he no longer holds under
 that name he says so about rather than claiming it erased. Forgetting does
 not delete the conversation itself; Delete history is still the separate,

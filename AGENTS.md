@@ -651,8 +651,11 @@ Trust constraints:
   honestly and never deciding the reset, which proceeds either way; Clear,
   Delete history, Archive, and a forget run no capture. Nothing else writes
   the notebook on its own: no scheduled job reads a conversation's lines to
-  learn from them, and no model call rewrites `MEMORY.md`, which stands as
-  the developer and Luke's own tools leave it. Flush state lives in the
+  learn from them, and no model call rewrites `MEMORY.md`, which from here
+  changes only under the developer's own hand or Luke's own notebook tools.
+  A build before this one promoted entries into that file behind HTML
+  markers; they are left where they stand, since removing them would be a
+  write to the notebook nobody asked for. Flush state lives in the
   runtime store's own table. Forgetting names notebook entries: the entries
   named go, with the provenance rows beside them and `USER.md`'s index rows,
   and an id the notebook does not hold is reported as a limitation rather
