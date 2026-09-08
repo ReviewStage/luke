@@ -4,26 +4,12 @@ import {
   type ConversationEntryKind,
   conversationEntryKey,
 } from "@sidecar/realtime";
-import {
-  CONVERSATION_KIND,
-  type ConversationRecord,
-  MAIN_SESSION_KEY,
-  RESTORE_OUTCOME,
-  type RestoreOutcome,
-  sessionKey,
-} from "@sidecar/runtime-contracts";
 import { useEffect, useRef, useState } from "react";
 import { type BrainRequestSnapshot, brainRequestPending } from "#shared/wire/brain";
-import {
-  CONVERSATION_CONTROL_WORDS,
-  CONVERSATION_DELETE_OUTCOME,
-  type ConversationDeleteOutcome,
-} from "#shared/wire/conversation";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { MarkdownMessage } from "./markdown-message";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CheckIcon, CopyIcon } from "./settings-icons";
-import type { ConversationsState } from "./use-conversations";
 
 export const HISTORY_ENTRY_SPEAKER = {
   YOU: "you",
@@ -55,34 +41,9 @@ export function historyEntryPresentation(kind: ConversationEntryKind): HistoryEn
 const COPY_CONFIRMATION_MS = 1500;
 
 const ENTRY_TIME = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-const ARCHIVE_TIME = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-});
 
 /** What History says under an ask whose run has not ended yet. */
 export const HISTORY_PENDING_LABEL = "Luke is working on this…";
-
-/** What History says over an archived conversation's thread instead of a composer. */
-export const HISTORY_ARCHIVED_NOTE = "Archived. Unarchive it to keep talking here.";
-
-/** The one-line outcomes the controls report, in place, on the header's own clock. */
-export const HISTORY_CONTROL_NOTICE = {
-  FRESH: "Started fresh. Your history and Luke's memory are still here.",
-  FRESH_FAILED: "Could not start fresh just now.",
-  DELETED: "History deleted. A recovery archive is saved on this Mac.",
-  DELETED_UNPUBLISHED:
-    "History deleted. The recovery archive is saved in the database and will be written to disk at the next launch.",
-  DELETE_REFUSED: "Could not delete this history.",
-  RESTORED: "Restored.",
-  RESTORE_NEWER_LIVE: "Not restored: this conversation already has newer messages.",
-  RESTORE_UNREADABLE: "Not restored: the archive could not be read.",
-  RESTORE_MISSING: "Not restored: that archive is gone.",
-} as const;
-
-const NOTICE_MS = 6000;
 
 function HistoryEntryRow({
   entry,
@@ -187,258 +148,12 @@ const STREAM_FOLLOW_SLACK_PX = 48;
  */
 const HISTORY_COMPOSER_ROW_INDEX = 1;
 
-/**
- * The conversation controls as the panel is handed them: the directory, the
- * selection, and one operation per control. Every operation goes back through
- * the bridge to the main process, which validates the key against the
- * directory as it then stands; the panel decides nothing but what to draw.
- */
-/** The selector and controls over every conversation: the conversations hook's own state and operations, as the panel needs them. */
-export type ConversationControls = Pick<
-  ConversationsState,
-  | "directory"
-  | "selected"
-  | "select"
-  | "createThread"
-  | "startFresh"
-  | "archive"
-  | "unarchive"
-  | "deleteHistory"
-  | "restoreArchive"
->;
-
-const CONFIRMING = {
-  FRESH: "fresh",
-  DELETE: "delete",
-} as const;
-
-type Confirming = (typeof CONFIRMING)[keyof typeof CONFIRMING];
-
-export function conversationLabel(record: ConversationRecord): string {
-  if (record.kind === CONVERSATION_KIND.MAIN) return "Main";
-  return record.temporary ? `${record.name} (temporary)` : record.name;
-}
-
-const RESTORE_NOTICE = {
-  [RESTORE_OUTCOME.RESTORED]: HISTORY_CONTROL_NOTICE.RESTORED,
-  [RESTORE_OUTCOME.NEWER_LIVE]: HISTORY_CONTROL_NOTICE.RESTORE_NEWER_LIVE,
-  [RESTORE_OUTCOME.MISSING]: HISTORY_CONTROL_NOTICE.RESTORE_MISSING,
-  [RESTORE_OUTCOME.UNREADABLE]: HISTORY_CONTROL_NOTICE.RESTORE_UNREADABLE,
-} satisfies Record<RestoreOutcome, string>;
-
-const DELETE_NOTICE = {
-  [CONVERSATION_DELETE_OUTCOME.COMPLETE]: HISTORY_CONTROL_NOTICE.DELETED,
-  [CONVERSATION_DELETE_OUTCOME.INCOMPLETE]: HISTORY_CONTROL_NOTICE.DELETED_UNPUBLISHED,
-  [CONVERSATION_DELETE_OUTCOME.REFUSED]: HISTORY_CONTROL_NOTICE.DELETE_REFUSED,
-} satisfies Record<ConversationDeleteOutcome, string>;
-
-/**
- * The header over the thread: a compact selector across every conversation,
- * and the controls that replaced the one ambiguous Clear. Each destructive
- * control confirms in place with the sentence that says what it keeps.
- */
-function ConversationHeader({
-  controls,
-  onNotice,
-}: {
-  controls: ConversationControls;
-  onNotice: (notice: string) => void;
-}): React.JSX.Element {
-  const [confirming, setConfirming] = useState<Confirming | undefined>(undefined);
-  const { directory, selected } = controls;
-  const active = directory.entries.filter((entry) => entry.archivedAt === undefined);
-  const archived = directory.entries.filter((entry) => entry.archivedAt !== undefined);
-  const current = directory.entries.find((entry) => entry.sessionKey === selected);
-  const isMain = current?.kind === CONVERSATION_KIND.MAIN;
-  const isArchived = current?.archivedAt !== undefined;
-  const archives = directory.archives.filter((archive) => archive.sessionKey === selected);
-
-  const startFresh = async () => {
-    setConfirming(undefined);
-    const fresh = await controls.startFresh(selected);
-    onNotice(fresh ? HISTORY_CONTROL_NOTICE.FRESH : HISTORY_CONTROL_NOTICE.FRESH_FAILED);
-  };
-  const deleteHistory = async () => {
-    setConfirming(undefined);
-    onNotice(DELETE_NOTICE[await controls.deleteHistory(selected)]);
-  };
-
-  return (
-    <header className="history-header">
-      <label className="history-selector">
-        <span className="visually-hidden">Conversation</span>
-        <select
-          className="history-select"
-          value={selected}
-          onChange={(event) => {
-            controls.select(sessionKey(event.target.value));
-          }}
-        >
-          <optgroup label="Conversations">
-            {active.map((entry) => (
-              <option key={entry.sessionKey} value={entry.sessionKey}>
-                {conversationLabel(entry)}
-              </option>
-            ))}
-          </optgroup>
-          {archived.length > 0 ? (
-            <optgroup label="Archived">
-              {archived.map((entry) => (
-                <option key={entry.sessionKey} value={entry.sessionKey}>
-                  {conversationLabel(entry)}
-                </option>
-              ))}
-            </optgroup>
-          ) : null}
-        </select>
-      </label>
-      <details className="history-menu">
-        <summary className="history-menu-summary" aria-label="Conversation controls">
-          Manage
-        </summary>
-        <div className="history-menu-sheet">
-          <div className="history-menu-group">
-            <button
-              type="button"
-              className="history-menu-action"
-              onClick={() => void controls.createThread(false)}
-            >
-              {CONVERSATION_CONTROL_WORDS.NEW_THREAD}
-            </button>
-            <button
-              type="button"
-              className="history-menu-action"
-              onClick={() => void controls.createThread(true)}
-            >
-              {CONVERSATION_CONTROL_WORDS.NEW_TEMPORARY_THREAD}
-            </button>
-            <p className="history-menu-note">{CONVERSATION_CONTROL_WORDS.TEMPORARY_EXPLANATION}</p>
-          </div>
-          {current && !isArchived ? (
-            <div className="history-menu-group">
-              {confirming === CONFIRMING.FRESH ? (
-                <>
-                  <p className="history-menu-note">
-                    {CONVERSATION_CONTROL_WORDS.START_FRESH_EXPLANATION}
-                  </p>
-                  <span className="history-confirm">
-                    <button
-                      type="button"
-                      className="history-menu-cancel"
-                      onClick={() => setConfirming(undefined)}
-                    >
-                      Cancel
-                    </button>
-                    <button type="button" className="history-menu-action" onClick={startFresh}>
-                      {CONVERSATION_CONTROL_WORDS.START_FRESH}
-                    </button>
-                  </span>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  className="history-menu-action"
-                  onClick={() => setConfirming(CONFIRMING.FRESH)}
-                >
-                  {CONVERSATION_CONTROL_WORDS.START_FRESH}
-                </button>
-              )}
-              {isMain ? null : (
-                <button
-                  type="button"
-                  className="history-menu-action"
-                  onClick={() => void controls.archive(selected)}
-                >
-                  {CONVERSATION_CONTROL_WORDS.ARCHIVE}
-                </button>
-              )}
-            </div>
-          ) : null}
-          {current && isArchived ? (
-            <div className="history-menu-group">
-              <button
-                type="button"
-                className="history-menu-action"
-                onClick={() => void controls.unarchive(selected)}
-              >
-                {CONVERSATION_CONTROL_WORDS.UNARCHIVE}
-              </button>
-            </div>
-          ) : null}
-          {current ? (
-            <div className="history-menu-group">
-              {confirming === CONFIRMING.DELETE ? (
-                <>
-                  <p className="history-menu-note">
-                    {CONVERSATION_CONTROL_WORDS.DELETE_EXPLANATION}
-                  </p>
-                  <span className="history-confirm">
-                    <button
-                      type="button"
-                      className="history-menu-cancel"
-                      onClick={() => setConfirming(undefined)}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      className="history-menu-action history-menu-danger"
-                      onClick={deleteHistory}
-                    >
-                      {CONVERSATION_CONTROL_WORDS.DELETE_HISTORY}
-                    </button>
-                  </span>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  className="history-menu-action history-menu-danger"
-                  onClick={() => setConfirming(CONFIRMING.DELETE)}
-                >
-                  {CONVERSATION_CONTROL_WORDS.DELETE_HISTORY}
-                </button>
-              )}
-            </div>
-          ) : null}
-          {archives.length > 0 ? (
-            <div className="history-menu-group">
-              <p className="history-menu-note">Deleted history of this conversation</p>
-              <ul className="history-archives">
-                {archives.map((archive) => (
-                  <li key={archive.archiveId} className="history-archive">
-                    <span className="history-archive-label">
-                      {ARCHIVE_TIME.format(new Date(archive.deletedAt))} · {archive.historyLines}{" "}
-                      lines
-                      {archive.publishedAt === undefined ? " · not yet on disk" : ""}
-                    </span>
-                    <button
-                      type="button"
-                      className="history-menu-action"
-                      onClick={() => {
-                        void controls.restoreArchive(archive).then((outcome) => {
-                          onNotice(RESTORE_NOTICE[outcome]);
-                        });
-                      }}
-                    >
-                      {CONVERSATION_CONTROL_WORDS.RESTORE}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </div>
-      </details>
-    </header>
-  );
-}
-
 export function ConversationHistoryPanel({
   entries,
   live = [],
   requests = [],
   onCancelRequest,
-  conversations,
+  onClear,
   ask,
   onAskEngaged,
   askShortcut,
@@ -456,32 +171,19 @@ export function ConversationHistoryPanel({
    * bubbles they will settle into — words growing, no timestamp, no copy.
    */
   live?: readonly ConversationEntry[];
-  /** The selector and the controls over every conversation Luke holds. */
-  conversations: ConversationControls;
-  /** The ask for the conversation shown: main's composer on the sessions tab is the same handler aimed at main. */
+  onClear: () => void;
+  /** The same ask the sessions tab's composer carries: one conversation, reached from either tab. */
   ask: AskHandler;
   onAskEngaged: (engaged: boolean) => void;
   askShortcut?: string;
 }): React.JSX.Element {
+  const [confirmingClear, setConfirmingClear] = useState(false);
   const list = useRef<HTMLDivElement | null>(null);
   const entryCount = entries.length;
   const liveLength = live.reduce((total, entry) => total + entry.words.length, 0);
   const pendingRuns = new Set(
     requests.filter(brainRequestPending).map((snapshot) => snapshot.runId),
   );
-  const [notice, setNotice] = useState<string | undefined>(undefined);
-  const selectedRecord = conversations.directory.entries.find(
-    (entry) => entry.sessionKey === conversations.selected,
-  );
-  const archived = selectedRecord?.archivedAt !== undefined;
-  // Only main's thread carries the voice window's words still being said.
-  const shownLive = conversations.selected === MAIN_SESSION_KEY ? live : [];
-
-  useEffect(() => {
-    if (notice === undefined) return;
-    const timer = setTimeout(() => setNotice(undefined), NOTICE_MS);
-    return () => clearTimeout(timer);
-  }, [notice]);
 
   useEffect(() => {
     // Reading the count binds the scroll to an append or clear, not to an
@@ -501,29 +203,48 @@ export function ConversationHistoryPanel({
     if (fromTail <= STREAM_FOLLOW_SLACK_PX) element.scrollTop = element.scrollHeight;
   }, [liveLength]);
 
-  const thread = entries.length > 0 || shownLive.length > 0;
+  useEffect(() => {
+    if (entries.length === 0) setConfirmingClear(false);
+  }, [entries.length]);
+
+  const thread = entries.length > 0 || live.length > 0;
 
   return (
     <section
       // PostHog blocks this fixed class and its whole subtree. Conversation
-      // history belongs on this screen, but never in an optional recording:
-      // the selector's thread names and the archive list ride inside it too.
+      // history belongs on this screen, but never in an optional recording.
       className="history-view ph-no-capture"
       role="tabpanel"
       id={panelPanelId(PANEL_TAB.HISTORY)}
       aria-labelledby={panelTabId(PANEL_TAB.HISTORY)}
     >
-      {/* Keyed by the selection so a confirmation opened over one conversation
-          never carries over to the next. */}
-      <ConversationHeader
-        key={conversations.selected}
-        controls={conversations}
-        onNotice={setNotice}
-      />
-      {notice ? (
-        <p className="history-notice" role="status">
-          {notice}
-        </p>
+      {entries.length > 0 ? (
+        <header className="history-header">
+          <span className="history-clear-controls">
+            {confirmingClear ? (
+              <button
+                type="button"
+                className="history-clear-cancel"
+                onClick={() => setConfirmingClear(false)}
+              >
+                Cancel
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="history-clear"
+              onClick={() => {
+                if (!confirmingClear) {
+                  setConfirmingClear(true);
+                  return;
+                }
+                onClear();
+              }}
+            >
+              {confirmingClear ? "Clear history" : "Clear"}
+            </button>
+          </span>
+        </header>
       ) : null}
       {thread ? (
         <div className="history-scroll" ref={list}>
@@ -551,7 +272,7 @@ export function ConversationHistoryPanel({
                   />
                 );
               })}
-              {shownLive.map((entry, index) => (
+              {live.map((entry, index) => (
                 <HistoryEntryRow
                   // biome-ignore lint/suspicious/noArrayIndexKey: A line still being said has no durable id, and its words change on every delta — a key made of either would remount the bubble mid-sentence, while its position holds still for exactly as long as the line does.
                   key={`live:${entry.kind}:${index}`}
@@ -569,20 +290,15 @@ export function ConversationHistoryPanel({
       )}
       {/* The thread is where a typed ask's reply lands as a bubble, so the field
           that asks stands at its foot — the same composer the sessions tab
-          holds, addressed to the conversation shown. It rides inside the
+          holds, addressed to the same conversation. It rides inside the
           blocked subtree: a draft here is worded beside the words it will
-          join, and a recording sees neither. An archived conversation takes
-          no ask: its brain is retired until it is unarchived. */}
-      {archived ? (
-        <p className="history-archived-note">{HISTORY_ARCHIVED_NOTE}</p>
-      ) : (
-        <AskLuke
-          ask={ask}
-          onEngagedChange={onAskEngaged}
-          rowIndex={HISTORY_COMPOSER_ROW_INDEX}
-          {...(askShortcut ? { shortcut: askShortcut } : undefined)}
-        />
-      )}
+          join, and a recording sees neither. */}
+      <AskLuke
+        ask={ask}
+        onEngagedChange={onAskEngaged}
+        rowIndex={HISTORY_COMPOSER_ROW_INDEX}
+        {...(askShortcut ? { shortcut: askShortcut } : undefined)}
+      />
     </section>
   );
 }

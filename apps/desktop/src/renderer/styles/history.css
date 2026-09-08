@@ -18,163 +18,39 @@
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
+  justify-content: flex-end;
   padding: 0 2px;
 }
 
-/* The selector is the conversation's name in a compact control: one line,
-   the width its longest name needs, and the same quiet chrome as the menu. */
-.history-selector {
+.history-clear-controls {
   display: inline-flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  align-items: center;
-}
-
-.history-select {
-  max-width: 100%;
-  min-height: 28px;
-  padding: 0 9px;
-  border: 0;
-  border-radius: 9px;
-  background: var(--raised);
-  color: var(--text-primary);
-  font-size: 11px;
-  font-weight: 620;
-}
-
-.history-menu {
-  position: relative;
   flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
 }
 
-.history-menu-summary {
-  display: inline-flex;
+.history-clear,
+.history-clear-cancel {
   min-height: 28px;
-  align-items: center;
   padding: 0 9px;
   border-radius: 9px;
+  background: transparent;
   color: var(--text-secondary);
   font-size: 10px;
   font-weight: 620;
-  list-style: none;
-  cursor: default;
   transition:
     background-color var(--duration-hover) ease,
     color var(--duration-hover) ease;
 }
 
-.history-menu-summary::-webkit-details-marker {
-  display: none;
-}
-
-.history-menu-summary:hover,
-.history-menu[open] .history-menu-summary {
+.history-clear:hover,
+.history-clear-cancel:hover {
   background: var(--raised);
   color: var(--text-primary);
 }
 
-/* The sheet drops under the header and over the thread; nothing else moves. */
-.history-menu-sheet {
-  position: absolute;
-  z-index: 2;
-  top: calc(100% + 4px);
-  right: 0;
-  display: flex;
-  width: min(300px, 80vw);
-  flex-direction: column;
-  gap: 8px;
-  padding: 8px;
-  border-radius: 12px;
-  background: var(--raised);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-}
-
-.history-menu-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.history-menu-group + .history-menu-group {
-  padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.history-menu-action,
-.history-menu-cancel {
-  min-height: 26px;
-  padding: 0 8px;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-primary);
-  font-size: 11px;
-  font-weight: 600;
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-}
-
-.history-menu-action:hover,
-.history-menu-cancel:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.history-menu-cancel {
-  color: var(--text-secondary);
-}
-
-.history-menu-danger {
+.history-clear-controls:has(.history-clear-cancel) .history-clear {
   color: var(--danger);
-}
-
-.history-menu-note {
-  margin: 0;
-  padding: 0 8px;
-  color: var(--text-secondary);
-  font-size: 10px;
-  line-height: 1.4;
-}
-
-.history-confirm {
-  display: flex;
-  justify-content: flex-end;
-  gap: 4px;
-}
-
-.history-archives {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.history-archive {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  padding-left: 8px;
-}
-
-.history-archive-label {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.history-notice,
-.history-archived-note {
-  margin: 0;
-  padding: 0 6px;
-  color: var(--text-secondary);
-  font-size: 10px;
-  line-height: 1.4;
 }
 
 /* The thread scrolls on two nested scrollers, one per axis. The outer one is

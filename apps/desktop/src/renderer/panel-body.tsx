@@ -1,6 +1,5 @@
 import { SessionRow as PanelSessionRow, ProviderMark } from "@sidecar/panel";
 import type { ConversationEntry } from "@sidecar/realtime";
-import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
 import {
   isSessionApplicationId,
   SESSION_APPLICATION_SCOPE,
@@ -14,9 +13,9 @@ import { useCallback, useState } from "react";
 import { ACCOUNT_STATUS, type AccountProvider, type AccountSnapshot } from "#shared/wire/account";
 import type { BrainRequestSnapshot } from "#shared/wire/brain";
 import type { SessionOpenResult } from "#shared/wire/session";
-import { AskLuke } from "./ask-luke";
+import { type AskHandler, AskLuke } from "./ask-luke";
 import { CalendarGate, type CalendarGateControl } from "./calendar-gate";
-import { type ConversationControls, ConversationHistoryPanel } from "./conversation-history-panel";
+import { ConversationHistoryPanel } from "./conversation-history-panel";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import {
   type ArrangedSessions,
@@ -519,18 +518,18 @@ export interface PanelBodyProps {
   onOpenSessionApplication: (session: SessionView, applicationId: SessionApplicationId) => void;
   /** Opens the pull request a row or tray header reports; the panel writes nothing else. */
   writes: SessionWriteHandlers;
-  /** The thread of the conversation History is showing, this launch's and what survived the last. */
+  /** The conversation between the developer and Luke, this launch's and what survived the last. */
   conversationHistory: readonly ConversationEntry[];
-  /** The lines still being said, drawn under main's thread while their words grow. */
+  /** The lines still being said, drawn under that thread while their words grow. */
   liveConversationEntries: readonly ConversationEntry[];
-  /** The selector and controls over every conversation Luke holds. */
-  conversations: ConversationControls;
+  /** Clears that same thread from the view, Luke's next context, and the stored file. */
+  onClearConversationHistory: () => void;
   /** The brain's runs, so History draws an ask still being worked on beside its words. */
   brainRequests: readonly BrainRequestSnapshot[];
   /** Cancels one of those runs at the developer's press. */
   onCancelBrainRequest: (runId: string) => void;
-  /** Carries a typed ask to one conversation, captured at the send: main's from the sessions tab, the shown one from History. */
-  askIn: (text: string, sessionKey: SessionKey) => Promise<string | undefined>;
+  /** Carries a typed ask to Luke's own conversation, answering why it could not go. */
+  ask: AskHandler;
   /** Reports someone being part-way through an ask, so the panel holds for them. */
   onAskEngaged: (engaged: boolean) => void;
   /** The registered summon key the field should teach, if the system granted one. */
@@ -580,10 +579,10 @@ export function PanelBody({
   writes,
   conversationHistory,
   liveConversationEntries,
-  conversations,
+  onClearConversationHistory,
   brainRequests,
   onCancelBrainRequest,
-  askIn,
+  ask,
   onAskEngaged,
   askShortcut,
   offerOptions,
@@ -701,8 +700,8 @@ export function PanelBody({
           live={liveConversationEntries}
           requests={brainRequests}
           onCancelRequest={onCancelBrainRequest}
-          conversations={conversations}
-          ask={(text) => askIn(text, conversations.selected)}
+          onClear={onClearConversationHistory}
+          ask={ask}
           onAskEngaged={onAskEngaged}
           {...(askShortcut ? { askShortcut } : undefined)}
         />
@@ -795,7 +794,7 @@ export function PanelBody({
               question worth typing before any session has appeared. It arrives
               at the tail of the same fan the rows ride. */}
           <AskLuke
-            ask={(text) => askIn(text, MAIN_SESSION_KEY)}
+            ask={ask}
             onEngagedChange={onAskEngaged}
             rowIndex={rows.length + 1}
             {...(askShortcut ? { shortcut: askShortcut } : undefined)}

@@ -9,8 +9,7 @@ import {
   type SessionKey,
   threadSessionKey,
 } from "@sidecar/runtime-contracts";
-import { CONVERSATION_DELETE_OUTCOME } from "#shared/wire/conversation";
-import { VOICE_COMMAND } from "#shared/wire/voice-view";
+import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion";
 import {
   type ConversationOperationsDependencies,
   conversationOperations,
@@ -76,8 +75,8 @@ function harness(erasePublished = true) {
         return true;
       },
     },
-    retireVoiceTurns: (command) => {
-      calls.push(`voice:${command}`);
+    retireVoiceTurns: () => {
+      calls.push("voice:retired");
     },
     now: () => NOW,
     report: (message) => {
@@ -103,15 +102,11 @@ test("a new thread opens a brain over it, and archiving retires the brain first;
   ]);
 });
 
-test("Start fresh retires main's turns in the voice window and no other conversation's", async () => {
+test("Start fresh replaces a conversation's lifetime and tells the voice window nothing: no history was erased", async () => {
   const { operations, calls } = harness();
   assert.equal(await operations.startFresh(THREAD), true);
   assert.equal(await operations.startFresh(MAIN_SESSION_KEY), true);
-  assert.deepEqual(calls, [
-    `reset:${THREAD}`,
-    `reset:${MAIN_SESSION_KEY}`,
-    `voice:${VOICE_COMMAND.RETIRE_TURNS}`,
-  ]);
+  assert.deepEqual(calls, [`reset:${THREAD}`, `reset:${MAIN_SESSION_KEY}`]);
 });
 
 test("Delete history fences, retires the brain, erases, and rebuilds, in that order, telling the voice window about main alone", async () => {
@@ -128,10 +123,7 @@ test("Delete history fences, retires the brain, erases, and rebuilds, in that or
     await operations.deleteHistory(MAIN_SESSION_KEY),
     CONVERSATION_DELETE_OUTCOME.COMPLETE,
   );
-  assert.deepEqual(calls.slice(0, 2), [
-    `fence:${MAIN_SESSION_KEY}:${NOW}`,
-    `voice:${VOICE_COMMAND.CLEAR_CONVERSATION}`,
-  ]);
+  assert.deepEqual(calls.slice(0, 2), [`fence:${MAIN_SESSION_KEY}:${NOW}`, "voice:retired"]);
   const unpublished = harness(false);
   assert.equal(
     await unpublished.operations.deleteHistory(THREAD),

@@ -1,7 +1,3 @@
-import {
-  CONVERSATION_DELETE_OUTCOME,
-  type ConversationDeleteOutcome,
-} from "#shared/wire/conversation";
 import type { HistoryErasure } from "../runtime-store-wiring";
 
 /**
@@ -35,6 +31,21 @@ export interface ConversationDeletionDependencies {
   rebuildBrain: () => Promise<void>;
   report: (message: string) => void;
 }
+
+/**
+ * How a deletion ended. Complete means the rows are gone and the recovery
+ * archive is published and verified on disk; incomplete means the rows are
+ * gone and the archive is committed in the database but its file is not yet
+ * published, which the next launch retries; refused means nothing changed.
+ */
+export const CONVERSATION_DELETE_OUTCOME = {
+  COMPLETE: "complete",
+  INCOMPLETE: "incomplete",
+  REFUSED: "refused",
+} as const;
+
+export type ConversationDeleteOutcome =
+  (typeof CONVERSATION_DELETE_OUTCOME)[keyof typeof CONVERSATION_DELETE_OUTCOME];
 
 export async function deleteConversationHistoryFlow(
   dependencies: ConversationDeletionDependencies,

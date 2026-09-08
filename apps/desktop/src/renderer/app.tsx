@@ -155,7 +155,6 @@ import {
 import { SupersetSignInSlot } from "./superset-sign-in-slot";
 import { UPDATE_ROW_ACTION, updateRow } from "./update-row";
 import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
-import { useConversations } from "./use-conversations";
 import { useMeasuredHeight } from "./use-measured-height";
 import { panelEntryOpen, usePanelEntry } from "./use-panel-entry";
 import { usePanelPresentation } from "./use-panel-presentation";
@@ -1978,6 +1977,7 @@ export function App(): React.JSX.Element {
     voiceActive,
     microphoneStatus,
     voiceHotkey,
+    conversationHistory,
     acceptBootstrap: acceptVoiceBootstrap,
     askLuke,
     brainRequests,
@@ -1985,9 +1985,8 @@ export function App(): React.JSX.Element {
     discardListening,
     stopSpeaking,
     requestMicrophoneAccess,
+    clearConversationHistory,
   } = useVoiceView();
-  const conversations = useConversations();
-  const acceptConversationsBootstrap = conversations.acceptBootstrap;
   const { voiceError, voiceNotice, talkOpening, liveConversationEntries } = voiceView;
   // A capture run always draws the fixture's words: the voice window that
   // otherwise decides the captions does not stand in one.
@@ -2242,7 +2241,6 @@ export function App(): React.JSX.Element {
       // The voice snapshots ride the same rule: the voice window's pushes
       // beat a bootstrap still in flight.
       acceptVoiceBootstrap(value);
-      acceptConversationsBootstrap(value);
       acceptCalendarOnboardingBootstrap(value.calendarOnboardingOwed);
       acceptSessionReplayBootstrap(value.sessionReplay);
       acceptSettingsBootstrap(value.settings);
@@ -2339,7 +2337,6 @@ export function App(): React.JSX.Element {
     acceptSettingsBootstrap,
     acceptUpdateBootstrap,
     acceptVoiceBootstrap,
-    acceptConversationsBootstrap,
     applyAuthoritativeMode,
     applyPresentation,
     beginEntry,
@@ -2837,12 +2834,12 @@ export function App(): React.JSX.Element {
             onOpenSession={openSession}
             onOpenSessionApplication={openSessionApplication}
             writes={sessionWrites}
-            conversationHistory={conversations.history}
+            conversationHistory={conversationHistory}
             liveConversationEntries={liveConversationEntries}
-            conversations={conversations}
+            onClearConversationHistory={clearConversationHistory}
             brainRequests={brainRequests}
             onCancelBrainRequest={cancelBrainAsk}
-            askIn={askLuke}
+            ask={askLuke}
             onAskEngaged={changeAskEngagement}
             {...(shownAskHotkey ? { askShortcut: shownAskHotkey } : undefined)}
             offerOptions={offerOptions}

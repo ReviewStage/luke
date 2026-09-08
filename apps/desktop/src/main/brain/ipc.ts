@@ -12,7 +12,7 @@ import {
   replyConversationEntry,
   typedAskConversationEntry,
 } from "@sidecar/realtime";
-import { MAIN_SESSION_KEY, type SessionKey, sessionKey } from "@sidecar/runtime-contracts";
+import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import { BRIDGE } from "#shared/bridge";
 import {
@@ -279,19 +279,13 @@ export function registerBrainIpc(dependencies: BrainIpcDependencies): void {
     {
       submitBrainAsk(context, submission) {
         if (!originAllowed(context.sender, submission)) return REJECTED_SUBMISSION;
-        // The conversation is captured here, at the submission: a spoken ask
-        // is main's, a typed one names the conversation its composer stood
-        // in, and switching the selector afterwards retargets nothing. A key
-        // the directory does not list answers no brain and is refused.
-        const target =
-          submission.origin === BRAIN_REQUEST_ORIGIN.TYPED && submission.sessionKey !== undefined
-            ? sessionKey(submission.sessionKey)
-            : MAIN_SESSION_KEY;
+        // Every ask a window submits is main's: the talk key and both
+        // composers speak into the one conversation the panel draws.
         return submitBrainAsk(
-          brain(target),
+          brain(MAIN_SESSION_KEY),
           submission,
           dependencies.recordConversationEntry,
-          target,
+          MAIN_SESSION_KEY,
         );
       },
       // A wait that finds its run ended does not hand the words over on the

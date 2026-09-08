@@ -38,9 +38,9 @@ sends nothing anywhere. It stays on your Mac unless a feature below sends it.
 **Your conversation with Luke.** Luke keeps the conversations you have with
 him — what you typed or said, what he spoke or announced, the actions he took
 at your request, and the asks he is still working on — in a database on your
-Mac, so they are still there the next time you open him. There is a main
-conversation and any threads you open beside it; the History tab lists them
-and lets you switch. Each conversation's History holds its 200 most recent
+Mac, so they are still there the next time you open him. The History tab
+shows the main conversation, the one the talk key and every observation
+reach. Each conversation's History holds its 200 most recent
 entries and nothing older than 14 days, whichever runs out first, each kept in
 full so the tab shows every word. Beside the History, Luke keeps a transcript
 of each conversation's turns in the same database: every input the model was
@@ -74,20 +74,16 @@ generation holds at most 200 asks and stays under 8 MiB: the oldest finished
 asks go first once their endings are in the History, and when nothing can go
 Luke declines a new ask rather than growing the record.
 
-The History tab's controls change what is kept, each in a stated way.
-**Start fresh** begins a new generation for the conversation and keeps its
-History, its transcript, and everything Luke remembers about you; only his
-working context restarts. **Archive** takes a thread off the active list and
-keeps everything. **Delete history** removes a conversation's History,
-transcript, and working memory from the database, and writes them first, in
-the same step, into a compressed recovery archive kept on your Mac under
-Luke's own data (a `.jsonl.deleted.<time>.zst` file, and until it is written
-to disk, a copy inside the database); the deletion is reported complete only
-once that file is written and verified, and a copy not yet written is written
-at the next launch. **Restore** puts a deleted conversation back from its
-archive, unless the conversation has newer messages, in which case nothing is
-changed. Deleting never touches the separate things Luke remembers about you,
-described next, and never touches your agents' own files.
+The History tab's one control, **Clear**, removes the conversation's
+History, transcript, and working memory from the database, and writes them
+first, in the same step, into a compressed recovery archive kept on your Mac
+under Luke's own data (a `.jsonl.deleted.<time>.zst` file, and until it is
+written to disk, a copy inside the database); the deletion is reported
+complete only once that file is written and verified, and a copy not yet
+written is written at the next launch. Nothing in the app reads an archive
+back yet; it stands on your Mac for you alone. Clearing never touches the
+separate things Luke remembers about you, described next, and never touches
+your agents' own files.
 
 Luke also tidies this storage on his own, on the terms OpenClaw's session
 store uses: a conversation untouched for 30 days, and a thread idle for 7, is
@@ -302,12 +298,9 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 - Delete your OpenAI key to turn voice off.
 - Delete any synced provider API key from that provider's row in Settings. Keys
   are also deleted when you delete your account.
-- Use the History tab's controls: Start fresh to restart Luke's working
-  context for a conversation while keeping its history, Archive to shelve a
-  thread, Delete history to remove a conversation's stored conversation and
-  working memory behind a recovery archive on your Mac, and Restore to bring
-  one back; the working memory also discards itself 14 days after it began,
-  whatever you do.
+- Clear the History tab to remove the stored conversation and Luke's working
+  memory of it behind a recovery archive on your Mac; the working memory also
+  discards itself 14 days after it began, whatever you do.
 - Ask Luke what he remembers, correct a memory, or tell him to forget one.
 - Luke does not use your microphone until you start a turn.
 - Delete your account from the Account section in Settings. This erases your

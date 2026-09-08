@@ -140,7 +140,7 @@ import {
 import { VOICE_SOURCE_COUNTED_AS } from "#shared/product-vocabulary";
 import type { BrainRequestSnapshot } from "#shared/wire/brain";
 import { SPEECH_OUTCOME, type SpeechOutcome } from "#shared/wire/speech";
-import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/wire/voice-view";
+import { IDLE_VOICE_VIEW, VOICE_COMMAND, type VoiceView } from "#shared/wire/voice-view";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { AppleCalendarReader } from "./apple-calendar";
 import {
@@ -153,6 +153,7 @@ import {
   shouldBackfillArrivalSettled,
 } from "./arrival-flow";
 import type { WorkspaceCreationDefaults } from "./brain/act-performer";
+import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion";
 import { wakeEventsFromHooks } from "./brain/flow";
 import { BrainReplyDeliveries } from "./brain/reply-delivery";
 import { wireBrain } from "./brain/wiring";
@@ -178,7 +179,6 @@ import {
 } from "./introduction-flow";
 import { registerAccountSessionIpc } from "./ipc/account-session";
 import { registerCalendarConnectionIpc } from "./ipc/calendar-connection";
-import { registerConversationsIpc } from "./ipc/conversations";
 import { createSessionActPerformer, registerSessionActsIpc } from "./ipc/session-acts";
 import { registerSettingsRowsIpc } from "./ipc/settings-rows";
 import { registerTrackerConnectionIpc } from "./ipc/tracker-connection";
@@ -491,14 +491,13 @@ const runtimeStoreWiring = wireRuntimeStore({
   now: Date.now,
   createEventId: () => randomUUID(),
   onHistoryChanged: (sessionKey, entries, except) => {
-    const payload: ConversationHistoryPayload = {
-      sessionKey,
-      entries,
-      cleared: entries.length === 0,
-    };
+    // The panel draws main alone; another conversation's thread is held here
+    // for its brain and its tests and reaches no window.
+    if (sessionKey !== MAIN_SESSION_KEY) return;
+    const payload: ConversationHistoryPayload = { entries, cleared: entries.length === 0 };
     broadcast(channels.onConversationHistoryChanged, payload, except);
   },
-  onDirectoryChanged: (directory) => broadcast(channels.onConversationsChanged, directory),
+  onDirectoryChanged: () => undefined,
   report: (message) => process.stderr.write(`${message}\n`),
 });
 /**
@@ -1675,9 +1674,10 @@ const brainWiring = wireBrain({
 const conversationControls = conversationOperations({
   store: runtimeStoreWiring,
   brain: brainWiring,
-  /** Tells the voice window main's turns are retired, with or without its copy of the thread. */
-  retireVoiceTurns: (command) =>
-    voiceWindow.current()?.webContents.send(channels.onVoiceCommand, { command }),
+  retireVoiceTurns: () =>
+    voiceWindow
+      .current()
+      ?.webContents.send(channels.onVoiceCommand, { command: VOICE_COMMAND.CLEAR_CONVERSATION }),
   now: Date.now,
   report: (message) => process.stderr.write(`${message}\n`),
 });
@@ -2083,6 +2083,11 @@ function registerIpc(): void {
     storeVoiceView: (view) => {
       latestVoiceView = view;
     },
+    // The History Clear is Delete history on main: the recoverable deletion,
+    // reported to the panel as refused only when the store took nothing.
+    clearConversation: async () =>
+      (await conversationControls.deleteHistory(MAIN_SESSION_KEY)) !==
+      CONVERSATION_DELETE_OUTCOME.REFUSED,
     setShortcutCapturing: (capturing) => hotkeys.setShortcutCapturing(capturing),
     openExternal: (url) => shell.openExternal(url),
     // While the takeover stands and no account credential exists yet, the
@@ -2112,12 +2117,6 @@ function registerIpc(): void {
   });
 
   registerSessionActsIpc({ ipcMain, trustedSender, performer: sessionActPerformer });
-  registerConversationsIpc({
-    ipcMain,
-    trustedSender,
-    panel: (sender) => panels.owns(sender),
-    operations: conversationControls,
-  });
   brainWiring.registerIpc({
     ipcMain,
     trustedSender,

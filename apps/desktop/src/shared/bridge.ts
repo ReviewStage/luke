@@ -29,7 +29,6 @@ import {
   type RealtimeDiagnostics,
   storedConversationEntry,
 } from "@sidecar/realtime";
-import { isIdentifier, isRestoreOutcome, type RestoreOutcome } from "@sidecar/runtime-contracts";
 import {
   isProviderId,
   isSessionApplicationId,
@@ -88,16 +87,8 @@ import {
   isReceiverEpoch,
 } from "./wire/brain";
 import {
-  type ConversationDeleteOutcome,
-  type ConversationDirectory,
-  type ConversationHistoryPayload,
-  type ConversationThreadRequest,
-  isConversationDeleteOutcome,
-  isConversationDirectory,
-  isConversationThreadRequest,
-} from "./wire/conversation";
-import {
   type AppBootstrap,
+  type ConversationHistoryPayload,
   type DisplayDiagnostic,
   type SessionOpenResult,
   type SessionReplayBootstrap,
@@ -1065,87 +1056,6 @@ export const BRIDGE = {
     channel: "app:conversation-history-changed",
     args: noArgs,
     result: result<ConversationHistoryPayload>(),
-  }),
-  /**
-   * The conversation directory as the main process holds it: every logical
-   * conversation with its kind and lifecycle standing, and the recoverable
-   * archives of deleted history. Pushed whole on every change.
-   */
-  onConversationsChanged: entry({
-    kind: "subscribe",
-    channel: "app:conversations-changed",
-    args: noArgs,
-    result: result<ConversationDirectory>(isConversationDirectory),
-  }),
-  listConversations: entry({
-    kind: "invoke",
-    channel: "app:list-conversations",
-    args: noArgs,
-    result: result<ConversationDirectory>(isConversationDirectory),
-  }),
-  /** One conversation's retained thread, for a panel that switched to it. */
-  conversationHistory: entry({
-    kind: "invoke",
-    channel: "app:conversation-history",
-    args: args<[string]>((v) => v.length === 1 && isIdentifier(v[0])),
-    result: result<readonly ConversationEntry[]>(
-      (v) => Array.isArray(v) && v.every((entry) => storedConversationEntry(entry) !== undefined),
-    ),
-  }),
-  /**
-   * New thread: another logical conversation of the same agent, durable or
-   * temporary. Answers the directory as it then stands; the new thread's key
-   * is the one entry the caller did not have before.
-   */
-  createConversationThread: entry({
-    kind: "invoke",
-    channel: "app:create-conversation-thread",
-    args: args<[ConversationThreadRequest]>(
-      (v) => v.length === 1 && isConversationThreadRequest(v[0]),
-    ),
-    result: result<string | undefined>((v) => v === undefined || isIdentifier(v)),
-  }),
-  /**
-   * Start fresh: the conversation keeps its key and its history, and Luke's
-   * working context for it begins again under a new lifetime. Answers
-   * whether the new lifetime reached the store.
-   */
-  startFreshConversation: entry({
-    kind: "invoke",
-    channel: "app:start-fresh-conversation",
-    args: args<[string]>((v) => v.length === 1 && isIdentifier(v[0])),
-    result: result<boolean>(isWireBoolean),
-  }),
-  archiveConversation: entry({
-    kind: "invoke",
-    channel: "app:archive-conversation",
-    args: args<[string]>((v) => v.length === 1 && isIdentifier(v[0])),
-    result: result<boolean>(isWireBoolean),
-  }),
-  unarchiveConversation: entry({
-    kind: "invoke",
-    channel: "app:unarchive-conversation",
-    args: args<[string]>((v) => v.length === 1 && isIdentifier(v[0])),
-    result: result<boolean>(isWireBoolean),
-  }),
-  /**
-   * Delete history: the conversation's stored lines, transcript, and working
-   * context go, behind a compressed recovery archive committed with the
-   * removal and then published to disk. Answers whether the publication
-   * completed; an incomplete one is retried at the next launch.
-   */
-  deleteConversationHistory: entry({
-    kind: "invoke",
-    channel: "app:delete-conversation-history",
-    args: args<[string]>((v) => v.length === 1 && isIdentifier(v[0])),
-    result: result<ConversationDeleteOutcome>(isConversationDeleteOutcome),
-  }),
-  /** Restore: one archive back into its conversation, refused when that conversation holds newer lines. */
-  restoreConversationArchive: entry({
-    kind: "invoke",
-    channel: "app:restore-conversation-archive",
-    args: oneString,
-    result: result<RestoreOutcome>(isRestoreOutcome),
   }),
 } as const;
 

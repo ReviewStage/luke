@@ -1,42 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { appendConversationThreadEntry, CONVERSATION_ENTRY_KIND } from "@sidecar/realtime";
-import { CONVERSATION_KIND, MAIN_SESSION_KEY, threadSessionKey } from "@sidecar/runtime-contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CONVERSATION_CONTROL_WORDS } from "#shared/wire/conversation";
 import {
-  type ConversationControls,
   ConversationHistoryPanel,
-  HISTORY_ARCHIVED_NOTE,
   HISTORY_ENTRY_SPEAKER,
   HISTORY_PENDING_LABEL,
   historyEntryPresentation,
 } from "./conversation-history-panel";
-
-const MAIN = {
-  sessionKey: MAIN_SESSION_KEY,
-  kind: CONVERSATION_KIND.MAIN,
-  name: "main",
-  createdAt: 1,
-  lastActivityAt: 1,
-} as const;
-
-/** The controls with main alone listed, every operation inert; a test that needs more overrides. */
-function controls(overrides: Partial<ConversationControls> = {}): ConversationControls {
-  return {
-    directory: { entries: [MAIN], archives: [] },
-    selected: MAIN_SESSION_KEY,
-    select: () => undefined,
-    createThread: async () => undefined,
-    startFresh: async () => true,
-    archive: async () => true,
-    unarchive: async () => true,
-    deleteHistory: async () => "complete",
-    restoreArchive: async () => "restored",
-    ...overrides,
-  };
-}
 
 test("conversation asks are shown as the developer's own words", () => {
   assert.deepEqual(historyEntryPresentation(CONVERSATION_ENTRY_KIND.TYPED_ASK), {
@@ -76,7 +48,7 @@ test("an announcement shows its spoken transcript", () => {
           words: "Checkout is ready.",
         },
       ],
-      conversations: controls(),
+      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
@@ -95,7 +67,7 @@ test("a reply keeps its lines through the thread and draws as the Markdown it wa
   const markup = renderToStaticMarkup(
     createElement(ConversationHistoryPanel, {
       entries,
-      conversations: controls(),
+      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
@@ -117,7 +89,7 @@ test("a recorded entry keeps its local time at the row's edge, outside the bubbl
           recordedAt: Date.parse("2026-01-02T03:04:00.000Z"),
         },
       ],
-      conversations: controls(),
+      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
@@ -140,7 +112,7 @@ test("conversation history is blocked from optional panel recordings", () => {
   const markup = renderToStaticMarkup(
     createElement(ConversationHistoryPanel, {
       entries: [{ kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "private words" }],
-      conversations: controls(),
+      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
@@ -159,7 +131,7 @@ test("messages offer a copy control while quiet events offer none", () => {
         { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Shipping." },
         { kind: CONVERSATION_ENTRY_KIND.ACT, words: "Sent to Codex." },
       ],
-      conversations: controls(),
+      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
@@ -181,7 +153,7 @@ test("a line still being said draws as the bubble it will settle into", () => {
         },
       ],
       live: [{ kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT, words: "Checkout is" }],
-      conversations: controls(),
+      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
@@ -200,7 +172,7 @@ test("words still arriving stand the thread up without a settled line", () => {
     createElement(ConversationHistoryPanel, {
       entries: [],
       live: [{ kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Looking now." }],
-      conversations: controls(),
+      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
@@ -208,113 +180,29 @@ test("words still arriving stand the thread up without a settled line", () => {
 
   assert.match(markup, />Looking now\.</);
   assert.doesNotMatch(markup, />No messages yet</);
+  // Clear retires recorded lines, and nothing here is recorded yet.
+  assert.doesNotMatch(markup, /history-header/);
 });
 
 test("the empty history reports only its state", () => {
   const markup = renderToStaticMarkup(
     createElement(ConversationHistoryPanel, {
       entries: [],
-      conversations: controls(),
+      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
   );
 
   assert.match(markup, />No messages yet</);
-  assert.doesNotMatch(markup, /next typed|stays in memory/);
-});
-
-test("the header lists every conversation, archived apart, and its controls say what starting fresh keeps", () => {
-  const thread = {
-    sessionKey: threadSessionKey("t-1"),
-    kind: CONVERSATION_KIND.THREAD,
-    name: "Thread 1",
-    createdAt: 2,
-    lastActivityAt: 2,
-  } as const;
-  const shelved = {
-    ...thread,
-    sessionKey: threadSessionKey("t-2"),
-    name: "Thread 2",
-    archivedAt: 3,
-  } as const;
-  const markup = renderToStaticMarkup(
-    createElement(ConversationHistoryPanel, {
-      entries: [],
-      conversations: controls({
-        directory: {
-          entries: [MAIN, thread, shelved],
-          archives: [
-            {
-              archiveId: "a-1",
-              sessionKey: MAIN_SESSION_KEY,
-              kind: CONVERSATION_KIND.MAIN,
-              name: "main",
-              createdAt: 1,
-              deletedAt: Date.parse("2026-01-02T03:04:00.000Z"),
-              encoding: "zstd",
-              sha256: "00",
-              byteLength: 10,
-              fileName: "agent_main_main.jsonl.deleted.x.zst",
-              publishedAt: 5,
-              historyLines: 4,
-              transcriptEvents: 9,
-            },
-          ],
-        },
-      }),
-      ask: async () => undefined,
-      onAskEngaged: () => undefined,
-    }),
-  );
-  assert.match(
-    markup,
-    /<optgroup label="Conversations"><option[^>]*>Main<\/option><option[^>]*>Thread 1<\/option>/,
-  );
-  assert.match(markup, /<optgroup label="Archived"><option[^>]*>Thread 2<\/option>/);
-  assert.match(markup, new RegExp(CONVERSATION_CONTROL_WORDS.START_FRESH));
-  assert.match(markup, new RegExp(CONVERSATION_CONTROL_WORDS.NEW_THREAD));
-  assert.match(markup, new RegExp(CONVERSATION_CONTROL_WORDS.DELETE_HISTORY));
-  assert.match(markup, new RegExp(CONVERSATION_CONTROL_WORDS.RESTORE));
-  // Main cannot be archived, and the old Clear is nowhere.
-  assert.doesNotMatch(markup, />Archive<|>Clear</);
-  // The archive list says how many lines it holds, never what they said.
-  assert.match(markup, /4 lines/);
-  // Everything, the selector and the archive list included, rides inside the blocked subtree.
-  assert.ok(markup.indexOf("ph-no-capture") < markup.indexOf("history-select"));
-});
-
-test("an archived conversation shows its thread read-only, with no composer", () => {
-  const shelved = {
-    sessionKey: threadSessionKey("t-2"),
-    kind: CONVERSATION_KIND.THREAD,
-    name: "Thread 2",
-    createdAt: 2,
-    lastActivityAt: 2,
-    archivedAt: 3,
-  } as const;
-  const markup = renderToStaticMarkup(
-    createElement(ConversationHistoryPanel, {
-      entries: [{ kind: CONVERSATION_ENTRY_KIND.REPLY, words: "kept" }],
-      conversations: controls({
-        directory: { entries: [MAIN, shelved], archives: [] },
-        selected: shelved.sessionKey,
-      }),
-      ask: async () => undefined,
-      onAskEngaged: () => undefined,
-    }),
-  );
-  assert.match(markup, />kept</);
-  assert.match(markup, new RegExp(HISTORY_ARCHIVED_NOTE));
-  assert.match(markup, new RegExp(CONVERSATION_CONTROL_WORDS.UNARCHIVE));
-  assert.doesNotMatch(markup, /id="ask-luke-input"/);
+  assert.doesNotMatch(markup, /history-header|next typed|stays in memory/);
 });
 
 test("the composer stands at the foot of the thread, empty or not", () => {
   const empty = renderToStaticMarkup(
     createElement(ConversationHistoryPanel, {
       entries: [],
-      conversations: controls(),
+      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
@@ -326,7 +214,7 @@ test("the composer stands at the foot of the thread, empty or not", () => {
   const threaded = renderToStaticMarkup(
     createElement(ConversationHistoryPanel, {
       entries: [{ kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "ship it" }],
-      conversations: controls(),
+      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
       askShortcut: "Alt+Space",
@@ -358,7 +246,7 @@ test("an ask whose run is still going waits beside its words and offers a cancel
         ],
         requests: [{ ...run, status }],
         onCancelRequest: (runId) => cancelled.push(runId),
-        conversations: controls(),
+        onClear: () => undefined,
         ask: async () => undefined,
         onAskEngaged: () => undefined,
       }),
@@ -379,7 +267,7 @@ test("an ask whose run is still going waits beside its words and offers a cancel
       entries: [{ kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words: "ship it", requestId: "run-1" }],
       requests: [{ ...run, origin: "spoken", status: "running" }],
       onCancelRequest: (runId) => cancelled.push(runId),
-      conversations: controls(),
+      onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),

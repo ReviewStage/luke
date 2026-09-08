@@ -322,13 +322,17 @@ Trust constraints:
   journal, a new ask is refused at the door when nothing can go, and a write
   that would still grow an envelope past a bound is refused rather than
   dropping a run still going or its journal.
-- The conversations are a directory, and History's controls are five
-  distinct acts in place of the one Clear. Main is the agent's ordinary
-  conversation, the one the talk key and every observation reach; a private
-  thread (`agent:<agentId>:thread:<uuid>`) is another logical conversation
-  of the same agent with its own generation, history, and transcript, opened
-  by the developer and asked in from the History tab, where the ask captures
-  the conversation at the send and a switch afterwards retargets nothing. A
+- The conversations are a directory, and the main process carries five
+  distinct operations over it, none of which a window can name: no bridge
+  entry lists, creates, resets, archives, or restores a conversation. The
+  History tab draws exactly what it drew before — one thread and its Clear —
+  and the Clear is Delete history on main; the selector, threads, Start
+  fresh, Archive, and Restore reach no control and no bridge until a product
+  decision draws them, and stand exercised by their tests. Main is the
+  agent's ordinary conversation, the one the talk key, both composers, and
+  every observation reach; a private thread (`agent:<agentId>:thread:<uuid>`)
+  is another logical conversation of the same agent with its own generation,
+  history, and transcript, and only main's thread is relayed to a window. A
   temporary thread is held in memory alone — its history and its envelope
   both — and is gone at the next launch; nothing said in it is remembered
   automatically, and its explicit `remember` writes are the same act as

@@ -1,6 +1,5 @@
 import { BRAIN_REQUEST_ORIGIN, BRAIN_SUBMISSION_OUTCOME } from "@sidecar/brain/requests";
 import { type ConversationEntry, REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
-import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MicrophoneStatus, VoiceHotkeyState } from "#shared/wire/audio";
 import {
@@ -9,8 +8,15 @@ import {
   type BrainRequestSnapshot,
 } from "#shared/wire/brain";
 import type { AppBootstrap } from "#shared/wire/session";
-import { IDLE_VOICE_VIEW, VOICE_COMMAND, type VoiceView } from "#shared/wire/voice-view";
+import {
+  IDLE_VOICE_VIEW,
+  VOICE_COMMAND,
+  VOICE_COMMAND_OUTCOME,
+  type VoiceCommandOutcome,
+  type VoiceView,
+} from "#shared/wire/voice-view";
 import { useBootstrapRacedChannel } from "./use-bootstrap-raced-channel";
+import { VOICE_ERROR_NOTICE_MS } from "./voice/use-voice-session";
 import { VOICE_ACTIVITY_HANGOVER_MS, VOICE_ACTIVITY_THRESHOLD } from "./voice/voice-level-meter";
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
 
@@ -29,6 +35,10 @@ export function askDraftReason(result: BrainAskSubmissionResult | undefined): st
     ? undefined
     : BRAIN_ASK_REFUSAL[result.reason];
 }
+
+/** What the strip says when the stored thread could not be deleted. */
+export const CLEAR_FAILED_REASON =
+  "History was cleared from view, but its file could not be fully erased. Try again.";
 
 /**
  * How long a voice has been active, read off the relayed levels with the
@@ -120,10 +130,9 @@ export interface VoiceViewState {
    * A typed ask to Luke, submitted to the brain in the main process and
    * answered with whether it was accepted into a run: nothing when it was, a
    * reason when it was not, so the composer keeps a refused draft. The reply
-   * arrives later, in the thread and in the voice. It names the conversation
-   * the composer stood in; unnamed, it is main's.
+   * arrives later, in the thread and in the voice.
    */
-  askLuke: (text: string, sessionKey?: SessionKey) => Promise<string | undefined>;
+  askLuke: (text: string) => Promise<string | undefined>;
   /** Every run the brain holds, for History to draw a pending ask beside its words. */
   brainRequests: readonly BrainRequestSnapshot[];
   /** Cancels one run the developer no longer wants. */
@@ -132,6 +141,8 @@ export interface VoiceViewState {
   discardListening: () => void;
   stopSpeaking: () => void;
   requestMicrophoneAccess: () => void;
+  /** Clears the visible history, the next call's context, and the stored file. */
+  clearConversationHistory: () => void;
 }
 
 /**
@@ -165,9 +176,7 @@ export function useVoiceView(): VoiceViewState {
   // whole. A Clear relays as an empty thread, which is all a view needs.
   const acceptHistoryBootstrap = useBootstrapRacedChannel(
     (onChange) =>
-      window.sidecar.onConversationHistoryChanged((payload) => {
-        if (payload.sessionKey === MAIN_SESSION_KEY) onChange(payload.entries);
-      }),
+      window.sidecar.onConversationHistoryChanged((payload) => onChange(payload.entries)),
     setConversationHistory,
   );
   const acceptBootstrap = useCallback(
@@ -213,14 +222,13 @@ export function useVoiceView(): VoiceViewState {
   // One submission id per press of Send: the id is what makes a retry of
   // this very ask the same run and a second deliberate ask a new one.
   const askLuke = useCallback(
-    async (text: string, sessionKey?: SessionKey): Promise<string | undefined> =>
+    async (text: string): Promise<string | undefined> =>
       askDraftReason(
         await window.sidecar
           .submitBrainAsk({
             submissionId: crypto.randomUUID(),
             question: text,
             origin: BRAIN_REQUEST_ORIGIN.TYPED,
-            ...(sessionKey ? { sessionKey } : undefined),
           })
           .catch((): BrainAskSubmissionResult | undefined => undefined),
       ),
@@ -254,8 +262,26 @@ export function useVoiceView(): VoiceViewState {
   const requestMicrophoneAccess = useCallback(() => {
     void window.sidecar.voiceCommand(VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS);
   }, []);
+  // The one failure the panel reports itself: the stored thread refusing to
+  // go is the main process's answer to this press, not anything the voice
+  // window saw, so it borrows the strip here on the strip's own clock.
+  const [localError, setLocalError] = useState<string>();
+  useEffect(() => {
+    if (localError === undefined) return;
+    const timer = window.setTimeout(() => setLocalError(undefined), VOICE_ERROR_NOTICE_MS);
+    return () => window.clearTimeout(timer);
+  }, [localError]);
+  const clearConversationHistory = useCallback(() => {
+    void window.sidecar
+      .voiceCommand(VOICE_COMMAND.CLEAR_CONVERSATION)
+      .catch((): VoiceCommandOutcome => VOICE_COMMAND_OUTCOME.REFUSED)
+      .then((outcome) => {
+        if (outcome === VOICE_COMMAND_OUTCOME.REFUSED) setLocalError(CLEAR_FAILED_REASON);
+      });
+  }, []);
+
   return {
-    view,
+    view: localError === undefined ? view : { ...view, voiceError: localError },
     speaking: view.voiceStatus === REALTIME_STATUS.RESPONDING,
     voiceTurn: waveformVoice(view.voiceStatus),
     level,
@@ -270,5 +296,6 @@ export function useVoiceView(): VoiceViewState {
     discardListening,
     stopSpeaking,
     requestMicrophoneAccess,
+    clearConversationHistory,
   };
 }

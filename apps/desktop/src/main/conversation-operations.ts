@@ -1,25 +1,34 @@
-import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
-import { VOICE_COMMAND } from "#shared/wire/voice-view";
-import { deleteConversationHistoryFlow } from "./brain/conversation-deletion";
+import type { ConversationEntry } from "@sidecar/realtime";
+import { MAIN_SESSION_KEY, type RestoreOutcome, type SessionKey } from "@sidecar/runtime-contracts";
+import {
+  type ConversationDeleteOutcome,
+  deleteConversationHistoryFlow,
+} from "./brain/conversation-deletion";
 import type { BrainWiring } from "./brain/wiring";
-import type { ConversationOperations } from "./ipc/conversations";
-import type { RuntimeStoreWiring } from "./runtime-store-wiring";
+import type { ConversationDirectorySnapshot, RuntimeStoreWiring } from "./runtime-store-wiring";
 
 /**
- * The conversation controls as the desktop carries them out, each on a key
- * the directory listed when the panel asked. New thread opens a brain over a
- * fresh conversation; Start fresh replaces a conversation's lifetime and
- * touches none of its history; Archive retires a thread's brain and leaves
- * its history in the store; Delete history is the recoverable deletion, in
- * the order its own module states; Restore brings an archive back where no
- * newer conversation stands. Main's turns in the voice window are retired
- * whenever main starts fresh or loses its history.
+ * The conversation operations the desktop carries out over the two wirings,
+ * each on a key the directory lists. New thread opens a brain over a fresh
+ * conversation; Start fresh replaces a conversation's lifetime and touches
+ * none of its history; Archive retires a thread's brain and leaves its
+ * history in the store; Delete history is the recoverable deletion, in the
+ * order its own module states; Restore brings an archive back where no newer
+ * conversation stands. The panel reaches exactly one of them: its Clear is
+ * Delete history on main. The rest have no control until a product decision
+ * draws one, and stand here exercised by their tests.
  */
-
-/** The two things the voice window is told about main: its turns are retired, with or without its copy of the thread. */
-export type VoiceRetirement =
-  | typeof VOICE_COMMAND.CLEAR_CONVERSATION
-  | typeof VOICE_COMMAND.RETIRE_TURNS;
+export interface ConversationOperations {
+  directory: () => ConversationDirectorySnapshot;
+  holds: (sessionKey: SessionKey) => boolean;
+  history: (sessionKey: SessionKey) => readonly ConversationEntry[];
+  createThread: (temporary: boolean) => Promise<SessionKey | undefined>;
+  startFresh: (sessionKey: SessionKey) => Promise<boolean>;
+  archive: (sessionKey: SessionKey) => Promise<boolean>;
+  unarchive: (sessionKey: SessionKey) => Promise<boolean>;
+  deleteHistory: (sessionKey: SessionKey) => Promise<ConversationDeleteOutcome>;
+  restoreArchive: (archiveId: string) => Promise<RestoreOutcome>;
+}
 
 export interface ConversationOperationsDependencies {
   store: Pick<
@@ -34,7 +43,8 @@ export interface ConversationOperationsDependencies {
     | "restoreArchive"
   >;
   brain: Pick<BrainWiring, "openConversation" | "closeConversation" | "resetConversation">;
-  retireVoiceTurns: (command: VoiceRetirement) => void;
+  /** Tells the voice window main's history is gone, so it retires its turns and empties its copy of the thread. */
+  retireVoiceTurns: () => void;
   now: () => number;
   report: (message: string) => void;
 }
@@ -52,12 +62,7 @@ export function conversationOperations(
       await brain.openConversation(record.sessionKey);
       return record.sessionKey;
     },
-    startFresh: async (sessionKey) => {
-      const reset = await brain.resetConversation(sessionKey);
-      if (sessionKey === MAIN_SESSION_KEY)
-        dependencies.retireVoiceTurns(VOICE_COMMAND.RETIRE_TURNS);
-      return reset;
-    },
+    startFresh: (sessionKey) => brain.resetConversation(sessionKey),
     archive: async (sessionKey) => {
       if (sessionKey === MAIN_SESSION_KEY) return false;
       await brain.closeConversation(sessionKey);
@@ -73,9 +78,7 @@ export function conversationOperations(
         now: dependencies.now,
         fence: (deletedAt) => {
           store.thread(sessionKey).fence(deletedAt);
-          if (sessionKey === MAIN_SESSION_KEY) {
-            dependencies.retireVoiceTurns(VOICE_COMMAND.CLEAR_CONVERSATION);
-          }
+          if (sessionKey === MAIN_SESSION_KEY) dependencies.retireVoiceTurns();
         },
         retireBrain: () => brain.closeConversation(sessionKey),
         erase: (deletedAt) => store.eraseHistory(sessionKey, deletedAt),

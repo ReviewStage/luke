@@ -96,7 +96,18 @@ export interface SessionReplayBootstrap {
   accountId?: string;
 }
 
-export type { ConversationHistoryPayload } from "./conversation";
+/**
+ * The conversation history as every panel window draws it. The thread has one
+ * store, the main process's runtime store, which takes the hidden voice
+ * window's appends and the main process's own lines and relays the thread
+ * whole to every panel so History reads the same on every display. `cleared`
+ * marks the relay of a Clear, which the voice window is told of on its own
+ * command; a panel needs nothing from it but the empty thread.
+ */
+export interface ConversationHistoryPayload {
+  entries: readonly ConversationEntry[];
+  cleared: boolean;
+}
 
 export interface AppBootstrap {
   mode: WindowMode;
