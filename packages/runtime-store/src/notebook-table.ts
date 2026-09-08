@@ -203,9 +203,12 @@ export const NOTEBOOK_REFUSAL = {
  * Remembers one thing: a line under USER.md's remembered heading and an
  * entry beside it. Naming an entry to replace removes that line first; words
  * already remembered add nothing; and the list past its bound refuses a new
- * entry rather than cutting one. The file is written before the table, so a
- * table write that fails leaves a line the next reconcile adopts rather than
- * an entry with no line behind it.
+ * entry rather than cutting one. The rows land first and the file is written
+ * inside the same transaction, so a file write that throws rolls the rows
+ * back and the caller sees the failure, never an id with no line behind it.
+ * The two resources are still two: a commit that fails after the file landed
+ * leaves a line with no row, which the next reconcile adopts under a fresh id
+ * of the developer's origin, and the caller still sees a failure, not an id.
  */
 export function rememberNotebookEntry(
   database: RuntimeDatabase,
@@ -232,11 +235,11 @@ export function rememberNotebookEntry(
     content = appendNotebookEntry(content, words);
   }
   if (content === current.content) return { ok: true, entries: current.entries };
-  writeUserFile(root, content);
   const entries = database.transaction(() => {
     if (replaced) database.prepare("DELETE FROM notebook_entries WHERE id = ?").run(replaced.id);
     if (!duplicate) insertEntry(database, { id: ask.id, words, origin: MEMORY_ORIGIN.AGENT }, now);
     recordHash(database, hashText(content), now);
+    writeUserFile(root, content);
     return selectEntries(database);
   });
   return { ok: true, entries };
@@ -252,10 +255,10 @@ export function forgetNotebookEntry(
   const entry = current.entries.find((candidate) => candidate.id === id);
   if (!entry) return { ok: false, entries: current.entries, reason: NOTEBOOK_REFUSAL.UNKNOWN_ID };
   const content = removeNotebookEntry(current.content, entry.words);
-  writeUserFile(root, content);
   const entries = database.transaction(() => {
     database.prepare("DELETE FROM notebook_entries WHERE id = ?").run(id);
     recordHash(database, hashText(content), now);
+    writeUserFile(root, content);
     return selectEntries(database);
   });
   return { ok: true, entries };
@@ -291,7 +294,6 @@ export function migrateFactsIntoNotebook(
     content = appendNotebookEntry(content, words);
     added.push({ id: fact.id, words });
   }
-  if (content !== current.content) writeUserFile(root, content);
   database.transaction(() => {
     for (const fact of added) {
       insertEntry(
@@ -307,6 +309,7 @@ export function migrateFactsIntoNotebook(
     }
     database.exec("DELETE FROM personal_facts");
     recordHash(database, hashText(content), now);
+    if (content !== current.content) writeUserFile(root, content);
   });
   return facts.length;
 }

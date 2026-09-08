@@ -72,6 +72,21 @@ test("remember writes a line under the heading and an entry beside it; forget re
   assert.equal(forgetNotebookEntry(database, root, "e3", NOW).ok, false);
 });
 
+test("a file write that fails rolls the rows back and leaves the file as it was", () => {
+  const database = openTestDatabase();
+  const root = workspace();
+  rememberNotebookEntry(database, root, { id: "e1", words: "likes espresso" }, NOW);
+  const before = userFile(root);
+  fs.mkdirSync(`${path.join(root, WORKSPACE_FILE.USER)}.${process.pid}.tmp`);
+  assert.throws(() => rememberNotebookEntry(database, root, { id: "e2", words: "new" }, NOW + 1));
+  assert.throws(() => forgetNotebookEntry(database, root, "e1", NOW + 2));
+  assert.equal(userFile(root), before);
+  assert.deepEqual(
+    listNotebookEntries(database, root, NOW + 3).map((entry) => entry.id),
+    ["e1"],
+  );
+});
+
 test("the list is bounded at 32 unless an entry is replaced", () => {
   const database = openTestDatabase();
   const root = workspace();
