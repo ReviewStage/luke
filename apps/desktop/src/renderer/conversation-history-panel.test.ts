@@ -10,6 +10,10 @@ import {
   historyEntryPresentation,
 } from "./conversation-history-panel";
 
+const NOW = Date.parse("2026-09-08T17:30:00.000Z");
+const HOUR_MS = 60 * 60_000;
+const DAY_MS = 24 * HOUR_MS;
+
 test("conversation asks are shown as the developer's own words", () => {
   assert.deepEqual(historyEntryPresentation(CONVERSATION_ENTRY_KIND.TYPED_ASK), {
     speaker: HISTORY_ENTRY_SPEAKER.YOU,
@@ -55,6 +59,7 @@ test("an announcement shows its spoken transcript", () => {
           words: "Checkout is ready.",
         },
       ],
+      now: NOW,
       onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
@@ -74,6 +79,7 @@ test("a reply keeps its lines through the thread and draws as the Markdown it wa
   const markup = renderToStaticMarkup(
     createElement(ConversationHistoryPanel, {
       entries,
+      now: NOW,
       onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
@@ -96,6 +102,7 @@ test("a recorded entry keeps its local time at the row's edge, outside the bubbl
           recordedAt: Date.parse("2026-01-02T03:04:00.000Z"),
         },
       ],
+      now: NOW,
       onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
@@ -119,6 +126,7 @@ test("conversation history is blocked from optional panel recordings", () => {
   const markup = renderToStaticMarkup(
     createElement(ConversationHistoryPanel, {
       entries: [{ kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "private words" }],
+      now: NOW,
       onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
@@ -138,6 +146,7 @@ test("messages offer a copy control while quiet events offer none", () => {
         { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Shipping." },
         { kind: CONVERSATION_ENTRY_KIND.ACT, words: "Sent to Codex." },
       ],
+      now: NOW,
       onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
@@ -160,6 +169,7 @@ test("a line still being said draws as the bubble it will settle into", () => {
         },
       ],
       live: [{ kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT, words: "Checkout is" }],
+      now: NOW,
       onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
@@ -179,6 +189,7 @@ test("words still arriving stand the thread up without a settled line", () => {
     createElement(ConversationHistoryPanel, {
       entries: [],
       live: [{ kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Looking now." }],
+      now: NOW,
       onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
@@ -195,6 +206,7 @@ test("the empty history reports only its state", () => {
   const markup = renderToStaticMarkup(
     createElement(ConversationHistoryPanel, {
       entries: [],
+      now: NOW,
       onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
@@ -209,6 +221,7 @@ test("the composer stands at the foot of the thread, empty or not", () => {
   const empty = renderToStaticMarkup(
     createElement(ConversationHistoryPanel, {
       entries: [],
+      now: NOW,
       onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
@@ -221,6 +234,7 @@ test("the composer stands at the foot of the thread, empty or not", () => {
   const threaded = renderToStaticMarkup(
     createElement(ConversationHistoryPanel, {
       entries: [{ kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "ship it" }],
+      now: NOW,
       onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
@@ -253,6 +267,7 @@ test("an ask whose run is still going waits beside its words and offers a cancel
         ],
         requests: [{ ...run, status }],
         onCancelRequest: (runId) => cancelled.push(runId),
+        now: NOW,
         onClear: () => undefined,
         ask: async () => undefined,
         onAskEngaged: () => undefined,
@@ -274,10 +289,85 @@ test("an ask whose run is still going waits beside its words and offers a cancel
       entries: [{ kind: CONVERSATION_ENTRY_KIND.SPOKEN_ASK, words: "ship it", requestId: "run-1" }],
       requests: [{ ...run, origin: "spoken", status: "running" }],
       onCancelRequest: (runId) => cancelled.push(runId),
+      now: NOW,
       onClear: () => undefined,
       ask: async () => undefined,
       onAskEngaged: () => undefined,
     }),
   );
   assert.match(spoken, /class="history-cancel"/);
+});
+
+test("a line that followed a long silence is dated over it, in the quiet event voice", () => {
+  const markup = renderToStaticMarkup(
+    createElement(ConversationHistoryPanel, {
+      entries: [
+        { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "ship it", recordedAt: NOW - 9 * DAY_MS },
+        { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Shipping.", recordedAt: NOW - 9 * DAY_MS },
+        {
+          kind: CONVERSATION_ENTRY_KIND.ACT,
+          words: "Sent to Codex.",
+          recordedAt: NOW - 2 * DAY_MS,
+        },
+        {
+          kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
+          words: "status?",
+          recordedAt: NOW - HOUR_MS / 2,
+        },
+        { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Quiet.", recordedAt: NOW - HOUR_MS / 4 },
+      ],
+      now: NOW,
+      onClear: () => undefined,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
+    }),
+  );
+
+  // The first recorded line is dated, then every line an hour or more after
+  // the one before it; a reply half an hour on answers the ask and draws none.
+  const breaks = [...markup.matchAll(/<li class="history-break">/g)];
+  assert.equal(breaks.length, 3);
+  assert.ok(markup.indexOf('<li class="history-break">') < markup.indexOf("history-entry"));
+  const dates = [...markup.matchAll(/dateTime="([^"]+)"[^>]*><strong>([^<]+)<\/strong>/g)].map(
+    (match) => [match[1], match[2]],
+  );
+  assert.deepEqual(dates, [
+    [
+      new Date(NOW - 9 * DAY_MS).toISOString(),
+      new Date(NOW - 9 * DAY_MS).toLocaleDateString(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      }),
+    ],
+    [
+      new Date(NOW - 2 * DAY_MS).toISOString(),
+      new Date(NOW - 2 * DAY_MS).toLocaleDateString(undefined, { weekday: "long" }),
+    ],
+    [new Date(NOW - HOUR_MS / 2).toISOString(), "Today"],
+  ]);
+  // The date is the thread's own line, never a message: no bubble, no copy control.
+  assert.match(
+    markup,
+    /<li class="history-break"><time class="history-break-time" dateTime="[^"]+"><strong>/,
+  );
+  assert.equal(markup.match(/class="history-copy"/g)?.length, 4);
+});
+
+test("lines with no stamp draw no date over them", () => {
+  const markup = renderToStaticMarkup(
+    createElement(ConversationHistoryPanel, {
+      entries: [
+        { kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "ship it" },
+        { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Shipping." },
+      ],
+      live: [{ kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Still" }],
+      now: NOW,
+      onClear: () => undefined,
+      ask: async () => undefined,
+      onAskEngaged: () => undefined,
+    }),
+  );
+
+  assert.doesNotMatch(markup, /history-break/);
 });

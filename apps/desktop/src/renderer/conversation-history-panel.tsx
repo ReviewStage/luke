@@ -7,6 +7,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { type BrainRequestSnapshot, brainRequestPending } from "#shared/wire/brain";
 import { type AskHandler, AskLuke } from "./ask-luke";
+import { createHistoryTimeBreakFormatter, opensHistoryTimeBreak } from "./history-time-break";
 import { MarkdownMessage } from "./markdown-message";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CheckIcon, CopyIcon } from "./settings-icons";
@@ -44,6 +45,8 @@ export function historyEntryPresentation(kind: ConversationEntryKind): HistoryEn
 const COPY_CONFIRMATION_MS = 1500;
 
 const ENTRY_TIME = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+
+const timeBreakLabel = createHistoryTimeBreakFormatter();
 
 /** What History says under an ask whose run has not ended yet. */
 export const HISTORY_PENDING_LABEL = "Luke is working on this…";
@@ -125,14 +128,36 @@ function HistoryEntryRow({
   );
 }
 
+/**
+ * The moment a line was said, set over it the way iMessage dates a message
+ * that followed a long silence. It is the thread's line, not a message: it
+ * reads in the quiet voice the requested acts use, and it stands still under
+ * the pull like Luke's rows do, so uncovering the stamp column never pushes
+ * a date off the screen.
+ */
+function HistoryTimeBreak({ recordedAt, now }: { recordedAt: number; now: number }) {
+  const at = new Date(recordedAt);
+  const label = timeBreakLabel(recordedAt, now);
+  return (
+    <li className="history-break">
+      <time className="history-break-time" dateTime={at.toISOString()}>
+        <strong>{label.day}</strong> {label.time}
+      </time>
+    </li>
+  );
+}
+
 /** Stable enough for repeated identical lines without pretending the record has durable ids. */
 function keyedHistoryEntries(entries: readonly ConversationEntry[]) {
   const occurrences = new Map<string, number>();
+  let previousRecordedAt: number | undefined;
   return entries.map((entry) => {
     const base = conversationEntryKey(entry);
     const occurrence = (occurrences.get(base) ?? 0) + 1;
     occurrences.set(base, occurrence);
-    return { entry, key: `${base}:${occurrence}` };
+    const opensBreak = opensHistoryTimeBreak(previousRecordedAt, entry.recordedAt);
+    if (entry.recordedAt !== undefined) previousRecordedAt = entry.recordedAt;
+    return { entry, key: `${base}:${occurrence}`, opensBreak };
   });
 }
 
@@ -155,6 +180,7 @@ export function ConversationHistoryPanel({
   entries,
   live = [],
   requests = [],
+  now,
   onCancelRequest,
   onClear,
   ask,
@@ -162,6 +188,12 @@ export function ConversationHistoryPanel({
   askShortcut,
 }: {
   entries: readonly ConversationEntry[];
+  /**
+   * The instant the thread's dates are read against, so a line from earlier
+   * today says Today and one from last week says which day. Passed down like
+   * the rows' ages are, because only the app knows which clock is honest.
+   */
+  now: number;
   /**
    * The brain's runs, so an ask whose run is still going is drawn waiting,
    * with the cancel the developer holds. Read here from the records alone;
@@ -257,14 +289,14 @@ export function ConversationHistoryPanel({
               moment the fingers lift, which only the browser can see. */}
           <div className="history-pull">
             <ol className="history-list">
-              {keyedHistoryEntries(entries).map(({ entry, key }) => {
+              {keyedHistoryEntries(entries).flatMap(({ entry, key, opensBreak }) => {
                 const runId = entry.requestId;
                 const pending =
                   runId !== undefined &&
                   (entry.kind === CONVERSATION_ENTRY_KIND.TYPED_ASK ||
                     entry.kind === CONVERSATION_ENTRY_KIND.SPOKEN_ASK) &&
                   pendingRuns.has(runId);
-                return (
+                const row = (
                   <HistoryEntryRow
                     key={key}
                     entry={entry}
@@ -274,6 +306,16 @@ export function ConversationHistoryPanel({
                       : undefined)}
                   />
                 );
+                return opensBreak && entry.recordedAt !== undefined
+                  ? [
+                      <HistoryTimeBreak
+                        key={`${key}:break`}
+                        recordedAt={entry.recordedAt}
+                        now={now}
+                      />,
+                      row,
+                    ]
+                  : [row];
               })}
               {live.map((entry, index) => (
                 <HistoryEntryRow
