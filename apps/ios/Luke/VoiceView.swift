@@ -277,6 +277,11 @@ struct VoiceView: View {
     // drag under way is the pull's or the scroll's, decided at its first move.
     @State private var timePull: CGFloat = 0
     @State private var pullClaimed: Bool?
+    // The instant the thread's dates are read against, so a line from earlier
+    // today says Today and one from last week says which day. It moves when a
+    // line lands, when the screen appears, and at midnight, and at no other
+    // time, because nothing else can change what a date should say.
+    @State private var now = Date()
     @FocusState private var composing: Bool
     // The keyboard button and composer are the two shapes of one control.
     @Namespace private var glassNamespace
@@ -432,7 +437,14 @@ struct VoiceView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 14) {
-                    ForEach(conversation.messages) { message in
+                    ForEach(Array(conversation.messages.enumerated()), id: \.element.id) {
+                        index, message in
+                        if ConversationTimeBreak.opens(
+                            after: index == 0 ? nil : conversation.messages[index - 1].recordedAt,
+                            recordedAt: message.recordedAt
+                        ) {
+                            ConversationTimeBreakLabel(recordedAt: message.recordedAt, now: now)
+                        }
                         StampedMessageRow(message: message, pull: timePull)
                             .id(message.id)
                     }
@@ -448,13 +460,18 @@ struct VoiceView: View {
             .scrollDismissesKeyboard(.interactively)
             .simultaneousGesture(timePullGesture)
             .onChange(of: conversation.messages) {
+                now = Date()
                 guard let last = conversation.messages.last else { return }
                 withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
             }
             .onAppear {
+                now = Date()
                 if let last = conversation.messages.last {
                     proxy.scrollTo(last.id, anchor: .bottom)
                 }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+                now = Date()
             }
         }
         .overlay {
@@ -858,5 +875,27 @@ private struct StampedMessageRow: View {
                 .padding(.trailing, Self.stampInset)
                 .offset(x: Self.reveal - pull)
         }
+    }
+}
+
+/// The moment a line was said, set over it the way iMessage dates a message
+/// that followed a long silence. It is the thread's line, not a message: it
+/// reads in the quiet voice of a caption, centered, and it stands still under
+/// the pull as Luke's rows do, so uncovering the stamp column never pushes a
+/// date off the screen.
+private struct ConversationTimeBreakLabel: View {
+    let recordedAt: Date
+    let now: Date
+
+    var body: some View {
+        let label = ConversationTimeBreak.label(recordedAt: recordedAt, now: now)
+        return (Text(label.day).fontWeight(.semibold) + Text(" \(label.time)"))
+            .font(.caption2)
+            .monospacedDigit()
+            .foregroundStyle(Color.inkTertiary)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 4)
+            .accessibilityElement(children: .combine)
     }
 }
