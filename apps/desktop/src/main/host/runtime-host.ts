@@ -170,7 +170,7 @@ import {
   type ObservedAccountCalendars,
   type SettingsUpdateResult,
 } from "#shared/contracts";
-import { CONNECTION_COUNTED_AS, VOICE_SOURCE_COUNTED_AS } from "#shared/product-vocabulary";
+import { VOICE_SOURCE_COUNTED_AS } from "#shared/product-vocabulary";
 import { isSpeechOutcome, SPEECH_OUTCOME, type SpeechOutcome } from "#shared/wire/speech";
 import {
   APPLE_CALENDAR_ACCESS_REFUSAL,
@@ -1986,7 +1986,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
           );
           recordProductEvent(
             apiKey?.trim() ? PRODUCT_EVENT.PROVIDER_CONNECT : PRODUCT_EVENT.PROVIDER_DISCONNECT,
-            { connection_id: CONNECTION_COUNTED_AS[providerId] },
+            { connection_id: providerId },
           );
         },
         "Could not save that API key on this system.",

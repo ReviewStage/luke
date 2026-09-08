@@ -34,11 +34,14 @@ the event list or a property's value set is still a product decision rather
 than an implementation detail, because it changes what a user consented to when
 they left the switch on.
 
-A value set that repeats another package's — the connection ids, the settings
-pages — repeats it rather than importing it, because that package reads this
-one and the edge would close a loop. The desktop closes each gap with a total
-`Record` bridge in `apps/desktop/src/shared/product-vocabulary.ts`, so a new
-member does not build until this vocabulary has answered for it.
+A value set another package already declares is imported where the graph
+allows it: `connection_id` is `CREDENTIAL_PROVIDER_ID` itself, read from
+`@sidecar/credentials/vocabulary`, so there is no second list to drift. A set
+whose package reads this one — the diagnostic kinds, the settings pages —
+still repeats it, because the edge would close a loop; the desktop closes each
+of those gaps with a total `Record` bridge in
+`apps/desktop/src/shared/product-vocabulary.ts`, so a new member does not build
+until this vocabulary has answered for it.
 
 `PRODUCT_SURFACE_EVENT` is the subset the renderer may ask for: surface motion
 the main process cannot see. It exists to be the narrowing — the main process
