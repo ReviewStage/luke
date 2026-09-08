@@ -1,4 +1,5 @@
 import { APP_TOOL_KIND } from "@sidecar/acts";
+import { brainRequestRecordFromWire } from "@sidecar/brain/requests";
 import { type ConversationEntry, conversationEntryFromWire } from "@sidecar/realtime";
 import { GatewayClient, type GatewayTransport } from "@sidecar/runtime";
 import {
@@ -59,8 +60,13 @@ export interface GatewayWiring {
   readonly client: GatewayClient;
   readonly operator: GatewayOperator;
   readonly host: HostOperator;
-  /** Registers this process's node with the host over the current connection; run at every attachment. */
-  registerNode: () => Promise<boolean>;
+  /**
+   * What every attachment owes the host it now reaches: the host's stream
+   * adopted (its sequence and snapshot, so a replaced host's events are not
+   * dropped against the old host's count), and this process's node
+   * registered on the connection that now stands.
+   */
+  attached: () => Promise<boolean>;
 }
 
 /** The commands the EventKit helper answers; an invocation naming anything else is refused here. */
@@ -84,7 +90,21 @@ function isCarriedAppAction(
 
 export function wireGateway(dependencies: GatewayWiringDependencies): GatewayWiring {
   const { transport, broadcast, sendToVoice, report } = dependencies;
-  const client = new GatewayClient({ transport, createId: dependencies.createId, report });
+  const client = new GatewayClient({
+    transport,
+    createId: dependencies.createId,
+    report,
+    // A snapshot stands in for events the client will never see: the ones a
+    // replaced host never numbered, or a window that moved past. The runs it
+    // carries reach every window as the runs list would have.
+    onSnapshot: (snapshot) => {
+      if (!isRecord(snapshot) || !Array.isArray(snapshot.runs)) return;
+      broadcast(
+        channels.onBrainRequestsChanged,
+        snapshot.runs.flatMap((run) => brainRequestRecordFromWire(run) ?? []),
+      );
+    },
+  });
   const operator = createGatewayOperator({ client });
   const host = createHostOperator({ client, lastSettings: dependencies.lastSettings, report });
 
@@ -167,7 +187,8 @@ export function wireGateway(dependencies: GatewayWiringDependencies): GatewayWir
     client,
     operator,
     host,
-    registerNode: async () => {
+    attached: async () => {
+      await client.adoptHost();
       const result = await client.call(GATEWAY_METHOD.NODE_REGISTER, {
         nodeId: DESKTOP_NATIVE_NODE_ID,
         capabilities: [...NODE_CAPABILITY_LIST],

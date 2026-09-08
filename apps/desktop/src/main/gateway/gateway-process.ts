@@ -24,6 +24,7 @@ import {
   gatewayLockPath,
   gatewayProfilePath,
   gatewayStateRootArgument,
+  registersProviderHooks,
 } from "./process-mode";
 
 /**
@@ -141,6 +142,7 @@ export function startGatewayProcess(argv: readonly string[]): void {
         decrypt: (cipherText) => safeStorage.decryptString(cipherText),
       },
       createWorker: () => new Worker(runtimeStoreWorkerPath(__dirname), { name: "runtime-store" }),
+      registerProviderHooks: registersProviderHooks(argv),
       now: Date.now,
       createId: () => crypto.randomUUID(),
       report,

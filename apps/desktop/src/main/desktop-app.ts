@@ -14,7 +14,7 @@ import { type FeedbackSubmission, feedbackDeliveryFromEnvironment } from "@sidec
 import { fixtureSnapshot } from "@sidecar/fixtures";
 import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { peekLocalSessions } from "@sidecar/providers";
-import { GATEWAY_ATTACHMENT, type GatewayTransport, InProcessTransport } from "@sidecar/runtime";
+import { type GatewayTransport, InProcessTransport } from "@sidecar/runtime";
 import { GATEWAY_CLIENT_ROLE, MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
@@ -61,10 +61,12 @@ import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/wire/voice-view";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { runAppleCalendarHelper } from "./apple-calendar";
 import { registerBrainIpc } from "./brain/ipc";
+import { attachAndSettle, followReattachments } from "./gateway/attachment";
 import { DESKTOP_OPERATOR_CLIENT_ID } from "./gateway/desktop-node";
 import { currentBuildIdentity } from "./gateway/gateway-process";
 import type { HostBootstrap, HostSessionReplay } from "./gateway/host-operator";
 import { createGatewayLauncher } from "./gateway/launcher";
+import { gatewayStateRootArgument, registersProviderHooks } from "./gateway/process-mode";
 import { wireGateway } from "./gateway/wiring";
 import { composeRuntimeHost, type RuntimeHost } from "./host/runtime-host";
 import {
@@ -120,8 +122,14 @@ const appName = resolveAppName({
   developerIdSigned: buildCarriesDeveloperIdSigning(),
 });
 app.setName(appName);
-app.setPath("userData", path.join(app.getPath("appData"), appName));
-app.setPath("sessionData", path.join(app.getPath("appData"), appName));
+// The state root is Luke's application data under that name, or the one an
+// explicit `--state-root=` names: the same argument the Gateway takes, so a
+// validation run can stand a whole desktop and Gateway pair on a temporary
+// root without touching the real one or repurposing the home directory.
+const stateRoot =
+  gatewayStateRootArgument(process.argv) ?? path.join(app.getPath("appData"), appName);
+app.setPath("userData", stateRoot);
+app.setPath("sessionData", stateRoot);
 
 const captureOutput = argumentValue("--capture-evidence");
 const profile = argumentValue("--profile") ?? "idle";
@@ -435,6 +443,7 @@ const gatewayLauncher = runMode.observesProviders
   ? createGatewayLauncher({
       stateRoot: app.getPath("userData"),
       build: currentBuildIdentity(appName),
+      registerProviderHooks: registersProviderHooks(process.argv),
       report,
     })
   : undefined;
@@ -457,6 +466,7 @@ const transport: GatewayTransport = gatewayLauncher
         createWorker: () => {
           throw new Error("a fixture run keeps nothing on disk and starts no store worker");
         },
+        registerProviderHooks: false,
         now: Date.now,
         createId: () => randomUUID(),
         report,
@@ -552,16 +562,16 @@ function adoptBootstrap(boot: HostBootstrap): void {
 }
 
 /**
- * What every attachment owes the host: this process's node, registered on
- * the connection that now stands, and the guide the panel last reported. A
- * reattachment after the Gateway went away also recycles the voice window,
- * because the epoch its renderer holds was the old host's, and tells every
- * window what the host now holds.
+ * What every attachment owes the host: its stream adopted and this process's
+ * node registered on the connection that now stands, the guide the panel last
+ * reported, and a bootstrap read. A reattachment after the Gateway went away
+ * also recycles the voice window, because the epoch its renderer holds was the
+ * old host's, and tells every window what the host now holds.
  */
 let attachments = 0;
 async function onAttached(): Promise<void> {
   attachments += 1;
-  await gateway.registerNode();
+  await gateway.attached();
   if (appGuide !== EMPTY_APP_GUIDE) void gateway.host.reportGuide(appGuide);
   const boot = await gateway.host.bootstrap();
   if (boot) {
@@ -583,9 +593,6 @@ async function onAttached(): Promise<void> {
     raiseVoiceWindow();
   }
 }
-gatewayLauncher?.onStateChanged((state) => {
-  if (state === GATEWAY_ATTACHMENT.ATTACHED) void onAttached();
-});
 
 function registerIpc(): void {
   const registerHandler = (
@@ -1021,27 +1028,44 @@ export function startDesktopApp(): void {
     void app.whenReady().then(async () => {
       if (process.platform === "darwin") app.setActivationPolicy("accessory");
       Menu.setApplicationMenu(null);
-      // The host stands first: attached, or started, or composed here. The
-      // first bootstrap read from it is what the introduction decision and
-      // every window's first paint are drawn from.
+      // The host stands first: attached, or started, or composed here, and
+      // its first bootstrap read before anything is decided from it. The
+      // introduction plays only on a host actually reached: a launch that
+      // cannot reach its runtime knows nothing of the account and must not
+      // greet a signed-in developer as a stranger.
+      let hostReached = false;
       if (gatewayLauncher) {
-        const attached = await gatewayLauncher.attach();
+        const first = await attachAndSettle({
+          onStateChanged: (listener) => gatewayLauncher.onStateChanged(listener),
+          attach: () => gatewayLauncher.attach(),
+          onAttached,
+          report,
+        });
+        hostReached = first.reached;
         report(
-          attached.outcome === "failed"
-            ? `Gateway not attached: ${attached.failure}`
-            : `Gateway ${attached.outcome} (pid ${attached.pid})`,
+          first.result.outcome === "failed"
+            ? `Gateway not attached: ${first.result.failure}`
+            : `Gateway ${first.result.outcome} (pid ${first.result.pid})`,
         );
+        followReattachments({
+          onStateChanged: (listener) => gatewayLauncher.onStateChanged(listener),
+          onAttached,
+          report,
+        });
       } else if (localRuntime) {
         await localRuntime.start();
         await onAttached();
+        hostReached = true;
       }
       const introductionInput = {
         requiresAccount: runMode.requiresAccount,
         signedIn: account.status === ACCOUNT_STATUS.SIGNED_IN,
         completed: introductionCompletedOnDisk(),
       };
-      const giveIntroduction = shouldRunIntroduction(introductionInput);
-      if (shouldBackfillIntroductionCompletion(introductionInput)) markIntroductionComplete();
+      const giveIntroduction = hostReached && shouldRunIntroduction(introductionInput);
+      if (hostReached && shouldBackfillIntroductionCompletion(introductionInput)) {
+        markIntroductionComplete();
+      }
       await panels.refreshGeometry();
       registerIpc();
       dock.applyIcon();

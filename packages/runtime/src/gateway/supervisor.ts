@@ -32,6 +32,8 @@ export const GATEWAY_SUPERVISOR_DEFAULTS = {
   DISCOVERY_POLL_MS: 100,
   /** How long an explicit stop waits for the Gateway to leave before it is killed. */
   STOP_WAIT_MS: 12_000,
+  /** How long the stop's own shutdown request may go unanswered before the exit wait begins regardless. */
+  STOP_REQUEST_WAIT_MS: 3_000,
   /** How long an incompatible Gateway of another build is given to drain before this build starts its own. */
   DRAIN_WAIT_MS: 12_000,
 } as const;
@@ -119,6 +121,7 @@ export interface GatewaySupervisorPorts {
   discoveryWaitMs?: number;
   discoveryPollMs?: number;
   stopWaitMs?: number;
+  stopRequestWaitMs?: number;
   drainWaitMs?: number;
 }
 
@@ -211,13 +214,21 @@ export class GatewaySupervisor {
     const connection = this.#connection;
     const pid = this.#pid;
     if (connection?.connected()) {
-      await connection.request({
-        protocolVersion: GATEWAY_PROTOCOL_VERSION,
-        id: this.#ports.createId(),
-        method: GATEWAY_METHOD.SHUTDOWN,
-        params: {},
-        idempotencyKey: this.#ports.createId(),
-      });
+      // The ask itself is bounded: a socket that stays open under a host that
+      // no longer answers must not hold the quit open, so the exit wait — and
+      // the kill past it — begins whether or not the ask was acknowledged.
+      await Promise.race([
+        connection.request({
+          protocolVersion: GATEWAY_PROTOCOL_VERSION,
+          id: this.#ports.createId(),
+          method: GATEWAY_METHOD.SHUTDOWN,
+          params: {},
+          idempotencyKey: this.#ports.createId(),
+        }),
+        this.#sleep(
+          this.#ports.stopRequestWaitMs ?? GATEWAY_SUPERVISOR_DEFAULTS.STOP_REQUEST_WAIT_MS,
+        ),
+      ]);
     }
     this.#dropConnection();
     if (pid === undefined) return;

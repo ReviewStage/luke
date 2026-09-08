@@ -22,6 +22,8 @@ import { gatewayDiscoveryPath, gatewayProcessArguments } from "./process-mode";
 export interface GatewayLauncherOptions {
   stateRoot: string;
   build: GatewayBuildIdentity;
+  /** Whether the Gateway may register observation hooks with the providers; a validation run says no. */
+  registerProviderHooks?: boolean;
   report: (message: string) => void;
 }
 
@@ -52,7 +54,9 @@ export function createGatewayLauncher(options: GatewayLauncherOptions): GatewayS
         process.execPath,
         [
           ...(app.isPackaged ? [] : [app.getAppPath()]),
-          ...gatewayProcessArguments(options.stateRoot),
+          ...gatewayProcessArguments(options.stateRoot, {
+            registerProviderHooks: options.registerProviderHooks,
+          }),
         ],
         {
           detached: true,

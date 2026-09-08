@@ -53,7 +53,9 @@ export async function shutdownGateway(
   const deadlineMs = options.deadlineMs ?? GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS;
   const startedAt = now();
   steps.closeAdmissions();
-  const cancelled = await steps.cancelActive();
+  // One deadline covers the cancellation and the settling both: a cancel
+  // that hangs on a store or a run is as unbounded as a run that never
+  // settles, and either leaves the Gateway standing past its quit.
   const controller = new AbortController();
   let timer: ScheduledTimer | undefined;
   const deadline = new Promise<false>((resolve) => {
@@ -62,13 +64,19 @@ export async function shutdownGateway(
       resolve(false);
     }, deadlineMs);
   });
-  const settled = await Promise.race([
-    steps.awaitSettled(controller.signal).then(
-      () => true,
-      () => false,
-    ),
-    deadline,
+  const cancelled = await Promise.race([
+    steps.cancelActive().catch((): readonly string[] => []),
+    deadline.then((): readonly string[] => []),
   ]);
+  const settled = controller.signal.aborted
+    ? false
+    : await Promise.race([
+        steps.awaitSettled(controller.signal).then(
+          () => true,
+          () => false,
+        ),
+        deadline,
+      ]);
   if (timer !== undefined) cancel(timer);
   const unresolved = await steps.persistUnresolved();
   return { settled, cancelled, unresolved, elapsedMs: now() - startedAt };

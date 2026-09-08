@@ -1,4 +1,10 @@
-import { ACT_RESULT_STATUS, type ActResult, text, type UnparsedWireValue } from "@sidecar/wire";
+import {
+  ACT_RESULT_STATUS,
+  type ActResult,
+  text,
+  type UnknownActResult,
+  type UnparsedWireValue,
+} from "@sidecar/wire";
 import {
   type ProviderSessionObservation,
   SESSION_APPLICATION_ID,
@@ -687,7 +693,18 @@ export type ProviderWorkspaceResult =
       warning?: string;
     }
   | { status: typeof ACT_RESULT_STATUS.REJECTED; reason: string }
-  | { status: typeof ACT_RESULT_STATUS.UNSUPPORTED; reason: string };
+  | { status: typeof ACT_RESULT_STATUS.UNSUPPORTED; reason: string }
+  /** The create was handed to the machine and its answer lost: it may have happened, so it is never retried. */
+  | UnknownActResult;
+
+/**
+ * Thrown by an open port when the address was handed to the process that
+ * opens it and that process went away before answering: the system may have
+ * opened it. An adapter that creates through a deep link reads this as an
+ * unknown outcome, never a refusal, so the journal can neither call the
+ * create failed nor repeat it.
+ */
+export class ExternalOpenAnswerLostError extends Error {}
 
 /**
  * A user-asked request for another agent in the workspace an observed session

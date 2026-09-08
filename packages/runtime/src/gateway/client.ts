@@ -113,20 +113,57 @@ export class GatewayClient {
   }
 
   /**
+   * Adopts the host now on the other side of the transport as a new stream:
+   * a hello reads its sequence and its whole snapshot, the snapshot is handed
+   * to the hook, and the cursor moves to that sequence whatever it was
+   * before. A replaced host numbers its events from one again, so a cursor
+   * carried over from the old host would drop every event of the new one
+   * until it caught up; adopting fences that. Events arriving while the hello
+   * is out are taken after it, and any at or below the adopted sequence are
+   * already in the snapshot. Concurrent callers share one adoption.
+   */
+  adoptHost(): Promise<void> {
+    this.#reconnecting ??= this.#adoptHostOnce().finally(() => this.#settleReconnect());
+    return this.#reconnecting;
+  }
+
+  async #adoptHostOnce(): Promise<void> {
+    const response = await this.#options.transport.request({
+      protocolVersion: GATEWAY_PROTOCOL_VERSION,
+      id: this.#options.createId(),
+      method: GATEWAY_METHOD.HELLO,
+      params: {},
+    });
+    if (!response.ok) {
+      if (response.error.code !== GATEWAY_ERROR.DISCONNECTED) {
+        this.#options.report?.(`Gateway hello refused: ${response.error.message}`);
+      }
+      return;
+    }
+    const sequence = helloSequence(response.result);
+    if (sequence === undefined || !isRecord(response.result)) {
+      this.#options.report?.("Gateway hello answered in a shape this client cannot read");
+      return;
+    }
+    this.#lastSequence = sequence;
+    this.#options.onSnapshot?.(response.result.snapshot ?? {}, sequence);
+  }
+
+  /**
    * Asks the host for everything since the last sequence seen. Replayed
    * events are delivered in order as though they had never been missed; a
    * snapshot is adopted through the snapshot hook and the sequence moves to
    * where the host stands. Concurrent callers share one reconnection.
    */
   reconnect(): Promise<void> {
-    this.#reconnecting ??= this.#reconnectOnce().finally(() => {
-      this.#reconnecting = undefined;
-      const arrived = this.#arrivedDuringReconnect
-        .splice(0)
-        .sort((a, b) => a.sequence - b.sequence);
-      for (const event of arrived) this.#take(event);
-    });
+    this.#reconnecting ??= this.#reconnectOnce().finally(() => this.#settleReconnect());
     return this.#reconnecting;
+  }
+
+  #settleReconnect(): void {
+    this.#reconnecting = undefined;
+    const arrived = this.#arrivedDuringReconnect.splice(0).sort((a, b) => a.sequence - b.sequence);
+    for (const event of arrived) this.#take(event);
   }
 
   async #reconnectOnce(): Promise<void> {

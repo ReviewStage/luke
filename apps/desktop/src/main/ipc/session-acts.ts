@@ -22,6 +22,7 @@ import {
   type TrackerActionResult,
 } from "@sidecar/issues";
 import {
+  ExternalOpenAnswerLostError,
   isListedWorkspaceAgentModel,
   isProviderId,
   type ProviderActResult,
@@ -43,6 +44,7 @@ import {
   ACT_RESULT_STATUS,
   isWireString,
   UNKNOWN_ACT_STATUS,
+  type UnknownActResult,
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
@@ -58,10 +60,10 @@ import type { SettingsStore } from "../settings-store";
  * the open port so the act that asked records itself unknown, never failed
  * and never retried.
  */
-export class NodeAnswerLostError extends Error {}
+export { ExternalOpenAnswerLostError as NodeAnswerLostError };
 
 /** What an open answers when its answer was lost: the effect is uncertain. */
-function unknownOpen(error: NodeAnswerLostError): SessionOpenResult {
+function unknownOpen(error: ExternalOpenAnswerLostError): SessionOpenResult {
   return { status: UNKNOWN_ACT_STATUS, reason: error.message };
 }
 
@@ -196,7 +198,7 @@ export function createSessionActPerformer(
    * counted in only one of the two paths would read as a provider nobody sends
    * messages to.
    */
-  function countSessionAct<Result extends ProviderActResult>(
+  function countSessionAct<Result extends ProviderActResult | UnknownActResult>(
     providerId: string,
     counted: ProductSessionAct,
     result: Result,
@@ -213,7 +215,7 @@ export function createSessionActPerformer(
   }
 
   // Capability checks stay in their handlers so no act can inherit another act's authority.
-  async function performSessionAct<Result extends ProviderActResult>(
+  async function performSessionAct<Result extends ProviderActResult | UnknownActResult>(
     identity: SessionIdentity,
     counted: ProductSessionAct,
     act: (adapter: SessionProviderAdapter, session: Session) => Promise<Result>,
@@ -271,7 +273,7 @@ export function createSessionActPerformer(
     try {
       await openExternal(url);
     } catch (error) {
-      if (error instanceof NodeAnswerLostError) return unknownOpen(error);
+      if (error instanceof ExternalOpenAnswerLostError) return unknownOpen(error);
       return { status: ACT_RESULT_STATUS.REJECTED, reason: failureReason };
     }
     countOpen(identity);
@@ -309,7 +311,7 @@ export function createSessionActPerformer(
     try {
       await openExternal(url);
     } catch (error) {
-      if (error instanceof NodeAnswerLostError) return unknownOpen(error);
+      if (error instanceof ExternalOpenAnswerLostError) return unknownOpen(error);
       return { status: ACT_RESULT_STATUS.REJECTED, reason: REFUSAL.OPEN_APP_FAILED };
     }
     countOpen(identity);

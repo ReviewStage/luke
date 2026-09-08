@@ -94,6 +94,7 @@ import {
   isTerminalChildRunStatus,
   MAIN_SESSION_KEY,
   NODE_CAPABILITY_STATUS,
+  type SessionKey,
   sessionKey as toSessionKey,
 } from "@sidecar/runtime-contracts";
 import type { RuntimeStorePort } from "@sidecar/runtime-store";
@@ -231,6 +232,13 @@ export interface RuntimeHostOptions {
   environment: NodeJS.ProcessEnv;
   cipher: SecretCipher;
   createWorker: () => RuntimeStorePort;
+  /**
+   * Whether the observation hooks are registered with the providers' own
+   * user-level configurations at start. A validation run on a temporary
+   * state root says no, so nothing of the developer's real provider
+   * configuration moves; the transcripts are observed either way.
+   */
+  registerProviderHooks?: boolean;
   now: () => number;
   createId: () => string;
   report: (message: string) => void;
@@ -1178,7 +1186,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
   }
 
   async function applyLocalSessionHooks(): Promise<void> {
-    if (!runMode.observesProviders) return;
+    if (!runMode.observesProviders || options.registerProviderHooks === false) return;
     await Promise.all(
       orderedRegistrations.map(async ({ adapter, registerObservationHook }) => {
         if (!registerObservationHook) return;
@@ -2390,16 +2398,26 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
       await brainWiring.publicationSettled();
     },
     persistUnresolved: async () => {
-      // Every cancellation above was journaled before its effect; what did
-      // not reach a terminal state by the deadline is what the next launch
-      // finds and marks interrupted, so the count is what still runs.
-      return brainWiring
-        .allRequests()
-        .filter(
+      // What the next launch will find: the records as the stores last
+      // persisted them, read from the envelopes rather than from memory. A
+      // cancellation whose write did not land leaves its run queued or
+      // running on disk, and that is what the load marks interrupted and
+      // never replays, so it is counted here as unresolved.
+      const keys = new Set<SessionKey>([
+        MAIN_SESSION_KEY,
+        ...runtimeStoreWiring.directory().entries.map((entry) => entry.sessionKey),
+      ]);
+      let unresolved = 0;
+      for (const key of keys) {
+        const persisted = brainWiring.store(key).current();
+        if (!persisted) continue;
+        unresolved += persisted.requests.filter(
           (record) =>
             record.status === BRAIN_REQUEST_STATUS.QUEUED ||
             record.status === BRAIN_REQUEST_STATUS.RUNNING,
         ).length;
+      }
+      return unresolved;
     },
   };
 

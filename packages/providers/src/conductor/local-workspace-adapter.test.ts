@@ -4,7 +4,12 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
-import { ACT_RESULT_STATUS, WORKSPACE_TASK_SUPPORT } from "@sidecar/session";
+import {
+  ACT_RESULT_STATUS,
+  ExternalOpenAnswerLostError,
+  WORKSPACE_TASK_SUPPORT,
+} from "@sidecar/session";
+import { UNKNOWN_ACT_STATUS } from "@sidecar/wire";
 import {
   ConductorLocalWorkspaceAdapter,
   ConductorRepositoryReader,
@@ -353,4 +358,37 @@ test("the local creator is named apart from cloud Conductor", () => {
   // the id keeps them routed apart, and the two must not both read "Conductor".
   assert.equal(adapter.provider.displayName, "Conductor (local)");
   assert.notEqual(adapter.provider.id, "conductor");
+});
+
+test("a create whose deep link was handed to the machine and never answered is unknown, not refused", async (t) => {
+  const databasePath = await temporaryDatabasePath(t);
+  const database = createReposDatabase(databasePath);
+  writeRepo(database, { id: "repo-luke", name: "luke", rootPath: "/Users/dev/repos/luke" });
+  database.close();
+  const adapter = new ConductorLocalWorkspaceAdapter({
+    reader: new ConductorRepositoryReader({ databasePath }),
+    openExternal: async () => {
+      throw new ExternalOpenAnswerLostError("the desktop went away before answering");
+    },
+  });
+  await adapter.refresh();
+  const result = await adapter.createWorkspace({
+    providerProjectId: "repo-luke",
+    providerTargetId: "/Users/dev/repos/luke",
+    task: "Start on the parser",
+  });
+  // The link may have created the workspace: neither a refusal to report nor an act to repeat.
+  assert.equal(result.status, UNKNOWN_ACT_STATUS);
+  const refused = new ConductorLocalWorkspaceAdapter({
+    reader: new ConductorRepositoryReader({ databasePath }),
+    openExternal: async () => {
+      throw new Error("no handler for the scheme");
+    },
+  });
+  await refused.refresh();
+  const rejected = await refused.createWorkspace({
+    providerProjectId: "repo-luke",
+    providerTargetId: "/Users/dev/repos/luke",
+  });
+  assert.equal(rejected.status, ACT_RESULT_STATUS.REJECTED);
 });

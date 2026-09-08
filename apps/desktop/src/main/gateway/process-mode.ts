@@ -12,6 +12,13 @@ import { GATEWAY_PROTOCOL_VERSION, type GatewayBuildIdentity } from "@sidecar/ru
  */
 export const GATEWAY_PROCESS_ARGUMENT = "--gateway";
 export const GATEWAY_STATE_ROOT_ARGUMENT = "--state-root";
+/**
+ * Leaves the developer's own provider configurations untouched: no
+ * observation hook is registered with Claude Code or Codex. For a validation
+ * run on a temporary state root, whose Gateway must not reach into the real
+ * user-level hook surfaces; observation still reads the transcripts.
+ */
+export const NO_PROVIDER_HOOKS_ARGUMENT = "--no-provider-hooks";
 
 export const GATEWAY_PROFILE_DIRECTORY = "gateway-profile";
 export const GATEWAY_STATE_DIRECTORY = "gateway";
@@ -41,9 +48,20 @@ export function gatewayLockPath(stateRoot: string): string {
   return path.join(stateRoot, GATEWAY_STATE_DIRECTORY, GATEWAY_LOCK_FILE);
 }
 
+export function registersProviderHooks(argv: readonly string[]): boolean {
+  return !argv.includes(NO_PROVIDER_HOOKS_ARGUMENT);
+}
+
 /** The arguments that start the Gateway for a state root; the executable and app path are the launcher's. */
-export function gatewayProcessArguments(stateRoot: string): readonly string[] {
-  return [GATEWAY_PROCESS_ARGUMENT, `${GATEWAY_STATE_ROOT_ARGUMENT}=${stateRoot}`];
+export function gatewayProcessArguments(
+  stateRoot: string,
+  options: { registerProviderHooks?: boolean } = {},
+): readonly string[] {
+  return [
+    GATEWAY_PROCESS_ARGUMENT,
+    `${GATEWAY_STATE_ROOT_ARGUMENT}=${stateRoot}`,
+    ...(options.registerProviderHooks === false ? [NO_PROVIDER_HOOKS_ARGUMENT] : []),
+  ];
 }
 
 export interface GatewayBuildContext {

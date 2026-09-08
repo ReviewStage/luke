@@ -1,4 +1,4 @@
-import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, type UnknownActResult } from "@sidecar/wire";
 import {
   type ProviderActResult,
   type ProviderControlRequest,
@@ -145,7 +145,7 @@ export class CompositeSessionProviderAdapter extends SessionProviderAdapterBase 
    * never seen the subject, so the question moves on; any firm answer is the
    * subject's own and ends the search.
    */
-  async #dispatchAct<Result extends ProviderActResult>(
+  async #dispatchAct<Result extends ProviderActResult | UnknownActResult>(
     act: (adapter: SessionProviderAdapter) => Promise<Result>,
   ): Promise<Result> {
     for (const adapter of this.#adapters) {

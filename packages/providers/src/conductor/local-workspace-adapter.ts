@@ -1,6 +1,7 @@
 import {
   ACT_RESULT_STATUS,
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
+  ExternalOpenAnswerLostError,
   type ProviderSessionObservation,
   type ProviderWorkspaceRequest,
   type ProviderWorkspaceResult,
@@ -8,7 +9,7 @@ import {
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "@sidecar/session";
-import { text, wireRecord } from "@sidecar/wire";
+import { text, UNKNOWN_ACT_STATUS, wireRecord } from "@sidecar/wire";
 import { repositoryLabel } from "../shared/cloud-session-adapter.js";
 import {
   canIgnoreSqliteError,
@@ -249,6 +250,12 @@ export class ConductorLocalWorkspaceAdapter extends SessionProviderAdapterBase {
     try {
       await this.#openExternal(link);
     } catch (error) {
+      // A link handed to the opening process and never answered may have
+      // created the workspace; that is an unknown outcome, not a refusal,
+      // and the journal must not read it as one it can repeat.
+      if (error instanceof ExternalOpenAnswerLostError) {
+        return { status: UNKNOWN_ACT_STATUS, reason: error.message };
+      }
       return {
         status: ACT_RESULT_STATUS.REJECTED,
         reason: `Couldn't ask Conductor to create the workspace: ${

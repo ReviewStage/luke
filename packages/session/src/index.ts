@@ -12,6 +12,7 @@ export {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   CONVERSATION_MESSAGE_AUTHOR,
   type ConversationMessageAuthor,
+  ExternalOpenAnswerLostError,
   HOSTED_AGENT_ID,
   HOSTED_AGENT_ID_LIST,
   type HostedAgentId,
