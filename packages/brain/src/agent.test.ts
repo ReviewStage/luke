@@ -3984,6 +3984,66 @@ test("an ask already drained but waiting behind another turn takes its words wit
   assert.equal(h.agent.request(cancelledRun)?.question, "cancelled-behind-5c7d");
 });
 
+test("folded asks left alone by cancelling every ordinary one still open their turn, in follow-up mode too", async () => {
+  const { QUEUE_MODE, QUEUE_DEFAULTS } = await import("@sidecar/runtime");
+  const inner = new FakeClient();
+  const gated = gatedClient(inner);
+  const h = harness({ client: gated.client, queueMode: QUEUE_MODE.FOLLOWUP });
+  inner.answers.push(answered([message("first")]), answered([message("for the folded one")]));
+  const first = acceptedRunId(await submit(h, "first?"));
+  await settle();
+  // The queue fills behind the running turn; the oldest waiting ask folds into the summary.
+  const folded = acceptedRunId(await submit(h, "folded-survivor-3e1a"));
+  const ordinary: string[] = [];
+  for (let index = 0; index < QUEUE_DEFAULTS.CAPACITY; index += 1) {
+    ordinary.push(acceptedRunId(await submit(h, `ordinary ${index} marker-0d4c`)));
+  }
+  await settle();
+  for (const runId of ordinary) {
+    assert.equal((await h.agent.cancelAsk(runId))?.status, BRAIN_REQUEST_STATUS.CANCELLED);
+  }
+  assert.equal(h.agent.request(folded)?.status, BRAIN_REQUEST_STATUS.QUEUED);
+  assert.equal(h.agent.busy(), true);
+  gated.open();
+  await settle();
+  assert.equal((await h.agent.waitAsk(first, 1))?.text, "first");
+  // The folded ask is not left queued forever: the summary alone opens its turn.
+  assert.equal((await h.agent.waitAsk(folded, 1))?.text, "for the folded one");
+  assert.equal(inner.inputs.length, 2);
+  const secondTurn = (inner.inputs[1] ?? []).map((item) => JSON.stringify(item)).join("\n");
+  assert.ok(secondTurn.includes("1 earlier input was summarized because the queue was full"));
+  assert.ok(secondTurn.includes("folded-survivor-3e1a"));
+  assert.ok(!secondTurn.includes("marker-0d4c"));
+  assert.equal(h.agent.busy(), false);
+});
+
+test("cancelling every waiting ask, folded ones included, leaves nothing queued, no turn to open, and the conversation idle", async () => {
+  const { QUEUE_MODE, QUEUE_DEFAULTS } = await import("@sidecar/runtime");
+  const h = harness({ queueMode: QUEUE_MODE.COLLECT, queueDebounceMs: 500 });
+  const all: string[] = [];
+  for (let index = 0; index <= QUEUE_DEFAULTS.CAPACITY + 1; index += 1) {
+    all.push(acceptedRunId(await submit(h, `ask ${index}`)));
+  }
+  assert.equal(h.agent.busy(), true);
+  // The two oldest are folded; cancel them first, then everything the queue still holds.
+  for (const runId of all) {
+    assert.equal((await h.agent.cancelAsk(runId))?.status, BRAIN_REQUEST_STATUS.CANCELLED);
+  }
+  assert.equal(h.agent.busy(), false);
+  assert.equal(h.clock.timers.size, 0);
+  await h.clock.advance(NOW + 500);
+  await settle();
+  assert.equal(h.client.inputs.length, 0);
+  // Stale summary metadata does not hold the conversation: the next ask opens its own turn at once.
+  h.client.answers.push(answered([message("fresh")]));
+  const next = acceptedRunId(await submit(h, "after all of them"));
+  await h.clock.advance(NOW + 1000);
+  await settle();
+  assert.equal((await h.agent.waitAsk(next, 1))?.text, "fresh");
+  const opening = itemText((h.client.inputs[0] ?? [])[0]);
+  assert.ok(!opening.includes("summarized because the queue was full"));
+});
+
 test("a refused final checkpoint fails a drained batch's primary and its riders alike", async () => {
   const { QUEUE_MODE } = await import("@sidecar/runtime");
   const inner = new FakeClient();

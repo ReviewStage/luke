@@ -157,7 +157,7 @@ export interface QueueBatch {
 export function drainQueue(state: PendingQueueState, mode: QueueMode): readonly QueueBatch[] {
   if (state.entries.length === 0 && state.summarizedCount === 0) return [];
   const summary = queueSummaryText(state);
-  if (mode === QUEUE_MODE.FOLLOWUP) {
+  if (mode === QUEUE_MODE.FOLLOWUP && state.entries.length > 0) {
     return state.entries.map((input, index) => ({
       inputs: [input],
       ...(index === 0 && summary ? { summary } : undefined),
@@ -214,8 +214,9 @@ export class PendingInputQueue {
     return this.#state;
   }
 
+  /** How many asks wait here for a turn: the entries and the ones folded into the summary alike. */
   get size(): number {
-    return this.#state.entries.length;
+    return this.#state.entries.length + this.#state.summarizedCount;
   }
 
   /**
@@ -252,6 +253,23 @@ export class PendingInputQueue {
     if (entries.length === this.#state.entries.length) return false;
     this.#state = { ...this.#state, entries };
     if (entries.length === 0 && this.#state.summarizedCount === 0) this.#disarm();
+    return true;
+  }
+
+  /**
+   * Withdraws one input the overflow already folded, by its place in the
+   * summary (fold order, oldest first), so a summary whose asks were all
+   * taken back holds no turn open and counts nothing waiting.
+   */
+  withdrawSummarized(index: number): boolean {
+    const lines = this.#state.summaryLines;
+    if (!Number.isInteger(index) || index < 0 || index >= lines.length) return false;
+    this.#state = {
+      ...this.#state,
+      summaryLines: lines.filter((_, at) => at !== index),
+      summarizedCount: this.#state.summarizedCount - 1,
+    };
+    if (this.#state.entries.length === 0 && this.#state.summarizedCount === 0) this.#disarm();
     return true;
   }
 

@@ -196,3 +196,56 @@ test("withdraw takes one queued input back before the drain, and disarms the tim
   assert.equal(clock.timers.size, 0);
   assert.deepEqual(flushed, [["b"]]);
 });
+
+test("a queue holding only folded asks still drains one turn for them, in follow-up as in collect", () => {
+  let state: PendingQueueState = EMPTY_QUEUE;
+  const settings = { capacity: 1, overflow: QUEUE_OVERFLOW.SUMMARIZE };
+  state = admitToQueue(state, input("a"), settings).state;
+  state = admitToQueue(state, input("b"), settings).state;
+  state = { ...state, entries: [] };
+  assert.equal(state.summarizedCount, 1);
+  for (const mode of [QUEUE_MODE.FOLLOWUP, QUEUE_MODE.COLLECT, QUEUE_MODE.STEER]) {
+    const batches = drainQueue(state, mode);
+    assert.equal(batches.length, 1);
+    assert.deepEqual(batches[0]?.inputs, []);
+    assert.ok(batches[0]?.summary?.includes("1 earlier input was summarized"));
+  }
+});
+
+test("withdrawing a folded ask by its place in the summary leaves the queue empty and disarmed when nothing else waits", () => {
+  const clock = fakeClock();
+  const flushed: string[][] = [];
+  const full = new PendingInputQueue({
+    settings: { mode: QUEUE_MODE.COLLECT, capacity: 1, overflow: QUEUE_OVERFLOW.SUMMARIZE },
+    steer: () => false,
+    interrupt: () => undefined,
+    flush: (batches) => {
+      for (const batch of batches) flushed.push(batch.inputs.map((entry) => entry.id));
+    },
+    schedule: (callback) => {
+      const id = clock.next++;
+      clock.timers.set(id, callback);
+      return id;
+    },
+    // SAFETY: every timer this test's clock hands out is the number it minted above.
+    cancel: (timer) => void clock.timers.delete(timer as number),
+  });
+  full.push(input("a"));
+  full.push(input("b"));
+  full.push(input("c"));
+  assert.equal(full.size, 3);
+  assert.equal(full.state.summaryLines.length, 2);
+  // The one entry withdrawn: the two folded asks still hold the turn and count as waiting.
+  assert.equal(full.withdraw("c"), true);
+  assert.equal(full.size, 2);
+  assert.equal(clock.timers.size, 1);
+  assert.equal(full.withdrawSummarized(5), false);
+  assert.equal(full.withdrawSummarized(0), true);
+  assert.equal(full.state.summarizedCount, 1);
+  assert.equal(full.withdrawSummarized(0), true);
+  assert.equal(full.size, 0);
+  assert.equal(clock.timers.size, 0);
+  assert.equal(full.withdrawSummarized(0), false);
+  clock.fire();
+  assert.deepEqual(flushed, []);
+});

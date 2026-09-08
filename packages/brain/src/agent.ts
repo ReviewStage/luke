@@ -886,8 +886,15 @@ export class BrainAgent {
       // Words still waiting for a turn are withdrawn before any turn composes
       // its question from them; words already steered were said to the model
       // and cannot be unsaid. The record keeps the ask as accepted either way.
-      this.#asks.withdraw(runId);
-      this.#summarized = this.#summarized.filter((input) => input.run.runId !== runId);
+      if (!this.#asks.withdraw(runId)) {
+        // The summarized list and the queue's summary are kept in one fold
+        // order, so the ask's place in one is its place in the other.
+        const folded = this.#summarized.findIndex((input) => input.run.runId === runId);
+        if (folded >= 0) {
+          this.#summarized.splice(folded, 1);
+          this.#asks.withdrawSummarized(folded);
+        }
+      }
       await this.#ledger.settleRun(this.#generation, runId, BRAIN_REQUEST_STATUS.CANCELLED, {});
     }
     return this.request(runId);
