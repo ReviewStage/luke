@@ -299,6 +299,43 @@
   line-height: 1.4;
 }
 
+/* The date over a line that followed a long silence, in the quiet voice the
+   requested acts use, with the day set apart from the time the way iMessage
+   sets it. It stands still under the pull as Luke's rows do, in the room the
+   view has before the stamp column, so a swipe that uncovers the times never
+   pushes a date off the screen. */
+.history-break {
+  display: flex;
+  width: 100%;
+  flex: 0 0 auto;
+}
+
+/* The label starts at the view's left edge, exactly as Luke's rows do, and
+   centers its words within itself: a label centered by its row instead would
+   begin half a column in, and the pull would carry it that far before sticky
+   could take hold. */
+.history-break-time {
+  position: sticky;
+  left: 0;
+  width: calc(100% - var(--history-time-column));
+  padding: 10px 12px 4px;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.history-break-time strong {
+  color: var(--text-secondary);
+  font-weight: 620;
+}
+
+/* The thread's first date needs no pause above it. */
+.history-list > .history-break:first-child .history-break-time {
+  padding-top: 2px;
+}
+
 /* Consecutive bubbles stay conversationally tight. A speaker change gets the
    small pause chat apps use instead of repeating names above every message. */
 .history-entry[data-speaker="you"] + .history-entry[data-speaker="luke"],

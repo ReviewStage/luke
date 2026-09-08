@@ -699,6 +699,7 @@ export function PanelBody({
           entries={conversationHistory}
           live={liveConversationEntries}
           requests={brainRequests}
+          now={now}
           onCancelRequest={onCancelBrainRequest}
           onClear={onClearConversationHistory}
           ask={ask}
