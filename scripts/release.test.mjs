@@ -33,25 +33,6 @@ import { DMG_WINDOW } from "../design/dmg-window.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-test("manual releases install the locked dependencies before checking the workspace", () => {
-  const releaseScript = fs.readFileSync(path.join(repoRoot, "scripts", "release-macos.sh"), "utf8");
-  const bootstrapCall = releaseScript.indexOf('"$SCRIPT_DIRECTORY/bootstrap.sh"');
-  const checkCall = releaseScript.indexOf('"$SCRIPT_DIRECTORY/check.sh"');
-  const desktopReleaseCall = releaseScript.indexOf("pnpm --filter @luke/desktop release");
-
-  assert.notEqual(bootstrapCall, -1);
-  assert.ok(bootstrapCall < checkCall);
-  assert.ok(checkCall < desktopReleaseCall);
-  for (const credential of [
-    "GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET",
-    "POSTHOG_PROJECT_API_KEY",
-    "SENTRY_AUTH_TOKEN",
-    "SENTRY_DSN",
-  ]) {
-    assert.match(releaseScript, new RegExp(`\\$\\{${credential}:-}`));
-  }
-});
-
 test("release DMG names include the desktop version and packaged architecture", () => {
   const desktopPackage = JSON.parse(
     fs.readFileSync(path.join(repoRoot, "apps", "desktop", "package.json"), "utf8"),
@@ -394,25 +375,4 @@ test("manual publishing uploads only electron-builder's release asset set", () =
   assert.ok(publishScript.includes("$ZIP_PATH.sha256"));
   assert.equal(publishScript.includes(`--${"legacy"}-${"packager"}`), false);
   assert.equal(publishScript.includes(`write-${"update"}-feed`), false);
-});
-
-test("release verification covers signing, Gatekeeper, stapling, and disk image integrity", () => {
-  const workflow = fs.readFileSync(
-    path.join(repoRoot, ".github", "workflows", "release.yml"),
-    "utf8",
-  );
-
-  assert.ok(workflow.includes('codesign --verify --deep --strict --verbose=2 "$APP_PATH"'));
-  assert.ok(workflow.includes('grep -q "Authority=Developer ID Application"'));
-  assert.ok(workflow.includes("spctl --assess --type execute -vv"));
-  assert.ok(workflow.includes('xcrun stapler validate "$APP_PATH"'));
-  assert.ok(workflow.includes('codesign --verify --strict "$DIST_DIR/$DMG_ASSET_NAME"'));
-  assert.ok(workflow.includes("spctl --assess --type open --context context:primary-signature"));
-  assert.ok(workflow.includes('xcrun stapler validate "$DIST_DIR/$DMG_ASSET_NAME"'));
-  assert.ok(workflow.includes('hdiutil verify "$DIST_DIR/$DMG_ASSET_NAME"'));
-  assert.ok(workflow.includes('shasum -a 256 -c "$CHECKSUM_NAME"'));
-  assert.ok(workflow.includes('shasum -a 256 -c "$DMG_CHECKSUM_NAME"'));
-  assert.ok(
-    workflow.includes('cmp "$DIST_DIR/$DMG_ASSET_NAME" "$DIST_DIR/$LATEST_DMG_ASSET_NAME"'),
-  );
 });

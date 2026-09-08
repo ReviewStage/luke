@@ -15,11 +15,6 @@ available_in = [ "local" ]
 default = true
 icon = "play"
 
-[scripts.run.mac-test]
-command = "./scripts/test-macos.sh"
-available_in = [ "local" ]
-icon = "test-tube"
-
 [scripts.run.verify]
 command = "./scripts/verify.sh"
 available_in = [ "local" ]

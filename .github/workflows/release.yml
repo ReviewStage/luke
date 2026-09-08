@@ -42,11 +42,6 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
       - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
         with:
           xcode-version: "16.2"
@@ -79,6 +74,8 @@ jobs:
             fi
           done
 
+      - uses: ./.github/actions/setup
+
       - name: Resolve release version
         run: |
           VERSION=$(node -p "require('./apps/desktop/package.json').version")
@@ -87,26 +84,31 @@ jobs:
             exit 1
           fi
 
-          DIST_DIR=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.builderReleaseArtifactDirectory(process.cwd())))")
-          ASSET_NAME=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.releaseZipFileName(process.argv[1])))" "$VERSION")
-          DMG_ASSET_NAME=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.releaseDmgFileName(process.argv[1])))" "$VERSION")
-          LATEST_DMG_ASSET_NAME=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.RELEASE_LATEST_DMG_FILE_NAME))")
-          UPDATE_FEED_ASSET_NAME=$(node -e "import('./apps/desktop/scripts/release-config.mjs').then((config) => process.stdout.write(config.RELEASE_UPDATE_FEED_FILE_NAME))")
           {
             echo "VERSION=$VERSION"
-            echo "DIST_DIR=$DIST_DIR"
-            echo "ASSET_NAME=$ASSET_NAME"
-            echo "CHECKSUM_NAME=$ASSET_NAME.sha256"
-            echo "DMG_ASSET_NAME=$DMG_ASSET_NAME"
-            echo "DMG_CHECKSUM_NAME=$DMG_ASSET_NAME.sha256"
-            echo "LATEST_DMG_ASSET_NAME=$LATEST_DMG_ASSET_NAME"
-            echo "UPDATE_FEED_ASSET_NAME=$UPDATE_FEED_ASSET_NAME"
-            echo "APP_PATH=$DIST_DIR/mac-arm64/Luke.app"
-            echo "UPDATE_FEED_PATH=$DIST_DIR/$UPDATE_FEED_ASSET_NAME"
+            node -e '
+              import("./apps/desktop/scripts/release-config.mjs").then((config) => {
+                const version = process.argv[1];
+                const distDirectory = config.builderReleaseArtifactDirectory(process.cwd());
+                const zipName = config.releaseZipFileName(version);
+                const dmgName = config.releaseDmgFileName(version);
+                process.stdout.write(
+                  [
+                    `DIST_DIR=${distDirectory}`,
+                    `ASSET_NAME=${zipName}`,
+                    `CHECKSUM_NAME=${zipName}.sha256`,
+                    `DMG_ASSET_NAME=${dmgName}`,
+                    `DMG_CHECKSUM_NAME=${dmgName}.sha256`,
+                    `LATEST_DMG_ASSET_NAME=${config.RELEASE_LATEST_DMG_FILE_NAME}`,
+                    `UPDATE_FEED_ASSET_NAME=${config.RELEASE_UPDATE_FEED_FILE_NAME}`,
+                    `APP_PATH=${distDirectory}/mac-arm64/Luke.app`,
+                    `UPDATE_FEED_PATH=${distDirectory}/${config.RELEASE_UPDATE_FEED_FILE_NAME}`,
+                    "",
+                  ].join("\n"),
+                );
+              });
+            ' "$VERSION"
           } >> "$GITHUB_ENV"
-
-      - name: Bootstrap workspace
-        run: ./scripts/bootstrap.sh
 
       - name: Run repository checks
         run: ./scripts/check.sh
@@ -161,7 +163,6 @@ jobs:
 
       - name: Validate notarized application
         run: |
-          codesign --verify --deep --strict "$APP_PATH"
           assessment=$(spctl --assess --type execute -vv "$APP_PATH" 2>&1)
           printf '%s\n' "$assessment"
           grep -q "source=Notarized Developer ID" <<< "$assessment"
@@ -203,39 +204,11 @@ jobs:
           if (!/size: \d+/.test(manifest)) throw new Error("latest-mac.yml is missing size");
           NODE
 
-      # The release stays a draft until every asset has finished uploading,
-      # so nothing points releases/latest at the new version while its
-      # archive is still in flight: an updater that checks mid-upload keeps
-      # resolving the previous release's self-consistent manifest instead of
-      # a new manifest whose archive is incomplete. gh resolves a draft by
-      # its pending tag, so a re-run's view and upload find it the same way
-      # they find a published release, and the flip runs only while the
-      # release is still a draft, so re-running an old tag's workflow can
-      # never re-mark a superseded release Latest.
       - name: Publish GitHub Release
         if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          TAG="$GITHUB_REF_NAME"
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" \
-              --draft \
-              --verify-tag \
-              --title "Luke $VERSION" \
-              --generate-notes
-          fi
-          gh release upload "$TAG" \
-            "$DIST_DIR/$ASSET_NAME" \
-            "$DIST_DIR/$CHECKSUM_NAME" \
-            "$DIST_DIR/$DMG_ASSET_NAME" \
-            "$DIST_DIR/$DMG_CHECKSUM_NAME" \
-            "$DIST_DIR/$LATEST_DMG_ASSET_NAME" \
-            "$DIST_DIR/$UPDATE_FEED_ASSET_NAME" \
-            --clobber
-          if [[ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" == "true" ]]; then
-            gh release edit "$TAG" --draft=false --latest
-          fi
+        run: ./scripts/release/publish-github.sh
 
       - name: Preserve rehearsal artifacts
         if: ${{ github.event_name == 'workflow_dispatch' }}

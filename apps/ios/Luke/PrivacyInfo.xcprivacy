@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<!-- App Store Connect refuses an upload that calls a required-reason API
-	     without declaring it here, and scripts/ios-project.test.mjs holds this
+	     without declaring it here, and apps/ios/ios-project.test.mjs holds this
 	     list equal to what the app and LukeKit sources actually call, so an API
 	     cannot be added or dropped without the declaration following. Both
 	     apps carry the same list because both link LukeKit. UserDefaults holds
