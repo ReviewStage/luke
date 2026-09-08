@@ -528,7 +528,18 @@ Trust constraints:
   earlier entry can be overwritten; the copy is disposed at the turn's end
   and nothing it said enters the conversation; a write stands as soon as it
   is made, and only a turn that ran to its end marks the cycle flushed, so
-  an interrupted flush runs again. The reset capture: Start fresh on an
+  an interrupted flush runs again. The cycle is durable, with one owner for
+  each half: the compaction count is the generation's own and rides on its
+  envelope with every checkpoint, and the marker saying which count was
+  flushed is maintenance state in the store's flush-state table, keyed by
+  the generation's id, read once per generation before its first assessment
+  and written after each completed flush, so a relaunch neither flushes a
+  cycle twice nor skips one, and Clear, Start fresh, and Delete history
+  begin a lifetime at cycle zero that consults no earlier marker. A marker
+  that cannot be read defers the flush; one that cannot be written after
+  three attempts is reported and leaves the cycle unflushed, never silently
+  done, and the housekeeping turn itself is never rerun to retry a write.
+  The reset capture: Start fresh on an
   eligible conversation runs the same turn first, its outcome reported
   honestly and never deciding the reset, which proceeds either way; Clear,
   Delete history, Archive, and a forget run no capture. The consolidation

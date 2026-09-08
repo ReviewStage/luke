@@ -18,6 +18,12 @@ export const MEMORY_FLUSH_DEFAULTS = {
   FORCE_TRANSCRIPT_BYTES: 2 * 1024 * 1024,
   /** The most output tokens a housekeeping turn may spend. */
   MAXIMUM_OUTPUT_TOKENS: 2_000,
+  /**
+   * How many times the marker of a completed flush is offered to its store
+   * before the cycle is left unflushed; the housekeeping turn itself is never
+   * repeated to retry a write.
+   */
+  MARKER_WRITE_ATTEMPTS: 3,
 } as const;
 
 /** The pinned reply token a housekeeping turn answers when nothing is worth storing. */

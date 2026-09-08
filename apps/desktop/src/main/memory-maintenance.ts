@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { BrainFlushInput } from "@sidecar/brain";
+import type { BrainFlushInput, BrainFlushMarkerStore } from "@sidecar/brain";
 import { REFUSAL_REASON, runMemoryHousekeeping } from "@sidecar/brain";
 import {
   appendOnlyPromotion,
@@ -23,6 +23,7 @@ import {
   dreamDiaryEntry,
   type HousekeepingPrompt,
   hashText,
+  housekeepingCompleted,
   ingestionQuery,
   isConversationCandidate,
   localDayStamp,
@@ -111,6 +112,13 @@ export interface MemoryMaintenance {
   flushHookFor: (
     sessionKey: SessionKey,
   ) => ((input: BrainFlushInput) => Promise<MemoryHousekeepingResult>) | undefined;
+  /**
+   * Where one conversation's flush marker outlives the process: the store's
+   * flush-state row, read and written under the generation the brain names,
+   * so a relaunch knows which cycle was flushed and a new lifetime reads none.
+   * Nothing for a conversation that never flushes.
+   */
+  flushMarkerFor: (sessionKey: SessionKey) => BrainFlushMarkerStore | undefined;
   /** Whether a conversation's reset captures first: main and the developer's durable private threads. */
   capturesOnReset: (sessionKey: SessionKey) => boolean;
   /** The capture run before a reset, over a copy of the conversation's context; never blocks the reset's outcome. */
@@ -181,7 +189,6 @@ export function wireMemoryMaintenance(
     dependencies.persistent && interactive(sessionKey) && !dependencies.isTemporary(sessionKey);
 
   const housekeeping = async (
-    sessionKey: SessionKey,
     items: readonly WireRecord[],
     prompt: HousekeepingPrompt,
     dateStamp: string,
@@ -210,27 +217,28 @@ export function wireMemoryMaintenance(
 
   const flushHookFor: MemoryMaintenance["flushHookFor"] = (sessionKey) => {
     if (!eligible(sessionKey)) return undefined;
-    return async (input) => {
+    return (input) => {
       const day = localDayStamp(dependencies.now());
-      const result = await housekeeping(
-        sessionKey,
-        input.items,
-        memoryFlushPrompt(day),
-        day,
-        input.signal,
-      );
-      try {
-        await dependencies.client().recordMemoryFlush(sessionKey, {
-          compactionCount: input.compactionCount,
-          outcome: result.outcome,
+      return housekeeping(input.items, memoryFlushPrompt(day), day, input.signal);
+    };
+  };
+
+  const flushMarkerFor: MemoryMaintenance["flushMarkerFor"] = (sessionKey) => {
+    if (!eligible(sessionKey)) return undefined;
+    return {
+      read: async (generationId) => {
+        const state = await dependencies.client().memoryFlushState(sessionKey, generationId);
+        return state && housekeepingCompleted(state.outcome) ? state.compactionCount : undefined;
+      },
+      write: async (generationId, compactionCount) => {
+        const recorded = await dependencies.client().recordMemoryFlush(sessionKey, {
+          generationId,
+          compactionCount,
+          outcome: MEMORY_HOUSEKEEPING_OUTCOME.COMPLETED,
           flushedAt: dependencies.now(),
         });
-      } catch (error) {
-        dependencies.report(
-          `Memory flush state could not be recorded: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-      return result;
+        if (!recorded) throw new Error("the store refused the flush marker");
+      },
     };
   };
 
@@ -252,7 +260,7 @@ export function wireMemoryMaintenance(
       CONSOLIDATION_DEFAULTS.CONSOLIDATION_TIMEOUT_MS,
     );
     try {
-      return await housekeeping(sessionKey, items, resetCapturePrompt(day), day, controller.signal);
+      return await housekeeping(items, resetCapturePrompt(day), day, controller.signal);
     } finally {
       clearTimeout(timer);
     }
@@ -716,6 +724,7 @@ export function wireMemoryMaintenance(
 
   return {
     flushHookFor,
+    flushMarkerFor,
     capturesOnReset: eligible,
     captureBeforeReset,
     runConsolidation,

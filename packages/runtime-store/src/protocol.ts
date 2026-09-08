@@ -248,7 +248,7 @@ export interface RuntimeStoreMethods {
     result: readonly MemoryRewriteRecord[];
   };
   [RUNTIME_STORE_METHOD.MEMORY_FLUSH_STATE_GET]: {
-    params: { sessionKey: SessionKey };
+    params: { sessionKey: SessionKey; generationId: string };
     result: FlushState | undefined;
   };
   [RUNTIME_STORE_METHOD.MEMORY_FLUSH_STATE_PUT]: {

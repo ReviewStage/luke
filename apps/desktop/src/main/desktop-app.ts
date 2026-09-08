@@ -1756,6 +1756,7 @@ const brainWiring = wireBrain({
   memory: (sessionKey) => memoryWiring.accessFor(sessionKey),
   recall: (sessionKey) => memoryWiring.recallFor(sessionKey),
   beforeCompaction: (sessionKey) => memoryMaintenance.flushHookFor(sessionKey),
+  flushMarker: (sessionKey) => memoryMaintenance.flushMarkerFor(sessionKey),
   beforeReset: (sessionKey, items) => memoryMaintenance.captureBeforeReset(sessionKey, items),
 });
 
