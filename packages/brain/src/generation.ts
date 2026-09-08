@@ -54,9 +54,12 @@ export interface Generation {
    * The flush marker as this generation has read it: whether the store has
    * been consulted, and the compaction count the last completed flush ran
    * under. Filled from the marker store at the first assessment and kept in
-   * step with every marker that lands after.
+   * step with every marker that lands after. A marker write the turn stopped
+   * waiting for is still `settling`: the next assessment waits for it before
+   * reading the gate, so a write that lands late is counted and never
+   * repeated.
    */
-  flush: { read: boolean; lastCompactionCount?: number };
+  flush: { read: boolean; lastCompactionCount?: number; settling?: Promise<void> };
   journal: BrainJournal;
   requests: Map<string, BrainRequestRecord>;
   /** Runs accepted in memory but not yet checkpointed; not yet acknowledged to anyone. */

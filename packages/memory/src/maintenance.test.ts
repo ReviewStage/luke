@@ -43,6 +43,7 @@ import {
 } from "./flush.js";
 import {
   prepareForIngestion,
+  privateKeyLines,
   RECALLED_CONTEXT_MARKER,
   REDACTED_TOKEN,
   redactSensitiveText,
@@ -177,6 +178,69 @@ test("private-key armor is redacted by scanning: a terminated block whole, an un
     REDACTED_TOKEN,
   );
   assert.ok(performance.now() - startedAt < 500, "the scan is linear in the text");
+});
+
+test("a generic PKCS#8 header with no label is a private key too, whole, cut, and line by line", () => {
+  const body =
+    "MIIBSYNTHETICBODYLINE0000000000000000000000000000\nSYNTHETICBODYLINE1111111111111111111111111111111";
+  const pkcs8 = `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`;
+  const whole = redactSensitiveText(`before ${pkcs8} after`);
+  assert.equal(whole.text, `before ${REDACTED_TOKEN} after`);
+  assert.equal(whole.redactions, 1);
+  const cut = redactSensitiveText(pkcs8.slice(0, 60));
+  assert.equal(cut.text, REDACTED_TOKEN);
+  assert.equal(prepareForIngestion("-----BEGIN PRIVATE KEY-----"), undefined);
+  const encrypted = redactSensitiveText(
+    "-----BEGIN ENCRYPTED PRIVATE KEY-----\nabc\n-----END ENCRYPTED PRIVATE KEY-----",
+  );
+  assert.equal(encrypted.text, REDACTED_TOKEN);
+  // A label past the bound is not an armor: the scan moves on rather than matching across it.
+  const long = redactSensitiveText(`-----BEGIN ${"A".repeat(65)} PRIVATE KEY-----\nabc`);
+  assert.equal(long.redactions, 0);
+});
+
+test("privateKeyLines marks every line of a key block by index, through the END line, to the end when unterminated, across CRLF and repeated blocks, and nothing outside", () => {
+  const lines = [
+    "- safe before",
+    "-----BEGIN RSA PRIVATE KEY-----",
+    "SYNTHETICRSABODY",
+    "-----END RSA PRIVATE KEY-----",
+    "- safe between",
+    "-----BEGIN PRIVATE KEY-----\r",
+    "SYNTHETICPKCS8BODY\r",
+    "-----END PRIVATE KEY-----\r",
+    "- safe after",
+    "note -----BEGIN EC PRIVATE KEY-----",
+    "SYNTHETICECBODY",
+    "-----END EC PRIVATE",
+    "still inside: the closing armor was truncated",
+  ];
+  assert.deepEqual(privateKeyLines(lines), [
+    false,
+    true,
+    true,
+    true,
+    false,
+    true,
+    true,
+    true,
+    false,
+    true,
+    true,
+    true,
+    true,
+  ]);
+  assert.deepEqual(privateKeyLines(["- a", "-----BEGIN CERTIFICATE-----", "x", "- b"]), [
+    false,
+    false,
+    false,
+    false,
+  ]);
+  assert.deepEqual(privateKeyLines([]), []);
+  const startedAt = performance.now();
+  const many = new Array(50_000).fill("-----BEGIN RSA PRIVATE KEY-----");
+  assert.equal(privateKeyLines(many).every(Boolean), true);
+  assert.ok(performance.now() - startedAt < 500, "the line scan is linear");
 });
 
 test("only an interrupted or failed housekeeping turn fell short; a skipped one is the expected answer and reports nothing", () => {

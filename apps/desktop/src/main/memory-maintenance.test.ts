@@ -576,3 +576,89 @@ test("a completed dated note is staged beside a full History budget rather than 
   assert.equal(fromMain(await h.store.listMemoryCandidates()), 250);
   h.close();
 });
+
+test("a multiline private-key block in a dated note stages no line, generic or labelled, while the bullets around it keep their exact line numbers, and a body line staged by an earlier build is refused at the re-read", async () => {
+  const h = await harness();
+  const rsaBody = "SYNTHETICRSABODYLINE00000000000000000000000000000000";
+  const pkcs8Body = "SYNTHETICPKCS8BODYLINE1111111111111111111111111111111";
+  const ecBody = "SYNTHETICECBODYLINE22222222222222222222222222222222";
+  const note = [
+    `# ${YESTERDAY}`,
+    "",
+    "- The release train leaves on Thursday mornings for every service",
+    "-----BEGIN RSA PRIVATE KEY-----",
+    rsaBody,
+    rsaBody.toLowerCase(),
+    "-----END RSA PRIVATE KEY-----",
+    "- The staging cluster is reached through the shared bastion host",
+    "-----BEGIN PRIVATE KEY-----\r",
+    `${pkcs8Body}\r`,
+    "-----END PRIVATE KEY-----\r",
+    "- Deploy notes belong in the runbook rather than the chat thread",
+    "-----BEGIN EC PRIVATE KEY-----",
+    ecBody,
+    "-----END EC PRIVATE",
+    "- This bullet follows a truncated closing armor and is dropped conservatively",
+  ];
+  const notePath = `memory/${YESTERDAY}.md`;
+  fs.writeFileSync(path.join(h.workspace, notePath), `${note.join("\n")}\n`);
+  // A candidate an earlier build staged from a body line, recurring enough to rank at deep.
+  for (const [day, at] of [
+    [TWO_DAYS_AGO, NOW - 2 * DAY_MS],
+    [YESTERDAY, NOW - DAY_MS],
+    [TODAY, NOW],
+  ] as const) {
+    await h.store.stageMemoryCandidates(
+      [
+        {
+          text: rsaBody,
+          path: notePath,
+          startLine: 5,
+          endLine: 5,
+          origin: CANDIDATE_ORIGIN.USER,
+          sessionKind: CANDIDATE_SESSION_KIND.INTERACTIVE,
+          query: `ingest:${day}`,
+          score: 0.8,
+          day,
+        },
+      ],
+      at,
+    );
+  }
+  const report = await h.maintenance.runConsolidation();
+  assert.ok(report);
+  const candidates = await h.store.listMemoryCandidates();
+  const fromNote = candidates.filter((candidate) => candidate.path === notePath);
+  assert.deepEqual(
+    fromNote
+      .filter((candidate) => candidate.text !== rsaBody)
+      .map((candidate) => [candidate.startLine, candidate.endLine, candidate.text])
+      .sort((a, b) => Number(a[0]) - Number(b[0])),
+    [
+      [3, 3, note[2]?.slice(2)],
+      [8, 8, note[7]?.slice(2)],
+      [12, 12, note[11]?.slice(2)],
+    ],
+    "the safe bullets stand at their original line numbers and nothing from a block or after a truncated armor",
+  );
+  const leaked = (text: string) =>
+    [rsaBody, rsaBody.toLowerCase(), pkcs8Body, ecBody, "PRIVATE KEY"].some((marker) =>
+      text.includes(marker),
+    );
+  assert.equal(
+    candidates.filter((candidate) => candidate.text !== rsaBody).some((c) => leaked(c.text)),
+    false,
+    "no body line or armor is staged",
+  );
+  assert.equal(
+    h.prompts.some((prompt) => leaked(prompt)),
+    false,
+    "nothing of the block reaches a model prompt",
+  );
+  assert.ok(
+    report.notes.some((line) => /its source is gone or changed/u.test(line)),
+    "the body line staged earlier is refused at the re-read",
+  );
+  assert.equal(h.memory().includes(rsaBody), false);
+  h.close();
+});

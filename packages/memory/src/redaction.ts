@@ -53,7 +53,39 @@ const SENSITIVE_PATTERNS: readonly RegExp[] = [
 
 const PEM_BEGIN = "-----BEGIN ";
 const PEM_END = "-----END ";
-const PEM_HEADER_REST = /^[A-Z ]{1,64}PRIVATE KEY-----/u;
+/**
+ * What follows `-----BEGIN ` or `-----END ` in a private-key armor: an
+ * optional bounded label (`RSA `, `EC `, `ENCRYPTED `) or nothing at all,
+ * since a generic PKCS#8 header reads `-----BEGIN PRIVATE KEY-----`.
+ */
+const PEM_HEADER_REST = /^[A-Z ]{0,64}PRIVATE KEY-----/u;
+
+function isPrivateKeyArmor(line: string, armor: string): boolean {
+  const at = line.indexOf(armor);
+  return at !== -1 && PEM_HEADER_REST.test(line.slice(at + armor.length, at + armor.length + 128));
+}
+
+/**
+ * Which lines of a text stand inside a private-key block, so a reader that
+ * stages or re-reads a file line by line drops every line of a block rather
+ * than only the one carrying `BEGIN`. The scan is stateful and linear: a
+ * line holding a `BEGIN ... PRIVATE KEY` header opens a block, every line
+ * through the matching `END` header is inside it, and a block never closed
+ * runs to the end of the text, the same conservative answer the single-text
+ * redaction gives. Indices are the caller's own, so the lines outside a
+ * block keep their original coordinates.
+ */
+export function privateKeyLines(lines: readonly string[]): readonly boolean[] {
+  const inside: boolean[] = new Array(lines.length).fill(false);
+  let open = false;
+  lines.forEach((line, index) => {
+    if (!open && isPrivateKeyArmor(line, PEM_BEGIN)) open = true;
+    if (!open) return;
+    inside[index] = true;
+    if (isPrivateKeyArmor(line, PEM_END)) open = false;
+  });
+  return inside;
+}
 
 /**
  * Redacts private-key blocks by scanning for their armor rather than

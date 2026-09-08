@@ -33,6 +33,7 @@ import {
   memoryFlushPrompt,
   parseConsolidationPlan,
   prepareForIngestion,
+  privateKeyLines,
   type RankedCandidate,
   remReflections,
   resetCapturePrompt,
@@ -456,7 +457,12 @@ export function wireMemoryMaintenance(
       } catch {
         continue;
       }
-      content.split("\n").forEach((line, index) => {
+      const lines = content.split("\n");
+      // A key block is excluded whole before any line becomes a candidate:
+      // split first, a body line carries no armor for the redaction to see.
+      const insideKey = privateKeyLines(lines);
+      lines.forEach((line, index) => {
+        if (insideKey[index]) return;
         const trimmed = line.trim();
         if (trimmed.length === 0 || trimmed.startsWith("#") || trimmed.startsWith("<!--")) return;
         const prepared = prepareForIngestion(
@@ -494,9 +500,13 @@ export function wireMemoryMaintenance(
     const read = await readWorkspaceFile(dependencies.workspaceDirectory(), candidate.path);
     if (!read.ok) return false;
     const lines = read.content.split("\n");
-    const slice = lines
-      .slice(Math.max(0, candidate.startLine - 1), Math.max(candidate.startLine, candidate.endLine))
-      .join(" ");
+    const insideKey = privateKeyLines(lines);
+    const from = Math.max(0, candidate.startLine - 1);
+    const to = Math.max(candidate.startLine, candidate.endLine);
+    // The re-read excludes what the staging read excludes, so a candidate an
+    // earlier build staged from inside a key block is never confirmed present.
+    if (insideKey.slice(from, to).some(Boolean)) return false;
+    const slice = lines.slice(from, to).join(" ");
     const prepared = prepareForIngestion(
       slice.replace(/^[-*+]\s+/u, "").slice(0, NOTE_LINE_MAX_CHARS),
     );

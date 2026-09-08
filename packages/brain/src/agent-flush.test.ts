@@ -370,3 +370,50 @@ test("failed persistence: a marker write that fails is reported and leaves the c
   assert.equal(failing.markers.size, 0);
   await f.agent.stop();
 });
+
+test("a marker write still out when the turn is revoked is waited for at the next assessment: a write that lands late marks the cycle and the hook is not rerun", async () => {
+  const marker = new FakeMarkerStore();
+  let release: (() => void) | undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const write = marker.write.bind(marker);
+  marker.write = async (generationId, compactionCount) => {
+    await gate;
+    return write(generationId, compactionCount);
+  };
+  let calls = 0;
+  const h = agentWith(
+    async () => {
+      calls += 1;
+      return { outcome: MEMORY_HOUSEKEEPING_OUTCOME.COMPLETED, writes: 1 };
+    },
+    { marker },
+  );
+  await ask(h.agent, OVER_FLUSH_THRESHOLD);
+  assert.equal(calls, 1, "the flush ran in maintenance");
+  assert.equal(marker.markers.size, 0, "its marker write is still out");
+  // A new ask revokes the maintenance holding the write; the write lands only afterwards.
+  const accepted = await h.agent.submitAsk({
+    submissionId: "after-revoke",
+    question: "still over the threshold",
+    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+  });
+  assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(release);
+  release();
+  const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
+  const record = await h.agent.waitAsk(runId, 60_000);
+  assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  await settle();
+  const generation = h.store.generationId();
+  assert.ok(generation);
+  assert.equal(marker.markers.get(generation), 0, "the late write landed under the generation");
+  assert.equal(marker.writes, 1, "the write was issued once and never retried");
+  assert.equal(calls, 1, "the flushed cycle is not run again");
+  assert.deepEqual(h.agent.flushCycle(), { compactionCount: 0, lastFlushCompactionCount: 0 });
+  await ask(h.agent, "another");
+  assert.equal(calls, 1);
+  await h.agent.stop();
+});
