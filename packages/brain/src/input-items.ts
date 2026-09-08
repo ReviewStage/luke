@@ -1,5 +1,4 @@
 import { RECALLED_CONTEXT_MARKER } from "@sidecar/memory";
-import type { Session } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 import { sessionSummary } from "./observation-inbox.js";
 import type { BrainDelivery, BrainTurnNotice, BrainWakeEvent } from "./wake-events.js";
