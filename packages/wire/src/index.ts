@@ -10,8 +10,6 @@ export {
 export {
   type CloudFetch,
   HTTP_STATUS,
-} from "./http.js";
-export {
   isRecord,
   isWireBoolean,
   isWireNumber,
@@ -25,15 +23,13 @@ export {
   resolveOptions,
   text,
   type UnparsedWireValue,
+  unparsedWire,
+  type WireBoundaryInput,
   type WirePrimitive,
   type WireRecord,
   type WireValue,
   wholeNumber,
   wholeText,
+  wireRecord,
 } from "./json.js";
 export { parseReleaseVersion } from "./release-version.js";
-export {
-  unparsedWire,
-  type WireBoundaryInput,
-  wireRecord,
-} from "./wire-boundary.js";

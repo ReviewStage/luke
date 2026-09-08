@@ -1,7 +1,11 @@
 /**
- * Defensive readers for values a provider, API, or model may have shaped
- * differently than this build expects. A missing or mistyped field is
- * undefined, never a throw, so one bad record cannot fail an observation.
+ * The wire boundary: the values that arrive from outside this build, the
+ * defensive readers that decode them, and the HTTP vocabulary the readers
+ * answer for. A missing or mistyped field is undefined, never a throw, so one
+ * bad record cannot fail an observation. The HTTP statuses and the injected
+ * fetch sit here rather than with the adapters that read them, so the fake
+ * that speaks this vocabulary is reachable without depending on every
+ * provider.
  */
 
 /** A JSON primitive before this build has validated field names. */
@@ -181,3 +185,35 @@ export function resolveOptions<K extends string>(
   }
   return resolved;
 }
+
+/** JSON or structured-clone input before wire guards run. */
+export type WireBoundaryInput =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | readonly WireBoundaryInput[]
+  | { readonly [key: string]: WireBoundaryInput };
+
+/** Accepts JSON or structured-clone input before wire guards run. */
+export function unparsedWire(value: WireBoundaryInput): UnparsedWireValue {
+  // SAFETY: WireBoundaryInput is the structured-clone shape; UnparsedWireValue is the same boundary one step in.
+  return value as UnparsedWireValue;
+}
+
+/** Narrows JSON or IPC input before field guards run. */
+export function wireRecord(value: UnparsedWireValue): WireRecord | undefined {
+  return isRecord(value) ? value : undefined;
+}
+
+/** The statuses this build branches on at the HTTP boundary. */
+export const HTTP_STATUS = {
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  CONFLICT: 409,
+} as const;
+
+/** The fetch a caller is given, so a test can answer for the network. */
+export type CloudFetch = (url: string, init: RequestInit) => Promise<Response>;
