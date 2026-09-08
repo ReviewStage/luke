@@ -2,44 +2,27 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  type AgentId,
   type ArchiveEncoding,
   CONVERSATION_KIND,
   type ConversationKind,
   conversationKindOf,
   type HistoryArchiveRecord,
   historyArchiveRecordFromWire,
-  isArchiveEncoding,
   isConversationKind,
-  RESTORE_OUTCOME,
-  type RestoreOutcome,
   type SessionKey,
 } from "@sidecar/runtime-contracts";
-import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { standingGeneration } from "./brain-envelope.js";
-import {
-  archiveEncodingSuffix,
-  decodeArchiveContent,
-  encodeArchiveContent,
-} from "./compression.js";
+import { archiveEncodingSuffix, encodeArchiveContent } from "./compression.js";
 import {
   conversationRecord,
-  createConversation,
   historyCutoff,
   raiseHistoryCutoff,
   removeConversationRow,
   removeConversationRows,
   removeConversationRowsAtOrBefore,
-  touchConversation,
 } from "./conversations-table.js";
 import { nullable, type RuntimeDatabase } from "./database.js";
-import { historyEntryFromPayload } from "./history.js";
-import { restoreHistoryLine } from "./history-table.js";
-import {
-  appendTranscript,
-  listTranscript,
-  transcriptEventFromPayload,
-} from "./transcript-table.js";
+import { listTranscript } from "./transcript-table.js";
 
 /**
  * The recoverable deletion of a conversation's history, ported in shape from
@@ -53,11 +36,8 @@ import {
  * exclusively, synced, linked into place, and read back against the hash;
  * only then is the payload let go of in the database and the deletion
  * reported complete. A registry row still holding its payload is a
- * publication a launch retries.
- *
- * Restoring is the mirror, bounded on one side: an archive is restored only
- * into a conversation that holds no history newer than the archive, so a
- * live conversation is never overwritten by an older copy of itself.
+ * publication a launch retries. Nothing reads an archive back: it stands on
+ * the developer's own disk for the developer alone.
  */
 
 export const ARCHIVE_DIRECTORY = "archives";
@@ -429,157 +409,6 @@ export function publishPendingArchives(
   return rows
     .map((row) => row.archive_id)
     .filter((archiveId) => !publishArchive(database, agentRoot, archiveId, durability));
-}
-
-export interface RestoreResult {
-  outcome: RestoreOutcome;
-  sessionKey?: SessionKey;
-  historyLines?: number;
-  transcriptEvents?: number;
-}
-
-/** The archive's content, from the registry's payload while it holds one, else from the verified file. */
-function readArchiveContent(
-  database: RuntimeDatabase,
-  agentRoot: string,
-  row: ArchiveRow,
-): string | undefined {
-  if (!isArchiveEncoding(row.encoding)) return undefined;
-  // SAFETY: the payload column is the BLOB the deletion wrote, or NULL once published.
-  const held = database
-    .prepare("SELECT payload FROM history_archives WHERE archive_id = ?")
-    .get(row.archive_id) as { payload: Uint8Array | null } | undefined;
-  let bytes: Uint8Array | undefined = held?.payload ?? undefined;
-  if (!bytes) {
-    const target = path.resolve(archiveDirectory(agentRoot), row.file_name);
-    try {
-      bytes = fs.readFileSync(target);
-    } catch {
-      return undefined;
-    }
-  }
-  if (hashBytes(bytes) !== row.sha256) return undefined;
-  try {
-    return decodeArchiveContent(bytes, row.encoding);
-  } catch {
-    return undefined;
-  }
-}
-
-function parsedLines(content: string): UnparsedWireValue[] {
-  const lines: UnparsedWireValue[] = [];
-  for (const line of content.split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      // SAFETY: JSON.parse returns a wire value; each reader below validates its line.
-      lines.push(JSON.parse(line) as UnparsedWireValue);
-    } catch {
-      // A line this build cannot parse drops the line, not the archive.
-    }
-  }
-  return lines;
-}
-
-/**
- * Restores a deleted conversation's history from its archive. The identities
- * are the archive's own — the same session key, kind, name, and creation
- * instant, and each line's own id — so what comes back is the conversation
- * that was deleted rather than a copy. It never overwrites a newer live
- * conversation: a key that holds any history or transcript written since the
- * deletion is refused, and nothing is changed.
- */
-export function restoreArchive(
-  database: RuntimeDatabase,
-  agentRoot: string,
-  archiveId: string,
-  agentId: AgentId,
-  now: number,
-): RestoreResult {
-  const row = archiveRow(database, archiveId);
-  if (!row) return { outcome: RESTORE_OUTCOME.MISSING };
-  const content = readArchiveContent(database, agentRoot, row);
-  if (content === undefined) return { outcome: RESTORE_OUTCOME.UNREADABLE };
-  const lines = parsedLines(content);
-  const header = lines.find((line) => isRecord(line) && line.type === ARCHIVE_LINE.HEADER);
-  if (!isRecord(header) || !isWireString(header.sessionKey)) {
-    return { outcome: RESTORE_OUTCOME.UNREADABLE };
-  }
-  // SAFETY: a non-empty string is what the session key constructor admits; the header wrote its own key.
-  const sessionKey = header.sessionKey as SessionKey;
-  return database.transaction(() => {
-    // SAFETY: COUNT(*) is one integer column named `count`.
-    const live = database
-      .prepare(
-        `SELECT (SELECT COUNT(*) FROM history_events WHERE session_key = ?) +
-                (SELECT COUNT(*) FROM transcript_events WHERE session_key = ?) AS count`,
-      )
-      .get(sessionKey, sessionKey) as { count: number };
-    if (live.count > 0) return { outcome: RESTORE_OUTCOME.NEWER_LIVE, sessionKey };
-    const kind: ConversationKind = isConversationKind(header.kind)
-      ? header.kind
-      : conversationKindOf(sessionKey);
-    createConversation(database, {
-      agentId,
-      sessionKey,
-      kind,
-      name: isWireString(header.name) ? header.name : row.name,
-      now: isWireNumber(header.createdAt) ? header.createdAt : row.created_at,
-    });
-    if (row.previous_cutoff === null) {
-      database
-        .prepare("UPDATE conversations SET history_cleared_at = NULL WHERE session_key = ?")
-        .run(sessionKey);
-    } else {
-      database
-        .prepare("UPDATE conversations SET history_cleared_at = ? WHERE session_key = ?")
-        .run(row.previous_cutoff, sessionKey);
-    }
-    // The deletion's marker on the standing lifetime is the same cutoff by
-    // another name, and a restore releases it the same way: a marker left at
-    // the deletion's instant would hide every line brought back.
-    database
-      .prepare(
-        `UPDATE conversation_sessions SET reset_cleared_at = ?
-         WHERE session_key = ? AND reset_cleared_at IS NOT NULL
-           AND (? IS NULL OR reset_cleared_at > ?)`,
-      )
-      .run(row.previous_cutoff, sessionKey, row.previous_cutoff, row.previous_cutoff);
-    let historyLines = 0;
-    let transcriptEvents = 0;
-    let latest = 0;
-    for (const line of lines) {
-      if (!isRecord(line)) continue;
-      if (line.type === ARCHIVE_LINE.HISTORY) {
-        const entry = historyEntryFromPayload(JSON.stringify(line.entry));
-        if (!entry || entry.recordedAt === undefined) continue;
-        restoreHistoryLine(
-          database,
-          sessionKey,
-          isWireString(line.sessionId) ? line.sessionId : undefined,
-          { ...entry, recordedAt: entry.recordedAt },
-        );
-        historyLines += 1;
-        latest = Math.max(latest, entry.recordedAt);
-      } else if (line.type === ARCHIVE_LINE.TRANSCRIPT && isRecord(line.event)) {
-        const event = transcriptEventFromPayload(
-          isWireString(line.event.kind) ? line.event.kind : "",
-          isWireNumber(line.event.recordedAt) ? line.event.recordedAt : 0,
-          line.event,
-        );
-        if (!event) continue;
-        appendTranscript(
-          database,
-          sessionKey,
-          isWireString(line.sessionId) ? line.sessionId : undefined,
-          [event],
-        );
-        transcriptEvents += 1;
-        latest = Math.max(latest, event.recordedAt);
-      }
-    }
-    touchConversation(database, sessionKey, Math.max(latest, now));
-    return { outcome: RESTORE_OUTCOME.RESTORED, sessionKey, historyLines, transcriptEvents };
-  });
 }
 
 /** Forgets one archive's registry row and removes its file; the disk budget's own removal path. */

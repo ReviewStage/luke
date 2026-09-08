@@ -28,13 +28,11 @@ import {
   type ResolvedConfiguration,
 } from "@sidecar/runtime";
 import {
-  type ChildCompletionRecord,
   type ChildRunRecord,
   conversationRecordToWire,
   GATEWAY_ERROR,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
-  historyArchiveRecordToWire,
   isIdentifier,
   MAIN_SESSION_KEY,
   type MaybePromise,
@@ -42,11 +40,8 @@ import {
   type SessionKey,
   sessionKey as toSessionKey,
 } from "@sidecar/runtime-contracts";
-import type { MemoryForgetAsk, MemoryForgetReport } from "@sidecar/runtime-store";
-import type { Session } from "@sidecar/session";
 import {
   isRecord,
-  isWireBoolean,
   isWireNumber,
   isWireString,
   type WireRecord,
@@ -78,25 +73,13 @@ export interface GatewayBrainAccess {
   holdsGeneration: (generationId: string) => boolean;
   /** Settles once every standing follower has published every report taken so far. */
   publicationSettled: () => Promise<void>;
-  children: Pick<
-    ChildRunService,
-    "children" | "child" | "childrenOf" | "completions" | "completion" | "cancel"
-  >;
+  children: Pick<ChildRunService, "children" | "child" | "childrenOf">;
   configuration: () => ResolvedConfiguration;
   /** Republishes the configuration with the settable fields patched; answers the refusals, none on success. */
   updateConfiguration: (patch: SettableConfigurationPatch) => readonly string[];
-  /** How many compact notices main has not yet read. */
-  pendingNoticeCount: () => number;
 }
 
 export interface GatewayMemoryAccess {
-  search: (
-    query: string,
-    maxResults: number | undefined,
-    signal?: AbortSignal,
-  ) => Promise<WireRecord>;
-  get: (path: string, from: number | undefined, lines: number | undefined) => Promise<WireRecord>;
-  forget: (ask: MemoryForgetAsk) => Promise<MemoryForgetReport | undefined>;
   status: () => WireRecord;
 }
 
@@ -110,8 +93,8 @@ export interface GatewayServiceDependencies {
   brain: GatewayBrainAccess;
   conversations: ConversationOperations;
   memory: GatewayMemoryAccess;
-  /** The observed sessions as the roster holds them now. */
-  observedSessions: () => readonly Session[];
+  /** How many sessions the roster holds now; the observation event's whole payload. */
+  observedSessionCount: () => number;
   deliveries: BrainReplyDeliveries;
   receiver: GatewayReceiverState;
   nodes?: NodeRegistry;
@@ -159,7 +142,6 @@ export interface GatewayService {
 const REFUSAL = {
   NO_RUN: "no run has that id",
   NOT_LISTED: "the directory does not list that conversation",
-  NO_CHILD: "no child has that id",
 } as const;
 
 function invalid(message: string): GatewayMethodOutcome {
@@ -221,20 +203,10 @@ class ParamReader {
     return this.#params[name] === undefined ? undefined : this.number(name);
   }
 
-  optionalBoolean(name: string): boolean | undefined {
-    const value = this.#params[name];
-    if (value === undefined || isWireBoolean(value)) return value;
-    throw new ParamRefusal(`${name} must be a boolean`);
-  }
-
   stringList(name: string): readonly string[] {
     const value = this.#params[name];
     if (Array.isArray(value) && value.every(isWireString)) return value;
     throw new ParamRefusal(`${name} must be a list of strings`);
-  }
-
-  optionalStringList(name: string): readonly string[] | undefined {
-    return this.#params[name] === undefined ? undefined : this.stringList(name);
   }
 
   optionalRecord(name: string): WireRecord | undefined {
@@ -296,35 +268,6 @@ function childRecordToWire(record: ChildRunRecord): WireRecord {
   };
 }
 
-/** The bounded projection of a completion: where its delivery stands, never the result's words. */
-function completionToWire(completion: ChildCompletionRecord): WireRecord {
-  return {
-    completionId: completion.completionId,
-    childId: completion.childId,
-    destination: completion.destination,
-    status: completion.status,
-    delivery: completion.delivery,
-    attempts: completion.attempts,
-    ...(completion.failureDetail !== undefined
-      ? { failureDetail: completion.failureDetail }
-      : undefined),
-  };
-}
-
-/** The observed roster's bounded fields: what the rows draw, never a transcript. */
-function sessionToWire(session: Session): WireRecord {
-  return {
-    providerId: session.providerId,
-    providerSessionId: session.providerSessionId,
-    title: session.title,
-    status: session.status,
-    location: session.location,
-    lastActivityAt: session.lastActivityAt,
-    canReceiveMessage: session.canReceiveMessage,
-    ...(session.workspace?.name !== undefined ? { workspace: session.workspace.name } : undefined),
-  };
-}
-
 function configurationToWire(snapshot: ResolvedConfiguration): WireRecord {
   const { configuration } = snapshot;
   return {
@@ -355,16 +298,6 @@ function submissionResultToWire(result: BrainSubmissionResult): WireRecord {
     : { outcome: result.outcome, reason: result.reason };
 }
 
-function forgetReportToWire(report: MemoryForgetReport): WireRecord {
-  return {
-    forgottenEntries: report.forgottenEntries,
-    removedCandidates: report.removedCandidates,
-    removedMemoryEntries: report.removedMemoryEntries,
-    tombstoned: report.tombstoned,
-    limitations: [...report.limitations],
-  };
-}
-
 export function createGatewayService(dependencies: GatewayServiceDependencies): GatewayService {
   const { brain, conversations, deliveries, receiver } = dependencies;
   const nodes = dependencies.nodes ?? new NodeRegistry();
@@ -379,7 +312,7 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
 
   const snapshot = (): WireValue => ({
     runs: brain.allRequests().map(brainRequestRecordToWire),
-    conversations: conversations.directory().entries.map(conversationRecordToWire),
+    conversations: conversations.directory().map(conversationRecordToWire),
     deliveries: deliveries.records().map(deliveryRecordToWire),
     configurationRevision: brain.configuration().revision,
     nodes: nodes.list().map(nodeSnapshotToWire),
@@ -426,10 +359,7 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
     return granted;
   };
 
-  const submit = async (
-    read: ParamReader,
-    steerRunId: string | undefined,
-  ): Promise<GatewayMethodOutcome> => {
+  const submit = async (read: ParamReader): Promise<GatewayMethodOutcome> => {
     const sessionKey = read.sessionKeyOrMain("sessionKey");
     const submissionId = read.identifier("submissionId");
     const question = read.string("question").trim().slice(0, maximumTypedAskLength);
@@ -444,12 +374,6 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
         }),
       );
     }
-    if (steerRunId !== undefined) {
-      const live = agent.request(steerRunId);
-      if (!live || isTerminalBrainRequestStatus(live.status)) {
-        return gatewayError(GATEWAY_ERROR.NOT_FOUND, "no run under way has that id to steer");
-      }
-    }
     const result = await agent.submitAsk({ submissionId, origin, question });
     if (result.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED) {
       await publishAsk(agent, result.runId, dependencies.recordConversationEntry, sessionKey);
@@ -462,20 +386,6 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
 
   const methods: GatewayMethodTable = {
     ...dependencies.methods,
-    [GATEWAY_METHOD.CONVERSATION_LIST]: () => {
-      const directory = conversations.directory();
-      return gatewayOk({
-        entries: directory.entries.map(conversationRecordToWire),
-        archives: directory.archives.map(historyArchiveRecordToWire),
-      });
-    },
-    [GATEWAY_METHOD.CONVERSATION_CREATE]: reading(async (read) => {
-      const temporary = read.optionalBoolean("temporary") === true;
-      const created = await conversations.createThread(temporary);
-      return created
-        ? gatewayOk({ sessionKey: created })
-        : gatewayError(GATEWAY_ERROR.REFUSED, "the store did not create a thread");
-    }),
     [GATEWAY_METHOD.CONVERSATION_HISTORY]: reading((read) => {
       const sessionKey = read.sessionKeyOrMain("sessionKey");
       if (!conversations.holds(sessionKey)) {
@@ -483,25 +393,12 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
       }
       return gatewayOk({ entries: conversations.history(sessionKey).map(conversationEntryToWire) });
     }),
-    [GATEWAY_METHOD.CONVERSATION_RESET]: reading(async (read) =>
-      gatewayOk({ reset: await conversations.startFresh(read.sessionKeyOrMain("sessionKey")) }),
-    ),
-    [GATEWAY_METHOD.CONVERSATION_ARCHIVE]: reading(async (read) =>
-      gatewayOk({ archived: await conversations.archive(read.sessionKey("sessionKey")) }),
-    ),
-    [GATEWAY_METHOD.CONVERSATION_UNARCHIVE]: reading(async (read) =>
-      gatewayOk({ unarchived: await conversations.unarchive(read.sessionKey("sessionKey")) }),
-    ),
     [GATEWAY_METHOD.CONVERSATION_DELETE]: reading(async (read) =>
       gatewayOk({
         outcome: await conversations.deleteHistory(read.sessionKeyOrMain("sessionKey")),
       }),
     ),
-    [GATEWAY_METHOD.CONVERSATION_RESTORE]: reading(async (read) =>
-      gatewayOk({ outcome: await conversations.restoreArchive(read.identifier("archiveId")) }),
-    ),
-    [GATEWAY_METHOD.RUN_SUBMIT]: reading((read) => submit(read, undefined)),
-    [GATEWAY_METHOD.RUN_STEER]: reading((read) => submit(read, read.identifier("runId"))),
+    [GATEWAY_METHOD.RUN_SUBMIT]: reading((read) => submit(read)),
     [GATEWAY_METHOD.RUN_CANCEL]: reading(async (read) => {
       const runId = read.identifier("runId");
       const agent = brain.agentForRun(runId);
@@ -536,15 +433,6 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
         generationId !== undefined && grantReplyOnCall(live, generationId, speakerEpoch);
       return answer({ record: live, speak: granted });
     }),
-    [GATEWAY_METHOD.RUN_STATUS]: reading((read) => {
-      const runId = read.identifier("runId");
-      const record = brain.agentForRun(runId)?.request(runId);
-      if (!record) return gatewayError(GATEWAY_ERROR.NOT_FOUND, REFUSAL.NO_RUN);
-      return gatewayOk({
-        record: brainRequestRecordToWire(record),
-        sessionKey: brain.conversationForRun(runId) ?? MAIN_SESSION_KEY,
-      });
-    }),
     [GATEWAY_METHOD.RUN_LIST]: () =>
       gatewayOk({ runs: brain.allRequests().map(brainRequestRecordToWire) }),
     [GATEWAY_METHOD.CHILD_LIST]: reading((read) => {
@@ -552,67 +440,7 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
       const records = requester ? brain.children.childrenOf(requester) : brain.children.children();
       return gatewayOk({ children: records.map(childRecordToWire) });
     }),
-    [GATEWAY_METHOD.CHILD_STATUS]: reading((read) => {
-      const childId = read.identifier("childId");
-      const record = brain.children.child(childId);
-      if (!record) return gatewayError(GATEWAY_ERROR.NOT_FOUND, REFUSAL.NO_CHILD);
-      const completion = brain.children.completion(childId);
-      return gatewayOk({
-        child: childRecordToWire(record),
-        ...(completion ? { completion: completionToWire(completion) } : undefined),
-      });
-    }),
-    [GATEWAY_METHOD.CHILD_CANCEL]: reading(async (read) => {
-      const childId = read.identifier("childId");
-      if (!brain.children.child(childId)) {
-        return gatewayError(GATEWAY_ERROR.NOT_FOUND, REFUSAL.NO_CHILD);
-      }
-      const cancelled = await brain.children.cancel(childId);
-      return gatewayOk(
-        cancelled.ok
-          ? { cancelled: true }
-          : { cancelled: false, remaining: [...cancelled.remaining] },
-      );
-    }),
-    [GATEWAY_METHOD.CHILD_COMPLETIONS]: () =>
-      gatewayOk({ completions: brain.children.completions().map(completionToWire) }),
-    [GATEWAY_METHOD.MEMORY_SEARCH]: reading(async (read) =>
-      gatewayOk(
-        await dependencies.memory.search(read.string("query"), read.optionalNumber("maxResults")),
-      ),
-    ),
-    [GATEWAY_METHOD.MEMORY_GET]: reading(async (read) =>
-      gatewayOk(
-        await dependencies.memory.get(
-          read.string("path"),
-          read.optionalNumber("from"),
-          read.optionalNumber("lines"),
-        ),
-      ),
-    ),
-    // A forget names any of three kinds of source; a list it leaves out
-    // names none of that kind, so an absent list is an empty one.
-    [GATEWAY_METHOD.MEMORY_FORGET]: reading(async (read) => {
-      const entryIds = read.optionalStringList("entryIds") ?? [];
-      const sessionKeys = read.optionalStringList("sessionKeys") ?? [];
-      const candidateKeys = read.optionalStringList("candidateKeys") ?? [];
-      const reason = read.string("reason");
-      if (sessionKeys.some((key) => !isIdentifier(key))) {
-        return invalid("sessionKeys must be non-empty strings");
-      }
-      const report = await dependencies.memory.forget({
-        entryIds,
-        sessionKeys: sessionKeys.map(toSessionKey),
-        candidateKeys,
-        reason,
-      });
-      return report
-        ? gatewayOk(forgetReportToWire(report))
-        : gatewayError(GATEWAY_ERROR.REFUSED, "no notebook stands to forget from");
-    }),
     [GATEWAY_METHOD.MEMORY_STATUS]: () => gatewayOk(dependencies.memory.status()),
-    [GATEWAY_METHOD.CONFIGURATION_SNAPSHOT]: () =>
-      gatewayOk(configurationToWire(brain.configuration())),
     [GATEWAY_METHOD.CONFIGURATION_UPDATE]: reading((read) => {
       const reasoningEffort = read.optionalString("reasoningEffort");
       const maximumOutputTokens = read.optionalNumber("maximumOutputTokens");
@@ -626,11 +454,6 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
       }
       return gatewayOk(configurationToWire(brain.configuration()));
     }),
-    [GATEWAY_METHOD.OBSERVATION_STATE]: () =>
-      gatewayOk({
-        sessions: dependencies.observedSessions().map(sessionToWire),
-        pendingNotices: brain.pendingNoticeCount(),
-      }),
     // A registration over the protocol names capabilities the host may ask
     // for; each is invoked back through the registering client's own
     // channel, which the in-process build wires directly.
@@ -693,12 +516,6 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
         reason: result.reason,
       });
     }),
-    [GATEWAY_METHOD.DELIVERY_LIST]: () =>
-      gatewayOk({
-        deliveries: deliveries.records().map(deliveryRecordToWire),
-        receiverEpoch: receiver.epoch(),
-        receiverReady: receiver.isReady(),
-      }),
     [GATEWAY_METHOD.DELIVERY_CLAIM]: reading((read) => {
       const claim: BrainReplyClaimResult = deliveries.claim(
         read.identifier("runId"),
@@ -720,16 +537,6 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
       );
       if (emptied) offerReplies();
       return gatewayOk({ acknowledged: emptied });
-    }),
-    [GATEWAY_METHOD.DELIVERY_GRANT_ON_CALL]: reading((read) => {
-      const runId = read.identifier("runId");
-      const epoch = read.number("epoch");
-      const live = brain.agentForRun(runId)?.request(runId);
-      const generationId = runGeneration(runId);
-      if (!live || generationId === undefined) {
-        return gatewayError(GATEWAY_ERROR.NOT_FOUND, REFUSAL.NO_RUN);
-      }
-      return gatewayOk({ granted: grantReplyOnCall(live, generationId, epoch) });
     }),
   };
 
@@ -779,12 +586,12 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
     },
     directoryChanged: () => {
       server.emit(GATEWAY_EVENT.DIRECTORY_CHANGED, {
-        entries: conversations.directory().entries.map(conversationRecordToWire),
+        entries: conversations.directory().map(conversationRecordToWire),
       });
     },
     observationChanged: () => {
       server.emit(GATEWAY_EVENT.OBSERVATION_CHANGED, {
-        sessions: dependencies.observedSessions().length,
+        sessions: dependencies.observedSessionCount(),
       });
     },
     configurationChanged: () => {

@@ -13,7 +13,6 @@ import {
   type ConversationRecord,
   DEFAULT_AGENT_ID,
   MAIN_SESSION_KEY,
-  RESTORE_OUTCOME,
   type SessionKey,
   sessionKey,
   TRANSCRIPT_EVENT_KIND,
@@ -27,7 +26,6 @@ import {
   listArchives,
   type PublicationDurability,
   publishPendingArchives,
-  restoreArchive,
 } from "./archives.js";
 import { loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
 import { decodeArchiveContent, encodeArchiveContent, zstdSupported } from "./compression.js";
@@ -49,13 +47,13 @@ import {
   staleVictims,
 } from "./maintenance.js";
 import { measurePhysicalUsage, runHistoryMaintenance } from "./maintenance-run.js";
-import { countConversationRows, inspectHistory, line, NOW } from "./testing.js";
+import { inspectHistory, line, NOW } from "./testing.js";
 import { listCompactionBoundaries, listTranscript, searchTranscript } from "./transcript-table.js";
 
 /**
  * The lifecycle the store now owns: the transcript kept apart from the
- * projection, the recoverable deletion and its restore, and the maintenance
- * policy ported from OpenClaw. Every value below is synthetic.
+ * projection, the recoverable deletion, and the maintenance policy ported
+ * from OpenClaw. Every value below is synthetic.
  */
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -271,60 +269,7 @@ test("Delete history commits the archive with the removal, publishes and verifie
   const content = decodeArchiveContent(fs.readFileSync(file), deleted.archive.encoding);
   assert.match(content, /first words/u);
   assert.match(content, new RegExp(SECRET, "u"));
-  // Restore: the same key, the same lines with their ids, the cutoff released.
-  const restored = restoreArchive(database, root, "archive-1", DEFAULT_AGENT_ID, NOW + 2);
-  assert.equal(restored.outcome, RESTORE_OUTCOME.RESTORED);
-  assert.deepEqual(
-    listHistory(database, MAIN_SESSION_KEY, NOW + 2).map((entry) => [entry.eventId, entry.words]),
-    [
-      ["h1", "first words"],
-      ["h2", "second words"],
-    ],
-  );
-  assert.equal(historyClearedAt(database, MAIN_SESSION_KEY), undefined);
-  assert.equal(searchTranscript(database, MAIN_SESSION_KEY, SECRET).length, 1);
-  assert.equal(listTranscript(database, MAIN_SESSION_KEY)[0]?.sessionId, "gen-1");
-  // A second restore finds a live conversation and overwrites nothing.
-  appendHistory(database, MAIN_SESSION_KEY, [line("newer", NOW + 3, { eventId: "h3" })], NOW + 3);
-  assert.equal(
-    restoreArchive(database, root, "archive-1", DEFAULT_AGENT_ID, NOW + 4).outcome,
-    RESTORE_OUTCOME.NEWER_LIVE,
-  );
-  assert.equal(listHistory(database, MAIN_SESSION_KEY, NOW + 4).length, 3);
-  database.close();
-  fs.rmSync(root, { recursive: true, force: true });
-});
-
-test("a restored line carries the event key the live append writes, so a late re-report of it is one row", () => {
-  const root = agentRoot();
-  const database = openAt(root);
-  // A line without an id is keyed on its value, where a hand-built key could differ from the live one.
-  const reported = line("words", NOW - 10);
-  appendHistory(database, MAIN_SESSION_KEY, [reported], NOW);
-  // SAFETY: the query selects the one text column the row type names.
-  const keyOf = () =>
-    (
-      database
-        .prepare("SELECT event_key FROM history_events WHERE session_key = ? ORDER BY sequence")
-        .all(MAIN_SESSION_KEY) as { event_key: string }[]
-    ).map((row) => row.event_key);
-  const liveKeys = keyOf();
-  assert.ok(
-    deleteConversationHistory(database, root, MAIN_SESSION_KEY, NOW, { archiveId: "archive-3" }),
-  );
-  assert.deepEqual(countConversationRows(database, MAIN_SESSION_KEY), {
-    history: 0,
-    transcript: 0,
-    boundaries: 0,
-    sessions: 0,
-  });
-  assert.equal(
-    restoreArchive(database, root, "archive-3", DEFAULT_AGENT_ID, NOW + 1).outcome,
-    RESTORE_OUTCOME.RESTORED,
-  );
-  assert.deepEqual(keyOf(), liveKeys);
-  appendHistory(database, MAIN_SESSION_KEY, [reported], NOW + 2);
-  assert.equal(inspectHistory(database, MAIN_SESSION_KEY).count, 1);
+  assert.equal(searchTranscript(database, MAIN_SESSION_KEY, SECRET).length, 0);
   database.close();
   fs.rmSync(root, { recursive: true, force: true });
 });
@@ -342,7 +287,7 @@ test("a publication a crash interrupted keeps its payload in the registry and is
   assert.equal(deleted.published, false);
   assert.equal(deleted.archive.publishedAt, undefined);
   assert.deepEqual(listHistory(database, MAIN_SESSION_KEY, NOW), []);
-  // The registry still holds the bytes, so a restore works from them alone.
+  // The registry still holds the bytes until the publication lands.
   // SAFETY: length() of the payload column is one integer column named bytes.
   const held = database
     .prepare("SELECT length(payload) AS bytes FROM history_archives WHERE archive_id = ?")
@@ -361,10 +306,6 @@ test("a publication a crash interrupted keeps its payload in the registry and is
     .prepare("SELECT payload FROM history_archives WHERE archive_id = ?")
     .get("archive-2") as { payload: Uint8Array | null };
   assert.equal(cleared.payload, null);
-  assert.equal(
-    restoreArchive(relaunched, root, "archive-2", DEFAULT_AGENT_ID, NOW + 1).outcome,
-    RESTORE_OUTCOME.RESTORED,
-  );
   relaunched.close();
   fs.rmSync(root, { recursive: true, force: true });
 });
@@ -417,10 +358,6 @@ test("a directory sync that fails is a publication that failed: the rows are gon
     .get("archive-4") as { payload: Uint8Array | null; published_at: number | null };
   assert.equal(cleared.payload, null);
   assert.ok(cleared.published_at !== null);
-  assert.equal(
-    restoreArchive(database, root, "archive-4", DEFAULT_AGENT_ID, NOW + 1).outcome,
-    RESTORE_OUTCOME.RESTORED,
-  );
   database.close();
   fs.rmSync(root, { recursive: true, force: true });
 });

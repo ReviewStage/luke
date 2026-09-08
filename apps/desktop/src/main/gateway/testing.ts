@@ -33,17 +33,11 @@ export function operatorOverBrain(options: {
       // SAFETY: only the revision is read here; the stand-in is never read further.
       configuration: () => ({ revision: 1 }) as ResolvedConfiguration,
       updateConfiguration: () => [],
-      pendingNoticeCount: () => 0,
     },
     // SAFETY: the submit path reaches no conversation operation; the stand-in is never read.
     conversations: {} as ConversationOperations,
-    memory: {
-      search: async () => ({}),
-      get: async () => ({}),
-      forget: async () => undefined,
-      status: () => ({}),
-    },
-    observedSessions: () => [],
+    memory: { status: () => ({}) },
+    observedSessionCount: () => 0,
     deliveries: new BrainReplyDeliveries({ nextDeliveryId: () => `delivery-${++ids}` }),
     receiver: { isReady: () => false, epoch: () => 0 },
     recordConversationEntry: options.recordConversationEntry,

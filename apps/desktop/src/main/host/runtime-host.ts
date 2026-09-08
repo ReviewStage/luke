@@ -1116,7 +1116,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     embeddingAdapter: () => voiceCapabilities.embeddingAdapter,
     workspaceDirectory: agentWorkspacePath,
     createRuntime: () => brainWiring.createRuntime(),
-    conversationDirectory: () => runtimeStoreWiring.directory().entries,
+    conversationDirectory: () => runtimeStoreWiring.directory(),
     isTemporary: runtimeStoreWiring.isTemporary,
     historyLines: (sessionKey) => runtimeStoreWiring.thread(sessionKey).entries(),
     now,
@@ -1131,7 +1131,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     client: runtimeStoreWiring.client,
     createRuntime: () => brainWiring.createRuntime(),
     workspaceDirectory: agentWorkspacePath,
-    conversationDirectory: () => runtimeStoreWiring.directory().entries,
+    conversationDirectory: () => runtimeStoreWiring.directory(),
     isTemporary: runtimeStoreWiring.isTemporary,
     historyLines: (sessionKey) => runtimeStoreWiring.thread(sessionKey).entries(),
     background: (work) => brainWiring.lanes.run(LANE.BACKGROUND, work),
@@ -1152,7 +1152,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
       await runtimeStoreWiring.ensureConversation(sessionKey, CONVERSATION_KIND.CHILD, name);
     },
     archiveConversation: (sessionKey) => runtimeStoreWiring.archive(sessionKey),
-    conversationDirectory: () => runtimeStoreWiring.directory().entries,
+    conversationDirectory: () => runtimeStoreWiring.directory(),
     historyLines: (sessionKey) => runtimeStoreWiring.thread(sessionKey).entries(),
     childStore: () => runtimeStoreWiring.childStore(),
     createId,
@@ -2441,38 +2441,16 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
       children: brainWiring.children,
       configuration: () => brainWiring.configuration(),
       updateConfiguration: (patch) => brainWiring.updateConfiguration(patch),
-      pendingNoticeCount: () => brainWiring.pendingNotices().length,
     },
     conversations: conversationControls,
     memory: {
-      search: async (query, maxResults, signal = new AbortController().signal) => {
-        const access = memoryWiring.accessFor(MAIN_SESSION_KEY);
-        if (!access)
-          return { status: ACT_RESULT_STATUS.REJECTED, reason: "no notebook index stands" };
-        return access.search({
-          query,
-          ...(maxResults !== undefined ? { maxResults } : undefined),
-          signal,
-        });
-      },
-      get: async (filePath, from, lines) => {
-        const access = memoryWiring.accessFor(MAIN_SESSION_KEY);
-        if (!access)
-          return { status: ACT_RESULT_STATUS.REJECTED, reason: "no notebook index stands" };
-        return access.get({
-          path: filePath,
-          ...(from !== undefined ? { from } : undefined),
-          ...(lines !== undefined ? { lines } : undefined),
-        });
-      },
-      forget: (ask) => memoryMaintenance.forget(ask),
       status: () => ({
         mode: memoryWiring.mode(),
         entries: runtimeStoreWiring.rememberedFacts().length,
       }),
     },
-    observedSessions: () =>
-      sessionRegistry.list().filter((session) => session.realtimeVoice !== true),
+    observedSessionCount: () =>
+      sessionRegistry.list().filter((session) => session.realtimeVoice !== true).length,
     deliveries: brainReplyDeliveries,
     receiver: voiceReceiver,
     nodes,
@@ -2597,7 +2575,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         // never replays, so it is counted here as unresolved.
         const keys = new Set<SessionKey>([
           MAIN_SESSION_KEY,
-          ...runtimeStoreWiring.directory().entries.map((entry) => entry.sessionKey),
+          ...runtimeStoreWiring.directory().map((entry) => entry.sessionKey),
         ]);
         let unresolved = 0;
         for (const key of keys) {

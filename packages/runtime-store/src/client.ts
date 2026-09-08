@@ -10,16 +10,14 @@ import type {
 import type { ConversationEntry } from "@sidecar/realtime";
 import type { ChildStore, ScheduledJob, ScheduledJobStore } from "@sidecar/runtime";
 import type {
-  AgentId,
   ArchiveReason,
   ConversationRecord,
   HistoryAppendOutcome,
-  HistoryArchiveRecord,
   SessionKey,
   TranscriptEvent,
 } from "@sidecar/runtime-contracts";
 import type { UnparsedWireValue } from "@sidecar/wire";
-import type { DeletionOptions, DeletionOutcome, RestoreResult } from "./archives.js";
+import type { DeletionOptions, DeletionOutcome } from "./archives.js";
 import type { ConversationCreation } from "./conversations-table.js";
 import { EnvelopeTracker } from "./envelope.js";
 import type { HistorySearchHit } from "./history-table.js";
@@ -345,14 +343,6 @@ export class RuntimeStoreClient {
     options: DeletionOptions = {},
   ): Promise<DeletionOutcome | undefined> {
     return this.request(RUNTIME_STORE_METHOD.CONVERSATION_DELETE, { sessionKey, now, ...options });
-  }
-
-  listArchives(): Promise<readonly HistoryArchiveRecord[]> {
-    return this.request(RUNTIME_STORE_METHOD.ARCHIVES_LIST, {});
-  }
-
-  restoreArchive(archiveId: string, agentId: AgentId, now: number): Promise<RestoreResult> {
-    return this.request(RUNTIME_STORE_METHOD.ARCHIVE_RESTORE, { archiveId, agentId, now });
   }
 
   /** One maintenance pass under the pinned defaults, keeping the conversations named whatever their age. */

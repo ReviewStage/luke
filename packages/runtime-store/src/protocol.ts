@@ -16,11 +16,10 @@ import type {
   ChildRunRecord,
   ConversationRecord,
   HistoryAppendOutcome,
-  HistoryArchiveRecord,
   SessionKey,
 } from "@sidecar/runtime-contracts";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import type { DeletionOptions, DeletionOutcome, RestoreResult } from "./archives.js";
+import type { DeletionOptions, DeletionOutcome } from "./archives.js";
 import type { EnvelopeRead } from "./brain-envelope.js";
 import type { ConversationCreation } from "./conversations-table.js";
 import type { BrainStateSave } from "./envelope.js";
@@ -94,8 +93,6 @@ export const RUNTIME_STORE_METHOD = {
   CONVERSATION_UNARCHIVE: "conversations.unarchive",
   CONVERSATION_PIN: "conversations.pin",
   CONVERSATION_DELETE: "conversations.delete",
-  ARCHIVES_LIST: "archives.list",
-  ARCHIVE_RESTORE: "archives.restore",
   MAINTENANCE_RUN: "maintenance.run",
   JOBS_LIST: "jobs.list",
   JOB_PUT: "jobs.put",
@@ -282,14 +279,6 @@ export interface RuntimeStoreMethods {
   [RUNTIME_STORE_METHOD.CONVERSATION_DELETE]: {
     params: { sessionKey: SessionKey; now: number } & DeletionOptions;
     result: DeletionOutcome | undefined;
-  };
-  [RUNTIME_STORE_METHOD.ARCHIVES_LIST]: {
-    params: Record<string, never>;
-    result: readonly HistoryArchiveRecord[];
-  };
-  [RUNTIME_STORE_METHOD.ARCHIVE_RESTORE]: {
-    params: { archiveId: string; agentId: AgentId; now: number };
-    result: RestoreResult;
   };
   [RUNTIME_STORE_METHOD.MAINTENANCE_RUN]: {
     params: { now: number; preserve: readonly SessionKey[] };

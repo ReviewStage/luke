@@ -111,22 +111,16 @@ function fakeHost(options: { persistCancellations?: boolean } = {}) {
       // SAFETY: only the revision is read; the fixture stands in for the snapshot.
       configuration: () => ({ revision: 1 }) as unknown as ResolvedConfiguration,
       updateConfiguration: () => [],
-      pendingNoticeCount: () => 0,
     },
     // SAFETY: the tests reach History and the deletion alone; the fixture stands in for the rest.
     conversations: {
       deleteHistory: async () => CONVERSATION_DELETE_OUTCOME.COMPLETE,
       holds: () => true,
       history: () => history,
-      directory: () => ({ entries: [], archives: [] }),
+      directory: () => [],
     } as unknown as ConversationOperations,
-    memory: {
-      search: async () => ({}),
-      get: async () => ({}),
-      forget: async () => undefined,
-      status: () => ({}),
-    },
-    observedSessions: () => [],
+    memory: { status: () => ({}) },
+    observedSessionCount: () => 0,
     deliveries,
     receiver,
     recordConversationEntry: (entry) => {

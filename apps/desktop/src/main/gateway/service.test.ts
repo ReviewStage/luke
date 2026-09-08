@@ -114,7 +114,6 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
       // SAFETY: only the revision is read; the fixture stands in for the snapshot.
       configuration: () => ({ revision: 1 }) as unknown as ResolvedConfiguration,
       updateConfiguration: () => [],
-      pendingNoticeCount: () => 0,
     },
     // SAFETY: the tests reach the deletion alone; the fixture stands in for the other operations.
     conversations: {
@@ -124,15 +123,10 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
       },
       holds: () => true,
       history: () => [],
-      directory: () => ({ entries: [], archives: [] }),
+      directory: () => [],
     } as unknown as ConversationOperations,
-    memory: {
-      search: async () => ({}),
-      get: async () => ({}),
-      forget: async () => undefined,
-      status: () => ({}),
-    },
-    observedSessions: () => [],
+    memory: { status: () => ({}) },
+    observedSessionCount: () => 0,
     deliveries,
     receiver,
     recordConversationEntry: (entry) => {
