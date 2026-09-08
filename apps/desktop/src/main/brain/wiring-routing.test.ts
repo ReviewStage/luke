@@ -534,6 +534,37 @@ test("a conversation reopened while it stands down waits for the close and stand
   await c.wiring.rebuild();
 });
 
+test("two opens of one key landing in the same tick, a hook and a held briefing, build one store and list the conversation once", async () => {
+  const c = composed();
+  await c.wiring.rebuild();
+  const abcKey = observedSessionKey(ABC);
+  assert.equal(c.repositories.get(abcKey), undefined);
+  // Nothing stands for abc yet; both paths reach the same opening.
+  c.wiring.wake([
+    {
+      kind: BRAIN_WAKE_KIND.HOOK,
+      hookEvent: "Stop",
+      identity: ABC,
+      session: session("abc"),
+      atMs: 1,
+    },
+  ]);
+  c.wiring.releaseHeld([{ briefing: "decided earlier", decidedAt: 1, sessionKey: abcKey }]);
+  await until(() => c.wiring.pendingNotices().length === 2);
+  await until(() => !(c.wiring.current(abcKey)?.busy() ?? true));
+  assert.ok(c.wiring.current(abcKey));
+  assert.equal(c.repositories.get(abcKey), 1);
+  assert.equal(c.ensured.filter((entry) => entry.sessionKey === abcKey).length, 1);
+  // Both turns ran, one after the other, in that one conversation: the
+  // later call's context carries the hook's wake and the release together.
+  assert.equal(c.inputs.length, 2);
+  const last = itemTexts(c.inputs[1] ?? []).join("\n");
+  assert.ok(last.includes(BRAIN_INPUT_MARKER.OBSERVED_EVENTS));
+  assert.ok(last.includes(BRAIN_INPUT_MARKER.HOLD_RELEASED));
+  c.wiring.retire();
+  await c.wiring.rebuild();
+});
+
 test("a heartbeat settles only when its turn has, so a scheduler's tick is over when its work is", async () => {
   const gate: Gate = {
     holds: (texts) => texts.includes(BRAIN_INPUT_MARKER.HEARTBEAT),

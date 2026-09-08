@@ -1,4 +1,6 @@
 import {
+  type ChildCancellation,
+  type ChildSpawnOutcome,
   type EffectiveToolPolicy,
   type ForkSnapshot,
   type SkillLoad,
@@ -11,11 +13,15 @@ import {
 } from "@sidecar/runtime";
 import {
   type ChildCleanup,
+  type ChildCompletionRecord,
   type ChildContextMode,
   type ChildPolicyMetadata,
+  type ChildRunRecord,
   type ContextEngine,
+  type ConversationRecord,
   isChildCleanup,
   isChildContextMode,
+  type SessionKey,
   type ToolExecutionContext,
   type ToolExecutor,
   type ToolInvocation,
@@ -32,6 +38,11 @@ import {
 } from "@sidecar/wire";
 import { estimateTokens } from "./compaction.js";
 import { identityFromRecord, parsedRecord, rejection, sameIdentity } from "./generation.js";
+import {
+  childSpawnReceiptRecord,
+  childSummaryRecord,
+  conversationListingRecord,
+} from "./input-items.js";
 import { UNCONFIRMED_ACT_RESULT, UNKNOWN_ACT_RESULT } from "./journal.js";
 import type { BrainActExecution, BrainActPerformer, BrainRoster } from "./performer.js";
 import {
@@ -43,7 +54,7 @@ import {
   maximumMemorySearchResults,
   maximumSessionsHistoryLines,
 } from "./tools.js";
-import { REFUSAL_REASON, type RunControl, type TurnContext } from "./turn.js";
+import { REFUSAL_REASON, type RunControl, SPAWN_REFUSAL_REASON, type TurnContext } from "./turn.js";
 import type { BrainDelivery } from "./wake-events.js";
 
 /**
@@ -94,19 +105,42 @@ export interface BrainChildSpawnAsk {
   readonly fork: () => ForkSnapshot | undefined;
 }
 
+/** One child as the host lists it: its record and, once it has ended, its completion. */
+export interface BrainChildListing {
+  readonly record: ChildRunRecord;
+  readonly completion: ChildCompletionRecord | undefined;
+}
+
 /**
  * How the session tools reach delegation: the host owns the conversations,
- * the child service, and the directory, and answers each in the record the
- * model reads. The agent validates the call's arguments and its own standing;
- * the host validates ownership — a child named here must be this
- * conversation's — and everything after.
+ * the child service, and the directory, and answers each in its own typed
+ * terms; the records the model reads are built here. The agent validates the
+ * call's arguments and its own standing; the host validates ownership — a
+ * child named here must be this conversation's, and one that is not is
+ * answered with nothing — and everything after.
  */
 export interface BrainChildAccess {
-  spawn(ask: BrainChildSpawnAsk): Promise<WireRecord>;
-  list(): Promise<WireRecord>;
-  cancel(childId: string): Promise<WireRecord>;
-  conversations(): Promise<WireRecord>;
-  history(childId: string, limit: number): Promise<WireRecord>;
+  /** The conversation these tools belong to, which the listing marks current. */
+  readonly sessionKey: SessionKey;
+  spawn(ask: BrainChildSpawnAsk): Promise<ChildSpawnOutcome>;
+  list(): Promise<readonly BrainChildListing[]>;
+  /** Cancels one of this conversation's children and its descendants; nothing for a child that is not its own. */
+  cancel(childId: string): Promise<ChildCancellation | undefined>;
+  conversations(): Promise<readonly ConversationRecord[]>;
+  /** One of this conversation's children's history lines, most recent last; nothing for a child that is not its own. */
+  history(childId: string, limit: number): Promise<readonly string[] | undefined>;
+}
+
+/** A spawn's outcome as the model reads it: the receipt, or the refusal's sentence with the service's detail. */
+function spawnOutcomeRecord(outcome: ChildSpawnOutcome): WireRecord {
+  if (outcome.accepted) return childSpawnReceiptRecord(outcome.receipt);
+  const words = SPAWN_REFUSAL_REASON[outcome.reason];
+  return rejection(outcome.detail ? `${words}: ${outcome.detail}` : words);
+}
+
+function cancellationRecord(childId: string, cancelled: ChildCancellation): WireRecord {
+  if (cancelled.ok) return { status: ACT_RESULT_STATUS.ACCEPTED, cancelled: [childId] };
+  return rejection(`not every child could be cancelled: ${cancelled.remaining.join(", ")}`);
 }
 
 /** A context as a fork would take it: its items and their estimated size, or nothing when it holds none. */
@@ -369,18 +403,30 @@ export function createTurnToolExecutor(
           },
           fork: () => forkSnapshotOf(context.context),
         };
-        return performJournaled(call, execution, () => children.spawn(ask));
+        return performJournaled(call, execution, async () =>
+          spawnOutcomeRecord(await children.spawn(ask)),
+        );
       }
       case BRAIN_TOOL.SUBAGENTS: {
         if (args.action === "cancel") {
           const childId = text(args.child_id);
           if (!childId) return rejection(REFUSAL_REASON.NOT_OWN_CHILD);
-          return performJournaled(call, execution, () => children.cancel(childId));
+          return performJournaled(call, execution, async () => {
+            const cancelled = await children.cancel(childId);
+            return cancelled
+              ? cancellationRecord(childId, cancelled)
+              : rejection(REFUSAL_REASON.UNKNOWN_CHILD);
+          });
         }
-        return children.list();
+        return {
+          status: ACT_RESULT_STATUS.ACCEPTED,
+          children: (await children.list()).map(({ record, completion }) =>
+            childSummaryRecord(record, completion),
+          ),
+        };
       }
       case BRAIN_TOOL.SESSIONS_LIST:
-        return children.conversations();
+        return conversationListingRecord(await children.conversations(), children.sessionKey);
       case BRAIN_TOOL.SESSIONS_HISTORY: {
         const childId = text(args.child_id);
         if (!childId) return rejection(REFUSAL_REASON.NOT_OWN_CHILD);
@@ -388,7 +434,9 @@ export function createTurnToolExecutor(
           isWireNumber(args.limit) && args.limit > 0
             ? Math.min(Math.floor(args.limit), maximumSessionsHistoryLines)
             : maximumSessionsHistoryLines;
-        return children.history(childId, limit);
+        const lines = await children.history(childId, limit);
+        if (!lines) return rejection(REFUSAL_REASON.UNKNOWN_CHILD);
+        return { status: ACT_RESULT_STATUS.ACCEPTED, lines: [...lines] };
       }
       default:
         return rejection(REFUSAL_REASON.NOT_OFFERED);

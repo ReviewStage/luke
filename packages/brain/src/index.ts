@@ -2,7 +2,6 @@ export {
   BRAIN_DEFAULTS,
   BrainAgent,
   type BrainAgentOptions,
-  type BrainChildRunEnd,
   type BrainCompletionDelivery,
   type BrainFlushCycle,
   type BrainFlushInput,
@@ -109,6 +108,7 @@ export {
 } from "./state-store.js";
 export type {
   BrainChildAccess,
+  BrainChildListing,
   BrainChildSpawnAsk,
   BrainMemoryAccess,
 } from "./tool-executor.js";

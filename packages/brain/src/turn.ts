@@ -1,8 +1,14 @@
 import type { ScheduledTimer } from "@sidecar/realtime";
-import type { ToolDescriptor, ToolPolicyLayers } from "@sidecar/runtime";
+import {
+  CHILD_SPAWN_REFUSAL,
+  type ChildSpawnRefusal,
+  type ToolDescriptor,
+  type ToolPolicyLayers,
+} from "@sidecar/runtime";
 import { RUN_ORIGIN, type RunOrigin } from "@sidecar/runtime-contracts";
 import type { WireRecord } from "@sidecar/wire";
 import type { Generation } from "./generation.js";
+import type { SteeredDeliveries } from "./steered-deliveries.js";
 import type { RecordingContextEngine } from "./transcript-recorder.js";
 import type { BrainWakeEvent } from "./wake-events.js";
 
@@ -52,11 +58,27 @@ export const REFUSAL_REASON = {
   MALFORMED_ARGUMENTS: "not run: the call's arguments are not the strings the tool takes",
   NO_CHILDREN: "not run: this conversation cannot delegate",
   NOT_OWN_CHILD: "not run: no child of this conversation has that id",
+  /** A child named by id that the host does not hold for this conversation. */
+  UNKNOWN_CHILD: "no child of this conversation has that id",
   EMPTY_TASK: "a task needs words",
   NO_MEMORY: "not run: this agent has no notebook index",
   EMPTY_QUERY: "a search needs words",
   NOT_MEMORY_PATH: "not read: that path is not a notebook file",
 } as const;
+
+/** A spawn refusal in the words the model reads; the service answers the code and this the sentence. */
+export const SPAWN_REFUSAL_REASON = {
+  [CHILD_SPAWN_REFUSAL.EMPTY_TASK]: "a task needs words",
+  [CHILD_SPAWN_REFUSAL.DEPTH_CAP]: "not run: the delegation depth cap is reached",
+  [CHILD_SPAWN_REFUSAL.REQUESTER_LIMIT]:
+    "not run: this conversation already has its limit of active children",
+  [CHILD_SPAWN_REFUSAL.GLOBAL_LIMIT]: "not run: every child execution slot is taken",
+  [CHILD_SPAWN_REFUSAL.BLOCKED_COMPLETIONS]:
+    "not run: too many completions are blocked awaiting delivery",
+  [CHILD_SPAWN_REFUSAL.FORK_OTHER_AGENT]: "not run: a fork must stay within the same agent",
+  [CHILD_SPAWN_REFUSAL.PERSISTENCE]: "not run: the child's record could not be written",
+  [CHILD_SPAWN_REFUSAL.STOPPED]: "not run: delegation is stopped",
+} as const satisfies Record<ChildSpawnRefusal, string>;
 
 export const TURN_OUTCOME = {
   DONE: "done",
@@ -118,12 +140,12 @@ export interface TurnPlan {
   /** The developer's own words when the turn is their ask, for the recall that precedes the inference. */
   question?: string;
   /**
-   * Hears every checkpoint of this turn that landed with its opening words
-   * in it, so a host that owes someone an answer about those words — a
-   * child's completion — answers from what is on disk, not from how the
-   * turn ended.
+   * What the turn owes about the words in it: its opening words, and the
+   * words steered into its run. Answered by the checkpoints that land and by
+   * nothing else, so a host owed an answer about those words — a child's
+   * completion — reads what is on disk, not how the turn ended.
    */
-  onPersisted?: () => void;
+  deliveries: SteeredDeliveries;
   run?: RunControl;
   /**
    * The generation the work was queued in. A turn that reaches the front of

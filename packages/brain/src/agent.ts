@@ -7,6 +7,7 @@ import {
 } from "@sidecar/memory";
 import type { ScheduledTimer } from "@sidecar/realtime";
 import {
+  type ChildEnd,
   type ChildPolicyContext,
   type EffectiveToolPolicy,
   PendingInputQueue,
@@ -21,7 +22,8 @@ import {
 import {
   type AgentRuntime,
   CHILD_RUN_STATUS,
-  type ChildRunStatus,
+  type ChildCompletionRecord,
+  type ChildRunRecord,
   CONTEXT_INPUT_KIND,
   type ContextEngine,
   type ContextMark,
@@ -60,7 +62,6 @@ import {
 import {
   activityNoticesInputText,
   askInputText,
-  type ChildCompletionInput,
   childCompletionInputText,
   heartbeatInputText,
   holdReleasedInputText,
@@ -106,6 +107,7 @@ import {
   type BrainStoreLease,
   brainGenerationExpired,
 } from "./state-store.js";
+import { SteeredDeliveries } from "./steered-deliveries.js";
 import {
   type BrainChildAccess,
   type BrainMemoryAccess,
@@ -396,39 +398,19 @@ export interface BrainRecallAsk {
   readonly signal: AbortSignal;
 }
 
-/** How a child's run ended, as its requester's service takes it. */
-export interface BrainChildRunEnd {
-  readonly status: ChildRunStatus;
-  readonly resultText?: string;
-  readonly failureDetail?: string;
-  readonly performedActs: number;
-  readonly unknownActs: number;
-}
-
 /** Whether a completion reached this conversation, and how. */
 export interface BrainCompletionDelivery {
   readonly delivered: boolean;
   readonly reason?: string;
 }
 
-/**
- * Words steered into the run under way whose fate someone awaits: ingested
- * once the runtime says so, and settled delivered by the first checkpoint
- * that lands after that, or not delivered when the run ends first.
- */
-interface SteeredDelivery {
-  ingested: boolean;
-  settle: (delivered: boolean) => void;
-}
-
-/** The execution under way: for an ask to steer into or interrupt, and for a steered delivery to be answered. */
+/** The execution under way: for an ask to steer into or interrupt, and for a steered delivery to be answered through its plan's deliveries. */
 interface ActiveExecution {
   run: RunControl;
   started: RuntimeRun;
   plan: TurnPlan;
   /** The asks riding inside the run, settled with its end. */
   riders: RunControl[];
-  steered: SteeredDelivery[];
 }
 
 /** What one turn gathers as it runs, for its trace and its deliveries. */
@@ -1188,6 +1170,7 @@ export class BrainAgent {
       const result = await this.#turn({
         generation,
         trigger: BRAIN_TURN_TRIGGER.HEARTBEAT,
+        deliveries: new SteeredDeliveries(),
         events: this.#inboxEvents(generation),
         open: (attached, now) => [
           ...(attached.length > 0 ? [wakeInputText(attached, now)] : []),
@@ -1238,6 +1221,7 @@ export class BrainAgent {
       this.#turn({
         generation,
         trigger: BRAIN_TURN_TRIGGER.HOLD_RELEASED,
+        deliveries: new SteeredDeliveries(),
         events: this.#inboxEvents(generation),
         open: (attached, now) => [
           ...(attached.length > 0 ? [wakeInputText(attached, now)] : []),
@@ -1252,28 +1236,28 @@ export class BrainAgent {
    * recorded run under the child origin, its submission id the child run's
    * id the requester's service minted, so the same child asked twice is one
    * run. Settles with the run's end, as the service takes it: a completed
-   * run's final text is the result, and an interrupted one — the run a
-   * relaunch found unfinished — is the honest unknown with the acts its
-   * journal established.
+   * run's final text is the result, an interrupted one — the run a relaunch
+   * found unfinished — is the honest unknown with the acts its journal
+   * established, and a run its generation forgot before it ended is the
+   * same unknown, decided here rather than left to the requester to guess.
    */
   async runChildTask(
     task: string,
     childRunId: string,
-  ): Promise<
-    { readonly runId: string; readonly done: Promise<BrainChildRunEnd | undefined> } | undefined
-  > {
+  ): Promise<{ readonly runId: string; readonly done: Promise<ChildEnd> } | undefined> {
     const submitted = await this.submitAsk({
       submissionId: childRunId,
       question: task,
       origin: BRAIN_REQUEST_ORIGIN.CHILD,
     });
     if (submitted.outcome !== BRAIN_SUBMISSION_OUTCOME.ACCEPTED) return undefined;
-    return {
-      runId: submitted.runId,
-      done: this.#awaitTerminal(submitted.runId).then((record) =>
-        record ? childRunEnd(record) : undefined,
-      ),
-    };
+    return { runId: submitted.runId, done: this.#childRunEnd(submitted.runId) };
+  }
+
+  /** A child run's end once it is terminal, or the unknown end of a run its generation forgot first. */
+  async #childRunEnd(runId: string): Promise<ChildEnd> {
+    const record = await this.#awaitTerminal(runId);
+    return record ? childRunEnd(record) : RUN_FORGOTTEN;
   }
 
   /**
@@ -1283,14 +1267,13 @@ export class BrainAgent {
    * Nothing is run: a child whose record was never written is not started
    * again on the strength of its requester's receipt.
    */
-  async adoptChildRun(childRunId: string): Promise<BrainChildRunEnd | undefined> {
+  async adoptChildRun(childRunId: string): Promise<ChildEnd | undefined> {
     await this.ready();
     const record = this.requests().find(
       (held) => held.submissionId === childRunId && held.origin === BRAIN_REQUEST_ORIGIN.CHILD,
     );
     if (!record) return undefined;
-    const settled = await this.#awaitTerminal(record.runId);
-    return settled ? childRunEnd(settled) : undefined;
+    return this.#childRunEnd(record.runId);
   }
 
   /**
@@ -1328,17 +1311,23 @@ export class BrainAgent {
    * model, so a delivery this conversation could not take is retried later
    * rather than lost.
    */
-  deliverChildCompletion(completion: ChildCompletionInput): Promise<BrainCompletionDelivery> {
+  deliverChildCompletion(
+    completion: ChildCompletionRecord,
+    record: ChildRunRecord,
+  ): Promise<BrainCompletionDelivery> {
     const pending = this.#pendingCompletions.get(completion.completionId);
     if (pending) return pending;
-    const deciding = this.#deliverCompletion(completion).finally(() => {
+    const deciding = this.#deliverCompletion(completion, record).finally(() => {
       this.#pendingCompletions.delete(completion.completionId);
     });
     this.#pendingCompletions.set(completion.completionId, deciding);
     return deciding;
   }
 
-  async #deliverCompletion(completion: ChildCompletionInput): Promise<BrainCompletionDelivery> {
+  async #deliverCompletion(
+    completion: ChildCompletionRecord,
+    record: ChildRunRecord,
+  ): Promise<BrainCompletionDelivery> {
     await this.ready();
     this.#expireIfDue();
     const generation = this.#generation;
@@ -1351,7 +1340,7 @@ export class BrainAgent {
     if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
       return { delivered: false, reason: "the conversation's memory cannot be run" };
     }
-    const text = childCompletionInputText(completion, this.#now());
+    const text = childCompletionInputText(completion, record, this.#now());
     const active = this.#active;
     if (
       active &&
@@ -1362,9 +1351,7 @@ export class BrainAgent {
       // Steered words are delivered when a checkpoint carries them, not when
       // the run took them: a run that ends before that has rolled them back,
       // and the asker retries against a context that never held them.
-      const delivered = await new Promise<boolean>((settle) => {
-        active.steered.push({ ingested: false, settle });
-      });
+      const delivered = await active.plan.deliveries.steered();
       if (delivered) this.#deliveredCompletions.add(completion.completionId);
       return delivered
         ? { delivered: true }
@@ -1373,7 +1360,7 @@ export class BrainAgent {
             reason: "the run under way ended before its checkpoint carried the completion",
           };
     }
-    let persisted = false;
+    const deliveries = new SteeredDeliveries();
     const result = await this.#queueTurn(BRAIN_TURN_TRIGGER.CHILD_COMPLETION, () =>
       this.#turn({
         generation,
@@ -1383,15 +1370,13 @@ export class BrainAgent {
           ...(attached.length > 0 ? [wakeInputText(attached, now)] : []),
           text,
         ],
-        onPersisted: () => {
-          persisted = true;
-        },
+        deliveries,
       }),
     );
     // Delivered is what the store holds, not how the turn ended: a turn that
     // failed after an act's checkpoint carried the completion has delivered
     // it, and a turn that answered but whose checkpoint the store refused has not.
-    if (persisted) {
+    if (deliveries.openingPersisted) {
       this.#deliveredCompletions.add(completion.completionId);
       return { delivered: true };
     }
@@ -1487,6 +1472,7 @@ export class BrainAgent {
         this.#turn({
           generation,
           trigger: BRAIN_TURN_TRIGGER.ROSTER,
+          deliveries: new SteeredDeliveries(),
           events: this.#inboxEvents(generation),
           open: (attached, openedAt) => [wakeInputText(attached, openedAt, roster.text)],
         }),
@@ -1551,6 +1537,7 @@ export class BrainAgent {
       const result = await this.#turn({
         generation,
         trigger: BRAIN_TURN_TRIGGER.WAKE,
+        deliveries: new SteeredDeliveries(),
         events: inbox,
         open: (attached, now) => [wakeInputText(attached, now)],
       });
@@ -1888,20 +1875,6 @@ export class BrainAgent {
     this.#options.store.expireIfDue(this.#now());
   }
 
-  /**
-   * A checkpoint of the turn landed: its opening words are on disk, and so
-   * are any steered words the runtime had ingested by then. Whoever awaits
-   * those words is answered delivered here and nowhere else.
-   */
-  #persisted(plan: TurnPlan): void {
-    plan.onPersisted?.();
-    const active = this.#active;
-    if (!active || active.plan !== plan) return;
-    const carried = active.steered.filter((steered) => steered.ingested);
-    active.steered = active.steered.filter((steered) => !steered.ingested);
-    for (const steered of carried) steered.settle(true);
-  }
-
   #runRevoked(run: RunControl): boolean {
     return run.cancelled || run.timedOut || this.#stopped || run.generation.abort.signal.aborted;
   }
@@ -1980,6 +1953,7 @@ export class BrainAgent {
           {
             generation,
             trigger: childTask ? BRAIN_TURN_TRIGGER.CHILD_TASK : BRAIN_TURN_TRIGGER.ASK,
+            deliveries: new SteeredDeliveries(),
             events: this.#inboxEvents(generation),
             open: (attached, now) =>
               childTask
@@ -2170,7 +2144,7 @@ export class BrainAgent {
       if (!plan.run && run.deadline !== undefined) this.#cancel(run.deadline);
       this.#turnInFlight = false;
       // Steered words no checkpoint of the turn carried are owed still.
-      for (const steered of this.#active?.steered.splice(0) ?? []) steered.settle(false);
+      plan.deliveries.turnEnded();
       this.#active = undefined;
     }
   }
@@ -2240,7 +2214,7 @@ export class BrainAgent {
       // already happened. A turn that fails before its first effect still
       // rolls back whole, and the deltas it read are read again.
       const advanceMark = async () => {
-        if (await this.#ledger.checkpoint(turnContext)) this.#persisted(plan);
+        if (await this.#ledger.checkpoint(turnContext)) plan.deliveries.persisted();
         else run.checkpointFailed = true;
         contextMark = context.mark();
         cursorMark = generation.cursors.persisted();
@@ -2315,7 +2289,7 @@ export class BrainAgent {
       const written = await this.#ledger.checkpoint(turnContext);
       if (!written) run.checkpointFailed = true;
       if (written) {
-        this.#persisted(plan);
+        plan.deliveries.persisted();
         await context.afterTurn({ signal: turnContext.signal });
       }
       // A briefing leaves only from a turn that still stands: the stop or the
@@ -2535,7 +2509,7 @@ export class BrainAgent {
           this.#compactionCount += 1;
           return;
         case RUNTIME_EVENT.STEERED:
-          for (const steered of this.#active?.steered ?? []) steered.ingested = true;
+          turn.plan.deliveries.ingested();
           return;
         case RUNTIME_EVENT.TOOL_RESULT:
           gathering.toolCalls.push({
@@ -2578,23 +2552,10 @@ export class BrainAgent {
       signal: turnContext.signal,
       onEvent,
     });
-    const active: ActiveExecution = {
-      run,
-      started,
-      plan: turn.plan,
-      riders: turn.riders,
-      steered: [],
-    };
-    this.#active = active;
-    return started.done.finally(() => {
-      // Steered words the runtime never ingested are not delivered; words it
-      // did ingest wait for the turn's final checkpoint, which decides them.
-      const waiting = active.steered.filter((steered) => steered.ingested);
-      for (const steered of active.steered.filter((steered) => !steered.ingested)) {
-        steered.settle(false);
-      }
-      active.steered = waiting;
-    });
+    this.#active = { run, started, plan: turn.plan, riders: turn.riders };
+    // Steered words the runtime never ingested are not delivered; words it
+    // did ingest wait for the turn's final checkpoint, which decides them.
+    return started.done.finally(() => turn.plan.deliveries.runEnded());
   }
 
   /** How a run's end reads as a turn's: an observation turn keeps what it read wherever a run would fall short. */
@@ -2665,8 +2626,18 @@ export class BrainAgent {
   }
 }
 
+/**
+ * The end of a child run whose record its generation no longer holds — a
+ * wait that returned nothing because the generation was replaced under it.
+ * What the run did is unknown; nothing about it can be vouched for.
+ */
+const RUN_FORGOTTEN: ChildEnd = {
+  status: CHILD_RUN_STATUS.UNKNOWN,
+  failureDetail: "the child's run was forgotten by its generation before it ended",
+};
+
 /** A child's run record as its requester's service reads its end. */
-function childRunEnd(record: BrainRequestRecord): BrainChildRunEnd {
+function childRunEnd(record: BrainRequestRecord): ChildEnd {
   const counts = { performedActs: record.performedActs, unknownActs: record.unknownActs };
   switch (record.status) {
     case BRAIN_REQUEST_STATUS.SUCCEEDED:
