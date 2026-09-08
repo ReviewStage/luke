@@ -9,7 +9,10 @@ import {
   brainStateFromStored,
   brainStateRecord,
   freshBrainState,
+  responsesModelAnswer,
+  responsesToolLoopRuntime,
 } from "@sidecar/brain";
+import { bareModelAdapter } from "@sidecar/brain/testing";
 import type { ScheduledTimer } from "@sidecar/realtime";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { BrainHost } from "./host";
@@ -133,24 +136,26 @@ test("a generation whose agent was retired before its expiry still dies on the h
     follow: () => async () => undefined,
     publishEmpty: () => undefined,
   });
+  const retiredModel = bareModelAdapter({
+    respond: async () => {
+      const answer = responsesModelAnswer({
+        output: [
+          {
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: RETIRED_SECRET }],
+          },
+        ],
+      });
+      assert.ok(answer);
+      return answer;
+    },
+    quietUntil: () => undefined,
+  });
   await host.replace(
     () =>
       new BrainAgent({
-        client: {
-          respond: async () => ({
-            outcome: "answered",
-            payload: {
-              output: [
-                {
-                  type: "message",
-                  role: "assistant",
-                  content: [{ type: "output_text", text: RETIRED_SECRET }],
-                },
-              ],
-            },
-          }),
-          quietUntil: () => undefined,
-        },
+        runtime: responsesToolLoopRuntime(retiredModel),
         acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
         roster: () => ({ text: "", identities: [] }),
         standingContext: () => "",

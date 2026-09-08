@@ -9,17 +9,19 @@ import {
   BRAIN_SUBMISSION_OUTCOME,
   BRAIN_TOOL,
   BRAIN_TURN_AUTHORITY,
+  BRAIN_WAKE_KIND,
   type BrainActPerformer,
   BrainAgent,
   BrainStateStore,
   brainInstructions,
   brainToolDefinitions,
   HOSTED_SERVICE_PATH,
-  HostedBrainClient,
+  HostedModelAdapter,
   isRecord,
   maximumHostedBrainRequestBytes,
   normalizeSession,
   REALTIME_TOOL,
+  responsesToolLoopRuntime,
   SESSION_STATUS,
   type SessionIdentity,
   type SessionProvider,
@@ -27,6 +29,7 @@ import {
   type WireRecord,
 } from "../server/core";
 import { HOSTED_BRAIN_DEFAULTS, handleBrainRespond } from "../server/hosted/brain-respond";
+import { handleBrainCapabilities, handleBrainRespondV2 } from "../server/hosted/brain-v2";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import type { HostedSpend } from "../server/hosted/quota";
 
@@ -389,6 +392,7 @@ interface StorageFile {
 }
 
 interface Desktop {
+  model: HostedModelAdapter;
   agent: BrainAgent;
   performed: Parameters<BrainActPerformer["perform"]>[0][];
   upstreamCalls: UpstreamCall[];
@@ -431,9 +435,18 @@ function desktopOnHostedService(
   assert.ok(session);
   const { fetch: upstreamFetch, calls: upstreamCalls } = upstream(answers);
   let spent = 0;
+  // The desktop speaks the second contract: it reads the capabilities first
+  // and then posts inferences to the v2 endpoint; the first contract's
+  // endpoint stays for installed clients and is not what this desktop calls.
   const service = async (url: string, init: RequestInit): Promise<Response> => {
-    assert.equal(url, `https://luke.test${HOSTED_SERVICE_PATH.BRAIN_RESPOND}`);
-    return handleBrainRespond({
+    const handler =
+      url === `https://luke.test${HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES}`
+        ? handleBrainCapabilities
+        : url === `https://luke.test${HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2}`
+          ? handleBrainRespondV2
+          : undefined;
+    assert.ok(handler, `the desktop called ${url}`);
+    return handler({
       request: new Request(url, init),
       apiKey: API_KEY,
       resolveUserId: async (request) =>
@@ -445,7 +458,7 @@ function desktopOnHostedService(
       fetch: upstreamFetch,
     });
   };
-  const client = new HostedBrainClient({
+  const model = new HostedModelAdapter({
     serviceBaseUrl: "https://luke.test",
     readAccessToken: async () => "account-token",
     refreshAccount: async () => undefined,
@@ -465,7 +478,7 @@ function desktopOnHostedService(
   const performed: Desktop["performed"] = [];
   let runs = 0;
   const agent = new BrainAgent({
-    client,
+    runtime: responsesToolLoopRuntime(model),
     acts: {
       perform: async (functionCall) => {
         performed.push(functionCall);
@@ -483,6 +496,7 @@ function desktopOnHostedService(
   });
   return {
     agent,
+    model,
     performed,
     upstreamCalls,
     spent: () => spent,
@@ -534,7 +548,9 @@ test("the desktop runs the tool loop and the act while the service runs only inf
   assert.equal(desktop.upstreamCalls.length, 2);
   for (const index of [0, 1]) {
     const sent = sentBody(desktop.upstreamCalls, index);
+    // The desktop named the tools; the service selected its own schemas for them.
     assert.deepEqual(sent.tools, brainToolDefinitions(DEVELOPER));
+    assert.equal(sent.instructions, brainInstructions());
     assert.equal(sent.store, false);
   }
   const second = inputItems(desktop.upstreamCalls, 1);
@@ -652,5 +668,22 @@ test("an answer the hosted path cannot replay is refused before any act or check
   assert.equal(next?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.equal(next?.text, "Fine.");
   assert.equal(desktop.spent(), 5);
+  await desktop.agent.stop();
+});
+
+test("a provider rate limit behind the real v2 handler stands the desktop's hosted adapter down for the bounded wait, as a keyed desktop would, and the allowance was spent once", async () => {
+  const desktop = desktopOnHostedService([
+    () => new Response("", { status: 429, headers: { "retry-after": "9" } }),
+  ]);
+  const record = await desktop.ask("anything?");
+  assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.equal(desktop.spent(), 1);
+  assert.equal(desktop.model.quietUntil() !== undefined, true);
+  assert.ok((desktop.model.quietUntil() ?? 0) <= Date.now() + 9_000 + 1_000);
+  assert.ok((desktop.model.quietUntil() ?? 0) > Date.now());
+  // The cooldown holds the next wake rather than spending another inference on it.
+  desktop.agent.wake([{ kind: BRAIN_WAKE_KIND.HOOK, identity: abc, atMs: NOW }]);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(desktop.upstreamCalls.length, 1);
   await desktop.agent.stop();
 });

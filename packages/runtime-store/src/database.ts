@@ -1,7 +1,11 @@
 import { DatabaseSync, type SQLInputValue, type StatementSync } from "node:sqlite";
 import type { AgentId, SessionKey } from "@sidecar/runtime-contracts";
 import type { UnparsedWireValue } from "@sidecar/wire";
-import { RUNTIME_SCHEMA_STATEMENTS, RUNTIME_SCHEMA_VERSION } from "./schema.js";
+import {
+  RUNTIME_SCHEMA_MIGRATIONS,
+  RUNTIME_SCHEMA_STATEMENTS,
+  RUNTIME_SCHEMA_VERSION,
+} from "./schema.js";
 
 /**
  * The agent's database connection, spoken to synchronously. It runs on the
@@ -40,23 +44,46 @@ export class RuntimeDatabase {
     return database;
   }
 
+  /**
+   * Brings the schema to this build's version. A database at an earlier
+   * version is walked forward one step at a time before the current
+   * statements run, so a column the statements now declare is added to the
+   * table that already stands rather than assumed; a database at a later
+   * version, or at one with no step to reach this one, is refused.
+   */
   #migrateSchema(): void {
     this.transaction(() => {
-      for (const statement of RUNTIME_SCHEMA_STATEMENTS) this.#db.exec(statement);
+      // SAFETY: sqlite_master's name column is text; a row is that column or nothing.
+      const versioned = this.#db
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_version'")
+        .get() as { name: string } | undefined;
       // SAFETY: the schema_version table has one integer column; a row is that column or nothing.
-      const row = this.#db.prepare("SELECT version FROM schema_version").get() as
-        | { version: number }
-        | undefined;
+      const row = versioned
+        ? (this.#db.prepare("SELECT version FROM schema_version").get() as
+            | { version: number }
+            | undefined)
+        : undefined;
+      if (row && row.version > RUNTIME_SCHEMA_VERSION) {
+        throw new Error(
+          `runtime database is at schema version ${row.version}, not ${RUNTIME_SCHEMA_VERSION}`,
+        );
+      }
+      if (row) {
+        for (let version = row.version + 1; version <= RUNTIME_SCHEMA_VERSION; version += 1) {
+          const steps = RUNTIME_SCHEMA_MIGRATIONS.get(version);
+          if (!steps) {
+            throw new Error(`runtime database cannot be migrated to schema version ${version}`);
+          }
+          for (const step of steps) this.#db.prepare(step.sql).run(...step.params);
+        }
+      }
+      for (const statement of RUNTIME_SCHEMA_STATEMENTS) this.#db.exec(statement);
       if (!row) {
         this.#db
           .prepare("INSERT INTO schema_version (version) VALUES (?)")
           .run(RUNTIME_SCHEMA_VERSION);
-        return;
-      }
-      if (row.version !== RUNTIME_SCHEMA_VERSION) {
-        throw new Error(
-          `runtime database is at schema version ${row.version}, not ${RUNTIME_SCHEMA_VERSION}`,
-        );
+      } else if (row.version !== RUNTIME_SCHEMA_VERSION) {
+        this.#db.prepare("UPDATE schema_version SET version = ?").run(RUNTIME_SCHEMA_VERSION);
       }
     });
   }

@@ -4,20 +4,22 @@ import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
   BrainAgent,
-  type BrainClient,
-  type BrainClientAnswer,
   type BrainRequestRecord,
   type BrainStateStorage,
   BrainStateStore,
   brainStateFromStored,
+  responsesModelAnswer,
+  responsesToolLoopRuntime,
 } from "@sidecar/brain";
 import { isTerminalBrainRequestStatus } from "@sidecar/brain/requests";
+import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
 import {
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
 } from "@sidecar/realtime";
-import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import type { ModelResponse } from "@sidecar/runtime-contracts";
+import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import {
   type BrainReplyOffer,
   type BrainRequestSnapshot,
@@ -47,8 +49,8 @@ class MemoryStorage implements BrainStateStorage {
 }
 
 /** A model that answers nothing until the test says so. */
-function heldClient(): BrainClient & { release: (answer: BrainClientAnswer) => void } {
-  const waiting: ((answer: BrainClientAnswer) => void)[] = [];
+function heldClient(): BareResponsesModel & { release: (answer: ModelResponse) => void } {
+  const waiting: ((answer: ModelResponse) => void)[] = [];
   return {
     respond: () =>
       new Promise((resolve) => {
@@ -144,9 +146,10 @@ function composed() {
     if (speak) offerReplies();
     return { record: live, speak };
   };
-  const build = (client: BrainClient) =>
-    new BrainAgent({
-      client,
+  const build = (client: BareResponsesModel) => {
+    const model = bareModelAdapter(client);
+    return new BrainAgent({
+      runtime: responsesToolLoopRuntime(model),
       acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
       roster: () => ({ text: "", identities: [] }),
       standingContext: () => "",
@@ -167,6 +170,7 @@ function composed() {
       // SAFETY: the handle is what `schedule` above returned, which is always a `setTimeout` timer.
       cancel: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
     });
+  };
   return {
     storage,
     store,
@@ -187,13 +191,17 @@ function composed() {
   };
 }
 
-function answered(text: string): BrainClientAnswer {
-  return {
-    outcome: "answered",
-    payload: {
-      output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text }] }],
-    },
-  };
+/** A raw Responses payload as the adapter would normalize it. */
+function answerOf(payload: WireRecord): ModelResponse {
+  const answer = responsesModelAnswer(payload);
+  assert.ok(answer);
+  return answer;
+}
+
+function answered(text: string): ModelResponse {
+  return answerOf({
+    output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text }] }],
+  });
 }
 
 function replies(thread: readonly ConversationEntry[], runId: string) {
@@ -253,14 +261,13 @@ test("removing the capability under five outstanding runs leaves every run inter
   }
   assert.deepEqual(c.broadcasts.at(-1), []);
   // The old agent's late model answer changes nothing anyone can see.
-  client.release({
-    outcome: "answered",
-    payload: {
+  client.release(
+    answerOf({
       output: [
         { type: "message", role: "assistant", content: [{ type: "output_text", text: "late" }] },
       ],
-    },
-  });
+    }),
+  );
   await settle();
   assert.equal(c.thread().filter((e) => e.words === "late").length, 0);
   assert.equal(
@@ -302,14 +309,16 @@ test("a successor replacing the agent under outstanding runs inherits a thread w
     c.record,
   );
   assert.equal(result.outcome, "accepted");
-  second.release({
-    outcome: "answered",
-    payload: {
+  // The host reaches its first inference only after the run's own
+  // bookkeeping; the answer is released once the model has been asked.
+  await settle();
+  second.release(
+    answerOf({
       output: [
         { type: "message", role: "assistant", content: [{ type: "output_text", text: "done" }] },
       ],
-    },
-  });
+    }),
+  );
   await settle();
   const fresh = brainStateFromStored(c.storage.file)?.requests.find(
     (r) => r.question === "new ask",
@@ -529,6 +538,7 @@ test("a Clear invalidates every delivery: an unclaimed offer is refused, a late 
   c.receiver.markReady(epoch);
   const [runId] = await submitMany(agent, c.record, 1);
   assert.ok(runId);
+  await settle();
   client.release(answered("Before the clear."));
   await settle();
   assert.equal(c.offers.length, 1);

@@ -9,29 +9,21 @@ export {
   type BrainAgentOptions,
   type BrainRequestsListener,
 } from "./agent.js";
-export {
-  BRAIN_CLIENT_OUTCOME,
-  BRAIN_OPENAI_DEFAULTS,
-  BRAIN_RATE_LIMIT_COOLDOWN_MS,
-  type BrainClient,
-  type BrainClientAnswer,
-  type BrainClientOutcome,
-  type BrainRespondOptions,
-  HostedBrainClient,
-  type HostedBrainClientOptions,
-  OpenAiBrainClient,
-  type OpenAiBrainClientOptions,
-  type OpenAiBrainOptions,
-  openAiBrainClient,
-} from "./client.js";
+export { pairedDanglingCalls, ResponsesContextEngine } from "./context-engine.js";
+export { TranscriptCursors } from "./cursors.js";
 export { BrainGenerationClock, type BrainGenerationClockOptions } from "./generation-clock.js";
 export {
-  askInputItem,
+  HOSTED_MODEL_ADAPTER_ID,
+  HostedModelAdapter,
+  type HostedModelAdapterOptions,
+} from "./hosted-model-adapter.js";
+export {
+  askInputText,
   BRAIN_INPUT_MARKER,
   type BrainInputMarker,
-  holdReleasedInputItem,
-  standingContextItem,
-  wakeInputItem,
+  holdReleasedInputText,
+  standingContextText,
+  wakeInputText,
 } from "./input-items.js";
 export { brainInstructions } from "./instructions.js";
 export {
@@ -41,11 +33,29 @@ export {
   UNKNOWN_ACT_RESULT,
 } from "./journal.js";
 export {
-  BrainMemory,
-  type BrainMemoryMark,
-  type BrainMemoryState,
-  pairedDanglingCalls,
-} from "./memory.js";
+  LOOP_GUARD_DETECTOR,
+  LOOP_GUARD_LEVEL,
+  LOOP_GUARD_THRESHOLDS,
+  LoopGuard,
+  type LoopGuardConfig,
+  type LoopGuardDetector,
+  type LoopGuardLevel,
+  type LoopGuardVerdict,
+} from "./loop-guard.js";
+export {
+  BRAIN_RATE_LIMIT_COOLDOWN_MS,
+  BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS,
+  RETRY_AFTER_HEADER,
+  rateLimitWaitMs,
+} from "./model-adapter-shared.js";
+export {
+  BRAIN_OPENAI_DEFAULTS,
+  OPENAI_MODEL_ADAPTER_ID,
+  OpenAiModelAdapter,
+  type OpenAiModelAdapterOptions,
+  type OpenAiModelOptions,
+  openAiModelAdapter,
+} from "./openai-model-adapter.js";
 export type { BrainActExecution, BrainActPerformer, BrainRoster } from "./performer.js";
 export {
   BRAIN_REQUEST_FAILURE,
@@ -69,21 +79,39 @@ export {
   isTerminalBrainRequestStatus,
 } from "./requests.js";
 export {
-  BRAIN_REASONING_EFFORT,
+  BRAIN_RESPONSES_COMPACT_PATH,
+  BRAIN_RESPONSES_INPUT_TOKENS_PATH,
   BRAIN_RESPONSES_PATH,
+  type BrainCompactRequest,
   type BrainFunctionCall,
-  type BrainReasoningEffort,
+  type BrainInputTokensRequest,
   type BrainResponsesOptions,
   type BrainResponsesOutput,
   type BrainResponsesRequest,
+  brainCompactRequest,
+  brainInputTokensRequest,
   brainResponsesOutput,
   brainResponsesRequest,
   functionCallOutputItem,
   isCompactionItem,
+  RESPONSES_ITEM_FORMAT,
   RESPONSES_ITEM_TYPE,
+  RESPONSES_STATUS,
+  type ResponsesFunctionTool,
   type ResponsesInputItem,
+  responsesCompactedWindow,
+  responsesInputTokens,
+  responsesModelAnswer,
+  responsesToolDefinition,
+  toolSchemaFromDefinition,
   userMessageItem,
 } from "./responses-api.js";
+export { responsesToolLoopRuntime } from "./responses-runtime.js";
+export {
+  TOOL_LOOP_RUNTIME,
+  ToolLoopAgentRuntime,
+  type ToolLoopRuntimeOptions,
+} from "./runtime.js";
 export { type Settled, settledUnlessAborted } from "./settled.js";
 export {
   BRAIN_GENERATION_LIFETIME_MS,
@@ -107,6 +135,8 @@ export {
   brainStateRecord,
   brainStateRepositoryFromStorage,
   freshBrainState,
+  LEGACY_CHECKPOINT_FORMAT_TAG,
+  legacyStampOf,
   type RetainedBrainState,
   retainedBrainState,
 } from "./state-store.js";
@@ -115,6 +145,8 @@ export {
   type BrainToolName,
   brainToolAllowed,
   brainToolDefinitions,
+  brainToolSchemas,
+  hostedBrainToolCatalog,
   isBrainOnlyTool,
   maximumBriefingLength,
 } from "./tools.js";

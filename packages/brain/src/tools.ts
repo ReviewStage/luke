@@ -1,5 +1,7 @@
 import { type RealtimeToolWireDefinition, realtimeToolDefinitions } from "@sidecar/acts";
 import { BRAIN_TURN_AUTHORITY, type BrainTurnAuthority } from "@sidecar/hosted";
+import type { ToolSchema } from "@sidecar/runtime-contracts";
+import { toolSchemaFromDefinition } from "./responses-api.js";
 
 /**
  * The tools the brain is offered, fixed by the authority of the turn. A
@@ -118,4 +120,21 @@ const BRAIN_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(BRAIN_T
 /** Whether a call names a tool the agent answers itself rather than an act. */
 export function isBrainOnlyTool(name: string): name is BrainToolName {
   return BRAIN_ONLY_TOOL_NAMES.has(name);
+}
+
+/** The same toolset in the brain's contract shape, for a runtime that knows no provider. */
+export function brainToolSchemas(authority: BrainTurnAuthority): readonly ToolSchema[] {
+  return brainToolDefinitions(authority).map(toolSchemaFromDefinition);
+}
+
+/**
+ * Every tool a hosted request may select by name: the acts table's rows and
+ * the brain's own three. The service selects schemas from this catalog and
+ * nothing a caller sends; a desktop checks the names it means to send against
+ * the catalog the service advertised.
+ */
+export function hostedBrainToolCatalog(): ReadonlyMap<string, RealtimeToolWireDefinition> {
+  return new Map(
+    [...realtimeToolDefinitions(), ...BRAIN_ONLY_TOOLS].map((tool) => [tool.name, tool]),
+  );
 }

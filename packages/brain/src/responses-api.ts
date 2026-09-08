@@ -1,11 +1,19 @@
 import type { RealtimeToolWireDefinition } from "@sidecar/acts";
 import {
+  MODEL_FAILURE,
+  MODEL_RESPONSE_OUTCOME,
+  type ModelResponse,
+  type ModelUsage,
+  type ToolSchema,
+} from "@sidecar/runtime-contracts";
+import {
   isRecord,
   isWireString,
   text,
   type UnparsedWireValue,
   type WireRecord,
   wholeNumber,
+  wireRecord,
 } from "@sidecar/wire";
 
 /**
@@ -65,10 +73,15 @@ export const BRAIN_REASONING_EFFORT = {
 export type BrainReasoningEffort =
   (typeof BRAIN_REASONING_EFFORT)[keyof typeof BRAIN_REASONING_EFFORT];
 
+/** A function tool as the Responses request carries it: the acts table's own row, or a contract schema wrapped. */
+export type ResponsesFunctionTool =
+  | RealtimeToolWireDefinition
+  | { type: "function"; name: string; description: string; parameters: WireRecord };
+
 export interface BrainResponsesOptions {
   model: string;
   instructions: string;
-  tools: readonly RealtimeToolWireDefinition[];
+  tools: readonly ResponsesFunctionTool[];
   maximumOutputTokens: number;
   reasoningEffort: BrainReasoningEffort;
 }
@@ -204,4 +217,134 @@ export function brainResponsesOutput(payload: UnparsedWireValue): BrainResponses
     ...(status ? { status } : undefined),
     ...(incompleteReason ? { incompleteReason } : undefined),
   };
+}
+
+/** The provider item format the brain's checkpoints are in: the Responses input array, first shape. */
+export const RESPONSES_ITEM_FORMAT = {
+  FORMAT: "openai-responses-input",
+  VERSION: 1,
+} as const;
+
+export const BRAIN_RESPONSES_COMPACT_PATH = "/responses/compact";
+export const BRAIN_RESPONSES_INPUT_TOKENS_PATH = "/responses/input_tokens";
+
+/** A tool as the brain's contracts carry it, as the Responses API takes it: a function tool. */
+export function responsesToolDefinition(schema: ToolSchema): ResponsesFunctionTool {
+  return {
+    type: "function",
+    name: schema.name,
+    description: schema.description,
+    parameters: schema.parameters,
+  };
+}
+
+/** A tool as the acts table or the brain defines it, in the brain's contract shape. */
+export function toolSchemaFromDefinition(definition: RealtimeToolWireDefinition): ToolSchema {
+  // SAFETY: the parameters are a JSON-schema object built from literals; a JSON round trip is its wire form.
+  const parameters = wireRecord(
+    JSON.parse(JSON.stringify(definition.parameters)) as UnparsedWireValue,
+  );
+  return {
+    name: definition.name,
+    description: definition.description,
+    parameters: parameters ?? {},
+  };
+}
+
+/** The explicit compaction request: the model and the window to fold, and the same instructions the window was built under. */
+export function brainCompactRequest(
+  input: readonly ResponsesInputItem[],
+  options: Pick<BrainResponsesOptions, "model" | "instructions">,
+) {
+  return { model: options.model, instructions: options.instructions, input };
+}
+
+export type BrainCompactRequest = ReturnType<typeof brainCompactRequest>;
+
+/** The token count request: everything one inference would carry except the output budget. */
+export function brainInputTokensRequest(
+  input: readonly ResponsesInputItem[],
+  options: Pick<BrainResponsesOptions, "model" | "instructions" | "tools">,
+) {
+  return { model: options.model, instructions: options.instructions, tools: options.tools, input };
+}
+
+export type BrainInputTokensRequest = ReturnType<typeof brainInputTokensRequest>;
+
+/** The states a Responses object may be in; only two carry a reply. */
+export const RESPONSES_STATUS = {
+  COMPLETED: "completed",
+  INCOMPLETE: "incomplete",
+  FAILED: "failed",
+  CANCELLED: "cancelled",
+  IN_PROGRESS: "in_progress",
+  QUEUED: "queued",
+} as const;
+
+/**
+ * One Responses answer as the brain's contracts carry it: the output items
+ * verbatim for the context engine, the text, the tool calls, the usage, and
+ * whether the provider folded the context or stopped short. An HTTP success
+ * is not a reply: a response the provider itself marks failed, cancelled, or
+ * still under way is a provider failure with the provider's own code, and
+ * never a completed answer with no words. A payload with no output array is
+ * not a Responses answer at all and reads as nothing.
+ */
+export function responsesModelAnswer(payload: UnparsedWireValue): ModelResponse | undefined {
+  const output = brainResponsesOutput(payload);
+  if (!output) return undefined;
+  if (
+    output.status !== undefined &&
+    output.status !== RESPONSES_STATUS.COMPLETED &&
+    output.status !== RESPONSES_STATUS.INCOMPLETE
+  ) {
+    const error = isRecord(payload) && isRecord(payload.error) ? payload.error : undefined;
+    const code = error ? text(error.code) : undefined;
+    return {
+      outcome: MODEL_RESPONSE_OUTCOME.FAILED,
+      failure: MODEL_FAILURE.UPSTREAM,
+      reason: code ? `response ${output.status}: ${code}` : `response ${output.status}`,
+    };
+  }
+  const usage = isRecord(payload) && isRecord(payload.usage) ? payload.usage : undefined;
+  const outputTokens = usage ? wholeNumber(usage.output_tokens) : undefined;
+  const modelUsage: ModelUsage = {
+    ...(output.inputTokens !== undefined ? { inputTokens: output.inputTokens } : undefined),
+    ...(outputTokens !== undefined ? { outputTokens } : undefined),
+  };
+  return {
+    outcome: MODEL_RESPONSE_OUTCOME.ANSWERED,
+    items: output.items,
+    text: output.outputText,
+    toolCalls: output.functionCalls,
+    ...(usage ? { usage: modelUsage } : undefined),
+    compacted: output.compacted,
+    ...(output.incompleteReason
+      ? {
+          incomplete: {
+            reason: output.incompleteReason,
+            ...(output.status ? { status: output.status } : undefined),
+          },
+        }
+      : undefined),
+  };
+}
+
+/** The compacted window an explicit compaction answered, or nothing when the payload carries none. */
+export function responsesCompactedWindow(
+  payload: UnparsedWireValue,
+): readonly ResponsesInputItem[] | undefined {
+  if (!isRecord(payload) || !Array.isArray(payload.output)) return undefined;
+  const items: ResponsesInputItem[] = [];
+  for (const item of payload.output) {
+    if (!isRecord(item)) return undefined;
+    items.push(item);
+  }
+  return items;
+}
+
+/** The count a token-count answer carries — a non-negative safe integer — or nothing. */
+export function responsesInputTokens(payload: UnparsedWireValue): number | undefined {
+  const count = isRecord(payload) ? wholeNumber(payload.input_tokens) : undefined;
+  return count !== undefined && Number.isSafeInteger(count) && count >= 0 ? count : undefined;
 }

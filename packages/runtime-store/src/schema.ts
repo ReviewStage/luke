@@ -27,15 +27,43 @@
  * version this build does not know is refused rather than migrated by guess.
  */
 
-export const RUNTIME_SCHEMA_VERSION = 1;
+import type { SQLInputValue } from "node:sqlite";
+import { LEGACY_CHECKPOINT_FORMAT_TAG } from "@sidecar/brain";
 
-/** The format tag every checkpoint item carries, naming whose shape it is. */
-export const CHECKPOINT_FORMAT = {
-  /** An item of the OpenAI Responses input array, stored as its JSON. */
-  OPENAI_RESPONSES_INPUT_V1: "openai-responses-input/1",
-} as const;
+export const RUNTIME_SCHEMA_VERSION = 2;
 
-export type CheckpointFormat = (typeof CHECKPOINT_FORMAT)[keyof typeof CHECKPOINT_FORMAT];
+/**
+ * The tag version 1 of the schema wrote on every checkpoint item. Every such
+ * item was the tool-loop runtime's first version over the Responses input
+ * array, because nothing else ever wrote one.
+ */
+export const LEGACY_ITEM_FORMAT_TAG = "openai-responses-input/1";
+
+/**
+ * How a database at an earlier version is brought to this one, in order. Each
+ * step runs inside the migration's transaction; a version this build does not
+ * know how to reach is refused rather than guessed at.
+ */
+export interface SchemaMigrationStep {
+  sql: string;
+  params: readonly SQLInputValue[];
+}
+
+export const RUNTIME_SCHEMA_MIGRATIONS: ReadonlyMap<number, readonly SchemaMigrationStep[]> =
+  new Map([
+    [
+      2,
+      [
+        { sql: "ALTER TABLE conversation_sessions ADD COLUMN checkpoint_format TEXT", params: [] },
+        {
+          sql: `UPDATE conversation_sessions SET checkpoint_format = ?
+       WHERE checkpoint_format IS NULL
+         AND EXISTS (SELECT 1 FROM runtime_checkpoints WHERE runtime_checkpoints.session_id = conversation_sessions.session_id)`,
+          params: [LEGACY_CHECKPOINT_FORMAT_TAG],
+        },
+      ],
+    ],
+  ]);
 
 export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS schema_version (
@@ -59,7 +87,8 @@ export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
     created_at INTEGER NOT NULL,
     expires_at INTEGER NOT NULL,
     reset_cleared_at INTEGER,
-    reset_generation_id TEXT
+    reset_generation_id TEXT,
+    checkpoint_format TEXT
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS conversation_sessions_one_standing
     ON conversation_sessions(session_key)`,

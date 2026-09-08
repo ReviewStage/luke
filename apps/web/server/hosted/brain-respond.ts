@@ -14,11 +14,13 @@ import {
   type UnparsedWireValue,
 } from "../core.js";
 import {
+  BODY_READ,
   errorResponse,
   HOSTED_API_ERROR,
   HOSTED_HTTP_STATUS,
   type HostedErrorFields,
   jsonResponse,
+  readBoundedBody,
 } from "./http.js";
 import { type FetchLike, postOpenAi } from "./openai.js";
 import type { HostedSpend } from "./quota.js";
@@ -55,58 +57,6 @@ export interface BrainRespondOptions {
   spend: (userId: string) => Promise<HostedSpend>;
   fetch?: FetchLike;
   timeoutMs?: number;
-}
-
-const BODY_READ = {
-  READ: "read",
-  TOO_LARGE: "too-large",
-  UNREADABLE: "unreadable",
-} as const;
-
-type BodyRead =
-  | { outcome: typeof BODY_READ.READ; text: string }
-  | { outcome: typeof BODY_READ.TOO_LARGE }
-  | { outcome: typeof BODY_READ.UNREADABLE };
-
-/**
- * Reads the body as it streams, counting bytes rather than trusting a
- * Content-Length the sender may omit or misstate, and stops reading the
- * moment the bound is passed so an oversized request is never held whole.
- */
-async function readBoundedBody(request: Request, maximumBytes: number): Promise<BodyRead> {
-  const stream = request.body;
-  if (!stream) return { outcome: BODY_READ.UNREADABLE };
-  const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
-  let received = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      received += value.byteLength;
-      if (received > maximumBytes) {
-        await reader.cancel().catch(() => undefined);
-        return { outcome: BODY_READ.TOO_LARGE };
-      }
-      chunks.push(value);
-    }
-  } catch {
-    return { outcome: BODY_READ.UNREADABLE };
-  }
-  const joined = new Uint8Array(received);
-  let offset = 0;
-  for (const chunk of chunks) {
-    joined.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  try {
-    return {
-      outcome: BODY_READ.READ,
-      text: new TextDecoder("utf-8", { fatal: true }).decode(joined),
-    };
-  } catch {
-    return { outcome: BODY_READ.UNREADABLE };
-  }
 }
 
 function admittedRequest(body: string): HostedBrainRequest | undefined {

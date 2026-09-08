@@ -3,7 +3,8 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { BRAIN_CLIENT_OUTCOME, BRAIN_TURN_AUTHORITY, BRAIN_TURN_TRIGGER } from "@sidecar/brain";
+import { BRAIN_TURN_AUTHORITY, BRAIN_TURN_TRIGGER, TOOL_LOOP_RUNTIME } from "@sidecar/brain";
+import { MODEL_RESPONSE_OUTCOME } from "@sidecar/runtime-contracts";
 import { isRecord, isWireString, recordFromJsonLine } from "@sidecar/wire";
 import { AgentTraceWriter, TRACE_ENTRY_KIND } from "./trace-writer.js";
 import { TRACE_DIRECTION } from "./vocabulary.js";
@@ -26,7 +27,7 @@ test("lines land in the named file, stamped, in the order they were recorded", a
   writer.recordBrainRequest({
     inputItems: 3,
     inputChars: 2_048,
-    outcome: BRAIN_CLIENT_OUTCOME.ANSWERED,
+    outcome: MODEL_RESPONSE_OUTCOME.ANSWERED,
     elapsedMs: 900,
     outputItemKinds: ["reasoning", "message"],
     inputTokens: 1_500,
@@ -35,7 +36,7 @@ test("lines land in the named file, stamped, in the order they were recorded", a
   writer.recordBrainTurn({
     trigger: BRAIN_TURN_TRIGGER.WAKE,
     authority: BRAIN_TURN_AUTHORITY.OBSERVATION,
-    inputItemKinds: ["message", "message"],
+    runtime: TOOL_LOOP_RUNTIME.ID,
     inputTokens: 1_500,
     transcriptBytes: 4_096,
     toolCalls: [{ name: "announce", argumentsChars: 120, outcomeStatus: "accepted" }],
@@ -52,7 +53,7 @@ test("lines land in the named file, stamped, in the order they were recorded", a
   assert.equal(entries[0]?.kind, TRACE_ENTRY_KIND.WIRE);
   assert.equal(entries[0]?.direction, TRACE_DIRECTION.CLIENT);
   assert.equal(entries[1]?.kind, TRACE_ENTRY_KIND.BRAIN_REQUEST);
-  assert.equal(entries[1]?.outcome, BRAIN_CLIENT_OUTCOME.ANSWERED);
+  assert.equal(entries[1]?.outcome, MODEL_RESPONSE_OUTCOME.ANSWERED);
   assert.equal(entries[1]?.inputChars, 2_048);
   assert.ok(entries[1] && !("model" in entries[1]));
   assert.equal(entries[2]?.kind, TRACE_ENTRY_KIND.BRAIN);

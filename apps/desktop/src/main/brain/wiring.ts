@@ -1,14 +1,15 @@
 import {
   BrainAgent,
-  type BrainClient,
   type BrainDelivery,
   BrainGenerationClock,
   type BrainRoster,
   type BrainStateRepository,
   BrainStateStore,
   type BrainTurnTraceRecord,
+  responsesToolLoopRuntime,
 } from "@sidecar/brain";
 import type { ConversationEntry } from "@sidecar/realtime";
+import type { ModelAdapter } from "@sidecar/runtime-contracts";
 import {
   type ProviderTranscriptResult,
   type ProviderTranscriptSinceResult,
@@ -60,8 +61,8 @@ export interface BrainWiringDependencies {
   adapterFor: (providerId: string) => TranscriptReader | undefined;
   session: (identity: SessionIdentity) => Session | undefined;
   deliver: (delivery: BrainDelivery) => Promise<void>;
-  /** The client the credential policy built, or nothing when it built none. */
-  client: () => BrainClient | undefined;
+  /** The model adapter the credential policy built, or nothing when it built none. */
+  model: () => ModelAdapter | undefined;
   /** Whether a brain may stand at all: observing, on the network, and past the account gate. */
   runnable: () => boolean;
   dropBriefings: () => void;
@@ -101,10 +102,10 @@ export interface BrainWiring {
  * with briefings for the voice and acts for the performer. Nothing here
  * detects a change for it — no status edge, no notice — because the brain
  * notices changes itself, against its own memory. Built by `rebuild`
- * whenever the credential policy is applied, on whichever client the policy
- * chose: the developer's own OpenAI key directly, or Luke's hosted service on
- * the signed-in account. With neither there is no brain, nothing is
- * announced, and an ask is answered with the honest refusal.
+ * whenever the credential policy is applied, on whichever model adapter the
+ * policy chose: the developer's own OpenAI key directly, or Luke's hosted
+ * service on the signed-in account. With neither there is no brain, nothing
+ * is announced, and an ask is answered with the honest refusal.
  */
 export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
   // The standing follower's publication, awaited by a wait that found its run
@@ -157,9 +158,9 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
    */
   const acts = createBrainActPerformer(dependencies.acts);
 
-  const build = (client: BrainClient): BrainAgent =>
+  const build = (model: ModelAdapter): BrainAgent =>
     new BrainAgent({
-      client,
+      runtime: responsesToolLoopRuntime(model),
       acts,
       roster: dependencies.roster,
       standingContext: dependencies.standingContext,
@@ -199,12 +200,12 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
 
   const rebuild = (): Promise<void> =>
     host.replace(() => {
-      const client = dependencies.client();
-      if (!client || !dependencies.runnable()) {
+      const model = dependencies.model();
+      if (!model || !dependencies.runnable()) {
         dependencies.dropBriefings();
         return undefined;
       }
-      return build(client);
+      return build(model);
     });
 
   const registerIpc = (registration: BrainIpcRegistration): void => {

@@ -1,5 +1,19 @@
-import { BRAIN_TURN_AUTHORITY } from "@sidecar/hosted";
+import { BRAIN_TURN_AUTHORITY, HOSTED_BRAIN_OPTION_BOUNDS } from "@sidecar/hosted";
 import type { ScheduledTimer } from "@sidecar/realtime";
+import {
+  type AgentRuntime,
+  CONTEXT_INPUT_KIND,
+  type ContextMark,
+  type ReasoningEffort,
+  RUN_END_REASON,
+  RUNTIME_EVENT,
+  type RuntimeEvent,
+  type RuntimeRunEnd,
+  type ToolExecutionContext,
+  type ToolExecutor,
+  type ToolInvocation,
+  type ToolResult,
+} from "@sidecar/runtime-contracts";
 import {
   type ProviderTranscriptResult,
   type ProviderTranscriptSinceResult,
@@ -8,51 +22,59 @@ import {
   type SessionIdentity,
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS, text, type WireRecord } from "@sidecar/wire";
-import { BRAIN_CLIENT_OUTCOME, type BrainClient } from "./client.js";
 import {
+  CONTEXT_OPENING,
+  claimOpenedContext,
   type Generation,
   generationFrom,
   identityFromRecord,
   parsedRecord,
   rejection,
+  retireContext,
+  retireOpenedContext,
   sameIdentity,
 } from "./generation.js";
 import {
-  askInputItem,
-  holdReleasedInputItem,
-  standingContextItem,
-  wakeInputItem,
+  askInputText,
+  holdReleasedInputText,
+  standingContextText,
+  wakeInputText,
 } from "./input-items.js";
+import { brainInstructions } from "./instructions.js";
 import { journalActCounts, UNCONFIRMED_ACT_RESULT, UNKNOWN_ACT_RESULT } from "./journal.js";
-import { BrainMemory, pairedDanglingCalls } from "./memory.js";
+import {
+  BrainRequestLedger,
+  PENDING_MARK_FIELD,
+  type PendingMarkField,
+  type RunEnd,
+  SAVE_SCOPE,
+} from "./ledger.js";
 import type { BrainActExecution, BrainActPerformer, BrainRoster } from "./performer.js";
 import {
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_STATUS,
   BRAIN_SUBMISSION_OUTCOME,
   BRAIN_SUBMISSION_REJECTION,
-  type BrainRequestFailure,
   type BrainRequestRecord,
   type BrainSubmission,
   type BrainSubmissionResult,
   interruptedUnfinishedRequests,
   isTerminalBrainRequestStatus,
 } from "./requests.js";
-import {
-  type BrainFunctionCall,
-  type BrainResponsesOutput,
-  brainResponsesOutput,
-  functionCallOutputItem,
-  type ResponsesInputItem,
-} from "./responses-api.js";
-import { settledUnlessAborted } from "./settled.js";
+import { incompleteDetail, TOOL_RESULT_STATUS } from "./runtime.js";
 import {
   type BrainPersistedState,
   type BrainStateStore,
   type BrainStoreLease,
   brainGenerationExpired,
 } from "./state-store.js";
-import { BRAIN_TOOL, brainToolAllowed, isBrainOnlyTool, maximumBriefingLength } from "./tools.js";
+import {
+  BRAIN_TOOL,
+  brainToolAllowed,
+  brainToolSchemas,
+  isBrainOnlyTool,
+  maximumBriefingLength,
+} from "./tools.js";
 import type { BrainToolCallTrace, BrainTurnTraceRecord } from "./trace.js";
 import {
   attachTranscriptDeltas,
@@ -61,7 +83,6 @@ import {
 } from "./transcript-reads.js";
 import {
   BRAIN_TURN_TRIGGER,
-  type DispatchOutcome,
   REFUSAL_REASON,
   type RunControl,
   TURN_OUTCOME,
@@ -77,33 +98,42 @@ import { BRAIN_WAKE_KIND, type BrainDelivery, type BrainWakeEvent } from "./wake
  * answers with briefings for the voice to speak and acts for the host to
  * carry. Nothing detects a change on its behalf: the roster look carries
  * what stands and what each transcript gained, and the brain notices what is
- * new against its own memory. It is transport- and storage-agnostic on
- * purpose — the client, the roster rendering, the transcript reads, the
- * delivery, and the persistence are all handed in — so the same agent runs in
- * the desktop's main process and, later, behind a service request.
+ * new against its own memory.
  *
- * Every write it can cause still runs the host's own validation: an act tool
- * call goes to the performer as a function call and nothing more, and the host
- * validates it against what it observed exactly as it would a spoken one. And
- * an act can leave a turn at all only when the developer opened it: the turn's
- * authority is fixed here from what invoked it — an ask is the developer's,
- * a wake, a roster look, or a hold release is observation — so the toolset a
- * model is offered and the gate every emitted call meets are both decided
- * before the model reads a word, and nothing it reads can move them.
+ * It is the host of an execution, not the execution itself. What it owns is
+ * the conversation's standing: accepting asks into runs with records,
+ * queueing turns, revoking them on a cancel, a deadline, a stop, or the
+ * store's generation changing, journaling every act before its effect and
+ * its result before the next inference, moving the transcript cursors, and
+ * checkpointing the context the runtime hands back. How a turn reaches a
+ * model — which provider, which item shapes, how the loop between model and
+ * tools runs — is the agent runtime's and the model adapter's, handed in,
+ * and nothing here reads inside a provider's item. The same host runs over
+ * any runtime whose checkpoints it can store, and refuses to open a turn over
+ * a checkpoint written by a runtime it was not given.
+ *
+ * Every write the model can cause still runs the host's own validation: an
+ * act tool call goes to the performer as a function call and nothing more, and
+ * the host validates it against what it observed exactly as it would a spoken
+ * one. And an act can leave a turn at all only when the developer opened it:
+ * the turn's authority is fixed here from what invoked it — an ask is the
+ * developer's, a wake, a roster look, or a hold release is observation — so
+ * the toolset a model is offered and the gate every emitted call meets are
+ * both decided before the model reads a word, and nothing it reads can move
+ * them.
  *
  * A developer ask is a run with a record: accepted once its record is
  * checkpointed, queued behind the turns ahead of it, running under an
  * execution deadline and a cancellation the developer holds, and ended in one
  * of the terminal statuses the record vocabulary names. Every act the run
  * dispatches is journaled before the performer sees it and again with its
- * result before the model does, and the memory's rollback point advances
+ * result before the model does, and the context's rollback point advances
  * past each answered act, so a reply the model then fails to produce cannot
  * erase an act that already happened.
  */
 
 export const BRAIN_DEFAULTS = {
-  MAXIMUM_OUTPUT_TOKENS: 16_000,
-  MAX_TOOL_ITERATIONS: 8,
+  MAXIMUM_OUTPUT_TOKENS: HOSTED_BRAIN_OPTION_BOUNDS.MAXIMUM_OUTPUT_TOKENS,
   /** Wakes inside this window open one turn together: a hook and the poll's edge for the same stop. */
   WAKE_COALESCE_MS: 3_000,
   /**
@@ -121,11 +151,14 @@ export const BRAIN_DEFAULTS = {
 } as const;
 
 export interface BrainAgentOptions {
-  client: BrainClient;
+  /** The execution the host runs turns on; it decides how a model and its tools loop, and it alone reaches the model. */
+  runtime: AgentRuntime;
   acts: BrainActPerformer;
   roster: () => BrainRoster;
   /** Everything the host renders beside the roster: projects, facts, recent conversation, guide. */
   standingContext: () => string;
+  /** The standing instructions a turn runs under; the build's own unless a host prepares them. */
+  instructions?: () => string;
   readTranscriptSince: (
     identity: SessionIdentity,
     cursor: string | undefined,
@@ -141,41 +174,24 @@ export interface BrainAgentOptions {
   schedule?: (callback: () => void, delayMs: number) => ScheduledTimer;
   cancel?: (timer: ScheduledTimer) => void;
   maximumOutputTokens?: number;
-  maxToolIterations?: number;
+  reasoningEffort?: ReasoningEffort;
   wakeCoalesceMs?: number;
   executionDeadlineMs?: number;
   deltaPerSessionChars?: number;
   fullTranscriptChars?: number;
 }
 
-type RecordChanges = Partial<Omit<BrainRequestRecord, "runId" | "revision">>;
-
-/**
- * What one save owns. A record scope changes one record's fields over the
- * committed record — or inserts the record, for its own acceptance. A working
- * scope commits the turn's memory, cursors, and journal. The whole scope is
- * the restore's alone.
- */
-interface SaveScope {
-  working?: boolean;
-  whole?: boolean;
-  record?: { runId: string; changes: RecordChanges; insert?: BrainRequestRecord };
-}
-
-/** What a run's end carries into its record beyond the status. */
-interface RunEnd {
-  text?: string;
-  failure?: BrainRequestFailure;
-}
-
-interface LoopHooks {
-  append: (items: readonly ResponsesInputItem[]) => void;
+/** What one turn gathers as it runs, for its trace and its deliveries. */
+interface TurnGathering {
   toolCalls: BrainToolCallTrace[];
   deliveries: BrainDelivery[];
-  onIteration: () => void;
-  onOutput: (output: BrainResponsesOutput) => void;
-  onError: (reason: string) => void;
-  advanceMark: () => Promise<void>;
+  iterations: number;
+  compacted: boolean;
+  inputTokens?: number;
+  outputText: string;
+  /** The final answer's shortfall, when it stopped short with words still delivered. */
+  incomplete?: string;
+  error?: string;
 }
 
 /** A pending submission, held so a retry of the same id awaits the same durable answer. */
@@ -193,17 +209,17 @@ export class BrainAgent {
   readonly #schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
   readonly #cancel: (timer: ScheduledTimer) => void;
   readonly #report: (message: string) => void;
+  readonly #instructions: () => string;
   readonly #maximumOutputTokens: number;
-  readonly #maxToolIterations: number;
   readonly #wakeCoalesceMs: number;
   readonly #executionDeadlineMs: number;
   readonly #deltaPerSessionChars: number;
   readonly #fullTranscriptChars: number;
   #generation: Generation | undefined;
   readonly #lease: BrainStoreLease;
+  readonly #ledger: BrainRequestLedger;
   readonly #runs = new Map<string, RunControl>();
   readonly #pendingSubmissions = new Map<string, PendingSubmission>();
-  readonly #pendingMarks = new Map<string, Promise<boolean>>();
   readonly #listeners = new Set<BrainRequestsListener>();
   #turnInFlight = false;
   #restored: Promise<void> | undefined;
@@ -212,6 +228,8 @@ export class BrainAgent {
   #flushTimer: ScheduledTimer | undefined;
   #stopped = false;
   #unsubscribeStore: (() => void) | undefined;
+  #observationTurns = 0;
+  #incompatibleReported: string | undefined;
 
   constructor(options: BrainAgentOptions) {
     this.#options = options;
@@ -225,14 +243,21 @@ export class BrainAgent {
         globalThis.clearTimeout(timer as ReturnType<typeof setTimeout>);
       });
     this.#report = options.report ?? ((message) => process.stderr.write(`${message}\n`));
+    this.#instructions = options.instructions ?? brainInstructions;
     this.#maximumOutputTokens = options.maximumOutputTokens ?? BRAIN_DEFAULTS.MAXIMUM_OUTPUT_TOKENS;
-    this.#maxToolIterations = options.maxToolIterations ?? BRAIN_DEFAULTS.MAX_TOOL_ITERATIONS;
     this.#wakeCoalesceMs = options.wakeCoalesceMs ?? BRAIN_DEFAULTS.WAKE_COALESCE_MS;
     this.#executionDeadlineMs = options.executionDeadlineMs ?? BRAIN_DEFAULTS.EXECUTION_DEADLINE_MS;
     this.#deltaPerSessionChars =
       options.deltaPerSessionChars ?? BRAIN_DEFAULTS.DELTA_PER_SESSION_CHARS;
     this.#fullTranscriptChars = options.fullTranscriptChars ?? BRAIN_DEFAULTS.FULL_TRANSCRIPT_CHARS;
     this.#lease = options.store.lease();
+    this.#ledger = new BrainRequestLedger({
+      store: options.store,
+      lease: this.#lease,
+      now: this.#now,
+      report: this.#report,
+      notify: () => this.#notify(),
+    });
     this.#unsubscribeStore = options.store.onReplaced((state) => this.#adoptGeneration(state));
   }
 
@@ -255,6 +280,20 @@ export class BrainAgent {
   ready(): Promise<void> {
     this.#restored ??= this.#restore();
     return this.#restored;
+  }
+
+  /**
+   * Why the standing generation cannot open a turn, when it cannot: its
+   * checkpoint was written by a runtime other than the one this agent runs.
+   * The checkpoint, the requests, and the journal are all kept as they are;
+   * the way forward is a runtime that reads them or a Clear.
+   */
+  async incompatibility(): Promise<string | undefined> {
+    await this.ready();
+    const generation = this.#generation;
+    if (!generation) return undefined;
+    const opened = await generation.opened;
+    return opened.kind === CONTEXT_OPENING.INCOMPATIBLE ? opened.reason : undefined;
   }
 
   /** Every acknowledged run this generation holds, oldest acceptance first. */
@@ -306,6 +345,25 @@ export class BrainAgent {
       return {
         outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
         reason: BRAIN_SUBMISSION_REJECTION.EMPTY,
+      };
+    }
+    // The generation's context is awaited before the pending checks below, so
+    // that from the check to the registration nothing is awaited and two
+    // retries of one id cannot both slip past each other into two runs.
+    const opened = await generation.opened;
+    if (generation !== this.#generation || this.#stopped) {
+      return {
+        outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+        reason: BRAIN_SUBMISSION_REJECTION.ABSENT,
+      };
+    }
+    if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
+      // The memory stands, whole, and nothing runs over it: an ask into it
+      // would be a run this runtime cannot give a context to.
+      this.#reportIncompatible(generation, opened.reason);
+      return {
+        outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+        reason: BRAIN_SUBMISSION_REJECTION.INCOMPATIBLE,
       };
     }
     const sameAsk = (held: { question: string; origin: BrainSubmission["origin"] }) =>
@@ -367,8 +425,11 @@ export class BrainAgent {
     };
     generation.provisional.add(record.runId);
     generation.requests.set(record.runId, record);
-    const written = await this.#save(generation, {
-      record: { runId: record.runId, changes: {}, insert: record },
+    const written = await this.#ledger.save(generation, {
+      kind: SAVE_SCOPE.RECORD,
+      runId: record.runId,
+      changes: {},
+      insert: record,
     });
     generation.provisional.delete(record.runId);
     if (!written) {
@@ -388,7 +449,7 @@ export class BrainAgent {
       // Accepted durably, but into an agent that stopped while the write was
       // out: the run is the developer's to see, and it ends here rather than
       // being scheduled on an agent the host has already replaced.
-      await this.#settleRun(generation, record.runId, BRAIN_REQUEST_STATUS.INTERRUPTED, {});
+      await this.#ledger.settleRun(generation, record.runId, BRAIN_REQUEST_STATUS.INTERRUPTED, {});
       return accepted;
     }
     const run: RunControl = {
@@ -451,7 +512,7 @@ export class BrainAgent {
       run.abort.abort();
     }
     if (record.status === BRAIN_REQUEST_STATUS.QUEUED && this.#generation) {
-      await this.#settleRun(this.#generation, runId, BRAIN_REQUEST_STATUS.CANCELLED, {});
+      await this.#ledger.settleRun(this.#generation, runId, BRAIN_REQUEST_STATUS.CANCELLED, {});
     }
     return this.request(runId);
   }
@@ -464,62 +525,23 @@ export class BrainAgent {
    * memory either, so the next report tries the whole step again.
    */
   markHistoryRecorded(runId: string, recordedAt: number): Promise<boolean> {
-    return this.#mark(runId, "historyRecordedAt", recordedAt);
+    return this.#mark(runId, PENDING_MARK_FIELD.HISTORY_RECORDED_AT, recordedAt);
   }
 
   /** Marks a run's own ask as written into the host's thread, on the same terms. */
   markAskRecorded(runId: string, recordedAt: number): Promise<boolean> {
-    return this.#mark(runId, "askRecordedAt", recordedAt);
+    return this.#mark(runId, PENDING_MARK_FIELD.ASK_RECORDED_AT, recordedAt);
   }
 
-  /**
-   * Writes one marker onto a run without the marker ever standing in memory
-   * before it stands on disk: the write carries the record as it would read
-   * with the marker, and only a write that landed puts the marker on the live
-   * record — merged onto whatever else has advanced meanwhile, never a
-   * captured copy rolled over it. Callers marking the same field of the same
-   * run while a write is out share that write's answer, the way retried
-   * submissions share one acceptance.
-   */
-  async #mark(
-    runId: string,
-    field: "askRecordedAt" | "historyRecordedAt",
-    recordedAt: number,
-  ): Promise<boolean> {
-    const key = `${runId}\u0000${field}`;
-    const pending = this.#pendingMarks.get(key);
-    if (pending) return pending;
-    const marking = (async () => {
-      await this.ready();
-      const generation = this.#generation;
-      const record = generation?.requests.get(runId);
-      if (!generation || !record) return false;
-      if (record[field] !== undefined) return true;
-      return this.#commit(generation, runId, { [field]: recordedAt });
-    })();
-    this.#pendingMarks.set(key, marking);
-    try {
-      return await marking;
-    } finally {
-      this.#pendingMarks.delete(key);
-    }
-  }
-
-  /**
-   * A staged write of some fields of one record, owning nothing else: the
-   * envelope is the store's committed state with the fields applied to that
-   * record alone, and the live record takes them in the same queue step once
-   * the store has — so no save assembled from older state can follow and undo
-   * them, nothing reads the fields before they are kept, and nothing of any
-   * other record or of a turn still in flight rides along.
-   */
-  #commit(generation: Generation, runId: string, changes: RecordChanges): Promise<boolean> {
-    return this.#save(generation, { record: { runId, changes } });
+  async #mark(runId: string, field: PendingMarkField, recordedAt: number): Promise<boolean> {
+    await this.ready();
+    const generation = this.#generation;
+    return generation ? this.#ledger.mark(generation, runId, field, recordedAt) : false;
   }
 
   /**
    * Queues wake events. Nothing is sent yet: wakes inside the coalescing
-   * window open one turn together, and wakes during a client's quiet wait for
+   * window open one turn together, and wakes during a model's quiet wait for
    * it to end rather than being dropped.
    */
   wake(events: readonly BrainWakeEvent[]): void {
@@ -552,8 +574,8 @@ export class BrainAgent {
         authority: BRAIN_TURN_AUTHORITY.OBSERVATION,
         events,
         open: (attached, now) => [
-          ...(attached.length > 0 ? [wakeInputItem(attached, now)] : []),
-          holdReleasedInputItem(held, now),
+          ...(attached.length > 0 ? [wakeInputText(attached, now)] : []),
+          holdReleasedInputText(held, now),
         ],
       }),
     );
@@ -589,11 +611,17 @@ export class BrainAgent {
     if (generation) {
       for (const record of this.requests()) {
         if (record.status === BRAIN_REQUEST_STATUS.QUEUED) {
-          await this.#settleRun(generation, record.runId, BRAIN_REQUEST_STATUS.INTERRUPTED, {});
+          await this.#ledger.settleRun(
+            generation,
+            record.runId,
+            BRAIN_REQUEST_STATUS.INTERRUPTED,
+            {},
+          );
         }
       }
     }
     await this.#queue;
+    if (this.#generation) retireOpenedContext(this.#generation);
   }
 
   /**
@@ -601,7 +629,7 @@ export class BrainAgent {
    * than an internal timer. Carries the roster as `list_sessions` renders it
    * and, for every local session the brain has read before or that is working
    * or waiting now, what its transcript gained since — sessions with nothing
-   * new are left out. Skipped while a turn is in flight or the client is
+   * new are left out. Skipped while a turn is in flight or the model is
    * quiet, because the next look reads the same deltas; pending hook wakes
    * ride along rather than waiting for their own.
    */
@@ -612,16 +640,16 @@ export class BrainAgent {
       void this.ready().then(() => this.rosterLook());
       return;
     }
-    if (this.#options.client.quietUntil() !== undefined) return;
+    if (this.#options.runtime.quietUntil() !== undefined) return;
     const roster = this.#options.roster();
     const now = this.#now();
-    const memory = generation.memory;
+    const cursors = generation.cursors;
     const looks: BrainWakeEvent[] = (roster.sessions ?? []).flatMap((session) => {
       const identity: SessionIdentity = {
         providerId: session.providerId,
         providerSessionId: session.providerSessionId,
       };
-      const readBefore = memory.cursor(identity) !== undefined;
+      const readBefore = cursors.cursor(identity) !== undefined;
       const live =
         session.status === SESSION_STATUS.WORKING || session.status === SESSION_STATUS.WAITING;
       if (session.location !== SESSION_LOCATION.LOCAL || !(readBefore || live)) return [];
@@ -635,7 +663,7 @@ export class BrainAgent {
         trigger: BRAIN_TURN_TRIGGER.ROSTER,
         authority: BRAIN_TURN_AUTHORITY.OBSERVATION,
         events,
-        open: (attached, openedAt) => [wakeInputItem(attached, openedAt, roster.text)],
+        open: (attached, openedAt) => [wakeInputText(attached, openedAt, roster.text)],
         dropEmptyRosterDeltas: true,
       }),
     );
@@ -657,7 +685,7 @@ export class BrainAgent {
 
   #flush(): void {
     if (this.#stopped) return;
-    const quietUntil = this.#options.client.quietUntil();
+    const quietUntil = this.#options.runtime.quietUntil();
     if (quietUntil !== undefined) {
       this.#scheduleFlush(Math.max(quietUntil - this.#now(), this.#wakeCoalesceMs));
       return;
@@ -676,7 +704,7 @@ export class BrainAgent {
         trigger: BRAIN_TURN_TRIGGER.WAKE,
         authority: BRAIN_TURN_AUTHORITY.OBSERVATION,
         events,
-        open: (attached, now) => [wakeInputItem(attached, now)],
+        open: (attached, now) => [wakeInputText(attached, now)],
       });
       if (
         result.outcome === TURN_OUTCOME.QUIET &&
@@ -708,6 +736,10 @@ export class BrainAgent {
     for (const listener of [...this.#listeners]) listener(records);
   }
 
+  #generationFrom(state: BrainPersistedState): Generation {
+    return generationFrom(state, this.#options.runtime, JSON.stringify(UNKNOWN_ACT_RESULT));
+  }
+
   async #restore(): Promise<void> {
     let state: BrainPersistedState;
     try {
@@ -725,14 +757,19 @@ export class BrainAgent {
     const current = this.#options.store.current() ?? state;
     if (adopted && adopted.id === current.generationId) return;
     state = current;
-    const generation = generationFrom(state);
+    const generation = this.#generationFrom(state);
     this.#generation = generation;
+    const opened = await generation.opened;
+    if (generation !== this.#generation) return;
+    if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
+      this.#reportIncompatible(generation, opened.reason);
+    }
     const interrupted = interruptedUnfinishedRequests(state.requests, this.#now());
-    const paired = pairedDanglingCalls(state.items, () => JSON.stringify(UNKNOWN_ACT_RESULT));
-    if (interrupted === state.requests && paired === state.items) return;
-    // An act found started with no result may have happened: the interrupted
-    // run says so in its count, and its output stands as unknown, never as a
-    // call to make again.
+    // An act found started with no result may have happened: the runtime's
+    // context paired it as unknown at load, and the interrupted run says so
+    // in its count; neither is ever a call to make again.
+    const repaired = opened.kind === CONTEXT_OPENING.LOADED ? opened.repaired : 0;
+    if (interrupted === state.requests && repaired === 0) return;
     const unfinished = new Set(
       state.requests
         .filter((record) => !isTerminalBrainRequestStatus(record.status))
@@ -750,9 +787,17 @@ export class BrainAgent {
           : record,
       ]),
     );
-    generation.memory = new BrainMemory({ items: paired, cursors: state.cursors });
-    await this.#save(generation, { whole: true });
+    await this.#ledger.save(generation, {
+      kind: SAVE_SCOPE.WHOLE,
+      context: opened.kind === CONTEXT_OPENING.LOADED ? opened.context : undefined,
+    });
     this.#notify();
+  }
+
+  #reportIncompatible(generation: Generation, reason: string): void {
+    if (this.#incompatibleReported === generation.id) return;
+    this.#incompatibleReported = generation.id;
+    this.#report(`Brain memory is kept but cannot be run: ${reason}`);
   }
 
   /**
@@ -772,11 +817,12 @@ export class BrainAgent {
       run.abort.abort();
     }
     this.#runs.clear();
+    if (previous) retireOpenedContext(previous);
     // Wakes coalesced against the old memory — including a quiet retry's —
     // are that generation's work, and go with it.
     this.#cancelFlush();
     this.#pending = [];
-    this.#generation = generationFrom(state);
+    this.#generation = this.#generationFrom(state);
     this.#notify();
   }
 
@@ -795,110 +841,6 @@ export class BrainAgent {
     this.#options.store.expireIfDue(this.#now());
   }
 
-  /**
-   * A turn's or an act's checkpoint: the working memory, cursors, and journal
-   * this turn owns become the committed ones, together with the run's own
-   * accounting when a run owns the turn. Nothing else changes: every other
-   * record stays as committed, so a request accepted or marked meanwhile is
-   * untouched and a request still provisional is not published.
-   */
-  #checkpoint(generation: Generation, run?: RunControl): Promise<boolean> {
-    return this.#save(generation, {
-      working: true,
-      ...(run
-        ? {
-            record: {
-              runId: run.runId,
-              changes: { performedActs: run.performedActs, unknownActs: run.unknownActs },
-            },
-          }
-        : undefined),
-    });
-  }
-
-  /**
-   * The one way a generation reaches the store, and the one place the scope
-   * of a save is decided. Every envelope is composed inside the store's
-   * serialized queue from the store's committed state — never from a copy
-   * taken before entering the queue, and never from live state the save does
-   * not own — so a save can only add what it owns to what the saves before it
-   * kept. What a save may own: the working memory, cursors, and journal, when
-   * it is the checkpoint of the turn holding them; one record's fields, when
-   * it is that record's acceptance, transition, accounting, end, or mark; or
-   * the whole generation, when it is the restore that just loaded it. Owned
-   * record fields land on the live record in the queue step that keeps them.
-   */
-  async #save(generation: Generation, scope: SaveScope): Promise<boolean> {
-    let owned: BrainRequestRecord | undefined;
-    let missing = false;
-    let pruned = false;
-    const written = await this.#options.store.write(
-      this.#lease,
-      generation.id,
-      (state) => {
-        const memory = generation.memory.persisted();
-        const working = scope.working === true || scope.whole === true;
-        let requests: readonly BrainRequestRecord[];
-        if (scope.whole) {
-          requests = [...generation.requests.values()].map((record) => ({ ...record }));
-        } else if (scope.record) {
-          const { runId, changes } = scope.record;
-          const committed = state.requests.find((record) => record.runId === runId);
-          if (committed) {
-            const changed: BrainRequestRecord = {
-              ...committed,
-              ...changes,
-              revision: committed.revision + 1,
-            };
-            owned = changed;
-            requests = state.requests.map((record) => (record.runId === runId ? changed : record));
-          } else if (scope.record.insert) {
-            owned = { ...scope.record.insert };
-            requests = [...state.requests, owned];
-          } else {
-            missing = true;
-            requests = state.requests;
-          }
-        } else {
-          requests = state.requests;
-        }
-        return {
-          items: working ? memory.items : state.items,
-          cursors: working ? memory.cursors : state.cursors,
-          journal: working ? generation.journal.entries() : state.journal,
-          requests,
-        };
-      },
-      (commit) => {
-        // Retention decided inside the same queue step: the runs the store
-        // let go of leave the working copy too, or the next checkpoint of
-        // the journal would write them straight back.
-        if (commit.prunedRunIds.length > 0) {
-          for (const runId of commit.prunedRunIds) generation.requests.delete(runId);
-          generation.journal.dropRuns(commit.prunedRunIds);
-          pruned = true;
-        }
-        if (!owned || !scope.record) return;
-        const live = generation.requests.get(owned.runId);
-        if (live) {
-          generation.requests.set(owned.runId, {
-            ...live,
-            ...scope.record.changes,
-            revision: owned.revision,
-          });
-        }
-      },
-    );
-    if (!written || missing) {
-      this.#report("Brain memory could not be checkpointed");
-      return false;
-    }
-    // Runs retention let go of are gone from the list every window draws,
-    // and the windows hear it now rather than on the next unrelated change.
-    if (pruned) this.#notify();
-    return true;
-  }
-
   #runRevoked(run: RunControl): boolean {
     return run.cancelled || run.timedOut || this.#stopped || run.generation.abort.signal.aborted;
   }
@@ -912,7 +854,7 @@ export class BrainAgent {
     const record = generation.requests.get(run.runId);
     if (!record || record.status !== BRAIN_REQUEST_STATUS.QUEUED || this.#runRevoked(run)) {
       if (record?.status === BRAIN_REQUEST_STATUS.QUEUED) {
-        await this.#settleRun(
+        await this.#ledger.settleRun(
           generation,
           run.runId,
           run.cancelled ? BRAIN_REQUEST_STATUS.CANCELLED : BRAIN_REQUEST_STATUS.INTERRUPTED,
@@ -928,7 +870,7 @@ export class BrainAgent {
     // effect. A start the store refuses ends the run as the persistence
     // failure it is, with nothing called; a revocation that landed while the
     // start was being written ends it on its own terms, likewise unopened.
-    const started = await this.#commit(generation, run.runId, {
+    const started = await this.#ledger.commit(generation, run.runId, {
       status: BRAIN_REQUEST_STATUS.RUNNING,
       startedAt: this.#now(),
     });
@@ -936,7 +878,7 @@ export class BrainAgent {
     if (!started || this.#runRevoked(run)) {
       this.#runs.delete(run.runId);
       if (this.#runRevoked(run)) {
-        await this.#settleRun(
+        await this.#ledger.settleRun(
           generation,
           run.runId,
           run.cancelled ? BRAIN_REQUEST_STATUS.CANCELLED : BRAIN_REQUEST_STATUS.INTERRUPTED,
@@ -944,7 +886,7 @@ export class BrainAgent {
         );
         return;
       }
-      await this.#settleRun(
+      await this.#ledger.settleRun(
         generation,
         run.runId,
         BRAIN_REQUEST_STATUS.FAILED,
@@ -964,7 +906,7 @@ export class BrainAgent {
         trigger: BRAIN_TURN_TRIGGER.ASK,
         authority: BRAIN_TURN_AUTHORITY.DEVELOPER,
         events,
-        open: (attached, now) => [askInputItem(question, attached, now)],
+        open: (attached, now) => [askInputText(question, attached, now)],
         run,
       });
     } catch {
@@ -997,63 +939,7 @@ export class BrainAgent {
       status = BRAIN_REQUEST_STATUS.SUCCEEDED;
       if (result.text) end.text = result.text;
     }
-    await this.#settleRun(generation, run.runId, status, end, run);
-  }
-
-  #update(generation: Generation, runId: string, changes: RecordChanges): void {
-    const record = generation.requests.get(runId);
-    if (!record) return;
-    generation.requests.set(runId, { ...record, ...changes, revision: record.revision + 1 });
-  }
-
-  /**
-   * Ends a run in its record and checkpoints the end. A success whose end
-   * cannot be written is not a success anyone can find again, so it is
-   * downgraded to a persistence failure — the reply still travels — and the
-   * write is tried once more; a failed end that will not write is reported
-   * and stands in memory alone.
-   */
-  /**
-   * Ends a run in its record, staged behind the write that keeps it: until
-   * the store has answered, every reader — a wait, a snapshot, the follower —
-   * still sees the run under way, so no success is spoken or written that the
-   * file may yet refuse. A success the store refuses is downgraded to a
-   * persistence failure, the reply kept, and written once more; an end the
-   * store will not take at all stands in memory alone, as the failure it is,
-   * so the run still finishes for everyone watching it.
-   */
-  async #settleRun(
-    generation: Generation,
-    runId: string,
-    status: BrainRequestRecord["status"],
-    end: RunEnd,
-    run?: RunControl,
-  ): Promise<void> {
-    const record = generation.requests.get(runId);
-    if (!record || isTerminalBrainRequestStatus(record.status)) return;
-    const settled: RecordChanges = {
-      status,
-      settledAt: this.#now(),
-      ...(end.text !== undefined ? { text: end.text } : undefined),
-      ...(end.failure !== undefined ? { failure: end.failure } : undefined),
-      ...(run ? { performedActs: run.performedActs, unknownActs: run.unknownActs } : undefined),
-    };
-    if (await this.#commit(generation, runId, settled)) {
-      this.#notify();
-      return;
-    }
-    const fallback =
-      status === BRAIN_REQUEST_STATUS.SUCCEEDED
-        ? {
-            ...settled,
-            status: BRAIN_REQUEST_STATUS.FAILED,
-            failure: BRAIN_REQUEST_FAILURE.PERSISTENCE,
-          }
-        : settled;
-    if (!(await this.#commit(generation, runId, fallback))) {
-      this.#update(generation, runId, fallback);
-    }
-    this.#notify();
+    await this.#ledger.settleRun(generation, run.runId, status, end, run);
   }
 
   async #turn(plan: TurnPlan): Promise<TurnResult> {
@@ -1068,9 +954,20 @@ export class BrainAgent {
     if (generation !== this.#generation || generation.abort.signal.aborted) {
       return { outcome: TURN_OUTCOME.REVOKED };
     }
+    const opened = await generation.opened;
+    if (generation !== this.#generation || generation.abort.signal.aborted) {
+      return { outcome: TURN_OUTCOME.REVOKED };
+    }
+    if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
+      // The memory is kept as it is and nothing is read or written over it.
+      this.#reportIncompatible(generation, opened.reason);
+      return { outcome: TURN_OUTCOME.INCOMPATIBLE };
+    }
+    const context = opened.context;
     const run = plan.run;
-    const context: TurnContext = {
+    const turnContext: TurnContext = {
       generation,
+      context,
       ...(run ? { run } : undefined),
       signal: run
         ? AbortSignal.any([generation.abort.signal, run.abort.signal])
@@ -1080,11 +977,11 @@ export class BrainAgent {
     let ended = false;
     const execution: BrainActExecution = {
       authority: BRAIN_TURN_AUTHORITY.DEVELOPER,
-      isRevoked: () => ended || this.#revoked(context),
-      signal: context.signal,
+      isRevoked: () => ended || this.#revoked(turnContext),
+      signal: turnContext.signal,
     };
     try {
-      return await this.#runTurn(plan, context, execution);
+      return await this.#runTurn(plan, turnContext, execution);
     } finally {
       ended = true;
       this.#turnInFlight = false;
@@ -1097,34 +994,32 @@ export class BrainAgent {
 
   async #runTurn(
     plan: TurnPlan,
-    context: TurnContext,
+    turnContext: TurnContext,
     execution: BrainActExecution,
   ): Promise<TurnResult> {
-    const { generation, run } = context;
-    const memory = generation.memory;
+    const { generation, context, run } = turnContext;
     const startedAt = this.#now();
-    let mark = memory.mark();
-    const appendedKinds: string[] = [];
-    const toolCalls: BrainToolCallTrace[] = [];
-    const deliveries: BrainDelivery[] = [];
-    let iterations = 0;
-    let compacted = false;
-    let inputTokens: number | undefined;
-    let outputText = "";
-    let error: string | undefined;
-
+    let contextMark: ContextMark = context.mark();
+    let cursorMark = generation.cursors.persisted();
+    const gathering: TurnGathering = {
+      toolCalls: [],
+      deliveries: [],
+      iterations: 0,
+      compacted: false,
+      outputText: "",
+    };
     const revocation = (): TurnResult => {
-      error = run?.timedOut ? "execution deadline passed" : "turn revoked";
+      gathering.error = run?.timedOut ? "execution deadline passed" : "turn revoked";
       return { outcome: TURN_OUTCOME.REVOKED };
     };
-    if (this.#revoked(context)) return revocation();
+    if (this.#revoked(turnContext)) return revocation();
 
-    const attachedDeltas = await this.#attachDeltas(plan.events, context);
+    const attachedDeltas = await this.#attachDeltas(plan.events, turnContext);
     const transcriptBytes = attachedDeltas.transcriptBytes;
     let failure: TurnResult | undefined;
-    if (this.#revoked(context)) {
+    if (this.#revoked(turnContext)) {
       // Nothing the reads gained opens an inference the developer or the
-      // host has already withdrawn; the cursors go back with the memory.
+      // host has already withdrawn; the cursors go back with the context.
       failure = revocation();
     } else {
       const events = plan.dropEmptyRosterDeltas
@@ -1133,63 +1028,45 @@ export class BrainAgent {
               event.kind !== BRAIN_WAKE_KIND.ROSTER || Boolean(event.transcriptDelta?.text),
           )
         : attachedDeltas.events;
-      const append = (items: readonly ResponsesInputItem[]) => {
-        memory.append(items);
-        for (const item of items) appendedKinds.push(text(item.type) ?? "unknown");
+      // Only a developer run advances its rollback point past each answered
+      // tool, so a later failure never reverts an act that already happened;
+      // an observation turn rolls back whole and reads its deltas again.
+      const advanceMark = async () => {
+        if (!run) return;
+        if (!(await this.#ledger.checkpoint(turnContext))) run.checkpointFailed = true;
+        contextMark = context.mark();
+        cursorMark = generation.cursors.persisted();
       };
-      append(plan.open(events, startedAt));
       try {
-        failure = await this.#loop(plan, context, execution, {
-          append,
-          toolCalls,
-          deliveries,
-          onIteration: () => {
-            iterations += 1;
-          },
-          onOutput: (output) => {
-            if (output.compacted) {
-              memory.dropBeforeLatestCompaction();
-              compacted = true;
-            }
-            if (output.inputTokens !== undefined) inputTokens = output.inputTokens;
-            outputText = output.outputText;
-          },
-          onError: (reason) => {
-            error = reason;
-          },
-          // Only a developer run advances its rollback point: each answered
-          // act is checkpointed and the mark moves past it, so a later failure
-          // returns the memory to the last paired state and never to before an
-          // act that already happened. An observation turn still rolls back
-          // whole, so the deltas it read are read again rather than skipped.
-          advanceMark: async () => {
-            if (!run) return;
-            if (!(await this.#checkpoint(generation, run))) run.checkpointFailed = true;
-            mark = memory.mark();
-          },
+        const end = await this.#execute(plan, turnContext, execution, gathering, {
+          opening: plan.open(events, startedAt),
+          advanceMark,
         });
-      } catch (loopError) {
-        // A client that threw instead of answering: the turn fails like one
+        failure = this.#turnResultFrom(end, turnContext, gathering);
+      } catch (runtimeError) {
+        // A runtime that threw instead of ending: the turn fails like one
         // whose model failed, and rolls back to the last paired state.
-        error = loopError instanceof Error ? loopError.name : "unknown error";
-        failure = this.#revoked(context) ? revocation() : { outcome: TURN_OUTCOME.FAILED };
+        gathering.error = runtimeError instanceof Error ? runtimeError.name : "unknown error";
+        failure = this.#revoked(turnContext) ? revocation() : { outcome: TURN_OUTCOME.FAILED };
       }
     }
 
     if (failure) {
-      memory.rollback(mark);
-      this.#report(`Brain ${plan.trigger} turn did not complete: ${error}`);
+      await this.#restoreContext(turnContext, contextMark);
+      generation.cursors.rollback(cursorMark);
+      this.#report(`Brain ${plan.trigger} turn did not complete: ${gathering.error}`);
     } else {
-      memory.retainCursors(this.#options.roster().identities);
-      const written = await this.#checkpoint(generation, run);
+      generation.cursors.retain(this.#options.roster().identities);
+      const written = await this.#ledger.checkpoint(turnContext);
       if (!written && run) run.checkpointFailed = true;
+      if (written) await context.afterTurn({ signal: turnContext.signal });
       // A briefing leaves only from a turn that still stands: the stop or the
       // replacement that landed during the write — or during an earlier
       // briefing — withdraws every one not yet handed over, and a checkpoint
       // the store refused is one such withdrawal made visible.
-      for (const delivery of deliveries) {
-        if (this.#revoked(context) || !written) {
-          error = "turn revoked before delivery";
+      for (const delivery of gathering.deliveries) {
+        if (this.#revoked(turnContext) || !written) {
+          gathering.error = "turn revoked before delivery";
           break;
         }
         try {
@@ -1202,129 +1079,176 @@ export class BrainAgent {
       }
     }
 
+    const { id: runtime, model } = this.#options.runtime.descriptor;
     this.#options.trace?.({
       trigger: plan.trigger,
       authority: plan.authority,
-      inputItemKinds: appendedKinds,
-      ...(inputTokens !== undefined ? { inputTokens } : undefined),
+      runtime,
+      ...(gathering.inputTokens !== undefined ? { inputTokens: gathering.inputTokens } : undefined),
       transcriptBytes,
-      toolCalls,
-      ...(outputText ? { outputText } : undefined),
-      deliveries: deliveries.map((delivery) => ({ briefingChars: delivery.briefing.length })),
-      ...(this.#options.client.model ? { model: this.#options.client.model } : undefined),
+      toolCalls: gathering.toolCalls,
+      ...(gathering.outputText ? { outputText: gathering.outputText } : undefined),
+      ...(gathering.incomplete ? { incomplete: gathering.incomplete } : undefined),
+      deliveries: gathering.deliveries.map((delivery) => ({
+        briefingChars: delivery.briefing.length,
+      })),
+      ...(model ? { model } : undefined),
       elapsedMs: this.#now() - startedAt,
-      iterations,
-      compacted,
-      ...(error ? { error } : undefined),
+      iterations: gathering.iterations,
+      compacted: gathering.compacted,
+      ...(gathering.error ? { error: gathering.error } : undefined),
     });
 
-    return failure ?? { outcome: TURN_OUTCOME.DONE, text: outputText };
+    return failure ?? { outcome: TURN_OUTCOME.DONE, text: gathering.outputText };
   }
 
-  /** The model loop: answers a failure to roll back to, or nothing when the turn reached its text. */
-  async #loop(
+  /**
+   * Stands the generation's context back at the mark the turn last committed
+   * past — the start of the turn for an observation, the last checkpointed
+   * tool result for a run — on a fresh engine, because a late hook of the
+   * old engine may still apply to it. A reopen the runtime refuses leaves the
+   * generation standing without a context, its stored checkpoint untouched.
+   */
+  async #restoreContext(turnContext: TurnContext, mark: ContextMark): Promise<void> {
+    const { generation, context } = turnContext;
+    const reopened = await claimOpenedContext(
+      this.#options.runtime.openContext(
+        { format: context.checkpointFormat, items: mark.items },
+        JSON.stringify(UNKNOWN_ACT_RESULT),
+        { signal: generation.abort.signal },
+      ),
+      generation.abort.signal,
+      "the runtime could not reopen its own checkpoint",
+    );
+    if (reopened.aborted) return;
+    const standing = await generation.opened;
+    const stillUsed = standing.kind === CONTEXT_OPENING.LOADED && standing.context === context;
+    if (generation !== this.#generation || !stillUsed) {
+      if (reopened.value.kind === CONTEXT_OPENING.LOADED) retireContext(reopened.value.context);
+      return;
+    }
+    // The engine the turn used is not re-admitted either way: it may hold
+    // what a late hook applied. A refused reopen leaves the generation
+    // standing without a context, every turn over it refused as incompatible.
+    generation.opened = Promise.resolve(reopened.value);
+    retireContext(context);
+    if (reopened.value.kind === CONTEXT_OPENING.INCOMPATIBLE) {
+      this.#reportIncompatible(generation, reopened.value.reason);
+    }
+  }
+
+  /**
+   * One execution on the runtime: the opening words, the toolset the
+   * authority fixes, the standing context rebuilt for every inference, and a
+   * listener that keeps what the run gathers and checkpoints each answered
+   * tool before the runtime asks the model again.
+   */
+  #execute(
     plan: TurnPlan,
-    context: TurnContext,
+    turnContext: TurnContext,
     execution: BrainActExecution,
-    hooks: LoopHooks,
-  ): Promise<TurnResult | undefined> {
-    const { generation } = context;
-    const revocation = (): TurnResult => {
-      hooks.onError(context.run?.timedOut ? "execution deadline passed" : "turn revoked");
-      return { outcome: TURN_OUTCOME.REVOKED };
+    gathering: TurnGathering,
+    turn: { opening: readonly string[]; advanceMark: () => Promise<void> },
+  ): Promise<RuntimeRunEnd> {
+    const { context, run } = turnContext;
+    const runId = run?.runId ?? `${plan.trigger}-${++this.#observationTurns}`;
+    const tools = this.#executor(plan, turnContext, execution, gathering);
+    const onEvent = async (event: RuntimeEvent) => {
+      switch (event.kind) {
+        case RUNTIME_EVENT.ANSWERED:
+          if (event.toolCalls > 0) gathering.iterations += 1;
+          return;
+        case RUNTIME_EVENT.TEXT:
+          gathering.outputText = event.text;
+          return;
+        case RUNTIME_EVENT.USAGE:
+          if (event.usage.inputTokens !== undefined) {
+            gathering.inputTokens = event.usage.inputTokens;
+          }
+          return;
+        case RUNTIME_EVENT.COMPACTED:
+          gathering.compacted = true;
+          return;
+        case RUNTIME_EVENT.TOOL_RESULT:
+          gathering.toolCalls.push({
+            name: event.invocation.name,
+            argumentsChars: event.invocation.argumentsJson.length,
+            outcomeStatus: event.result.status ?? TOOL_RESULT_STATUS.ANSWERED,
+          });
+          // The answered tool is in the context; a run keeps it before the
+          // model is asked again, so a later failure cannot unpair it.
+          await turn.advanceMark();
+          return;
+        default:
+          return;
+      }
     };
-    let iterations = 0;
-    for (;;) {
-      const roster = this.#options.roster();
-      const standing = standingContextItem(
-        roster.text,
-        this.#options.standingContext(),
-        this.#now(),
-      );
-      const answered = await settledUnlessAborted(
-        this.#options.client.respond([...generation.memory.items(), standing], {
-          authority: plan.authority,
-          maximumOutputTokens: this.#maximumOutputTokens,
-          signal: context.signal,
-        }),
-        context.signal,
-      );
-      if (answered.aborted || this.#revoked(context)) return revocation();
-      const answer = answered.value;
-      if (answer.outcome === BRAIN_CLIENT_OUTCOME.QUIET) {
-        hooks.onError("quiet");
-        return { outcome: TURN_OUTCOME.QUIET, until: answer.until };
-      }
-      if (answer.outcome === BRAIN_CLIENT_OUTCOME.FAILED) {
-        hooks.onError(answer.reason);
-        return { outcome: TURN_OUTCOME.FAILED };
-      }
-      const output = brainResponsesOutput(answer.payload);
-      if (!output) {
-        hooks.onError("response carried no output");
-        return { outcome: TURN_OUTCOME.FAILED };
-      }
-      hooks.append(output.items);
-      hooks.onOutput(output);
-      if (output.functionCalls.length === 0) {
-        if (output.incompleteReason && !output.outputText) {
-          // The model stopped short of any words. A run says it fell short
-          // rather than claiming a reply; an observation turn has nobody to
-          // answer, and keeps what it read so the deltas are not read twice.
-          hooks.onError(`${output.status ?? "incomplete"}: ${output.incompleteReason}`);
-          return context.run ? { outcome: TURN_OUTCOME.INCOMPLETE } : undefined;
-        }
+    const started = this.#options.runtime.start({
+      runId,
+      context,
+      tools,
+      toolSchemas: brainToolSchemas(plan.authority),
+      prompt: this.#instructions(),
+      input: turn.opening.map((text) => ({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text })),
+      ephemeral: () => [
+        standingContextText(
+          this.#options.roster().text,
+          this.#options.standingContext(),
+          this.#now(),
+        ),
+      ],
+      maximumOutputTokens: this.#maximumOutputTokens,
+      ...(this.#options.reasoningEffort
+        ? { reasoningEffort: this.#options.reasoningEffort }
+        : undefined),
+      signal: turnContext.signal,
+      onEvent,
+    });
+    return started.done;
+  }
+
+  /** How a run's end reads as a turn's: an observation turn keeps what it read wherever a run would fall short. */
+  #turnResultFrom(
+    end: RuntimeRunEnd,
+    turnContext: TurnContext,
+    gathering: TurnGathering,
+  ): TurnResult | undefined {
+    if (this.#revoked(turnContext)) {
+      gathering.error = turnContext.run?.timedOut ? "execution deadline passed" : "turn revoked";
+      return { outcome: TURN_OUTCOME.REVOKED };
+    }
+    switch (end.reason) {
+      case RUN_END_REASON.COMPLETED:
+        // The end's text is the reply: an earlier answer's words that preceded
+        // a tool call are not the answer when the final answer said nothing.
+        gathering.outputText = end.text;
+        if (end.incomplete) gathering.incomplete = incompleteDetail(end.incomplete);
         return undefined;
-      }
-
-      iterations += 1;
-      hooks.onIteration();
-      if (iterations > this.#maxToolIterations) {
-        // Every call still gets its output so the memory never holds a
-        // dangling function_call; the model reads the refusals next turn. The
-        // turn itself fell short of a reply, and is reported as such.
-        hooks.append(
-          output.functionCalls.map((call) => {
-            hooks.toolCalls.push({
-              name: call.name,
-              argumentsChars: call.argumentsJson.length,
-              outcomeStatus: ACT_RESULT_STATUS.REJECTED,
-            });
-            return functionCallOutputItem(
-              call.callId,
-              JSON.stringify(rejection(REFUSAL_REASON.BUDGET_SPENT)),
-            );
-          }),
-        );
-        hooks.onError("tool iteration budget spent");
-        await hooks.advanceMark();
-        return context.run ? { outcome: TURN_OUTCOME.INCOMPLETE } : undefined;
-      }
-
-      // Calls run in the order the model emitted them, one at a time: an act
-      // is journaled and checkpointed before the next one starts, and a
-      // cancel landing between two refuses the second rather than racing it.
-      for (const call of output.functionCalls) {
-        const outcome = await this.#dispatch(call, roster, plan, context, execution, hooks);
-        hooks.toolCalls.push({
-          name: call.name,
-          argumentsChars: call.argumentsJson.length,
-          outcomeStatus: text(outcome.output.status) ?? "answered",
-        });
-        hooks.append([functionCallOutputItem(outcome.callId, JSON.stringify(outcome.output))]);
-        if (context.run && generation.journal.get(context.run.runId, call.callId)) {
-          await hooks.advanceMark();
-        }
-      }
-      await hooks.advanceMark();
-      if (this.#revoked(context)) return revocation();
+      case RUN_END_REASON.THROTTLED:
+        gathering.error = "quiet";
+        return { outcome: TURN_OUTCOME.QUIET, until: end.until };
+      case RUN_END_REASON.PROVIDER_FAILURE:
+        gathering.error = end.detail;
+        return { outcome: TURN_OUTCOME.FAILED };
+      case RUN_END_REASON.INCOMPLETE:
+      case RUN_END_REASON.LOOP_GUARD:
+        // The model stopped short of any words. A run says it fell short
+        // rather than claiming a reply; an observation turn has nobody to
+        // answer, and keeps what it read so the deltas are not read twice.
+        gathering.error = end.detail;
+        return turnContext.run ? { outcome: TURN_OUTCOME.INCOMPLETE } : undefined;
+      case RUN_END_REASON.CANCELLED:
+      case RUN_END_REASON.DEADLINE:
+        gathering.error =
+          end.reason === RUN_END_REASON.DEADLINE ? "execution deadline passed" : "turn revoked";
+        return { outcome: TURN_OUTCOME.REVOKED };
     }
   }
 
   /**
    * Reads what each woken session's transcript gained since the brain last
    * looked, once per session however many events name it, and moves the
-   * cursor. The cursor moves with the memory: a turn that fails rolls both
+   * cursor. The cursor moves with the context: a turn that fails rolls both
    * back, so the same delta is read again rather than skipped. A read still
    * out when the turn is revoked is left unread: the wait settles, and the
    * turn goes on to its rollback without it.
@@ -1334,7 +1258,7 @@ export class BrainAgent {
     context: TurnContext,
   ): Promise<TranscriptDeltasAttached> {
     return attachTranscriptDeltas(events, {
-      cursors: context.generation.memory,
+      cursors: context.generation.cursors,
       read: (identity, cursor) => this.#options.readTranscriptSince(identity, cursor),
       signal: context.signal,
       maximumChars: this.#deltaPerSessionChars,
@@ -1351,50 +1275,61 @@ export class BrainAgent {
     return rejection(REFUSAL_REASON.NOT_OFFERED);
   }
 
-  async #dispatch(
-    call: BrainFunctionCall,
-    roster: BrainRoster,
+  /**
+   * The tool executor one turn hands its runtime: every call the model emits
+   * lands here, is refused when the turn's authority never offered it, and
+   * is otherwise the brain's own read, the briefing it decided to give, or
+   * an act carried through the journal. The runtime's own standing joins the
+   * turn's: an act prepared inside a run the runtime has ended is refused.
+   */
+  #executor(
     plan: TurnPlan,
-    context: TurnContext,
+    turnContext: TurnContext,
     execution: BrainActExecution,
-    hooks: LoopHooks,
-  ): Promise<DispatchOutcome> {
-    const refused = this.#refusalForAuthority(plan, call.name);
-    if (refused) return { callId: call.callId, output: refused };
-
-    const args = parsedRecord(call.argumentsJson);
-    const observed = (identity: SessionIdentity) =>
-      roster.identities.some((listed) => sameIdentity(listed, identity));
-    const named = identityFromRecord(args);
-
-    if (!isBrainOnlyTool(call.name)) {
-      if (plan.authority !== BRAIN_TURN_AUTHORITY.DEVELOPER || !context.run) {
-        return { callId: call.callId, output: rejection(REFUSAL_REASON.ACT_IN_OBSERVATION) };
-      }
-      return {
-        callId: call.callId,
-        output: await this.#performJournaled(call, context.run, execution),
-      };
-    }
-
-    switch (call.name) {
-      case BRAIN_TOOL.LIST_SESSIONS:
-        return { callId: call.callId, output: { roster: this.#options.roster().text } };
-      case BRAIN_TOOL.READ_TRANSCRIPT: {
-        if (!named || !observed(named)) {
-          return { callId: call.callId, output: rejection(REFUSAL_REASON.UNOBSERVED_SESSION) };
+    gathering: TurnGathering,
+  ): ToolExecutor {
+    const answer = (output: WireRecord): ToolResult => {
+      const status = text(output.status);
+      return { outputJson: JSON.stringify(output), ...(status ? { status } : undefined) };
+    };
+    return {
+      execute: async (call: ToolInvocation, runtimeContext: ToolExecutionContext) => {
+        const refused = this.#refusalForAuthority(plan, call.name);
+        if (refused) return answer(refused);
+        const roster = this.#options.roster();
+        const args = parsedRecord(call.argumentsJson);
+        const named = identityFromRecord(args);
+        const observed = (identity: SessionIdentity) =>
+          roster.identities.some((listed) => sameIdentity(listed, identity));
+        if (!isBrainOnlyTool(call.name)) {
+          if (plan.authority !== BRAIN_TURN_AUTHORITY.DEVELOPER || !turnContext.run) {
+            return answer(rejection(REFUSAL_REASON.ACT_IN_OBSERVATION));
+          }
+          const joined: BrainActExecution = {
+            authority: execution.authority,
+            isRevoked: () => execution.isRevoked() || runtimeContext.isRevoked(),
+            signal: execution.signal,
+          };
+          return answer(await this.#performJournaled(call, turnContext, turnContext.run, joined));
         }
-        return { callId: call.callId, output: await this.#readWhole(named, context) };
-      }
-      case BRAIN_TOOL.ANNOUNCE: {
-        const briefing = text(args.briefing)?.slice(0, maximumBriefingLength);
-        if (!briefing) {
-          return { callId: call.callId, output: rejection(REFUSAL_REASON.EMPTY_BRIEFING) };
+        switch (call.name) {
+          case BRAIN_TOOL.LIST_SESSIONS:
+            return answer({ roster: roster.text });
+          case BRAIN_TOOL.READ_TRANSCRIPT: {
+            if (!named || !observed(named)) {
+              return answer(rejection(REFUSAL_REASON.UNOBSERVED_SESSION));
+            }
+            return answer(await this.#readWhole(named, turnContext));
+          }
+          case BRAIN_TOOL.ANNOUNCE: {
+            const briefing = text(args.briefing)?.slice(0, maximumBriefingLength);
+            if (!briefing) return answer(rejection(REFUSAL_REASON.EMPTY_BRIEFING));
+            gathering.deliveries.push({ briefing, decidedAt: this.#now() });
+            return answer({ status: ACT_RESULT_STATUS.ACCEPTED });
+          }
         }
-        hooks.deliveries.push({ briefing, decidedAt: this.#now() });
-        return { callId: call.callId, output: { status: ACT_RESULT_STATUS.ACCEPTED } };
-      }
-    }
+      },
+    };
   }
 
   /**
@@ -1410,12 +1345,15 @@ export class BrainAgent {
    * outcome is unknown, counted as such, and never a refusal.
    */
   async #performJournaled(
-    call: BrainFunctionCall,
+    call: ToolInvocation,
+    turnContext: TurnContext,
     run: RunControl,
     execution: BrainActExecution,
   ): Promise<WireRecord> {
     const { generation } = run;
-    if (this.#runRevoked(run)) return rejection(REFUSAL_REASON.RUN_REVOKED);
+    if (this.#runRevoked(run) || execution.isRevoked()) {
+      return rejection(REFUSAL_REASON.RUN_REVOKED);
+    }
     const recorded = generation.journal.get(run.runId, call.callId);
     if (recorded) {
       if (recorded.argumentsJson !== call.argumentsJson) {
@@ -1433,7 +1371,7 @@ export class BrainAgent {
       argumentsJson: call.argumentsJson,
       startedAt: this.#now(),
     });
-    if (!(await this.#checkpoint(generation, run))) {
+    if (!(await this.#ledger.checkpoint(turnContext))) {
       generation.journal.forget(run.runId, call.callId);
       run.checkpointFailed = true;
       return rejection(REFUSAL_REASON.NOT_CHECKPOINTED);
@@ -1450,9 +1388,6 @@ export class BrainAgent {
     if (output.status === ACT_RESULT_STATUS.ACCEPTED) run.performedActs += 1;
     if (output.status === UNCONFIRMED_ACT_RESULT.status) run.unknownActs += 1;
     generation.journal.settle(run.runId, call.callId, JSON.stringify(output), this.#now());
-    // The record's accounting travels with the checkpoint that follows the
-    // result, owned by the run, so a copy taken before the next inference
-    // already says what was done.
     return output;
   }
 

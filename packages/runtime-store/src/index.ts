@@ -34,8 +34,8 @@ export {
   type RuntimeStoreResponse,
 } from "./protocol.js";
 export {
-  CHECKPOINT_FORMAT,
-  type CheckpointFormat,
+  LEGACY_ITEM_FORMAT_TAG,
+  RUNTIME_SCHEMA_MIGRATIONS,
   RUNTIME_SCHEMA_STATEMENTS,
   RUNTIME_SCHEMA_VERSION,
 } from "./schema.js";

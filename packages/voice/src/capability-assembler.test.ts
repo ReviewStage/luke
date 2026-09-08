@@ -86,18 +86,18 @@ test("the assembler builds and clears the keyed voice capabilities as one unit",
 
   await assembler.apply();
   assert.ok(assembler.realtimeCredentials);
-  assert.ok(assembler.brainClient);
+  assert.ok(assembler.brainModel);
   assert.match(reports.at(-1) ?? "", /Luke brain: enabled/);
 
   key = undefined;
   await assembler.apply();
   assert.equal(assembler.realtimeCredentials, undefined);
-  assert.equal(assembler.brainClient, undefined);
+  assert.equal(assembler.brainModel, undefined);
   assert.match(reports.at(-2) ?? "", /unavailable/);
   assert.match(reports.at(-1) ?? "", /Luke brain: absent/);
 });
 
-test("a wrapped brain client stands where the built one would, and only when one was built", async () => {
+test("a wrapped brain model stands where the built one would, and only when one was built", async () => {
   const wrapped: string[] = [];
   let key: string | undefined = "test-key";
   const assembler = new VoiceCapabilityAssembler({
@@ -111,20 +111,20 @@ test("a wrapped brain client stands where the built one would, and only when one
     hostedServiceBaseUrl: "https://example.test",
     refreshAccount: async () => undefined,
     report: () => undefined,
-    wrapBrainClient: (client) => {
-      wrapped.push(client.model ?? "unnamed");
-      return client;
+    wrapBrainModel: (model) => {
+      wrapped.push(model.model ?? "unnamed");
+      return model;
     },
   });
 
   await assembler.apply();
-  assert.ok(assembler.brainClient);
+  assert.ok(assembler.brainModel);
   assert.deepEqual(wrapped, ["gpt-5.6-terra"]);
 
   // No client, nothing to decorate: the wrapper must not conjure one.
   key = undefined;
   await assembler.apply();
-  assert.equal(assembler.brainClient, undefined);
+  assert.equal(assembler.brainModel, undefined);
   assert.deepEqual(wrapped, ["gpt-5.6-terra"]);
 });
 
@@ -193,15 +193,15 @@ test("the brain follows the voice source: hosted on an account, direct on a key,
   await hosted.apply();
   assert.ok(hosted.realtimeCredentials);
   // The service names the model, and the stored key is never read for it.
-  assert.ok(hosted.brainClient);
-  assert.equal(hosted.brainClient?.model, undefined);
+  assert.ok(hosted.brainModel);
+  assert.equal(hosted.brainModel?.model, undefined);
 
   const keyed = new VoiceCapabilityAssembler({
     ...seams,
     settings: settingsFor({ source: VOICE_SOURCE.KEY, key: "test-key" }),
   });
   await keyed.apply();
-  assert.ok(keyed.brainClient?.model);
+  assert.ok(keyed.brainModel?.model);
 
   const signedOut = new VoiceCapabilityAssembler({
     ...seams,
@@ -209,7 +209,7 @@ test("the brain follows the voice source: hosted on an account, direct on a key,
     settings: settingsFor({ source: VOICE_SOURCE.ACCOUNT }),
   });
   await signedOut.apply();
-  assert.equal(signedOut.brainClient, undefined);
+  assert.equal(signedOut.brainModel, undefined);
 
   const fixture = new VoiceCapabilityAssembler({
     ...seams,
@@ -218,5 +218,5 @@ test("the brain follows the voice source: hosted on an account, direct on a key,
     fixtureRun: () => true,
   });
   await fixture.apply();
-  assert.equal(fixture.brainClient, undefined);
+  assert.equal(fixture.brainModel, undefined);
 });

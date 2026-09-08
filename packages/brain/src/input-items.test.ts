@@ -7,15 +7,14 @@ import {
   type Session,
   type SessionProvider,
 } from "@sidecar/session";
-import { isRecord, isWireString, unparsedWire, type WireRecord, wireRecord } from "@sidecar/wire";
+import { unparsedWire, type WireRecord, wireRecord } from "@sidecar/wire";
 import {
-  askInputItem,
+  askInputText,
   BRAIN_INPUT_MARKER,
-  holdReleasedInputItem,
-  standingContextItem,
-  wakeInputItem,
+  holdReleasedInputText,
+  standingContextText,
+  wakeInputText,
 } from "./input-items.js";
-import type { ResponsesInputItem } from "./responses-api.js";
 import { BRAIN_WAKE_KIND, type BrainWakeEvent } from "./wake-events.js";
 
 const NOW = 1_800_000_000_000;
@@ -32,15 +31,7 @@ function session(overrides: Partial<ProviderSessionObservation> = {}): Session {
   });
 }
 
-function itemText(item: ResponsesInputItem): string {
-  assert.ok(Array.isArray(item.content));
-  const [first] = item.content;
-  assert.ok(isRecord(first) && isWireString(first.text));
-  return first.text;
-}
-
-function itemBody(item: ResponsesInputItem, marker: string): WireRecord {
-  const text = itemText(item);
+function itemBody(text: string, marker: string): WireRecord {
   const [head, ...rest] = text.split("\n");
   assert.ok(head?.startsWith(`${marker} `), `opens with ${marker}`);
   const parsed = wireRecord(unparsedWire(JSON.parse(rest.join("\n"))));
@@ -57,7 +48,7 @@ test("a wake item carries each event's observed fields and transcript delta as d
     transcriptDelta: { text: "assistant: done", truncated: false, status: "accepted" },
     atMs: NOW,
   };
-  const body = itemBody(wakeInputItem([event], NOW), BRAIN_INPUT_MARKER.OBSERVED_EVENTS);
+  const body = itemBody(wakeInputText([event], NOW), BRAIN_INPUT_MARKER.OBSERVED_EVENTS);
   assert.deepEqual(body, {
     events: [
       {
@@ -82,7 +73,7 @@ test("a wake item carries each event's observed fields and transcript delta as d
 
 test("an ask item carries the question and the events that arrived since the last turn", () => {
   const body = itemBody(
-    askInputItem(
+    askInputText(
       "what's running?",
       [
         {
@@ -102,7 +93,7 @@ test("an ask item carries the question and the events that arrived since the las
 
 test("a hold-released item lists the held briefings", () => {
   const body = itemBody(
-    holdReleasedInputItem(
+    holdReleasedInputText(
       [
         {
           briefing: "Checkout agent wants a decision.",
@@ -124,11 +115,9 @@ test("a hold-released item lists the held briefings", () => {
 });
 
 test("the standing context item is the roster and then whatever else the host rendered", () => {
-  const text = itemText(
-    standingContextItem("Currently observed sessions:\n- one", "Facts.\n", NOW),
-  );
+  const text = standingContextText("Currently observed sessions:\n- one", "Facts.\n", NOW);
   assert.ok(text.startsWith(`${BRAIN_INPUT_MARKER.STANDING_CONTEXT} `));
   assert.ok(text.endsWith("Currently observed sessions:\n- one\n\nFacts."));
-  const bare = itemText(standingContextItem("No sessions.", "   ", NOW));
+  const bare = standingContextText("No sessions.", "   ", NOW);
   assert.ok(bare.endsWith("\nNo sessions."));
 });

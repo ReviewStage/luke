@@ -212,10 +212,52 @@ Trust constraints:
   says travels as the Responses input the agent keeps — behind a marker, as
   data — directly to OpenAI on the developer's own key, or through Luke's own
   service on the hosted tier, where the service performs one model inference
-  per request under the same authority, asks OpenAI not to store it, and
-  keeps and logs none of the request body, the output, or the compaction
-  inside it. The development trace records a turn's about-fields and byte
-  counts under its own gate, never a transcript's text.
+  per request, asks OpenAI not to store it, and keeps and logs none of the
+  request body, the output, or the compaction inside it. The development
+  trace records a turn's about-fields and byte counts under its own gate,
+  never a transcript's text.
+- The judgment is a host over replaceable parts, and the seams are the
+  contracts in `packages/runtime-contracts`. The host (`BrainAgent`) owns the
+  conversation's standing — accepting asks into runs, queueing turns, the
+  journal that records an act before its effect and its result before the
+  next inference, the transcript cursors, the checkpoint — and reaches a
+  model only through an `AgentRuntime` over a `ModelAdapter`, a
+  `ContextEngine`, and the `ToolExecutor` the host itself supplies. Nothing in
+  the host reads inside a provider's item. The runtime this build ships is
+  the tool loop over the OpenAI Responses context engine, on the keyed
+  adapter or the hosted one; it ends a run only through completion,
+  cancellation, its deadline, a throttle, a provider failure, an answer that
+  stopped short, or the loop guard ported from OpenClaw `b7528507` (MIT;
+  `THIRD_PARTY_NOTICES.md`), which is off unless configured, exactly as the
+  pinned source has it. There is no count of tool iterations that ends a
+  run. A checkpoint is stamped with the runtime that wrote it, its version,
+  and the provider item format (`tool-loop@1:openai-responses-input/1`
+  today), carried on the generation so an empty checkpoint keeps it too; a
+  runtime loads only its own stamp, and a valid checkpoint of another stamp
+  is not corruption: it is kept whole, beside the requests and the journal,
+  every turn over it is refused as incompatible, and the way forward is a
+  runtime that reads it or the developer's Clear. Corrupt rows are replaced
+  by the store that observed them. Every hook of an engine may be
+  asynchronous and is
+  awaited only until the run's signal fires, like every wait on the model.
+- The hosted tier speaks two brain contracts. The first, kept for installed
+  clients, carries the input array and a turn authority and lets the service
+  derive everything else. The second (`/api/brain/capabilities`,
+  `/api/brain/v2/respond`, `/api/brain/v2/count-tokens`,
+  `/api/brain/v2/compact`) lets the desktop prepare the prompt — bounded to
+  its own 200,000-character envelope, refused past it, never cut — and name
+  the tools it offers, each a registered name the service holds a schema
+  for; a caller can never upload a schema, and an unregistered name refuses
+  the request. The service still fixes the model, the upstream, its
+  credential, the refusal to store, the output budget's ceiling, and the
+  2 MiB body bound, spends the same review allowance per operation, keeps
+  no conversation, executes no tool, and answers an explicit compaction's
+  whole window for the desktop to adopt as it came. A desktop built on the
+  second contract reads the capabilities first and fails with a
+  compatibility error when the service lacks them; it never falls back to
+  the first. The service therefore deploys before such a desktop ships, and
+  widening either contract is a product decision, not an implementation
+  detail.
 - What the brain keeps is one generation, in one database under one writer,
   and the generation's shape is the retention rule. The database is the
   runtime store: one SQLite file per agent under Luke's own application data

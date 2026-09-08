@@ -63,3 +63,18 @@ test("a rollback that shortens the items replaces from the divergence point, and
   assert.ok(same.kind === SAVE_KIND.AMEND);
   assert.deepEqual(same.delta, {});
 });
+
+test("a stamp that changes travels in the delta, cleared as well as set, and an unchanged one does not", () => {
+  const before = populatedState("gen-1");
+  const stamped = { ...before, checkpointFormat: "tool-loop@2:openai-responses-input/1" };
+  const set = brainStateSave(before, "gen-1", stamped);
+  assert.ok(set.kind === SAVE_KIND.AMEND);
+  assert.deepEqual(set.delta.checkpointFormat, { stamp: stamped.checkpointFormat });
+  const { checkpointFormat: _cleared, ...unstamped } = stamped;
+  const cleared = brainStateSave(stamped, "gen-1", unstamped);
+  assert.ok(cleared.kind === SAVE_KIND.AMEND);
+  assert.deepEqual(cleared.delta.checkpointFormat, { stamp: undefined });
+  const same = brainStateSave(stamped, "gen-1", { ...stamped });
+  assert.ok(same.kind === SAVE_KIND.AMEND);
+  assert.equal(same.delta.checkpointFormat, undefined);
+});
