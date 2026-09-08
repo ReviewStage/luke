@@ -14,9 +14,12 @@ import {
   type BrainStateRepository,
   BrainStateStore,
   responsesModelAnswer,
-  responsesToolLoopRuntime,
 } from "@sidecar/brain";
-import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
+import {
+  type BareResponsesModel,
+  bareModelAdapter,
+  toolLoopRuntimeOver,
+} from "@sidecar/brain/testing";
 import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
@@ -146,7 +149,8 @@ function composed() {
   const followers = new Map<BrainAgent, () => Promise<void>>();
   const build = (client: BareResponsesModel) => {
     const agent = new BrainAgent({
-      runtime: responsesToolLoopRuntime(bareModelAdapter(client)),
+      runtime: toolLoopRuntimeOver(bareModelAdapter(client)),
+      prepareTurn: () => ({ prompt: "instructions", layers: {} }),
       acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
       roster: () => ({ text: "- abc", identities: [] }),
       // The standing context as the main process renders it: the recent
