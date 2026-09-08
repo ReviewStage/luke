@@ -552,6 +552,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     snapshot: ResolvedConfiguration,
     store: BrainStateStore,
     sessionKey: SessionKey,
+    fork: readonly WireRecord[] | undefined,
   ): BrainAgent => {
     const runtimeDescriptor = registries.agentRuntimes.get(snapshot.configuration.agentRuntimeId);
     const engineDescriptor = registries.contextEngines.get(snapshot.configuration.contextEngineId);
@@ -570,8 +571,6 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     // the child restriction at its depth, the fork it inherited if any, and
     // its own deadline when the spawn set one.
     const childRecord = childRecordOf(sessionKey);
-    const fork = pendingForks.get(sessionKey);
-    pendingForks.delete(sessionKey);
     return new BrainAgent({
       observes: observed
         ? { kind: LOOK_SUBJECT.SESSION, identity: observed }
@@ -649,24 +648,27 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
    * whichever kind it is — steered into its run under way or opened as a turn
    * of its own — so no conversation ever polls for a result.
    */
-  const pendingForks = new Map<SessionKey, readonly WireRecord[]>();
   const childRecordOf = (sessionKey: SessionKey): ChildRunRecord | undefined => {
     const childId = childIdOf(sessionKey);
     return childId === undefined ? undefined : children.child(childId);
   };
   const childName = (record: ChildRunRecord) => record.label ?? `Child ${record.childId}`;
-  const openChild = async (record: ChildRunRecord): Promise<BrainAgent | undefined> => {
+  const openChild = async (
+    record: ChildRunRecord,
+    fork?: readonly WireRecord[],
+  ): Promise<BrainAgent | undefined> => {
     const model = liveModel();
     if (!model) return undefined;
     await dependencies.ensureChildConversation(record.childSessionKey, childName(record));
     const opened = openConversation(record.childSessionKey);
-    if (!opened.host.current()) await rebuildOne(record.childSessionKey, opened, model);
+    if (!opened.host.current()) await rebuildOne(record.childSessionKey, opened, model, fork);
     return opened.host.current();
   };
-  const childEnd = (end: Awaited<ReturnType<BrainAgent["runChildTask"]>>): ChildEnd =>
-    end?.done
-      ? { status: CHILD_RUN_STATUS.UNKNOWN, failureDetail: "the child's run did not end" }
-      : { status: CHILD_RUN_STATUS.UNKNOWN, failureDetail: "the child's run was not accepted" };
+  /** A run the generation forgot before it ended: unknown, with the acts its journal established. */
+  const runNotEnded: ChildEnd = {
+    status: CHILD_RUN_STATUS.UNKNOWN,
+    failureDetail: "the child's run did not end",
+  };
   const children = new ChildRunService({
     store: dependencies.childStore(),
     createId: dependencies.createId,
@@ -674,13 +676,11 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     ...(dependencies.childTimers ?? undefined),
     executor: {
       start: async (record, fork) => {
-        if (fork) pendingForks.set(record.childSessionKey, fork);
-        const agent = await openChild(record);
-        pendingForks.delete(record.childSessionKey);
+        const agent = await openChild(record, fork);
         if (!agent) return { started: false, reason: "no model stands to run the child" };
         const run = await agent.runChildTask(record.task, record.childRunId);
         if (!run) return { started: false, reason: "the child's run was refused" };
-        return { started: true, done: run.done.then((end) => end ?? childEnd(run)) };
+        return { started: true, done: run.done.then((end) => end ?? runNotEnded) };
       },
       resume: async (record) => {
         const agent = await openChild(record);
@@ -788,23 +788,14 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     };
     return {
       spawn: async (ask) => {
+        const model = dependencies.model()?.model;
         const outcome = await children.spawn({
+          ...ask,
           agentId: DEFAULT_AGENT_ID,
           requesterSessionKey: sessionKey,
-          requesterRunId: ask.requesterRunId,
           requesterDepth: childRecordOf(sessionKey)?.depth ?? 0,
-          task: ask.task,
-          ...(ask.label !== undefined ? { label: ask.label } : undefined),
-          ...(dependencies.model()?.model ? { model: dependencies.model()?.model } : undefined),
-          ...(ask.context !== undefined ? { context: ask.context } : undefined),
-          ...(ask.cleanup !== undefined ? { cleanup: ask.cleanup } : undefined),
-          ...(ask.timeoutMs !== undefined ? { timeoutMs: ask.timeoutMs } : undefined),
-          ...(ask.expectsCompletion !== undefined
-            ? { expectsCompletion: ask.expectsCompletion }
-            : undefined),
-          policy: ask.policy,
+          ...(model ? { model } : undefined),
           sameAgent: true,
-          fork: ask.fork,
         });
         if (!outcome.accepted) {
           const refused: WireRecord = {
@@ -880,6 +871,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     sessionKey: SessionKey,
     opened: OpenConversation,
     model: ModelAdapter | undefined,
+    fork?: readonly WireRecord[],
   ): Promise<void> =>
     opened.host.replace(() => {
       if (!model) {
@@ -891,6 +883,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         publishConfiguration(dependencies.credential()),
         opened.store,
         sessionKey,
+        fork,
       );
     });
 
