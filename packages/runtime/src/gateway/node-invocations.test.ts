@@ -14,7 +14,7 @@ import {
   nodeInvocationAnswerToWire,
   nodeInvocationFromWire,
 } from "@sidecar/runtime-contracts";
-import { isRecord, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import { WebSocket } from "ws";
 import { GatewayClient } from "./client.js";
 import { createGatewayToken, GATEWAY_LOOPBACK_HOST } from "./discovery.js";
@@ -48,7 +48,7 @@ function hostWithNodes() {
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.NODE_REGISTER]: (params, context) => {
       const connection = context.connection;
-      if (!connection || typeof params.nodeId !== "string") {
+      if (!connection || !isWireString(params.nodeId)) {
         return gatewayError(GATEWAY_ERROR.REFUSED, "no connection");
       }
       const nodeId = params.nodeId;
@@ -56,7 +56,7 @@ function hostWithNodes() {
       nodes.registerRemote({
         nodeId,
         capabilities: Array.isArray(params.capabilities)
-          ? params.capabilities.filter((c): c is string => typeof c === "string")
+          ? params.capabilities.filter(isWireString)
           : [],
         invoke: (capability, invoked) =>
           connection.invoke({

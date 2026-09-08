@@ -61,7 +61,7 @@ import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/wire/voice-view";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { runAppleCalendarHelper } from "./apple-calendar";
 import { registerBrainIpc } from "./brain/ipc";
-import { attachAndSettle, followReattachments, retryAttachWhileFailed } from "./gateway/attachment";
+import { followReattachments, retryAttachWhileFailed, waitForHost } from "./gateway/attachment";
 import { DESKTOP_OPERATOR_CLIENT_ID } from "./gateway/desktop-node";
 import { currentBuildIdentity } from "./gateway/gateway-process";
 import type { HostBootstrap, HostSessionReplay } from "./gateway/host-operator";
@@ -574,19 +574,18 @@ async function onAttached(): Promise<void> {
   await gateway.attached();
   if (appGuide !== EMPTY_APP_GUIDE) void gateway.host.reportGuide(appGuide);
   const boot = await gateway.host.bootstrap();
-  if (boot) {
-    adoptBootstrap(boot);
-    if (attachments > 1) {
-      broadcast(channels.onSettingsChanged, boot.settings);
-      broadcast(channels.onAccountChanged, boot.account);
-      broadcast(channels.onSessionsChanged, { sessions: boot.sessions });
-      broadcast(channels.onWorkspaceProjectsChanged, boot.workspaceProjects);
-      broadcast(channels.onCalendarsChanged, boot.calendars);
-      broadcast(channels.onAnnouncementsHeldChanged, boot.announcementsHeld);
-      broadcast(channels.onCalendarOnboardingChanged, boot.calendarOnboardingOwed);
-      broadcast(channels.onSessionReplayChanged, sessionReplayBootstrap());
-      void hotkeys.reapply(HOTKEY_RANK.TALK);
-    }
+  if (!boot) throw new Error("the host answered no bootstrap");
+  adoptBootstrap(boot);
+  if (attachments > 1) {
+    broadcast(channels.onSettingsChanged, boot.settings);
+    broadcast(channels.onAccountChanged, boot.account);
+    broadcast(channels.onSessionsChanged, { sessions: boot.sessions });
+    broadcast(channels.onWorkspaceProjectsChanged, boot.workspaceProjects);
+    broadcast(channels.onCalendarsChanged, boot.calendars);
+    broadcast(channels.onAnnouncementsHeldChanged, boot.announcementsHeld);
+    broadcast(channels.onCalendarOnboardingChanged, boot.calendarOnboardingOwed);
+    broadcast(channels.onSessionReplayChanged, sessionReplayBootstrap());
+    void hotkeys.reapply(HOTKEY_RANK.TALK);
   }
   if (attachments > 1 && voiceWindow.current()) {
     voiceWindow.close();
@@ -1033,45 +1032,41 @@ export function startDesktopApp(): void {
       // introduction plays only on a host actually reached: a launch that
       // cannot reach its runtime knows nothing of the account and must not
       // greet a signed-in developer as a stranger.
-      let hostReached = false;
       if (gatewayLauncher) {
-        const first = await attachAndSettle({
-          onStateChanged: (listener) => gatewayLauncher.onStateChanged(listener),
+        const onStateChanged = (listener: Parameters<typeof gatewayLauncher.onStateChanged>[0]) =>
+          gatewayLauncher.onStateChanged(listener);
+        // The retries begin the moment an attach fails, and the launch waits
+        // on whichever attachment first reads a bootstrap; its tail below
+        // runs once, over that bootstrap, and a reattachment after it runs
+        // only the attachment work.
+        retryAttachWhileFailed({
+          onStateChanged,
+          attach: () => gatewayLauncher.attach(),
+          report,
+        });
+        const first = await waitForHost({
+          onStateChanged,
           attach: () => gatewayLauncher.attach(),
           onAttached,
           report,
         });
-        hostReached = first.reached;
         report(
           first.result.outcome === "failed"
-            ? `Gateway not attached: ${first.result.failure}`
+            ? `Gateway attached after a failed first attempt (${first.result.failure})`
             : `Gateway ${first.result.outcome} (pid ${first.result.pid})`,
         );
-        followReattachments({
-          onStateChanged: (listener) => gatewayLauncher.onStateChanged(listener),
-          onAttached,
-          report,
-        });
-        retryAttachWhileFailed({
-          onStateChanged: (listener) => gatewayLauncher.onStateChanged(listener),
-          currentState: () => gatewayLauncher.state(),
-          attach: () => gatewayLauncher.attach(),
-          report,
-        });
+        followReattachments({ onStateChanged, onAttached, report });
       } else if (localRuntime) {
         await localRuntime.start();
         await onAttached();
-        hostReached = true;
       }
       const introductionInput = {
         requiresAccount: runMode.requiresAccount,
         signedIn: account.status === ACCOUNT_STATUS.SIGNED_IN,
         completed: introductionCompletedOnDisk(),
       };
-      const giveIntroduction = hostReached && shouldRunIntroduction(introductionInput);
-      if (hostReached && shouldBackfillIntroductionCompletion(introductionInput)) {
-        markIntroductionComplete();
-      }
+      const giveIntroduction = shouldRunIntroduction(introductionInput);
+      if (shouldBackfillIntroductionCompletion(introductionInput)) markIntroductionComplete();
       await panels.refreshGeometry();
       registerIpc();
       dock.applyIcon();

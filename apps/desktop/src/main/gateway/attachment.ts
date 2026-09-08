@@ -34,12 +34,16 @@ export interface FirstAttachment {
  * runs the same work on its own; the launch never waits on it again.
  */
 export async function attachAndSettle(ports: AttachmentPorts): Promise<FirstAttachment> {
-  let pending: Promise<void> | undefined;
+  let pending: Promise<boolean> | undefined;
   const unsubscribe = ports.onStateChanged((state) => {
     if (state !== GATEWAY_ATTACHMENT.ATTACHED) return;
-    const work = ports.onAttached().catch((error: Error) => {
-      ports.report(`the attachment work failed: ${error.message}`);
-    });
+    const work = ports.onAttached().then(
+      () => true,
+      (error: Error) => {
+        ports.report(`the attachment work failed: ${error.message}`);
+        return false;
+      },
+    );
     pending ??= work;
   });
   const result = await ports.attach();
@@ -47,24 +51,51 @@ export async function attachAndSettle(ports: AttachmentPorts): Promise<FirstAtta
     unsubscribe();
     return { reached: false, result };
   }
-  await pending;
+  const reached = (await pending) === true;
   unsubscribe();
-  return { reached: pending !== undefined, result };
+  return { reached, result };
 }
 
 /**
- * The reattachments after the first: each runs the attachment work anew, so
- * a Gateway restarted behind the client is adopted as a new stream and told
- * the node again.
+ * The launch's wait for a host it can read: the first attach and its work,
+ * and when that does not reach the host, the next attachment that does,
+ * however many retries stand between. Settles once, on the first attachment
+ * whose work finished, so a launch runs its tail exactly once and only over
+ * a bootstrap it actually read; nothing is invented meanwhile.
+ */
+export async function waitForHost(ports: AttachmentPorts): Promise<FirstAttachment> {
+  const first = await attachAndSettle(ports);
+  if (first.reached) return first;
+  ports.report("no Gateway was reached at launch; waiting for one");
+  return new Promise((resolve) => {
+    let settling = false;
+    const unsubscribe = ports.onStateChanged((state) => {
+      if (state !== GATEWAY_ATTACHMENT.ATTACHED || settling) return;
+      settling = true;
+      void ports.onAttached().then(
+        () => {
+          unsubscribe();
+          resolve({ reached: true, result: first.result });
+        },
+        (error: Error) => {
+          ports.report(`the attachment work failed: ${error.message}`);
+          settling = false;
+        },
+      );
+    });
+  });
+}
+
+/**
+ * The reattachments after the launch's own: installed once `waitForHost` has
+ * settled, so every ATTACHED it hears is a Gateway found or started again
+ * behind the client, and each runs the attachment work anew: the new stream
+ * adopted, the node told again, the bootstrap read. The supervisor announces
+ * state changes only, never the standing state, so nothing here is skipped.
  */
 export function followReattachments(ports: Omit<AttachmentPorts, "attach">): () => void {
-  let first = true;
   return ports.onStateChanged((state) => {
     if (state !== GATEWAY_ATTACHMENT.ATTACHED) return;
-    if (first) {
-      first = false;
-      return;
-    }
     void ports.onAttached().catch((error: Error) => {
       ports.report(`the reattachment work failed: ${error.message}`);
     });

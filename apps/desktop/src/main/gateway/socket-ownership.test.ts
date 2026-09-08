@@ -69,6 +69,8 @@ function fakeHost(options: { persistCancellations?: boolean } = {}) {
   const live = new Map<string, BrainRequestRecord>();
   const persisted = new Map<string, BrainRequestRecord>();
   const history: ConversationEntry[] = [];
+  // SAFETY: the service reads only these members off an agent; the fixture stands in for the rest.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- A fake agent is stood up whole for the host under test.
   const agent = {
     submitAsk: async (submission: BrainSubmission) => {
       const runId = `run-${++runs}`;
