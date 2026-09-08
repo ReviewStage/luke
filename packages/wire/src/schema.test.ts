@@ -206,7 +206,7 @@ test("a registered value is its own refusal, apart from a malformed one", () => 
   assert.equal(tool.parse("announce"), "announce");
   assert.equal(refusalOf(tool, "shell"), SCHEMA_REFUSAL.NOT_REGISTERED);
   assert.equal(refusalOf(tool, 5), SCHEMA_REFUSAL.MALFORMED);
-  assert.deepEqual(tool.jsonSchema(), { type: "string" });
+  assert.deepEqual(tool.jsonSchema(), { type: "string", minLength: 1 });
 });
 
 test("a refinement names its own refusal and a mapping keeps the node it read", () => {
@@ -303,7 +303,7 @@ test("a record's node is the strict object form, with exactly its required keys"
     type: "object",
     description: "one row",
     properties: {
-      name: { type: "string", maxLength: 8, description: "what it is called" },
+      name: { type: "string", minLength: 1, maxLength: 8, description: "what it is called" },
       effort: { type: "string", enum: ["low", "high"] },
       counts: { type: "array", items: { type: "integer", minimum: 0 }, maxItems: 4 },
       done: { type: "boolean" },
@@ -315,7 +315,10 @@ test("a record's node is the strict object form, with exactly its required keys"
 
 test("a union's node is an anyOf of its members', and a literal's names what it admits", () => {
   assert.deepEqual(s.union([s.text(), s.literal(2)]).jsonSchema(), {
-    anyOf: [{ type: "string" }, { type: "integer", enum: [2] }],
+    anyOf: [
+      { type: "string", minLength: 1 },
+      { type: "integer", enum: [2] },
+    ],
   });
   assert.deepEqual(s.literal("done").jsonSchema(), { type: "string", enum: ["done"] });
   assert.deepEqual(s.literal(null).jsonSchema(), { type: "null" });
@@ -328,8 +331,12 @@ test("a union's node is an anyOf of its members', and a literal's names what it 
 test("describe leaves the schema it was called on alone", () => {
   const plain = s.text();
   const described = plain.describe("a name");
-  assert.deepEqual(plain.jsonSchema(), { type: "string" });
-  assert.deepEqual(described.jsonSchema(), { type: "string", description: "a name" });
+  assert.deepEqual(plain.jsonSchema(), { type: "string", minLength: 1 });
+  assert.deepEqual(described.jsonSchema(), {
+    type: "string",
+    minLength: 1,
+    description: "a name",
+  });
   assert.equal(described.parse(" a "), "a");
 });
 
@@ -337,8 +344,32 @@ test("describing an optional field leaves it optional", () => {
   const node = s.record({ a: s.text().optional().describe("maybe"), b: s.text() }).jsonSchema();
   assert.deepEqual(node, {
     type: "object",
-    properties: { a: { type: "string", description: "maybe" }, b: { type: "string" } },
+    properties: {
+      a: { type: "string", minLength: 1, description: "maybe" },
+      b: { type: "string", minLength: 1 },
+    },
     required: ["b"],
     additionalProperties: false,
+  });
+});
+
+test("every bound a schema enforces is a bound its node carries", () => {
+  assert.deepEqual(s.array(s.boolean(), { minimum: 2, max: 4 }).jsonSchema(), {
+    type: "array",
+    items: { type: "boolean" },
+    minItems: 2,
+    maxItems: 4,
+  });
+  assert.deepEqual(s.array(s.boolean(), { minimum: 2 }).jsonSchema(), {
+    type: "array",
+    items: { type: "boolean" },
+    minItems: 2,
+  });
+  assert.deepEqual(s.wholeNumber({ minimum: 0 }).jsonSchema(), { type: "integer", minimum: 0 });
+  assert.deepEqual(s.text({ allowEmpty: true }).jsonSchema(), { type: "string" });
+  assert.deepEqual(s.wholeText({ max: 9 }).jsonSchema(), {
+    type: "string",
+    minLength: 1,
+    maxLength: 9,
   });
 });

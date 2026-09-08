@@ -45,6 +45,7 @@ export type JsonSchemaNode =
       readonly type: "string";
       readonly description?: string;
       readonly enum?: readonly string[];
+      readonly minLength?: number;
       readonly maxLength?: number;
     }
   | {
@@ -60,6 +61,7 @@ export type JsonSchemaNode =
       readonly type: "array";
       readonly description?: string;
       readonly items: JsonSchemaNode;
+      readonly minItems?: number;
       readonly maxItems?: number;
     }
   | {
@@ -70,6 +72,17 @@ export type JsonSchemaNode =
       readonly additionalProperties: false;
     }
   | { readonly anyOf: readonly JsonSchemaNode[]; readonly description?: string };
+
+/**
+ * A node while its bounds are being written, before it is emitted read-only.
+ * Derived from {@link JsonSchemaNode} rather than restated, so a member added
+ * to the emitted form is a member the builder can write.
+ */
+type Draft<Node> = { -readonly [Key in keyof Node]: Node[Key] };
+
+type StringNodeDraft = Draft<Extract<JsonSchemaNode, { type: "string" }>>;
+type NumberNodeDraft = Draft<Extract<JsonSchemaNode, { type: "number" | "integer" }>>;
+type ArrayNodeDraft = Draft<Extract<JsonSchemaNode, { type: "array" }>>;
 
 export interface Schema<Value> {
   /**
@@ -198,8 +211,18 @@ export interface TextOptions extends DescribedOptions {
   allowEmpty?: boolean;
 }
 
-function stringNode(max: number | undefined): JsonSchemaNode {
-  return max === undefined ? { type: "string" } : { type: "string", maxLength: max };
+/**
+ * A text's node carries every bound its schema enforces. `minLength` is `1`
+ * wherever an empty text is refused: JSON Schema cannot say "not only
+ * whitespace", so the emitted bound is necessary rather than sufficient, but a
+ * bound the parser holds and the node omits is drift in the direction that
+ * misleads a model.
+ */
+function stringNode(bounds: { max?: number; allowEmpty?: boolean }): JsonSchemaNode {
+  const node: StringNodeDraft = { type: "string" };
+  if (bounds.allowEmpty !== true) node.minLength = 1;
+  if (bounds.max !== undefined) node.maxLength = bounds.max;
+  return node;
 }
 
 function textSchema(options: TextOptions = {}): Schema<string> {
@@ -230,7 +253,7 @@ function textSchema(options: TextOptions = {}): Schema<string> {
       }
       return refuse(SCHEMA_REFUSAL.TOO_LARGE);
     },
-    () => describedNode(stringNode(max), description),
+    () => describedNode(stringNode({ max, allowEmpty }), description),
   );
 }
 
@@ -248,7 +271,7 @@ function wholeTextSchema(options: BoundedTextOptions = {}): Schema<string> {
       if (max !== undefined && normalized.length > max) return refuse(SCHEMA_REFUSAL.TOO_LARGE);
       return admit(normalized);
     },
-    () => describedNode(stringNode(max), description),
+    () => describedNode(stringNode({ max }), description),
   );
 }
 
@@ -263,11 +286,10 @@ export interface NumberOptions extends DescribedOptions {
 }
 
 function numberNode(whole: boolean, options: NumberOptions): JsonSchemaNode {
-  const type = whole ? "integer" : "number";
-  if (options.minimum === undefined && options.maximum === undefined) return { type };
-  if (options.maximum === undefined) return { type, minimum: options.minimum };
-  if (options.minimum === undefined) return { type, maximum: options.maximum };
-  return { type, minimum: options.minimum, maximum: options.maximum };
+  const node: NumberNodeDraft = { type: whole ? "integer" : "number" };
+  if (options.minimum !== undefined) node.minimum = options.minimum;
+  if (options.maximum !== undefined) node.maximum = options.maximum;
+  return node;
 }
 
 function boundedNumber(options: NumberOptions, whole: boolean): Schema<number> {
@@ -339,6 +361,17 @@ export interface ArrayOptions extends DescribedOptions {
   skipRefused?: boolean;
 }
 
+function arrayNode(
+  items: JsonSchemaNode,
+  minimum: number | undefined,
+  max: number | undefined,
+): JsonSchemaNode {
+  const node: ArrayNodeDraft = { type: "array", items };
+  if (minimum !== undefined) node.minItems = minimum;
+  if (max !== undefined) node.maxItems = max;
+  return node;
+}
+
 function arraySchema<Value>(item: Schema<Value>, options: ArrayOptions = {}): Schema<Value[]> {
   const { max, minimum, description } = options;
   const skipRefused = options.skipRefused === true;
@@ -359,13 +392,7 @@ function arraySchema<Value>(item: Schema<Value>, options: ArrayOptions = {}): Sc
       }
       return admit(admitted);
     },
-    () =>
-      describedNode(
-        max === undefined
-          ? { type: "array", items: item.jsonSchema() }
-          : { type: "array", items: item.jsonSchema(), maxItems: max },
-        description,
-      ),
+    () => describedNode(arrayNode(item.jsonSchema(), minimum, max), description),
   );
 }
 
@@ -378,7 +405,13 @@ export const RECORD_EXTRA_KEYS = {
 export type RecordExtraKeys = (typeof RECORD_EXTRA_KEYS)[keyof typeof RECORD_EXTRA_KEYS];
 
 export interface RecordOptions extends DescribedOptions {
-  /** Requests refuse a key they did not name; an answer may ignore one a newer service added. */
+  /**
+   * Requests refuse a key they did not name; an answer may ignore one a newer
+   * service added. The emitted node says `additionalProperties: false` either
+   * way, because that is the contract a model is held to and the strict form a
+   * function tool's parameters take: `IGNORE` tolerates on the way in what the
+   * node still declines to invite.
+   */
   extraKeys?: RecordExtraKeys;
 }
 
