@@ -128,8 +128,8 @@ private final class VoiceSessionModel {
                 }
                 return items
             },
-            makeAudioCapturer: { VoiceAudioCapturer() },
-            makeAudioPlayer: { VoiceAudioPlayer() }
+            makeAudioCapturer: { PCMAudioCapturer(policy: .phone) },
+            makeAudioPlayer: { PCMAudioPlayer(policy: .phone) }
         )
         reconnectCallback = { [weak self, weak accountSession] startWithTurn in
             guard let accountSession else { return }
