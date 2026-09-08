@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- App Store Connect refuses an upload that calls a required-reason API
+	     without declaring it here, and scripts/ios-project.test.mjs holds this
+	     list equal to what the app and LukeKit sources actually call, so an API
+	     cannot be added or dropped without the declaration following. Both
+	     apps carry the same list because both link LukeKit. UserDefaults holds
+	     the app's own settings and nothing read from another app (CA92.1);
+	     the system uptime clock measures elapsed time inside the app, a
+	     talk-key hold and a Realtime call's idle timer, never a fingerprint
+	     (35F9.1). Nothing here tracks: the counted events and the recording
+	     are disclosed in PRIVACY.md and travel to no tracking domain. -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>35F9.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
