@@ -99,6 +99,7 @@ export class GatewayServer {
   readonly #events: GatewayEvent[] = [];
   readonly #listeners = new Set<GatewayEventListener>();
   #sequence = 0;
+  #admitting = true;
 
   constructor(options: GatewayServerOptions) {
     this.#options = options;
@@ -106,6 +107,20 @@ export class GatewayServer {
 
   sequence(): number {
     return this.#sequence;
+  }
+
+  /**
+   * Closes the door to new work: every mutating method but the shutdown
+   * itself answers shutting-down from here on, while reads, hellos, and
+   * reconnections still answer, so a client can see the host leaving rather
+   * than lose it. Nothing under way is touched; that is the coordinator's.
+   */
+  closeAdmissions(): void {
+    this.#admitting = false;
+  }
+
+  admitting(): boolean {
+    return this.#admitting;
   }
 
   revision(): GatewayRevision {
@@ -221,6 +236,13 @@ export class GatewayServer {
         GATEWAY_ERROR.UNAUTHORIZED,
         `${client.role} may not call ${request.method}`,
       );
+    }
+    if (
+      !this.#admitting &&
+      isMutatingGatewayMethod(request.method) &&
+      request.method !== GATEWAY_METHOD.SHUTDOWN
+    ) {
+      return gatewayError(GATEWAY_ERROR.SHUTTING_DOWN, "the host is shutting down");
     }
     if (isMutatingGatewayMethod(request.method) && request.idempotencyKey === undefined) {
       return gatewayError(

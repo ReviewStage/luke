@@ -64,6 +64,27 @@ export {
   type DeliveryRecord,
 } from "./gateway/delivery.js";
 export {
+  createGatewayToken,
+  discoveryMatchesBuild,
+  GATEWAY_DISCOVERY_DIRECTORY_MODE,
+  GATEWAY_DISCOVERY_FILE_MODE,
+  GATEWAY_LOOPBACK_HOST,
+  type GatewayDiscoveryRecord,
+  gatewayDiscoveryFromWire,
+  gatewayDiscoveryToWire,
+  publishGatewayDiscovery,
+  readGatewayDiscovery,
+  withdrawGatewayDiscovery,
+} from "./gateway/discovery.js";
+export {
+  acquireGatewayInstanceLock,
+  type GatewayLockAcquisition,
+  type GatewayLockHolder,
+  type GatewayLockOptions,
+  processIsAlive,
+  readGatewayLockHolder,
+} from "./gateway/instance-lock.js";
+export {
   type NodeCapabilityHandler,
   type NodeRegistration,
   NodeRegistry,
@@ -84,6 +105,31 @@ export {
   gatewayError,
   gatewayOk,
 } from "./gateway/server.js";
+export {
+  GATEWAY_SHUTDOWN_DEFAULTS,
+  type GatewayShutdownOptions,
+  type GatewayShutdownReport,
+  type GatewayShutdownSteps,
+  shutdownGateway,
+} from "./gateway/shutdown.js";
+export {
+  GATEWAY_ATTACH_FAILURE,
+  GATEWAY_ATTACH_OUTCOME,
+  GATEWAY_ATTACHMENT,
+  GATEWAY_CONNECT_FAILURE,
+  GATEWAY_SUPERVISOR_DEFAULTS,
+  type GatewayAttachFailure,
+  type GatewayAttachment,
+  type GatewayAttachOutcome,
+  type GatewayAttachResult,
+  type GatewayConnectFailure,
+  type GatewayConnection,
+  type GatewayConnectResult,
+  type GatewaySpawnedProcess,
+  GatewaySupervisor,
+  type GatewaySupervisorPorts,
+  refusalOfConnectFailure,
+} from "./gateway/supervisor.js";
 export {
   type GatewayEventSink,
   type GatewayTransport,

@@ -22,6 +22,7 @@ export const GATEWAY_PROTOCOL_VERSION = 1;
 export const GATEWAY_METHOD = {
   HELLO: "gateway.hello",
   RECONNECT: "gateway.reconnect",
+  SHUTDOWN: "gateway.shutdown",
   CONVERSATION_LIST: "conversation.list",
   CONVERSATION_CREATE: "conversation.create",
   CONVERSATION_HISTORY: "conversation.history",
@@ -71,6 +72,7 @@ export function isGatewayMethod(value: UnparsedWireValue): value is GatewayMetho
  * a read needs none, because reading twice is reading.
  */
 export const MUTATING_GATEWAY_METHODS: ReadonlySet<GatewayMethod> = new Set<GatewayMethod>([
+  GATEWAY_METHOD.SHUTDOWN,
   GATEWAY_METHOD.CONVERSATION_CREATE,
   GATEWAY_METHOD.CONVERSATION_RESET,
   GATEWAY_METHOD.CONVERSATION_ARCHIVE,
@@ -126,6 +128,8 @@ export const GATEWAY_ERROR = {
   NODE_UNAVAILABLE: "node_unavailable",
   UNKNOWN_CAPABILITY: "unknown_capability",
   DISCONNECTED: "disconnected",
+  SHUTTING_DOWN: "shutting_down",
+  INCOMPATIBLE_BUILD: "incompatible_build",
   INTERNAL: "internal",
 } as const;
 
@@ -202,6 +206,39 @@ export type GatewayReconnectKind =
 export type GatewayReconnectAnswer =
   | { kind: typeof GATEWAY_RECONNECT_KIND.REPLAY; events: readonly GatewayEvent[] }
   | { kind: typeof GATEWAY_RECONNECT_KIND.SNAPSHOT; sequence: number; snapshot: WireValue };
+
+/**
+ * What a client and a host settle before any request crosses a process
+ * boundary: the protocol version each speaks and the build each is, carried
+ * on the connection's own handshake and never in an address. The token that
+ * authenticates the client travels the same way, behind the authorization
+ * header, so it is never part of a URL a log or a history could keep.
+ */
+export const GATEWAY_HANDSHAKE_HEADER = {
+  AUTHORIZATION: "authorization",
+  PROTOCOL_VERSION: "x-luke-gateway-protocol",
+  BUILD_VERSION: "x-luke-gateway-build",
+  CLIENT_ID: "x-luke-gateway-client",
+  CLIENT_ROLE: "x-luke-gateway-role",
+} as const;
+
+/** How a handshake ended, when it did not end in a connection. */
+export const GATEWAY_HANDSHAKE_REFUSAL = {
+  UNAUTHORIZED: "unauthorized",
+  UNSUPPORTED_VERSION: "unsupported_version",
+  INCOMPATIBLE_BUILD: "incompatible_build",
+  SHUTTING_DOWN: "shutting_down",
+  MALFORMED: "malformed",
+} as const;
+
+export type GatewayHandshakeRefusal =
+  (typeof GATEWAY_HANDSHAKE_REFUSAL)[keyof typeof GATEWAY_HANDSHAKE_REFUSAL];
+
+/** The build one side of the boundary is, as the handshake states it. */
+export interface GatewayBuildIdentity {
+  protocolVersion: number;
+  buildVersion: string;
+}
 
 /** Who is asking: the one operator client, or a node offering capabilities. */
 export const GATEWAY_CLIENT_ROLE = {
