@@ -20,14 +20,12 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - run: ./scripts/bootstrap.sh
+      - uses: ./.github/actions/setup
       - run: ./scripts/check.sh
 
+  # Packages the app and captures the fixture frames. The portable job above is
+  # the one place the full check runs: repeating it on a macOS runner costs
+  # minutes and reports nothing the Linux run did not.
   macos:
     name: macOS app and evidence
     runs-on: macos-15
@@ -36,16 +34,11 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
+      - uses: ./.github/actions/setup
       - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
         with:
           xcode-version: "16.2"
-      - run: ./scripts/bootstrap.sh
-      - run: ./scripts/verify.sh
+      - run: ./scripts/evidence.sh
       - name: Preserve visual evidence
         id: visual-evidence
         if: ${{ always() && !cancelled() }}

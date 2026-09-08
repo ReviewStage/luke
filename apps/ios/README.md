@@ -57,7 +57,7 @@ project keeps everything the archive needs that does not name a team:
   it.
 - **A privacy manifest in each app.** `Luke/PrivacyInfo.xcprivacy` and
   `LukeWatch/PrivacyInfo.xcprivacy` declare the required-reason APIs the apps
-  and `LukeKit` call, and `scripts/ios-project.test.mjs` holds the
+  and `LukeKit` call, and `ios-project.test.mjs` holds the
   declarations equal to what the sources actually call.
 
 What the archive still needs from outside the tree is the team: the

@@ -146,11 +146,8 @@ sidecar_require_macos() {
 sidecar_require_node() {
     sidecar_require_command node
     sidecar_require_command pnpm
-    if ! node -e '
-        const [major, minor] = process.versions.node.split(".").map(Number);
-        process.exit(major > 22 || (major === 22 && minor >= 18) ? 0 : 1);
-    '; then
-        printf 'error: Node.js 22.18 or newer is required (found %s)\n' "$(node --version)" >&2
+    if ! node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 24 ? 0 : 1)'; then
+        printf 'error: Node.js 24 or newer is required (found %s)\n' "$(node --version)" >&2
         return 1
     fi
 }

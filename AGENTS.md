@@ -14,7 +14,6 @@ Canonical commands:
 | --- | --- |
 | `./scripts/bootstrap.sh` | Install pinned workspace dependencies |
 | `./scripts/check.sh` | Run portable repository, type, test, and build checks |
-| `./scripts/test-macos.sh` | Package and validate the macOS app |
 | `./scripts/verify.sh` | Complete macOS validation plus visual evidence |
 | `pnpm release:macos` | Create a local signed, notarized, and verified electron-builder DMG, zip, and update manifest |
 | `./scripts/run.sh` | Launch the app against live sessions, replacing any running instance (`--fixture smoke` for fixture data, `--keep-running` to keep the running instance, `--no-trace` to skip the development trace) |
