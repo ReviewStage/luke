@@ -112,6 +112,13 @@ export interface TurnPlan {
   events: readonly BrainWakeEvent[];
   /** The words the turn opens with, each ingested as the developer's or the host's, in order. */
   open: (events: readonly BrainWakeEvent[], now: number) => readonly string[];
+  /**
+   * Hears every checkpoint of this turn that landed with its opening words
+   * in it, so a host that owes someone an answer about those words — a
+   * child's completion — answers from what is on disk, not from how the
+   * turn ended.
+   */
+  onPersisted?: () => void;
   run?: RunControl;
   /**
    * The generation the work was queued in. A turn that reaches the front of

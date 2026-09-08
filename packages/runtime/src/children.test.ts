@@ -117,7 +117,10 @@ class FakeExecutor implements ChildExecutor {
   refuseStart: string | undefined;
   refuseResume: string | undefined;
   cancelLands = true;
+  /** Holds every start until released, so a cancel can land while the backend is still starting. */
+  holdStart: Promise<void> | undefined;
   async start(record: ChildRunRecord, fork: readonly unknown[] | undefined) {
+    if (this.holdStart) await this.holdStart;
     if (this.refuseStart) return { started: false as const, reason: this.refuseStart };
     let end!: (end: ChildEnd) => void;
     const done = new Promise<ChildEnd>((resolve) => {
@@ -445,8 +448,9 @@ test("a relaunch adopts unfinished children through the executor's recovery and 
   for (let index = 0; index < 5; index += 1) assert.ok((await service.spawn(request())).accepted);
   await settle();
   assert.equal(executor.started.length, 5);
-  // Relaunch: the same store, a new service; the backend refuses every resume.
-  const relaunch = harness({ store });
+  // Relaunch: the same store, a new service minting ids of its own; the backend refuses every resume.
+  let later = 0;
+  const relaunch = harness({ store, createId: () => `later-${++later}` });
   relaunch.executor.refuseResume = "no model";
   await relaunch.service.start();
   assert.equal(relaunch.executor.resumed.length, CHILD_DEFAULTS.RECOVERY_FAILURE_BUDGET);
@@ -497,4 +501,34 @@ test("a fire-and-forget child records its delivery as not required, and delete c
   );
   assert.equal(deliverer.delivered.length, 0);
   assert.deepEqual(executor.archived, ["id-1"]);
+});
+
+test("a cancel that lands while the child is still starting stops the run that then begins, and the terminal row is never overwritten", async () => {
+  const { service, store, executor } = harness();
+  let release: (() => void) | undefined;
+  executor.holdStart = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const spawned = await service.spawn(request());
+  assert.ok(spawned.accepted);
+  await settle();
+  assert.equal(executor.started.length, 0);
+  // The cancel finds no run yet; the record settles cancelled on its word.
+  const cancelled = await service.cancel(spawned.receipt.childId);
+  assert.deepEqual(cancelled, { ok: true, remaining: [] });
+  assert.equal(store.children.get("id-1")?.status, CHILD_RUN_STATUS.CANCELLED);
+  assert.deepEqual(executor.cancelled, ["id-1"]);
+  // The backend then starts the run anyway: it is stopped, and the row stays cancelled, never running.
+  release?.();
+  await settle();
+  assert.equal(executor.started.length, 1);
+  assert.deepEqual(executor.cancelled, ["id-1", "id-1"]);
+  const record = store.children.get("id-1");
+  assert.equal(record?.status, CHILD_RUN_STATUS.CANCELLED);
+  assert.equal(record?.startedAt, undefined);
+  executor.started[0]?.end({ status: CHILD_RUN_STATUS.COMPLETED, resultText: "too late" });
+  await settle();
+  assert.equal(store.children.get("id-1")?.status, CHILD_RUN_STATUS.CANCELLED);
+  assert.equal(store.completions.size, 1);
+  assert.equal(store.completions.get("completion:id-1")?.status, CHILD_RUN_STATUS.CANCELLED);
 });

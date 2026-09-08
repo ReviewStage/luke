@@ -499,10 +499,10 @@ export class ChildRunService {
     } catch (error) {
       start = { started: false, reason: error instanceof Error ? error.name : "start threw" };
     }
-    const current = this.#children.get(record.childId);
-    if (!current || isTerminalChildRunStatus(current.status)) {
-      // Cancelled while starting: the executor's run, if it began, hears the
-      // cancel through its own record; nothing more is owed here.
+    if (this.#ended(record.childId)) {
+      // Cancelled while starting: the cancel found no run to stop, so the run
+      // that has just begun is stopped here, and the terminal row stands.
+      if (start.started) void this.#stopLateStart(record);
       return;
     }
     if (!start.started) {
@@ -513,7 +513,11 @@ export class ChildRunService {
       return;
     }
     this.#recoveryFailures = 0;
-    await this.#put({ ...current, status: CHILD_RUN_STATUS.RUNNING, startedAt: this.#now() });
+    await this.#putIfActive(record.childId, (current) => ({
+      ...current,
+      status: CHILD_RUN_STATUS.RUNNING,
+      startedAt: this.#now(),
+    }));
     void start.done.then(
       (end) => this.#complete(record.childId, end),
       (error: Error) =>
@@ -522,6 +526,27 @@ export class ChildRunService {
           failureDetail: `the child's run did not report its end: ${error.name}`,
         }),
     );
+  }
+
+  /** Whether the child has ended, or is ending in a write not yet landed. */
+  #ended(childId: string): boolean {
+    const current = this.#children.get(childId);
+    return !current || isTerminalChildRunStatus(current.status) || this.#settling.has(childId);
+  }
+
+  /** A run that began after its child was cancelled is stopped; its end, when it comes, changes nothing. */
+  async #stopLateStart(record: ChildRunRecord): Promise<void> {
+    try {
+      if (!(await this.#options.executor.cancel(record))) {
+        this.#report(
+          `Child ${record.childId} started after its cancellation and could not be stopped`,
+        );
+      }
+    } catch {
+      this.#report(
+        `Child ${record.childId} started after its cancellation and could not be stopped`,
+      );
+    }
   }
 
   /**
@@ -777,6 +802,26 @@ export class ChildRunService {
     const record = this.#children.get(childId);
     if (!record) return undefined;
     return this.#options.executor.history(record, limit);
+  }
+
+  /**
+   * Writes a change to a child still under way, decided inside the child's
+   * own write chain: a cancel or an end that settled the child first leaves
+   * its terminal row standing, never overwritten by a start that landed late.
+   */
+  #putIfActive(
+    childId: string,
+    change: (current: ChildRunRecord) => ChildRunRecord,
+  ): Promise<boolean> {
+    return this.#chain(childId, async () => {
+      const current = this.#children.get(childId);
+      if (!current || this.#ended(childId)) return false;
+      const record = change(current);
+      const written = await this.#options.store.putChild(record);
+      if (written) this.#children.set(childId, record);
+      else this.#report(`Child ${childId}'s record could not be written`);
+      return written;
+    });
   }
 
   #put(record: ChildRunRecord): Promise<boolean> {

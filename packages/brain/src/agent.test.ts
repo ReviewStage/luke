@@ -3984,12 +3984,14 @@ test("a child's completion steers into the requester's run under way, is taken o
     status: "completed",
     resultText: "the child's report",
   };
-  // The run is waiting on its first inference: the completion is steered in.
-  const steered = await h.agent.deliverChildCompletion(completion);
-  assert.deepEqual(steered, { delivered: true });
-  const again = await h.agent.deliverChildCompletion(completion);
-  assert.deepEqual(again, { delivered: true });
+  // The run is waiting on its first inference: the completion is steered in,
+  // and a retry that arrives while it is still being decided joins it.
+  const steered = h.agent.deliverChildCompletion(completion);
+  await settle();
+  const again = h.agent.deliverChildCompletion(completion);
   open();
+  assert.deepEqual(await steered, { delivered: true });
+  assert.deepEqual(await again, { delivered: true });
   await settle();
   assert.equal((await h.agent.waitAsk(runId, 1))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   // Two inferences: the act's, then the one that read the steered completion
@@ -4035,4 +4037,89 @@ test("without delegation wired, the session tools are offered and refused, and n
   assert.equal(outputs.length, 1);
   assert.ok(outputs[0]?.output.includes("cannot delegate"));
   assert.equal(h.performed.length, 0);
+});
+
+test("a steered completion is delivered only once a checkpoint carries it: a run that fails first leaves it owed, and the retry lands", async () => {
+  const inner = new FakeClient();
+  inner.answers.push(failedAnswer("upstream down"));
+  const { client, open } = gatedClient(inner);
+  const h = harness({ client });
+  const runId = acceptedRunId(await submit(h, "keep going"));
+  await settle();
+  const completion = {
+    completionId: "completion:child-1",
+    childId: "child-1",
+    status: "completed",
+    resultText: "the child's report",
+  };
+  const pending = h.agent.deliverChildCompletion(completion);
+  open();
+  const steered = await pending;
+  assert.equal(steered.delivered, false);
+  assert.equal((await h.agent.waitAsk(runId, 1))?.status, BRAIN_REQUEST_STATUS.FAILED);
+  // Nothing of the completion stands in the persisted context.
+  assert.ok(!JSON.stringify(h.storage.stored()?.items ?? []).includes("the child's report"));
+  // The retry opens its own turn and lands.
+  inner.answers.push(answered([message("")]));
+  const retried = await h.agent.deliverChildCompletion(completion);
+  assert.deepEqual(retried, { delivered: true });
+  assert.ok(JSON.stringify(h.storage.stored()?.items ?? []).includes("the child's report"));
+  const completionTurns = inner.inputs.filter((input) =>
+    input.some(
+      (item) =>
+        item.type === RESPONSES_ITEM_TYPE.MESSAGE &&
+        itemText(item).includes(BRAIN_INPUT_MARKER.CHILD_COMPLETION),
+    ),
+  );
+  assert.equal(completionTurns.length, 1);
+});
+
+test("a steered completion carried by an act's checkpoint is delivered even though the run then fails", async () => {
+  const inner = new FakeClient();
+  inner.answers.push(
+    answered([messageAct("act-1")]),
+    answered([messageAct("act-2")]),
+    failedAnswer("upstream down"),
+  );
+  const { client, open } = gatedClient(inner);
+  const h = harness({ client });
+  const runId = acceptedRunId(await submit(h, "keep going"));
+  await settle();
+  const pending = h.agent.deliverChildCompletion({
+    completionId: "completion:child-2",
+    childId: "child-2",
+    status: "completed",
+    resultText: "carried by the act",
+  });
+  open();
+  assert.deepEqual(await pending, { delivered: true });
+  assert.equal((await h.agent.waitAsk(runId, 1))?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.equal(h.performed.length, 2);
+  // The second act's checkpoint carried the steered words; the failure rolled back to it, not before.
+  assert.ok(JSON.stringify(h.storage.stored()?.items ?? []).includes("carried by the act"));
+});
+
+test("a completion turn whose checkpoint the store refuses is not delivered, and one whose model fails leaves the context untouched", async () => {
+  const h = harness();
+  const before = JSON.stringify(h.storage.stored()?.items ?? []);
+  h.client.answers.push(failedAnswer("upstream down"));
+  const failed = await h.agent.deliverChildCompletion({
+    completionId: "completion:child-3",
+    childId: "child-3",
+    status: "completed",
+    resultText: "never kept",
+  });
+  assert.equal(failed.delivered, false);
+  assert.equal(JSON.stringify(h.storage.stored()?.items ?? []), before);
+  h.client.answers.push(answered([message("noted")]));
+  h.storage.failWrites = true;
+  const refused = await h.agent.deliverChildCompletion({
+    completionId: "completion:child-4",
+    childId: "child-4",
+    status: "completed",
+    resultText: "answered but not kept",
+  });
+  assert.equal(refused.delivered, false);
+  assert.ok(!JSON.stringify(h.storage.stored()?.items ?? []).includes("answered but not kept"));
+  h.storage.failWrites = false;
 });

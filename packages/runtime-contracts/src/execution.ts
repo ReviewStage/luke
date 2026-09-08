@@ -431,6 +431,8 @@ export interface ContextEngine {
 export const RUNTIME_EVENT = {
   /** One inference answered; how many tool calls it carried. */
   ANSWERED: "answered",
+  /** Words steered into the run were ingested at a model boundary; how many, and the next checkpoint carries them. */
+  STEERED: "steered",
   TEXT: "text",
   TOOL_CALL: "tool_call",
   TOOL_RESULT: "tool_result",
@@ -481,6 +483,7 @@ export type RuntimeRunEnd =
 
 export type RuntimeEvent =
   | { readonly kind: typeof RUNTIME_EVENT.ANSWERED; readonly toolCalls: number }
+  | { readonly kind: typeof RUNTIME_EVENT.STEERED; readonly inputs: number }
   | { readonly kind: typeof RUNTIME_EVENT.TEXT; readonly text: string }
   | { readonly kind: typeof RUNTIME_EVENT.TOOL_CALL; readonly invocation: ToolInvocation }
   | {
