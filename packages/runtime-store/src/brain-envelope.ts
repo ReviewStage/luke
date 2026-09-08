@@ -6,7 +6,6 @@ import {
   type BrainRequestRecord,
   type BrainTranscriptCursors,
   brainPersistedStateFromWire,
-  legacyStampOf,
 } from "@sidecar/brain";
 import type { SessionKey } from "@sidecar/runtime-contracts";
 import { isWireNumber, isWireString, type WireRecord, type WireValue } from "@sidecar/wire";
@@ -90,9 +89,6 @@ export function loadBrainEnvelope(database: RuntimeDatabase, sessionKey: Session
   const items = database
     .prepare("SELECT item FROM runtime_checkpoints WHERE session_id = ? ORDER BY sequence")
     .all(session.sessionId) as { item: string }[];
-  // The stamp lives on the generation row alone, so an empty checkpoint keeps
-  // it and an item row says nothing about whose shape it is.
-  const stamp = session.checkpointFormat ?? legacyStampOf(items);
   // SAFETY: the three text columns selected are the ones the row type names.
   const cursorRows = database
     .prepare(
@@ -142,7 +138,11 @@ export function loadBrainEnvelope(database: RuntimeDatabase, sessionKey: Session
     generationId: session.sessionId,
     createdAt: session.createdAt,
     expiresAt: session.expiresAt,
-    ...(stamp !== undefined ? { checkpointFormat: stamp } : undefined),
+    // The stamp lives on the generation row alone, so an empty checkpoint
+    // keeps it and an item row says nothing about whose shape it is.
+    ...(session.checkpointFormat !== undefined
+      ? { checkpointFormat: session.checkpointFormat }
+      : undefined),
     items: parsedItems,
     compactionCount: session.compactionCount,
     cursors,
@@ -260,7 +260,7 @@ function replaceGeneration(
       state.expiresAt,
       nullable(state.reset?.clearedAt),
       nullable(state.reset?.generationId),
-      nullable(stampOf(state)),
+      nullable(state.checkpointFormat),
       state.compactionCount,
     );
   if (state.reset) raiseHistoryCutoff(database, sessionKey, state.reset.clearedAt);
@@ -274,10 +274,6 @@ function replaceGeneration(
   state.journal.forEach((entry, ordinal) => {
     upsertJournal(database, state.generationId, ordinal, entry);
   });
-}
-
-function stampOf(state: BrainPersistedState): string | undefined {
-  return state.checkpointFormat ?? legacyStampOf(state.items);
 }
 
 function insertItems(

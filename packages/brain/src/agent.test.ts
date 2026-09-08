@@ -9,6 +9,7 @@ import {
   type ChildCompletionRecord,
   type ChildRunRecord,
   COMPLETION_DELIVERY_STATUS,
+  checkpointFormatTag,
   childSessionKey,
   DEFAULT_AGENT_ID,
   MAIN_SESSION_KEY,
@@ -853,6 +854,7 @@ test("restored memory opens the next turn, and held briefings are re-decided fro
   const storage = new FakeStorage(
     JSON.stringify({
       ...freshBrainState("gen-prior", NOW - 1),
+      checkpointFormat: checkpointFormatTag(CHECKPOINT),
       items: prior,
       cursors: { "claude-code": { abc: "old" } },
     }),

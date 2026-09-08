@@ -75,7 +75,7 @@ test("a mint answer round-trips through the wire reader, with or without a quota
   assert.deepEqual(metered?.quota, quota);
 });
 
-test("a mint answer without wsUrl (old server) still parses for new readers", () => {
+test("a mint answer with no wsUrl at all is discarded", () => {
   const wire = {
     connection: {
       value: "eph-secret",
@@ -84,9 +84,7 @@ test("a mint answer without wsUrl (old server) still parses for new readers", ()
       callsUrl: HOSTED_CALLS_URL,
     },
   };
-  const answer = hostedMintAnswerFromWire(wire, NOW);
-  assert.ok(answer);
-  assert.equal(answer.connection.wsUrl, undefined);
+  assert.equal(hostedMintAnswerFromWire(wire, NOW), undefined);
 });
 
 test("a credential aimed anywhere but the canonical calls endpoint is discarded", () => {

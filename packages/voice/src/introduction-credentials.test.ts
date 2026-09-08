@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { HOSTED_CALLS_URL } from "@sidecar/hosted";
+import { HOSTED_CALLS_URL, HOSTED_WS_BASE_URL } from "@sidecar/hosted";
 import { REALTIME_MINT_OUTCOME, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import { IntroductionRealtimeCredentialMinter } from "./introduction-credentials.js";
 
 const NOW = 1_800_000_000_000;
+const MODEL = "gpt-realtime-2.1";
+const WS_URL = `${HOSTED_WS_BASE_URL}?model=${MODEL}`;
 const SERVICE = "https://tryluke.dev";
 
 function mintedBody(overrides: ParsedJsonObject = {}) {
@@ -13,8 +15,9 @@ function mintedBody(overrides: ParsedJsonObject = {}) {
     connection: {
       value: "eph-secret",
       expiresAt: NOW + 60_000,
-      model: "gpt-realtime-2.1",
+      model: MODEL,
       callsUrl: HOSTED_CALLS_URL,
+      wsUrl: WS_URL,
       ...overrides,
     },
   };
@@ -62,8 +65,9 @@ test("mints through the introduction endpoint with no authorization at all", asy
   assert.deepEqual(connection, {
     value: "eph-secret",
     expiresAt: NOW + 60_000,
-    model: "gpt-realtime-2.1",
+    model: MODEL,
     callsUrl: HOSTED_CALLS_URL,
+    wsUrl: WS_URL,
   });
 
   const [request] = requests;
