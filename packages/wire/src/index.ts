@@ -32,4 +32,3 @@ export {
   wholeText,
   wireRecord,
 } from "./json.js";
-export { parseReleaseVersion } from "./release-version.js";

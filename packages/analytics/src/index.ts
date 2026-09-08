@@ -61,6 +61,7 @@ export {
   productSignInAge,
   type RecordProductEvent,
 } from "./product-events.js";
+export { parseReleaseVersion } from "./release-version.js";
 export {
   ProductEventSender,
   type ProductEventSenderOptions,
