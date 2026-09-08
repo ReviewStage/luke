@@ -64,12 +64,20 @@ function swift(path: string): string {
   return source;
 }
 
+function assertSameValues(
+  swiftValues: readonly string[],
+  typeScriptValues: readonly string[],
+  label: string,
+): void {
+  assert.deepEqual([...swiftValues].sort(), [...typeScriptValues].sort(), label);
+}
+
 function assertSameSet(
   swiftValues: readonly string[],
   typeScriptSet: Readonly<Record<string, string>>,
   label: string,
 ): void {
-  assert.deepEqual([...swiftValues].sort(), Object.values(typeScriptSet).sort(), label);
+  assertSameValues(swiftValues, Object.values(typeScriptSet), label);
 }
 
 function assertSubset(
@@ -142,11 +150,9 @@ test("ActResult is HOSTED_ACT_RESULT", () => {
 });
 
 test("VoiceToolName is the remote tool set the mint declares", () => {
-  assert.deepEqual(
-    [...swiftEnumRawValues(swift(`${KIT}/VoiceAsks.swift`), "VoiceToolName")].sort(),
-    remoteRealtimeToolDefinitions()
-      .map((tool) => tool.name)
-      .sort(),
+  assertSameValues(
+    swiftEnumRawValues(swift(`${KIT}/VoiceAsks.swift`), "VoiceToolName"),
+    remoteRealtimeToolDefinitions().map((tool) => tool.name),
     "a tool the mint declares and the phone cannot name is refused before it is looked at",
   );
 });
@@ -168,11 +174,9 @@ test("RealtimeVoice is REALTIME_VOICE", () => {
 });
 
 test("RealtimeVoiceSpeed names the same paces as REALTIME_VOICE_SPEED", () => {
-  assert.deepEqual(
-    [...swiftEnumRawValues(swift(`${KIT}/VoiceSettings.swift`), "RealtimeVoiceSpeed")].sort(),
-    Object.keys(REALTIME_VOICE_SPEED)
-      .map((key) => key.toLowerCase())
-      .sort(),
+  assertSameValues(
+    swiftEnumRawValues(swift(`${KIT}/VoiceSettings.swift`), "RealtimeVoiceSpeed"),
+    Object.keys(REALTIME_VOICE_SPEED).map((key) => key.toLowerCase()),
     "a pace the phone stores by a name the contract does not have falls to the default",
   );
 });

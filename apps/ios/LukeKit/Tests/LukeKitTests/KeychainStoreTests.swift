@@ -18,8 +18,12 @@ final class KeychainStoreTests: XCTestCase {
         accessibility: .afterFirstUnlock
     )
 
-    override func setUp() {
-        super.setUp()
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        // A keychain can refuse writes outright — an unsigned build on a fresh
+        // simulator, or the file-based keychain a macOS `swift test` gets — and
+        // a store that cannot be written to asserts nothing about this type.
+        try XCTSkipUnless(store.set("probe", for: .accessToken), "this keychain refuses writes")
         store.clearAll()
         other.clearAll()
     }
@@ -42,15 +46,15 @@ final class KeychainStoreTests: XCTestCase {
         )
     }
 
-    func testAValueRoundTrips() throws {
-        try XCTSkipUnless(store.set("access", for: .accessToken), "this keychain refuses writes")
+    func testAValueRoundTrips() {
+        store.set("access", for: .accessToken)
         XCTAssertEqual(store.get(.accessToken), "access")
         store.delete(.accessToken)
         XCTAssertNil(store.get(.accessToken))
     }
 
-    func testTwoServicesNeverShareARow() throws {
-        try XCTSkipUnless(store.set("mine", for: .accessToken), "this keychain refuses writes")
+    func testTwoServicesNeverShareARow() {
+        store.set("mine", for: .accessToken)
         other.set("theirs", for: .accessToken)
         XCTAssertEqual(store.get(.accessToken), "mine")
         XCTAssertEqual(other.get(.accessToken), "theirs")
@@ -58,23 +62,23 @@ final class KeychainStoreTests: XCTestCase {
         XCTAssertEqual(store.get(.accessToken), "mine")
     }
 
-    func testClearingLeavesNoKeyBehind() throws {
-        try XCTSkipUnless(store.save(makeTokens()), "this keychain refuses writes")
+    func testClearingLeavesNoKeyBehind() {
+        store.save(makeTokens())
         store.clearAll()
         for key in KeychainStore.Key.allCases {
             XCTAssertNil(store.get(key), key.rawValue)
         }
     }
 
-    func testSavedTokensLoadBackWhole() throws {
+    func testSavedTokensLoadBackWhole() {
         let tokens = makeTokens()
-        try XCTSkipUnless(store.save(tokens), "this keychain refuses writes")
+        store.save(tokens)
         XCTAssertEqual(store.load(), tokens)
     }
 
-    func testTheOptionalFieldsSurviveTheirAbsence() throws {
+    func testTheOptionalFieldsSurviveTheirAbsence() {
         var tokens = makeTokens()
-        try XCTSkipUnless(store.save(tokens), "this keychain refuses writes")
+        store.save(tokens)
         tokens.name = nil
         tokens.accountID = nil
         tokens.pictureURL = nil
@@ -82,14 +86,14 @@ final class KeychainStoreTests: XCTestCase {
         XCTAssertEqual(store.load(), tokens)
     }
 
-    func testNothingLoadsWithoutAnAccessToken() throws {
-        try XCTSkipUnless(store.set("developer@example.com", for: .email), "refuses writes")
+    func testNothingLoadsWithoutAnAccessToken() {
+        store.set("developer@example.com", for: .email)
         XCTAssertNil(store.load())
     }
 
     func testAnUnreadableExpiryReadsAsSpentRatherThanValid() throws {
         var tokens = makeTokens()
-        try XCTSkipUnless(store.save(tokens), "this keychain refuses writes")
+        store.save(tokens)
         store.set("not a number", for: .expiry)
         let loaded = try XCTUnwrap(store.load())
         XCTAssertEqual(loaded.expiry.timeIntervalSinceNow, 0, accuracy: 5)

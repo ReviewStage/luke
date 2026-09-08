@@ -39,11 +39,11 @@ public enum PCMAudioSessionPolicy: Sendable {
     var categoryOptions: AVAudioSession.CategoryOptions {
         #if os(iOS)
         switch self {
-        case .phone: [.defaultToSpeaker, .allowBluetoothHFP]
-        case .hostOwned: []
+        case .phone: return [.defaultToSpeaker, .allowBluetoothHFP]
+        case .hostOwned: return []
         }
         #else
-        []
+        return []
         #endif
     }
 
