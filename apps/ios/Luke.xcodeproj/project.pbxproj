@@ -11,14 +11,12 @@
 		AABBCC000000000000000021 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000013 /* ContentView.swift */; };
 		AABBCC000000000000000022 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000014 /* Assets.xcassets */; };
 		AABBCC000000000000000102 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000104 /* PrivacyInfo.xcprivacy */; };
-		AABBCC000000000000000023 /* LukeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000015 /* LukeTests.swift */; };
 		AABBCC000000000000000083 /* LukeKit in Frameworks */ = {isa = PBXBuildFile; productRef = AABBCC000000000000000081 /* LukeKit */; };
 		AABBCC000000000000000084 /* LukeKit in Frameworks */ = {isa = PBXBuildFile; productRef = AABBCC000000000000000082 /* LukeKit */; };
 		AABBCC000000000000000085 /* Marks.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000016 /* Marks.swift */; };
 		AABBCC000000000000000086 /* SVGPath.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000017 /* SVGPath.swift */; };
 		AABBCC000000000000000087 /* VaultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000018 /* VaultView.swift */; };
 		AABBCC000000000000000088 /* Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000019 /* Palette.swift */; };
-		AABBCC000000000000000089 /* CanvasInkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001A /* CanvasInkTests.swift */; };
 		AABBCC00000000000000008A /* SessionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001B /* SessionsView.swift */; };
 		AABBCC00000000000000008C /* SessionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001D /* SessionDetailView.swift */; };
 		AABBCC00000000000000008D /* WorkspaceCreatorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001E /* WorkspaceCreatorSheet.swift */; };
@@ -31,7 +29,6 @@
 		AABBCC0000000000000000B6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000B2 /* Assets.xcassets */; };
 		AABBCC000000000000000103 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000105 /* PrivacyInfo.xcprivacy */; };
 		AABBCC0000000000000000B7 /* LukeKit in Frameworks */ = {isa = PBXBuildFile; productRef = AABBCC0000000000000000C0 /* LukeKit */; };
-		AABBCC0000000000000000C7 /* WatchTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000C1 /* WatchTokenStore.swift */; };
 		AABBCC0000000000000000FB /* WatchNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000FA /* WatchNetwork.swift */; };
 		AABBCC0000000000000000FD /* WatchVoiceAudioSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000FC /* WatchVoiceAudioSession.swift */; };
 		AABBCC0000000000000000F7 /* WatchWebSocketChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000FF /* WatchWebSocketChannel.swift */; };
@@ -45,17 +42,16 @@
 		AABBCC0000000000000000F4 /* MarkdownMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000A3 /* MarkdownMessageView.swift */; };
 		AABBCC0000000000000000F0 /* LukeWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000B3 /* LukeWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AABBCC0000000000000000D4 /* VoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D0 /* VoiceView.swift */; };
-		AABBCC0000000000000000D5 /* VoiceAudioCapturer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D1 /* VoiceAudioCapturer.swift */; };
-		AABBCC0000000000000000D6 /* VoiceAudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D2 /* VoiceAudioPlayer.swift */; };
 		AABBCC0000000000000000D9 /* VoiceSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D8 /* VoiceSettingsSheet.swift */; };
 		AABBCC0000000000000000F9 /* SessionsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000F8 /* SessionsStore.swift */; };
 		AABBCC0000000000000000E6 /* WatchVoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000E5 /* WatchVoiceView.swift */; };
 		AABBCC0000000000000000E8 /* WatchVoiceSessionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000E7 /* WatchVoiceSessionModel.swift */; };
-		AABBCC0000000000000000EA /* WatchAudioCapturer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000E9 /* WatchAudioCapturer.swift */; };
-		AABBCC0000000000000000EC /* WatchAudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000EB /* WatchAudioPlayer.swift */; };
-		AABBCC0000000000000000EE /* WatchLukeMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000ED /* WatchLukeMark.swift */; };
 		AABBCC0000000000000000F6 /* WatchNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000F5 /* WatchNavigation.swift */; };
 		AABBCC000000000000000100 /* WatchVoiceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000101 /* WatchVoiceSettingsView.swift */; };
+		AABBCC000000000000000110 /* MarksTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000113 /* MarksTests.swift */; };
+		AABBCC000000000000000111 /* PaletteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000114 /* PaletteTests.swift */; };
+		AABBCC000000000000000112 /* SessionsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000115 /* SessionsStoreTests.swift */; };
+		AABBCC000000000000000118 /* VoiceViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000119 /* VoiceViewTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -65,6 +61,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = AABBCC0000000000000000B9;
 			remoteInfo = LukeWatch;
+		};
+		AABBCC000000000000000116 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AABBCC000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AABBCC000000000000000030;
+			remoteInfo = Luke;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -88,12 +91,10 @@
 		AABBCC000000000000000012 /* LukeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LukeApp.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000013 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000014 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		AABBCC000000000000000015 /* LukeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LukeTests.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000016 /* Marks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Marks.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000017 /* SVGPath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SVGPath.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000018 /* VaultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultView.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000019 /* Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Palette.swift; sourceTree = "<group>"; };
-		AABBCC00000000000000001A /* CanvasInkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasInkTests.swift; sourceTree = "<group>"; };
 		AABBCC00000000000000001B /* SessionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsView.swift; sourceTree = "<group>"; };
 		AABBCC00000000000000001C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AABBCC000000000000000104 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -106,7 +107,6 @@
 		AABBCC0000000000000000B1 /* LukeWatchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LukeWatchView.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000B2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AABBCC0000000000000000B3 /* LukeWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LukeWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		AABBCC0000000000000000C1 /* WatchTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchTokenStore.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000FA /* WatchNetwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchNetwork.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000FC /* WatchVoiceAudioSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchVoiceAudioSession.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000FF /* WatchWebSocketChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchWebSocketChannel.swift; sourceTree = "<group>"; };
@@ -119,17 +119,16 @@
 		AABBCC0000000000000000C4 /* PhoneSessionRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneSessionRelay.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000C5 /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = System/Library/Frameworks/WatchConnectivity.framework; sourceTree = SDKROOT; };
 		AABBCC0000000000000000D0 /* VoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceView.swift; sourceTree = "<group>"; };
-		AABBCC0000000000000000D1 /* VoiceAudioCapturer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceAudioCapturer.swift; sourceTree = "<group>"; };
-		AABBCC0000000000000000D2 /* VoiceAudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceAudioPlayer.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000D8 /* VoiceSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSettingsSheet.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000F8 /* SessionsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsStore.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000E5 /* WatchVoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchVoiceView.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000E7 /* WatchVoiceSessionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchVoiceSessionModel.swift; sourceTree = "<group>"; };
-		AABBCC0000000000000000E9 /* WatchAudioCapturer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchAudioCapturer.swift; sourceTree = "<group>"; };
-		AABBCC0000000000000000EB /* WatchAudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchAudioPlayer.swift; sourceTree = "<group>"; };
-		AABBCC0000000000000000ED /* WatchLukeMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchLukeMark.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000F5 /* WatchNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchNavigation.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000101 /* WatchVoiceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchVoiceSettingsView.swift; sourceTree = "<group>"; };
+		AABBCC000000000000000113 /* MarksTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarksTests.swift; sourceTree = "<group>"; };
+		AABBCC000000000000000114 /* PaletteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteTests.swift; sourceTree = "<group>"; };
+		AABBCC000000000000000115 /* SessionsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsStoreTests.swift; sourceTree = "<group>"; };
+		AABBCC000000000000000119 /* VoiceViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceViewTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -202,8 +201,6 @@
 				AABBCC0000000000000000A3 /* MarkdownMessageView.swift */,
 				AABBCC0000000000000000C4 /* PhoneSessionRelay.swift */,
 				AABBCC0000000000000000D0 /* VoiceView.swift */,
-				AABBCC0000000000000000D1 /* VoiceAudioCapturer.swift */,
-				AABBCC0000000000000000D2 /* VoiceAudioPlayer.swift */,
 				AABBCC0000000000000000D8 /* VoiceSettingsSheet.swift */,
 				AABBCC000000000000000014 /* Assets.xcassets */,
 				AABBCC00000000000000001C /* Info.plist */,
@@ -215,8 +212,10 @@
 		AABBCC000000000000000005 /* LukeTests */ = {
 			isa = PBXGroup;
 			children = (
-				AABBCC00000000000000001A /* CanvasInkTests.swift */,
-				AABBCC000000000000000015 /* LukeTests.swift */,
+				AABBCC000000000000000113 /* MarksTests.swift */,
+				AABBCC000000000000000114 /* PaletteTests.swift */,
+				AABBCC000000000000000115 /* SessionsStoreTests.swift */,
+				AABBCC000000000000000119 /* VoiceViewTests.swift */,
 			);
 			path = LukeTests;
 			sourceTree = "<group>";
@@ -226,7 +225,6 @@
 			children = (
 				AABBCC0000000000000000B0 /* LukeWatchApp.swift */,
 				AABBCC0000000000000000B1 /* LukeWatchView.swift */,
-				AABBCC0000000000000000C1 /* WatchTokenStore.swift */,
 				AABBCC0000000000000000FA /* WatchNetwork.swift */,
 				AABBCC0000000000000000FC /* WatchVoiceAudioSession.swift */,
 				AABBCC0000000000000000FF /* WatchWebSocketChannel.swift */,
@@ -239,9 +237,6 @@
 				AABBCC0000000000000000E5 /* WatchVoiceView.swift */,
 				AABBCC000000000000000101 /* WatchVoiceSettingsView.swift */,
 				AABBCC0000000000000000E7 /* WatchVoiceSessionModel.swift */,
-				AABBCC0000000000000000E9 /* WatchAudioCapturer.swift */,
-				AABBCC0000000000000000EB /* WatchAudioPlayer.swift */,
-				AABBCC0000000000000000ED /* WatchLukeMark.swift */,
 				AABBCC0000000000000000F5 /* WatchNavigation.swift */,
 				AABBCC0000000000000000B2 /* Assets.xcassets */,
 			);
@@ -293,6 +288,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				AABBCC000000000000000117 /* PBXTargetDependency */,
 			);
 			name = LukeTests;
 			packageProductDependencies = (
@@ -416,8 +412,6 @@
 				AABBCC0000000000000000A4 /* MarkdownMessageView.swift in Sources */,
 				AABBCC0000000000000000CA /* PhoneSessionRelay.swift in Sources */,
 				AABBCC0000000000000000D4 /* VoiceView.swift in Sources */,
-				AABBCC0000000000000000D5 /* VoiceAudioCapturer.swift in Sources */,
-				AABBCC0000000000000000D6 /* VoiceAudioPlayer.swift in Sources */,
 				AABBCC0000000000000000D9 /* VoiceSettingsSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -426,8 +420,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AABBCC000000000000000089 /* CanvasInkTests.swift in Sources */,
-				AABBCC000000000000000023 /* LukeTests.swift in Sources */,
+				AABBCC000000000000000110 /* MarksTests.swift in Sources */,
+				AABBCC000000000000000111 /* PaletteTests.swift in Sources */,
+				AABBCC000000000000000112 /* SessionsStoreTests.swift in Sources */,
+				AABBCC000000000000000118 /* VoiceViewTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -437,7 +433,6 @@
 			files = (
 				AABBCC0000000000000000B4 /* LukeWatchApp.swift in Sources */,
 				AABBCC0000000000000000B5 /* LukeWatchView.swift in Sources */,
-				AABBCC0000000000000000C7 /* WatchTokenStore.swift in Sources */,
 				AABBCC0000000000000000FB /* WatchNetwork.swift in Sources */,
 				AABBCC0000000000000000FD /* WatchVoiceAudioSession.swift in Sources */,
 				AABBCC0000000000000000F7 /* WatchWebSocketChannel.swift in Sources */,
@@ -448,9 +443,6 @@
 				AABBCC0000000000000000E6 /* WatchVoiceView.swift in Sources */,
 				AABBCC000000000000000100 /* WatchVoiceSettingsView.swift in Sources */,
 				AABBCC0000000000000000E8 /* WatchVoiceSessionModel.swift in Sources */,
-				AABBCC0000000000000000EA /* WatchAudioCapturer.swift in Sources */,
-				AABBCC0000000000000000EC /* WatchAudioPlayer.swift in Sources */,
-				AABBCC0000000000000000EE /* WatchLukeMark.swift in Sources */,
 				AABBCC0000000000000000F6 /* WatchNavigation.swift in Sources */,
 				AABBCC0000000000000000F4 /* MarkdownMessageView.swift in Sources */,
 			);
@@ -463,6 +455,11 @@
 			isa = PBXTargetDependency;
 			target = AABBCC0000000000000000B9 /* LukeWatch */;
 			targetProxy = AABBCC0000000000000000F1 /* PBXContainerItemProxy */;
+		};
+		AABBCC000000000000000117 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AABBCC000000000000000030 /* Luke */;
+			targetProxy = AABBCC000000000000000116 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -657,6 +654,7 @@
 		AABBCC000000000000000074 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -665,12 +663,14 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Luke.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Luke";
 			};
 			name = Debug;
 		};
 		AABBCC000000000000000075 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -679,6 +679,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Luke.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Luke";
 			};
 			name = Release;
 		};

@@ -918,6 +918,37 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
+  tools/ios-parity:
+    dependencies:
+      '@sidecar/acts':
+        specifier: workspace:*
+        version: link:../../packages/acts
+      '@sidecar/analytics':
+        specifier: workspace:*
+        version: link:../../packages/analytics
+      '@sidecar/guide':
+        specifier: workspace:*
+        version: link:../../packages/guide
+      '@sidecar/hosted':
+        specifier: workspace:*
+        version: link:../../packages/hosted
+      '@sidecar/realtime':
+        specifier: workspace:*
+        version: link:../../packages/realtime
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../../packages/session
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
 packages:
 
   7zip-bin@5.2.0:

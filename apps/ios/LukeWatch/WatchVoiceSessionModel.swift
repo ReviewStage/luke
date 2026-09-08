@@ -177,8 +177,8 @@ final class WatchVoiceSessionModel {
             makeWebSocket: { url, ephemeralKey in
                 WatchWebSocketChannel(url: url, ephemeralKey: ephemeralKey)
             },
-            makeAudioCapturer: { WatchAudioCapturer() },
-            makeAudioPlayer: { WatchAudioPlayer() }
+            makeAudioCapturer: { PCMAudioCapturer(policy: .hostOwned) },
+            makeAudioPlayer: { PCMAudioPlayer(policy: .hostOwned) }
         )
         let s = RealtimeSession(options: opts)
         session = s

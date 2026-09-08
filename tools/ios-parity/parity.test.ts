@@ -1,0 +1,316 @@
+/**
+ * The iOS and watchOS apps are Swift clients of contracts that live in
+ * `packages/`, and every vocabulary they take part in is transcribed by hand.
+ * This suite is the only thing that checks the transcription: each case lifts a
+ * Swift declaration's values out of the source and diffs them against the
+ * TypeScript set the declaration's own comment names, so a value added in a
+ * package and forgotten in Swift fails `./scripts/check.sh` rather than
+ * reaching a device as a refusal the phone cannot name.
+ *
+ * Some sets are deliberately narrower in Swift — the phone counts a subset of
+ * the desktop's events, and offers a subset of its settings — so those rows
+ * assert a subset. Everything the phone claims to mirror whole is compared as a
+ * set, in both directions.
+ */
+
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { test } from "node:test";
+
+import { REALTIME_TOOL, remoteRealtimeToolDefinitions } from "@sidecar/acts";
+import {
+  PRODUCT_ACCOUNT_ACT,
+  PRODUCT_EVENT,
+  PRODUCT_EVENT_BATCH_LIMIT,
+  PRODUCT_EVENT_CLIENT,
+  PRODUCT_EVENT_CLIENT_HEADER,
+  PRODUCT_SESSION_ACT,
+  PRODUCT_SETTING_VALUE,
+} from "@sidecar/analytics";
+import { APP_SETTING_ID } from "@sidecar/guide";
+import {
+  HOSTED_ACT_RESULT,
+  HOSTED_API_ERROR,
+  VAULT_KEY_MAX_LENGTH,
+  VAULT_PROVIDER_ID,
+} from "@sidecar/hosted";
+import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
+import {
+  CONVERSATION_MESSAGE_AUTHOR,
+  PROVIDER_ID,
+  SESSION_CONTROL_KIND,
+  WORKSPACE_TASK_SUPPORT,
+} from "@sidecar/session";
+
+import {
+  swiftEnumRawValues,
+  swiftStaticNumber,
+  swiftStaticString,
+  swiftSwitchLiterals,
+  swiftSwitchNumbers,
+} from "./swift-source.js";
+
+const IOS_ROOT = join(import.meta.dirname, "..", "..", "apps", "ios");
+const KIT = "LukeKit/Sources/LukeKit";
+
+const sources = new Map<string, string>();
+
+function swift(path: string): string {
+  const cached = sources.get(path);
+  if (cached !== undefined) return cached;
+  const source = readFileSync(join(IOS_ROOT, path), "utf8");
+  sources.set(path, source);
+  return source;
+}
+
+function assertSameValues(
+  swiftValues: readonly string[],
+  typeScriptValues: readonly string[],
+  label: string,
+): void {
+  assert.deepEqual([...swiftValues].sort(), [...typeScriptValues].sort(), label);
+}
+
+function assertSameSet(
+  swiftValues: readonly string[],
+  typeScriptSet: Readonly<Record<string, string>>,
+  label: string,
+): void {
+  assertSameValues(swiftValues, Object.values(typeScriptSet), label);
+}
+
+function assertSubset(
+  swiftValues: readonly string[],
+  typeScriptValues: readonly string[],
+  label: string,
+): void {
+  const known = new Set(typeScriptValues);
+  assert.deepEqual(
+    swiftValues.filter((value) => !known.has(value)),
+    [],
+    label,
+  );
+}
+
+test("RosterSessionControlKind is SESSION_CONTROL_KIND", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/RosterSession.swift`), "RosterSessionControlKind"),
+    SESSION_CONTROL_KIND,
+    "a control kind the phone cannot name is drawn as a plain action",
+  );
+});
+
+test("ConversationAuthor is CONVERSATION_MESSAGE_AUTHOR", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/ConversationClient.swift`), "ConversationAuthor"),
+    CONVERSATION_MESSAGE_AUTHOR,
+    "an author the phone cannot name drops the message off the chat screen",
+  );
+});
+
+test("ProjectTaskSupport is WORKSPACE_TASK_SUPPORT", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/ProjectsClient.swift`), "ProjectTaskSupport"),
+    WORKSPACE_TASK_SUPPORT,
+    "a task support the phone cannot name offers the wrong creation form",
+  );
+});
+
+test("ProductProviderID is PROVIDER_ID", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/ProductEvents.swift`), "ProductProviderID"),
+    PROVIDER_ID,
+    "a provider the phone cannot name is left uncounted",
+  );
+});
+
+test("VaultProviderID is VAULT_PROVIDER_ID", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/VaultClient.swift`), "VaultProviderID"),
+    VAULT_PROVIDER_ID,
+    "a vault provider the phone cannot name cannot be offered a key field",
+  );
+});
+
+test("HostedAPIError is HOSTED_API_ERROR", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/VaultClient.swift`), "HostedAPIError"),
+    HOSTED_API_ERROR,
+    "a refusal the phone cannot name is shown as a bare status instead of a reason",
+  );
+});
+
+test("ActResult is HOSTED_ACT_RESULT", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/ActClient.swift`), "ActResult"),
+    HOSTED_ACT_RESULT,
+    "an act outcome the phone cannot name reads as a malformed answer",
+  );
+});
+
+test("VoiceToolName is the remote tool set the mint declares", () => {
+  assertSameValues(
+    swiftEnumRawValues(swift(`${KIT}/VoiceAsks.swift`), "VoiceToolName"),
+    remoteRealtimeToolDefinitions().map((tool) => tool.name),
+    "a tool the mint declares and the phone cannot name is refused before it is looked at",
+  );
+});
+
+test("every VoiceToolName is a REALTIME_TOOL", () => {
+  assertSubset(
+    swiftEnumRawValues(swift(`${KIT}/VoiceAsks.swift`), "VoiceToolName"),
+    Object.values(REALTIME_TOOL),
+    "a tool renamed in the acts table leaves the phone naming a tool that does not exist",
+  );
+});
+
+test("RealtimeVoice is REALTIME_VOICE", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/VoiceSettings.swift`), "RealtimeVoice"),
+    REALTIME_VOICE,
+    "a voice outside the set is refused at mint time",
+  );
+});
+
+test("RealtimeVoiceSpeed names the same paces as REALTIME_VOICE_SPEED", () => {
+  assertSameValues(
+    swiftEnumRawValues(swift(`${KIT}/VoiceSettings.swift`), "RealtimeVoiceSpeed"),
+    Object.keys(REALTIME_VOICE_SPEED).map((key) => key.toLowerCase()),
+    "a pace the phone stores by a name the contract does not have falls to the default",
+  );
+});
+
+test("RealtimeVoiceSpeed multiplies by what REALTIME_VOICE_SPEED holds", () => {
+  const multipliers = swiftSwitchNumbers(
+    swift(`${KIT}/VoiceSettings.swift`),
+    "RealtimeVoiceSpeed",
+    "multiplier",
+    "Double",
+  );
+  const expected = new Map(
+    Object.entries(REALTIME_VOICE_SPEED).map(([key, speed]) => [key.toLowerCase(), speed]),
+  );
+  assert.deepEqual(
+    [...multipliers].sort(),
+    [...expected].sort(),
+    "a pace whose multiplier drifted speaks at a rate the contract never offered",
+  );
+});
+
+test("every ProductEvent name is a PRODUCT_EVENT", () => {
+  assertSubset(
+    swiftSwitchLiterals(swift(`${KIT}/ProductEvents.swift`), "ProductEvent", "name"),
+    Object.values(PRODUCT_EVENT),
+    "an event name outside the allowlist is refused by the service as a whole batch",
+  );
+});
+
+test("every ProductEventClient is a PRODUCT_EVENT_CLIENT", () => {
+  assertSubset(
+    swiftEnumRawValues(swift(`${KIT}/ProductEvents.swift`), "ProductEventClient"),
+    Object.values(PRODUCT_EVENT_CLIENT),
+    "a client header value outside the set reads as the desktop's",
+  );
+});
+
+test("ProductAccountAct is PRODUCT_ACCOUNT_ACT", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/ProductEvents.swift`), "ProductAccountAct"),
+    PRODUCT_ACCOUNT_ACT,
+    "an account act outside the allowlist is refused with its batch",
+  );
+});
+
+test("ProductSessionAct is PRODUCT_SESSION_ACT", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/ProductEvents.swift`), "ProductSessionAct"),
+    PRODUCT_SESSION_ACT,
+    "a session act outside the allowlist is refused with its batch",
+  );
+});
+
+test("every ProductSettingID is an APP_SETTING_ID", () => {
+  assertSubset(
+    swiftEnumRawValues(swift(`${KIT}/ProductEvents.swift`), "ProductSettingID"),
+    Object.values(APP_SETTING_ID),
+    "a setting id outside the shared vocabulary is refused with its batch",
+  );
+});
+
+test("ProductSettingValue is PRODUCT_SETTING_VALUE", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/ProductEvents.swift`), "ProductSettingValue"),
+    PRODUCT_SETTING_VALUE,
+    "a setting-change shape outside the allowlist is refused with its batch",
+  );
+});
+
+test("the client header is PRODUCT_EVENT_CLIENT_HEADER", () => {
+  assert.equal(
+    swiftStaticString(swift(`${KIT}/ProductEventSender.swift`), "clientHeader"),
+    PRODUCT_EVENT_CLIENT_HEADER,
+    "a header the service does not read makes every phone batch the desktop's",
+  );
+});
+
+test("the batch limit is PRODUCT_EVENT_BATCH_LIMIT", () => {
+  assert.equal(
+    swiftStaticNumber(swift(`${KIT}/ProductEventSender.swift`), "batchLimit"),
+    PRODUCT_EVENT_BATCH_LIMIT,
+    "a batch larger than the wire's bound is refused whole",
+  );
+});
+
+test("the vault key bound is VAULT_KEY_MAX_LENGTH", () => {
+  assert.equal(
+    swiftStaticNumber(swift(`${KIT}/VaultClient.swift`), "keyMaxLength"),
+    VAULT_KEY_MAX_LENGTH,
+    "a bound looser than the server's lets an unusable key travel",
+  );
+});
+
+test("a case with no raw value contributes its own name", () => {
+  const source = "public enum Kind: String, Sendable {\n    case codex\n    case omp\n}\n";
+  assert.deepEqual(swiftEnumRawValues(source, "Kind"), ["codex", "omp"]);
+});
+
+test("an explicit raw value wins over the case name", () => {
+  const source = 'enum Kind: String {\n    case claudeCode = "claude-code"\n}\n';
+  assert.deepEqual(swiftEnumRawValues(source, "Kind"), ["claude-code"]);
+});
+
+test("several cases on one line are several values", () => {
+  const source = 'enum Method: String, Sendable { case get = "GET", post = "POST" }\n';
+  assert.deepEqual(swiftEnumRawValues(source, "Method"), ["GET", "POST"]);
+});
+
+test("a computed property inside the body is not part of the case list", () => {
+  const source = [
+    "public enum Speed: String, CaseIterable, Sendable, Identifiable {",
+    "    case slow",
+    "    case fast",
+    "",
+    "    /// A brace in a comment { does not close the body.",
+    "    public var multiplier: Double {",
+    "        switch self {",
+    "        case .slow: 0.75",
+    "        case .fast: 1.5",
+    "        }",
+    "    }",
+    "}",
+  ].join("\n");
+  assert.deepEqual(swiftEnumRawValues(source, "Speed"), ["slow", "fast"]);
+  assert.deepEqual(
+    [...swiftSwitchNumbers(source, "Speed", "multiplier", "Double")],
+    [
+      ["slow", 0.75],
+      ["fast", 1.5],
+    ],
+  );
+});
+
+test("a declaration that is not there is a failure, never an empty set", () => {
+  assert.throws(() => swiftEnumRawValues("enum Other: String { case a }", "Kind"), /no .*Kind/u);
+  assert.throws(() => swiftSwitchLiterals("", "Kind", "name"), /no type Kind/u);
+});

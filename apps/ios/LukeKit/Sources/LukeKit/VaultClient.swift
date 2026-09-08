@@ -89,6 +89,12 @@ public enum HostedAPIError: String, Sendable {
     case quotaExhausted = "quota-exhausted"
     case unavailable = "unavailable"
     case upstreamError = "upstream-error"
+    /// Distinct from a spent allowance: the upstream itself is rate limiting,
+    /// so the wait is the bounded one it named rather than the rest of the day.
+    case upstreamThrottled = "upstream-throttled"
+    case requestTooLarge = "request-too-large"
+    case promptTooLarge = "prompt-too-large"
+    case unknownTool = "unknown-tool"
     case methodNotAllowed = "method-not-allowed"
 }
 

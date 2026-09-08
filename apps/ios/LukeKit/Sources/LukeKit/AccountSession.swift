@@ -76,7 +76,7 @@ public final class AccountSession {
     /// Returns the stored access token when signed in, or nil when signed out.
     public func currentAccessToken() -> String? {
         guard case .signedIn = state else { return nil }
-        return KeychainStore.get(.accessToken)
+        return KeychainStore.phone.get(.accessToken)
     }
 
     /// Returns a credential payload suitable for WatchConnectivity transfer.
@@ -104,7 +104,7 @@ public final class AccountSession {
         accessToken = nil
         refreshToken = nil
         accessTokenExpiry = nil
-        KeychainStore.clearAll()
+        KeychainStore.phone.clearAll()
         state = .signedOut
         if let token = tokenToRevoke {
             try? await client.revoke(refreshToken: token)
@@ -177,21 +177,21 @@ public final class AccountSession {
     }
 
     private func restoreFromKeychain() {
-        guard let storedAccessToken = KeychainStore.get(.accessToken),
-              let email = KeychainStore.get(.email)
+        guard let storedAccessToken = KeychainStore.phone.get(.accessToken),
+              let email = KeychainStore.phone.get(.email)
         else { return }
         accessToken = storedAccessToken
-        refreshToken = KeychainStore.get(.refreshToken)
-        if let expiryStr = KeychainStore.get(.expiry), let interval = TimeInterval(expiryStr) {
+        refreshToken = KeychainStore.phone.get(.refreshToken)
+        if let expiryStr = KeychainStore.phone.get(.expiry), let interval = TimeInterval(expiryStr) {
             accessTokenExpiry = Date(timeIntervalSinceReferenceDate: interval)
         }
         let identity = AccountIdentity(
-            id: KeychainStore.get(.accountID),
+            id: KeychainStore.phone.get(.accountID),
             email: email,
-            name: KeychainStore.get(.name),
+            name: KeychainStore.phone.get(.name),
             // Re-validated on the way out of the keychain so a stored value
             // is never trusted past the same host policy userinfo applies.
-            pictureURL: AccountIdentity.pictureURL(fromWire: KeychainStore.get(.pictureURL))
+            pictureURL: AccountIdentity.pictureURL(fromWire: KeychainStore.phone.get(.pictureURL))
         )
         state = .signedIn(identity)
         let gen = generation
@@ -242,9 +242,9 @@ public final class AccountSession {
         refreshToken = tokens.refreshToken
         accessTokenExpiry = tokens.expiry
         let persisted = [
-            KeychainStore.set(tokens.accessToken, for: .accessToken),
-            KeychainStore.set(tokens.refreshToken, for: .refreshToken),
-            KeychainStore.set(String(tokens.expiry.timeIntervalSinceReferenceDate), for: .expiry),
+            KeychainStore.phone.set(tokens.accessToken, for: .accessToken),
+            KeychainStore.phone.set(tokens.refreshToken, for: .refreshToken),
+            KeychainStore.phone.set(String(tokens.expiry.timeIntervalSinceReferenceDate), for: .expiry),
         ]
         credentialsPersisted = persisted.allSatisfy { $0 }
         onTokensRefreshed?()
@@ -253,16 +253,16 @@ public final class AccountSession {
     private func storeIdentity(_ identity: AccountIdentity) {
         // The email gates restore like the tokens do; the id, name, and
         // picture are cosmetic, so their persistence does not decide the flag.
-        let emailPersisted = KeychainStore.set(identity.email, for: .email)
+        let emailPersisted = KeychainStore.phone.set(identity.email, for: .email)
         credentialsPersisted = credentialsPersisted && emailPersisted
-        if let id = identity.id { KeychainStore.set(id, for: .accountID) }
-        if let name = identity.name { KeychainStore.set(name, for: .name) }
+        if let id = identity.id { KeychainStore.phone.set(id, for: .accountID) }
+        if let name = identity.name { KeychainStore.phone.set(name, for: .name) }
         // Deleted when absent so a photo removed at the provider does not
         // outlive the provider's own answer.
         if let picture = identity.pictureURL {
-            KeychainStore.set(picture.absoluteString, for: .pictureURL)
+            KeychainStore.phone.set(picture.absoluteString, for: .pictureURL)
         } else {
-            KeychainStore.delete(.pictureURL)
+            KeychainStore.phone.delete(.pictureURL)
         }
     }
 }

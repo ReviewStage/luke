@@ -15,7 +15,9 @@ xcodebuild \
 ## Test
 
 The tests live in two places, and each has its own entry. The Luke scheme runs
-the app target's suites on a simulator:
+the app target's own suites on a simulator — the ones that reach inside the app
+through `@testable import Luke`, which is what `TEST_HOST` on the test target
+buys:
 
 ```sh
 xcodebuild \
@@ -35,6 +37,16 @@ Both are required. They stay separate because Xcode 26's xcodebuild does not
 pick up an SPM test target from this app scheme — neither as a testable
 reference nor through a test plan — so a scheme entry would claim coverage the
 simulator run does not deliver.
+
+A third suite needs no Xcode and runs with the rest of the repository:
+`tools/ios-parity` diffs every Swift enum that transcribes a TypeScript
+vocabulary against the vocabulary itself, so a value added in `packages/` and
+forgotten here fails `./scripts/check.sh` rather than reaching a device as a
+refusal the phone cannot name.
+
+```sh
+pnpm --filter @luke/ios-parity test
+```
 
 ## TestFlight
 
@@ -188,6 +200,17 @@ the wrist, and the voice call's mint and Realtime socket all leave the watch
 itself. watchOS chooses the path and prefers the phone:
 the paired iPhone's connection tunneled over Bluetooth whenever the phone is
 in range, the watch's own Wi-Fi or cellular only when it is not.
+
+`LukeKit` holds every line both apps run, and a watch file exists only where
+watchOS draws or routes something differently: the credentials in
+`KeychainStore`, parameterized by the service string and the accessibility
+class that are the only things the two sandboxes differ on; the voice call's
+audio in `PCMAudioPlayer` and `PCMAudioCapturer`, parameterized by who owns
+the audio session, since on the watch that is `WatchVoiceAudioSession` for the
+whole call; and Luke's own face in `FaceArt` and `LukeMark`, with only the
+tab bar's UIKit rasterization left on the phone, where UIKit exists. A copy
+kept in step by a "change both" comment is a copy that eventually is not, so
+each of those was one file with two callers rather than two files.
 
 The settings the two apps both hold — the voice and speed the next mint asks
 for, and the New Workspace choices remembered per provider — are kept equal

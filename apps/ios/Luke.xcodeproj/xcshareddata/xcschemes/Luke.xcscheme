@@ -55,6 +55,15 @@
             </BuildableReference>
          </TestableReference>
       </Testables>
+      <MacroExpansion>
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "AABBCC000000000000000030"
+            BuildableName = "Luke.app"
+            BlueprintName = "Luke"
+            ReferencedContainer = "container:Luke.xcodeproj">
+         </BuildableReference>
+      </MacroExpansion>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"
