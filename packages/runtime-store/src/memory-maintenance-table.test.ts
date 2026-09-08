@@ -293,6 +293,7 @@ test("a schema 7 database gains the maintenance tables and the compaction count 
     }[]
   ).map((row) => row.name);
   assert.ok(columns.includes("compaction_count"));
+  // SAFETY: as above, for the flush-state table.
   const flushColumns = (
     eight.prepare("SELECT name FROM pragma_table_info('memory_flush_state')").all() as {
       name: string;
