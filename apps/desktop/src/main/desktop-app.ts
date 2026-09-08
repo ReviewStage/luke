@@ -61,7 +61,7 @@ import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/wire/voice-view";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { runAppleCalendarHelper } from "./apple-calendar";
 import { registerBrainIpc } from "./brain/ipc";
-import { attachAndSettle, followReattachments } from "./gateway/attachment";
+import { attachAndSettle, followReattachments, retryAttachWhileFailed } from "./gateway/attachment";
 import { DESKTOP_OPERATOR_CLIENT_ID } from "./gateway/desktop-node";
 import { currentBuildIdentity } from "./gateway/gateway-process";
 import type { HostBootstrap, HostSessionReplay } from "./gateway/host-operator";
@@ -1050,6 +1050,12 @@ export function startDesktopApp(): void {
         followReattachments({
           onStateChanged: (listener) => gatewayLauncher.onStateChanged(listener),
           onAttached,
+          report,
+        });
+        retryAttachWhileFailed({
+          onStateChanged: (listener) => gatewayLauncher.onStateChanged(listener),
+          currentState: () => gatewayLauncher.state(),
+          attach: () => gatewayLauncher.attach(),
           report,
         });
       } else if (localRuntime) {

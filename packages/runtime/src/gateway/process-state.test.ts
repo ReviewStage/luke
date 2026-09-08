@@ -12,7 +12,11 @@ import {
   readGatewayDiscovery,
   withdrawGatewayDiscovery,
 } from "./discovery.js";
-import { acquireGatewayInstanceLock, readGatewayLockHolder } from "./instance-lock.js";
+import {
+  acquireGatewayInstanceLock,
+  acquireGatewayInstanceLockWaiting,
+  readGatewayLockHolder,
+} from "./instance-lock.js";
 import { shutdownGateway } from "./shutdown.js";
 
 async function scratch(): Promise<string> {
@@ -152,4 +156,49 @@ test("shutdown closes admissions, cancels, and reports what settled; a deadline 
   assert.equal(late.settled, false);
   assert.equal(late.unresolved, 1);
   assert.equal(aborted, true);
+});
+
+test("a Gateway starting behind a live holder that is leaving waits for its release rather than reading it as standing", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "luke-lock-wait-"));
+  const filePath = path.join(directory, "instance.lock");
+  let holderAlive = true;
+  const first = await acquireGatewayInstanceLock({
+    filePath,
+    pid: 100,
+    startedAt: 1,
+    isAlive: () => holderAlive,
+  });
+  assert.ok(first.acquired);
+  let polls = 0;
+  const second = await acquireGatewayInstanceLockWaiting({
+    filePath,
+    pid: 200,
+    startedAt: 2,
+    isAlive: (pid) => (pid === 100 ? holderAlive : true),
+    waitMs: 1_000,
+    pollMs: 100,
+    sleep: async () => {
+      polls += 1;
+      // The holder releases on the second poll, as a leaving Gateway does after its sockets drop.
+      if (polls === 2 && first.acquired) {
+        await first.release();
+        holderAlive = false;
+      }
+    },
+  });
+  assert.ok(second.acquired);
+  assert.equal((await readGatewayLockHolder(filePath))?.pid, 200);
+  // A holder that never leaves is answered as held once the wait is spent.
+  const third = await acquireGatewayInstanceLockWaiting({
+    filePath,
+    pid: 300,
+    startedAt: 3,
+    isAlive: () => true,
+    waitMs: 300,
+    pollMs: 100,
+    sleep: async () => undefined,
+  });
+  assert.equal(third.acquired, false);
+  if (!third.acquired) assert.equal(third.holder.pid, 200);
+  await fs.rm(directory, { recursive: true, force: true });
 });

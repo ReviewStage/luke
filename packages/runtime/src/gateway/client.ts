@@ -61,6 +61,13 @@ export class GatewayClient {
    */
   #baselined = false;
   #reconnecting: Promise<void> | undefined;
+  /**
+   * Which adoption or reconnection stands. Each begins a new generation and
+   * every answer is checked against it when it lands, so a reply from a host
+   * since replaced, or a reconnection the adoption superseded, installs
+   * nothing.
+   */
+  #generation = 0;
   /** Events that arrived while a reconnection was in flight, taken again once it has settled. */
   #arrivedDuringReconnect: GatewayEvent[] = [];
   #unsubscribe: (() => void) | undefined;
@@ -131,17 +138,26 @@ export class GatewayClient {
    * already in the snapshot. Concurrent callers share one adoption.
    */
   adoptHost(): Promise<void> {
-    this.#reconnecting ??= this.#adoptHostOnce().finally(() => this.#settleReconnect());
-    return this.#reconnecting;
+    // An adoption supersedes a reconnection still out: that one was asked of
+    // the host this client is leaving, and its answer, whenever it lands,
+    // installs nothing.
+    this.#generation += 1;
+    const generation = this.#generation;
+    const adoption: Promise<void> = this.#adoptHostOnce(generation).finally(() => {
+      if (this.#reconnecting === adoption) this.#settleReconnect();
+    });
+    this.#reconnecting = adoption;
+    return adoption;
   }
 
-  async #adoptHostOnce(): Promise<void> {
+  async #adoptHostOnce(generation: number): Promise<void> {
     const response = await this.#options.transport.request({
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
       id: this.#options.createId(),
       method: GATEWAY_METHOD.HELLO,
       params: {},
     });
+    if (generation !== this.#generation) return;
     if (!response.ok) {
       if (response.error.code !== GATEWAY_ERROR.DISCONNECTED) {
         this.#options.report?.(`Gateway hello refused: ${response.error.message}`);
@@ -165,23 +181,30 @@ export class GatewayClient {
    * where the host stands. Concurrent callers share one reconnection.
    */
   reconnect(): Promise<void> {
-    this.#reconnecting ??= this.#reconnectOnce().finally(() => this.#settleReconnect());
-    return this.#reconnecting;
+    if (this.#reconnecting) return this.#reconnecting;
+    this.#generation += 1;
+    const reconnection: Promise<void> = this.#reconnectOnce(this.#generation).finally(() => {
+      if (this.#reconnecting === reconnection) this.#settleReconnect();
+    });
+    this.#reconnecting = reconnection;
+    return reconnection;
   }
 
+  /** The adoption or reconnection that stood is over: what arrived meanwhile is taken now, in order. */
   #settleReconnect(): void {
     this.#reconnecting = undefined;
     const arrived = this.#arrivedDuringReconnect.splice(0).sort((a, b) => a.sequence - b.sequence);
     for (const event of arrived) this.#take(event);
   }
 
-  async #reconnectOnce(): Promise<void> {
+  async #reconnectOnce(generation: number): Promise<void> {
     const response = await this.#options.transport.request({
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
       id: this.#options.createId(),
       method: GATEWAY_METHOD.RECONNECT,
       params: { lastSequence: this.#lastSequence },
     });
+    if (generation !== this.#generation) return;
     if (!response.ok) {
       if (response.error.code !== GATEWAY_ERROR.DISCONNECTED) {
         this.#options.report?.(`Gateway reconnection refused: ${response.error.message}`);
@@ -209,14 +232,16 @@ export class GatewayClient {
   }
 
   #take(event: GatewayEvent): void {
-    if (event.sequence <= this.#lastSequence) return;
     if (this.#reconnecting) {
-      // The host answered the reconnection from where it stood when asked;
-      // an event emitted since is not in that answer and must not wait for
-      // a later gap to surface it.
+      // Held until the adoption or reconnection settles, whatever its number:
+      // during an adoption the cursor is the old host's, and an event of the
+      // new host numbered below it is not stale, it is the first of the new
+      // stream. Whether it is already in the answer is decided after, against
+      // the adopted cursor.
       this.#arrivedDuringReconnect.push(event);
       return;
     }
+    if (event.sequence <= this.#lastSequence) return;
     if (event.sequence !== this.#lastSequence + 1) {
       // With a baseline, the gap is filled from the host's own log and the
       // event that showed it arrives inside the replay, in its place. Without

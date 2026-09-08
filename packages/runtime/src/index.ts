@@ -79,9 +79,12 @@ export {
 } from "./gateway/discovery.js";
 export {
   acquireGatewayInstanceLock,
+  acquireGatewayInstanceLockWaiting,
+  GATEWAY_LOCK_WAIT_DEFAULTS,
   type GatewayLockAcquisition,
   type GatewayLockHolder,
   type GatewayLockOptions,
+  type GatewayLockWaitOptions,
   processIsAlive,
   readGatewayLockHolder,
 } from "./gateway/instance-lock.js";

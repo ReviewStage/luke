@@ -6,7 +6,7 @@ import {
   type GatewayAttachment,
   type GatewayAttachResult,
 } from "@sidecar/runtime";
-import { attachAndSettle, followReattachments } from "./attachment";
+import { attachAndSettle, followReattachments, retryAttachWhileFailed } from "./attachment";
 
 /** A supervisor stand-in: announces ATTACHED before its attach resolves, as the real one does. */
 function supervisor() {
@@ -86,4 +86,59 @@ test("reattachments after the first each run the attachment work again", async (
   s.announce(GATEWAY_ATTACHMENT.ATTACHED);
   await Promise.resolve();
   assert.equal(runs, 2);
+});
+
+test("a failed attach is tried again after a growing pause until one attaches, and never after a stop", async () => {
+  const s = supervisor();
+  const scheduled: Array<{ work: () => void; delayMs: number }> = [];
+  let attaches = 0;
+  const stop = retryAttachWhileFailed({
+    onStateChanged: s.onStateChanged,
+    // The first attach already failed before the retries began: they begin at once.
+    currentState: () => GATEWAY_ATTACHMENT.FAILED,
+    attach: async () => {
+      attaches += 1;
+      return { outcome: GATEWAY_ATTACH_OUTCOME.FAILED, failure: "not_ready" };
+    },
+    setTimeout: (work, delayMs) => {
+      scheduled.push({ work, delayMs });
+      return undefined;
+    },
+    initialDelayMs: 100,
+    maximumDelayMs: 250,
+    report: () => undefined,
+  });
+  assert.deepEqual(
+    scheduled.map((entry) => entry.delayMs),
+    [100],
+  );
+  s.announce(GATEWAY_ATTACHMENT.FAILED);
+  assert.deepEqual(
+    scheduled.map((entry) => entry.delayMs),
+    [100],
+  );
+  scheduled[0]?.work();
+  assert.equal(attaches, 1);
+  s.announce(GATEWAY_ATTACHMENT.FAILED);
+  s.announce(GATEWAY_ATTACHMENT.FAILED);
+  assert.deepEqual(
+    scheduled.map((entry) => entry.delayMs),
+    [100, 200],
+  );
+  scheduled[1]?.work();
+  s.announce(GATEWAY_ATTACHMENT.FAILED);
+  assert.deepEqual(
+    scheduled.map((entry) => entry.delayMs),
+    [100, 200, 250],
+  );
+  // An attachment resets the pause; a stop ends the retries.
+  s.announce(GATEWAY_ATTACHMENT.ATTACHED);
+  scheduled[2]?.work();
+  s.announce(GATEWAY_ATTACHMENT.FAILED);
+  assert.equal(scheduled.at(-1)?.delayMs, 100);
+  s.announce(GATEWAY_ATTACHMENT.STOPPED);
+  const before = attaches;
+  scheduled.at(-1)?.work();
+  assert.equal(attaches, before);
+  stop();
 });

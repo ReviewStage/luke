@@ -101,3 +101,37 @@ export async function readGatewayLockHolder(
     return undefined;
   }
 }
+
+export const GATEWAY_LOCK_WAIT_DEFAULTS = {
+  /** How long a starting Gateway waits on a live holder before giving the state root up as held. */
+  WAIT_MS: 10_000,
+  POLL_MS: 200,
+} as const;
+
+export interface GatewayLockWaitOptions extends GatewayLockOptions {
+  waitMs?: number;
+  pollMs?: number;
+  sleep?: (ms: number) => Promise<void>;
+}
+
+/**
+ * Acquires the lock, waiting a bounded time on a holder that is alive: a
+ * Gateway leaving on a signal releases its lock after it has closed its
+ * sockets, and the desktop's restart can spawn the next Gateway before that
+ * release lands. The next Gateway waits for it rather than reading a
+ * departing holder as a standing one and leaving itself.
+ */
+export async function acquireGatewayInstanceLockWaiting(
+  options: GatewayLockWaitOptions,
+): Promise<GatewayLockAcquisition> {
+  const waitMs = options.waitMs ?? GATEWAY_LOCK_WAIT_DEFAULTS.WAIT_MS;
+  const pollMs = options.pollMs ?? GATEWAY_LOCK_WAIT_DEFAULTS.POLL_MS;
+  const sleep = options.sleep ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  let waited = 0;
+  for (;;) {
+    const acquisition = await acquireGatewayInstanceLock(options);
+    if (acquisition.acquired || waited >= waitMs) return acquisition;
+    await sleep(pollMs);
+    waited += pollMs;
+  }
+}

@@ -3,7 +3,7 @@ import path from "node:path";
 import { Worker } from "node:worker_threads";
 import * as Sentry from "@sentry/electron/main";
 import {
-  acquireGatewayInstanceLock,
+  acquireGatewayInstanceLockWaiting,
   createGatewayToken,
   GATEWAY_LOOPBACK_HOST,
   processIsAlive,
@@ -93,7 +93,10 @@ export function startGatewayProcess(argv: readonly string[]): void {
       app.dock?.hide();
     }
     const startedAt = Date.now();
-    const lock = await acquireGatewayInstanceLock({
+    // A Gateway leaving on a signal releases its lock after its sockets have
+    // dropped, and the desktop's restart may have spawned this one already;
+    // the wait is for that release, bounded.
+    const lock = await acquireGatewayInstanceLockWaiting({
       filePath: gatewayLockPath(stateRoot),
       pid: process.pid,
       startedAt,

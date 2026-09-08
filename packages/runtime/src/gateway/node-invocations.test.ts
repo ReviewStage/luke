@@ -491,3 +491,87 @@ test("a fresh client with no baseline adopts the host as it stands rather than r
   server.emit(GATEWAY_EVENT.SPEECH_OFFERED, { id: "new-offer" });
   assert.deepEqual(heard, [GATEWAY_EVENT.SPEECH_OFFERED]);
 });
+
+test("an event of the new host arriving during adoption is held and delivered after it, whatever the old cursor said, and an adoption supersedes a reconnection still out", async () => {
+  let ids = 0;
+  const makeServer = () =>
+    new GatewayServer({
+      methods: {},
+      configurationRevision: () => 1,
+      sessionRevision: () => undefined,
+      snapshot: () => ({}),
+      now: () => 0,
+      createEventId: () => `event-${++ids}`,
+    });
+  const oldServer = makeServer();
+  const newServer = makeServer();
+  let current = oldServer;
+  let wireUp = true;
+  const sinks = new Set<(event: import("@sidecar/runtime-contracts").GatewayEvent) => void>();
+  for (const server of [oldServer, newServer]) {
+    server.subscribe((event) => {
+      if (current !== server || !wireUp) return;
+      for (const sink of [...sinks]) sink(event);
+    });
+  }
+  // Every request is handled at once but its answer travels back only when
+  // the test releases it, so an event can be emitted after the hello was
+  // captured and before its answer lands.
+  const pendingAnswers: Array<() => void> = [];
+  const client = new GatewayClient({
+    transport: {
+      request: async (request) => {
+        const answered = current.handle(request, OPERATOR);
+        await new Promise<void>((resolve) => pendingAnswers.push(resolve));
+        return answered;
+      },
+      events: (sink) => {
+        sinks.add(sink);
+        return () => sinks.delete(sink);
+      },
+      connected: () => true,
+    },
+    createId: () => `r-${++ids}`,
+  });
+  const heard: string[] = [];
+  client.on(GATEWAY_EVENT.RUNS_CHANGED, (event) => heard.push(String(event.payload)));
+  // The old host ran long: the cursor is high.
+  for (let i = 0; i < 100; i += 1) oldServer.emit(GATEWAY_EVENT.RUNS_CHANGED, `old-${i + 1}`);
+  assert.equal(client.lastSequence(), 100);
+  // A dropped event on the old host puts a reconnection out; its answer is delayed.
+  wireUp = false;
+  oldServer.emit(GATEWAY_EVENT.RUNS_CHANGED, "old-101-dropped");
+  wireUp = true;
+  oldServer.emit(GATEWAY_EVENT.RUNS_CHANGED, "old-102");
+  assert.equal(pendingAnswers.length, 1);
+  // Before that answers, the host is replaced and adopted. The new host had
+  // emitted five events before this client arrived; its sixth lands while
+  // the hello's answer is out, numbered far below the old cursor.
+  current = newServer;
+  for (let i = 0; i < 5; i += 1) newServer.emit(GATEWAY_EVENT.RUNS_CHANGED, `new-${i + 1}`);
+  const adoption = client.adoptHost();
+  assert.equal(pendingAnswers.length, 2);
+  // The host handles the hello (capturing sequence 5) before the sixth event
+  // is emitted; only the answer is still on its way.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  newServer.emit(GATEWAY_EVENT.RUNS_CHANGED, "new-6");
+  assert.deepEqual(
+    heard.filter((h) => h.startsWith("new")),
+    [],
+  );
+  // The old reconnection answers first and installs nothing; then the hello lands.
+  pendingAnswers[0]?.();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  pendingAnswers[1]?.();
+  await adoption;
+  // The hello was captured at sequence 5; the sixth was held rather than
+  // dropped against the old cursor of 100, and is delivered after the
+  // adoption; nothing of the old host's replay landed.
+  assert.equal(client.lastSequence(), 6);
+  assert.deepEqual(
+    heard.filter((h) => h.startsWith("new")),
+    ["new-6"],
+  );
+  assert.equal(heard.includes("old-101-dropped"), false);
+  assert.equal(heard.includes("old-102"), false);
+});
