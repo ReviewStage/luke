@@ -52,6 +52,7 @@ import {
 import { journalActCounts, UNKNOWN_ACT_RESULT } from "./journal.js";
 import {
   BrainRequestLedger,
+  INBOX_CAPACITY,
   PENDING_MARK_FIELD,
   type PendingMarkField,
   type RunEnd,
@@ -229,6 +230,12 @@ type RunEndFlags = Pick<
 >;
 
 /** How a run ended, as its record takes it: the status and what rides beside it. */
+/** What a turn came to and the run it ran under, read by the settlement that follows every exit. */
+interface OpenedTurn {
+  result: TurnResult;
+  run: RunControl | undefined;
+}
+
 interface RunOutcome {
   status: BrainRequestRecord["status"];
   end: RunEnd;
@@ -370,6 +377,8 @@ export class BrainAgent {
   readonly #lastLook = new BySession<string>();
   /** Captures run one after another, so two reads of one session never race each other's cursor. */
   #capturing: Promise<unknown> = Promise.resolve();
+  #capturesInFlight = 0;
+  #turnsQueued = 0;
   /** The review's retry, armed while the model is quiet and the scheduler's occurrence already taken. */
   #heartbeatRetry: ScheduledTimer | undefined;
   #restored: Promise<void> | undefined;
@@ -440,6 +449,25 @@ export class BrainAgent {
   /** How many captured observations are waiting for a turn to consume them. */
   pendingWakes(): number {
     return this.#generation?.inbox.length ?? this.#wakes.size();
+  }
+
+  /**
+   * Whether anything is under way or owed: a turn running or queued, a
+   * capture still landing, an observation captured and not yet consumed, or
+   * an ask waiting in the queue. A host stands a conversation down only when
+   * this answers false, so an analysis in flight is never cut mid-thought
+   * because its session left the roster.
+   */
+  busy(): boolean {
+    return (
+      this.#turnInFlight ||
+      this.#turnsQueued > 0 ||
+      this.#capturesInFlight > 0 ||
+      this.#active !== undefined ||
+      this.#asks.size > 0 ||
+      (this.#generation?.inbox.length ?? 0) > 0 ||
+      this.#wakes.size() > 0
+    );
   }
 
   /**
@@ -683,6 +711,11 @@ export class BrainAgent {
     const active = this.#active;
     const run = this.#runs.get(input.id);
     if (!active || !run || this.#runRevoked(active.run)) return false;
+    // Only another ask's turn can take the words: a heartbeat, a wake, or a
+    // hold's release runs under its own prompt and origin, and a reply
+    // formed inside it would be that turn's, not the developer's answer. The
+    // ask waits in the queue instead and opens its own turn when this one ends.
+    if (active.plan.trigger !== BRAIN_TURN_TRIGGER.ASK) return false;
     const text = askInputText(input.text, [], this.#now());
     if (!active.started.steer({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text })) return false;
     active.riders.push(run);
@@ -948,14 +981,23 @@ export class BrainAgent {
       }
       return entries.length;
     };
+    this.#capturesInFlight += 1;
+    const settled = () => {
+      this.#capturesInFlight -= 1;
+    };
     const run = this.#capturing.then(work, work);
-    this.#capturing = run.catch(() => undefined);
+    this.#capturing = run.then(settled, settled);
     return run;
   }
 
-  /** Every captured observation as the events a turn opens with, oldest first. */
+  /**
+   * The captured observations a turn opens with, oldest first and at most
+   * the inbox's turn depth. What stands beyond it waits, whole, for the next
+   * wake or look, which opens a turn whenever the inbox holds anything: the
+   * store keeps every capture until a turn has consumed it.
+   */
   #inboxEvents(generation: Generation): readonly BrainWakeEvent[] {
-    return generation.inbox.map(eventFromEntry);
+    return generation.inbox.slice(0, INBOX_CAPACITY).map(eventFromEntry);
   }
 
   /**
@@ -1204,8 +1246,12 @@ export class BrainAgent {
   }
 
   #enqueue<T>(work: () => Promise<T>): Promise<T> {
+    this.#turnsQueued += 1;
+    const settled = () => {
+      this.#turnsQueued -= 1;
+    };
     const run = this.#queue.then(work, work);
-    this.#queue = run.catch(() => undefined);
+    this.#queue = run.then(settled, settled);
     return run;
   }
 
@@ -1595,7 +1641,42 @@ export class BrainAgent {
     }
   }
 
+  /**
+   * One turn, settled whole: however it ends — at the door, by a thrown
+   * hook, or by the model — the asks riding in it end with it, the asks that
+   * waited behind it open, and an observation turn leaves its notice.
+   */
   async #turn(plan: TurnPlan, riders: RunControl[] = []): Promise<TurnResult> {
+    let outcome: OpenedTurn;
+    try {
+      outcome = await this.#openTurn(plan, riders);
+    } catch {
+      outcome = { result: { outcome: TURN_OUTCOME.FAILED }, run: plan.run };
+    }
+    const { result, run } = outcome;
+    // Riders ride an ask's turn alone, and an ask always brings its run.
+    if (plan.run) await this.#settleRiders(riders, plan.run, result);
+    // Asks that arrived while this turn ran open now rather than waiting out
+    // the queue's debounce: what they were waiting for has ended.
+    this.#asks.flush();
+    if (
+      run &&
+      runOriginOf(plan.trigger) !== RUN_ORIGIN.USER &&
+      REPORTED_OUTCOMES.has(result.outcome)
+    ) {
+      this.#options.notice?.({
+        trigger: plan.trigger,
+        identities: uniqueIdentities(plan.events),
+        briefings: result.outcome === TURN_OUTCOME.DONE ? result.briefings : [],
+        performedActs: run.performedActs,
+        at: this.#now(),
+      });
+    }
+    return result;
+  }
+
+  /** The turn itself, answering its result and the run it ran under; the door's refusals answer the plan's own. */
+  async #openTurn(plan: TurnPlan, riders: RunControl[]): Promise<OpenedTurn> {
     await this.ready();
     // The generation's death is checked at the door of every turn, so a
     // memory that outlived its fortnight while the app sat idle is not read
@@ -1605,16 +1686,16 @@ export class BrainAgent {
     // Work queued in a generation since replaced opens nothing: its briefings
     // and its wakes described a memory that no longer exists.
     if (generation !== this.#generation || generation.abort.signal.aborted) {
-      return { outcome: TURN_OUTCOME.REVOKED };
+      return { result: { outcome: TURN_OUTCOME.REVOKED }, run: plan.run };
     }
     const opened = await generation.opened;
     if (generation !== this.#generation || generation.abort.signal.aborted) {
-      return { outcome: TURN_OUTCOME.REVOKED };
+      return { result: { outcome: TURN_OUTCOME.REVOKED }, run: plan.run };
     }
     if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
       // The memory is kept as it is and nothing is read or written over it.
       this.#reportIncompatible(generation, opened.reason);
-      return { outcome: TURN_OUTCOME.INCOMPATIBLE };
+      return { result: { outcome: TURN_OUTCOME.INCOMPATIBLE }, run: plan.run };
     }
     const context = opened.context;
     // An observation turn runs under an unrecorded run of its own, so an act
@@ -1650,29 +1731,14 @@ export class BrainAgent {
       isRevoked: () => ended || this.#revoked(turnContext),
       signal: turnContext.signal,
     };
-    let result: TurnResult;
     try {
-      result = await this.#runTurn(plan, turnContext, execution, riders);
+      return { result: await this.#runTurn(plan, turnContext, execution, riders), run };
     } finally {
       ended = true;
       if (!plan.run && run.deadline !== undefined) this.#cancel(run.deadline);
       this.#turnInFlight = false;
       this.#active = undefined;
     }
-    await this.#settleRiders(riders, run, result);
-    // Asks that arrived while this turn ran open now rather than waiting out
-    // the queue's debounce: what they were waiting for has ended.
-    this.#asks.flush();
-    if (runOriginOf(plan.trigger) !== RUN_ORIGIN.USER && REPORTED_OUTCOMES.has(result.outcome)) {
-      this.#options.notice?.({
-        trigger: plan.trigger,
-        identities: uniqueIdentities(plan.events),
-        briefings: result.outcome === TURN_OUTCOME.DONE ? result.briefings : [],
-        performedActs: run.performedActs,
-        at: this.#now(),
-      });
-    }
-    return result;
   }
 
   #revoked(context: Pick<TurnContext, "signal">): boolean {

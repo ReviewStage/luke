@@ -2589,27 +2589,22 @@ test("an observation in flight enters no memory through an unrelated mark or acc
   assert.deepEqual(crashed.storage.stored()?.cursors, before?.cursors);
   // The observation fails: memory and the consumed cursor never advanced,
   // and the captured entry stands for the next turn.
+  // The ask accepted meanwhile did not ride the hold release's turn — a
+  // developer's words never steer into an observation — so it opens its own
+  // turn behind it, and that turn is the one that consumes the standing entry.
   inner.answers.unshift(failedAnswer("network"));
   regate.open();
   await settle();
   const after = brainStateFromStored(observing.storage.file);
   assert.ok(!JSON.stringify(after?.items).includes("UNCOMMITTED_OBSERVATION"));
-  assert.deepEqual(after?.cursors, before?.cursors);
-  assert.equal(after?.inbox.length, 1);
-  // The success control: the same hook again reads nothing twice; the next
-  // turn consumes the standing entry and, answered, commits the cursor it owns.
-  inner.answers.push(answered([message("seen")]));
-  await observing.agent.wake([edge(ABC)]);
-  await observing.clock.advance(observing.clock.now + 3_000);
-  await settle();
+  assert.equal(after?.inbox.length, 0);
+  assert.equal(after?.cursors["claude-code"]?.abc, "abc-cursor");
+  assert.equal((await observing.agent.waitAsk(acceptedRunId(accepted), 1))?.text, "later");
   assert.deepEqual(
     observing.sinceReads.map((read) => read.cursor),
     [undefined],
   );
-  assert.equal(
-    brainStateFromStored(observing.storage.file)?.cursors["claude-code"]?.abc,
-    "abc-cursor",
-  );
+  assert.equal(observing.traces.at(-1)?.origin, RUN_ORIGIN.USER);
 });
 
 test("a run whose start the store refuses opens no work and ends as a persistence failure", async () => {
@@ -3527,12 +3522,71 @@ test("a conversation that observes no session opens no look, however the roster 
   assert.equal(h.agent.pendingWakes(), 0);
 });
 
-test("a hook delivered twice is one wake, and the pending wakes are bounded", async () => {
+test("a hook delivered twice is one wake, and every distinct capture is kept until a turn consumes it", async () => {
   const h = harness();
   await h.agent.wake([edge(ABC), edge(ABC)]);
   assert.equal(h.agent.pendingWakes(), 1);
   await h.agent.wake(Array.from({ length: 40 }, (_, index) => edge(DEF, NOW + index)));
-  assert.equal(h.agent.pendingWakes(), 20);
+  assert.equal(h.agent.pendingWakes(), 41);
+});
+
+test("captures past a turn's depth are kept whole across a relaunch and read in order, none dropped", async () => {
+  // Each hook reads a distinct piece of transcript; the model is quiet, so
+  // nothing consumes what is captured.
+  let piece = 0;
+  const reading = (): Partial<BrainAgentOptions> => ({
+    readTranscriptSince: async (identity) => ({
+      status: ACT_RESULT_STATUS.ACCEPTED,
+      text: `PIECE_${++piece}`,
+      cursor: `${identity.providerSessionId}-${piece}`,
+      truncated: false,
+    }),
+  });
+  const quiet = harness({
+    ...reading(),
+    client: {
+      respond: () => Promise.reject(new Error("never asked")),
+      quietUntil: () => NOW + 60_000,
+    },
+  });
+  for (let index = 0; index < 25; index += 1) {
+    await quiet.agent.wake([edge(ABC, NOW + index)]);
+  }
+  assert.equal(quiet.agent.pendingWakes(), 25);
+  const stored = quiet.storage.stored();
+  assert.equal(stored?.inbox.length, 25);
+  const captured = (stored?.inbox ?? []).map((entry) => entry.delta?.text);
+  assert.deepEqual(
+    captured,
+    Array.from({ length: 25 }, (_, index) => `PIECE_${index + 1}`),
+  );
+  assert.equal(stored?.captureCursors["claude-code"]?.abc, "abc-25");
+  await quiet.agent.stop();
+
+  // A relaunch reads what was captured without touching the transcript: the
+  // first turn opens with the oldest twenty, the next look with the rest.
+  const relaunched = harness(reading(), quiet.storage);
+  relaunched.client.answers.push(answered([message("")]), answered([message("")]));
+  await relaunched.agent.ready();
+  await relaunched.clock.advance(relaunched.clock.now + 3_000);
+  await settle();
+  assert.equal(relaunched.sinceReads.length, 0);
+  assert.equal(relaunched.client.inputs.length, 1);
+  const firstTurn = (relaunched.client.inputs[0] ?? []).map(itemText).join("\n");
+  for (let index = 1; index <= 20; index += 1) assert.ok(firstTurn.includes(`PIECE_${index}`));
+  assert.ok(!firstTurn.includes("PIECE_21"));
+  assert.equal(relaunched.agent.pendingWakes(), 5);
+  assert.equal(relaunched.storage.stored()?.inbox.length, 5);
+  // The next look finds nothing new in the transcript and still opens the
+  // turn the standing captures are owed.
+  relaunched.agent.rosterLook();
+  await relaunched.clock.advance(relaunched.clock.now + 3_000);
+  await settle();
+  assert.equal(relaunched.client.inputs.length, 2);
+  const secondTurn = (relaunched.client.inputs[1] ?? []).map(itemText).join("\n");
+  for (let index = 21; index <= 25; index += 1) assert.ok(secondTurn.includes(`PIECE_${index}`));
+  assert.equal(relaunched.agent.pendingWakes(), 0);
+  assert.equal(relaunched.storage.stored()?.inbox.length, 0);
 });
 
 test("a conversation that looks at one session reads only it, and a repeated unchanged look opens no inference", async () => {
@@ -3635,6 +3689,88 @@ test("a steered companion shares the run's persistence failure: a final write th
   // The reply that formed still travels on both, as the record's own words.
   assert.equal(primary?.text, "Reply for both.");
   assert.equal(companion?.text, "Reply for both.");
+});
+
+test("a developer's ask during a heartbeat is not steered into it: the review keeps its own prompt and origin, and the ask gets a reply turn of its own", async () => {
+  const inner = new FakeClient();
+  const gated = gatedClient(inner);
+  const h = harness({ client: gated.client });
+  inner.answers.push(answered([message("nothing spoken")]), answered([message("Your answer.")]));
+  const tick = h.agent.heartbeat();
+  await settle();
+  const ask = acceptedRunId(await submit(h, "what changed?"));
+  await settle();
+  // Queued behind the review, not riding inside it.
+  assert.equal(h.agent.request(ask)?.status, BRAIN_REQUEST_STATUS.QUEUED);
+  gated.open();
+  await tick;
+  await settle();
+  assert.equal((await h.agent.waitAsk(ask, 1))?.text, "Your answer.");
+  assert.equal(inner.inputs.length, 2);
+  const review = (inner.inputs[0] ?? []).map(itemText).join("\n");
+  assert.ok(review.includes(BRAIN_INPUT_MARKER.HEARTBEAT));
+  assert.ok(!review.includes("what changed?"));
+  assert.ok((inner.inputs[1] ?? []).map(itemText).join("\n").includes("what changed?"));
+  assert.deepEqual(
+    h.traces.map((trace) => trace.origin),
+    [RUN_ORIGIN.HEARTBEAT, RUN_ORIGIN.USER],
+  );
+});
+
+test("a rider settles when the shared turn dies to a thrown hook after its checkpoint, and none is left running", async () => {
+  const inner = new FakeClient();
+  const gated = gatedClient(inner);
+  let rosterReads = 0;
+  const h = harness({
+    client: gated.client,
+    // The roster is read after the final checkpoint, outside the model loop's
+    // own guard: a throw there is the kind of failure a hook can raise.
+    roster: () => {
+      rosterReads += 1;
+      if (rosterReads >= 3) throw new Error("hook failed after the checkpoint");
+      return { text: "roster", identities: [ABC, DEF] };
+    },
+  });
+  inner.answers.push(answered([message("First alone.")]), answered([message("Both.")]));
+  const first = acceptedRunId(await submit(h, "first?"));
+  await settle();
+  const second = acceptedRunId(await submit(h, "second?"));
+  await settle();
+  assert.equal(h.agent.request(second)?.status, BRAIN_REQUEST_STATUS.RUNNING);
+  gated.open();
+  await settle();
+  assert.equal(h.agent.request(first)?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.equal(h.agent.request(second)?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.ok(h.agent.requests().every((record) => record.status !== BRAIN_REQUEST_STATUS.RUNNING));
+  assert.equal(h.agent.busy(), false);
+});
+
+test("riders committed running before a turn refused at its door are settled with it, never left running", async () => {
+  const { QUEUE_MODE } = await import("@sidecar/runtime");
+  const h = harness({ queueMode: QUEUE_MODE.COLLECT, queueDebounceMs: 500 });
+  const first = acceptedRunId(await submit(h, "first?"));
+  const second = acceptedRunId(await submit(h, "second?"));
+  // The generation is replaced the instant the primary is marked running, so
+  // the collected turn reaches its door over a memory that no longer stands.
+  let reset = false;
+  h.agent.subscribe((records) => {
+    if (reset) return;
+    if (
+      records.some(
+        (record) => record.runId === first && record.status === BRAIN_REQUEST_STATUS.RUNNING,
+      )
+    ) {
+      reset = true;
+      h.store.reset();
+    }
+  });
+  await h.clock.advance(NOW + 500);
+  await settle();
+  assert.ok(reset);
+  assert.equal(h.client.inputs.length, 0);
+  assert.ok(h.agent.requests().every((record) => record.status !== BRAIN_REQUEST_STATUS.RUNNING));
+  assert.notEqual(h.agent.request(second)?.status, BRAIN_REQUEST_STATUS.RUNNING);
+  assert.equal(h.agent.busy(), false);
 });
 
 test("asks collected behind a primary that is cancelled or whose start the store refuses still open their own turn", async () => {
