@@ -224,13 +224,42 @@ export class HotkeyRegistrar {
   }
 
   /**
-   * Re-registers from `fromRank` down the pecking order. Talk lets everything
-   * go — `unregisterAll` takes the lower keys down with it — then ask and
-   * stop are taken afresh once it has settled. Ask lets only itself and stop
-   * go; stop lets only itself go, because nothing yields to it.
+   * Re-registers `fromRank` and every rank below it, in order. Moving the talk
+   * key lets everything go, because `unregisterAll` is exactly that; a lower
+   * rank lets go only of itself and the ranks under it, so a change that is
+   * none of the talk key's business cannot make its registration flicker — and
+   * stop lets only itself go, because nothing yields to it. Each rank is then
+   * taken afresh from the top down, because the chord a lower key may have is
+   * decided by where the higher ones landed: a talk key moving onto Option-S
+   * must win it, and one moving off must give it back.
    */
   async reapply(fromRank: HotkeyRank): Promise<void> {
-    await this.#apply(fromRank);
+    const ranks = RANK_ORDER.slice(RANK_ORDER.indexOf(fromRank));
+    if (fromRank === HOTKEY_RANK.TALK) {
+      const released = this.#talkKeyWatcher?.stop();
+      this.#talkKeyWatcher = undefined;
+      this.#shortcut.unregisterAll();
+      // The system releases the old helper's chord when its process exits, not
+      // when the kill is asked for, and the defaults sit in both helpers'
+      // candidate lists — a successor that starts too early is refused the very
+      // fallback it was promised.
+      await released;
+      this.#key(HOTKEY_RANK.TALK).accelerator = undefined;
+      this.#held = true;
+    } else {
+      for (const rank of ranks) {
+        const accelerator = this.#key(rank).accelerator;
+        if (accelerator) this.#shortcut.unregister(accelerator);
+      }
+    }
+    for (const rank of ranks) {
+      this.#register(rank);
+      // The panel keeps showing the old talk key until the new one actually
+      // answers: the helper announces its own registration over stdout, and
+      // every path without a helper is decided by the time `#register` returns.
+      if (rank === HOTKEY_RANK.TALK && this.#talkKeyWatcher) continue;
+      this.#send(rank);
+    }
   }
 
   /**
@@ -263,12 +292,10 @@ export class HotkeyRegistrar {
    * keys must never compete.
    */
   #taken(rank: HotkeyRank): readonly (string | undefined)[] {
-    const taken: (string | undefined)[] = [];
-    for (const above of this.#above(rank)) {
+    return this.#above(rank).flatMap((above) => {
       const state = this.#key(above);
-      taken.push(...state.candidates(state.chosen, []), state.accelerator);
-    }
-    return taken;
+      return [...state.candidates(state.chosen, []), state.accelerator];
+    });
   }
 
   #owns(rank: HotkeyRank, chord: string): boolean {
@@ -392,43 +419,5 @@ export class HotkeyRegistrar {
   #send(rank: HotkeyRank): void {
     const state = this.#key(rank);
     this.#host.broadcast(state.changedChannel, state.changedPayload());
-  }
-
-  /**
-   * Re-registers `fromRank` and every rank below it, in order. Moving the talk
-   * key lets everything go, because `unregisterAll` is exactly that; a lower
-   * rank lets go only of itself and the ranks under it, so a change that is
-   * none of the talk key's business cannot make its registration flicker. Each
-   * is then taken afresh from the top down, because the chord a lower key may
-   * have is decided by where the higher ones landed: a talk key moving onto
-   * Option-S must win it, and one moving off must give it back.
-   */
-  async #apply(fromRank: HotkeyRank): Promise<void> {
-    const ranks = RANK_ORDER.slice(RANK_ORDER.indexOf(fromRank));
-    if (fromRank === HOTKEY_RANK.TALK) {
-      const released = this.#talkKeyWatcher?.stop();
-      this.#talkKeyWatcher = undefined;
-      this.#shortcut.unregisterAll();
-      // The system releases the old helper's chord when its process exits, not
-      // when the kill is asked for, and the defaults sit in both helpers'
-      // candidate lists — a successor that starts too early is refused the very
-      // fallback it was promised.
-      await released;
-      this.#key(HOTKEY_RANK.TALK).accelerator = undefined;
-      this.#held = true;
-    } else {
-      for (const rank of ranks) {
-        const accelerator = this.#key(rank).accelerator;
-        if (accelerator) this.#shortcut.unregister(accelerator);
-      }
-    }
-    for (const rank of ranks) {
-      this.#register(rank);
-      // The panel keeps showing the old talk key until the new one actually
-      // answers: the helper announces its own registration over stdout, and
-      // every path without a helper is decided by the time `#register` returns.
-      if (rank === HOTKEY_RANK.TALK && this.#talkKeyWatcher) continue;
-      this.#send(rank);
-    }
   }
 }
