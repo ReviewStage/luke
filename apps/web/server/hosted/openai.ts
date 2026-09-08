@@ -6,15 +6,12 @@
  */
 
 import type {
-  attentionResponsesRequest,
   BrainCompactRequest,
   BrainEmbeddingsRequest,
   BrainInputTokensRequest,
   BrainResponsesRequest,
-  legacyAttentionResponsesRequest,
   realtimeClientSecretRequest,
   remoteRealtimeClientSecretRequest,
-  subjectResponsesRequest,
 } from "../core.js";
 // Type-only, so the value-level import the introduction handler takes from
 // this module never becomes a runtime cycle.
@@ -24,8 +21,6 @@ export const HOSTED_OPENAI_ENVIRONMENT = {
   API_KEY: "OPENAI_API_KEY",
   /** The same override names the desktop honours, so one convention configures both. */
   REALTIME_MODEL: "LUKE_REALTIME_MODEL",
-  ATTENTION_MODEL: "LUKE_ATTENTION_MODEL",
-  SUBJECT_MODEL: "LUKE_SUBJECT_MODEL",
   BRAIN_MODEL: "LUKE_BRAIN_MODEL",
 } as const;
 
@@ -41,9 +36,6 @@ export type OpenAiPostBody =
   | ReturnType<typeof realtimeClientSecretRequest>
   | ReturnType<typeof remoteRealtimeClientSecretRequest>
   | ReturnType<typeof introductionClientSecretRequest>
-  | ReturnType<typeof attentionResponsesRequest>
-  | ReturnType<typeof legacyAttentionResponsesRequest>
-  | ReturnType<typeof subjectResponsesRequest>
   | BrainResponsesRequest
   | BrainCompactRequest
   | BrainInputTokensRequest

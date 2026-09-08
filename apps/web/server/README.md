@@ -118,15 +118,14 @@ from production lands on the protected preview like any other request, so the
 browser needs that deployment's access cookie already; without it the dashboard
 reports the intercepted API call rather than the metrics.
 
-# Hosted voice and attention
+# Hosted voice
 
-`api/voice/mint.ts` and `api/attention/review.ts` run Luke's voice and
-attention review on the deployment's own OpenAI key for a signed-in desktop.
-Both are exact-path files, so Vercel's zero-config `api/` detection routes
-them without a `routes` entry; only the bracketed auth catch-all needs one.
-The logic lives in `server/hosted/` behind injected seams, and each request is
-resolved to a user through the auth service's own `/oauth2/userinfo` endpoint,
-called in process.
+`api/voice/mint.ts` runs Luke's voice on the deployment's own OpenAI key for a
+signed-in desktop. It is an exact-path file, so Vercel's zero-config `api/`
+detection routes it without a `routes` entry; only the bracketed auth
+catch-all needs one. The logic lives in `server/hosted/` behind injected
+seams, and each request is resolved to a user through the auth service's own
+`/oauth2/userinfo` endpoint, called in process.
 
 The mint answer's `connection` object carries both a WebRTC calls endpoint
 (`callsUrl`) for the desktop renderer and a WebSocket endpoint (`wsUrl`) for
@@ -139,12 +138,12 @@ composed by the client: `callsUrl` is the calls endpoint at
 transports. Clients predating this field ignore `wsUrl`; clients predating
 this server receive a connection without it and must handle its absence.
 
-The endpoints need one secret: `OPENAI_API_KEY`. Without it both answer 503
+The endpoint needs one secret: `OPENAI_API_KEY`. Without it it answers 503
 and the hosted tier is simply off, the same kill switch as the feedback
 endpoint, which is the intended state for Preview deployments, so a preview
-never spends the production key. `LUKE_REALTIME_MODEL` and
-`LUKE_ATTENTION_MODEL` optionally override the models, under the same names
-the desktop honours; a blank value is treated as absent.
+never spends the production key. `LUKE_REALTIME_MODEL` optionally overrides
+the model, under the same name the desktop honours; a blank value is treated
+as absent.
 
 `api/account/delete.ts` erases the signed-in user on the same bearer
 resolution: the desktop's Delete account confirm is the only caller. Deleting
@@ -188,9 +187,9 @@ backstop and should be configured with it.
 
 `api/brain/respond.ts` runs one inference of Luke's brain on the deployment's
 own OpenAI key for a signed-in client that carries none of its own. It is an
-exact-path file like the voice and attention routes, resolved to a user
-through the same bearer seam, and it is the one hosted route with a raised
-function duration: `vercel.json` gives it 120 seconds so the 90-second
+exact-path file like the voice route, resolved to a user through the same
+bearer seam, and it is the one hosted route with a raised function duration:
+`vercel.json` gives it 120 seconds so the 90-second
 upstream ceiling the brain shares with its keyed client can pass, and that
 `functions` entry names this route alone.
 
@@ -215,8 +214,8 @@ refused upstream still counts. `LUKE_BRAIN_MODEL` optionally overrides the
 model, under the name the desktop's keyed client honours; a blank value is
 treated as absent, and nothing in a request can name one. Without
 `OPENAI_API_KEY` the route answers 503 like the rest of the hosted tier. The
-existing attention, subject, mint, and device routes are untouched by this
-route and keep their contracts for released clients.
+existing mint and device routes are untouched by this route and keep their
+contracts for released clients.
 
 # Provider key vault
 
