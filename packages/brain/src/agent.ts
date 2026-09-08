@@ -66,7 +66,7 @@ import {
   isTerminalBrainRequestStatus,
 } from "./requests.js";
 import { incompleteDetail, TOOL_RESULT_STATUS } from "./runtime.js";
-import { claimedUnlessAborted, settledUnlessAborted } from "./settled.js";
+import { settledUnlessAborted } from "./settled.js";
 import {
   type BrainPersistedState,
   type BrainStateStore,
