@@ -2963,3 +2963,28 @@ test("a refused result checkpoint under a landed terminal write keeps the confir
   assert.equal(again.performed.length, 0);
   assert.equal(again.client.inputs.length, 0);
 });
+
+test("the final answer's text is the reply: a preface before a tool call does not survive an empty final answer, and a shortfall with words is kept beside them", async () => {
+  const h = harness();
+  h.client.answers.push(
+    answered([message("Let me look."), call("c1", BRAIN_TOOL.LIST_SESSIONS, {})]),
+    answered([message("")]),
+  );
+  const silent = await ask(h, "look");
+  assert.equal(silent?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  assert.equal(silent?.text, undefined);
+  assert.equal(h.traces[0]?.outputText, undefined);
+
+  const partial = responsesModelAnswer({
+    output: [message("Half of")],
+    status: "incomplete",
+    incomplete_details: { reason: "max_output_tokens" },
+  });
+  assert.ok(partial);
+  h.client.answers.push(partial);
+  const short = await ask(h, "explain at length");
+  assert.equal(short?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  assert.equal(short?.text, "Half of");
+  assert.equal(h.traces[1]?.outputText, "Half of");
+  assert.equal(h.traces[1]?.incomplete, "incomplete: max_output_tokens");
+});

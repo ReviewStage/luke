@@ -13,6 +13,8 @@ import {
   type CheckpointFormat,
   CONTEXT_INPUT_KIND,
   type ContextEngine,
+  type ContextInput,
+  type ContextLifecycle,
   type ContextOpening,
   type ModelAdapter,
   REASONING_EFFORT,
@@ -32,6 +34,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { BrainAgent } from "./agent.js";
+import { ResponsesContextEngine } from "./context-engine.js";
 import { HostedModelAdapter } from "./hosted-model-adapter.js";
 import { OpenAiModelAdapter } from "./openai-model-adapter.js";
 import {
@@ -42,8 +45,9 @@ import {
   BRAIN_SUBMISSION_REJECTION,
   type BrainRequestRecord,
 } from "./requests.js";
-import { RESPONSES_ITEM_TYPE } from "./responses-api.js";
+import { RESPONSES_ITEM_FORMAT, RESPONSES_ITEM_TYPE } from "./responses-api.js";
 import { responsesToolLoopRuntime } from "./responses-runtime.js";
+import { ToolLoopAgentRuntime } from "./runtime.js";
 import {
   type BrainPersistedState,
   type BrainStateStorage,
@@ -657,4 +661,119 @@ test("the Responses runtime refuses a valid checkpoint of the scripted runtime: 
   await settle();
   assert.equal(storage.stored()?.checkpointFormat, undefined);
   await again.agent.stop();
+});
+
+/**
+ * A Responses engine whose ingest can be held open: what a store-backed or
+ * remote engine looks like when it is slow, and the hostile case for a
+ * cancel — a hook resolving after the run it belonged to has ended, onto an
+ * object the host must no longer be using.
+ */
+class HeldIngestEngine extends ResponsesContextEngine {
+  static held: (() => void)[] = [];
+  static hold = false;
+  override async ingest(input: ContextInput, lifecycle?: ContextLifecycle): Promise<void> {
+    if (HeldIngestEngine.hold && input.kind === CONTEXT_INPUT_KIND.MODEL_OUTPUT) {
+      HeldIngestEngine.hold = false;
+      await new Promise<void>((resolve) => {
+        HeldIngestEngine.held.push(resolve);
+      });
+    }
+    // The obligation the contract states: nothing applied once the signal fired.
+    // Deliberately violated here, so the host's own fence is what the test proves.
+    super.ingest(input);
+    void lifecycle;
+  }
+}
+
+function heldIngestRuntime(model: ModelAdapter): AgentRuntime {
+  return new ToolLoopAgentRuntime({
+    model,
+    itemFormat: { format: RESPONSES_ITEM_FORMAT.FORMAT, version: RESPONSES_ITEM_FORMAT.VERSION },
+    createContext: (format) =>
+      new HeldIngestEngine({ id: format.runtime, version: format.runtimeVersion }),
+  });
+}
+
+test("an ingest held across a cancel that resolves after the successor turn began lands on the retired engine, never in the context the next turn reads or keeps", async () => {
+  const storage = new Storage();
+  const upstream = fakeUpstream([
+    () => payload([message("LATE_WORDS")]),
+    () => payload([message("fresh reply")]),
+  ]);
+  const h = host(heldIngestRuntime, KEYED.model(upstream), storage);
+  HeldIngestEngine.hold = true;
+  const accepted = await h.agent.submitAsk({
+    submissionId: "held",
+    question: "first",
+    origin: BRAIN_REQUEST_ORIGIN.TYPED,
+  });
+  assert.ok(accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
+  await settle();
+  assert.equal(HeldIngestEngine.held.length, 1, "the model's answer is being ingested");
+  await h.agent.cancelAsk(accepted.runId);
+  const cancelled = await h.agent.waitAsk(accepted.runId, 60_000);
+  assert.equal(cancelled?.status, BRAIN_REQUEST_STATUS.CANCELLED);
+
+  // The successor turn opens on the restored context and runs to its reply.
+  const next = await h.ask("second");
+  assert.equal(next?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  assert.equal(next?.text, "fresh reply");
+  // Now the held ingest resolves, onto the engine the cancelled turn used.
+  HeldIngestEngine.held.shift()?.();
+  await settle();
+  const shown = upstream.calls[1]?.body.input;
+  assert.ok(Array.isArray(shown));
+  assert.ok(
+    !JSON.stringify(shown).includes("LATE_WORDS"),
+    "the successor never saw the late words",
+  );
+  assert.ok(!(storage.file ?? "").includes("LATE_WORDS"), "the checkpoint never kept them");
+  // A third turn reads the same context again, and still finds nothing of them.
+  upstream.answers.push(() => payload([message("third")]));
+  await h.ask("third");
+  assert.ok(!JSON.stringify(upstream.calls[2]?.body.input).includes("LATE_WORDS"));
+  await h.agent.stop();
+});
+
+test("a model failure after a recorded act restores the context to the act's committed boundary: the act, its result, and the record survive and are read again", async () => {
+  const storage = new Storage();
+  const upstream = fakeUpstream([
+    () => payload([actCall("call_1")]),
+    () => new Response("", { status: 500 }),
+    () => payload([message("after")]),
+  ]);
+  const h = host(responsesToolLoopRuntime, KEYED.model(upstream), storage);
+  const failed = await h.ask("send then fail");
+  assert.equal(failed?.status, BRAIN_REQUEST_STATUS.FAILED);
+  assert.equal(failed?.failure, BRAIN_REQUEST_FAILURE.MODEL);
+  assert.equal(failed?.performedActs, 1);
+  const stored = storage.stored();
+  assert.equal(stored?.journal.length, 1);
+  assert.equal(
+    stored?.journal[0]?.outputJson,
+    JSON.stringify({ status: ACT_RESULT_STATUS.ACCEPTED }),
+  );
+  const kept = stored?.items ?? [];
+  assert.ok(
+    kept.some(
+      (item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL && item.call_id === "call_1",
+    ),
+  );
+  assert.ok(
+    kept.some(
+      (item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT && item.call_id === "call_1",
+    ),
+  );
+  // The next turn's context carries the paired act, on the restored engine.
+  await h.ask("continue");
+  const shown = upstream.calls[2]?.body.input;
+  assert.ok(Array.isArray(shown));
+  const items = shown.filter(isRecord);
+  assert.ok(
+    items.some(
+      (item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT && item.call_id === "call_1",
+    ),
+  );
+  await h.agent.stop();
 });

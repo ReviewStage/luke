@@ -533,3 +533,43 @@ test("an engine whose lifecycle hooks are asynchronous is awaited at every step"
   await asyncEngine.adoptCompaction(window);
   assert.deepEqual(asyncEngine.checkpoint().items, window);
 });
+
+test("an answer that stopped short while still carrying words ends completed with the shortfall beside the words, and every answer's text is reported, the empty one included", async () => {
+  const partial = harness();
+  partial.model.answers.push(
+    answered({
+      text: "Half an answer",
+      incomplete: { status: "incomplete", reason: "max_output_tokens" },
+    }),
+  );
+  const end = await runtime(partial.model).start(partial.request()).done;
+  assert.deepEqual(end, {
+    reason: RUN_END_REASON.COMPLETED,
+    text: "Half an answer",
+    incomplete: { status: "incomplete", reason: "max_output_tokens" },
+  });
+  assert.deepEqual(kinds(partial.events), [
+    RUNTIME_EVENT.ANSWERED,
+    RUNTIME_EVENT.TEXT,
+    RUNTIME_EVENT.INCOMPLETE,
+    RUNTIME_EVENT.ENDED,
+  ]);
+
+  const preface = harness();
+  preface.model.answers.push(
+    answered({
+      text: "Let me check.",
+      items: [
+        { type: RESPONSES_ITEM_TYPE.FUNCTION_CALL, call_id: "c1", name: "act", arguments: "{}" },
+      ],
+      toolCalls: [toolCall("c1", "act")],
+    }),
+    answered({ text: "" }),
+  );
+  const ended = await runtime(preface.model).start(preface.request()).done;
+  assert.deepEqual(ended, { reason: RUN_END_REASON.COMPLETED, text: "" });
+  const texts = preface.events.flatMap((event) =>
+    event.kind === RUNTIME_EVENT.TEXT ? [event.text] : [],
+  );
+  assert.deepEqual(texts, ["Let me check.", ""]);
+});

@@ -438,7 +438,13 @@ export type RunEndReason = (typeof RUN_END_REASON)[keyof typeof RUN_END_REASON];
 
 /** What a run ended as: the reason, and what it carries for that reason. */
 export type RuntimeRunEnd =
-  | { readonly reason: typeof RUN_END_REASON.COMPLETED; readonly text: string }
+  | {
+      readonly reason: typeof RUN_END_REASON.COMPLETED;
+      /** The final answer's words, authoritative: empty when the model's last answer said nothing. */
+      readonly text: string;
+      /** Set when the final answer stopped short while still carrying words; the words are kept and the shortfall is not lost. */
+      readonly incomplete?: ModelIncomplete;
+    }
   | { readonly reason: typeof RUN_END_REASON.CANCELLED }
   | { readonly reason: typeof RUN_END_REASON.DEADLINE }
   | { readonly reason: typeof RUN_END_REASON.THROTTLED; readonly until: number }

@@ -54,6 +54,7 @@ import {
   interruptedUnfinishedRequests,
   isTerminalBrainRequestStatus,
 } from "./requests.js";
+import { settledUnlessAborted } from "./settled.js";
 import {
   type BrainPersistedState,
   type BrainStateStore,
@@ -203,6 +204,8 @@ interface TurnGathering {
   compacted: boolean;
   inputTokens?: number;
   outputText: string;
+  /** The final answer's shortfall, when it stopped short with words still delivered. */
+  incomplete?: string;
   error?: string;
 }
 
@@ -1247,7 +1250,7 @@ export class BrainAgent {
     }
 
     if (failure) {
-      context.rollback(contextMark);
+      await this.#restoreContext(generation, context, contextMark);
       generation.cursors.rollback(cursorMark);
       this.#report(`Brain ${plan.trigger} turn did not complete: ${gathering.error}`);
     } else {
@@ -1283,6 +1286,7 @@ export class BrainAgent {
       transcriptBytes,
       toolCalls: gathering.toolCalls,
       ...(gathering.outputText ? { outputText: gathering.outputText } : undefined),
+      ...(gathering.incomplete ? { incomplete: gathering.incomplete } : undefined),
       deliveries: gathering.deliveries.map((delivery) => ({
         briefingChars: delivery.briefing.length,
       })),
@@ -1294,6 +1298,43 @@ export class BrainAgent {
     });
 
     return failure ?? { outcome: TURN_OUTCOME.DONE, text: gathering.outputText };
+  }
+
+  /**
+   * Stands the generation's context back at the mark the turn last committed
+   * past — the start of the turn for an observation, the last checkpointed
+   * tool result for a run, so nothing an act did and the store kept is
+   * reverted — on a fresh engine rather than the one the turn used. A hook
+   * of the old engine still held when the turn was revoked may resolve
+   * later and apply to the object it was called on; that object is no
+   * longer the generation's, so the next turn never sees it. The reopen runs
+   * under the generation's own signal and installs nothing once the
+   * generation has been replaced: the successor's context is never touched.
+   * A reopen the runtime refuses — which its own stamp should never be —
+   * leaves the old engine rolled back in place rather than none at all.
+   */
+  async #restoreContext(
+    generation: Generation,
+    context: ContextEngine,
+    mark: ContextMark,
+  ): Promise<void> {
+    const reopened = await settledUnlessAborted(
+      this.#options.runtime.openContext(
+        { format: context.checkpointFormat, items: mark.items },
+        JSON.stringify(UNKNOWN_ACT_RESULT),
+        { signal: generation.abort.signal },
+      ),
+      generation.abort.signal,
+    );
+    if (reopened.aborted || generation !== this.#generation || generation.context !== context) {
+      return;
+    }
+    if (!reopened.value.bootstrap.loaded) {
+      context.rollback(mark);
+      return;
+    }
+    generation.context = reopened.value.context;
+    void Promise.resolve(context.dispose()).catch(() => undefined);
   }
 
   /**
@@ -1379,6 +1420,12 @@ export class BrainAgent {
     }
     switch (end.reason) {
       case RUN_END_REASON.COMPLETED:
+        // The end's text is the reply: an earlier answer's words that preceded
+        // a tool call are not the answer when the final answer said nothing.
+        gathering.outputText = end.text;
+        if (end.incomplete) {
+          gathering.incomplete = `${end.incomplete.status ?? "incomplete"}: ${end.incomplete.reason}`;
+        }
         return undefined;
       case RUN_END_REASON.THROTTLED:
         gathering.error = "quiet";

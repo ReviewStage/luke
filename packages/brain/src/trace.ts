@@ -22,6 +22,8 @@ export interface BrainTurnTraceRecord {
   transcriptBytes: number;
   toolCalls: readonly BrainToolCallTrace[];
   outputText?: string;
+  /** Why the final answer stopped short, when it did while still carrying words. */
+  incomplete?: string;
   deliveries: readonly { briefingChars: number }[];
   model?: string;
   elapsedMs: number;

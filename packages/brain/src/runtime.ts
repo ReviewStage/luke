@@ -11,6 +11,7 @@ import {
   MODEL_RESPONSE_OUTCOME,
   type ModelAdapter,
   type ModelAnswer,
+  type ModelIncomplete,
   RUN_END_REASON,
   RUNTIME_EVENT,
   type RuntimeCheckpoint,
@@ -75,6 +76,10 @@ export interface ToolLoopRuntimeOptions {
 interface EndSignal {
   deadline: boolean;
   ended: boolean;
+}
+
+function incompleteDetail(incomplete: ModelIncomplete): string {
+  return `${incomplete.status ?? "incomplete"}: ${incomplete.reason}`;
 }
 
 function resultStatus(outputJson: string): string | undefined {
@@ -239,14 +244,20 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
       const continued = await this.#absorb(answer, request, emit, ingest, lifecycle);
       if (signal.aborted) return cancelled();
       if (!continued) {
+        // An answer that stopped short with no words is a run that fell short;
+        // one that stopped short with words still ends completed, its words
+        // authoritative, and the shortfall travels beside them.
         if (answer.incomplete && !answer.text) {
-          await emit({ kind: RUNTIME_EVENT.INCOMPLETE, incomplete: answer.incomplete });
           return finish({
             reason: RUN_END_REASON.INCOMPLETE,
-            detail: `${answer.incomplete.status ?? "incomplete"}: ${answer.incomplete.reason}`,
+            detail: incompleteDetail(answer.incomplete),
           });
         }
-        return finish({ reason: RUN_END_REASON.COMPLETED, text: answer.text });
+        return finish({
+          reason: RUN_END_REASON.COMPLETED,
+          text: answer.text,
+          ...(answer.incomplete ? { incomplete: answer.incomplete } : undefined),
+        });
       }
       // Calls run in the order the model emitted them, one at a time, and the
       // listener is awaited after each result: an act is recorded before the
@@ -320,7 +331,12 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
       await emit({ kind: RUNTIME_EVENT.COMPACTED, dropped: settled.value });
     }
     if (answer.usage) await emit({ kind: RUNTIME_EVENT.USAGE, usage: answer.usage });
-    if (answer.text) await emit({ kind: RUNTIME_EVENT.TEXT, text: answer.text });
+    // Every answer's text is reported, the empty one included, so a listener
+    // keeping the latest words holds what the final answer actually said.
+    await emit({ kind: RUNTIME_EVENT.TEXT, text: answer.text });
+    if (answer.incomplete) {
+      await emit({ kind: RUNTIME_EVENT.INCOMPLETE, incomplete: answer.incomplete });
+    }
     return answer.toolCalls.length > 0;
   }
 
