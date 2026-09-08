@@ -283,7 +283,12 @@ export class ConversationRecall {
     }
     const running = this.#inFlight.get(key);
     if (running) return running;
-    const started = this.#run({ ...ask, query }, key).finally(() => this.#inFlight.delete(key));
+    // A run settles its own registration only: an invalidation may have cleared
+    // it and a later run may hold the key by now, and that run's callers still
+    // share it until it finishes.
+    const started: Promise<RecallResult> = this.#run({ ...ask, query }, key).finally(() => {
+      if (this.#inFlight.get(key) === started) this.#inFlight.delete(key);
+    });
     this.#inFlight.set(key, started);
     return started;
   }
