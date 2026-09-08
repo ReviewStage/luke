@@ -48,6 +48,15 @@ export interface Generation {
   captureCursors: TranscriptCursors;
   /** The observations captured and not yet consumed, as last committed. */
   inbox: readonly BrainObservationEntry[];
+  /** How many times the context has folded in this generation; persisted with every checkpoint. */
+  compactionCount: number;
+  /**
+   * The flush marker as this generation has read it: whether the store has
+   * been consulted, and the compaction count the last completed flush ran
+   * under. Filled from the marker store at the first assessment and kept in
+   * step with every marker that lands after.
+   */
+  flush: { read: boolean; lastCompactionCount?: number };
   journal: BrainJournal;
   requests: Map<string, BrainRequestRecord>;
   /** Runs accepted in memory but not yet checkpointed; not yet acknowledged to anyone. */
@@ -158,6 +167,8 @@ export function generationFrom(
     cursors: new TranscriptCursors(state.cursors),
     captureCursors: new TranscriptCursors(state.captureCursors),
     inbox: [...state.inbox],
+    compactionCount: state.compactionCount,
+    flush: { read: false },
     journal: new BrainJournal(state.journal),
     requests: new Map(state.requests.map((record) => [record.runId, { ...record }])),
     provisional: new Set(),

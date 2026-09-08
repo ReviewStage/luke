@@ -232,6 +232,7 @@ export class BrainRequestLedger {
         return {
           ...(checkpointFormat !== undefined ? { checkpointFormat } : undefined),
           items: checkpoint ? checkpoint.items : state.items,
+          compactionCount: context ? generation.compactionCount : state.compactionCount,
           cursors: context ? generation.cursors.persisted() : state.cursors,
           captureCursors:
             scope.kind === SAVE_SCOPE.CAPTURE || scope.kind === SAVE_SCOPE.WHOLE

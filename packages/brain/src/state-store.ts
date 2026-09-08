@@ -92,6 +92,12 @@ export interface BrainPersistedState {
    */
   checkpointFormat?: string;
   items: readonly ResponsesInputItem[];
+  /**
+   * How many times this generation's context has folded. A property of the
+   * context the items are, so it rides on the envelope: the pre-compaction
+   * flush's cycle is this count, and a fresh generation starts at zero.
+   */
+  compactionCount: number;
   /** Where a model has read each transcript to, keyed by provider id, then by provider session id. */
   cursors: BrainTranscriptCursors;
   /** Where the inbox has captured each transcript to; ahead of `cursors` while entries wait. */
@@ -119,6 +125,7 @@ export function freshBrainState(generationId: string, now: number): BrainPersist
     createdAt: now,
     expiresAt: now + BRAIN_GENERATION_LIFETIME_MS,
     items: [],
+    compactionCount: 0,
     cursors: {},
     captureCursors: {},
     inbox: [],
@@ -143,6 +150,12 @@ export function brainPersistedStateFromWire(
   if (checkpointFormat === null) return undefined;
   const reset = resetMarkerFromWire(value.reset);
   if (reset === null || (reset && reset.clearedAt > value.createdAt)) return undefined;
+  // An envelope written before the count existed has folded under no rule
+  // this build reads; it starts its cycles at zero rather than as unreadable.
+  const compactionCount = value.compactionCount === undefined ? 0 : value.compactionCount;
+  if (!isWireNumber(compactionCount) || !Number.isInteger(compactionCount) || compactionCount < 0) {
+    return undefined;
+  }
   const items: ResponsesInputItem[] = [];
   for (const item of value.items) {
     if (!isRecord(item)) return undefined;
@@ -183,6 +196,7 @@ export function brainPersistedStateFromWire(
     expiresAt: value.expiresAt,
     ...(checkpointFormat !== undefined ? { checkpointFormat } : undefined),
     items,
+    compactionCount,
     cursors,
     captureCursors,
     inbox,

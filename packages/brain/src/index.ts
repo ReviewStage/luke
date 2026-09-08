@@ -5,6 +5,7 @@ export {
   type BrainCompletionDelivery,
   type BrainFlushCycle,
   type BrainFlushInput,
+  type BrainFlushMarkerStore,
   type BrainLane,
   type BrainOpeningNotes,
   type BrainRecallAsk,

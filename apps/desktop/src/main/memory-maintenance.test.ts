@@ -427,6 +427,7 @@ test("the flush hook and the reset capture exist only for main and durable priva
   assert.ok(h.maintenance.flushHookFor(MAIN_SESSION_KEY));
   assert.ok(h.maintenance.flushHookFor(h.thread));
   assert.equal(h.maintenance.flushHookFor(h.temporary), undefined);
+  assert.equal(h.maintenance.flushMarkerFor(h.temporary), undefined);
   assert.equal(h.maintenance.capturesOnReset(h.temporary), false);
   const skipped = await h.maintenance.captureBeforeReset(h.temporary, [{ type: "message" }]);
   assert.equal(skipped.outcome, MEMORY_HOUSEKEEPING_OUTCOME.SKIPPED);
@@ -507,5 +508,29 @@ test("the light limit bounds one sweep and the cursor advances only over the lin
   const third = await h.maintenance.runConsolidation();
   assert.ok(third);
   assert.equal(fromMain(await h.store.listMemoryCandidates()), 105, "nothing learned twice");
+  h.close();
+});
+
+test("the flush marker is kept per conversation under the generation the brain names, and a new generation reads none", async () => {
+  const h = await harness();
+  const marker = h.maintenance.flushMarkerFor(MAIN_SESSION_KEY);
+  assert.ok(marker);
+  assert.equal(await marker.read("gen-1"), undefined);
+  await marker.write("gen-1", 2);
+  assert.equal(await marker.read("gen-1"), 2);
+  assert.equal(
+    await marker.read("gen-2"),
+    undefined,
+    "a marker from an earlier lifetime is never this cycle's",
+  );
+  const thread = h.maintenance.flushMarkerFor(h.thread);
+  assert.ok(thread);
+  assert.equal(
+    await thread.read("gen-1"),
+    undefined,
+    "one conversation's marker says nothing about another's",
+  );
+  await thread.write("gen-1", 0);
+  assert.equal(await marker.read("gen-1"), 2);
   h.close();
 });

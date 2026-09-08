@@ -302,8 +302,8 @@ export class RuntimeStoreClient {
     return this.request(RUNTIME_STORE_METHOD.MEMORY_REWRITES_LIST, {});
   }
 
-  memoryFlushState(sessionKey: SessionKey): Promise<FlushState | undefined> {
-    return this.request(RUNTIME_STORE_METHOD.MEMORY_FLUSH_STATE_GET, { sessionKey });
+  memoryFlushState(sessionKey: SessionKey, generationId: string): Promise<FlushState | undefined> {
+    return this.request(RUNTIME_STORE_METHOD.MEMORY_FLUSH_STATE_GET, { sessionKey, generationId });
   }
 
   recordMemoryFlush(sessionKey: SessionKey, state: FlushState): Promise<boolean> {

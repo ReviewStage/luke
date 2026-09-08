@@ -7,6 +7,7 @@ import {
   BrainAgent,
   type BrainDelivery,
   type BrainFlushInput,
+  type BrainFlushMarkerStore,
   BrainGenerationClock,
   type BrainMemoryAccess,
   type BrainRecallAsk,
@@ -165,6 +166,8 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
   beforeCompaction?: (
     sessionKey: SessionKey,
   ) => ((input: BrainFlushInput) => Promise<MemoryHousekeepingResult>) | undefined;
+  /** Where one conversation's flush marker outlives the process; nothing for one that never flushes. */
+  flushMarker?: (sessionKey: SessionKey) => BrainFlushMarkerStore | undefined;
   /**
    * The capture run before an eligible conversation starts fresh, over a
    * copy of its context. Its outcome is reported and never decides the
@@ -504,6 +507,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
   };
 
   const flushFor = (sessionKey: SessionKey) => dependencies.beforeCompaction?.(sessionKey);
+  const flushMarkerFor = (sessionKey: SessionKey) => dependencies.flushMarker?.(sessionKey);
 
   /** The skills the latest preparation listed to the model: the only ones `load_skill` may load. */
   interface ListedSkills {
@@ -612,6 +616,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       ...(memory ? { memory } : undefined),
       ...(recall ? { recall } : undefined),
       ...(flushFor(sessionKey) ? { beforeCompaction: flushFor(sessionKey) } : undefined),
+      ...(flushMarkerFor(sessionKey) ? { flushMarker: flushMarkerFor(sessionKey) } : undefined),
       runtime: runtimeDescriptor.create(model, engineDescriptor),
       acts,
       roster: dependencies.roster,

@@ -39,6 +39,8 @@ export interface BrainStateDelta {
   /** The generation's stamp, when this save sets, changes, or clears it. */
   checkpointFormat?: { stamp: string | undefined };
   items?: BrainItemsDelta;
+  /** The generation's compaction count, when this save moved it. */
+  compactionCount?: number;
   cursors?: BrainTranscriptCursors;
   captureCursors?: BrainTranscriptCursors;
   /** The inbox whole, when it changed; it is small by construction and replaced rather than diffed. */
@@ -165,6 +167,9 @@ export function brainStateSave(
   if (items) delta.items = items;
   if (next.checkpointFormat !== previous.checkpointFormat) {
     delta.checkpointFormat = { stamp: next.checkpointFormat };
+  }
+  if (previous.compactionCount !== next.compactionCount) {
+    delta.compactionCount = next.compactionCount;
   }
   if (!sameJson(previous.cursors, next.cursors)) delta.cursors = next.cursors;
   if (!sameJson(previous.captureCursors, next.captureCursors)) {

@@ -73,7 +73,21 @@
 
 import type { SQLInputValue } from "node:sqlite";
 import { LEGACY_CHECKPOINT_FORMAT_TAG } from "@sidecar/brain";
-export const RUNTIME_SCHEMA_VERSION = 8;
+
+/**
+ * One flush marker per conversation: the generation and compaction count the
+ * last completed flush ran under. A row is consulted only for the generation
+ * it names, so a marker from an earlier lifetime never reads as this cycle's.
+ */
+const MEMORY_FLUSH_STATE_TABLE = `CREATE TABLE IF NOT EXISTS memory_flush_state (
+    session_key TEXT PRIMARY KEY,
+    generation_id TEXT NOT NULL,
+    compaction_count INTEGER NOT NULL,
+    outcome TEXT NOT NULL,
+    flushed_at INTEGER NOT NULL
+  )`;
+
+export const RUNTIME_SCHEMA_VERSION = 9;
 
 /**
  * How a database at an earlier version is brought to this one, in order. Each
@@ -133,6 +147,21 @@ export const RUNTIME_SCHEMA_MIGRATIONS: ReadonlyMap<number, readonly SchemaMigra
     [6, []],
     [7, []],
     [8, []],
+    [
+      9,
+      [
+        {
+          sql: "ALTER TABLE conversation_sessions ADD COLUMN compaction_count INTEGER NOT NULL DEFAULT 0",
+          params: [],
+        },
+        // The flush marker is keyed by the generation it was written under
+        // from this version on; rows from before it name no generation and
+        // were read by nothing, so the table starts over rather than
+        // carrying a marker no cycle can claim.
+        { sql: "DROP TABLE memory_flush_state", params: [] },
+        { sql: MEMORY_FLUSH_STATE_TABLE, params: [] },
+      ],
+    ],
   ]);
 
 export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
@@ -164,7 +193,8 @@ export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
     expires_at INTEGER NOT NULL,
     reset_cleared_at INTEGER,
     reset_generation_id TEXT,
-    checkpoint_format TEXT
+    checkpoint_format TEXT,
+    compaction_count INTEGER NOT NULL DEFAULT 0
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS conversation_sessions_one_standing
     ON conversation_sessions(session_key)`,
@@ -403,10 +433,5 @@ export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
     candidate_keys TEXT NOT NULL,
     created_at INTEGER NOT NULL
   )`,
-  `CREATE TABLE IF NOT EXISTS memory_flush_state (
-    session_key TEXT PRIMARY KEY,
-    compaction_count INTEGER NOT NULL,
-    outcome TEXT NOT NULL,
-    flushed_at INTEGER NOT NULL
-  )`,
+  MEMORY_FLUSH_STATE_TABLE,
 ];

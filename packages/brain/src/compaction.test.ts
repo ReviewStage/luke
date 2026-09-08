@@ -415,6 +415,7 @@ test("a required compaction that fails ends the run recoverably and leaves the c
     expiresAt: NOW + 14 * 24 * 60 * 60 * 1000,
     checkpointFormat: "tool-loop@1:openai-responses-input/1",
     items: [userMessageItem("x".repeat(500))],
+    compactionCount: 0,
     cursors: {},
     captureCursors: {},
     inbox: [],
