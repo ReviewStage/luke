@@ -1,11 +1,7 @@
+import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials/vocabulary";
 import { APP_PANEL_TAB, APP_SETTING_ID, type AppPanelTab, type AppSettingId } from "@sidecar/guide";
 import { ISSUE_TRACKER_ID, type IssueTrackerId } from "@sidecar/issues";
-import {
-  ACT_RESULT_STATUS,
-  PROVIDER_ID,
-  PROVIDER_ID_LIST,
-  type ProviderId,
-} from "@sidecar/session";
+import { ACT_RESULT_STATUS, PROVIDER_ID_LIST, type ProviderId } from "@sidecar/session";
 import {
   isRecord,
   isWireNumber,
@@ -126,22 +122,6 @@ export const PRODUCT_EVENT_PROPERTY = {
 export type ProductEventProperty =
   (typeof PRODUCT_EVENT_PROPERTY)[keyof typeof PRODUCT_EVENT_PROPERTY];
 
-/**
- * Every service a credential row connects, as a count names it. It repeats
- * the desktop's own credential-provider set rather than importing it, because
- * that set knows about Electron and this file may not; the desktop closes the
- * gap with a total `Record` bridge, so a new credential provider does not
- * build until this vocabulary answers for it.
- */
-export const PRODUCT_CONNECTION_ID = {
-  CONDUCTOR: PROVIDER_ID.CONDUCTOR,
-  LINEAR: ISSUE_TRACKER_ID.LINEAR,
-  OPENAI: "openai",
-} as const;
-
-export type ProductConnectionId =
-  (typeof PRODUCT_CONNECTION_ID)[keyof typeof PRODUCT_CONNECTION_ID];
-
 /** Which credential a spoken call ran on, never which credential it was. */
 export const PRODUCT_CREDENTIAL_SOURCE = {
   ACCOUNT: "account",
@@ -171,9 +151,10 @@ export type ProductSessionAct = (typeof PRODUCT_SESSION_ACT)[keyof typeof PRODUC
  * Which kind of fault an observation pass reported, never the fault itself:
  * the error's message stays in the local log, because the words of a failure
  * can carry a path, a branch, or a title. It repeats the providers package's
- * own diagnostic-kind set rather than importing it, the same one-way rule the
- * connection ids keep; the desktop closes the gap with a total `Record`
- * bridge, so a new kind does not build until this vocabulary answers for it.
+ * own diagnostic-kind set rather than importing it, because that package reads
+ * this one and the edge would close a loop; the desktop closes the gap with a
+ * total `Record` bridge, so a new kind does not build until this vocabulary
+ * answers for it.
  */
 export const PRODUCT_DIAGNOSTIC_KIND = {
   ACCIDENTAL_WAKE: "accidental_wake",
@@ -411,7 +392,7 @@ export function productSessionCountBucket(count: number): ProductSessionCountBuc
 /** What each property's value is, once it has been read. */
 interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.APP_VERSION]: string;
-  [PRODUCT_EVENT_PROPERTY.CONNECTION_ID]: ProductConnectionId;
+  [PRODUCT_EVENT_PROPERTY.CONNECTION_ID]: CredentialProviderId;
   [PRODUCT_EVENT_PROPERTY.PROVIDER_ID]: ProviderId;
   [PRODUCT_EVENT_PROPERTY.TRACKER_ID]: IssueTrackerId;
   [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE]: ProductCalendarSource;
@@ -450,7 +431,7 @@ export type EnumeratedProductEventProperty = Exclude<
 
 /** Every value each enumerable property may ever hold. */
 export const PRODUCT_EVENT_PROPERTY_VALUES = {
-  [PRODUCT_EVENT_PROPERTY.CONNECTION_ID]: Object.values(PRODUCT_CONNECTION_ID),
+  [PRODUCT_EVENT_PROPERTY.CONNECTION_ID]: Object.values(CREDENTIAL_PROVIDER_ID),
   [PRODUCT_EVENT_PROPERTY.PROVIDER_ID]: PROVIDER_ID_LIST,
   [PRODUCT_EVENT_PROPERTY.TRACKER_ID]: Object.values(ISSUE_TRACKER_ID),
   [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE]: Object.values(PRODUCT_CALENDAR_SOURCE),
@@ -617,79 +598,27 @@ function bucketReader(value: UnparsedWireValue): ProductSessionCountBucket | und
 }
 
 /**
- * How each property's value is read. The unenumerable ones are named here,
- * which is what makes "no free text" a property of the type rather than a
- * promise about call sites: a version that is not `x.y.z` and a count that is
- * not a rung are both discarded.
+ * How each property's value is read. Every enumerable property's reader comes
+ * from that property's own declared set rather than from a second list, so the
+ * two can never disagree; the three no set can enumerate are named here, which
+ * is what makes "no free text" a property of the type rather than a promise
+ * about call sites: a version that is not `x.y.z` and a count that is not a
+ * rung are both discarded.
  */
 const PRODUCT_EVENT_PROPERTY_READER: PropertyReader = {
+  // SAFETY: the source is keyed by exactly the enumerable properties, and each
+  // reader is built from the set filed under the key it lands on; the cast
+  // restores only what `Object.entries` and `Object.fromEntries` widen away.
+  ...(Object.fromEntries(
+    Object.entries(PRODUCT_EVENT_PROPERTY_VALUES).map(([property, values]) => [
+      property,
+      memberReader(values),
+    ]),
+  ) as Pick<PropertyReader, EnumeratedProductEventProperty>),
   [PRODUCT_EVENT_PROPERTY.APP_VERSION]: (value) =>
     isWireString(value) && parseReleaseVersion(value) ? value.trim() : undefined,
   [PRODUCT_EVENT_PROPERTY.SESSION_COUNT]: bucketReader,
   [PRODUCT_EVENT_PROPERTY.IMAGE_COUNT]: bucketReader,
-  [PRODUCT_EVENT_PROPERTY.CONNECTION_ID]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.CONNECTION_ID],
-  ),
-  [PRODUCT_EVENT_PROPERTY.PROVIDER_ID]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.PROVIDER_ID],
-  ),
-  [PRODUCT_EVENT_PROPERTY.TRACKER_ID]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.TRACKER_ID],
-  ),
-  [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE],
-  ),
-  [PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE],
-  ),
-  [PRODUCT_EVENT_PROPERTY.SESSION_ACT]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SESSION_ACT],
-  ),
-  [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND],
-  ),
-  [PRODUCT_EVENT_PROPERTY.ISSUE_ACT]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.ISSUE_ACT],
-  ),
-  [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACT]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.ACCOUNT_ACT],
-  ),
-  [PRODUCT_EVENT_PROPERTY.SUPERSET_ACT]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SUPERSET_ACT],
-  ),
-  [PRODUCT_EVENT_PROPERTY.UPDATE_ACT]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.UPDATE_ACT],
-  ),
-  [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.PANEL_TAB],
-  ),
-  [PRODUCT_EVENT_PROPERTY.PANEL_SOURCE]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.PANEL_SOURCE],
-  ),
-  [PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW],
-  ),
-  [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE],
-  ),
-  [PRODUCT_EVENT_PROPERTY.ASK_OUTCOME]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.ASK_OUTCOME],
-  ),
-  [PRODUCT_EVENT_PROPERTY.EXCHANGE_KIND]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.EXCHANGE_KIND],
-  ),
-  [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT],
-  ),
-  [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE],
-  ),
-  [PRODUCT_EVENT_PROPERTY.SETTING_ID]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SETTING_ID],
-  ),
-  [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: memberReader(
-    PRODUCT_EVENT_PROPERTY_VALUES[PRODUCT_EVENT_PROPERTY.SETTING_VALUE],
-  ),
 };
 
 const PRODUCT_EVENT_NAMES: ReadonlySet<string> = new Set(Object.values(PRODUCT_EVENT));
