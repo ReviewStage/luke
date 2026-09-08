@@ -322,7 +322,7 @@ export function isPromotionOriginBlocked(candidate: Pick<MemoryCandidate, "origi
 export function isConsolidationCandidateEligible(candidate: MemoryCandidate): boolean {
   if (isPromotionOriginBlocked(candidate)) return false;
   if (candidate.status !== CANDIDATE_STATUS.STAGED) return false;
-  if (candidate.path.startsWith(CONVERSATION_PATH_PREFIX)) {
+  if (isConversationCandidate(candidate)) {
     return candidate.sessionKind === CANDIDATE_SESSION_KIND.INTERACTIVE;
   }
   return true;
@@ -332,6 +332,16 @@ export const CONVERSATION_PATH_PREFIX = "conversation:";
 
 export function conversationCandidatePath(sessionKey: SessionKey): string {
   return `${CONVERSATION_PATH_PREFIX}${sessionKey}`;
+}
+
+/** Whether a candidate's evidence is a History line rather than a note. */
+export function isConversationCandidate(candidate: Pick<MemoryCandidate, "path">): boolean {
+  return candidate.path.startsWith(CONVERSATION_PATH_PREFIX);
+}
+
+/** The query an ingestion day stages a seed under; one distinct query per day. */
+export function ingestionQuery(day: string): string {
+  return `ingest:${day}`;
 }
 
 /** What a recall signal is read from: a search result's path, lines, words, and score. */

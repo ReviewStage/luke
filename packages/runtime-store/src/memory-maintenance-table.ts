@@ -154,6 +154,20 @@ export function stageMemoryCandidates(
   });
 }
 
+function phaseHit(
+  held: MemoryCandidate,
+  phase: ConsolidationPhase,
+): Pick<MemoryCandidate, "lightHits" | "remHits"> {
+  switch (phase) {
+    case CONSOLIDATION_PHASE.LIGHT:
+      return { lightHits: held.lightHits + 1, remHits: held.remHits };
+    case CONSOLIDATION_PHASE.REM:
+      return { lightHits: held.lightHits, remHits: held.remHits + 1 };
+    case CONSOLIDATION_PHASE.DEEP:
+      return { lightHits: held.lightHits, remHits: held.remHits };
+  }
+}
+
 /** Records a phase's hit on candidates, for the small boost deep ranking adds. */
 export function recordPhaseHits(
   database: RuntimeDatabase,
@@ -168,8 +182,7 @@ export function recordPhaseHits(
       if (!held) continue;
       putCandidate(database, {
         ...held,
-        lightHits: held.lightHits + (phase === "light" ? 1 : 0),
-        remHits: held.remHits + (phase === "rem" ? 1 : 0),
+        ...phaseHit(held, phase),
         lastPhaseHitAt: now,
       });
       hit += 1;
@@ -200,11 +213,6 @@ export function setCandidateStatus(
   });
 }
 
-export interface IngestionCursor {
-  readonly sessionKey: SessionKey;
-  readonly lastRecordedAt: number;
-}
-
 export function ingestionCursor(database: RuntimeDatabase, sessionKey: SessionKey): number {
   // SAFETY: the one integer column selected is the cursor.
   const row = database
@@ -213,17 +221,21 @@ export function ingestionCursor(database: RuntimeDatabase, sessionKey: SessionKe
   return row?.last_recorded_at ?? 0;
 }
 
-/** Whether a message hash was ingested from the conversation before. */
-export function messageIngested(
+/** Which of the hashes were ingested from the conversation before, in one read. */
+export function messagesIngested(
   database: RuntimeDatabase,
   sessionKey: SessionKey,
-  hash: string,
-): boolean {
-  return (
-    database
-      .prepare("SELECT 1 FROM memory_ingested_messages WHERE session_key = ? AND hash = ?")
-      .get(sessionKey, hash) !== undefined
-  );
+  hashes: readonly string[],
+): readonly string[] {
+  if (hashes.length === 0) return [];
+  // SAFETY: the one text column selected is the hash.
+  const rows = database
+    .prepare(
+      `SELECT hash FROM memory_ingested_messages
+       WHERE session_key = ? AND hash IN (SELECT value FROM json_each(?))`,
+    )
+    .all(sessionKey, JSON.stringify(hashes)) as { hash: string }[];
+  return rows.map((row) => row.hash);
 }
 
 /** Moves the cursor forward and remembers the hashes, bounded per conversation to the pinned count. */
@@ -387,15 +399,23 @@ export function listMemoryRewrites(database: RuntimeDatabase): readonly MemoryRe
     candidate_keys: string;
     created_at: number;
   }[];
-  return rows.map((row) => ({
-    id: row.id,
-    path: row.path,
-    phase: PHASES.find((phase) => phase === row.phase) ?? CONSOLIDATION_PHASE.DEEP,
-    previous: row.previous,
-    nextHash: row.next_hash,
-    candidateKeys: candidateKeysOf(row.candidate_keys),
-    createdAt: row.created_at,
-  }));
+  // A row whose phase this build does not name is left unread rather than guessed at.
+  return rows.flatMap((row) => {
+    const phase = PHASES.find((candidate) => candidate === row.phase);
+    return phase
+      ? [
+          {
+            id: row.id,
+            path: row.path,
+            phase,
+            previous: row.previous,
+            nextHash: row.next_hash,
+            candidateKeys: candidateKeysOf(row.candidate_keys),
+            createdAt: row.created_at,
+          },
+        ]
+      : [];
+  });
 }
 
 const DURABLE_FILES: readonly string[] = [WORKSPACE_FILE.MEMORY, DREAMS_FILE];
@@ -553,12 +573,10 @@ export function flushState(
     | { compaction_count: number; outcome: string; flushed_at: number }
     | undefined;
   if (!row) return undefined;
-  return {
-    compactionCount: row.compaction_count,
-    outcome:
-      OUTCOMES.find((outcome) => outcome === row.outcome) ?? MEMORY_HOUSEKEEPING_OUTCOME.FAILED,
-    flushedAt: row.flushed_at,
-  };
+  const outcome = OUTCOMES.find((candidate) => candidate === row.outcome);
+  // An outcome this build does not name reads as no recorded flush rather than as a failed one.
+  if (!outcome) return undefined;
+  return { compactionCount: row.compaction_count, outcome, flushedAt: row.flushed_at };
 }
 
 export function recordFlush(
@@ -646,7 +664,7 @@ export function forgetMemorySources(
         root,
         {
           path: WORKSPACE_FILE.MEMORY,
-          phase: "deep",
+          phase: CONSOLIDATION_PHASE.DEEP,
           expectedHash: memory.hash,
           next: scrubbed.content,
           candidateKeys: [...toRemove],

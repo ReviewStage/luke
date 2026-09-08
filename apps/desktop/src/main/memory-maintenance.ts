@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { BrainFlushInput } from "@sidecar/brain";
-import { runMemoryHousekeeping } from "@sidecar/brain";
+import { REFUSAL_REASON, runMemoryHousekeeping } from "@sidecar/brain";
 import {
   appendOnlyPromotion,
   applyConsolidationPlan,
@@ -21,7 +21,10 @@ import {
   DREAM_DIARY_SYSTEM_PROMPT,
   DREAMS_FILE,
   dreamDiaryEntry,
+  type HousekeepingPrompt,
   hashText,
+  ingestionQuery,
+  isConversationCandidate,
   localDayStamp,
   MEMORY_HOUSEKEEPING_OUTCOME,
   type MemoryCandidate,
@@ -56,7 +59,7 @@ import type {
   MemoryForgetReport,
   RuntimeStoreClient,
 } from "@sidecar/runtime-store";
-import type { WireRecord } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 
 /**
  * Memory maintenance as the desktop composes it: the pre-compaction flush
@@ -180,10 +183,9 @@ export function wireMemoryMaintenance(
   const housekeeping = async (
     sessionKey: SessionKey,
     items: readonly WireRecord[],
-    prompt: ReturnType<typeof memoryFlushPrompt>,
+    prompt: HousekeepingPrompt,
     dateStamp: string,
     signal: AbortSignal,
-    kind: string,
   ): Promise<MemoryHousekeepingResult> => {
     const runtime = dependencies.createRuntime();
     if (!runtime) {
@@ -200,7 +202,7 @@ export function wireMemoryMaintenance(
       dateStamp,
       workspace: workspace(),
       signal,
-      runId: `${kind}-${sessionKey}-${dependencies.createId()}`,
+      runId: dependencies.createId(),
     });
     if (result.writes > 0) dependencies.onNotebookChanged?.();
     return result;
@@ -216,7 +218,6 @@ export function wireMemoryMaintenance(
         memoryFlushPrompt(day),
         day,
         input.signal,
-        "flush",
       );
       try {
         await dependencies.client().recordMemoryFlush(sessionKey, {
@@ -251,14 +252,7 @@ export function wireMemoryMaintenance(
       CONSOLIDATION_DEFAULTS.CONSOLIDATION_TIMEOUT_MS,
     );
     try {
-      return await housekeeping(
-        sessionKey,
-        items,
-        resetCapturePrompt(day),
-        day,
-        controller.signal,
-        "reset-capture",
-      );
+      return await housekeeping(sessionKey, items, resetCapturePrompt(day), day, controller.signal);
     } finally {
       clearTimeout(timer);
     }
@@ -275,11 +269,15 @@ export function wireMemoryMaintenance(
     const opened = await runtime.openContext(undefined, JSON.stringify({}));
     try {
       const run = runtime.start({
-        runId: `consolidation-${dependencies.createId()}`,
+        runId: dependencies.createId(),
         context: opened.context,
         tools: {
           execute: async () => ({
-            outputJson: JSON.stringify({ status: "rejected", reason: "no tools" }),
+            outputJson: JSON.stringify({
+              status: ACT_RESULT_STATUS.REJECTED,
+              reason: REFUSAL_REASON.NOT_OFFERED,
+            }),
+            status: ACT_RESULT_STATUS.REJECTED,
           }),
         },
         toolSchemas: [],
@@ -401,7 +399,7 @@ export function wireMemoryMaintenance(
           sessionKind: CANDIDATE_SESSION_KIND.INTERACTIVE,
           sourceSessionKey: sessionKey,
           ...(entry.eventId ? { sourceEventId: entry.eventId } : undefined),
-          query: `ingest:${localDayStamp(recordedAt)}`,
+          query: ingestionQuery(localDayStamp(recordedAt)),
           score: INGESTION_SCORE,
           day: localDayStamp(recordedAt),
         },
@@ -449,7 +447,7 @@ export function wireMemoryMaintenance(
           endLine: index + 1,
           origin: CANDIDATE_ORIGIN.AGENT,
           sessionKind: CANDIDATE_SESSION_KIND.INTERACTIVE,
-          query: `ingest:${day}`,
+          query: ingestionQuery(day),
           score: INGESTION_SCORE,
           day,
         });
@@ -461,7 +459,7 @@ export function wireMemoryMaintenance(
   /** Re-reads a promotion's source right before publishing; a source gone or changed is skipped. */
   const rehydrated = async (ranked: RankedCandidate): Promise<boolean> => {
     const candidate = ranked.candidate;
-    if (candidate.path.startsWith("conversation:") && candidate.sourceSessionKey) {
+    if (isConversationCandidate(candidate) && candidate.sourceSessionKey) {
       // SAFETY: the source key was a session key when the candidate was staged.
       const lines = dependencies.historyLines(candidate.sourceSessionKey as SessionKey);
       return lines.some((entry) =>

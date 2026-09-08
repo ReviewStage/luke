@@ -37,7 +37,7 @@ import {
   listForgottenSources,
   listMemoryCandidates,
   listMemoryRewrites,
-  messageIngested,
+  messagesIngested,
   publishMemoryRewrite,
   readDurableMemoryFile,
   reconcilePromotions,
@@ -163,7 +163,7 @@ const HANDLERS: RuntimeStoreHandlers = {
   [RUNTIME_STORE_METHOD.MEMORY_INGESTION_CURSOR]: (host, params) =>
     ingestionCursor(host.opened(), params.sessionKey),
   [RUNTIME_STORE_METHOD.MEMORY_INGESTION_SEEN]: (host, params) =>
-    params.hashes.filter((hash) => messageIngested(host.opened(), params.sessionKey, hash)),
+    messagesIngested(host.opened(), params.sessionKey, params.hashes),
   [RUNTIME_STORE_METHOD.MEMORY_INGESTION_ADVANCE]: (host, params) => {
     advanceIngestion(
       host.opened(),

@@ -129,6 +129,7 @@ export {
   type BrainTurnDescription,
   type BrainTurnPreparation,
   type BrainTurnTrigger,
+  REFUSAL_REASON,
   runOriginOf,
 } from "./turn.js";
 export {

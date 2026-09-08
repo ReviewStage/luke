@@ -28,7 +28,7 @@ import {
   listMemoryCandidates,
   listMemoryRewrites,
   MEMORY_REWRITE_REFUSAL,
-  messageIngested,
+  messagesIngested,
   publishMemoryRewrite,
   readDurableMemoryFile,
   reconcilePromotions,
@@ -86,10 +86,10 @@ test("ingestion cursors and seen hashes keep a line from being learned twice", (
   const database = openTestDatabase();
   assert.equal(ingestionCursor(database, MAIN_SESSION_KEY), 0);
   const hash = hashText("typed-ask\nhello");
-  assert.equal(messageIngested(database, MAIN_SESSION_KEY, hash), false);
+  assert.deepEqual(messagesIngested(database, MAIN_SESSION_KEY, [hash]), []);
   advanceIngestion(database, MAIN_SESSION_KEY, NOW, [hash], NOW);
   assert.equal(ingestionCursor(database, MAIN_SESSION_KEY), NOW);
-  assert.equal(messageIngested(database, MAIN_SESSION_KEY, hash), true);
+  assert.deepEqual(messagesIngested(database, MAIN_SESSION_KEY, [hash]), [hash]);
   advanceIngestion(database, MAIN_SESSION_KEY, NOW - 10, [], NOW + 1);
   assert.equal(ingestionCursor(database, MAIN_SESSION_KEY), NOW, "the cursor never moves back");
 });
