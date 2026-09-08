@@ -95,13 +95,17 @@ test("a recorded entry keeps its local time at the row's edge, outside the bubbl
     }),
   );
 
-  // The stamp is the row's last child, after the bubble closes: it rests in
-  // the clipped column a pull uncovers, never on a line of the bubble's own.
+  // The stamp is the row's last child, after the message closes: it stands in
+  // the column the thread's sideways scroll brings in, never on a line of the
+  // bubble's own, and the thread scrolls on two nested scrollers, one per axis.
   assert.match(
     markup,
-    /<\/span><time class="history-time" dateTime="2026-01-02T03:04:00.000Z">[^<]+<\/time><\/li>/,
+    /<\/div><time class="history-time" dateTime="2026-01-02T03:04:00.000Z">[^<]+<\/time><\/li>/,
   );
-  assert.match(markup, /<div class="history-scroll"><ol class="history-list">/);
+  assert.match(
+    markup,
+    /<div class="history-scroll"><div class="history-pull"><ol class="history-list">/,
+  );
 });
 
 test("conversation history is blocked from optional panel recordings", () => {
