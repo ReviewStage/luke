@@ -3970,3 +3970,69 @@ test("a heartbeat asked of a quiet model is not lost: the review opens once the 
   await settle();
   assert.equal(throttled.client.inputs.length, 2);
 });
+
+test("a child's completion steers into the requester's run under way, is taken once, and opens its own turn when nothing is under way", async () => {
+  const inner = new FakeClient();
+  inner.answers.push(answered([messageAct("act-1")]), answered([message("done")]));
+  const { client, open } = gatedClient(inner);
+  const h = harness({ client });
+  const runId = acceptedRunId(await submit(h, "keep going"));
+  await settle();
+  const completion = {
+    completionId: "completion:child-1",
+    childId: "child-1",
+    status: "completed",
+    resultText: "the child's report",
+  };
+  // The run is waiting on its first inference: the completion is steered in.
+  const steered = await h.agent.deliverChildCompletion(completion);
+  assert.deepEqual(steered, { delivered: true });
+  const again = await h.agent.deliverChildCompletion(completion);
+  assert.deepEqual(again, { delivered: true });
+  open();
+  await settle();
+  assert.equal((await h.agent.waitAsk(runId, 1))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  // Two inferences: the act's, then the one that read the steered completion
+  // beside the act's result, and never a third for the duplicate.
+  assert.equal(inner.inputs.length, 2);
+  const second = inner.inputs[1] ?? [];
+  const steeredItems = second.filter((item) =>
+    itemsOfType([item], RESPONSES_ITEM_TYPE.MESSAGE).some(() =>
+      itemText(item).includes(BRAIN_INPUT_MARKER.CHILD_COMPLETION),
+    ),
+  );
+  assert.equal(steeredItems.length, 1);
+  assert.ok(itemText(steeredItems[0]).includes("the child's report"));
+  assert.equal(h.performed.length, 1);
+  // With nothing under way, a new completion opens a turn of its own, offered announce.
+  inner.answers.push(
+    answered([call("c-announce", BRAIN_TOOL.ANNOUNCE, { briefing: "child done" })]),
+  );
+  inner.answers.push(answered([message("")]));
+  const opened = await h.agent.deliverChildCompletion({
+    ...completion,
+    completionId: "completion:child-2",
+    childId: "child-2",
+  });
+  assert.deepEqual(opened, { delivered: true });
+  assert.equal(inner.inputs.length, 4);
+  assert.deepEqual(
+    h.deliveries.map((delivery) => delivery.briefing),
+    ["child done"],
+  );
+  assert.equal(h.agent.requests().length, 1);
+});
+
+test("without delegation wired, the session tools are offered and refused, and nothing is spawned", async () => {
+  const h = harness();
+  h.client.answers.push(
+    answered([call("c-spawn", BRAIN_TOOL.SESSIONS_SPAWN, { task: "do a thing" })]),
+    answered([message("could not")]),
+  );
+  const record = await ask(h, "delegate this");
+  assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
+  const outputs = functionOutputs(h.client.inputs[1] ?? []);
+  assert.equal(outputs.length, 1);
+  assert.ok(outputs[0]?.output.includes("cannot delegate"));
+  assert.equal(h.performed.length, 0);
+});
