@@ -138,4 +138,4 @@ export {
   TRANSCRIPT_EVENT_KIND,
   type TranscriptEvent,
 } from "./storage.js";
-export type { ScheduledTimer } from "./timers.js";
+export { DAY_MS, type ScheduledTimer } from "./timers.js";
