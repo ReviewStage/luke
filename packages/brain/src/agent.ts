@@ -53,6 +53,7 @@ import {
   heartbeatInputText,
   holdReleasedInputText,
   primedNotesInputText,
+  recallInputText,
   standingContextText,
   subagentTaskInputText,
   wakeInputText,
@@ -95,6 +96,7 @@ import {
 } from "./state-store.js";
 import {
   type BrainChildAccess,
+  type BrainMemoryAccess,
   type BrainWorkspaceAccess,
   createTurnToolExecutor,
   journaledEffect,
@@ -303,6 +305,14 @@ export interface BrainAgentOptions {
   child?: ChildPolicyContext;
   /** Delegation, supplied by the host that owns the conversations; absent, the session tools refuse. */
   children?: BrainChildAccess;
+  /** The notebook's search and read, supplied by the host that owns the index; absent, the memory tools refuse. */
+  memory?: BrainMemoryAccess;
+  /**
+   * Private-conversation recall for a developer's ask: the host decides
+   * whether this conversation recalls at all and runs the bounded recall,
+   * answering the summary the turn reads for one inference and never keeps.
+   */
+  recall?: (ask: BrainRecallAsk) => Promise<string | undefined>;
   /**
    * The requester's active context a forked child starts over, adopted
    * whole into this conversation's empty context on its first turn and
@@ -340,6 +350,13 @@ function newRunControl(runId: string, generation: Generation, recorded: boolean)
     performedActs: 0,
     unknownActs: 0,
   };
+}
+
+/** What a recall is asked over: the developer's words and the run they open, for the host's cache and bounds. */
+export interface BrainRecallAsk {
+  readonly query: string;
+  readonly runId: string;
+  readonly signal: AbortSignal;
 }
 
 /** How a child's run ended, as its requester's service takes it. */
@@ -1843,6 +1860,7 @@ export class BrainAgent {
               childTask
                 ? [subagentTaskInputText(question, now)]
                 : [askInputText(question, attached, now)],
+            ...(childTask ? undefined : { question }),
             run,
           },
           riders,
@@ -2127,11 +2145,18 @@ export class BrainAgent {
           contextMark = context.mark();
           const primed = await this.#primeIfFresh(turnContext);
           notes = this.#options.openingNotes?.take() ?? [];
+          // Awaited only where a recall stands: an extra tick before every
+          // turn would reorder the inferences the routing tests count.
+          const recalled =
+            this.#options.recall && plan.trigger === BRAIN_TURN_TRIGGER.ASK
+              ? await this.#recallFor(plan, turnContext)
+              : undefined;
           const end = await this.#execute(turnContext, execution, gathering, {
             prompt: preparation.prompt,
             policy,
             plan,
             riders,
+            ...(recalled ? { recalled } : undefined),
             opening: [
               ...primed,
               ...(notes.length > 0 ? [activityNoticesInputText(notes, startedAt)] : []),
@@ -2304,6 +2329,28 @@ export class BrainAgent {
   }
 
   /**
+   * The recall a developer's ask earns before its inference, when the host
+   * runs one for this conversation: a summary for this turn's ephemeral
+   * context, never retained, so nothing recalled can be recalled again as if
+   * it had been said. A recall that fails, times out, or is revoked is no
+   * summary; the turn goes on without it.
+   */
+  async #recallFor(plan: TurnPlan, turnContext: TurnContext): Promise<string | undefined> {
+    const recall = this.#options.recall;
+    if (!recall || plan.trigger !== BRAIN_TURN_TRIGGER.ASK) return undefined;
+    const question = plan.question;
+    if (!question) return undefined;
+    const settled = await settledUnlessAborted(
+      recall({ query: question, runId: turnContext.run.runId, signal: turnContext.signal }).catch(
+        () => undefined,
+      ),
+      turnContext.signal,
+    );
+    if (settled.aborted || !settled.value) return undefined;
+    return settled.value;
+  }
+
+  /**
    * One execution on the runtime: the opening words, the toolset the
    * effective policy fixes, the standing context rebuilt for every
    * inference, and a listener that keeps what the run gathers and
@@ -2319,6 +2366,8 @@ export class BrainAgent {
       plan: TurnPlan;
       riders: RunControl[];
       opening: readonly string[];
+      /** A recall's summary, rebuilt into the ephemeral context of every inference of this turn and kept nowhere. */
+      recalled?: string;
       advanceMark: () => Promise<void>;
     },
   ): Promise<RuntimeRunEnd> {
@@ -2330,6 +2379,7 @@ export class BrainAgent {
         acts: this.#options.acts,
         workspace: this.#options.workspace,
         children: this.#options.children,
+        memory: this.#options.memory,
         readWhole: (identity, readContext) => this.#readWhole(identity, readContext),
         checkpoint: (checkpointContext) => this.#ledger.checkpoint(checkpointContext),
         runRevoked: (checked) => this.#runRevoked(checked),
@@ -2393,6 +2443,7 @@ export class BrainAgent {
           this.#options.standingContext(),
           this.#now(),
         ),
+        ...(turn.recalled ? [recallInputText(turn.recalled, this.#now())] : []),
       ],
       maximumOutputTokens: this.#maximumOutputTokens,
       ...(this.#options.reasoningEffort

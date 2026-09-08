@@ -5,7 +5,8 @@
     "api/brain/respond.ts": { "maxDuration": 120 },
     "api/brain/v2/respond.ts": { "maxDuration": 120 },
     "api/brain/v2/compact.ts": { "maxDuration": 120 },
-    "api/brain/v2/count-tokens.ts": { "maxDuration": 120 }
+    "api/brain/v2/count-tokens.ts": { "maxDuration": 120 },
+    "api/brain/v2/embed.ts": { "maxDuration": 60 }
   },
   "routes": [
     { "src": "/api/auth/(.*)", "dest": "/api/auth/[...all].ts" },

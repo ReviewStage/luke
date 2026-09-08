@@ -2,8 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_TOOL, realtimeToolDefinitions } from "@sidecar/acts";
 import { BRAIN_TURN_AUTHORITY } from "@sidecar/hosted";
-import { resolveToolPolicy, TOOL_EXECUTION, TOOL_POLICY_LAYER } from "@sidecar/runtime";
+import {
+  createRuntimeRegistries,
+  GROUP_PREFIX,
+  resolveToolPolicy,
+  TOOL_EFFECT,
+  TOOL_EXECUTION,
+  TOOL_POLICY_LAYER,
+} from "@sidecar/runtime";
 import { wireRecord } from "@sidecar/wire";
+import {
+  NOTEBOOK_MEMORY_PROVIDER_ID,
+  notebookMemoryProviderFor,
+  registerBrainBuiltIns,
+} from "./builtins.js";
 import {
   BRAIN_TOOL,
   brainToolCatalog,
@@ -121,4 +133,38 @@ test("a child's task turn loses announce like an ask, and the session tools stan
   assert.equal(capped.allows(BRAIN_TOOL.SESSIONS_HISTORY), false);
   assert.equal(below.allows(BRAIN_TOOL.SESSIONS_SPAWN), true);
   assert.equal(below.allows(BRAIN_TOOL.SUBAGENTS), true);
+});
+
+test("the memory tools stand in the catalog as host reads under their own group", () => {
+  const catalog = brainToolCatalog();
+  for (const name of [BRAIN_TOOL.MEMORY_SEARCH, BRAIN_TOOL.MEMORY_GET]) {
+    const entry = catalog.find((tool) => tool.id === name);
+    assert.ok(entry, name);
+    assert.equal(entry.execution, TOOL_EXECUTION.HOST);
+    assert.equal(entry.effect, TOOL_EFFECT.READ);
+    assert.ok(entry.groups.includes(TOOL_GROUP.MEMORY));
+    assert.ok(entry.groups.includes(TOOL_GROUP.READ));
+  }
+  const denied = resolveToolPolicy(catalog, {
+    agent: { deny: [`${GROUP_PREFIX}${TOOL_GROUP.MEMORY}`] },
+  });
+  assert.equal(denied.allows(BRAIN_TOOL.MEMORY_SEARCH), false);
+  assert.equal(denied.allows(BRAIN_TOOL.MEMORY_GET), false);
+  assert.equal(denied.allows(BRAIN_TOOL.READ_TRANSCRIPT), true);
+});
+
+test("the built-ins register the notebook index as a memory provider per embedding adapter", () => {
+  const registries = registerBrainBuiltIns(createRuntimeRegistries());
+  assert.deepEqual(
+    registries.memoryProviders.entries().map((entry) => [entry.id, entry.embeddingAdapterId]),
+    [
+      [NOTEBOOK_MEMORY_PROVIDER_ID.OPENAI, "openai-embeddings"],
+      [NOTEBOOK_MEMORY_PROVIDER_ID.HOSTED, "hosted-embeddings"],
+    ],
+  );
+  assert.equal(notebookMemoryProviderFor("provider-key"), NOTEBOOK_MEMORY_PROVIDER_ID.OPENAI);
+  assert.equal(notebookMemoryProviderFor("hosted-account"), NOTEBOOK_MEMORY_PROVIDER_ID.HOSTED);
+  for (const provider of registries.memoryProviders.entries()) {
+    assert.deepEqual([...provider.capabilities], ["keyword", "vector", "notebook"]);
+  }
 });

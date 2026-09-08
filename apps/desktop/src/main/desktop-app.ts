@@ -185,6 +185,7 @@ import { registerSettingsRowsIpc } from "./ipc/settings-rows";
 import { registerTrackerConnectionIpc } from "./ipc/tracker-connection";
 import { registerVoiceRuntimeIpc } from "./ipc/voice-runtime";
 import { registerWindowSurfaceIpc } from "./ipc/window-surface";
+import { wireMemory } from "./memory-wiring";
 import { MediaDuckController } from "./native/media-duck";
 import { MicrophoneRouteWatcher } from "./native/microphone-route";
 import { OutputVolumeWatcher } from "./native/output-volume";
@@ -488,6 +489,7 @@ const runtimeStoreWiring = wireRuntimeStore({
   persistent: runMode.observesProviders,
   createWorker: () => new Worker(runtimeStoreWorkerPath(__dirname), { name: "runtime-store" }),
   agentRoot: () => agentRootPath(app.getPath("userData")),
+  workspaceDirectory: () => agentWorkspacePath(),
   ensureDirectory: (directory) => fs.mkdirSync(directory, { recursive: true, mode: 0o700 }),
   now: Date.now,
   createEventId: () => randomUUID(),
@@ -1455,7 +1457,12 @@ async function applyVoiceCredential(): Promise<void> {
   await transitionVoiceCredential({
     retire: () => brainWiring.retire(),
     apply: () => voiceCapabilities.apply(),
-    rebuild: brainWiring.rebuild,
+    rebuild: async () => {
+      await brainWiring.rebuild();
+      // A new credential is a new embedding adapter: the index is synced again
+      // so chunks indexed keyword-only gain their vectors.
+      void memoryWiring.sync();
+    },
   });
 }
 
@@ -1618,6 +1625,29 @@ const AGENT_SKILLS_DIRECTORY = "skills";
 const agentWorkspacePath = () =>
   path.join(agentRootPath(app.getPath("userData")), AGENT_WORKSPACE_DIRECTORY);
 
+/**
+ * The notebook's index and recall: the workspace files chunked and ranked in
+ * the store's worker, embedded on whichever credential the brain runs on,
+ * watched for a hand edit, and read by the brain's memory tools and by the
+ * bounded recall an eligible conversation's ask earns. It reaches the brain
+ * wiring below through lazy seams, since each needs the other only at run time.
+ */
+const memoryWiring = wireMemory({
+  persistent: runMode.observesProviders,
+  client: runtimeStoreWiring.client,
+  embeddingAdapter: () => voiceCapabilities.embeddingAdapter,
+  workspaceDirectory: agentWorkspacePath,
+  createRuntime: () => brainWiring.createRuntime(),
+  conversationDirectory: () => runtimeStoreWiring.directory().entries,
+  isTemporary: runtimeStoreWiring.isTemporary,
+  historyLines: (sessionKey) => runtimeStoreWiring.thread(sessionKey).entries(),
+  now: Date.now,
+  createId: () => randomUUID(),
+  report: (message) => process.stderr.write(`${message}\n`),
+  onSynced: () => {
+    void runtimeStoreWiring.refreshNotebook();
+  },
+});
 const brainWiring = wireBrain({
   repositoryFor: (sessionKey) => runtimeStoreWiring.brainStateRepository(sessionKey),
   ensureObservedConversation: async (sessionKey, name) => {
@@ -1674,7 +1704,10 @@ const brainWiring = wireBrain({
     trackedIssues: () => trackedIssues,
     appGuide: () => appGuide,
     rememberedFacts: runtimeStoreWiring.rememberedFacts,
-    mutateRememberedFacts: runtimeStoreWiring.mutateRememberedFacts,
+    notebook: {
+      remember: runtimeStoreWiring.rememberNotebookEntry,
+      forget: runtimeStoreWiring.forgetNotebookEntry,
+    },
     performAppAct: performBrainAppAct,
     recordConversationEntry: runtimeStoreWiring.recordConversationEntry,
   },
@@ -1694,6 +1727,8 @@ const brainWiring = wireBrain({
   skillRoots: () => [path.join(agentWorkspacePath(), AGENT_SKILLS_DIRECTORY)],
   runnable: () => runMode.observesProviders && runMode.sendsNetwork && accountCapabilitiesActive(),
   dropBriefings: () => speechArbiter.dropBriefings(),
+  memory: (sessionKey) => memoryWiring.accessFor(sessionKey),
+  recall: (sessionKey) => memoryWiring.recallFor(sessionKey),
 });
 
 const conversationControls = conversationOperations({
@@ -3059,6 +3094,9 @@ export function startDesktopApp(): void {
         // never rewritten: an edit the developer or the agent made stands.
         try {
           await brainWiring.seedWorkspace();
+          // The index follows the files: synced once here and again at every
+          // change the watcher sees, so a hand edit is searchable within seconds.
+          void memoryWiring.start();
         } catch (error) {
           process.stderr.write(
             `Brain workspace could not be seeded: ${error instanceof Error ? error.message : String(error)}\n`,
@@ -3312,6 +3350,7 @@ export function startDesktopApp(): void {
     stopHistoryMaintenance?.();
     cronScheduler.stop();
     brainWiring.retire();
+    memoryWiring.stop();
     // Deliberately not a flush: a request here either delays the quit or is
     // killed mid-flight, and an instant quit is worth the last minute of
     // counts.

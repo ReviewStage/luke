@@ -87,6 +87,8 @@ export const HOSTED_SERVICE_PATH = {
   BRAIN_RESPOND_V2: "/api/brain/v2/respond",
   BRAIN_COUNT_TOKENS: "/api/brain/v2/count-tokens",
   BRAIN_COMPACT: "/api/brain/v2/compact",
+  /** Embeddings for the notebook index on Luke's key (POST), the fourth operation of the second contract. */
+  BRAIN_EMBED: "/api/brain/v2/embed",
   ACCOUNT_DELETE: "/api/account/delete",
   USAGE: "/api/usage",
   EVENTS: "/api/events",

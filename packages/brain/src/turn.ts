@@ -53,6 +53,9 @@ export const REFUSAL_REASON = {
   NO_CHILDREN: "not run: this conversation cannot delegate",
   NOT_OWN_CHILD: "not run: no child of this conversation has that id",
   EMPTY_TASK: "a task needs words",
+  NO_MEMORY: "not run: this agent has no notebook index",
+  EMPTY_QUERY: "a search needs words",
+  NOT_MEMORY_PATH: "not read: that path is not a notebook file",
 } as const;
 
 export const TURN_OUTCOME = {
@@ -112,6 +115,8 @@ export interface TurnPlan {
   events: readonly BrainWakeEvent[];
   /** The words the turn opens with, each ingested as the developer's or the host's, in order. */
   open: (events: readonly BrainWakeEvent[], now: number) => readonly string[];
+  /** The developer's own words when the turn is their ask, for the recall that precedes the inference. */
+  question?: string;
   /**
    * Hears every checkpoint of this turn that landed with its opening words
    * in it, so a host that owes someone an answer about those words — a

@@ -5,6 +5,7 @@ import {
 } from "@sidecar/runtime-contracts";
 import {
   isRecord,
+  isWireNumber,
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
@@ -38,6 +39,8 @@ export const HOSTED_BRAIN_OPERATION = {
   RESPOND: "respond",
   COUNT_TOKENS: "count-tokens",
   COMPACT: "compact",
+  /** Embeddings for the notebook index: texts in, one vector each out, under the model the service fixes. */
+  EMBED: "embed",
 } as const;
 
 export type HostedBrainOperation =
@@ -65,6 +68,12 @@ export const HOSTED_BRAIN_TOOL_BOUNDS = {
 /** What the service fixes for one inference, as the desktop may ask within it. */
 export const HOSTED_BRAIN_OPTION_BOUNDS = {
   MAXIMUM_OUTPUT_TOKENS: 16_000,
+} as const;
+
+/** How much one embed request may carry: a sync's batch of notebook chunks, never a transcript. */
+export const HOSTED_BRAIN_EMBED_BOUNDS = {
+  MAXIMUM_TEXTS: 64,
+  MAXIMUM_TEXT_CHARS: 8_000,
 } as const;
 
 export interface HostedBrainBounds {
@@ -171,6 +180,18 @@ export interface HostedBrainCompactRequest {
   contract: typeof HOSTED_BRAIN_CONTRACT_VERSION;
   prompt: string;
   input: readonly WireRecord[];
+}
+
+export interface HostedBrainEmbedRequest {
+  contract: typeof HOSTED_BRAIN_CONTRACT_VERSION;
+  texts: readonly string[];
+}
+
+/** What the service answers an embed with: the model it used, its width, and one vector per text in order. */
+export interface HostedBrainEmbedAnswer {
+  model: string;
+  dimensions: number;
+  vectors: readonly (readonly number[])[];
 }
 
 /** Why a v2 request was refused, so the desktop can say the same thing the service does. */
@@ -327,6 +348,53 @@ export function hostedBrainCompactRequestFromWire(
   value: UnparsedWireValue,
 ): HostedBrainRequestRead<HostedBrainCompactRequest> {
   return requestReader({ prompt: promptRead, input: inputRead })(value);
+}
+
+/** The texts to embed: each non-empty and within its bound, the batch within its count. */
+const textsRead: FieldRead<readonly string[]> = (value) => {
+  if (!Array.isArray(value) || value.length === 0) {
+    return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
+  }
+  if (value.length > HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXTS) {
+    return refused(HOSTED_BRAIN_REQUEST_REFUSAL.OPTIONS_OUT_OF_BOUNDS);
+  }
+  const texts: string[] = [];
+  for (const entry of value) {
+    if (!isWireString(entry) || entry.trim().length === 0) {
+      return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
+    }
+    if (entry.length > HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXT_CHARS) {
+      return refused(HOSTED_BRAIN_REQUEST_REFUSAL.OPTIONS_OUT_OF_BOUNDS);
+    }
+    texts.push(entry);
+  }
+  return { ok: true, request: texts };
+};
+
+export function hostedBrainEmbedRequestFromWire(
+  value: UnparsedWireValue,
+): HostedBrainRequestRead<HostedBrainEmbedRequest> {
+  return requestReader({ texts: textsRead })(value);
+}
+
+export function hostedBrainEmbedAnswerFromWire(
+  value: UnparsedWireValue,
+): HostedBrainEmbedAnswer | undefined {
+  if (!isRecord(value)) return undefined;
+  const model = isWireString(value.model) && value.model.length > 0 ? value.model : undefined;
+  const dimensions = positiveWhole(value.dimensions);
+  if (!model || !dimensions || !Array.isArray(value.vectors)) return undefined;
+  const vectors: number[][] = [];
+  for (const entry of value.vectors) {
+    if (!Array.isArray(entry) || entry.length !== dimensions) return undefined;
+    const vector: number[] = [];
+    for (const component of entry) {
+      if (!isWireNumber(component)) return undefined;
+      vector.push(component);
+    }
+    vectors.push(vector);
+  }
+  return { model, dimensions, vectors };
 }
 
 export interface HostedBrainCountTokensAnswer {

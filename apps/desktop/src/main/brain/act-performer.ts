@@ -32,17 +32,18 @@ import {
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS, isWireString, type WireRecord } from "@sidecar/wire";
 import type { BrainAppActRequest } from "#shared/contracts";
-import {
-  forgetRememberedFact,
-  type RememberedFactsWriter,
-  type SessionActPerformer,
-  saveRememberedFact,
-} from "../ipc/session-acts";
+import type { SessionActPerformer } from "../ipc/session-acts";
 
 /** The developer's saved creation tie-breaks, as the projects context narrates them. */
 export interface WorkspaceCreationDefaults {
   defaultProviderId?: string;
   defaultProjectIds?: Readonly<Partial<Record<string, string>>>;
+}
+
+/** The notebook as an act reaches it: remember answers whether the words now stand, forget whether the entry is gone. */
+export interface BrainNotebookWriter {
+  remember(ask: { id: string; words: string; replaces?: string }): Promise<boolean>;
+  forget(id: string): Promise<boolean>;
 }
 
 export interface BrainActPerformerDependencies {
@@ -59,19 +60,15 @@ export interface BrainActPerformerDependencies {
   trackedIssues: () => readonly TrackedIssue[] | undefined;
   /** The guide as the renderer last reported it; empty before it has. */
   appGuide: () => AppGuideSnapshot;
+  /** The notebook's entries as the validators read them: what the model may name by id. */
   rememberedFacts: () => readonly RememberedFact[];
   /**
-   * Runs one read-compute-replace of the remembered facts under the host's
-   * queue, so two conversations remembering at once cannot drop each other's
-   * fact. The work is handed the list as it stands and the writer that
-   * persists its replacement, and what it answers is the list that then stands.
+   * The notebook's two writes, each carried whole by the store's worker,
+   * which serializes every mutation of the workspace and reconciles a hand
+   * edit before writing, so two conversations remembering at once cannot
+   * drop each other's entry.
    */
-  mutateRememberedFacts: (
-    work: (
-      current: readonly RememberedFact[],
-      write: RememberedFactsWriter,
-    ) => Promise<readonly RememberedFact[]>,
-  ) => Promise<readonly RememberedFact[]>;
+  notebook: BrainNotebookWriter;
   /** Carries an app act only a renderer can perform, and answers what became of it. */
   performAppAct: (action: BrainAppActRequest["action"]) => Promise<WireRecord>;
   /** Records the ask a carried session act was, so the thread holds it. */
@@ -184,24 +181,20 @@ export function createBrainActPerformer(
 
   const carryAppAction = (action: CarriedAppAction): Promise<WireRecord> =>
     dispatchByKind(action, {
-      // The two memory writes are the main process's own: the list lives
-      // here, and the store's answer is the whole report.
-      [APP_TOOL_KIND.REMEMBER]: async (act) => {
-        const facts = await dependencies.mutateRememberedFacts((current, write) =>
-          saveRememberedFact(current, act.words, act.replaces, randomUUID(), write),
-        );
-        return facts.some((fact) => fact.words === act.words)
+      // The two memory writes are the notebook's own: the store's worker
+      // writes the line and its provenance, and its answer is the whole report.
+      [APP_TOOL_KIND.REMEMBER]: async (act) =>
+        (await dependencies.notebook.remember({
+          id: randomUUID(),
+          words: act.words,
+          ...(act.replaces !== undefined ? { replaces: act.replaces } : undefined),
+        }))
           ? { status: ACT_RESULT_STATUS.ACCEPTED }
-          : rejection(REFUSAL.MEMORY_NOT_SAVED);
-      },
-      [APP_TOOL_KIND.FORGET]: async (act) => {
-        const facts = await dependencies.mutateRememberedFacts((current, write) =>
-          forgetRememberedFact(current, act.id, write),
-        );
-        return facts.some((fact) => fact.id === act.id)
-          ? rejection(REFUSAL.MEMORY_NOT_REMOVED)
-          : { status: ACT_RESULT_STATUS.ACCEPTED };
-      },
+          : rejection(REFUSAL.MEMORY_NOT_SAVED),
+      [APP_TOOL_KIND.FORGET]: async (act) =>
+        (await dependencies.notebook.forget(act.id))
+          ? { status: ACT_RESULT_STATUS.ACCEPTED }
+          : rejection(REFUSAL.MEMORY_NOT_REMOVED),
       [APP_TOOL_KIND.SETTING]: (act) => dependencies.performAppAct(act),
       [APP_TOOL_KIND.PANEL]: (act) => dependencies.performAppAct(act),
       [APP_TOOL_KIND.FEEDBACK]: (act) => dependencies.performAppAct(act),

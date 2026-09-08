@@ -30,6 +30,9 @@ const SEED_AGENTS = [
   "- Name a session only by the identity the standing context lists for it right now.",
   "- Your workspace files are yours to keep current: notes for yourself go in MEMORY.md, stable",
   "  facts about the developer in USER.md, dated notes under memory/.",
+  "- Before answering anything about prior work, decisions, dates, people, preferences, or",
+  "  todos, run memory_search, then memory_get to pull only the lines you need. Say you checked",
+  "  when confidence stays low, and report a search that ran keyword-only or was unavailable.",
   "",
 ].join("\n");
 

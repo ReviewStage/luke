@@ -1,4 +1,4 @@
-import type { RememberedFact } from "@sidecar/acts";
+import type { EmbeddingModelIdentity, IndexedFileWrite, MemoryReadResult } from "@sidecar/memory";
 import type { ConversationEntry } from "@sidecar/realtime";
 import type { ScheduledJob } from "@sidecar/runtime";
 import type {
@@ -16,7 +16,17 @@ import type { DeletionOptions, DeletionOutcome, RestoreResult } from "./archives
 import type { EnvelopeRead } from "./brain-envelope.js";
 import type { ConversationCreation } from "./conversations-table.js";
 import type { BrainStateSave } from "./envelope.js";
+import type { HistorySearchHit } from "./history-table.js";
 import type { MaintenanceReport } from "./maintenance-run.js";
+import type {
+  EmbeddingWrite,
+  MemoryApplyReport,
+  MemoryIndexStatus,
+  MemoryScanPlan,
+  MemorySearchOutcome,
+  MemorySearchQuery,
+} from "./memory-index-table.js";
+import type { NotebookEntry, NotebookMutation } from "./notebook-table.js";
 
 /**
  * What crosses between the store's client on the main thread and the worker
@@ -33,8 +43,16 @@ export const RUNTIME_STORE_METHOD = {
   HISTORY_APPEND: "history.append",
   HISTORY_LIST: "history.list",
   HISTORY_CUTOFF: "history.cutoff",
-  FACTS_LIST: "facts.list",
-  FACTS_REPLACE: "facts.replace",
+  HISTORY_SEARCH: "history.search",
+  NOTEBOOK_LIST: "notebook.list",
+  NOTEBOOK_REMEMBER: "notebook.remember",
+  NOTEBOOK_FORGET: "notebook.forget",
+  MEMORY_PLAN_SYNC: "memory.plan-sync",
+  MEMORY_APPLY_SYNC: "memory.apply-sync",
+  MEMORY_SEARCH: "memory.search",
+  MEMORY_GET: "memory.get",
+  MEMORY_REBUILD: "memory.rebuild",
+  MEMORY_STATUS: "memory.status",
   CONVERSATIONS_LIST: "conversations.list",
   CONVERSATION_CREATE: "conversations.create",
   CONVERSATION_ARCHIVE: "conversations.archive",
@@ -61,6 +79,8 @@ export type RuntimeStoreMethod = (typeof RUNTIME_STORE_METHOD)[keyof typeof RUNT
 export interface RuntimeStoreOpenOptions {
   /** The agent's own directory under Luke's application data; the database lives in it. */
   agentRoot: string;
+  /** The agent's identity workspace, the notebook's root; `<agentRoot>/workspace` by default. */
+  workspaceDirectory?: string;
   agentId: AgentId;
   sessionKey: SessionKey;
   conversationName: string;
@@ -89,13 +109,48 @@ export interface RuntimeStoreMethods {
     params: { sessionKey: SessionKey };
     result: number | undefined;
   };
-  [RUNTIME_STORE_METHOD.FACTS_LIST]: {
-    params: Record<string, never>;
-    result: readonly RememberedFact[];
+  [RUNTIME_STORE_METHOD.HISTORY_SEARCH]: {
+    params: { sessionKeys: readonly SessionKey[]; query: string; limit: number; now: number };
+    result: readonly HistorySearchHit[];
   };
-  [RUNTIME_STORE_METHOD.FACTS_REPLACE]: {
-    params: { facts: readonly RememberedFact[] };
-    result: boolean;
+  [RUNTIME_STORE_METHOD.NOTEBOOK_LIST]: {
+    params: { now: number };
+    result: readonly NotebookEntry[];
+  };
+  [RUNTIME_STORE_METHOD.NOTEBOOK_REMEMBER]: {
+    params: { id: string; words: string; replaces?: string; now: number };
+    result: NotebookMutation;
+  };
+  [RUNTIME_STORE_METHOD.NOTEBOOK_FORGET]: {
+    params: { id: string; now: number };
+    result: NotebookMutation;
+  };
+  [RUNTIME_STORE_METHOD.MEMORY_PLAN_SYNC]: {
+    params: { identity?: EmbeddingModelIdentity; now: number };
+    result: MemoryScanPlan;
+  };
+  [RUNTIME_STORE_METHOD.MEMORY_APPLY_SYNC]: {
+    params: {
+      changed: readonly IndexedFileWrite[];
+      removed: readonly string[];
+      embeddings: readonly EmbeddingWrite[];
+      identity?: EmbeddingModelIdentity;
+      now: number;
+    };
+    result: MemoryApplyReport;
+  };
+  [RUNTIME_STORE_METHOD.MEMORY_SEARCH]: {
+    params: MemorySearchQuery;
+    result: MemorySearchOutcome;
+  };
+  [RUNTIME_STORE_METHOD.MEMORY_GET]: {
+    params: { path: string; from?: number; lines?: number };
+    result: MemoryReadResult | undefined;
+  };
+  [RUNTIME_STORE_METHOD.MEMORY_REBUILD]: { params: Record<string, never>; result: boolean };
+  [RUNTIME_STORE_METHOD.MEMORY_STATUS]: {
+    params: Record<string, never>;
+    result: MemoryIndexStatus;
   };
   [RUNTIME_STORE_METHOD.CONVERSATIONS_LIST]: {
     params: Record<string, never>;

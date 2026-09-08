@@ -100,11 +100,22 @@ function performer(overrides: Partial<BrainActPerformerDependencies> = {}) {
     trackedIssues: () => undefined,
     appGuide: () => EMPTY_APP_GUIDE,
     rememberedFacts: () => facts,
-    mutateRememberedFacts: (work) =>
-      work(facts, (next) => {
-        facts = next;
+    // A notebook fake with the worker's own rules: one line per words, a replaced entry gone first.
+    notebook: {
+      remember: async (ask) => {
+        const retained = facts.filter((fact) => fact.id !== ask.replaces);
+        if (ask.replaces !== undefined && retained.length === facts.length) return false;
+        facts = retained.some((fact) => fact.words === ask.words)
+          ? retained
+          : [...retained, { id: ask.id, words: ask.words }];
         return true;
-      }),
+      },
+      forget: async (id) => {
+        if (!facts.some((fact) => fact.id === id)) return false;
+        facts = facts.filter((fact) => fact.id !== id);
+        return true;
+      },
+    },
     performAppAct: async (action) => {
       appActs.push(action);
       return { status: ACT_RESULT_STATUS.ACCEPTED };
@@ -196,24 +207,19 @@ test("memory acts are the main process's own, and the store's answer is the repo
   assert.equal(appActs.length, 0);
 });
 
-test("two conversations remembering at once both land when the host serializes the mutations", async () => {
+test("two conversations remembering at once both land: each write is one whole request to the notebook", async () => {
   let facts: readonly RememberedFact[] = [];
-  let mutations: Promise<unknown> = Promise.resolve();
-  const slowWrite = async (next: readonly RememberedFact[]) => {
-    // A store that answers a beat later, so an unserialized second read would still see the old list.
-    await new Promise((resolve) => setImmediate(resolve));
-    facts = next;
-    return true;
-  };
   const { acts } = performer({
     rememberedFacts: () => facts,
-    mutateRememberedFacts: (work) => {
-      const mutation = mutations.then(
-        () => work(facts, slowWrite),
-        () => work(facts, slowWrite),
-      );
-      mutations = mutation.catch(() => undefined);
-      return mutation;
+    notebook: {
+      remember: async (ask) => {
+        // The worker answers one request at a time; a beat's delay here shows
+        // the performer never reads the list, computes, and writes it back.
+        await new Promise((resolve) => setImmediate(resolve));
+        facts = [...facts, { id: ask.id, words: ask.words }];
+        return true;
+      },
+      forget: async () => false,
     },
   });
   const [first, second] = await Promise.all([

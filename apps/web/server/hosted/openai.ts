@@ -8,6 +8,7 @@
 import type {
   attentionResponsesRequest,
   BrainCompactRequest,
+  BrainEmbeddingsRequest,
   BrainInputTokensRequest,
   BrainResponsesRequest,
   legacyAttentionResponsesRequest,
@@ -45,7 +46,8 @@ export type OpenAiPostBody =
   | ReturnType<typeof subjectResponsesRequest>
   | BrainResponsesRequest
   | BrainCompactRequest
-  | BrainInputTokensRequest;
+  | BrainInputTokensRequest
+  | BrainEmbeddingsRequest;
 
 export interface OpenAiUpstreamOptions {
   apiKey: string;

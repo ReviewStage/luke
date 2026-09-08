@@ -8,6 +8,8 @@ import {
   type BrainChildAccess,
   type BrainDelivery,
   BrainGenerationClock,
+  type BrainMemoryAccess,
+  type BrainRecallAsk,
   type BrainRoster,
   type BrainStateRepository,
   BrainStateStore,
@@ -22,6 +24,7 @@ import {
   brainToolNotes,
   HOSTED_MODEL_ADAPTER_ID,
   LOOK_SUBJECT,
+  notebookMemoryProviderFor,
   OPENAI_MODEL_ADAPTER_ID,
   RESPONSES_CONTEXT_ENGINE_ID,
   registerBrainBuiltIns,
@@ -61,7 +64,7 @@ import {
   type WorkspaceSeeding,
   writeWorkspaceFile,
 } from "@sidecar/runtime";
-import type { ModelAdapter } from "@sidecar/runtime-contracts";
+import type { AgentRuntime, ModelAdapter } from "@sidecar/runtime-contracts";
 import {
   CHILD_RUN_STATUS,
   type ChildCompletionRecord,
@@ -158,6 +161,21 @@ export interface BrainWiringDependencies {
   /** Whether a brain may stand at all: observing, on the network, and past the account gate. */
   runnable: () => boolean;
   dropBriefings: () => void;
+  /**
+   * The notebook's search and read for one conversation's memory tools: a
+   * search may reach past private conversations, never the asking one, whose
+   * words are already its context. Absent, or answering nothing, the tools refuse.
+   */
+  memory?: (sessionKey: SessionKey) => BrainMemoryAccess | undefined;
+  /**
+   * Private-conversation recall for one conversation's asks: the host decides
+   * which conversations recall (main and the developer's private threads,
+   * never a temporary thread, an observed session, or a child) and answers
+   * nothing for one that does not.
+   */
+  recall?: (
+    sessionKey: SessionKey,
+  ) => ((ask: BrainRecallAsk) => Promise<string | undefined>) | undefined;
 }
 
 export interface BrainIpcRegistration {
@@ -252,6 +270,12 @@ export interface BrainWiring {
   inspectPrompt: (turn: BrainTurnDescription) => Promise<BuiltPrompt | undefined>;
   /** Seeds the workspace's missing files; safe to run at every launch. */
   seedWorkspace: () => Promise<WorkspaceSeeding>;
+  /**
+   * A fresh runtime over the standing configuration and the live model, for
+   * a run outside any conversation — the recall subrun — or nothing when no
+   * brain may stand. Its context is the caller's to open and dispose.
+   */
+  createRuntime: () => AgentRuntime | undefined;
 }
 
 interface OpenConversation {
@@ -469,6 +493,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
           ? OPENAI_MODEL_ADAPTER_ID
           : HOSTED_MODEL_ADAPTER_ID,
       contextEngineId: RESPONSES_CONTEXT_ENGINE_ID,
+      memoryProviderId: notebookMemoryProviderFor(credential.kind),
       credential,
       workspaceDirectory: dependencies.workspaceDirectory(),
       skillRoots: dependencies.skillRoots(),
@@ -484,6 +509,24 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     }
     return configurationStore.snapshot();
   };
+
+  // The memory tools reach the notebook's index through the host's one
+  // service; a host with none, or one not yet open, refuses them in the agent.
+  const memoryAccessFor = (sessionKey: SessionKey): BrainMemoryAccess => ({
+    search: async (ask) => {
+      const memory = dependencies.memory?.(sessionKey);
+      if (!memory)
+        return { status: ACT_RESULT_STATUS.REJECTED, reason: "no notebook index stands" };
+      return memory.search(ask);
+    },
+    get: async (ask) => {
+      const memory = dependencies.memory?.(sessionKey);
+      if (!memory)
+        return { status: ACT_RESULT_STATUS.REJECTED, reason: "no notebook index stands" };
+      return memory.get(ask);
+    },
+  });
+  const recallFor = (sessionKey: SessionKey) => dependencies.recall?.(sessionKey);
 
   /** The skills the latest preparation listed to the model: the only ones `load_skill` may load. */
   interface ListedSkills {
@@ -584,6 +627,8 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         ? { executionDeadlineMs: childRecord.timeoutMs }
         : undefined),
       children: childAccessFor(sessionKey),
+      ...(dependencies.memory ? { memory: memoryAccessFor(sessionKey) } : undefined),
+      ...(recallFor(sessionKey) ? { recall: recallFor(sessionKey) } : undefined),
       runtime: runtimeDescriptor.create(model, engineDescriptor),
       acts,
       roster: dependencies.roster,
@@ -1128,5 +1173,16 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       return prepared.built;
     },
     seedWorkspace: () => seedWorkspace(dependencies.workspaceDirectory(), BRAIN_WORKSPACE_SEEDS),
+    createRuntime: () => {
+      const model = liveModel();
+      const snapshot = configurationStore?.snapshot();
+      if (!model || !snapshot) return undefined;
+      const runtimeDescriptor = registries.agentRuntimes.get(snapshot.configuration.agentRuntimeId);
+      const engineDescriptor = registries.contextEngines.get(
+        snapshot.configuration.contextEngineId,
+      );
+      if (!runtimeDescriptor || !engineDescriptor) return undefined;
+      return runtimeDescriptor.create(model, engineDescriptor);
+    },
   };
 }

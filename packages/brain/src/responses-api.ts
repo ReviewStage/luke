@@ -8,6 +8,7 @@ import {
 } from "@sidecar/runtime-contracts";
 import {
   isRecord,
+  isWireNumber,
   isWireString,
   text,
   type UnparsedWireValue,
@@ -274,6 +275,48 @@ export function brainInputTokensRequest(
 }
 
 export type BrainInputTokensRequest = ReturnType<typeof brainInputTokensRequest>;
+
+/** OpenAI's embeddings endpoint, the one call the notebook index makes on a key. */
+export const BRAIN_EMBEDDINGS_PATH = "/embeddings";
+
+/** The embedding model the notebook index runs on by default; a build-fixed choice, not a request field. */
+export const BRAIN_EMBEDDING_MODEL = "text-embedding-3-small";
+
+/** The embeddings request: the texts and the model, and no retention asked for. */
+export function brainEmbeddingsRequest(texts: readonly string[], options: { model: string }) {
+  return { model: options.model, input: texts, encoding_format: "float" };
+}
+
+export type BrainEmbeddingsRequest = ReturnType<typeof brainEmbeddingsRequest>;
+
+/**
+ * The vectors an embeddings answer carries, in the order of the texts sent,
+ * or nothing for a payload of any other shape or a vector of another width.
+ */
+export function embeddingsVectors(
+  payload: UnparsedWireValue | undefined,
+): { model: string; vectors: number[][] } | undefined {
+  if (!isRecord(payload) || !Array.isArray(payload.data)) return undefined;
+  const model = isWireString(payload.model) && payload.model.length > 0 ? payload.model : undefined;
+  if (!model) return undefined;
+  const indexed: { index: number; vector: number[] }[] = [];
+  let width: number | undefined;
+  for (const entry of payload.data) {
+    if (!isRecord(entry) || !Array.isArray(entry.embedding) || !isWireNumber(entry.index)) {
+      return undefined;
+    }
+    const vector: number[] = [];
+    for (const component of entry.embedding) {
+      if (!isWireNumber(component)) return undefined;
+      vector.push(component);
+    }
+    if (vector.length === 0 || (width !== undefined && width !== vector.length)) return undefined;
+    width = vector.length;
+    indexed.push({ index: entry.index, vector });
+  }
+  indexed.sort((a, b) => a.index - b.index);
+  return { model, vectors: indexed.map((entry) => entry.vector) };
+}
 
 /** The states a Responses object may be in; only two carry a reply. */
 export const RESPONSES_STATUS = {

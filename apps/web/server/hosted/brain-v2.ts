@@ -1,12 +1,16 @@
 import {
+  BRAIN_EMBEDDING_MODEL,
+  BRAIN_EMBEDDINGS_PATH,
   BRAIN_RESPONSES_COMPACT_PATH,
   BRAIN_RESPONSES_INPUT_TOKENS_PATH,
   BRAIN_RESPONSES_PATH,
   brainCompactRequest,
+  brainEmbeddingsRequest,
   brainInputTokensRequest,
   brainOutputReplayable,
   brainResponsesOutput,
   brainResponsesRequest,
+  embeddingsVectors,
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_OPERATION,
   HOSTED_BRAIN_REQUEST_REFUSAL,
@@ -16,6 +20,7 @@ import {
   hostedBrainBounds,
   hostedBrainCompactRequestFromWire,
   hostedBrainCountTokensRequestFromWire,
+  hostedBrainEmbedRequestFromWire,
   hostedBrainRespondRequestFromWire,
   hostedBrainToolCatalog,
   maximumHostedBrainRequestBytes,
@@ -291,6 +296,26 @@ export function handleBrainCountTokens(options: BrainV2Options): Promise<Respons
     answer: (payload) => {
       const inputTokens = responsesInputTokens(payload);
       return inputTokens === undefined ? undefined : { inputTokens };
+    },
+  });
+}
+
+/**
+ * POST: one vector per text for the desktop's notebook index, under the
+ * embedding model this build fixes. The texts are notebook chunks the
+ * desktop chose to index; the service embeds them and keeps none.
+ */
+export function handleBrainEmbed(options: BrainV2Options): Promise<Response> {
+  return brainOperation(options, {
+    read: hostedBrainEmbedRequestFromWire,
+    path: BRAIN_EMBEDDINGS_PATH,
+    body: (request) => brainEmbeddingsRequest(request.texts, { model: BRAIN_EMBEDDING_MODEL }),
+    answer: (payload) => {
+      const answer = embeddingsVectors(payload);
+      const dimensions = answer?.vectors[0]?.length;
+      return answer && dimensions
+        ? { model: answer.model, dimensions, vectors: answer.vectors }
+        : undefined;
     },
   });
 }

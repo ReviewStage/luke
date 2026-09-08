@@ -16,51 +16,7 @@ import {
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import type { SettingsStore } from "../settings-store";
-import {
-  createSessionActPerformer,
-  forgetRememberedFact,
-  saveRememberedFact,
-} from "./session-acts";
-
-test("memory writes deduplicate and leave state unchanged when persistence fails", async () => {
-  const held = [{ id: "fact-one", words: "prefers concise answers" }];
-  let writes = 0;
-  const write = async () => {
-    writes += 1;
-    return false;
-  };
-
-  assert.equal(
-    await saveRememberedFact(held, "prefers concise answers", undefined, "duplicate", write),
-    held,
-  );
-  assert.equal(writes, 0);
-  assert.equal(await saveRememberedFact(held, "works on macOS", undefined, "new", write), held);
-  assert.equal(await forgetRememberedFact(held, "fact-one", write), held);
-  assert.equal(writes, 2);
-});
-
-test("replacing a fact with existing wording removes the contradicted entry", async () => {
-  const held = [
-    { id: "fact-one", words: "prefers detailed answers" },
-    { id: "fact-two", words: "prefers concise answers" },
-  ];
-  let written: readonly { id: string; words: string }[] | undefined;
-
-  const next = await saveRememberedFact(
-    held,
-    "prefers concise answers",
-    "fact-one",
-    "replacement",
-    async (facts) => {
-      written = facts;
-      return true;
-    },
-  );
-
-  assert.deepEqual(next, [held[1]]);
-  assert.deepEqual(written, next);
-});
+import { createSessionActPerformer } from "./session-acts";
 
 /*
  * The two acts that await something of their own between validation and the

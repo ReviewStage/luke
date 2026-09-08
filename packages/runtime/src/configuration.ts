@@ -173,6 +173,7 @@ export function defaultAgentConfiguration(options: {
   workspaceDirectory: string;
   skillRoots?: readonly string[];
   toolPolicy?: ToolPolicyLayers;
+  memoryProviderId?: string;
   agentId?: AgentId;
   reasoningEffort?: ReasoningEffort;
   maximumOutputTokens?: number;
@@ -186,6 +187,9 @@ export function defaultAgentConfiguration(options: {
     workspaceDirectory: options.workspaceDirectory,
     skillRoots: options.skillRoots ?? [],
     toolPolicy: options.toolPolicy ?? {},
+    ...(options.memoryProviderId !== undefined
+      ? { memoryProviderId: options.memoryProviderId }
+      : undefined),
     lifecycleServiceIds: [],
     ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : undefined),
     ...(options.maximumOutputTokens !== undefined

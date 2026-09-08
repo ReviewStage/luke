@@ -39,7 +39,7 @@ function inThread() {
   };
 }
 
-test("the protocol answers every request once and serves the brain store, the thread, and the facts", async () => {
+test("the protocol answers every request once and serves the brain store, the thread, the notebook, and the index", async () => {
   const root = agentRoot();
   const { client, close } = inThread();
   const report = await client.open({
@@ -74,8 +74,29 @@ test("the protocol answers every request once and serves the brain store, the th
   );
   assert.equal(appended.changed, true);
   assert.deepEqual(await client.listHistory(MAIN_SESSION_KEY, NOW), appended.entries);
-  assert.equal(await client.replacePersonalFacts([{ id: "f", words: "w" }]), true);
-  assert.deepEqual(await client.personalFacts(), [{ id: "f", words: "w" }]);
+  const remembered = await client.rememberNotebookEntry({ id: "f", words: "w", now: NOW });
+  assert.equal(remembered.ok, true);
+  assert.deepEqual(
+    (await client.listNotebookEntries(NOW)).map((entry) => [entry.id, entry.words]),
+    [["f", "w"]],
+  );
+  assert.equal(fs.existsSync(path.join(root, "workspace", "USER.md")), true);
+  const plan = await client.planMemorySync(undefined, NOW);
+  assert.deepEqual(
+    plan.changed.map((file) => file.path),
+    ["USER.md"],
+  );
+  await client.applyMemorySync({
+    changed: plan.changed,
+    removed: plan.removed,
+    embeddings: [],
+    now: NOW,
+  });
+  assert.equal((await client.searchMemory({ query: "w", now: NOW })).results.length, 1);
+  assert.equal((await client.readMemory("USER.md", 1, 1))?.text, "# USER.md");
+  assert.deepEqual(await client.searchHistory([MAIN_SESSION_KEY], "hello", 5, NOW), [
+    { sessionKey: MAIN_SESSION_KEY, entry: appended.entries[0] },
+  ]);
   const deleted = await client.deleteConversationHistory(MAIN_SESSION_KEY, NOW);
   assert.equal(deleted?.published, true);
   assert.deepEqual(await client.listHistory(MAIN_SESSION_KEY, NOW), []);

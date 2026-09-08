@@ -1,5 +1,5 @@
-import type { RememberedFact } from "@sidecar/acts";
 import type { BrainPersistedState, BrainStateLoad, BrainStateRepository } from "@sidecar/brain";
+import type { EmbeddingModelIdentity, MemoryReadResult } from "@sidecar/memory";
 import type { ConversationEntry } from "@sidecar/realtime";
 import type { ChildStore, ScheduledJob, ScheduledJobStore } from "@sidecar/runtime";
 import type {
@@ -15,7 +15,16 @@ import type { UnparsedWireValue } from "@sidecar/wire";
 import type { DeletionOptions, DeletionOutcome, RestoreResult } from "./archives.js";
 import type { ConversationCreation } from "./conversations-table.js";
 import { EnvelopeTracker } from "./envelope.js";
+import type { HistorySearchHit } from "./history-table.js";
 import type { MaintenanceReport } from "./maintenance-run.js";
+import type {
+  MemoryApplyReport,
+  MemoryIndexStatus,
+  MemoryScanPlan,
+  MemorySearchOutcome,
+  MemorySearchQuery,
+} from "./memory-index-table.js";
+import type { NotebookEntry, NotebookMutation } from "./notebook-table.js";
 import {
   RUNTIME_STORE_METHOD,
   type RuntimeStoreMethod,
@@ -132,8 +141,68 @@ export class RuntimeStoreClient {
     return this.request(RUNTIME_STORE_METHOD.HISTORY_CUTOFF, { sessionKey });
   }
 
-  personalFacts(): Promise<readonly RememberedFact[]> {
-    return this.request(RUNTIME_STORE_METHOD.FACTS_LIST, {});
+  /** The retained lines of the conversations named that carry the words, most recent first. */
+  searchHistory(
+    sessionKeys: readonly SessionKey[],
+    query: string,
+    limit: number,
+    now: number,
+  ): Promise<readonly HistorySearchHit[]> {
+    return this.request(RUNTIME_STORE_METHOD.HISTORY_SEARCH, { sessionKeys, query, limit, now });
+  }
+
+  /** The notebook's entries as they stand, the file reconciled first. */
+  listNotebookEntries(now: number): Promise<readonly NotebookEntry[]> {
+    return this.request(RUNTIME_STORE_METHOD.NOTEBOOK_LIST, { now });
+  }
+
+  rememberNotebookEntry(ask: {
+    id: string;
+    words: string;
+    replaces?: string;
+    now: number;
+  }): Promise<NotebookMutation> {
+    return this.request(RUNTIME_STORE_METHOD.NOTEBOOK_REMEMBER, ask);
+  }
+
+  forgetNotebookEntry(id: string, now: number): Promise<NotebookMutation> {
+    return this.request(RUNTIME_STORE_METHOD.NOTEBOOK_FORGET, { id, now });
+  }
+
+  planMemorySync(
+    identity: EmbeddingModelIdentity | undefined,
+    now: number,
+  ): Promise<MemoryScanPlan> {
+    return this.request(RUNTIME_STORE_METHOD.MEMORY_PLAN_SYNC, {
+      ...(identity ? { identity } : undefined),
+      now,
+    });
+  }
+
+  applyMemorySync(
+    params: RuntimeStoreMethods[typeof RUNTIME_STORE_METHOD.MEMORY_APPLY_SYNC]["params"],
+  ): Promise<MemoryApplyReport> {
+    return this.request(RUNTIME_STORE_METHOD.MEMORY_APPLY_SYNC, params);
+  }
+
+  searchMemory(query: MemorySearchQuery): Promise<MemorySearchOutcome> {
+    return this.request(RUNTIME_STORE_METHOD.MEMORY_SEARCH, query);
+  }
+
+  readMemory(path: string, from?: number, lines?: number): Promise<MemoryReadResult | undefined> {
+    return this.request(RUNTIME_STORE_METHOD.MEMORY_GET, {
+      path,
+      ...(from !== undefined ? { from } : undefined),
+      ...(lines !== undefined ? { lines } : undefined),
+    });
+  }
+
+  rebuildMemoryIndex(): Promise<boolean> {
+    return this.request(RUNTIME_STORE_METHOD.MEMORY_REBUILD, {});
+  }
+
+  memoryIndexStatus(): Promise<MemoryIndexStatus> {
+    return this.request(RUNTIME_STORE_METHOD.MEMORY_STATUS, {});
   }
 
   listConversations(): Promise<readonly ConversationRecord[]> {
@@ -183,10 +252,6 @@ export class RuntimeStoreClient {
     preserve: readonly SessionKey[];
   }): Promise<MaintenanceReport> {
     return this.request(RUNTIME_STORE_METHOD.MAINTENANCE_RUN, options);
-  }
-
-  replacePersonalFacts(facts: readonly RememberedFact[]): Promise<boolean> {
-    return this.request(RUNTIME_STORE_METHOD.FACTS_REPLACE, { facts });
   }
 
   /** The scheduler's jobs as a store: listed, written whole, and deleted through the worker. */

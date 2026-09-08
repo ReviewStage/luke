@@ -211,3 +211,50 @@ function listRetained(
   }
   return entries;
 }
+
+export interface HistorySearchHit {
+  readonly sessionKey: SessionKey;
+  readonly entry: ConversationEntry;
+}
+
+/**
+ * The retained lines of the conversations named that carry the words asked
+ * for, most recent first, each under its own conversation's cutoff and the
+ * same retention the panel draws. A recall over past conversations reads
+ * these and never a merged transcript: the lines already said, in the
+ * conversations the caller decided were eligible, and nothing indexed.
+ */
+export function searchHistory(
+  database: RuntimeDatabase,
+  sessionKeys: readonly SessionKey[],
+  query: string,
+  limit: number,
+  now: number,
+): readonly HistorySearchHit[] {
+  const needle = query.replace(/\s+/g, " ").trim().toLowerCase();
+  if (!needle || sessionKeys.length === 0) return [];
+  const hits: HistorySearchHit[] = [];
+  for (const sessionKey of sessionKeys) {
+    // SAFETY: the query selects the one text column the row type names.
+    const rows = database
+      .prepare(
+        `SELECT payload FROM history_events
+         WHERE session_key = ? AND recorded_at <= ? AND recorded_at >= ? AND recorded_at > ?
+           AND instr(lower(words), ?) > 0
+         ORDER BY recorded_at DESC, sequence DESC LIMIT ?`,
+      )
+      .all(
+        sessionKey,
+        now,
+        now - storedConversationMaximumAgeMs,
+        historyClearedAt(database, sessionKey) ?? -1,
+        needle,
+        limit,
+      ) as { payload: string }[];
+    for (const row of rows) {
+      const entry = historyEntryFromPayload(row.payload);
+      if (entry) hits.push({ sessionKey, entry });
+    }
+  }
+  return hits.sort((a, b) => (b.entry.recordedAt ?? 0) - (a.entry.recordedAt ?? 0)).slice(0, limit);
+}
