@@ -91,26 +91,27 @@ export const noUnknownParametersRule = defineRule({
       return resolvesToObject(alias, shadowedAliases, nextVisited);
     };
 
+    const unparsedInput = (
+      type: ESTree.TSType,
+      shadowedAliases: ReadonlySet<string>,
+    ): "objectParameter" | "unknownParameter" | null => {
+      if (type.type === "TSUnknownKeyword") return "unknownParameter";
+      return resolvesToObject(type, shadowedAliases) ? "objectParameter" : null;
+    };
+
     const checkParameters = (node: ParameterOwner) => {
       const shadowedAliases = lexicalTypeParameterNames(node, context.sourceCode.visitorKeys);
       for (const parameter of node.params) {
         const annotation = parameterAnnotation(parameter);
         if (annotation === null || annotation === undefined) continue;
-        if (annotation.typeAnnotation.type === "TSUnknownKeyword") {
-          const name = parameterName(parameter, context.sourceCode);
-          if (name === "cause") continue;
-          context.report({
-            node: annotation.typeAnnotation,
-            messageId: "unknownParameter",
-            data: { parameter: name },
-          });
-          continue;
-        }
-        if (!resolvesToObject(annotation.typeAnnotation, shadowedAliases)) continue;
+        const messageId = unparsedInput(annotation.typeAnnotation, shadowedAliases);
+        if (messageId === null) continue;
+        const name = parameterName(parameter, context.sourceCode);
+        if (messageId === "unknownParameter" && name === "cause") continue;
         context.report({
           node: annotation.typeAnnotation,
-          messageId: "objectParameter",
-          data: { parameter: parameterName(parameter, context.sourceCode) },
+          messageId,
+          data: { parameter: name },
         });
       }
     };
