@@ -388,11 +388,15 @@ Trust constraints:
   request ids, keys mutations, follows the sequence, and fills a gap from the
   host's log before delivering anything later. Desktop main is the one
   operator client; the renderer and voice windows keep the narrow preload
-  bridge and never speak the protocol. This machine's native capabilities
-  (opening an address with the operating system, carrying an app act to the
-  panel) are registered as one node's capabilities and asked for by name; a
-  capability no connected node offers answers a typed unavailable, and the
-  act that needed it is left undone and recorded as such, never as carried.
+  bridge and never speak the protocol. The native capabilities the brain's
+  own acts reach (opening an address a validated act named with the
+  operating system, carrying an app act to the panel) are registered as one
+  node's capabilities and asked for by name; a capability no connected node
+  offers answers a typed unavailable, and the act that needed it is left
+  undone and recorded as such, never as carried. Every other open the
+  desktop performs for itself (a settings row, an OAuth consent page, the
+  releases page, a Superset link) reaches the operating system directly, as
+  the client's own act, and crosses no node.
   Microphone, playback, window control, and OS opening stay the client's;
   scheduling, tool decisions, history, provider operations, and delivery
   policy stay the host's. Replies to the ear keep the reply-grant ledger's

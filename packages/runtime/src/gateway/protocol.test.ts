@@ -101,6 +101,22 @@ function transportFor(kind: TransportKind, server: GatewayServer, identity = OPE
     : new LoopbackTransport(server, identity);
 }
 
+/** Holds every answer of the transport until the scheduled work is fired, so an event can land mid-request. */
+function answeringLate(
+  transport: GatewayTransport,
+  schedule: (work: () => void) => void,
+): GatewayTransport {
+  return {
+    connected: () => transport.connected(),
+    events: (sink) => transport.events(sink),
+    request: async (request) => {
+      const response = await transport.request(request);
+      await new Promise<void>((resolve) => schedule(resolve));
+      return response;
+    },
+  };
+}
+
 function client(transport: GatewayTransport, onSnapshot?: (snapshot: WireValue) => void) {
   let ids = 0;
   return new GatewayClient({
@@ -243,6 +259,39 @@ for (const kind of ["in-process", "loopback"] as const) {
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(seen, [1, 2, 3, 4, 5]);
     assert.equal(c.lastSequence(), 5);
+  });
+
+  test(`[${kind}] an event emitted while a reconnection is in flight is delivered once it settles, not at the next gap`, async () => {
+    const h = harness();
+    const timers: Array<() => void> = [];
+    const schedule = (work: () => void) => {
+      timers.push(work);
+    };
+    const inner = transportFor(kind, h.server);
+    const transport =
+      inner instanceof LoopbackTransport
+        ? new LoopbackTransport(h.server, OPERATOR, { responseDelayMs: 50, schedule })
+        : answeringLate(inner, schedule);
+    const c = client(transport);
+    const seen: number[] = [];
+    c.onEvery((event) => seen.push(event.sequence));
+    h.server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+    // The wire loses event 2; event 3 shows the gap and opens the reconnection.
+    if (transport instanceof LoopbackTransport) transport.dropNextEvents(1);
+    else inner.setConnected(false);
+    h.server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+    inner.setConnected(true);
+    h.server.emit(GATEWAY_EVENT.DIRECTORY_CHANGED, { entries: [] });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(timers.length, 1);
+    // The host has answered from sequence 3; event 4 is emitted before the client adopts that answer.
+    h.server.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+    assert.deepEqual(seen, [1]);
+    for (const fire of timers.splice(0)) fire();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(seen, [1, 2, 3, 4]);
+    assert.equal(c.lastSequence(), 4);
   });
 
   test(`[${kind}] a reconnection past the replay window is answered with a snapshot, never a silent skip`, async () => {

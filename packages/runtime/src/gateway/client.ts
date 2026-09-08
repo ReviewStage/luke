@@ -53,6 +53,8 @@ export class GatewayClient {
   readonly #everyListener = new Set<GatewayClientEventListener>();
   #lastSequence = 0;
   #reconnecting: Promise<void> | undefined;
+  /** Events that arrived while a reconnection was in flight, taken again once it has settled. */
+  #arrivedDuringReconnect: GatewayEvent[] = [];
   #unsubscribe: (() => void) | undefined;
 
   constructor(options: GatewayClientOptions) {
@@ -119,6 +121,10 @@ export class GatewayClient {
   reconnect(): Promise<void> {
     this.#reconnecting ??= this.#reconnectOnce().finally(() => {
       this.#reconnecting = undefined;
+      const arrived = this.#arrivedDuringReconnect
+        .splice(0)
+        .sort((a, b) => a.sequence - b.sequence);
+      for (const event of arrived) this.#take(event);
     });
     return this.#reconnecting;
   }
@@ -158,6 +164,13 @@ export class GatewayClient {
 
   #take(event: GatewayEvent): void {
     if (event.sequence <= this.#lastSequence) return;
+    if (this.#reconnecting) {
+      // The host answered the reconnection from where it stood when asked;
+      // an event emitted since is not in that answer and must not wait for
+      // a later gap to surface it.
+      this.#arrivedDuringReconnect.push(event);
+      return;
+    }
     if (event.sequence !== this.#lastSequence + 1) {
       // The gap is filled first, from the host's own log; the event that
       // showed it arrives inside the replay, in its place.
