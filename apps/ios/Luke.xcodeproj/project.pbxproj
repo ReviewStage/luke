@@ -51,6 +51,7 @@
 		AABBCC000000000000000110 /* MarksTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000113 /* MarksTests.swift */; };
 		AABBCC000000000000000111 /* PaletteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000114 /* PaletteTests.swift */; };
 		AABBCC000000000000000112 /* SessionsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000115 /* SessionsStoreTests.swift */; };
+		AABBCC000000000000000118 /* VoiceViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000119 /* VoiceViewTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -127,6 +128,7 @@
 		AABBCC000000000000000113 /* MarksTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarksTests.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000114 /* PaletteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteTests.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000115 /* SessionsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsStoreTests.swift; sourceTree = "<group>"; };
+		AABBCC000000000000000119 /* VoiceViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceViewTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -213,6 +215,7 @@
 				AABBCC000000000000000113 /* MarksTests.swift */,
 				AABBCC000000000000000114 /* PaletteTests.swift */,
 				AABBCC000000000000000115 /* SessionsStoreTests.swift */,
+				AABBCC000000000000000119 /* VoiceViewTests.swift */,
 			);
 			path = LukeTests;
 			sourceTree = "<group>";
@@ -420,6 +423,7 @@
 				AABBCC000000000000000110 /* MarksTests.swift in Sources */,
 				AABBCC000000000000000111 /* PaletteTests.swift in Sources */,
 				AABBCC000000000000000112 /* SessionsStoreTests.swift in Sources */,
+				AABBCC000000000000000118 /* VoiceViewTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

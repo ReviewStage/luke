@@ -226,6 +226,29 @@ private final class VoiceSessionModel {
 
 }
 
+// MARK: - Talk button
+
+/// Longer than a normal tap, short enough that a tap does not feel delayed.
+/// This matches the desktop talk-key interaction.
+let talkButtonTapDuration: TimeInterval = 0.25
+
+enum TalkButtonReleaseAction: Sendable, Equatable {
+    /// Leave the microphone open until the next press and release.
+    case latch
+    /// Commit the open microphone turn now.
+    case send
+}
+
+/// A held first press sends on release. A quick first tap leaves the turn
+/// open, and any release after that latched turn sends it.
+func talkButtonReleaseAction(
+    heldDuration: TimeInterval,
+    wasLatched: Bool
+) -> TalkButtonReleaseAction {
+    if wasLatched { return .send }
+    return heldDuration < talkButtonTapDuration ? .latch : .send
+}
+
 // MARK: - VoiceView
 
 /// Voice conversation with Luke. Hold and release for push-to-talk, or tap
