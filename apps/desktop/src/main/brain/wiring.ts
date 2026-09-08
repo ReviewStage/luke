@@ -4,7 +4,6 @@ import {
   BrainGenerationClock,
   type BrainRoster,
   type BrainStateRepository,
-  type BrainStateStorage,
   BrainStateStore,
   type BrainTurnTraceRecord,
   responsesToolLoopRuntime,
@@ -41,10 +40,8 @@ interface TranscriptReader {
 }
 
 export interface BrainWiringDependencies {
-  /** A conversation's envelope in the runtime store, read and written only through the store built here. */
+  /** A conversation's envelope, read and written only through the store built here; a temporary thread's lives in memory alone. */
   repositoryFor: (sessionKey: SessionKey) => BrainStateRepository;
-  /** Whether a conversation is a temporary thread, whose envelope lives in this process alone. */
-  isTemporary: (sessionKey: SessionKey) => boolean;
   createId: () => string;
   report: (message: string) => void;
   traceTurn?: (record: BrainTurnTraceRecord) => void;
@@ -125,18 +122,6 @@ export interface BrainWiring {
   registerIpc: (registration: BrainIpcRegistration) => void;
 }
 
-/** A temporary thread's envelope, held in this process and gone with it. */
-class MemoryEnvelopeStorage implements BrainStateStorage {
-  #record: string | undefined;
-  read(): string | undefined {
-    return this.#record;
-  }
-  write(contents: string): boolean {
-    this.#record = contents;
-    return true;
-  }
-}
-
 interface OpenConversation {
   host: BrainHost;
   store: BrainStateStore;
@@ -199,19 +184,11 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         broadcast();
       },
     });
-    const store = new BrainStateStore(
-      dependencies.isTemporary(sessionKey)
-        ? {
-            storage: new MemoryEnvelopeStorage(),
-            createGenerationId: dependencies.createId,
-            report: dependencies.report,
-          }
-        : {
-            repository: dependencies.repositoryFor(sessionKey),
-            createGenerationId: dependencies.createId,
-            report: dependencies.report,
-          },
-    );
+    const store = new BrainStateStore({
+      repository: dependencies.repositoryFor(sessionKey),
+      createGenerationId: dependencies.createId,
+      report: dependencies.report,
+    });
     // A generation that ends — reset, expired, or replaced — takes its
     // unspoken briefings and replies with it, the one in the mouth's hand
     // included: they are that generation's words, and an offer is not proof

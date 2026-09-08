@@ -1,6 +1,6 @@
 import { BRAIN_REQUEST_ORIGIN, BRAIN_SUBMISSION_OUTCOME } from "@sidecar/brain/requests";
 import { type ConversationEntry, REALTIME_STATUS, type RealtimeStatus } from "@sidecar/realtime";
-import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
+import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MicrophoneStatus, VoiceHotkeyState } from "#shared/wire/audio";
 import {
@@ -123,7 +123,7 @@ export interface VoiceViewState {
    * arrives later, in the thread and in the voice. It names the conversation
    * the composer stood in; unnamed, it is main's.
    */
-  askLuke: (text: string, sessionKey?: string) => Promise<string | undefined>;
+  askLuke: (text: string, sessionKey?: SessionKey) => Promise<string | undefined>;
   /** Every run the brain holds, for History to draw a pending ask beside its words. */
   brainRequests: readonly BrainRequestSnapshot[];
   /** Cancels one run the developer no longer wants. */
@@ -213,7 +213,7 @@ export function useVoiceView(): VoiceViewState {
   // One submission id per press of Send: the id is what makes a retry of
   // this very ask the same run and a second deliberate ask a new one.
   const askLuke = useCallback(
-    async (text: string, sessionKey?: string): Promise<string | undefined> =>
+    async (text: string, sessionKey?: SessionKey): Promise<string | undefined> =>
       askDraftReason(
         await window.sidecar
           .submitBrainAsk({

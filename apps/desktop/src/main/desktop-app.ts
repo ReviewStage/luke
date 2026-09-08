@@ -140,7 +140,7 @@ import {
 import { VOICE_SOURCE_COUNTED_AS } from "#shared/product-vocabulary";
 import type { BrainRequestSnapshot } from "#shared/wire/brain";
 import { SPEECH_OUTCOME, type SpeechOutcome } from "#shared/wire/speech";
-import { IDLE_VOICE_VIEW, VOICE_COMMAND, type VoiceView } from "#shared/wire/voice-view";
+import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/wire/voice-view";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { AppleCalendarReader } from "./apple-calendar";
 import {
@@ -153,7 +153,6 @@ import {
   shouldBackfillArrivalSettled,
 } from "./arrival-flow";
 import type { WorkspaceCreationDefaults } from "./brain/act-performer";
-import { deleteConversationHistoryFlow } from "./brain/conversation-deletion";
 import { wakeEventsFromHooks } from "./brain/flow";
 import { BrainReplyDeliveries } from "./brain/reply-delivery";
 import { wireBrain } from "./brain/wiring";
@@ -165,6 +164,7 @@ import {
   calendarOnboardingStateFromStored,
   shouldBackfillCalendarOnboardingSettled,
 } from "./calendar-onboarding-flow";
+import { conversationOperations, startHistoryMaintenance } from "./conversation-operations";
 import {
   INTRODUCTION_FADE_MS,
   INTRODUCTION_HANDOFF_READY_MS,
@@ -178,7 +178,7 @@ import {
 } from "./introduction-flow";
 import { registerAccountSessionIpc } from "./ipc/account-session";
 import { registerCalendarConnectionIpc } from "./ipc/calendar-connection";
-import { type ConversationOperations, registerConversationsIpc } from "./ipc/conversations";
+import { registerConversationsIpc } from "./ipc/conversations";
 import { createSessionActPerformer, registerSessionActsIpc } from "./ipc/session-acts";
 import { registerSettingsRowsIpc } from "./ipc/settings-rows";
 import { registerTrackerConnectionIpc } from "./ipc/tracker-connection";
@@ -1614,7 +1614,6 @@ const sessionActPerformer = createSessionActPerformer({
 
 const brainWiring = wireBrain({
   repositoryFor: (sessionKey) => runtimeStoreWiring.brainStateRepository(sessionKey),
-  isTemporary: (sessionKey) => runtimeStoreWiring.isTemporary(sessionKey),
   createId: () => randomUUID(),
   report: (message) => process.stderr.write(`${message}\n`),
   ...(agentTrace ? { traceTurn: (record) => agentTrace.recordBrainTurn(record) } : undefined),
@@ -1673,65 +1672,16 @@ const brainWiring = wireBrain({
   dropBriefings: () => speechArbiter.dropBriefings(),
 });
 
-/** How often maintenance looks again between launches; a store crosses none of its bounds faster than this. */
-const HISTORY_MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000;
-let historyMaintenanceTimer: ReturnType<typeof setInterval> | undefined;
-
-/** Tells the voice window main's turns are retired, with or without its copy of the thread. */
-function retireVoiceTurns(
-  command: typeof VOICE_COMMAND.CLEAR_CONVERSATION | typeof VOICE_COMMAND.RETIRE_TURNS,
-): void {
-  voiceWindow.current()?.webContents.send(channels.onVoiceCommand, { command });
-}
-
-/**
- * The conversation controls as the desktop carries them out, each on a key
- * the directory listed when the panel asked. New thread opens a brain over a
- * fresh conversation; Start fresh replaces a conversation's lifetime and
- * touches none of its history; Archive retires a thread's brain and leaves
- * its history in the store; Delete history is the recoverable deletion, in
- * the order its own module states; Restore brings an archive back where no
- * newer conversation stands. Main's turns in the voice window are retired
- * whenever main starts fresh or loses its history.
- */
-const conversationOperations: ConversationOperations = {
-  directory: () => runtimeStoreWiring.directory(),
-  holds: (sessionKey) => runtimeStoreWiring.holds(sessionKey),
-  history: (sessionKey) => runtimeStoreWiring.thread(sessionKey).entries(),
-  createThread: async (temporary) => {
-    const record = await runtimeStoreWiring.createThread(temporary);
-    await brainWiring.openConversation(record.sessionKey);
-    return record.sessionKey;
-  },
-  startFresh: async (sessionKey) => {
-    const reset = await brainWiring.resetConversation(sessionKey);
-    if (sessionKey === MAIN_SESSION_KEY) retireVoiceTurns(VOICE_COMMAND.RETIRE_TURNS);
-    return reset;
-  },
-  archive: async (sessionKey) => {
-    if (sessionKey === MAIN_SESSION_KEY) return false;
-    await brainWiring.closeConversation(sessionKey);
-    return runtimeStoreWiring.archive(sessionKey);
-  },
-  unarchive: async (sessionKey) => {
-    const restored = await runtimeStoreWiring.unarchive(sessionKey);
-    if (restored) await brainWiring.openConversation(sessionKey);
-    return restored;
-  },
-  deleteHistory: (sessionKey) =>
-    deleteConversationHistoryFlow({
-      now: Date.now,
-      fence: (deletedAt) => {
-        runtimeStoreWiring.thread(sessionKey).fence(deletedAt);
-        if (sessionKey === MAIN_SESSION_KEY) retireVoiceTurns(VOICE_COMMAND.CLEAR_CONVERSATION);
-      },
-      retireBrain: () => brainWiring.closeConversation(sessionKey),
-      erase: (deletedAt) => runtimeStoreWiring.eraseHistory(sessionKey, deletedAt),
-      rebuildBrain: () => brainWiring.openConversation(sessionKey),
-      report: (message) => process.stderr.write(`${message}\n`),
-    }),
-  restoreArchive: (archiveId) => runtimeStoreWiring.restoreArchive(archiveId),
-};
+const conversationControls = conversationOperations({
+  store: runtimeStoreWiring,
+  brain: brainWiring,
+  /** Tells the voice window main's turns are retired, with or without its copy of the thread. */
+  retireVoiceTurns: (command) =>
+    voiceWindow.current()?.webContents.send(channels.onVoiceCommand, { command }),
+  now: Date.now,
+  report: (message) => process.stderr.write(`${message}\n`),
+});
+let stopHistoryMaintenance: (() => void) | undefined;
 
 function adapterFor(providerId: string) {
   if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return supersetWorkspaceAdapter;
@@ -2166,7 +2116,7 @@ function registerIpc(): void {
     ipcMain,
     trustedSender,
     panel: (sender) => panels.owns(sender),
-    operations: conversationOperations,
+    operations: conversationControls,
   });
   brainWiring.registerIpc({
     ipcMain,
@@ -3079,13 +3029,10 @@ export function startDesktopApp(): void {
         // it, so a line the Clear meant to erase is refused here too.
         await brainWiring.store().load();
         await runtimeStoreWiring.restore();
-        // Maintenance runs at every live launch — interrupted archive
-        // publications retried first — and then on its own hourly clock,
-        // keeping the conversations with a run under way whatever their age.
-        void runtimeStoreWiring.runMaintenance(brainWiring.busyConversations());
-        historyMaintenanceTimer = setInterval(() => {
-          void runtimeStoreWiring.runMaintenance(brainWiring.busyConversations());
-        }, HISTORY_MAINTENANCE_INTERVAL_MS).unref();
+        stopHistoryMaintenance = startHistoryMaintenance({
+          store: runtimeStoreWiring,
+          brain: brainWiring,
+        });
       }
       // A signed-in install with no arrival record predates the beat: its
       // sign-in was never observed, so it is settled now rather than greeted
@@ -3318,7 +3265,7 @@ export function startDesktopApp(): void {
     stopCalendarObservation();
     for (const watcher of spoolWatchers) watcher.close();
     spoolWatchers = [];
-    if (historyMaintenanceTimer) clearInterval(historyMaintenanceTimer);
+    stopHistoryMaintenance?.();
     brainWiring.retire();
     // Deliberately not a flush: a request here either delays the quit or is
     // killed mid-flight, and an instant quit is worth the last minute of

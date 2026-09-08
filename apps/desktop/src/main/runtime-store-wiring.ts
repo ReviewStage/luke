@@ -1,5 +1,5 @@
 import type { RememberedFact } from "@sidecar/acts";
-import type { BrainStateRepository } from "@sidecar/brain";
+import { type BrainStateRepository, brainStateRepositoryFromStorage } from "@sidecar/brain";
 import type { ConversationEntry } from "@sidecar/realtime";
 import {
   ARCHIVE_REASON,
@@ -70,7 +70,7 @@ export interface RuntimeStoreWiring {
   client: () => RuntimeStoreClient;
   /** One conversation's thread, relayed between windows through this process; created on first use. */
   thread: (sessionKey?: SessionKey) => ConversationThread<WebContents>;
-  /** A conversation's envelope in the store, for the brain wiring to build its writer on. */
+  /** A conversation's envelope, for the brain wiring to build its writer on: the store's, or memory alone for a temporary thread. */
   brainStateRepository: (sessionKey?: SessionKey) => BrainStateRepository;
   /** Opens the database for this launch. */
   open: () => Promise<void>;
@@ -105,7 +105,6 @@ export interface RuntimeStoreWiring {
   directory: () => ConversationDirectorySnapshot;
   /** Whether the key names a conversation the directory lists right now. */
   holds: (sessionKey: SessionKey) => boolean;
-  isTemporary: (sessionKey: SessionKey) => boolean;
   createThread: (temporary: boolean) => Promise<ConversationRecord>;
   archive: (sessionKey: SessionKey) => Promise<boolean>;
   unarchive: (sessionKey: SessionKey) => Promise<boolean>;
@@ -182,24 +181,40 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
   };
 
   const restoreThread = async (sessionKey: SessionKey): Promise<void> => {
-    thread(sessionKey).restore(
-      await client().listHistory(sessionKey, dependencies.now()),
-      await client().historyClearedAt(sessionKey),
-    );
+    const [entries, clearedAt] = await Promise.all([
+      client().listHistory(sessionKey, dependencies.now()),
+      client().historyClearedAt(sessionKey),
+    ]);
+    thread(sessionKey).restore(entries, clearedAt);
   };
 
   let rememberedFacts: readonly RememberedFact[] = [];
   let factMutations: Promise<unknown> = Promise.resolve();
 
-  const mainRecord = (): ConversationRecord => ({
-    sessionKey: MAIN_SESSION_KEY,
-    kind: CONVERSATION_KIND.MAIN,
-    name: MAIN_CONVERSATION_NAME,
-    createdAt: 0,
-    lastActivityAt: 0,
-  });
   // A run with nothing on disk still lists main, so the selector has a conversation to stand on.
-  if (!dependencies.persistent) stored = [mainRecord()];
+  if (!dependencies.persistent) {
+    stored = [
+      {
+        sessionKey: MAIN_SESSION_KEY,
+        kind: CONVERSATION_KIND.MAIN,
+        name: MAIN_CONVERSATION_NAME,
+        createdAt: 0,
+        lastActivityAt: 0,
+      },
+    ];
+  }
+
+  /** A temporary thread's envelope: held in this process for as long as the brain over it stands, and gone with it. */
+  const memoryRepository = (): BrainStateRepository => {
+    let record: string | undefined;
+    return brainStateRepositoryFromStorage({
+      read: () => record,
+      write: (contents) => {
+        record = contents;
+        return true;
+      },
+    });
+  };
 
   const holds = (sessionKey: SessionKey) =>
     temporary.has(sessionKey) || stored.some((record) => record.sessionKey === sessionKey);
@@ -224,7 +239,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     client,
     thread,
     brainStateRepository: (sessionKey = MAIN_SESSION_KEY) =>
-      client().brainStateRepository(sessionKey),
+      temporary.has(sessionKey) ? memoryRepository() : client().brainStateRepository(sessionKey),
     open: async () => {
       const agentRoot = dependencies.agentRoot();
       dependencies.ensureDirectory(agentRoot);
@@ -237,13 +252,11 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
       });
     },
     restore: async () => {
-      stored = await client().listConversations();
-      archives = await client().listArchives();
+      await refreshDirectory();
       // Every conversation's thread, archived ones included: an archived
       // thread is still shown, read-only, when the developer selects it.
-      for (const record of stored) await restoreThread(record.sessionKey);
+      await Promise.all(stored.map((record) => restoreThread(record.sessionKey)));
       rememberedFacts = await client().personalFacts();
-      announce();
     },
     rememberedFacts: () => rememberedFacts,
     mutateRememberedFacts: (work) => {
@@ -267,7 +280,6 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     },
     directory,
     holds,
-    isTemporary: (sessionKey) => temporary.has(sessionKey),
     createThread: async (isTemporary) => {
       const now = dependencies.now();
       const ordinal =

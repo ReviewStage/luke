@@ -27,13 +27,13 @@ function controls(overrides: Partial<ConversationControls> = {}): ConversationCo
   return {
     directory: { entries: [MAIN], archives: [] },
     selected: MAIN_SESSION_KEY,
-    onSelect: () => undefined,
-    onNewThread: () => undefined,
-    onStartFresh: async () => true,
-    onArchive: async () => true,
-    onUnarchive: async () => true,
-    onDeleteHistory: async () => "complete",
-    onRestore: async () => "restored",
+    select: () => undefined,
+    createThread: async () => undefined,
+    startFresh: async () => true,
+    archive: async () => true,
+    unarchive: async () => true,
+    deleteHistory: async () => "complete",
+    restoreArchive: async () => "restored",
     ...overrides,
   };
 }

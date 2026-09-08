@@ -21,7 +21,6 @@ function dependencies(overrides: Partial<BrainWiringDependencies> = {}) {
   });
   const wiring: BrainWiringDependencies = {
     repositoryFor: (sessionKey) => repository(sessionKey),
-    isTemporary: () => false,
     createId: () => "id",
     report: () => undefined,
     recordConversationEntry: () => true,

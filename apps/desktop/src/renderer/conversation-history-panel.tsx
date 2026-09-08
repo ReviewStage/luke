@@ -7,11 +7,9 @@ import {
 import {
   CONVERSATION_KIND,
   type ConversationRecord,
-  type HistoryArchiveRecord,
   MAIN_SESSION_KEY,
   RESTORE_OUTCOME,
   type RestoreOutcome,
-  type SessionKey,
   sessionKey,
 } from "@sidecar/runtime-contracts";
 import { useEffect, useRef, useState } from "react";
@@ -20,12 +18,12 @@ import {
   CONVERSATION_CONTROL_WORDS,
   CONVERSATION_DELETE_OUTCOME,
   type ConversationDeleteOutcome,
-  type ConversationDirectory,
 } from "#shared/wire/conversation";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { MarkdownMessage } from "./markdown-message";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import { CheckIcon, CopyIcon } from "./settings-icons";
+import type { ConversationsState } from "./use-conversations";
 
 export const HISTORY_ENTRY_SPEAKER = {
   YOU: "you",
@@ -195,17 +193,19 @@ const HISTORY_COMPOSER_ROW_INDEX = 1;
  * the bridge to the main process, which validates the key against the
  * directory as it then stands; the panel decides nothing but what to draw.
  */
-export interface ConversationControls {
-  directory: ConversationDirectory;
-  selected: SessionKey;
-  onSelect: (sessionKey: SessionKey) => void;
-  onNewThread: (temporary: boolean) => void;
-  onStartFresh: (sessionKey: SessionKey) => Promise<boolean>;
-  onArchive: (sessionKey: SessionKey) => Promise<boolean>;
-  onUnarchive: (sessionKey: SessionKey) => Promise<boolean>;
-  onDeleteHistory: (sessionKey: SessionKey) => Promise<ConversationDeleteOutcome>;
-  onRestore: (archive: HistoryArchiveRecord) => Promise<RestoreOutcome>;
-}
+/** The selector and controls over every conversation: the conversations hook's own state and operations, as the panel needs them. */
+export type ConversationControls = Pick<
+  ConversationsState,
+  | "directory"
+  | "selected"
+  | "select"
+  | "createThread"
+  | "startFresh"
+  | "archive"
+  | "unarchive"
+  | "deleteHistory"
+  | "restoreArchive"
+>;
 
 const CONFIRMING = {
   FRESH: "fresh",
@@ -219,29 +219,18 @@ export function conversationLabel(record: ConversationRecord): string {
   return record.temporary ? `${record.name} (temporary)` : record.name;
 }
 
-function restoreNotice(outcome: RestoreOutcome): string {
-  switch (outcome) {
-    case RESTORE_OUTCOME.RESTORED:
-      return HISTORY_CONTROL_NOTICE.RESTORED;
-    case RESTORE_OUTCOME.NEWER_LIVE:
-      return HISTORY_CONTROL_NOTICE.RESTORE_NEWER_LIVE;
-    case RESTORE_OUTCOME.MISSING:
-      return HISTORY_CONTROL_NOTICE.RESTORE_MISSING;
-    case RESTORE_OUTCOME.UNREADABLE:
-      return HISTORY_CONTROL_NOTICE.RESTORE_UNREADABLE;
-  }
-}
+const RESTORE_NOTICE = {
+  [RESTORE_OUTCOME.RESTORED]: HISTORY_CONTROL_NOTICE.RESTORED,
+  [RESTORE_OUTCOME.NEWER_LIVE]: HISTORY_CONTROL_NOTICE.RESTORE_NEWER_LIVE,
+  [RESTORE_OUTCOME.MISSING]: HISTORY_CONTROL_NOTICE.RESTORE_MISSING,
+  [RESTORE_OUTCOME.UNREADABLE]: HISTORY_CONTROL_NOTICE.RESTORE_UNREADABLE,
+} satisfies Record<RestoreOutcome, string>;
 
-function deleteNotice(outcome: ConversationDeleteOutcome): string {
-  switch (outcome) {
-    case CONVERSATION_DELETE_OUTCOME.COMPLETE:
-      return HISTORY_CONTROL_NOTICE.DELETED;
-    case CONVERSATION_DELETE_OUTCOME.INCOMPLETE:
-      return HISTORY_CONTROL_NOTICE.DELETED_UNPUBLISHED;
-    case CONVERSATION_DELETE_OUTCOME.REFUSED:
-      return HISTORY_CONTROL_NOTICE.DELETE_REFUSED;
-  }
-}
+const DELETE_NOTICE = {
+  [CONVERSATION_DELETE_OUTCOME.COMPLETE]: HISTORY_CONTROL_NOTICE.DELETED,
+  [CONVERSATION_DELETE_OUTCOME.INCOMPLETE]: HISTORY_CONTROL_NOTICE.DELETED_UNPUBLISHED,
+  [CONVERSATION_DELETE_OUTCOME.REFUSED]: HISTORY_CONTROL_NOTICE.DELETE_REFUSED,
+} satisfies Record<ConversationDeleteOutcome, string>;
 
 /**
  * The header over the thread: a compact selector across every conversation,
@@ -266,12 +255,12 @@ function ConversationHeader({
 
   const startFresh = async () => {
     setConfirming(undefined);
-    const fresh = await controls.onStartFresh(selected);
+    const fresh = await controls.startFresh(selected);
     onNotice(fresh ? HISTORY_CONTROL_NOTICE.FRESH : HISTORY_CONTROL_NOTICE.FRESH_FAILED);
   };
   const deleteHistory = async () => {
     setConfirming(undefined);
-    onNotice(deleteNotice(await controls.onDeleteHistory(selected)));
+    onNotice(DELETE_NOTICE[await controls.deleteHistory(selected)]);
   };
 
   return (
@@ -282,7 +271,7 @@ function ConversationHeader({
           className="history-select"
           value={selected}
           onChange={(event) => {
-            controls.onSelect(sessionKey(event.target.value));
+            controls.select(sessionKey(event.target.value));
           }}
         >
           <optgroup label="Conversations">
@@ -312,14 +301,14 @@ function ConversationHeader({
             <button
               type="button"
               className="history-menu-action"
-              onClick={() => controls.onNewThread(false)}
+              onClick={() => void controls.createThread(false)}
             >
               {CONVERSATION_CONTROL_WORDS.NEW_THREAD}
             </button>
             <button
               type="button"
               className="history-menu-action"
-              onClick={() => controls.onNewThread(true)}
+              onClick={() => void controls.createThread(true)}
             >
               {CONVERSATION_CONTROL_WORDS.NEW_TEMPORARY_THREAD}
             </button>
@@ -358,7 +347,7 @@ function ConversationHeader({
                 <button
                   type="button"
                   className="history-menu-action"
-                  onClick={() => void controls.onArchive(selected)}
+                  onClick={() => void controls.archive(selected)}
                 >
                   {CONVERSATION_CONTROL_WORDS.ARCHIVE}
                 </button>
@@ -370,7 +359,7 @@ function ConversationHeader({
               <button
                 type="button"
                 className="history-menu-action"
-                onClick={() => void controls.onUnarchive(selected)}
+                onClick={() => void controls.unarchive(selected)}
               >
                 {CONVERSATION_CONTROL_WORDS.UNARCHIVE}
               </button>
@@ -426,8 +415,8 @@ function ConversationHeader({
                       type="button"
                       className="history-menu-action"
                       onClick={() => {
-                        void controls.onRestore(archive).then((outcome) => {
-                          onNotice(restoreNotice(outcome));
+                        void controls.restoreArchive(archive).then((outcome) => {
+                          onNotice(RESTORE_NOTICE[outcome]);
                         });
                       }}
                     >

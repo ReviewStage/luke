@@ -61,6 +61,7 @@ export {
   brainPersistedStateFromWire,
   brainStateFromStored,
   brainStateRecord,
+  brainStateRepositoryFromStorage,
   freshBrainState,
   LEGACY_CHECKPOINT_FORMAT_TAG,
   legacyStampOf,

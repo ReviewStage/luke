@@ -2839,20 +2839,9 @@ export function App(): React.JSX.Element {
             writes={sessionWrites}
             conversationHistory={conversations.history}
             liveConversationEntries={liveConversationEntries}
-            conversations={{
-              directory: conversations.directory,
-              selected: conversations.selected,
-              onSelect: conversations.select,
-              onNewThread: (temporary) => void conversations.createThread(temporary),
-              onStartFresh: conversations.startFresh,
-              onArchive: conversations.archive,
-              onUnarchive: conversations.unarchive,
-              onDeleteHistory: conversations.deleteHistory,
-              onRestore: conversations.restoreArchive,
-            }}
+            conversations={conversations}
             brainRequests={brainRequests}
             onCancelBrainRequest={cancelBrainAsk}
-            ask={askLuke}
             askIn={askLuke}
             onAskEngaged={changeAskEngagement}
             {...(shownAskHotkey ? { askShortcut: shownAskHotkey } : undefined)}

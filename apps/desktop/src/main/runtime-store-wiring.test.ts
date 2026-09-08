@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { MessageChannel } from "node:worker_threads";
+import { freshBrainState } from "@sidecar/brain";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
 import {
   CONVERSATION_KIND,
@@ -83,6 +85,11 @@ test("a temporary thread keeps its lines in memory alone and is gone at the next
   assert.deepEqual(await first.wired.eraseHistory(other.sessionKey, NOW), { published: true });
   assert.deepEqual(first.wired.thread(other.sessionKey).entries(), []);
   assert.equal(await first.wired.archive(other.sessionKey), true);
+  // A temporary thread's envelope is answered from memory: nothing of it reaches the database.
+  const memory = first.wired.brainStateRepository(temporary.sessionKey);
+  assert.deepEqual(await memory.load(), {});
+  assert.equal(await memory.save(freshBrainState("gen-temporary", NOW)), true);
+  assert.equal((await memory.load()).state?.generationId, "gen-temporary");
   assert.deepEqual(
     first.wired
       .directory()
@@ -96,6 +103,13 @@ test("a temporary thread keeps its lines in memory alone and is gone at the next
     false,
   );
   await first.close();
+  const file = new DatabaseSync(path.join(root, "agent.sqlite"), { readOnly: true });
+  // SAFETY: COUNT(*) is one integer column named `count`.
+  const sessions = file
+    .prepare("SELECT COUNT(*) AS count FROM conversation_sessions WHERE session_key = ?")
+    .get(temporary.sessionKey) as { count: number };
+  assert.equal(sessions.count, 0);
+  file.close();
 
   const relaunched = wiring(root);
   await relaunched.wired.open();

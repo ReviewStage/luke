@@ -1,6 +1,6 @@
 import { SessionRow as PanelSessionRow, ProviderMark } from "@sidecar/panel";
 import type { ConversationEntry } from "@sidecar/realtime";
-import type { SessionKey } from "@sidecar/runtime-contracts";
+import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
 import {
   isSessionApplicationId,
   SESSION_APPLICATION_SCOPE,
@@ -14,7 +14,7 @@ import { useCallback, useState } from "react";
 import { ACCOUNT_STATUS, type AccountProvider, type AccountSnapshot } from "#shared/wire/account";
 import type { BrainRequestSnapshot } from "#shared/wire/brain";
 import type { SessionOpenResult } from "#shared/wire/session";
-import { type AskHandler, AskLuke } from "./ask-luke";
+import { AskLuke } from "./ask-luke";
 import { CalendarGate, type CalendarGateControl } from "./calendar-gate";
 import { type ConversationControls, ConversationHistoryPanel } from "./conversation-history-panel";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
@@ -529,9 +529,7 @@ export interface PanelBodyProps {
   brainRequests: readonly BrainRequestSnapshot[];
   /** Cancels one of those runs at the developer's press. */
   onCancelBrainRequest: (runId: string) => void;
-  /** Carries a typed ask to Luke's main conversation, answering why it could not go. */
-  ask: AskHandler;
-  /** The same ask aimed at the conversation History is showing, captured at the send. */
+  /** Carries a typed ask to one conversation, captured at the send: main's from the sessions tab, the shown one from History. */
   askIn: (text: string, sessionKey: SessionKey) => Promise<string | undefined>;
   /** Reports someone being part-way through an ask, so the panel holds for them. */
   onAskEngaged: (engaged: boolean) => void;
@@ -585,7 +583,6 @@ export function PanelBody({
   conversations,
   brainRequests,
   onCancelBrainRequest,
-  ask,
   askIn,
   onAskEngaged,
   askShortcut,
@@ -798,7 +795,7 @@ export function PanelBody({
               question worth typing before any session has appeared. It arrives
               at the tail of the same fan the rows ride. */}
           <AskLuke
-            ask={ask}
+            ask={(text) => askIn(text, MAIN_SESSION_KEY)}
             onEngagedChange={onAskEngaged}
             rowIndex={rows.length + 1}
             {...(askShortcut ? { shortcut: askShortcut } : undefined)}
