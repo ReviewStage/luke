@@ -21,7 +21,7 @@ import {
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
-import type { BrainRequestSnapshot } from "#shared/wire/brain";
+import { type BrainRequestSnapshot, brainRequestPending } from "#shared/wire/brain";
 import { type BrainActPerformerDependencies, createBrainActPerformer } from "./act-performer";
 import { BrainHost } from "./host";
 import {
@@ -360,9 +360,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     allRequests,
     busyConversations: () =>
       [...latestRecords.entries()]
-        .filter(([, records]) =>
-          records.some((record) => record.status === "queued" || record.status === "running"),
-        )
+        .filter(([, records]) => records.some(brainRequestPending))
         .map(([sessionKey]) => sessionKey),
     rebuild,
     retire,
