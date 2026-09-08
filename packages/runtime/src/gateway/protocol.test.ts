@@ -12,7 +12,7 @@ import {
   gatewayReconnectAnswerFromWire,
   NODE_CAPABILITY_STATUS,
 } from "@sidecar/runtime-contracts";
-import type { WireRecord, WireValue } from "@sidecar/wire";
+import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
 import { GatewayClient } from "./client.js";
 import { NodeRegistry } from "./nodes.js";
 import { GatewayServer, gatewayError, gatewayOk } from "./server.js";
@@ -23,6 +23,12 @@ const OPERATOR: GatewayClientIdentity = {
   role: GATEWAY_CLIENT_ROLE.OPERATOR,
 };
 const NODE: GatewayClientIdentity = { clientId: "node", role: GATEWAY_CLIENT_ROLE.NODE };
+
+/** A wire value the test expects to be a record; anything else fails the test where it stands. */
+function recordOf(value: WireValue | undefined): WireRecord {
+  assert.ok(isRecord(value));
+  return value;
+}
 
 interface Harness {
   server: GatewayServer;
@@ -39,15 +45,7 @@ function harness(replayWindow = 500): Harness {
   const sessionRevision = new Map<string, string>([["agent:main:main", "gen-1"]]);
   const nodes = new NodeRegistry();
   let ids = 0;
-  const held: Harness = {
-    effects,
-    nodes,
-    configurationRevision,
-    sessionRevision,
-    snapshots: 0,
-    // Assigned below once the server can refer to the harness's counters.
-    server: undefined as unknown as GatewayServer,
-  };
+  const counters = { snapshots: 0 };
   const server = new GatewayServer({
     methods: {
       [GATEWAY_METHOD.RUN_SUBMIT]: (params) => {
@@ -76,15 +74,23 @@ function harness(replayWindow = 500): Harness {
     configurationRevision: () => configurationRevision.value,
     sessionRevision: (key) => sessionRevision.get(key),
     snapshot: () => {
-      held.snapshots += 1;
-      return { runs: [], snapshotOf: held.snapshots };
+      counters.snapshots += 1;
+      return { runs: [], snapshotOf: counters.snapshots };
     },
     now: () => 1_800_000_000_000,
     createEventId: () => `event-${++ids}`,
     replayWindow,
   });
-  held.server = server;
-  return held;
+  return {
+    server,
+    nodes,
+    effects,
+    configurationRevision,
+    sessionRevision,
+    get snapshots() {
+      return counters.snapshots;
+    },
+  };
 }
 
 type TransportKind = "in-process" | "loopback";
@@ -296,18 +302,17 @@ for (const kind of ["in-process", "loopback"] as const) {
     const unknown = await c.call(GATEWAY_METHOD.NODE_INVOKE, { capability: "os.openExternal" });
     assert.ok(unknown.ok);
     if (unknown.ok) {
-      const result = unknown.result as WireRecord;
-      assert.equal(result.status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
+      assert.equal(recordOf(unknown.result).status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
     }
     h.nodes.register({
       nodeId: "desktop-native",
       capabilities: { "os.openExternal": () => undefined },
     });
     const ok = await c.call(GATEWAY_METHOD.NODE_INVOKE, { capability: "os.openExternal" });
-    assert.ok(ok.ok && (ok.result as WireRecord).status === NODE_CAPABILITY_STATUS.OK);
+    assert.ok(ok.ok && recordOf(ok.result).status === NODE_CAPABILITY_STATUS.OK);
     h.nodes.setConnected("desktop-native", false);
     const gone = await c.call(GATEWAY_METHOD.NODE_INVOKE, { capability: "os.openExternal" });
-    assert.ok(gone.ok && (gone.result as WireRecord).status === NODE_CAPABILITY_STATUS.UNAVAILABLE);
+    assert.ok(gone.ok && recordOf(gone.result).status === NODE_CAPABILITY_STATUS.UNAVAILABLE);
     assert.deepEqual(h.effects, ["invoked os.openExternal"]);
     assert.equal(changes.length, 2);
   });

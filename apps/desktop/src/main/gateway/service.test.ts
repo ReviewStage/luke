@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { BrainAgent, BrainRequestRecord, BrainSubmission } from "@sidecar/brain";
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
-import type { ConversationEntry } from "@sidecar/realtime";
+import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
 import { InProcessTransport, LoopbackTransport } from "@sidecar/runtime";
 import {
@@ -15,7 +15,7 @@ import {
   NODE_CAPABILITY_STATUS,
   type SessionKey,
 } from "@sidecar/runtime-contracts";
-import type { WireRecord, WireValue } from "@sidecar/wire";
+import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
 import { CONVERSATION_DELETE_OUTCOME } from "../brain/conversation-deletion";
 import { BrainReplyDeliveries } from "../brain/reply-delivery";
 import type { ConversationOperations } from "../conversation-operations";
@@ -24,6 +24,12 @@ import { createGatewayOperator } from "./operator";
 import { createGatewayService } from "./service";
 
 const NOW = 1_800_000_000_000;
+
+/** A wire value the test expects to be a record; anything else fails the test where it stands. */
+function recordOf(value: WireValue | undefined): WireRecord {
+  assert.ok(isRecord(value));
+  return value;
+}
 
 function record(overrides: Partial<BrainRequestRecord> = {}): BrainRequestRecord {
   return {
@@ -219,7 +225,7 @@ for (const kind of ["in-process", "loopback"] as const) {
     f.receiver.markReady(second);
     f.service.receiverReady();
     assert.equal(f.offers().length, 2);
-    const offer = f.offers()[1]?.payload as WireRecord;
+    const offer = recordOf(f.offers()[1]?.payload);
     assert.equal(offer.epoch, second);
     // The vanished renderer's claim, naming the old epoch, is refused; the current one is granted once.
     assert.deepEqual(await f.operator.claim("run-1", String(offer.deliveryId), first), {
@@ -250,7 +256,7 @@ for (const kind of ["in-process", "loopback"] as const) {
     f.receiver.markReady(first);
     f.end("run-1");
     f.end("run-2");
-    const offer = f.offers()[0]?.payload as WireRecord;
+    const offer = recordOf(f.offers()[0]?.payload);
     assert.equal(offer.runId, "run-1");
     assert.equal((await f.operator.claim("run-1", String(offer.deliveryId), first)).granted, true);
     // A second receiver takes over while the first still holds the claimed words.
@@ -258,7 +264,7 @@ for (const kind of ["in-process", "loopback"] as const) {
     const second = f.receiver.begin();
     f.receiver.markReady(second);
     f.service.receiverReady();
-    const next = f.offers()[1]?.payload as WireRecord;
+    const next = recordOf(f.offers()[1]?.payload);
     // run-1 may already have been heard: only run-2 is offered to the newcomer.
     assert.equal(next.runId, "run-2");
     assert.equal(f.deliveries.state("run-1"), DELIVERY_STATE.CLAIMED);
@@ -298,7 +304,7 @@ for (const kind of ["in-process", "loopback"] as const) {
     f.service.generationReplaced(MAIN_SESSION_KEY);
     assert.deepEqual(withdrawn, [epoch]);
     assert.equal(f.deliveries.state("run-1"), undefined);
-    const offer = f.offers()[0]?.payload as WireRecord;
+    const offer = recordOf(f.offers()[0]?.payload);
     assert.deepEqual(await f.operator.claim("run-1", String(offer.deliveryId), epoch), {
       granted: false,
     });
@@ -327,7 +333,7 @@ for (const kind of ["in-process", "loopback"] as const) {
     f.report();
     f.service.historyChanged(
       MAIN_SESSION_KEY,
-      [{ kind: "ask", words: "q" } as ConversationEntry],
+      [{ kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "q" }],
       7,
     );
     f.service.historyChanged(MAIN_SESSION_KEY, []);
@@ -345,7 +351,7 @@ for (const kind of ["in-process", "loopback"] as const) {
       params: { url: "https://example.test" },
     });
     assert.ok(missing.ok);
-    assert.equal((missing.result as WireRecord).status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
+    assert.equal(recordOf(missing.result).status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
     const opened: string[] = [];
     f.service.nodes.register({
       nodeId: "desktop-native",
@@ -360,7 +366,7 @@ for (const kind of ["in-process", "loopback"] as const) {
       capability: "os.openExternal",
       params: { url: "https://example.test" },
     });
-    assert.ok(ok.ok && (ok.result as WireRecord).status === NODE_CAPABILITY_STATUS.OK);
+    assert.ok(ok.ok && recordOf(ok.result).status === NODE_CAPABILITY_STATUS.OK);
     assert.deepEqual(opened, ["https://example.test"]);
     // A registration over the wire for a node this process never registered is refused.
     const foreign = await f.operator.client.call(GATEWAY_METHOD.NODE_REGISTER, {

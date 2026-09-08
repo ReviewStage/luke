@@ -10,7 +10,7 @@ import {
   accountGateOpen,
   HostedVaultClient,
 } from "@sidecar/account";
-import { APP_TOOL_KIND, rememberedFactsText } from "@sidecar/acts";
+import { rememberedFactsText } from "@sidecar/acts";
 import {
   PRODUCT_CREDENTIAL_SOURCE,
   PRODUCT_DIAGNOSTIC_KIND,
@@ -1866,28 +1866,30 @@ gatewayService.nodes.register({
       return undefined;
     },
     [NODE_CAPABILITY.PANEL_APP_ACT]: (params) => {
-      const action = params.action;
-      if (
-        !isRecord(action) ||
-        !isWireString(action.kind) ||
-        action.kind === APP_TOOL_KIND.REMEMBER ||
-        action.kind === APP_TOOL_KIND.FORGET
-      ) {
-        throw new Error("the app act is not one the panel carries");
-      }
-      // SAFETY: the act performer validated this action against the guide
-      // before handing it to the node; the guard above re-checks its kind.
-      return performBrainAppAct(action as unknown as BrainAppActRequest["action"]);
+      const action = isWireString(params.act) ? carriedAppActs.get(params.act) : undefined;
+      if (isWireString(params.act)) carriedAppActs.delete(params.act);
+      if (!action) throw new Error("no app act is held under that token");
+      return performBrainAppAct(action);
     },
   },
 });
 
+/**
+ * The app acts handed to the native node and not yet performed, by token.
+ * The act itself was validated against the guide by the act performer, and
+ * both sides of this capability stand in one process, so the typed act is
+ * held here and only its token crosses the invocation; a node on the other
+ * side of a socket is where the act would be serialized, and that boundary
+ * is the process split's to draw.
+ */
+const carriedAppActs = new Map<string, BrainAppActRequest["action"]>();
+
 /** An app act the brain asked for, carried to the panel through the node capability it registered. */
 async function invokeNodeAppAct(action: BrainAppActRequest["action"]): Promise<WireRecord> {
-  const result = await gatewayService.nodes.invoke(NODE_CAPABILITY.PANEL_APP_ACT, {
-    // SAFETY: a carried app action is a record of the vocabulary's own strings and booleans.
-    action: action as unknown as WireRecord,
-  });
+  const act = randomUUID();
+  carriedAppActs.set(act, action);
+  const result = await gatewayService.nodes.invoke(NODE_CAPABILITY.PANEL_APP_ACT, { act });
+  carriedAppActs.delete(act);
   if (result.status === NODE_CAPABILITY_STATUS.OK && isRecord(result.value)) return result.value;
   return {
     status: ACT_RESULT_STATUS.REJECTED,

@@ -176,6 +176,18 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
   ) => Promise<MemoryHousekeepingResult>;
 }
 
+/** The configuration fields a client may set over the protocol; everything else is the build's or the credential policy's. */
+export interface SettableConfigurationPatch {
+  reasoningEffort?: string;
+  maximumOutputTokens?: number;
+}
+
+/** The same fields once validated, as the next published configuration carries them. */
+interface SettableConfiguration {
+  reasoningEffort?: ReasoningEffort;
+  maximumOutputTokens?: number;
+}
+
 export interface BrainWiring {
   /** Main's host. */
   readonly host: BrainHost;
@@ -259,10 +271,7 @@ export interface BrainWiring {
    * answers the refusals, none when the snapshot now stands. A patch stands
    * until the credential policy next republishes, which reads it again.
    */
-  updateConfiguration: (patch: {
-    reasoningEffort?: string;
-    maximumOutputTokens?: number;
-  }) => readonly string[];
+  updateConfiguration: (patch: SettableConfigurationPatch) => readonly string[];
   /**
    * The prompt a turn of this kind would run under right now, built by the
    * same three stages a live turn uses — the standing configuration, the
@@ -466,7 +475,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
   const registries = registerBrainBuiltIns(createRuntimeRegistries());
   // The settable fields a client patched over the protocol, applied to every
   // configuration published after, so a credential change keeps them.
-  let settable: { reasoningEffort?: ReasoningEffort; maximumOutputTokens?: number } = {};
+  let settable: SettableConfiguration = {};
   const configurationFor = (credential: CredentialReference) => ({
     ...defaultAgentConfiguration({
       agentRuntimeId: TOOL_LOOP_RUNTIME.ID,
@@ -909,11 +918,8 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     await Promise.all([...publications.values()].map((settled) => settled()));
   };
 
-  const updateConfiguration = (patch: {
-    reasoningEffort?: string;
-    maximumOutputTokens?: number;
-  }): readonly string[] => {
-    const next = { ...settable };
+  const updateConfiguration = (patch: SettableConfigurationPatch): readonly string[] => {
+    const next: SettableConfiguration = { ...settable };
     if (patch.reasoningEffort !== undefined) {
       if (!isReasoningEffort(patch.reasoningEffort)) {
         return [
