@@ -76,8 +76,8 @@ export interface GatewayBrainAccess {
   configuration: () => ResolvedConfiguration;
   /** Republishes the configuration with the settable fields patched; answers the refusals, none on success. */
   updateConfiguration: (patch: GatewayConfigurationPatch) => readonly string[];
-  /** The compact notices main has not yet read. */
-  pendingNotices: () => readonly string[];
+  /** How many compact notices main has not yet read. */
+  pendingNoticeCount: () => number;
 }
 
 /** The fields a client may change in the configuration; everything else is the build's or the credential policy's. */
@@ -634,7 +634,7 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
     [GATEWAY_METHOD.OBSERVATION_STATE]: () =>
       gatewayOk({
         sessions: dependencies.observedSessions().map(sessionToWire),
-        pendingNotices: brain.pendingNotices().length,
+        pendingNotices: brain.pendingNoticeCount(),
       }),
     [GATEWAY_METHOD.NODE_REGISTER]: (params, context) => {
       // A registration over the protocol names capabilities the host may ask

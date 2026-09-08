@@ -526,7 +526,7 @@ function registered(live: () => BrainRequestRecord | undefined) {
       // SAFETY: only the revision is read here; the fixture stands in for the snapshot.
       configuration: () => ({ revision: 1 }) as unknown as ResolvedConfiguration,
       updateConfiguration: () => [],
-      pendingNotices: () => [],
+      pendingNoticeCount: () => 0,
     },
     // SAFETY: the grant boundary reaches no conversation operation; the fixture stands in for them.
     conversations: {} as ConversationOperations,

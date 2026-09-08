@@ -1780,7 +1780,7 @@ const gatewayService = createGatewayService({
     children: brainWiring.children,
     configuration: () => brainWiring.configuration(),
     updateConfiguration: (patch) => brainWiring.updateConfiguration(patch),
-    pendingNotices: () => brainWiring.pendingNotices(),
+    pendingNoticeCount: () => brainWiring.pendingNotices().length,
   },
   conversations: conversationControls,
   memory: {
