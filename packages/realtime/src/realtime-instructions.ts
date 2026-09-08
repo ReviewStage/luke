@@ -75,7 +75,7 @@ const REALTIME_INSTRUCTION_HEAD: readonly string[] = [
 
 /**
  * The standing instructions a remote (phone) call still runs under: that call
- * carries the roster as context and the session acts as its own tools, so it
+ * carries the roster as context and the session actions as its own tools, so it
  * keeps the resolution rules those need until it too is given a brain.
  */
 const REMOTE_REALTIME_INSTRUCTION_HEAD: readonly string[] = [
@@ -85,7 +85,7 @@ const REMOTE_REALTIME_INSTRUCTION_HEAD: readonly string[] = [
   "- The roster is private context, not a report: answer out of it, never read it out.",
   "- Follow the developer's lead and preserve their exact requested scope. Never expand an agent's",
   "  task with improvements, requirements, or elaboration of your own.",
-  "- Repeat back what they said only when an act needs explicit confirmation first.",
+  "- Repeat back what they said only when an action needs explicit confirmation first.",
   "- If audio is noisy, ambiguous, or cut off, ask briefly for it to be repeated. Never infer",
   "  missing words or call a tool from unclear audio.",
   '- A roster line\'s bracketed capability data, its ages ("updated minutes ago"), and its branch',

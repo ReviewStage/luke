@@ -29,7 +29,7 @@ export function isTerminalDeliveryState(state: DeliveryState): boolean {
 }
 
 /**
- * One reply owed to the ear after its words already stand in History. Never
+ * One reply owed to the ear after its words already stand in Conversation. Never
  * persisted: a claimed delivery may already have been audible, so a launch
  * never replays one, and an unclaimed one is worth nothing to a launch that
  * did not watch the run.
@@ -71,9 +71,9 @@ export interface DeliveryOffer {
 /**
  * The one owner of which ended runs may still be spoken, and to whom, with
  * each delivery's state named. A run becomes deliverable only once its end
- * stands in History and only if this ledger watched it while it was still
+ * stands in Conversation and only if this ledger watched it while it was still
  * going: a run first seen ended — the bootstrap after a launch, a follower's
- * first report — may already have been heard, and History holds its words
+ * first report — may already have been heard, and Conversation holds its words
  * either way.
  *
  * Every authorization to speak a run's end passes through here, whichever
@@ -114,7 +114,7 @@ export class DeliveryLedger<Words> {
   }
 
   /**
-   * A run's end has reached History. Answers the delivery now owed for it, or
+   * A run's end has reached Conversation. Answers the delivery now owed for it, or
    * nothing: a run this ledger never watched running, or one already owed,
    * claimed, or granted on its own call, adds nothing.
    */

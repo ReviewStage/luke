@@ -1,4 +1,4 @@
-import type { HistoryAppendOutcome } from "@sidecar/runtime/vocabulary";
+import type { ConversationAppendOutcome } from "@sidecar/runtime/vocabulary";
 import {
   appendConversationThreadEntry,
   type ConversationEntry,
@@ -19,10 +19,10 @@ import {
  * the Clear's to erase in the store, where the same cutoff is applied.
  */
 export interface ConversationThreadStore {
-  appendHistory(
+  appendConversation(
     entries: readonly ConversationEntry[],
     now: number,
-  ): Promise<HistoryAppendOutcome<ConversationEntry>>;
+  ): Promise<ConversationAppendOutcome<ConversationEntry>>;
 }
 
 /**
@@ -30,14 +30,14 @@ export interface ConversationThreadStore {
  * under the same append rule: idempotent on each line's identity, placed
  * where it happened, and retained to the same bounds.
  */
-export class MemoryHistoryStore implements ConversationThreadStore {
+export class MemoryConversationStore implements ConversationThreadStore {
   #entries: readonly ConversationEntry[] = [];
   readonly #held = new Set<string>();
 
-  appendHistory(
+  appendConversation(
     entries: readonly ConversationEntry[],
     now: number,
-  ): Promise<HistoryAppendOutcome<ConversationEntry>> {
+  ): Promise<ConversationAppendOutcome<ConversationEntry>> {
     let thread = this.#entries;
     for (const entry of entries) {
       const identity = conversationEntryIdentity(entry);
@@ -104,9 +104,9 @@ export class ConversationThread {
     const admitted = entries.filter((entry) => this.#afterClear(entry));
     if (admitted.length === 0) return true;
     const epoch = this.#epoch;
-    let outcome: HistoryAppendOutcome<ConversationEntry>;
+    let outcome: ConversationAppendOutcome<ConversationEntry>;
     try {
-      outcome = await this.#store.appendHistory(admitted, this.#now());
+      outcome = await this.#store.appendConversation(admitted, this.#now());
     } catch (error) {
       this.#report(
         `Could not persist the conversation: ${error instanceof Error ? error.message : String(error)}`,

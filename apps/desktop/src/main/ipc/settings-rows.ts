@@ -8,7 +8,7 @@ import {
   SETTING_SIDE_EFFECT,
 } from "@sidecar/settings";
 import type { AppSettings } from "@sidecar/settings/wire";
-import { ACT_RESULT_STATUS, isWireString } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, isWireString } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { BRIDGE, type BridgeArgumentsFor } from "#shared/bridge";
 import type { HostOperator } from "../gateway/host-operator";
@@ -61,7 +61,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
   const refusal = async (reason: string): Promise<SettingsRefusal> => {
     const settings = dependencies.lastSettings() ?? (await host.settingsSnapshot());
     if (!settings) throw new Error(reason);
-    return new SettingsRefusal({ status: ACT_RESULT_STATUS.REJECTED, settings, reason });
+    return new SettingsRefusal({ status: ACTION_RESULT_STATUS.REJECTED, settings, reason });
   };
 
   // The renderer can replace or clear a provider's credential but never reads
@@ -202,7 +202,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
  * runs here, at the host's ask through the native node, so the consent dialog
  * a connect raises is still raised on this machine by the press that asked for
  * it. The one address opened from here — the Privacy pane a row's press names
- * — is the client's own act.
+ * — is the client's own action.
  */
 function registerConnectionRows(
   dependencies: Pick<

@@ -28,11 +28,11 @@ import {
   retireOpenedContext,
 } from "./generation.js";
 import { holdReleasedInputText, wakeInputText } from "./input-items.js";
-import { journalActCounts, UNKNOWN_ACT_RESULT } from "./journal.js";
+import { journalActionCounts, UNKNOWN_ACTION_RESULT } from "./journal.js";
 import { BrainRequestLedger, PENDING_MARK_FIELD, type PendingMarkField } from "./ledger.js";
 import { type BrainFlushInput, type BrainFlushMarkerStore, Maintenance } from "./maintenance.js";
 import { inboxEvents } from "./observation-inbox.js";
-import type { BrainActPerformer, BrainRoster } from "./performer.js";
+import type { BrainActionPerformer, BrainRoster } from "./performer.js";
 import {
   BRAIN_REQUEST_STATUS,
   type BrainRequestRecord,
@@ -71,7 +71,7 @@ export type BrainLane = <T>(trigger: BrainTurnTrigger, work: () => Promise<T>) =
 export interface BrainAgentOptions {
   /** The execution the host runs turns on; it decides how a model and its tools loop, and it alone reaches the model. */
   runtime: AgentRuntime;
-  acts: BrainActPerformer;
+  actions: BrainActionPerformer;
   roster: () => BrainRoster;
   /** Everything the host renders beside the roster: projects, facts, recent conversation, guide. */
   standingContext: () => string;
@@ -156,7 +156,7 @@ export interface BrainAgentOptions {
 /**
  * The brain: one long-lived agent that is woken by the agents' hooks and by
  * its own scheduled look at the roster, asked things by the developer, and
- * answers with briefings for the voice to speak and acts for the host to
+ * answers with briefings for the voice to speak and actions for the host to
  * carry. Nothing detects a change on its behalf: the roster look carries
  * what stands and what each transcript gained, and the brain notices what is
  * new against its own memory.
@@ -164,7 +164,7 @@ export interface BrainAgentOptions {
  * It is the host of an execution, not the execution itself. What it owns is
  * the conversation's standing: accepting asks into runs with records,
  * queueing turns, revoking them on a cancel, a deadline, a stop, or the
- * store's generation changing, journaling every act before its effect and
+ * store's generation changing, journaling every action before its effect and
  * its result before the next inference, moving the transcript cursors, and
  * checkpointing the context the runtime hands back. How a turn reaches a
  * model — which provider, which item shapes, how the loop between model and
@@ -180,18 +180,18 @@ export interface BrainAgentOptions {
  * before the model reads a word: the same policy fixes the schemas the model
  * is offered and the gate every emitted call meets, so nothing the model
  * reads can widen either. Who opened the turn — the developer's ask, a wake,
- * a roster look, a hold release — is recorded as its origin, and an act taken
+ * a roster look, a hold release — is recorded as its origin, and an action taken
  * in a turn the developer did not open is journaled and narrated as Luke's
  * own rather than as anything the developer asked for.
  *
  * A developer ask is a run with a record: accepted once its record is
  * checkpointed, queued behind the turns ahead of it, running under an
  * execution deadline and a cancellation the developer holds, and ended in one
- * of the terminal statuses the record vocabulary names. Every act the run
+ * of the terminal statuses the record vocabulary names. Every action the run
  * dispatches is journaled before the performer sees it and again with its
  * result before the model does, and the context's rollback point advances
  * past each answered act, so a reply the model then fails to produce cannot
- * erase an act that already happened.
+ * erase an action that already happened.
  */
 export class BrainAgent {
   readonly #options: BrainAgentOptions;
@@ -260,7 +260,7 @@ export class BrainAgent {
     this.#turns = new TurnRunner({
       seam,
       runtime: options.runtime,
-      acts: options.acts,
+      actions: options.actions,
       roster: options.roster,
       standingContext: options.standingContext,
       prepareTurn: options.prepareTurn,
@@ -416,7 +416,7 @@ export class BrainAgent {
 
   /**
    * Cancels a run: a queued one never starts, a running one has its model and
-   * read work aborted and every act not yet dispatched refused. An act whose
+   * read work aborted and every action not yet dispatched refused. An action whose
    * effect is already under way is neither retried nor aborted — its result
    * is kept, known or unknown — because cancelling cannot undo a message
    * already sent.
@@ -433,8 +433,8 @@ export class BrainAgent {
    * only once it is itself written: a mark the store refused is not held in
    * memory either, so the next report tries the whole step again.
    */
-  markHistoryRecorded(runId: string, recordedAt: number): Promise<boolean> {
-    return this.#mark(runId, PENDING_MARK_FIELD.HISTORY_RECORDED_AT, recordedAt);
+  markConversationRecorded(runId: string, recordedAt: number): Promise<boolean> {
+    return this.#mark(runId, PENDING_MARK_FIELD.CONVERSATION_RECORDED_AT, recordedAt);
   }
 
   /** Marks a run's own ask as written into the host's thread, on the same terms. */
@@ -530,7 +530,7 @@ export class BrainAgent {
   /**
    * Revokes every execution at once and takes nothing more: the generation's
    * signal fires, so every wait the agent holds — a model answer, a
-   * transcript read, a run's own act preparation — settles, and the queue
+   * transcript read, a run's own action preparation — settles, and the queue
    * drains behind it. Unfinished runs are recorded as interrupted: the agent
    * stopping — a key or account changing, the app quitting — is not the
    * developer's cancel, and the record says which. Synchronous up to the
@@ -601,7 +601,7 @@ export class BrainAgent {
     return generationFrom(
       state,
       this.#options.runtime,
-      JSON.stringify(UNKNOWN_ACT_RESULT),
+      JSON.stringify(UNKNOWN_ACTION_RESULT),
       this.#now,
     );
   }
@@ -632,12 +632,12 @@ export class BrainAgent {
       this.#reportIncompatible(generation, opened.reason);
     }
     const interrupted = interruptedUnfinishedRequests(state.requests, this.#now());
-    // An act found started with no result may have happened: the runtime's
+    // An action found started with no result may have happened: the runtime's
     // context paired it as unknown at load, and the interrupted run says so
     // in its count; neither is ever a call to make again.
     const repaired = opened.kind === CONTEXT_OPENING.LOADED ? opened.repaired : 0;
     // A journal row under a run no record names is what an observation turn
-    // that died mid-act left behind. Its result already stands in the context,
+    // that died mid-action left behind. Its result already stands in the context,
     // paired at load, and no record waits for its count, so it goes here
     // rather than standing where a later turn's call could be matched to it.
     const recorded = new Set(state.requests.map((record) => record.runId));
@@ -651,15 +651,15 @@ export class BrainAgent {
         .filter((record) => !isTerminalBrainRequestStatus(record.status))
         .map((record) => record.runId),
     );
-    // An interrupted run's accounting is what its journal established: acts
-    // whose result was accepted went through, acts whose result says unknown
+    // An interrupted run's accounting is what its journal established: actions
+    // whose result was accepted went through, actions whose result says unknown
     // or never arrived may have. Counted from the journal alone, so a copy
     // taken mid-run and a copy taken after it both say the same.
     generation.requests = new Map(
       interrupted.map((record) => [
         record.runId,
         unfinished.has(record.runId)
-          ? { ...record, ...journalActCounts(state.journal, record.runId) }
+          ? { ...record, ...journalActionCounts(state.journal, record.runId) }
           : record,
       ]),
     );

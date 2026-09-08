@@ -18,7 +18,7 @@ struct SessionsView: View {
     @State private var spawningSession: RosterSession?
     @State private var renaming: RenameTarget?
     @State private var renameText = ""
-    @State private var actFailure: String?
+    @State private var actionFailure: String?
 
     /// Which advertised rename a menu press opened: the session itself, or
     /// the workspace it runs in. One alert serves both; the flag picks the
@@ -29,10 +29,10 @@ struct SessionsView: View {
 
         var id: String { session.id }
         var title: String { isWorkspace ? "Rename Workspace" : "Rename Session" }
-        var act: ProductSessionAct { isWorkspace ? .workspaceRename : .sessionRename }
+        var action: ProductSessionAction { isWorkspace ? .workspaceRename : .sessionRename }
     }
 
-    private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
+    private let actionClient = ActionClient(baseURL: AccountConstants.serviceURL)
     private let conversationClient = ConversationClient(serviceURL: AccountConstants.serviceURL)
 
     var body: some View {
@@ -47,7 +47,7 @@ struct SessionsView: View {
                 let current = store.sessions.first { $0.id == opened.id } ?? opened
                 SessionDetailView(
                     session: current,
-                    actClient: actClient,
+                    actionClient: actionClient,
                     conversationClient: conversationClient,
                     thread: Binding(
                         get: { threads[opened.id] ?? [] },
@@ -67,7 +67,7 @@ struct SessionsView: View {
             }
         }
         .sheet(item: $spawningSession) { s in
-            AgentSpawnerSheet(session: s, actClient: actClient) {
+            AgentSpawnerSheet(session: s, actionClient: actionClient) {
                 spawningSession = nil
                 Task { await refreshSessions() }
             }
@@ -81,10 +81,10 @@ struct SessionsView: View {
             Button("Rename") {
                 let name = renameText
                 Task {
-                    await performAct(on: target.session, counting: target.act) { token in
+                    await performAction(on: target.session, counting: target.action) { token in
                         let rename =
                             target.isWorkspace
-                            ? actClient.renameWorkspace : actClient.renameSession
+                            ? actionClient.renameWorkspace : actionClient.renameSession
                         return try await rename(
                             token, target.session.providerId, target.session.sessionId, name)
                     }
@@ -92,7 +92,7 @@ struct SessionsView: View {
             }
             Button("Cancel", role: .cancel) {}
         }
-        .failureAlert("Not Delivered", reason: $actFailure)
+        .failureAlert("Not Delivered", reason: $actionFailure)
     }
 
     /// The rows the query leaves: matched with the desktop's own search
@@ -194,7 +194,7 @@ struct SessionsView: View {
     /// Whether the row offers anything beyond what it draws. Every offer here
     /// is one the session's latest observation advertised — the row invents
     /// no fallback for a provider that advertised nothing.
-    private func hasRowActs(_ s: RosterSession) -> Bool {
+    private func hasRowActions(_ s: RosterSession) -> Bool {
         s.canReceiveMessage || !s.controls.isEmpty || !s.spawnableAgents.isEmpty || s.canRename
             || s.canRenameWorkspace
     }
@@ -208,7 +208,7 @@ struct SessionsView: View {
             .contentShape(
                 [.interaction, .contextMenuPreview], RoundedRectangle(cornerRadius: 15))
         Group {
-            if hasRowActs(s) {
+            if hasRowActions(s) {
                 core.contextMenu {
                     rowMenu(s, viewDetails: nil, sendMessage: { store.open(s) })
                 } preview: {
@@ -242,9 +242,9 @@ struct SessionsView: View {
     }
 
     /// The menu reads in the system's own order: what the session takes now,
-    /// then the edits that open further UI, then the acts that end something
+    /// then the edits that open further UI, then the actions that end something
     /// — a stop wearing the destructive role, the archive closing the menu
-    /// the way Mail's does. Every entry is still only an advertised act, and
+    /// the way Mail's does. Every entry is still only an advertised action, and
     /// each section holds only the kinds the adapters themselves declared.
     @ViewBuilder
     private func rowMenu(
@@ -321,12 +321,12 @@ struct SessionsView: View {
     private func runControl(_ s: RosterSession, _ control: RosterSessionControl) {
         // An archive's whole visible outcome is the row leaving, so the leave
         // happens at the press — the row slides out and the screen it opened
-        // pops — with the act following behind rather than the press waiting
+        // pops — with the action following behind rather than the press waiting
         // on two round trips.
         if control.kind == .archive { store.beginArchiving(s) }
         Task {
-            let delivered = await performAct(on: s, counting: .controlRun) { token in
-                try await actClient.executeControl(
+            let delivered = await performAction(on: s, counting: .controlRun) { token in
+                try await actionClient.executeControl(
                     accessToken: token,
                     providerId: s.providerId,
                     providerSessionId: s.sessionId,
@@ -350,20 +350,20 @@ struct SessionsView: View {
         }
     }
 
-    /// Runs one row act through the shared runner, then refreshes so the
-    /// roster reflects what the act changed; a refusal is surfaced in the
+    /// Runs one row action through the shared runner, then refreshes so the
+    /// roster reflects what the action changed; a refusal is surfaced in the
     /// failure alert with the server's own reason.
     @discardableResult
-    private func performAct(
+    private func performAction(
         on s: RosterSession,
-        counting act: ProductSessionAct,
-        _ call: (String) async throws -> ActMessageAnswer
+        counting action: ProductSessionAction,
+        _ call: (String) async throws -> ActionMessageAnswer
     ) async -> Bool {
-        let outcome = await session.performAct(
-            counting: act,
+        let outcome = await session.performAction(
+            counting: action,
             provider: s.providerId,
             events: events,
-            fallbackReason: "The act was not delivered.",
+            fallbackReason: "The action was not delivered.",
             call
         )
         switch outcome {
@@ -371,7 +371,7 @@ struct SessionsView: View {
             await refreshSessions()
             return true
         case .refused(let reason):
-            actFailure = reason
+            actionFailure = reason
             return false
         case .signedOut:
             return false  // The state change redraws automatically.

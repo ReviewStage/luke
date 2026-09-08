@@ -4,19 +4,19 @@ import path from "node:path";
 import {
   type ArchiveEncoding,
   CONVERSATION_KIND,
+  type ConversationArchiveRecord,
   type ConversationKind,
+  conversationArchiveRecordFromWire,
   conversationKindOf,
-  type HistoryArchiveRecord,
-  historyArchiveRecordFromWire,
   isConversationKind,
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
 import { standingGeneration } from "./brain-envelope.js";
 import { archiveEncodingSuffix, encodeArchiveContent } from "./compression.js";
 import {
+  conversationCutoff,
   conversationRecord,
-  historyCutoff,
-  raiseHistoryCutoff,
+  raiseConversationCutoff,
   removeConversationRow,
   removeConversationRows,
   removeConversationRowsAtOrBefore,
@@ -80,7 +80,7 @@ export function isArchiveStagingName(fileName: string): boolean {
 /** The JSONL record kinds an archive is made of; the header first, then the lines in their order. */
 const ARCHIVE_LINE = {
   HEADER: "header",
-  HISTORY: "history",
+  CONVERSATION: "conversation",
   TRANSCRIPT: "transcript",
 } as const;
 
@@ -111,16 +111,16 @@ type ArchiveRow = {
   byte_length: number;
   file_name: string;
   published_at: number | null;
-  history_lines: number;
+  conversation_lines: number;
   transcript_events: number;
   previous_cutoff: number | null;
 };
 
 const ARCHIVE_COLUMNS = `archive_id, session_key, kind, name, created_at, deleted_at, encoding, sha256,
-  byte_length, file_name, published_at, history_lines, transcript_events, previous_cutoff`;
+  byte_length, file_name, published_at, conversation_lines, transcript_events, previous_cutoff`;
 
-function recordFromRow(row: ArchiveRow): HistoryArchiveRecord | undefined {
-  return historyArchiveRecordFromWire({
+function recordFromRow(row: ArchiveRow): ConversationArchiveRecord | undefined {
+  return conversationArchiveRecordFromWire({
     archiveId: row.archive_id,
     sessionKey: row.session_key,
     kind: isConversationKind(row.kind) ? row.kind : conversationKindOf(row.session_key),
@@ -132,17 +132,19 @@ function recordFromRow(row: ArchiveRow): HistoryArchiveRecord | undefined {
     byteLength: row.byte_length,
     fileName: row.file_name,
     ...(row.published_at !== null ? { publishedAt: row.published_at } : undefined),
-    historyLines: row.history_lines,
+    conversationLines: row.conversation_lines,
     transcriptEvents: row.transcript_events,
   });
 }
 
-export function listArchives(database: StoreDatabase): readonly HistoryArchiveRecord[] {
+export function listArchives(database: StoreDatabase): readonly ConversationArchiveRecord[] {
   // SAFETY: the columns selected are the ones the row type names, typed by the schema.
   const rows = database
-    .prepare(`SELECT ${ARCHIVE_COLUMNS} FROM history_archives ORDER BY deleted_at DESC, archive_id`)
+    .prepare(
+      `SELECT ${ARCHIVE_COLUMNS} FROM conversation_archives ORDER BY deleted_at DESC, archive_id`,
+    )
     .all() as ArchiveRow[];
-  const records: HistoryArchiveRecord[] = [];
+  const records: ConversationArchiveRecord[] = [];
   for (const row of rows) {
     const record = recordFromRow(row);
     if (record) records.push(record);
@@ -153,7 +155,7 @@ export function listArchives(database: StoreDatabase): readonly HistoryArchiveRe
 function archiveRow(database: StoreDatabase, archiveId: string): ArchiveRow | undefined {
   // SAFETY: as above, for one row or none.
   return database
-    .prepare(`SELECT ${ARCHIVE_COLUMNS} FROM history_archives WHERE archive_id = ?`)
+    .prepare(`SELECT ${ARCHIVE_COLUMNS} FROM conversation_archives WHERE archive_id = ?`)
     .get(archiveId) as ArchiveRow | undefined;
 }
 
@@ -203,7 +205,7 @@ export interface DeletionOptions {
 }
 
 export interface DeletionOutcome {
-  archive: HistoryArchiveRecord;
+  archive: ConversationArchiveRecord;
   /** Whether the archive file is published and verified; false means the payload still waits in the registry. */
   published: boolean;
 }
@@ -216,7 +218,7 @@ export interface DeletionOutcome {
  * checkpoint, requests, and receipts. Publication follows, outside the
  * transaction, and its outcome is the answer.
  */
-export function deleteConversationHistory(
+export function deleteConversation(
   database: StoreDatabase,
   agentRoot: string,
   sessionKey: SessionKey,
@@ -233,7 +235,9 @@ export function deleteConversationHistory(
     const record = conversationRecord(database, sessionKey);
     if (!record) return undefined;
     const standing = standingGeneration(database, sessionKey);
-    const previousCutoff = cutoffBefore ? cutoffBefore.value : historyCutoff(database, sessionKey);
+    const previousCutoff = cutoffBefore
+      ? cutoffBefore.value
+      : conversationCutoff(database, sessionKey);
     const header: ArchiveHeader = {
       sessionKey,
       kind: record.kind,
@@ -250,9 +254,9 @@ export function deleteConversationHistory(
     // line accepted after the press, while the deletion waited on the disk,
     // is the conversation's next line and stays.
     // SAFETY: the columns selected are the ones the row type names.
-    const historyRows = database
+    const conversationRows = database
       .prepare(
-        `SELECT payload, session_id FROM history_events
+        `SELECT payload, session_id FROM conversation_events
          WHERE session_key = ? AND recorded_at <= ? ORDER BY sequence`,
       )
       .all(sessionKey, now) as { payload: string; session_id: string | null }[];
@@ -260,10 +264,10 @@ export function deleteConversationHistory(
       limit: Number.MAX_SAFE_INTEGER,
     }).filter((stored) => stored.event.recordedAt <= now);
     const lines: string[] = [JSON.stringify({ type: ARCHIVE_LINE.HEADER, ...header })];
-    for (const row of historyRows) {
+    for (const row of conversationRows) {
       lines.push(
         JSON.stringify({
-          type: ARCHIVE_LINE.HISTORY,
+          type: ARCHIVE_LINE.CONVERSATION,
           ...(row.session_id !== null ? { sessionId: row.session_id } : undefined),
           entry: JSON.parse(row.payload),
         }),
@@ -283,9 +287,9 @@ export function deleteConversationHistory(
     const fileName = archiveFileName(sessionKey, now, archiveId, encoded.encoding);
     database
       .prepare(
-        `INSERT INTO history_archives
+        `INSERT INTO conversation_archives
            (archive_id, session_key, kind, name, created_at, deleted_at, encoding, sha256, byte_length,
-            file_name, published_at, history_lines, transcript_events, previous_cutoff, payload)
+            file_name, published_at, conversation_lines, transcript_events, previous_cutoff, payload)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
       )
       .run(
@@ -299,12 +303,12 @@ export function deleteConversationHistory(
         hashBytes(encoded.bytes),
         encoded.bytes.length,
         fileName,
-        historyRows.length,
+        conversationRows.length,
         transcript.length,
         nullable(header.previousCutoff),
         encoded.bytes,
       );
-    raiseHistoryCutoff(database, sessionKey, now);
+    raiseConversationCutoff(database, sessionKey, now);
     if (removeConversation && record.kind !== CONVERSATION_KIND.MAIN) {
       removeConversationRows(database, sessionKey);
       removeConversationRow(database, sessionKey);
@@ -345,7 +349,7 @@ export function publishArchive(
   if (row.published_at !== null) return true;
   // SAFETY: the payload column is the BLOB the deletion wrote, or NULL once published.
   const payload = database
-    .prepare("SELECT payload FROM history_archives WHERE archive_id = ?")
+    .prepare("SELECT payload FROM conversation_archives WHERE archive_id = ?")
     .get(archiveId) as { payload: Uint8Array | null } | undefined;
   if (!payload?.payload) return false;
   const directory = archiveDirectory(agentRoot);
@@ -379,7 +383,9 @@ export function publishArchive(
     return false;
   }
   database
-    .prepare("UPDATE history_archives SET published_at = ?, payload = NULL WHERE archive_id = ?")
+    .prepare(
+      "UPDATE conversation_archives SET published_at = ?, payload = NULL WHERE archive_id = ?",
+    )
     .run(Date.now(), archiveId);
   return true;
 }
@@ -403,7 +409,7 @@ export function publishPendingArchives(
   // SAFETY: one text column selected.
   const rows = database
     .prepare(
-      "SELECT archive_id FROM history_archives WHERE published_at IS NULL ORDER BY deleted_at",
+      "SELECT archive_id FROM conversation_archives WHERE published_at IS NULL ORDER BY deleted_at",
     )
     .all() as { archive_id: string }[];
   return rows
@@ -425,6 +431,6 @@ export function removeArchive(
   } catch {
     return false;
   }
-  database.prepare("DELETE FROM history_archives WHERE archive_id = ?").run(archiveId);
+  database.prepare("DELETE FROM conversation_archives WHERE archive_id = ?").run(archiveId);
   return true;
 }

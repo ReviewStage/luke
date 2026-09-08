@@ -8,14 +8,14 @@ import { REALTIME_CLIENT_EVENT } from "./realtime-events.js";
  * that exists before an account does, so its session is narrowed at the API
  * itself: no tools are declared at all, and every scripted turn is opened with
  * `tool_choice: "none"` — there is no roster, no guide, and no carrier behind
- * this call, so a turn that somehow asked for an act would find nothing
+ * this call, so a turn that somehow asked for an action would find nothing
  * declared to ask with.
  */
 
 /**
  * What the introduction call is for, replacing the standing conversation
  * instructions rather than extending them: this call has no roster, no guide,
- * and no acts, and instructions written for those would have Luke describe
+ * and no actions, and instructions written for those would have Luke describe
  * capabilities the call deliberately does not carry.
  */
 const INTRODUCTION_INSTRUCTION_HEAD: string = [
@@ -94,7 +94,7 @@ const maximumIntroductionDataLength = 1_000;
  * reading "ignore your instructions and ..." is then data Luke has been handed
  * to mention, and the one thing it cannot do is change what Luke was asked to
  * do with it. The turn is opened with `tool_choice: "none"` on a session that
- * declares no tools, so a scripted beat can never become an act.
+ * declares no tools, so a scripted beat can never become an action.
  */
 export function introductionSpeechEvents(line: IntroductionLine): readonly WireRecord[] {
   const direction = text(line.direction);

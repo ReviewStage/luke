@@ -151,7 +151,7 @@ const BOOT: HostBootstrap = {
   sessions: [],
   sessionsSettled: false,
   announcementsHeld: false,
-  conversationHistory: [],
+  conversationLines: [],
   workspaceProjects: [],
   calendars: [],
   calendarOnboardingOwed: false,

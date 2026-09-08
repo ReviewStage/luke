@@ -246,7 +246,7 @@ export function SessionOptionsButton({
         <button
           type="button"
           className="options-clear"
-          // Asking Luke for the whole list back is this X's own act, so that
+          // Asking Luke for the whole list back is this X's own action, so that
           // is where he signs it — and the X unmounts under his tap, which
           // the errand already treats as a control the change took away.
           {...errandTargetProps(ERRAND_TARGET.LIST_CLEAR)}

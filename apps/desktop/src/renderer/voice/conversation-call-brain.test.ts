@@ -14,7 +14,7 @@ import {
   REALTIME_STATUS,
 } from "@sidecar/realtime";
 import { REPLY_KIND } from "@sidecar/voice/orchestrator";
-import { ACT_RESULT_STATUS, isRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, isRecord } from "@sidecar/wire";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import {
   armDeveloperTurn,
@@ -112,7 +112,7 @@ test("a cancelled reply's late finish cannot ask the brain in the turn that repl
   assert.deepEqual(context.asked, []);
   assert.deepEqual(toolOutputs(context, sentBefore), [
     {
-      status: ACT_RESULT_STATUS.REJECTED,
+      status: ACTION_RESULT_STATUS.REJECTED,
       reason: "That turn is over; ask again if it still matters.",
     },
   ]);
@@ -190,7 +190,7 @@ test("a spoken ask goes to the brain and its answer is voiced", async () => {
   });
   settleReply(context);
 
-  // History records the words as a reply, naming the run whose end they voice.
+  // Conversation records the words as a reply, naming the run whose end they voice.
   assert.deepEqual(context.replyEndings, [
     {
       texts: ["Claude Code is on the tests now."],
@@ -203,7 +203,7 @@ test("a spoken ask goes to the brain and its answer is voiced", async () => {
 test("a rejected answer's reason is the tool's output, and the follow-up still speaks", async () => {
   const context = harness({
     askBrain: async () => ({
-      status: ACT_RESULT_STATUS.REJECTED,
+      status: ACTION_RESULT_STATUS.REJECTED,
       reason: "That session is no longer observed.",
     }),
   });
@@ -215,7 +215,7 @@ test("a rejected answer's reason is the tool's output, and the follow-up still s
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   assert.deepEqual(toolOutputs(context, sentBefore), [
-    { status: ACT_RESULT_STATUS.REJECTED, reason: "That session is no longer observed." },
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: "That session is no longer observed." },
   ]);
   // The refusal is voiced like any answer.
   assert.equal(responseCreates(context, sentBefore).length, 1);
@@ -233,7 +233,7 @@ test("a call with no brain behind it is refused, and the refusal is voiced", asy
 
   assert.deepEqual(toolOutputs(context, sentBefore), [
     {
-      status: ACT_RESULT_STATUS.REJECTED,
+      status: ACTION_RESULT_STATUS.REJECTED,
       reason: "Luke's judgment is not available on this call.",
     },
   ]);
@@ -251,7 +251,7 @@ test("an ask carrying no words never reaches the brain", async () => {
 
   assert.deepEqual(context.asked, []);
   assert.deepEqual(toolOutputs(context, sentBefore), [
-    { status: ACT_RESULT_STATUS.REJECTED, reason: "The ask carried no words." },
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: "The ask carried no words." },
   ]);
 });
 
@@ -279,7 +279,7 @@ test("a call to a tool the voice was never given is refused before the brain", a
 
   assert.deepEqual(context.asked, []);
   assert.deepEqual(toolOutputs(context, sentBefore), [
-    { status: ACT_RESULT_STATUS.REJECTED, reason: "No such tool exists." },
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: "No such tool exists." },
   ]);
 });
 
@@ -319,14 +319,14 @@ test("malformed SDK call details are refused before the brain", async () => {
   await context.session.connect();
 
   assert.deepEqual(await context.executeSdkTool(ASK_BRAIN_TOOL.name, undefined), {
-    status: ACT_RESULT_STATUS.REJECTED,
+    status: ACTION_RESULT_STATUS.REJECTED,
     reason: "The tool call was malformed.",
   });
   assert.deepEqual(
     await context.executeSdkTool(ASK_BRAIN_TOOL.name, {
       toolCall: { type: "function_call", callId: "call-1", name: ASK_BRAIN_TOOL.name },
     }),
-    { status: ACT_RESULT_STATUS.REJECTED, reason: "The tool arguments were malformed." },
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: "The tool arguments were malformed." },
   );
   assert.deepEqual(context.asked, []);
 });
@@ -346,7 +346,7 @@ test("a brain that throws is refused with a bounded reason", async () => {
 
   // The error's own words never reach the model; the refusal is fixed by the build.
   assert.deepEqual(toolOutputs(context, sentBefore), [
-    { status: ACT_RESULT_STATUS.REJECTED, reason: "Luke's judgment did not answer." },
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: "Luke's judgment did not answer." },
   ]);
 });
 
@@ -583,7 +583,7 @@ test("a done that outlives the settle backstop cannot ask the brain out of the s
   assert.deepEqual(context.asked, []);
   assert.deepEqual(toolOutputs(context, sentBefore), [
     {
-      status: ACT_RESULT_STATUS.REJECTED,
+      status: ACTION_RESULT_STATUS.REJECTED,
       reason: "That turn is over; ask again if it still matters.",
     },
   ]);

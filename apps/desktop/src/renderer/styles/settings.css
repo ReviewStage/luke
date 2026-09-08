@@ -391,7 +391,7 @@
    `quiet-button` itself rather than a copy of its padding, radius, ground and
    type. What is added here is only what a choice needs and an offer does not —
    a second line, and the ground and edge a chosen filter chip takes for the
-   half that is live. Chosen is a state, not an act: a stronger accent would
+   half that is live. Chosen is a state, not an action: a stronger accent would
    read as the thing to press rather than the thing already true. */
 .source-toggle {
   display: flex;
@@ -730,7 +730,7 @@
   color: var(--danger-text);
 }
 
-/* Deleting a key is the one act in this panel that cannot be undone from inside
+/* Deleting a key is the one action in this panel that cannot be undone from inside
    it: nothing here can hand a key back, so a trash pressed by mistake costs a
    trip to the provider's own site. The trash asks instead of acting, and the
    answer is given in the few pixels the question was asked in.

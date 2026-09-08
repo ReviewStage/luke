@@ -12,11 +12,11 @@ import {
   SessionRoster,
 } from "@sidecar/session";
 import {
-  ACT_KIND,
-  advertisedActFor,
+  ACTION_KIND,
+  advertisedActionFor,
   advertisedControl,
   advertisedControls,
-} from "./advertised-acts.js";
+} from "./advertised-actions.js";
 import { maximumSessionLinkLength } from "./bounds.js";
 
 const codex: SessionProvider = { id: "codex", displayName: "Codex" };
@@ -62,7 +62,7 @@ test("normalizes provider observations without conflating provider-local identit
       title: "  Implement the shared session core  ",
       parentProviderSessionId: "  run:parent  ",
       advertises: [
-        { kind: ACT_KIND.CONTROL, id: TEST_CONTROL_WITH_WHITESPACE, label: " Open workspace " },
+        { kind: ACTION_KIND.CONTROL, id: TEST_CONTROL_WITH_WHITESPACE, label: " Open workspace " },
       ],
     }),
   );
@@ -75,7 +75,7 @@ test("normalizes provider observations without conflating provider-local identit
   assert.equal(session.title, "Implement the shared session core");
   assert.equal(session.parentProviderSessionId, "run:parent");
   assert.deepEqual(advertisedControls(session), [
-    { kind: ACT_KIND.CONTROL, id: TEST_CONTROL.OPEN, label: "Open workspace" },
+    { kind: ACTION_KIND.CONTROL, id: TEST_CONTROL.OPEN, label: "Open workspace" },
   ]);
   assert.notEqual(advertisedControl(session, TEST_CONTROL.OPEN), undefined);
   assert.equal(advertisedControl(session, TEST_CONTROL.INTERRUPT), undefined);
@@ -162,9 +162,9 @@ test("a session takes messages only when its adapter said so explicitly", () => 
   assert.deepEqual(roster.get(identity)?.advertises, []);
 
   roster.replaceProvider(codex, [
-    observation("run:message", 100, { advertises: [{ kind: ACT_KIND.MESSAGE }] }),
+    observation("run:message", 100, { advertises: [{ kind: ACTION_KIND.MESSAGE }] }),
   ]);
-  assert.deepEqual(roster.get(identity)?.advertises, [{ kind: ACT_KIND.MESSAGE }]);
+  assert.deepEqual(roster.get(identity)?.advertises, [{ kind: ACTION_KIND.MESSAGE }]);
 });
 
 test("the agents a session can start are the latest pass's word", () => {
@@ -172,14 +172,14 @@ test("the agents a session can start are the latest pass's word", () => {
   const identity = { providerId: codex.id, providerSessionId: "run:spawn" };
 
   const agentsFor = (session: Session | undefined): readonly string[] =>
-    session ? (advertisedActFor(session, ACT_KIND.ADD_AGENT)?.agents ?? []) : [];
+    session ? (advertisedActionFor(session, ACTION_KIND.ADD_AGENT)?.agents ?? []) : [];
 
   roster.replaceProvider(codex, [observation("run:spawn", 100)]);
   assert.deepEqual(agentsFor(roster.get(identity)), []);
 
   roster.replaceProvider(codex, [
     observation("run:spawn", 100, {
-      advertises: [{ kind: ACT_KIND.ADD_AGENT, agents: ["claude", "cursor"] }],
+      advertises: [{ kind: ACTION_KIND.ADD_AGENT, agents: ["claude", "cursor"] }],
     }),
   ]);
   assert.deepEqual(agentsFor(roster.get(identity)), ["claude", "cursor"]);
@@ -223,7 +223,7 @@ test("a change is held to the web alone, and never a shortened one", () => {
   const changeFor = (change: string) =>
     observe(roster, codex, observation("run:change", 100, { detail: { change } })).detail.change;
 
-  // The pull-request chip acts on this field the way pressing a row acts on
+  // The pull-request chip acts on this field the way pressing a row actions on
   // the link, so the same rule guards it — narrowed to https because every
   // pull request a provider reports lives on the web.
   assert.equal(

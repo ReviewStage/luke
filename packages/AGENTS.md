@@ -12,16 +12,16 @@ reaches cannot become a package's: `tools/trace-export` reads a recorded trace
 against `@sidecar/brain`'s hosted tool catalog, which `@sidecar/devtrace` would
 otherwise pull into the app that only writes the file.
 
-Whether an act may run is decided once, by `admit()` in `@sidecar/acts`, which
-mints the only `ValidatedAct` there is: its brand is `@sidecar/wire`'s
+Whether an action may run is decided once, by `admit()` in `@sidecar/actions`, which
+mints the only `ValidatedAction` there is: its brand is `@sidecar/wire`'s
 module-private symbol, which nothing anywhere can spell, so `admit` is the one
 place the repository enters the admitted set and a signature that takes one says
 the gauntlet ran. Everything below it re-shapes what it already holds through
 `reshapeAdmitted`, which needs an admitted value to answer at all — which is how
 a provider's write signature enforces the requirement rather than
-restating it. The direction stays acts → session → wire, and `@sidecar/session`
+restating it. The direction stays actions → session → wire, and `@sidecar/session`
 keeps the narrower act vocabulary an observation advertises with; the two are
-proven to be the same strings where `@sidecar/acts` declares the whole of it.
+proven to be the same strings where `@sidecar/actions` declares the whole of it.
 
 A wire value's rules are declared once, as a `Schema` in `@sidecar/wire`,
 which both parses the untrusted value and emits the JSON Schema a model is
@@ -72,8 +72,8 @@ is one whose sources compilation never visits. Packages the server names get
 `export *`; packages reached only through another get a bare side-effect
 import, which pulls the file into the compile graph without widening the
 export namespace, where `export *` can silently drop a name two doors both
-export. Where two doors genuinely both have to carry a name — `ACT_KIND`, which
-the act table names in full and the session package names its advertised subset
+export. Where two doors genuinely both have to carry a name — `ACTION_KIND`, which
+the action table names in full and the session package names its advertised subset
 of — the door that carries the whole of it re-exports the name explicitly,
 which takes precedence over both stars.
 

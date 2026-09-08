@@ -1,4 +1,4 @@
-import { ACT_KIND } from "@sidecar/acts";
+import { ACTION_KIND } from "@sidecar/actions";
 import {
   isProductExchangeKind,
   isProductSurfaceEventName,
@@ -8,8 +8,8 @@ import {
   productEventFromWire,
 } from "@sidecar/analytics";
 import {
-  type BrainAppActAnswer,
-  type BrainAppActRequest,
+  type BrainAppActionAnswer,
+  type BrainAppActionRequest,
   type BrainAskSubmission,
   type BrainAskSubmissionResult,
   type BrainAskWait,
@@ -73,8 +73,8 @@ import {
 import type { SettingsUpdateResult } from "@sidecar/settings/wire";
 import type { WindowMode } from "@sidecar/surface";
 import {
-  type ActResult,
-  isActResult,
+  type ActionResult,
+  isActionResult,
   isOptionalWireString,
   isRecord,
   isUnitLevel,
@@ -420,7 +420,7 @@ export const BRIDGE = {
     kind: "invoke",
     channel: "app:disconnect-superset",
     args: noArgs,
-    result: result<ActResult>(isActResult),
+    result: result<ActionResult>(isActionResult),
   }),
   openSession: entry({
     kind: "invoke",
@@ -463,7 +463,7 @@ export const BRIDGE = {
    * record as it then stands — ended, or still pending — or nothing for a run
    * the brain does not know, and whether the asking call may say the words:
    * granted only to the voice window, under the receiver epoch it names, for
-   * an end already in History, and only once per run, so the words are never
+   * an end already in Conversation, and only once per run, so the words are never
    * both said on the call and delivered later.
    */
   waitBrainAsk: entry({
@@ -536,10 +536,10 @@ export const BRIDGE = {
    * matched to the request by id. The answer is the outcome record the brain
    * reads, as the renderer's own carrier produced it.
    */
-  answerBrainAppAct: entry({
+  answerBrainAppAction: entry({
     kind: "send",
-    channel: "app:answer-brain-app-act",
-    args: args<[string, BrainAppActAnswer]>(
+    channel: "app:answer-brain-app-action",
+    args: args<[string, BrainAppActionAnswer]>(
       (v) => v.length === 2 && isWireString(v[0]) && isRecord(v[1]) && isWireValue(v[1]),
     ),
   }),
@@ -634,7 +634,7 @@ export const BRIDGE = {
    * report, each with the id the window minted for it. The main process
    * appends them to the thread it owns — idempotently, so a line delivered
    * twice is one line — and relays the thread whole to every other panel
-   * window, so the History tab reads the same on every display; a window's own
+   * window, so the Conversation tab reads the same on every display; a window's own
    * report is not echoed back to it. A report never replaces the thread: what
    * the store holds is authoritative, and a window can only add to it. The
    * relay never leaves the machine, and every line in it is one the reporting
@@ -642,9 +642,9 @@ export const BRIDGE = {
    * answer says whether the store took them, so the window marks a line
    * reported only then and sends a refused one again.
    */
-  appendConversationHistory: entry({
+  appendConversationLines: entry({
     kind: "invoke",
-    channel: "app:append-conversation-history",
+    channel: "app:append-conversation-lines",
     args: args<[readonly ConversationEntry[]]>(
       (v) =>
         v.length === 1 &&
@@ -873,18 +873,18 @@ export const BRIDGE = {
    * An app act the brain decided that only the renderer can perform, already
    * validated in the main process against the guide the renderer reported.
    */
-  onBrainAppAct: entry({
+  onBrainAppAction: entry({
     kind: "subscribe",
-    channel: "app:brain-app-act",
+    channel: "app:brain-app-action",
     args: noArgs,
-    result: result<BrainAppActRequest>(
+    result: result<BrainAppActionRequest>(
       (v) =>
         isRecord(v) &&
         isWireString(v.requestId) &&
         isRecord(v.action) &&
         isWireString(v.action.kind) &&
-        v.action.kind !== ACT_KIND.REMEMBER &&
-        v.action.kind !== ACT_KIND.FORGET,
+        v.action.kind !== ACTION_KIND.REMEMBER &&
+        v.action.kind !== ACTION_KIND.FORGET,
     ),
   }),
 } as const;

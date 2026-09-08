@@ -1,8 +1,8 @@
 import {
-  ACT_RESULT_STATUS,
+  ACTION_RESULT_STATUS,
   CLI_CONNECTION,
   type CliConnection,
-  type ProviderActResult,
+  type ProviderActionResult,
   type ProviderSessionObservation,
   SESSION_LOCATION,
   type SessionProvider,
@@ -134,7 +134,7 @@ export interface CliPass {
    */
   connection(): CliConnection;
   /** One authenticated write; answers what became of it, never throws. */
-  write(argv: readonly string[]): Promise<{ outcome: ProviderActResult; stdout?: string }>;
+  write(argv: readonly string[]): Promise<{ outcome: ProviderActionResult; stdout?: string }>;
 }
 
 /**
@@ -295,7 +295,7 @@ export function cliPass(input: CliPassInput): CliPass {
      * The one authenticated write: a single invocation of the provider's own
      * CLI, for something the user just asked for against what the latest pass
      * observed — an adapter validates before it builds the argv, exactly as
-     * the cloud pass's callers do. The login is probed at act time rather than
+     * the cloud pass's callers do. The login is probed at action time rather than
      * held from the observation pass, so a CLI signed out since then refuses
      * before anything runs, and the refusal wording is fixed here rather than
      * echoing whatever the CLI printed. What the command wrote to stdout rides
@@ -310,21 +310,21 @@ export function cliPass(input: CliPassInput): CliPass {
       } catch {
         return {
           outcome: {
-            status: ACT_RESULT_STATUS.REJECTED,
+            status: ACTION_RESULT_STATUS.REJECTED,
             reason: `${name}'s CLI could not answer, so nothing was sent.`,
           },
         };
       }
       connection = probed;
       if (probed !== CLI_CONNECTION.CONNECTED) {
-        // The act just learned what the next pass would have: the login is
+        // The action just learned what the next pass would have: the login is
         // gone. Observed state clears now rather than a tick later, and a pass
         // still in flight is superseded so its answer cannot land what was
         // read under the login that no longer stands.
         forgetLogin();
         return {
           outcome: {
-            status: ACT_RESULT_STATUS.REJECTED,
+            status: ACTION_RESULT_STATUS.REJECTED,
             reason:
               probed === CLI_CONNECTION.CLI_MISSING
                 ? `${name}'s CLI is not installed, so nothing was sent.`
@@ -341,7 +341,7 @@ export function cliPass(input: CliPassInput): CliPass {
       } catch {
         return {
           outcome: {
-            status: ACT_RESULT_STATUS.REJECTED,
+            status: ACTION_RESULT_STATUS.REJECTED,
             reason: `${name}'s CLI could not answer, so the request may not have landed.`,
           },
         };
@@ -349,7 +349,7 @@ export function cliPass(input: CliPassInput): CliPass {
       if (result.exitCode !== 0) {
         return {
           outcome: {
-            status: ACT_RESULT_STATUS.REJECTED,
+            status: ACTION_RESULT_STATUS.REJECTED,
             reason: `${name}'s CLI refused the request.`,
           },
         };
@@ -357,7 +357,7 @@ export function cliPass(input: CliPassInput): CliPass {
       // A write that landed changes what the provider holds, so the refresh
       // that follows must actually ask rather than serve the cached snapshot.
       lastAttemptAt = Number.NEGATIVE_INFINITY;
-      return { outcome: { status: ACT_RESULT_STATUS.ACCEPTED }, stdout: result.stdout };
+      return { outcome: { status: ACTION_RESULT_STATUS.ACCEPTED }, stdout: result.stdout };
     },
   };
 }

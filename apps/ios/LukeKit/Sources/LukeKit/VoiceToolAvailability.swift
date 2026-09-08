@@ -26,7 +26,7 @@ public struct VoiceToolReport: Equatable, Sendable {
     public let mintedKnown: Bool
 }
 
-/// Judges each tool the way the acts themselves are gated: a tool the
+/// Judges each tool the way the actions themselves are gated: a tool the
 /// service did not mint for this call is not Luke's to call; a tool the phone
 /// never carries says why the phone has no surface for it; and a tool the
 /// phone carries is available only while the observed roster or projects

@@ -69,7 +69,7 @@ const BRIDGE: VoiceBridge = {
       exchange === undefined ? undefined : voiceExchangeKind(exchange),
     ),
   reportReady: (epoch) => void window.sidecar.reportVoiceReady(epoch),
-  appendConversation: (entries) => window.sidecar.appendConversationHistory(entries),
+  appendConversation: (entries) => window.sidecar.appendConversationLines(entries),
   settleSpeech: (id, outcome) => void window.sidecar.settleSpeech(id, outcome),
   submitBrainAsk: (submission) => window.sidecar.submitBrainAsk(submission),
   waitBrainAsk: (runId, epoch) => window.sidecar.waitBrainAsk(runId, epoch),
@@ -228,7 +228,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   }, [remoteAudio, remoteStream]);
 
   // A panel's ask, validated and forwarded by the main process. Each command
-  // is the same act the panel used to perform on its own session; none opens
+  // is the same action the panel used to perform on its own session; none opens
   // a turn the developer did not.
   useReportingSubscription(orchestrator, VOICE_READINESS_PART.COMMANDS, () =>
     window.sidecar.onVoiceCommand(({ command }) => {

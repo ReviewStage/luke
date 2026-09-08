@@ -252,8 +252,8 @@ export class AskLedger {
       status: BRAIN_REQUEST_STATUS.QUEUED,
       revision: 0,
       acceptedAt,
-      performedActs: 0,
-      unknownActs: 0,
+      performedActions: 0,
+      unknownActions: 0,
     };
     generation.provisional.add(record.runId);
     generation.requests.set(record.runId, record);
@@ -451,7 +451,7 @@ export class AskLedger {
 
   /**
    * Cancels a run: a queued one never starts, a running one has its model and
-   * read work aborted and every act not yet dispatched refused. An act whose
+   * read work aborted and every action not yet dispatched refused. An action whose
    * effect is already under way is neither retried nor aborted — its result
    * is kept, known or unknown — because cancelling cannot undo a message
    * already sent.

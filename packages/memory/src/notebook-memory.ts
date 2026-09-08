@@ -7,7 +7,7 @@ import {
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
-import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import {
   type ConversationLineHit,
   type EmbeddingModelIdentity,
@@ -39,11 +39,11 @@ import { selectHybridSearchResults, tokenize } from "./ranking.js";
  * An adapter that cannot answer degrades the search to keyword-only and the
  * answer says so. No embedding is ever made of a conversation: the
  * past-conversation results a search may carry are lines already retained in
- * History, read from the store for the eligible conversations alone and
+ * Conversation, read from the store for the eligible conversations alone and
  * indexed nowhere.
  */
 
-/** The store as the host reads and writes it: the index's plan and apply, its search and read, and History's search. */
+/** The store as the host reads and writes it: the index's plan and apply, its search and read, and Conversation's search. */
 export interface NotebookMemoryStore {
   planMemorySync(
     identity: EmbeddingModelIdentity | undefined,
@@ -52,7 +52,7 @@ export interface NotebookMemoryStore {
   applyMemorySync(apply: MemorySyncApply): Promise<MemoryApplyReport>;
   searchMemory(query: MemorySearchQuery): Promise<MemorySearchOutcome>;
   readMemory(path: string, from?: number, lines?: number): Promise<MemoryReadResult | undefined>;
-  searchHistory(
+  searchConversation(
     sessionKeys: readonly SessionKey[],
     query: string,
     limit: number,
@@ -125,7 +125,7 @@ export function conversationResultPath(sessionKey: SessionKey): string {
   return `${CONVERSATION_RESULT_PATH_PREFIX}${sessionKey}`;
 }
 
-/** A line's keyword score: the share of the query's tokens it carries; a search has no bm25 over History. */
+/** A line's keyword score: the share of the query's tokens it carries; a search has no bm25 over Conversation. */
 function lexicalScore(query: string, words: string): number {
   const asked = [...tokenize(query)];
   if (asked.length === 0) return 0;
@@ -280,7 +280,7 @@ export class NotebookMemory {
       search: async (ask) => {
         const answer = await this.search(sessionKey, ask);
         return {
-          status: ACT_RESULT_STATUS.ACCEPTED,
+          status: ACTION_RESULT_STATUS.ACCEPTED,
           mode: answer.mode,
           ...(answer.note ? { note: answer.note } : undefined),
           results: answer.results.map(resultRecord),
@@ -290,13 +290,13 @@ export class NotebookMemory {
         const read = await this.#options.store().readMemory(ask.path, ask.from, ask.lines);
         if (!read) {
           const refused: WireRecord = {
-            status: ACT_RESULT_STATUS.REJECTED,
+            status: ACTION_RESULT_STATUS.REJECTED,
             reason: "not read: that path is not a notebook file",
           };
           return refused;
         }
         const answered: WireRecord = {
-          status: ACT_RESULT_STATUS.ACCEPTED,
+          status: ACTION_RESULT_STATUS.ACCEPTED,
           path: read.path,
           from: read.from,
           to: read.to,
@@ -456,7 +456,9 @@ export class NotebookMemory {
   ): Promise<MemorySearchResult[]> {
     const keys = this.#eligibleKeys(current);
     if (keys.length === 0 || limit <= 0) return [];
-    const hits = await this.#options.store().searchHistory(keys, query, limit, this.#options.now());
+    const hits = await this.#options
+      .store()
+      .searchConversation(keys, query, limit, this.#options.now());
     return hits.map((hit, ordinal) => conversationResult(query, hit, ordinal));
   }
 }

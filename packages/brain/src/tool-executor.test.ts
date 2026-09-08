@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { REALTIME_TOOL } from "@sidecar/acts";
+import { REALTIME_TOOL } from "@sidecar/actions";
 import { CHILD_SPAWN_REFUSAL, TOOL_POLICY_LAYER } from "@sidecar/runtime";
 import {
   CHILD_CLEANUP,
@@ -16,7 +16,7 @@ import {
   RUN_ORIGIN,
   type ToolInvocation,
 } from "@sidecar/runtime/vocabulary";
-import { ACT_RESULT_STATUS, isRecord, type UnparsedWireValue } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { BrainJournal } from "./journal.js";
 import {
   type BrainChildAccess,
@@ -72,8 +72,8 @@ function executor(
     cancelled: false,
     timedOut: false,
     checkpointFailed: false,
-    performedActs: 0,
-    unknownActs: 0,
+    performedActions: 0,
+    unknownActions: 0,
   };
   // SAFETY: the executor reads the generation's journal and the run's controls; nothing else of the turn context.
   const context = {
@@ -83,7 +83,7 @@ function executor(
   } as unknown as TurnContext;
   const dependencies: ToolExecutorDependencies = {
     roster: () => ({ text: "roster", identities: [] }),
-    acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
+    actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
     children,
     memory: undefined,
     workspace: {
@@ -94,7 +94,7 @@ function executor(
       },
       loadSkill: async () => ({ ok: true, instructions: "do it", truncated: false }),
     },
-    readWhole: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED, transcript: "whole" }),
+    readWhole: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole" }),
     checkpoint: async () => {
       checkpoints.push(journal.entries().length);
       return true;
@@ -142,7 +142,7 @@ test("a workspace write with a missing or non-string argument is refused before 
   ];
   for (const args of malformed) {
     const output = await h.execute(call(BRAIN_TOOL.WRITE_WORKSPACE_FILE, args));
-    assert.equal(output.status, ACT_RESULT_STATUS.REJECTED);
+    assert.equal(output.status, ACTION_RESULT_STATUS.REJECTED);
     assert.equal(output.reason, REFUSAL_REASON.MALFORMED_ARGUMENTS);
   }
   assert.deepEqual(h.written, []);
@@ -159,7 +159,7 @@ test("a workspace write with a missing or non-string argument is refused before 
   const written = await h.execute(
     call(BRAIN_TOOL.WRITE_WORKSPACE_FILE, { name: "MEMORY.md", content: "# MEMORY.md\n" }),
   );
-  assert.equal(written.status, ACT_RESULT_STATUS.ACCEPTED);
+  assert.equal(written.status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.deepEqual(h.written, [["MEMORY.md", "# MEMORY.md\n"]]);
   // The write went through the journal: started and checkpointed before the effect, settled after.
   assert.deepEqual(h.checkpoints, [1]);
@@ -194,7 +194,7 @@ test("the refusal names the policy's own answer: the turn layer for announce in 
   assert.deepEqual(h.journal.entries(), []);
 });
 
-test("an effect is journaled by what the catalog says the tool is: every act and the workspace write, never a read or the briefing", () => {
+test("an effect is journaled by what the catalog says the tool is: every action and the workspace write, never a read or the briefing", () => {
   const wake = resolveTurnToolPolicy(CATALOG, {}, BRAIN_TURN_TRIGGER.WAKE);
   assert.ok(journaledEffect(wake, REALTIME_TOOL.SEND_SESSION_MESSAGE));
   assert.ok(journaledEffect(wake, BRAIN_TOOL.WRITE_WORKSPACE_FILE));
@@ -203,8 +203,8 @@ test("an effect is journaled by what the catalog says the tool is: every act and
   assert.ok(!journaledEffect(wake, BRAIN_TOOL.ANNOUNCE));
   assert.ok(!journaledEffect(wake, "not_a_tool"));
   // A tool the policy removed is refused, not journaled.
-  const noActs = resolveTurnToolPolicy(CATALOG, { agent: { deny: ["group:acts"] } });
-  assert.ok(!journaledEffect(noActs, REALTIME_TOOL.SEND_SESSION_MESSAGE));
+  const noActions = resolveTurnToolPolicy(CATALOG, { agent: { deny: ["group:actions"] } });
+  assert.ok(!journaledEffect(noActions, REALTIME_TOOL.SEND_SESSION_MESSAGE));
 });
 
 const NOW = 1_800_000_000_000;
@@ -284,13 +284,13 @@ test("the session tools render the host's typed answers in the records the model
         archivedAt: NOW,
       },
     ],
-    history: async (childId) => (childId === "child-1" ? ["ask: hi", "reply: done"] : undefined),
+    lines: async (childId) => (childId === "child-1" ? ["ask: hi", "reply: done"] : undefined),
   };
   const h = executor(BRAIN_TURN_TRIGGER.ASK, children);
 
   const receipt = await h.execute(call(BRAIN_TOOL.SESSIONS_SPAWN, { task: "look" }));
   assert.deepEqual(receipt, {
-    status: ACT_RESULT_STATUS.ACCEPTED,
+    status: ACTION_RESULT_STATUS.ACCEPTED,
     accepted: true,
     completed: false,
     child_id: "child-2",
@@ -306,13 +306,13 @@ test("the session tools render the host's typed answers in the records the model
     call(BRAIN_TOOL.SESSIONS_SPAWN, { task: "look", label: "refused" }, "call-refused"),
   );
   assert.deepEqual(refused, {
-    status: ACT_RESULT_STATUS.REJECTED,
+    status: ACTION_RESULT_STATUS.REJECTED,
     reason: "not run: this conversation already has its limit of active children: 5 active",
   });
 
   const listed = await h.execute(call(BRAIN_TOOL.SUBAGENTS, { action: "list" }));
   assert.deepEqual(listed, {
-    status: ACT_RESULT_STATUS.ACCEPTED,
+    status: ACTION_RESULT_STATUS.ACCEPTED,
     children: [
       {
         child_id: "child-1",
@@ -331,7 +331,7 @@ test("the session tools render the host's typed answers in the records the model
 
   const conversations = await h.execute(call(BRAIN_TOOL.SESSIONS_LIST, {}));
   assert.deepEqual(conversations, {
-    status: ACT_RESULT_STATUS.ACCEPTED,
+    status: ACTION_RESULT_STATUS.ACCEPTED,
     conversations: [
       {
         session_key: MAIN_SESSION_KEY,
@@ -343,28 +343,28 @@ test("the session tools render the host's typed answers in the records the model
     ],
   });
 
-  const history = await h.execute(call(BRAIN_TOOL.SESSIONS_HISTORY, { child_id: "child-1" }));
-  assert.deepEqual(history, {
-    status: ACT_RESULT_STATUS.ACCEPTED,
+  const read = await h.execute(call(BRAIN_TOOL.SESSIONS_HISTORY, { child_id: "child-1" }));
+  assert.deepEqual(read, {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
     lines: ["ask: hi", "reply: done"],
   });
   const notOwn = await h.execute(
     call(BRAIN_TOOL.SESSIONS_HISTORY, { child_id: "someone-elses" }, "call-other-history"),
   );
   assert.deepEqual(notOwn, {
-    status: ACT_RESULT_STATUS.REJECTED,
+    status: ACTION_RESULT_STATUS.REJECTED,
     reason: REFUSAL_REASON.UNKNOWN_CHILD,
   });
 
   const cancel = await h.execute(
     call(BRAIN_TOOL.SUBAGENTS, { action: "cancel", child_id: "child-1" }, "call-cancel"),
   );
-  assert.deepEqual(cancel, { status: ACT_RESULT_STATUS.ACCEPTED, cancelled: ["child-1"] });
+  assert.deepEqual(cancel, { status: ACTION_RESULT_STATUS.ACCEPTED, cancelled: ["child-1"] });
   const cancelOther = await h.execute(
     call(BRAIN_TOOL.SUBAGENTS, { action: "cancel", child_id: "someone-elses" }, "call-cancel-2"),
   );
   assert.deepEqual(cancelOther, {
-    status: ACT_RESULT_STATUS.REJECTED,
+    status: ACTION_RESULT_STATUS.REJECTED,
     reason: REFUSAL_REASON.UNKNOWN_CHILD,
   });
   assert.deepEqual(cancelled, ["child-1"]);

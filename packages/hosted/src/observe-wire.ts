@@ -16,8 +16,8 @@ import { writtenText } from "./service-wire.js";
 
 /**
  * One control a session's provider advertised for it, as the observe endpoint
- * reports it: the id an act names, and the label and kind the row draws. What
- * the control targets never travels — the act endpoint re-observes and builds
+ * reports it: the id an action names, and the label and kind the row draws. What
+ * the control targets never travels — the action endpoint re-observes and builds
  * the write from its own fresh advertisement, so the wire copy can gate a
  * button but can never redirect a write.
  */
@@ -31,9 +31,9 @@ export interface ObservedSessionControl {
 /**
  * One cloud session as reported by the observe endpoint. The fields are a
  * bounded subset of `ProviderSessionObservation`: what mobile can show in a
- * roster row, and which acts that row may offer. The service maps the
+ * roster row, and which actions that row may offer. The service maps the
  * adapter's observation onto this shape and stores nothing — a new request is
- * a new observation pass, and every act endpoint re-observes for itself
+ * a new observation pass, and every action endpoint re-observes for itself
  * rather than trusting these advertisements.
  *
  * The detail fields are the session vocabulary's own, and the reader holds

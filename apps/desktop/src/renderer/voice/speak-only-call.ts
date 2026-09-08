@@ -16,7 +16,7 @@ import {
   voiceExchangeActive,
 } from "@sidecar/realtime";
 import { REPLY_KIND, type ReplyKind } from "@sidecar/voice/orchestrator";
-import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import type { BuiltRealtimeSessionConfig, SdkToolCallDetails } from "./agents-realtime-transport";
 import { CaptionStrip } from "./captions";
 import { type InterruptedSpan, Interruption } from "./interruption";
@@ -110,7 +110,7 @@ export interface SpeakOnlyCallOptions extends RealtimeCallOptions {
   /**
    * The words a reply leaves behind at the moment it ends — finished, talked
    * over, or the call closing under it, whichever came. `kind` says whether
-   * the words were a briefing or a reply, so History records each as itself.
+   * the words were a briefing or a reply, so Conversation records each as itself.
    * The words were already spoken toward the room (the caption runs a little
    * ahead of the audio, so a cut reply hands over slightly more than was
    * heard); the caller records them so the thread survives the call. A reply
@@ -140,7 +140,7 @@ export interface SpeakOnlyCallOptions extends RealtimeCallOptions {
  * type rather than a flag on a wider one: there is no field here to hold a
  * device, no member that could open one, and the session document is the
  * ordinary one overlaid with {@link SPEAK_ONLY_SESSION_CONFIG}, so nothing
- * said, heard, or read out on such a call can become an act.
+ * said, heard, or read out on such a call can become an action.
  *
  * Everything about turn-taking that needs no microphone lives here too:
  * starting a reply, ending it, cutting it off, the caption it draws, and the
@@ -279,7 +279,7 @@ export class SpeakOnlyCall<
     _details: SdkToolCallDetails | undefined,
   ): Promise<WireRecord> {
     return Promise.resolve({
-      status: ACT_RESULT_STATUS.REJECTED,
+      status: ACTION_RESULT_STATUS.REJECTED,
       reason: "This call carries no tools.",
     });
   }
@@ -314,7 +314,7 @@ export class SpeakOnlyCall<
    * Voices one scripted beat of the introduction, reporting whether it could.
    * The beat's direction is fixed by the build and its data already bounded;
    * the turn opens with `tool_choice: "none"` on a session that declared no
-   * tools, so nothing about it can arm an act. No caption subject is set —
+   * tools, so nothing about it can arm an action. No caption subject is set —
    * the introduction speaks about no observed session.
    */
   speakIntroduction(line: IntroductionLine): boolean {
@@ -764,7 +764,7 @@ export class SpeakOnlyCall<
     // out, so the cut-off is immediate rather than eventual.
     this.silenceLuke();
     // The caption is cut with the audio, but handed over first. Generated text
-    // runs slightly ahead of playback; History keeps that available transcript
+    // runs slightly ahead of playback; Conversation keeps that available transcript
     // so an interrupted announcement can still be recalled.
     this.#captions.end();
     this.#interruption.cut({

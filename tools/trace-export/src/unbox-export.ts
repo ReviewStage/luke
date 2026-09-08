@@ -253,7 +253,7 @@ function brainInputText(entry: WireRecord): string {
 
 /**
  * The turn's produce: the text it ended on, one line per tool call with how
- * the act came out, and one line per briefing it handed the mouth, as counts.
+ * the action came out, and one line per briefing it handed the mouth, as counts.
  * A turn that ended in an error shows the error where its text would be.
  */
 function brainOutputText(entry: WireRecord): string {

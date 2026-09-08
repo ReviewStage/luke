@@ -49,8 +49,8 @@ export class ResponsesContextEngine implements ContextEngine {
   /**
    * An empty checkpoint loads as nothing. A compatible one loads whole, with
    * every `function_call` that has no output answered with the lost-result
-   * record, because a checkpoint taken between an act's start and its result
-   * must never hand the model a dangling call or replay the act. A checkpoint
+   * record, because a checkpoint taken between an action's start and its result
+   * must never hand the model a dangling call or replay the action. A checkpoint
    * of any other stamp is not corruption and is not repaired: it is refused
    * with its stamp named, the engine stays empty, and what the caller does
    * about a memory it cannot read is the caller's decision.
@@ -167,7 +167,7 @@ export class ResponsesContextEngine implements ContextEngine {
 /**
  * Answers every `function_call` in the array that has no `function_call_output`
  * anywhere in it with the output given, so a memory restored from a checkpoint
- * taken between an act's start and its result never replays the call and
+ * taken between an action's start and its result never replays the call and
  * never hands the model a dangling one.
  */
 export function pairedDanglingCalls(

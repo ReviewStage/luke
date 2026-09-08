@@ -105,7 +105,7 @@ export function useAppState(): AppStateSnapshot | undefined {
 
 /**
  * The settings as the document holds them, for a callback that cannot wait a
- * render: two acts asked in one breath arrive as two calls in one turn, and
+ * render: two actions asked in one breath arrive as two calls in one turn, and
  * the second has to compose against what the first stored.
  */
 export function appSettingsNow(): AppSettingsView | undefined {

@@ -12,7 +12,7 @@ import {
  * that ran it: a submission is acknowledged only once its record is on disk,
  * a wait answers with the record as it stands rather than abandoning the run,
  * and a restart finds every unfinished record and marks it interrupted rather
- * than resuming an act it cannot know the state of.
+ * than resuming an action it cannot know the state of.
  */
 
 export const BRAIN_REQUEST_STATUS = {
@@ -78,7 +78,7 @@ export function isBrainRequestOrigin(value: UnparsedWireValue): value is BrainRe
 export const BRAIN_REQUEST_FAILURE = {
   /** The model did not answer, or answered nothing readable. */
   MODEL: "model",
-  /** A checkpoint could not be written, so the run stopped before or after an act. */
+  /** A checkpoint could not be written, so the run stopped before or after an action. */
   PERSISTENCE: "persistence",
   /** The run reached its execution deadline. */
   DEADLINE: "deadline",
@@ -120,19 +120,19 @@ export interface BrainRequestRecord {
   /** The reply, when the run reached one. */
   text?: string;
   failure?: BrainRequestFailure;
-  /** How many acts the run performed to completion, so a failed reply still says what was done. */
-  performedActs: number;
+  /** How many actions the run performed to completion, so a failed reply still says what was done. */
+  performedActions: number;
   /**
-   * How many acts were dispatched whose result never came back: a performer
+   * How many actions were dispatched whose result never came back: a performer
    * that threw after the provider may have accepted the write, or a launch
-   * that found the act started and its result unrecorded. Each may have
+   * that found the action started and its result unrecorded. Each may have
    * happened, so none is retried and the developer is told as much.
    */
-  unknownActs: number;
+  unknownActions: number;
   /** When the host recorded the ask itself in the thread, for an origin whose words the host records. */
   askRecordedAt?: number;
   /** When the host recorded the run's end in the thread, so it is recorded exactly once. */
-  historyRecordedAt?: number;
+  conversationRecordedAt?: number;
 }
 
 /** Reads a stored record, or nothing for one this build cannot vouch for. */
@@ -149,8 +149,9 @@ export function brainRequestRecordFromWire(
   if (!isBrainRequestOrigin(value.origin) || !isBrainRequestStatus(value.status)) return undefined;
   if (!isWireString(value.question)) return undefined;
   if (!finiteNumber(value.acceptedAt) || !finiteNumber(value.revision)) return undefined;
-  if (!finiteNumber(value.performedActs) || !finiteNumber(value.unknownActs)) return undefined;
-  if (value.historyRecordedAt !== undefined && !finiteNumber(value.historyRecordedAt)) {
+  if (!finiteNumber(value.performedActions) || !finiteNumber(value.unknownActions))
+    return undefined;
+  if (value.conversationRecordedAt !== undefined && !finiteNumber(value.conversationRecordedAt)) {
     return undefined;
   }
   if (value.askRecordedAt !== undefined && !finiteNumber(value.askRecordedAt)) return undefined;
@@ -166,10 +167,11 @@ export function brainRequestRecordFromWire(
     status: value.status,
     revision: value.revision,
     acceptedAt: value.acceptedAt,
-    performedActs: value.performedActs,
-    unknownActs: value.unknownActs,
+    performedActions: value.performedActions,
+    unknownActions: value.unknownActions,
   };
-  if (value.historyRecordedAt !== undefined) record.historyRecordedAt = value.historyRecordedAt;
+  if (value.conversationRecordedAt !== undefined)
+    record.conversationRecordedAt = value.conversationRecordedAt;
   if (value.askRecordedAt !== undefined) record.askRecordedAt = value.askRecordedAt;
   if (value.startedAt !== undefined) record.startedAt = value.startedAt;
   if (value.settledAt !== undefined) record.settledAt = value.settledAt;
@@ -192,11 +194,11 @@ export function brainRequestRecordToWire(record: BrainRequestRecord): WireRecord
     ...(record.settledAt !== undefined ? { settledAt: record.settledAt } : undefined),
     ...(record.text !== undefined ? { text: record.text } : undefined),
     ...(record.failure !== undefined ? { failure: record.failure } : undefined),
-    performedActs: record.performedActs,
-    unknownActs: record.unknownActs,
+    performedActions: record.performedActions,
+    unknownActions: record.unknownActions,
     ...(record.askRecordedAt !== undefined ? { askRecordedAt: record.askRecordedAt } : undefined),
-    ...(record.historyRecordedAt !== undefined
-      ? { historyRecordedAt: record.historyRecordedAt }
+    ...(record.conversationRecordedAt !== undefined
+      ? { conversationRecordedAt: record.conversationRecordedAt }
       : undefined),
   };
 }
@@ -207,7 +209,7 @@ function finiteNumber(value: UnparsedWireValue): value is number {
 
 /**
  * What a launch does to the records the last one left unfinished: nothing it
- * was doing is resumed, because an act mid-flight when the process died is
+ * was doing is resumed, because an action mid-flight when the process died is
  * one whose effect it cannot know, and a queued ask is answered with the
  * honest interruption rather than run against a roster the developer has not
  * looked at since.
@@ -289,23 +291,23 @@ export const BRAIN_ASK_REFUSAL = {
 /** What the voice says while a run is still going when its wait ran out. */
 export const BRAIN_ASK_PENDING_NOTE = "I'm still working on that. I'll tell you when it's done.";
 
-function actsPhrase(count: number): string {
+function actionsPhrase(count: number): string {
   return count === 1 ? "one thing you asked" : `${count} things you asked`;
 }
 
 /**
- * What the record can vouch for about acts: what went through, and what was
+ * What the record can vouch for about actions: what went through, and what was
  * dispatched but never answered — which may have happened, so it is said as
  * such and never retried on Luke's own initiative.
  */
-function actsAccount(snapshot: BrainRequestRecord): string {
-  const done = snapshot.performedActs;
-  const unsure = snapshot.unknownActs;
+function actionsAccount(snapshot: BrainRequestRecord): string {
+  const done = snapshot.performedActions;
+  const unsure = snapshot.unknownActions;
   const parts: string[] = [];
-  if (done > 0) parts.push(`I did ${actsPhrase(done)}`);
+  if (done > 0) parts.push(`I did ${actionsPhrase(done)}`);
   if (unsure > 0) {
     parts.push(
-      `${unsure === 1 ? "one act" : `${unsure} acts`} may have gone through without confirming, so I won't repeat ${unsure === 1 ? "it" : "them"} on my own`,
+      `${unsure === 1 ? "one action" : `${unsure} actions`} may have gone through without confirming, so I won't repeat ${unsure === 1 ? "it" : "them"} on my own`,
     );
   }
   return parts.join(", and ");
@@ -315,13 +317,13 @@ function actsAccount(snapshot: BrainRequestRecord): string {
  * The words a run's end leaves in the thread and in the voice's mouth, built
  * from the record alone. A reply the model reached is said as it stands; an
  * end without one is worded here in fixed sentences that say what was done
- * before it, so an act that went through is never reported as nothing having
- * happened, an act nobody confirmed is never reported as refused, and a reply
- * that failed to form is never reported as the acts failing. Nothing a model
+ * before it, so an action that went through is never reported as nothing having
+ * happened, an action nobody confirmed is never reported as refused, and a reply
+ * that failed to form is never reported as the actions failing. Nothing a model
  * or a provider wrote enters except the reply text.
  */
 export function brainReplyWords(snapshot: BrainRequestRecord): string | undefined {
-  const account = actsAccount(snapshot);
+  const account = actionsAccount(snapshot);
   const acted = account.length > 0;
   const said = snapshot.text ? `${snapshot.text} ` : "";
   switch (snapshot.status) {
@@ -330,7 +332,7 @@ export function brainReplyWords(snapshot: BrainRequestRecord): string | undefine
       return undefined;
     case BRAIN_REQUEST_STATUS.SUCCEEDED:
       if (snapshot.text)
-        return acted && snapshot.unknownActs > 0 ? `${said}${account}.` : snapshot.text;
+        return acted && snapshot.unknownActions > 0 ? `${said}${account}.` : snapshot.text;
       return acted ? `Done: ${account}.` : "I had nothing to add to that.";
     case BRAIN_REQUEST_STATUS.FAILED:
       if (snapshot.failure === BRAIN_REQUEST_FAILURE.PERSISTENCE) {

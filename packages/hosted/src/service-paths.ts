@@ -11,21 +11,21 @@ export const HOSTED_SERVICE_PATH = {
    * Mints one ephemeral Realtime credential for the signed-in iPhone and
    * answers with the user's cloud session roster pre-serialized as a context
    * item (POST). Same quota meter as VOICE_MINT; narrowed to the tool set the
-   * mobile act endpoints serve.
+   * mobile action endpoints serve.
    */
   REMOTE_VOICE_MINT: "/api/voice/remote-mint",
   /** Send a message to a cloud session (POST). */
-  ACT_MESSAGE: "/api/acts/message",
+  ACTION_MESSAGE: "/api/actions/message",
   /** Create a workspace in a cloud project (POST). */
-  ACT_WORKSPACE: "/api/acts/workspace",
+  ACTION_WORKSPACE: "/api/actions/workspace",
   /** Run a control the session's latest observation advertised (POST). */
-  ACT_CONTROL: "/api/acts/control",
+  ACTION_CONTROL: "/api/actions/control",
   /** Start another agent in the workspace an observed session runs in (POST). */
-  ACT_AGENT: "/api/acts/agent",
+  ACTION_AGENT: "/api/actions/agent",
   /** Rename an observed session itself — the chat (POST). */
-  ACT_RENAME_SESSION: "/api/acts/rename-session",
+  ACTION_RENAME_SESSION: "/api/actions/rename-session",
   /** Rename the workspace an observed session runs in (POST). */
-  ACT_RENAME_WORKSPACE: "/api/acts/rename-workspace",
+  ACTION_RENAME_WORKSPACE: "/api/actions/rename-workspace",
   /**
    * List the projects a new workspace can be created in (GET): each entry is
    * one a provider itself reported on a fresh observation pass, so a creation

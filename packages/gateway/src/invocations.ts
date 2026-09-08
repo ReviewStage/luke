@@ -18,14 +18,14 @@ import {
  */
 export const NODE_INVOCATION_REFUSAL = {
   /** The connection was already gone when the ask was made: nothing was dispatched. */
-  DISCONNECTED: "the node's connection is closed; the act was not dispatched",
+  DISCONNECTED: "the node's connection is closed; the action was not dispatched",
   /** The ask reached the connection and the connection closed before an answer: the effect is uncertain. */
   ANSWER_LOST:
-    "the node's connection closed before it answered; whether the act took effect is unknown",
+    "the node's connection closed before it answered; whether the action took effect is unknown",
   NOT_SERVING: "the connection serves no node capabilities",
 } as const;
 
-/** Never dispatched: the act did not happen and may be asked again. */
+/** Never dispatched: the action did not happen and may be asked again. */
 export function unavailableInvocation(
   invocation: Pick<NodeInvocation, "capability">,
   reason: string,
@@ -33,7 +33,7 @@ export function unavailableInvocation(
   return { status: NODE_CAPABILITY_STATUS.UNAVAILABLE, capability: invocation.capability, reason };
 }
 
-/** Dispatched and unanswered: the act may have happened and is never repeated on that account. */
+/** Dispatched and unanswered: the action may have happened and is never repeated on that account. */
 export function unknownInvocation(
   invocation: Pick<NodeInvocation, "capability">,
 ): NodeCapabilityResult {

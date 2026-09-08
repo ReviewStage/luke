@@ -1,7 +1,7 @@
 import fs from "node:fs";
-import { rememberedFactsText } from "@sidecar/acts";
+import { rememberedFactsText } from "@sidecar/actions";
 import { DeliveryLedger, workspaceProjectContextText } from "@sidecar/brain";
-import type { BrainAppActRequest } from "@sidecar/brain/requests-wire";
+import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
 import {
   carried,
@@ -32,12 +32,17 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import {
   type ConversationEntry,
-  conversationHistoryText,
+  conversationLinesText,
   recentConversationEntries,
   storedConversationEntry,
 } from "@sidecar/session";
 import { VOICE_SOURCE } from "@sidecar/settings";
-import { ACT_RESULT_STATUS, isRecord, UNKNOWN_ACT_STATUS, type WireRecord } from "@sidecar/wire";
+import {
+  ACTION_RESULT_STATUS,
+  isRecord,
+  UNKNOWN_ACTION_STATUS,
+  type WireRecord,
+} from "@sidecar/wire";
 import { wireBrain } from "./brain/wiring.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { IssuesComposer } from "./compose-issues.js";
@@ -45,7 +50,7 @@ import type { ObservationComposer } from "./compose-observation.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { SpeechComposer } from "./compose-speech.js";
 import type { Composer } from "./composer.js";
-import { conversationOperations, startHistoryMaintenance } from "./conversation-operations.js";
+import { conversationOperations, startConversationMaintenance } from "./conversation-operations.js";
 import type { HostKernel } from "./host-kernel.js";
 import { seedWorkspaceThenStartMemory } from "./lifecycle.js";
 import { wireMemoryMaintenance } from "./memory-maintenance.js";
@@ -100,14 +105,14 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
     ensureDirectory: (directory) => fs.mkdirSync(directory, { recursive: true, mode: 0o700 }),
     now,
     createEventId: createId,
-    onHistoryChanged: (sessionKey, entries, except) =>
-      kernel.service().historyChanged(sessionKey, entries, except),
+    onConversationChanged: (sessionKey, entries, except) =>
+      kernel.service().conversationChanged(sessionKey, entries, except),
     onDirectoryChanged: () => undefined,
     report,
   });
   const deliveries = new DeliveryLedger<GrantedWords>({ nextDeliveryId: createId });
   let appGuide: AppGuideSnapshot = EMPTY_APP_GUIDE;
-  let stopHistoryMaintenance: (() => void) | undefined;
+  let stopConversationMaintenance: (() => void) | undefined;
 
   const memory: MemoryWiring = runMode.observesProviders
     ? composeNotebookMemory({
@@ -144,7 +149,7 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
     return [
       workspaceProjectContextText(projects, defaults.defaultProviderId, defaults.defaultProjectIds),
       rememberedFactsText(store.rememberedFacts()),
-      conversationHistoryText(recentConversationEntries(store.thread().entries()), sessions),
+      conversationLinesText(recentConversationEntries(store.thread().entries()), sessions),
       appGuideContextText(appGuide),
     ]
       .filter((part): part is string => part !== undefined && part.trim().length > 0)
@@ -153,20 +158,20 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
 
   /**
    * Carries an app act only a renderer can perform to the native node, as the
-   * validated act itself, serialized: the node hands it to the panel and
+   * validated action itself, serialized: the node hands it to the panel and
    * answers what became of it. No node connected, or one that answers in a
-   * shape this build cannot read, is a refusal, and the act is left undone.
+   * shape this build cannot read, is a refusal, and the action is left undone.
    */
-  async function performAppAct(action: BrainAppActRequest["action"]): Promise<WireRecord> {
-    const result = await kernel.nodes.invoke(HOST_NODE_CAPABILITY.PANEL_APP_ACT, {
+  async function performAppAction(action: BrainAppActionRequest["action"]): Promise<WireRecord> {
+    const result = await kernel.nodes.invoke(HOST_NODE_CAPABILITY.PANEL_APP_ACTION, {
       action: carried(action),
     });
     if (result.status === NODE_CAPABILITY_STATUS.OK && isRecord(result.value)) return result.value;
     if (result.status === NODE_CAPABILITY_STATUS.UNKNOWN) {
-      return { status: UNKNOWN_ACT_STATUS, reason: result.reason };
+      return { status: UNKNOWN_ACTION_STATUS, reason: result.reason };
     }
     return {
-      status: ACT_RESULT_STATUS.REJECTED,
+      status: ACTION_RESULT_STATUS.REJECTED,
       reason:
         result.status === NODE_CAPABILITY_STATUS.OK
           ? "The panel answered in a shape this build cannot read."
@@ -184,7 +189,7 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
     },
     archiveConversation: (sessionKey) => store.archive(sessionKey),
     conversationDirectory: () => store.directory(),
-    historyLines: (sessionKey) => store.thread(sessionKey).entries(),
+    conversationLines: (sessionKey) => store.thread(sessionKey).entries(),
     childStore: () => store.childStore(),
     createId,
     report,
@@ -199,8 +204,8 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
       if (sessionKey === MAIN_SESSION_KEY) speech.withdrawBriefings();
       kernel.service().generationReplaced(sessionKey);
     },
-    acts: {
-      sessionActs: observation.sessionActs,
+    actions: {
+      sessionActions: observation.sessionActions,
       sessions: observation.actableSessions,
       refreshSessions: () => observation.loop.refresh(),
       workspaceProjects: observation.workspaceProjects,
@@ -212,7 +217,7 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
         remember: store.rememberNotebookEntry,
         forget: store.forgetNotebookEntry,
       },
-      performAppAct: (action) => performAppAct(action),
+      performAppAction: (action) => performAppAction(action),
       recordConversationEntry: store.recordConversationEntry,
     },
     roster: observation.roster,
@@ -283,7 +288,7 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
       const entries: ConversationEntry[] = [];
       for (const entry of params.entries) {
         const stored = storedConversationEntry(entry);
-        if (!stored) return invalid("an entry is not the shape History keeps");
+        if (!stored) return invalid("an entry is not the shape Conversation keeps");
         entries.push(stored);
       }
       const accepted = await store.thread(sessionKey).append(entries, reporterOf(params));
@@ -314,13 +319,13 @@ export function composeBrain(dependencies: BrainDependencies): BrainComposer {
       });
       await wiring.store().load();
       await store.restore();
-      stopHistoryMaintenance = startHistoryMaintenance({ store, brain: wiring });
+      stopConversationMaintenance = startConversationMaintenance({ store, brain: wiring });
       await cron.start();
       await cron.ensure(heartbeatJob(now()));
     },
     stop: async () => {
-      stopHistoryMaintenance?.();
-      stopHistoryMaintenance = undefined;
+      stopConversationMaintenance?.();
+      stopConversationMaintenance = undefined;
       cron.stop();
       wiring.retire();
       memory.stop();

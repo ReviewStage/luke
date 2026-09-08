@@ -1,6 +1,6 @@
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "@sidecar/credentials/vocabulary";
 import {
-  ACT_KIND,
+  ACTION_KIND,
   type AdvertisedControl,
   SESSION_CONTROL_KIND,
   SESSION_STATUS,
@@ -10,7 +10,7 @@ import {
 } from "@sidecar/session";
 
 /**
- * What Conductor calls the states it reports and the acts it documents, and
+ * What Conductor calls the states it reports and the actions it documents, and
  * the bounds every read is held to. Nothing here issues a request.
  */
 
@@ -45,7 +45,7 @@ export const CONDUCTOR_SPAWNABLE_AGENTS: readonly string[] = workspaceAgentModel
  * a turn there is something to stop.
  */
 export const CONDUCTOR_CANCEL_ADVERTISEMENT = {
-  kind: ACT_KIND.CONTROL,
+  kind: ACTION_KIND.CONTROL,
   id: "cancel-turn",
   label: "Stop this turn",
   controlKind: SESSION_CONTROL_KIND.STOP,
@@ -67,7 +67,7 @@ export const CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID = "archive-workspace";
 
 export function conductorArchiveWorkspaceAdvertisement(workspaceId: string): AdvertisedControl {
   return {
-    kind: ACT_KIND.CONTROL,
+    kind: ACTION_KIND.CONTROL,
     id: CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID,
     label: "Archive",
     controlKind: SESSION_CONTROL_KIND.ARCHIVE,

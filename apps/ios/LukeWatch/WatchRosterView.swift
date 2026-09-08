@@ -7,7 +7,7 @@ struct WatchRosterView: View {
     @Environment(ProductEventSender.self) private var events
     @State private var archiveFailure: String?
 
-    private let actClient = ActClient(
+    private let actionClient = ActionClient(
         baseURL: AccountConstants.serviceURL, http: WatchNetwork.session
     )
 
@@ -118,13 +118,13 @@ struct WatchRosterView: View {
 
     private func archiveSession(_ session: RosterSession, control: RosterSessionControl) {
         Task {
-            let outcome = await account.performAct(
+            let outcome = await account.performAction(
                 counting: .controlRun,
                 provider: session.providerId,
                 events: events,
                 fallbackReason: "The session was not archived."
             ) { token in
-                try await actClient.executeControl(
+                try await actionClient.executeControl(
                     accessToken: token,
                     providerId: session.providerId,
                     providerSessionId: session.sessionId,
@@ -206,7 +206,7 @@ struct WatchSessionDetailView: View {
     private let conversationClient = ConversationClient(
         serviceURL: AccountConstants.serviceURL, http: WatchNetwork.session
     )
-    private let actClient = ActClient(
+    private let actionClient = ActionClient(
         baseURL: AccountConstants.serviceURL, http: WatchNetwork.session
     )
 
@@ -514,13 +514,13 @@ struct WatchSessionDetailView: View {
         outgoing.append(message)
         scrollIntent = .end
         Task {
-            let outcome = await account.performAct(
+            let outcome = await account.performAction(
                 counting: .messageSend,
                 provider: session.providerId,
                 events: events,
                 fallbackReason: "The message was not delivered."
             ) { token in
-                try await actClient.sendMessage(
+                try await actionClient.sendMessage(
                     accessToken: token,
                     providerId: session.providerId,
                     providerSessionId: session.sessionId,
@@ -589,9 +589,9 @@ private struct WatchSessionInfoView: View {
     @State private var renameTarget: RenameTarget?
     @State private var renameText = ""
     @State private var agentShown = false
-    @State private var actFailure: String?
+    @State private var actionFailure: String?
 
-    private let actClient = ActClient(
+    private let actionClient = ActionClient(
         baseURL: AccountConstants.serviceURL, http: WatchNetwork.session
     )
 
@@ -704,7 +704,7 @@ private struct WatchSessionInfoView: View {
         }
         .navigationTitle("Session Info")
         .sheet(isPresented: $agentShown) {
-            WatchAgentSpawnerView(session: session, actClient: actClient) {
+            WatchAgentSpawnerView(session: session, actionClient: actionClient) {
                 agentShown = false
                 await store.load()
             }
@@ -723,13 +723,13 @@ private struct WatchSessionInfoView: View {
         .alert(
             "Action Not Delivered",
             isPresented: Binding(
-                get: { actFailure != nil },
-                set: { if !$0 { actFailure = nil } }
+                get: { actionFailure != nil },
+                set: { if !$0 { actionFailure = nil } }
             )
         ) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(actFailure ?? "")
+            Text(actionFailure ?? "")
         }
     }
 
@@ -807,17 +807,17 @@ private struct WatchSessionInfoView: View {
         let name = renameText
         renameTarget = nil
         Task {
-            await performAct(counting: target == .session ? .sessionRename : .workspaceRename) {
+            await performAction(counting: target == .session ? .sessionRename : .workspaceRename) {
                 switch target {
                 case .session:
-                    try await actClient.renameSession(
+                    try await actionClient.renameSession(
                         accessToken: $0,
                         providerId: session.providerId,
                         providerSessionId: session.sessionId,
                         name: name
                     )
                 case .workspace:
-                    try await actClient.renameWorkspace(
+                    try await actionClient.renameWorkspace(
                         accessToken: $0,
                         providerId: session.providerId,
                         providerSessionId: session.sessionId,
@@ -831,8 +831,8 @@ private struct WatchSessionInfoView: View {
     private func runControl(_ control: RosterSessionControl) {
         runningControl = control.id
         Task {
-            let delivered = await performAct(counting: .controlRun) {
-                try await actClient.executeControl(
+            let delivered = await performAction(counting: .controlRun) {
+                try await actionClient.executeControl(
                     accessToken: $0,
                     providerId: session.providerId,
                     providerSessionId: session.sessionId,
@@ -847,12 +847,12 @@ private struct WatchSessionInfoView: View {
     }
 
     @discardableResult
-    private func performAct<Answer: ActAnswer>(
-        counting act: ProductSessionAct,
+    private func performAction<Answer: ActionAnswer>(
+        counting action: ProductSessionAction,
         _ call: (String) async throws -> Answer
     ) async -> Bool {
-        let outcome = await account.performAct(
-            counting: act,
+        let outcome = await account.performAction(
+            counting: action,
             provider: session.providerId,
             events: events,
             fallbackReason: "The action was not delivered.",
@@ -863,7 +863,7 @@ private struct WatchSessionInfoView: View {
             await store.load()
             return true
         case .refused(let reason):
-            actFailure = reason
+            actionFailure = reason
             return false
         case .signedOut:
             return false
@@ -873,7 +873,7 @@ private struct WatchSessionInfoView: View {
 
 private struct WatchAgentSpawnerView: View {
     let session: RosterSession
-    let actClient: ActClient
+    let actionClient: ActionClient
     let onDone: () async -> Void
 
     @Environment(WatchAccountSession.self) private var account
@@ -887,11 +887,11 @@ private struct WatchAgentSpawnerView: View {
 
     init(
         session: RosterSession,
-        actClient: ActClient,
+        actionClient: ActionClient,
         onDone: @escaping () async -> Void
     ) {
         self.session = session
-        self.actClient = actClient
+        self.actionClient = actionClient
         self.onDone = onDone
         _agent = State(initialValue: session.spawnableAgents.first ?? "")
     }
@@ -939,13 +939,13 @@ private struct WatchAgentSpawnerView: View {
         spawning = true
         Task {
             defer { spawning = false }
-            let outcome = await account.performAct(
+            let outcome = await account.performAction(
                 counting: .agentAdd,
                 provider: session.providerId,
                 events: events,
                 fallbackReason: "The agent was not started."
             ) { token in
-                try await actClient.spawnAgent(
+                try await actionClient.spawnAgent(
                     accessToken: token,
                     providerId: session.providerId,
                     providerSessionId: session.sessionId,

@@ -9,7 +9,7 @@ import {
 import {
   ARCHIVE_STAGING_STALE_MS,
   archiveDirectory,
-  deleteConversationHistory,
+  deleteConversation,
   isArchiveStagingName,
   listArchives,
   publishPendingArchives,
@@ -18,12 +18,12 @@ import {
 import { archiveConversation, listConversations } from "./conversations-table.js";
 import { AGENT_DATABASE_FILE, type StoreDatabase } from "./database.js";
 import {
+  CONVERSATION_MAINTENANCE_DEFAULTS,
+  type ConversationMaintenanceConfig,
   capVictims,
   countUnarchived,
   DISK_BUDGET_HIGH_WATER_RATIO,
   diskBudgetVictims,
-  HISTORY_MAINTENANCE_DEFAULTS,
-  type HistoryMaintenanceConfig,
   idleThreadVictims,
   type MaintenanceProtections,
   shouldRunEntryMaintenance,
@@ -43,7 +43,7 @@ export interface MaintenanceRunOptions {
   /** Conversations with a run under way, and any the host wants kept whatever their age. */
   preserve: readonly SessionKey[];
   /** Overrides for a test; the app runs the pinned defaults. */
-  config?: Partial<HistoryMaintenanceConfig>;
+  config?: Partial<ConversationMaintenanceConfig>;
   /** Runs the cap without waiting for the batched trigger, as a forced cleanup does. */
   force?: boolean;
   createArchiveId?: () => string;
@@ -76,9 +76,9 @@ export interface MaintenanceReport {
 }
 
 function resolvedConfig(
-  config: Partial<HistoryMaintenanceConfig> | undefined,
-): HistoryMaintenanceConfig {
-  const merged = { ...HISTORY_MAINTENANCE_DEFAULTS, ...config };
+  config: Partial<ConversationMaintenanceConfig> | undefined,
+): ConversationMaintenanceConfig {
+  const merged = { ...CONVERSATION_MAINTENANCE_DEFAULTS, ...config };
   if (merged.maximumDiskBytes !== null && merged.maximumDiskBytes <= 0) {
     merged.maximumDiskBytes = null;
     merged.highWaterBytes = null;
@@ -96,7 +96,7 @@ function resolvedConfig(
   return merged;
 }
 
-export function runHistoryMaintenance(
+export function runConversationMaintenance(
   database: StoreDatabase,
   agentRoot: string,
   options: MaintenanceRunOptions,
@@ -223,16 +223,10 @@ export function enforceDiskBudget(
     const victims = diskBudgetVictims(listConversations(database), options.protections);
     for (const victim of victims) {
       if (usage.totalBytes <= options.highWaterBytes) break;
-      const deleted = deleteConversationHistory(
-        database,
-        agentRoot,
-        victim.sessionKey,
-        options.now,
-        {
-          ...(options.createArchiveId ? { archiveId: options.createArchiveId() } : undefined),
-          removeConversation: true,
-        },
-      );
+      const deleted = deleteConversation(database, agentRoot, victim.sessionKey, options.now, {
+        ...(options.createArchiveId ? { archiveId: options.createArchiveId() } : undefined),
+        removeConversation: true,
+      });
       if (!deleted) continue;
       deletedConversations += 1;
       database.reclaimFreedPages();

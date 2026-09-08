@@ -113,8 +113,8 @@ export function bootstrapPatch(held: AppState, boot: HostBootstrap): AppStatePat
     },
     voice: { ...held.voice, epoch: boot.receiverEpoch },
     conversation: {
-      entries: boot.conversationHistory,
-      cleared: boot.conversationHistory.length === 0,
+      entries: boot.conversationLines,
+      cleared: boot.conversationLines.length === 0,
     },
     announcements: { held: boot.announcementsHeld },
     onboarding: { calendarOwed: boot.calendarOnboardingOwed },

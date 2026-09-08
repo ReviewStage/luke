@@ -92,8 +92,8 @@ class FakeStore implements NotebookMemoryStore {
   readonly #root: string;
   readonly #files = new Map<string, { hash: string; chunks: StoredChunk[] }>();
   readonly #cache = new Map<string, readonly number[]>();
-  readonly history = new Map<SessionKey, ConversationEntry[]>();
-  historySearches = 0;
+  readonly linesByKey = new Map<SessionKey, ConversationEntry[]>();
+  conversationSearches = 0;
 
   constructor(root: string) {
     this.#root = root;
@@ -237,16 +237,16 @@ class FakeStore implements NotebookMemoryStore {
     };
   }
 
-  async searchHistory(
+  async searchConversation(
     sessionKeys: readonly SessionKey[],
     query: string,
     limit: number,
   ): Promise<readonly ConversationLineHit[]> {
-    this.historySearches += 1;
+    this.conversationSearches += 1;
     const asked = [...tokenize(query)];
     const hits: ConversationLineHit[] = [];
     for (const sessionKey of sessionKeys) {
-      for (const entry of this.history.get(sessionKey) ?? []) {
+      for (const entry of this.linesByKey.get(sessionKey) ?? []) {
         const held = tokenize(entry.words);
         if (asked.every((token) => held.has(token))) hits.push({ sessionKey, entry });
       }
@@ -394,10 +394,10 @@ test("a later batch's failure keeps every vector the earlier batches answered, a
   assert.equal(h.store.status().embeddedChunks, h.store.status().chunks);
 });
 
-test("conversation hits are keyword-only fallback: they fill spare slots from eligible conversations' History and never displace notebook chunks", async () => {
+test("conversation hits are keyword-only fallback: they fill spare slots from eligible conversations' Conversation and never displace notebook chunks", async () => {
   const h = harness();
   await h.memory.sync();
-  h.store.history.set(MAIN_SESSION_KEY, [
+  h.store.linesByKey.set(MAIN_SESSION_KEY, [
     {
       kind: CONVERSATION_ENTRY_KIND.TYPED_ASK,
       words: "we chose Tuesday deploys in main",
@@ -405,7 +405,7 @@ test("conversation hits are keyword-only fallback: they fill spare slots from el
       eventId: "a",
     },
   ]);
-  h.store.history.set(h.thread, [
+  h.store.linesByKey.set(h.thread, [
     {
       kind: CONVERSATION_ENTRY_KIND.REPLY,
       words: "Tuesday it is",
@@ -419,7 +419,7 @@ test("conversation hits are keyword-only fallback: they fill spare slots from el
       eventId: "d",
     },
   ]);
-  h.store.history.set(h.temporary, [
+  h.store.linesByKey.set(h.temporary, [
     {
       kind: CONVERSATION_ENTRY_KIND.REPLY,
       words: "tuesday secret",

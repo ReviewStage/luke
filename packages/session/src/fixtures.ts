@@ -59,7 +59,7 @@ export interface SessionSnapshot {
   lastActivityAt: number;
   /**
    * Drawn only: the pull-request chip a live session's published work earns.
-   * A fixture run refuses every act — its registry is empty, so nothing a
+   * A fixture run refuses every action — its registry is empty, so nothing a
    * capture could press reaches a provider.
    */
   hasChange?: boolean;

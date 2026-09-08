@@ -48,10 +48,10 @@ export const REFUSAL_REASON = {
   NOT_ALLOWED: "not run: the tool policy does not offer this tool in this turn",
   NOT_OFFERED: "not run: no such tool in this turn",
   EMPTY_BRIEFING: "a briefing needs words",
-  ACT_FAILED: "the act did not complete",
+  ACTION_FAILED: "the action did not complete",
   READ_FAILED: "the transcript could not be read",
   RUN_REVOKED: "not run: this ask was cancelled or its run ended",
-  NOT_CHECKPOINTED: "not run: the act could not be recorded before running, so it was not run",
+  NOT_CHECKPOINTED: "not run: the action could not be recorded before running, so it was not run",
   CALL_ID_REUSED: "not run: this call id was already used with different arguments",
   NO_WORKSPACE: "not run: this agent has no workspace",
   MALFORMED_ARGUMENTS: "not run: the call's arguments are not the strings the tool takes",
@@ -123,12 +123,12 @@ export interface RunControl {
   cancelled: boolean;
   timedOut: boolean;
   deadline?: ScheduledTimer;
-  /** Whether a checkpoint failed inside this run, after which no further act may be dispatched. */
+  /** Whether a checkpoint failed inside this run, after which no further action may be dispatched. */
   checkpointFailed: boolean;
   /** Whether the context had to be compacted before the run could be sent and could not be; the context stands as it was. */
   compactionFailed?: boolean;
-  performedActs: number;
-  unknownActs: number;
+  performedActions: number;
+  unknownActions: number;
 }
 
 interface TurnPlanBase {

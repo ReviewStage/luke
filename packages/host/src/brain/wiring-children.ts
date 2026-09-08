@@ -25,12 +25,12 @@ import type { WireRecord } from "@sidecar/wire";
 export interface ChildWiringDependencies {
   /** Lists a child's conversation in the directory, creating its row when none stands. */
   ensureChildConversation: (sessionKey: SessionKey, name: string) => Promise<void>;
-  /** Archives a conversation in the directory, its history kept; a completed child's, on its clock. */
+  /** Archives a conversation in the directory, its lines kept; a completed child's, on its clock. */
   archiveConversation: (sessionKey: SessionKey) => Promise<boolean>;
   /** The directory as it stands, for `sessions_list`. */
   conversationDirectory: () => readonly ConversationRecord[];
-  /** One conversation's thread as it stands, for `sessions_history` over a child. */
-  historyLines: (sessionKey: SessionKey) => readonly ConversationEntry[];
+  /** One conversation's lines as they stand, for `sessions_history` over a child. */
+  conversationLines: (sessionKey: SessionKey) => readonly ConversationEntry[];
   /** Where child records and completions stand between launches. */
   childStore: () => ChildStore;
   /** The clock the child service's delivery retries and archive delays run on; absent means the process's own timers. */
@@ -126,9 +126,9 @@ export function wireChildren(
         await host.closeConversation(record.childSessionKey);
         return dependencies.archiveConversation(record.childSessionKey);
       },
-      history: async (record, limit) =>
+      lines: async (record, limit) =>
         dependencies
-          .historyLines(record.childSessionKey)
+          .conversationLines(record.childSessionKey)
           .slice(-limit)
           .map((entry) => `${entry.kind}: ${entry.words}`),
     },
@@ -171,8 +171,8 @@ export function wireChildren(
         })),
       cancel: async (childId) => (own(childId) ? service.cancel(childId) : undefined),
       conversations: async () => dependencies.conversationDirectory(),
-      history: async (childId, limit) =>
-        own(childId) ? ((await service.history(childId, limit)) ?? []) : undefined,
+      lines: async (childId, limit) =>
+        own(childId) ? ((await service.lines(childId, limit)) ?? []) : undefined,
     };
   };
 

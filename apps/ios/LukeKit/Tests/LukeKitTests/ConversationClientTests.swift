@@ -126,7 +126,7 @@ final class ConversationClientTests: XCTestCase {
         )
     }
 
-    func testAHistoryPositionRidesAsAnOffsetAlone() async throws {
+    func testAConversationPositionRidesAsAnOffsetAlone() async throws {
         let stub = StubHTTPClient { request in
             let components = URLComponents(
                 url: request.url!, resolvingAgainstBaseURL: false

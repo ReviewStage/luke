@@ -45,9 +45,9 @@ function complete(): BrainPersistedState {
         startedAt: NOW + 1,
         settledAt: NOW + 2,
         text: "Nothing much.",
-        performedActs: 0,
-        unknownActs: 0,
-        historyRecordedAt: NOW + 3,
+        performedActions: 0,
+        unknownActions: 0,
+        conversationRecordedAt: NOW + 3,
       },
     ],
     journal: [
@@ -73,7 +73,7 @@ function terminal(index: number, overrides: Partial<BrainPersistedState["request
     submissionId: `sub-${index}`,
     acceptedAt: NOW + index,
     settledAt: NOW + index + 1,
-    historyRecordedAt: NOW + index + 2,
+    conversationRecordedAt: NOW + index + 2,
     ...overrides,
   };
 }
@@ -186,7 +186,7 @@ test("retention keeps 200 records, oldest ended runs and their journals going fi
 
 test("an ended run whose end the thread has not taken is kept past the count, however old", () => {
   const requests = Array.from({ length: 203 }, (_, index) =>
-    terminal(index, index < 3 ? { historyRecordedAt: undefined } : {}),
+    terminal(index, index < 3 ? { conversationRecordedAt: undefined } : {}),
   );
   const retained = retainedBrainState({ ...freshBrainState("gen-1", NOW), requests, journal: [] });
   // The three unpublished are the oldest, yet the next three go instead.

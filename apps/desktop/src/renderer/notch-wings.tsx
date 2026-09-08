@@ -296,7 +296,7 @@ export function NotchWings({
           </span>
           {/* While sign-in stands between Luke and anything to watch, the
               strip says the one honest thing instead: why Luke is idle, and
-              the one act that wakes him. */}
+              the one action that wakes him. */}
           {accountGated && (
             <span
               className="sign-in-label"

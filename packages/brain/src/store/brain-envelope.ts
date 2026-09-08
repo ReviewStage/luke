@@ -9,7 +9,7 @@ import {
 import type { BrainJournalEntry } from "../journal.js";
 import type { BrainObservationEntry } from "../observation-inbox.js";
 import type { BrainRequestRecord } from "../requests.js";
-import { raiseHistoryCutoff, touchConversation } from "./conversations-table.js";
+import { raiseConversationCutoff, touchConversation } from "./conversations-table.js";
 import { column, nullable, type StoreDatabase } from "./database.js";
 import { type BrainStateSave, SAVE_KIND } from "./envelope.js";
 import { appendTranscript } from "./transcript-table.js";
@@ -263,7 +263,7 @@ function replaceGeneration(
       nullable(state.checkpointFormat),
       state.compactionCount,
     );
-  if (state.reset) raiseHistoryCutoff(database, sessionKey, state.reset.clearedAt);
+  if (state.reset) raiseConversationCutoff(database, sessionKey, state.reset.clearedAt);
   insertItems(database, state.generationId, state.items, 0);
   insertCursors(database, state.generationId, state.cursors);
   insertCaptureCursors(database, state.generationId, state.captureCursors);
@@ -357,8 +357,8 @@ function upsertRequest(
     .prepare(
       `INSERT OR REPLACE INTO requests
          (run_id, session_id, ordinal, submission_id, origin, question, status, revision,
-          accepted_at, started_at, settled_at, text, failure, performed_acts, unknown_acts,
-          ask_recorded_at, history_recorded_at)
+          accepted_at, started_at, settled_at, text, failure, performed_actions, unknown_actions,
+          ask_recorded_at, conversation_recorded_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
@@ -375,10 +375,10 @@ function upsertRequest(
       nullable(record.settledAt),
       nullable(record.text),
       nullable(record.failure),
-      record.performedActs,
-      record.unknownActs,
+      record.performedActions,
+      record.unknownActions,
       nullable(record.askRecordedAt),
-      nullable(record.historyRecordedAt),
+      nullable(record.conversationRecordedAt),
     );
 }
 
@@ -416,14 +416,14 @@ function requestWire(row: Record<string, SQLInputValue>): WireRecord {
     status: column(row.status, isWireString),
     revision: column(row.revision, isWireNumber),
     acceptedAt: column(row.accepted_at, isWireNumber),
-    performedActs: column(row.performed_acts, isWireNumber),
-    unknownActs: column(row.unknown_acts, isWireNumber),
+    performedActions: column(row.performed_actions, isWireNumber),
+    unknownActions: column(row.unknown_actions, isWireNumber),
     ...optionalField("startedAt", column(row.started_at, isWireNumber)),
     ...optionalField("settledAt", column(row.settled_at, isWireNumber)),
     ...optionalField("text", column(row.text, isWireString)),
     ...optionalField("failure", column(row.failure, isWireString)),
     ...optionalField("askRecordedAt", column(row.ask_recorded_at, isWireNumber)),
-    ...optionalField("historyRecordedAt", column(row.history_recorded_at, isWireNumber)),
+    ...optionalField("conversationRecordedAt", column(row.conversation_recorded_at, isWireNumber)),
   };
 }
 

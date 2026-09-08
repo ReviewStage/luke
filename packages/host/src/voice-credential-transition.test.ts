@@ -138,7 +138,7 @@ function composition() {
       return new BrainAgent({
         runtime: toolLoopRuntimeOver(model),
         prepareTurn: () => ({ prompt: "instructions", layers: {} }),
-        acts: { perform: async () => ({ status: "accepted" }) },
+        actions: { perform: async () => ({ status: "accepted" }) },
         roster: () => ({ text: "none", identities: [] }),
         standingContext: () => "",
         readTranscriptSince: async () => ({ status: "unsupported", reason: "no" }),

@@ -33,12 +33,12 @@ const SAMPLE_VALUE = {
   [PRODUCT_EVENT_PROPERTY.TRACKER_ID]: "linear",
   [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE]: "google",
   [PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE]: "account",
-  [PRODUCT_EVENT_PROPERTY.SESSION_ACT]: "message_send",
+  [PRODUCT_EVENT_PROPERTY.SESSION_ACTION]: "message_send",
   [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: "accidental_wake",
-  [PRODUCT_EVENT_PROPERTY.ISSUE_ACT]: "comment_add",
-  [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACT]: "sign_out",
-  [PRODUCT_EVENT_PROPERTY.SUPERSET_ACT]: "disconnect",
-  [PRODUCT_EVENT_PROPERTY.UPDATE_ACT]: "check",
+  [PRODUCT_EVENT_PROPERTY.ISSUE_ACTION]: "comment_add",
+  [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACTION]: "sign_out",
+  [PRODUCT_EVENT_PROPERTY.SUPERSET_ACTION]: "disconnect",
+  [PRODUCT_EVENT_PROPERTY.UPDATE_ACTION]: "check",
   [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: "settings",
   [PRODUCT_EVENT_PROPERTY.PANEL_SOURCE]: "capsule",
   [PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW]: "connections",
@@ -270,7 +270,7 @@ test("the surface channel's names are events the vocabulary already knows", () =
   }
   // The guard is the narrowing: an event the main process emits for itself is
   // not something the renderer may ask for.
-  assert.equal(isProductSurfaceEventName(PRODUCT_EVENT.SESSION_ACT_SEND), false);
+  assert.equal(isProductSurfaceEventName(PRODUCT_EVENT.SESSION_ACTION_SEND), false);
   assert.equal(isProductSurfaceEventName(PRODUCT_EVENT.APP_LAUNCH), false);
   assert.equal(isProductSurfaceEventName("panel:open "), false);
   assert.equal(isProductSurfaceEventName(7), false);

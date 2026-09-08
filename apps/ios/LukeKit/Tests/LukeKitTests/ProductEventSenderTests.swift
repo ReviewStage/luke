@@ -253,7 +253,7 @@ final class ProductEventSenderTests: XCTestCase {
         let (sender, log) = makeSender(queueLimit: 3)
         sender.arm()
         for provider in [ProductProviderID.claudeCode, .codex, .conductor, .omp] {
-            sender.record(.sessionActSend(provider: provider, act: .messageSend))
+            sender.record(.sessionActionSend(provider: provider, action: .messageSend))
         }
         await sender.flush().value
 
@@ -319,8 +319,8 @@ final class ProductEventSenderTests: XCTestCase {
         XCTAssertEqual(providers, ["codex", "claude-code"])
     }
 
-    /// The sign-out path records its act and awaits a flush while the timed
-    /// flush may already be mid-request with an earlier batch; an act queued
+    /// The sign-out path records its action and awaits a flush while the timed
+    /// flush may already be mid-request with an earlier batch; an action queued
     /// after that batch was taken must ride its own request, not wait behind
     /// a token the sign-out is about to clear.
     func testAFlushCalledMidRequestChainsBehindItRatherThanReturningIt() async {
@@ -336,7 +336,7 @@ final class ProductEventSenderTests: XCTestCase {
         let first = sender.flush()
         await taken.wait()
 
-        sender.record(.accountAct(.signOut))
+        sender.record(.accountAction(.signOut))
         let second = sender.flush()
         await release.open()
         await first.value
@@ -346,7 +346,7 @@ final class ProductEventSenderTests: XCTestCase {
         XCTAssertEqual(requests.count, 2)
         XCTAssertEqual(
             sentEvents(requests[1]).map { $0["name"] as? String },
-            ["account:act"]
+            ["account:action"]
         )
     }
 
@@ -386,7 +386,7 @@ final class ProductEventSenderTests: XCTestCase {
 
         // The predecessor has finished and the successor's request is being
         // held open; a flush arriving now is the clobbered-slot case.
-        sender.record(.accountAct(.signOut))
+        sender.record(.accountAction(.signOut))
         let third = sender.flush()
         // Room for a wrongly unchained third send to reach the stub before
         // the successor is released; a chained one cannot.
@@ -399,7 +399,7 @@ final class ProductEventSenderTests: XCTestCase {
         XCTAssertEqual(requests.count, 3)
         XCTAssertEqual(
             sentEvents(requests[2]).map { $0["name"] as? String },
-            ["account:act"]
+            ["account:action"]
         )
         let peak = await meter.peak
         XCTAssertEqual(peak, 1)

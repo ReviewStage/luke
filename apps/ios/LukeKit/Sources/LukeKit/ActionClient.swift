@@ -1,0 +1,247 @@
+import Foundation
+
+// MARK: - Wire models
+
+/// The three outcomes a hosted action endpoint can return.
+/// Mirrors `ACTION_RESULT_STATUS` in `@sidecar/wire`.
+public enum ActionResult: String, Codable, Equatable, Sendable {
+    case accepted
+    case rejected
+    case unsupported
+}
+
+/// The answer returned by `POST /api/actions/message`.
+public struct ActionMessageAnswer: Codable, Equatable, Sendable {
+    public let result: ActionResult
+    public let reason: String?
+
+    public init(result: ActionResult, reason: String?) {
+        self.result = result
+        self.reason = reason
+    }
+}
+
+/// The answer returned by `POST /api/actions/workspace`.
+public struct ActionWorkspaceAnswer: Codable, Equatable, Sendable {
+    public let result: ActionResult
+    public let reason: String?
+    /// The created session's provider id, when the provider reports one.
+    public let providerSessionId: String?
+
+    public init(result: ActionResult, reason: String?, providerSessionId: String?) {
+        self.result = result
+        self.reason = reason
+        self.providerSessionId = providerSessionId
+    }
+}
+
+// MARK: - Errors
+
+public enum ActionClientError: Error, Equatable {
+    case invalidResponse
+    case unauthorized
+    case serverError(status: Int)
+}
+
+extension ActionClientError: HostedUnauthorizedSignaling {
+    public var isUnauthorized: Bool { self == .unauthorized }
+}
+
+// MARK: - Client
+
+/// HTTP client for Luke's hosted action endpoints.
+///
+/// Acts are the write path for cloud sessions: message a session that is
+/// accepting messages, run a control its provider advertised, start another
+/// agent in its workspace, rename it or its workspace, or create a workspace
+/// in a provider project.
+///
+/// Text bounds (`sessionMessageText` / `workspaceNameText`) are enforced on
+/// the server. The client trims text before sending as a courtesy.
+public final class ActionClient: Sendable {
+    private let baseURL: URL
+    private let http: HTTPClient
+
+    public init(baseURL: URL, http: HTTPClient = URLSession.shared) {
+        self.baseURL = baseURL
+        self.http = http
+    }
+
+    /// Sends a message to a cloud session.
+    ///
+    /// The server re-observes the session's status before writing. If the
+    /// session is not currently accepting messages the answer is `rejected`
+    /// with a human-readable reason.
+    public func sendMessage(
+        accessToken: String,
+        providerId: String,
+        providerSessionId: String,
+        text: String
+    ) async throws -> ActionMessageAnswer {
+        let url = baseURL.appendingPathComponent("api/actions/message")
+        let body: [String: String] = [
+            "providerId": providerId,
+            "providerSessionId": providerSessionId,
+            "text": text.trimmingCharacters(in: .whitespacesAndNewlines),
+        ]
+        return try await post(url: url, body: body, accessToken: accessToken)
+    }
+
+    /// Runs a control the session's latest observation advertised (stop a
+    /// turn, archive a settled workspace, approve a plan).
+    ///
+    /// The server re-observes before writing: a control the fresh pass no
+    /// longer advertises answers `rejected` rather than landing on a session
+    /// that moved on.
+    public func executeControl(
+        accessToken: String,
+        providerId: String,
+        providerSessionId: String,
+        controlId: String
+    ) async throws -> ActionMessageAnswer {
+        let url = baseURL.appendingPathComponent("api/actions/control")
+        let body: [String: String] = [
+            "providerId": providerId,
+            "providerSessionId": providerSessionId,
+            "controlId": controlId,
+        ]
+        return try await post(url: url, body: body, accessToken: accessToken)
+    }
+
+    /// Starts another agent in the workspace an observed session runs in.
+    ///
+    /// `agent` must be one of the kinds the session's latest observation
+    /// listed as spawnable; the server re-observes and validates it again.
+    /// `model` and `effort` name a choice from the projects answer's own
+    /// agent table, validated by the server against the same table.
+    public func spawnAgent(
+        accessToken: String,
+        providerId: String,
+        providerSessionId: String,
+        agent: String,
+        name: String? = nil,
+        task: String? = nil,
+        model: String? = nil,
+        effort: String? = nil
+    ) async throws -> ActionWorkspaceAnswer {
+        let url = baseURL.appendingPathComponent("api/actions/agent")
+        var body: [String: String] = [
+            "providerId": providerId,
+            "providerSessionId": providerSessionId,
+            "agent": agent,
+        ]
+        if let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+            body["name"] = name
+        }
+        if let task = task?.trimmingCharacters(in: .whitespacesAndNewlines), !task.isEmpty {
+            body["task"] = task
+        }
+        if let model, !model.isEmpty { body["model"] = model }
+        if let effort, !effort.isEmpty { body["effort"] = effort }
+        return try await post(url: url, body: body, accessToken: accessToken)
+    }
+
+    /// Renames an observed session itself — the chat.
+    public func renameSession(
+        accessToken: String,
+        providerId: String,
+        providerSessionId: String,
+        name: String
+    ) async throws -> ActionMessageAnswer {
+        try await rename(
+            path: "api/actions/rename-session",
+            accessToken: accessToken,
+            providerId: providerId,
+            providerSessionId: providerSessionId,
+            name: name
+        )
+    }
+
+    /// Renames the workspace an observed session runs in.
+    public func renameWorkspace(
+        accessToken: String,
+        providerId: String,
+        providerSessionId: String,
+        name: String
+    ) async throws -> ActionMessageAnswer {
+        try await rename(
+            path: "api/actions/rename-workspace",
+            accessToken: accessToken,
+            providerId: providerId,
+            providerSessionId: providerSessionId,
+            name: name
+        )
+    }
+
+    private func rename(
+        path: String,
+        accessToken: String,
+        providerId: String,
+        providerSessionId: String,
+        name: String
+    ) async throws -> ActionMessageAnswer {
+        let url = baseURL.appendingPathComponent(path)
+        let body: [String: String] = [
+            "providerId": providerId,
+            "providerSessionId": providerSessionId,
+            "name": name.trimmingCharacters(in: .whitespacesAndNewlines),
+        ]
+        return try await post(url: url, body: body, accessToken: accessToken)
+    }
+
+    /// Creates a workspace in a cloud project.
+    ///
+    /// `name` and `task` are optional; the server bounds them before passing
+    /// them to the provider. `agent`, `model`, and `effort` name a choice from
+    /// the projects answer's own agent table, with `model` and `effort` sent
+    /// only for providers that document them.
+    public func createWorkspace(
+        accessToken: String,
+        providerId: String,
+        providerProjectId: String,
+        name: String? = nil,
+        task: String? = nil,
+        agent: String? = nil,
+        model: String? = nil,
+        effort: String? = nil
+    ) async throws -> ActionWorkspaceAnswer {
+        let url = baseURL.appendingPathComponent("api/actions/workspace")
+        var body: [String: String] = [
+            "providerId": providerId,
+            "providerProjectId": providerProjectId,
+        ]
+        if let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+            body["name"] = name
+        }
+        if let task = task?.trimmingCharacters(in: .whitespacesAndNewlines), !task.isEmpty {
+            body["task"] = task
+        }
+        if let agent, !agent.isEmpty { body["agent"] = agent }
+        if let model, !model.isEmpty { body["model"] = model }
+        if let effort, !effort.isEmpty { body["effort"] = effort }
+        return try await post(url: url, body: body, accessToken: accessToken)
+    }
+
+    // MARK: - Private
+
+    private func post<T: Decodable>(
+        url: URL,
+        body: [String: String],
+        accessToken: String
+    ) async throws -> T {
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await http.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 401 { throw ActionClientError.unauthorized }
+        guard (200 ..< 300).contains(status) else { throw ActionClientError.serverError(status: status) }
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            throw ActionClientError.invalidResponse
+        }
+    }
+}

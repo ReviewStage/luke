@@ -53,7 +53,7 @@ export {
 export { BRAIN_INPUT_MARKER } from "./input-items.js";
 export { brainToolNotes } from "./instructions.js";
 export type { BrainJournalEntry } from "./journal.js";
-export { UNKNOWN_ACT_STATUS } from "./journal.js";
+export { UNKNOWN_ACTION_STATUS } from "./journal.js";
 export {
   BRAIN_RATE_LIMIT_COOLDOWN_MS,
   BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS,
@@ -65,7 +65,7 @@ export {
   BRAIN_OPENAI_DEFAULTS,
   openAiModelAdapter,
 } from "./openai-model-adapter.js";
-export type { BrainActExecution, BrainActPerformer, BrainRoster } from "./performer.js";
+export type { BrainActionExecution, BrainActionPerformer, BrainRoster } from "./performer.js";
 export {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,

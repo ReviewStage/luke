@@ -71,7 +71,7 @@ export function microphoneConstraints(
   return { ...MICROPHONE_PROCESSING, deviceId: { exact: device.deviceId } };
 }
 
-/** The three browser and bridge acts the opener composes, injectable. */
+/** The three browser and bridge actions the opener composes, injectable. */
 export interface MicrophoneOpener {
   route(): Promise<MicrophoneRoute | undefined>;
   enumerate(): Promise<readonly EnumeratedMicrophone[]>;

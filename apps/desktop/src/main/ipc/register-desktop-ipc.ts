@@ -16,7 +16,7 @@ import type { DesktopServices } from "../services/compose-desktop";
 import { createSettingsHandler } from "../settings-handler";
 import { registerAccountSessionIpc } from "./account-session";
 import { registerBrainIpc } from "./brain";
-import { registerSessionActsIpc } from "./session-acts";
+import { registerSessionActionsIpc } from "./session-actions";
 import { registerSettingsRowsIpc } from "./settings-rows";
 import { registerVoiceRuntimeIpc } from "./voice-runtime";
 import { registerWindowSurfaceIpc } from "./window-surface";
@@ -70,12 +70,12 @@ export function registerDesktopIpc(services: DesktopServices): void {
   );
   // The voice window's appends to the conversation, carried to the host's
   // store under this window's opaque reporter, and relayed back to every
-  // other panel's History by the host's change event.
+  // other panel's Conversation by the host's change event.
   registerBridge(
     BRIDGE,
     {
-      appendConversationHistory(context, entries) {
-        return operator.host.appendHistory(entries, windows.reporterOf(context));
+      appendConversationLines(context, entries) {
+        return operator.host.appendConversation(entries, windows.reporterOf(context));
       },
     },
     { ipcMain, trustedSender },
@@ -148,9 +148,9 @@ export function registerDesktopIpc(services: DesktopServices): void {
     voiceWindow,
     receiver: { markReady: (epoch) => operator.host.readyReceiver(epoch) },
     state,
-    // The History Clear is Delete history on main: the recoverable deletion,
+    // The Conversation Clear is Delete conversation on main: the recoverable deletion,
     // reported to the panel as refused only when the store took nothing.
-    clearConversation: () => operator.operator.deleteHistory(MAIN_SESSION_KEY),
+    clearConversation: () => operator.operator.deleteConversation(MAIN_SESSION_KEY),
     setShortcutCapturing: (capturing) => hotkeys.setShortcutCapturing(capturing),
     openExternal: config.openExternal,
     // While the takeover stands and no voice stands on the host yet, the
@@ -179,7 +179,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     recordAgentTrace: (trace) => operator.host.recordAgentTrace(trace),
   });
 
-  registerSessionActsIpc({
+  registerSessionActionsIpc({
     ipcMain,
     trustedSender,
     performer: {
@@ -201,8 +201,8 @@ export function registerDesktopIpc(services: DesktopServices): void {
   registerHandler(BRIDGE.reportAppGuide, (snapshot: AppGuideSnapshot) =>
     operator.reportGuide(snapshot),
   );
-  registerHandler(BRIDGE.answerBrainAppAct, (requestId: string, answer: WireRecord) =>
-    native.answerAppAct(requestId, answer),
+  registerHandler(BRIDGE.answerBrainAppAction, (requestId: string, answer: WireRecord) =>
+    native.answerAppAction(requestId, answer),
   );
 
   registerHandler(BRIDGE.sendFeedback, (submission: FeedbackSubmission) =>

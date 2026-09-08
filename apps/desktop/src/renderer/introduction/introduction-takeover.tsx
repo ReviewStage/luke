@@ -12,7 +12,7 @@ import {
 } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { activeVoiceStream } from "@sidecar/voice/orchestrator";
-import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
@@ -332,7 +332,7 @@ const SIGNATURE_STROKES = signatureStrokes();
  */
 const INTRODUCTION_REFUSAL = "The introduction takes no writes.";
 const INERT_WRITES: SessionWriteHandlers = {
-  openChange: async () => ({ status: ACT_RESULT_STATUS.REJECTED, reason: INTRODUCTION_REFUSAL }),
+  openChange: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: INTRODUCTION_REFUSAL }),
 };
 
 function inertRow(row: SessionView): SessionView {

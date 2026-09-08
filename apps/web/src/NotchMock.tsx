@@ -109,10 +109,10 @@ const BACKDROP_SPEED = 0.5;
 
 /**
  * The panel's tabs, in the renderer's own order and words. Sessions is the one
- * the mock shows; History and Settings are drawn only so the bar is the
+ * the mock shows; Conversation and Settings are drawn only so the bar is the
  * product's bar and not a two-tab sketch of it.
  */
-const MOCK_TABS = ["Sessions", "History", "Settings"] as const;
+const MOCK_TABS = ["Sessions", "Conversation", "Settings"] as const;
 
 /** The composer's placeholder, the renderer's own words for the pill at the panel's foot. */
 const ASK_PLACEHOLDER = "Ask Luke…";

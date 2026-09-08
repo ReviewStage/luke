@@ -21,7 +21,7 @@ function normalizedProviderId(provider: SessionProvider): string {
 /**
  * The roster is the latest poll and nothing more: each provider's most recent
  * observation, normalized, merged into one list for the panel, the brain, and
- * act validation. Nothing here detects a change — no field comparators, no
+ * action validation. Nothing here detects a change — no field comparators, no
  * revision, no retention of sessions a provider stopped reporting. A session
  * leaves the roster on the pass that no longer reports it, every pass is
  * announced to the listeners whether or not anything moved, and the brain

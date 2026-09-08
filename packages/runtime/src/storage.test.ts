@@ -5,11 +5,11 @@ import { CONVERSATION_KIND, sessionKey } from "./identifiers.js";
 import {
   ARCHIVE_ENCODING,
   ARCHIVE_REASON,
+  type ConversationArchiveRecord,
   type ConversationRecord,
+  conversationArchiveRecordFromWire,
   conversationRecordFromWire,
   conversationRecordToWire,
-  type HistoryArchiveRecord,
-  historyArchiveRecordFromWire,
 } from "./storage.js";
 
 const NOW = 1_800_000_000_000;
@@ -47,7 +47,7 @@ test("a conversation record survives the wire whole, with every optional field p
 });
 
 test("an archive record reads back whole from its stored row, published or not yet", () => {
-  const published: HistoryArchiveRecord = {
+  const published: ConversationArchiveRecord = {
     archiveId: "archive-1",
     sessionKey: sessionKey("agent:main:main"),
     kind: CONVERSATION_KIND.MAIN,
@@ -59,11 +59,11 @@ test("an archive record reads back whole from its stored row, published or not y
     byteLength: 42,
     fileName: "agent%3Amain%3Amain.jsonl.deleted.1.archive-1.zst",
     publishedAt: NOW + 11,
-    historyLines: 3,
+    conversationLines: 3,
     transcriptEvents: 7,
   };
   const { publishedAt: _published, ...pending } = published;
   for (const record of [published, pending]) {
-    assert.deepEqual(historyArchiveRecordFromWire(throughText({ ...record })), record);
+    assert.deepEqual(conversationArchiveRecordFromWire(throughText({ ...record })), record);
   }
 });

@@ -110,7 +110,7 @@ export function ResetIcon(): React.JSX.Element {
   );
 }
 
-/** Stands down without choosing: the cancel a control becomes mid-act. */
+/** Stands down without choosing: the cancel a control becomes mid-action. */
 export function CloseIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">

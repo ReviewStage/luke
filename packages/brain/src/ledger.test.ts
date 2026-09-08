@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
-import { ACT_RESULT_STATUS, isWireString, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, isWireString, type WireRecord } from "@sidecar/wire";
 import { BrainAgent } from "./agent.js";
 import { type BrainPersistedState, freshBrainState } from "./envelope.js";
 import {
@@ -28,7 +28,7 @@ import {
   holdWriteMatching,
   itemsOfType,
   message,
-  messageAct,
+  messageAction,
   NOW,
   nextRunId,
   PLAIN_PREPARATION,
@@ -39,7 +39,7 @@ import {
   submissionsIssued,
   submit,
 } from "./harness.js";
-import { UNKNOWN_ACT_RESULT } from "./journal.js";
+import { UNKNOWN_ACTION_RESULT } from "./journal.js";
 import {
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_ORIGIN,
@@ -60,9 +60,12 @@ import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testi
  * own queue.
  */
 
-test("a checkpoint that fails before an act refuses it, and acceptance itself needs the record written", async () => {
+test("a checkpoint that fails before an action refuses it, and acceptance itself needs the record written", async () => {
   const inner = new FakeClient();
-  inner.answers.push(answered([messageAct("call_1", "one")]), answered([message("Nothing sent.")]));
+  inner.answers.push(
+    answered([messageAction("call_1", "one")]),
+    answered([message("Nothing sent.")]),
+  );
   const gated = gatedClient(inner);
   const h = harness({ client: gated.client });
   h.repository.refuse();
@@ -80,7 +83,7 @@ test("a checkpoint that fails before an act refuses it, and acceptance itself ne
   const record = h.agent.request(runId);
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
-  assert.equal(record?.performedActs, 0);
+  assert.equal(record?.performedActions, 0);
   assert.equal(h.performed.length, 0);
   const refusal = functionOutputs(inner.inputs[1] ?? [])[0];
   assert.ok(refusal?.output.includes("could not be recorded before running"));
@@ -88,32 +91,32 @@ test("a checkpoint that fails before an act refuses it, and acceptance itself ne
   assert.equal(h.repository.state?.journal.length, 0);
 });
 
-test("a checkpoint that fails after an act keeps its result in memory, blocks further acts, and reports the failure", async () => {
+test("a checkpoint that fails after an action keeps its result in memory, blocks further actions, and reports the failure", async () => {
   let acted = 0;
   let repository: FakeBrainStateRepository | undefined;
   const h = harness({
-    acts: {
+    actions: {
       perform: async (): Promise<WireRecord> => {
         acted += 1;
         // The disk goes away from the moment the first effect has happened.
         repository?.refuse();
-        return { status: ACT_RESULT_STATUS.ACCEPTED };
+        return { status: ACTION_RESULT_STATUS.ACCEPTED };
       },
     },
   });
   repository = h.repository;
   h.client.answers.push(
-    answered([messageAct("call_1", "one"), messageAct("call_2", "two")]),
+    answered([messageAction("call_1", "one"), messageAction("call_2", "two")]),
     answered([message("Sent.")]),
   );
   const record = await ask(h, "send two");
   assert.equal(acted, 1);
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
-  assert.equal(record?.performedActs, 1);
+  assert.equal(record?.performedActions, 1);
   assert.equal(record?.text, "Sent.");
   const outputs = functionOutputs(h.client.inputs[1] ?? []);
-  assert.ok(outputs[0]?.output.includes(ACT_RESULT_STATUS.ACCEPTED));
+  assert.ok(outputs[0]?.output.includes(ACTION_RESULT_STATUS.ACCEPTED));
   assert.ok(outputs[1]?.output.includes("could not be recorded"));
   // The disk holds the started entry with no result, which a restart reads as unknown.
   const stored = h.repository.state;
@@ -124,11 +127,11 @@ test("a checkpoint that fails after an act keeps its result in memory, blocks fu
 
 test("a restart marks unfinished runs interrupted and pairs a started act as unknown, never replaying it", async () => {
   const held = heldPerformer();
-  const h = harness({ acts: held.acts });
-  h.client.answers.push(answered([messageAct("call_1")]), answered([message("Sent.")]));
+  const h = harness({ actions: held.actions });
+  h.client.answers.push(answered([messageAction("call_1")]), answered([message("Sent.")]));
   const runId = acceptedRunId(await submit(h, "send"));
   await settle();
-  // The process dies here: the act has started, its result never recorded.
+  // The process dies here: the action has started, its result never recorded.
   const stored = h.repository.state;
   assert.equal(stored?.requests[0]?.status, BRAIN_REQUEST_STATUS.RUNNING);
   assert.equal(stored?.journal[0]?.outputJson, undefined);
@@ -143,7 +146,7 @@ test("a restart marks unfinished runs interrupted and pairs a started act as unk
   assert.equal(restored?.requests[0]?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
   const paired = functionOutputs(restored?.items ?? []);
   assert.equal(paired.length, 1);
-  assert.ok(paired[0]?.output.includes(UNKNOWN_ACT_RESULT.status));
+  assert.ok(paired[0]?.output.includes(UNKNOWN_ACTION_RESULT.status));
   // The next ask opens on a memory with no dangling call, and runs no old act.
   relaunched.client.answers.push(answered([message("Hello.")]));
   const next = await ask(relaunched, "hi");
@@ -231,13 +234,13 @@ test("a run's history mark is kept once and survives a relaunch", async () => {
   h.client.answers.push(answered([message("Hi.")]));
   const record = await ask(h, "hello");
   assert.ok(record);
-  assert.equal(record.historyRecordedAt, undefined);
-  await h.agent.markHistoryRecorded(record.runId, NOW + 5);
-  await h.agent.markHistoryRecorded(record.runId, NOW + 9);
-  assert.equal(h.agent.request(record.runId)?.historyRecordedAt, NOW + 5);
+  assert.equal(record.conversationRecordedAt, undefined);
+  await h.agent.markConversationRecorded(record.runId, NOW + 5);
+  await h.agent.markConversationRecorded(record.runId, NOW + 9);
+  assert.equal(h.agent.request(record.runId)?.conversationRecordedAt, NOW + 5);
   const relaunched = harness({}, fakeBrainStateRepository(h.repository.state));
   await relaunched.agent.ready();
-  assert.equal(relaunched.agent.request(record.runId)?.historyRecordedAt, NOW + 5);
+  assert.equal(relaunched.agent.request(record.runId)?.conversationRecordedAt, NOW + 5);
 });
 
 test("stop settles only after a held acceptance, which the successor then finds interrupted and cannot be written over", async () => {
@@ -264,11 +267,11 @@ test("stop settles only after a held acceptance, which the successor then finds 
   const successor = new BrainAgent({
     runtime: runtimeOver(successorModel),
     prepareTurn: PLAIN_PREPARATION,
-    acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
+    actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
     roster: () => ({ text: "", identities: [] }),
     standingContext: () => "",
-    readTranscriptSince: async () => ({ status: ACT_RESULT_STATUS.REJECTED, reason: "no" }),
-    readTranscript: async () => ({ status: ACT_RESULT_STATUS.REJECTED, reason: "no" }),
+    readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
+    readTranscript: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
     deliver: () => undefined,
     store: h.store,
     createRunId: () => `successor-${nextRunId()}`,
@@ -279,17 +282,17 @@ test("stop settles only after a held acceptance, which the successor then finds 
   });
   await successor.ready();
   const runId = h.agent.requests()[0]?.runId ?? "";
-  assert.equal(await h.agent.markHistoryRecorded(runId, NOW + 1), false);
-  assert.equal(h.repository.state?.requests[0]?.historyRecordedAt, undefined);
-  assert.equal(await successor.markHistoryRecorded(runId, NOW + 1), true);
-  assert.equal(h.repository.state?.requests[0]?.historyRecordedAt, NOW + 1);
+  assert.equal(await h.agent.markConversationRecorded(runId, NOW + 1), false);
+  assert.equal(h.repository.state?.requests[0]?.conversationRecordedAt, undefined);
+  assert.equal(await successor.markConversationRecorded(runId, NOW + 1), true);
+  assert.equal(h.repository.state?.requests[0]?.conversationRecordedAt, NOW + 1);
   await successor.stop();
 });
 
-test("a copy taken before the second model answer already carries the acts the journal established", async () => {
+test("a copy taken before the second model answer already carries the actions the journal established", async () => {
   // One accepted act, then a held model call.
   const inner = new FakeClient();
-  inner.answers.push(answered([messageAct("call_1", "one")]));
+  inner.answers.push(answered([messageAction("call_1", "one")]));
   let release: ((answer: BrainClientAnswer) => void) | undefined;
   let calls = 0;
   const client: BrainClient = {
@@ -309,48 +312,52 @@ test("a copy taken before the second model answer already carries the acts the j
   const copy = h.repository.state;
   const stored = copy;
   assert.equal(stored?.requests[0]?.status, BRAIN_REQUEST_STATUS.RUNNING);
-  assert.equal(stored?.requests[0]?.performedActs, 1);
+  assert.equal(stored?.requests[0]?.performedActions, 1);
   const relaunched = harness({}, fakeBrainStateRepository(copy));
   await relaunched.agent.ready();
   const record = relaunched.agent.requests()[0];
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
-  assert.equal(record?.performedActs, 1);
-  assert.equal(record?.unknownActs, 0);
+  assert.equal(record?.performedActions, 1);
+  assert.equal(record?.unknownActions, 0);
   // A second relaunch of the recovered file says the same.
   const again = harness({}, fakeBrainStateRepository(relaunched.repository.state));
   await again.agent.ready();
-  assert.equal(again.agent.requests()[0]?.performedActs, 1);
+  assert.equal(again.agent.requests()[0]?.performedActions, 1);
 
-  // One explicitly unknown act, one confirmed refusal, one started-unanswered
+  // One explicitly unknown action, one confirmed refusal, one started-unanswered
   // act, then the crash: each counted once from the journal.
   const held = heldPerformer();
   let dispatched = 0;
   const mixed = harness({
-    acts: {
+    actions: {
       perform: (functionCall, execution) => {
         dispatched += 1;
         if (dispatched === 1) return Promise.reject(new Error("socket closed after send"));
         if (dispatched === 2) {
-          return Promise.resolve({ status: ACT_RESULT_STATUS.REJECTED, reason: "not observed" });
+          return Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: "not observed" });
         }
-        return held.acts.perform(functionCall, execution);
+        return held.actions.perform(functionCall, execution);
       },
     },
   });
   mixed.client.answers.push(
-    answered([messageAct("m1", "one"), messageAct("m2", "two"), messageAct("m3", "three")]),
+    answered([
+      messageAction("m1", "one"),
+      messageAction("m2", "two"),
+      messageAction("m3", "three"),
+    ]),
   );
   await submit(mixed, "send three");
   await settle();
   const midway = mixed.repository.state;
-  assert.equal(midway?.requests[0]?.unknownActs, 1);
+  assert.equal(midway?.requests[0]?.unknownActions, 1);
   assert.equal(midway?.journal.length, 3);
   const recovered = harness({}, fakeBrainStateRepository(mixed.repository.state));
   await recovered.agent.ready();
   const mixedRecord = recovered.agent.requests()[0];
   assert.equal(mixedRecord?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
-  assert.equal(mixedRecord?.performedActs, 0);
-  assert.equal(mixedRecord?.unknownActs, 2);
+  assert.equal(mixedRecord?.performedActions, 0);
+  assert.equal(mixedRecord?.unknownActions, 2);
 });
 
 test("a history mark the store refused is not held either, and the next attempt writes it", async () => {
@@ -359,12 +366,12 @@ test("a history mark the store refused is not held either, and the next attempt 
   const record = await ask(h, "hello");
   assert.ok(record);
   h.repository.refuse();
-  assert.equal(await h.agent.markHistoryRecorded(record.runId, NOW + 5), false);
-  assert.equal(h.agent.request(record.runId)?.historyRecordedAt, undefined);
+  assert.equal(await h.agent.markConversationRecorded(record.runId, NOW + 5), false);
+  assert.equal(h.agent.request(record.runId)?.conversationRecordedAt, undefined);
   h.repository.accept();
-  assert.equal(await h.agent.markHistoryRecorded(record.runId, NOW + 6), true);
-  assert.equal(h.agent.request(record.runId)?.historyRecordedAt, NOW + 6);
-  assert.equal(h.repository.state?.requests[0]?.historyRecordedAt, NOW + 6);
+  assert.equal(await h.agent.markConversationRecorded(record.runId, NOW + 6), true);
+  assert.equal(h.agent.request(record.runId)?.conversationRecordedAt, NOW + 6);
+  assert.equal(h.repository.state?.requests[0]?.conversationRecordedAt, NOW + 6);
   // The same terms for the ask's own mark.
   h.repository.refuse();
   assert.equal(await h.agent.markAskRecorded(record.runId, NOW), false);
@@ -379,13 +386,13 @@ test("a mark is not visible or acknowledged before its write lands, and marking 
   const record = await ask(h, "hello");
   assert.ok(record);
   const releaseWrite = h.repository.hold();
-  const first = h.agent.markHistoryRecorded(record.runId, NOW + 5);
+  const first = h.agent.markConversationRecorded(record.runId, NOW + 5);
   await settle();
   // Nothing reads the mark while the write is out, and a second caller waits
   // on the same write rather than being told yes.
-  assert.equal(h.agent.request(record.runId)?.historyRecordedAt, undefined);
+  assert.equal(h.agent.request(record.runId)?.conversationRecordedAt, undefined);
   let secondAnswered = false;
-  const second = h.agent.markHistoryRecorded(record.runId, NOW + 7).then((written) => {
+  const second = h.agent.markConversationRecorded(record.runId, NOW + 7).then((written) => {
     secondAnswered = true;
     return written;
   });
@@ -396,17 +403,17 @@ test("a mark is not visible or acknowledged before its write lands, and marking 
   assert.equal(secondAnswered, false);
   releaseWrite(false);
   assert.deepEqual(await Promise.all([first, second]), [false, false]);
-  assert.equal(h.agent.request(record.runId)?.historyRecordedAt, undefined);
-  assert.equal(h.repository.state?.requests[0]?.historyRecordedAt, undefined);
+  assert.equal(h.agent.request(record.runId)?.conversationRecordedAt, undefined);
+  assert.equal(h.repository.state?.requests[0]?.conversationRecordedAt, undefined);
   // The ask marker's write queued behind the held one and landed on its own
   // terms once storage answered again: one marker's refusal is not the other's.
   assert.equal(await other, true);
   assert.equal(h.agent.request(record.runId)?.askRecordedAt, NOW);
   // A retry after storage recovers writes the mark, and lands beside fields
   // that advanced meanwhile rather than over them.
-  assert.equal(await h.agent.markHistoryRecorded(record.runId, NOW + 9), true);
+  assert.equal(await h.agent.markConversationRecorded(record.runId, NOW + 9), true);
   const marked = h.agent.request(record.runId);
-  assert.equal(marked?.historyRecordedAt, NOW + 9);
+  assert.equal(marked?.conversationRecordedAt, NOW + 9);
   assert.equal(marked?.askRecordedAt, NOW);
   assert.equal(marked?.text, "Hi.");
   assert.deepEqual(h.repository.state?.requests[0], marked);
@@ -506,20 +513,20 @@ test("a run's success is seen by no reader before the write that keeps it has la
 });
 
 test("two different markers saved concurrently both survive, in either order, on one run or two", async () => {
-  for (const historyFirst of [true, false]) {
+  for (const conversationFirst of [true, false]) {
     const h = harness();
     const runId = await completedRun(h);
     const marks = [
-      () => h.agent.markHistoryRecorded(runId, NOW + 1),
+      () => h.agent.markConversationRecorded(runId, NOW + 1),
       () => h.agent.markAskRecorded(runId, NOW),
     ];
     const results = await Promise.all(
-      historyFirst ? marks.map((m) => m()) : marks.reverse().map((m) => m()),
+      conversationFirst ? marks.map((m) => m()) : marks.reverse().map((m) => m()),
     );
     assert.deepEqual(results, [true, true]);
     const live = h.agent.request(runId);
     const stored = h.repository.state?.requests.find((r) => r.runId === runId);
-    assert.equal(live?.historyRecordedAt, NOW + 1);
+    assert.equal(live?.conversationRecordedAt, NOW + 1);
     assert.equal(live?.askRecordedAt, NOW);
     assert.deepEqual(stored, live);
   }
@@ -529,21 +536,21 @@ test("two different markers saved concurrently both survive, in either order, on
   const second = await completedRun(h, "two");
   assert.deepEqual(
     await Promise.all([
-      h.agent.markHistoryRecorded(first, NOW + 1),
-      h.agent.markHistoryRecorded(second, NOW + 2),
+      h.agent.markConversationRecorded(first, NOW + 1),
+      h.agent.markConversationRecorded(second, NOW + 2),
       h.agent.markAskRecorded(second, NOW),
     ]),
     [true, true, true],
   );
   assert.deepEqual(h.repository.state?.requests, h.agent.requests());
-  assert.equal(h.repository.state?.requests[1]?.historyRecordedAt, NOW + 2);
+  assert.equal(h.repository.state?.requests[1]?.conversationRecordedAt, NOW + 2);
 });
 
 test("an ordinary observation checkpoint composed behind a held mark keeps the mark", async () => {
   const h = harness();
   const runId = await completedRun(h);
   const releaseWrite = h.repository.hold();
-  const marking = h.agent.markHistoryRecorded(runId, NOW + 1);
+  const marking = h.agent.markConversationRecorded(runId, NOW + 1);
   await settle();
   // Periodic observation races the publication: its inference and checkpoint
   // queue behind the held mark write.
@@ -554,14 +561,14 @@ test("an ordinary observation checkpoint composed behind a held mark keeps the m
   assert.equal(await marking, true);
   await settle();
   assert.equal(h.client.inputs.length, 2);
-  assert.equal(h.agent.request(runId)?.historyRecordedAt, NOW + 1);
-  assert.equal(h.repository.state?.requests[0]?.historyRecordedAt, NOW + 1);
+  assert.equal(h.agent.request(runId)?.conversationRecordedAt, NOW + 1);
+  assert.equal(h.repository.state?.requests[0]?.conversationRecordedAt, NOW + 1);
   assert.equal(h.repository.state?.items.length, 4);
 });
 
 test("a terminal end and its marks overlapping a new submission and a checkpoint regress nothing", async () => {
   const inner = new FakeClient();
-  inner.answers.push(answered([messageAct("call_1")]), answered([message("Sent.")]));
+  inner.answers.push(answered([messageAction("call_1")]), answered([message("Sent.")]));
   const gated = gatedClient(inner);
   const h = harness({ client: gated.client });
   const first = acceptedRunId(await submit(h, "send"));
@@ -572,7 +579,7 @@ test("a terminal end and its marks overlapping a new submission and a checkpoint
   const [second, end, marked, askMarked] = await Promise.all([
     submit(h, "second"),
     h.agent.waitAsk(first, 60_000),
-    h.agent.waitAsk(first, 60_000).then(() => h.agent.markHistoryRecorded(first, NOW + 9)),
+    h.agent.waitAsk(first, 60_000).then(() => h.agent.markConversationRecorded(first, NOW + 9)),
     h.agent.markAskRecorded(first, NOW),
   ]);
   await h.agent.wake([edge(ABC)]);
@@ -584,10 +591,10 @@ test("a terminal end and its marks overlapping a new submission and a checkpoint
   const kept = stored?.requests.find((r) => r.runId === first);
   assert.equal(kept?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.equal(kept?.text, "Sent.");
-  assert.equal(kept?.performedActs, 1);
-  assert.equal(kept?.historyRecordedAt, NOW + 9);
+  assert.equal(kept?.performedActions, 1);
+  assert.equal(kept?.conversationRecordedAt, NOW + 9);
   assert.equal(kept?.askRecordedAt, NOW);
-  assert.equal(stored?.journal[0]?.outputJson?.includes(ACT_RESULT_STATUS.ACCEPTED), true);
+  assert.equal(stored?.journal[0]?.outputJson?.includes(ACTION_RESULT_STATUS.ACCEPTED), true);
   assert.equal(stored?.requests.length, 2);
   assert.deepEqual(stored?.requests, h.agent.requests());
   assert.equal(
@@ -607,21 +614,21 @@ test("a failure among overlapping saves leaves the others kept, and a retry land
     return writes === 2 ? false : landed(state, transcript);
   };
   const results = await Promise.all([
-    h.agent.markHistoryRecorded(runId, NOW + 1),
+    h.agent.markConversationRecorded(runId, NOW + 1),
     h.agent.markAskRecorded(runId, NOW),
   ]);
   assert.deepEqual(results, [true, false]);
   h.repository.save = landed;
   let live = h.agent.request(runId);
   let stored = h.repository.state?.requests[0];
-  assert.equal(live?.historyRecordedAt, NOW + 1);
+  assert.equal(live?.conversationRecordedAt, NOW + 1);
   assert.equal(live?.askRecordedAt, undefined);
   assert.deepEqual(stored, live);
   assert.equal(await h.agent.markAskRecorded(runId, NOW), true);
   live = h.agent.request(runId);
   stored = h.repository.state?.requests[0];
   assert.equal(live?.askRecordedAt, NOW);
-  assert.equal(live?.historyRecordedAt, NOW + 1);
+  assert.equal(live?.conversationRecordedAt, NOW + 1);
   assert.deepEqual(stored, live);
 });
 
@@ -629,7 +636,7 @@ test("a refused acceptance is never saved by an unrelated mark, and never comes 
   const h = harness();
   const a = await completedRun(h, "s");
   const held = holdNextWrite(h.repository);
-  const firstMark = h.agent.markHistoryRecorded(a, NOW + 1);
+  const firstMark = h.agent.markConversationRecorded(a, NOW + 1);
   await settle();
   const secondMark = h.agent.markAskRecorded(a, NOW);
   // B is provisional while its own acceptance write waits behind the marks.
@@ -659,7 +666,7 @@ test("a refused acceptance is never saved by an unrelated mark, and never comes 
     h.repository.state?.requests.map((r) => r.runId),
     [a],
   );
-  assert.equal(h.repository.state?.requests[0]?.historyRecordedAt, NOW + 1);
+  assert.equal(h.repository.state?.requests[0]?.conversationRecordedAt, NOW + 1);
   assert.equal(h.repository.state?.requests[0]?.askRecordedAt, NOW);
   const relaunched = harness({}, fakeBrainStateRepository(h.repository.state));
   await relaunched.agent.ready();
@@ -743,14 +750,14 @@ test("an observation in flight enters no memory through an unrelated mark or acc
   assert.equal(before?.inbox.length, 1);
   assert.deepEqual(before?.captureCursors, { [claude.id]: { abc: "abc-cursor" } });
   // Unrelated publication and acceptance land while the observation is out.
-  assert.equal(await observing.agent.markHistoryRecorded(a, NOW + 1), true);
+  assert.equal(await observing.agent.markConversationRecorded(a, NOW + 1), true);
   inner.answers.push(answered([message("later")]));
   const accepted = await submit(observing, "another ask");
   assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
   const during = observing.repository.state;
   assert.ok(!JSON.stringify(during?.items).includes("UNCOMMITTED_OBSERVATION"));
   assert.deepEqual(during?.cursors, before?.cursors);
-  assert.equal(during?.requests.find((r) => r.runId === a)?.historyRecordedAt, NOW + 1);
+  assert.equal(during?.requests.find((r) => r.runId === a)?.conversationRecordedAt, NOW + 1);
   // A crash copy taken now restores nothing of the observation.
   const crashed = harness({}, fakeBrainStateRepository(observing.repository.state));
   await crashed.agent.ready();
@@ -778,10 +785,10 @@ test("an observation in flight enters no memory through an unrelated mark or acc
 
 test("a run whose start the store refuses opens no work and ends as a persistence failure", async () => {
   const h = harness({
-    acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
+    actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
   });
   await h.agent.ready();
-  h.client.answers.push(answered([messageAct("call_1")]), answered([message("Sent.")]));
+  h.client.answers.push(answered([messageAction("call_1")]), answered([message("Sent.")]));
   const landed = h.repository.save;
   h.repository.save = (state, transcript) =>
     CARRIES_A_RUNNING_RUN(state) ? false : landed(state, transcript);
@@ -789,7 +796,7 @@ test("a run whose start the store refuses opens no work and ends as a persistenc
   const record = await h.agent.waitAsk(runId, 60_000);
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(record?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
-  assert.equal(record?.performedActs, 0);
+  assert.equal(record?.performedActions, 0);
   assert.equal(h.client.inputs.length, 0, "no model call");
   assert.deepEqual(h.performed, []);
   assert.deepEqual(h.repository.state?.requests[0], record);
@@ -803,7 +810,7 @@ test("a cancel or stop landing while the start is being written ends the run uno
   // Cancel during the held start write.
   const cancelling = harness();
   await cancelling.agent.ready();
-  cancelling.client.answers.push(answered([messageAct("call_1")]));
+  cancelling.client.answers.push(answered([messageAction("call_1")]));
   const heldStart = holdWriteMatching(cancelling.repository, CARRIES_A_RUNNING_RUN);
   const runId = acceptedRunId(await submit(cancelling, "send"));
   await settle();
@@ -821,7 +828,7 @@ test("a cancel or stop landing while the start is being written ends the run uno
   // Stop during a start that is then refused.
   const stopping = harness();
   await stopping.agent.ready();
-  stopping.client.answers.push(answered([messageAct("call_1")]));
+  stopping.client.answers.push(answered([messageAction("call_1")]));
   const refusedStart = holdWriteMatching(stopping.repository, CARRIES_A_RUNNING_RUN);
   const stopRun = acceptedRunId(await submit(stopping, "send"));
   await settle();
@@ -836,9 +843,9 @@ test("a cancel or stop landing while the start is being written ends the run uno
   // Positive control: the model is called only after the start has landed,
   // and a cancel over a dispatched act still waits to publish the counted end.
   const held = heldPerformer();
-  const h = harness({ acts: held.acts });
+  const h = harness({ actions: held.actions });
   await h.agent.ready();
-  h.client.answers.push(answered([messageAct("call_1")]));
+  h.client.answers.push(answered([messageAction("call_1")]));
   const start = holdWriteMatching(h.repository, CARRIES_A_RUNNING_RUN);
   const live = acceptedRunId(await submit(h, "send"));
   await settle();
@@ -859,7 +866,7 @@ test("a cancel or stop landing while the start is being written ends the run uno
   await settle();
   assert.equal(seen.length, 1);
   assert.equal(seen[0]?.status, BRAIN_REQUEST_STATUS.CANCELLED);
-  assert.equal(seen[0]?.performedActs, 0);
+  assert.equal(seen[0]?.performedActions, 0);
   assert.deepEqual(h.repository.state?.requests[0], h.agent.request(live));
 });
 
@@ -878,11 +885,11 @@ test("runs retention lets go of leave the live records and journal too, so the n
   const h = harness({ store }, repository);
   const runIds: string[] = [];
   for (const words of ["a", "b", "c", "d"]) {
-    h.client.answers.push(answered([messageAct(`call_${words}`)]), answered([message(words)]));
+    h.client.answers.push(answered([messageAction(`call_${words}`)]), answered([message(words)]));
     const record = await ask(h, words);
     assert.ok(record);
     runIds.push(record.runId);
-    assert.equal(await h.agent.markHistoryRecorded(record.runId, h.clock.now), true);
+    assert.equal(await h.agent.markConversationRecorded(record.runId, h.clock.now), true);
   }
   // Retention ran inside the marks: the four oldest seeded runs went to make
   // room, in the file, in the live records, and in the journal the agent holds.
@@ -932,7 +939,7 @@ test("a generation at its record bound refuses a new ask at the door, and admits
   h.agent.subscribe((records) => heard.push(records));
   // The oldest seeded run's end reaches the thread, and the room it held opens.
   const oldest = seeded[0]?.runId ?? "";
-  assert.equal(await h.agent.markHistoryRecorded(oldest, NOW), true);
+  assert.equal(await h.agent.markConversationRecorded(oldest, NOW), true);
   h.client.answers.push(answered([message("b")]));
   const second = await ask(h, "b");
   assert.equal(second?.text, "b");
@@ -951,7 +958,7 @@ test("a refused result checkpoint under a landed terminal write keeps the confir
   await h.agent.ready();
   const landed = repository.save;
   let refused = 0;
-  // Only the checkpoints carrying an act's recorded result are refused; the
+  // Only the checkpoints carrying an action's recorded result are refused; the
   // record-only writes, including the terminal one, still land.
   repository.save = (state, transcript) => {
     if (state.journal.some((entry) => entry.outputJson !== undefined)) {
@@ -973,16 +980,16 @@ test("a refused result checkpoint under a landed terminal write keeps the confir
   const answer = await ask(h, "tell the checkout agent to run the tests");
   assert.ok(refused > 0);
   assert.equal(h.performed.length, 1);
-  // The act's acceptance was observed, so its count stands, and the run ends
+  // The action's acceptance was observed, so its count stands, and the run ends
   // as the persistence failure it is rather than as a success.
   assert.equal(answer?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(answer?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
-  assert.equal(answer?.performedActs, 1);
-  assert.equal(answer?.unknownActs, 0);
+  assert.equal(answer?.performedActions, 1);
+  assert.equal(answer?.unknownActions, 0);
   assert.equal(answer?.text, "Sent.");
   const stored = repository.state;
   assert.equal(stored?.requests[0]?.status, BRAIN_REQUEST_STATUS.FAILED);
-  assert.equal(stored?.requests[0]?.performedActs, 1);
+  assert.equal(stored?.requests[0]?.performedActions, 1);
   assert.deepEqual(
     stored?.journal.map((entry) => [entry.callId, entry.outputJson]),
     [["call_b", undefined]],
@@ -1001,8 +1008,8 @@ test("a refused result checkpoint under a landed terminal write keeps the confir
   const restored = again.agent.request(answer?.runId ?? "");
   assert.equal(restored?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(restored?.failure, BRAIN_REQUEST_FAILURE.PERSISTENCE);
-  assert.equal(restored?.performedActs, 1);
-  assert.equal(restored?.unknownActs, 0);
+  assert.equal(restored?.performedActions, 1);
+  assert.equal(restored?.unknownActions, 0);
   const file = repository.state;
   assert.deepEqual(
     file?.items.map((item) => item.type),

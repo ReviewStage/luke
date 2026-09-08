@@ -166,7 +166,7 @@ export function isSendable(entry: FeedbackEntry | undefined): entry is FeedbackE
 
 /**
  * Why an attachment did not come along, in the composer's own words. Said
- * beside the field rather than thrown, because attaching is the user's act.
+ * beside the field rather than thrown, because attaching is the user's action.
  */
 export const IMAGE_REFUSAL = {
   UNREADABLE: "That file could not come along as a screenshot.",

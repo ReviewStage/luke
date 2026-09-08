@@ -66,7 +66,7 @@ export class ChildRuns {
    * id the requester's service minted, so the same child asked twice is one
    * run. Settles with the run's end, as the service takes it: a completed
    * run's final text is the result, an interrupted one — the run a relaunch
-   * found unfinished — is the honest unknown with the acts its journal
+   * found unfinished — is the honest unknown with the actions its journal
    * established, and a run its generation forgot before it ended is the
    * same unknown, decided here rather than left to the requester to guess.
    */
@@ -206,7 +206,7 @@ export class ChildRuns {
       }),
     );
     // Delivered is what the store holds, not how the turn ended: a turn that
-    // failed after an act's checkpoint carried the completion has delivered
+    // failed after an action's checkpoint carried the completion has delivered
     // it, and a turn that answered but whose checkpoint the store refused has not.
     if (deliveries.openingPersisted) {
       this.#delivered.add(completion.completionId);

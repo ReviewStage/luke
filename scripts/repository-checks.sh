@@ -242,15 +242,15 @@ node --input-type=module -e '
   }
 ' "$SIDECAR_REPO_ROOT"
 
-# docs/DESIGN.md admits one native motion on the surface: the History thread's
+# docs/DESIGN.md admits one native motion on the surface: the Conversation thread's
 # stamp column, scrolled in by the thread's own sideways scroll and put back by
 # scroll snapping, because only the browser sees the fingers lift. Everything
 # else moves on the spring, so a snap anywhere else is a second exception the
 # contract has not granted.
 snaps_outside_history=$(grep -rln 'scroll-snap-type' "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer/styles" |
-    grep -v '/history\.css$' || true)
+    grep -v '/conversation\.css$' || true)
 if [[ -n "$snaps_outside_history" ]]; then
-    printf 'error: scroll snapping is the History thread'"'"'s alone (docs/DESIGN.md); found in:\n%s\n' \
+    printf 'error: scroll snapping is the Conversation thread'"'"'s alone (docs/DESIGN.md); found in:\n%s\n' \
         "$snaps_outside_history" >&2
     exit 1
 fi
@@ -263,7 +263,7 @@ fi
 # runtime import has nothing to resolve to. Nothing local reports the absence —
 # every toolchain in this repository substitutes the `.ts` back — so the first
 # report is FUNCTION_INVOCATION_FAILED on every deployed route, which is how
-# adding one `export * from "@sidecar/acts"` inside an already-doored package
+# adding one `export * from "@sidecar/actions"` inside an already-doored package
 # took down sign-in. The closure is computed here from the doors' own bare
 # imports so the door list cannot fall behind the graph it exists to cover.
 core_doors_file="$SIDECAR_REPO_ROOT/apps/web/server/core.ts"

@@ -200,7 +200,7 @@ export class AppleCalendarReader {
   }
 
   /**
-   * Forgets the held observation — the sign-out's act, so a failing pass
+   * Forgets the held observation — the sign-out's action, so a failing pass
    * after reconnecting cannot resurrect meetings from an era the stop
    * already ended.
    */
@@ -255,7 +255,7 @@ export class AppleCalendarReader {
   }
 
   /**
-   * Runs the system's own consent ask — the connect flow's one act. The
+   * Runs the system's own consent ask — the connect flow's one action. The
    * helper asks as its own TCC identity, so the dialog and the grant hold
    * whatever launched Luke; what comes back is what seeding the connection
    * needs — how far the grant went, the calendar list, and the calendar new

@@ -33,7 +33,7 @@ import {
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials/vocabulary";
 import {
-  APP_UPDATE_ACT,
+  APP_UPDATE_ACTION,
   APP_UPDATE_WAIT,
   type AppGuideFact,
   type AppGuideSetting,
@@ -52,7 +52,7 @@ import {
 } from "@sidecar/settings";
 import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "@sidecar/settings/wire";
 import { CLI_CONNECTION } from "@sidecar/settings/wire";
-import { ACT_RESULT_STATUS, type ActResult } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import type { AppBridge } from "#shared/bridge";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "#shared/messages/audio";
 import type { UpdateSnapshot } from "#shared/messages/update";
@@ -314,13 +314,13 @@ function voiceKeyFact(settings: AppSettingsView, voiceAvailable: boolean): AppGu
   };
 }
 
-/** The row's button, in the words a spoken update ask names an act by. */
+/** The row's button, in the words a spoken update ask names an action by. */
 const UPDATE_BUTTON_FOR_ROW_ACTION = {
-  [UPDATE_ROW_ACTION.CHECK]: APP_UPDATE_ACT.CHECK,
+  [UPDATE_ROW_ACTION.CHECK]: APP_UPDATE_ACTION.CHECK,
   [UPDATE_ROW_ACTION.CHECKING]: APP_UPDATE_WAIT.CHECKING,
   [UPDATE_ROW_ACTION.DOWNLOADING]: APP_UPDATE_WAIT.DOWNLOADING,
-  [UPDATE_ROW_ACTION.RESTART]: APP_UPDATE_ACT.RESTART,
-  [UPDATE_ROW_ACTION.GET]: APP_UPDATE_ACT.DOWNLOAD,
+  [UPDATE_ROW_ACTION.RESTART]: APP_UPDATE_ACTION.RESTART,
+  [UPDATE_ROW_ACTION.GET]: APP_UPDATE_ACTION.DOWNLOAD,
 } as const satisfies Record<UpdateRowAction, AppUpdateButton>;
 
 /**
@@ -369,7 +369,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "The panel",
       detail:
-        "Three tabs, Sessions, History, and Settings, switched by pressing one or by asking " +
+        "Three tabs, Sessions, Conversation, and Settings, switched by pressing one or by asking " +
         "Luke to show it. Asked while the panel is closed, the panel opens on that tab.",
     },
     {
@@ -406,8 +406,8 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
     {
       label: "Conversation history",
       detail:
-        "The panel's History tab shows every typed ask, transcribed spoken ask, reply, " +
-        "announcement, and session act, kept across launches in Luke's own file on this Mac — " +
+        "The panel's Conversation tab shows every typed ask, transcribed spoken ask, reply, " +
+        "announcement, and session action, kept across launches in Luke's own file on this Mac — " +
         "up to 200 lines and 14 days, whichever cuts first. The 20 most recent lines ride " +
         "into a call beside Luke's working memory of what he read, said, and did, which lives " +
         "in its own file on this Mac for exactly 14 days from when it began. The view is " +
@@ -441,7 +441,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
         "answer from it. He also reads what a local transcript gained on his own, when an " +
         "agent's hook wakes him and on his periodic look at working and waiting sessions, " +
         "so he can notice what changed. What he read stays in his working memory for at " +
-        "most 14 days, or until History is cleared, and never reaches an agent's own files. " +
+        "most 14 days, or until Conversation is cleared, and never reaches an agent's own files. " +
         "A cloud session's conversation stays with its provider, answered from roster " +
         "fields alone.",
     },
@@ -607,7 +607,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
       detail:
         `The Updates section on ${FRONT_PAGE} says which version this is and where the build ` +
         "stands. The row's press can be asked of Luke — check for updates, open the releases " +
-        "page, restart to update — and only the one act the row currently offers runs. The " +
+        "page, restart to update — and only the one action the row currently offers runs. The " +
         "Changelog row opens the changelog in the browser, by hand alone.",
     },
     {
@@ -698,8 +698,8 @@ function spokenWorkspaceAgentSelection(
 
 /**
  * Carries one validated spoken settings change to the same bridge calls the
- * settings rows use, and returns the canonical act result. Human-readable
- * history belongs to the act's ACTS narration, not to a second result shape.
+ * settings rows use, and returns the canonical action result. Human-readable
+ * history belongs to the action's ACTIONS narration, not to a second result shape.
  * The store answers with the settings it actually holds either way, and
  * `onSettings` hands that snapshot back to the panel so the switch on screen
  * and the sentence out loud never disagree. The current settings ride along
@@ -710,7 +710,7 @@ export async function applySpokenSetting(
   action: { setting: AppGuideSetting; value: string; effort?: string },
   onSettings: (settings: AppSettings) => void,
   current?: AppSettingsView,
-): Promise<ActResult> {
+): Promise<ActionResult> {
   let result: SettingsUpdateResult;
   if (
     action.setting.id === APP_SETTING_ID.WORKSPACE_AGENT_MODEL ||
@@ -723,7 +723,7 @@ export async function applySpokenSetting(
       current?.workspaceAgentDefaults?.[PROVIDER_ID.CONDUCTOR],
     );
     if ("refusal" in composed) {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason: composed.refusal };
+      return { status: ACTION_RESULT_STATUS.REJECTED, reason: composed.refusal };
     }
     result = await bridge.updateSettingEntry(
       APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
@@ -733,29 +733,29 @@ export async function applySpokenSetting(
   } else {
     if (!isAppSettingId(action.setting.id)) {
       return {
-        status: ACT_RESULT_STATUS.REJECTED,
+        status: ACTION_RESULT_STATUS.REJECTED,
         reason: "That setting cannot be changed from here.",
       };
     }
     const field = settingFieldForGuideId(action.setting.id);
     if (!field) {
       return {
-        status: ACT_RESULT_STATUS.REJECTED,
+        status: ACTION_RESULT_STATUS.REJECTED,
         reason: "That setting cannot be changed from here.",
       };
     }
     const value = spokenSettingValue(field, action.value);
     if (value === undefined) {
       return {
-        status: ACT_RESULT_STATUS.REJECTED,
+        status: ACTION_RESULT_STATUS.REJECTED,
         reason: "That setting cannot be changed from here.",
       };
     }
     result = await bridge.updateSetting(field, value);
   }
   onSettings(result.settings);
-  if (result.status !== ACT_RESULT_STATUS.ACCEPTED) {
+  if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
     return { status: result.status, reason: result.reason };
   }
-  return { status: ACT_RESULT_STATUS.ACCEPTED };
+  return { status: ACTION_RESULT_STATUS.ACCEPTED };
 }

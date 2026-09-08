@@ -34,7 +34,7 @@ import {
   type SessionIdentity,
   type SessionProvider,
 } from "@sidecar/session";
-import { ACT_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
 import { type BrainWiring, wireBrain } from "./wiring.js";
 
 /**
@@ -175,7 +175,7 @@ function composed(t: TestContext, gate?: Gate): Composed {
     },
     archiveConversation: async () => true,
     conversationDirectory: () => [],
-    historyLines: () => [],
+    conversationLines: () => [],
     childStore: () => memoryChildStore(),
     parallelism: () => 8,
     createId: () => `id-${++ids}`,
@@ -186,9 +186,9 @@ function composed(t: TestContext, gate?: Gate): Composed {
     },
     broadcastRequests: () => undefined,
     onGenerationReplaced: () => undefined,
-    acts: {
-      sessionActs: {
-        perform: async () => ({ status: ACT_RESULT_STATUS.REJECTED, reason: "not in test" }),
+    actions: {
+      sessionActions: {
+        perform: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "not in test" }),
         openSession: () => Promise.reject(new Error("not in test")),
         openSessionApplication: () => Promise.reject(new Error("not in test")),
         openSessionChange: () => Promise.reject(new Error("not in test")),
@@ -201,7 +201,9 @@ function composed(t: TestContext, gate?: Gate): Composed {
       appGuide: () => ({ facts: [], settings: [] }),
       rememberedFacts: () => [],
       notebook: { remember: async () => true, forget: async () => true },
-      performAppAct: async (): Promise<WireRecord> => ({ status: ACT_RESULT_STATUS.REJECTED }),
+      performAppAction: async (): Promise<WireRecord> => ({
+        status: ACTION_RESULT_STATUS.REJECTED,
+      }),
       recordConversationEntry: () => undefined,
     },
     roster: () => ({
@@ -223,13 +225,13 @@ function composed(t: TestContext, gate?: Gate): Composed {
           // The transcript grows once; every later read from the cursor finds
           // nothing new.
           return {
-            status: ACT_RESULT_STATUS.ACCEPTED,
+            status: ACTION_RESULT_STATUS.ACCEPTED,
             text: cursor === undefined ? SECRET(providerSessionId) : "",
             cursor: `${providerSessionId}-1`,
             truncated: false,
           };
         },
-        transcript: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED, transcript: "" }),
+        transcript: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "" }),
       },
     }),
     session: (identity) =>

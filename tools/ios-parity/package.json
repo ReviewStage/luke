@@ -9,7 +9,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@sidecar/acts": "workspace:*",
+    "@sidecar/actions": "workspace:*",
     "@sidecar/analytics": "workspace:*",
     "@sidecar/guide": "workspace:*",
     "@sidecar/hosted": "workspace:*",

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { maximumRememberedFacts } from "@sidecar/acts";
+import { maximumRememberedFacts } from "@sidecar/actions";
 import {
   appendNotebookEntry,
   hashText,

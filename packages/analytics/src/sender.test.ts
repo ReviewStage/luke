@@ -193,9 +193,9 @@ test("signed out the queue waits rather than being spent", async () => {
 test("past the queue limit the oldest go and the newest stay", async () => {
   const { sender, requests } = sharingSender({ queueLimit: 3 });
   for (const providerId of ["claude-code", "codex", "conductor", "omp"] as const) {
-    sender.record(PRODUCT_EVENT.SESSION_ACT_SEND, {
+    sender.record(PRODUCT_EVENT.SESSION_ACTION_SEND, {
       provider_id: providerId,
-      session_act: "message_send",
+      session_action: "message_send",
     });
   }
   await sender.flush();

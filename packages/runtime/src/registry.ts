@@ -58,7 +58,7 @@ export const BUILTIN_EMBEDDING_ADAPTER = {
   HOSTED: "hosted-embeddings",
 } as const;
 
-/** How a tool's call is carried out: inside the host, by the host's act performer, or against the agent's own workspace files. */
+/** How a tool's call is carried out: inside the host, by the host's action performer, or against the agent's own workspace files. */
 export const TOOL_EXECUTION = {
   HOST: "host",
   PERFORMER: "performer",
@@ -97,7 +97,7 @@ export type ToolPlacement =
  */
 export type ToolDescriptor = {
   readonly schema: ToolSchema;
-  /** Groups the policy may name in place of the tool: `group:read`, `group:acts`, and so on. */
+  /** Groups the policy may name in place of the tool: `group:read`, `group:actions`, and so on. */
   readonly groups: readonly string[];
 } & ToolPlacement;
 

@@ -115,7 +115,7 @@ export interface AppConversationSlice {
 
 /**
  * What this run may record, as its two halves: what the host answered, and
- * whether an act that ended the account it files under has stood recording
+ * whether an action that ended the account it files under has stood recording
  * down for the rest of the run.
  */
 export interface AppSessionReplaySlice {

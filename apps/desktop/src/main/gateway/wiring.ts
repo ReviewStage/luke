@@ -1,6 +1,6 @@
-import { ACT_KIND } from "@sidecar/acts";
+import { ACTION_KIND } from "@sidecar/actions";
 import { brainRequestRecordFromWire } from "@sidecar/brain/requests";
-import type { BrainAppActRequest } from "@sidecar/brain/requests-wire";
+import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import {
   GATEWAY_METHOD,
   GatewayClient,
@@ -47,7 +47,7 @@ export interface GatewayWiringDependencies {
   /** This machine's native capabilities, performed here at the host's ask. */
   node: {
     openExternal: (url: string) => Promise<void>;
-    performAppAct: (action: BrainAppActRequest["action"]) => Promise<WireRecord>;
+    performAppAction: (action: BrainAppActionRequest["action"]) => Promise<WireRecord>;
     runAppleCalendarHelper: (
       helperArguments: readonly string[],
       timeoutMs: number,
@@ -78,12 +78,12 @@ const APPLE_CALENDAR_HELPER_COMMANDS: ReadonlySet<string> = new Set([
 /** The same check the bridge applies before an app act reaches a renderer; the renderer's own guard is the rest. */
 function isCarriedAppAction(
   value: UnparsedWireValue,
-): value is BrainAppActRequest["action"] & WireRecord {
+): value is BrainAppActionRequest["action"] & WireRecord {
   return (
     isRecord(value) &&
     isWireString(value.kind) &&
-    value.kind !== ACT_KIND.REMEMBER &&
-    value.kind !== ACT_KIND.FORGET
+    value.kind !== ACTION_KIND.REMEMBER &&
+    value.kind !== ACTION_KIND.FORGET
   );
 }
 
@@ -120,7 +120,7 @@ export function wireGateway(dependencies: GatewayWiringDependencies): GatewayWir
   });
   operator.onDeliveryOffered((offer) => sendToVoice(channels.onBrainReplyOffered, offer));
   operator.onDeliveriesWithdrawn((epoch) => sendToVoice(channels.onBrainRepliesWithdrawn, epoch));
-  operator.onHistoryChanged((change) => {
+  operator.onConversationChanged((change) => {
     if (change.sessionKey !== MAIN_SESSION_KEY) return;
     const entries = change.entries
       .map((entry) => storedConversationEntry(entry, { strict: false }))
@@ -147,12 +147,12 @@ export function wireGateway(dependencies: GatewayWiringDependencies): GatewayWir
         await dependencies.node.openExternal(invocation.params.url);
         return { status: NODE_CAPABILITY_STATUS.OK, value: undefined };
       }
-      case HOST_NODE_CAPABILITY.PANEL_APP_ACT: {
+      case HOST_NODE_CAPABILITY.PANEL_APP_ACTION: {
         const action = invocation.params.action;
-        if (!isCarriedAppAction(action)) return failed("the act is not one a panel performs");
+        if (!isCarriedAppAction(action)) return failed("the action is not one a panel performs");
         return {
           status: NODE_CAPABILITY_STATUS.OK,
-          value: await dependencies.node.performAppAct(action),
+          value: await dependencies.node.performAppAction(action),
         };
       }
       case HOST_NODE_CAPABILITY.APPLE_CALENDAR_HELPER: {

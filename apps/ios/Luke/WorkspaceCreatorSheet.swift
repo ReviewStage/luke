@@ -10,7 +10,7 @@ import SwiftUI
 /// are remembered on this device and preselected only while the latest answer
 /// still lists them.
 struct WorkspaceCreatorSheet: View {
-    let actClient: ActClient
+    let actionClient: ActionClient
     let projectsClient: ProjectsClient
     /// Called after a successful creation so the presenter can dismiss and refresh.
     let onCreated: () -> Void
@@ -230,7 +230,7 @@ struct WorkspaceCreatorSheet: View {
         return "\(project.repository)\(target)"
     }
 
-    // MARK: - Acts
+    // MARK: - Actions
 
     private var canCreate: Bool {
         guard !creating, let project else { return false }
@@ -274,7 +274,7 @@ struct WorkspaceCreatorSheet: View {
             defer { creating = false }
             do {
                 let created = try await session.authorized { token in
-                    try await actClient.createWorkspace(
+                    try await actionClient.createWorkspace(
                         accessToken: token,
                         providerId: project.providerId,
                         providerProjectId: project.providerProjectId,
@@ -287,7 +287,7 @@ struct WorkspaceCreatorSheet: View {
                 }
                 if created.result == .accepted {
                     if let provider = ProductProviderID(rawValue: project.providerId) {
-                        events.record(.sessionActSend(provider: provider, act: .workspaceCreate))
+                        events.record(.sessionActionSend(provider: provider, action: .workspaceCreate))
                     }
                     rememberChoices()
                     onCreated()
@@ -318,7 +318,7 @@ struct WorkspaceCreatorSheet: View {
 /// fresh advertisement before anything starts.
 struct AgentSpawnerSheet: View {
     let session: RosterSession
-    let actClient: ActClient
+    let actionClient: ActionClient
     /// Called after a successful spawn so the presenter can dismiss and refresh.
     let onDone: () -> Void
 
@@ -330,9 +330,9 @@ struct AgentSpawnerSheet: View {
     @State private var spawning = false
     @State private var failure: String?
 
-    init(session: RosterSession, actClient: ActClient, onDone: @escaping () -> Void) {
+    init(session: RosterSession, actionClient: ActionClient, onDone: @escaping () -> Void) {
         self.session = session
-        self.actClient = actClient
+        self.actionClient = actionClient
         self.onDone = onDone
         _agent = State(initialValue: session.spawnableAgents.first ?? "")
     }
@@ -389,13 +389,13 @@ struct AgentSpawnerSheet: View {
         failure = nil
         Task {
             defer { spawning = false }
-            let outcome = await account.performAct(
+            let outcome = await account.performAction(
                 counting: .agentAdd,
                 provider: session.providerId,
                 events: events,
                 fallbackReason: "The agent was not started."
             ) { token in
-                try await actClient.spawnAgent(
+                try await actionClient.spawnAgent(
                     accessToken: token,
                     providerId: session.providerId,
                     providerSessionId: session.sessionId,

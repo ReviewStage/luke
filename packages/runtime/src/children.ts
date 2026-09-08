@@ -96,8 +96,8 @@ export interface ChildEnd {
   readonly status: ChildRunStatus;
   readonly resultText?: string;
   readonly failureDetail?: string;
-  readonly performedActs?: number;
-  readonly unknownActs?: number;
+  readonly performedActions?: number;
+  readonly unknownActions?: number;
 }
 
 /** A child's run accepted by its backend, with the promise of its end; or refused, with why. */
@@ -107,7 +107,7 @@ export type ChildStart =
 
 /**
  * What runs a child: opens its conversation and its run, adopts one a launch
- * found unfinished, cancels it, archives it, and reads its history. Every
+ * found unfinished, cancels it, archives it, and reads its lines. Every
  * method belongs to the host that owns the conversations; the service knows
  * only the record it hands over.
  */
@@ -122,10 +122,10 @@ export interface ChildExecutor {
   resume(record: ChildRunRecord): Promise<ChildStart>;
   /** Cancels the child's run; answers whether the cancellation landed. */
   cancel(record: ChildRunRecord): Promise<boolean>;
-  /** Archives the child's conversation, its history kept. */
+  /** Archives the child's conversation, its lines kept. */
   archive(record: ChildRunRecord): Promise<boolean>;
-  /** The child's own history lines, most recent last, bounded. */
-  history(record: ChildRunRecord, limit: number): Promise<readonly string[]>;
+  /** The child's own conversation lines, most recent last, bounded. */
+  lines(record: ChildRunRecord, limit: number): Promise<readonly string[]>;
 }
 
 export interface CompletionDeliveryOutcome {
@@ -357,10 +357,12 @@ export class ChildRunService {
       await this.#complete(record.childId, {
         status: CHILD_RUN_STATUS.UNKNOWN,
         failureDetail: "not recovered: the recovery budget was spent by earlier backend failures",
-        ...(record.performedActs !== undefined
-          ? { performedActs: record.performedActs }
+        ...(record.performedActions !== undefined
+          ? { performedActions: record.performedActions }
           : undefined),
-        ...(record.unknownActs !== undefined ? { unknownActs: record.unknownActs } : undefined),
+        ...(record.unknownActions !== undefined
+          ? { unknownActions: record.unknownActions }
+          : undefined),
       });
       return;
     }
@@ -633,8 +635,10 @@ export class ChildRunService {
       settledAt: now,
       ...(end.resultText !== undefined ? { resultText: end.resultText } : undefined),
       ...(end.failureDetail !== undefined ? { failureDetail: end.failureDetail } : undefined),
-      ...(end.performedActs !== undefined ? { performedActs: end.performedActs } : undefined),
-      ...(end.unknownActs !== undefined ? { unknownActs: end.unknownActs } : undefined),
+      ...(end.performedActions !== undefined
+        ? { performedActions: end.performedActions }
+        : undefined),
+      ...(end.unknownActions !== undefined ? { unknownActions: end.unknownActions } : undefined),
     };
     await this.#put(settled);
     const completionId = completionIdFor(childId);
@@ -810,12 +814,12 @@ export class ChildRunService {
     }
   }
 
-  /** The child's own history, through the executor, for `sessions_history`. */
-  async history(childId: string, limit: number): Promise<readonly string[] | undefined> {
+  /** The child's own conversation lines, through the executor, for `sessions_history`. */
+  async lines(childId: string, limit: number): Promise<readonly string[] | undefined> {
     await this.start();
     const record = this.#children.get(childId);
     if (!record) return undefined;
-    return this.#options.executor.history(record, limit);
+    return this.#options.executor.lines(record, limit);
   }
 
   /**

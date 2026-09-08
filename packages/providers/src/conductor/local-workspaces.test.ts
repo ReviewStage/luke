@@ -5,12 +5,12 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import {
-  ACT_RESULT_STATUS,
-  dispatchAct,
+  ACTION_RESULT_STATUS,
+  dispatchAction,
   ExternalOpenAnswerLostError,
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
-import { UNKNOWN_ACT_STATUS } from "@sidecar/wire";
+import { UNKNOWN_ACTION_STATUS } from "@sidecar/wire";
 import { admittedForTest } from "@sidecar/wire/testing";
 import { conductorCreateWorkspaceLink } from "./applications.js";
 import { conductorLocalWorkspacePlugin, conductorRepositories } from "./local-workspaces.js";
@@ -211,7 +211,7 @@ test("creating a workspace fires Conductor's create link for the offered reposit
     },
   });
   await plugin.refresh();
-  const result = await dispatchAct(
+  const result = await dispatchAction(
     plugin,
     "createWorkspace",
     admittedForTest({
@@ -220,7 +220,7 @@ test("creating a workspace fires Conductor's create link for the offered reposit
       task: "Start on the parser",
     }),
   );
-  assert.equal(result.status, ACT_RESULT_STATUS.ACCEPTED);
+  assert.equal(result.status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.equal(opened.length, 1);
   const parsed = parseConductorCreateLink(opened[0] ?? "");
   assert.equal(parsed.path, "/Users/dev/repos/luke");
@@ -279,12 +279,12 @@ test("creating a workspace with no task lands clean, with no send warning", asyn
     openExternal: async () => {},
   });
   await plugin.refresh();
-  const result = await dispatchAct(
+  const result = await dispatchAction(
     plugin,
     "createWorkspace",
     admittedForTest({ providerProjectId: "repo-luke" }),
   );
-  assert.equal(result.status, ACT_RESULT_STATUS.ACCEPTED);
+  assert.equal(result.status, ACTION_RESULT_STATUS.ACCEPTED);
   // Nothing was pre-filled, so there is nothing to press Return on.
   assert.ok(!("warning" in result && result.warning));
 });
@@ -305,7 +305,7 @@ test("creating a workspace uses the offered root path, never the request's", asy
   await plugin.refresh();
   // A request naming a different target than the one offered is not the project
   // this pass reported, so it is refused rather than fired at a path of its own.
-  const result = await dispatchAct(
+  const result = await dispatchAction(
     plugin,
     "createWorkspace",
     admittedForTest({
@@ -314,7 +314,7 @@ test("creating a workspace uses the offered root path, never the request's", asy
       task: "anything",
     }),
   );
-  assert.equal(result.status, ACT_RESULT_STATUS.UNSUPPORTED);
+  assert.equal(result.status, ACTION_RESULT_STATUS.UNSUPPORTED);
   assert.equal(opened.length, 0);
 });
 
@@ -332,12 +332,12 @@ test("creating a workspace in an unoffered project is unsupported", async (t) =>
     },
   });
   await plugin.refresh();
-  const result = await dispatchAct(
+  const result = await dispatchAction(
     plugin,
     "createWorkspace",
     admittedForTest({ providerProjectId: "repo-unknown" }),
   );
-  assert.equal(result.status, ACT_RESULT_STATUS.UNSUPPORTED);
+  assert.equal(result.status, ACTION_RESULT_STATUS.UNSUPPORTED);
   assert.equal(opened.length, 0);
 });
 
@@ -354,12 +354,12 @@ test("a failed open is reported as a rejection the user can act on", async (t) =
     },
   });
   await plugin.refresh();
-  const result = await dispatchAct(
+  const result = await dispatchAction(
     plugin,
     "createWorkspace",
     admittedForTest({ providerProjectId: "repo-luke" }),
   );
-  assert.equal(result.status, ACT_RESULT_STATUS.REJECTED);
+  assert.equal(result.status, ACTION_RESULT_STATUS.REJECTED);
   assert.match(
     "reason" in result ? result.reason : "",
     /Couldn't ask Conductor to create the workspace/,
@@ -392,7 +392,7 @@ test("a create whose deep link was handed to the machine and never answered is u
     },
   });
   await plugin.refresh();
-  const result = await dispatchAct(
+  const result = await dispatchAction(
     plugin,
     "createWorkspace",
     admittedForTest({
@@ -401,8 +401,8 @@ test("a create whose deep link was handed to the machine and never answered is u
       task: "Start on the parser",
     }),
   );
-  // The link may have created the workspace: neither a refusal to report nor an act to repeat.
-  assert.equal(result.status, UNKNOWN_ACT_STATUS);
+  // The link may have created the workspace: neither a refusal to report nor an action to repeat.
+  assert.equal(result.status, UNKNOWN_ACTION_STATUS);
   const refused = conductorLocalWorkspacePlugin({
     repositories: conductorRepositories({ databasePath }),
     openExternal: async () => {
@@ -410,7 +410,7 @@ test("a create whose deep link was handed to the machine and never answered is u
     },
   });
   await refused.refresh();
-  const rejected = await dispatchAct(
+  const rejected = await dispatchAction(
     refused,
     "createWorkspace",
     admittedForTest({
@@ -418,5 +418,5 @@ test("a create whose deep link was handed to the machine and never answered is u
       providerTargetId: "/Users/dev/repos/luke",
     }),
   );
-  assert.equal(rejected.status, ACT_RESULT_STATUS.REJECTED);
+  assert.equal(rejected.status, ACTION_RESULT_STATUS.REJECTED);
 });

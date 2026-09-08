@@ -1,4 +1,4 @@
-import { ACT_KIND } from "@sidecar/session";
+import { ACTION_KIND } from "@sidecar/session";
 import { describeProviderContract, PROVIDER_OBSERVATION } from "../testing/index.js";
 import { ompPlugin } from "./index.js";
 
@@ -17,11 +17,11 @@ describeProviderContract((input) => ompPlugin({ ompHome: input.home, now: input.
   absentProjectId: "unreported-project",
   advertised: [],
   unadvertised: [
-    ACT_KIND.MESSAGE,
-    ACT_KIND.CONTROL,
-    ACT_KIND.ADD_AGENT,
-    ACT_KIND.RENAME_SESSION,
-    ACT_KIND.RENAME_WORKSPACE,
+    ACTION_KIND.MESSAGE,
+    ACTION_KIND.CONTROL,
+    ACTION_KIND.ADD_AGENT,
+    ACTION_KIND.RENAME_SESSION,
+    ACTION_KIND.RENAME_WORKSPACE,
   ],
   transcript: {
     sessionId: OMP_SESSION_ID.WORKING,

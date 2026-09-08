@@ -42,7 +42,7 @@ private actor CallCounter {
 }
 
 /// Holds a stubbed answer open until the test releases it, so a response can
-/// be made to arrive after acts that started later.
+/// be made to arrive after actions that started later.
 private actor Gate {
     private var opened = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
@@ -139,7 +139,7 @@ final class VaultStoreTests: XCTestCase {
             try await save.value
             XCTFail("Expected throw")
         } catch AccountSessionError.signedOut {
-            // expected: the act refuses rather than replaying under the new account
+            // expected: the action refuses rather than replaying under the new account
         } catch {
             XCTFail("Unexpected: \(error)")
         }
@@ -172,12 +172,12 @@ final class VaultStoreTests: XCTestCase {
         await gate.open()
         try await save.value
 
-        // The first account's delivered act must not install an entry into
+        // The first account's delivered action must not install an entry into
         // the second account's visible list.
         XCTAssertNil(store.entry(for: .conductor))
     }
 
-    func testSuccessfulActClearsAStaleLoadError() async throws {
+    func testSuccessfulActionClearsAStaleLoadError() async throws {
         let counter = CallCounter()
         let stub = StubHTTPClient { request in
             switch await counter.next() {

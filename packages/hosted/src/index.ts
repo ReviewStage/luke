@@ -1,10 +1,10 @@
 export type { AccountToken } from "./account-token.js";
 export {
-  type HostedActAnswer,
-  type HostedActWorkspaceAnswer,
-  hostedActAnswerSchema,
-  hostedActWorkspaceAnswerSchema,
-} from "./act-wire.js";
+  type HostedActionAnswer,
+  type HostedActionWorkspaceAnswer,
+  hostedActionAnswerSchema,
+  hostedActionWorkspaceAnswerSchema,
+} from "./action-wire.js";
 export {
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_EMBED_BOUNDS,

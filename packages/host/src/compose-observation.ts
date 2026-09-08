@@ -2,7 +2,7 @@ import path from "node:path";
 import {
   PRODUCT_DIAGNOSTIC_KIND,
   PRODUCT_EVENT,
-  PRODUCT_SUPERSET_ACT,
+  PRODUCT_SUPERSET_ACTION,
   type ProductDiagnosticKind,
   productSessionCountBucket,
 } from "@sidecar/analytics";
@@ -61,21 +61,24 @@ import {
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { CliConnection } from "@sidecar/settings/wire";
 import {
-  ACT_RESULT_STATUS,
+  ACTION_RESULT_STATUS,
   isRecord,
   isWireString,
   lateRef,
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import type { WorkspaceCreationDefaults } from "./brain/act-performer.js";
+import type { WorkspaceCreationDefaults } from "./brain/action-performer.js";
 import { wakeEventsFromHooks } from "./brain/wiring.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { IssuesComposer } from "./compose-issues.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
-import { createSessionActPerformer, type SessionActPerformer } from "./session-act-performer.js";
+import {
+  createSessionActionPerformer,
+  type SessionActionPerformer,
+} from "./session-action-performer.js";
 
 const SESSION_REFRESH_INTERVAL_MS = 60_000;
 
@@ -102,7 +105,7 @@ export interface ObservationLinks {
 export interface ObservationComposer extends Composer {
   /** The loop the merge's supervisor enables; the composer never enables it itself. */
   readonly loop: ObservationLoop;
-  readonly sessionActs: SessionActPerformer;
+  readonly sessionActions: SessionActionPerformer;
   readonly supersetCli: ReturnType<typeof supersetPlugin>["cli"];
   codexCloudConnection: () => CliConnection;
   pluginFor: (providerId: string) => SessionProviderPlugin | undefined;
@@ -116,7 +119,7 @@ export interface ObservationComposer extends Composer {
   broadcastWorkspaceProjects: () => Promise<void>;
   readSupersetWorkspaceHost: () => Promise<WorkspaceHostEnrichment>;
   refreshCredentialAdapter: (providerId: CredentialProviderId) => void;
-  /** The sessions an act may name: the roster less the voice's own. */
+  /** The sessions an action may name: the roster less the voice's own. */
   actableSessions: () => readonly Session[];
   roster: () => BrainRoster;
   workspaceProjects: () => readonly ObservedWorkspaceProject[];
@@ -210,8 +213,8 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
       kernel.emit(GATEWAY_EVENT.SUPERSET_SIGN_IN_CHANGED, carried(state));
       if (state.stage !== SUPERSET_SIGN_IN_STAGE.CONNECTED) return;
       void loop.refresh();
-      settings.recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
-        superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_COMPLETE,
+      settings.recordProductEvent(PRODUCT_EVENT.SUPERSET_ACTION, {
+        superset_action: PRODUCT_SUPERSET_ACTION.SIGN_IN_COMPLETE,
       });
     },
   });
@@ -391,7 +394,7 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     }
   }
 
-  const sessionActs = createSessionActPerformer({
+  const sessionActions = createSessionActionPerformer({
     sessionRegistry,
     openExternal: (url) => kernel.openExternalThroughNode(url),
     pluginFor,
@@ -584,7 +587,7 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
       }),
     [GATEWAY_METHOD.SESSION_OPEN]: async (params) => {
       if (!isSessionIdentity(params.identity)) return invalid("identity must name a session");
-      return gatewayOk(carried(await sessionActs.openSession(params.identity)));
+      return gatewayOk(carried(await sessionActions.openSession(params.identity)));
     },
     [GATEWAY_METHOD.SESSION_OPEN_APPLICATION]: async (params) => {
       if (!isSessionIdentity(params.identity)) return invalid("identity must name a session");
@@ -592,12 +595,12 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
         return invalid("applicationId is not one this build knows");
       }
       return gatewayOk(
-        carried(await sessionActs.openSessionApplication(params.identity, params.applicationId)),
+        carried(await sessionActions.openSessionApplication(params.identity, params.applicationId)),
       );
     },
     [GATEWAY_METHOD.SESSION_OPEN_CHANGE]: async (params) => {
       if (!isSessionIdentity(params.identity)) return invalid("identity must name a session");
-      return gatewayOk(carried(await sessionActs.openSessionChange(params.identity)));
+      return gatewayOk(carried(await sessionActions.openSessionChange(params.identity)));
     },
     [GATEWAY_METHOD.WORKSPACE_PROJECTS]: async () =>
       gatewayOk({
@@ -618,8 +621,8 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
       return gatewayOk({ installed, connected });
     },
     [GATEWAY_METHOD.SUPERSET_BEGIN_SIGN_IN]: async () => {
-      settings.recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
-        superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_START,
+      settings.recordProductEvent(PRODUCT_EVENT.SUPERSET_ACTION, {
+        superset_action: PRODUCT_SUPERSET_ACTION.SIGN_IN_START,
       });
       return gatewayOk({ state: carried(await supersetSignIn.begin()) });
     },
@@ -637,31 +640,31 @@ export function composeObservation(dependencies: ObservationDependencies): Obser
     },
     [GATEWAY_METHOD.SUPERSET_CANCEL_SIGN_IN]: () => {
       supersetSignIn.cancel();
-      settings.recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
-        superset_act: PRODUCT_SUPERSET_ACT.SIGN_IN_CANCEL,
+      settings.recordProductEvent(PRODUCT_EVENT.SUPERSET_ACTION, {
+        superset_action: PRODUCT_SUPERSET_ACTION.SIGN_IN_CANCEL,
       });
       return gatewayOk({});
     },
     [GATEWAY_METHOD.SUPERSET_DISCONNECT]: async () => {
       if (!(await supersetCli.signOut())) {
         return gatewayOk({
-          status: ACT_RESULT_STATUS.REJECTED,
+          status: ACTION_RESULT_STATUS.REJECTED,
           reason: "Superset could not sign out.",
         });
       }
       supersetSignIn.cancel();
       void loop.refresh();
-      settings.recordProductEvent(PRODUCT_EVENT.SUPERSET_ACT, {
-        superset_act: PRODUCT_SUPERSET_ACT.DISCONNECT,
+      settings.recordProductEvent(PRODUCT_EVENT.SUPERSET_ACTION, {
+        superset_action: PRODUCT_SUPERSET_ACTION.DISCONNECT,
       });
-      return gatewayOk({ status: ACT_RESULT_STATUS.ACCEPTED });
+      return gatewayOk({ status: ACTION_RESULT_STATUS.ACCEPTED });
     },
   };
 
   return {
     methods,
     loop,
-    sessionActs,
+    sessionActions,
     supersetCli,
     codexCloudConnection: () => codexCloud.connection(),
     pluginFor,

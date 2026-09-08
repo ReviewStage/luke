@@ -1,6 +1,6 @@
 import type { SessionKey } from "@sidecar/runtime/vocabulary";
 import type { Session, SessionIdentity } from "@sidecar/session";
-import type { ActResultStatus, WireRecord } from "@sidecar/wire";
+import type { ActionResultStatus, WireRecord } from "@sidecar/wire";
 import type { BrainTurnTrigger } from "./turn.js";
 
 /**
@@ -27,7 +27,7 @@ export type BrainWakeKind = (typeof BRAIN_WAKE_KIND)[keyof typeof BRAIN_WAKE_KIN
 export interface BrainTranscriptDelta {
   text: string;
   truncated: boolean;
-  status: ActResultStatus;
+  status: ActionResultStatus;
 }
 
 export interface BrainWakeEvent {
@@ -59,7 +59,7 @@ export interface BrainDelivery {
 /**
  * What one observation or heartbeat turn amounted to, in the host's own
  * counts and never a transcript's words: which sessions it looked at,
- * whether it briefed the developer and with what, and how many acts it
+ * whether it briefed the developer and with what, and how many actions it
  * carried. An observed conversation hands one to the host after each of its
  * turns.
  */
@@ -67,7 +67,7 @@ export interface BrainTurnReport {
   trigger: BrainTurnTrigger;
   identities: readonly SessionIdentity[];
   briefings: readonly string[];
-  performedActs: number;
+  performedActions: number;
   at: number;
 }
 

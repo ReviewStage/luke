@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { admittedForTest } from "@sidecar/wire/testing";
-import type { ProviderTranscriptSinceResult } from "./act-results.js";
-import { ACT_KIND } from "./advertised-acts.js";
+import type { ProviderTranscriptSinceResult } from "./action-results.js";
+import { ACTION_KIND } from "./advertised-actions.js";
 import { mergePlugins, type SessionProviderPlugin } from "./provider-plugin.js";
 import type { ProviderSessionObservation } from "./session-shape.js";
 import { SESSION_STATUS } from "./session-status.js";
@@ -24,11 +24,11 @@ const OBSERVATION: ProviderSessionObservation = {
   lastActivityAt: OBSERVED_AT,
 };
 
-/** A plugin observing one named session and answering every act firmly. */
+/** A plugin observing one named session and answering every action firmly. */
 function stubPlugin(
   providerId: string,
   observations: readonly ProviderSessionObservation[],
-  answer: () => Promise<{ status: typeof ACT_RESULT_STATUS.ACCEPTED }>,
+  answer: () => Promise<{ status: typeof ACTION_RESULT_STATUS.ACCEPTED }>,
   asked: string[],
 ): SessionProviderPlugin {
   return {
@@ -36,7 +36,7 @@ function stubPlugin(
     observe: async () => observations,
     latest: () => observations,
     projects: () => [{ ...PROJECT, providerProjectId: `${providerId}-project` }],
-    acts: {
+    actions: {
       message: async () => {
         asked.push(providerId);
         return answer();
@@ -47,7 +47,7 @@ function stubPlugin(
 
 const ADVERTISING_OBSERVATION: ProviderSessionObservation = {
   ...OBSERVATION,
-  advertises: [{ kind: ACT_KIND.MESSAGE }],
+  advertises: [{ kind: ACTION_KIND.MESSAGE }],
 };
 
 const CLOUD_OBSERVATION: ProviderSessionObservation = {
@@ -57,7 +57,7 @@ const CLOUD_OBSERVATION: ProviderSessionObservation = {
 
 test("merged plugins answer one roster, with a repeated session named once", async () => {
   const asked: string[] = [];
-  const accepted = async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) as const;
+  const accepted = async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) as const;
   const local = stubPlugin("merged", [ADVERTISING_OBSERVATION], accepted, asked);
   const cloud = stubPlugin("merged", [ADVERTISING_OBSERVATION, CLOUD_OBSERVATION], accepted, asked);
   const merged = mergePlugins({ id: "merged", displayName: "Merged" }, [local, cloud]);
@@ -74,7 +74,7 @@ test("merged plugins answer one roster, with a repeated session named once", asy
 
 test("a merged pass fails whole rather than retiring the observer that answered", async () => {
   const asked: string[] = [];
-  const accepted = async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) as const;
+  const accepted = async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) as const;
   const working = stubPlugin("merged", [ADVERTISING_OBSERVATION], accepted, asked);
   const failing: SessionProviderPlugin = {
     provider: { id: "merged", displayName: "merged" },
@@ -88,39 +88,39 @@ test("a merged pass fails whole rather than retiring the observer that answered"
   await assert.rejects(merged.observe(), /the second observer failed/);
 });
 
-test("an act moves past an observer that never saw the session and stops at a firm answer", async () => {
+test("an action moves past an observer that never saw the session and stops at a firm answer", async () => {
   const asked: string[] = [];
   const unaware: SessionProviderPlugin = {
     provider: { id: "merged", displayName: "merged" },
     observe: async () => [],
     latest: () => [],
-    acts: {
+    actions: {
       message: async () => {
         asked.push("unaware");
-        return { status: ACT_RESULT_STATUS.ACCEPTED };
+        return { status: ACTION_RESULT_STATUS.ACCEPTED };
       },
     },
   };
   const holder = stubPlugin(
     "merged",
     [ADVERTISING_OBSERVATION],
-    async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) as const,
+    async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) as const,
     asked,
   );
   const merged = mergePlugins({ id: "merged", displayName: "Merged" }, [unaware, holder]);
   await merged.observe();
 
-  const result = await merged.acts?.message?.(
+  const result = await merged.actions?.message?.(
     admittedForTest({ request: { text: "ship it" }, observation: ADVERTISING_OBSERVATION }),
   );
 
-  assert.deepEqual(result, { status: ACT_RESULT_STATUS.ACCEPTED });
+  assert.deepEqual(result, { status: ACTION_RESULT_STATUS.ACCEPTED });
   // The unaware observer's own handler is never reached: its roster refused
   // the session before the handler could be asked.
   assert.deepEqual(asked, ["merged"]);
 });
 
-test("an act no observer holds answers unsupported once", async () => {
+test("an action no observer holds answers unsupported once", async () => {
   const unaware: SessionProviderPlugin = {
     provider: { id: "merged", displayName: "merged" },
     observe: async () => [],
@@ -129,10 +129,13 @@ test("an act no observer holds answers unsupported once", async () => {
   const merged = mergePlugins({ id: "merged", displayName: "Merged" }, [unaware, unaware]);
 
   assert.deepEqual(
-    await merged.acts?.message?.(
+    await merged.actions?.message?.(
       admittedForTest({ request: { text: "ship it" }, observation: ADVERTISING_OBSERVATION }),
     ),
-    { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: "No provider observer supports that act." },
+    {
+      status: ACTION_RESULT_STATUS.UNSUPPORTED,
+      reason: "No provider observer supports that action.",
+    },
   );
 });
 
@@ -153,12 +156,16 @@ test("a transcript read stops at the observer that holds the session", async () 
   // see but cannot render — and that refusal is the session's own answer, so
   // the second observer is never asked for a transcript it does not hold.
   const merged = mergePlugins({ id: "merged", displayName: "Merged" }, [
-    reader("local", { status: ACT_RESULT_STATUS.REJECTED, reason: "compressed" }),
-    reader("cloud", { status: ACT_RESULT_STATUS.ACCEPTED, text: "cloud words", truncated: false }),
+    reader("local", { status: ACTION_RESULT_STATUS.REJECTED, reason: "compressed" }),
+    reader("cloud", {
+      status: ACTION_RESULT_STATUS.ACCEPTED,
+      text: "cloud words",
+      truncated: false,
+    }),
   ]);
 
   assert.deepEqual(await merged.reads?.transcriptSince?.("session-1"), {
-    status: ACT_RESULT_STATUS.REJECTED,
+    status: ACTION_RESULT_STATUS.REJECTED,
     reason: "compressed",
   });
   assert.deepEqual(asked, ["local"]);

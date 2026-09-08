@@ -1,4 +1,4 @@
-import type { RealtimeFunctionCall } from "@sidecar/acts";
+import type { RealtimeFunctionCall } from "@sidecar/actions";
 import {
   isRecord,
   isWireString,
@@ -323,9 +323,9 @@ export function outputSpeedUpdateEvents(speed: number): readonly WireRecord[] {
 
 /**
  * One tool call the model made, as it arrives inside a finished response: the
- * act's own name and arguments, and the id its answer has to carry back. The
+ * action's own name and arguments, and the id its answer has to carry back. The
  * id stops here — a validator is handed the call itself, which is why
- * `RealtimeFunctionCall` in `@sidecar/acts` has no room for one.
+ * `RealtimeFunctionCall` in `@sidecar/actions` has no room for one.
  */
 export interface ParsedRealtimeFunctionCall extends RealtimeFunctionCall {
   callId: string;

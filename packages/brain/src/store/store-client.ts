@@ -27,7 +27,7 @@ import {
  * keeps a second list to forget a name in. A worker that errors or exits
  * settles every request still out as rejected and refuses every later one, so
  * a caller never waits on a thread that is gone; what a rejected write means
- * for the act it guarded is the caller's decision, as it always was.
+ * for the action it guarded is the caller's decision, as it always was.
  */
 export interface StoreClient {
   ask<Name extends StoreOperationName>(
@@ -53,7 +53,7 @@ export interface StoreClient {
   brainStateRepository(sessionKey: SessionKey): BrainStateRepository;
   /** The scheduler's jobs as a store: listed, written whole, and deleted through the worker. */
   scheduledJobStore(): ScheduledJobStore;
-  /** The notebook's index and History's search under the names the memory package's host asks for. */
+  /** The notebook's index and Conversation's search under the names the memory package's host asks for. */
   notebookMemoryStore(): NotebookMemoryStore;
   /** The child service's records and completions as a store, each written whole through the worker. */
   childStore(): ChildStore;
@@ -162,8 +162,8 @@ export function storeClient(port: StorePort): StoreClient {
           ...(from !== undefined ? { from } : undefined),
           ...(lines !== undefined ? { lines } : undefined),
         }),
-      searchHistory: (sessionKeys, query, limit, now) =>
-        ask("history.search", { sessionKeys, query, limit, now }),
+      searchConversation: (sessionKeys, query, limit, now) =>
+        ask("conversation.search", { sessionKeys, query, limit, now }),
     }),
     scheduledJobStore: () => ({
       list: () => ask("jobs.list", {}),

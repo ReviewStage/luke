@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  ACT_RESULT_STATUS,
+  ACTION_RESULT_STATUS,
   CLI_CONNECTION,
   type ProviderSessionObservation,
   SESSION_LOCATION,
@@ -143,7 +143,7 @@ test("a write that landed makes the next pass actually ask", async () => {
   const { pass, invocations } = harness({}, { minimumRefreshIntervalMs: 60_000 });
   await pass.run();
   const written = await pass.write(["cloud", "create"]);
-  assert.equal(written.outcome.status, ACT_RESULT_STATUS.ACCEPTED);
+  assert.equal(written.outcome.status, ACTION_RESULT_STATUS.ACCEPTED);
   const before = invocations.length;
   await pass.run();
   assert.ok(invocations.length > before);
@@ -157,7 +157,7 @@ test("a write refuses without running when the CLI has signed out since the pass
   const written = await pass.write(["cloud", "create"]);
   assert.deepEqual(written, {
     outcome: {
-      status: ACT_RESULT_STATUS.REJECTED,
+      status: ACTION_RESULT_STATUS.REJECTED,
       reason: "Stub's CLI is signed out, so nothing was sent.",
     },
   });
@@ -172,7 +172,7 @@ test("a write refuses without running when the binary has gone", async () => {
   behavior.binaryMissing = true;
   const written = await pass.write(["cloud", "create"]);
   assert.deepEqual(written.outcome, {
-    status: ACT_RESULT_STATUS.REJECTED,
+    status: ACTION_RESULT_STATUS.REJECTED,
     reason: "Stub's CLI is not installed, so nothing was sent.",
   });
 });
@@ -181,7 +181,7 @@ test("a write the CLI refused names no CLI output", async () => {
   const { pass } = harness({ listFails: true });
   const written = await pass.write(["cloud", "create"]);
   assert.deepEqual(written.outcome, {
-    status: ACT_RESULT_STATUS.REJECTED,
+    status: ACTION_RESULT_STATUS.REJECTED,
     reason: "Stub's CLI refused the request.",
   });
 });

@@ -2,21 +2,21 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { type ActKind, type ActRequest, admit } from "@sidecar/acts";
+import { type ActionKind, type ActionRequest, admit } from "@sidecar/actions";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import {
-  ACT_KIND,
-  ACT_RESULT_STATUS,
-  type ActInput,
-  type AdvertisedActKind,
+  ACTION_KIND,
+  ACTION_RESULT_STATUS,
+  type ActionInput,
+  type AdvertisedActionKind,
   type AdvertisedControl,
-  advertisedActFor,
+  advertisedActionFor,
   advertisedControls,
   CLI_CONNECTION,
-  dispatchAct,
+  dispatchAction,
   maximumSessionMessageLength,
   normalizeSession,
-  type ProviderActResult,
+  type ProviderActionResult,
   type ProviderSessionObservation,
   type ProviderWorkspaceResult,
   SESSION_STATUS,
@@ -97,14 +97,14 @@ export interface ProviderFixtures {
   readonly observation: ProviderObservation;
   /** The instant every case runs at, so a golden roster is deterministic. */
   readonly now: number;
-  /** The session the acts are asked of; it must appear in `golden/roster.json`. */
+  /** The session the actions are asked of; it must appear in `golden/roster.json`. */
   readonly sessionId: string;
   /** A session id no pass reports, for the unobserved-target case. */
   readonly absentSessionId: string;
-  /** The act kinds the golden roster advertises for `sessionId`. */
-  readonly advertised: readonly AdvertisedActKind[];
-  /** The act kinds it does not; every one must answer unsupported. */
-  readonly unadvertised: readonly AdvertisedActKind[];
+  /** The action kinds the golden roster advertises for `sessionId`. */
+  readonly advertised: readonly AdvertisedActionKind[];
+  /** The action kinds it does not; every one must answer unsupported. */
+  readonly unadvertised: readonly AdvertisedActionKind[];
   /** Set when this build documents reading this provider's transcript. */
   readonly transcript?: {
     readonly sessionId: string;
@@ -121,7 +121,7 @@ export interface ProviderFixtures {
   readonly cli?: { readonly loginProbeArgv: readonly string[] };
   /**
    * A control the golden roster advertises with a target of its own, for the
-   * case that rewrites one. A provider whose controls all act on the session
+   * case that rewrites one. A provider whose controls all action on the session
    * itself names none.
    */
   readonly targetedControlId?: string;
@@ -132,13 +132,13 @@ export interface ProviderFixtures {
  * each, so a kind added to the vocabulary fails every contract until each
  * provider says whether it carries it.
  */
-const ADVERTISED_ACT_KINDS = Object.values({
-  [ACT_KIND.MESSAGE]: ACT_KIND.MESSAGE,
-  [ACT_KIND.CONTROL]: ACT_KIND.CONTROL,
-  [ACT_KIND.ADD_AGENT]: ACT_KIND.ADD_AGENT,
-  [ACT_KIND.RENAME_SESSION]: ACT_KIND.RENAME_SESSION,
-  [ACT_KIND.RENAME_WORKSPACE]: ACT_KIND.RENAME_WORKSPACE,
-} as const satisfies Record<AdvertisedActKind, AdvertisedActKind>);
+const ADVERTISED_ACTION_KINDS = Object.values({
+  [ACTION_KIND.MESSAGE]: ACTION_KIND.MESSAGE,
+  [ACTION_KIND.CONTROL]: ACTION_KIND.CONTROL,
+  [ACTION_KIND.ADD_AGENT]: ACTION_KIND.ADD_AGENT,
+  [ACTION_KIND.RENAME_SESSION]: ACTION_KIND.RENAME_SESSION,
+  [ACTION_KIND.RENAME_WORKSPACE]: ACTION_KIND.RENAME_WORKSPACE,
+} as const satisfies Record<AdvertisedActionKind, AdvertisedActionKind>);
 
 /**
  * The roster and the request as admission reads them, over this provider's own
@@ -157,37 +157,37 @@ function admissionOver(plugin: SessionProviderPlugin) {
 
 function admissionRequest(
   plugin: SessionProviderPlugin,
-  kind: AdvertisedActKind,
+  kind: AdvertisedActionKind,
   providerSessionId: string,
-  overrides: ActOverrides = {},
-): ActRequest<ActKind> {
+  overrides: ActionOverrides = {},
+): ActionRequest<ActionKind> {
   const identity = {
     provider_id: plugin.provider.id,
     provider_session_id: providerSessionId,
   };
   switch (kind) {
-    case ACT_KIND.MESSAGE:
+    case ACTION_KIND.MESSAGE:
       return {
-        kind: ACT_KIND.MESSAGE,
+        kind: ACTION_KIND.MESSAGE,
         fields: { ...identity, text: overrides.text ?? UNSUPPORTED_MESSAGE_TEXT },
       };
-    case ACT_KIND.CONTROL:
+    case ACTION_KIND.CONTROL:
       return {
-        kind: ACT_KIND.CONTROL,
+        kind: ACTION_KIND.CONTROL,
         fields: {
           ...identity,
           control_id: overrides.control?.id ?? "contract-unadvertised-control",
         },
       };
-    case ACT_KIND.ADD_AGENT:
+    case ACTION_KIND.ADD_AGENT:
       return {
-        kind: ACT_KIND.ADD_AGENT,
+        kind: ACTION_KIND.ADD_AGENT,
         fields: { ...identity, agent: overrides.agent ?? "contract-unadvertised-agent" },
       };
-    case ACT_KIND.RENAME_SESSION:
-      return { kind: ACT_KIND.RENAME_SESSION, fields: { ...identity, name: "contract" } };
-    case ACT_KIND.RENAME_WORKSPACE:
-      return { kind: ACT_KIND.RENAME_WORKSPACE, fields: { ...identity, name: "contract" } };
+    case ACTION_KIND.RENAME_SESSION:
+      return { kind: ACTION_KIND.RENAME_SESSION, fields: { ...identity, name: "contract" } };
+    case ACTION_KIND.RENAME_WORKSPACE:
+      return { kind: ACTION_KIND.RENAME_WORKSPACE, fields: { ...identity, name: "contract" } };
   }
 }
 
@@ -212,47 +212,47 @@ function observationFor(
   );
 }
 
-const UNSUPPORTED: ProviderActResult = {
-  status: ACT_RESULT_STATUS.UNSUPPORTED,
-  reason: "This provider names no such act.",
+const UNSUPPORTED: ProviderActionResult = {
+  status: ACTION_RESULT_STATUS.UNSUPPORTED,
+  reason: "This provider names no such action.",
 };
 
 /**
- * Asks one act of a plugin the way its dispatcher will, over the target's own
+ * Asks one action of a plugin the way its dispatcher will, over the target's own
  * observation, with an admitted input because that is the only kind a plugin
- * act takes. Whether the ask may run at all is admission's answer, asked
+ * action takes. Whether the ask may run at all is admission's answer, asked
  * separately below; what this exercises is what the provider does with one.
  */
-async function askAct(
+async function askAction(
   plugin: SessionProviderPlugin,
-  kind: AdvertisedActKind,
+  kind: AdvertisedActionKind,
   providerSessionId: string,
-  overrides: ActOverrides = {},
-): Promise<ProviderActResult | ProviderWorkspaceResult> {
+  overrides: ActionOverrides = {},
+): Promise<ProviderActionResult | ProviderWorkspaceResult> {
   const observation = observationFor(plugin, providerSessionId);
-  const input = <Request>(request: Request): Admitted<ActInput<Request>> =>
+  const input = <Request>(request: Request): Admitted<ActionInput<Request>> =>
     admittedForTest({ request, observation });
   switch (kind) {
-    case ACT_KIND.MESSAGE:
+    case ACTION_KIND.MESSAGE:
       return (
-        (await plugin.acts?.message?.(
+        (await plugin.actions?.message?.(
           input({ text: overrides.text ?? UNSUPPORTED_MESSAGE_TEXT }),
         )) ?? UNSUPPORTED
       );
-    case ACT_KIND.CONTROL: {
+    case ACTION_KIND.CONTROL: {
       const control = overrides.control ?? {
-        kind: ACT_KIND.CONTROL,
+        kind: ACTION_KIND.CONTROL,
         id: "contract-unadvertised-control",
         label: "Never advertised",
       };
-      return (await plugin.acts?.control?.(input({ control }))) ?? UNSUPPORTED;
+      return (await plugin.actions?.control?.(input({ control }))) ?? UNSUPPORTED;
     }
-    case ACT_KIND.ADD_AGENT: {
+    case ACTION_KIND.ADD_AGENT: {
       // The dispatcher resolves the target from the advertisement, so the
       // suite hands over exactly what the advertisement named.
-      const advertised = observation && advertisedActFor(observation, ACT_KIND.ADD_AGENT);
+      const advertised = observation && advertisedActionFor(observation, ACTION_KIND.ADD_AGENT);
       return (
-        (await plugin.acts?.spawnAgent?.(
+        (await plugin.actions?.spawnAgent?.(
           input({
             spawnTarget: advertised?.target ?? providerSessionId,
             agent: overrides.agent ?? "contract-unadvertised-agent",
@@ -260,12 +260,13 @@ async function askAct(
         )) ?? UNSUPPORTED
       );
     }
-    case ACT_KIND.RENAME_SESSION:
-      return (await plugin.acts?.renameSession?.(input({ name: "contract" }))) ?? UNSUPPORTED;
-    case ACT_KIND.RENAME_WORKSPACE: {
-      const advertised = observation && advertisedActFor(observation, ACT_KIND.RENAME_WORKSPACE);
+    case ACTION_KIND.RENAME_SESSION:
+      return (await plugin.actions?.renameSession?.(input({ name: "contract" }))) ?? UNSUPPORTED;
+    case ACTION_KIND.RENAME_WORKSPACE: {
+      const advertised =
+        observation && advertisedActionFor(observation, ACTION_KIND.RENAME_WORKSPACE);
       return (
-        (await plugin.acts?.renameWorkspace?.(
+        (await plugin.actions?.renameWorkspace?.(
           input({ renameTarget: advertised?.target ?? providerSessionId, name: "contract" }),
         )) ?? UNSUPPORTED
       );
@@ -273,26 +274,26 @@ async function askAct(
   }
 }
 
-/** What an act's request carries from the observation's own advertisement. */
-interface ActOverrides {
+/** What an action's request carries from the observation's own advertisement. */
+interface ActionOverrides {
   control?: AdvertisedControl;
   text?: string;
   agent?: string;
 }
 
-/** The advertisement one act kind stands on for the fixture's own session. */
+/** The advertisement one action kind stands on for the fixture's own session. */
 function advertisementFor(
   plugin: SessionProviderPlugin,
   fixtures: ProviderFixtures,
-  kind: AdvertisedActKind,
-): ActOverrides {
+  kind: AdvertisedActionKind,
+): ActionOverrides {
   const observation = observationFor(plugin, fixtures.sessionId);
-  if (kind === ACT_KIND.CONTROL) {
+  if (kind === ACTION_KIND.CONTROL) {
     const control = advertisedControls(observation)[0];
     return control ? { control } : {};
   }
-  if (kind === ACT_KIND.ADD_AGENT) {
-    const agent = advertisedActFor(observation, ACT_KIND.ADD_AGENT)?.agents[0];
+  if (kind === ACTION_KIND.ADD_AGENT) {
+    const agent = advertisedActionFor(observation, ACTION_KIND.ADD_AGENT)?.agents[0];
     return agent ? { agent } : {};
   }
   return {};
@@ -317,7 +318,7 @@ interface CaseOptions {
  * One executable statement of what every provider must do. Each case names,
  * verbatim, the sentence of the root guide it holds a provider to; a case
  * whose sentence does not apply to a provider's way of being observed does not
- * run for it, and every provider declares an answer for every act kind.
+ * run for it, and every provider declares an answer for every action kind.
  */
 export function describeProviderContract(
   factory: ProviderPluginFactory,
@@ -329,13 +330,13 @@ export function describeProviderContract(
   const observedByCli = fixtures.observation === PROVIDER_OBSERVATION.CLI;
   const named = (title: string) => `${fixtures.providerId}: ${title}`;
 
-  for (const kind of ADVERTISED_ACT_KINDS) {
+  for (const kind of ADVERTISED_ACTION_KINDS) {
     const declared =
       Number(fixtures.advertised.includes(kind)) + Number(fixtures.unadvertised.includes(kind));
     assert.equal(
       declared,
       1,
-      `${fixtures.providerId} must declare exactly one answer for the ${kind} act`,
+      `${fixtures.providerId} must declare exactly one answer for the ${kind} action`,
     );
   }
 
@@ -454,17 +455,21 @@ export function describeProviderContract(
 
   // "No declaration may advertise a capability the adapter does not already
   // implement under the documented provider endpoint" — and its converse: an
-  // act a provider never advertised has no route, so it reaches nothing even
+  // action a provider never advertised has no route, so it reaches nothing even
   // when the ask arrives admitted.
-  test(named("refuses every act this provider's observation does not advertise"), async (t) => {
+  test(named("refuses every action this provider's observation does not advertise"), async (t) => {
     const { plugin, api, cli } = await contractCase(t);
     await plugin.observe();
     const requestsAfterPass = api.requests().length;
     const invocationsAfterPass = cli.invocations().length;
 
     for (const kind of fixtures.unadvertised) {
-      const result = await askAct(plugin, kind, fixtures.sessionId);
-      assert.equal(result.status, ACT_RESULT_STATUS.UNSUPPORTED, `the ${kind} act was not refused`);
+      const result = await askAction(plugin, kind, fixtures.sessionId);
+      assert.equal(
+        result.status,
+        ACTION_RESULT_STATUS.UNSUPPORTED,
+        `the ${kind} action was not refused`,
+      );
     }
 
     assert.equal(api.requests().length, requestsAfterPass);
@@ -472,7 +477,7 @@ export function describeProviderContract(
   });
 
   // "its target has to be one the roster holds"
-  test(named("admits no advertised act aimed at a session no pass reported"), async (t) => {
+  test(named("admits no advertised action aimed at a session no pass reported"), async (t) => {
     const { plugin, api, cli } = await contractCase(t);
     await plugin.observe();
     const requestsAfterPass = api.requests().length;
@@ -485,7 +490,11 @@ export function describeProviderContract(
         }),
         admissionOver(plugin),
       );
-      assert.equal(admitted.kind, undefined, `the ${kind} act was admitted for an absent session`);
+      assert.equal(
+        admitted.kind,
+        undefined,
+        `the ${kind} action was admitted for an absent session`,
+      );
     }
 
     assert.equal(api.requests().length, requestsAfterPass);
@@ -508,10 +517,10 @@ export function describeProviderContract(
         );
         const requestsAfterPass = api.requests().length;
 
-        // Asked the one way an act reaches a provider at all: `dispatchAct`
+        // Asked the one way an action reaches a provider at all: `dispatchAction`
         // resolves the advertised entry from the plugin's own latest roster,
         // so the caller's rewritten copy never becomes a route.
-        await dispatchAct(
+        await dispatchAction(
           plugin,
           "control",
           admittedForTest({
@@ -538,7 +547,7 @@ export function describeProviderContract(
 
   // "a rejection carries a reason the user can act on, never the message
   // itself" — and no message outside its bound ever becomes a request.
-  if (fixtures.advertised.includes(ACT_KIND.MESSAGE)) {
+  if (fixtures.advertised.includes(ACTION_KIND.MESSAGE)) {
     test(named("admits no empty or over-long message, and names none of it"), async (t) => {
       const { plugin, api } = await contractCase(t);
       await plugin.observe();
@@ -547,7 +556,7 @@ export function describeProviderContract(
 
       for (const text of ["", "   ", overLong]) {
         const admitted = await admit(
-          admissionRequest(plugin, ACT_KIND.MESSAGE, fixtures.sessionId, { text }),
+          admissionRequest(plugin, ACTION_KIND.MESSAGE, fixtures.sessionId, { text }),
           admissionOver(plugin),
         );
         assert.equal(admitted.kind, undefined, "an unbounded message was admitted");
@@ -570,7 +579,7 @@ export function describeProviderContract(
       assert.deepEqual(await plugin.observe(), []);
       assert.deepEqual(api.requests(), []);
       for (const kind of fixtures.advertised) {
-        await askAct(plugin, kind, fixtures.sessionId);
+        await askAction(plugin, kind, fixtures.sessionId);
       }
       assert.deepEqual(api.requests(), []);
     });
@@ -703,12 +712,12 @@ export function describeProviderContract(
     );
 
     if (fixtures.transcript) {
-      assert.equal(read?.status, ACT_RESULT_STATUS.ACCEPTED);
+      assert.equal(read?.status, ACTION_RESULT_STATUS.ACCEPTED);
       const transcript = read && "transcript" in read ? read.transcript : "";
       await assertGoldenText(golden("transcript.txt"), transcript);
     } else {
       assert.ok(
-        read === undefined || read.status === ACT_RESULT_STATUS.UNSUPPORTED,
+        read === undefined || read.status === ACTION_RESULT_STATUS.UNSUPPORTED,
         "a session whose transcript this build does not read answered with one",
       );
     }
@@ -728,7 +737,7 @@ export function describeProviderContract(
         fixtures.transcript?.unrenderableSessionId ?? "",
       );
 
-      assert.equal(read?.status, ACT_RESULT_STATUS.REJECTED);
+      assert.equal(read?.status, ACTION_RESULT_STATUS.REJECTED);
     });
   }
 
@@ -747,7 +756,7 @@ export function describeProviderContract(
       });
 
       assert.ok(read, "the conversation read answered nothing at all");
-      assert.equal(read.status, ACT_RESULT_STATUS.ACCEPTED);
+      assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED);
       await assertGoldenJson(golden("conversation.json"), read);
       for (const route of passRoutes) {
         assert.ok(
@@ -768,7 +777,7 @@ export function describeProviderContract(
         observation: observationFor(plugin, fixtures.conversation?.sessionId ?? ""),
       });
 
-      assert.equal(read?.status, ACT_RESULT_STATUS.REJECTED);
+      assert.equal(read?.status, ACTION_RESULT_STATUS.REJECTED);
     });
   }
 
@@ -800,7 +809,7 @@ export function describeProviderContract(
     );
   }
 
-  // "The adapter seam remains the authority for acts." One pass, one roster,
+  // "The adapter seam remains the authority for actions." One pass, one roster,
   // and the same roster again when nothing moved.
   test(named("observes exactly the recorded roster, and the same roster twice"), async (t) => {
     const { plugin } = await contractCase(t);
@@ -827,9 +836,9 @@ export function describeProviderContract(
 
     const projects: readonly WorkspaceProject[] = plugin.projects?.() ?? [];
     await assertGoldenJson(golden("projects.json"), projects);
-    // Asked the one way an act reaches a provider at all, so what refuses an
+    // Asked the one way an action reaches a provider at all, so what refuses an
     // unreported project is the same resolution production runs.
-    const created = await dispatchAct(
+    const created = await dispatchAction(
       plugin,
       "createWorkspace",
       admittedForTest({
@@ -840,7 +849,7 @@ export function describeProviderContract(
 
     assert.notEqual(
       created.status,
-      ACT_RESULT_STATUS.ACCEPTED,
+      ACTION_RESULT_STATUS.ACCEPTED,
       "a creation landed in a project no pass reported",
     );
     assert.equal(api.requests().length, requestsAfterPass);

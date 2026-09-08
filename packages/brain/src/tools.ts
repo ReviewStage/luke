@@ -1,4 +1,8 @@
-import { type ActToolDefinition, realtimeToolDefinitions, realtimeToolFamily } from "@sidecar/acts";
+import {
+  type ActionToolDefinition,
+  realtimeToolDefinitions,
+  realtimeToolFamily,
+} from "@sidecar/actions";
 import { MEMORY_QUERY_MAXIMUM_CHARS } from "@sidecar/memory";
 import {
   type ChildPolicyContext,
@@ -21,12 +25,12 @@ import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
 
 /**
  * The brain's tool catalog: every tool a turn could be offered, as the
- * registry describes it. The act rows come from the same table the Realtime
- * session was configured from, so the brain can ask for nothing the acts
+ * registry describes it. The action rows come from the same table the Realtime
+ * session was configured from, so the brain can ask for nothing the actions
  * package does not validate; the brain's own tools — the roster in full, a
  * whole transcript, the briefing, the workspace files, a skill's
  * instructions, the notebook's search and read — are dispatched inside the
- * agent and reach no act path.
+ * agent and reach no action path.
  * Which of the catalog a turn is offered is the effective tool policy's
  * decision, resolved from the configuration's layers and enforced twice by
  * the host: when the schemas are built and again at every dispatch. The one
@@ -69,7 +73,7 @@ export const maximumBriefingLength = 600;
 
 export const TOOL_GROUP = {
   READ: "read",
-  ACTS: "acts",
+  ACTIONS: "actions",
   SPEAK: "speak",
   WORKSPACE: "workspace",
   SKILLS: "skills",
@@ -87,9 +91,9 @@ export const maximumMemoryQueryLength = MEMORY_QUERY_MAXIMUM_CHARS;
 export const maximumChildTaskLength = 8_000;
 
 /** The most history lines one `sessions_history` read answers with. */
-export const maximumSessionsHistoryLines = 50;
+export const maximumSessionsConversationLines = 50;
 
-const BRAIN_ONLY_TOOLS: readonly ActToolDefinition[] = [
+const BRAIN_ONLY_TOOLS: readonly ActionToolDefinition[] = [
   {
     type: BRAIN_TOOL_TYPE,
     name: BRAIN_TOOL.LIST_SESSIONS,
@@ -261,7 +265,7 @@ const BRAIN_ONLY_TOOLS: readonly ActToolDefinition[] = [
     name: BRAIN_TOOL.SESSIONS_HISTORY,
     description:
       "Read the recent history of one child this conversation asked for, most recent last, " +
-      `bounded to ${maximumSessionsHistoryLines} lines. Only a child of this conversation answers.`,
+      `bounded to ${maximumSessionsConversationLines} lines. Only a child of this conversation answers.`,
     parameters: {
       type: "object",
       properties: {
@@ -322,7 +326,7 @@ const BRAIN_ONLY_TOOLS: readonly ActToolDefinition[] = [
 
 const BRAIN_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(BRAIN_TOOL));
 
-/** Whether a call names a tool the agent answers itself rather than an act. */
+/** Whether a call names a tool the agent answers itself rather than an action. */
 export function isBrainOnlyTool(name: string): name is BrainToolName {
   return BRAIN_ONLY_TOOL_NAMES.has(name);
 }
@@ -390,18 +394,18 @@ const BRAIN_ONLY_DESCRIPTORS = {
   },
 } as const satisfies Record<BrainToolName, ToolPlacement & { groups: readonly string[] }>;
 
-function actDescriptor(definition: ActToolDefinition): ToolDescriptor {
+function actionDescriptor(definition: ActionToolDefinition): ToolDescriptor {
   const family = realtimeToolFamily(definition.name);
-  if (family === undefined) throw new TypeError(`${definition.name} is not an act`);
+  if (family === undefined) throw new TypeError(`${definition.name} is not an action`);
   return {
     schema: toolSchemaFromDefinition(definition),
     execution: TOOL_EXECUTION.PERFORMER,
     effect: TOOL_EFFECT.WRITE,
-    groups: [TOOL_GROUP.ACTS, family],
+    groups: [TOOL_GROUP.ACTIONS, family],
   };
 }
 
-function brainOnlyDescriptor(definition: ActToolDefinition): ToolDescriptor {
+function brainOnlyDescriptor(definition: ActionToolDefinition): ToolDescriptor {
   const name = definition.name;
   if (!isBrainOnlyTool(name)) throw new TypeError(`${name} is not a brain tool`);
   return {
@@ -410,10 +414,10 @@ function brainOnlyDescriptor(definition: ActToolDefinition): ToolDescriptor {
   };
 }
 
-/** The whole catalog as descriptors: every act, then the brain's own tools, in a fixed order. */
+/** The whole catalog as descriptors: every action, then the brain's own tools, in a fixed order. */
 export function brainToolCatalog(): readonly ToolDescriptor[] {
   return [
-    ...realtimeToolDefinitions().map(actDescriptor),
+    ...realtimeToolDefinitions().map(actionDescriptor),
     ...BRAIN_ONLY_TOOLS.map(brainOnlyDescriptor),
   ];
 }

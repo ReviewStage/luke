@@ -27,8 +27,8 @@ function record(overrides: Partial<BrainRequestRecord> = {}): BrainRequestRecord
     revision: 1,
     acceptedAt: NOW,
     startedAt: NOW + 1,
-    performedActs: 0,
-    unknownActs: 0,
+    performedActions: 0,
+    unknownActions: 0,
     askRecordedAt: NOW,
     ...overrides,
   };
@@ -39,7 +39,7 @@ function ended(overrides: Partial<BrainRequestRecord> = {}): BrainRequestRecord 
     status: BRAIN_REQUEST_STATUS.SUCCEEDED,
     settledAt: NOW + 2,
     text: "Two agents are waiting.",
-    historyRecordedAt: NOW + 2,
+    conversationRecordedAt: NOW + 2,
     revision: 3,
     ...overrides,
   });
@@ -114,8 +114,11 @@ test("only a run watched while it was still going becomes deliverable when its e
   deliveries.observe([ended({ runId: "run-old" })]);
   assert.equal(deliveries.published(ended({ runId: "run-old" }), "gen-1"), undefined);
   deliveries.observe([ended({ runId: "run-old" }), record()]);
-  // Ended but not yet in History: nothing is owed until the publication owner says so.
-  assert.equal(deliveries.published(ended({ historyRecordedAt: undefined }), "gen-1"), undefined);
+  // Ended but not yet in Conversation: nothing is owed until the publication owner says so.
+  assert.equal(
+    deliveries.published(ended({ conversationRecordedAt: undefined }), "gen-1"),
+    undefined,
+  );
   const delivery = deliveries.published(ended(), "gen-1");
   assert.deepEqual(delivery, {
     runId: "run-1",
@@ -185,12 +188,12 @@ test("a delivery is granted once, to the epoch it was offered to, and every dupl
   assert.deepEqual(deliveries.unclaimed(), []);
 });
 
-test("the words granted are read from the live record, in History's own wording, never from the offer", () => {
+test("the words granted are read from the live record, in Conversation's own wording, never from the offer", () => {
   const deliveries = ledger();
   deliveries.observe([record()]);
   deliveries.published(ended(), "gen-1");
   deliveries.nextOffer(1);
-  const live = ended({ status: BRAIN_REQUEST_STATUS.FAILED, text: undefined, performedActs: 1 });
+  const live = ended({ status: BRAIN_REQUEST_STATUS.FAILED, text: undefined, performedActions: 1 });
   assert.deepEqual(deliveries.claim("run-1", "delivery-1", 1, context(live)), {
     granted: true,
     words: "I did one thing you asked, but I couldn't put the reply into words.",
@@ -222,17 +225,22 @@ test("a claim is refused, and the delivery forgotten, once the generation or the
   assert.equal(deliveries.published(ended(), "gen-1"), undefined);
 });
 
-test("a live record whose end is no longer in History, or cannot be worded, is not granted", () => {
+test("a live record whose end is no longer in Conversation, or cannot be worded, is not granted", () => {
   const deliveries = ledger();
   deliveries.observe([record()]);
   deliveries.published(ended(), "gen-1");
   deliveries.nextOffer(1);
   assert.deepEqual(
-    deliveries.claim("run-1", "delivery-1", 1, context(ended({ historyRecordedAt: undefined }))),
+    deliveries.claim(
+      "run-1",
+      "delivery-1",
+      1,
+      context(ended({ conversationRecordedAt: undefined })),
+    ),
     { granted: false },
   );
   assert.deepEqual(
-    deliveries.claim("run-1", "delivery-1", 1, context(record({ historyRecordedAt: NOW }))),
+    deliveries.claim("run-1", "delivery-1", 1, context(record({ conversationRecordedAt: NOW }))),
     { granted: false },
   );
   // Still unclaimed: a refusal for a record that may yet be recorded spends nothing.
@@ -266,7 +274,7 @@ test("the call that asked may be granted the words instead, once, and the offer 
   const deliveries = ledger();
   const spoken = { runId: "run-s", origin: BRAIN_REQUEST_ORIGIN.SPOKEN } as const;
   deliveries.observe([record(spoken)]);
-  // The end reached History and was offered, but the asking call comes back first.
+  // The end reached Conversation and was offered, but the asking call comes back first.
   deliveries.published(ended(spoken), "gen-1");
   deliveries.nextOffer(1);
   assert.equal(deliveries.grantOnCall(ended(spoken), "gen-1", 1, context(ended(spoken))), true);
@@ -280,17 +288,17 @@ test("the call that asked may be granted the words instead, once, and the offer 
   assert.equal(deliveries.nextOffer(1), undefined);
 });
 
-test("the call is refused the words once an offer was claimed, or before the end stands in History", () => {
+test("the call is refused the words once an offer was claimed, or before the end stands in Conversation", () => {
   const deliveries = ledger();
   const spoken = { runId: "run-s", origin: BRAIN_REQUEST_ORIGIN.SPOKEN } as const;
   deliveries.observe([record(spoken)]);
-  // The end is not yet marked in History: nobody is granted anything.
+  // The end is not yet marked in Conversation: nobody is granted anything.
   assert.equal(
     deliveries.grantOnCall(
-      ended({ ...spoken, historyRecordedAt: undefined }),
+      ended({ ...spoken, conversationRecordedAt: undefined }),
       "gen-1",
       1,
-      context(ended({ ...spoken, historyRecordedAt: undefined })),
+      context(ended({ ...spoken, conversationRecordedAt: undefined })),
     ),
     false,
   );

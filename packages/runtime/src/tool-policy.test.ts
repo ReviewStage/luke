@@ -21,8 +21,8 @@ function tool(name: string, groups: readonly string[]): ToolDescriptor {
 const CATALOG: readonly ToolDescriptor[] = [
   tool("list_sessions", ["read"]),
   tool("read_transcript", ["read"]),
-  tool("send_session_message", ["acts", "session"]),
-  tool("open_session", ["acts", "session"]),
+  tool("send_session_message", ["actions", "session"]),
+  tool("open_session", ["actions", "session"]),
   tool("announce", ["speak"]),
   tool("sessions_spawn", ["delegation"]),
   tool("conversations_list", ["admin"]),
@@ -45,7 +45,7 @@ test("layers apply in the pinned order, allow narrows, deny wins, and groups exp
   assert.deepEqual(TOOL_POLICY_ORDER, ["global", "agent", "provider", "session", "child", "turn"]);
   const policy = resolveToolPolicy(CATALOG, {
     global: { deny: ["message"] },
-    agent: { allow: ["group:read", "group:acts", "announce", "conversations_*"] },
+    agent: { allow: ["group:read", "group:actions", "announce", "conversations_*"] },
     provider: { deny: ["open_session"] },
     session: { deny: ["announce"] },
   });
@@ -88,7 +88,7 @@ test("the turn's own layer applies last, after every configured layer, and names
 
 test("a later allow cannot restore what an earlier layer denied", () => {
   const policy = resolveToolPolicy(CATALOG, {
-    global: { deny: ["group:acts"] },
+    global: { deny: ["group:actions"] },
     agent: { allow: ["send_session_message", "list_sessions"] },
   });
   assert.deepEqual(names(policy), ["list_sessions"]);

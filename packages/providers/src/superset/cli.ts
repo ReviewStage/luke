@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
-  ACT_RESULT_STATUS,
+  ACTION_RESULT_STATUS,
   type ProviderControlResult,
   type ProviderMessageResult,
   type ProviderWorkspaceRequest,
@@ -272,7 +272,7 @@ export class SupersetCli {
   async createWorkspace(request: ProviderWorkspaceRequest): Promise<ProviderWorkspaceResult> {
     if (!request.providerTargetId || !request.agent || !request.task) {
       return {
-        status: ACT_RESULT_STATUS.REJECTED,
+        status: ACTION_RESULT_STATUS.REJECTED,
         reason: "A Superset workspace needs a host, an agent, and an opening task.",
       };
     }
@@ -284,7 +284,7 @@ export class SupersetCli {
     );
     if (!offered)
       return {
-        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        status: ACTION_RESULT_STATUS.UNSUPPORTED,
         reason: UNSUPPORTED_BY_OBSERVATION,
       };
     const branch = this.#branchName(request.name ?? request.task);
@@ -311,7 +311,7 @@ export class SupersetCli {
     ];
     if (!(await this.connected()))
       return {
-        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        status: ACTION_RESULT_STATUS.UNSUPPORTED,
         reason: UNSUPPORTED_BY_OBSERVATION,
       };
     try {
@@ -327,7 +327,7 @@ export class SupersetCli {
       // a level down on the workspace itself.
       const workspaceRecord = envelope ? wireRecord(envelope.workspace) : undefined;
       const workspaceId = workspaceRecord ? text(workspaceRecord.id) : undefined;
-      if (!workspaceId) return { status: ACT_RESULT_STATUS.ACCEPTED };
+      if (!workspaceId) return { status: ACTION_RESULT_STATUS.ACCEPTED };
       try {
         await this.#run(this.executable, [
           "workspaces",
@@ -338,16 +338,16 @@ export class SupersetCli {
             : ["--host", request.providerTargetId]),
           "--json",
         ]);
-        return { status: ACT_RESULT_STATUS.ACCEPTED };
+        return { status: ACTION_RESULT_STATUS.ACCEPTED };
       } catch {
         return {
-          status: ACT_RESULT_STATUS.ACCEPTED,
+          status: ACTION_RESULT_STATUS.ACCEPTED,
           warning: "The workspace was created, but Superset could not open it.",
         };
       }
     } catch (error) {
       return {
-        status: ACT_RESULT_STATUS.REJECTED,
+        status: ACTION_RESULT_STATUS.REJECTED,
         reason: supersetFailureReason(
           unparsedWire({ stderr: attachedStderr(error) }),
           "Superset could not create that workspace.",
@@ -356,20 +356,20 @@ export class SupersetCli {
     }
   }
 
-  // The acts on a bound terminal name no `--host`: the CLI's default is this
+  // The actions on a bound terminal name no `--host`: the CLI's default is this
   // machine, which is the only machine the observed host state describes, and
   // the flag takes a machineId the state does not carry — passing the state
-  // directory's organization name there is what made every act fail.
+  // directory's organization name there is what made every action fail.
   async sendMessage(context: SupersetSessionContext, text: string): Promise<ProviderMessageResult> {
     // A chatless workspace row carries no terminal for a message to land in,
     // and never advertises taking one; the CLI answers the same way
     // rather than improvising a way in.
     if (!context.terminalId)
       return {
-        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        status: ACTION_RESULT_STATUS.UNSUPPORTED,
         reason: UNSUPPORTED_BY_OBSERVATION,
       };
-    return this.#act(
+    return this.#action(
       [
         "terminals",
         "send",
@@ -392,13 +392,13 @@ export class SupersetCli {
     // The one deletion the agent guide authorizes: the observed workspace id
     // as the command's single argument, nothing else ever deleted.
     if (controlId === SUPERSET_CONTROL_ID.DELETE_WORKSPACE) {
-      return this.#act(
+      return this.#action(
         ["workspaces", "delete", context.workspaceId, "--json"],
         "Superset could not delete that workspace.",
       );
     }
     return {
-      status: ACT_RESULT_STATUS.UNSUPPORTED,
+      status: ACTION_RESULT_STATUS.UNSUPPORTED,
       reason: UNSUPPORTED_BY_OBSERVATION,
     };
   }
@@ -419,7 +419,7 @@ export class SupersetCli {
   ): Promise<ProviderControlResult> {
     if (!(await this.connected()))
       return {
-        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        status: ACTION_RESULT_STATUS.UNSUPPORTED,
         reason: UNSUPPORTED_BY_OBSERVATION,
       };
     try {
@@ -430,10 +430,10 @@ export class SupersetCli {
         "--name",
         name,
       ]);
-      return { status: ACT_RESULT_STATUS.ACCEPTED };
+      return { status: ACTION_RESULT_STATUS.ACCEPTED };
     } catch (error) {
       return {
-        status: ACT_RESULT_STATUS.REJECTED,
+        status: ACTION_RESULT_STATUS.REJECTED,
         reason: supersetFailureReason(
           unparsedWire({ stderr: attachedStderr(error) }),
           "Superset could not rename that workspace.",
@@ -449,11 +449,11 @@ export class SupersetCli {
   ): Promise<ProviderWorkspaceResult> {
     if (!task) {
       return {
-        status: ACT_RESULT_STATUS.REJECTED,
+        status: ACTION_RESULT_STATUS.REJECTED,
         reason: "A Superset agent needs an opening task.",
       };
     }
-    return this.#act(
+    return this.#action(
       [
         "agents",
         "create",
@@ -469,17 +469,17 @@ export class SupersetCli {
     );
   }
 
-  async #act(arguments_: readonly string[], reason: string): Promise<ProviderControlResult> {
+  async #action(arguments_: readonly string[], reason: string): Promise<ProviderControlResult> {
     if (!(await this.connected()))
       return {
-        status: ACT_RESULT_STATUS.UNSUPPORTED,
+        status: ACTION_RESULT_STATUS.UNSUPPORTED,
         reason: UNSUPPORTED_BY_OBSERVATION,
       };
     try {
       await this.#run(this.executable, arguments_);
-      return { status: ACT_RESULT_STATUS.ACCEPTED };
+      return { status: ACTION_RESULT_STATUS.ACCEPTED };
     } catch {
-      return { status: ACT_RESULT_STATUS.REJECTED, reason };
+      return { status: ACTION_RESULT_STATUS.REJECTED, reason };
     }
   }
 

@@ -18,7 +18,7 @@ const REMARK_PLUGINS: Options["remarkPlugins"] = [[remarkGfm, { singleTilde: fal
  *
  * A link is drawn as one and names its destination on hover, but it is not a
  * control: the renderer refuses every navigation and has no door for opening
- * an arbitrary address, and a message's words must not become an act by
+ * an arbitrary address, and a message's words must not become an action by
  * being pressed. Only HTTP and HTTPS destinations survive `urlTransform`
  * below, so anything else arrives here as words alone.
  *

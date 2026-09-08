@@ -1,5 +1,5 @@
 /* A message's Markdown, drawn wherever Luke's or the developer's words are: the
-   History bubbles and the caption under the housing. Every measure is in `em`
+   Conversation bubbles and the caption under the housing. Every measure is in `em`
    so the same rules read at the caption's ten pixels and the thread's twelve
    and a half, and every tint is mixed from `currentColor`, so the same rule
    reads on the raised bubble's grey and on the sent bubble's accent without a
@@ -58,7 +58,7 @@
   border-radius: 0.7em;
   background: var(--markdown-tint);
   overflow-x: auto;
-  /* A line's end is read by the same sideways swipe that pulls the History
+  /* A line's end is read by the same sideways swipe that pulls the Conversation
      thread; at the block's edge the swipe stays the block's. */
   overscroll-behavior-x: contain;
   scrollbar-width: none;

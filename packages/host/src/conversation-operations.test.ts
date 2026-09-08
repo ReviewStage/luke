@@ -12,7 +12,7 @@ import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
 import {
   type ConversationOperationsDependencies,
   conversationOperations,
-  startHistoryMaintenance,
+  startConversationMaintenance,
 } from "./conversation-operations.js";
 
 const NOW = 1_800_000_000_000;
@@ -43,11 +43,11 @@ function harness(erasePublished = true, { marks = true, readsCutoff = true } = {
             calls.push(`fence:${sessionKey}:${deletedAt}`);
           },
         }) as unknown as ReturnType<ConversationOperationsDependencies["store"]["thread"]>,
-      historyCutoff: async (sessionKey) => {
+      conversationCutoff: async (sessionKey) => {
         calls.push(`cutoff:${sessionKey}`);
         return readsCutoff ? { value: EARLIER_CUTOFF } : undefined;
       },
-      eraseHistory: async (sessionKey, now, keepSessionId, cutoffBefore) => {
+      eraseConversation: async (sessionKey, now, keepSessionId, cutoffBefore) => {
         calls.push(`erase:${sessionKey}:${now}:${keepSessionId}:${cutoffBefore}`);
         return { published: erasePublished };
       },
@@ -72,9 +72,9 @@ function harness(erasePublished = true, { marks = true, readsCutoff = true } = {
   return { operations: conversationOperations(dependencies), calls };
 }
 
-test("Delete history fences the thread and the brain's generation, then erases what stood at or before the press while the successor lifetime stands; nothing is retired or reopened", async () => {
+test("Delete conversation fences the thread and the brain's generation, then erases what stood at or before the press while the successor lifetime stands; nothing is retired or reopened", async () => {
   const { operations, calls } = harness();
-  assert.equal(await operations.deleteHistory(THREAD), CONVERSATION_DELETE_OUTCOME.COMPLETE);
+  assert.equal(await operations.deleteConversation(THREAD), CONVERSATION_DELETE_OUTCOME.COMPLETE);
   assert.deepEqual(calls, [
     `fence:${THREAD}:${NOW}`,
     `cutoff:${THREAD}`,
@@ -83,15 +83,17 @@ test("Delete history fences the thread and the brain's generation, then erases w
   ]);
   const unpublished = harness(false);
   assert.equal(
-    await unpublished.operations.deleteHistory(THREAD),
+    await unpublished.operations.deleteConversation(THREAD),
     CONVERSATION_DELETE_OUTCOME.INCOMPLETE,
   );
-  assert.ok(unpublished.calls.some((call) => call.startsWith("report:Delete history incomplete")));
+  assert.ok(
+    unpublished.calls.some((call) => call.startsWith("report:Delete conversation incomplete")),
+  );
 });
 
 test("a marker the store will not write refuses the deletion with the fences standing and nothing erased", async () => {
   const { operations, calls } = harness(true, { marks: false });
-  assert.equal(await operations.deleteHistory(THREAD), CONVERSATION_DELETE_OUTCOME.REFUSED);
+  assert.equal(await operations.deleteConversation(THREAD), CONVERSATION_DELETE_OUTCOME.REFUSED);
   assert.deepEqual(
     calls.filter((call) => !call.startsWith("report:")),
     [`fence:${THREAD}:${NOW}`, `cutoff:${THREAD}`, `clear:${THREAD}:${NOW}`],
@@ -101,7 +103,7 @@ test("a marker the store will not write refuses the deletion with the fences sta
 
 test("a cutoff the store cannot read refuses the deletion after the marker, with nothing erased: an archive never records a guessed cutoff", async () => {
   const { operations, calls } = harness(true, { readsCutoff: false });
-  assert.equal(await operations.deleteHistory(THREAD), CONVERSATION_DELETE_OUTCOME.REFUSED);
+  assert.equal(await operations.deleteConversation(THREAD), CONVERSATION_DELETE_OUTCOME.REFUSED);
   assert.deepEqual(
     calls.filter((call) => !call.startsWith("report:")),
     [`fence:${THREAD}:${NOW}`, `cutoff:${THREAD}`, `clear:${THREAD}:${NOW}`],
@@ -111,7 +113,7 @@ test("a cutoff the store cannot read refuses the deletion after the marker, with
 
 test("maintenance runs at the launch, preserving the busy conversations, and stops with its clock", () => {
   const runs: (readonly SessionKey[])[] = [];
-  const stop = startHistoryMaintenance({
+  const stop = startConversationMaintenance({
     store: {
       runMaintenance: async (preserve) => {
         runs.push(preserve);

@@ -27,7 +27,7 @@ const settings = (captions: boolean) => settingsView({ voiceCaptions: captions }
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 /** A settings change, as the carrier arms one. */
-function settingAct(
+function settingAction(
   target: PendingErrand["targets"][number],
   page: PendingErrand["page"],
   hold: ErrandHold,
@@ -46,7 +46,7 @@ function settingAct(
   return act;
 }
 
-/** Arms every act of one reply, in the order the calls were answered. */
+/** Arms every action of one reply, in the order the calls were answered. */
 function run(...acts: readonly PendingErrand[]): ErrandRun {
   return acts.reduce(armErrand, EMPTY_ERRAND_RUN);
 }
@@ -54,11 +54,11 @@ function run(...acts: readonly PendingErrand[]): ErrandRun {
 const CAPTIONS_ON = settings(true);
 const CAPTIONS_OFF = settings(false);
 
-test("a second act waits its turn rather than taking the first out of the air", () => {
-  const first = settingAct(APP_SETTING_ID.VOICE_CAPTIONS, SETTINGS_VIEW.VOICE, {
+test("a second action waits its turn rather than taking the first out of the air", () => {
+  const first = settingAction(APP_SETTING_ID.VOICE_CAPTIONS, SETTINGS_VIEW.VOICE, {
     settings: CAPTIONS_ON,
   });
-  const second = settingAct(APP_SETTING_ID.SHOW_IN_DOCK, SETTINGS_VIEW.APPEARANCE, {
+  const second = settingAction(APP_SETTING_ID.SHOW_IN_DOCK, SETTINGS_VIEW.APPEARANCE, {
     settings: CAPTIONS_OFF,
   });
 
@@ -75,23 +75,23 @@ test("a second act waits its turn rather than taking the first out of the air", 
   assert.deepEqual(overtaking.run.waiting, [second]);
 });
 
-test("each act's change is drawn on its own tap, and never on another's", () => {
-  const first = settingAct(APP_SETTING_ID.VOICE_CAPTIONS, SETTINGS_VIEW.VOICE, {
+test("each action's change is drawn on its own tap, and never on another's", () => {
+  const first = settingAction(APP_SETTING_ID.VOICE_CAPTIONS, SETTINGS_VIEW.VOICE, {
     settings: CAPTIONS_ON,
   });
-  const second = settingAct(APP_SETTING_ID.SHOW_IN_DOCK, SETTINGS_VIEW.APPEARANCE, {
+  const second = settingAction(APP_SETTING_ID.SHOW_IN_DOCK, SETTINGS_VIEW.APPEARANCE, {
     settings: CAPTIONS_OFF,
   });
 
   const flying = nextErrand(run(first, second)).run;
   const landed = landErrand(flying);
   assert.deepEqual(landed.hold, { settings: CAPTIONS_ON });
-  // The act still waiting is still holding: its switch does not move until
+  // The action still waiting is still holding: its switch does not move until
   // Luke reaches it either.
   assert.deepEqual(landed.run.waiting, [second]);
 
   // The tap released it, so the end of that same flight draws it no second
-  // time — a hold drawn twice would re-apply a snapshot the next act's write
+  // time — a hold drawn twice would re-apply a snapshot the next action's write
   // has already superseded.
   const finished = finishErrand(landed.run);
   assert.deepEqual(finished.hold, NOTHING_HELD);
@@ -106,7 +106,7 @@ test("a flight that never reached its control still draws what it was holding", 
   // No tap landed, so nothing was released — and a hold nobody releases leaves
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // a switch showing the wrong state for as long as the panel is open.
-  const only = settingAct(APP_SETTING_ID.VOICE_CAPTIONS, SETTINGS_VIEW.VOICE, {
+  const only = settingAction(APP_SETTING_ID.VOICE_CAPTIONS, SETTINGS_VIEW.VOICE, {
     settings: CAPTIONS_ON,
   });
   const finished = finishErrand(nextErrand(run(only)).run);
@@ -115,10 +115,10 @@ test("a flight that never reached its control still draws what it was holding", 
 });
 
 test("a panel that has gone draws everything the run was still holding", () => {
-  const flying = settingAct(APP_SETTING_ID.VOICE_CAPTIONS, SETTINGS_VIEW.VOICE, {
+  const flying = settingAction(APP_SETTING_ID.VOICE_CAPTIONS, SETTINGS_VIEW.VOICE, {
     settings: CAPTIONS_ON,
   });
-  const waiting = settingAct(APP_SETTING_ID.SHOW_IN_DOCK, SETTINGS_VIEW.APPEARANCE, {
+  const waiting = settingAction(APP_SETTING_ID.SHOW_IN_DOCK, SETTINGS_VIEW.APPEARANCE, {
     settings: CAPTIONS_OFF,
   });
   const flushed = flushErrands(nextErrand(run(flying, waiting)).run);
@@ -144,9 +144,9 @@ test("holds folded together keep the last snapshot and every part of the view", 
   assert.deepEqual(foldErrandHolds([NOTHING_HELD, NOTHING_HELD]), NOTHING_HELD);
 });
 
-test("an act with nowhere to land leaves the run to the next one", () => {
+test("an action with nowhere to land leaves the run to the next one", () => {
   // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // The guide's ids travel as plain text, so an act can name a control this
+  // The guide's ids travel as plain text, so an action can name a control this
   // build does not draw. It is over the moment it is taken up.
   const nowhere: PendingErrand = {
     targets: [],
@@ -155,7 +155,7 @@ test("an act with nowhere to land leaves the run to the next one", () => {
     borrowsPanel: true,
     hold: { settings: CAPTIONS_ON },
   };
-  const second = settingAct(APP_SETTING_ID.SHOW_IN_DOCK, SETTINGS_VIEW.APPEARANCE, {
+  const second = settingAction(APP_SETTING_ID.SHOW_IN_DOCK, SETTINGS_VIEW.APPEARANCE, {
     settings: CAPTIONS_OFF,
   });
 
@@ -167,7 +167,7 @@ test("an act with nowhere to land leaves the run to the next one", () => {
 });
 
 test("the run is idle only once there is nothing in the air and nothing waiting", () => {
-  const only = settingAct(APP_SETTING_ID.VOICE_CAPTIONS, SETTINGS_VIEW.VOICE, NOTHING_HELD);
+  const only = settingAction(APP_SETTING_ID.VOICE_CAPTIONS, SETTINGS_VIEW.VOICE, NOTHING_HELD);
   assert.equal(errandRunIdle(EMPTY_ERRAND_RUN), true);
   assert.equal(errandRunIdle(run(only)), false);
   const flying = nextErrand(run(only)).run;
@@ -184,7 +184,7 @@ test("a panel asked for out loud is nobody's to take away afterwards", () => {
     hold: NOTHING_HELD,
   });
   const changes = (opening: boolean): PendingErrand =>
-    settingAct(APP_SETTING_ID.VOICE_CAPTIONS, SETTINGS_VIEW.VOICE, NOTHING_HELD, opening);
+    settingAction(APP_SETTING_ID.VOICE_CAPTIONS, SETTINGS_VIEW.VOICE, NOTHING_HELD, opening);
 
   // A switch has to be seen moving, so a settings change borrows the panel and
   // gives it back — but only the one it stood up itself.
@@ -192,7 +192,7 @@ test("a panel asked for out loud is nobody's to take away afterwards", () => {
   assert.equal(errandBorrowedPanel(false, changes(false)), false);
 
   // A second settings act finds the panel already open, so its own opening is
-  // false. It must not answer "no" on the first act's behalf: the close the
+  // false. It must not answer "no" on the first action's behalf: the close the
   // first one is owed still has to happen, and only once the run is done.
   assert.equal(errandBorrowedPanel(true, changes(false)), true);
 
@@ -203,7 +203,7 @@ test("a panel asked for out loud is nobody's to take away afterwards", () => {
   assert.equal(errandBorrowedPanel(false, shows(true)), false);
 });
 
-test("a flight waits for every surface edge its act moves", () => {
+test("a flight waits for every surface edge its action moves", () => {
   assert.equal(errandWait({ opening: true, surfaceChanging: true }), ERRAND_WAIT.CONTENT);
   assert.equal(errandWait({ opening: false, surfaceChanging: true }), ERRAND_WAIT.SURFACE);
   assert.equal(errandWait({ opening: false, surfaceChanging: false }), ERRAND_WAIT.AT_ONCE);

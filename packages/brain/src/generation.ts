@@ -18,7 +18,7 @@ import { RecordingContextEngine } from "./transcript-recorder.js";
  * One envelope's working copy, alive from the moment the agent adopts it to
  * the moment the store replaces it. Every turn captures the generation it
  * opened in and works on that object alone: a turn still awaiting a model, a
- * read, or an act when the generation is replaced finishes against the
+ * read, or an action when the generation is replaced finishes against the
  * orphaned copy, whose checkpoints the store then fences, and can neither
  * append to nor roll back the generation that succeeded it. The signal fires
  * on replacement and on stop, and every wait of the generation settles on it.

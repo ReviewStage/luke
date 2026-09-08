@@ -1,4 +1,4 @@
-import { ACT_KIND } from "@sidecar/session";
+import { ACTION_KIND } from "@sidecar/session";
 import { codexStateDb, describeProviderContract, PROVIDER_OBSERVATION } from "../testing/index.js";
 import { CODEX_HOOK_EVENT } from "./hooks.js";
 import { codexLocalPlugin } from "./index.js";
@@ -27,11 +27,11 @@ describeProviderContract(
     absentProjectId: "unreported-environment",
     advertised: [],
     unadvertised: [
-      ACT_KIND.MESSAGE,
-      ACT_KIND.CONTROL,
-      ACT_KIND.ADD_AGENT,
-      ACT_KIND.RENAME_SESSION,
-      ACT_KIND.RENAME_WORKSPACE,
+      ACTION_KIND.MESSAGE,
+      ACTION_KIND.CONTROL,
+      ACTION_KIND.ADD_AGENT,
+      ACTION_KIND.RENAME_SESSION,
+      ACTION_KIND.RENAME_WORKSPACE,
     ],
     transcript: {
       sessionId: CODEX_SESSION_ID.WORKING,

@@ -173,7 +173,7 @@ export function composeHost(options: HostSeams): Host {
         sessions: carried(observation.rosterForClients()),
         sessionsSettled: observation.rosterSettled(),
         announcementsHeld: quiet,
-        conversationHistory: carried(brain.store.thread().entries()),
+        conversationLines: carried(brain.store.thread().entries()),
         workspaceProjects: carried(
           account.capabilitiesActive()
             ? normalizeObservedWorkspaceProjects(
@@ -259,7 +259,7 @@ export function composeHost(options: HostSeams): Host {
   /**
    * The explicit quit's steps. Admissions close at the server; every run and
    * child under way is cancelled; the followers' publication is let finish,
-   * so an end already reached stands in History; and what did not settle is
+   * so an end already reached stands in Conversation; and what did not settle is
    * counted rather than finished: the store's load at the next start marks
    * an unsettled run interrupted and replays nothing.
    */

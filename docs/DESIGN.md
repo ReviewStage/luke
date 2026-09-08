@@ -49,12 +49,12 @@ content viewport may animate a `mask-image` edge to disclose overflow, because
 the mask neither changes layout nor moves content; no other layered content
 gets a size-animation exception.
 
-One motion is the browser's rather than a transition of ours: the History
+One motion is the browser's rather than a transition of ours: the Conversation
 thread's stamp column is scrolled in by the thread's own sideways scroll and
 put back by `scroll-snap-type`, because only the browser sees the fingers
 lift, and a listener that guessed the lift from the steps would snap while a
 hand still rested. It is the sole snap on the surface, `repository-checks.sh`
-holds it to `history.css`, and nothing else may borrow a native motion in
+holds it to `conversation.css`, and nothing else may borrow a native motion in
 place of the spring.
 
 **Never make the surface chase.** The surface's size is measured off content

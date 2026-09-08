@@ -221,7 +221,7 @@
   opacity: 0.55;
 }
 
-/* Quiet on purpose: leaving is the one act here that is not the reason the
+/* Quiet on purpose: leaving is the one action here that is not the reason the
    screen exists, so it reads as a footnote until it is asked after — and then
    admits what it is the way every destructive control does. */
 .sign-in-quit {

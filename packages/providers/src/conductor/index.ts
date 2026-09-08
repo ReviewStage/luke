@@ -3,7 +3,7 @@ import { WORKSPACE_TASK_SUPPORT } from "@sidecar/session";
 import type { CloudFetch } from "@sidecar/wire";
 import type { AdapterDiagnosticCallback } from "../shared/adapter-diagnostics.js";
 import { cloudPass } from "../shared/cloud-pass.js";
-import { conductorActs } from "./acts.js";
+import { conductorActions } from "./actions.js";
 import { conductorConversationEnds, readConductorConversation } from "./conversation.js";
 import { type ConductorPassCache, conductorObservations } from "./observe.js";
 import {
@@ -78,7 +78,7 @@ export function conductorPlugin(options: ConductorPluginOptions): SessionProvide
         taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
       })),
 
-    acts: conductorActs(pass),
+    actions: conductorActions(pass),
 
     reads: {
       conversation: ({ request, observation }) =>

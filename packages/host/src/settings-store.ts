@@ -35,7 +35,7 @@ import {
 } from "@sidecar/settings/wire";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import {
-  ACT_RESULT_STATUS,
+  ACTION_RESULT_STATUS,
   isRecord,
   isWireNumber,
   isWireString,
@@ -595,7 +595,7 @@ export class SettingsStore {
       else Object.assign(next, { [field]: value });
       return next;
     });
-    return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
+    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
   /**
@@ -625,7 +625,7 @@ export class SettingsStore {
       else delete next[field];
       return next;
     });
-    return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
+    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
   async accountPreferences(): Promise<AccountPreferences> {
@@ -660,7 +660,7 @@ export class SettingsStore {
       return changed.length > 0 ? next : undefined;
     });
     return {
-      status: ACT_RESULT_STATUS.ACCEPTED,
+      status: ACTION_RESULT_STATUS.ACCEPTED,
       settings: await this.snapshot(),
       changed,
     };
@@ -711,7 +711,7 @@ export class SettingsStore {
       else delete next[field];
       return next;
     });
-    return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await this.snapshot(), cleared };
+    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot(), cleared };
   }
   #secretStorage: SecretStorage = SECRET_STORAGE.UNKNOWN;
 
@@ -962,7 +962,7 @@ export class SettingsStore {
       : undefined;
     if (rejection)
       return {
-        status: ACT_RESULT_STATUS.REJECTED,
+        status: ACTION_RESULT_STATUS.REJECTED,
         settings: await this.snapshot(),
         reason: rejection,
       };
@@ -996,7 +996,7 @@ export class SettingsStore {
       },
       () => this.#resolved.delete(providerId),
     );
-    return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
+    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
   /**
@@ -1031,7 +1031,7 @@ export class SettingsStore {
         apiKeyRejection(accessToken);
     if (rejection)
       return {
-        status: ACT_RESULT_STATUS.REJECTED,
+        status: ACTION_RESULT_STATUS.REJECTED,
         settings: await this.snapshot(),
         reason: rejection,
       };
@@ -1054,7 +1054,7 @@ export class SettingsStore {
       },
       () => this.#forgetGrant(providerId),
     );
-    return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
+    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
   /** Disconnects one provider, deleting its stored grant with it. */
@@ -1071,7 +1071,7 @@ export class SettingsStore {
       },
       () => this.#forgetGrant(providerId),
     );
-    return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
+    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
   /** Both caches a written grant makes stale: the grant itself and the row's source. */
@@ -1118,7 +1118,7 @@ export class SettingsStore {
           apiKeyRejection(normalized);
     if (rejection || !id) {
       return {
-        status: ACT_RESULT_STATUS.REJECTED,
+        status: ACTION_RESULT_STATUS.REJECTED,
         settings: await this.snapshot(),
         reason: rejection ?? "Google answered the sign-in without naming an account.",
       };
@@ -1148,7 +1148,7 @@ export class SettingsStore {
       },
       () => this.#forgetCalendarAccounts(),
     );
-    return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
+    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
   /** Disconnects one account, deleting its stored grant with it. */
@@ -1163,7 +1163,7 @@ export class SettingsStore {
       },
       () => this.#forgetCalendarAccounts(),
     );
-    return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
+    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
   /**
@@ -1182,7 +1182,7 @@ export class SettingsStore {
     const id = calendarIdentifierText(calendarId);
     if (!id)
       return {
-        status: ACT_RESULT_STATUS.REJECTED,
+        status: ACTION_RESULT_STATUS.REJECTED,
         settings: await this.snapshot(),
         reason: "That is not a calendar id.",
       };
@@ -1220,8 +1220,8 @@ export class SettingsStore {
     );
     const settings = await this.snapshot();
     return missing
-      ? { status: ACT_RESULT_STATUS.REJECTED, settings, reason: missing }
-      : { status: ACT_RESULT_STATUS.ACCEPTED, settings };
+      ? { status: ACTION_RESULT_STATUS.REJECTED, settings, reason: missing }
+      : { status: ACTION_RESULT_STATUS.ACCEPTED, settings };
   }
 
   /**
@@ -1260,7 +1260,7 @@ export class SettingsStore {
             calendars: sanitizedCalendarIds(unparsedWire(selectedCalendarIds)),
           }),
     );
-    return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
+    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
   /**
@@ -1271,7 +1271,7 @@ export class SettingsStore {
     await this.#mutate((persisted) =>
       persisted.appleCalendar ? withAppleCalendar(persisted, undefined) : undefined,
     );
-    return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
+    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
   /** The decrypted account list a written one makes stale. */
@@ -1318,7 +1318,7 @@ export class SettingsStore {
       const changed = APP_SETTING_FIELDS.some((field) => next[field] !== persisted[field]);
       return changed ? next : undefined;
     });
-    return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
+    return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: await this.snapshot() };
   }
 
   /**

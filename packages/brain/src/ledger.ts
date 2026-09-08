@@ -28,7 +28,7 @@ import type { RunControl, TurnContext } from "./turn.js";
 /** The two markers the host's thread writes onto a run, each once. */
 export const PENDING_MARK_FIELD = {
   ASK_RECORDED_AT: "askRecordedAt",
-  HISTORY_RECORDED_AT: "historyRecordedAt",
+  CONVERSATION_RECORDED_AT: "conversationRecordedAt",
 } as const;
 
 export type PendingMarkField = (typeof PENDING_MARK_FIELD)[keyof typeof PENDING_MARK_FIELD];
@@ -122,7 +122,7 @@ export class BrainRequestLedger {
   }
 
   /**
-   * A turn's or an act's checkpoint: the working context, cursors, and journal
+   * A turn's or an action's checkpoint: the working context, cursors, and journal
    * this turn owns become the committed ones, together with the run's own
    * accounting when a run owns the turn. Nothing else changes: every other
    * record stays as committed, so a request accepted or marked meanwhile is
@@ -138,7 +138,10 @@ export class BrainRequestLedger {
           ? {
               record: {
                 runId: run.runId,
-                changes: { performedActs: run.performedActs, unknownActs: run.unknownActs },
+                changes: {
+                  performedActions: run.performedActions,
+                  unknownActions: run.unknownActions,
+                },
               },
             }
           : undefined),
@@ -204,7 +207,9 @@ export class BrainRequestLedger {
       settledAt: this.#now(),
       ...(end.text !== undefined ? { text: end.text } : undefined),
       ...(end.failure !== undefined ? { failure: end.failure } : undefined),
-      ...(run ? { performedActs: run.performedActs, unknownActs: run.unknownActs } : undefined),
+      ...(run
+        ? { performedActions: run.performedActions, unknownActions: run.unknownActions }
+        : undefined),
     };
     if (await this.commit(generation, runId, settled)) {
       this.#notify();

@@ -2,7 +2,7 @@ import Foundation
 import LukeKit
 import Observation
 
-/// Where a spoken act asked to take the developer once Luke has finished
+/// Where a spoken action asked to take the developer once Luke has finished
 /// saying so: a session's own screen, or the list narrowed as asked. Held
 /// until the reply settles, because moving the page mid-sentence would close
 /// the call that is still speaking.
@@ -20,7 +20,7 @@ enum WatchPendingNavigation {
 ///
 /// The session is not minted until the developer presses the talk button
 /// (beginTurn). prepare is called on view appear to store the credential
-/// reference and the act context without opening any connection.
+/// reference and the action context without opening any connection.
 @Observable
 @MainActor
 final class WatchVoiceSessionModel {
@@ -40,12 +40,12 @@ final class WatchVoiceSessionModel {
     /// told there is nowhere.
     private(set) var projects: ProjectsAnswer?
     /// The New Workspace choices this watch remembers, read at the moment a
-    /// call opens or an act lands.
+    /// call opens or an action lands.
     let defaults = WorkspaceCreationDefaults()
 
     private var accountSession: WatchAccountSession?
     private var thread: VoiceConversationThread?
-    private var makeActContext: (@MainActor () -> VoiceActContext)?
+    private var makeActionContext: (@MainActor () -> VoiceActionContext)?
     private var session: RealtimeSession?
     private var connectingForTurn = false
     private var endTurnAfterConnect = false
@@ -54,11 +54,11 @@ final class WatchVoiceSessionModel {
     func prepare(
         accountSession: WatchAccountSession,
         thread: VoiceConversationThread,
-        actContext: @escaping @MainActor () -> VoiceActContext
+        actionContext: @escaping @MainActor () -> VoiceActionContext
     ) {
         self.accountSession = accountSession
         self.thread = thread
-        makeActContext = actContext
+        makeActionContext = actionContext
     }
 
     private func connect(startWithTurn: Bool) async {
@@ -144,13 +144,13 @@ final class WatchVoiceSessionModel {
             onRecoverableError: { [weak self] message in self?.errorMessage = message },
             onSessionTools: { [weak self] names in self?.mintedTools = names },
             dispatchToolCall: { [weak self] name, arguments, _ in
-                guard let self, let makeActContext = self.makeActContext else {
+                guard let self, let makeActionContext = self.makeActionContext else {
                     return #"{"error":"not authorized"}"#
                 }
                 return await dispatchVoiceToolCall(
                     name: name,
                     arguments: arguments,
-                    context: makeActContext()
+                    context: makeActionContext()
                 )
             },
             contextItems: { [weak self] in
@@ -192,7 +192,7 @@ final class WatchVoiceSessionModel {
         endTurnAfterConnect = false
         accountSession = nil
         thread = nil
-        makeActContext = nil
+        makeActionContext = nil
         // The pending navigation is left standing: closing publishes the idle
         // edge the screen performs it on, so an open accepted mid-reply still
         // lands when the developer swipes away before Luke finishes saying

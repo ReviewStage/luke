@@ -1,6 +1,6 @@
 import type { CredentialProviderId, CredentialSource } from "@sidecar/credentials/vocabulary";
 import { CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
-import type { ActResult } from "@sidecar/wire";
+import type { ActionResult } from "@sidecar/wire";
 import { type RefObject, useEffect } from "react";
 
 /* One field, three jobs: what it is for depends on what is answering for the
@@ -68,7 +68,7 @@ export interface CredentialEntryControl {
   cancel(): void;
   commit(): void;
   /** Clears a stored key. Answers why if it could not. */
-  remove(providerId: CredentialProviderId): Promise<ActResult>;
+  remove(providerId: CredentialProviderId): Promise<ActionResult>;
 }
 
 /** The entry for one provider, or nothing if another provider holds it. */

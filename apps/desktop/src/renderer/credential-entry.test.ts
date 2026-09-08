@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
-import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import {
   type CredentialEntry,
   type CredentialEntryControl,
@@ -19,7 +19,7 @@ function control(entry?: CredentialEntry): CredentialEntryControl {
     fetchKey: () => undefined,
     cancel: () => undefined,
     commit: () => undefined,
-    remove: () => Promise.resolve({ status: ACT_RESULT_STATUS.ACCEPTED }),
+    remove: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
   };
 }
 

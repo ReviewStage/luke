@@ -56,11 +56,11 @@ export type AskHandler = (text: string) => Promise<string | undefined>;
 
 /**
  * The panel's own composer: one pill at the foot of the sessions list and of
- * the History thread alike, addressed to Luke rather than to any session.
+ * the Conversation thread alike, addressed to Luke rather than to any session.
  * Typing is the developer's half of the conversation, so the pill answers in
  * their green — the colour the meter gives their voice — and the reply lands
  * as Luke's spoken words, captioned at the panel's foot directly below the
- * field that asked, and as a bubble in the thread the History tab draws.
+ * field that asked, and as a bubble in the thread the Conversation tab draws.
  *
  * Sending is deliberately quiet. A sent ask clears the field and nothing else:
  * the reply beginning is the confirmation, and a line saying "sent" would sit

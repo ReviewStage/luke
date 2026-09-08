@@ -36,6 +36,6 @@ and none reaches a log line in it.
 
 A capability no connected node offers answers unavailable: it was never
 dispatched. An ask whose connection closed before it answered is unknown: it
-may have happened. The two must never collapse into one, because the act
-journal above records the first as a refusal and the second as an act whose
+may have happened. The two must never collapse into one, because the action
+journal above records the first as a refusal and the second as an action whose
 effect is uncertain and which Luke never retries on his own initiative.

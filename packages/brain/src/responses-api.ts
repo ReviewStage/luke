@@ -1,4 +1,4 @@
-import type { ActToolDefinition } from "@sidecar/acts";
+import type { ActionToolDefinition } from "@sidecar/actions";
 import {
   RESPONSES_CONTENT_PART_TYPE,
   RESPONSES_INPUT_ITEM_TYPE,
@@ -67,8 +67,8 @@ export interface ResponsesToolDefinition {
   parameters: WireRecord;
 }
 
-/** A function tool as the Responses request carries it: the acts table's own row, or a contract schema wrapped. */
-export type ResponsesFunctionTool = ActToolDefinition | ResponsesToolDefinition;
+/** A function tool as the Responses request carries it: the actions table's own row, or a contract schema wrapped. */
+export type ResponsesFunctionTool = ActionToolDefinition | ResponsesToolDefinition;
 
 export interface BrainResponsesOptions {
   model: string;
@@ -231,8 +231,8 @@ export function responsesToolDefinition(schema: ToolSchema): ResponsesToolDefini
   };
 }
 
-/** A tool as the acts table or the brain defines it, in the brain's contract shape. */
-export function toolSchemaFromDefinition(definition: ActToolDefinition): ToolSchema {
+/** A tool as the actions table or the brain defines it, in the brain's contract shape. */
+export function toolSchemaFromDefinition(definition: ActionToolDefinition): ToolSchema {
   // SAFETY: the parameters are a JSON-schema object built from literals; a JSON round trip is its wire form.
   const parameters = wireRecord(
     JSON.parse(JSON.stringify(definition.parameters)) as UnparsedWireValue,

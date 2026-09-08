@@ -67,14 +67,14 @@ test("the protocol answers every request once and serves the brain store, the th
     })),
     true,
   );
-  const appended = await client.ask("history.append", {
+  const appended = await client.ask("conversation.append", {
     sessionKey: MAIN_SESSION_KEY,
     entries: [line("hello", NOW, { eventId: "h" })],
     now: NOW,
   });
   assert.equal(appended.changed, true);
   assert.deepEqual(
-    await client.ask("history.list", { sessionKey: MAIN_SESSION_KEY, now: NOW }),
+    await client.ask("conversation.list", { sessionKey: MAIN_SESSION_KEY, now: NOW }),
     appended.entries,
   );
   const remembered = await client.ask("notebook.remember", { id: "f", words: "w", now: NOW });
@@ -101,7 +101,7 @@ test("the protocol answers every request once and serves the brain store, the th
     "# USER.md",
   );
   assert.deepEqual(
-    await client.ask("history.search", {
+    await client.ask("conversation.search", {
       sessionKeys: [MAIN_SESSION_KEY],
       query: "hello",
       limit: 5,
@@ -115,13 +115,13 @@ test("the protocol answers every request once and serves the brain store, the th
   });
   assert.equal(deleted?.published, true);
   assert.deepEqual(
-    await client.ask("history.list", { sessionKey: MAIN_SESSION_KEY, now: NOW }),
+    await client.ask("conversation.list", { sessionKey: MAIN_SESSION_KEY, now: NOW }),
     [],
   );
   assert.equal(await client.close(), true);
   // A request against a closed database is an error answer, not a hang.
   await assert.rejects(
-    client.ask("history.list", { sessionKey: MAIN_SESSION_KEY, now: NOW }),
+    client.ask("conversation.list", { sessionKey: MAIN_SESSION_KEY, now: NOW }),
     /not open/,
   );
   close();
@@ -161,11 +161,11 @@ test("a worker that dies settles every pending request as rejected and refuses l
     },
   };
   const client = storeClient(port);
-  const pending = client.ask("history.list", { sessionKey: MAIN_SESSION_KEY, now: NOW });
+  const pending = client.ask("conversation.list", { sessionKey: MAIN_SESSION_KEY, now: NOW });
   exit?.(1);
   await assert.rejects(pending, /exited with code 1/);
   await assert.rejects(
-    client.ask("history.list", { sessionKey: MAIN_SESSION_KEY, now: NOW }),
+    client.ask("conversation.list", { sessionKey: MAIN_SESSION_KEY, now: NOW }),
     /exited with code 1/,
   );
 });
@@ -185,7 +185,7 @@ test("the real worker entry serves the same protocol on its own thread", async (
       conversationName: MAIN_CONVERSATION_NAME,
       now: NOW,
     });
-    const appended = await client.ask("history.append", {
+    const appended = await client.ask("conversation.append", {
       sessionKey: MAIN_SESSION_KEY,
       entries: [line("hi", NOW, { eventId: "x" })],
       now: NOW,

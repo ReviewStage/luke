@@ -51,7 +51,7 @@ export type LidState = (typeof LID_STATE)[keyof typeof LID_STATE];
  * Where the developer's voice would be captured from: the default input's
  * transport, the built-in microphone's name when the machine has one, and
  * whether the lid over it is open. Read by a helper that reads nothing else
- * and can write nothing. What it decides is bounded to one act — which device
+ * and can write nothing. What it decides is bounded to one action — which device
  * the renderer asks the browser to open when a press takes a turn, so a
  * Bluetooth headset keeps its music codec while the Mac's own microphone
  * listens, and is listened to itself when a shut lid would muffle the Mac's.

@@ -258,7 +258,7 @@ test("an observe answer rejects an unknown status value", () => {
   assert.equal(answer.sessions.length, 0);
 });
 
-test("an observe answer carries the act advertisements and bounds them", () => {
+test("an observe answer carries the action advertisements and bounds them", () => {
   const raw = {
     sessions: [
       {

@@ -58,8 +58,8 @@ test("child runs are written whole, updated in place, read back through the cont
     status: CHILD_RUN_STATUS.COMPLETED,
     settledAt: NOW + 5,
     resultText: "the build fails on a missing import",
-    performedActs: 0,
-    unknownActs: 0,
+    performedActions: 0,
+    unknownActions: 0,
   };
   assert.equal(putChildRun(database, completed), true);
   assert.deepEqual(listChildRuns(database), [completed]);

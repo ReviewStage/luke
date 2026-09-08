@@ -1,7 +1,7 @@
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials/vocabulary";
 import { APP_PANEL_TAB, APP_SETTING_ID, type AppPanelTab, type AppSettingId } from "@sidecar/guide";
 import {
-  ACT_RESULT_STATUS,
+  ACTION_RESULT_STATUS,
   ISSUE_TRACKER_ID,
   type IssueTrackerId,
   PROVIDER_ID_LIST,
@@ -29,24 +29,24 @@ export const PRODUCT_EVENT = {
   APP_LAUNCH: "app:launch",
   APP_DAY_ACTIVE: "app:day_active",
   ACCOUNT_SIGN_IN: "account:sign_in",
-  ACCOUNT_ACT: "account:act",
+  ACCOUNT_ACTION: "account:action",
   PROVIDER_CONNECT: "provider:connect",
   PROVIDER_DISCONNECT: "provider:disconnect",
   TRACKER_CONNECT: "tracker:connect",
   TRACKER_DISCONNECT: "tracker:disconnect",
   CALENDAR_CONNECT: "calendar:connect",
   CALENDAR_DISCONNECT: "calendar:disconnect",
-  SUPERSET_ACT: "superset:act",
+  SUPERSET_ACTION: "superset:action",
   SESSION_OBSERVE: "session:observe",
-  SESSION_ACT_SEND: "session:act_send",
+  SESSION_ACTION_SEND: "session:action_send",
   SESSION_DIAGNOSTIC: "session:diagnostic",
-  ISSUE_ACT_SEND: "issue:act_send",
+  ISSUE_ACTION_SEND: "issue:action_send",
   PANEL_OPEN: "panel:open",
   PANEL_TAB_CHANGE: "panel:tab_change",
   SETTINGS_VIEW_OPEN: "settings:view_open",
   SETTINGS_RESET: "settings:reset",
   SEARCH_OPEN: "search:open",
-  UPDATE_ACT: "update:act",
+  UPDATE_ACTION: "update:action",
   FEEDBACK_OPEN: "feedback:open",
   FEEDBACK_SEND: "feedback:send",
   ASK_SUBMIT: "ask:submit",
@@ -63,12 +63,12 @@ export type ProductEventName = (typeof PRODUCT_EVENT)[keyof typeof PRODUCT_EVENT
 
 /**
  * The events the renderer may ask the main process to count, and the whole of
- * what the surface channel carries. Everything else is emitted where the act
+ * what the surface channel carries. Everything else is emitted where the action
  * itself happens, in the main process; these are surface motion the main
  * process cannot see — which tab is drawn, which page a row opened, whether a
  * search field was summoned. Keeping the set small and separate is what makes
  * the channel narrow: the handler validates against this union rather than
- * against every name, so a compromised renderer gains no reach into the acts.
+ * against every name, so a compromised renderer gains no reach into the actions.
  */
 export const PRODUCT_SURFACE_EVENT = {
   PANEL_OPEN: PRODUCT_EVENT.PANEL_OPEN,
@@ -101,12 +101,12 @@ export const PRODUCT_EVENT_PROPERTY = {
   SESSION_COUNT: "session_count",
   IMAGE_COUNT: "image_count",
   CREDENTIAL_SOURCE: "credential_source",
-  SESSION_ACT: "session_act",
+  SESSION_ACTION: "session_action",
   DIAGNOSTIC_KIND: "diagnostic_kind",
-  ISSUE_ACT: "issue_act",
-  ACCOUNT_ACT: "account_act",
-  SUPERSET_ACT: "superset_act",
-  UPDATE_ACT: "update_act",
+  ISSUE_ACTION: "issue_action",
+  ACCOUNT_ACTION: "account_action",
+  SUPERSET_ACTION: "superset_action",
+  UPDATE_ACTION: "update_action",
   PANEL_TAB: "panel_tab",
   PANEL_SOURCE: "panel_source",
   SETTINGS_VIEW: "settings_view",
@@ -133,8 +133,8 @@ export const PRODUCT_CREDENTIAL_SOURCE = {
 export type ProductCredentialSource =
   (typeof PRODUCT_CREDENTIAL_SOURCE)[keyof typeof PRODUCT_CREDENTIAL_SOURCE];
 
-/** Which act a session took, never what it carried. */
-export const PRODUCT_SESSION_ACT = {
+/** Which action a session took, never what it carried. */
+export const PRODUCT_SESSION_ACTION = {
   MESSAGE_SEND: "message_send",
   CONTROL_RUN: "control_run",
   SESSION_OPEN: "session_open",
@@ -145,7 +145,8 @@ export const PRODUCT_SESSION_ACT = {
   AGENT_ADD: "agent_add",
 } as const;
 
-export type ProductSessionAct = (typeof PRODUCT_SESSION_ACT)[keyof typeof PRODUCT_SESSION_ACT];
+export type ProductSessionAction =
+  (typeof PRODUCT_SESSION_ACTION)[keyof typeof PRODUCT_SESSION_ACTION];
 
 /**
  * Which kind of fault an observation pass reported, never the fault itself:
@@ -173,47 +174,50 @@ export const PRODUCT_CALENDAR_SOURCE = {
 export type ProductCalendarSource =
   (typeof PRODUCT_CALENDAR_SOURCE)[keyof typeof PRODUCT_CALENDAR_SOURCE];
 
-/** Where a Luke account stands after an act, never who the account is. */
-export const PRODUCT_ACCOUNT_ACT = {
+/** Where a Luke account stands after an action, never who the account is. */
+export const PRODUCT_ACCOUNT_ACTION = {
   SIGN_IN_START: "sign_in_start",
   SIGN_IN_CANCEL: "sign_in_cancel",
   SIGN_OUT: "sign_out",
   DELETE: "delete",
 } as const;
 
-export type ProductAccountAct = (typeof PRODUCT_ACCOUNT_ACT)[keyof typeof PRODUCT_ACCOUNT_ACT];
+export type ProductAccountAction =
+  (typeof PRODUCT_ACCOUNT_ACTION)[keyof typeof PRODUCT_ACCOUNT_ACTION];
 
 /** How far a Superset connection got, never the code or the organization. */
-export const PRODUCT_SUPERSET_ACT = {
+export const PRODUCT_SUPERSET_ACTION = {
   SIGN_IN_START: "sign_in_start",
   SIGN_IN_COMPLETE: "sign_in_complete",
   SIGN_IN_CANCEL: "sign_in_cancel",
   DISCONNECT: "disconnect",
 } as const;
 
-export type ProductSupersetAct = (typeof PRODUCT_SUPERSET_ACT)[keyof typeof PRODUCT_SUPERSET_ACT];
+export type ProductSupersetAction =
+  (typeof PRODUCT_SUPERSET_ACTION)[keyof typeof PRODUCT_SUPERSET_ACTION];
 
 /**
  * The things the Updates section's buttons ever do. It repeats the guide's
- * own act set rather than importing it, because the guide names the act a
- * spoken ask may reach and this names the act that happened: the row offers a
+ * own action set rather than importing it, because the guide names the action a
+ * spoken ask may reach and this names the action that happened: the row offers a
  * browser trip where the guide says `download`, and a restart the count sees
  * as the install it schedules. `changelog_open` is the Changelog row's own
  * browser trip, to the fixed changelog page rather than the releases one.
  */
-export const PRODUCT_UPDATE_ACT = {
+export const PRODUCT_UPDATE_ACTION = {
   CHECK: "check",
   INSTALL: "install",
   RELEASE_OPEN: "release_open",
   CHANGELOG_OPEN: "changelog_open",
 } as const;
 
-export type ProductUpdateAct = (typeof PRODUCT_UPDATE_ACT)[keyof typeof PRODUCT_UPDATE_ACT];
+export type ProductUpdateAction =
+  (typeof PRODUCT_UPDATE_ACTION)[keyof typeof PRODUCT_UPDATE_ACTION];
 
 /** Which half of the panel is drawn, said exactly as the guide says it. */
 export const PRODUCT_PANEL_TAB = {
   SESSIONS: APP_PANEL_TAB.SESSIONS,
-  HISTORY: APP_PANEL_TAB.HISTORY,
+  CONVERSATION: APP_PANEL_TAB.CONVERSATION,
   SETTINGS: APP_PANEL_TAB.SETTINGS,
 } as const satisfies Record<string, AppPanelTab>;
 
@@ -263,7 +267,7 @@ export type ProductSearchSurface =
 /** Whether an ask reached a conversation, never the words it carried. */
 export const PRODUCT_ASK_OUTCOME = {
   SENT: "sent",
-  REFUSED: ACT_RESULT_STATUS.REJECTED,
+  REFUSED: ACTION_RESULT_STATUS.REJECTED,
 } as const;
 
 export type ProductAskOutcome = (typeof PRODUCT_ASK_OUTCOME)[keyof typeof PRODUCT_ASK_OUTCOME];
@@ -300,13 +304,13 @@ export const PRODUCT_PERMISSION_RESULT = {
 export type ProductPermissionResult =
   (typeof PRODUCT_PERMISSION_RESULT)[keyof typeof PRODUCT_PERMISSION_RESULT];
 
-/** Which act a tracker took, never the state moved to or the comment written. */
-export const PRODUCT_ISSUE_ACT = {
+/** Which action a tracker took, never the state moved to or the comment written. */
+export const PRODUCT_ISSUE_ACTION = {
   STATE_MOVE: "state_move",
   COMMENT_ADD: "comment_add",
 } as const;
 
-export type ProductIssueAct = (typeof PRODUCT_ISSUE_ACT)[keyof typeof PRODUCT_ISSUE_ACT];
+export type ProductIssueAction = (typeof PRODUCT_ISSUE_ACTION)[keyof typeof PRODUCT_ISSUE_ACTION];
 
 /**
  * The shape a setting's new value is counted in, never the value itself: a
@@ -398,12 +402,12 @@ interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.SESSION_COUNT]: ProductSessionCountBucket;
   [PRODUCT_EVENT_PROPERTY.IMAGE_COUNT]: ProductSessionCountBucket;
   [PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE]: ProductCredentialSource;
-  [PRODUCT_EVENT_PROPERTY.SESSION_ACT]: ProductSessionAct;
+  [PRODUCT_EVENT_PROPERTY.SESSION_ACTION]: ProductSessionAction;
   [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: ProductDiagnosticKind;
-  [PRODUCT_EVENT_PROPERTY.ISSUE_ACT]: ProductIssueAct;
-  [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACT]: ProductAccountAct;
-  [PRODUCT_EVENT_PROPERTY.SUPERSET_ACT]: ProductSupersetAct;
-  [PRODUCT_EVENT_PROPERTY.UPDATE_ACT]: ProductUpdateAct;
+  [PRODUCT_EVENT_PROPERTY.ISSUE_ACTION]: ProductIssueAction;
+  [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACTION]: ProductAccountAction;
+  [PRODUCT_EVENT_PROPERTY.SUPERSET_ACTION]: ProductSupersetAction;
+  [PRODUCT_EVENT_PROPERTY.UPDATE_ACTION]: ProductUpdateAction;
   [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: ProductPanelTab;
   [PRODUCT_EVENT_PROPERTY.PANEL_SOURCE]: ProductPanelSource;
   [PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW]: ProductSettingsView;
@@ -435,12 +439,12 @@ export const PRODUCT_EVENT_PROPERTY_VALUES = {
   [PRODUCT_EVENT_PROPERTY.TRACKER_ID]: Object.values(ISSUE_TRACKER_ID),
   [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE]: Object.values(PRODUCT_CALENDAR_SOURCE),
   [PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE]: Object.values(PRODUCT_CREDENTIAL_SOURCE),
-  [PRODUCT_EVENT_PROPERTY.SESSION_ACT]: Object.values(PRODUCT_SESSION_ACT),
+  [PRODUCT_EVENT_PROPERTY.SESSION_ACTION]: Object.values(PRODUCT_SESSION_ACTION),
   [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: Object.values(PRODUCT_DIAGNOSTIC_KIND),
-  [PRODUCT_EVENT_PROPERTY.ISSUE_ACT]: Object.values(PRODUCT_ISSUE_ACT),
-  [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACT]: Object.values(PRODUCT_ACCOUNT_ACT),
-  [PRODUCT_EVENT_PROPERTY.SUPERSET_ACT]: Object.values(PRODUCT_SUPERSET_ACT),
-  [PRODUCT_EVENT_PROPERTY.UPDATE_ACT]: Object.values(PRODUCT_UPDATE_ACT),
+  [PRODUCT_EVENT_PROPERTY.ISSUE_ACTION]: Object.values(PRODUCT_ISSUE_ACTION),
+  [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACTION]: Object.values(PRODUCT_ACCOUNT_ACTION),
+  [PRODUCT_EVENT_PROPERTY.SUPERSET_ACTION]: Object.values(PRODUCT_SUPERSET_ACTION),
+  [PRODUCT_EVENT_PROPERTY.UPDATE_ACTION]: Object.values(PRODUCT_UPDATE_ACTION),
   [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: Object.values(PRODUCT_PANEL_TAB),
   [PRODUCT_EVENT_PROPERTY.PANEL_SOURCE]: Object.values(PRODUCT_PANEL_SOURCE),
   [PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW]: Object.values(PRODUCT_SETTINGS_VIEW),
@@ -463,20 +467,20 @@ export const PRODUCT_EVENT_PROPERTIES = {
   [PRODUCT_EVENT.APP_LAUNCH]: [PRODUCT_EVENT_PROPERTY.APP_VERSION],
   [PRODUCT_EVENT.APP_DAY_ACTIVE]: [PRODUCT_EVENT_PROPERTY.APP_VERSION],
   [PRODUCT_EVENT.ACCOUNT_SIGN_IN]: [],
-  [PRODUCT_EVENT.ACCOUNT_ACT]: [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACT],
+  [PRODUCT_EVENT.ACCOUNT_ACTION]: [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACTION],
   [PRODUCT_EVENT.PROVIDER_CONNECT]: [PRODUCT_EVENT_PROPERTY.CONNECTION_ID],
   [PRODUCT_EVENT.PROVIDER_DISCONNECT]: [PRODUCT_EVENT_PROPERTY.CONNECTION_ID],
   [PRODUCT_EVENT.TRACKER_CONNECT]: [PRODUCT_EVENT_PROPERTY.TRACKER_ID],
   [PRODUCT_EVENT.TRACKER_DISCONNECT]: [PRODUCT_EVENT_PROPERTY.TRACKER_ID],
   [PRODUCT_EVENT.CALENDAR_CONNECT]: [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE],
   [PRODUCT_EVENT.CALENDAR_DISCONNECT]: [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE],
-  [PRODUCT_EVENT.SUPERSET_ACT]: [PRODUCT_EVENT_PROPERTY.SUPERSET_ACT],
+  [PRODUCT_EVENT.SUPERSET_ACTION]: [PRODUCT_EVENT_PROPERTY.SUPERSET_ACTION],
   [PRODUCT_EVENT.PANEL_OPEN]: [PRODUCT_EVENT_PROPERTY.PANEL_SOURCE],
   [PRODUCT_EVENT.PANEL_TAB_CHANGE]: [PRODUCT_EVENT_PROPERTY.PANEL_TAB],
   [PRODUCT_EVENT.SETTINGS_VIEW_OPEN]: [PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW],
   [PRODUCT_EVENT.SETTINGS_RESET]: [],
   [PRODUCT_EVENT.SEARCH_OPEN]: [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE],
-  [PRODUCT_EVENT.UPDATE_ACT]: [PRODUCT_EVENT_PROPERTY.UPDATE_ACT],
+  [PRODUCT_EVENT.UPDATE_ACTION]: [PRODUCT_EVENT_PROPERTY.UPDATE_ACTION],
   [PRODUCT_EVENT.FEEDBACK_OPEN]: [],
   [PRODUCT_EVENT.FEEDBACK_SEND]: [PRODUCT_EVENT_PROPERTY.IMAGE_COUNT],
   [PRODUCT_EVENT.ASK_SUBMIT]: [PRODUCT_EVENT_PROPERTY.ASK_OUTCOME],
@@ -486,17 +490,17 @@ export const PRODUCT_EVENT_PROPERTIES = {
     PRODUCT_EVENT_PROPERTY.PROVIDER_ID,
     PRODUCT_EVENT_PROPERTY.SESSION_COUNT,
   ],
-  [PRODUCT_EVENT.SESSION_ACT_SEND]: [
+  [PRODUCT_EVENT.SESSION_ACTION_SEND]: [
     PRODUCT_EVENT_PROPERTY.PROVIDER_ID,
-    PRODUCT_EVENT_PROPERTY.SESSION_ACT,
+    PRODUCT_EVENT_PROPERTY.SESSION_ACTION,
   ],
   [PRODUCT_EVENT.SESSION_DIAGNOSTIC]: [
     PRODUCT_EVENT_PROPERTY.PROVIDER_ID,
     PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND,
   ],
-  [PRODUCT_EVENT.ISSUE_ACT_SEND]: [
+  [PRODUCT_EVENT.ISSUE_ACTION_SEND]: [
     PRODUCT_EVENT_PROPERTY.TRACKER_ID,
-    PRODUCT_EVENT_PROPERTY.ISSUE_ACT,
+    PRODUCT_EVENT_PROPERTY.ISSUE_ACTION,
   ],
   [PRODUCT_EVENT.VOICE_CALL_START]: [PRODUCT_EVENT_PROPERTY.CREDENTIAL_SOURCE],
   [PRODUCT_EVENT.INTRODUCTION_COMPLETE]: [],

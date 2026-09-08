@@ -1,4 +1,4 @@
-import type { AdvertisedAct } from "./advertised-acts.js";
+import type { AdvertisedAction } from "./advertised-actions.js";
 import type {
   SessionApplication,
   SessionIdentity,
@@ -147,13 +147,13 @@ export interface SessionFields {
   /** Apps on this machine that independently associate themselves with the session. */
   applications?: readonly SessionApplication[];
   /**
-   * The acts this session's provider documents for it right now, exactly as
-   * its latest observation advertised them. Absent means none: an act nothing
+   * The actions this session's provider documents for it right now, exactly as
+   * its latest observation advertised them. Absent means none: an action nothing
    * advertised is one that would have to be improvised. The list is replaced
    * whole by every observation, so nothing an adapter promised can outlive
    * the snapshot that promised it.
    */
-  advertises?: readonly AdvertisedAct[];
+  advertises?: readonly AdvertisedAction[];
 }
 
 /**

@@ -1,5 +1,5 @@
 import {
-  ACT_RESULT_STATUS,
+  ACTION_RESULT_STATUS,
   type ConversationPage,
   type ProviderConversationMessage,
   type ProviderConversationResult,
@@ -101,7 +101,7 @@ async function readNewerMessages(
     cursor = lastId;
     if (!hasMore || messages.length >= CONDUCTOR_CONVERSATION_BOUNDS.MAXIMUM_MESSAGES) break;
   }
-  return { status: ACT_RESULT_STATUS.ACCEPTED, messages, lastMessageId: cursor, hasMore };
+  return { status: ACTION_RESULT_STATUS.ACCEPTED, messages, lastMessageId: cursor, hasMore };
 }
 
 /** One page the tail walk read, as the two things the answer is built from. */
@@ -127,7 +127,7 @@ function newestStoredId(records: readonly WireRecord[]): string | undefined {
  * with where the page began so the next scroll can continue. It never names a
  * poll cursor, because history must not move a poll backward.
  */
-async function readHistoryPage(
+async function readConversationPage(
   pass: CloudPass,
   providerSessionId: string,
   endOffset: number,
@@ -154,7 +154,7 @@ async function readHistoryPage(
     chunkEnd = chunkStart;
   }
   return {
-    status: ACT_RESULT_STATUS.ACCEPTED,
+    status: ACTION_RESULT_STATUS.ACCEPTED,
     messages,
     hasMore: false,
     firstOffset: chunkEnd,
@@ -242,7 +242,7 @@ async function readTailPage(
     .filter(isDefined)
     .at(-1);
   return {
-    status: ACT_RESULT_STATUS.ACCEPTED,
+    status: ACTION_RESULT_STATUS.ACCEPTED,
     messages: kept.flatMap((page) => page.messages),
     hasMore: false,
     firstOffset,
@@ -278,13 +278,13 @@ export async function readConductorConversation(
   // plain non-negative integer an earlier answer reported.
   if (!UUID_PATTERN.test(providerSessionId)) {
     return {
-      status: ACT_RESULT_STATUS.UNSUPPORTED,
+      status: ACTION_RESULT_STATUS.UNSUPPORTED,
       reason: "That session's id is not a shape this build can read messages for.",
     };
   }
   if (page.afterMessageId !== undefined && !UUID_PATTERN.test(page.afterMessageId)) {
     return {
-      status: ACT_RESULT_STATUS.REJECTED,
+      status: ACTION_RESULT_STATUS.REJECTED,
       reason: "That conversation cursor is not one Conductor handed back.",
     };
   }
@@ -293,13 +293,13 @@ export async function readConductorConversation(
     (!Number.isSafeInteger(page.beforeOffset) || page.beforeOffset < 0)
   ) {
     return {
-      status: ACT_RESULT_STATUS.REJECTED,
+      status: ACTION_RESULT_STATUS.REJECTED,
       reason: "That conversation position is not one Conductor handed back.",
     };
   }
   if (page.afterMessageId !== undefined && page.beforeOffset !== undefined) {
     return {
-      status: ACT_RESULT_STATUS.REJECTED,
+      status: ACTION_RESULT_STATUS.REJECTED,
       reason: "A poll and a history read are different asks; a request names one position.",
     };
   }
@@ -309,13 +309,13 @@ export async function readConductorConversation(
       return await readNewerMessages(pass, providerSessionId, page.afterMessageId);
     }
     if (page.beforeOffset !== undefined) {
-      return await readHistoryPage(pass, providerSessionId, page.beforeOffset);
+      return await readConversationPage(pass, providerSessionId, page.beforeOffset);
     }
     return await readTailPage(pass, ends, providerSessionId);
   } catch (error) {
     if (error instanceof AdapterFailure) {
       return {
-        status: ACT_RESULT_STATUS.REJECTED,
+        status: ACTION_RESULT_STATUS.REJECTED,
         reason:
           error.failure === ADAPTER_FAILURE.UNAUTHORIZED
             ? `${CONDUCTOR_PROVIDER_NAME} rejected the configured API key.`

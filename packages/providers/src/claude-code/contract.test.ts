@@ -1,4 +1,4 @@
-import { ACT_KIND } from "@sidecar/session";
+import { ACTION_KIND } from "@sidecar/session";
 import { describeProviderContract, PROVIDER_OBSERVATION } from "../testing/index.js";
 import { CLAUDE_HOOK_EVENT } from "./hooks.js";
 import { claudeCodePlugin } from "./index.js";
@@ -24,11 +24,11 @@ describeProviderContract(
     absentProjectId: "unreported-project",
     advertised: [],
     unadvertised: [
-      ACT_KIND.MESSAGE,
-      ACT_KIND.CONTROL,
-      ACT_KIND.ADD_AGENT,
-      ACT_KIND.RENAME_SESSION,
-      ACT_KIND.RENAME_WORKSPACE,
+      ACTION_KIND.MESSAGE,
+      ACTION_KIND.CONTROL,
+      ACTION_KIND.ADD_AGENT,
+      ACTION_KIND.RENAME_SESSION,
+      ACTION_KIND.RENAME_WORKSPACE,
     ],
     transcript: { sessionId: CLAUDE_SESSION_ID.WORKING },
     hookSpool: { events: Object.values(CLAUDE_HOOK_EVENT) },

@@ -13,8 +13,8 @@ public enum RosterSessionControlKind: String, Sendable {
 
 /// One control a session's provider advertised for it, as the observe
 /// endpoint reports it. Mirrors the `ObservedSessionControl` wire shape from
-/// `@sidecar/hosted`: the id an act names, and the label and kind the row
-/// draws. What the control targets never travels — the act endpoint
+/// `@sidecar/hosted`: the id an action names, and the label and kind the row
+/// draws. What the control targets never travels — the action endpoint
 /// re-observes and rebuilds the write from its own fresh advertisement.
 public struct RosterSessionControl: Identifiable, Hashable, Sendable {
     public let id: String
@@ -156,7 +156,7 @@ public struct RosterSession: Identifiable, Hashable, Sendable {
 
     /// The schemes a session address may be handed to the operating system
     /// with. Mirrors `SESSION_LINK_SCHEME` in `@sidecar/session`: the link is
-    /// the one observed field this app acts on rather than draws, so the set
+    /// the one observed field this app actions on rather than draws, so the set
     /// is fixed by the build and applied here, where the wire is parsed — an
     /// address outside it never becomes a button at all.
     private static let openableLinkSchemes: Set<String> = [

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { REALTIME_TOOL, type RealtimeFunctionCall } from "@sidecar/acts";
+import { REALTIME_TOOL, type RealtimeFunctionCall } from "@sidecar/actions";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { RESPONSES_ITEM_FORMAT, TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import type { ScheduledTimer } from "@sidecar/runtime/vocabulary";
@@ -30,11 +30,11 @@ import {
   type SessionIdentity,
   type SessionProvider,
 } from "@sidecar/session";
-import { ACT_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
 import { BRAIN_DEFAULTS, BrainAgent, type BrainAgentOptions } from "./agent.js";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { type BrainPersistedState, MAXIMUM_TERMINAL_REQUESTS } from "./envelope.js";
-import type { BrainActExecution, BrainActPerformer } from "./performer.js";
+import type { BrainActionExecution, BrainActionPerformer } from "./performer.js";
 import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
@@ -69,9 +69,9 @@ export function seededRequests(count: number, published: boolean): BrainPersiste
     startedAt: NOW - count + index,
     settledAt: NOW - count + index,
     text: `seeded reply ${index}`,
-    performedActs: 0,
-    unknownActs: 0,
-    ...(published ? { historyRecordedAt: NOW - count + index } : undefined),
+    performedActions: 0,
+    unknownActions: 0,
+    ...(published ? { conversationRecordedAt: NOW - count + index } : undefined),
   }));
 }
 
@@ -162,8 +162,8 @@ export function failedAnswer(reason: string): BrainClientAnswer {
   return { outcome: MODEL_RESPONSE_OUTCOME.FAILED, failure: MODEL_FAILURE.UPSTREAM, reason };
 }
 
-/** Whether a request was offered any act at all, read off the toolset, as the adapters see it. */
-export function actsOffered(options: BrainRespondOptions): boolean {
+/** Whether a request was offered any action at all, read off the toolset, as the adapters see it. */
+export function actionsOffered(options: BrainRespondOptions): boolean {
   return options.tools.some((tool) => !isBrainOnlyTool(tool.name));
 }
 
@@ -215,14 +215,14 @@ export function runtimeOver(model: ModelAdapter): ToolLoopAgentRuntime {
 export class FakeClient implements BrainClient {
   readonly model = "fake-model";
   readonly inputs: ResponsesInputItem[][] = [];
-  readonly actsOffered: boolean[] = [];
+  readonly actionsOffered: boolean[] = [];
   readonly answers: BrainClientAnswer[] = [];
   quiet: number | undefined;
   fallback: BrainClientAnswer = answered([message("")]);
 
   respond(input: readonly ResponsesInputItem[], options: BrainRespondOptions) {
     this.inputs.push([...input]);
-    this.actsOffered.push(actsOffered(options));
+    this.actionsOffered.push(actionsOffered(options));
     return Promise.resolve(this.answers.shift() ?? this.fallback);
   }
 
@@ -275,7 +275,7 @@ export interface Harness {
   deliveries: BrainDelivery[];
   persisted: BrainPersistedState[];
   performed: RealtimeFunctionCall[];
-  executions: BrainActExecution[];
+  executions: BrainActionExecution[];
   traces: BrainTurnTraceRecord[];
   sinceReads: { identity: SessionIdentity; cursor: string | undefined }[];
   wholeReads: SessionIdentity[];
@@ -323,18 +323,18 @@ export function harness(
     now: () => clock.now,
   });
   const performed: RealtimeFunctionCall[] = [];
-  const executions: BrainActExecution[] = [];
+  const executions: BrainActionExecution[] = [];
   const traces: BrainTurnTraceRecord[] = [];
   const sinceReads: Harness["sinceReads"] = [];
   const wholeReads: SessionIdentity[] = [];
   const agent = new BrainAgent({
     runtime,
     prepareTurn: PLAIN_PREPARATION,
-    acts: {
+    actions: {
       perform: async (functionCall, execution) => {
         performed.push(functionCall);
         executions.push(execution);
-        return { status: ACT_RESULT_STATUS.ACCEPTED };
+        return { status: ACTION_RESULT_STATUS.ACCEPTED };
       },
     },
     roster: () => ({ text: "Currently observed sessions:\n- abc\n- def", identities: [ABC, DEF] }),
@@ -343,7 +343,7 @@ export function harness(
       sinceReads.push({ identity, cursor });
       // The transcript grows once: a read from its cursor finds nothing new.
       return {
-        status: ACT_RESULT_STATUS.ACCEPTED,
+        status: ACTION_RESULT_STATUS.ACCEPTED,
         text: cursor === undefined ? `${TRANSCRIPT_SECRET} for ${identity.providerSessionId}` : "",
         cursor: `${identity.providerSessionId}-cursor`,
         truncated: false,
@@ -351,7 +351,7 @@ export function harness(
     },
     readTranscript: async (identity): Promise<ProviderTranscriptResult> => {
       wholeReads.push(identity);
-      return { status: ACT_RESULT_STATUS.ACCEPTED, transcript: "whole transcript" };
+      return { status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole transcript" };
     },
     deliver: (delivery) => {
       deliveries.push(delivery);
@@ -468,22 +468,22 @@ export function childCompletion(fields: {
 }
 
 /**
- * Every act the observation turns are tested against: a provider write, a
+ * Every action the observation turns are tested against: a provider write, a
  * memory write, an open, and an app control, each with arguments that
  * validate against the roster.
  */
-export const OBSERVATION_ACTS: readonly WireRecord[] = [
-  call("act_message", REALTIME_TOOL.SEND_SESSION_MESSAGE, {
+export const OBSERVATION_ACTIONS: readonly WireRecord[] = [
+  call("action_message", REALTIME_TOOL.SEND_SESSION_MESSAGE, {
     provider_id: ABC.providerId,
     provider_session_id: ABC.providerSessionId,
     text: "run the tests",
   }),
-  call("act_open", REALTIME_TOOL.OPEN_SESSION, {
+  call("action_open", REALTIME_TOOL.OPEN_SESSION, {
     provider_id: ABC.providerId,
     provider_session_id: ABC.providerSessionId,
   }),
-  call("act_remember", REALTIME_TOOL.REMEMBER_FACT, { words: "the developer likes tests" }),
-  call("act_setting", REALTIME_TOOL.CHANGE_APP_SETTING, {
+  call("action_remember", REALTIME_TOOL.REMEMBER_FACT, { words: "the developer likes tests" }),
+  call("action_setting", REALTIME_TOOL.CHANGE_APP_SETTING, {
     setting_id: "voice_captions",
     value: "on",
   }),
@@ -499,25 +499,25 @@ export function functionOutputs(input: readonly ResponsesInputItem[]) {
   }));
 }
 
-/** A host whose configured policy denies every act: the reads, the briefing, and the workspace stay. */
+/** A host whose configured policy denies every action: the reads, the briefing, and the workspace stay. */
 export const NO_ACTS_POLICY: BrainAgentOptions["prepareTurn"] = () => ({
-  prompt: "no acts",
-  layers: { agent: { deny: [`group:${TOOL_GROUP.ACTS}`] } },
+  prompt: "no actions",
+  layers: { agent: { deny: [`group:${TOOL_GROUP.ACTIONS}`] } },
 });
 
-export function assertNoActReached(h: Harness): void {
+export function assertNoActionReached(h: Harness): void {
   assert.deepEqual(h.performed, []);
   assert.deepEqual(h.executions, []);
   const outputs = functionOutputs(h.client.inputs[1] ?? []);
-  for (const forbidden of OBSERVATION_ACTS) {
+  for (const forbidden of OBSERVATION_ACTIONS) {
     const output = outputs.find((entry) => entry.callId === forbidden.call_id);
     assert.ok(output, `${String(forbidden.call_id)} was answered`);
     assert.ok(output.output.includes("not run"), output.output);
-    assert.ok(output.output.includes(ACT_RESULT_STATUS.REJECTED));
+    assert.ok(output.output.includes(ACTION_RESULT_STATUS.REJECTED));
   }
   assert.ok(h.traces.every((trace) => trace.origin === RUN_ORIGIN.OBSERVATION));
-  // Denied at the schemas as well as at dispatch: the model was never shown an act.
-  assert.ok(h.client.actsOffered.every((offered) => !offered));
+  // Denied at the schemas as well as at dispatch: the model was never shown an action.
+  assert.ok(h.client.actionsOffered.every((offered) => !offered));
   for (const trace of h.traces) {
     assert.ok(trace.tools.includes(BRAIN_TOOL.ANNOUNCE));
     assert.ok(!trace.tools.includes(REALTIME_TOOL.SEND_SESSION_MESSAGE));
@@ -525,7 +525,7 @@ export function assertNoActReached(h: Harness): void {
 }
 
 /** A message act on the observed session `ABC`, under the call id given. */
-export function messageAct(callId: string, words = "run the tests"): WireRecord {
+export function messageAction(callId: string, words = "run the tests"): WireRecord {
   return call(callId, REALTIME_TOOL.SEND_SESSION_MESSAGE, {
     provider_id: ABC.providerId,
     provider_session_id: ABC.providerSessionId,
@@ -533,12 +533,12 @@ export function messageAct(callId: string, words = "run the tests"): WireRecord 
   });
 }
 
-/** A performer whose acts hold until the test releases each one, in order. */
+/** A performer whose actions hold until the test releases each one, in order. */
 export function heldPerformer() {
   const releases: (() => void)[] = [];
   const performed: RealtimeFunctionCall[] = [];
-  const executions: BrainActExecution[] = [];
-  const acts: BrainActPerformer = {
+  const executions: BrainActionExecution[] = [];
+  const actions: BrainActionPerformer = {
     perform: async (functionCall, execution): Promise<WireRecord> => {
       performed.push(functionCall);
       executions.push(execution);
@@ -546,11 +546,11 @@ export function heldPerformer() {
         releases.push(resolve);
       });
       return execution.isRevoked()
-        ? { status: ACT_RESULT_STATUS.REJECTED, reason: "turn over" }
-        : { status: ACT_RESULT_STATUS.ACCEPTED };
+        ? { status: ACTION_RESULT_STATUS.REJECTED, reason: "turn over" }
+        : { status: ACTION_RESULT_STATUS.ACCEPTED };
     },
   };
-  return { acts, releases, performed, executions };
+  return { actions, releases, performed, executions };
 }
 
 /** A client whose every answer waits for the test to open the gate. */
@@ -656,11 +656,11 @@ export function agentOn(runtime: ToolLoopAgentRuntime, h: Harness) {
   return new BrainAgent({
     runtime,
     prepareTurn: PLAIN_PREPARATION,
-    acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
+    actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
     roster: () => ({ text: "", identities: [] }),
     standingContext: () => "",
-    readTranscriptSince: async () => ({ status: ACT_RESULT_STATUS.REJECTED, reason: "no" }),
-    readTranscript: async () => ({ status: ACT_RESULT_STATUS.REJECTED, reason: "no" }),
+    readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
+    readTranscript: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
     deliver: () => undefined,
     store: h.store,
     createRunId: () => `run-${nextRunId()}`,

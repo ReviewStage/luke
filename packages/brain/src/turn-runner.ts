@@ -35,10 +35,10 @@ import {
   standingContextText,
   subagentTaskInputText,
 } from "./input-items.js";
-import { UNKNOWN_ACT_RESULT } from "./journal.js";
+import { UNKNOWN_ACTION_RESULT } from "./journal.js";
 import type { RunEnd } from "./ledger.js";
 import { inboxEvents } from "./observation-inbox.js";
-import type { BrainActExecution, BrainActPerformer, BrainRoster } from "./performer.js";
+import type { BrainActionExecution, BrainActionPerformer, BrainRoster } from "./performer.js";
 import { sameIdentity } from "./records.js";
 import {
   BRAIN_REQUEST_FAILURE,
@@ -152,8 +152,8 @@ export function newRunControl(
     cancelled: false,
     timedOut: false,
     checkpointFailed: false,
-    performedActs: 0,
-    unknownActs: 0,
+    performedActions: 0,
+    unknownActions: 0,
   };
 }
 
@@ -174,7 +174,7 @@ export function askQuestion(opened: readonly AskInput[]): string {
 export interface TurnRunnerOptions {
   seam: AgentSeam;
   runtime: AgentRuntime;
-  acts: BrainActPerformer;
+  actions: BrainActionPerformer;
   roster: () => BrainRoster;
   standingContext: () => string;
   prepareTurn: (turn: BrainTurnDescription) => BrainTurnPreparation | Promise<BrainTurnPreparation>;
@@ -273,7 +273,7 @@ export class TurnRunner {
       const run = primary.run;
       const generation = run.generation;
       // The start is durable before any work opens: a run the file does not
-      // show running is one a relaunch would find queued while its acts had
+      // show running is one a relaunch would find queued while its actions had
       // begun, and a cancel would settle on the queued path under a dispatched
       // effect. A start the store refuses ends the run as the persistence
       // failure it is, with nothing called; a revocation that landed while the
@@ -403,7 +403,7 @@ export class TurnRunner {
         trigger: plan.trigger,
         identities: uniqueIdentities(plan.events),
         briefings: result.outcome === TURN_OUTCOME.DONE ? result.briefings : [],
-        performedActs: run.performedActs,
+        performedActions: run.performedActions,
         at: this.#seam.now(),
       });
     }
@@ -433,11 +433,11 @@ export class TurnRunner {
       return { result: { outcome: TURN_OUTCOME.INCOMPATIBLE }, run: plan.run };
     }
     const context = opened.context;
-    // An observation turn runs under an unrecorded run of its own, so an act
+    // An observation turn runs under an unrecorded run of its own, so an action
     // it takes is journaled, checkpointed, and revoked exactly as an ask's.
     // Its id comes from the same minter as an ask's, never a counter: a
     // counter starts over with every agent, and a journal row a crashed turn
-    // left under the same id would be answered as this turn's own act.
+    // left under the same id would be answered as this turn's own action.
     const run =
       plan.run ??
       newRunControl(`${plan.trigger}:${this.#options.createRunId()}`, generation, false);
@@ -460,7 +460,7 @@ export class TurnRunner {
     };
     this.#turnInFlight = true;
     let ended = false;
-    const execution: BrainActExecution = {
+    const execution: BrainActionExecution = {
       runId: run.runId,
       origin: runOriginOf(plan.trigger),
       isRevoked: () => ended || this.#revoked(turnContext),
@@ -481,7 +481,7 @@ export class TurnRunner {
   async #runTurn(
     plan: TurnPlan,
     turnContext: TurnContext,
-    execution: BrainActExecution,
+    execution: BrainActionExecution,
     riders: RunControl[],
   ): Promise<TurnResult> {
     const { generation, context, run } = turnContext;
@@ -541,7 +541,7 @@ export class TurnRunner {
           : attachedDeltas.events;
       // Every turn advances its rollback point: each answered effect is
       // checkpointed and the mark moves past it, so a later failure returns
-      // the context to the last paired state and never to before an act that
+      // the context to the last paired state and never to before an action that
       // already happened. A turn that fails before its first effect still
       // rolls back whole, and the deltas it read are read again.
       const advanceMark = async () => {
@@ -597,7 +597,7 @@ export class TurnRunner {
       }
     }
 
-    // An unrecorded run's journal has done its work once the turn's acts have
+    // An unrecorded run's journal has done its work once the turn's actions have
     // settled: their results stand in the context, and no record waits for
     // their count. It goes before the final checkpoint so the store never
     // accumulates the journals of every observation turn.
@@ -683,7 +683,7 @@ export class TurnRunner {
     const reopened = await claimOpenedContext(
       this.#options.runtime.openContext(
         { format: context.checkpointFormat, items: mark.items },
-        JSON.stringify(UNKNOWN_ACT_RESULT),
+        JSON.stringify(UNKNOWN_ACTION_RESULT),
         { signal: generation.abort.signal },
       ),
       generation.abort.signal,
@@ -759,7 +759,7 @@ export class TurnRunner {
    */
   #execute(
     turnContext: TurnContext,
-    execution: BrainActExecution,
+    execution: BrainActionExecution,
     gathering: TurnGathering,
     turn: {
       prompt: string;
@@ -775,7 +775,7 @@ export class TurnRunner {
     const tools = createTurnToolExecutor(
       {
         roster: this.#options.roster,
-        acts: this.#options.acts,
+        actions: this.#options.actions,
         workspace: this.#options.workspace,
         children: this.#options.children,
         memory: this.#options.memory,
@@ -825,7 +825,7 @@ export class TurnRunner {
           // The answered tool is in the context. A recorded run keeps every
           // answer before the model is asked again; an unrecorded turn keeps
           // only an effect, so a turn that merely read and failed still rolls
-          // back whole and reads its deltas again, while an act that happened
+          // back whole and reads its deltas again, while an action that happened
           // is never reverted.
           if (run.recorded || journaledEffect(turn.policy, event.invocation.name)) {
             await turn.advanceMark();

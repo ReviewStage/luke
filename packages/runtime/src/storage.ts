@@ -16,7 +16,7 @@ import { type ConversationKind, isConversationKind, type SessionKey } from "./id
  */
 
 /** What an append answered: whether the store changed, and the lines it now holds. */
-export interface HistoryAppendOutcome<Entry> {
+export interface ConversationAppendOutcome<Entry> {
   changed: boolean;
   entries: readonly Entry[];
 }
@@ -113,7 +113,7 @@ export interface ConversationRecord {
   readonly kind: ConversationKind;
   readonly name: string;
   readonly createdAt: number;
-  /** The latest moment anything was written for it: a history line, a checkpoint, a transcript event. */
+  /** The latest moment anything was written for it: a conversation line, a checkpoint, a transcript event. */
   readonly lastActivityAt: number;
   readonly archivedAt?: number;
   readonly archiveReason?: ArchiveReason;
@@ -191,7 +191,7 @@ export function isArchiveEncoding(value: UnparsedWireValue): value is ArchiveEnc
  * with no publication yet is one a launch retries. Nothing reads the file
  * back: the record is what the store's own maintenance lists it by.
  */
-export interface HistoryArchiveRecord {
+export interface ConversationArchiveRecord {
   readonly archiveId: string;
   readonly sessionKey: SessionKey;
   readonly kind: ConversationKind;
@@ -204,13 +204,13 @@ export interface HistoryArchiveRecord {
   readonly byteLength: number;
   readonly fileName: string;
   readonly publishedAt?: number;
-  readonly historyLines: number;
+  readonly conversationLines: number;
   readonly transcriptEvents: number;
 }
 
-export function historyArchiveRecordFromWire(
+export function conversationArchiveRecordFromWire(
   value: UnparsedWireValue,
-): HistoryArchiveRecord | undefined {
+): ConversationArchiveRecord | undefined {
   if (!isRecord(value)) return undefined;
   if (!isWireString(value.archiveId) || value.archiveId.length === 0) return undefined;
   if (!isWireString(value.sessionKey) || value.sessionKey.length === 0) return undefined;
@@ -219,7 +219,7 @@ export function historyArchiveRecordFromWire(
   if (!isArchiveEncoding(value.encoding) || !isWireString(value.sha256)) return undefined;
   if (!isInstant(value.byteLength) || !isWireString(value.fileName)) return undefined;
   if (value.publishedAt !== undefined && !isInstant(value.publishedAt)) return undefined;
-  if (!isInstant(value.historyLines) || !isInstant(value.transcriptEvents)) return undefined;
+  if (!isInstant(value.conversationLines) || !isInstant(value.transcriptEvents)) return undefined;
   return {
     archiveId: value.archiveId,
     // SAFETY: a non-empty string, checked above, is what the session key constructor admits.
@@ -233,7 +233,7 @@ export function historyArchiveRecordFromWire(
     byteLength: value.byteLength,
     fileName: value.fileName,
     ...(value.publishedAt !== undefined ? { publishedAt: value.publishedAt } : undefined),
-    historyLines: value.historyLines,
+    conversationLines: value.conversationLines,
     transcriptEvents: value.transcriptEvents,
   };
 }

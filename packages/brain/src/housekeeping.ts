@@ -16,7 +16,7 @@ import {
   type ToolResult,
   type ToolSchema,
 } from "@sidecar/runtime/vocabulary";
-import { ACT_RESULT_STATUS, isWireString, type WireRecord, wireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, isWireString, type WireRecord, wireRecord } from "@sidecar/wire";
 import type { BrainWorkspaceAccess } from "./tool-executor.js";
 import { answer } from "./tool-results.js";
 import { BRAIN_TOOL, brainToolCatalog } from "./tools.js";
@@ -140,7 +140,7 @@ export async function completeToolFree(
 }
 
 function rejection(reason: string): ToolResult {
-  return answer({ status: ACT_RESULT_STATUS.REJECTED, reason });
+  return answer({ status: ACTION_RESULT_STATUS.REJECTED, reason });
 }
 
 /** Runs one housekeeping turn to its end and answers how it ended and how many writes it committed. */
@@ -165,7 +165,7 @@ export async function runMemoryHousekeeping(
       if (call.name === BRAIN_TOOL.READ_WORKSPACE_FILE) {
         const read = await options.workspace.read(name);
         return read.ok
-          ? answer({ status: ACT_RESULT_STATUS.ACCEPTED, name, content: read.content })
+          ? answer({ status: ACTION_RESULT_STATUS.ACCEPTED, name, content: read.content })
           : rejection(read.reason);
       }
       if (!isDailyNotePathForDay(name, options.dateStamp)) {
@@ -184,7 +184,7 @@ export async function runMemoryHousekeeping(
       const written = await options.workspace.write(name, content);
       if (!written.ok) return rejection(written.reason);
       writes += 1;
-      return answer({ status: ACT_RESULT_STATUS.ACCEPTED, name, chars: written.chars });
+      return answer({ status: ACTION_RESULT_STATUS.ACCEPTED, name, chars: written.chars });
     },
   };
   try {

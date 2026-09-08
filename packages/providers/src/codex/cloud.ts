@@ -1,5 +1,5 @@
 import {
-  ACT_RESULT_STATUS,
+  ACTION_RESULT_STATUS,
   type CliConnection,
   type SessionProviderPlugin,
   type WorkspaceProject,
@@ -39,7 +39,7 @@ export interface CodexCloudPlugin extends SessionProviderPlugin {
  * observed as having nothing. The one write is the one the user asks for: a
  * new task, through the CLI's documented `cloud exec`, in an environment the
  * latest pass reported. Codex documents no way to message or steer a task
- * already running, so its sessions name no session act at all: rows say where
+ * already running, so its sessions name no session action at all: rows say where
  * cloud tasks stand, and their address opens them where they live.
  */
 export function codexCloudPlugin(options: CodexCloudPluginOptions = {}): CodexCloudPlugin {
@@ -89,18 +89,18 @@ export function codexCloudPlugin(options: CodexCloudPluginOptions = {}): CodexCl
     latest: () => pass.latest(),
     projects: () => projects,
     connection: () => pass.connection(),
-    acts: {
+    actions: {
       async createWorkspace({ project, name, task }) {
         // Codex names tasks itself from the prompt; a name the user typed has
         // nowhere to go, and dropping it silently would honour half the ask.
         if (name !== undefined) {
-          return { status: ACT_RESULT_STATUS.REJECTED, reason: "Codex names its own tasks." };
+          return { status: ACTION_RESULT_STATUS.REJECTED, reason: "Codex names its own tasks." };
         }
         // The task is the whole creation — `cloud exec` starts nothing
         // without a prompt — so a creation without one has nothing to start.
         if (!task) {
           return {
-            status: ACT_RESULT_STATUS.REJECTED,
+            status: ACTION_RESULT_STATUS.REJECTED,
             reason: "A Codex cloud task needs an opening task shorter than a document.",
           };
         }
@@ -111,10 +111,10 @@ export function codexCloudPlugin(options: CodexCloudPluginOptions = {}): CodexCl
           CODEX_CLI.ARGUMENT_SEPARATOR,
           task,
         ]);
-        if (written.outcome.status !== ACT_RESULT_STATUS.ACCEPTED) return written.outcome;
+        if (written.outcome.status !== ACTION_RESULT_STATUS.ACCEPTED) return written.outcome;
         const providerSessionId = createdTaskId(written.stdout ?? "");
         return {
-          status: ACT_RESULT_STATUS.ACCEPTED,
+          status: ACTION_RESULT_STATUS.ACCEPTED,
           ...(providerSessionId ? { providerSessionId } : undefined),
         };
       },

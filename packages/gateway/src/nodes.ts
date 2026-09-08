@@ -39,10 +39,10 @@ export type NodeRegistryListener = (nodes: readonly NodeSnapshot[]) => void;
 
 /**
  * The nodes connected to the host and what each can do. A native capability
- * — opening an address on this machine, carrying an act to a panel — is the
+ * — opening an address on this machine, carrying an action to a panel — is the
  * client's to perform and the host's to ask for, and the host asks here by
  * name. A capability no connected node offers answers a typed unavailable,
- * never a success and never a throw, so the act that needed it is left undone
+ * never a success and never a throw, so the action that needed it is left undone
  * and recorded as such. A node that disconnects keeps its registration and
  * loses its availability, so its capabilities read unavailable rather than
  * unknown until it comes back.

@@ -136,14 +136,14 @@ export interface GatewayService {
   readonly nodes: NodeRegistry;
   /** The brain's whole list of records, as the followers report it: the ledger watches it and every client hears it. */
   runsReported: (snapshots: readonly BrainRequestSnapshot[]) => void;
-  /** A run's end stands in History, written and marked: the moment its reply may be owed to the ear. */
+  /** A run's end stands in Conversation, written and marked: the moment its reply may be owed to the ear. */
   endPublished: (record: BrainRequestRecord, sessionKey: SessionKey) => void;
   /** A conversation's generation ended; every reply owed of it is withdrawn and the receiver told. */
   generationReplaced: (sessionKey: SessionKey) => void;
   /** The receiver reported ready under a new epoch: whatever is owed is offered to it now. */
   receiverReady: () => void;
   /** One conversation's thread as every window should draw it, less the opaque reporter whose report produced it. */
-  historyChanged: (
+  conversationChanged: (
     sessionKey: SessionKey,
     entries: readonly ConversationEntry[],
     reporter?: string,
@@ -267,8 +267,12 @@ function childRecordToWire(record: ChildRunRecord): WireRecord {
     ...(record.startedAt !== undefined ? { startedAt: record.startedAt } : undefined),
     ...(record.settledAt !== undefined ? { settledAt: record.settledAt } : undefined),
     ...(record.failureDetail !== undefined ? { failureDetail: record.failureDetail } : undefined),
-    ...(record.performedActs !== undefined ? { performedActs: record.performedActs } : undefined),
-    ...(record.unknownActs !== undefined ? { unknownActs: record.unknownActs } : undefined),
+    ...(record.performedActions !== undefined
+      ? { performedActions: record.performedActions }
+      : undefined),
+    ...(record.unknownActions !== undefined
+      ? { unknownActions: record.unknownActions }
+      : undefined),
     ...(record.archivedAt !== undefined ? { archivedAt: record.archivedAt } : undefined),
     hasResult: record.resultText !== undefined,
   };
@@ -321,14 +325,14 @@ export interface BrainReplyClaimContext {
 
 /**
  * Whether a run's end may be spoken at all: ended, written and marked in
- * History, and wordable in History's own wording. The ledger keeps the
+ * Conversation, and wordable in Conversation's own wording. The ledger keeps the
  * states, the epochs, and the one grant per run; this is the only thing read
  * out of a brain record on the way there.
  */
 export function deliverable(record: BrainRequestRecord): boolean {
   return (
     isTerminalBrainRequestStatus(record.status) &&
-    record.historyRecordedAt !== undefined &&
+    record.conversationRecordedAt !== undefined &&
     brainReplyWords(record) !== undefined
   );
 }
@@ -438,16 +442,16 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
 
   const methods: GatewayMethodTable = {
     ...dependencies.methods,
-    [GATEWAY_METHOD.CONVERSATION_HISTORY]: reading((read) => {
+    [GATEWAY_METHOD.CONVERSATION_LINES]: reading((read) => {
       const sessionKey = read.sessionKeyOrMain("sessionKey");
       if (!conversations.holds(sessionKey)) {
         return gatewayError(GATEWAY_ERROR.NOT_FOUND, REFUSAL.NOT_LISTED);
       }
-      return gatewayOk({ entries: conversations.history(sessionKey).map(conversationEntryToWire) });
+      return gatewayOk({ entries: conversations.lines(sessionKey).map(conversationEntryToWire) });
     }),
     [GATEWAY_METHOD.CONVERSATION_DELETE]: reading(async (read) =>
       gatewayOk({
-        outcome: await conversations.deleteHistory(read.sessionKeyOrMain("sessionKey")),
+        outcome: await conversations.deleteConversation(read.sessionKeyOrMain("sessionKey")),
       }),
     ),
     [GATEWAY_METHOD.RUN_SUBMIT]: reading((read) => submit(read)),
@@ -460,7 +464,7 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
     }),
     // A wait that finds its run ended does not hand the words over on the
     // strength of the record alone: the followers' publication is let finish,
-    // the live record is re-read for its History mark, and the grant to say
+    // the live record is re-read for its Conversation mark, and the grant to say
     // the words on the call is asked of the ledger — only when the caller
     // names the receiver epoch it holds, which only the voice window does.
     [GATEWAY_METHOD.RUN_WAIT]: reading(async (read) => {
@@ -477,7 +481,7 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
       }
       await brain.publicationSettled();
       const live = brain.agentForRun(runId)?.request(runId) ?? waited;
-      if (speakerEpoch === undefined || live.historyRecordedAt === undefined) {
+      if (speakerEpoch === undefined || live.conversationRecordedAt === undefined) {
         return answer({ record: live, speak: false });
       }
       const generationId = runGeneration(runId);
@@ -628,9 +632,9 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
       server.emit(GATEWAY_EVENT.DELIVERIES_WITHDRAWN, { epoch: receiver.epoch() });
     },
     receiverReady: offerReplies,
-    historyChanged: (sessionKey, entries, reporter) => {
+    conversationChanged: (sessionKey, entries, reporter) => {
       server.emit(
-        GATEWAY_EVENT.HISTORY_CHANGED,
+        GATEWAY_EVENT.CONVERSATION_CHANGED,
         {
           sessionKey,
           entries: entries.map(conversationEntryToWire),

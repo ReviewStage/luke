@@ -26,7 +26,7 @@ import {
   type ToolInvocation,
   type ToolResult,
 } from "@sidecar/runtime/vocabulary";
-import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { compactContext } from "./compaction.js";
 import { LOOP_GUARD_LEVEL, LoopGuard, type LoopGuardConfig } from "./loop-guard.js";
 import { settledUnlessAborted } from "./settled.js";
@@ -53,7 +53,7 @@ import { outputStatus } from "./tool-results.js";
 /** What the model is told about a call the guard refused to dispatch. */
 const LOOP_GUARD_REFUSAL_REASON = "not run: the loop guard ended this run";
 const LOOP_GUARD_MARKER = "[loop guard]";
-/** The statuses the runtime itself puts on a tool's result, beside the act statuses a performer answers with. */
+/** The statuses the runtime itself puts on a tool's result, beside the action statuses a performer answers with. */
 export const TOOL_RESULT_STATUS = {
   UNKNOWN: "unknown",
   ANSWERED: "answered",
@@ -297,10 +297,10 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
           for (const refused of calls.slice(index)) {
             const result: ToolResult = {
               outputJson: JSON.stringify({
-                status: ACT_RESULT_STATUS.REJECTED,
+                status: ACTION_RESULT_STATUS.REJECTED,
                 reason: LOOP_GUARD_REFUSAL_REASON,
               }),
-              status: ACT_RESULT_STATUS.REJECTED,
+              status: ACTION_RESULT_STATUS.REJECTED,
             };
             await ingest({
               kind: CONTEXT_INPUT_KIND.TOOL_RESULT,
@@ -322,7 +322,7 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
         guard.record(call, result);
         await emit({ kind: RUNTIME_EVENT.TOOL_RESULT, invocation: call, result });
         if (verdict.stuck) {
-          // A warning is words for the model, read at its next inference and never kept as an act.
+          // A warning is words for the model, read at its next inference and never kept as an action.
           await ingest({
             kind: CONTEXT_INPUT_KIND.USER_TEXT,
             text: `${LOOP_GUARD_MARKER} ${verdict.message}`,

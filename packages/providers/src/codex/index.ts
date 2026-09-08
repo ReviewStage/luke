@@ -25,7 +25,7 @@ export interface CodexLocalPluginOptions {
 /**
  * Observes the Codex sessions on this machine from the state database Codex
  * writes for itself and the rollout each thread names, sharpened where the
- * observation hook left a token. It names no acts: Codex documents no
+ * observation hook left a token. It names no actions: Codex documents no
  * endpoint a local thread can be written to from outside its own process,
  * and an absent handler is the unsupported answer.
  *

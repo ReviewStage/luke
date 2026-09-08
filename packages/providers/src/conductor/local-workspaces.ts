@@ -1,5 +1,5 @@
 import {
-  ACT_RESULT_STATUS,
+  ACTION_RESULT_STATUS,
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   ExternalOpenAnswerLostError,
   type SessionProviderPlugin,
@@ -7,7 +7,7 @@ import {
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceProject,
 } from "@sidecar/session";
-import { text, UNKNOWN_ACT_STATUS, wireRecord } from "@sidecar/wire";
+import { text, UNKNOWN_ACTION_STATUS, wireRecord } from "@sidecar/wire";
 import { repositoryLabel } from "../shared/cloud-wire.js";
 import {
   canIgnoreSqliteError,
@@ -239,14 +239,14 @@ export function conductorLocalWorkspacePlugin(
       }));
     },
 
-    acts: {
+    actions: {
       async createWorkspace({ project, task }) {
         // The root path a create fires against is the offered project's own, never
         // the request's: a create can reach only a repository this pass reported.
         const rootPath = project.providerTargetId;
         if (!rootPath)
           return {
-            status: ACT_RESULT_STATUS.UNSUPPORTED,
+            status: ACTION_RESULT_STATUS.UNSUPPORTED,
             reason: UNSUPPORTED_BY_OBSERVATION,
           };
         const link = conductorCreateWorkspaceLink(rootPath, task);
@@ -257,10 +257,10 @@ export function conductorLocalWorkspacePlugin(
           // created the workspace; that is an unknown outcome, not a refusal,
           // and the journal must not read it as one it can repeat.
           if (error instanceof ExternalOpenAnswerLostError) {
-            return { status: UNKNOWN_ACT_STATUS, reason: error.message };
+            return { status: UNKNOWN_ACTION_STATUS, reason: error.message };
           }
           return {
-            status: ACT_RESULT_STATUS.REJECTED,
+            status: ACTION_RESULT_STATUS.REJECTED,
             reason: `Couldn't ask Conductor to create the workspace: ${
               error instanceof Error ? error.message : String(error)
             }`,
@@ -278,11 +278,11 @@ export function conductorLocalWorkspacePlugin(
         // the prompt is only waiting for the developer's own send.
         return task
           ? {
-              status: ACT_RESULT_STATUS.ACCEPTED,
+              status: ACTION_RESULT_STATUS.ACCEPTED,
               warning:
                 "Conductor opened the new workspace with your prompt ready in its composer — press Return there to send it, since Conductor's create link can't send it for you.",
             }
-          : { status: ACT_RESULT_STATUS.ACCEPTED };
+          : { status: ACTION_RESULT_STATUS.ACCEPTED };
       },
     },
   };

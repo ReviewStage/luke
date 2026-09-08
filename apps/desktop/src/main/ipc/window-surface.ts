@@ -81,12 +81,12 @@ export function registerWindowSurfaceIpc(dependencies: WindowSurfaceIpcDependenc
       },
       /**
        * The one counting channel the renderer has, and the narrowest thing in this
-       * file. Every other event is emitted where its act happens, in this process;
+       * file. Every other event is emitted where its action happens, in this process;
        * these are surface motion no main-process handler can see.
        *
        * Two gates rather than one. `isProductSurfaceEventName` is the narrowing
        * that matters: it refuses every name outside the surface set, so a renderer
-       * cannot reach the acts — a forged `session:act_send` or `account:act` dies
+       * cannot reach the actions — a forged `session:action_send` or `account:action` dies
        * here rather than becoming a count of something nobody did. Then the
        * vocabulary's own reader rebuilds the properties from that event's
        * allowlist, so what is queued is what this build declared and never what

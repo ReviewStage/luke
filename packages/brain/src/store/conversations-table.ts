@@ -119,23 +119,26 @@ export function createConversation(
 }
 
 /** The conversation's durable Clear cutoff, which outlives the generation whose marker raised it. */
-export function historyCutoff(database: StoreDatabase, sessionKey: SessionKey): number | undefined {
+export function conversationCutoff(
+  database: StoreDatabase,
+  sessionKey: SessionKey,
+): number | undefined {
   // SAFETY: the query selects the one nullable integer column the row type names.
   const row = database
-    .prepare("SELECT history_cleared_at FROM conversations WHERE session_key = ?")
-    .get(sessionKey) as { history_cleared_at: number | null } | undefined;
-  return row?.history_cleared_at ?? undefined;
+    .prepare("SELECT conversation_cleared_at FROM conversations WHERE session_key = ?")
+    .get(sessionKey) as { conversation_cleared_at: number | null } | undefined;
+  return row?.conversation_cleared_at ?? undefined;
 }
 
 /** Raises the conversation's durable cutoff to `clearedAt`; never lowers it. */
-export function raiseHistoryCutoff(
+export function raiseConversationCutoff(
   database: StoreDatabase,
   sessionKey: SessionKey,
   clearedAt: number,
 ): void {
   database
     .prepare(
-      `UPDATE conversations SET history_cleared_at = MAX(COALESCE(history_cleared_at, ?), ?)
+      `UPDATE conversations SET conversation_cleared_at = MAX(COALESCE(conversation_cleared_at, ?), ?)
        WHERE session_key = ?`,
     )
     .run(clearedAt, clearedAt, sessionKey);
@@ -200,7 +203,7 @@ export function pinConversation(
  * committed or needs no archive by the time it gets here.
  */
 export function removeConversationRows(database: StoreDatabase, sessionKey: SessionKey): void {
-  database.prepare("DELETE FROM history_events WHERE session_key = ?").run(sessionKey);
+  database.prepare("DELETE FROM conversation_events WHERE session_key = ?").run(sessionKey);
   database.prepare("DELETE FROM compaction_boundaries WHERE session_key = ?").run(sessionKey);
   database.prepare("DELETE FROM transcript_events WHERE session_key = ?").run(sessionKey);
   database.prepare("DELETE FROM conversation_sessions WHERE session_key = ?").run(sessionKey);
@@ -220,7 +223,7 @@ export function removeConversationRowsAtOrBefore(
   keepSessionId: string | undefined,
 ): void {
   database
-    .prepare("DELETE FROM history_events WHERE session_key = ? AND recorded_at <= ?")
+    .prepare("DELETE FROM conversation_events WHERE session_key = ? AND recorded_at <= ?")
     .run(sessionKey, instant);
   database
     .prepare("DELETE FROM compaction_boundaries WHERE session_key = ? AND created_at <= ?")

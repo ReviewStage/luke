@@ -39,7 +39,7 @@ Hold <kbd>⌥</kbd><kbd>Space</kbd> to talk to Luke from any app, or press
 status of your agents, kick fresh ones off for you, or message them on your
 behalf.
 
-The **History** tab keeps your conversations with Luke on your Mac, across
+The **Conversation** tab keeps your conversations with Luke on your Mac, across
 launches, drawing its 200 most recent entries and nothing older than a
 fortnight while keeping every entry stored, beside a transcript of Luke's own
 turns that a compaction never erases. Its one control, Clear, removes the

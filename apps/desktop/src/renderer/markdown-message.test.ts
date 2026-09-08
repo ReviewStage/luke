@@ -12,8 +12,8 @@ function render(words: string, className?: string): string {
 
 test("plain words are one paragraph under the given class", () => {
   assert.equal(
-    render("Checkout is ready.", "history-words"),
-    '<div class="markdown history-words"><p>Checkout is ready.</p></div>',
+    render("Checkout is ready.", "conversation-words"),
+    '<div class="markdown conversation-words"><p>Checkout is ready.</p></div>',
   );
   assert.equal(render(""), '<div class="markdown"></div>');
 });

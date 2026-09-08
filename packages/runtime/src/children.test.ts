@@ -156,7 +156,7 @@ class FakeExecutor implements ChildExecutor {
     this.archived.push(record.childId);
     return true;
   }
-  async history() {
+  async lines() {
     return ["reply: done"];
   }
 }

@@ -24,7 +24,7 @@ import { ARRIVAL_SPEECH_KIND, CALENDAR_ONBOARDING_SPEECH_KIND } from "@sidecar/r
 import { ObservationLoop } from "@sidecar/runtime";
 import { APP_SETTING_ID, APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { ObservedAccountCalendars } from "@sidecar/settings/wire";
-import { ACT_RESULT_STATUS, isWireBoolean, isWireString, lateRef } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, isWireBoolean, isWireString, lateRef } from "@sidecar/wire";
 import {
   APPLE_CALENDAR_ACCESS_REFUSAL,
   type AppleCalendarHelperRun,
@@ -376,7 +376,10 @@ export function composeCalendars(dependencies: CalendarsDependencies): Calendars
             superseded: () => appleConnectGeneration !== generation,
           });
           if (appleConnectGeneration !== generation) {
-            return { status: ACT_RESULT_STATUS.ACCEPTED, settings: await settingsStore.snapshot() };
+            return {
+              status: ACTION_RESULT_STATUS.ACCEPTED,
+              settings: await settingsStore.snapshot(),
+            };
           }
           if (outcome.access !== APPLE_CALENDAR_ACCESS.FULL) {
             return settings.refusedSettings(

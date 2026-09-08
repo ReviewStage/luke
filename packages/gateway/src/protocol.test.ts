@@ -339,7 +339,7 @@ for (const kind of ["in-process", "loopback"] as const) {
     assert.deepEqual(h.effects, []);
   });
 
-  test(`[${kind}] a disconnected required node answers a typed unavailable and nothing records the act as done`, async () => {
+  test(`[${kind}] a disconnected required node answers a typed unavailable and nothing records the action as done`, async () => {
     const h = harness();
     const c = client(transportFor(kind, h.server));
     const changes: WireValue[] = [];

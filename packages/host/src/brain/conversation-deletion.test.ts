@@ -29,16 +29,13 @@ import {
 import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
-  conversationHistoryText,
+  conversationLinesText,
   recentConversationEntries,
 } from "@sidecar/session";
-import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { ConversationThread } from "../conversation-thread.js";
 import { operatorOverBrain } from "../testing/index.js";
-import {
-  CONVERSATION_DELETE_OUTCOME,
-  deleteConversationHistoryFlow,
-} from "./conversation-deletion.js";
+import { CONVERSATION_DELETE_OUTCOME, deleteConversationFlow } from "./conversation-deletion.js";
 import { followBrainRequests } from "./publication.js";
 
 /**
@@ -125,8 +122,8 @@ function composed(t: TestContext) {
   const relayed: (readonly ConversationEntry[])[] = [];
   const thread = new ConversationThread({
     store: {
-      appendHistory: (entries, now) =>
-        client.ask("history.append", { sessionKey: MAIN_SESSION_KEY, entries, now }),
+      appendConversation: (entries, now) =>
+        client.ask("conversation.append", { sessionKey: MAIN_SESSION_KEY, entries, now }),
     },
     now: () => clock,
     onChanged: (entries) => relayed.push(entries),
@@ -134,21 +131,21 @@ function composed(t: TestContext) {
   const record = (entry: ConversationEntry, at: number) =>
     thread.append([{ ...entry, recordedAt: at, eventId: `line-${++ids}` }]);
   // Every agent built here is followed as the main process follows it — the
-  // one History write for a run — and stopped, with its follower drained, by
+  // one Conversation write for a run — and stopped, with its follower drained, by
   // the harness's close whatever the test asserted.
   const followers = new Map<BrainAgent, () => Promise<void>>();
   const build = (client: BareResponsesModel) => {
     const agent = new BrainAgent({
       runtime: toolLoopRuntimeOver(bareModelAdapter(client)),
       prepareTurn: () => ({ prompt: "instructions", layers: {} }),
-      acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
+      actions: { perform: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }) },
       roster: () => ({ text: "- abc", identities: [] }),
       // The standing context as the main process renders it: the recent
       // thread, so a line the Clear left anywhere would reach the model.
       standingContext: () =>
-        conversationHistoryText(recentConversationEntries(thread.entries()), []) ?? "",
-      readTranscriptSince: async () => ({ status: ACT_RESULT_STATUS.REJECTED, reason: "no" }),
-      readTranscript: async () => ({ status: ACT_RESULT_STATUS.REJECTED, reason: "no" }),
+        conversationLinesText(recentConversationEntries(thread.entries()), []) ?? "",
+      readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
+      readTranscript: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
       deliver: () => undefined,
       store,
       createRunId: () => `run-${++ids}`,
@@ -173,11 +170,11 @@ function composed(t: TestContext) {
   let refuseErase = false;
   let eraseGate: Promise<void> | undefined;
   const clear = () =>
-    deleteConversationHistoryFlow({
+    deleteConversationFlow({
       now: () => clock,
       fence: (at) => thread.fence(at),
       readCutoffBefore: async () => ({
-        value: await client.ask("history.cutoff", { sessionKey: MAIN_SESSION_KEY }),
+        value: await client.ask("conversation.cutoff", { sessionKey: MAIN_SESSION_KEY }),
       }),
       fenceBrain: (at) => store.clear(at),
       erase: async (at, cutoffBefore) => {
@@ -221,7 +218,7 @@ function composed(t: TestContext) {
           .all(),
         checkpoints: raw.prepare("SELECT item FROM runtime_checkpoints").all(),
         history: raw
-          .prepare("SELECT words, recorded_at FROM history_events WHERE session_key = ?")
+          .prepare("SELECT words, recorded_at FROM conversation_events WHERE session_key = ?")
           .all(MAIN_SESSION_KEY),
         transcript: raw
           .prepare("SELECT payload FROM transcript_events WHERE session_key = ?")
@@ -265,8 +262,8 @@ function composed(t: TestContext) {
       now: clock,
     });
     thread.restore(
-      await client.ask("history.list", { sessionKey: MAIN_SESSION_KEY, now: clock }),
-      await client.ask("history.cutoff", { sessionKey: MAIN_SESSION_KEY }),
+      await client.ask("conversation.list", { sessionKey: MAIN_SESSION_KEY, now: clock }),
+      await client.ask("conversation.cutoff", { sessionKey: MAIN_SESSION_KEY }),
     );
   };
   return {
@@ -332,7 +329,7 @@ type ArchiveRegistryRow = {
   archiveId: string;
   fileName: string;
   encoding: string;
-  historyLines: number;
+  conversationLines: number;
   publishedAt: number | null;
 };
 
@@ -343,8 +340,8 @@ function archivesOf(root: string): ArchiveRegistryRow[] {
     return raw
       .prepare(
         `SELECT archive_id AS archiveId, file_name AS fileName, encoding,
-                history_lines AS historyLines, published_at AS publishedAt
-         FROM history_archives ORDER BY deleted_at DESC, archive_id`,
+                conversation_lines AS conversationLines, published_at AS publishedAt
+         FROM conversation_archives ORDER BY deleted_at DESC, archive_id`,
       )
       .all() as ArchiveRegistryRow[];
   } finally {
@@ -358,7 +355,7 @@ function previousCutoffOf(root: string, archiveId: string): number | null | unde
   try {
     // SAFETY: the one column selected is the nullable integer the schema names.
     const row = raw
-      .prepare("SELECT previous_cutoff FROM history_archives WHERE archive_id = ?")
+      .prepare("SELECT previous_cutoff FROM conversation_archives WHERE archive_id = ?")
       .get(archiveId) as { previous_cutoff: number | null } | undefined;
     return row?.previous_cutoff;
   } finally {
@@ -404,7 +401,7 @@ test("a Clear under a held model answer fences the brain and the thread before a
   assert.equal(standing?.reset_cleared_at, pressedAt);
   assertNoneOf(OLD_WORDS, c.rows());
   assert.deepEqual(
-    (await c.client.ask("history.list", { sessionKey: MAIN_SESSION_KEY, now: c.now() })).map(
+    (await c.client.ask("conversation.list", { sessionKey: MAIN_SESSION_KEY, now: c.now() })).map(
       (entry) => entry.words,
     ),
     [AFTER_WORDS],
@@ -413,13 +410,16 @@ test("a Clear under a held model answer fences the brain and the thread before a
     c.thread.entries().map((entry) => entry.words),
     [AFTER_WORDS],
   );
-  assert.equal(await c.client.ask("history.cutoff", { sessionKey: MAIN_SESSION_KEY }), pressedAt);
+  assert.equal(
+    await c.client.ask("conversation.cutoff", { sessionKey: MAIN_SESSION_KEY }),
+    pressedAt,
+  );
   // The archive holds exactly what stood at the press, compressed on disk.
   const [archive] = archivesOf(c.root);
   assert.ok(archive);
   assert.notEqual(archive.publishedAt, null);
   // The two seeded lines and the second ask, which stood at the press; its answer never landed.
-  assert.equal(archive.historyLines, 3);
+  assert.equal(archive.conversationLines, 3);
   const bytes = fs.readFileSync(path.join(c.root, "archives", archive.fileName));
   const content = (
     archive.encoding === ARCHIVE_ENCODING.ZSTD ? zlib.zstdDecompressSync(bytes) : bytes
@@ -448,9 +448,12 @@ test("a Clear whose rows the store will not remove answers refused, yet the old 
   assert.ok(c.reports.some((report) => report.includes("could not be removed")));
   // The thread is fenced in memory and by the durable cutoff the marker raised.
   assert.deepEqual(c.thread.entries(), []);
-  assert.equal(await c.client.ask("history.cutoff", { sessionKey: MAIN_SESSION_KEY }), pressedAt);
+  assert.equal(
+    await c.client.ask("conversation.cutoff", { sessionKey: MAIN_SESSION_KEY }),
+    pressedAt,
+  );
   assert.deepEqual(
-    await c.client.ask("history.list", { sessionKey: MAIN_SESSION_KEY, now: c.now() }),
+    await c.client.ask("conversation.list", { sessionKey: MAIN_SESSION_KEY, now: c.now() }),
     [],
   );
   // The old checkpoint is gone from the database: the marker's successor
@@ -542,15 +545,21 @@ test("a Clear whose marker the disk refused, followed by a Clear that lands, arc
   c.repo.refuse = true;
   c.tick();
   assert.equal(await c.clear(), CONVERSATION_DELETE_OUTCOME.REFUSED);
-  assert.equal(await c.client.ask("history.cutoff", { sessionKey: MAIN_SESSION_KEY }), undefined);
+  assert.equal(
+    await c.client.ask("conversation.cutoff", { sessionKey: MAIN_SESSION_KEY }),
+    undefined,
+  );
   c.repo.refuse = false;
   // The second press lands. Its archive must record the cutoff the disk
   // held before it — none — and not the first press's in-memory fence.
   const secondAt = c.tick();
   assert.equal(await c.clear(), CONVERSATION_DELETE_OUTCOME.COMPLETE);
-  assert.equal(await c.client.ask("history.cutoff", { sessionKey: MAIN_SESSION_KEY }), secondAt);
+  assert.equal(
+    await c.client.ask("conversation.cutoff", { sessionKey: MAIN_SESSION_KEY }),
+    secondAt,
+  );
   const [archive] = archivesOf(c.root);
   assert.ok(archive);
-  assert.equal(archive.historyLines, 2);
+  assert.equal(archive.conversationLines, 2);
   assert.equal(previousCutoffOf(c.root, archive.archiveId), null);
 });

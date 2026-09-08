@@ -1,4 +1,4 @@
-import { PRODUCT_EVENT, PRODUCT_UPDATE_ACT, type RecordProductEvent } from "@sidecar/analytics";
+import { PRODUCT_EVENT, PRODUCT_UPDATE_ACTION, type RecordProductEvent } from "@sidecar/analytics";
 import { jsonStateFile } from "@sidecar/host";
 import { text } from "@sidecar/wire";
 import type { UpdateSnapshot } from "#shared/messages/update";
@@ -37,7 +37,7 @@ export interface UpdateServiceHostDependencies {
 }
 
 /**
- * The updater's lifecycle and the four acts the Updates row offers. The
+ * The updater's lifecycle and the four actions the Updates row offers. The
  * `UpdateService` itself holds the feed, the schedule, and the retry budget;
  * what is here is when it begins, when it gives its timers back, and the
  * counted event each press files.
@@ -84,22 +84,26 @@ export function createUpdateServiceHost(
   return {
     name: "updates",
     check: () => {
-      recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.CHECK });
+      recordProductEvent(PRODUCT_EVENT.UPDATE_ACTION, {
+        update_action: PRODUCT_UPDATE_ACTION.CHECK,
+      });
       return service.check();
     },
     install: () => {
-      recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, { update_act: PRODUCT_UPDATE_ACT.INSTALL });
+      recordProductEvent(PRODUCT_EVENT.UPDATE_ACTION, {
+        update_action: PRODUCT_UPDATE_ACTION.INSTALL,
+      });
       service.install();
     },
     openLatestRelease: () => {
-      recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, {
-        update_act: PRODUCT_UPDATE_ACT.RELEASE_OPEN,
+      recordProductEvent(PRODUCT_EVENT.UPDATE_ACTION, {
+        update_action: PRODUCT_UPDATE_ACTION.RELEASE_OPEN,
       });
       void config.openExternal(UPDATE_ENDPOINT.LATEST_RELEASE_PAGE_URL);
     },
     openChangelog: () => {
-      recordProductEvent(PRODUCT_EVENT.UPDATE_ACT, {
-        update_act: PRODUCT_UPDATE_ACT.CHANGELOG_OPEN,
+      recordProductEvent(PRODUCT_EVENT.UPDATE_ACTION, {
+        update_action: PRODUCT_UPDATE_ACTION.CHANGELOG_OPEN,
       });
       void config.openExternal(UPDATE_ENDPOINT.CHANGELOG_PAGE_URL);
     },

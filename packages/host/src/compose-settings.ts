@@ -37,7 +37,7 @@ import {
   settingEntryGuard,
 } from "@sidecar/settings";
 import type { CliConnection, SettingsUpdateResult } from "@sidecar/settings/wire";
-import { ACT_RESULT_STATUS, isWireString, lateRef, type UnparsedWireValue } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, isWireString, lateRef, type UnparsedWireValue } from "@sidecar/wire";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
@@ -89,7 +89,7 @@ export interface SettingsComposer extends Composer {
   pushAccountPreferences: () => void;
   /** The account behind the hydrated preferences changed; the next push hydrates again. */
   forgetAccountPreferenceHydration: () => void;
-  /** The count the account acts flush before they end the account they are authenticated with. */
+  /** The count the account actions flush before they end the account they are authenticated with. */
   flushProductEvents: () => Promise<void>;
   link: (links: SettingsLinks) => void;
 }
@@ -366,7 +366,7 @@ export function composeSettings(dependencies: SettingsDependencies): SettingsCom
   }
 
   const refusedSettings = async (reason: string): Promise<SettingsUpdateResult> => ({
-    status: ACT_RESULT_STATUS.REJECTED,
+    status: ACTION_RESULT_STATUS.REJECTED,
     settings: await store.snapshot(),
     reason,
   });

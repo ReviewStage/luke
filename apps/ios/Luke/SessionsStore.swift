@@ -22,7 +22,7 @@ enum SessionsRoute: Hashable {
 /// The list's state and the stack above it, shared between the list, the
 /// session screens, and the voice screen, because Luke can be asked in
 /// conversation for the same presses the list offers by hand: open a
-/// session's screen, narrow or reorder the list, search it. Every act on
+/// session's screen, narrow or reorder the list, search it. Every action on
 /// this store is a press the list itself draws a control for.
 @MainActor
 @Observable
@@ -59,7 +59,7 @@ final class SessionsStore {
     private var refreshPass = 0
     /// The newest pass whose roster actually landed.
     private var landedPass = 0
-    /// Sessions whose archive act is still in flight. The row leaves at the
+    /// Sessions whose archive action is still in flight. The row leaves at the
     /// press, so every roster write filters these ids: a refresh whose roster
     /// was read before the archive landed would otherwise bring the row back.
     private var archivingIds: Set<String> = []
@@ -94,7 +94,7 @@ final class SessionsStore {
 
     /// An archive's whole visible outcome is the row leaving, so the leave
     /// happens at the press — the row slides out and the screen it opened
-    /// pops — with the act following behind rather than the press waiting on
+    /// pops — with the action following behind rather than the press waiting on
     /// two round trips.
     func beginArchiving(_ session: RosterSession) {
         archivingIds.insert(session.id)
@@ -102,9 +102,9 @@ final class SessionsStore {
         withAnimation { sessions.removeAll { $0.id == session.id } }
     }
 
-    /// Lifts the hold once the act has answered. A refusal restores the row
+    /// Lifts the hold once the action has answered. A refusal restores the row
     /// locally before any refresh converges, because the outage that refused
-    /// the act usually fails the refresh too, and a chat the server never
+    /// the action usually fails the refresh too, and a chat the server never
     /// archived must not stay gone on the refusal's word alone.
     func endArchiving(_ session: RosterSession, delivered: Bool) {
         archivingIds.remove(session.id)
@@ -137,7 +137,7 @@ final class SessionsStore {
             }
             guard pass > landedPass else { return }
             landedPass = pass
-            // Animated so a row an act just removed slides out the way a
+            // Animated so a row an action just removed slides out the way a
             // deleted Mail row does, instead of blinking.
             withAnimation { sessions = fetched.filter { !archivingIds.contains($0.id) } }
             awaitingFirstRoster = false

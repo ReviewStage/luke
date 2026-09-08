@@ -4,7 +4,7 @@ import type {
   SecretStorage,
 } from "@sidecar/credentials/vocabulary";
 import type { CliConnection } from "@sidecar/session";
-import type { ActResult } from "@sidecar/wire";
+import type { ActionResult } from "@sidecar/wire";
 import { APP_SETTING_DEFAULTS, type StoredAppSettings, VOICE_SOURCE } from "./schema.js";
 
 export type { AccountCalendar, ObservedAccountCalendars } from "@sidecar/calendar/observation";
@@ -76,9 +76,9 @@ export function appSettingsView(settings: AppSettings): AppSettingsView {
   };
 }
 
-/** Every settings write returns the canonical act result and the latest stored snapshot. */
-export type SettingsUpdateResult = ActResult & {
+/** Every settings write returns the canonical action result and the latest stored snapshot. */
+export type SettingsUpdateResult = ActionResult & {
   settings: AppSettings;
-  /** Present only when the canonical act result is rejected or unsupported. */
+  /** Present only when the canonical action result is rejected or unsupported. */
   reason?: string;
 };

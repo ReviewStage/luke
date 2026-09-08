@@ -5,7 +5,7 @@
  * the rest of the app under the same discipline.
  */
 
-import { type ActResult, text, type UnparsedWireValue } from "@sidecar/wire";
+import { type ActionResult, text, type UnparsedWireValue } from "@sidecar/wire";
 
 export const ISSUE_TRACKER_ID = {
   LINEAR: "linear",
@@ -200,11 +200,11 @@ export function normalizeTrackedIssue(
 }
 
 /**
- * What became of an act. A rejection carries a reason the developer can hear,
+ * What became of an action. A rejection carries a reason the developer can hear,
  * never the body itself; unsupported means the tracker has no documented way
  * to do this right now, which is an answer rather than a failure.
  */
-export type TrackerActionResult = ActResult;
+export type TrackerActionResult = ActionResult;
 
 export const ISSUE_ACTION_KIND = {
   SET_STATE: "set-state",
@@ -230,7 +230,7 @@ export type TrackerIssueAction =
 
 /**
  * Observing must issue only reads; `execute` is the one place a client may
- * change tracker state, and only ever with an act the developer asked for,
+ * change tracker state, and only ever with an action the developer asked for,
  * against an issue and a transition the latest observation advertised.
  */
 export interface IssueTrackerAdapter {

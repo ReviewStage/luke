@@ -27,16 +27,16 @@ public enum ProductProviderID: String, CaseIterable, Sendable {
     case omp
 }
 
-/// Where a Luke account stands after an act, never who the account is.
-public enum ProductAccountAct: String, Sendable {
+/// Where a Luke account stands after an action, never who the account is.
+public enum ProductAccountAction: String, Sendable {
     case signInStart = "sign_in_start"
     case signInCancel = "sign_in_cancel"
     case signOut = "sign_out"
     case delete
 }
 
-/// Which act a session took, never what it carried.
-public enum ProductSessionAct: String, Sendable {
+/// Which action a session took, never what it carried.
+public enum ProductSessionAction: String, Sendable {
     case messageSend = "message_send"
     case controlRun = "control_run"
     case sessionOpen = "session_open"
@@ -80,7 +80,7 @@ public enum ProductSessionCountBucket: Int, CaseIterable, Sendable {
 }
 
 /// The events this app emits, of the shared vocabulary's thirty-odd: the
-/// subset with an iOS act behind it. Each case carries exactly the properties
+/// subset with an iOS action behind it. Each case carries exactly the properties
 /// its event's allowlist row names, as values the types above bound — the
 /// app version rides separately, supplied by the sender like the desktop
 /// sender supplies it, so no call site holds a version string of its own.
@@ -88,9 +88,9 @@ public enum ProductEvent: Equatable, Sendable {
     case appLaunch
     case appDayActive
     case accountSignIn
-    case accountAct(ProductAccountAct)
+    case accountAction(ProductAccountAction)
     case sessionObserve(provider: ProductProviderID, sessions: ProductSessionCountBucket)
-    case sessionActSend(provider: ProductProviderID, act: ProductSessionAct)
+    case sessionActionSend(provider: ProductProviderID, action: ProductSessionAction)
     case settingUpdate(setting: ProductSettingID, value: ProductSettingValue)
     case settingsReset
 
@@ -99,9 +99,9 @@ public enum ProductEvent: Equatable, Sendable {
         case .appLaunch: "app:launch"
         case .appDayActive: "app:day_active"
         case .accountSignIn: "account:sign_in"
-        case .accountAct: "account:act"
+        case .accountAction: "account:action"
         case .sessionObserve: "session:observe"
-        case .sessionActSend: "session:act_send"
+        case .sessionActionSend: "session:action_send"
         case .settingUpdate: "setting:update"
         case .settingsReset: "settings:reset"
         }
@@ -110,10 +110,10 @@ public enum ProductEvent: Equatable, Sendable {
     /// The wire names of the shared vocabulary's properties.
     private enum Property {
         static let appVersion = "app_version"
-        static let accountAct = "account_act"
+        static let accountAction = "account_action"
         static let providerID = "provider_id"
         static let sessionCount = "session_count"
-        static let sessionAct = "session_act"
+        static let sessionAction = "session_action"
         static let settingID = "setting_id"
         static let settingValue = "setting_value"
     }
@@ -125,12 +125,12 @@ public enum ProductEvent: Equatable, Sendable {
             [Property.appVersion: appVersion]
         case .accountSignIn:
             [:]
-        case .accountAct(let act):
-            [Property.accountAct: act.rawValue]
+        case .accountAction(let action):
+            [Property.accountAction: action.rawValue]
         case .sessionObserve(let provider, let sessions):
             [Property.providerID: provider.rawValue, Property.sessionCount: sessions.rawValue]
-        case .sessionActSend(let provider, let act):
-            [Property.providerID: provider.rawValue, Property.sessionAct: act.rawValue]
+        case .sessionActionSend(let provider, let action):
+            [Property.providerID: provider.rawValue, Property.sessionAction: action.rawValue]
         case .settingUpdate(let setting, let value):
             [Property.settingID: setting.rawValue, Property.settingValue: value.rawValue]
         case .settingsReset:

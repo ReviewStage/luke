@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-import { ACT_RESULT_STATUS, PROVIDER_ID, UNSUPPORTED_BY_OBSERVATION } from "@sidecar/session";
+import { ACTION_RESULT_STATUS, PROVIDER_ID, UNSUPPORTED_BY_OBSERVATION } from "@sidecar/session";
 import { admittedForTest } from "@sidecar/wire/testing";
 import { SupersetCli } from "./cli.js";
 import { isSupersetControlId, SUPERSET_CONTROL_ID } from "./vocabulary.js";
@@ -98,7 +98,7 @@ test("a missing CLI login exposes no Superset actions", async (t) => {
 
   assert.equal(await cli.connected(), false);
   assert.deepEqual(await cli.sendMessage(CONTEXT, "hello"), {
-    status: ACT_RESULT_STATUS.UNSUPPORTED,
+    status: ACTION_RESULT_STATUS.UNSUPPORTED,
     reason: UNSUPPORTED_BY_OBSERVATION,
   });
 });
@@ -136,26 +136,26 @@ test("message and controls use fixed arguments without a shell", async (t) => {
     },
   });
 
-  assert.equal((await cli.sendMessage(CONTEXT, "ship it")).status, ACT_RESULT_STATUS.ACCEPTED);
+  assert.equal((await cli.sendMessage(CONTEXT, "ship it")).status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.equal(
     (await cli.executeControl(CONTEXT, SUPERSET_CONTROL_ID.DELETE_WORKSPACE)).status,
-    ACT_RESULT_STATUS.ACCEPTED,
+    ACTION_RESULT_STATUS.ACCEPTED,
   );
   // The one workspace-opening invocation left is the follow-through on a
   // creation; an observed chat's open is an address handed to the OS instead.
   assert.equal(
     (await cli.executeControl(CONTEXT, "superset-open-workspace")).status,
-    ACT_RESULT_STATUS.UNSUPPORTED,
+    ACTION_RESULT_STATUS.UNSUPPORTED,
   );
   assert.equal(
     (await cli.createAgent(CONTEXT, "claude", "Review the change")).status,
-    ACT_RESULT_STATUS.ACCEPTED,
+    ACTION_RESULT_STATUS.ACCEPTED,
   );
   assert.equal(
     (await cli.renameWorkspace(CONTEXT, "Payments rollout")).status,
-    ACT_RESULT_STATUS.ACCEPTED,
+    ACTION_RESULT_STATUS.ACCEPTED,
   );
-  // No `--host` on any bound-workspace act: the observed host state is this
+  // No `--host` on any bound-workspace action: the observed host state is this
   // machine's own, which is the CLI's default, and the flag's machineId is an
   // identifier that state does not carry.
   assert.deepEqual(calls, [
@@ -214,7 +214,7 @@ test("a refused rename never repeats the CLI's stderr", async (t) => {
   });
 
   assert.deepEqual(await cli.renameWorkspace(CONTEXT, "Payments rollout"), {
-    status: ACT_RESULT_STATUS.REJECTED,
+    status: ACTION_RESULT_STATUS.REJECTED,
     reason: "unknown option '--host'",
   });
 
@@ -225,7 +225,7 @@ test("a refused rename never repeats the CLI's stderr", async (t) => {
     },
   });
   assert.deepEqual(await silent.renameWorkspace(CONTEXT, "Payments rollout"), {
-    status: ACT_RESULT_STATUS.REJECTED,
+    status: ACTION_RESULT_STATUS.REJECTED,
     reason: "Superset could not rename that workspace.",
   });
 });
@@ -243,16 +243,16 @@ test("a chatless workspace context takes the delete but never a message", async 
 
   // No terminal exists for a message to land in, so no invocation may run.
   assert.deepEqual(await cli.sendMessage(chatless, "hello"), {
-    status: ACT_RESULT_STATUS.UNSUPPORTED,
+    status: ACTION_RESULT_STATUS.UNSUPPORTED,
     reason: UNSUPPORTED_BY_OBSERVATION,
   });
   assert.equal(
     (await cli.executeControl(chatless, SUPERSET_CONTROL_ID.DELETE_WORKSPACE)).status,
-    ACT_RESULT_STATUS.ACCEPTED,
+    ACTION_RESULT_STATUS.ACCEPTED,
   );
   assert.equal(
     (await cli.renameWorkspace(chatless, "Cleaned up")).status,
-    ACT_RESULT_STATUS.ACCEPTED,
+    ACTION_RESULT_STATUS.ACCEPTED,
   );
   assert.deepEqual(calls, [
     ["workspaces", "delete", "workspace-1", "--json"],
@@ -270,7 +270,7 @@ test("a CLI failure becomes a bounded rejection", async (t) => {
   });
 
   assert.deepEqual(await cli.sendMessage(CONTEXT, "hello"), {
-    status: ACT_RESULT_STATUS.REJECTED,
+    status: ACTION_RESULT_STATUS.REJECTED,
     reason: "Superset could not deliver that message.",
   });
 });
@@ -328,7 +328,7 @@ test("discovers host-scoped projects and creates a workspace with a generated br
         task: "Fix the panel transitions",
       }),
     ),
-    { status: ACT_RESULT_STATUS.ACCEPTED },
+    { status: ACTION_RESULT_STATUS.ACCEPTED },
   );
   assert.deepEqual(mutableCommands, [
     [
@@ -437,7 +437,7 @@ test("creates on an observed remote host and preserves success when opening fail
       }),
     ),
     {
-      status: ACT_RESULT_STATUS.ACCEPTED,
+      status: ACTION_RESULT_STATUS.ACCEPTED,
       warning: "The workspace was created, but Superset could not open it.",
     },
   );
@@ -467,7 +467,7 @@ test("workspace creation never repeats the CLI's stderr", async (t) => {
       }),
     ),
     {
-      status: ACT_RESULT_STATUS.REJECTED,
+      status: ACTION_RESULT_STATUS.REJECTED,
       reason: "Branch names cannot begin with that prefix.",
     },
   );

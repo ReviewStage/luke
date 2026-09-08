@@ -7,7 +7,7 @@ import {
   type ConversationRecord,
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
-import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { BRAIN_REQUEST_STATUS, type BrainRequestRecord } from "./requests.js";
 
 /**
@@ -19,7 +19,7 @@ import { BRAIN_REQUEST_STATUS, type BrainRequestRecord } from "./requests.js";
 /** A spawn's receipt as the model reads it: accepted, never done, with the completion's route named. */
 export function childSpawnReceiptRecord(receipt: ChildSpawnReceipt): WireRecord {
   return {
-    status: ACT_RESULT_STATUS.ACCEPTED,
+    status: ACTION_RESULT_STATUS.ACCEPTED,
     accepted: true,
     completed: false,
     child_id: receipt.childId,
@@ -60,7 +60,7 @@ export function conversationListingRecord(
   current: SessionKey,
 ): WireRecord {
   return {
-    status: ACT_RESULT_STATUS.ACCEPTED,
+    status: ACTION_RESULT_STATUS.ACCEPTED,
     conversations: directory
       .filter((record) => record.archivedAt === undefined)
       .map((record) => ({
@@ -85,7 +85,10 @@ export const RUN_FORGOTTEN: ChildEnd = {
 
 /** A child's run record as its requester's service reads its end. */
 export function childRunEnd(record: BrainRequestRecord): ChildEnd {
-  const counts = { performedActs: record.performedActs, unknownActs: record.unknownActs };
+  const counts = {
+    performedActions: record.performedActions,
+    unknownActions: record.unknownActions,
+  };
   switch (record.status) {
     case BRAIN_REQUEST_STATUS.SUCCEEDED:
       return {

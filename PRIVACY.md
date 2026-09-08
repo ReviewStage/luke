@@ -50,16 +50,16 @@ sends nothing anywhere. It stays on your Mac unless a feature below sends it.
 **Your conversation with Luke.** Luke keeps the conversations you have with
 him — what you typed or said, what he spoke or announced, the actions he took
 at your request, and the asks he is still working on — in a database on your
-Mac, so they are still there the next time you open him. The History tab
+Mac, so they are still there the next time you open him. The Conversation tab
 shows the main conversation, the one the talk key and every observation
 reach. The tab draws a conversation's 200 most recent entries and nothing
 older than 14 days, each in full; that is what is shown, not what is kept.
 Every entry stays in the database until you clear the conversation or the
-housekeeping described below removes it. Beside the History, Luke keeps a transcript
+housekeeping described below removes it. Beside the Conversation, Luke keeps a transcript
 of each conversation's turns in the same database: every input the model was
 shown and every point at which his working context was folded. The transcript
 is a record, not a limit: folding the context changes what the model sees
-next and erases nothing here. The 20 most recent History lines, each cut to
+next and erases nothing here. The 20 most recent Conversation lines, each cut to
 400 characters, ride into a conversation as context, beside the working
 memory. A thread you open as temporary is held in memory alone and is gone
 when Luke next opens; nothing said in it is remembered automatically. Nothing
@@ -99,7 +99,7 @@ on its own, on the terms OpenClaw's sessions keep: it stands, the encrypted
 compaction included, until you clear the conversation, and an old one is
 loaded whole however long ago it began. A
 generation holds at most 200 asks: the oldest finished
-asks go first once their endings are in the History, and when nothing can go
+asks go first once their endings are in the Conversation, and when nothing can go
 Luke declines a new ask rather than growing the record.
 
 **Work Luke delegates to himself.** A conversation of Luke's may hand a task to
@@ -119,8 +119,8 @@ and then discarded. A child's conversation is archived an hour after it ends
 and lives under the same retention as every other conversation. Nothing a
 child does reaches you except through the conversation that asked for it.
 
-The History tab's one control, **Clear**, removes the conversation's
-History, transcript, and working memory from the database, and writes them
+The Conversation tab's one control, **Clear**, removes the conversation's
+lines, transcript, and working memory from the database, and writes them
 first, in the same step, into a compressed recovery archive kept on your Mac
 under Luke's own data (a `.jsonl.deleted.<time>.zst` file, and until it is
 written to disk, a copy inside the database); the deletion is reported
@@ -163,7 +163,7 @@ the short-lived voice credential the runtime mints for a call; no stored key,
 token, or account secret travels in any answer or event. Quitting Luke cancels
 what was running and writes down what did not finish rather than finishing it
 on paper. The three things the app still does on this machine at the runtime's
-ask are opening an address you or Luke asked to open, carrying an act to the
+ask are opening an address you or Luke asked to open, carrying an action to the
 panel, and running the Calendar helper behind macOS's own consent dialog.
 
 **Things Luke remembers about you.** During a conversation you start, Luke may
@@ -199,7 +199,7 @@ passages that changed and our service keeps and logs none of them. Without a
 key or an account the index still works by keywords alone, and Luke's answers
 say when a search ran that way. Luke's own conversations are never embedded or
 indexed: when he looks for something you said in an earlier conversation, he
-reads the lines History already keeps, only from main and the private threads
+reads the lines the Conversation already keeps, only from main and the private threads
 you opened and never from the conversation he is answering in, a temporary
 thread, an observed coding session's conversation, or a child's. What such a
 look finds is context for that one reply and is written nowhere.
@@ -211,7 +211,7 @@ its transcript grows past 2 MiB), Luke runs one private housekeeping turn over
 a copy of that conversation, allowed only to append to today's dated note
 under `memory/`; the copy is thrown away afterwards and nothing from it enters
 the conversation, and the same turn runs once when you start main or a
-durable private thread fresh, never when you clear or delete history, and
+durable private thread fresh, never when you clear or delete the conversation, and
 never for a temporary thread, an observed coding session, or a child. Nothing
 else writes the notebook on its own: no nightly job reads your conversations
 to learn from them, and no model call rewrites `MEMORY.md`, which from here
@@ -222,8 +222,8 @@ beside it. Both are left exactly where they are, for you to keep or delete:
 reads `DREAMS.md` at all. Asking Luke to forget removes the notebook line
 you name, and the search index follows the file; a line he no longer holds
 under that name he says so about rather than claiming it erased. Forgetting does
-not delete the conversation itself; Delete history is still the separate,
-recoverable act above.
+not delete the conversation itself; Delete conversation is still the separate,
+recoverable action above.
 
 **Your account.** Signing in with Google or GitHub gives us your name, email
 address, and which of the two you used. We also keep the records that keep you
@@ -245,7 +245,7 @@ error text.
 screen, your editor, your terminal, or any other app. A recording shows whatever
 the panel showed you, including session titles, branches and error
 text, your name and email address, and any screenshot you attached to the
-feedback form. The History tab is blocked from recordings, so neither the words in your
+feedback form. The Conversation tab is blocked from recordings, so neither the words in your
 conversation with Luke nor the things he remembers about you are included. Text you type into a field is replaced
 with blocks before the recording leaves your Mac, so an API key or a sign-in
 code you enter is not in it. While recording is on, Luke also reports what you
@@ -272,7 +272,7 @@ The iOS app records on the same terms: its own screens as screenshots, never
 anything else on your device, from the moment it opens, and shows the same
 things its screens show — session titles, branches, error text, and
 your name and email. A Conductor session's conversation, fetched onto that
-session's screen, is masked out of recordings the way the desktop's History
+session's screen, is masked out of recordings the way the desktop's Conversation
 tab is blocked, so those messages reach your phone and nothing else. Text you
 type into a field is masked, a message you sent stays masked when it is drawn
 back as a chat bubble, and a crash is reported on the next launch with its
@@ -297,7 +297,7 @@ copy from our database while the keys on this Mac stay; deleting a key
 deletes its synced copy too, and signed out nothing is ever synced. We store a synced key encrypted in our own
 database using AES-256-GCM with a server-only secret. The key is never
 returned to any caller: there is no endpoint that reads it back, and no code
-path that decrypts it for any purpose other than the observation or acts you
+path that decrypts it for any purpose other than the observation or actions you
 explicitly request through that provider. The server-side use of these keys
 ships as a separate feature; this describes only the storage. Every synced key
 is deleted alongside your account if you delete that.
@@ -410,16 +410,16 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 - Delete your OpenAI key to turn voice off.
 - Delete any synced provider API key from that provider's row in Settings. Keys
   are also deleted when you delete your account.
-- Clear the History tab to remove the stored conversation and Luke's working
+- Clear the Conversation tab to remove the stored conversation and Luke's working
   memory of it behind a recovery archive on your Mac. Nothing discards them
   on a schedule: a conversation stands until you clear it.
 - Ask Luke what he remembers, correct a memory, or tell him to forget one.
 - Edit or delete any of Luke's workspace files yourself; Luke never overwrites
-  your edit, and clearing the History tab does not touch them.
+  your edit, and clearing the Conversation tab does not touch them.
 - Luke may act on his own judgment in a turn you did not open — answering a
   coding agent, keeping his notes, on a hook, a look, or his scheduled review
-  — within the tool policy his configuration sets; the History tab records
-  such an act as his own, never as your request.
+  — within the tool policy his configuration sets; the Conversation tab records
+  such an action as his own, never as your request.
 - What you type or say to Luke goes to his main conversation; the
   conversation an ask is for is fixed at the moment you send it and never
   moved afterwards.

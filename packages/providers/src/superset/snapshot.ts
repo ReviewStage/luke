@@ -1,6 +1,6 @@
 import {
-  ACT_KIND,
-  type AdvertisedAct,
+  ACTION_KIND,
+  type AdvertisedAction,
   type ProviderSessionObservation,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
@@ -24,9 +24,9 @@ import {
  */
 
 /**
- * The acts Superset documents for one workspace it manages, given whether the
+ * The actions Superset documents for one workspace it manages, given whether the
  * row is settled and whether anything is bound to take a message. Both rows
- * that carry acts — a chat's and an idle workspace's — read them from here, so
+ * that carry actions — a chat's and an idle workspace's — read them from here, so
  * a press means the same thing on either. The workspace id rides every entry
  * as its target, which is what the press acts on and what seats a control once
  * on a tray's own header when several chats share the workspace.
@@ -34,27 +34,27 @@ import {
 function supersetAdvertisements(
   context: SupersetSessionContext,
   row: { settled: boolean; messageable: boolean },
-): readonly AdvertisedAct[] {
-  const advertises: AdvertisedAct[] = [];
+): readonly AdvertisedAction[] {
+  const advertises: AdvertisedAction[] = [];
   // Only a bound terminal gives a message somewhere to land; a chatless
   // workspace row stays unmessageable rather than improvising a way in.
-  if (row.messageable) advertises.push({ kind: ACT_KIND.MESSAGE });
+  if (row.messageable) advertises.push({ kind: ACTION_KIND.MESSAGE });
   // Deleting the workspace is unrecoverable and takes every sibling chat's
   // terminal with it, so it is offered only on a row positively seen settled —
   // never one still working, or one whose state could not be read.
   if (row.settled) {
     advertises.push({
-      kind: ACT_KIND.CONTROL,
+      kind: ACTION_KIND.CONTROL,
       id: SUPERSET_CONTROL_ID.DELETE_WORKSPACE,
       label: "Delete workspace",
       target: context.workspaceId,
     });
   }
   // Superset documents renaming any workspace it manages.
-  advertises.push({ kind: ACT_KIND.RENAME_WORKSPACE, target: context.workspaceId });
+  advertises.push({ kind: ACTION_KIND.RENAME_WORKSPACE, target: context.workspaceId });
   if (context.spawnableAgents.length > 0) {
     advertises.push({
-      kind: ACT_KIND.ADD_AGENT,
+      kind: ACTION_KIND.ADD_AGENT,
       agents: context.spawnableAgents,
       target: context.workspaceId,
     });
@@ -63,7 +63,7 @@ function supersetAdvertisements(
 }
 
 /**
- * An act reaches Superset through the CLI's own login, which serves one
+ * An action reaches Superset through the CLI's own login, which serves one
  * organization at a time, so only sessions the active organization's host
  * service recorded can be acted on at all.
  */
@@ -74,7 +74,7 @@ function actableInOrganization(
   return activeOrganizationId !== undefined && context.organizationId === activeOrganizationId;
 }
 
-/** One host-state read, as the roster and the act router ask about it. */
+/** One host-state read, as the roster and the action router ask about it. */
 export interface SupersetSnapshot {
   /** The context behind one observed session, recorded or directory-matched. */
   context(providerId: string, providerSessionId: string): SupersetSessionContext | undefined;
@@ -108,10 +108,10 @@ export function supersetSnapshot(
   const worktreesByPath = new Map<string, SupersetSessionContext>();
   /**
    * The chats matched by worktree path, remembered under the chat's own
-   * identity so the act router resolves an act against the same context its
+   * identity so the action router resolves an action against the same context its
    * advertisement rode. Every enrich pass rewrites a chat's entry from its
    * latest observation — confirming, moving, or dropping it — and a fresh
-   * snapshot adopts its predecessor's entries so the acts a drawn row still
+   * snapshot adopts its predecessor's entries so the actions a drawn row still
    * advertises keep resolving between the snapshot standing and that pass.
    */
   const directoryMatches = new Map<string, Map<string, SupersetSessionContext>>();
@@ -155,7 +155,7 @@ export function supersetSnapshot(
    * directory Superset made a live worktree at is that workspace's chat, even
    * though the binding row carries no session id to say which. The match
    * earns everything the workspace's own identity carries — the grouping and
-   * the workspace-scoped acts — but no terminal, because no observed binding
+   * the workspace-scoped actions — but no terminal, because no observed binding
    * identifies the exact terminal this chat is behind, and a message must
    * land on the chat it was typed at.
    */
@@ -200,9 +200,9 @@ export function supersetSnapshot(
      * Carries the previous snapshot's directory matches into this one, each
      * re-anchored to this snapshot's own read: an entry survives only while
      * the same worktree still stands, and is rebuilt from that worktree's
-     * fresh fields. Without this, an act pressed between this snapshot
+     * fresh fields. Without this, an action pressed between this snapshot
      * standing and the next enrich pass would find nothing behind the
-     * advertisement the drawn row still carries; the workspace-scoped acts an
+     * advertisement the drawn row still carries; the workspace-scoped actions an
      * adopted entry resolves stay honest either way, because they act on the
      * workspace whose worktree was just re-read, not on the chat.
      */
@@ -233,7 +233,7 @@ export function supersetSnapshot(
           ? supersetTerminalLink(context.workspaceId, context.terminalId)
           : supersetWorkspaceLink(context.workspaceId);
         // The app that wrote the host state is the scheme's handler, so the
-        // address stands without the CLI login the acts below wait for. The
+        // address stands without the CLI login the actions below wait for. The
         // association carries the exact terminal address; which mark a grouped
         // row's press follows is the session normalization's call — the
         // workspace's manager leads the marks and the press follows the first
@@ -284,14 +284,14 @@ export function supersetSnapshot(
     /**
      * The chatless workspaces as rows of the Superset workspace provider,
      * decorated here — beside `enrich`, from the same observed state — rather
-     * than by a registry transform, so an act path's plain refresh commits the
+     * than by a registry transform, so an action path's plain refresh commits the
      * same shape the observation loop does. Each row stands (`standing`): it is
      * re-reported for as long as the workspace exists and dropped the pass
      * after it is gone, so retention never ages it out however long the
      * workspace has sat idle — sitting idle is exactly what earns it a row.
      * Complete is the vocabulary's settled state, and a workspace with no agent
      * terminal is settled by construction — the same gate the delete control's
-     * advertisement stands on — so the acts ride only while the CLI's login
+     * advertisement stands on — so the actions ride only while the CLI's login
      * serves the recording organization, exactly as they do on a chat row.
      */
     workspaceRowObservations(activeOrganizationId) {

@@ -1,7 +1,7 @@
 import Foundation
 
 /// The Realtime tools the phone's session may be handed, by the names
-/// `REALTIME_TOOL` in `@sidecar/acts` gives them. A call naming anything
+/// `REALTIME_TOOL` in `@sidecar/actions` gives them. A call naming anything
 /// else is refused before it is looked at.
 public enum VoiceToolName: String, Sendable, CaseIterable {
     case sendSessionMessage = "send_session_message"
@@ -21,24 +21,24 @@ public struct VoiceAskRefusal: Error, Equatable, Sendable {
     public init(_ reason: String) { self.reason = reason }
 }
 
-/// A validated ask aimed at one provider's endpoint, so the act that lands
+/// A validated ask aimed at one provider's endpoint, so the action that lands
 /// can be counted under that provider's name.
 public protocol VoiceProviderAsk: Sendable {
     var providerId: String { get }
 }
 
-/// The phone's half of the act gauntlet, mirroring the `validate` rows of
-/// `ACTS` in `@sidecar/acts` for the acts the phone carries: a call the model
+/// The phone's half of the action gauntlet, mirroring the `validate` rows of
+/// `ACTIONS` in `@sidecar/actions` for the actions the phone carries: a call the model
 /// composed may only name a session the roster showed, doing something that
 /// session advertised, or a project the projects answer listed. Everything
-/// else is refused with a reason. The hosted endpoints validate the same act
+/// else is refused with a reason. The hosted endpoints validate the same action
 /// again on a fresh observation pass, so this is a first gate, never the last.
 public enum VoiceAsks {
     /// The same bounds a typed message and a workspace name carry on the desktop.
     public static let maximumMessageLength = 4_000
     public static let maximumNameLength = 80
 
-    // MARK: - Session acts
+    // MARK: - Session actions
 
     public struct MessageAsk: Equatable, VoiceProviderAsk {
         public let session: RosterSession

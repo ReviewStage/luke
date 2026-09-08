@@ -8,7 +8,7 @@ import {
   storedConversationMaximumAgeMs,
   withConversationEntryRequest,
 } from "@sidecar/session";
-import { HistoryReporter, withPendingLines } from "./history-reporter.js";
+import { ConversationReporter, withPendingLines } from "./conversation-reporter.js";
 
 /** An asynchronous entry belongs only to the history generation in which its work began. */
 export function conversationEntryBelongsToConversation(
@@ -67,7 +67,7 @@ export interface ConversationThreadOptions {
  */
 export class ConversationThread {
   readonly #options: ConversationThreadOptions;
-  readonly #reporter = new HistoryReporter();
+  readonly #reporter = new ConversationReporter();
   #entries: readonly ConversationEntry[] = [];
   #generation = 0;
   /**
@@ -93,7 +93,7 @@ export class ConversationThread {
   #latestMark: SpokenTurnMark | undefined;
   /**
    * The developer's spoken turns still being transcribed, keyed by the server
-   * item that names each turn: the preview History draws while the completed
+   * item that names each turn: the preview Conversation draws while the completed
    * transcript is still on the service's own clock. Kept apart from the
    * thread — a preview settles by leaving when the completed words are
    * recorded, or by leaving alone when nothing ever will.
@@ -101,7 +101,7 @@ export class ConversationThread {
   #previews: ReadonlyMap<string, string> = NO_SPOKEN_ASK_PREVIEWS;
   /** The generation of the developer-opened turn whose reply is still in flight. */
   #replyGeneration: number | undefined;
-  /** The History generation in which the current announcement began speaking. */
+  /** The Conversation generation in which the current announcement began speaking. */
   #announcementGeneration: number | undefined;
 
   constructor(options: ConversationThreadOptions) {
@@ -162,7 +162,7 @@ export class ConversationThread {
   }
 
   /**
-   * The main process's own lines — the ask a carried act was — reaching this
+   * The main process's own lines — the ask a carried action was — reaching this
    * window as they reach every panel, so this window's next whole report
    * carries them rather than standing them back down.
    */
@@ -311,7 +311,7 @@ export class ConversationThread {
    * it — the voice service's transcript, never the mouth's paraphrase of the
    * question. The transcript may already stand in the thread, in which case
    * the run is written onto that line; otherwise the mark carries the run to
-   * the transcript when it lands. Either way History can draw the ask as
+   * the transcript when it lands. Either way Conversation can draw the ask as
    * pending, with its cancel, beside the words actually said.
    */
   tieTurnToRun(mark: SpokenTurnMark | undefined, runId: string): void {
@@ -363,7 +363,7 @@ export class ConversationThread {
 
   /**
    * Persists what this window appended. The main process's store takes each
-   * line by its id, relays the thread to every panel's History, and reads the
+   * line by its id, relays the thread to every panel's Conversation, and reads the
    * recent slice for the brain, so nothing is re-fed to a call here. A line
    * is marked reported only once the store said it took it; one it refused is
    * sent again on the next publish. Before the restore this thread is only

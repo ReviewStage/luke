@@ -77,7 +77,7 @@ test("a phone or watch mint keeps its own narrowed session document on the share
   assert.equal(call.url, "https://api.openai.com/v1/realtime/client_secrets");
   const sent = JSON.parse(String(call.init?.body));
   // The document is the remote one, byte for byte: the phone keeps its own
-  // direct-act tools and the instructions that resolve agents from the roster
+  // direct-action tools and the instructions that resolve agents from the roster
   // it carries, while the desktop's mint is the brain's mouth and shares
   // neither.
   assert.deepEqual(sent, remoteRealtimeClientSecretRequest());

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SESSION_LIST_ALL } from "@sidecar/acts";
+import { SESSION_LIST_ALL } from "@sidecar/actions";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import {
   APP_PANEL_TAB,
@@ -89,8 +89,8 @@ test("showing a tab is signed on that tab", () => {
   assert.deepEqual(errandTargets({ kind: "panel", tab: APP_PANEL_TAB.SESSIONS }), [
     ERRAND_TARGET.SESSIONS_TAB,
   ]);
-  assert.deepEqual(errandTargets({ kind: "panel", tab: APP_PANEL_TAB.HISTORY }), [
-    ERRAND_TARGET.HISTORY_TAB,
+  assert.deepEqual(errandTargets({ kind: "panel", tab: APP_PANEL_TAB.CONVERSATION }), [
+    ERRAND_TARGET.CONVERSATION_TAB,
   ]);
   assert.deepEqual(errandTargets({ kind: "panel", tab: APP_PANEL_TAB.SETTINGS }), [
     ERRAND_TARGET.SETTINGS_TAB,

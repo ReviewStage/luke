@@ -18,14 +18,14 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { REALTIME_TOOL, remoteRealtimeToolDefinitions } from "@sidecar/acts";
+import { REALTIME_TOOL, remoteRealtimeToolDefinitions } from "@sidecar/actions";
 import {
-  PRODUCT_ACCOUNT_ACT,
+  PRODUCT_ACCOUNT_ACTION,
   PRODUCT_EVENT,
   PRODUCT_EVENT_BATCH_LIMIT,
   PRODUCT_EVENT_CLIENT,
   PRODUCT_EVENT_CLIENT_HEADER,
-  PRODUCT_SESSION_ACT,
+  PRODUCT_SESSION_ACTION,
   PRODUCT_SETTING_VALUE,
 } from "@sidecar/analytics";
 import { APP_SETTING_ID } from "@sidecar/guide";
@@ -38,7 +38,7 @@ import {
   SESSION_CONTROL_KIND,
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
-import { ACT_RESULT_STATUS } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 
 import {
   swiftEnumRawValues,
@@ -138,11 +138,11 @@ test("HostedAPIError is HOSTED_API_ERROR", () => {
   );
 });
 
-test("ActResult is ACT_RESULT_STATUS", () => {
+test("ActionResult is ACTION_RESULT_STATUS", () => {
   assertSameSet(
-    swiftEnumRawValues(swift(`${KIT}/ActClient.swift`), "ActResult"),
-    ACT_RESULT_STATUS,
-    "an act outcome the phone cannot name reads as a malformed answer",
+    swiftEnumRawValues(swift(`${KIT}/ActionClient.swift`), "ActionResult"),
+    ACTION_RESULT_STATUS,
+    "an action outcome the phone cannot name reads as a malformed answer",
   );
 });
 
@@ -158,7 +158,7 @@ test("every VoiceToolName is a REALTIME_TOOL", () => {
   assertSubset(
     swiftEnumRawValues(swift(`${KIT}/VoiceAsks.swift`), "VoiceToolName"),
     Object.values(REALTIME_TOOL),
-    "a tool renamed in the acts table leaves the phone naming a tool that does not exist",
+    "a tool renamed in the actions table leaves the phone naming a tool that does not exist",
   );
 });
 
@@ -211,19 +211,19 @@ test("every ProductEventClient is a PRODUCT_EVENT_CLIENT", () => {
   );
 });
 
-test("ProductAccountAct is PRODUCT_ACCOUNT_ACT", () => {
+test("ProductAccountAction is PRODUCT_ACCOUNT_ACTION", () => {
   assertSameSet(
-    swiftEnumRawValues(swift(`${KIT}/ProductEvents.swift`), "ProductAccountAct"),
-    PRODUCT_ACCOUNT_ACT,
+    swiftEnumRawValues(swift(`${KIT}/ProductEvents.swift`), "ProductAccountAction"),
+    PRODUCT_ACCOUNT_ACTION,
     "an account act outside the allowlist is refused with its batch",
   );
 });
 
-test("ProductSessionAct is PRODUCT_SESSION_ACT", () => {
+test("ProductSessionAction is PRODUCT_SESSION_ACTION", () => {
   assertSameSet(
-    swiftEnumRawValues(swift(`${KIT}/ProductEvents.swift`), "ProductSessionAct"),
-    PRODUCT_SESSION_ACT,
-    "a session act outside the allowlist is refused with its batch",
+    swiftEnumRawValues(swift(`${KIT}/ProductEvents.swift`), "ProductSessionAction"),
+    PRODUCT_SESSION_ACTION,
+    "a session action outside the allowlist is refused with its batch",
   );
 });
 

@@ -1,4 +1,4 @@
-import { ACT_KIND } from "@sidecar/session";
+import { ACTION_KIND } from "@sidecar/session";
 import {
   describeProviderContract,
   PROVIDER_OBSERVATION,
@@ -35,7 +35,7 @@ describeProviderContract(
     sessionId: "workspace-idle",
     absentSessionId: "workspace-never-observed",
     absentProjectId: "project-unreported",
-    advertised: [ACT_KIND.CONTROL, ACT_KIND.ADD_AGENT, ACT_KIND.RENAME_WORKSPACE],
-    unadvertised: [ACT_KIND.MESSAGE, ACT_KIND.RENAME_SESSION],
+    advertised: [ACTION_KIND.CONTROL, ACTION_KIND.ADD_AGENT, ACTION_KIND.RENAME_WORKSPACE],
+    unadvertised: [ACTION_KIND.MESSAGE, ACTION_KIND.RENAME_SESSION],
   },
 );

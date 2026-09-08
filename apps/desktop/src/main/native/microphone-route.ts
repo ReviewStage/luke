@@ -43,7 +43,7 @@ export interface MicrophoneRouteWatch {
  * Watches where the developer's voice would be captured from: the default
  * input's transport, the built-in microphone's name, and the lid over it —
  * read by a helper that reads nothing else and can write nothing. What the
- * answer decides is bounded to one act: which device the renderer asks the
+ * answer decides is bounded to one action: which device the renderer asks the
  * browser to open when a press takes a turn.
  */
 export function microphoneRouteWatcher(

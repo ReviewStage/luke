@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  ACT_KIND,
+  ACTION_KIND,
   normalizeSession,
   type ObservedWorkspaceProject,
   SESSION_APPLICATION_ID,
@@ -471,7 +471,7 @@ test("the roster says which agent kinds a session can start", () => {
       title: "bucharest-v1",
       status: SESSION_STATUS.WAITING,
       lastActivityAt: OBSERVED_AT,
-      advertises: [{ kind: ACT_KIND.ADD_AGENT, agents: ["claude", "codex", "cursor"] }],
+      advertises: [{ kind: ACTION_KIND.ADD_AGENT, agents: ["claude", "codex", "cursor"] }],
     },
   );
 

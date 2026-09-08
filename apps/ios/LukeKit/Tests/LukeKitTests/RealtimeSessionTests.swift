@@ -615,7 +615,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         )
     }
 
-    func testPrimaryAudioDrainingDuringAnActDoesNotReturnToReadyBeforeTheFollowUp() async throws {
+    func testPrimaryAudioDrainingDuringAnActionDoesNotReturnToReadyBeforeTheFollowUp() async throws {
         let ws = MockWebSocketTask()
         let player = ControlledDrainPlayer()
         let dispatchStarted = AsyncGate()
@@ -648,7 +648,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         )
         await dispatchStarted.wait()
 
-        // The spoken words finish while the act is still being carried.
+        // The spoken words finish while the action is still being carried.
         player.completeDrain()
         try await Task.sleep(nanoseconds: 50_000_000)
         XCTAssertFalse(statuses.contains(.ready), "The follow-up has not spoken yet")

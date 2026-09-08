@@ -1,4 +1,4 @@
-import { PRODUCT_ACCOUNT_ACT, PRODUCT_EVENT } from "@sidecar/analytics";
+import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@sidecar/analytics";
 import { AccountClient, AccountSessionManager, accountGateOpen } from "@sidecar/credentials";
 import {
   ACCOUNT_STATUS,
@@ -170,24 +170,24 @@ export function composeAccount(dependencies: AccountDependencies): AccountCompos
     [GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN]: async (params) => {
       if (!isAccountProvider(params.provider))
         return invalid("provider is not one this build knows");
-      settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACT, {
-        account_act: PRODUCT_ACCOUNT_ACT.SIGN_IN_START,
+      settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
+        account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_START,
       });
       const snapshot = await session.beginSignIn(params.provider);
       return gatewayOk({ account: carried(snapshot) });
     },
     [GATEWAY_METHOD.ACCOUNT_CANCEL_SIGN_IN]: () => {
-      settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACT, {
-        account_act: PRODUCT_ACCOUNT_ACT.SIGN_IN_CANCEL,
+      settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
+        account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_CANCEL,
       });
       session.cancelSignIn();
       return gatewayOk({});
     },
     [GATEWAY_METHOD.ACCOUNT_SIGN_OUT]: async () => {
-      settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACT, {
-        account_act: PRODUCT_ACCOUNT_ACT.SIGN_OUT,
+      settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
+        account_action: PRODUCT_ACCOUNT_ACTION.SIGN_OUT,
       });
-      // The count of the act leaves before the act ends the account it is
+      // The count of the action leaves before the action ends the account it is
       // authenticated with; queued behind the sign-out it would wait for the
       // next sign-in.
       await settings.flushProductEvents();
@@ -195,8 +195,8 @@ export function composeAccount(dependencies: AccountDependencies): AccountCompos
       return gatewayOk({ account: carried(snapshot) });
     },
     [GATEWAY_METHOD.ACCOUNT_DELETE]: async () => {
-      settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACT, {
-        account_act: PRODUCT_ACCOUNT_ACT.DELETE,
+      settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
+        account_action: PRODUCT_ACCOUNT_ACTION.DELETE,
       });
       await settings.flushProductEvents();
       const snapshot = await session.deleteEverywhere();

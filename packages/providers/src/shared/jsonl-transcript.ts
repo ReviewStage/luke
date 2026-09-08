@@ -10,7 +10,7 @@
  */
 
 import {
-  ACT_RESULT_STATUS,
+  ACTION_RESULT_STATUS,
   OMISSION_MARKER,
   type ProviderTranscriptResult,
   type ProviderTranscriptSinceResult,
@@ -180,7 +180,7 @@ export class TranscriptPathCache {
  * about the provider's own directory.
  */
 const TRANSCRIPT_NOT_FOUND = {
-  status: ACT_RESULT_STATUS.REJECTED,
+  status: ACTION_RESULT_STATUS.REJECTED,
   reason: "That session's transcript could not be found.",
 } as const;
 
@@ -224,14 +224,14 @@ export function jsonlTranscriptReader(input: JsonlTranscriptInput): JsonlTranscr
       const filePath = await input.locate(providerSessionId);
       if (filePath === undefined) return TRANSCRIPT_NOT_FOUND;
       const refusal = input.refuses?.(filePath);
-      if (refusal !== undefined) return { status: ACT_RESULT_STATUS.REJECTED, reason: refusal };
+      if (refusal !== undefined) return { status: ACTION_RESULT_STATUS.REJECTED, reason: refusal };
       const tail = await readTail(filePath, TRANSCRIPT_BOUNDS.READ_TAIL_BYTES);
       const transcript = boundedTranscript(
         tailRecords(tail).flatMap((record) => input.lines(record)),
       );
       return transcript === undefined
         ? TRANSCRIPT_NOT_FOUND
-        : { status: ACT_RESULT_STATUS.ACCEPTED, transcript };
+        : { status: ACTION_RESULT_STATUS.ACCEPTED, transcript };
     },
 
     async readSince(providerSessionId, cursor) {
@@ -240,10 +240,10 @@ export function jsonlTranscriptReader(input: JsonlTranscriptInput): JsonlTranscr
       );
       if (filePath === undefined) return TRANSCRIPT_NOT_FOUND;
       const refusal = input.refuses?.(filePath);
-      if (refusal !== undefined) return { status: ACT_RESULT_STATUS.REJECTED, reason: refusal };
+      if (refusal !== undefined) return { status: ACTION_RESULT_STATUS.REJECTED, reason: refusal };
       const since = await readRecordsSince(filePath, cursor, TRANSCRIPT_BOUNDS.READ_TAIL_BYTES);
       return {
-        status: ACT_RESULT_STATUS.ACCEPTED,
+        status: ACTION_RESULT_STATUS.ACCEPTED,
         text: boundedTranscript(since.records.flatMap((record) => input.lines(record))) ?? "",
         cursor: since.cursor,
         truncated: since.truncated,

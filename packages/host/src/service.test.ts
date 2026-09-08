@@ -48,8 +48,8 @@ function record(overrides: Partial<BrainRequestRecord> = {}): BrainRequestRecord
     status: BRAIN_REQUEST_STATUS.RUNNING,
     revision: 1,
     acceptedAt: NOW,
-    performedActs: 0,
-    unknownActs: 0,
+    performedActions: 0,
+    unknownActions: 0,
     askRecordedAt: NOW,
     ...overrides,
   };
@@ -60,7 +60,7 @@ function ended(overrides: Partial<BrainRequestRecord> = {}): BrainRequestRecord 
     status: BRAIN_REQUEST_STATUS.SUCCEEDED,
     settledAt: NOW + 2,
     text: "Two agents are waiting.",
-    historyRecordedAt: NOW + 2,
+    conversationRecordedAt: NOW + 2,
     revision: 3,
     ...overrides,
   });
@@ -128,12 +128,12 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
     },
     // SAFETY: the tests reach the deletion alone; the fixture stands in for the other operations.
     conversations: {
-      deleteHistory: async (sessionKey: SessionKey) => {
+      deleteConversation: async (sessionKey: SessionKey) => {
         deleted.push(sessionKey);
         return CONVERSATION_DELETE_OUTCOME.COMPLETE;
       },
       holds: () => true,
-      history: () => [],
+      lines: () => [],
       directory: () => [],
     } as unknown as ConversationOperations,
     memory: { status: () => ({}) },
@@ -204,9 +204,9 @@ for (const kind of ["in-process", "loopback"] as const) {
     assert.equal(f.asked.length, 1);
   });
 
-  test(`[${kind}] the Clear crosses the boundary as Delete history on main and answers whether it landed`, async () => {
+  test(`[${kind}] the Clear crosses the boundary as Delete conversation on main and answers whether it landed`, async () => {
     const f = fixture(kind);
-    assert.equal(await f.operator.deleteHistory(MAIN_SESSION_KEY), true);
+    assert.equal(await f.operator.deleteConversation(MAIN_SESSION_KEY), true);
     assert.deepEqual(f.deleted, [MAIN_SESSION_KEY]);
   });
 
@@ -322,13 +322,13 @@ for (const kind of ["in-process", "loopback"] as const) {
     assert.deepEqual(refused, { outcome: "rejected", reason: "absent" });
   });
 
-  test(`[${kind}] the run list and history changes reach the client as numbered events it can reconcile against`, async () => {
+  test(`[${kind}] the run list and conversation changes reach the client as numbered events it can reconcile against`, async () => {
     const f = fixture(kind);
     const runs: number[] = [];
     f.operator.onRunsChanged((list) => runs.push(list.length));
-    const history: string[] = [];
-    f.operator.onHistoryChanged((change) =>
-      history.push(`${change.sessionKey}:${change.entries.length}:${change.cleared}`),
+    const changes: string[] = [];
+    f.operator.onConversationChanged((change) =>
+      changes.push(`${change.sessionKey}:${change.entries.length}:${change.cleared}`),
     );
     await f.operator.submit({
       submissionId: "s",
@@ -336,14 +336,14 @@ for (const kind of ["in-process", "loopback"] as const) {
       origin: BRAIN_REQUEST_ORIGIN.TYPED,
     });
     f.report();
-    f.service.historyChanged(
+    f.service.conversationChanged(
       MAIN_SESSION_KEY,
       [{ kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "q" }],
       "window-7",
     );
-    f.service.historyChanged(MAIN_SESSION_KEY, []);
+    f.service.conversationChanged(MAIN_SESSION_KEY, []);
     assert.deepEqual(runs, [1]);
-    assert.deepEqual(history, ["agent:main:main:1:false", "agent:main:main:0:true"]);
+    assert.deepEqual(changes, ["agent:main:main:1:false", "agent:main:main:0:true"]);
     const listed = await f.operator.runs();
     assert.equal(listed.length, 1);
     assert.equal(f.operator.client.lastSequence(), 3);

@@ -1,6 +1,6 @@
 import type { SessionIdentity } from "@sidecar/session";
 import {
-  ACT_RESULT_STATUS,
+  ACTION_RESULT_STATUS,
   isRecord,
   text,
   type UnparsedWireValue,
@@ -37,5 +37,5 @@ export function sameIdentity(first: SessionIdentity, second: SessionIdentity): b
 }
 
 export function rejection(reason: string): WireRecord {
-  return { status: ACT_RESULT_STATUS.REJECTED, reason };
+  return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }

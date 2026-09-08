@@ -1411,7 +1411,7 @@ test("recovers from a corrupt settings file", async (t) => {
   assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
 });
 
-test("a voice reset forgets the voice, pace, captions, and duck in one act", async (t) => {
+test("a voice reset forgets the voice, pace, captions, and duck in one action", async (t) => {
   const directory = temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.MARIN);
