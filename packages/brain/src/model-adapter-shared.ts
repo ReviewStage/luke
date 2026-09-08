@@ -1,25 +1,30 @@
+import { HOSTED_BRAIN_OPTION_BOUNDS } from "@sidecar/hosted";
 import {
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
-  type ModelAdapter,
   type ModelFailure,
-  type ModelRequestOptions,
-  type ModelResponse,
 } from "@sidecar/runtime-contracts";
-import type { WireRecord } from "@sidecar/wire";
-import { RESPONSES_ITEM_FORMAT } from "./responses-api.js";
-import { TOOL_LOOP_RUNTIME } from "./runtime.js";
+import type { UnparsedWireValue } from "@sidecar/wire";
 
-/** The output budget one inference is asked for, the same on every transport. */
-export const BRAIN_MAXIMUM_OUTPUT_TOKENS = 16_000;
+/** The output budget one inference is asked for, the same on every transport: the hosted contract's ceiling. */
+export const BRAIN_MAXIMUM_OUTPUT_TOKENS = HOSTED_BRAIN_OPTION_BOUNDS.MAXIMUM_OUTPUT_TOKENS;
+
+/** A turn may read a transcript, reason over it, and act; the ceiling is for a runaway, not a budget. */
+export const BRAIN_REQUEST_TIMEOUT_MS = 90_000;
 
 /**
  * What the two Responses adapters share: the statuses they read off a
  * transport, the cooldown a rate limit earns, and the shapes of a failure.
  */
 
-export const RATE_LIMIT_STATUS = 429;
-export const UNAUTHORIZED_STATUS = 401;
+export const HTTP_STATUS = {
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  METHOD_NOT_ALLOWED: 405,
+  TOO_MANY_REQUESTS: 429,
+} as const;
+
 export const RETRY_AFTER_HEADER = "retry-after";
 
 /**
@@ -58,6 +63,16 @@ export function requestSignal(
   return cancellation ? AbortSignal.any([timeout, cancellation]) : timeout;
 }
 
+/** The body as JSON, or nothing when it is not; every reader validates what comes back as wire. */
+export async function payloadOf(response: Response): Promise<UnparsedWireValue | undefined> {
+  try {
+    // SAFETY: response.json returns a runtime value; the caller's reader validates it as wire.
+    return (await response.json()) as UnparsedWireValue;
+  } catch {
+    return undefined;
+  }
+}
+
 export function failed(failure: ModelFailure, reason: string) {
   return { outcome: MODEL_RESPONSE_OUTCOME.FAILED, failure, reason } as const;
 }
@@ -72,45 +87,4 @@ export function requestFault(error: Error | undefined) {
     MODEL_FAILURE.NETWORK,
     `request did not complete: ${error?.name ?? "unknown error"}`,
   );
-}
-
-/** The two things a bare transport answers: an inference, and when it is quiet. */
-export interface BareResponsesModel {
-  readonly model?: string;
-  respond(items: readonly WireRecord[], options: ModelRequestOptions): Promise<ModelResponse>;
-  quietUntil(): number | undefined;
-}
-
-/**
- * A full model adapter over a transport that only infers, in the Responses
- * item format: it counts and compacts nothing, and says so. For a host's
- * tests and for a transport that has not grown the other two operations.
- */
-export function bareModelAdapter(bare: BareResponsesModel): ModelAdapter {
-  return {
-    ...(bare.model ? { model: bare.model } : undefined),
-    capabilities: () =>
-      Promise.resolve({
-        outcome: MODEL_RESPONSE_OUTCOME.ANSWERED,
-        capabilities: {
-          adapter: "bare-responses",
-          ...(bare.model ? { model: bare.model } : undefined),
-          checkpoint: {
-            runtime: TOOL_LOOP_RUNTIME.ID,
-            runtimeVersion: TOOL_LOOP_RUNTIME.VERSION,
-            format: RESPONSES_ITEM_FORMAT.FORMAT,
-            formatVersion: RESPONSES_ITEM_FORMAT.VERSION,
-          },
-          countsInputTokens: false,
-          compacts: false,
-          maximumOutputTokens: BRAIN_MAXIMUM_OUTPUT_TOKENS,
-        },
-      }),
-    respond: (items, options) => bare.respond(items, options),
-    countInputTokens: () =>
-      Promise.resolve(failed(MODEL_FAILURE.COMPATIBILITY, "this transport does not count tokens")),
-    compact: () =>
-      Promise.resolve(failed(MODEL_FAILURE.COMPATIBILITY, "this transport does not compact")),
-    quietUntil: () => bare.quietUntil(),
-  };
 }

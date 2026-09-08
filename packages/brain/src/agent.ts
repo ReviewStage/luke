@@ -1,4 +1,4 @@
-import { BRAIN_TURN_AUTHORITY } from "@sidecar/hosted";
+import { BRAIN_TURN_AUTHORITY, HOSTED_BRAIN_OPTION_BOUNDS } from "@sidecar/hosted";
 import type { ScheduledTimer } from "@sidecar/realtime";
 import {
   type AgentRuntime,
@@ -55,6 +55,7 @@ import {
   interruptedUnfinishedRequests,
   isTerminalBrainRequestStatus,
 } from "./requests.js";
+import { incompleteDetail, TOOL_RESULT_STATUS } from "./runtime.js";
 import { claimedUnlessAborted } from "./settled.js";
 import {
   type BrainPersistedState,
@@ -127,7 +128,7 @@ import { BRAIN_WAKE_KIND, type BrainDelivery, type BrainWakeEvent } from "./wake
  */
 
 export const BRAIN_DEFAULTS = {
-  MAXIMUM_OUTPUT_TOKENS: 16_000,
+  MAXIMUM_OUTPUT_TOKENS: HOSTED_BRAIN_OPTION_BOUNDS.MAXIMUM_OUTPUT_TOKENS,
   /** Wakes inside this window open one turn together: a hook and the poll's edge for the same stop. */
   WAKE_COALESCE_MS: 3_000,
   /**
@@ -178,6 +179,14 @@ export interface BrainAgentOptions {
 }
 
 type RecordChanges = Partial<Omit<BrainRequestRecord, "runId" | "revision">>;
+
+/** The two markers the host's thread writes onto a run, each once. */
+const PENDING_MARK_FIELD = {
+  ASK_RECORDED_AT: "askRecordedAt",
+  HISTORY_RECORDED_AT: "historyRecordedAt",
+} as const;
+
+type PendingMarkField = (typeof PENDING_MARK_FIELD)[keyof typeof PENDING_MARK_FIELD];
 
 /**
  * What one save owns. A record scope changes one record's fields over the
@@ -235,7 +244,7 @@ export class BrainAgent {
   readonly #lease: BrainStoreLease;
   readonly #runs = new Map<string, RunControl>();
   readonly #pendingSubmissions = new Map<string, PendingSubmission>();
-  readonly #pendingMarks = new Map<string, Promise<boolean>>();
+  readonly #pendingMarks = new Map<string, Map<PendingMarkField, Promise<boolean>>>();
   readonly #listeners = new Set<BrainRequestsListener>();
   #turnInFlight = false;
   #restored: Promise<void> | undefined;
@@ -531,12 +540,12 @@ export class BrainAgent {
    * memory either, so the next report tries the whole step again.
    */
   markHistoryRecorded(runId: string, recordedAt: number): Promise<boolean> {
-    return this.#mark(runId, "historyRecordedAt", recordedAt);
+    return this.#mark(runId, PENDING_MARK_FIELD.HISTORY_RECORDED_AT, recordedAt);
   }
 
   /** Marks a run's own ask as written into the host's thread, on the same terms. */
   markAskRecorded(runId: string, recordedAt: number): Promise<boolean> {
-    return this.#mark(runId, "askRecordedAt", recordedAt);
+    return this.#mark(runId, PENDING_MARK_FIELD.ASK_RECORDED_AT, recordedAt);
   }
 
   /**
@@ -548,13 +557,8 @@ export class BrainAgent {
    * run while a write is out share that write's answer, the way retried
    * submissions share one acceptance.
    */
-  async #mark(
-    runId: string,
-    field: "askRecordedAt" | "historyRecordedAt",
-    recordedAt: number,
-  ): Promise<boolean> {
-    const key = `${runId}:${field}`;
-    const pending = this.#pendingMarks.get(key);
+  async #mark(runId: string, field: PendingMarkField, recordedAt: number): Promise<boolean> {
+    const pending = this.#pendingMarks.get(runId)?.get(field);
     if (pending) return pending;
     const marking = (async () => {
       await this.ready();
@@ -564,11 +568,14 @@ export class BrainAgent {
       if (record[field] !== undefined) return true;
       return this.#commit(generation, runId, { [field]: recordedAt });
     })();
-    this.#pendingMarks.set(key, marking);
+    const marks = this.#pendingMarks.get(runId) ?? new Map<PendingMarkField, Promise<boolean>>();
+    marks.set(field, marking);
+    this.#pendingMarks.set(runId, marks);
     try {
       return await marking;
     } finally {
-      this.#pendingMarks.delete(key);
+      marks.delete(field);
+      if (marks.size === 0) this.#pendingMarks.delete(runId);
     }
   }
 
@@ -1199,7 +1206,7 @@ export class BrainAgent {
     const { generation, run } = turnContext;
     const startedAt = this.#now();
     let contextMark: ContextMark = context.mark();
-    let cursorMark = generation.cursors.mark();
+    let cursorMark = generation.cursors.persisted();
     const gathering: TurnGathering = {
       toolCalls: [],
       deliveries: [],
@@ -1227,16 +1234,14 @@ export class BrainAgent {
               event.kind !== BRAIN_WAKE_KIND.ROSTER || Boolean(event.transcriptDelta?.text),
           )
         : attachedDeltas.events;
-      // Only a developer run advances its rollback point: each answered tool
-      // is checkpointed and the mark moves past it, so a later failure
-      // returns the context to the last paired state and never to before an
-      // act that already happened. An observation turn still rolls back
-      // whole, so the deltas it read are read again rather than skipped.
+      // Only a developer run advances its rollback point past each answered
+      // tool, so a later failure never reverts an act that already happened;
+      // an observation turn rolls back whole and reads its deltas again.
       const advanceMark = async () => {
         if (!run) return;
         if (!(await this.#checkpoint(generation, run))) run.checkpointFailed = true;
         contextMark = context.mark();
-        cursorMark = generation.cursors.mark();
+        cursorMark = generation.cursors.persisted();
       };
       try {
         const end = await this.#execute(plan, turnContext, context, execution, gathering, {
@@ -1306,16 +1311,9 @@ export class BrainAgent {
   /**
    * Stands the generation's context back at the mark the turn last committed
    * past — the start of the turn for an observation, the last checkpointed
-   * tool result for a run, so nothing an act did and the store kept is
-   * reverted — on a fresh engine rather than the one the turn used. A hook
-   * of the old engine still held when the turn was revoked may resolve
-   * later and apply to the object it was called on; that object is no
-   * longer the generation's, so the next turn never sees it. The reopen runs
-   * under the generation's own signal and installs nothing once the
-   * generation has been replaced: the successor's context is never touched.
-   * A reopen the runtime refuses — which its own stamp should never be —
-   * re-admits nothing: the generation stands without a context and refuses
-   * turns, its stored checkpoint untouched.
+   * tool result for a run — on a fresh engine, because a late hook of the
+   * old engine may still apply to it. A reopen the runtime refuses leaves the
+   * generation standing without a context, its stored checkpoint untouched.
    */
   async #restoreContext(
     generation: Generation,
@@ -1332,11 +1330,6 @@ export class BrainAgent {
       (opened) => retireContext(opened.context),
     );
     if (reopened.aborted) return;
-    // The value was claimed while the signal stood, but this continuation
-    // runs later: a stop that landed between the two keeps the same
-    // generation and context, so the signal is checked here as well as the
-    // identities, and a context claimed for a generation since revoked is
-    // retired rather than installed.
     if (
       generation.abort.signal.aborted ||
       generation !== this.#generation ||
@@ -1346,10 +1339,6 @@ export class BrainAgent {
       return;
     }
     if (!reopened.value.bootstrap.loaded) {
-      // The engine the turn used is not re-admitted: it may hold what a late
-      // hook applied. The generation stands with no context, every turn over
-      // it refused as incompatible, and the stored checkpoint — the last
-      // committed boundary — kept whole for a Clear or a runtime that reads it.
       retireContext(reopened.value.context);
       retireContext(context);
       generation.context = undefined;
@@ -1399,7 +1388,7 @@ export class BrainAgent {
           gathering.toolCalls.push({
             name: event.invocation.name,
             argumentsChars: event.invocation.argumentsJson.length,
-            outcomeStatus: event.result.status ?? "answered",
+            outcomeStatus: event.result.status ?? TOOL_RESULT_STATUS.ANSWERED,
           });
           // The answered tool is in the context; a run keeps it before the
           // model is asked again, so a later failure cannot unpair it.
@@ -1448,9 +1437,7 @@ export class BrainAgent {
         // The end's text is the reply: an earlier answer's words that preceded
         // a tool call are not the answer when the final answer said nothing.
         gathering.outputText = end.text;
-        if (end.incomplete) {
-          gathering.incomplete = `${end.incomplete.status ?? "incomplete"}: ${end.incomplete.reason}`;
-        }
+        if (end.incomplete) gathering.incomplete = incompleteDetail(end.incomplete);
         return undefined;
       case RUN_END_REASON.THROTTLED:
         gathering.error = "quiet";
@@ -1615,9 +1602,6 @@ export class BrainAgent {
     if (output.status === ACT_RESULT_STATUS.ACCEPTED) run.performedActs += 1;
     if (output.status === UNCONFIRMED_ACT_RESULT.status) run.unknownActs += 1;
     generation.journal.settle(run.runId, call.callId, JSON.stringify(output), this.#now());
-    // The record's accounting travels with the checkpoint that follows the
-    // result, owned by the run, so a copy taken before the next inference
-    // already says what was done.
     return output;
   }
 

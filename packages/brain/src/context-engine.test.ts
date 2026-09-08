@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { CONTEXT_INPUT_KIND, checkpointFormatTag } from "@sidecar/runtime-contracts";
 import type { WireRecord } from "@sidecar/wire";
-import { ResponsesContextEngine } from "./context-engine.js";
-import { RESPONSES_ITEM_TYPE } from "./responses-api.js";
+import { pairedDanglingCalls, ResponsesContextEngine } from "./context-engine.js";
+import { functionCallOutputItem, RESPONSES_ITEM_TYPE, userMessageItem } from "./responses-api.js";
 
 const RUNTIME = { id: "tool-loop", version: 1 };
 const LOST = JSON.stringify({ status: "unknown" });
@@ -107,4 +107,17 @@ test("a mark rolls the items back and dispose empties them", () => {
   assert.equal(context.checkpoint().items.length, 1);
   context.dispose();
   assert.equal(context.checkpoint().items.length, 0);
+});
+
+test("a function_call with no output anywhere after it is paired, and a paired one left alone", () => {
+  const call = (id: string) => ({ type: "function_call", call_id: id, name: "x", arguments: "{}" });
+  const items = [call("a"), functionCallOutputItem("a", "done"), call("b"), userMessageItem("x")];
+  const paired = pairedDanglingCalls(items, (callId) => `unknown:${callId}`);
+  assert.deepEqual(paired.slice(0, 4), items);
+  assert.deepEqual(paired[4], functionCallOutputItem("b", "unknown:b"));
+  const settled = [call("a"), functionCallOutputItem("a", "done")];
+  assert.equal(
+    pairedDanglingCalls(settled, () => ""),
+    settled,
+  );
 });

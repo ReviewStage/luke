@@ -3,13 +3,15 @@ import test from "node:test";
 import type { AgentRuntime, ContextOpening } from "@sidecar/runtime-contracts";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { generationFrom } from "./generation.js";
-import { TOOL_LOOP_RUNTIME_IDENTITY } from "./runtime.js";
+import { TOOL_LOOP_RUNTIME } from "./runtime.js";
 import { freshBrainState } from "./state-store.js";
+
+const TOOL_LOOP_IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };
 
 const NOW = 1_800_000_000_000;
 
 function heldRuntime() {
-  const context = new ResponsesContextEngine(TOOL_LOOP_RUNTIME_IDENTITY);
+  const context = new ResponsesContextEngine(TOOL_LOOP_IDENTITY);
   let disposed = 0;
   Object.defineProperty(context, "dispose", {
     value: () => {

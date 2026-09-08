@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  type BareResponsesModel,
-  bareModelAdapter,
-  type ResponsesInputItem,
-  responsesModelAnswer,
-  userMessageItem,
-} from "@sidecar/brain";
+import { type ResponsesInputItem, responsesModelAnswer, userMessageItem } from "@sidecar/brain";
+import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
 import {
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,

@@ -19,7 +19,6 @@ import {
   type RuntimeRun,
   type RuntimeRunEnd,
   type RuntimeRunRequest,
-  sameCheckpointFormat,
   type ToolInvocation,
   type ToolResult,
 } from "@sidecar/runtime-contracts";
@@ -50,18 +49,18 @@ export const TOOL_LOOP_RUNTIME = {
   VERSION: 1,
 } as const;
 
-/** The runtime as a context engine is told who writes its checkpoints. */
-export const TOOL_LOOP_RUNTIME_IDENTITY = {
-  id: TOOL_LOOP_RUNTIME.ID,
-  version: TOOL_LOOP_RUNTIME.VERSION,
-} as const;
-
 /** What the model is told about a call the guard refused to dispatch. */
 const LOOP_GUARD_REFUSAL_REASON = "not run: the loop guard ended this run";
 const LOOP_GUARD_MARKER = "[loop guard]";
+/** The statuses the runtime itself puts on a tool's result, beside the act statuses a performer answers with. */
+export const TOOL_RESULT_STATUS = {
+  UNKNOWN: "unknown",
+  ANSWERED: "answered",
+} as const;
+
 /** What the model is told about a tool that threw instead of answering; the executor is expected to catch its own. */
 const TOOL_DID_NOT_ANSWER = {
-  status: "unknown",
+  status: TOOL_RESULT_STATUS.UNKNOWN,
   reason: "the tool did not answer; it may have run, so do not repeat it",
 } as const;
 
@@ -78,7 +77,7 @@ interface EndSignal {
   ended: boolean;
 }
 
-function incompleteDetail(incomplete: ModelIncomplete): string {
+export function incompleteDetail(incomplete: ModelIncomplete): string {
   return `${incomplete.status ?? "incomplete"}: ${incomplete.reason}`;
 }
 
@@ -123,9 +122,6 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
     request: Omit<RuntimeRunRequest, "context">,
     lostResultJson: string,
   ): Promise<RuntimeRun | { readonly refused: string }> {
-    if (!sameCheckpointFormat(checkpoint.format, this.descriptor.checkpoint)) {
-      return { refused: "checkpoint format is not this runtime's" };
-    }
     const { context, bootstrap } = await this.openContext(checkpoint, lostResultJson);
     if (!bootstrap.loaded) return { refused: bootstrap.reason ?? "checkpoint not loaded" };
     return this.start({ ...request, context });
@@ -259,10 +255,6 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
           ...(answer.incomplete ? { incomplete: answer.incomplete } : undefined),
         });
       }
-      // Calls run in the order the model emitted them, one at a time, and the
-      // listener is awaited after each result: an act is recorded before the
-      // next starts, and a cancel landing between two reaches the executor,
-      // which refuses the second rather than racing it.
       const calls = [...answer.toolCalls];
       for (let index = 0; index < calls.length; index += 1) {
         const call = calls[index];

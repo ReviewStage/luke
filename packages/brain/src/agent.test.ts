@@ -50,7 +50,7 @@ import {
   type ResponsesInputItem,
   responsesModelAnswer,
 } from "./responses-api.js";
-import { TOOL_LOOP_RUNTIME_IDENTITY, ToolLoopAgentRuntime } from "./runtime.js";
+import { TOOL_LOOP_RUNTIME, ToolLoopAgentRuntime } from "./runtime.js";
 import {
   type BrainPersistedState,
   type BrainStateStorage,
@@ -63,6 +63,8 @@ import type { BrainTurnTraceRecord } from "./trace.js";
 import { OMISSION_MARKER } from "./transcript-reads.js";
 import { BRAIN_TURN_TRIGGER } from "./turn.js";
 import { BRAIN_WAKE_KIND, type BrainDelivery, type BrainWakeEvent } from "./wake-events.js";
+
+const TOOL_LOOP_IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };
 
 const NOW = 1_800_000_000_000;
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
@@ -155,8 +157,8 @@ function authorityOf(options: BrainRespondOptions): BrainTurnAuthority {
 }
 
 const CHECKPOINT = {
-  runtime: TOOL_LOOP_RUNTIME_IDENTITY.id,
-  runtimeVersion: TOOL_LOOP_RUNTIME_IDENTITY.version,
+  runtime: TOOL_LOOP_RUNTIME.ID,
+  runtimeVersion: TOOL_LOOP_RUNTIME.VERSION,
   format: RESPONSES_ITEM_FORMAT.FORMAT,
   formatVersion: RESPONSES_ITEM_FORMAT.VERSION,
 } as const;
@@ -195,7 +197,7 @@ function runtimeOver(model: ModelAdapter): ToolLoopAgentRuntime {
   return new ToolLoopAgentRuntime({
     model,
     itemFormat: { format: RESPONSES_ITEM_FORMAT.FORMAT, version: RESPONSES_ITEM_FORMAT.VERSION },
-    createContext: () => new ResponsesContextEngine(TOOL_LOOP_RUNTIME_IDENTITY),
+    createContext: () => new ResponsesContextEngine(TOOL_LOOP_IDENTITY),
   });
 }
 
@@ -642,7 +644,7 @@ test("the tool loop has no iteration cap: it runs until the model answers withou
   assert.equal(outputs.length, rounds);
   assert.equal(h.traces[0]?.iterations, rounds);
   assert.equal(h.traces[0]?.error, undefined);
-  assert.equal(h.traces[0]?.runtime, TOOL_LOOP_RUNTIME_IDENTITY.id);
+  assert.equal(h.traces[0]?.runtime, TOOL_LOOP_RUNTIME.ID);
 });
 
 test("a compaction item drops everything before it from the remembered array", async () => {
@@ -3002,7 +3004,7 @@ function heldOpenRuntime(model: ModelAdapter, disposeHangs = false) {
   const inner = runtimeOver(model);
   let release: (() => void) | undefined;
   let disposed = 0;
-  const context = new ResponsesContextEngine(TOOL_LOOP_RUNTIME_IDENTITY);
+  const context = new ResponsesContextEngine(TOOL_LOOP_IDENTITY);
   Object.defineProperty(context, "dispose", {
     value: () => {
       disposed += 1;

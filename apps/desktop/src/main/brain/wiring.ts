@@ -158,10 +158,6 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
    */
   const acts = createBrainActPerformer(dependencies.acts);
 
-  // The runtime this build ships is composed here, once per agent: the tool
-  // loop over the Responses context engine on whichever adapter the policy
-  // chose. A different runtime would be a different composition at this line
-  // and nothing else in the host.
   const build = (model: ModelAdapter): BrainAgent =>
     new BrainAgent({
       runtime: responsesToolLoopRuntime(model),

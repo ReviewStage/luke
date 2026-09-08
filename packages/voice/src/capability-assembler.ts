@@ -213,7 +213,7 @@ export class VoiceCapabilityAssembler {
     if (this.#brainModel) {
       write(`Luke brain: enabled (${this.#brainModel.model ?? "model chosen by the service"})\n`);
     } else if (apiKeyConfigured) {
-      write("Luke brain: unavailable — the key was found but no client was built\n");
+      write("Luke brain: unavailable — the key was found but no adapter was built\n");
     } else {
       write("Luke brain: absent — no OpenAI key and no signed-in account\n");
     }

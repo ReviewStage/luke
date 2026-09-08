@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_TOOL, type RealtimeFunctionCall } from "@sidecar/acts";
 import {
-  type BareResponsesModel,
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
   type BrainActExecution,
@@ -10,13 +9,13 @@ import {
   BrainAgent,
   type BrainStateStorage,
   BrainStateStore,
-  bareModelAdapter,
   brainStateFromStored,
   brainStateRecord,
   freshBrainState,
   responsesModelAnswer,
   responsesToolLoopRuntime,
 } from "@sidecar/brain";
+import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
 import {
   appendConversationThreadEntry,
   BRIEFING_SPEECH_KIND,

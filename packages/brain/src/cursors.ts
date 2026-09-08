@@ -48,10 +48,6 @@ export class TranscriptCursors {
     }
   }
 
-  mark(): BrainTranscriptCursors {
-    return this.persisted();
-  }
-
   rollback(mark: BrainTranscriptCursors): void {
     this.#cursors = cursorMap(mark);
   }

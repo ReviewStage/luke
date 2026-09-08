@@ -6,23 +6,11 @@ export type Settled<T> = { aborted: true } | { aborted: false; value: T };
  * dropped unread — a late model answer or transcript can then reach nothing.
  * The promise's own rejection still propagates.
  */
-export async function settledUnlessAborted<T>(
+export function settledUnlessAborted<T>(
   promise: Promise<T>,
   signal: AbortSignal,
 ): Promise<Settled<T>> {
-  if (signal.aborted) return { aborted: true };
-  // A rejection after the abort has already answered would otherwise be
-  // nobody's to handle; this branch takes it and the race below still sees
-  // the rejection first when the promise settles before the signal.
-  promise.catch(() => undefined);
-  const aborted = new Promise<Settled<T>>((resolve) => {
-    signal.addEventListener("abort", () => resolve({ aborted: true }), { once: true });
-  });
-  const settled = await Promise.race([
-    promise.then((value): Settled<T> => ({ aborted: false, value })),
-    aborted,
-  ]);
-  return signal.aborted ? { aborted: true } : settled;
+  return claimedUnlessAborted(promise, signal, () => undefined);
 }
 
 /**

@@ -1,19 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  type BareResponsesModel,
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
   BrainAgent,
   type BrainRequestRecord,
   type BrainStateStorage,
   BrainStateStore,
-  bareModelAdapter,
   brainStateFromStored,
   responsesModelAnswer,
   responsesToolLoopRuntime,
 } from "@sidecar/brain";
 import { isTerminalBrainRequestStatus } from "@sidecar/brain/requests";
+import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
 import {
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,

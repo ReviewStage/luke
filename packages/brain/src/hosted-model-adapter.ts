@@ -8,6 +8,7 @@ import {
   type HostedBrainCapabilities,
   type HostedBrainCompactRequest,
   type HostedBrainCountTokensRequest,
+  type HostedBrainOperation,
   type HostedBrainRespondRequest,
   hostedBrainCapabilitiesFromWire,
   hostedBrainCompactRequestFromWire,
@@ -37,17 +38,17 @@ import {
   wireRecord,
 } from "@sidecar/wire";
 import {
+  BRAIN_REQUEST_TIMEOUT_MS,
   type FetchLike,
   failed,
-  RATE_LIMIT_STATUS,
+  HTTP_STATUS,
+  payloadOf,
   RETRY_AFTER_HEADER,
   rateLimitWaitMs,
   requestSignal,
   throttled,
-  UNAUTHORIZED_STATUS,
   withoutTrailingSlash,
 } from "./model-adapter-shared.js";
-import { BRAIN_OPENAI_DEFAULTS } from "./openai-model-adapter.js";
 import {
   RESPONSES_ITEM_FORMAT,
   responsesCompactedWindow,
@@ -101,10 +102,7 @@ export class HostedModelAdapter implements ModelAdapter {
     this.#refreshAccount = options.refreshAccount;
     this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
     this.#now = options.now ?? Date.now;
-    this.#requestTimeoutMs = positiveInteger(
-      options.requestTimeoutMs,
-      BRAIN_OPENAI_DEFAULTS.REQUEST_TIMEOUT_MS,
-    );
+    this.#requestTimeoutMs = positiveInteger(options.requestTimeoutMs, BRAIN_REQUEST_TIMEOUT_MS);
     this.#report = options.report ?? ((message) => process.stderr.write(`${message}\n`));
   }
 
@@ -261,7 +259,7 @@ export class HostedModelAdapter implements ModelAdapter {
     const token = await this.#readAccessToken();
     if (!token) return failed(MODEL_FAILURE.CREDENTIAL, "no account token");
     let response = await this.#request(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES, "GET", token);
-    if (response?.status === UNAUTHORIZED_STATUS) {
+    if (response?.status === HTTP_STATUS.UNAUTHORIZED) {
       response = await this.#retryRefreshed(
         token,
         (refreshed) => this.#request(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES, "GET", refreshed),
@@ -269,13 +267,16 @@ export class HostedModelAdapter implements ModelAdapter {
       );
     }
     if (!response) return failed(MODEL_FAILURE.NETWORK, "capabilities request did not complete");
-    if (response.status === 404 || response.status === 405) {
+    if (
+      response.status === HTTP_STATUS.NOT_FOUND ||
+      response.status === HTTP_STATUS.METHOD_NOT_ALLOWED
+    ) {
       return failed(
         MODEL_FAILURE.COMPATIBILITY,
         `the hosted service does not offer brain contract ${HOSTED_BRAIN_CONTRACT_VERSION}`,
       );
     }
-    if (response.status === UNAUTHORIZED_STATUS) {
+    if (response.status === HTTP_STATUS.UNAUTHORIZED) {
       return failed(MODEL_FAILURE.CREDENTIAL, "the account token was refused");
     }
     if (!response.ok) {
@@ -307,7 +308,7 @@ export class HostedModelAdapter implements ModelAdapter {
     const token = await this.#readAccessToken();
     if (!token) return failed(MODEL_FAILURE.CREDENTIAL, "no account token");
     let response = await this.#request(path, "POST", token, serialized, signal);
-    if (response?.status === UNAUTHORIZED_STATUS) {
+    if (response?.status === HTTP_STATUS.UNAUTHORIZED) {
       response = await this.#retryRefreshed(
         token,
         (refreshed) => this.#request(path, "POST", refreshed, serialized, signal),
@@ -315,11 +316,14 @@ export class HostedModelAdapter implements ModelAdapter {
       );
     }
     if (!response) return failed(MODEL_FAILURE.NETWORK, "request did not complete");
-    if (response.status === RATE_LIMIT_STATUS) return this.#quiet(response);
-    if (response.status === UNAUTHORIZED_STATUS) {
+    if (response.status === HTTP_STATUS.TOO_MANY_REQUESTS) return this.#quiet(response);
+    if (response.status === HTTP_STATUS.UNAUTHORIZED) {
       return failed(MODEL_FAILURE.CREDENTIAL, "the account token was refused");
     }
-    if (response.status === 404 || response.status === 405) {
+    if (
+      response.status === HTTP_STATUS.NOT_FOUND ||
+      response.status === HTTP_STATUS.METHOD_NOT_ALLOWED
+    ) {
       return failed(MODEL_FAILURE.COMPATIBILITY, `the hosted service does not serve ${path}`);
     }
     if (!response.ok) {
@@ -393,7 +397,7 @@ export class HostedModelAdapter implements ModelAdapter {
   }
 }
 
-function unsupported(operation: string) {
+function unsupported(operation: HostedBrainOperation) {
   return failed(
     MODEL_FAILURE.COMPATIBILITY,
     `the hosted service does not offer the ${operation} operation`,
@@ -417,14 +421,5 @@ function refusedLocally(refusal: string) {
         MODEL_FAILURE.BOUNDS,
         "input carries an item the hosted service does not replay",
       );
-  }
-}
-
-async function payloadOf(response: Response): Promise<UnparsedWireValue> {
-  try {
-    // SAFETY: response.json returns a runtime value; every reader validates it as wire.
-    return (await response.json()) as UnparsedWireValue;
-  } catch {
-    return undefined;
   }
 }

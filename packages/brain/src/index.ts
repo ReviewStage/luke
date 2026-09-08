@@ -9,7 +9,7 @@ export {
   type BrainAgentOptions,
   type BrainRequestsListener,
 } from "./agent.js";
-export { ResponsesContextEngine } from "./context-engine.js";
+export { pairedDanglingCalls, ResponsesContextEngine } from "./context-engine.js";
 export { TranscriptCursors } from "./cursors.js";
 export { BrainGenerationClock, type BrainGenerationClockOptions } from "./generation-clock.js";
 export {
@@ -42,12 +42,10 @@ export {
   type LoopGuardLevel,
   type LoopGuardVerdict,
 } from "./loop-guard.js";
-export { pairedDanglingCalls } from "./memory.js";
 export {
-  type BareResponsesModel,
   BRAIN_RATE_LIMIT_COOLDOWN_MS,
   BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS,
-  bareModelAdapter,
+  RETRY_AFTER_HEADER,
   rateLimitWaitMs,
 } from "./model-adapter-shared.js";
 export {
@@ -111,7 +109,6 @@ export {
 export { responsesToolLoopRuntime } from "./responses-runtime.js";
 export {
   TOOL_LOOP_RUNTIME,
-  TOOL_LOOP_RUNTIME_IDENTITY,
   ToolLoopAgentRuntime,
   type ToolLoopRuntimeOptions,
 } from "./runtime.js";

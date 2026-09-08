@@ -236,8 +236,9 @@ Trust constraints:
   runtime loads only its own stamp, and a valid checkpoint of another stamp
   is not corruption: it is kept whole, beside the requests and the journal,
   every turn over it is refused as incompatible, and the way forward is a
-  runtime that reads it or the developer's Clear. Corrupt rows keep the
-  store's own repair. Every hook of an engine may be asynchronous and is
+  runtime that reads it or the developer's Clear. Corrupt rows are replaced
+  by the store that observed them. Every hook of an engine may be
+  asynchronous and is
   awaited only until the run's signal fires, like every wait on the model.
 - The hosted tier speaks two brain contracts. The first, kept for installed
   clients, carries the input array and a turn authority and lets the service

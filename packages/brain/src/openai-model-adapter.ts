@@ -10,11 +10,14 @@ import {
   REASONING_EFFORT,
   type ReasoningEffort,
 } from "@sidecar/runtime-contracts";
-import { positiveInteger, text, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { positiveInteger, text, type WireRecord } from "@sidecar/wire";
 import {
+  BRAIN_MAXIMUM_OUTPUT_TOKENS,
+  BRAIN_REQUEST_TIMEOUT_MS,
   type FetchLike,
   failed,
-  RATE_LIMIT_STATUS,
+  HTTP_STATUS,
+  payloadOf,
   RETRY_AFTER_HEADER,
   rateLimitWaitMs,
   requestFault,
@@ -51,9 +54,8 @@ export const BRAIN_OPENAI_DEFAULTS = {
   BASE_URL: "https://api.openai.com/v1",
   MODEL: "gpt-5.6-terra",
   REASONING_EFFORT: REASONING_EFFORT.MEDIUM,
-  /** A turn may read a transcript, reason over it, and act; the ceiling is for a runaway, not a budget. */
-  REQUEST_TIMEOUT_MS: 90_000,
-  MAXIMUM_OUTPUT_TOKENS: 16_000,
+  REQUEST_TIMEOUT_MS: BRAIN_REQUEST_TIMEOUT_MS,
+  MAXIMUM_OUTPUT_TOKENS: BRAIN_MAXIMUM_OUTPUT_TOKENS,
 } as const;
 
 export const OPENAI_MODEL_ADAPTER_ID = "openai-responses";
@@ -70,15 +72,6 @@ export interface OpenAiModelAdapterOptions {
 }
 
 export type OpenAiModelOptions = Omit<OpenAiModelAdapterOptions, "apiKey">;
-
-async function payloadOf(response: Response): Promise<UnparsedWireValue | undefined> {
-  try {
-    // SAFETY: response.json returns a runtime value; every reader below validates it as wire.
-    return (await response.json()) as UnparsedWireValue;
-  } catch {
-    return undefined;
-  }
-}
 
 /**
  * Carries inferences to the OpenAI Responses API on the developer's own key.
@@ -220,10 +213,10 @@ export class OpenAiModelAdapter implements ModelAdapter {
     } catch (error) {
       return requestFault(error instanceof Error ? error : undefined);
     }
-    if (response.status === RATE_LIMIT_STATUS) return this.#quiet(response);
+    if (response.status === HTTP_STATUS.TOO_MANY_REQUESTS) return this.#quiet(response);
     // Status alone diagnoses credentials or an outage without writing the
     // request, the key, or any session material to the log.
-    if (response.status === 401 || response.status === 403) {
+    if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
       return failed(MODEL_FAILURE.CREDENTIAL, `request failed with status ${response.status}`);
     }
     if (!response.ok) {

@@ -30,11 +30,9 @@
 export const RUNTIME_SCHEMA_VERSION = 2;
 
 /**
- * The tag version 1 of the schema wrote on every checkpoint item before the
- * stamp moved onto the generation itself. Every such item was the tool-loop
- * runtime's first version over the Responses input array, because nothing
- * else ever wrote one, so the migration to version 2 stamps a generation that
- * has items with exactly that.
+ * The tag version 1 of the schema wrote on every checkpoint item. Every such
+ * item was the tool-loop runtime's first version over the Responses input
+ * array, because nothing else ever wrote one.
  */
 export const LEGACY_ITEM_FORMAT_TAG = "openai-responses-input/1";
 

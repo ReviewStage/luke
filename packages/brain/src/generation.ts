@@ -114,7 +114,7 @@ export function generationFrom(
         `checkpoint ${checkpoint ? checkpointFormatTag(checkpoint.format) : "(none)"} could not be loaded`;
     })
     .catch((error: Error) => {
-      generation.incompatible = `the runtime could not open the context: ${error.name}`;
+      generation.incompatible = `the runtime could not open the context: ${error.message}`;
     });
   return generation;
 }

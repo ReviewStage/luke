@@ -6,13 +6,13 @@ import {
   BrainGenerationClock,
   type BrainStateStorage,
   BrainStateStore,
-  bareModelAdapter,
   brainStateFromStored,
   brainStateRecord,
   freshBrainState,
   responsesModelAnswer,
   responsesToolLoopRuntime,
 } from "@sidecar/brain";
+import { bareModelAdapter } from "@sidecar/brain/testing";
 import type { ScheduledTimer } from "@sidecar/realtime";
 import { ACT_RESULT_STATUS } from "@sidecar/wire";
 import { BrainHost } from "./host";

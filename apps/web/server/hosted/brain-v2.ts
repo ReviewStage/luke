@@ -1,5 +1,4 @@
 import {
-  BRAIN_OPENAI_DEFAULTS,
   BRAIN_RESPONSES_COMPACT_PATH,
   BRAIN_RESPONSES_INPUT_TOKENS_PATH,
   BRAIN_RESPONSES_PATH,
@@ -21,6 +20,7 @@ import {
   hostedBrainToolCatalog,
   maximumHostedBrainRequestBytes,
   REASONING_EFFORT,
+  RETRY_AFTER_HEADER,
   type ResponsesFunctionTool,
   rateLimitWaitMs,
   responsesCompactedWindow,
@@ -54,8 +54,6 @@ import type { HostedSpend } from "./quota.js";
  * tool, keeps no conversation, and stores and logs none of the request, the
  * reply, or the encrypted items that travel in them.
  */
-
-const RETRY_AFTER_HEADER = "retry-after";
 
 export interface BrainV2Options {
   request: Request;
@@ -231,9 +229,6 @@ export function handleBrainRespondV2(options: BrainV2Options): Promise<Response>
       }),
     );
     if (payload instanceof Response) return payload;
-    // An answer carrying an item this endpoint would refuse to replay next
-    // turn is not handed down: the desktop would keep it verbatim and every
-    // later turn of that memory would fail here.
     const output = payload === undefined ? undefined : brainResponsesOutput(payload);
     if (!output || !brainOutputReplayable(payload)) {
       return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR);
@@ -293,5 +288,3 @@ export function handleBrainCompact(options: BrainV2Options): Promise<Response> {
     return jsonResponse(HOSTED_HTTP_STATUS.OK, { output: window });
   });
 }
-
-export { BRAIN_OPENAI_DEFAULTS };

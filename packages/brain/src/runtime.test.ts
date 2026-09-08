@@ -20,7 +20,9 @@ import {
 import { isWireString, type WireRecord } from "@sidecar/wire";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { RESPONSES_ITEM_FORMAT, RESPONSES_ITEM_TYPE } from "./responses-api.js";
-import { TOOL_LOOP_RUNTIME, TOOL_LOOP_RUNTIME_IDENTITY, ToolLoopAgentRuntime } from "./runtime.js";
+import { TOOL_LOOP_RUNTIME, ToolLoopAgentRuntime } from "./runtime.js";
+
+const TOOL_LOOP_IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };
 
 function answered(
   overrides: Partial<Extract<ModelResponse, { outcome: "answered" }>> = {},
@@ -93,7 +95,7 @@ function runtime(model: FakeModel, loopGuard?: { enabled: boolean }) {
   return new ToolLoopAgentRuntime({
     model,
     itemFormat: { format: RESPONSES_ITEM_FORMAT.FORMAT, version: RESPONSES_ITEM_FORMAT.VERSION },
-    createContext: () => new ResponsesContextEngine(TOOL_LOOP_RUNTIME_IDENTITY),
+    createContext: () => new ResponsesContextEngine(TOOL_LOOP_IDENTITY),
     ...(loopGuard ? { loopGuard } : undefined),
   });
 }
@@ -111,7 +113,7 @@ function harness(tools?: Partial<ToolExecutor>): Harness {
   const model = new FakeModel();
   const events: RuntimeEvent[] = [];
   const executed: ToolInvocation[] = [];
-  const context = new ResponsesContextEngine(TOOL_LOOP_RUNTIME_IDENTITY);
+  const context = new ResponsesContextEngine(TOOL_LOOP_IDENTITY);
   context.bootstrap(undefined, '{"status":"unknown"}');
   const abort = new AbortController();
   const executor: ToolExecutor = {
@@ -477,7 +479,7 @@ test("every context handed to an executor is revoked once the run ends, on compl
 test("an engine whose lifecycle hooks are asynchronous is awaited at every step", async () => {
   const h = harness();
   const log: string[] = [];
-  const inner = new ResponsesContextEngine(TOOL_LOOP_RUNTIME_IDENTITY);
+  const inner = new ResponsesContextEngine(TOOL_LOOP_IDENTITY);
   const later = <Value>(value: Value): Promise<Value> =>
     new Promise((resolve) => setImmediate(() => resolve(value)));
   const asyncEngine: ContextEngine = {
