@@ -17,6 +17,10 @@ struct WatchVoiceView: View {
     @State private var model = WatchVoiceSessionModel()
     @State private var isPressing = false
     @State private var settingsShown = false
+    // The sideways pull that uncovers the thread's stamps, and whether the
+    // drag under way is the pull's or the scroll's, decided at its first move.
+    @State private var timePull: CGFloat = 0
+    @State private var pullClaimed: Bool?
     private let actClient = ActClient(baseURL: AccountConstants.serviceURL)
 
     var body: some View {
@@ -114,7 +118,7 @@ struct WatchVoiceView: View {
                             .opacity(model.status == .connecting ? 0.4 : 1)
                     } else {
                         ForEach(conversation.messages) { message in
-                            WatchVoiceBubble(message: message)
+                            WatchVoiceBubble(message: message, pull: timePull)
                                 .id(message.id)
                         }
                     }
@@ -126,6 +130,7 @@ struct WatchVoiceView: View {
                 .padding(.bottom, 88)
                 .frame(maxWidth: .infinity)
             }
+            .simultaneousGesture(timePullGesture)
             .onChange(of: conversation.messages) {
                 guard let last = conversation.messages.last else { return }
                 withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
@@ -137,6 +142,30 @@ struct WatchVoiceView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// The pull rides beside the scroll rather than replacing it, as on the
+    /// phone: a drag that starts mostly sideways is the pull's for its whole
+    /// length, one that starts mostly upright is the scroll's, and the lift
+    /// springs the column back. The crown still scrolls throughout.
+    private var timePullGesture: some Gesture {
+        DragGesture(minimumDistance: 8)
+            .onChanged { value in
+                let claimed =
+                    pullClaimed
+                    ?? ConversationTimePull.claimsDrag(
+                        width: value.translation.width, height: value.translation.height
+                    )
+                pullClaimed = claimed
+                guard claimed else { return }
+                timePull = ConversationTimePull.distance(
+                    dragged: value.translation.width, reveal: WatchVoiceBubble.reveal
+                )
+            }
+            .onEnded { _ in
+                pullClaimed = nil
+                withAnimation(.spring(duration: 0.35)) { timePull = 0 }
+            }
     }
 
     // MARK: - Floating controls
@@ -266,22 +295,47 @@ struct WatchVoiceView: View {
 
 // MARK: - Message bubble
 
+/// One line of the thread with its stamp in the column past the screen's
+/// trailing edge, which the pull brings in the way iMessage uncovers a
+/// message's time. The watch's screen is too narrow for a received bubble to
+/// keep room spare beside it, so here both sides ride the pull and move left
+/// together, Luke's words running off the leading edge for as long as the
+/// fingers hold; the phone, with room to the right of his bubbles, leaves
+/// them standing.
 private struct WatchVoiceBubble: View {
     let message: VoiceConversationMessage
+    let pull: CGFloat
+
+    /// Room for the widest stamp a twelve-hour clock draws at this size.
+    static let timeColumn: CGFloat = 48
+    /// How far the column travels to stand fully in view: its own width and
+    /// the thread's trailing inset it rests behind.
+    static let reveal: CGFloat = timeColumn + 4
 
     private var isDeveloper: Bool { message.speaker == .developer }
 
     var body: some View {
-        Text(message.words)
-            .font(.system(size: 13))
-            .foregroundStyle(isDeveloper ? Color.white : Color.primary)
-            .multilineTextAlignment(.leading)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 7)
-            .background {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isDeveloper ? Color.accentColor : Color.secondary.opacity(0.18))
-            }
-            .frame(maxWidth: .infinity, alignment: isDeveloper ? .trailing : .leading)
+        ZStack(alignment: .trailing) {
+            Text(message.words)
+                .font(.system(size: 13))
+                .foregroundStyle(isDeveloper ? Color.white : Color.primary)
+                .multilineTextAlignment(.leading)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 7)
+                .background {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(isDeveloper ? Color.accentColor : Color.secondary.opacity(0.18))
+                }
+                .frame(maxWidth: .infinity, alignment: isDeveloper ? .trailing : .leading)
+                .offset(x: -pull)
+            Text(message.recordedAt, format: .dateTime.hour().minute())
+                .font(.system(size: 10))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .frame(width: Self.timeColumn, alignment: .trailing)
+                .padding(.trailing, 2)
+                .offset(x: Self.reveal - pull)
+        }
     }
 }
