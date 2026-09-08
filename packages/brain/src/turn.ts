@@ -55,8 +55,18 @@ export const TURN_OUTCOME = {
   INCOMPATIBLE: "incompatible",
 } as const;
 
+export type TurnOutcome = (typeof TURN_OUTCOME)[keyof typeof TURN_OUTCOME];
+
+/** The outcomes a turn's own conversation reports to the host as a notice; the rest never ran. */
+export const REPORTED_OUTCOMES: ReadonlySet<TurnOutcome> = new Set([
+  TURN_OUTCOME.DONE,
+  TURN_OUTCOME.QUIET,
+  TURN_OUTCOME.FAILED,
+  TURN_OUTCOME.INCOMPLETE,
+]);
+
 export type TurnResult =
-  | { outcome: typeof TURN_OUTCOME.DONE; text: string; briefings?: readonly string[] }
+  | { outcome: typeof TURN_OUTCOME.DONE; text: string; briefings: readonly string[] }
   | { outcome: typeof TURN_OUTCOME.QUIET; until: number }
   | { outcome: typeof TURN_OUTCOME.FAILED }
   | { outcome: typeof TURN_OUTCOME.INCOMPLETE }
@@ -93,8 +103,6 @@ export interface TurnPlan {
   open: (events: readonly BrainWakeEvent[], now: number) => readonly string[];
   /** Whether a roster look's events with nothing new in their transcript are left out. */
   dropEmptyRosterDeltas?: boolean;
-  /** Asks steered or collected into this turn, settled with its end. */
-  companions?: RunControl[];
   run?: RunControl;
   /**
    * The generation the work was queued in. A turn that reaches the front of

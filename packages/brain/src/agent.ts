@@ -2,8 +2,11 @@ import { HOSTED_BRAIN_OPTION_BOUNDS } from "@sidecar/hosted";
 import type { ScheduledTimer } from "@sidecar/realtime";
 import {
   type EffectiveToolPolicy,
+  PendingInputQueue,
   QUEUE_DEFAULTS,
   QUEUE_MODE,
+  type QueueBatch,
+  type QueuedInput,
   type QueueMode,
 } from "@sidecar/runtime";
 import {
@@ -12,6 +15,7 @@ import {
   type ContextMark,
   type ReasoningEffort,
   RUN_END_REASON,
+  RUN_ORIGIN,
   RUNTIME_EVENT,
   type RuntimeEvent,
   type RuntimeRun,
@@ -97,6 +101,7 @@ import {
   type BrainTurnDescription,
   type BrainTurnPreparation,
   type BrainTurnTrigger,
+  REPORTED_OUTCOMES,
   type RunControl,
   runOriginOf,
   TURN_OUTCOME,
@@ -170,8 +175,12 @@ export const BRAIN_DEFAULTS = {
   DELTA_PER_SESSION_CHARS: 20_000,
   /** The most of a whole transcript one read answers with, cut from the front. */
   FULL_TRANSCRIPT_CHARS: 60_000,
-  /** The most wakes held for one turn; past it the oldest go, since the delta read covers what they said. */
-  PENDING_WAKE_CAPACITY: QUEUE_DEFAULTS.CAPACITY,
+  /**
+   * The most wakes held for one turn; past it the oldest go, since the delta
+   * read covers what they said. The wake buffer is not the ask queue, whose
+   * capacity and overflow are the port's own.
+   */
+  PENDING_WAKE_CAPACITY: 20,
 } as const;
 
 /** Runs a turn's work under the host's lane for its trigger, so conversations share the lanes' budgets and nothing wider. */
@@ -186,6 +195,16 @@ export interface BrainOpeningNotes {
   take(): readonly string[];
   restore(notes: readonly string[]): void;
 }
+
+/**
+ * What a run's end is read from: the flags its own execution set and the
+ * generation it ran in. A rider's end is the primary's flags with its own
+ * record, so nothing has to fabricate a control to reuse the reading.
+ */
+type RunEndFlags = Pick<
+  RunControl,
+  "generation" | "cancelled" | "timedOut" | "checkpointFailed" | "compactionFailed"
+>;
 
 /** How a run ended, as its record takes it: the status and what rides beside it. */
 interface RunOutcome {
@@ -314,10 +333,17 @@ export class BrainAgent {
   readonly #pendingSubmissions = new Map<string, PendingSubmission>();
   readonly #listeners = new Set<BrainRequestsListener>();
   #turnInFlight = false;
-  /** The execution under way, for an ask to steer into or interrupt. */
-  #active: { run: RunControl; started: RuntimeRun; plan: TurnPlan } | undefined;
-  /** Asks collected for one turn, and the timer that opens it. */
-  #collecting: { runs: RunControl[]; questions: string[]; timer: ScheduledTimer } | undefined;
+  /** The execution under way, for an ask to steer into or interrupt, and the asks riding inside it. */
+  #active:
+    | { run: RunControl; started: RuntimeRun; plan: TurnPlan; riders: RunControl[] }
+    | undefined;
+  /** Where an ask that arrives while this conversation is busy waits, under the queue's own mode and bounds. */
+  readonly #asks: PendingInputQueue;
+  /**
+   * Asks the overflow folded into a summary line: their words reach the model
+   * as that line, and their records settle with the turn that carries it.
+   */
+  #summarized: RunControl[] = [];
   /** Each session as it last looked when an observation was captured, for the unchanged-look suppression. */
   readonly #lastLook = new Map<string, string>();
   /** Captures run one after another, so two reads of one session never race each other's cursor. */
@@ -368,6 +394,17 @@ export class BrainAgent {
       cancel: this.#cancel,
       quietUntil: () => this.#options.runtime.quietUntil(),
       flush: (events) => this.#flushWakes(events),
+    });
+    this.#asks = new PendingInputQueue({
+      settings: {
+        mode: options.queueMode ?? QUEUE_DEFAULTS.MODE,
+        debounceMs: options.queueDebounceMs ?? QUEUE_DEFAULTS.DEBOUNCE_MS,
+      },
+      steer: (input) => this.#steerAsk(input),
+      interrupt: () => this.#interruptActive(),
+      flush: (batches) => this.#openBatches(batches),
+      schedule: this.#schedule,
+      cancel: this.#cancel,
     });
     this.#unsubscribeStore = options.store.onReplaced((state) => this.#adoptGeneration(state));
   }
@@ -573,61 +610,133 @@ export class BrainAgent {
   }
 
   /**
-   * Where an accepted ask goes, by the queue mode. Steer hands it to the
-   * execution under way at its next model boundary — every tool call already
-   * emitted still gets its result first — and the ask ends with that run.
-   * Interrupt cancels the execution under way and opens the ask next.
-   * Collect holds asks for the debounce and opens one turn for them all.
-   * Follow-up, and every mode when nothing is under way, queues the ask
-   * behind the turns ahead of it.
+   * Where an accepted ask goes. An idle conversation opens it at once: the
+   * queue exists for a conversation that is busy, and a debounce on an idle
+   * one is only delay — except in collect mode, whose window is its whole
+   * contract. Everything else is admitted to the ported queue, which decides
+   * under its mode whether the words steer into the execution under way,
+   * interrupt it, or wait for a turn of their own, and under its bounds what
+   * the overflow folds into a summary.
    */
   #admitAsk(run: RunControl, question: string): void {
-    const mode = this.#options.queueMode ?? QUEUE_DEFAULTS.MODE;
-    const active = this.#active;
-    if (mode === QUEUE_MODE.STEER && active && !this.#runRevoked(active.run)) {
-      const text = askInputText(question, [], this.#now());
-      if (active.started.steer({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text })) {
-        active.plan.companions = [...(active.plan.companions ?? []), run];
-        void this.#ledger
-          .commit(run.generation, run.runId, {
-            status: BRAIN_REQUEST_STATUS.RUNNING,
-            startedAt: this.#now(),
-          })
-          .then(() => this.#notify());
-        return;
-      }
-    }
-    if (mode === QUEUE_MODE.INTERRUPT && active && !this.#runRevoked(active.run)) {
-      active.run.cancelled = true;
-      active.run.abort.abort();
-    }
-    if (mode === QUEUE_MODE.COLLECT) {
-      if (this.#collecting) {
-        this.#collecting.runs.push(run);
-        this.#collecting.questions.push(question);
-        return;
-      }
-      const collecting = {
-        runs: [run],
-        questions: [question],
-        timer: this.#schedule(() => {
-          if (this.#collecting !== collecting) return;
-          this.#collecting = undefined;
-          const [first, ...rest] = collecting.runs;
-          if (!first) return;
-          this.#wakes.take();
-          void this.#queueTurn(BRAIN_TURN_TRIGGER.ASK, () =>
-            this.#runAsk(first, collecting.questions.join("\n\n"), rest),
-          );
-        }, this.#options.queueDebounceMs ?? QUEUE_DEFAULTS.DEBOUNCE_MS),
-      };
-      this.#collecting = collecting;
+    const mode = this.#asks.settings.mode;
+    if (!this.#active && this.#asks.size === 0 && mode !== QUEUE_MODE.COLLECT) {
+      this.#openAsks([run], question);
       return;
     }
+    const held = this.#asks.state.entries;
+    const admitted = this.#asks.push({ id: run.runId, text: question, atMs: this.#now() });
+    this.#foldEvicted(held);
+    if (!admitted && !held.some((entry) => entry.id === run.runId)) {
+      // The overflow refused these words outright: no turn will carry them,
+      // and the record ends here rather than waiting for one that never opens.
+      void this.#settleWaiting([run]);
+    }
+  }
+
+  /**
+   * Moves the runs the overflow just let go of out of the queue's accounting
+   * and into this agent's: one folded into a summary rides the next drained
+   * turn as a rider, and one dropped outright settles now, because nothing
+   * will carry its words.
+   */
+  #foldEvicted(held: readonly QueuedInput[]): void {
+    const state = this.#asks.state;
+    const evicted = held.filter((entry) => !state.entries.some((kept) => kept.id === entry.id));
+    if (evicted.length === 0) return;
+    const folded = state.summaryLines.length >= evicted.length;
+    const dropped: RunControl[] = [];
+    for (const entry of evicted) {
+      const run = this.#runs.get(entry.id);
+      if (!run) continue;
+      if (folded) this.#summarized.push(run);
+      else dropped.push(run);
+    }
+    if (dropped.length > 0) void this.#settleWaiting(dropped);
+  }
+
+  /** Hands an ask to the execution under way at its next model boundary; answers whether it took them. */
+  #steerAsk(input: QueuedInput): boolean {
+    const active = this.#active;
+    const run = this.#runs.get(input.id);
+    if (!active || !run || this.#runRevoked(active.run)) return false;
+    const text = askInputText(input.text, [], this.#now());
+    if (!active.started.steer({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text })) return false;
+    active.riders.push(run);
+    // The one place a rider is committed running: its words are in the model's
+    // hands, and the run it rides is the run it ends with.
+    void this.#ledger
+      .commit(run.generation, run.runId, {
+        status: BRAIN_REQUEST_STATUS.RUNNING,
+        startedAt: this.#now(),
+      })
+      .then(() => this.#notify());
+    return true;
+  }
+
+  /** Cancels the execution under way so the ask that interrupted it opens next. */
+  #interruptActive(): void {
+    const active = this.#active;
+    if (!active || this.#runRevoked(active.run)) return;
+    active.run.cancelled = true;
+    active.run.abort.abort();
+  }
+
+  /**
+   * Opens the turns the queue drained, in order. The batch that carries the
+   * overflow's summary carries the summarized runs with it, so an ask whose
+   * words reached the model only as a summary line still settles with the
+   * turn that read it.
+   */
+  #openBatches(batches: readonly QueueBatch[]): void {
+    for (const batch of batches) {
+      const runs = batch.inputs.flatMap((input) => this.#runs.get(input.id) ?? []);
+      const riders = batch.summary === undefined ? [] : this.#summarized.splice(0);
+      const question = [
+        ...(batch.summary === undefined ? [] : [batch.summary]),
+        ...batch.inputs.map((input) => input.text),
+      ].join("\n\n");
+      this.#openAsks([...runs, ...riders], question);
+    }
+  }
+
+  /** Queues one turn for the asks given, the first that can open it standing as its run. */
+  #openAsks(runs: readonly RunControl[], question: string): void {
+    if (runs.length === 0) return;
     // The ask's turn opens with the inbox as it stands, so the window a wake
     // armed has nothing left to open and is disarmed.
     this.#wakes.take();
-    void this.#queueTurn(BRAIN_TURN_TRIGGER.ASK, () => this.#runAsk(run, question));
+    void this.#queueTurn(BRAIN_TURN_TRIGGER.ASK, () => this.#runAsk(runs, question));
+  }
+
+  /**
+   * Settles asks no turn will carry — the queue emptied by a Clear, a reset,
+   * an expiry, or a stop, and anything the overflow dropped — as the run
+   * itself says: cancelled when the developer cancelled it, interrupted when
+   * this conversation's standing was taken away under it.
+   */
+  async #settleWaiting(runs: readonly RunControl[]): Promise<void> {
+    // How each ask ends is read now, before anything is awaited: a generation
+    // being replaced revokes every run it holds, and a blanket revocation is
+    // not the developer's cancel.
+    const ends = runs.map((run) => ({
+      run,
+      status: run.cancelled ? BRAIN_REQUEST_STATUS.CANCELLED : BRAIN_REQUEST_STATUS.INTERRUPTED,
+    }));
+    for (const { run, status } of ends) {
+      this.#runs.delete(run.runId);
+      await this.#ledger.settleRun(run.generation, run.runId, status, {});
+    }
+  }
+
+  /** Everything waiting for a turn, queued or summarized, forgotten by the queue as it is taken. */
+  #takeWaiting(): readonly RunControl[] {
+    const waiting = [
+      ...this.#asks.state.entries.flatMap((entry) => this.#runs.get(entry.id) ?? []),
+      ...this.#summarized.splice(0),
+    ];
+    this.#asks.clear();
+    return waiting;
   }
 
   /**
@@ -673,11 +782,12 @@ export class BrainAgent {
       run.abort.abort();
     }
     const active = this.#active;
-    if (run && active?.plan.companions?.includes(run)) {
+    const riding = run ? (active?.riders.indexOf(run) ?? -1) : -1;
+    if (run && active && riding >= 0) {
       // An ask steered into another run has said its words to the model
       // already; what cancelling withdraws is its record's claim on that
       // run's reply, which it no longer waits for.
-      active.plan.companions = active.plan.companions.filter((held) => held !== run);
+      active.riders.splice(riding, 1);
       this.#runs.delete(runId);
       await this.#ledger.settleRun(run.generation, runId, BRAIN_REQUEST_STATUS.CANCELLED, {});
       return this.request(runId);
@@ -924,7 +1034,7 @@ export class BrainAgent {
     this.#stopped = true;
     this.#cancelMaintenance();
     this.#wakes.clear();
-    this.#cancelCollecting();
+    const waiting = this.#takeWaiting();
     this.#cancelHeartbeatRetry();
     this.#unsubscribeStore?.();
     this.#unsubscribeStore = undefined;
@@ -938,6 +1048,7 @@ export class BrainAgent {
         pending.result.catch(() => undefined),
       ),
     );
+    await this.#settleWaiting(waiting);
     const generation = this.#generation;
     if (generation) {
       for (const record of this.requests()) {
@@ -1006,12 +1117,6 @@ export class BrainAgent {
         }),
       );
     });
-  }
-
-  #cancelCollecting(): void {
-    if (!this.#collecting) return;
-    this.#cancel(this.#collecting.timer);
-    this.#collecting = undefined;
   }
 
   /** Queues a turn behind this conversation's own, and runs it under the host's lane for its trigger. */
@@ -1254,6 +1359,9 @@ export class BrainAgent {
     const previous = this.#generation;
     if (previous?.id === state.generationId) return;
     this.#cancelMaintenance();
+    // Asks that only ever waited belong to the memory being replaced: nothing
+    // opens for them, and each record ends as the replacement leaves it.
+    void this.#settleWaiting(this.#takeWaiting());
     previous?.abort.abort();
     for (const run of this.#runs.values()) {
       run.cancelled = true;
@@ -1264,7 +1372,6 @@ export class BrainAgent {
     // Wakes coalesced against the old memory — including a quiet retry's —
     // are that generation's work, and go with it.
     this.#wakes.clear();
-    this.#cancelCollecting();
     this.#cancelHeartbeatRetry();
     this.#generation = this.#generationFrom(state);
     this.#armInbox(this.#generation);
@@ -1292,114 +1399,125 @@ export class BrainAgent {
     return run.cancelled || run.timedOut || this.#stopped || run.generation.abort.signal.aborted;
   }
 
-  async #runAsk(
-    run: RunControl,
-    question: string,
-    companions: readonly RunControl[] = [],
-  ): Promise<void> {
-    const generation = run.generation;
-    const record = generation.requests.get(run.runId);
-    // The asks collected behind a run that never opens are not lost: the
-    // next of them opens a turn of its own, with the rest behind it.
-    const handOn = async () => {
-      const [next, ...rest] = companions;
-      if (next) await this.#runAsk(next, question, rest);
-    };
-    if (!record || record.status !== BRAIN_REQUEST_STATUS.QUEUED || this.#runRevoked(run)) {
-      if (record?.status === BRAIN_REQUEST_STATUS.QUEUED) {
-        await this.#ledger.settleRun(
-          generation,
-          run.runId,
-          run.cancelled ? BRAIN_REQUEST_STATUS.CANCELLED : BRAIN_REQUEST_STATUS.INTERRUPTED,
-          {},
-        );
+  /**
+   * Opens one turn for the asks a drain handed over. The first of them that
+   * can still open stands as the turn's run and the rest ride inside it; an
+   * ask already revoked, or one whose start the store refuses, settles here
+   * and leaves the turn to the next, so asks behind a run that never opened
+   * are not lost.
+   */
+  async #runAsk(runs: readonly RunControl[], question: string): Promise<void> {
+    const waiting = [...runs];
+    while (waiting.length > 0) {
+      const run = waiting.shift();
+      if (!run || !(await this.#opens(run))) continue;
+      const generation = run.generation;
+      // The start is durable before any work opens: a run the file does not
+      // show running is one a relaunch would find queued while its acts had
+      // begun, and a cancel would settle on the queued path under a dispatched
+      // effect. A start the store refuses ends the run as the persistence
+      // failure it is, with nothing called; a revocation that landed while the
+      // start was being written ends it on its own terms, likewise unopened.
+      const started = await this.#ledger.commit(generation, run.runId, {
+        status: BRAIN_REQUEST_STATUS.RUNNING,
+        startedAt: this.#now(),
+      });
+      this.#notify();
+      if (!started || this.#runRevoked(run)) {
+        this.#runs.delete(run.runId);
+        if (this.#runRevoked(run)) {
+          await this.#ledger.settleRun(
+            generation,
+            run.runId,
+            run.cancelled ? BRAIN_REQUEST_STATUS.CANCELLED : BRAIN_REQUEST_STATUS.INTERRUPTED,
+            {},
+          );
+        } else {
+          await this.#ledger.settleRun(
+            generation,
+            run.runId,
+            BRAIN_REQUEST_STATUS.FAILED,
+            { failure: BRAIN_REQUEST_FAILURE.PERSISTENCE },
+            run,
+          );
+        }
+        continue;
       }
-      this.#runs.delete(run.runId);
-      await handOn();
-      return;
-    }
-    // The start is durable before any work opens: a run the file does not
-    // show running is one a relaunch would find queued while its acts had
-    // begun, and a cancel would settle on the queued path under a dispatched
-    // effect. A start the store refuses ends the run as the persistence
-    // failure it is, with nothing called; a revocation that landed while the
-    // start was being written ends it on its own terms, likewise unopened.
-    const started = await this.#ledger.commit(generation, run.runId, {
-      status: BRAIN_REQUEST_STATUS.RUNNING,
-      startedAt: this.#now(),
-    });
-    this.#notify();
-    if (!started || this.#runRevoked(run)) {
-      this.#runs.delete(run.runId);
-      if (this.#runRevoked(run)) {
-        await this.#ledger.settleRun(
-          generation,
-          run.runId,
-          run.cancelled ? BRAIN_REQUEST_STATUS.CANCELLED : BRAIN_REQUEST_STATUS.INTERRUPTED,
-          {},
-        );
-      } else {
-        await this.#ledger.settleRun(
-          generation,
-          run.runId,
-          BRAIN_REQUEST_STATUS.FAILED,
-          { failure: BRAIN_REQUEST_FAILURE.PERSISTENCE },
-          run,
-        );
-      }
-      await handOn();
-      return;
-    }
-    run.deadline = this.#schedule(() => {
-      run.timedOut = true;
-      run.abort.abort();
-    }, this.#executionDeadlineMs);
-    let result: TurnResult;
-    try {
-      const plan: TurnPlan = {
-        generation,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
-        events: this.#inboxEvents(generation),
-        open: (attached, now) => [askInputText(question, attached, now)],
-        run,
-        companions: [...companions],
-      };
-      for (const companion of companions) {
-        await this.#ledger.commit(generation, companion.runId, {
+      const riders: RunControl[] = [];
+      for (const rider of waiting.splice(0)) {
+        if (!(await this.#opens(rider))) continue;
+        riders.push(rider);
+        await this.#ledger.commit(rider.generation, rider.runId, {
           status: BRAIN_REQUEST_STATUS.RUNNING,
           startedAt: this.#now(),
         });
       }
-      if (companions.length > 0) this.#notify();
-      result = await this.#turn(plan);
-    } catch {
-      result = { outcome: TURN_OUTCOME.FAILED };
+      if (riders.length > 0) this.#notify();
+      run.deadline = this.#schedule(() => {
+        run.timedOut = true;
+        run.abort.abort();
+      }, this.#executionDeadlineMs);
+      let result: TurnResult;
+      try {
+        result = await this.#turn(
+          {
+            generation,
+            trigger: BRAIN_TURN_TRIGGER.ASK,
+            events: this.#inboxEvents(generation),
+            open: (attached, now) => [askInputText(question, attached, now)],
+            run,
+          },
+          riders,
+        );
+      } catch {
+        result = { outcome: TURN_OUTCOME.FAILED };
+      }
+      if (run.deadline !== undefined) this.#cancel(run.deadline);
+      this.#runs.delete(run.runId);
+      const { status, end } = this.#endOf(run, result);
+      await this.#ledger.settleRun(generation, run.runId, status, end, run);
+      return;
     }
-    if (run.deadline !== undefined) this.#cancel(run.deadline);
+  }
+
+  /**
+   * Whether a waiting ask may still open a turn: its record queued and its
+   * execution not revoked. One that may not is settled and forgotten here,
+   * as the record's own end rather than as anything the turn did.
+   */
+  async #opens(run: RunControl): Promise<boolean> {
+    const record = run.generation.requests.get(run.runId);
+    if (record?.status === BRAIN_REQUEST_STATUS.QUEUED && !this.#runRevoked(run)) return true;
+    if (record?.status === BRAIN_REQUEST_STATUS.QUEUED) {
+      await this.#ledger.settleRun(
+        run.generation,
+        run.runId,
+        run.cancelled ? BRAIN_REQUEST_STATUS.CANCELLED : BRAIN_REQUEST_STATUS.INTERRUPTED,
+        {},
+      );
+    }
     this.#runs.delete(run.runId);
-    const { status, end } = this.#endOf(run, result);
-    await this.#ledger.settleRun(generation, run.runId, status, end, run);
+    return false;
   }
 
   /** How a run's turn result reads as its record's end. */
-  #endOf(run: RunControl, result: TurnResult): RunOutcome {
-    const generation = run.generation;
+  #endOf(flags: RunEndFlags, result: TurnResult): RunOutcome {
     const end: RunEnd = {};
     let status: BrainRequestRecord["status"];
-    if (run.timedOut) {
+    if (flags.timedOut) {
       status = BRAIN_REQUEST_STATUS.TIMED_OUT;
       end.failure = BRAIN_REQUEST_FAILURE.DEADLINE;
-    } else if (run.cancelled) {
+    } else if (flags.cancelled) {
       status = BRAIN_REQUEST_STATUS.CANCELLED;
-    } else if (this.#stopped || generation.abort.signal.aborted) {
+    } else if (this.#stopped || flags.generation.abort.signal.aborted) {
       status = BRAIN_REQUEST_STATUS.INTERRUPTED;
-    } else if (run.checkpointFailed) {
+    } else if (flags.checkpointFailed) {
       // What the run did may be unrecorded; that outranks whatever the model
       // did afterwards, and the reply, if one formed, still travels.
       status = BRAIN_REQUEST_STATUS.FAILED;
       end.failure = BRAIN_REQUEST_FAILURE.PERSISTENCE;
       if (result.outcome === TURN_OUTCOME.DONE && result.text) end.text = result.text;
-    } else if (run.compactionFailed) {
+    } else if (flags.compactionFailed) {
       status = BRAIN_REQUEST_STATUS.FAILED;
       end.failure = BRAIN_REQUEST_FAILURE.COMPACTION;
     } else if (result.outcome === TURN_OUTCOME.INCOMPLETE) {
@@ -1417,32 +1535,24 @@ export class BrainAgent {
 
   /**
    * Settles the asks that rode inside another turn — steered into it, or
-   * collected with it — with that turn's own end: the reply the turn reached
-   * is their reply, and its failure is theirs. Each keeps its own record and
-   * its own acceptance; only the execution was shared.
+   * drained with it — with that turn's own end: the reply the turn reached is
+   * their reply, and its failure is theirs, a final write that failed
+   * included. Each keeps its own record and its own acceptance; only the
+   * execution was shared.
    */
-  async #settleCompanions(plan: TurnPlan, run: RunControl, result: TurnResult): Promise<void> {
-    for (const companion of plan.companions ?? []) {
-      this.#runs.delete(companion.runId);
-      // The shared run's end is theirs whole: a final write that failed or a
-      // compaction that could not fold is not a success for a companion either.
-      const { status, end } = this.#endOf(
-        {
-          ...companion,
-          cancelled: run.cancelled,
-          timedOut: run.timedOut,
-          checkpointFailed: run.checkpointFailed,
-          ...(run.compactionFailed !== undefined
-            ? { compactionFailed: run.compactionFailed }
-            : undefined),
-        },
-        result,
-      );
-      await this.#ledger.settleRun(run.generation, companion.runId, status, end);
+  async #settleRiders(
+    riders: readonly RunControl[],
+    primary: RunControl,
+    result: TurnResult,
+  ): Promise<void> {
+    for (const rider of riders) {
+      this.#runs.delete(rider.runId);
+      const { status, end } = this.#endOf(primary, result);
+      await this.#ledger.settleRun(primary.generation, rider.runId, status, end);
     }
   }
 
-  async #turn(plan: TurnPlan): Promise<TurnResult> {
+  async #turn(plan: TurnPlan, riders: RunControl[] = []): Promise<TurnResult> {
     await this.ready();
     // The generation's death is checked at the door of every turn, so a
     // memory that outlived its fortnight while the app sat idle is not read
@@ -1499,23 +1609,22 @@ export class BrainAgent {
     };
     let result: TurnResult;
     try {
-      result = await this.#runTurn(plan, turnContext, execution);
+      result = await this.#runTurn(plan, turnContext, execution, riders);
     } finally {
       ended = true;
       if (!plan.run && run.deadline !== undefined) this.#cancel(run.deadline);
       this.#turnInFlight = false;
       this.#active = undefined;
     }
-    await this.#settleCompanions(plan, run, result);
-    if (
-      plan.trigger !== BRAIN_TURN_TRIGGER.ASK &&
-      result.outcome !== TURN_OUTCOME.REVOKED &&
-      result.outcome !== TURN_OUTCOME.INCOMPATIBLE
-    ) {
+    await this.#settleRiders(riders, run, result);
+    // Asks that arrived while this turn ran open now rather than waiting out
+    // the queue's debounce: what they were waiting for has ended.
+    this.#asks.flush();
+    if (runOriginOf(plan.trigger) !== RUN_ORIGIN.USER && REPORTED_OUTCOMES.has(result.outcome)) {
       this.#options.notice?.({
         trigger: plan.trigger,
         identities: uniqueIdentities(plan.events),
-        briefings: result.outcome === TURN_OUTCOME.DONE ? (result.briefings ?? []) : [],
+        briefings: result.outcome === TURN_OUTCOME.DONE ? result.briefings : [],
         performedActs: run.performedActs,
         at: this.#now(),
       });
@@ -1531,6 +1640,7 @@ export class BrainAgent {
     plan: TurnPlan,
     turnContext: TurnContext,
     execution: BrainActExecution,
+    riders: RunControl[],
   ): Promise<TurnResult> {
     const { generation, context, run } = turnContext;
     const startedAt = this.#now();
@@ -1616,6 +1726,7 @@ export class BrainAgent {
             prompt: preparation.prompt,
             policy,
             plan,
+            riders,
             opening: [
               ...primed,
               ...(notes.length > 0 ? [activityNoticesInputText(notes, startedAt)] : []),
@@ -1784,6 +1895,7 @@ export class BrainAgent {
       prompt: string;
       policy: EffectiveToolPolicy;
       plan: TurnPlan;
+      riders: RunControl[];
       opening: readonly string[];
       advanceMark: () => Promise<void>;
     },
@@ -1863,7 +1975,7 @@ export class BrainAgent {
       signal: turnContext.signal,
       onEvent,
     });
-    this.#active = { run, started, plan: turn.plan };
+    this.#active = { run, started, plan: turn.plan, riders: turn.riders };
     return started.done;
   }
 
