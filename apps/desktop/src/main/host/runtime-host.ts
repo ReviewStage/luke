@@ -1077,12 +1077,21 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
   });
   let stopHistoryMaintenance: (() => void) | undefined;
 
+  const managedJobRuns: ReadonlyMap<string, () => Promise<void>> = new Map([
+    [
+      CONSOLIDATION_DEFAULTS.JOB_ID,
+      async () => {
+        await memoryMaintenance.runConsolidation();
+      },
+    ],
+  ]);
   const cronScheduler = new CronScheduler({
     store: runtimeStoreWiring.scheduledJobStore(),
     coordinate: (work) => brainWiring.lanes.run(LANE.CRON, work),
     run: async (job) => {
-      if (job.id === CONSOLIDATION_DEFAULTS.JOB_ID) {
-        await memoryMaintenance.runConsolidation();
+      const managed = managedJobRuns.get(job.id);
+      if (managed) {
+        await managed();
         return;
       }
       await brainWiring.heartbeat(job.sessionKey);
