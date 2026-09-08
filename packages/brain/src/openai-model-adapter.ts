@@ -22,6 +22,9 @@ import {
   BRAIN_RESPONSES_COMPACT_PATH,
   BRAIN_RESPONSES_INPUT_TOKENS_PATH,
   BRAIN_RESPONSES_PATH,
+  type BrainCompactRequest,
+  type BrainInputTokensRequest,
+  type BrainResponsesRequest,
   brainCompactRequest,
   brainInputTokensRequest,
   brainResponsesRequest,
@@ -212,7 +215,7 @@ class OpenAiTransport implements ResponsesTransport<undefined> {
 }
 
 function prepared<Result>(
-  request: object,
+  request: BrainResponsesRequest | BrainInputTokensRequest | BrainCompactRequest,
   read: PreparedOperation<Result>["read"],
 ): PreparedOperation<Result> {
   return { body: JSON.stringify(request), read };

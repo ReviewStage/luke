@@ -28,13 +28,15 @@ import {
   text as trimmedText,
   type UnparsedWireValue,
 } from "../core.js";
-import { HOSTED_BRAIN_DEFAULTS, readBoundedBody } from "./brain-respond.js";
+import { HOSTED_BRAIN_DEFAULTS } from "./brain-respond.js";
 import {
+  BODY_READ,
   errorResponse,
   HOSTED_API_ERROR,
   HOSTED_HTTP_STATUS,
   type HostedErrorFields,
   jsonResponse,
+  readBoundedBody,
 } from "./http.js";
 import { type FetchLike, postOpenAi } from "./openai.js";
 import type { HostedSpend } from "./quota.js";
@@ -55,37 +57,50 @@ import type { HostedSpend } from "./quota.js";
  * reply, or the encrypted items that travel in them.
  */
 
-export interface BrainV2Options {
+export interface BrainCapabilitiesOptions {
   request: Request;
   /** Luke's own OpenAI key, from the deployment environment; absent means the tier is off. */
   apiKey: string | undefined;
   /** A deployment-configured model override; the shared default otherwise. */
   model?: string;
   resolveUserId: (request: Request) => Promise<string | undefined>;
+}
+
+export interface BrainV2Options extends BrainCapabilitiesOptions {
   spend: (userId: string) => Promise<HostedSpend>;
   fetch?: FetchLike;
   timeoutMs?: number;
 }
 
 /** The catalog a name selects from: the acts table's rows and the brain's own tools, fixed by the build. */
-export function hostedBrainCatalog(): ReadonlyMap<string, ResponsesFunctionTool> {
-  return hostedBrainToolCatalog();
-}
+const CATALOG: ReadonlyMap<string, ResponsesFunctionTool> = hostedBrainToolCatalog();
+const CATALOG_NAMES: ReadonlySet<string> = new Set(CATALOG.keys());
+
+const HTTP_METHOD = {
+  GET: "GET",
+  POST: "POST",
+} as const;
+
+type HttpMethod = (typeof HTTP_METHOD)[keyof typeof HTTP_METHOD];
 
 export function hostedBrainCapabilities(model: string | undefined): HostedBrainCapabilities {
   return {
     contract: HOSTED_BRAIN_CONTRACT_VERSION,
-    model: trimmedText(model) ?? HOSTED_BRAIN_DEFAULTS.MODEL,
+    model: modelOf(model),
     operations: Object.values(HOSTED_BRAIN_OPERATION),
-    tools: [...hostedBrainCatalog().keys()],
+    tools: [...CATALOG.keys()],
     bounds: hostedBrainBounds(),
     reasoningEfforts: Object.values(REASONING_EFFORT),
   };
 }
 
+function modelOf(override: string | undefined): string {
+  return trimmedText(override) ?? HOSTED_BRAIN_DEFAULTS.MODEL;
+}
+
 /** GET: what this service speaks, so a desktop can refuse to run against one that lacks it. */
-export function handleBrainCapabilities(options: BrainV2Options): Promise<Response> {
-  return withAccount(options, "GET", async () =>
+export function handleBrainCapabilities(options: BrainCapabilitiesOptions): Promise<Response> {
+  return withAccount(options, HTTP_METHOD.GET, async () =>
     jsonResponse(HOSTED_HTTP_STATUS.OK, hostedBrainCapabilities(options.model)),
   );
 }
@@ -99,26 +114,24 @@ const REFUSAL_ERROR = {
 
 /** The registered schemas the request's names select, in the order named. */
 function selectedTools(names: readonly string[]): ResponsesFunctionTool[] {
-  const catalog = hostedBrainCatalog();
   const tools: ResponsesFunctionTool[] = [];
   for (const name of names) {
-    const tool = catalog.get(name);
+    const tool = CATALOG.get(name);
     if (tool) tools.push(tool);
   }
   return tools;
 }
 
 /**
- * The gate every v2 operation passes: the tier switched on, the caller
- * signed in, the body within its byte bound and read whole, the request
- * admitted by the contract's own reader, and the allowance spent — before
- * the upstream call, and spent whether or not it answers, the convention
- * every hosted meter keeps.
+ * The gate every operation passes before anything else: the method, the tier
+ * switched on, and the caller signed in. The key reaches the handler
+ * trimmed, the way the desktop's own key reads trim theirs, so a whitespace
+ * credential is the kill switch rather than a key.
  */
 async function withAccount(
-  options: BrainV2Options,
-  method: "GET" | "POST",
-  handle: (userId: string) => Promise<Response>,
+  options: BrainCapabilitiesOptions,
+  method: HttpMethod,
+  handle: (userId: string, apiKey: string) => Promise<Response>,
 ): Promise<Response> {
   const { request } = options;
   if (request.method !== method) {
@@ -127,25 +140,70 @@ async function withAccount(
       HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
     );
   }
-  if (!trimmedText(options.apiKey)) {
+  const apiKey = trimmedText(options.apiKey);
+  if (!apiKey) {
     return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
   }
   const userId = await options.resolveUserId(request);
   if (!userId) {
     return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
   }
-  return handle(userId);
+  return handle(userId, apiKey);
 }
 
-async function admitted<Request>(
+/** One operation of the contract: how its request is read, where it posts, what it posts, and what of the answer is handed down. */
+interface BrainOperation<Admitted> {
+  read: (payload: UnparsedWireValue) => HostedBrainRequestRead<Admitted>;
+  path: string;
+  body: (request: Admitted, model: string) => Parameters<typeof postOpenAi>[1];
+  /** The response body for the desktop, or nothing when the upstream's answer is not one this contract hands down. */
+  answer: (payload: UnparsedWireValue) => object | undefined;
+}
+
+/**
+ * The one shape every POST operation has: the body within its byte bound and
+ * read whole, the request admitted by the contract's own reader, the
+ * allowance spent — before the upstream call, and spent whether or not it
+ * answers, the convention every hosted meter keeps — then one upstream post
+ * and the answer as the operation reads it.
+ */
+function brainOperation<Admitted>(
   options: BrainV2Options,
-  read: (payload: UnparsedWireValue) => HostedBrainRequestRead<Request>,
-): Promise<Request | Response> {
-  const body = await readBoundedBody(options.request, maximumHostedBrainRequestBytes);
-  if (body.outcome === "too-large") {
+  operation: BrainOperation<Admitted>,
+): Promise<Response> {
+  return withAccount(options, HTTP_METHOD.POST, async (userId, apiKey) => {
+    const admitted = await admittedRequest(options.request, operation.read);
+    if (admitted instanceof Response) return admitted;
+    const spend = await options.spend(userId);
+    if (!spend.allowed) {
+      return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED, {
+        quota: spend.quota,
+      });
+    }
+    const payload = await upstream(
+      options,
+      apiKey,
+      operation.path,
+      operation.body(admitted, modelOf(options.model)),
+    );
+    if (payload instanceof Response) return payload;
+    const answer = payload === undefined ? undefined : operation.answer(payload);
+    if (!answer) {
+      return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR);
+    }
+    return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+  });
+}
+
+async function admittedRequest<Admitted>(
+  request: Request,
+  read: (payload: UnparsedWireValue) => HostedBrainRequestRead<Admitted>,
+): Promise<Admitted | Response> {
+  const body = await readBoundedBody(request, maximumHostedBrainRequestBytes);
+  if (body.outcome === BODY_READ.TOO_LARGE) {
     return errorResponse(HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE, HOSTED_API_ERROR.REQUEST_TOO_LARGE);
   }
-  if (body.outcome !== "read") {
+  if (body.outcome !== BODY_READ.READ) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
   let payload: unknown;
@@ -156,28 +214,18 @@ async function admitted<Request>(
   }
   // SAFETY: JSON.parse returns a runtime value; the contract reader validates it as wire.
   const result = read(payload as UnparsedWireValue);
-  if (!result.ok)
+  if (!result.ok) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, REFUSAL_ERROR[result.refusal]);
+  }
   return result.request;
-}
-
-async function spent(options: BrainV2Options, userId: string): Promise<Response | undefined> {
-  const spend = await options.spend(userId);
-  if (spend.allowed) return undefined;
-  return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED, {
-    quota: spend.quota,
-  });
 }
 
 async function upstream(
   options: BrainV2Options,
+  apiKey: string,
   path: string,
   body: Parameters<typeof postOpenAi>[1],
 ): Promise<UnparsedWireValue | Response> {
-  const apiKey = trimmedText(options.apiKey);
-  if (!apiKey) {
-    return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
-  }
   const response = await postOpenAi(path, body, {
     apiKey,
     fetch: options.fetch,
@@ -209,82 +257,54 @@ async function upstream(
 
 /** POST: one inference on the prepared prompt and the selected schemas, answered as the payload came. */
 export function handleBrainRespondV2(options: BrainV2Options): Promise<Response> {
-  return withAccount(options, "POST", async (userId) => {
-    const request = await admitted(options, (payload) =>
-      hostedBrainRespondRequestFromWire(payload, new Set(hostedBrainCatalog().keys())),
-    );
-    if (request instanceof Response) return request;
-    const refused = await spent(options, userId);
-    if (refused) return refused;
-    const payload = await upstream(
-      options,
-      BRAIN_RESPONSES_PATH,
+  return brainOperation(options, {
+    read: (payload) => hostedBrainRespondRequestFromWire(payload, CATALOG_NAMES),
+    path: BRAIN_RESPONSES_PATH,
+    body: (request, model) =>
       brainResponsesRequest(request.input, {
-        model: trimmedText(options.model) ?? HOSTED_BRAIN_DEFAULTS.MODEL,
+        model,
         instructions: request.prompt,
         tools: selectedTools(request.tools),
         maximumOutputTokens:
           request.options.maximumOutputTokens ?? HOSTED_BRAIN_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
         reasoningEffort: request.options.reasoningEffort ?? HOSTED_BRAIN_DEFAULTS.REASONING_EFFORT,
       }),
-    );
-    if (payload instanceof Response) return payload;
-    const output = payload === undefined ? undefined : brainResponsesOutput(payload);
-    if (!output || !brainOutputReplayable(payload)) {
-      return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR);
-    }
     // SAFETY: brainResponsesOutput accepted the payload as a JSON record.
-    return jsonResponse(HOSTED_HTTP_STATUS.OK, payload as object);
+    answer: (payload) =>
+      brainResponsesOutput(payload) && brainOutputReplayable(payload)
+        ? (payload as object)
+        : undefined,
   });
 }
 
 /** POST: how many input tokens the prepared request weighs, and nothing else of the upstream's answer. */
 export function handleBrainCountTokens(options: BrainV2Options): Promise<Response> {
-  return withAccount(options, "POST", async (userId) => {
-    const request = await admitted(options, (payload) =>
-      hostedBrainCountTokensRequestFromWire(payload, new Set(hostedBrainCatalog().keys())),
-    );
-    if (request instanceof Response) return request;
-    const refused = await spent(options, userId);
-    if (refused) return refused;
-    const payload = await upstream(
-      options,
-      BRAIN_RESPONSES_INPUT_TOKENS_PATH,
+  return brainOperation(options, {
+    read: (payload) => hostedBrainCountTokensRequestFromWire(payload, CATALOG_NAMES),
+    path: BRAIN_RESPONSES_INPUT_TOKENS_PATH,
+    body: (request, model) =>
       brainInputTokensRequest(request.input, {
-        model: trimmedText(options.model) ?? HOSTED_BRAIN_DEFAULTS.MODEL,
+        model,
         instructions: request.prompt,
         tools: selectedTools(request.tools),
       }),
-    );
-    if (payload instanceof Response) return payload;
-    const inputTokens = responsesInputTokens(payload);
-    if (inputTokens === undefined) {
-      return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR);
-    }
-    return jsonResponse(HOSTED_HTTP_STATUS.OK, { inputTokens });
+    answer: (payload) => {
+      const inputTokens = responsesInputTokens(payload);
+      return inputTokens === undefined ? undefined : { inputTokens };
+    },
   });
 }
 
 /** POST: an explicit compaction; the whole window the upstream answers is the desktop's next context. */
 export function handleBrainCompact(options: BrainV2Options): Promise<Response> {
-  return withAccount(options, "POST", async (userId) => {
-    const request = await admitted(options, hostedBrainCompactRequestFromWire);
-    if (request instanceof Response) return request;
-    const refused = await spent(options, userId);
-    if (refused) return refused;
-    const payload = await upstream(
-      options,
-      BRAIN_RESPONSES_COMPACT_PATH,
-      brainCompactRequest(request.input, {
-        model: trimmedText(options.model) ?? HOSTED_BRAIN_DEFAULTS.MODEL,
-        instructions: request.prompt,
-      }),
-    );
-    if (payload instanceof Response) return payload;
-    const window = payload === undefined ? undefined : responsesCompactedWindow(payload);
-    if (!window || !brainOutputReplayable(payload)) {
-      return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR);
-    }
-    return jsonResponse(HOSTED_HTTP_STATUS.OK, { output: window });
+  return brainOperation(options, {
+    read: hostedBrainCompactRequestFromWire,
+    path: BRAIN_RESPONSES_COMPACT_PATH,
+    body: (request, model) =>
+      brainCompactRequest(request.input, { model, instructions: request.prompt }),
+    answer: (payload) => {
+      const window = responsesCompactedWindow(payload);
+      return window && brainOutputReplayable(payload) ? { output: window } : undefined;
+    },
   });
 }

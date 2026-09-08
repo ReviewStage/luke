@@ -72,7 +72,9 @@ export const HOSTED_SERVICE_PATH = {
    * memory from the latest compaction item onward, the standing context, and
    * the turn's new items — and the service holds the instructions, the tool
    * schemas, and the model fixed by its own build, answering with the raw
-   * Responses payload for the desktop to append and act on.
+   * Responses payload for the desktop to append and act on. Kept for the
+   * installed desktops through 0.5.0 that speak only this contract; retire it
+   * once none remain.
    */
   BRAIN_RESPOND: "/api/brain/respond",
   /**

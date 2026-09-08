@@ -197,69 +197,106 @@ function keysExactly(value: WireRecord, keys: readonly string[]): boolean {
   return present.length === keys.length && keys.every((key) => key in value);
 }
 
-type FieldRead<Value> =
-  | { ok: true; value: Value }
-  | { ok: false; refusal: HostedBrainRequestRefusal };
+type FieldRead<Value> = (value: UnparsedWireValue) => HostedBrainRequestRead<Value>;
 
-function refusedField<Value>(refusal: HostedBrainRequestRefusal): FieldRead<Value> {
-  return { ok: false, refusal };
+type FieldTable = Record<string, FieldRead<unknown>>;
+
+type ReadFields<Fields extends FieldTable> = {
+  [Key in keyof Fields]: Fields[Key] extends FieldRead<infer Value> ? Value : never;
+};
+
+/**
+ * One reader over a table of fields: a request is a record carrying exactly
+ * the contract version and the table's keys, each admitted by its own reader
+ * in the table's order, and refused whole at the first field that refuses.
+ */
+function requestReader<Fields extends FieldTable>(
+  fields: Fields,
+): (
+  value: UnparsedWireValue,
+) => HostedBrainRequestRead<
+  { contract: typeof HOSTED_BRAIN_CONTRACT_VERSION } & ReadFields<Fields>
+> {
+  const keys = ["contract", ...Object.keys(fields)];
+  return (value) => {
+    if (!isRecord(value) || !keysExactly(value, keys)) {
+      return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
+    }
+    if (value.contract !== HOSTED_BRAIN_CONTRACT_VERSION) {
+      return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
+    }
+    const read: Partial<ReadFields<Fields>> = {};
+    for (const [key, reader] of Object.entries(fields)) {
+      const field = reader(value[key]);
+      if (!field.ok) return refused(field.refusal);
+      // SAFETY: Object.entries walks the table's own keys, and each reader is the one ReadFields types its key by.
+      read[key as keyof Fields] = field.request as ReadFields<Fields>[keyof Fields];
+    }
+    return {
+      ok: true,
+      // SAFETY: every key of the table was read by the reader that types it above.
+      request: { contract: HOSTED_BRAIN_CONTRACT_VERSION, ...read } as {
+        contract: typeof HOSTED_BRAIN_CONTRACT_VERSION;
+      } & ReadFields<Fields>,
+    };
+  };
 }
 
 /** The prompt as sent, or the refusal it earns: absent or non-text is malformed, too long is its own word. */
-function promptRead(value: UnparsedWireValue): FieldRead<string> {
-  if (!isWireString(value)) return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
+const promptRead: FieldRead<string> = (value) => {
+  if (!isWireString(value)) return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
   if (value.length > HOSTED_BRAIN_PROMPT_BOUNDS.MAXIMUM_CHARS) {
-    return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.PROMPT_TOO_LARGE);
+    return refused(HOSTED_BRAIN_REQUEST_REFUSAL.PROMPT_TOO_LARGE);
   }
-  return { ok: true, value };
-}
+  return { ok: true, request: value };
+};
 
 /** Registered names only: each within its length, unique, and known to the catalog given. */
-function toolsRead(
-  value: UnparsedWireValue,
-  catalog: ReadonlySet<string>,
-): FieldRead<readonly string[]> {
-  const names = textList(value, HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_TOOLS);
-  if (!names) return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
-  if (names.some((name) => name.length > HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_NAME_CHARS)) {
-    return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
-  }
-  if (new Set(names).size !== names.length) {
-    return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
-  }
-  if (names.some((name) => !catalog.has(name))) {
-    return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.UNKNOWN_TOOL);
-  }
-  return { ok: true, value: names };
+function toolsRead(catalog: ReadonlySet<string>): FieldRead<readonly string[]> {
+  return (value) => {
+    const names = textList(value, HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_TOOLS);
+    if (!names) return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
+    if (names.some((name) => name.length > HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_NAME_CHARS)) {
+      return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
+    }
+    if (new Set(names).size !== names.length) {
+      return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
+    }
+    if (names.some((name) => !catalog.has(name))) {
+      return refused(HOSTED_BRAIN_REQUEST_REFUSAL.UNKNOWN_TOOL);
+    }
+    return { ok: true, request: names };
+  };
 }
 
-function optionsRead(value: UnparsedWireValue): FieldRead<HostedBrainRequestOptions> {
-  if (!isRecord(value)) return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
+const optionsRead: FieldRead<HostedBrainRequestOptions> = (value) => {
+  if (!isRecord(value)) return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
   const allowed = Object.keys(value).every(
     (key) => key === "maximumOutputTokens" || key === "reasoningEffort",
   );
-  if (!allowed) return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
+  if (!allowed) return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
   const options: HostedBrainRequestOptions = {};
   if (value.maximumOutputTokens !== undefined) {
     const tokens = positiveWhole(value.maximumOutputTokens);
-    if (tokens === undefined) return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
+    if (tokens === undefined) return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
     if (tokens > HOSTED_BRAIN_OPTION_BOUNDS.MAXIMUM_OUTPUT_TOKENS) {
-      return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.OPTIONS_OUT_OF_BOUNDS);
+      return refused(HOSTED_BRAIN_REQUEST_REFUSAL.OPTIONS_OUT_OF_BOUNDS);
     }
     options.maximumOutputTokens = tokens;
   }
   if (value.reasoningEffort !== undefined) {
     if (!isReasoningEffort(value.reasoningEffort)) {
-      return refusedField(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
+      return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
     }
     options.reasoningEffort = value.reasoningEffort;
   }
-  return { ok: true, value: options };
-}
+  return { ok: true, request: options };
+};
 
-const RESPOND_KEYS = ["contract", "prompt", "tools", "options", "input"] as const;
-const COUNT_TOKENS_KEYS = ["contract", "prompt", "tools", "input"] as const;
-const COMPACT_KEYS = ["contract", "prompt", "input"] as const;
+const inputRead: FieldRead<readonly WireRecord[]> = (value) => {
+  const input = admitBrainInput(value);
+  return input ? { ok: true, request: input } : refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
+};
 
 /**
  * Reads a respond request against the tool catalog the reader is given — the
@@ -271,76 +308,25 @@ export function hostedBrainRespondRequestFromWire(
   value: UnparsedWireValue,
   catalog: ReadonlySet<string>,
 ): HostedBrainRequestRead<HostedBrainRespondRequest> {
-  if (!isRecord(value) || !keysExactly(value, RESPOND_KEYS)) {
-    return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
-  }
-  if (value.contract !== HOSTED_BRAIN_CONTRACT_VERSION) {
-    return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
-  }
-  const prompt = promptRead(value.prompt);
-  if (!prompt.ok) return refused(prompt.refusal);
-  const tools = toolsRead(value.tools, catalog);
-  if (!tools.ok) return refused(tools.refusal);
-  const options = optionsRead(value.options);
-  if (!options.ok) return refused(options.refusal);
-  const input = admitBrainInput(value.input);
-  if (!input) return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
-  return {
-    ok: true,
-    request: {
-      contract: HOSTED_BRAIN_CONTRACT_VERSION,
-      prompt: prompt.value,
-      tools: tools.value,
-      options: options.value,
-      input,
-    },
-  };
+  return requestReader({
+    prompt: promptRead,
+    tools: toolsRead(catalog),
+    options: optionsRead,
+    input: inputRead,
+  })(value);
 }
 
 export function hostedBrainCountTokensRequestFromWire(
   value: UnparsedWireValue,
   catalog: ReadonlySet<string>,
 ): HostedBrainRequestRead<HostedBrainCountTokensRequest> {
-  if (!isRecord(value) || !keysExactly(value, COUNT_TOKENS_KEYS)) {
-    return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
-  }
-  if (value.contract !== HOSTED_BRAIN_CONTRACT_VERSION) {
-    return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
-  }
-  const prompt = promptRead(value.prompt);
-  if (!prompt.ok) return refused(prompt.refusal);
-  const tools = toolsRead(value.tools, catalog);
-  if (!tools.ok) return refused(tools.refusal);
-  const input = admitBrainInput(value.input);
-  if (!input) return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
-  return {
-    ok: true,
-    request: {
-      contract: HOSTED_BRAIN_CONTRACT_VERSION,
-      prompt: prompt.value,
-      tools: tools.value,
-      input,
-    },
-  };
+  return requestReader({ prompt: promptRead, tools: toolsRead(catalog), input: inputRead })(value);
 }
 
 export function hostedBrainCompactRequestFromWire(
   value: UnparsedWireValue,
 ): HostedBrainRequestRead<HostedBrainCompactRequest> {
-  if (!isRecord(value) || !keysExactly(value, COMPACT_KEYS)) {
-    return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
-  }
-  if (value.contract !== HOSTED_BRAIN_CONTRACT_VERSION) {
-    return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
-  }
-  const prompt = promptRead(value.prompt);
-  if (!prompt.ok) return refused(prompt.refusal);
-  const input = admitBrainInput(value.input);
-  if (!input) return refused(HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);
-  return {
-    ok: true,
-    request: { contract: HOSTED_BRAIN_CONTRACT_VERSION, prompt: prompt.value, input },
-  };
+  return requestReader({ prompt: promptRead, input: inputRead })(value);
 }
 
 export interface HostedBrainCountTokensAnswer {
