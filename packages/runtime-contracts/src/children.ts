@@ -5,14 +5,7 @@ import {
   isWireString,
   type UnparsedWireValue,
 } from "@sidecar/wire";
-import {
-  type AgentId,
-  agentId,
-  DEFAULT_AGENT_ID,
-  isIdentifier,
-  type SessionKey,
-  sessionKey,
-} from "./identifiers.js";
+import { type AgentId, isIdentifier, type SessionKey } from "./identifiers.js";
 
 /**
  * The vocabulary of delegation: a child is one agent run a conversation
@@ -22,36 +15,6 @@ import {
  * Nothing here runs a child or delivers a completion; these are the records
  * the store keeps and the receipt a spawn hands back.
  */
-
-const SESSION_KEY_PREFIX = "agent";
-const SESSION_KEY_SEPARATOR = ":";
-const SUBAGENT_SEGMENT = "subagent";
-
-/** A child's conversation: `agent:<agentId>:subagent:<childId>`, the id minted by the host. */
-export function childSessionKey(childId: string, agent: AgentId = DEFAULT_AGENT_ID): SessionKey {
-  if (!isIdentifier(childId) || childId.includes(SESSION_KEY_SEPARATOR)) {
-    throw new TypeError("child identifier must be a non-empty string without separators");
-  }
-  return sessionKey(
-    [SESSION_KEY_PREFIX, agent, SUBAGENT_SEGMENT, childId].join(SESSION_KEY_SEPARATOR),
-  );
-}
-
-/** The child id a key addresses, or nothing for a key of any other shape. */
-export function childIdOf(key: SessionKey | string): string | undefined {
-  const [prefix, agent, segment, childId, ...rest] = key.split(SESSION_KEY_SEPARATOR);
-  if (prefix !== SESSION_KEY_PREFIX || !agent || segment !== SUBAGENT_SEGMENT) return undefined;
-  if (!childId || rest.length > 0) return undefined;
-  return childId;
-}
-
-/** The agent a child key belongs to. */
-export function childAgentOf(key: SessionKey | string): AgentId | undefined {
-  const [prefix, agent, segment] = key.split(SESSION_KEY_SEPARATOR);
-  return prefix === SESSION_KEY_PREFIX && agent && segment === SUBAGENT_SEGMENT
-    ? agentId(agent)
-    : undefined;
-}
 
 /**
  * How a child's context starts. Isolated is a clean transcript; fork branches
