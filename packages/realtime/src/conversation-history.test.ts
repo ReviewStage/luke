@@ -179,6 +179,7 @@ test("an act's line records the ask in words, with the identity it named", () =>
   const message = sessionActConversationEntry(
     { kind: SESSION_TOOL_KIND.MESSAGE, identity, text: "please add tests" },
     sessions,
+    CONVERSATION_ENTRY_KIND.ACT,
   );
   assert.equal(message.kind, CONVERSATION_ENTRY_KIND.ACT);
   assert.equal(message.words, 'sent a message to "checkout-service": "please add tests"');
@@ -186,14 +187,21 @@ test("an act's line records the ask in words, with the identity it named", () =>
 
   const control: SessionControl = { id: "retry", label: "Retry" };
   assert.equal(
-    sessionActConversationEntry({ kind: SESSION_TOOL_KIND.CONTROL, identity, control }, sessions)
-      .words,
+    sessionActConversationEntry(
+      { kind: SESSION_TOOL_KIND.CONTROL, identity, control },
+      sessions,
+      CONVERSATION_ENTRY_KIND.ACT,
+    ).words,
     'ran "Retry" on "checkout-service"',
   );
 
   // A session the roster no longer shows is still named honestly.
   assert.equal(
-    sessionActConversationEntry({ kind: SESSION_TOOL_KIND.OPEN, identity }, []).words,
+    sessionActConversationEntry(
+      { kind: SESSION_TOOL_KIND.OPEN, identity },
+      [],
+      CONVERSATION_ENTRY_KIND.ACT,
+    ).words,
     "opened a session",
   );
 
@@ -222,15 +230,19 @@ test("an act's line records the ask in words, with the identity it named", () =>
     applicationId: SESSION_APPLICATION_ID.SUPERSET,
   } as const;
   assert.equal(
-    sessionActConversationEntry(openedInApp, [heldByApp]).words,
+    sessionActConversationEntry(openedInApp, [heldByApp], CONVERSATION_ENTRY_KIND.ACT).words,
     'opened "checkout-service" in Superset',
   );
-  assert.equal(sessionActConversationEntry(openedInApp, []).words, "opened a session in superset");
+  assert.equal(
+    sessionActConversationEntry(openedInApp, [], CONVERSATION_ENTRY_KIND.ACT).words,
+    "opened a session in superset",
+  );
 
   // A workspace creation aims at no session, so its line carries no identity.
   const created = sessionActConversationEntry(
     { kind: SESSION_TOOL_KIND.CREATE_WORKSPACE, providerId: "conductor", providerProjectId: "p1" },
     sessions,
+    CONVERSATION_ENTRY_KIND.ACT,
   );
   assert.equal(created.words, "asked conductor to create a workspace");
   assert.equal(created.identity, undefined);
@@ -242,6 +254,7 @@ test("an act's line records the ask in words, with the identity it named", () =>
       name: "Notch panel clipping",
     },
     sessions,
+    CONVERSATION_ENTRY_KIND.ACT,
   );
   assert.equal(
     createdNamed.words,

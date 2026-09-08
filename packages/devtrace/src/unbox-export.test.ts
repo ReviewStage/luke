@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BRAIN_TOOL, BRAIN_TURN_TRIGGER, brainOnlyToolDefinitions } from "@sidecar/brain";
+import { BRAIN_TOOL, BRAIN_TURN_TRIGGER, hostedBrainToolCatalog } from "@sidecar/brain";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
 import { TRACE_ENTRY_KIND } from "./trace-writer.js";
 import { unboxTraceFromLines } from "./unbox-export.js";
@@ -155,7 +155,7 @@ test("a brain turn becomes its own generation, and junk lines cost only themselv
     at: "2026-08-25T10:05:00.000Z",
     kind: TRACE_ENTRY_KIND.BRAIN,
     trigger: BRAIN_TURN_TRIGGER.WAKE,
-    tools: brainOnlyToolDefinitions().map((tool) => tool.name),
+    tools: [...hostedBrainToolCatalog().keys()],
     inputItemKinds: ["message", "function_call_output"],
     inputTokens: 1_500,
     transcriptBytes: 4_096,
@@ -180,10 +180,7 @@ test("a brain turn becomes its own generation, and junk lines cost only themselv
     cost: 0,
   });
   const toolNames = toolsOf(generation).map((tool) => tool.name);
-  assert.deepEqual(
-    toolNames,
-    brainOnlyToolDefinitions().map((tool) => tool.name),
-  );
+  assert.deepEqual(toolNames, [...hostedBrainToolCatalog().keys()]);
   const announce = toolsOf(generation).find((tool) => tool.name === BRAIN_TOOL.ANNOUNCE);
   assert.equal(announce?.type, "function");
   assert.ok(isRecord(announce?.inputSchema));

@@ -7,8 +7,8 @@ import {
   BrainAgent,
   BrainStateStore,
   hostedBrainToolCatalog,
-  responsesToolLoopRuntime,
 } from "@sidecar/brain";
+import { toolLoopRuntimeOver } from "@sidecar/brain/testing";
 import {
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_OPERATION,
@@ -145,7 +145,8 @@ function composition() {
       if (!model) return undefined;
       builds.push(model.model ?? "hosted");
       return new BrainAgent({
-        runtime: responsesToolLoopRuntime(model),
+        runtime: toolLoopRuntimeOver(model),
+        prepareTurn: () => ({ prompt: "instructions", layers: {} }),
         acts: { perform: async () => ({ status: "accepted" }) },
         roster: () => ({ text: "none", identities: [] }),
         standingContext: () => "",

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { toolLoopRuntimeOver } from "../../../packages/brain/src/testing.js";
 import {
   admitBrainInputItem,
   BRAIN_DEFAULTS,
@@ -22,7 +23,6 @@ import {
   maximumHostedBrainRequestBytes,
   normalizeSession,
   REALTIME_TOOL,
-  responsesToolLoopRuntime,
   SESSION_STATUS,
   type SessionIdentity,
   type SessionProvider,
@@ -479,7 +479,8 @@ function desktopOnHostedService(
   const performed: Desktop["performed"] = [];
   let runs = 0;
   const agent = new BrainAgent({
-    runtime: responsesToolLoopRuntime(model),
+    runtime: toolLoopRuntimeOver(model),
+    prepareTurn: () => ({ prompt: brainInstructions(), layers: {} }),
     acts: {
       perform: async (functionCall) => {
         performed.push(functionCall);

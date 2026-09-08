@@ -227,13 +227,12 @@ function applyWireEntry(state: ExportState, entry: WireRecord, atMs: number | un
  */
 function brainAvailableTools(entry: WireRecord): readonly WireRecord[] {
   const catalog = hostedBrainToolCatalog();
-  const names = Array.isArray(entry.tools)
-    ? entry.tools.map((name) => text(name)).filter((name) => name !== undefined)
+  const definitions = Array.isArray(entry.tools)
+    ? entry.tools.flatMap((name) => {
+        const tool = catalog.get(text(name) ?? "");
+        return tool ? [tool] : [];
+      })
     : [];
-  const definitions = names.flatMap((name) => {
-    const tool = catalog.get(name);
-    return tool ? [tool] : [];
-  });
   return toolDefinitions(unparsedWire(JSON.parse(JSON.stringify(definitions))));
 }
 

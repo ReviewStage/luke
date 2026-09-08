@@ -9,10 +9,13 @@ import {
   BrainStateStore,
   brainStateFromStored,
   responsesModelAnswer,
-  responsesToolLoopRuntime,
 } from "@sidecar/brain";
 import { isTerminalBrainRequestStatus } from "@sidecar/brain/requests";
-import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
+import {
+  type BareResponsesModel,
+  bareModelAdapter,
+  toolLoopRuntimeOver,
+} from "@sidecar/brain/testing";
 import {
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
@@ -149,7 +152,8 @@ function composed() {
   const build = (client: BareResponsesModel) => {
     const model = bareModelAdapter(client);
     return new BrainAgent({
-      runtime: responsesToolLoopRuntime(model),
+      runtime: toolLoopRuntimeOver(model),
+      prepareTurn: () => ({ prompt: "instructions", layers: {} }),
       acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
       roster: () => ({ text: "", identities: [] }),
       standingContext: () => "",
