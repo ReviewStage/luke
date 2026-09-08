@@ -23,10 +23,6 @@ function providerHint(): SocialProvider | undefined {
   return socialProviderFromState(new URLSearchParams(window.location.search).get("state"));
 }
 
-function previewMode(): boolean {
-  return import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "1";
-}
-
 function ProviderMark({
   provider,
   className,
@@ -76,13 +72,12 @@ function ConnectionGraphic({ provider }: { provider: SocialProvider }): React.JS
 
 function SignIn(): React.JSX.Element {
   const [provider] = useState(providerHint);
-  const [preview] = useState(previewMode);
   const [pending, setPending] = useState<SocialProvider>();
   const [failure, setFailure] = useState<string>();
   const startedFromHint = useRef(false);
 
   useEffect(() => {
-    if (preview || !provider || startedFromHint.current) return;
+    if (!provider || startedFromHint.current) return;
     startedFromHint.current = true;
     setPending(provider);
     captureSiteEvent(SITE_EVENT.SIGN_IN_START);
@@ -91,7 +86,7 @@ function SignIn(): React.JSX.Element {
       setPending(undefined);
       setFailure("Sign-in could not start. Try again.");
     });
-  }, [provider, preview]);
+  }, [provider]);
 
   const begin = async () => {
     if (!provider || pending) return;
