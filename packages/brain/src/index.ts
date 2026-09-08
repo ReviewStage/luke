@@ -4,6 +4,7 @@ export {
   type BrainAgentOptions,
   type BrainChildRunEnd,
   type BrainCompletionDelivery,
+  type BrainFlushInput,
   type BrainLane,
   type BrainOpeningNotes,
   type BrainRecallAsk,
@@ -27,6 +28,12 @@ export {
 } from "./embedding-adapters.js";
 export { BrainGenerationClock } from "./generation-clock.js";
 export { HOSTED_MODEL_ADAPTER_ID, HostedModelAdapter } from "./hosted-model-adapter.js";
+export {
+  HOUSEKEEPING_REFUSAL,
+  HOUSEKEEPING_TOOLS,
+  type MemoryHousekeepingOptions,
+  runMemoryHousekeeping,
+} from "./housekeeping.js";
 export { BRAIN_INPUT_MARKER, primedNotesInputText } from "./input-items.js";
 export { brainInstructions, brainToolNotes } from "./instructions.js";
 export type { BrainJournalEntry } from "./journal.js";

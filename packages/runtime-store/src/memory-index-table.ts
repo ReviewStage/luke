@@ -313,7 +313,7 @@ export interface MemoryApplyReport {
   readonly embeddedChunks: number;
 }
 
-function removeIndexedPath(database: RuntimeDatabase, filePath: string): void {
+export function removeIndexedPath(database: RuntimeDatabase, filePath: string): void {
   database.prepare("DELETE FROM memory_index_chunks_fts WHERE path = ?").run(filePath);
   database.prepare("DELETE FROM memory_index_chunks WHERE path = ?").run(filePath);
   database.prepare("DELETE FROM memory_index_sources WHERE path = ?").run(filePath);

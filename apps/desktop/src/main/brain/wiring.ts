@@ -7,6 +7,7 @@ import {
   BrainAgent,
   type BrainChildAccess,
   type BrainDelivery,
+  type BrainFlushInput,
   BrainGenerationClock,
   type BrainMemoryAccess,
   type BrainRecallAsk,
@@ -32,6 +33,11 @@ import {
   runOriginOf,
   TOOL_LOOP_RUNTIME,
 } from "@sidecar/brain";
+import {
+  housekeepingCompleted,
+  MEMORY_HOUSEKEEPING_OUTCOME,
+  type MemoryHousekeepingResult,
+} from "@sidecar/memory";
 import type { ConversationEntry } from "@sidecar/realtime";
 import {
   type BuiltPrompt,
@@ -176,6 +182,24 @@ export interface BrainWiringDependencies {
   recall?: (
     sessionKey: SessionKey,
   ) => ((ask: BrainRecallAsk) => Promise<string | undefined>) | undefined;
+  /**
+   * The pre-compaction memory flush for one conversation: the host decides
+   * which conversations flush (main and the developer's durable private
+   * threads, never a temporary thread, an observed session, or a child) and
+   * answers nothing for one that does not.
+   */
+  beforeCompaction?: (
+    sessionKey: SessionKey,
+  ) => ((input: BrainFlushInput) => Promise<MemoryHousekeepingResult>) | undefined;
+  /**
+   * The capture run before an eligible conversation starts fresh, over a
+   * copy of its context. Its outcome is reported and never decides the
+   * reset: a capture that failed is recorded honestly and the reset proceeds.
+   */
+  beforeReset?: (
+    sessionKey: SessionKey,
+    items: readonly WireRecord[],
+  ) => Promise<MemoryHousekeepingResult>;
 }
 
 export interface BrainIpcRegistration {
@@ -527,6 +551,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     },
   });
   const recallFor = (sessionKey: SessionKey) => dependencies.recall?.(sessionKey);
+  const flushFor = (sessionKey: SessionKey) => dependencies.beforeCompaction?.(sessionKey);
 
   /** The skills the latest preparation listed to the model: the only ones `load_skill` may load. */
   interface ListedSkills {
@@ -629,6 +654,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       children: childAccessFor(sessionKey),
       ...(dependencies.memory ? { memory: memoryAccessFor(sessionKey) } : undefined),
       ...(recallFor(sessionKey) ? { recall: recallFor(sessionKey) } : undefined),
+      ...(flushFor(sessionKey) ? { beforeCompaction: flushFor(sessionKey) } : undefined),
       runtime: runtimeDescriptor.create(model, engineDescriptor),
       acts,
       roster: dependencies.roster,
@@ -1159,6 +1185,28 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
           `Start fresh refused: ${cancelled.remaining.length} child run(s) could not be cancelled first`,
         );
         return false;
+      }
+      // The capture reads a copy of the context the reset is about to let go
+      // of and writes only today's note; whatever it answers, the reset goes
+      // ahead, and a capture that did not complete is said so.
+      const capture = dependencies.beforeReset;
+      const agent = current(sessionKey);
+      if (capture && agent) {
+        const items = await agent.contextSnapshot().catch(() => undefined);
+        if (items && items.length > 0) {
+          const result = await capture(sessionKey, items).catch(
+            (error: unknown): MemoryHousekeepingResult => ({
+              outcome: MEMORY_HOUSEKEEPING_OUTCOME.FAILED,
+              writes: 0,
+              reason: error instanceof Error ? error.message : String(error),
+            }),
+          );
+          if (!housekeepingCompleted(result.outcome)) {
+            dependencies.report(
+              `Reset capture did not complete (${result.outcome}${result.reason ? `: ${result.reason}` : ""}); ${result.writes} note write(s) stand and the reset proceeds`,
+            );
+          }
+        }
       }
       return openConversation(sessionKey).store.reset();
     },

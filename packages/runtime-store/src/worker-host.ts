@@ -30,6 +30,23 @@ import {
   searchMemoryIndex,
 } from "./memory-index-table.js";
 import {
+  advanceIngestion,
+  flushState,
+  forgetMemorySources,
+  ingestionCursor,
+  listForgottenSources,
+  listMemoryCandidates,
+  listMemoryRewrites,
+  messageIngested,
+  publishMemoryRewrite,
+  readDurableMemoryFile,
+  recordFlush,
+  recordPhaseHits,
+  setCandidateStatus,
+  stageMemoryCandidates,
+  tombstoneSources,
+} from "./memory-maintenance-table.js";
+import {
   forgetNotebookEntry,
   listNotebookEntries,
   migrateFactsIntoNotebook,
@@ -132,6 +149,44 @@ const HANDLERS: RuntimeStoreHandlers = {
     readMemoryLines(host.workspace(), params.path, params.from, params.lines),
   [RUNTIME_STORE_METHOD.MEMORY_REBUILD]: (host) => rebuildMemoryIndex(host.opened()),
   [RUNTIME_STORE_METHOD.MEMORY_STATUS]: (host) => memoryIndexStatus(host.opened()),
+  [RUNTIME_STORE_METHOD.MEMORY_CANDIDATES_STAGE]: (host, params) =>
+    stageMemoryCandidates(host.opened(), params.seeds, params.now),
+  [RUNTIME_STORE_METHOD.MEMORY_CANDIDATES_LIST]: (host, params) =>
+    listMemoryCandidates(host.opened(), params.status),
+  [RUNTIME_STORE_METHOD.MEMORY_CANDIDATES_STATUS]: (host, params) =>
+    setCandidateStatus(host.opened(), params.keys, params.status, params.now),
+  [RUNTIME_STORE_METHOD.MEMORY_PHASE_HITS]: (host, params) =>
+    recordPhaseHits(host.opened(), params.phase, params.keys, params.now),
+  [RUNTIME_STORE_METHOD.MEMORY_INGESTION_CURSOR]: (host, params) =>
+    ingestionCursor(host.opened(), params.sessionKey),
+  [RUNTIME_STORE_METHOD.MEMORY_INGESTION_SEEN]: (host, params) =>
+    params.hashes.filter((hash) => messageIngested(host.opened(), params.sessionKey, hash)),
+  [RUNTIME_STORE_METHOD.MEMORY_INGESTION_ADVANCE]: (host, params) => {
+    advanceIngestion(
+      host.opened(),
+      params.sessionKey,
+      params.lastRecordedAt,
+      params.hashes,
+      params.now,
+    );
+    return true;
+  },
+  [RUNTIME_STORE_METHOD.MEMORY_TOMBSTONES_LIST]: (host) => listForgottenSources(host.opened()),
+  [RUNTIME_STORE_METHOD.MEMORY_TOMBSTONE]: (host, params) =>
+    tombstoneSources(host.opened(), params.sources, params.now),
+  [RUNTIME_STORE_METHOD.MEMORY_DURABLE_READ]: (host, params) =>
+    readDurableMemoryFile(host.workspace(), params.name),
+  [RUNTIME_STORE_METHOD.MEMORY_REWRITE_PUBLISH]: (host, params) =>
+    publishMemoryRewrite(host.opened(), host.workspace(), params.ask, params.now),
+  [RUNTIME_STORE_METHOD.MEMORY_REWRITES_LIST]: (host) => listMemoryRewrites(host.opened()),
+  [RUNTIME_STORE_METHOD.MEMORY_FLUSH_STATE_GET]: (host, params) =>
+    flushState(host.opened(), params.sessionKey),
+  [RUNTIME_STORE_METHOD.MEMORY_FLUSH_STATE_PUT]: (host, params) => {
+    recordFlush(host.opened(), params.sessionKey, params.state);
+    return true;
+  },
+  [RUNTIME_STORE_METHOD.MEMORY_FORGET]: (host, params) =>
+    forgetMemorySources(host.opened(), host.workspace(), params.ask, params.now),
   [RUNTIME_STORE_METHOD.CONVERSATIONS_LIST]: (host) => listConversations(host.opened()),
   [RUNTIME_STORE_METHOD.CONVERSATION_CREATE]: (host, params) =>
     createConversation(host.opened(), params),

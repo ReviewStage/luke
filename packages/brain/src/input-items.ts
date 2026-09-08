@@ -1,3 +1,5 @@
+import { RECALLED_CONTEXT_MARKER } from "@sidecar/memory";
+import type { Session } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 import { sessionSummary } from "./observation-inbox.js";
 import type { BrainDelivery, BrainTurnNotice, BrainWakeEvent } from "./wake-events.js";
@@ -27,7 +29,7 @@ export const BRAIN_INPUT_MARKER = {
   /** A child's end, handed to the conversation that asked for it: a report to review, never an instruction. */
   CHILD_COMPLETION: "[child completion]",
   /** What a bounded recall over the notebook and past private conversations summarized, for this turn alone. */
-  RECALLED_MEMORY: "[recalled memory]",
+  RECALLED_MEMORY: RECALLED_CONTEXT_MARKER,
 } as const;
 
 export type BrainInputMarker = (typeof BRAIN_INPUT_MARKER)[keyof typeof BRAIN_INPUT_MARKER];
