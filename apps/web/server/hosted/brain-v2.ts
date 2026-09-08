@@ -1,6 +1,8 @@
 import {
+  BRAIN_DEFAULTS,
   BRAIN_EMBEDDING_MODEL,
   BRAIN_EMBEDDINGS_PATH,
+  BRAIN_OPENAI_DEFAULTS,
   BRAIN_RESPONSES_COMPACT_PATH,
   BRAIN_RESPONSES_INPUT_TOKENS_PATH,
   BRAIN_RESPONSES_PATH,
@@ -33,7 +35,6 @@ import {
   text as trimmedText,
   type UnparsedWireValue,
 } from "../core.js";
-import { HOSTED_BRAIN_DEFAULTS } from "./brain-respond.js";
 import {
   BODY_READ,
   errorResponse,
@@ -47,20 +48,27 @@ import { type FetchLike, postOpenAi } from "./openai.js";
 import type { HostedSpend } from "./quota.js";
 
 /**
- * The second hosted brain contract, beside the first. One HTTP request is
- * still one model call and nothing more: the desktop owns the memory, the
- * scheduling, the tool loop, and every effect. What changed is what the
- * desktop may say: it prepares the prompt, bounded to the contract's own
+ * The hosted brain contract. One HTTP request is one model call and nothing
+ * more: the desktop owns the memory, the scheduling, the tool loop, and every
+ * effect. The desktop prepares the prompt, bounded to the contract's own
  * envelope, and names the tools it means to offer, each a name this service
  * registers a schema for — a caller can never upload a schema, and a name the
- * catalog does not hold refuses the request. The service still fixes the
- * model, the upstream, its credential, the refusal to store, and the bounds,
- * answers its capabilities so a desktop can decide before sending anything,
- * and posts each operation once: an inference, a token count, or an explicit
- * compaction whose answered window the desktop adopts whole. It runs no
- * tool, keeps no conversation, and stores and logs none of the request, the
- * reply, or the encrypted items that travel in them.
+ * catalog does not hold refuses the request. The service fixes the model, the
+ * upstream, its credential, the refusal to store, and the bounds, answers its
+ * capabilities so a desktop can decide before sending anything, and posts each
+ * operation once: an inference, a token count, or an explicit compaction whose
+ * answered window the desktop adopts whole. It runs no tool, keeps no
+ * conversation, and stores and logs none of the request, the reply, or the
+ * encrypted items that travel in them.
  */
+
+export const HOSTED_BRAIN_DEFAULTS = {
+  MODEL: BRAIN_OPENAI_DEFAULTS.MODEL,
+  REASONING_EFFORT: BRAIN_OPENAI_DEFAULTS.REASONING_EFFORT,
+  MAXIMUM_OUTPUT_TOKENS: BRAIN_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
+  /** The same ceiling the keyed client keeps: a turn that reasons over a transcript, not a runaway. */
+  UPSTREAM_TIMEOUT_MS: BRAIN_OPENAI_DEFAULTS.REQUEST_TIMEOUT_MS,
+} as const;
 
 export interface BrainCapabilitiesOptions {
   request: Request;

@@ -98,7 +98,7 @@ function composition() {
     refreshAccount: async () => undefined,
     fetch: async (input) => {
       const url = String(input);
-      // The hosted adapter speaks the second contract: it reads the
+      // The hosted adapter speaks the brain contract: it reads the
       // capabilities and then posts each turn, which this fake holds.
       if (url.endsWith(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES)) {
         return Response.json({

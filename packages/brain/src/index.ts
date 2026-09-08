@@ -39,7 +39,7 @@ export {
   type ToolFreeCompletionOptions,
 } from "./housekeeping.js";
 export { BRAIN_INPUT_MARKER, primedNotesInputText } from "./input-items.js";
-export { brainInstructions, brainToolNotes } from "./instructions.js";
+export { brainToolNotes } from "./instructions.js";
 export type { BrainJournalEntry } from "./journal.js";
 export { UNCONFIRMED_ACT_RESULT, UNKNOWN_ACT_RESULT, UNKNOWN_ACT_STATUS } from "./journal.js";
 export {
@@ -119,7 +119,6 @@ export {
   brainToolCatalog,
   brainToolSchemas,
   hostedBrainToolCatalog,
-  hostedBrainV1ToolDefinitions,
   resolveTurnToolPolicy,
   TOOL_GROUP,
   turnToolPolicy,

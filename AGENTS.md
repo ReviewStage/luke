@@ -483,24 +483,22 @@ Trust constraints:
   loopback text transport, and the socket; widening the method vocabulary,
   the event set, or what a node may be asked is a product decision, not an
   implementation detail.
-- The hosted tier speaks two brain contracts. The first, kept for installed
-  clients, carries the input array and a turn authority and lets the service
-  derive everything else. The second (`/api/brain/capabilities`,
+- The hosted tier speaks one brain contract (`/api/brain/capabilities`,
   `/api/brain/v2/respond`, `/api/brain/v2/count-tokens`,
-  `/api/brain/v2/compact`) lets the desktop prepare the prompt — bounded to
+  `/api/brain/v2/compact`). It lets the desktop prepare the prompt — bounded to
   its own 200,000-character envelope, refused past it, never cut — and name
   the tools it offers, each a registered name the service holds a schema
   for, emitted from the same declaration that parses the request; a caller
-  can never upload a schema, and an unregistered name refuses the request. The service still fixes the model, the upstream, its
-  credential, the refusal to store, the output budget's ceiling, and the
+  can never upload a schema, and an unregistered name refuses the request.
+  The service fixes the model, the upstream, its credential, the refusal to
+  store, the output budget's ceiling, and the
   2 MiB body bound, spends the same review allowance per operation, keeps
   no conversation, executes no tool, and answers an explicit compaction's
-  whole window for the desktop to adopt as it came. A desktop built on the
-  second contract reads the capabilities first and fails with a
-  compatibility error when the service lacks them; it never falls back to
-  the first. The service therefore deploys before such a desktop ships, and
-  widening either contract is a product decision, not an implementation
-  detail.
+  whole window for the desktop to adopt as it came. A desktop reads the
+  capabilities first and fails with a compatibility error when the service
+  lacks them; there is no older contract to fall back to. The service
+  therefore deploys before such a desktop ships, and widening the contract
+  is a product decision, not an implementation detail.
 - What the brain keeps is one generation per conversation, in one database
   under one writer, and the generation's shape is the retention rule for the
   model's context alone. The database is the runtime store: one SQLite file

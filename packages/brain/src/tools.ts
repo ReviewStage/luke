@@ -3,7 +3,6 @@ import {
   realtimeToolDefinitions,
   realtimeToolFamily,
 } from "@sidecar/acts";
-import { BRAIN_TURN_AUTHORITY, type BrainTurnAuthority } from "@sidecar/hosted";
 import { MEMORY_QUERY_MAXIMUM_CHARS } from "@sidecar/memory";
 import {
   type ChildPolicyContext,
@@ -459,23 +458,4 @@ export function brainToolSchemas(policy: EffectiveToolPolicy): readonly ToolSche
  */
 export function hostedBrainToolCatalog(): ReadonlyMap<string, ResponsesFunctionTool> {
   return new Map(brainToolCatalog().map((tool) => [tool.id, responsesToolDefinition(tool.schema)]));
-}
-
-/**
- * The toolsets the first hosted contract fixed from a turn's authority, kept
- * for installed clients still speaking it: a developer turn was offered every
- * act and the two reads, an observation turn the two reads and the briefing.
- * The current desktop names its tools itself under the second contract and
- * never sends an authority; nothing new is built on this table.
- */
-export function hostedBrainV1ToolDefinitions(
-  authority: BrainTurnAuthority,
-): readonly RealtimeToolWireDefinition[] {
-  const reads = BRAIN_ONLY_TOOLS.filter(
-    (tool) => tool.name === BRAIN_TOOL.LIST_SESSIONS || tool.name === BRAIN_TOOL.READ_TRANSCRIPT,
-  );
-  if (authority === BRAIN_TURN_AUTHORITY.DEVELOPER) {
-    return [...realtimeToolDefinitions(), ...reads];
-  }
-  return [...reads, ...BRAIN_ONLY_TOOLS.filter((tool) => tool.name === BRAIN_TOOL.ANNOUNCE)];
 }

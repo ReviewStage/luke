@@ -15,7 +15,6 @@ import {
   isWireString,
   text,
   type UnparsedWireValue,
-  type WireRecord,
   wholeNumber,
 } from "@sidecar/wire";
 import {
@@ -23,7 +22,6 @@ import {
   type RealtimeConnection,
   realtimeCredentialIsUsable,
 } from "./realtime-contract.js";
-import { admitBrainInput } from "./responses-input.js";
 
 /**
  * The wire contract between Luke's hosted service and the desktop. The web
@@ -67,30 +65,18 @@ export const HOSTED_SERVICE_PATH = {
    */
   INTRODUCTION_MINT: "/api/voice/introduction-mint",
   /**
-   * Run one turn of Luke's brain on Luke's key (POST), for a developer with
-   * none of their own. The desktop sends the brain's own input array — its
-   * memory from the latest compaction item onward, the standing context, and
-   * the turn's new items — and the service holds the instructions, the tool
-   * schemas, and the model fixed by its own build, answering with the raw
-   * Responses payload for the desktop to append and act on. Kept for the
-   * installed desktops through 0.5.0 that speak only this contract; retire it
-   * once none remain.
-   */
-  BRAIN_RESPOND: "/api/brain/respond",
-  /**
-   * The second brain contract (see `brain-contract.ts`). GET the
-   * capabilities to learn the model, the operations, the registered tool
-   * names, and the bounds before sending anything; POST the three operations
-   * with a prepared prompt and tool names, and the same admitted input array.
+   * The brain contract (see `brain-contract.ts`). GET the capabilities to
+   * learn the model, the operations, the registered tool names, and the
+   * bounds before sending anything; POST the three operations with a prepared
+   * prompt and tool names, and the same admitted input array.
    */
   BRAIN_CAPABILITIES: "/api/brain/capabilities",
   BRAIN_RESPOND_V2: "/api/brain/v2/respond",
   BRAIN_COUNT_TOKENS: "/api/brain/v2/count-tokens",
   BRAIN_COMPACT: "/api/brain/v2/compact",
-  /** Embeddings for the notebook index on Luke's key (POST), the fourth operation of the second contract. */
+  /** Embeddings for the notebook index on Luke's key (POST), the fourth operation of that contract. */
   BRAIN_EMBED: "/api/brain/v2/embed",
   ACCOUNT_DELETE: "/api/account/delete",
-  USAGE: "/api/usage",
   EVENTS: "/api/events",
   /**
    * Store and read account preferences (GET, PUT). Only settings named by
@@ -377,81 +363,6 @@ export function remoteMintAnswerFromWire(
     ...base,
     context: { sessions: { itemId, text: itemText } },
   };
-}
-
-/**
- * Who opened the brain turn a request runs. It is derived by the desktop's
- * main process from how the turn was invoked — an ask the developer typed or
- * spoke against a wake, a roster look, or a hold release — and never from
- * anything a model wrote or a transcript said. It fixes the toolset the turn
- * is offered: a developer turn may act and never announces, an observation
- * turn may only read and announce. It lives here rather than in the brain
- * package so the hosted service can read it without a hosted → brain edge.
- */
-export const BRAIN_TURN_AUTHORITY = {
-  DEVELOPER: "developer",
-  OBSERVATION: "observation",
-} as const;
-
-export type BrainTurnAuthority = (typeof BRAIN_TURN_AUTHORITY)[keyof typeof BRAIN_TURN_AUTHORITY];
-
-/** Reads an authority off the wire, or nothing: an absent or unknown one is never a developer's. */
-export function brainTurnAuthorityFromWire(
-  value: UnparsedWireValue,
-): BrainTurnAuthority | undefined {
-  if (!isWireString(value)) return undefined;
-  return Object.values(BRAIN_TURN_AUTHORITY).find((authority) => authority === value);
-}
-
-/**
- * What one hosted brain turn carries up: the input array as the desktop holds
- * it, every item one of the Responses forms this build replays (see
- * `responses-input.ts`), and the authority the turn runs under. Nothing else
- * travels — not a model, instructions, tools, a store flag, or an output
- * budget — because the service's build fixes every one of them from the
- * authority, so a request cannot widen what the brain may do, only what it is
- * shown. A request naming no authority, or carrying any field beyond these
- * two, is refused whole rather than read as a developer's.
- */
-export interface HostedBrainRequest {
-  authority: BrainTurnAuthority;
-  input: readonly WireRecord[];
-}
-
-const HOSTED_BRAIN_REQUEST_KEYS: ReadonlySet<string> = new Set(["authority", "input"]);
-
-/**
- * Validates and rebuilds a brain turn request arriving as untrusted JSON, or
- * nothing. The desktop runs the same reader over the body it is about to
- * send, so an input the service would refuse never spends a call.
- */
-export function hostedBrainRequestFromWire(
-  value: UnparsedWireValue,
-): HostedBrainRequest | undefined {
-  if (!isRecord(value)) return undefined;
-  if (!Object.keys(value).every((key) => HOSTED_BRAIN_REQUEST_KEYS.has(key))) return undefined;
-  const authority = brainTurnAuthorityFromWire(value.authority);
-  if (authority === undefined) return undefined;
-  const input = admitBrainInput(value.input);
-  if (!input) return undefined;
-  return { authority, input };
-}
-
-/**
- * Where today's allowance stands on both meters, read without spending
- * either: what the usage endpoint answers, and what the panel shows.
- */
-export interface HostedUsageAnswer {
-  voice: HostedQuota;
-  attention: HostedQuota;
-}
-
-/** Validates a usage answer; a malformed one reads as no answer at all. */
-export function hostedUsageAnswerFromWire(value: UnparsedWireValue): HostedUsageAnswer | undefined {
-  if (!isRecord(value)) return undefined;
-  const voice = hostedQuotaFromWire(value.voice);
-  const attention = hostedQuotaFromWire(value.attention);
-  return voice && attention ? { voice, attention } : undefined;
 }
 
 const HOSTED_API_ERROR_LIST: readonly HostedApiError[] = Object.values(HOSTED_API_ERROR);

@@ -87,7 +87,7 @@ function adapter(
   });
 }
 
-test("the adapter reads the capabilities once, then posts the prepared prompt, the tool names, and the options on the second contract", async () => {
+test("the adapter reads the capabilities once, then posts the prepared prompt, the tool names, and the options", async () => {
   const { fetch, calls } = service({
     [HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES]: [() => Response.json(capabilities())],
     [HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2]: [

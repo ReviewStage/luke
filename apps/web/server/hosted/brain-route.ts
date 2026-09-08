@@ -8,7 +8,7 @@ import { HOSTED_METER, spendHostedMeter } from "./quota.js";
 /**
  * The deployment's real seams behind every brain route, built once: the key
  * this deployment holds, its model override, the bearer's account, and the
- * review allowance meter both contracts share. A route file hands its
+ * review allowance meter every operation spends. A route file hands its
  * handler here and nothing else.
  */
 export function hostedBrainRoute(handle: (options: BrainV2Options) => Promise<Response>) {
