@@ -472,6 +472,22 @@ test("the guide offers what a new Conductor agent runs, by the names people know
   );
 });
 
+test("the guide offers GPT-6 Astra for new Conductor agents", () => {
+  const unset = guideSetting(APP_SETTING_ID.WORKSPACE_AGENT_MODEL);
+
+  assert.ok(unset.choices?.includes("GPT-6 Astra"));
+  assert.equal(unset.choices?.includes("gpt-6-astra"), false);
+  assert.deepEqual(unset.efforts?.["GPT-6 Astra"], [
+    "none",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+    "ultra",
+  ]);
+});
+
 test("a spoken model or effort change composes the one stored selection", async () => {
   const carried: (WorkspaceAgentSelection | undefined)[] = [];
   const bridge = spokenSettingBridge({

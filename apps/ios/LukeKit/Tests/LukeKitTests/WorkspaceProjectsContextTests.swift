@@ -73,6 +73,23 @@ final class WorkspaceProjectsContextTests: XCTestCase {
         )
     }
 
+    func testAgentOptionsRenderGPT6AstraForPhoneAndWatchVoiceContext() {
+        let answer = ProjectsAnswer(
+            projects: [project("p1", repository: "acme/web")],
+            agentModels: [
+                WorkspaceAgentOption(
+                    providerId: "conductor", agent: "codex",
+                    models: [WorkspaceAgentModelChoice(id: "gpt-6-astra", label: "GPT-6 Astra")],
+                    efforts: ["ultra"]
+                )
+            ]
+        )
+
+        let text = WorkspaceProjectsContext.text(
+            answer: answer, defaultProviderId: nil, defaultProjectIds: [:])
+        XCTAssertTrue(text.contains("codex — models GPT-6 Astra (gpt-6-astra); efforts ultra"))
+    }
+
     func testTheCapKeepsTheDefaultProjectPastTheCut() {
         let projects = (0 ..< 12).map { project("p\($0)", repository: "repo-\($0)") }
         let listed = WorkspaceProjectsContext.listedProjects(projects, defaultProjectIds: ["conductor": "p11"])

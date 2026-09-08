@@ -103,6 +103,18 @@ final class WorkspaceAgentOptionTests: XCTestCase {
             ])
         )
     }
+
+    func testDecodesGPT6Astra() {
+        let option = WorkspaceAgentOption(json: [
+            "providerId": "conductor",
+            "agent": "codex",
+            "models": [["id": "gpt-6-astra", "label": "GPT-6 Astra"]],
+            "efforts": ["ultra"],
+        ])
+
+        XCTAssertEqual(option?.models, [WorkspaceAgentModelChoice(id: "gpt-6-astra", label: "GPT-6 Astra")])
+        XCTAssertEqual(option?.efforts, ["ultra"])
+    }
 }
 
 // MARK: - ProjectsClient
