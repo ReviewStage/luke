@@ -11,14 +11,12 @@
 		AABBCC000000000000000021 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000013 /* ContentView.swift */; };
 		AABBCC000000000000000022 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000014 /* Assets.xcassets */; };
 		AABBCC000000000000000102 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000104 /* PrivacyInfo.xcprivacy */; };
-		AABBCC000000000000000023 /* LukeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000015 /* LukeTests.swift */; };
 		AABBCC000000000000000083 /* LukeKit in Frameworks */ = {isa = PBXBuildFile; productRef = AABBCC000000000000000081 /* LukeKit */; };
 		AABBCC000000000000000084 /* LukeKit in Frameworks */ = {isa = PBXBuildFile; productRef = AABBCC000000000000000082 /* LukeKit */; };
 		AABBCC000000000000000085 /* Marks.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000016 /* Marks.swift */; };
 		AABBCC000000000000000086 /* SVGPath.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000017 /* SVGPath.swift */; };
 		AABBCC000000000000000087 /* VaultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000018 /* VaultView.swift */; };
 		AABBCC000000000000000088 /* Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000019 /* Palette.swift */; };
-		AABBCC000000000000000089 /* CanvasInkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001A /* CanvasInkTests.swift */; };
 		AABBCC00000000000000008A /* SessionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001B /* SessionsView.swift */; };
 		AABBCC00000000000000008C /* SessionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001D /* SessionDetailView.swift */; };
 		AABBCC00000000000000008D /* WorkspaceCreatorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC00000000000000001E /* WorkspaceCreatorSheet.swift */; };
@@ -56,6 +54,9 @@
 		AABBCC0000000000000000EE /* WatchLukeMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000ED /* WatchLukeMark.swift */; };
 		AABBCC0000000000000000F6 /* WatchNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000F5 /* WatchNavigation.swift */; };
 		AABBCC000000000000000100 /* WatchVoiceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000101 /* WatchVoiceSettingsView.swift */; };
+		AABBCC000000000000000110 /* MarksTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000113 /* MarksTests.swift */; };
+		AABBCC000000000000000111 /* PaletteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000114 /* PaletteTests.swift */; };
+		AABBCC000000000000000112 /* SessionsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000115 /* SessionsStoreTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -65,6 +66,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = AABBCC0000000000000000B9;
 			remoteInfo = LukeWatch;
+		};
+		AABBCC000000000000000116 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AABBCC000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AABBCC000000000000000030;
+			remoteInfo = Luke;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -88,12 +96,10 @@
 		AABBCC000000000000000012 /* LukeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LukeApp.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000013 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000014 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		AABBCC000000000000000015 /* LukeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LukeTests.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000016 /* Marks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Marks.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000017 /* SVGPath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SVGPath.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000018 /* VaultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultView.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000019 /* Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Palette.swift; sourceTree = "<group>"; };
-		AABBCC00000000000000001A /* CanvasInkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasInkTests.swift; sourceTree = "<group>"; };
 		AABBCC00000000000000001B /* SessionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsView.swift; sourceTree = "<group>"; };
 		AABBCC00000000000000001C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AABBCC000000000000000104 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -130,6 +136,9 @@
 		AABBCC0000000000000000ED /* WatchLukeMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchLukeMark.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000F5 /* WatchNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchNavigation.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000101 /* WatchVoiceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchVoiceSettingsView.swift; sourceTree = "<group>"; };
+		AABBCC000000000000000113 /* MarksTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarksTests.swift; sourceTree = "<group>"; };
+		AABBCC000000000000000114 /* PaletteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteTests.swift; sourceTree = "<group>"; };
+		AABBCC000000000000000115 /* SessionsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsStoreTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -215,8 +224,9 @@
 		AABBCC000000000000000005 /* LukeTests */ = {
 			isa = PBXGroup;
 			children = (
-				AABBCC00000000000000001A /* CanvasInkTests.swift */,
-				AABBCC000000000000000015 /* LukeTests.swift */,
+				AABBCC000000000000000113 /* MarksTests.swift */,
+				AABBCC000000000000000114 /* PaletteTests.swift */,
+				AABBCC000000000000000115 /* SessionsStoreTests.swift */,
 			);
 			path = LukeTests;
 			sourceTree = "<group>";
@@ -293,6 +303,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				AABBCC000000000000000117 /* PBXTargetDependency */,
 			);
 			name = LukeTests;
 			packageProductDependencies = (
@@ -426,8 +437,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AABBCC000000000000000089 /* CanvasInkTests.swift in Sources */,
-				AABBCC000000000000000023 /* LukeTests.swift in Sources */,
+				AABBCC000000000000000110 /* MarksTests.swift in Sources */,
+				AABBCC000000000000000111 /* PaletteTests.swift in Sources */,
+				AABBCC000000000000000112 /* SessionsStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -463,6 +475,11 @@
 			isa = PBXTargetDependency;
 			target = AABBCC0000000000000000B9 /* LukeWatch */;
 			targetProxy = AABBCC0000000000000000F1 /* PBXContainerItemProxy */;
+		};
+		AABBCC000000000000000117 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AABBCC000000000000000030 /* Luke */;
+			targetProxy = AABBCC000000000000000116 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -657,6 +674,7 @@
 		AABBCC000000000000000074 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -665,12 +683,14 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Luke.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Luke";
 			};
 			name = Debug;
 		};
 		AABBCC000000000000000075 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -679,6 +699,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Luke.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Luke";
 			};
 			name = Release;
 		};

@@ -15,7 +15,9 @@ xcodebuild \
 ## Test
 
 The tests live in two places, and each has its own entry. The Luke scheme runs
-the app target's suites on a simulator:
+the app target's own suites on a simulator — the ones that reach inside the app
+through `@testable import Luke`, which is what `TEST_HOST` on the test target
+buys:
 
 ```sh
 xcodebuild \
