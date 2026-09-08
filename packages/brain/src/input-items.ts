@@ -1,6 +1,6 @@
 import type { WireRecord } from "@sidecar/wire";
 import { sessionSummary } from "./observation-inbox.js";
-import type { BrainDelivery, BrainWakeEvent } from "./wake-events.js";
+import type { BrainDelivery, BrainTurnNotice, BrainWakeEvent } from "./wake-events.js";
 
 /**
  * The words a turn opens with, each a marker naming what kind of turn it is
@@ -158,6 +158,29 @@ export function heartbeatInputText(now: number): string {
  * text, so main can say what its observed conversations did without having
  * read what the agents wrote.
  */
-export function activityNoticesInputText(notices: readonly string[], now: number): string {
-  return marked(BRAIN_INPUT_MARKER.ACTIVITY_NOTICES, now, JSON.stringify({ notices }));
+/**
+ * One compact line about a sibling conversation's turn, from the host's own
+ * counts, the name it resolved for the session, and the words Luke himself
+ * chose to say: never a transcript's text.
+ */
+function noticeLine(notice: BrainTurnNotice): string {
+  const identity = notice.identities[0];
+  const who = identity
+    ? `${identity.providerId} session ${JSON.stringify(notice.label)}`
+    : notice.label;
+  const said =
+    notice.briefings.length > 0
+      ? `briefed: ${notice.briefings.map((briefing) => JSON.stringify(briefing)).join(" ")}`
+      : "briefed nothing";
+  const acts = notice.performedActs > 0 ? `; acts: ${notice.performedActs}` : "";
+  return `${new Date(notice.at).toISOString()} ${who}: ${notice.trigger} turn, ${said}${acts}`;
+}
+
+/** What the sibling conversations did since this one last ran, one line each. */
+export function activityNoticesInputText(notices: readonly BrainTurnNotice[], now: number): string {
+  return marked(
+    BRAIN_INPUT_MARKER.ACTIVITY_NOTICES,
+    now,
+    JSON.stringify({ notices: notices.map(noticeLine) }),
+  );
 }

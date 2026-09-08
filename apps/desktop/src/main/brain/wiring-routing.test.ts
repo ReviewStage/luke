@@ -7,6 +7,7 @@ import {
   BRAIN_INPUT_MARKER,
   BRAIN_REQUEST_ORIGIN,
   BRAIN_SUBMISSION_OUTCOME,
+  BRAIN_TURN_TRIGGER,
   BRAIN_WAKE_KIND,
   type BrainDelivery,
   type BrainStateStorage,
@@ -261,8 +262,18 @@ test("a roster look opens one conversation per observed session, each reading on
   // Main was handed nothing to read and opened no turn of its own.
   const notices = c.wiring.pendingNotices();
   assert.equal(notices.length, 2);
-  assert.ok(notices.every((line) => !line.includes("TRANSCRIPT_OF")));
-  assert.ok(notices.some((line) => line.includes("Claude Code: abc")));
+  // Each notice names its source session by the label the host resolved and
+  // carries the trigger as the typed vocabulary, never a transcript's words.
+  assert.deepEqual(notices.map((notice) => notice.label).sort(), [
+    "Claude Code: abc",
+    "Claude Code: def",
+  ]);
+  assert.ok(notices.every((notice) => notice.trigger === BRAIN_TURN_TRIGGER.ROSTER));
+  assert.ok(
+    notices.every(
+      (notice) => !notice.briefings.some((briefing) => briefing.includes("TRANSCRIPT_OF")),
+    ),
+  );
   const main = c.wiring.current();
   assert.ok(main);
   const accepted = await main.submitAsk({
@@ -333,6 +344,28 @@ test("hooks route to the session's own conversation, main is never woken by one,
   await c.wiring.rebuild();
 });
 
+test("a held briefing whose source conversation has stood down is re-decided in main, never lost", async () => {
+  const c = composed();
+  await c.wiring.rebuild();
+  const goneKey = observedSessionKey({ providerId: claude.id, providerSessionId: "gone" });
+  c.wiring.releaseHeld([
+    { briefing: "a session that has stood down", decidedAt: 1, sessionKey: goneKey },
+  ]);
+  const releases = () =>
+    c.inputs
+      .map((input) => itemTexts(input).join("\n"))
+      .filter((text) => text.includes(BRAIN_INPUT_MARKER.HOLD_RELEASED));
+  await until(() => releases().length >= 1);
+  await settle();
+  // No conversation was opened for the source: main re-decides it, and the
+  // briefing is neither dropped nor sent to another session's conversation.
+  assert.equal(c.wiring.current(goneKey), undefined);
+  assert.equal(releases().length, 1);
+  assert.ok(releases()[0]?.includes("a session that has stood down"));
+  c.wiring.retire();
+  await c.wiring.rebuild();
+});
+
 test("one observed conversation waiting on its model neither blocks another nor main", async () => {
   const gate: Gate = { holds: (texts) => texts.includes(SECRET("def")), release: () => undefined };
   const c = composed(gate);
@@ -342,7 +375,7 @@ test("one observed conversation waiting on its model neither blocks another nor 
   // def's inference is held; abc's has finished and left its notice.
   assert.equal(c.inputs.length, 2);
   assert.equal(c.wiring.pendingNotices().length, 1);
-  assert.ok(c.wiring.pendingNotices()[0]?.includes("Claude Code: abc"));
+  assert.equal(c.wiring.pendingNotices()[0]?.label, "Claude Code: abc");
   const main = c.wiring.current();
   assert.ok(main);
   const accepted = await main.submitAsk({
@@ -364,7 +397,7 @@ test("one observed conversation waiting on its model neither blocks another nor 
   );
   assert.equal(c.wiring.lanes.snapshot("agent").active, 0);
   assert.equal(c.wiring.pendingNotices().length, 1);
-  assert.ok(c.wiring.pendingNotices()[0]?.includes("Claude Code: def"));
+  assert.equal(c.wiring.pendingNotices()[0]?.label, "Claude Code: def");
   c.wiring.retire();
   await c.wiring.rebuild();
 });

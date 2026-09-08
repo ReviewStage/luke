@@ -115,6 +115,7 @@ import {
   type BrainDelivery,
   type BrainTranscriptDelta,
   type BrainTurnNotice,
+  type BrainTurnReport,
   type BrainWakeEvent,
 } from "./wake-events.js";
 import { WakeQueue } from "./wake-queue.js";
@@ -213,8 +214,8 @@ export type BrainLane = <T>(trigger: BrainTurnTrigger, work: () => Promise<T>) =
  * when that turn fails, so nothing is consumed by a turn that never ran.
  */
 export interface BrainOpeningNotes {
-  take(): readonly string[];
-  restore(notes: readonly string[]): void;
+  take(): readonly BrainTurnNotice[];
+  restore(notes: readonly BrainTurnNotice[]): void;
 }
 
 /**
@@ -263,7 +264,7 @@ export interface BrainAgentOptions {
   readTranscript: (identity: SessionIdentity) => Promise<ProviderTranscriptResult>;
   deliver: (delivery: BrainDelivery) => void | Promise<void>;
   /** Hears what each observation, hold-release, or heartbeat turn amounted to, in the host's own counts. */
-  notice?: (notice: BrainTurnNotice) => void;
+  notice?: (report: BrainTurnReport) => void;
   /** The lane each turn runs under; absent, turns are bounded only by this conversation's own serial queue. */
   lane?: BrainLane;
   openingNotes?: BrainOpeningNotes;
@@ -1696,7 +1697,7 @@ export class BrainAgent {
     };
     let preparation: BrainTurnPreparation | undefined;
     let policy: EffectiveToolPolicy | undefined;
-    let notes: readonly string[] = [];
+    let notes: readonly BrainTurnNotice[] = [];
     const revocation = (): TurnResult => {
       gathering.error = run.timedOut ? "execution deadline passed" : "turn revoked";
       return { outcome: TURN_OUTCOME.REVOKED };

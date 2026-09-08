@@ -13,6 +13,7 @@ import {
   type BrainTurnDescription,
   type BrainTurnNotice,
   type BrainTurnPreparation,
+  type BrainTurnReport,
   type BrainTurnTraceRecord,
   type BrainTurnTrigger,
   type BrainWakeEvent,
@@ -160,7 +161,7 @@ export interface BrainWiring {
   /** Opens the scheduled review in a conversation, main's by default. */
   heartbeat: (sessionKey?: SessionKey) => void;
   /** The compact notices main has not yet read, for inspection. */
-  pendingNotices: () => readonly string[];
+  pendingNotices: () => readonly BrainTurnNotice[];
   /** The brain of one conversation as it stands now, main's by default; nothing between transitions and on a run with no key. */
   current: (sessionKey?: SessionKey) => BrainAgent | undefined;
   /** The brain holding the run named, whichever conversation it is in. */
@@ -244,26 +245,6 @@ function laneFor(trigger: BrainTurnTrigger): Lane {
     default:
       return LANE.AGENT;
   }
-}
-
-/**
- * One compact line about an observed conversation's turn, from the host's
- * own counts and the words Luke himself chose to say: never a transcript's
- * text. Main reads these to answer for its sibling conversations.
- */
-function noticeLine(notice: BrainTurnNotice, session: Session | undefined): string {
-  const identity = notice.identities[0];
-  const who = session
-    ? `${session.provider.displayName} session "${session.title}"`
-    : identity
-      ? `${identity.providerId} session ${identity.providerSessionId}`
-      : "a session";
-  const said =
-    notice.briefings.length > 0
-      ? `briefed: ${notice.briefings.map((briefing) => JSON.stringify(briefing)).join(" ")}`
-      : "briefed nothing";
-  const acts = notice.performedActs > 0 ? `; acts: ${notice.performedActs}` : "";
-  return `${new Date(notice.at).toISOString()} ${who}: ${notice.trigger} turn, ${said}${acts}`;
 }
 
 function observedName(session: Session | undefined, identity: SessionIdentity): string {
@@ -388,21 +369,30 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
   // What the observed conversations did, for main's next turn: taken when
   // that turn opens, handed back if it fails, bounded so a quiet main never
   // accumulates a day of notices.
-  let notices: string[] = [];
+  let notices: readonly BrainTurnNotice[] = [];
+  /** The one place the bound is applied, so a record and a hand-back cannot each trim differently. */
+  const holdNotices = (held: readonly BrainTurnNotice[]) => {
+    notices = held.slice(-MAXIMUM_PENDING_NOTICES);
+  };
   const openingNotes = {
     take: () => {
       const taken = notices;
       notices = [];
       return taken;
     },
-    restore: (returned: readonly string[]) => {
-      notices = [...returned, ...notices].slice(-MAXIMUM_PENDING_NOTICES);
-    },
+    restore: (returned: readonly BrainTurnNotice[]) => holdNotices([...returned, ...notices]),
   };
-  const recordNotice = (notice: BrainTurnNotice) => {
-    const identity = notice.identities[0];
-    notices.push(noticeLine(notice, identity ? dependencies.session(identity) : undefined));
-    if (notices.length > MAXIMUM_PENDING_NOTICES) notices = notices.slice(-MAXIMUM_PENDING_NOTICES);
+  /**
+   * What one of main's siblings did, as main will read it: the conversation's
+   * own counts, and the name this host resolved for the session the turn
+   * looked at — its own session when the turn named none.
+   */
+  const recordNotice = (report: BrainTurnReport, observed: SessionIdentity) => {
+    const identity = report.identities[0] ?? observed;
+    holdNotices([
+      ...notices,
+      { ...report, label: observedName(dependencies.session(identity), identity) },
+    ]);
   };
 
   // The registries hold what this build compiled in; the configuration names
@@ -516,7 +506,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         ? { kind: LOOK_SUBJECT.SESSION, identity: observed }
         : { kind: LOOK_SUBJECT.NONE },
       lane: (trigger, work) => lanes.run(laneFor(trigger), work),
-      notice: observed ? recordNotice : () => {},
+      notice: observed ? (report) => recordNotice(report, observed) : () => {},
       openingNotes: sessionKey === MAIN_SESSION_KEY ? openingNotes : NO_OPENING_NOTES,
       runtime: runtimeDescriptor.create(model, engineDescriptor),
       acts,
@@ -693,8 +683,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
   const releaseHeld = (held: readonly BrainDelivery[]): void => {
     const bySource = new Map<SessionKey, BrainDelivery[]>();
     for (const delivery of held) {
-      // SAFETY: a delivery's source was set by this wiring from a key it opened.
-      const source = (delivery.sessionKey as SessionKey | undefined) ?? MAIN_SESSION_KEY;
+      const source = delivery.sessionKey ?? MAIN_SESSION_KEY;
       const key = conversations.get(source)?.host.current() ? source : MAIN_SESSION_KEY;
       bySource.set(key, [...(bySource.get(key) ?? []), delivery]);
     }
@@ -755,7 +744,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     rosterLook,
     releaseHeld,
     heartbeat: (sessionKey = MAIN_SESSION_KEY) => current(sessionKey)?.heartbeat(),
-    pendingNotices: () => [...notices],
+    pendingNotices: () => notices,
     resetConversation: (sessionKey) => openConversation(sessionKey).store.reset(),
     registerIpc,
     registries,

@@ -3431,7 +3431,7 @@ test("collect mode opens one turn for the asks that arrive within the debounce, 
 });
 
 test("a heartbeat opens a turn under its own marker, may announce, and reports a notice; its text is not a reply", async () => {
-  const notices: import("./wake-events.js").BrainTurnNotice[] = [];
+  const notices: import("./wake-events.js").BrainTurnReport[] = [];
   const h = harness({ notice: (notice) => notices.push(notice) });
   h.client.answers.push(
     answered([call("call_1", BRAIN_TOOL.ANNOUNCE, { briefing: "One thing needs you." })]),
@@ -3459,7 +3459,15 @@ test("a heartbeat opens a turn under its own marker, may announce, and reports a
 });
 
 test("opening notes are read once by the next turn and handed back when that turn fails", async () => {
-  let held = ["session abc: briefed 'done'"];
+  const note: import("./wake-events.js").BrainTurnNotice = {
+    trigger: BRAIN_TURN_TRIGGER.WAKE,
+    identities: [ABC],
+    briefings: ["abc is done."],
+    performedActs: 0,
+    at: NOW,
+    label: "Claude Code: abc",
+  };
+  let held = [note];
   const h = harness({
     openingNotes: {
       take: () => {
@@ -3474,14 +3482,19 @@ test("opening notes are read once by the next turn and handed back when that tur
   });
   h.client.answers.push(failedAnswer("down"));
   await ask(h, "what happened?");
-  assert.deepEqual(held, ["session abc: briefed 'done'"]);
+  assert.deepEqual(held, [note]);
   h.client.answers.push(answered([message("abc finished.")]));
   await ask(h, "and now?");
   assert.deepEqual(held, []);
   const opening = (h.client.inputs[1] ?? []).map((item) =>
     item.type === RESPONSES_ITEM_TYPE.MESSAGE ? itemText(item) : "",
   );
-  assert.ok(opening.some((text) => text.startsWith(BRAIN_INPUT_MARKER.ACTIVITY_NOTICES)));
+  const activity = opening.find((text) => text.startsWith(BRAIN_INPUT_MARKER.ACTIVITY_NOTICES));
+  // The line is the host's counts and the words Luke chose to say, and names
+  // the session by the label the host resolved for it.
+  assert.ok(activity?.includes("Claude Code: abc"));
+  assert.ok(activity?.includes("abc is done."));
+  assert.ok(activity?.includes(`${BRAIN_TURN_TRIGGER.WAKE} turn`));
   h.client.answers.push(answered([message("ok")]));
   await ask(h, "again?");
   const later = (h.client.inputs[2] ?? []).map((item) =>
@@ -3523,7 +3536,7 @@ test("a hook delivered twice is one wake, and the pending wakes are bounded", as
 });
 
 test("a conversation that looks at one session reads only it, and a repeated unchanged look opens no inference", async () => {
-  const notices: import("./wake-events.js").BrainTurnNotice[] = [];
+  const notices: import("./wake-events.js").BrainTurnReport[] = [];
   let text = `${TRANSCRIPT_SECRET} for abc`;
   const h = harness({
     observes: { kind: LOOK_SUBJECT.SESSION, identity: ABC },

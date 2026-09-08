@@ -1,5 +1,7 @@
+import type { SessionKey } from "@sidecar/runtime-contracts";
 import type { Session, SessionIdentity } from "@sidecar/session";
 import type { ActResultStatus, WireRecord } from "@sidecar/wire";
+import type { BrainTurnTrigger } from "./turn.js";
 
 /**
  * What wakes the brain, and what it hands back. A wake is a provider's hook
@@ -51,22 +53,31 @@ export interface BrainDelivery {
    * deliveries, so a briefing held through a meeting goes back to the
    * conversation that knows the session it was about, never to another.
    */
-  sessionKey?: string;
+  sessionKey?: SessionKey;
 }
 
 /**
  * What one observation or heartbeat turn amounted to, in the host's own
- * counts and never a transcript's words: which sessions it looked at, whether
- * it briefed the developer and with what, and how many acts it carried. An
- * observed conversation hands one to the host after each of its turns, for
- * the host to record as a compact attributable notice that main reads on its
- * next turn, so main learns what its sibling conversations did without ever
- * being handed their raw context.
+ * counts and never a transcript's words: which sessions it looked at,
+ * whether it briefed the developer and with what, and how many acts it
+ * carried. An observed conversation hands one to the host after each of its
+ * turns.
  */
-export interface BrainTurnNotice {
-  trigger: string;
+export interface BrainTurnReport {
+  trigger: BrainTurnTrigger;
   identities: readonly SessionIdentity[];
   briefings: readonly string[];
   performedActs: number;
   at: number;
+}
+
+/**
+ * The same report once the host has named the session it was about: the
+ * compact attributable notice main reads on its next turn, so main learns
+ * what its sibling conversations did without ever being handed their raw
+ * context.
+ */
+export interface BrainTurnNotice extends BrainTurnReport {
+  /** The host's own name for the session the turn looked at, never a transcript's words. */
+  label: string;
 }
