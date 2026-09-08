@@ -11,6 +11,9 @@
  * private conversation's generation is replaced.
  */
 
+import { DAILY_NOTES_DIRECTORY, parseDailyNoteName, WORKSPACE_FILE } from "@sidecar/runtime";
+import { DREAMS_FILE } from "./candidate.js";
+
 export const MEMORY_FLUSH_DEFAULTS = {
   /** How far under the compaction threshold the flush fires. */
   SOFT_THRESHOLD_TOKENS: 4_000,
@@ -58,6 +61,11 @@ export interface MemoryHousekeepingResult {
   /** How many note writes the turn committed; each stands whatever the turn's end. */
   readonly writes: number;
   readonly reason?: string;
+}
+
+/** A housekeeping turn that failed before it could answer for itself, with nothing written. */
+export function failedHousekeeping(reason: string): MemoryHousekeepingResult {
+  return { outcome: MEMORY_HOUSEKEEPING_OUTCOME.FAILED, writes: 0, reason };
 }
 
 export function housekeepingCompleted(outcome: MemoryHousekeepingOutcome): boolean {
@@ -123,7 +131,7 @@ export function shouldRunMemoryFlush(assessment: MemoryFlushAssessment): boolean
 
 /** The dated note's path for a day, `memory/YYYY-MM-DD.md`. */
 export function dailyNotePathFor(dateStamp: string): string {
-  return `memory/${dateStamp}.md`;
+  return `${DAILY_NOTES_DIRECTORY}/${dateStamp}.md`;
 }
 
 /** The local calendar day of an instant, as the notes are named. */
@@ -135,12 +143,12 @@ export function localDayStamp(atMs: number): string {
   return `${year}-${month}-${day}`;
 }
 
-const DAILY_NOTE_FOR_DAY = /^memory\/(\d{4}-\d{2}-\d{2})(?:-[a-z0-9-]+)?\.md$/u;
+const DAILY_NOTES_PREFIX = `${DAILY_NOTES_DIRECTORY}/`;
 
 /** Whether a workspace name is the day's dated note or a slugged variant of it. */
 export function isDailyNotePathForDay(name: string, dateStamp: string): boolean {
-  const match = DAILY_NOTE_FOR_DAY.exec(name);
-  return match !== null && match[1] === dateStamp;
+  if (!name.startsWith(DAILY_NOTES_PREFIX)) return false;
+  return parseDailyNoteName(name.slice(DAILY_NOTES_PREFIX.length))?.day === dateStamp;
 }
 
 /** Whether `next` keeps `previous` whole at its front: the only rewrite a housekeeping turn may make. */
@@ -154,8 +162,14 @@ const TARGET_HINT = (dateStamp: string) =>
   `Store durable memories only in ${dailyNotePathFor(dateStamp)} (it is created if needed).`;
 const APPEND_ONLY_HINT = (dateStamp: string) =>
   `If ${dailyNotePathFor(dateStamp)} already exists, APPEND new content only and do not overwrite existing entries.`;
-const READ_ONLY_HINT =
-  "Treat workspace bootstrap and reference files such as MEMORY.md, DREAMS.md, SOUL.md, USER.md, and AGENTS.md as read-only during this turn; never overwrite, replace, or edit them.";
+const READ_ONLY_FILES: readonly string[] = [
+  WORKSPACE_FILE.MEMORY,
+  DREAMS_FILE,
+  WORKSPACE_FILE.SOUL,
+  WORKSPACE_FILE.USER,
+  WORKSPACE_FILE.AGENTS,
+];
+const READ_ONLY_HINT = `Treat workspace bootstrap and reference files such as ${READ_ONLY_FILES.slice(0, -1).join(", ")}, and ${READ_ONLY_FILES.at(-1)} as read-only during this turn; never overwrite, replace, or edit them.`;
 const NO_VARIANT_HINT =
   "Do NOT create timestamped variant files (e.g., YYYY-MM-DD-HHMM.md); always use the canonical YYYY-MM-DD.md filename.";
 

@@ -1,3 +1,4 @@
+import { DAY_MS } from "@sidecar/runtime-contracts";
 import {
   type ObservedWorkspaceProject,
   SESSION_LOCATION,
@@ -126,7 +127,6 @@ type SessionAgeText = (typeof SESSION_AGE_TEXT)[keyof typeof SESSION_AGE_TEXT];
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
-const DAY_MS = 24 * HOUR_MS;
 
 function sessionAgeText(lastActivityAt: number, now: number): SessionAgeText {
   const elapsed = now - lastActivityAt;

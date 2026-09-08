@@ -1,6 +1,4 @@
 import { randomUUID } from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
 import { maximumRememberedFacts } from "@sidecar/acts";
 import { BRAIN_WORKSPACE_SEEDS } from "@sidecar/brain";
 import {
@@ -14,6 +12,7 @@ import {
   removeNotebookEntry,
 } from "@sidecar/memory";
 import type { RuntimeDatabase } from "./database.js";
+import { readWorkspaceFileSync, writeWorkspaceFileSync } from "./workspace-files.js";
 
 /**
  * The notebook's writer. The facts Luke remembers about the developer are
@@ -68,28 +67,13 @@ function entryOf(row: EntryRow): NotebookEntry {
   };
 }
 
-function userFile(root: string): string {
-  return path.join(root, NOTEBOOK_FILE.USER);
-}
-
 /** The file as it stands, or the seed it would be given when it does not exist yet. */
 function readUserFile(root: string): string {
-  try {
-    return fs.readFileSync(userFile(root), "utf8");
-  } catch (error) {
-    // SAFETY: fs throws an ErrnoException; only its code is read, and any other error is rethrown.
-    if ((error as NodeJS.ErrnoException).code === "ENOENT")
-      return BRAIN_WORKSPACE_SEEDS[NOTEBOOK_FILE.USER];
-    throw error;
-  }
+  return readWorkspaceFileSync(root, NOTEBOOK_FILE.USER, BRAIN_WORKSPACE_SEEDS[NOTEBOOK_FILE.USER]);
 }
 
 function writeUserFile(root: string, content: string): void {
-  fs.mkdirSync(root, { recursive: true, mode: 0o700 });
-  const file = userFile(root);
-  const temporary = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(temporary, content, { mode: 0o600 });
-  fs.renameSync(temporary, file);
+  writeWorkspaceFileSync(root, NOTEBOOK_FILE.USER, content);
 }
 
 function selectEntries(database: RuntimeDatabase): readonly NotebookEntry[] {
