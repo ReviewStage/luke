@@ -996,7 +996,7 @@ test("a wake turn runs the acts the policy allows, journaled and attributed as L
 
   assert.equal(h.performed.length, OBSERVATION_ACTS.length);
   assert.ok(h.executions.every((execution) => execution.origin === RUN_ORIGIN.OBSERVATION));
-  assert.ok(h.executions.every((execution) => execution.runId.startsWith("wake-")));
+  assert.ok(h.executions.every((execution) => execution.runId.startsWith("wake:")));
   assert.deepEqual(
     h.deliveries.map((delivery) => delivery.briefing),
     ["Tests asked."],
@@ -1008,6 +1008,75 @@ test("a wake turn runs the acts the policy allows, journaled and attributed as L
   assert.deepEqual(h.storage.stored()?.journal, []);
   assert.deepEqual(h.storage.stored()?.requests, []);
   assert.equal(h.traces[0]?.origin, RUN_ORIGIN.OBSERVATION);
+  await h.agent.stop();
+});
+
+test("an observation turn's run id never repeats across a rebuild, and a journal row a crashed observation left behind is dropped rather than answered as this turn's act", async () => {
+  // The last launch died mid-act in its first wake turn: the journal holds a
+  // settled row under the id a counter would mint again, with no record.
+  const [messageAct] = OBSERVATION_ACTS;
+  assert.ok(messageAct && isWireString(messageAct.call_id) && isWireString(messageAct.arguments));
+  const storage = new FakeStorage(
+    JSON.stringify({
+      ...freshBrainState("gen-prior", NOW - 1),
+      journal: [
+        {
+          runId: "wake-1",
+          callId: messageAct.call_id,
+          name: REALTIME_TOOL.SEND_SESSION_MESSAGE,
+          argumentsJson: messageAct.arguments,
+          startedAt: NOW - 10,
+          outputJson: JSON.stringify({ status: ACT_RESULT_STATUS.ACCEPTED }),
+          settledAt: NOW - 9,
+        },
+      ],
+    }),
+  );
+  const h = harness({}, storage);
+  await h.agent.ready();
+  assert.deepEqual(h.storage.stored()?.journal, [], "the orphaned row went with the restore");
+  h.agent.wake([edge(ABC)]);
+  h.client.answers.push(answered([messageAct]), answered([message("")]));
+  await h.clock.advance(NOW + 3_000);
+  // The act ran: the stale row was not mistaken for this turn's own result.
+  assert.equal(h.performed.length, 1);
+  const first = h.executions[0]?.runId;
+  assert.ok(first && !first.startsWith("wake-1"));
+  // A second agent over the same store mints a different id for its first wake.
+  await h.agent.stop();
+  const successor = harness({}, storage);
+  successor.agent.wake([edge(ABC)]);
+  successor.client.answers.push(answered([messageAct]), answered([message("")]));
+  await successor.clock.advance(NOW + 3_000);
+  assert.equal(successor.performed.length, 1);
+  assert.notEqual(successor.executions[0]?.runId, first);
+  await successor.agent.stop();
+});
+
+test("an observation turn whose model never answers ends at the execution deadline, and the queue moves on", async () => {
+  // The first inference never answers; every later one answers at once.
+  let calls = 0;
+  const hung: BrainClient = {
+    respond: () =>
+      ++calls === 1
+        ? new Promise<never>(() => undefined)
+        : Promise.resolve(answered([message("")])),
+    quietUntil: () => undefined,
+  };
+  const h = harness({ client: hung, executionDeadlineMs: 60_000 });
+  h.agent.wake([edge(ABC)]);
+  await h.clock.advance(NOW + 3_000);
+  await settle();
+  assert.equal(h.traces.length, 0, "the turn is still holding the model");
+  await h.clock.advance(NOW + 3_000 + 60_000);
+  await settle();
+  assert.equal(h.traces.length, 1);
+  assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.WAKE);
+  assert.equal(h.traces[0]?.error, "execution deadline passed");
+  // The next turn is not stuck behind the dead one.
+  h.agent.rosterLook();
+  await settle();
+  assert.equal(h.traces.length, 2);
   await h.agent.stop();
 });
 

@@ -260,7 +260,6 @@ export class BrainAgent {
   readonly #wakes: WakeQueue;
   #stopped = false;
   #unsubscribeStore: (() => void) | undefined;
-  #observationTurns = 0;
   #incompatibleReported: string | undefined;
   /** The optional compaction queued after the last turn; a new ask, a stop, or a replacement cancels it. */
   #maintenance: AbortController | undefined;
@@ -865,7 +864,16 @@ export class BrainAgent {
     // context paired it as unknown at load, and the interrupted run says so
     // in its count; neither is ever a call to make again.
     const repaired = opened.kind === CONTEXT_OPENING.LOADED ? opened.repaired : 0;
-    if (interrupted === state.requests && repaired === 0) return;
+    // A journal row under a run no record names is what an observation turn
+    // that died mid-act left behind. Its result already stands in the context,
+    // paired at load, and no record waits for its count, so it goes here
+    // rather than standing where a later turn's call could be matched to it.
+    const recorded = new Set(state.requests.map((record) => record.runId));
+    const orphaned = state.journal.filter((entry) => !recorded.has(entry.runId));
+    if (orphaned.length > 0) {
+      generation.journal.dropRuns(new Set(orphaned.map((entry) => entry.runId)));
+    }
+    if (interrupted === state.requests && repaired === 0 && orphaned.length === 0) return;
     const unfinished = new Set(
       state.requests
         .filter((record) => !isTerminalBrainRequestStatus(record.status))
@@ -1064,8 +1072,21 @@ export class BrainAgent {
     const context = opened.context;
     // An observation turn runs under an unrecorded run of its own, so an act
     // it takes is journaled, checkpointed, and revoked exactly as an ask's.
+    // Its id comes from the same minter as an ask's, never a counter: a
+    // counter starts over with every agent, and a journal row a crashed turn
+    // left under the same id would be answered as this turn's own act.
     const run =
-      plan.run ?? newRunControl(`${plan.trigger}-${++this.#observationTurns}`, generation, false);
+      plan.run ??
+      newRunControl(`${plan.trigger}:${this.#options.createRunId()}`, generation, false);
+    // An observation turn holds the queue as an ask does, so it ends at the
+    // same deadline: a model that never answers cannot stall every turn
+    // behind it.
+    if (!plan.run) {
+      run.deadline = this.#schedule(() => {
+        run.timedOut = true;
+        run.abort.abort();
+      }, this.#executionDeadlineMs);
+    }
     const turnContext: TurnContext = {
       generation,
       context,
@@ -1084,6 +1105,7 @@ export class BrainAgent {
       return await this.#runTurn(plan, turnContext, execution);
     } finally {
       ended = true;
+      if (!plan.run && run.deadline !== undefined) this.#cancel(run.deadline);
       this.#turnInFlight = false;
     }
   }
