@@ -1,6 +1,5 @@
-import { HOOK_EVENT } from "../shared/hook-events.js";
 import {
-  HOOK_ENTRY_NESTING,
+  HOOK_EVENT,
   type ObservationHookSpec,
   type ObservedHookEvent,
   observationHooksFor,
@@ -75,7 +74,6 @@ const CODEX_HOOK_SPEC: ObservationHookSpec<CodexHookEvent> = {
   // Codex thread ids are UUIDs: hex and hyphens, like Claude Code's.
   sessionIdPattern: "[0-9a-fA-F-]{8,64}",
   subagentField: "agent_id",
-  entryNesting: HOOK_ENTRY_NESTING.NESTED,
 };
 
 const codexHooks = observationHooksFor(CODEX_HOOK_SPEC);

@@ -1,8 +1,7 @@
 import os from "node:os";
 import path from "node:path";
-import { HOOK_EVENT } from "../shared/hook-events.js";
 import {
-  HOOK_ENTRY_NESTING,
+  HOOK_EVENT,
   type ObservationHookSpec,
   type ObservedHookEvent,
   observationHooksFor,
@@ -80,7 +79,6 @@ const CLAUDE_HOOK_SPEC: ObservationHookSpec<ClaudeHookEvent> = {
   // The shape Claude Code mints: hex and hyphens.
   sessionIdPattern: "[0-9a-fA-F-]{8,64}",
   subagentField: "agent_id",
-  entryNesting: HOOK_ENTRY_NESTING.NESTED,
 };
 
 /** Where Claude Code keeps its transcripts and its user-level settings. */
