@@ -86,6 +86,8 @@ import {
   heartbeatJob,
   LANE,
   NodeRegistry,
+  ObservationLoop,
+  ObservationSupervisor,
 } from "@sidecar/runtime";
 import {
   CONVERSATION_KIND,
@@ -107,8 +109,6 @@ import {
   isSessionApplicationId,
   isWorkspaceProviderId,
   normalizeObservedWorkspaceProjects,
-  ObservationLoop,
-  ObservationSupervisor,
   type ObservedWorkspaceProject,
   PROVIDER_ID,
   PROVIDER_ID_LIST,
