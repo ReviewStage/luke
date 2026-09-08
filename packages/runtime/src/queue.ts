@@ -84,7 +84,8 @@ export interface QueueAdmission {
   readonly evicted: readonly QueuedInput[];
 }
 
-function summaryLine(input: QueuedInput): string {
+/** The one line an input folded by the overflow keeps: the head of its words, whitespace collapsed. */
+export function queueSummaryLine(input: QueuedInput): string {
   const head = input.text.replace(/\s+/g, " ").trim();
   return head.length > QUEUE_DEFAULTS.SUMMARY_HEAD_CHARS
     ? `${head.slice(0, QUEUE_DEFAULTS.SUMMARY_HEAD_CHARS)}…`
@@ -126,7 +127,7 @@ export function admitToQueue(
       return {
         state: {
           entries: [...rest, input],
-          summaryLines: [...state.summaryLines, summaryLine(oldest)],
+          summaryLines: [...state.summaryLines, queueSummaryLine(oldest)],
           summarizedCount: state.summarizedCount + 1,
         },
         admitted: true,
@@ -156,7 +157,7 @@ export interface QueueBatch {
 export function drainQueue(state: PendingQueueState, mode: QueueMode): readonly QueueBatch[] {
   if (state.entries.length === 0 && state.summarizedCount === 0) return [];
   const summary = queueSummaryText(state);
-  if (mode === QUEUE_MODE.FOLLOWUP) {
+  if (mode === QUEUE_MODE.FOLLOWUP && state.entries.length > 0) {
     return state.entries.map((input, index) => ({
       inputs: [input],
       ...(index === 0 && summary ? { summary } : undefined),
@@ -213,8 +214,9 @@ export class PendingInputQueue {
     return this.#state;
   }
 
+  /** How many asks wait here for a turn: the entries and the ones folded into the summary alike. */
   get size(): number {
-    return this.#state.entries.length;
+    return this.#state.entries.length + this.#state.summarizedCount;
   }
 
   /**
@@ -239,6 +241,36 @@ export class PendingInputQueue {
   /** Drains everything now, in the mode given; a caller uses it when a run ends with input waiting. */
   flush(mode: QueueMode = this.#settings.mode): void {
     this.#flushNow(mode);
+  }
+
+  /**
+   * Withdraws one queued input before it is drained, so words the developer
+   * took back never open a turn. Answers whether it was still waiting here;
+   * an input already steered or drained is past withdrawing.
+   */
+  withdraw(id: string): boolean {
+    const entries = this.#state.entries.filter((entry) => entry.id !== id);
+    if (entries.length === this.#state.entries.length) return false;
+    this.#state = { ...this.#state, entries };
+    if (entries.length === 0 && this.#state.summarizedCount === 0) this.#disarm();
+    return true;
+  }
+
+  /**
+   * Withdraws one input the overflow already folded, by its place in the
+   * summary (fold order, oldest first), so a summary whose asks were all
+   * taken back holds no turn open and counts nothing waiting.
+   */
+  withdrawSummarized(index: number): boolean {
+    const lines = this.#state.summaryLines;
+    if (!Number.isInteger(index) || index < 0 || index >= lines.length) return false;
+    this.#state = {
+      ...this.#state,
+      summaryLines: lines.filter((_, at) => at !== index),
+      summarizedCount: this.#state.summarizedCount - 1,
+    };
+    if (this.#state.entries.length === 0 && this.#state.summarizedCount === 0) this.#disarm();
+    return true;
   }
 
   /** Forgets everything queued; the timer goes with it. */

@@ -96,6 +96,7 @@ export {
   type QueueMode,
   type QueueOverflow,
   type QueueSettings,
+  queueSummaryLine,
   queueSummaryText,
 } from "./queue.js";
 export {

@@ -9,6 +9,8 @@ import {
   type QueueBatch,
   type QueuedInput,
   type QueueMode,
+  queueSummaryLine,
+  queueSummaryText,
 } from "@sidecar/runtime";
 import {
   type AgentRuntime,
@@ -397,6 +399,31 @@ interface PendingSubmission {
 
 export type BrainRequestsListener = (records: readonly BrainRequestRecord[]) => void;
 
+/**
+ * One ask as its turn reads it: the run that records it and the words the
+ * model is shown for it, its question or, once the overflow folded it, the
+ * one summary line the queue cut it to.
+ */
+interface AskInput {
+  readonly run: RunControl;
+  readonly text: string;
+  readonly folded: boolean;
+}
+
+/** The question one turn opens with for the asks that opened it: the overflow's summary first, then each ask's words. */
+function askQuestion(opened: readonly AskInput[]): string {
+  const summaryLines = opened.filter((input) => input.folded).map((input) => input.text);
+  const summary = queueSummaryText({
+    entries: [],
+    summaryLines,
+    summarizedCount: summaryLines.length,
+  });
+  return [
+    ...(summary === undefined ? [] : [summary]),
+    ...opened.filter((input) => !input.folded).map((input) => input.text),
+  ].join("\n\n");
+}
+
 export class BrainAgent {
   readonly #options: BrainAgentOptions;
   readonly #now: () => number;
@@ -426,9 +453,14 @@ export class BrainAgent {
    * Asks the overflow folded into a summary line: their words reach the model
    * as that line, and their records settle with the turn that carries it.
    */
-  #summarized: RunControl[] = [];
+  #summarized: AskInput[] = [];
   readonly #subject: LookSubject;
-  /** Each session as it last looked when an observation was captured, for the unchanged-look suppression. */
+  /**
+   * Each session as it last looked when an observation was captured, for the
+   * unchanged-look suppression. Held in memory alone: the first look after a
+   * launch is captured even with no transcript gained, because a status that
+   * changed while Luke was closed is still a change worth one look.
+   */
   readonly #lastLook = new BySession<string>();
   /** Captures run one after another, so two reads of one session never race each other's cursor. */
   #capturing: Promise<unknown> = Promise.resolve();
@@ -731,7 +763,7 @@ export class BrainAgent {
   #admitAsk(run: RunControl, question: string): void {
     const mode = this.#asks.settings.mode;
     if (!this.#active && this.#asks.size === 0 && mode !== QUEUE_MODE.COLLECT) {
-      this.#openAsks([run], question);
+      this.#openAsks([{ run, text: question, folded: false }]);
       return;
     }
     const held = this.#asks.state.entries;
@@ -759,7 +791,7 @@ export class BrainAgent {
     for (const entry of evicted) {
       const run = this.#runs.get(entry.id);
       if (!run) continue;
-      if (folded) this.#summarized.push(run);
+      if (folded) this.#summarized.push({ run, text: queueSummaryLine(entry), folded: true });
       else dropped.push(run);
     }
     if (dropped.length > 0) void this.#settleWaiting(dropped);
@@ -801,27 +833,29 @@ export class BrainAgent {
    * Opens the turns the queue drained, in order. The batch that carries the
    * overflow's summary carries the summarized runs with it, so an ask whose
    * words reached the model only as a summary line still settles with the
-   * turn that read it.
+   * turn that read it. Each ask travels with its own words rather than in a
+   * question joined here: what the model reads is composed when the turn
+   * opens, from the asks that still open it, so an ask cancelled between the
+   * drain and the turn takes its words with it.
    */
   #openBatches(batches: readonly QueueBatch[]): void {
     for (const batch of batches) {
-      const runs = batch.inputs.flatMap((input) => this.#runs.get(input.id) ?? []);
+      const inputs = batch.inputs.flatMap((input) => {
+        const run = this.#runs.get(input.id);
+        return run ? [{ run, text: input.text, folded: false }] : [];
+      });
       const riders = batch.summary === undefined ? [] : this.#summarized.splice(0);
-      const question = [
-        ...(batch.summary === undefined ? [] : [batch.summary]),
-        ...batch.inputs.map((input) => input.text),
-      ].join("\n\n");
-      this.#openAsks([...runs, ...riders], question);
+      this.#openAsks([...inputs, ...riders]);
     }
   }
 
   /** Queues one turn for the asks given, the first that can open it standing as its run. */
-  #openAsks(runs: readonly RunControl[], question: string): void {
-    if (runs.length === 0) return;
+  #openAsks(inputs: readonly AskInput[]): void {
+    if (inputs.length === 0) return;
     // The ask's turn opens with the inbox as it stands, so the window a wake
     // armed has nothing left to open and is disarmed.
     this.#wakes.take();
-    void this.#queueTurn(BRAIN_TURN_TRIGGER.ASK, () => this.#runAsk(runs, question));
+    void this.#queueTurn(BRAIN_TURN_TRIGGER.ASK, () => this.#runAsk(inputs));
   }
 
   /**
@@ -848,7 +882,7 @@ export class BrainAgent {
   #takeWaiting(): readonly RunControl[] {
     const waiting = [
       ...this.#asks.state.entries.flatMap((entry) => this.#runs.get(entry.id) ?? []),
-      ...this.#summarized.splice(0),
+      ...this.#summarized.splice(0).map((input) => input.run),
     ];
     this.#asks.clear();
     return waiting;
@@ -908,6 +942,18 @@ export class BrainAgent {
       return this.request(runId);
     }
     if (record.status === BRAIN_REQUEST_STATUS.QUEUED && this.#generation) {
+      // Words still waiting for a turn are withdrawn before any turn composes
+      // its question from them; words already steered were said to the model
+      // and cannot be unsaid. The record keeps the ask as accepted either way.
+      if (!this.#asks.withdraw(runId)) {
+        // The summarized list and the queue's summary are kept in one fold
+        // order, so the ask's place in one is its place in the other.
+        const folded = this.#summarized.findIndex((input) => input.run.runId === runId);
+        if (folded >= 0) {
+          this.#summarized.splice(folded, 1);
+          this.#asks.withdrawSummarized(folded);
+        }
+      }
       await this.#ledger.settleRun(this.#generation, runId, BRAIN_REQUEST_STATUS.CANCELLED, {});
     }
     return this.request(runId);
@@ -1723,13 +1769,16 @@ export class BrainAgent {
    * can still open stands as the turn's run and the rest ride inside it; an
    * ask already revoked, or one whose start the store refuses, settles here
    * and leaves the turn to the next, so asks behind a run that never opened
-   * are not lost.
+   * are not lost. The question the model reads is composed here from the
+   * asks that opened, and from no other: the overflow's summary from the
+   * folded ones, then each ask's own words.
    */
-  async #runAsk(runs: readonly RunControl[], question: string): Promise<void> {
-    const waiting = [...runs];
+  async #runAsk(inputs: readonly AskInput[]): Promise<void> {
+    const waiting = [...inputs];
     while (waiting.length > 0) {
-      const run = waiting.shift();
-      if (!run || !(await this.#opens(run))) continue;
+      const primary = waiting.shift();
+      if (!primary || !(await this.#opens(primary.run))) continue;
+      const run = primary.run;
       const generation = run.generation;
       // The start is durable before any work opens: a run the file does not
       // show running is one a relaunch would find queued while its acts had
@@ -1763,15 +1812,18 @@ export class BrainAgent {
         continue;
       }
       const riders: RunControl[] = [];
+      const opened: AskInput[] = [primary];
       for (const rider of waiting.splice(0)) {
-        if (!(await this.#opens(rider))) continue;
-        riders.push(rider);
-        await this.#ledger.commit(rider.generation, rider.runId, {
+        if (!(await this.#opens(rider.run))) continue;
+        riders.push(rider.run);
+        opened.push(rider);
+        await this.#ledger.commit(rider.run.generation, rider.run.runId, {
           status: BRAIN_REQUEST_STATUS.RUNNING,
           startedAt: this.#now(),
         });
       }
       if (riders.length > 0) this.#notify();
+      const question = askQuestion(opened);
       run.deadline = this.#schedule(() => {
         run.timedOut = true;
         run.abort.abort();
