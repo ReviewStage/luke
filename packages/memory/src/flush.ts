@@ -68,6 +68,19 @@ export function housekeepingCompleted(outcome: MemoryHousekeepingOutcome): boole
 }
 
 /**
+ * Whether a housekeeping turn's end is worth reporting: it was started and
+ * did not run to its end. A skipped turn — a conversation that never
+ * captures, or no brain standing to run one — is the expected answer, not a
+ * shortfall, and is not reported as one.
+ */
+export function housekeepingFellShort(outcome: MemoryHousekeepingOutcome): boolean {
+  return (
+    outcome === MEMORY_HOUSEKEEPING_OUTCOME.INTERRUPTED ||
+    outcome === MEMORY_HOUSEKEEPING_OUTCOME.FAILED
+  );
+}
+
+/**
  * The token count at which the flush fires: the compaction threshold less
  * the soft margin, the margin itself capped at half the room the reserve
  * leaves so a small window still flushes before it compacts.

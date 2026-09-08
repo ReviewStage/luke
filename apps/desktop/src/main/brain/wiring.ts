@@ -35,7 +35,7 @@ import {
   TOOL_LOOP_RUNTIME,
 } from "@sidecar/brain";
 import {
-  housekeepingCompleted,
+  housekeepingFellShort,
   MEMORY_HOUSEKEEPING_OUTCOME,
   type MemoryHousekeepingResult,
 } from "@sidecar/memory";
@@ -1206,7 +1206,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
               reason: error.message,
             }),
           );
-          if (!housekeepingCompleted(result.outcome)) {
+          if (housekeepingFellShort(result.outcome)) {
             dependencies.report(
               `Reset capture did not complete (${result.outcome}${result.reason ? `: ${result.reason}` : ""}); ${result.writes} note write(s) stand and the reset proceeds`,
             );

@@ -32,9 +32,11 @@ import {
   validateConsolidationPlan,
 } from "./consolidation.js";
 import {
+  housekeepingFellShort,
   isAppendOnlyRewrite,
   isDailyNotePathForDay,
   MEMORY_FLUSH_DEFAULTS,
+  MEMORY_HOUSEKEEPING_OUTCOME,
   memoryFlushPrompt,
   memoryFlushThreshold,
   shouldRunMemoryFlush,
@@ -143,6 +145,46 @@ test("recalled-context blocks are stripped and sensitive material is redacted be
   assert.equal(redacted.text.includes(REDACTED_TOKEN), true);
   assert.equal(prepareForIngestion(`${RECALLED_CONTEXT_MARKER}\nonly recalled`), undefined);
   assert.equal(prepareForIngestion("password: hunter2"), undefined);
+});
+
+test("private-key armor is redacted by scanning: a terminated block whole, an unterminated or cut one to the end, and a run of headers in linear time", () => {
+  const key = "-----BEGIN RSA PRIVATE KEY-----\nMIIEow\nAAAA\n-----END RSA PRIVATE KEY-----";
+  const whole = redactSensitiveText(`before ${key} after`);
+  assert.equal(whole.text, `before ${REDACTED_TOKEN} after`);
+  assert.equal(whole.redactions, 1);
+  // A block whose closing armor was cut off — by truncation or a line bound — still redacts its body.
+  const cut = redactSensitiveText("note -----BEGIN EC PRIVATE KEY-----\nMHcCAQEE body continues");
+  assert.equal(cut.text, `note ${REDACTED_TOKEN}`);
+  assert.equal(cut.redactions, 1);
+  // Two blocks are two redactions, and text between them stands.
+  const two = redactSensitiveText(`${key} and ${key}`);
+  assert.equal(two.text, `${REDACTED_TOKEN} and ${REDACTED_TOKEN}`);
+  assert.equal(two.redactions, 2);
+  // A BEGIN of something else is not a key and is left alone.
+  assert.equal(
+    redactSensitiveText("-----BEGIN CERTIFICATE-----\nabc\n-----END CERTIFICATE-----").redactions,
+    0,
+  );
+  const startedAt = performance.now();
+  const headers = "-----BEGIN RSA PRIVATE KEY-----\n".repeat(20_000);
+  assert.equal(
+    redactSensitiveText(headers).redactions,
+    1,
+    "an unterminated run is one redaction to the end",
+  );
+  assert.equal(
+    redactSensitiveText(`-----BEGIN RSA PRIVATE KEY-----${" ".repeat(200_000)}`).text,
+    REDACTED_TOKEN,
+  );
+  assert.ok(performance.now() - startedAt < 500, "the scan is linear in the text");
+});
+
+test("only an interrupted or failed housekeeping turn fell short; a skipped one is the expected answer and reports nothing", () => {
+  assert.equal(housekeepingFellShort(MEMORY_HOUSEKEEPING_OUTCOME.SKIPPED), false);
+  assert.equal(housekeepingFellShort(MEMORY_HOUSEKEEPING_OUTCOME.COMPLETED), false);
+  assert.equal(housekeepingFellShort(MEMORY_HOUSEKEEPING_OUTCOME.NOTHING_TO_STORE), false);
+  assert.equal(housekeepingFellShort(MEMORY_HOUSEKEEPING_OUTCOME.INTERRUPTED), true);
+  assert.equal(housekeepingFellShort(MEMORY_HOUSEKEEPING_OUTCOME.FAILED), true);
 });
 
 function seed(overrides: Partial<CandidateSeed> = {}): CandidateSeed {
@@ -262,6 +304,37 @@ test("a model plan is parsed against the candidates, validated against the prior
   );
   assert.ok(performance.now() - startedAt < 500, "a malformed fence is refused in linear time");
   assert.equal(validateConsolidationPlan({ previous: existing, plan, promotions }), undefined);
+  // A merge is compared against its prior entry after whitespace is collapsed
+  // and bounded, so an entry padded with a long whitespace run, or a run of
+  // comments, is judged in linear time rather than backtracked over.
+  const padded = `- Deploys go out on${" ".repeat(100_000)}Tuesday afternoons <!-- importance: 0.5 -->`;
+  const commented = `- ${"<!-- x -->".repeat(2_000)} Deploys go out on Tuesday afternoons`;
+  const mergePlan = {
+    operations: [
+      {
+        candidateKey: durable.key,
+        action: "merged",
+        priorEntries: [padded],
+      },
+    ],
+  };
+  const merging = parseConsolidationPlan(JSON.stringify(mergePlan), promotions);
+  assert.ok(merging);
+  const compareStartedAt = performance.now();
+  for (const previous of [`# MEMORY.md\n\n${padded}\n`, `# MEMORY.md\n\n${commented}\n`]) {
+    const [entry] = previous.split("\n").filter((line) => line.startsWith("- "));
+    assert.ok(entry);
+    const plan = parseConsolidationPlan(
+      JSON.stringify({ operations: [{ ...mergePlan.operations[0], priorEntries: [entry] }] }),
+      promotions,
+    );
+    assert.ok(plan);
+    assert.match(
+      validateConsolidationPlan({ previous, plan, promotions }) ?? "",
+      /unrelated prior entry/u,
+    );
+  }
+  assert.ok(performance.now() - compareStartedAt < 500, "the comparison is linear in the entry");
   const applied = applyConsolidationPlan({ existingMemory: existing, plan, day: "2026-09-08" });
   assert.ok(applied);
   assert.equal(applied.added, 1);
