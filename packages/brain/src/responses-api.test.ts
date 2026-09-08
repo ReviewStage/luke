@@ -13,7 +13,7 @@ import {
 } from "./responses-api.js";
 import { BRAIN_TOOL, brainToolDefinitions } from "./tools.js";
 
-test("the request asks for compaction on the API's default, stores nothing, and replays reasoning", () => {
+test("the request asks the API for no compaction of its own, stores nothing, and replays reasoning", () => {
   const request = brainResponsesRequest([userMessageItem("hello")], {
     model: "gpt-test",
     instructions: "be Luke",
@@ -24,7 +24,8 @@ test("the request asks for compaction on the API's default, stores nothing, and 
   assert.equal(request.model, "gpt-test");
   assert.equal(request.instructions, "be Luke");
   assert.equal(request.store, false);
-  assert.deepEqual(request.context_management, [{ type: "compaction" }]);
+  // The host schedules compaction itself; a provider policy beside it would compete over one window.
+  assert.equal("context_management" in request, false);
   assert.deepEqual(request.include, ["reasoning.encrypted_content"]);
   assert.deepEqual(request.reasoning, { effort: "medium" });
   assert.equal(request.tool_choice, "auto");

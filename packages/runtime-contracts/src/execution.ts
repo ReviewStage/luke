@@ -1,4 +1,5 @@
 import { isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import type { CompactionSource } from "./storage.js";
 
 /**
  * The seams along which Luke's reasoning is replaceable. A host owns the
@@ -253,6 +254,15 @@ export interface ModelCapabilities {
   readonly maximumOutputTokens: number;
   /** The tool names the adapter's transport will carry; absent means any schema travels whole. */
   readonly tools?: readonly string[];
+  /** The model's context window in tokens, when the adapter knows it; the compaction policy reads it. */
+  readonly contextWindowTokens?: number;
+  /**
+   * The most bytes one serialized request may weigh on this transport, when
+   * the transport fixes one. It is an admission bound, separate from the
+   * context window: the host prepares the context before a request would
+   * cross it rather than letting the transport refuse.
+   */
+  readonly maximumRequestBytes?: number;
 }
 
 export type ModelCapabilitiesAnswer =
@@ -397,6 +407,19 @@ export interface ContextEngine {
   compact(lifecycle?: ContextLifecycle): MaybePromise<number>;
   /** Adopts the window an explicit compaction answered, whole: it is the canonical next context. */
   adoptCompaction(items: readonly WireRecord[], lifecycle?: ContextLifecycle): MaybePromise<void>;
+  /**
+   * Folds the older retained items behind a summary the host writes for
+   * them, keeping roughly `keepRecentTokens` of the most recent items and
+   * never parting a tool call from its result; answers how many items went,
+   * or zero when nothing was folded — too little to fold, or a summary the
+   * host could not produce. An engine whose items cannot be folded this way
+   * leaves it undefined.
+   */
+  foldBehindSummary?(
+    summarize: (older: readonly WireRecord[]) => Promise<string | undefined>,
+    keepRecentTokens: number,
+    lifecycle?: ContextLifecycle,
+  ): MaybePromise<number>;
   /** Maintenance once a turn has committed; nothing the model sees changes here. */
   afterTurn(lifecycle?: ContextLifecycle): MaybePromise<void>;
   mark(): ContextMark;
@@ -533,10 +556,29 @@ export interface AgentRuntimeDescriptor {
  * tools and nothing outside it: no scheduling, no persistence, no policy
  * about what a tool may do.
  */
+/** That a compaction happened, by which way and folding how much, or why it did not. */
+export type RuntimeCompaction =
+  | { readonly compacted: true; readonly source: CompactionSource; readonly dropped: number }
+  | { readonly compacted: false; readonly reason: string };
+
+/** What a compaction runs under: the prompt the next request will carry, and the signal that ends the wait. */
+export interface CompactionOptions {
+  readonly prompt: string;
+  readonly signal: AbortSignal;
+}
+
 export interface AgentRuntime {
   readonly descriptor: AgentRuntimeDescriptor;
   /** The moment held-back inferences may resume, for a host to ask before opening a turn. */
   quietUntil(): number | undefined;
+  /** What the runtime's model can do and how large its window is, for the host's compaction policy; nothing when it cannot say. */
+  capabilities(): Promise<ModelCapabilities | undefined>;
+  /**
+   * Folds the context, by whatever way the runtime's model and engine offer,
+   * so the next request fits. A failure changes nothing about the context;
+   * the host decides what a failure means for the turn that needed it.
+   */
+  compact(context: ContextEngine, options: CompactionOptions): Promise<RuntimeCompaction>;
   /** A context engine of this runtime's format, bootstrapped from the checkpoint when one is compatible. */
   openContext(
     checkpoint: RuntimeCheckpoint | undefined,

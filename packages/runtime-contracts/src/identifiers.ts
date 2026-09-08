@@ -66,8 +66,63 @@ export function mainSessionKey(agent: AgentId = DEFAULT_AGENT_ID): SessionKey {
   );
 }
 
-/** The default agent's ordinary conversation, the one conversation this build holds. */
+/** The default agent's ordinary conversation, the one every launch has and the talk key defaults to. */
 export const MAIN_SESSION_KEY: SessionKey = mainSessionKey();
+
+/**
+ * What kind of conversation a session key addresses. Main is the agent's
+ * ordinary conversation, and a thread is one the developer opened beside it.
+ * A key this build cannot classify is kept by maintenance and never a
+ * victim, because losing history is the worse failure.
+ */
+export const CONVERSATION_KIND = {
+  MAIN: "main",
+  THREAD: "thread",
+  UNKNOWN: "unknown",
+} as const;
+
+export type ConversationKind = (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
+
+const CONVERSATION_KIND_LIST: readonly ConversationKind[] = Object.values(CONVERSATION_KIND);
+
+export function isConversationKind(value: UnparsedWireValue): value is ConversationKind {
+  // SAFETY: value is a string; list membership is the vocabulary check.
+  return isWireString(value) && CONVERSATION_KIND_LIST.includes(value as ConversationKind);
+}
+
+const THREAD_SEGMENT = "thread";
+
+/**
+ * A private thread's stable address: `agent:<agentId>:thread:<threadId>`.
+ * The thread id is minted by the host as a UUID, so nothing untrusted enters
+ * the key; a reversible encoder for arbitrary provider ids arrives with the
+ * observed conversations that need one.
+ */
+export function threadSessionKey(threadId: string, agent: AgentId = DEFAULT_AGENT_ID): SessionKey {
+  if (!isIdentifier(threadId) || threadId.includes(SESSION_KEY_SEPARATOR)) {
+    throw new TypeError("thread identifier must be a non-empty string without separators");
+  }
+  return sessionKey(
+    [SESSION_KEY_PREFIX, agent, THREAD_SEGMENT, threadId].join(SESSION_KEY_SEPARATOR),
+  );
+}
+
+/** The agent and the segments after it, for a key of the `agent:<id>:...` shape; nothing for any other. */
+function parsedSessionKey(key: string): { agent: string; rest: readonly string[] } | undefined {
+  const parts = key.split(SESSION_KEY_SEPARATOR);
+  const [prefix, agent, ...rest] = parts;
+  if (prefix !== SESSION_KEY_PREFIX || !agent || rest.length === 0) return undefined;
+  return { agent, rest };
+}
+
+export function conversationKindOf(key: SessionKey | string): ConversationKind {
+  const parsed = parsedSessionKey(key);
+  if (!parsed) return CONVERSATION_KIND.UNKNOWN;
+  const [head] = parsed.rest;
+  if (parsed.rest.length === 1 && head === MAIN_CONVERSATION_NAME) return CONVERSATION_KIND.MAIN;
+  if (head === THREAD_SEGMENT && parsed.rest.length === 2) return CONVERSATION_KIND.THREAD;
+  return CONVERSATION_KIND.UNKNOWN;
+}
 
 /**
  * Where a run came from. Origin is attribution — it says who or what opened

@@ -31,6 +31,7 @@ import {
   type WireRecord,
   wireRecord,
 } from "@sidecar/wire";
+import { COMPACTION_POLICY } from "./compaction.js";
 import {
   BRAIN_REQUEST_TIMEOUT_MS,
   type Failure,
@@ -134,6 +135,8 @@ class HostedTransport implements ResponsesTransport<HostedBrainCapabilities> {
       compacts: capabilities.operations.includes(RESPONSES_OPERATION.COMPACT),
       maximumOutputTokens: capabilities.bounds.maximumOutputTokens,
       tools: capabilities.tools,
+      contextWindowTokens: COMPACTION_POLICY.DEFAULT_CONTEXT_WINDOW_TOKENS,
+      maximumRequestBytes: capabilities.bounds.requestBytes,
     };
   }
 

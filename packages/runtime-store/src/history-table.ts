@@ -5,6 +5,7 @@ import {
 } from "@sidecar/realtime";
 import type { HistoryAppendOutcome, SessionKey } from "@sidecar/runtime-contracts";
 import { standingGeneration } from "./brain-envelope.js";
+import { historyCutoff } from "./conversations-table.js";
 import { nullable, type RuntimeDatabase } from "./database.js";
 import {
   historyEntryAdmitted,
@@ -29,7 +30,7 @@ export function historyClearedAt(
   database: RuntimeDatabase,
   sessionKey: SessionKey,
 ): number | undefined {
-  const durable = database.historyCutoff(sessionKey);
+  const durable = historyCutoff(database, sessionKey);
   const marker = standingGeneration(database, sessionKey)?.resetClearedAt;
   if (durable === undefined) return marker;
   return marker === undefined ? durable : Math.max(durable, marker);
@@ -96,6 +97,33 @@ function appendOne(
   ) {
     return false;
   }
+  insertLine(database, sessionKey, sessionId, entry);
+  return true;
+}
+
+/**
+ * Writes a line back from its archive under the identity it left with: the
+ * same event key the live append writes for the entry, so a late re-report
+ * of a restored line finds its row instead of standing beside it. Admission,
+ * retention, and the once-published check are the live append's concerns; a
+ * restore lands only in a conversation holding nothing newer, and the lines
+ * it writes already stood together under the same index.
+ */
+export function restoreHistoryLine(
+  database: RuntimeDatabase,
+  sessionKey: SessionKey,
+  sessionId: string | undefined,
+  entry: ConversationEntry & { recordedAt: number },
+): void {
+  insertLine(database, sessionKey, sessionId, entry);
+}
+
+function insertLine(
+  database: RuntimeDatabase,
+  sessionKey: SessionKey,
+  sessionId: string | undefined,
+  entry: ConversationEntry & { recordedAt: number },
+): void {
   const sequence = nextHistorySequence(database, sessionKey);
   database
     .prepare(
@@ -108,7 +136,7 @@ function appendOne(
       sessionKey,
       sequence,
       nullable(sessionId),
-      eventKey,
+      historyEventKey(entry),
       entry.kind,
       entry.words,
       entry.recordedAt,
@@ -117,7 +145,6 @@ function appendOne(
       nullable(entry.identity?.providerSessionId),
       historyPayload(entry),
     );
-  return true;
 }
 
 /** The conversation's next sequence, taken from its counter so a number is never handed out twice. */
@@ -197,18 +224,4 @@ function listRetained(
     if (entry) entries.push(entry);
   }
   return entries;
-}
-
-/** The Clear's erasure of the thread: every line at or before the cutoff goes. */
-export function clearHistoryAtOrBefore(
-  database: RuntimeDatabase,
-  sessionKey: SessionKey,
-  clearedAt: number,
-): void {
-  database.transaction(() => {
-    database.raiseHistoryCutoff(sessionKey, clearedAt);
-    database
-      .prepare("DELETE FROM history_events WHERE session_key = ? AND recorded_at <= ?")
-      .run(sessionKey, clearedAt);
-  });
 }

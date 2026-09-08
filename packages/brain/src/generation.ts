@@ -19,6 +19,7 @@ import { BrainJournal } from "./journal.js";
 import type { BrainRequestRecord } from "./requests.js";
 import { claimedUnlessAborted, type Settled } from "./settled.js";
 import type { BrainPersistedState } from "./state-store.js";
+import { RecordingContextEngine } from "./transcript-recorder.js";
 
 /**
  * One envelope's working copy, alive from the moment the agent adopts it to
@@ -57,7 +58,8 @@ export const CONTEXT_OPENING = {
 export type OpenedContext =
   | {
       kind: typeof CONTEXT_OPENING.LOADED;
-      context: ContextEngine;
+      /** The runtime's engine behind the transcript recorder, so every save can carry what the engine ingested. */
+      context: RecordingContextEngine;
       /** How many dangling tool calls the context paired at load, so the load may be checkpointed. */
       repaired: number;
     }
@@ -91,6 +93,7 @@ export async function claimOpenedContext(
   open: Promise<ContextOpening>,
   signal: AbortSignal,
   notLoadedReason: string,
+  now: () => number = Date.now,
 ): Promise<Settled<OpenedContext>> {
   const claimed = await claimedUnlessAborted(open, signal, ({ context }) => retireContext(context));
   if (claimed.aborted) return claimed;
@@ -100,9 +103,16 @@ export async function claimOpenedContext(
     return { aborted: true };
   }
   if (bootstrap.loaded) {
+    // The engine is handed back behind the transcript recorder, so every
+    // input the runtime ingests and every fold is on record beside the
+    // checkpoint that carries it.
     return {
       aborted: false,
-      value: { kind: CONTEXT_OPENING.LOADED, context, repaired: bootstrap.repaired },
+      value: {
+        kind: CONTEXT_OPENING.LOADED,
+        context: new RecordingContextEngine(context, now),
+        repaired: bootstrap.repaired,
+      },
     };
   }
   retireContext(context);
@@ -113,6 +123,7 @@ export function generationFrom(
   state: BrainPersistedState,
   runtime: AgentRuntime,
   lostResultJson: string,
+  now: () => number = Date.now,
 ): Generation {
   const abort = new AbortController();
   const checkpoint = storedCheckpoint(state);
@@ -127,6 +138,7 @@ export function generationFrom(
           runtime.openContext(checkpoint, lostResultJson, { signal: abort.signal }),
           abort.signal,
           `checkpoint ${checkpoint ? checkpointFormatTag(checkpoint.format) : "(none)"} could not be loaded`,
+          now,
         )
           .then((claimed) =>
             claimed.aborted ? incompatibleContext(REPLACED_WHILE_OPENING) : claimed.value,

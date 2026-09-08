@@ -76,6 +76,12 @@ export const BRAIN_REQUEST_FAILURE = {
   DEADLINE: "deadline",
   /** The model stopped before a reply formed: an incomplete output, or the tool budget spent. */
   INCOMPLETE: "incomplete",
+  /**
+   * The context had to be compacted before the run could be sent and the
+   * compaction did not succeed. The conversation stands exactly as it was;
+   * the ask can be made again once the model or the network is back.
+   */
+  COMPACTION: "compaction",
 } as const;
 
 export type BrainRequestFailure =

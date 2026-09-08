@@ -1,5 +1,4 @@
 import { DatabaseSync, type SQLInputValue, type StatementSync } from "node:sqlite";
-import type { AgentId, SessionKey } from "@sidecar/runtime-contracts";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import {
   RUNTIME_SCHEMA_MIGRATIONS,
@@ -24,6 +23,7 @@ import {
  */
 
 export const AGENT_DATABASE_FILE = "agent.sqlite";
+const INCREMENTAL_AUTO_VACUUM = 2;
 
 export class RuntimeDatabase {
   readonly #db: DatabaseSync;
@@ -40,15 +40,37 @@ export class RuntimeDatabase {
     db.exec("PRAGMA synchronous = FULL");
     db.exec("PRAGMA foreign_keys = ON");
     const database = new RuntimeDatabase(db);
+    database.#adoptIncrementalVacuum();
     database.#migrateSchema();
     return database;
   }
 
   /**
+   * Freed pages are handed back to the file system on request rather than
+   * kept, so a deletion the disk budget makes is a deletion the file's size
+   * shows. A database created before the mode was set is rebuilt once to
+   * adopt it; VACUUM cannot run inside a transaction, so it runs here, before
+   * the schema migration opens one.
+   */
+  #adoptIncrementalVacuum(): void {
+    // SAFETY: PRAGMA auto_vacuum answers one integer column named auto_vacuum.
+    const mode = this.#db.prepare("PRAGMA auto_vacuum").get() as { auto_vacuum: number };
+    if (mode.auto_vacuum === INCREMENTAL_AUTO_VACUUM) return;
+    this.#db.exec("PRAGMA auto_vacuum = INCREMENTAL");
+    this.#db.exec("VACUUM");
+  }
+
+  /** Returns freed pages to the file system and truncates the WAL, so the physical measurement sees a deletion. */
+  reclaimFreedPages(): void {
+    this.#db.exec("PRAGMA incremental_vacuum");
+    this.#db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  }
+
+  /**
    * Brings the schema to this build's version. A database at an earlier
-   * version is walked forward one step at a time before the current
-   * statements run, so a column the statements now declare is added to the
-   * table that already stands rather than assumed; a database at a later
+   * version is walked forward one step at a time after the current statements
+   * have created what is missing, so a column the statements now declare is
+   * added to the table that already stands rather than assumed; a database at a later
    * version, or at one with no step to reach this one, is refused.
    */
   #migrateSchema(): void {
@@ -68,6 +90,11 @@ export class RuntimeDatabase {
           `runtime database is at schema version ${row.version}, not ${RUNTIME_SCHEMA_VERSION}`,
         );
       }
+      // The current statements run first: each creates a table only where
+      // none stands, so a table a later version added exists before a step
+      // that fills it from the older ones, and a table that already stands is
+      // left for its step to alter.
+      for (const statement of RUNTIME_SCHEMA_STATEMENTS) this.#db.exec(statement);
       if (row) {
         for (let version = row.version + 1; version <= RUNTIME_SCHEMA_VERSION; version += 1) {
           const steps = RUNTIME_SCHEMA_MIGRATIONS.get(version);
@@ -77,7 +104,6 @@ export class RuntimeDatabase {
           for (const step of steps) this.#db.prepare(step.sql).run(...step.params);
         }
       }
-      for (const statement of RUNTIME_SCHEMA_STATEMENTS) this.#db.exec(statement);
       if (!row) {
         this.#db
           .prepare("INSERT INTO schema_version (version) VALUES (?)")
@@ -121,39 +147,6 @@ export class RuntimeDatabase {
 
   close(): void {
     this.#db.close();
-  }
-
-  /** Makes sure the agent and its conversation exist; idempotent. */
-  ensureConversation(agentId: AgentId, sessionKey: SessionKey, name: string, now: number): void {
-    this.transaction(() => {
-      this.#db
-        .prepare("INSERT OR IGNORE INTO agents (agent_id, created_at) VALUES (?, ?)")
-        .run(agentId, now);
-      this.#db
-        .prepare(
-          "INSERT OR IGNORE INTO conversations (session_key, agent_id, name, created_at) VALUES (?, ?, ?, ?)",
-        )
-        .run(sessionKey, agentId, name, now);
-    });
-  }
-
-  /** The conversation's durable Clear cutoff, which outlives the generation whose marker raised it. */
-  historyCutoff(sessionKey: SessionKey): number | undefined {
-    // SAFETY: the query selects the one nullable integer column the row type names.
-    const row = this.#db
-      .prepare("SELECT history_cleared_at FROM conversations WHERE session_key = ?")
-      .get(sessionKey) as { history_cleared_at: number | null } | undefined;
-    return row?.history_cleared_at ?? undefined;
-  }
-
-  /** Raises the conversation's durable cutoff to `clearedAt`; never lowers it. */
-  raiseHistoryCutoff(sessionKey: SessionKey, clearedAt: number): void {
-    this.#db
-      .prepare(
-        `UPDATE conversations SET history_cleared_at = MAX(COALESCE(history_cleared_at, ?), ?)
-         WHERE session_key = ?`,
-      )
-      .run(clearedAt, clearedAt, sessionKey);
   }
 }
 

@@ -35,54 +35,77 @@ title, whether you archived it, and the id the app opens it by — so their rows
 can say which app holds them and open there; that read opens no transcript and
 sends nothing anywhere. It stays on your Mac unless a feature below sends it.
 
-**Your conversation with Luke.** Luke keeps the conversation you have with him
-— what you typed or said, what he spoke or announced, the actions he took at
-your request, and the asks he is still working on — in a database on your
-Mac, so it is still there the next time you open him. It holds the 200 most
-recent entries and nothing older than 14 days, whichever runs out first, each
-kept in full so the History tab shows every word, and each stamped with the
-working-memory generation, described next, that stood when it was said; that
-stamp is a label, and a generation ending on its own does not erase a line.
-The 20 most recent lines, each cut to 400 characters, ride into a conversation
-as context, beside the working memory. Clearing the History tab deletes the
-stored lines as well as the view. Nothing about the conversation is written on
-our servers, and a fixture or evidence run keeps no conversation at all.
+**Your conversation with Luke.** Luke keeps the conversations you have with
+him — what you typed or said, what he spoke or announced, the actions he took
+at your request, and the asks he is still working on — in a database on your
+Mac, so they are still there the next time you open him. The History tab
+shows the main conversation, the one the talk key and every observation
+reach. Each conversation's History holds its 200 most recent
+entries and nothing older than 14 days, whichever runs out first, each kept in
+full so the tab shows every word. Beside the History, Luke keeps a transcript
+of each conversation's turns in the same database: every input the model was
+shown and every point at which his working context was folded. The transcript
+is a record, not a limit: folding the context changes what the model sees
+next and erases nothing here. The 20 most recent History lines, each cut to
+400 characters, ride into a conversation as context, beside the working
+memory. A thread you open as temporary is held in memory alone and is gone
+when Luke next opens; nothing said in it is remembered automatically. Nothing
+about a conversation is written on our servers, and a fixture or evidence run
+keeps no conversation at all.
 
-**Luke's working memory.** Luke keeps a working memory of his own turns in the
-same database on your Mac, in its own tables: the model's own record of what
-he read, said, and did — the transcript excerpts described above, the
+**Luke's working memory.** For each conversation Luke keeps a working memory
+of his own turns in the same database, in its own tables: the model's record
+of what he read, said, and did — the transcript excerpts described above, the
 position he last read each transcript to, a record of each ask you made and
 how it ended, and a receipt for each action he took at your ask. When that
-record grows long, OpenAI folds its older part into an opaque, encrypted
-compaction item, which Luke stores beside the rest; it is still derived from
-your sessions and your conversation, so it lives under the same rule as the
-rest. The whole record is one generation, and a generation lives exactly 14
+record grows long, Luke folds its older part: he asks OpenAI to compact it,
+which answers an opaque, encrypted compaction item he stores in place of the
+older part, or, on a connection that cannot compact, he asks the model for a
+written summary and keeps that instead. Either is still derived from your
+sessions and your conversation and lives under the same rule as the rest. The
+folding is Luke's own decision, made when the record nears the model's
+window or the size a request may be; OpenAI is not asked to compact on its
+own. The whole record is one generation, and a generation lives exactly 14
 days from the moment it began: writing into it never extends it, and when its
 time is up everything in it, the encrypted compaction included, is discarded
 and an empty generation begins, which may observe your sessions afresh; a
 generation found expired when Luke starts is discarded then and there. A
 generation holds at most 200 asks and stays under 8 MiB: the oldest finished
 asks go first once their endings are in the History, and when nothing can go
-Luke declines a new ask rather than growing the record. Clearing the History
-tab discards the current generation too, along with anything Luke was still
-working on and anything he was about to say: the History, his context, and
-the memory are emptied the moment you press, and the stored conversation and
-the generation are erased with a small record, holding no content, of when
-the Clear happened so that nothing written before it can come back. If the
-disk refuses part of that erasure, the History and his context stay emptied,
-the Clear is reported as not finished rather than done, and the next thing
-Luke writes replaces what was left. Clearing does not touch the separate
-things Luke remembers about you, described next, and never touches your
-agents' own files.
+Luke declines a new ask rather than growing the record.
+
+The History tab's one control, **Clear**, removes the conversation's
+History, transcript, and working memory from the database, and writes them
+first, in the same step, into a compressed recovery archive kept on your Mac
+under Luke's own data (a `.jsonl.deleted.<time>.zst` file, and until it is
+written to disk, a copy inside the database); the deletion is reported
+complete only once that file is written and verified, and a copy not yet
+written is written at the next launch. Nothing in the app reads an archive
+back yet; it stands on your Mac for you alone. Clearing never touches the
+separate things Luke remembers about you, described next, and never touches
+your agents' own files.
+
+Luke also tidies this storage on his own, on the terms OpenClaw's session
+store uses: a conversation untouched for 30 days, and a thread idle for 7, is
+archived in place and keeps everything, and nothing is removed outright. He
+keeps at most 5,000
+conversations on the active list, archiving the longest untouched first, and
+holds the database, its log, and the recovery archives together under 10 GiB
+on your Mac: past that he removes the oldest recovery archives and then
+permanently deletes conversations his own cap had archived, oldest first,
+never one you archived, pinned, or are talking in, and never the main
+conversation, until the total is back under 8 GiB, and tells you what
+protected data left it above. Recovery archives do not expire by age.
 
 The database lives under Luke's own application data, in a folder of its own
-per agent (`agents/main/agent.sqlite`), and it is written from one place: a
-worker thread of Luke's own, so nothing else on your Mac and no other part of
-Luke writes it. Earlier versions of Luke kept the conversation, the working
-memory, and the things he remembers about you in three files beside your
-settings. Those files are no longer read or written, so that conversation,
-that memory, and those remembered things start over; the files stay where
-they were until you remove them.
+per agent (`agents/main/agent.sqlite`, with recovery archives beside it under
+`archives/`), and it is written from one place: a worker thread of Luke's
+own, so nothing else on your Mac and no other part of Luke writes it. Earlier
+versions of Luke kept the conversation, the working memory, and the things he
+remembers about you in three files beside your settings. Those files are no
+longer read or written, so that conversation, that memory, and those
+remembered things start over; the files stay where they were until you remove
+them.
 
 **Things Luke remembers about you.** During a conversation you start, Luke may
 silently save a concise preference, personal fact, goal, or recurring constraint
@@ -275,9 +298,9 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 - Delete your OpenAI key to turn voice off.
 - Delete any synced provider API key from that provider's row in Settings. Keys
   are also deleted when you delete your account.
-- Clear the History tab to delete your stored conversation and Luke's working
-  memory from your Mac; the working memory also discards itself 14 days after
-  it began, whether or not you clear it.
+- Clear the History tab to remove the stored conversation and Luke's working
+  memory of it behind a recovery archive on your Mac; the working memory also
+  discards itself 14 days after it began, whatever you do.
 - Ask Luke what he remembers, correct a memory, or tell him to forget one.
 - Luke does not use your microphone until you start a turn.
 - Delete your account from the Account section in Settings. This erases your

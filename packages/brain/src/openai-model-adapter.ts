@@ -6,6 +6,7 @@ import {
   type ReasoningEffort,
 } from "@sidecar/runtime-contracts";
 import { positiveInteger, text, type WireRecord } from "@sidecar/wire";
+import { COMPACTION_POLICY } from "./compaction.js";
 import {
   BRAIN_MAXIMUM_OUTPUT_TOKENS,
   BRAIN_REQUEST_TIMEOUT_MS,
@@ -125,6 +126,7 @@ class OpenAiTransport implements ResponsesTransport<undefined> {
       countsInputTokens: true,
       compacts: true,
       maximumOutputTokens: BRAIN_OPENAI_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
+      contextWindowTokens: COMPACTION_POLICY.DEFAULT_CONTEXT_WINDOW_TOKENS,
     };
   }
 

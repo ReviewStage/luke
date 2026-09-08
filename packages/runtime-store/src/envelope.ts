@@ -5,6 +5,7 @@ import type {
   BrainTranscriptCursors,
   ResponsesInputItem,
 } from "@sidecar/brain";
+import type { TranscriptEvent } from "@sidecar/runtime-contracts";
 import type { EnvelopeRead } from "./brain-envelope.js";
 
 /**
@@ -60,9 +61,18 @@ export type SaveKind = (typeof SAVE_KIND)[keyof typeof SAVE_KIND];
  * against a generation the store has since replaced — is refused, and never
  * turns "the database moved on" into a replacement of the newer generation.
  */
-export type BrainStateSave =
+export type BrainStateSave = (
   | { kind: typeof SAVE_KIND.REPLACE; expectGeneration?: string; state: BrainPersistedState }
-  | { kind: typeof SAVE_KIND.AMEND; generationId: string; delta: BrainStateDelta };
+  | { kind: typeof SAVE_KIND.AMEND; generationId: string; delta: BrainStateDelta }
+) & {
+  /**
+   * The transcript events the checkpoint carries with it, appended to the
+   * conversation's retained transcript in the same transaction under the
+   * generation the save lands in, so a checkpoint and its record of what
+   * entered the context are one write or none.
+   */
+  transcript?: readonly TranscriptEvent[];
+};
 
 function sameJson<Value>(left: Value, right: Value): boolean {
   return left === right || JSON.stringify(left) === JSON.stringify(right);
@@ -177,8 +187,9 @@ export class EnvelopeTracker {
     this.#observed = read.generation;
   }
 
-  saveFor(next: BrainPersistedState): BrainStateSave {
-    return brainStateSave(this.#saved, this.#observed, next);
+  saveFor(next: BrainPersistedState, transcript?: readonly TranscriptEvent[]): BrainStateSave {
+    const save = brainStateSave(this.#saved, this.#observed, next);
+    return transcript && transcript.length > 0 ? { ...save, transcript } : save;
   }
 
   landed(next: BrainPersistedState): void {

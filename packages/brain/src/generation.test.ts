@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { AgentRuntime, ContextOpening } from "@sidecar/runtime-contracts";
+import {
+  type AgentRuntime,
+  CONTEXT_INPUT_KIND,
+  type ContextOpening,
+} from "@sidecar/runtime-contracts";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { CONTEXT_OPENING, generationFrom } from "./generation.js";
 import { TOOL_LOOP_RUNTIME } from "./runtime.js";
@@ -25,6 +29,8 @@ function heldRuntime() {
   const runtime: AgentRuntime = {
     descriptor: { id: "held", checkpoint: context.checkpointFormat },
     quietUntil: () => undefined,
+    capabilities: () => Promise.resolve(undefined),
+    compact: () => Promise.resolve({ compacted: false, reason: "not compacted here" }),
     openContext: () => opening,
     start: () => {
       throw new Error("not started here");
@@ -79,10 +85,12 @@ test("an open that resolves while the generation stands installs the context and
   standing.release();
   const opened = await generation.opened;
   assert.equal(opened.kind, CONTEXT_OPENING.LOADED);
-  assert.equal(
-    opened.kind === CONTEXT_OPENING.LOADED ? opened.context : undefined,
-    standing.context,
-  );
+  // The generation holds the runtime's engine behind the transcript recorder:
+  // what is ingested through the one lands in the other, and is on record.
+  assert.ok(opened.kind === CONTEXT_OPENING.LOADED);
+  await opened.context.ingest({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: "hello" });
+  assert.equal(standing.context.checkpoint().items.length, 1);
+  assert.equal(opened.context.pending().length, 1);
   await tick();
   assert.equal(standing.disposed(), 0);
 });

@@ -3,6 +3,7 @@ import {
   type AgentRuntimeDescriptor,
   type CheckpointFormat,
   CONTEXT_INPUT_KIND,
+  type CompactionOptions,
   type ContextEngine,
   type ContextInput,
   type ContextLifecycle,
@@ -11,10 +12,12 @@ import {
   MODEL_RESPONSE_OUTCOME,
   type ModelAdapter,
   type ModelAnswer,
+  type ModelCapabilities,
   type ModelIncomplete,
   RUN_END_REASON,
   RUNTIME_EVENT,
   type RuntimeCheckpoint,
+  type RuntimeCompaction,
   type RuntimeEvent,
   type RuntimeRun,
   type RuntimeRunEnd,
@@ -23,6 +26,7 @@ import {
   type ToolResult,
 } from "@sidecar/runtime-contracts";
 import { ACT_RESULT_STATUS, isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import { compactContext } from "./compaction.js";
 import { LOOP_GUARD_LEVEL, LoopGuard, type LoopGuardConfig } from "./loop-guard.js";
 import { settledUnlessAborted } from "./settled.js";
 
@@ -94,6 +98,7 @@ function resultStatus(outputJson: string): string | undefined {
 export class ToolLoopAgentRuntime implements AgentRuntime {
   readonly #options: ToolLoopRuntimeOptions;
   readonly #checkpoint: CheckpointFormat;
+  #capabilities: Promise<ModelCapabilities | undefined> | undefined;
 
   constructor(options: ToolLoopRuntimeOptions) {
     this.#options = options;
@@ -117,6 +122,24 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
 
   quietUntil(): number | undefined {
     return this.#options.model.quietUntil();
+  }
+
+  /** Asked once and kept: a hosted adapter reads the service for it, and the answer does not change within a build. */
+  capabilities(): Promise<ModelCapabilities | undefined> {
+    this.#capabilities ??= this.#options.model.capabilities().then(
+      (answer) =>
+        answer.outcome === MODEL_RESPONSE_OUTCOME.ANSWERED ? answer.capabilities : undefined,
+      () => undefined,
+    );
+    return this.#capabilities;
+  }
+
+  /** The runtime's own compaction: the model's explicit one where it compacts, the engine's fold behind a summary otherwise. */
+  async compact(context: ContextEngine, options: CompactionOptions): Promise<RuntimeCompaction> {
+    return compactContext(context, this.#options.model, {
+      ...options,
+      capabilities: await this.capabilities(),
+    });
   }
 
   async openContext(

@@ -129,7 +129,7 @@ test("one request is one inference on the build's fixed settings, answered as th
   assert.equal(sent.max_output_tokens, 16_000);
   assert.deepEqual(sent.reasoning, { effort: "medium" });
   assert.deepEqual(sent.include, ["reasoning.encrypted_content"]);
-  assert.deepEqual(sent.context_management, [{ type: "compaction" }]);
+  assert.equal("context_management" in sent, false);
   assert.deepEqual(sent.input, INPUT);
   assert.equal("background" in sent, false);
   assert.equal("conversation" in sent, false);

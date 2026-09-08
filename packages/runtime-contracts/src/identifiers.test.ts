@@ -28,3 +28,16 @@ test("run origins are the fixed vocabulary and nothing else", () => {
   assert.equal(isRunOrigin("developer"), false);
   assert.equal(isRunOrigin(undefined), false);
 });
+
+test("session keys classify into the conversation kinds maintenance tells apart", async () => {
+  const { CONVERSATION_KIND, conversationKindOf, threadSessionKey } = await import(
+    "./identifiers.js"
+  );
+  assert.equal(conversationKindOf(MAIN_SESSION_KEY), CONVERSATION_KIND.MAIN);
+  assert.equal(threadSessionKey("t-1"), "agent:main:thread:t-1");
+  assert.equal(conversationKindOf(threadSessionKey("t-1")), CONVERSATION_KIND.THREAD);
+  assert.equal(conversationKindOf("agent:main:cron:nightly"), CONVERSATION_KIND.UNKNOWN);
+  assert.equal(conversationKindOf("global"), CONVERSATION_KIND.UNKNOWN);
+  assert.equal(conversationKindOf("agent:main:thread:a:b"), CONVERSATION_KIND.UNKNOWN);
+  assert.throws(() => threadSessionKey("a:b"), TypeError);
+});

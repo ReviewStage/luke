@@ -17,16 +17,14 @@ import {
   storedConversationMaximumAgeMs,
 } from "@sidecar/realtime";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
+import { deleteConversationHistory } from "./archives.js";
 import { loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
+import { raiseHistoryCutoff } from "./conversations-table.js";
 import { RuntimeDatabase } from "./database.js";
 import { EnvelopeTracker, SAVE_KIND } from "./envelope.js";
 import { personalFacts, replacePersonalFacts } from "./facts-table.js";
-import {
-  appendHistory,
-  clearHistoryAtOrBefore,
-  historyClearedAt,
-  listHistory,
-} from "./history-table.js";
+import { appendHistory, historyClearedAt, listHistory } from "./history-table.js";
+import { RUNTIME_SCHEMA_VERSION } from "./schema.js";
 import { inspectHistory, line, NOW, openTestDatabase, populatedState, request } from "./testing.js";
 
 /** A repository over the database in-thread, tracking the last envelope it saw land as the client does. */
@@ -205,15 +203,17 @@ test("a line learns the run it opened, and a run's ask and end are each publishe
   assert.deepEqual(published.entries, [tied, reply]);
 });
 
-test("the sequence counts up and is never reused after retention or a Clear", () => {
+test("the sequence counts up and is never reused after retention or a deletion", () => {
   const database = openTestDatabase();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "luke-database-"));
   appendHistory(database, MAIN_SESSION_KEY, [line("a", NOW - 10, { eventId: "a" })], NOW);
   appendHistory(database, MAIN_SESSION_KEY, [line("b", NOW - 5, { eventId: "b" })], NOW);
-  clearHistoryAtOrBefore(database, MAIN_SESSION_KEY, NOW);
+  assert.ok(deleteConversationHistory(database, root, MAIN_SESSION_KEY, NOW));
   assert.equal(inspectHistory(database, MAIN_SESSION_KEY).count, 0);
   appendHistory(database, MAIN_SESSION_KEY, [line("c", NOW + 1, { eventId: "c" })], NOW + 1);
   const sequences = inspectHistory(database, MAIN_SESSION_KEY).sequences;
   assert.deepEqual(sequences, [3]);
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("retention keeps the 200 most recent lines and nothing older than a fortnight, judged at the append", () => {
@@ -251,16 +251,15 @@ test("a brain generation's expiry erases no visible history; only the Clear reac
   // ...while the thread keeps its lines under its own retention, still attributed to gen-1.
   assert.deepEqual(listHistory(database, MAIN_SESSION_KEY, NOW + 1), [said]);
   assert.deepEqual(inspectHistory(database, MAIN_SESSION_KEY).sessionIds, ["gen-1"]);
-  // The Clear writes the marker into the successor and erases the lines at or before it.
+  // A reset marker written into the successor raises the cutoff, and the lines at or before it stop projecting.
   const clearedAt = NOW + 2;
   saveBrainEnvelope(database, MAIN_SESSION_KEY, {
     kind: SAVE_KIND.REPLACE,
     expectGeneration: "gen-2",
     state: { ...freshBrainState("gen-3", clearedAt), reset: { clearedAt, generationId: "gen-2" } },
   });
-  clearHistoryAtOrBefore(database, MAIN_SESSION_KEY, clearedAt);
   assert.deepEqual(listHistory(database, MAIN_SESSION_KEY, NOW + 3), []);
-  // A late line from before the Clear is refused by the standing marker even though the rows are gone.
+  // A late line from before the cutoff is refused by the standing marker.
   assert.equal(
     appendHistory(database, MAIN_SESSION_KEY, [line("late", NOW + 1, { eventId: "late" })], NOW + 3)
       .changed,
@@ -366,8 +365,8 @@ test("the Clear's cutoff outlives the generation that carried its marker, at the
   assert.equal(historyClearedAt(database, MAIN_SESSION_KEY), cutoff);
   assert.deepEqual(listHistory(database, MAIN_SESSION_KEY, expiry), []);
   assert.equal(appendHistory(database, MAIN_SESSION_KEY, [atCutoff], expiry).changed, false);
-  // A later Clear only raises the cutoff; an older marker never lowers it.
-  clearHistoryAtOrBefore(database, MAIN_SESSION_KEY, expiry + 5);
+  // A later cutoff only raises it; an older marker never lowers it.
+  raiseHistoryCutoff(database, MAIN_SESSION_KEY, expiry + 5);
   saveBrainEnvelope(database, MAIN_SESSION_KEY, {
     kind: SAVE_KIND.REPLACE,
     expectGeneration: "gen-after",
@@ -444,7 +443,7 @@ test("a line keeps its Markdown line structure through the store and a relaunch"
   relaunch.close();
 });
 
-test("the checkpoint stamp lives on the generation: an empty foreign checkpoint keeps it, a delta may set it, and a stray item stamp is unreadable", () => {
+test("the checkpoint stamp lives on the generation: an empty foreign checkpoint keeps it, a delta may set it, and no item row carries one", () => {
   const database = openTestDatabase();
   const foreign = "other-runtime@3:anthropic-messages/2";
   const empty = { ...populatedState("gen-f"), checkpointFormat: foreign, items: [] };
@@ -471,14 +470,15 @@ test("the checkpoint stamp lives on the generation: an empty foreign checkpoint 
   const restamped = loadBrainEnvelope(database, MAIN_SESSION_KEY);
   assert.equal(restamped.state?.checkpointFormat, native);
   assert.equal(restamped.state?.items.length, 1);
-  // An item row of another stamp than the generation's is not its checkpoint.
-  database
-    .prepare("UPDATE runtime_checkpoints SET format = ? WHERE session_id = ?")
-    .run(foreign, "gen-f");
-  assert.deepEqual(loadBrainEnvelope(database, MAIN_SESSION_KEY), {
-    unreadable: true,
-    generation: "gen-f",
-  });
+  // The stamp is the generation's alone: an item row carries none of its own.
+  // SAFETY: PRAGMA table_info answers one text column named name per column of the table.
+  const columns = database.prepare("PRAGMA table_info(runtime_checkpoints)").all() as {
+    name: string;
+  }[];
+  assert.equal(
+    columns.some((column) => column.name === "format"),
+    false,
+  );
 });
 
 test("a version-1 database is walked forward: its item-tagged generation gains the legacy stamp, an empty one none, and a newer database is refused", () => {
@@ -530,7 +530,13 @@ test("a version-1 database is walked forward: its item-tagged generation gains t
   const version = database.prepare("SELECT version FROM schema_version").get() as {
     version: number;
   };
-  assert.equal(version.version, 2);
+  assert.equal(version.version, RUNTIME_SCHEMA_VERSION);
+  // SAFETY: the columns version 3 added to the conversation row.
+  const migrated = database
+    .prepare("SELECT kind, last_activity_at FROM conversations WHERE session_key = ?")
+    .get(MAIN_SESSION_KEY) as { kind: string; last_activity_at: number };
+  assert.equal(migrated.kind, "main");
+  assert.equal(migrated.last_activity_at, NOW);
   database.close();
   // Reopening at the current version is a no-op, and a newer database is refused.
   RuntimeDatabase.open(location).close();

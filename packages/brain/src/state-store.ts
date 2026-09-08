@@ -1,4 +1,8 @@
-import { checkpointFormatFromTag, checkpointFormatTag } from "@sidecar/runtime-contracts";
+import {
+  checkpointFormatFromTag,
+  checkpointFormatTag,
+  type TranscriptEvent,
+} from "@sidecar/runtime-contracts";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { type BrainJournalEntry, brainJournalEntryFromWire } from "./journal.js";
 import {
@@ -331,7 +335,15 @@ export interface BrainStateLoad {
  */
 export interface BrainStateRepository {
   load(): BrainStateLoad | Promise<BrainStateLoad>;
-  save(state: BrainPersistedState): boolean | Promise<boolean>;
+  /**
+   * Makes `state` the envelope that stands and, in the same write, appends
+   * `transcript` to the conversation's retained record under the generation
+   * the state names. A repository with no transcript table ignores it.
+   */
+  save(
+    state: BrainPersistedState,
+    transcript?: readonly TranscriptEvent[],
+  ): boolean | Promise<boolean>;
 }
 
 /** A record storage as a repository: the whole envelope in one serialized record. */
@@ -374,6 +386,18 @@ export interface BrainStoreLease {
 export interface BrainWriteCommit {
   prunedRunIds: readonly string[];
 }
+
+/**
+ * What one write composes: the envelope's mutable fields, and beside them
+ * the transcript events the checkpoint carries into the conversation's
+ * retained record in the same write. The transcript is not part of the
+ * envelope — it answers to the conversation's retention, not the
+ * generation's — and rides along only so the two land together or not at all.
+ */
+export type BrainStateMutation = Omit<
+  BrainPersistedState,
+  "version" | "generationId" | "createdAt" | "expiresAt" | "reset"
+> & { transcript?: readonly TranscriptEvent[] };
 
 /**
  * The one writer of the brain's state. Every write is serialized behind the
@@ -582,18 +606,13 @@ export class BrainStateStore {
   write(
     lease: BrainStoreLease,
     generationId: string,
-    mutate: (
-      state: BrainPersistedState,
-    ) => Omit<
-      BrainPersistedState,
-      "version" | "generationId" | "createdAt" | "expiresAt" | "reset"
-    >,
+    mutate: (state: BrainPersistedState) => BrainStateMutation,
     committed?: (commit: BrainWriteCommit) => void,
   ): Promise<boolean> {
     return this.#serialized(async () => {
       const held = this.#state;
       if (!this.holdsLease(lease) || !held || held.generationId !== generationId) return false;
-      const mutated = mutate(held);
+      const { transcript, ...mutated } = mutate(held);
       const composed: BrainPersistedState = {
         ...mutated,
         version: BRAIN_STATE_VERSION,
@@ -604,7 +623,7 @@ export class BrainStateStore {
       };
       const retained = retainedBrainState(composed, this.#bounds);
       if (retained.oversized && grows(retained, held)) return false;
-      if (!(await this.#persist(retained.state))) return false;
+      if (!(await this.#persist(retained.state, transcript))) return false;
       if (this.#state !== held || !this.holdsLease(lease)) return false;
       this.#state = retained.state;
       committed?.({ prunedRunIds: retained.prunedRunIds });
@@ -709,12 +728,33 @@ export class BrainStateStore {
     for (const listener of [...this.#replacedListeners]) listener(state);
   }
 
-  async #persist(state: BrainPersistedState): Promise<boolean> {
+  async #persist(
+    state: BrainPersistedState,
+    transcript?: readonly TranscriptEvent[],
+  ): Promise<boolean> {
     try {
-      return await this.#repository.save(state);
+      return await this.#repository.save(state, transcript);
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Start fresh: the standing generation is replaced by an empty one, born
+   * now, and nothing else changes. The fence is the same synchronous one a
+   * Clear raises — the old generation stands nowhere in memory and every
+   * listener has heard the successor before this returns — but the successor
+   * carries no marker, because nothing is erased: the conversation's history
+   * and transcript stay as they were, attributed to the lifetime that wrote
+   * them, and the model simply begins its next turn from nothing. Answers
+   * whether the successor reached storage.
+   */
+  reset(now: number = this.#now()): Promise<boolean> {
+    const fresh = this.#begin(now);
+    return this.#serialized(async () => {
+      if (this.#state !== fresh) return false;
+      return this.#persist(fresh);
+    });
   }
 
   #serialized<T>(work: () => Promise<T>): Promise<T> {

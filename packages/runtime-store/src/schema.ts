@@ -23,6 +23,18 @@
  * a partial unique index over the run and kind of every line tied to a run,
  * per conversation, so a second publication has no row it could occupy.
  *
+ * The stored record and the model's projection are two different tables. The
+ * transcript table keeps every input the context engine ingested and every
+ * point at which the projection folded, per conversation and never cascading
+ * with a lifetime, so a compaction or a Start fresh changes the projection
+ * and erases no record; the checkpoint rows are the projection, stamped once
+ * on the generation rather than per row. The conversation row carries its
+ * kind and where it stands in its lifecycle — archived, pinned, last active —
+ * which is what maintenance reads, and the archive registry holds each
+ * deleted conversation's compressed recovery payload, committed in the
+ * transaction that removed the rows and cleared only once the file it names
+ * is published and verified.
+ *
  * The schema is versioned by the `schema_version` table. A database at a
  * version this build does not know is refused rather than migrated by guess.
  */
@@ -30,14 +42,7 @@
 import type { SQLInputValue } from "node:sqlite";
 import { LEGACY_CHECKPOINT_FORMAT_TAG } from "@sidecar/brain";
 
-export const RUNTIME_SCHEMA_VERSION = 2;
-
-/**
- * The tag version 1 of the schema wrote on every checkpoint item. Every such
- * item was the tool-loop runtime's first version over the Responses input
- * array, because nothing else ever wrote one.
- */
-export const LEGACY_ITEM_FORMAT_TAG = "openai-responses-input/1";
+export const RUNTIME_SCHEMA_VERSION = 3;
 
 /**
  * How a database at an earlier version is brought to this one, in order. Each
@@ -63,6 +68,35 @@ export const RUNTIME_SCHEMA_MIGRATIONS: ReadonlyMap<number, readonly SchemaMigra
         },
       ],
     ],
+    [
+      3,
+      [
+        { sql: "ALTER TABLE runtime_checkpoints DROP COLUMN format", params: [] },
+        {
+          sql: "ALTER TABLE conversations ADD COLUMN kind TEXT NOT NULL DEFAULT 'main'",
+          params: [],
+        },
+        { sql: "ALTER TABLE conversations ADD COLUMN archived_at INTEGER", params: [] },
+        { sql: "ALTER TABLE conversations ADD COLUMN archive_reason TEXT", params: [] },
+        { sql: "ALTER TABLE conversations ADD COLUMN pinned_at INTEGER", params: [] },
+        {
+          sql: "ALTER TABLE conversations ADD COLUMN last_activity_at INTEGER NOT NULL DEFAULT 0",
+          params: [],
+        },
+        {
+          sql: "ALTER TABLE conversations ADD COLUMN next_transcript_sequence INTEGER NOT NULL DEFAULT 1",
+          params: [],
+        },
+        {
+          sql: `UPDATE conversations SET last_activity_at = MAX(
+         created_at,
+         COALESCE((SELECT MAX(recorded_at) FROM history_events WHERE history_events.session_key = conversations.session_key), 0),
+         COALESCE((SELECT MAX(created_at) FROM conversation_sessions WHERE conversation_sessions.session_key = conversations.session_key), 0)
+       )`,
+          params: [],
+        },
+      ],
+    ],
   ]);
 
 export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
@@ -79,7 +113,13 @@ export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
     name TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     next_history_sequence INTEGER NOT NULL DEFAULT 1,
-    history_cleared_at INTEGER
+    history_cleared_at INTEGER,
+    kind TEXT NOT NULL DEFAULT 'main',
+    archived_at INTEGER,
+    archive_reason TEXT,
+    pinned_at INTEGER,
+    last_activity_at INTEGER NOT NULL DEFAULT 0,
+    next_transcript_sequence INTEGER NOT NULL DEFAULT 1
   )`,
   `CREATE TABLE IF NOT EXISTS conversation_sessions (
     session_id TEXT PRIMARY KEY,
@@ -95,7 +135,6 @@ export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS runtime_checkpoints (
     session_id TEXT NOT NULL REFERENCES conversation_sessions(session_id) ON DELETE CASCADE,
     sequence INTEGER NOT NULL,
-    format TEXT NOT NULL,
     item TEXT NOT NULL,
     PRIMARY KEY (session_id, sequence)
   )`,
@@ -159,6 +198,42 @@ export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
     ON history_events(session_key, recorded_at, sequence)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS history_events_once_published
     ON history_events(session_key, request_id, kind) WHERE request_id IS NOT NULL`,
+  `CREATE TABLE IF NOT EXISTS transcript_events (
+    session_key TEXT NOT NULL REFERENCES conversations(session_key),
+    sequence INTEGER NOT NULL,
+    session_id TEXT,
+    kind TEXT NOT NULL,
+    recorded_at INTEGER NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (session_key, sequence)
+  )`,
+  `CREATE TABLE IF NOT EXISTS compaction_boundaries (
+    session_key TEXT NOT NULL REFERENCES conversations(session_key),
+    transcript_sequence INTEGER NOT NULL,
+    session_id TEXT,
+    source TEXT NOT NULL,
+    dropped INTEGER NOT NULL,
+    checkpoint_format TEXT,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (session_key, transcript_sequence)
+  )`,
+  `CREATE TABLE IF NOT EXISTS history_archives (
+    archive_id TEXT PRIMARY KEY,
+    session_key TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    name TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    deleted_at INTEGER NOT NULL,
+    encoding TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    byte_length INTEGER NOT NULL,
+    file_name TEXT NOT NULL,
+    published_at INTEGER,
+    history_lines INTEGER NOT NULL,
+    transcript_events INTEGER NOT NULL,
+    previous_cutoff INTEGER,
+    payload BLOB
+  )`,
   `CREATE TABLE IF NOT EXISTS personal_facts (
     id TEXT PRIMARY KEY,
     ordinal INTEGER NOT NULL,

@@ -521,6 +521,8 @@ function registered(live: () => BrainRequestRecord | undefined) {
     },
     trustedSender: () => true,
     brain: () => agent,
+    brainForRun: () => agent,
+    allRequests: () => [],
     submitters: {
       panel: (sender) => sender === panelSender,
       voice: (sender) => sender === voiceSender,

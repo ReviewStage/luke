@@ -1,4 +1,4 @@
-import { type ContextEngine, checkpointFormatTag } from "@sidecar/runtime-contracts";
+import { checkpointFormatTag } from "@sidecar/runtime-contracts";
 import type { Generation } from "./generation.js";
 import {
   BRAIN_REQUEST_FAILURE,
@@ -8,6 +8,7 @@ import {
   isTerminalBrainRequestStatus,
 } from "./requests.js";
 import type { BrainStateStore, BrainStoreLease } from "./state-store.js";
+import type { RecordingContextEngine } from "./transcript-recorder.js";
 import type { RunControl, TurnContext } from "./turn.js";
 
 /**
@@ -57,8 +58,8 @@ export const SAVE_SCOPE = {
  * carries the context only when the runtime loaded one.
  */
 export type SaveScope =
-  | { kind: typeof SAVE_SCOPE.WORKING; context: ContextEngine; record?: RecordChange }
-  | { kind: typeof SAVE_SCOPE.WHOLE; context: ContextEngine | undefined }
+  | { kind: typeof SAVE_SCOPE.WORKING; context: RecordingContextEngine; record?: RecordChange }
+  | { kind: typeof SAVE_SCOPE.WHOLE; context: RecordingContextEngine | undefined }
   | ({ kind: typeof SAVE_SCOPE.RECORD } & RecordChange);
 
 /** What composing the requests of one save decided, read once the store has answered. */
@@ -179,25 +180,33 @@ export class BrainRequestLedger {
   async save(generation: Generation, scope: SaveScope): Promise<boolean> {
     let outcome: SaveOutcome | undefined;
     let pruned = false;
+    let carried = 0;
+    const context = scope.kind === SAVE_SCOPE.RECORD ? undefined : scope.context;
     const written = await this.#store.write(
       this.#lease,
       generation.id,
       (state) => {
-        const context = scope.kind === SAVE_SCOPE.RECORD ? undefined : scope.context;
         const checkpoint = context?.checkpoint();
         outcome = this.#requestsOf(generation, scope, state.requests);
         const checkpointFormat = checkpoint
           ? checkpointFormatTag(checkpoint.format)
           : state.checkpointFormat;
+        // The transcript events the checkpoint carries: everything recorded
+        // since the last checkpoint landed, written in the same transaction
+        // so the record and the projection cannot disagree about what entered.
+        const transcript = context?.pending() ?? [];
+        carried = transcript.length;
         return {
           ...(checkpointFormat !== undefined ? { checkpointFormat } : undefined),
           items: checkpoint ? checkpoint.items : state.items,
           cursors: context ? generation.cursors.persisted() : state.cursors,
           journal: context ? generation.journal.entries() : state.journal,
           requests: outcome.requests,
+          ...(transcript.length > 0 ? { transcript } : undefined),
         };
       },
       (commit) => {
+        if (carried > 0) context?.retained(carried);
         // Retention decided inside the same queue step: the runs the store
         // let go of leave the working copy too, or the next checkpoint of
         // the journal would write them straight back.

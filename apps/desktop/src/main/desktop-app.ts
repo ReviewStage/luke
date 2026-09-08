@@ -63,6 +63,7 @@ import {
   sessionContextText,
   workspaceProjectContextText,
 } from "@sidecar/realtime";
+import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   CreatedWorkspaceOpenTracker,
@@ -152,6 +153,7 @@ import {
   shouldBackfillArrivalSettled,
 } from "./arrival-flow";
 import type { WorkspaceCreationDefaults } from "./brain/act-performer";
+import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion";
 import { wakeEventsFromHooks } from "./brain/flow";
 import { BrainReplyDeliveries } from "./brain/reply-delivery";
 import { wireBrain } from "./brain/wiring";
@@ -163,6 +165,7 @@ import {
   calendarOnboardingStateFromStored,
   shouldBackfillCalendarOnboardingSettled,
 } from "./calendar-onboarding-flow";
+import { conversationOperations, startHistoryMaintenance } from "./conversation-operations";
 import {
   INTRODUCTION_FADE_MS,
   INTRODUCTION_HANDOFF_READY_MS,
@@ -487,10 +490,14 @@ const runtimeStoreWiring = wireRuntimeStore({
   ensureDirectory: (directory) => fs.mkdirSync(directory, { recursive: true, mode: 0o700 }),
   now: Date.now,
   createEventId: () => randomUUID(),
-  onHistoryChanged: (entries, except) => {
+  onHistoryChanged: (sessionKey, entries, except) => {
+    // The panel draws main alone; another conversation's thread is held here
+    // for its brain and its tests and reaches no window.
+    if (sessionKey !== MAIN_SESSION_KEY) return;
     const payload: ConversationHistoryPayload = { entries, cleared: entries.length === 0 };
     broadcast(channels.onConversationHistoryChanged, payload, except);
   },
+  onDirectoryChanged: () => undefined,
   report: (message) => process.stderr.write(`${message}\n`),
 });
 /**
@@ -1445,7 +1452,7 @@ async function stopAccountCapabilities(): Promise<void> {
 
 async function applyVoiceCredential(): Promise<void> {
   await transitionVoiceCredential({
-    retire: () => brainWiring.host.retire(),
+    retire: () => brainWiring.retire(),
     apply: () => voiceCapabilities.apply(),
     rebuild: brainWiring.rebuild,
   });
@@ -1524,7 +1531,7 @@ function brainStandingContext(): string {
     ),
     rememberedFactsText(runtimeStoreWiring.rememberedFacts()),
     conversationHistoryText(
-      recentConversationEntries(runtimeStoreWiring.thread.entries()),
+      recentConversationEntries(runtimeStoreWiring.thread().entries()),
       sessions,
     ),
     appGuideContextText(appGuide),
@@ -1605,15 +1612,17 @@ const sessionActPerformer = createSessionActPerformer({
 });
 
 const brainWiring = wireBrain({
-  repository: runtimeStoreWiring.brainStateRepository(),
+  repositoryFor: (sessionKey) => runtimeStoreWiring.brainStateRepository(sessionKey),
   createId: () => randomUUID(),
   report: (message) => process.stderr.write(`${message}\n`),
   ...(agentTrace ? { traceTurn: (record) => agentTrace.recordBrainTurn(record) } : undefined),
-  recordConversationEntry: runtimeStoreWiring.recordConversationEntry,
+  recordConversationEntry: (entry, recordedAt, sessionKey) =>
+    runtimeStoreWiring.recordConversationEntry(entry, recordedAt, sessionKey),
   broadcastRequests: broadcastBrainRequests,
   onEndPublished: offerBrainReply,
-  onGenerationReplaced: () => {
-    withdrawBriefings();
+  onGenerationReplaced: (sessionKey) => {
+    // Briefings are main's alone; replies are owed for any conversation's run.
+    if (sessionKey === MAIN_SESSION_KEY) withdrawBriefings();
     withdrawBrainReplies();
   },
   replies: {
@@ -1625,7 +1634,7 @@ const brainWiring = wireBrain({
     grantOnCall: (record, epoch) => {
       const granted = brainReplyDeliveries.grantOnCall(
         record,
-        brainWiring.store().generationId() ?? "",
+        brainWiring.store(brainWiring.conversationForRun(record.runId)).generationId() ?? "",
         epoch,
         brainReplyClaimContext(),
       );
@@ -1648,7 +1657,7 @@ const brainWiring = wireBrain({
     trackedIssues: () => trackedIssues,
     appGuide: () => appGuide,
     rememberedFacts: runtimeStoreWiring.rememberedFacts,
-    writeRememberedFacts: runtimeStoreWiring.writeRememberedFacts,
+    mutateRememberedFacts: runtimeStoreWiring.mutateRememberedFacts,
     performAppAct: performBrainAppAct,
     recordConversationEntry: runtimeStoreWiring.recordConversationEntry,
   },
@@ -1661,6 +1670,14 @@ const brainWiring = wireBrain({
   runnable: () => runMode.observesProviders && runMode.sendsNetwork && accountCapabilitiesActive(),
   dropBriefings: () => speechArbiter.dropBriefings(),
 });
+
+const conversationControls = conversationOperations({
+  store: runtimeStoreWiring,
+  brain: brainWiring,
+  now: Date.now,
+  report: (message) => process.stderr.write(`${message}\n`),
+});
+let stopHistoryMaintenance: (() => void) | undefined;
 
 function adapterFor(providerId: string) {
   if (providerId === SUPERSET_WORKSPACE_PROVIDER_ID) return supersetWorkspaceAdapter;
@@ -1811,7 +1828,7 @@ function registerIpc(): void {
     // Computed rather than read from the cached flag: at launch nothing
     // has recomputed it yet, so a persisted pause would draw a waking face.
     announcementsHeld: accountCapabilitiesActive() && (await announcementsQuietNow(Date.now())),
-    conversationHistory: runtimeStoreWiring.thread.entries(),
+    conversationHistory: runtimeStoreWiring.thread().entries(),
     settings: await settingsStore.snapshot(),
   });
   registerContextHandler(BRIDGE.getVoiceBootstrap, voiceBootstrapFields);
@@ -1879,7 +1896,7 @@ function registerIpc(): void {
     BRIDGE,
     {
       appendConversationHistory(context, entries) {
-        return runtimeStoreWiring.thread.append(entries, context.sender);
+        return runtimeStoreWiring.thread().append(entries, context.sender);
       },
     },
     { ipcMain, trustedSender },
@@ -2062,7 +2079,11 @@ function registerIpc(): void {
     storeVoiceView: (view) => {
       latestVoiceView = view;
     },
-    clearConversation: () => runtimeStoreWiring.clearConversation(brainWiring.store()),
+    // The History Clear is Delete history on main: the recoverable deletion,
+    // reported to the panel as refused only when the store took nothing.
+    clearConversation: async () =>
+      (await conversationControls.deleteHistory(MAIN_SESSION_KEY)) !==
+      CONVERSATION_DELETE_OUTCOME.REFUSED,
     setShortcutCapturing: (capturing) => hotkeys.setShortcutCapturing(capturing),
     openExternal: (url) => shell.openExternal(url),
     // While the takeover stands and no account credential exists yet, the
@@ -2589,8 +2610,8 @@ function broadcastBrainRequests(snapshots: readonly BrainRequestSnapshot[]): voi
  * the live record was read from — and it goes out at once if a receiver is
  * ready, or waits for the next one that reports.
  */
-function offerBrainReply(record: BrainRequestRecord): void {
-  const generationId = brainWiring.store().generationId();
+function offerBrainReply(record: BrainRequestRecord, sessionKey: SessionKey): void {
+  const generationId = brainWiring.store(sessionKey).generationId();
   if (generationId === undefined) return;
   brainReplyDeliveries.published(record, generationId);
   offerBrainReplies();
@@ -2600,8 +2621,8 @@ function offerBrainReply(record: BrainRequestRecord): void {
 function brainReplyClaimContext() {
   return {
     receiverCurrent: (epoch: number) => voiceReceiver.isReady() && voiceReceiver.epoch() === epoch,
-    generationStands: (generationId: string) => brainWiring.store().holdsGeneration(generationId),
-    liveRecord: (runId: string) => brainWiring.current()?.request(runId),
+    generationStands: (generationId: string) => brainWiring.holdsGeneration(generationId),
+    liveRecord: (runId: string) => brainWiring.agentForRun(runId)?.request(runId),
   };
 }
 
@@ -3003,6 +3024,10 @@ export function startDesktopApp(): void {
         // it, so a line the Clear meant to erase is refused here too.
         await brainWiring.store().load();
         await runtimeStoreWiring.restore();
+        stopHistoryMaintenance = startHistoryMaintenance({
+          store: runtimeStoreWiring,
+          brain: brainWiring,
+        });
       }
       // A signed-in install with no arrival record predates the beat: its
       // sign-in was never observed, so it is settled now rather than greeted
@@ -3235,7 +3260,8 @@ export function startDesktopApp(): void {
     stopCalendarObservation();
     for (const watcher of spoolWatchers) watcher.close();
     spoolWatchers = [];
-    brainWiring.host.retire();
+    stopHistoryMaintenance?.();
+    brainWiring.retire();
     // Deliberately not a flush: a request here either delays the quit or is
     // killed mid-flight, and an instant quit is worth the last minute of
     // counts.

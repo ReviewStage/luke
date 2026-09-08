@@ -73,7 +73,7 @@ test("respond posts the fixed request on the developer's key and normalizes the 
   assert.equal(call.body.store, false);
   assert.deepEqual(call.body.reasoning, { effort: "medium" });
   assert.equal(call.body.max_output_tokens, 500);
-  assert.deepEqual(call.body.context_management, [{ type: "compaction" }]);
+  assert.equal("context_management" in call.body, false);
   assert.ok(Array.isArray(call.body.tools));
   assert.deepEqual(
     call.body.tools.filter(isRecord).map((tool) => [tool.type, tool.name]),

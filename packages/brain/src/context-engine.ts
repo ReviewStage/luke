@@ -14,11 +14,15 @@ import { isWireString, type WireRecord } from "@sidecar/wire";
 import {
   functionCallOutputItem,
   isCompactionItem,
+  isUserMessageItem,
   RESPONSES_ITEM_FORMAT,
   RESPONSES_ITEM_TYPE,
   type ResponsesInputItem,
   userMessageItem,
 } from "./responses-api.js";
+
+/** OpenClaw's own approximation where no count is at hand. */
+export const ESTIMATED_CHARS_PER_TOKEN = 4;
 
 /**
  * The context engine for the OpenAI Responses input array. It is the one
@@ -102,6 +106,45 @@ export class ResponsesContextEngine implements ContextEngine {
   /** Adopts the window an explicit compaction answered, whole: it is the canonical next context. */
   adoptCompaction(items: readonly WireRecord[]): void {
     this.#items = [...items];
+  }
+
+  /**
+   * The local fold, the port of OpenClaw's recent-tail cut: walking back from
+   * the end until roughly `keepRecentTokens` are kept, the cut lands on the
+   * latest user message at or before that point, so every function call
+   * stays beside its output and every reasoning item beside the call it
+   * preceded. The older items are handed to the summarizer and replaced by
+   * its words as one user message; a summary that does not come leaves the
+   * items untouched.
+   */
+  async foldBehindSummary(
+    summarize: (older: readonly WireRecord[]) => Promise<string | undefined>,
+    keepRecentTokens: number,
+  ): Promise<number> {
+    const cut = this.#cutPoint(keepRecentTokens);
+    if (cut <= 0) return 0;
+    const before = this.#items;
+    const older = before.slice(0, cut);
+    const summary = await summarize(older);
+    // A turn or a mark may have moved the items while the summary was
+    // written; the fold applies only to the array it was planned over.
+    if (summary === undefined || this.#items !== before) return 0;
+    this.#items = [userMessageItem(summary), ...before.slice(cut)];
+    return older.length;
+  }
+
+  #cutPoint(keepRecentTokens: number): number {
+    const items = this.#items;
+    let accumulated = 0;
+    let cut: number | undefined;
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+      const item = items[index];
+      if (!item) continue;
+      if (isUserMessageItem(item)) cut = index;
+      accumulated += Math.ceil(JSON.stringify(item).length / ESTIMATED_CHARS_PER_TOKEN);
+      if (accumulated >= keepRecentTokens && cut !== undefined) break;
+    }
+    return cut ?? 0;
   }
 
   afterTurn(): void {}

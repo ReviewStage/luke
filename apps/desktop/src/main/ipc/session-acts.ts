@@ -144,14 +144,16 @@ export interface SessionActPerformer {
 }
 
 /** Makes the list given the remembered facts, answering whether it landed; the runtime store is the writer. */
-type MemoryWriter = (facts: readonly RememberedFact[]) => boolean | Promise<boolean>;
+export type RememberedFactsWriter = (
+  facts: readonly RememberedFact[],
+) => boolean | Promise<boolean>;
 
 export async function saveRememberedFact(
   held: readonly RememberedFact[],
   words: string,
   replaces: string | undefined,
   id: string,
-  write: MemoryWriter,
+  write: RememberedFactsWriter,
 ): Promise<readonly RememberedFact[]> {
   const remembered = rememberedFactText(words);
   if (!remembered) return held;
@@ -168,7 +170,7 @@ export async function saveRememberedFact(
 export async function forgetRememberedFact(
   held: readonly RememberedFact[],
   id: string,
-  write: MemoryWriter,
+  write: RememberedFactsWriter,
 ): Promise<readonly RememberedFact[]> {
   if (!holdsRememberedFact(held, id)) return held;
   const next = withoutRememberedFact(held, id);

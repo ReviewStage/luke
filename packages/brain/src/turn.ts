@@ -1,8 +1,8 @@
 import type { BrainTurnAuthority } from "@sidecar/hosted";
 import type { ScheduledTimer } from "@sidecar/realtime";
-import type { ContextEngine } from "@sidecar/runtime-contracts";
 import type { WireRecord } from "@sidecar/wire";
 import type { Generation } from "./generation.js";
+import type { RecordingContextEngine } from "./transcript-recorder.js";
 import type { BrainWakeEvent } from "./wake-events.js";
 
 export const BRAIN_TURN_TRIGGER = {
@@ -62,6 +62,8 @@ export interface RunControl {
   deadline?: ScheduledTimer;
   /** Whether a checkpoint failed inside this run, after which no further act may be dispatched. */
   checkpointFailed: boolean;
+  /** Whether the context had to be compacted before the run could be sent and could not be; the context stands as it was. */
+  compactionFailed?: boolean;
   performedActs: number;
   unknownActs: number;
 }
@@ -86,7 +88,7 @@ export interface TurnPlan {
 /** The generation a turn opened in, the context it runs over, and the one signal every wait of the turn settles on. */
 export interface TurnContext {
   generation: Generation;
-  context: ContextEngine;
+  context: RecordingContextEngine;
   run?: RunControl;
   signal: AbortSignal;
 }
