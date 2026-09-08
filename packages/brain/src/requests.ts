@@ -1,4 +1,10 @@
-import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import {
+  isRecord,
+  isWireNumber,
+  isWireString,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "@sidecar/wire";
 
 /**
  * A developer ask as the brain owns it from acceptance to its end. The record
@@ -170,6 +176,29 @@ export function brainRequestRecordFromWire(
   if (value.text !== undefined) record.text = value.text;
   if (value.failure !== undefined) record.failure = value.failure;
   return record;
+}
+
+/** The record as the protocol carries it; `brainRequestRecordFromWire` reads it back whole. */
+export function brainRequestRecordToWire(record: BrainRequestRecord): WireRecord {
+  return {
+    runId: record.runId,
+    submissionId: record.submissionId,
+    origin: record.origin,
+    question: record.question,
+    status: record.status,
+    revision: record.revision,
+    acceptedAt: record.acceptedAt,
+    ...(record.startedAt !== undefined ? { startedAt: record.startedAt } : undefined),
+    ...(record.settledAt !== undefined ? { settledAt: record.settledAt } : undefined),
+    ...(record.text !== undefined ? { text: record.text } : undefined),
+    ...(record.failure !== undefined ? { failure: record.failure } : undefined),
+    performedActs: record.performedActs,
+    unknownActs: record.unknownActs,
+    ...(record.askRecordedAt !== undefined ? { askRecordedAt: record.askRecordedAt } : undefined),
+    ...(record.historyRecordedAt !== undefined
+      ? { historyRecordedAt: record.historyRecordedAt }
+      : undefined),
+  };
 }
 
 function finiteNumber(value: UnparsedWireValue): value is number {

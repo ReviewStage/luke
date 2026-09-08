@@ -95,6 +95,8 @@ const NODE_METHODS: ReadonlySet<GatewayMethod> = new Set<GatewayMethod>([
  */
 export class GatewayServer {
   readonly #options: GatewayServerOptions;
+  /** The host's handlers, with the two the protocol itself answers: hello and reconnect are the server's own. */
+  readonly #methods: GatewayMethodTable;
   readonly #idempotent = new Map<GatewayMethod, Map<string, IdempotentAnswer>>();
   readonly #events: GatewayEvent[] = [];
   readonly #listeners = new Set<GatewayEventListener>();
@@ -102,6 +104,11 @@ export class GatewayServer {
 
   constructor(options: GatewayServerOptions) {
     this.#options = options;
+    this.#methods = {
+      ...options.methods,
+      [GATEWAY_METHOD.HELLO]: () => gatewayOk(this.#hello()),
+      [GATEWAY_METHOD.RECONNECT]: (params) => this.#reconnectOutcome(params),
+    };
   }
 
   sequence(): number {
@@ -115,13 +122,7 @@ export class GatewayServer {
   async handle(request: GatewayRequest, client: GatewayClientIdentity): Promise<GatewayResponse> {
     const refused = this.#admit(request, client);
     if (refused) return this.#respond(request.id, refused);
-    if (request.method === GATEWAY_METHOD.HELLO) {
-      return this.#respond(request.id, gatewayOk(this.#hello()));
-    }
-    if (request.method === GATEWAY_METHOD.RECONNECT) {
-      return this.#respond(request.id, this.#reconnectOutcome(request.params));
-    }
-    const handler = this.#options.methods[request.method];
+    const handler = this.#methods[request.method];
     if (!handler) {
       return this.#respond(
         request.id,
@@ -286,10 +287,9 @@ export class GatewayServer {
     ledger.set(key, { paramsText, answer });
     const capacity =
       this.#options.idempotencyCapacity ?? GATEWAY_SERVER_DEFAULTS.IDEMPOTENCY_CAPACITY;
-    while (ledger.size > capacity) {
+    if (ledger.size > capacity) {
       const oldest = ledger.keys().next().value;
-      if (oldest === undefined) break;
-      ledger.delete(oldest);
+      if (oldest !== undefined) ledger.delete(oldest);
     }
     return answer;
   }

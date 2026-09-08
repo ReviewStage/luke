@@ -1,9 +1,11 @@
 import {
   GATEWAY_ERROR,
   type GatewayClientIdentity,
+  type GatewayErrorCode,
   type GatewayEvent,
   type GatewayRequest,
   type GatewayResponse,
+  type GatewayRevision,
   gatewayEventFromWire,
   gatewayRequestFromWire,
   gatewayResponseFromWire,
@@ -26,45 +28,46 @@ export interface GatewayTransport {
   connected(): boolean;
 }
 
-function disconnected(id: string): GatewayResponse {
-  return {
-    id,
-    ok: false,
-    error: { code: GATEWAY_ERROR.DISCONNECTED, message: "the transport is not connected" },
-    revision: { configuration: 0, sequence: 0 },
-  };
+function refusal(
+  id: string,
+  code: GatewayErrorCode,
+  message: string,
+  revision: GatewayRevision = { configuration: 0, sequence: 0 },
+): GatewayResponse {
+  return { id, ok: false, error: { code, message }, revision };
 }
 
 /**
- * The transport this build ships: the client and the host in one process,
- * the request handed to the server directly and every event delivered on the
- * same tick it is emitted. Nothing is serialized; the envelopes are already
- * the shapes a socket would carry, and the loopback transport below proves
- * that by carrying them through text.
+ * What every transport bound to a server in this process shares: the
+ * server, the client identity every request is handled under, the sinks, one
+ * subscription to the server's events, and a connected flag a test flips as
+ * a socket closing and reopening would. What differs is how a request and
+ * an event cross: directly, or through text.
  */
-export class InProcessTransport implements GatewayTransport {
-  readonly #server: GatewayServer;
-  readonly #identity: GatewayClientIdentity;
+abstract class ServerBoundTransport implements GatewayTransport {
+  protected readonly server: GatewayServer;
+  protected readonly identity: GatewayClientIdentity;
   readonly #sinks = new Set<GatewayEventSink>();
   #unsubscribe: (() => void) | undefined;
   #connected = true;
 
   constructor(server: GatewayServer, identity: GatewayClientIdentity) {
-    this.#server = server;
-    this.#identity = identity;
+    this.server = server;
+    this.identity = identity;
   }
 
   request(request: GatewayRequest): Promise<GatewayResponse> {
-    if (!this.#connected) return Promise.resolve(disconnected(request.id));
-    return this.#server.handle(request, this.#identity);
+    if (!this.#connected) {
+      return Promise.resolve(
+        refusal(request.id, GATEWAY_ERROR.DISCONNECTED, "the transport is not connected"),
+      );
+    }
+    return this.carryRequest(request);
   }
 
   events(sink: GatewayEventSink): () => void {
     this.#sinks.add(sink);
-    this.#unsubscribe ??= this.#server.subscribe((event) => {
-      if (!this.#connected) return;
-      for (const held of [...this.#sinks]) held(event);
-    });
+    this.#unsubscribe ??= this.server.subscribe((event) => this.carryEvent(event));
     return () => {
       this.#sinks.delete(sink);
     };
@@ -85,6 +88,34 @@ export class InProcessTransport implements GatewayTransport {
     this.#unsubscribe?.();
     this.#unsubscribe = undefined;
     this.#sinks.clear();
+  }
+
+  /** Hands one event, already carried across, to every sink. */
+  protected deliver(event: GatewayEvent): void {
+    for (const held of [...this.#sinks]) held(event);
+  }
+
+  /** Carries a request the connected transport admitted to the server and answers what came back. */
+  protected abstract carryRequest(request: GatewayRequest): Promise<GatewayResponse>;
+
+  /** Carries one event the server emitted toward the sinks, or drops it as the wire would. */
+  protected abstract carryEvent(event: GatewayEvent): void;
+}
+
+/**
+ * The transport this build ships: the client and the host in one process,
+ * the request handed to the server directly and every event delivered on the
+ * same tick it is emitted. Nothing is serialized; the envelopes are already
+ * the shapes a socket would carry, and the loopback transport below proves
+ * that by carrying them through text.
+ */
+export class InProcessTransport extends ServerBoundTransport {
+  protected carryRequest(request: GatewayRequest): Promise<GatewayResponse> {
+    return this.server.handle(request, this.identity);
+  }
+
+  protected carryEvent(event: GatewayEvent): void {
+    if (this.connected()) this.deliver(event);
   }
 }
 
@@ -108,13 +139,8 @@ function throughText(value: WireValue): WireValue {
  * taken down and brought back, and told to drop the next events, so a
  * client's gap detection and reconnection can be exercised.
  */
-export class LoopbackTransport implements GatewayTransport {
-  readonly #server: GatewayServer;
-  readonly #identity: GatewayClientIdentity;
+export class LoopbackTransport extends ServerBoundTransport {
   readonly #options: LoopbackTransportOptions;
-  readonly #sinks = new Set<GatewayEventSink>();
-  #unsubscribe: (() => void) | undefined;
-  #connected = true;
   #dropNext = 0;
   /** The events the server emitted while the transport was down, or that were dropped: the gap the client must find. */
   #missed: GatewayEvent[] = [];
@@ -124,73 +150,45 @@ export class LoopbackTransport implements GatewayTransport {
     identity: GatewayClientIdentity,
     options: LoopbackTransportOptions = {},
   ) {
-    this.#server = server;
-    this.#identity = identity;
+    super(server, identity);
     this.#options = options;
   }
 
-  async request(request: GatewayRequest): Promise<GatewayResponse> {
-    if (!this.#connected) return disconnected(request.id);
+  protected async carryRequest(request: GatewayRequest): Promise<GatewayResponse> {
     const carried = gatewayRequestFromWire(throughText(requestToWire(request)));
     if (!carried) {
-      return {
-        id: request.id,
-        ok: false,
-        error: {
-          code: GATEWAY_ERROR.INVALID_PARAMS,
-          message: "the request did not survive the wire",
-        },
-        revision: { configuration: 0, sequence: 0 },
-      };
+      return refusal(
+        request.id,
+        GATEWAY_ERROR.INVALID_PARAMS,
+        "the request did not survive the wire",
+      );
     }
-    const response = await this.#server.handle(carried, this.#identity);
+    const response = await this.server.handle(carried, this.identity);
     const delay = this.#options.responseDelayMs ?? 0;
     if (delay > 0) {
       const schedule = this.#options.schedule ?? ((work, ms) => setTimeout(work, ms));
       await new Promise<void>((resolve) => schedule(resolve, delay));
     }
     const parsed = gatewayResponseFromWire(throughText(responseToWire(response)));
-    if (!parsed) {
-      return {
-        id: request.id,
-        ok: false,
-        error: { code: GATEWAY_ERROR.INTERNAL, message: "the answer did not survive the wire" },
-        revision: response.revision,
-      };
+    return (
+      parsed ??
+      refusal(
+        request.id,
+        GATEWAY_ERROR.INTERNAL,
+        "the answer did not survive the wire",
+        response.revision,
+      )
+    );
+  }
+
+  protected carryEvent(event: GatewayEvent): void {
+    if (!this.connected() || this.#dropNext > 0) {
+      if (this.#dropNext > 0) this.#dropNext -= 1;
+      this.#missed.push(event);
+      return;
     }
-    return parsed;
-  }
-
-  events(sink: GatewayEventSink): () => void {
-    this.#sinks.add(sink);
-    this.#unsubscribe ??= this.#server.subscribe((event) => {
-      if (!this.#connected || this.#dropNext > 0) {
-        if (this.#dropNext > 0) this.#dropNext -= 1;
-        this.#missed.push(event);
-        return;
-      }
-      const carried = gatewayEventFromWire(throughText(eventToWire(event)));
-      if (!carried) return;
-      for (const held of [...this.#sinks]) held(carried);
-    });
-    return () => {
-      this.#sinks.delete(sink);
-    };
-  }
-
-  connected(): boolean {
-    return this.#connected;
-  }
-
-  setConnected(connected: boolean): void {
-    this.#connected = connected;
-  }
-
-  close(): void {
-    this.#connected = false;
-    this.#unsubscribe?.();
-    this.#unsubscribe = undefined;
-    this.#sinks.clear();
+    const carried = gatewayEventFromWire(throughText(eventToWire(event)));
+    if (carried) this.deliver(carried);
   }
 
   /** Loses the next `count` events on the wire, as a socket that closed mid-stream would. */

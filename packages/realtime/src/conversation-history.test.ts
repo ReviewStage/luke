@@ -14,7 +14,9 @@ import {
   appendConversationThreadEntry,
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
+  conversationEntryFromWire,
   conversationEntryKey,
+  conversationEntryToWire,
   conversationHistoryText,
   enrichedConversationEntry,
   hasConversationEntryForRequest,
@@ -687,4 +689,25 @@ test("a spoken ask is tied to its run whichever lands first, its words untouched
   assert.ok(tiedLine);
   assert.equal(withConversationEntryRequest(tied, tiedLine, "run-2"), tied);
   assert.equal(withConversationEntryRequest([], line, "run-2").length, 0);
+});
+
+test("a History line survives the Gateway wire whole, with every optional field present or absent", () => {
+  const full: ConversationEntry = {
+    kind: CONVERSATION_ENTRY_KIND.ACT,
+    words: "Sent it.",
+    eventId: "line-1",
+    identity: { providerId: "claude-code", providerSessionId: "abc" },
+    recordedAt: OBSERVED_AT,
+    requestId: "run-1",
+  };
+  const bare: ConversationEntry = { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Done." };
+  for (const entry of [full, bare]) {
+    const wire = JSON.parse(JSON.stringify(conversationEntryToWire(entry)));
+    assert.deepEqual(conversationEntryFromWire(wire), entry);
+    assert.deepEqual(Object.keys(wire).sort(), Object.keys(entry).sort());
+  }
+  assert.equal(
+    conversationEntryFromWire({ ...conversationEntryToWire(full), identity: { providerId: "x" } }),
+    undefined,
+  );
 });
