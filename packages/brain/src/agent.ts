@@ -2156,6 +2156,7 @@ export class BrainAgent {
             policy,
             plan,
             riders,
+            ...(recalled ? { recalled } : undefined),
             opening: [
               ...primed,
               ...(notes.length > 0 ? [activityNoticesInputText(notes, startedAt)] : []),
