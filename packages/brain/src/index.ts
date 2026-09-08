@@ -37,6 +37,7 @@ export {
 export { BRAIN_INPUT_MARKER, primedNotesInputText } from "./input-items.js";
 export { brainInstructions, brainToolNotes } from "./instructions.js";
 export type { BrainJournalEntry } from "./journal.js";
+export { UNCONFIRMED_ACT_RESULT, UNKNOWN_ACT_RESULT, UNKNOWN_ACT_STATUS } from "./journal.js";
 export {
   BRAIN_RATE_LIMIT_COOLDOWN_MS,
   BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS,

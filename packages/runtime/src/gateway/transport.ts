@@ -9,9 +9,22 @@ import {
   gatewayEventFromWire,
   gatewayRequestFromWire,
   gatewayResponseFromWire,
+  type NodeCapabilityResult,
+  type NodeInvocation,
+  nodeCapabilityResultFromWire,
+  nodeCapabilityResultToWire,
+  nodeInvocationFromWire,
+  nodeInvocationToWire,
 } from "@sidecar/runtime-contracts";
 import type { WireValue } from "@sidecar/wire";
-import { eventToWire, type GatewayServer } from "./server.js";
+import {
+  InvocationMemory,
+  NODE_INVOCATION_REFUSAL,
+  type NodeInvocationHandler,
+  unavailableInvocation,
+} from "./invocations.js";
+import type { GatewayServer } from "./server.js";
+import { eventToWire } from "./server.js";
 
 export type GatewayEventSink = (event: GatewayEvent) => void;
 
@@ -20,12 +33,30 @@ export type GatewayEventSink = (event: GatewayEvent) => void;
  * subscription to the events the host emits while the transport is up. A
  * transport that is down answers every request with a disconnected error
  * rather than hanging, and drops events, so the client's sequence shows the
- * gap on reconnection.
+ * gap on reconnection. A transport may also carry the host's asks the other
+ * way — the invocations of the node capabilities this client registered —
+ * on this same connection and no other; one that cannot serves none.
  */
 export interface GatewayTransport {
   request(request: GatewayRequest): Promise<GatewayResponse>;
   events(sink: GatewayEventSink): () => void;
   connected(): boolean;
+  /** Serves the host's invocations of this client's node capabilities, deduped by id before anything native runs. */
+  serveInvocations?(handler: NodeInvocationHandler): () => void;
+}
+
+/**
+ * The connection a request arrived on, as the host sees it: the one place the
+ * host may send a node invocation back to, and the thing whose closing makes
+ * every capability registered on it unavailable. A method handler that
+ * registers a node keeps this, never the client's identity alone, so an
+ * invocation is bound to the authenticated connection that offered the
+ * capability and an answer from any other connection lands nowhere.
+ */
+export interface GatewayHostConnection {
+  connectionId: string;
+  invoke(invocation: NodeInvocation): Promise<NodeCapabilityResult>;
+  onClosed(listener: () => void): () => void;
 }
 
 function refusal(
@@ -47,13 +78,46 @@ function refusal(
 abstract class ServerBoundTransport implements GatewayTransport {
   protected readonly server: GatewayServer;
   protected readonly identity: GatewayClientIdentity;
+  /** This transport as the host sees it: the connection its requests arrive on and its node is asked through. */
+  protected readonly hostConnection: GatewayHostConnection;
   readonly #sinks = new Set<GatewayEventSink>();
+  readonly #closedListeners = new Set<() => void>();
+  #memory: InvocationMemory | undefined;
   #unsubscribe: (() => void) | undefined;
   #connected = true;
+  static #connections = 0;
 
   constructor(server: GatewayServer, identity: GatewayClientIdentity) {
     this.server = server;
     this.identity = identity;
+    ServerBoundTransport.#connections += 1;
+    this.hostConnection = {
+      connectionId: `in-process-${ServerBoundTransport.#connections}`,
+      invoke: (invocation) => this.#invoke(invocation),
+      onClosed: (listener) => {
+        this.#closedListeners.add(listener);
+        return () => {
+          this.#closedListeners.delete(listener);
+        };
+      },
+    };
+  }
+
+  serveInvocations(handler: NodeInvocationHandler): () => void {
+    const memory = new InvocationMemory(handler);
+    this.#memory = memory;
+    return () => {
+      if (this.#memory === memory) this.#memory = undefined;
+    };
+  }
+
+  async #invoke(invocation: NodeInvocation): Promise<NodeCapabilityResult> {
+    if (!this.#connected) {
+      return unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.DISCONNECTED);
+    }
+    const memory = this.#memory;
+    if (!memory) return unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.NOT_SERVING);
+    return this.carryInvocation(invocation, (carried) => memory.take(carried));
   }
 
   request(request: GatewayRequest): Promise<GatewayResponse> {
@@ -82,12 +146,14 @@ abstract class ServerBoundTransport implements GatewayTransport {
     this.#connected = connected;
   }
 
-  /** Ends the transport for good: no request answers and no event is delivered again. */
+  /** Ends the transport for good: no request answers, no event is delivered, and the host hears the connection close. */
   close(): void {
     this.#connected = false;
     this.#unsubscribe?.();
     this.#unsubscribe = undefined;
     this.#sinks.clear();
+    for (const listener of [...this.#closedListeners]) listener();
+    this.#closedListeners.clear();
   }
 
   /** Hands one event, already carried across, to every sink. */
@@ -100,6 +166,12 @@ abstract class ServerBoundTransport implements GatewayTransport {
 
   /** Carries one event the server emitted toward the sinks, or drops it as the wire would. */
   protected abstract carryEvent(event: GatewayEvent): void;
+
+  /** Carries one invocation to the served node and its answer back, as the wire would. */
+  protected abstract carryInvocation(
+    invocation: NodeInvocation,
+    take: (invocation: NodeInvocation) => Promise<{ result: NodeCapabilityResult }>,
+  ): Promise<NodeCapabilityResult>;
 }
 
 /**
@@ -111,11 +183,18 @@ abstract class ServerBoundTransport implements GatewayTransport {
  */
 export class InProcessTransport extends ServerBoundTransport {
   protected carryRequest(request: GatewayRequest): Promise<GatewayResponse> {
-    return this.server.handle(request, this.identity);
+    return this.server.handle(request, this.identity, this.hostConnection);
   }
 
   protected carryEvent(event: GatewayEvent): void {
     if (this.connected()) this.deliver(event);
+  }
+
+  protected async carryInvocation(
+    invocation: NodeInvocation,
+    take: (invocation: NodeInvocation) => Promise<{ result: NodeCapabilityResult }>,
+  ): Promise<NodeCapabilityResult> {
+    return (await take(invocation)).result;
   }
 }
 
@@ -142,6 +221,7 @@ function throughText(value: WireValue): WireValue {
 export class LoopbackTransport extends ServerBoundTransport {
   readonly #options: LoopbackTransportOptions;
   #dropNext = 0;
+  #repeatNextInvocation = 0;
   /** The events the server emitted while the transport was down, or that were dropped: the gap the client must find. */
   #missed: GatewayEvent[] = [];
 
@@ -163,7 +243,7 @@ export class LoopbackTransport extends ServerBoundTransport {
         "the request did not survive the wire",
       );
     }
-    const response = await this.server.handle(carried, this.identity);
+    const response = await this.server.handle(carried, this.identity, this.hostConnection);
     const delay = this.#options.responseDelayMs ?? 0;
     if (delay > 0) {
       const schedule = this.#options.schedule ?? ((work, ms) => setTimeout(work, ms));
@@ -189,6 +269,31 @@ export class LoopbackTransport extends ServerBoundTransport {
     }
     const carried = gatewayEventFromWire(throughText(eventToWire(event)));
     if (carried) this.deliver(carried);
+  }
+
+  protected async carryInvocation(
+    invocation: NodeInvocation,
+    take: (invocation: NodeInvocation) => Promise<{ result: NodeCapabilityResult }>,
+  ): Promise<NodeCapabilityResult> {
+    const carried = nodeInvocationFromWire(throughText(nodeInvocationToWire(invocation)));
+    if (!carried) {
+      return unavailableInvocation(invocation, "the invocation did not survive the wire");
+    }
+    // Delivered as many times as a test asked, so a node's dedupe is exercised
+    // on a frame the wire repeated while the first was still performing.
+    const takes = Array.from({ length: 1 + this.#repeatNextInvocation }, () => take(carried));
+    this.#repeatNextInvocation = 0;
+    const answered = (await Promise.all(takes))[0];
+    if (!answered) return unavailableInvocation(invocation, "the node answered nothing");
+    const parsed = nodeCapabilityResultFromWire(
+      throughText(nodeCapabilityResultToWire(answered.result)),
+    );
+    return parsed ?? unavailableInvocation(invocation, "the answer did not survive the wire");
+  }
+
+  /** Delivers the next invocation `count` extra times, as a wire that repeated a frame would. */
+  repeatNextInvocation(count: number): void {
+    this.#repeatNextInvocation = count;
   }
 
   /** Loses the next `count` events on the wire, as a socket that closed mid-stream would. */

@@ -145,7 +145,10 @@ function appleCalendarHelperPath(): string {
  * refuses to run anywhere but a Mac: on any other platform the calendar
  * simply cannot answer, which the reader reports rather than hides.
  */
-function defaultRunHelper(helperArguments: readonly string[], timeoutMs: number): Promise<string> {
+export function runAppleCalendarHelper(
+  helperArguments: readonly string[],
+  timeoutMs: number,
+): Promise<string> {
   if (process.platform !== "darwin") {
     return Promise.reject(new Error("Apple Calendar is only readable on macOS"));
   }
@@ -258,7 +261,7 @@ export class AppleCalendarReader {
 
   constructor(options: AppleCalendarReaderOptions) {
     this.#readConnection = options.readConnection;
-    this.#runHelper = options.runHelper ?? defaultRunHelper;
+    this.#runHelper = options.runHelper ?? runAppleCalendarHelper;
     this.#now = options.now ?? Date.now;
   }
 

@@ -10,7 +10,7 @@ import {
   maximumTypedAskLength,
 } from "@sidecar/realtime";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
-import { InProcessTransport } from "@sidecar/runtime";
+import { GatewayClient, InProcessTransport } from "@sidecar/runtime";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_EVENT, MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import { BRIDGE } from "#shared/bridge";
@@ -559,11 +559,13 @@ function registered(live: () => BrainRequestRecord | undefined) {
     createId: () => `id-${++ids}`,
   });
   const operator = createGatewayOperator({
-    transport: new InProcessTransport(service.server, {
-      clientId: "test-operator",
-      role: GATEWAY_CLIENT_ROLE.OPERATOR,
+    client: new GatewayClient({
+      transport: new InProcessTransport(service.server, {
+        clientId: "test-operator",
+        role: GATEWAY_CLIENT_ROLE.OPERATOR,
+      }),
+      createId: () => `request-${++ids}`,
     }),
-    createId: () => `request-${++ids}`,
   });
   registerBrainIpc({
     ipcMain: {

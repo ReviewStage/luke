@@ -1,4 +1,10 @@
-import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import {
+  isRecord,
+  isWireNumber,
+  isWireString,
+  UNKNOWN_ACT_STATUS,
+  type UnparsedWireValue,
+} from "@sidecar/wire";
 
 /**
  * The action journal: one entry per act a developer ask dispatched, keyed by
@@ -46,7 +52,7 @@ export function brainJournalEntryFromWire(value: UnparsedWireValue): BrainJourna
 }
 
 /** The status an act's output carries when whether it happened cannot be established. */
-export const UNKNOWN_ACT_STATUS = "unknown";
+export { UNKNOWN_ACT_STATUS };
 
 /** What a model is told about a call whose act ran but whose result never reached the journal. */
 export const UNKNOWN_ACT_RESULT = {

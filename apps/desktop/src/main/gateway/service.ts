@@ -123,6 +123,14 @@ export interface GatewayServiceDependencies {
   askWaitMs?: number;
   now: () => number;
   createId: () => string;
+  /**
+   * The host's further methods, beside the ones this service answers itself:
+   * the settings, account, integration, and client-fact vocabulary the
+   * runtime host owns. A method both name is the host's.
+   */
+  methods?: GatewayMethodTable;
+  /** Hears the operator's connection close, when the transport can tell: the client's receiver and node are gone with it. */
+  onOperatorDisconnected?: () => void;
 }
 
 export interface GatewayService {
@@ -136,10 +144,11 @@ export interface GatewayService {
   generationReplaced: (sessionKey: SessionKey) => void;
   /** The receiver reported ready under a new epoch: whatever is owed is offered to it now. */
   receiverReady: () => void;
+  /** One conversation's thread as every window should draw it, less the opaque reporter whose report produced it. */
   historyChanged: (
     sessionKey: SessionKey,
     entries: readonly ConversationEntry[],
-    reporter?: number,
+    reporter?: string,
   ) => void;
   directoryChanged: () => void;
   observationChanged: () => void;
@@ -448,7 +457,11 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
     return gatewayOk(submissionResultToWire(result));
   };
 
+  /** Which connection a remote node was last registered on, so only that connection's closing disconnects it. */
+  const nodeOwners = new Map<string, string>();
+
   const methods: GatewayMethodTable = {
+    ...dependencies.methods,
     [GATEWAY_METHOD.CONVERSATION_LIST]: () => {
       const directory = conversations.directory();
       return gatewayOk({
@@ -621,19 +634,46 @@ export function createGatewayService(dependencies: GatewayServiceDependencies): 
     // A registration over the protocol names capabilities the host may ask
     // for; each is invoked back through the registering client's own
     // channel, which the in-process build wires directly.
+    // A registration names the capabilities the host may ask the registering
+    // connection for. Each ask travels back on that connection alone, bound
+    // to it by the invocation id its ledger holds; the connection closing
+    // marks the node disconnected, so the next ask answers unavailable, and
+    // a later registration from a new connection takes the node over whole.
     [GATEWAY_METHOD.NODE_REGISTER]: reading((read, context) => {
       const nodeId = read.identifier("nodeId");
-      if (read.stringList("capabilities").length === 0) {
+      const capabilities = read.stringList("capabilities");
+      if (capabilities.length === 0) {
         return invalid("capabilities must name at least one capability");
       }
-      if (nodes.has(nodeId)) {
-        nodes.setConnected(nodeId, true);
-        return gatewayOk({ nodeId, connected: true, clientId: context.client.clientId });
+      const connection = context.connection;
+      if (!connection) {
+        if (nodes.has(nodeId)) {
+          nodes.setConnected(nodeId, true);
+          return gatewayOk({ nodeId, connected: true, clientId: context.client.clientId });
+        }
+        return gatewayError(
+          GATEWAY_ERROR.REFUSED,
+          "a node's capabilities are registered by the process that performs them",
+        );
       }
-      return gatewayError(
-        GATEWAY_ERROR.REFUSED,
-        "a node's capabilities are registered by the process that performs them",
-      );
+      nodeOwners.set(nodeId, connection.connectionId);
+      nodes.registerRemote({
+        nodeId,
+        capabilities,
+        invoke: (capability, params) =>
+          connection.invoke({
+            invocationId: dependencies.createId(),
+            nodeId,
+            capability,
+            params,
+          }),
+      });
+      connection.onClosed(() => {
+        if (nodeOwners.get(nodeId) !== connection.connectionId) return;
+        nodes.setConnected(nodeId, false);
+        dependencies.onOperatorDisconnected?.();
+      });
+      return gatewayOk({ nodeId, connected: true, clientId: context.client.clientId });
     }),
     [GATEWAY_METHOD.NODE_UNREGISTER]: reading((read) =>
       gatewayOk({ disconnected: nodes.setConnected(read.identifier("nodeId"), false) }),

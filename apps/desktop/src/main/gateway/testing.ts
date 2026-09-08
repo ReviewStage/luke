@@ -1,6 +1,6 @@
 import type { BrainAgent } from "@sidecar/brain";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
-import { InProcessTransport } from "@sidecar/runtime";
+import { GatewayClient, InProcessTransport } from "@sidecar/runtime";
 import { GATEWAY_CLIENT_ROLE, MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import { BrainReplyDeliveries } from "../brain/reply-delivery";
 import type { ConversationOperations } from "../conversation-operations";
@@ -51,10 +51,12 @@ export function operatorOverBrain(options: {
     createId: () => `id-${++ids}`,
   });
   return createGatewayOperator({
-    transport: new InProcessTransport(service.server, {
-      clientId: "test-operator",
-      role: GATEWAY_CLIENT_ROLE.OPERATOR,
+    client: new GatewayClient({
+      transport: new InProcessTransport(service.server, {
+        clientId: "test-operator",
+        role: GATEWAY_CLIENT_ROLE.OPERATOR,
+      }),
+      createId: () => `request-${++ids}`,
     }),
-    createId: () => `request-${++ids}`,
   });
 }

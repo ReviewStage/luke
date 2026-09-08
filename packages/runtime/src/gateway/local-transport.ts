@@ -12,10 +12,19 @@ import {
   type GatewayResponse,
   gatewayEventFromWire,
   gatewayResponseFromWire,
+  type NodeInvocation,
+  nodeInvocationAnswerToWire,
+  nodeInvocationFromWire,
 } from "@sidecar/runtime-contracts";
 import { isRecord, type UnparsedWireValue, type WireValue } from "@sidecar/wire";
 import { WebSocket } from "ws";
 import type { GatewayDiscoveryRecord } from "./discovery.js";
+import {
+  InvocationMemory,
+  NODE_INVOCATION_REFUSAL,
+  type NodeInvocationHandler,
+  unavailableInvocation,
+} from "./invocations.js";
 import { GATEWAY_REFUSAL_HEADER, LOCAL_GATEWAY_FRAME } from "./local-host.js";
 import {
   GATEWAY_CONNECT_FAILURE,
@@ -78,6 +87,7 @@ export class LocalGatewayConnection implements GatewayConnection {
   readonly #pending = new Map<string, (response: GatewayResponse) => void>();
   readonly #sinks = new Set<GatewayEventSink>();
   readonly #closedListeners = new Set<() => void>();
+  #memory: InvocationMemory | undefined;
   #open = true;
 
   constructor(socket: WebSocket, hostBuild: GatewayBuildIdentity) {
@@ -122,6 +132,20 @@ export class LocalGatewayConnection implements GatewayConnection {
     return this.#open && this.#socket.readyState === WebSocket.OPEN;
   }
 
+  /**
+   * Serves the host's invocations arriving on this socket. Each is deduped
+   * by id before the handler runs, and answered on this socket alone; an
+   * invocation arriving while no handler is served is answered unavailable,
+   * so the host never waits on a node that is not there.
+   */
+  serveInvocations(handler: NodeInvocationHandler): () => void {
+    const memory = new InvocationMemory(handler);
+    this.#memory = memory;
+    return () => {
+      if (this.#memory === memory) this.#memory = undefined;
+    };
+  }
+
   onClosed(listener: () => void): () => void {
     this.#closedListeners.add(listener);
     return () => {
@@ -158,7 +182,30 @@ export class LocalGatewayConnection implements GatewayConnection {
       const event: GatewayEvent | undefined = gatewayEventFromWire(envelope);
       if (!event) return;
       for (const sink of [...this.#sinks]) sink(event);
+      return;
     }
+    if (kind === LOCAL_GATEWAY_FRAME.INVOCATION) {
+      const invocation = nodeInvocationFromWire(envelope);
+      if (!invocation) return;
+      void this.#answer(invocation);
+    }
+  }
+
+  async #answer(invocation: NodeInvocation): Promise<void> {
+    const memory = this.#memory;
+    const answer = memory
+      ? await memory.take(invocation)
+      : {
+          invocationId: invocation.invocationId,
+          result: unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.NOT_SERVING),
+        };
+    if (!this.connected()) return;
+    this.#socket.send(
+      JSON.stringify({
+        kind: LOCAL_GATEWAY_FRAME.ANSWER,
+        envelope: nodeInvocationAnswerToWire(answer),
+      }),
+    );
   }
 
   #closed(): void {

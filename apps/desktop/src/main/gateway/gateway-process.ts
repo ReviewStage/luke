@@ -1,20 +1,23 @@
 import fs from "node:fs";
 import path from "node:path";
+import { Worker } from "node:worker_threads";
+import * as Sentry from "@sentry/electron/main";
 import {
   acquireGatewayInstanceLock,
   createGatewayToken,
   GATEWAY_LOOPBACK_HOST,
-  GatewayServer,
-  gatewayOk,
   processIsAlive,
   publishGatewayDiscovery,
   shutdownGateway,
   withdrawGatewayDiscovery,
 } from "@sidecar/runtime";
 import { LocalGatewayHost } from "@sidecar/runtime/local-gateway";
-import { GATEWAY_METHOD, type GatewayBuildIdentity } from "@sidecar/runtime-contracts";
-import { app } from "electron";
+import type { GatewayBuildIdentity } from "@sidecar/runtime-contracts";
+import { app, safeStorage } from "electron";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "../app-identity";
+import { composeRuntimeHost } from "../host/runtime-host";
+import { runModeFor, sentryReportingEnabled } from "../run-mode";
+import { runtimeStoreWorkerPath } from "../runtime-store-path";
 import {
   gatewayBuildIdentity,
   gatewayDiscoveryPath,
@@ -26,18 +29,18 @@ import {
 /**
  * The Gateway entry mode of the executable. It draws nothing, takes the
  * Gateway's own single-instance lock under a profile of its own, then the
- * portable lock under the state root, binds the loopback host, and only then
- * publishes the discovery record a desktop client reads. It leaves on the
- * protocol's own shutdown (the desktop's explicit Quit, or a newer build
- * draining it) and on a termination signal, in the coordinator's order:
- * admissions closed, work cancelled, a bounded wait, and unresolved state
- * left for recovery rather than finished on paper. Nothing restarts it: a
- * Gateway that was quit stays quit until the desktop next launches.
+ * portable lock under the state root, composes Luke's runtime over that
+ * state root — the databases, the notebook, the credentials, the
+ * observation, the scheduler, the accounts — binds the loopback host, and
+ * only then publishes the discovery record a desktop client reads. It leaves
+ * on the protocol's own shutdown (the desktop's explicit Quit, or a newer
+ * build draining it) and on a termination signal, in the coordinator's
+ * order: admissions closed, work cancelled, a bounded wait, and unresolved
+ * state left for recovery rather than finished on paper. Nothing restarts
+ * it: a Gateway that was quit stays quit until the desktop next launches.
  *
- * What it hosts today is the protocol's door and the shutdown; the runtime
- * composition the desktop still holds in its own process moves here in the
- * follow-up that relocates the host, and until then the desktop's operator
- * keeps the in-process transport for every other method.
+ * The state root is the one the desktop always kept; the profile under it is
+ * the Gateway's alone, and nothing of the runtime derives a path from it.
  */
 export function developmentBundleStamp(): string | undefined {
   try {
@@ -56,6 +59,8 @@ export function currentBuildIdentity(appName: string): GatewayBuildIdentity {
   });
 }
 
+declare const PACKAGED_SENTRY_DSN: string;
+
 export function startGatewayProcess(argv: readonly string[]): void {
   const appName = resolveAppName({
     packaged: app.isPackaged,
@@ -67,6 +72,13 @@ export function startGatewayProcess(argv: readonly string[]): void {
   app.setPath("userData", profile);
   app.setPath("sessionData", profile);
   const report = (message: string) => process.stderr.write(`[gateway] ${message}\n`);
+  // The Gateway is always a live run: a fixture or capture run composes its
+  // host in the desktop process and starts no Gateway at all.
+  const runMode = runModeFor({ capture: false, fixture: false });
+  Sentry.init({
+    dsn: PACKAGED_SENTRY_DSN,
+    enabled: sentryReportingEnabled(runMode.sendsNetwork, PACKAGED_SENTRY_DSN),
+  });
 
   if (!app.requestSingleInstanceLock()) {
     report("another Gateway holds this state root; leaving");
@@ -95,37 +107,60 @@ export function startGatewayProcess(argv: readonly string[]): void {
     const leave = () => {
       leaving ??= (async () => {
         const outcome = await shutdownGateway({
-          closeAdmissions: () => host.closeAdmissions(),
-          cancelActive: async () => [],
-          awaitSettled: async () => undefined,
-          persistUnresolved: async () => 0,
+          closeAdmissions: () => {
+            host.closeAdmissions();
+            runtime.shutdownSteps.closeAdmissions();
+          },
+          cancelActive: runtime.shutdownSteps.cancelActive,
+          awaitSettled: runtime.shutdownSteps.awaitSettled,
+          persistUnresolved: runtime.shutdownSteps.persistUnresolved,
         });
         report(
-          `shutting down: ${outcome.settled ? "settled" : "unsettled"}, ${outcome.unresolved} unresolved`,
+          `shutting down: ${outcome.settled ? "settled" : "unsettled"}, ${outcome.cancelled.length} cancelled, ${outcome.unresolved} unresolved`,
         );
         await withdrawGatewayDiscovery(gatewayDiscoveryPath(stateRoot), process.pid);
         await host.close();
+        await runtime.close().catch((error: Error) => {
+          report(`the runtime did not close cleanly: ${error.message}`);
+        });
         await lock.release();
         app.exit(0);
       })();
       return leaving;
     };
-    const server = new GatewayServer({
-      methods: {
-        [GATEWAY_METHOD.SHUTDOWN]: () => {
-          void leave();
-          return gatewayOk({ accepted: true });
-        },
+    const runtime = composeRuntimeHost({
+      stateRoot,
+      runMode,
+      appVersion: app.getVersion(),
+      packaged: app.isPackaged,
+      homeDirectory: app.getPath("home"),
+      environment: process.env,
+      cipher: {
+        isAvailable: () => safeStorage.isEncryptionAvailable(),
+        encrypt: (plainText) => safeStorage.encryptString(plainText),
+        decrypt: (cipherText) => safeStorage.decryptString(cipherText),
       },
-      configurationRevision: () => 0,
-      sessionRevision: () => undefined,
-      snapshot: () => ({}),
+      createWorker: () => new Worker(runtimeStoreWorkerPath(__dirname), { name: "runtime-store" }),
       now: Date.now,
-      createEventId: () => crypto.randomUUID(),
+      createId: () => crypto.randomUUID(),
+      report,
+      // The protocol's shutdown answers accepted at once and leaves in the
+      // coordinator's order after.
+      onShutdownRequested: () => void leave(),
     });
     const build = currentBuildIdentity(appName);
     const token = createGatewayToken();
-    const host = new LocalGatewayHost({ server, token, build, report });
+    const host = new LocalGatewayHost({ server: runtime.service.server, token, build, report });
+    try {
+      await runtime.start();
+    } catch (error) {
+      report(
+        `the runtime could not start: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      await lock.release();
+      app.exit(1);
+      return;
+    }
     const port = await host.listen();
     await publishGatewayDiscovery(gatewayDiscoveryPath(stateRoot), {
       ...build,

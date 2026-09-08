@@ -12,6 +12,26 @@ export interface NodeRegistration {
   capabilities: Readonly<Record<string, NodeCapabilityHandler>>;
 }
 
+/** A node on the other side of a connection: what it offers, and the one connection its asks travel on. */
+export type RemoteNodeInvoker = (
+  capability: string,
+  params: WireRecord,
+) => Promise<NodeCapabilityResult>;
+
+export interface RemoteNodeRegistration {
+  nodeId: string;
+  capabilities: readonly string[];
+  invoke: RemoteNodeInvoker;
+}
+
+interface HeldNode {
+  nodeId: string;
+  capabilities: readonly string[];
+  /** Performs one capability in this process, or asks the connection the node registered on. */
+  perform: (capability: string, params: WireRecord) => Promise<NodeCapabilityResult>;
+  connected: boolean;
+}
+
 export interface NodeSnapshot {
   nodeId: string;
   capabilities: readonly string[];
@@ -31,11 +51,48 @@ export type NodeRegistryListener = (nodes: readonly NodeSnapshot[]) => void;
  * unknown until it comes back.
  */
 export class NodeRegistry {
-  readonly #nodes = new Map<string, { registration: NodeRegistration; connected: boolean }>();
+  readonly #nodes = new Map<string, HeldNode>();
   readonly #listeners = new Set<NodeRegistryListener>();
 
   register(registration: NodeRegistration): void {
-    this.#nodes.set(registration.nodeId, { registration, connected: true });
+    this.#nodes.set(registration.nodeId, {
+      nodeId: registration.nodeId,
+      capabilities: Object.keys(registration.capabilities),
+      perform: async (capability, params) => {
+        const handler = registration.capabilities[capability];
+        if (!handler) return this.#unknown(capability);
+        try {
+          return { status: NODE_CAPABILITY_STATUS.OK, value: await handler(params) };
+        } catch (error) {
+          return {
+            status: NODE_CAPABILITY_STATUS.FAILED,
+            capability,
+            reason: error instanceof Error ? error.message : String(error),
+          };
+        }
+      },
+      connected: true,
+    });
+    this.#changed();
+  }
+
+  /**
+   * Registers a node whose capabilities are performed on the connection that
+   * offered them. A registration under an id already held replaces the
+   * invoker whole — the client reconnected — so an ask made after this
+   * reaches the new connection, and one made before it was answered by the
+   * old connection's own closing, never by the new one.
+   */
+  registerRemote(registration: RemoteNodeRegistration): void {
+    this.#nodes.set(registration.nodeId, {
+      nodeId: registration.nodeId,
+      capabilities: [...registration.capabilities],
+      perform: (capability, params) =>
+        registration.capabilities.includes(capability)
+          ? registration.invoke(capability, params)
+          : Promise.resolve(this.#unknown(capability)),
+      connected: true,
+    });
     this.#changed();
   }
 
@@ -68,9 +125,9 @@ export class NodeRegistry {
   }
 
   list(): readonly NodeSnapshot[] {
-    return [...this.#nodes.values()].map(({ registration, connected }) => ({
-      nodeId: registration.nodeId,
-      capabilities: Object.keys(registration.capabilities),
+    return [...this.#nodes.values()].map(({ nodeId, capabilities, connected }) => ({
+      nodeId,
+      capabilities: [...capabilities],
       connected,
     }));
   }
@@ -78,8 +135,8 @@ export class NodeRegistry {
   async invoke(capability: string, params: WireRecord = {}): Promise<NodeCapabilityResult> {
     const provider = this.#provider(capability);
     if (!provider) {
-      const known = [...this.#nodes.values()].some(
-        ({ registration }) => capability in registration.capabilities,
+      const known = [...this.#nodes.values()].some((node) =>
+        node.capabilities.includes(capability),
       );
       return {
         status: NODE_CAPABILITY_STATUS.UNAVAILABLE,
@@ -89,16 +146,7 @@ export class NodeRegistry {
           : "no node offers that capability",
       };
     }
-    try {
-      const value = await provider(params);
-      return { status: NODE_CAPABILITY_STATUS.OK, value };
-    } catch (error) {
-      return {
-        status: NODE_CAPABILITY_STATUS.FAILED,
-        capability,
-        reason: error instanceof Error ? error.message : String(error),
-      };
-    }
+    return provider.perform(capability, params);
   }
 
   onChange(listener: NodeRegistryListener): () => void {
@@ -108,13 +156,19 @@ export class NodeRegistry {
     };
   }
 
-  #provider(capability: string): NodeCapabilityHandler | undefined {
-    for (const { registration, connected } of this.#nodes.values()) {
-      if (!connected) continue;
-      const handler = registration.capabilities[capability];
-      if (handler) return handler;
+  #provider(capability: string): HeldNode | undefined {
+    for (const node of this.#nodes.values()) {
+      if (node.connected && node.capabilities.includes(capability)) return node;
     }
     return undefined;
+  }
+
+  #unknown(capability: string): NodeCapabilityResult {
+    return {
+      status: NODE_CAPABILITY_STATUS.UNAVAILABLE,
+      capability,
+      reason: "no node offers that capability",
+    };
   }
 
   #changed(): void {

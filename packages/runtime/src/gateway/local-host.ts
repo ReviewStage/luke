@@ -16,11 +16,22 @@ import {
   type GatewayResponse,
   gatewayRequestFromWire,
   isIdentifier,
+  type NodeCapabilityResult,
+  type NodeInvocation,
+  nodeInvocationAnswerFromWire,
+  nodeInvocationToWire,
 } from "@sidecar/runtime-contracts";
 import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import { type WebSocket, WebSocketServer } from "ws";
 import { GATEWAY_LOOPBACK_HOST } from "./discovery.js";
+import {
+  NODE_INVOCATION_REFUSAL,
+  PendingInvocations,
+  unavailableInvocation,
+  unknownInvocation,
+} from "./invocations.js";
 import { eventToWire, type GatewayServer } from "./server.js";
+import type { GatewayHostConnection } from "./transport.js";
 
 /**
  * The Gateway on a socket: the protocol's envelopes carried as text over a
@@ -39,6 +50,9 @@ export const LOCAL_GATEWAY_FRAME = {
   REQUEST: "request",
   RESPONSE: "response",
   EVENT: "event",
+  /** The host asking the node on this one socket to perform a capability; answered by the same socket alone. */
+  INVOCATION: "invocation",
+  ANSWER: "answer",
 } as const;
 
 export interface LocalGatewayHostOptions {
@@ -72,9 +86,15 @@ const REFUSAL_STATUS = {
 interface AdmittedClient {
   identity: GatewayClientIdentity;
   drainOnly: boolean;
+  /** The asks out on this socket; closed with it, so every unanswered ask reads unavailable and uncertain. */
+  pending: PendingInvocations;
+  connection: GatewayHostConnection;
+  closedListeners: Set<() => void>;
 }
 
-type HandshakeDecision = { admitted: AdmittedClient } | { refusal: GatewayHandshakeRefusal };
+type HandshakeDecision =
+  | { admitted: Omit<AdmittedClient, "connection"> }
+  | { refusal: GatewayHandshakeRefusal };
 
 function headerValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? (value.length === 1 ? value[0] : undefined) : value;
@@ -100,8 +120,10 @@ export class LocalGatewayHost {
   });
   readonly #sockets: WebSocketServer;
   readonly #clients = new Map<WebSocket, AdmittedClient>();
+  readonly #closedListeners = new Set<(client: GatewayClientIdentity) => void>();
   #unsubscribe: (() => void) | undefined;
   #admitting = true;
+  #connections = 0;
 
   constructor(options: LocalGatewayHostOptions) {
     this.#options = options;
@@ -144,6 +166,14 @@ export class LocalGatewayHost {
     return this.#clients.size;
   }
 
+  /** Hears every admitted socket close, with the identity it was admitted under. */
+  onClientClosed(listener: (client: GatewayClientIdentity) => void): () => void {
+    this.#closedListeners.add(listener);
+    return () => {
+      this.#closedListeners.delete(listener);
+    };
+  }
+
   /** Refuses every new connection from here on and closes the server's own door to mutations. */
   closeAdmissions(): void {
     this.#admitting = false;
@@ -178,6 +208,47 @@ export class LocalGatewayHost {
     });
   }
 
+  /** One socket as the host's methods see it: the connection a node registers against and is asked back through. */
+  #connectionFor(
+    socket: WebSocket,
+    client: Omit<AdmittedClient, "connection">,
+  ): GatewayHostConnection {
+    this.#connections += 1;
+    return {
+      connectionId: `socket-${this.#connections}`,
+      invoke: (invocation: NodeInvocation): Promise<NodeCapabilityResult> => {
+        if (socket.readyState !== socket.OPEN) {
+          return Promise.resolve(
+            unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.DISCONNECTED),
+          );
+        }
+        const answered = client.pending.open(invocation);
+        socket.send(
+          JSON.stringify({
+            kind: LOCAL_GATEWAY_FRAME.INVOCATION,
+            envelope: nodeInvocationToWire(invocation),
+          }),
+          (error) => {
+            // A write that failed may or may not have left the process, so
+            // the ask is settled unknown rather than unavailable.
+            if (!error) return;
+            client.pending.answer({
+              invocationId: invocation.invocationId,
+              result: unknownInvocation(invocation),
+            });
+          },
+        );
+        return answered;
+      },
+      onClosed: (listener) => {
+        client.closedListeners.add(listener);
+        return () => {
+          client.closedListeners.delete(listener);
+        };
+      },
+    };
+  }
+
   /** Decides the handshake from its headers alone: the client admitted, or the one refusal it earns. */
   #admission(headers: http.IncomingHttpHeaders): HandshakeDecision {
     if (!this.#admitting) return { refusal: GATEWAY_HANDSHAKE_REFUSAL.SHUTTING_DOWN };
@@ -199,12 +270,13 @@ export class LocalGatewayHost {
     if (buildVersion === undefined || !isIdentifier(clientId) || !isClientRole(role)) {
       return { refusal: GATEWAY_HANDSHAKE_REFUSAL.MALFORMED };
     }
-    return {
-      admitted: {
-        identity: { clientId, role },
-        drainOnly: buildVersion !== this.#options.build.buildVersion,
-      },
+    const admitted: Omit<AdmittedClient, "connection"> = {
+      identity: { clientId, role },
+      drainOnly: buildVersion !== this.#options.build.buildVersion,
+      pending: new PendingInvocations(),
+      closedListeners: new Set(),
     };
+    return { admitted };
   }
 
   /** The headers a 101 answer carries, so the client learns the host's build on the same handshake. */
@@ -215,7 +287,11 @@ export class LocalGatewayHost {
     };
   }
 
-  #admit(socket: WebSocket, client: AdmittedClient): void {
+  #admit(socket: WebSocket, admitted: Omit<AdmittedClient, "connection">): void {
+    const client: AdmittedClient = {
+      ...admitted,
+      connection: this.#connectionFor(socket, admitted),
+    };
     this.#clients.set(socket, client);
     socket.on("message", (data, isBinary) => {
       if (isBinary) return socket.close(1003, "text frames only");
@@ -223,6 +299,13 @@ export class LocalGatewayHost {
     });
     socket.on("close", () => {
       this.#clients.delete(socket);
+      // The asks still out settle first, so a node handler waiting on one
+      // reads unavailable before it hears the connection is gone and marks
+      // the node disconnected.
+      client.pending.close();
+      for (const listener of [...client.closedListeners]) listener();
+      client.closedListeners.clear();
+      for (const listener of [...this.#closedListeners]) listener(client.identity);
     });
     socket.on("error", (error) => {
       this.#options.report?.(`a Gateway client socket failed: ${error.message}`);
@@ -237,9 +320,17 @@ export class LocalGatewayHost {
     } catch {
       return;
     }
-    if (!isRecord(value) || value.kind !== LOCAL_GATEWAY_FRAME.REQUEST) return;
+    if (!isRecord(value) || !isRecord(value.envelope)) return;
     const envelope = value.envelope;
-    if (!isRecord(envelope)) return;
+    if (value.kind === LOCAL_GATEWAY_FRAME.ANSWER) {
+      // An answer settles only an ask this same socket was sent; another
+      // socket's answer, or one for an ask already settled or never made,
+      // lands nowhere.
+      const answer = nodeInvocationAnswerFromWire(envelope);
+      if (answer) client.pending.answer(answer);
+      return;
+    }
+    if (value.kind !== LOCAL_GATEWAY_FRAME.REQUEST) return;
     const request = gatewayRequestFromWire(envelope);
     let response: GatewayResponse;
     if (!request) {
@@ -264,7 +355,7 @@ export class LocalGatewayHost {
         revision: this.#options.server.revision(),
       };
     } else {
-      response = await this.#options.server.handle(request, client.identity);
+      response = await this.#options.server.handle(request, client.identity, client.connection);
     }
     if (socket.readyState !== socket.OPEN) return;
     socket.send(

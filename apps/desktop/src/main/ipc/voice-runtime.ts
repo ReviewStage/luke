@@ -1,11 +1,7 @@
-import {
-  PRODUCT_EVENT,
-  type ProductCredentialSource,
-  type RecordProductEvent,
-} from "@sidecar/analytics";
+import { PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/analytics";
 import { CREDENTIAL_CONNECTION, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
 import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
-import type { RealtimeCredentialMinter } from "@sidecar/voice";
+import type { RealtimeConnection, RealtimeDiagnostics } from "@sidecar/realtime";
 import type {
   BrowserWindow,
   IpcMain,
@@ -21,19 +17,7 @@ import {
   voiceExchangeActive,
 } from "#shared/wire/voice-view";
 import { registerBridge } from "../register-bridge";
-import type { VoiceReceiver } from "../voice-receiver";
 import type { PanelManager } from "../window/panel-manager";
-
-/**
- * The minter a call will run on and the source its count names, chosen
- * together: two closures deciding independently across the awaited mint could
- * disagree at exactly the transitions the introduction is built around — an
- * account landing, or leaving, while a mint is in flight.
- */
-export interface ChosenRealtimeCredentials {
-  minter: RealtimeCredentialMinter;
-  countedSource: ProductCredentialSource;
-}
 
 /** The hidden window the conversation lives in, as much of it as the bridge needs. */
 export interface VoiceWindowSurface {
@@ -46,13 +30,18 @@ export interface VoiceRuntimeIpcDependencies {
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
   panels: PanelManager;
   voiceWindow: VoiceWindowSurface;
-  /** Whether the voice window's renderer can receive yet, which only its own report under the current epoch decides. */
-  receiver: Pick<VoiceReceiver, "markReady">;
+  /** Whether the voice window's renderer can receive yet, which only its own report under the current epoch decides; the host answers. */
+  receiver: { markReady: (epoch: number) => boolean | Promise<boolean> };
   /** Hands a payload to every panel and the voice window alike. */
   broadcast: <Payload>(channel: string, payload: Payload) => void;
   openExternal: (url: string) => Promise<void>;
-  chooseRealtimeCredentials: () => ChosenRealtimeCredentials | undefined;
-  unavailableDiagnostics: () => ReturnType<RealtimeCredentialMinter["diagnostics"]>;
+  /**
+   * The one credential a call runs on: the short-lived realtime secret the
+   * host's account minter issued, or the introduction's bounded mint while the
+   * takeover stands. Counted by whoever minted, under the source it came from.
+   */
+  mintRealtimeCredential: () => Promise<RealtimeConnection | undefined>;
+  realtimeDiagnostics: () => Promise<RealtimeDiagnostics>;
   recordProductEvent: RecordProductEvent;
   /**
    * Takes one tapped wire event into the development trace. On a run without
@@ -144,22 +133,8 @@ export function registerVoiceRuntimeIpc(dependencies: VoiceRuntimeIpcDependencie
         const displayId = panels.displayIdFor(context.sender);
         if (displayId !== undefined) panels.focusIfExpanded(displayId);
       },
-      async requestRealtimeCredential() {
-        // Chosen once, before the awaited mint: the source counted is the
-        // source the credential actually came from, whatever the account did
-        // while the request was in flight.
-        const chosen = dependencies.chooseRealtimeCredentials();
-        const credential = await chosen?.minter.mint();
-        if (credential && chosen) {
-          dependencies.recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
-            credential_source: chosen.countedSource,
-          });
-        }
-        return credential;
-      },
-      requestRealtimeDiagnostics: () =>
-        dependencies.chooseRealtimeCredentials()?.minter.diagnostics() ??
-        dependencies.unavailableDiagnostics(),
+      requestRealtimeCredential: () => dependencies.mintRealtimeCredential(),
+      requestRealtimeDiagnostics: () => dependencies.realtimeDiagnostics(),
       recordAgentTrace(_context, trace) {
         dependencies.recordAgentTrace(trace);
       },

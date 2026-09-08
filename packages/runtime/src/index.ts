@@ -86,12 +86,23 @@ export {
   readGatewayLockHolder,
 } from "./gateway/instance-lock.js";
 export {
+  INVOCATION_MEMORY_DEFAULTS,
+  InvocationMemory,
+  NODE_INVOCATION_REFUSAL,
+  type NodeInvocationHandler,
+  PendingInvocations,
+  unavailableInvocation,
+  unknownInvocation,
+} from "./gateway/invocations.js";
+export {
   type NodeCapabilityHandler,
   type NodeRegistration,
   NodeRegistry,
   type NodeRegistryListener,
   type NodeSnapshot,
   nodeSnapshotToWire,
+  type RemoteNodeInvoker,
+  type RemoteNodeRegistration,
 } from "./gateway/nodes.js";
 export {
   eventToWire,

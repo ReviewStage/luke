@@ -9,6 +9,7 @@ import {
 } from "@sidecar/runtime-contracts";
 import type { ScheduledTimer } from "../timers.js";
 import { discoveryMatchesBuild, type GatewayDiscoveryRecord } from "./discovery.js";
+import type { NodeInvocationHandler } from "./invocations.js";
 import type { GatewayEventSink, GatewayTransport } from "./transport.js";
 
 /**
@@ -138,6 +139,8 @@ export class GatewaySupervisor {
   #state: GatewayAttachment = GATEWAY_ATTACHMENT.DETACHED;
   #connection: GatewayConnection | undefined;
   #releaseConnection: (() => void) | undefined;
+  /** The node handler served on every connection this supervisor adopts, so a reattachment serves the same node. */
+  #invocationHandler: NodeInvocationHandler | undefined;
   #pid: number | undefined;
   #restartsAt: number[] = [];
   #attaching: Promise<GatewayAttachResult> | undefined;
@@ -153,6 +156,14 @@ export class GatewaySupervisor {
         };
       },
       connected: () => this.#connection?.connected() ?? false,
+      serveInvocations: (handler) => {
+        this.#invocationHandler = handler;
+        const release = this.#connection?.serveInvocations?.(handler);
+        return () => {
+          if (this.#invocationHandler === handler) this.#invocationHandler = undefined;
+          release?.();
+        };
+      },
     };
   }
 
@@ -242,10 +253,13 @@ export class GatewaySupervisor {
         case GATEWAY_CONNECT_FAILURE.SHUTTING_DOWN:
           // A record whose process is alive but not answering is a Gateway
           // still starting or already leaving; waiting on its exit keeps
-          // this build from opening the databases beside it.
+          // this build from opening the databases beside it. A stop that
+          // lands during the wait ends it: a client leaving has no
+          // databases to open, and nothing to wait twelve seconds for.
           await this.#waitForExit(
             record.pid,
             this.#ports.drainWaitMs ?? GATEWAY_SUPERVISOR_DEFAULTS.DRAIN_WAIT_MS,
+            { untilStopped: true },
           );
           return undefined;
         case GATEWAY_CONNECT_FAILURE.UNAUTHORIZED:
@@ -282,7 +296,11 @@ export class GatewaySupervisor {
     const left = await this.#waitForExit(
       record.pid,
       this.#ports.drainWaitMs ?? GATEWAY_SUPERVISOR_DEFAULTS.DRAIN_WAIT_MS,
+      { untilStopped: true },
     );
+    if (this.#state === GATEWAY_ATTACHMENT.STOPPED) {
+      return this.#failed(GATEWAY_ATTACH_FAILURE.UNREACHABLE);
+    }
     return left ? undefined : this.#failed(GATEWAY_ATTACH_FAILURE.INCOMPATIBLE_BUILD);
   }
 
@@ -336,6 +354,9 @@ export class GatewaySupervisor {
     this.#dropConnection();
     this.#connection = connection;
     this.#pid = pid;
+    // Served before the attached state is announced, so the first node
+    // registration the client makes over this connection finds its handler.
+    if (this.#invocationHandler) connection.serveInvocations?.(this.#invocationHandler);
     const unsubscribeEvents = connection.events((event) => {
       for (const sink of [...this.#sinks]) sink(event);
     });
@@ -397,10 +418,22 @@ export class GatewaySupervisor {
     return { outcome: GATEWAY_ATTACH_OUTCOME.FAILED, failure };
   }
 
-  async #waitForExit(pid: number, waitMs: number): Promise<boolean> {
+  /**
+   * Waits for a process to leave, up to `waitMs`. A reattachment's drain
+   * wait also ends when this supervisor is stopped, since a stopped client
+   * has nothing left to wait for; the stop's own wait on the Gateway it
+   * asked to leave runs to its bound regardless, because that wait is what
+   * decides whether to kill.
+   */
+  async #waitForExit(
+    pid: number,
+    waitMs: number,
+    options: { untilStopped?: boolean } = {},
+  ): Promise<boolean> {
     const pollMs = this.#ports.discoveryPollMs ?? GATEWAY_SUPERVISOR_DEFAULTS.DISCOVERY_POLL_MS;
     const startedAt = this.#now();
     while (this.#ports.isAlive(pid)) {
+      if (options.untilStopped && this.#state === GATEWAY_ATTACHMENT.STOPPED) return false;
       if (this.#now() - startedAt >= waitMs) return false;
       await this.#sleep(pollMs);
     }

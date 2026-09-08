@@ -42,6 +42,7 @@ import type { LinearIssueTracker } from "@sidecar/trackers";
 import {
   ACT_RESULT_STATUS,
   isWireString,
+  UNKNOWN_ACT_STATUS,
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
@@ -50,6 +51,19 @@ import { BRIDGE } from "#shared/bridge";
 import type { SessionOpenResult } from "#shared/contracts";
 import { createActionHandler } from "../action-handler";
 import type { SettingsStore } from "../settings-store";
+
+/**
+ * An open that was handed to the native node and whose answer was lost with
+ * the node's connection: the system may have opened the address. Thrown by
+ * the open port so the act that asked records itself unknown, never failed
+ * and never retried.
+ */
+export class NodeAnswerLostError extends Error {}
+
+/** What an open answers when its answer was lost: the effect is uncertain. */
+function unknownOpen(error: NodeAnswerLostError): SessionOpenResult {
+  return { status: UNKNOWN_ACT_STATUS, reason: error.message };
+}
 
 /**
  * What performing an act needs from the app: the registry the act is
@@ -115,7 +129,11 @@ export interface ActExecutionGuard {
 export interface SessionActsIpcDependencies {
   ipcMain: Pick<IpcMain, "handle" | "on">;
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
-  performer: SessionActPerformer;
+  /** The opens alone: a press is not a write, and the writes reach the performer only through the brain in the host. */
+  performer: Pick<
+    SessionActPerformer,
+    "openSession" | "openSessionApplication" | "openSessionChange"
+  >;
 }
 
 /**
@@ -252,7 +270,8 @@ export function createSessionActPerformer(
     }
     try {
       await openExternal(url);
-    } catch {
+    } catch (error) {
+      if (error instanceof NodeAnswerLostError) return unknownOpen(error);
       return { status: ACT_RESULT_STATUS.REJECTED, reason: failureReason };
     }
     countOpen(identity);
@@ -289,7 +308,8 @@ export function createSessionActPerformer(
     if (!url) return { status: ACT_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_APP_ADDRESS };
     try {
       await openExternal(url);
-    } catch {
+    } catch (error) {
+      if (error instanceof NodeAnswerLostError) return unknownOpen(error);
       return { status: ACT_RESULT_STATUS.REJECTED, reason: REFUSAL.OPEN_APP_FAILED };
     }
     countOpen(identity);

@@ -1,5 +1,5 @@
 import { brainRequestRecordFromWire, isBrainRequestOrigin } from "@sidecar/brain/requests";
-import { type GatewayCallResult, GatewayClient, type GatewayClientOptions } from "@sidecar/runtime";
+import type { GatewayCallResult, GatewayClient } from "@sidecar/runtime";
 import {
   GATEWAY_EVENT,
   GATEWAY_METHOD,
@@ -54,8 +54,8 @@ export interface GatewayHistoryChange {
   sessionKey: string;
   entries: readonly WireValue[];
   cleared: boolean;
-  /** The window whose report produced the change, by its contents id, so the relay can skip echoing it. */
-  reporter?: number;
+  /** The opaque reporter whose report produced the change, minted by this client for one window, so the relay can skip echoing it. */
+  reporter?: string;
 }
 
 function runsFromWire(value: WireValue | undefined): readonly BrainRequestSnapshot[] {
@@ -78,8 +78,13 @@ function claimFromWire(result: GatewayCallResult): BrainReplyClaimResult {
   return { granted: true, words, origin };
 }
 
-export function createGatewayOperator(options: GatewayClientOptions): GatewayOperator {
-  const client = new GatewayClient(options);
+/** The operator is one typed surface over a client the desktop shares with its host operator; the client is made once. */
+export interface GatewayOperatorOptions {
+  client: GatewayClient;
+}
+
+export function createGatewayOperator(options: GatewayOperatorOptions): GatewayOperator {
+  const { client } = options;
   const on = <Payload>(
     kind: GatewayEvent["kind"],
     read: (payload: WireValue) => Payload | undefined,
@@ -166,7 +171,7 @@ export function createGatewayOperator(options: GatewayClientOptions): GatewayOpe
             sessionKey: payload.sessionKey,
             entries: payload.entries,
             cleared: payload.cleared,
-            ...(isWireNumber(payload.reporter) ? { reporter: payload.reporter } : undefined),
+            ...(isWireString(payload.reporter) ? { reporter: payload.reporter } : undefined),
           };
         },
         listener,

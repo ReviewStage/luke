@@ -4,11 +4,10 @@ import type { BrainAgent, BrainRequestRecord, BrainSubmission } from "@sidecar/b
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
-import { InProcessTransport, LoopbackTransport } from "@sidecar/runtime";
+import { GatewayClient, InProcessTransport, LoopbackTransport } from "@sidecar/runtime";
 import {
   DELIVERY_STATE,
   GATEWAY_CLIENT_ROLE,
-  GATEWAY_ERROR,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   MAIN_SESSION_KEY,
@@ -148,7 +147,9 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
     transportKind === "in-process"
       ? new InProcessTransport(service.server, identity)
       : new LoopbackTransport(service.server, identity);
-  const operator = createGatewayOperator({ transport, createId: () => `request-${++ids}` });
+  const operator = createGatewayOperator({
+    client: new GatewayClient({ transport, createId: () => `request-${++ids}` }),
+  });
   const events: { kind: string; payload: WireValue }[] = [];
   service.server.subscribe((event) => events.push({ kind: event.kind, payload: event.payload }));
   return {
@@ -333,7 +334,7 @@ for (const kind of ["in-process", "loopback"] as const) {
     f.service.historyChanged(
       MAIN_SESSION_KEY,
       [{ kind: CONVERSATION_ENTRY_KIND.TYPED_ASK, words: "q" }],
-      7,
+      "window-7",
     );
     f.service.historyChanged(MAIN_SESSION_KEY, []);
     assert.deepEqual(runs, [1]);
@@ -367,12 +368,20 @@ for (const kind of ["in-process", "loopback"] as const) {
     });
     assert.ok(ok.ok && recordOf(ok.result).status === NODE_CAPABILITY_STATUS.OK);
     assert.deepEqual(opened, ["https://example.test"]);
-    // A registration over the wire for a node this process never registered is refused.
-    const foreign = await f.operator.client.call(GATEWAY_METHOD.NODE_REGISTER, {
+    // A registration over the wire binds the node to the connection it came
+    // on: an ask of it is dispatched there and nowhere else, and a connection
+    // that serves no handler answers unavailable, the ask never dispatched.
+    const remote = await f.operator.client.call(GATEWAY_METHOD.NODE_REGISTER, {
       nodeId: "phone",
       capabilities: ["mic"],
     });
-    assert.equal(foreign.ok, false);
-    if (!foreign.ok) assert.equal(foreign.error.code, GATEWAY_ERROR.REFUSED);
+    assert.ok(remote.ok);
+    const unserved = await f.operator.client.call(GATEWAY_METHOD.NODE_INVOKE, {
+      capability: "mic",
+      params: {},
+    });
+    assert.ok(unserved.ok);
+    assert.equal(recordOf(unserved.result).status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
+    assert.ok(f.service.nodes.list().some((node) => node.nodeId === "phone" && node.connected));
   });
 }

@@ -1,6 +1,5 @@
 import { BrowserWindow, type WebContents } from "electron";
 import type { RunMode } from "../run-mode";
-import type { VoiceReceiver } from "../voice-receiver";
 import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
 
 export interface VoiceWindowOptions {
@@ -11,7 +10,8 @@ export interface VoiceWindowOptions {
    * crash, replacement, or close ends it, so nothing is sent to a renderer on
    * the strength of its window existing.
    */
-  receiver: VoiceReceiver;
+  /** Where the renderer's epochs begin and end: the host's receiver, reached through the client. */
+  receiver: { begin: () => void; reset: () => void };
   preloadPath: string;
   rendererHtmlPath: string;
   rendererUrl: string;

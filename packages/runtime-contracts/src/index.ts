@@ -153,7 +153,14 @@ export {
   NODE_CAPABILITY_STATUS,
   type NodeCapabilityResult,
   type NodeCapabilityStatus,
+  type NodeInvocation,
+  type NodeInvocationAnswer,
   nodeCapabilityResultFromWire,
+  nodeCapabilityResultToWire,
+  nodeInvocationAnswerFromWire,
+  nodeInvocationAnswerToWire,
+  nodeInvocationFromWire,
+  nodeInvocationToWire,
   TERMINAL_DELIVERY_STATES,
 } from "./protocol.js";
 export {

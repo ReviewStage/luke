@@ -55,6 +55,55 @@ export const GATEWAY_METHOD = {
   DELIVERY_CLAIM: "delivery.claim",
   DELIVERY_ACKNOWLEDGE: "delivery.acknowledge",
   DELIVERY_GRANT_ON_CALL: "delivery.grantOnCall",
+  /** Everything a window's bootstrap reads of the host, in one answer. */
+  CLIENT_BOOTSTRAP: "client.bootstrap",
+  SETTINGS_SNAPSHOT: "settings.snapshot",
+  SETTINGS_UPDATE: "settings.update",
+  SETTINGS_UPDATE_ENTRY: "settings.updateEntry",
+  SETTINGS_RESET: "settings.reset",
+  CREDENTIAL_SET_API_KEY: "credential.setApiKey",
+  ACCOUNT_SNAPSHOT: "account.snapshot",
+  ACCOUNT_BEGIN_SIGN_IN: "account.beginSignIn",
+  ACCOUNT_CANCEL_SIGN_IN: "account.cancelSignIn",
+  ACCOUNT_SIGN_OUT: "account.signOut",
+  ACCOUNT_DELETE: "account.delete",
+  CALENDAR_CONNECT_GOOGLE: "calendar.connectGoogle",
+  CALENDAR_CANCEL_GOOGLE_SIGN_IN: "calendar.cancelGoogleSignIn",
+  CALENDAR_REOPEN_GOOGLE_SIGN_IN: "calendar.reopenGoogleSignIn",
+  CALENDAR_REMOVE_ACCOUNT: "calendar.removeAccount",
+  CALENDAR_CONNECT_APPLE: "calendar.connectApple",
+  CALENDAR_DISCONNECT_APPLE: "calendar.disconnectApple",
+  CALENDAR_APPLE_ACCESS_STATUS: "calendar.appleAccessStatus",
+  CALENDAR_CANCEL_APPLE_CONNECT: "calendar.cancelAppleConnect",
+  CALENDAR_REFRESH: "calendar.refresh",
+  CALENDAR_SET_SELECTED: "calendar.setSelected",
+  TRACKER_CONNECT: "tracker.connect",
+  TRACKER_CANCEL_SIGN_IN: "tracker.cancelSignIn",
+  TRACKER_REOPEN_SIGN_IN: "tracker.reopenSignIn",
+  TRACKER_DISCONNECT: "tracker.disconnect",
+  SUPERSET_STATUS: "superset.status",
+  SUPERSET_BEGIN_SIGN_IN: "superset.beginSignIn",
+  SUPERSET_SUBMIT_CODE: "superset.submitCode",
+  SUPERSET_CHOOSE_ORGANIZATION: "superset.chooseOrganization",
+  SUPERSET_REOPEN_SIGN_IN: "superset.reopenSignIn",
+  SUPERSET_CANCEL_SIGN_IN: "superset.cancelSignIn",
+  SUPERSET_DISCONNECT: "superset.disconnect",
+  SESSION_ROSTER: "session.roster",
+  SESSION_ACT: "session.act",
+  SESSION_OPEN: "session.open",
+  SESSION_OPEN_APPLICATION: "session.openApplication",
+  SESSION_OPEN_CHANGE: "session.openChange",
+  WORKSPACE_PROJECTS: "workspace.projects",
+  SPEECH_SETTLE: "speech.settle",
+  RECEIVER_REPORT: "receiver.report",
+  VOICE_MINT_REALTIME_CREDENTIAL: "voice.mintRealtimeCredential",
+  VOICE_DIAGNOSTICS: "voice.diagnostics",
+  GUIDE_REPORT: "guide.report",
+  ANALYTICS_RECORD: "analytics.record",
+  CONVERSATION_APPEND: "conversation.append",
+  ONBOARDING_STATE: "onboarding.state",
+  ONBOARDING_SKIP_CALENDAR: "onboarding.skipCalendar",
+  ONBOARDING_COMPLETE_CALENDAR: "onboarding.completeCalendar",
 } as const;
 
 export type GatewayMethod = (typeof GATEWAY_METHOD)[keyof typeof GATEWAY_METHOD];
@@ -91,6 +140,45 @@ export const MUTATING_GATEWAY_METHODS: ReadonlySet<GatewayMethod> = new Set<Gate
   GATEWAY_METHOD.DELIVERY_CLAIM,
   GATEWAY_METHOD.DELIVERY_ACKNOWLEDGE,
   GATEWAY_METHOD.DELIVERY_GRANT_ON_CALL,
+  GATEWAY_METHOD.SETTINGS_UPDATE,
+  GATEWAY_METHOD.SETTINGS_UPDATE_ENTRY,
+  GATEWAY_METHOD.SETTINGS_RESET,
+  GATEWAY_METHOD.CREDENTIAL_SET_API_KEY,
+  GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN,
+  GATEWAY_METHOD.ACCOUNT_CANCEL_SIGN_IN,
+  GATEWAY_METHOD.ACCOUNT_SIGN_OUT,
+  GATEWAY_METHOD.ACCOUNT_DELETE,
+  GATEWAY_METHOD.CALENDAR_CONNECT_GOOGLE,
+  GATEWAY_METHOD.CALENDAR_CANCEL_GOOGLE_SIGN_IN,
+  GATEWAY_METHOD.CALENDAR_REOPEN_GOOGLE_SIGN_IN,
+  GATEWAY_METHOD.CALENDAR_REMOVE_ACCOUNT,
+  GATEWAY_METHOD.CALENDAR_CONNECT_APPLE,
+  GATEWAY_METHOD.CALENDAR_DISCONNECT_APPLE,
+  GATEWAY_METHOD.CALENDAR_CANCEL_APPLE_CONNECT,
+  GATEWAY_METHOD.CALENDAR_REFRESH,
+  GATEWAY_METHOD.CALENDAR_SET_SELECTED,
+  GATEWAY_METHOD.TRACKER_CONNECT,
+  GATEWAY_METHOD.TRACKER_CANCEL_SIGN_IN,
+  GATEWAY_METHOD.TRACKER_REOPEN_SIGN_IN,
+  GATEWAY_METHOD.TRACKER_DISCONNECT,
+  GATEWAY_METHOD.SUPERSET_BEGIN_SIGN_IN,
+  GATEWAY_METHOD.SUPERSET_SUBMIT_CODE,
+  GATEWAY_METHOD.SUPERSET_CHOOSE_ORGANIZATION,
+  GATEWAY_METHOD.SUPERSET_REOPEN_SIGN_IN,
+  GATEWAY_METHOD.SUPERSET_CANCEL_SIGN_IN,
+  GATEWAY_METHOD.SUPERSET_DISCONNECT,
+  GATEWAY_METHOD.SESSION_ACT,
+  GATEWAY_METHOD.SESSION_OPEN,
+  GATEWAY_METHOD.SESSION_OPEN_APPLICATION,
+  GATEWAY_METHOD.SESSION_OPEN_CHANGE,
+  GATEWAY_METHOD.SPEECH_SETTLE,
+  GATEWAY_METHOD.RECEIVER_REPORT,
+  GATEWAY_METHOD.VOICE_MINT_REALTIME_CREDENTIAL,
+  GATEWAY_METHOD.GUIDE_REPORT,
+  GATEWAY_METHOD.ANALYTICS_RECORD,
+  GATEWAY_METHOD.CONVERSATION_APPEND,
+  GATEWAY_METHOD.ONBOARDING_SKIP_CALENDAR,
+  GATEWAY_METHOD.ONBOARDING_COMPLETE_CALENDAR,
 ]);
 
 export function isMutatingGatewayMethod(method: GatewayMethod): boolean {
@@ -167,6 +255,17 @@ export const GATEWAY_EVENT = {
   CONFIGURATION_CHANGED: "configuration.changed",
   OBSERVATION_CHANGED: "observation.changed",
   NODE_CHANGED: "node.changed",
+  SETTINGS_CHANGED: "settings.changed",
+  ACCOUNT_CHANGED: "account.changed",
+  SESSIONS_CHANGED: "sessions.changed",
+  WORKSPACE_PROJECTS_CHANGED: "workspaceProjects.changed",
+  CALENDARS_CHANGED: "calendars.changed",
+  ANNOUNCEMENTS_HELD_CHANGED: "announcementsHeld.changed",
+  SUPERSET_SIGN_IN_CHANGED: "supersetSignIn.changed",
+  CALENDAR_ONBOARDING_CHANGED: "calendarOnboarding.changed",
+  SPEECH_OFFERED: "speech.offered",
+  SPEECH_WITHDRAWN: "speech.withdrawn",
+  SESSION_REPLAY_CHANGED: "sessionReplay.changed",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];
@@ -257,11 +356,20 @@ export interface GatewayClientIdentity {
  * What a node capability's invocation answers. Unavailable is a typed answer,
  * never a thrown error and never a success: a required node that is not
  * connected leaves the act undone and says so, so nothing records it as done.
+ * Unknown is the other typed answer an absent node can give, and it is not
+ * unavailable: the ask was dispatched to the node and the node's connection
+ * closed before it answered, so the effect may have happened. What reads an
+ * unknown must record the act as uncertain, never as failed and never as
+ * safe to repeat.
  */
 export const NODE_CAPABILITY_STATUS = {
   OK: "ok",
+  /** Never dispatched: no connected node offered the capability. */
   UNAVAILABLE: "unavailable",
+  /** The node performed and reported a failure. */
   FAILED: "failed",
+  /** Dispatched, and the answer lost with the node's connection; the effect is uncertain. */
+  UNKNOWN: "unknown",
 } as const;
 
 export type NodeCapabilityStatus =
@@ -270,7 +378,8 @@ export type NodeCapabilityStatus =
 export type NodeCapabilityResult =
   | { status: typeof NODE_CAPABILITY_STATUS.OK; value: WireValue | undefined }
   | { status: typeof NODE_CAPABILITY_STATUS.UNAVAILABLE; capability: string; reason: string }
-  | { status: typeof NODE_CAPABILITY_STATUS.FAILED; capability: string; reason: string };
+  | { status: typeof NODE_CAPABILITY_STATUS.FAILED; capability: string; reason: string }
+  | { status: typeof NODE_CAPABILITY_STATUS.UNKNOWN; capability: string; reason: string };
 
 /**
  * Where one delivery to the ear stands. Queued is owed and not yet offered to
@@ -407,6 +516,69 @@ export function gatewayReconnectAnswerFromWire(
   return undefined;
 }
 
+export function nodeCapabilityResultToWire(result: NodeCapabilityResult): WireRecord {
+  return result.status === NODE_CAPABILITY_STATUS.OK
+    ? {
+        status: result.status,
+        ...(result.value !== undefined ? { value: result.value } : undefined),
+      }
+    : { status: result.status, capability: result.capability, reason: result.reason };
+}
+
+/**
+ * The host asking one connected node to perform one of its capabilities. It
+ * travels on that node's own connection and nowhere else: never in the event
+ * log, so a reconnecting client is never replayed an ask to act, and never to
+ * another client, so no other process sees the parameters or can answer for
+ * the node. The id binds the answer to the ask; a connection that closes
+ * before answering leaves the ask unavailable and the effect uncertain.
+ */
+export interface NodeInvocation {
+  invocationId: string;
+  nodeId: string;
+  capability: string;
+  params: WireRecord;
+}
+
+export interface NodeInvocationAnswer {
+  invocationId: string;
+  result: NodeCapabilityResult;
+}
+
+export function nodeInvocationToWire(invocation: NodeInvocation): WireRecord {
+  return {
+    invocationId: invocation.invocationId,
+    nodeId: invocation.nodeId,
+    capability: invocation.capability,
+    params: invocation.params,
+  };
+}
+
+export function nodeInvocationFromWire(value: UnparsedWireValue): NodeInvocation | undefined {
+  if (!isRecord(value) || !isIdentifier(value.invocationId) || !isIdentifier(value.nodeId)) {
+    return undefined;
+  }
+  if (!isWireString(value.capability) || !isRecord(value.params)) return undefined;
+  return {
+    invocationId: value.invocationId,
+    nodeId: value.nodeId,
+    capability: value.capability,
+    params: value.params,
+  };
+}
+
+export function nodeInvocationAnswerToWire(answer: NodeInvocationAnswer): WireRecord {
+  return { invocationId: answer.invocationId, result: nodeCapabilityResultToWire(answer.result) };
+}
+
+export function nodeInvocationAnswerFromWire(
+  value: UnparsedWireValue,
+): NodeInvocationAnswer | undefined {
+  if (!isRecord(value) || !isIdentifier(value.invocationId)) return undefined;
+  const result = nodeCapabilityResultFromWire(value.result);
+  return result ? { invocationId: value.invocationId, result } : undefined;
+}
+
 export function nodeCapabilityResultFromWire(
   value: UnparsedWireValue,
 ): NodeCapabilityResult | undefined {
@@ -416,7 +588,8 @@ export function nodeCapabilityResultFromWire(
   }
   if (
     (value.status === NODE_CAPABILITY_STATUS.UNAVAILABLE ||
-      value.status === NODE_CAPABILITY_STATUS.FAILED) &&
+      value.status === NODE_CAPABILITY_STATUS.FAILED ||
+      value.status === NODE_CAPABILITY_STATUS.UNKNOWN) &&
     isWireString(value.capability) &&
     isWireString(value.reason)
   ) {
