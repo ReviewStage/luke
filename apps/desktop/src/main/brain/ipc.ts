@@ -1,5 +1,4 @@
 import type { BrainAgent, BrainRequestRecord } from "@sidecar/brain";
-import { BRAIN_DEFAULTS } from "@sidecar/brain";
 import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_SUBMISSION_OUTCOME,
@@ -23,6 +22,7 @@ import {
   type BrainRequestSnapshot,
   brainReplyWords,
 } from "#shared/wire/brain";
+import type { GatewayOperator } from "../gateway/operator";
 import { registerBridge } from "../register-bridge";
 
 /** The two kinds of window that may submit, and which origin each may claim. */
@@ -33,18 +33,8 @@ export interface BrainSubmitters {
   voice(sender: WebContents): boolean;
 }
 
+/** What the publication owner reaches: the thread, every window, and the delivery owner. */
 export interface BrainIpcDependencies {
-  ipcMain: Pick<IpcMain, "handle" | "on">;
-  trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
-  /**
-   * The brain of one conversation as it stands now — main's when none is
-   * named — or nothing on a run with no key to run it on or for a
-   * conversation the directory does not list.
-   */
-  brain: (sessionKey?: SessionKey) => BrainAgent | undefined;
-  /** The brain holding the run named, whichever conversation it belongs to. */
-  brainForRun: (runId: string) => BrainAgent | undefined;
-  submitters: BrainSubmitters;
   /**
    * Records one line in one conversation's thread at the moment given,
    * answering whether the thread took it; the main process is the thread's
@@ -72,23 +62,6 @@ export interface BrainIpcDependencies {
    * before the words are granted anywhere.
    */
   onPublication?: (settled: () => Promise<void>) => void;
-  /** Settles once every standing follower has published every report taken so far. */
-  publicationSettled?: () => Promise<void>;
-  /** Every run every standing brain holds, for a window to reconcile against the pushes it heard. */
-  allRequests: () => readonly BrainRequestSnapshot[];
-  /**
-   * The one owner of every grant to speak a run's end, reached only by the
-   * voice window: the claim on an offered delivery, its acknowledgement, and
-   * the grant to the call that asked, each under the receiver epoch the
-   * caller names — never an epoch read off the main process's own state.
-   */
-  replies?: {
-    claim: (runId: string, deliveryId: string, epoch: number) => BrainReplyClaimResult;
-    acknowledge: (runId: string, deliveryId: string, epoch: number) => void;
-    grantOnCall: (record: BrainRequestRecord, epoch: number) => boolean;
-  };
-  /** How long one wait holds before answering the run still pending. */
-  askWaitMs?: number;
 }
 
 const REJECTED_SUBMISSION: BrainAskSubmissionResult = {
@@ -134,7 +107,7 @@ export async function submitBrainAsk(
 }
 
 /** Writes a typed ask's own line once, at its acceptance, and marks the run when the thread took it. */
-async function publishAsk(
+export async function publishAsk(
   agent: BrainPublicationAgent,
   runId: string,
   record: BrainIpcDependencies["recordConversationEntry"],
@@ -267,9 +240,23 @@ export function followBrainRequests(
   };
 }
 
-export function registerBrainIpc(dependencies: BrainIpcDependencies): void {
-  const { ipcMain, trustedSender, brain, submitters } = dependencies;
-  const askWaitMs = dependencies.askWaitMs ?? BRAIN_DEFAULTS.ASK_WAIT_MS;
+/**
+ * Who a window is, as the client alone can tell: the composer's panel types,
+ * the hidden voice window speaks and is the one receiver of replies, and
+ * neither may claim the other's standing. The host never sees a sender; it
+ * sees the origin the client vouched for and, for the voice window alone,
+ * the receiver epoch it holds.
+ */
+export interface BrainIpcRegistration {
+  ipcMain: Pick<IpcMain, "handle" | "on">;
+  trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
+  submitters: BrainSubmitters;
+  /** The operator client every window's ask crosses to reach the host. */
+  operator: GatewayOperator;
+}
+
+export function registerBrainIpc(registration: BrainIpcRegistration): void {
+  const { ipcMain, trustedSender, submitters, operator } = registration;
   // A child's origin is the runtime's own and never a window's: a submission
   // claiming it is refused whichever window sent it.
   const originAllowed = (sender: WebContents, submission: BrainAskSubmission) => {
@@ -289,43 +276,23 @@ export function registerBrainIpc(dependencies: BrainIpcDependencies): void {
         if (!originAllowed(context.sender, submission)) return REJECTED_SUBMISSION;
         // Every ask a window submits is main's: the talk key and both
         // composers speak into the one conversation the panel draws.
-        return submitBrainAsk(
-          brain(MAIN_SESSION_KEY),
-          submission,
-          dependencies.recordConversationEntry,
-          MAIN_SESSION_KEY,
-        );
+        return operator.submit(submission, MAIN_SESSION_KEY);
       },
-      // A wait that finds its run ended does not hand the words over on the
-      // strength of the record alone: the follower's publication is let
-      // finish, the live record is re-read for its History mark, and the
-      // grant to say the words on the call is asked of the delivery owner —
-      // which refuses if an offer for the run was already claimed, and
-      // withdraws an unclaimed offer if it grants. A pending run, a refused
-      // History write, or a caller that is not the current voice renderer
-      // comes back with the record and no grant, and the eventual delivery
-      // says the words instead.
-      async waitBrainAsk(context, runId, epoch): Promise<BrainAskWait> {
-        const waited = await dependencies.brainForRun(runId)?.waitAsk(runId, askWaitMs);
-        if (!waited || !isTerminalBrainRequestStatus(waited.status)) {
-          return { record: waited, speak: false };
-        }
-        await dependencies.publicationSettled?.();
-        const live = dependencies.brainForRun(runId)?.request(runId) ?? waited;
-        if (!submitters.voice(context.sender) || live.historyRecordedAt === undefined) {
-          return { record: live, speak: false };
-        }
-        return { record: live, speak: dependencies.replies?.grantOnCall(live, epoch) === true };
+      // The asking call may be granted the words only when it is the voice
+      // window's, under the receiver epoch it names; a panel's wait carries
+      // no epoch, so the host answers it the record and no grant.
+      waitBrainAsk(context, runId, epoch): Promise<BrainAskWait> {
+        return operator.wait(runId, submitters.voice(context.sender) ? epoch : undefined);
       },
-      cancelBrainAsk: (_context, runId) => dependencies.brainForRun(runId)?.cancelAsk(runId),
-      brainRequestSnapshots: () => dependencies.allRequests(),
-      claimBrainReply(context, runId, deliveryId, epoch): BrainReplyClaimResult {
-        if (!submitters.voice(context.sender) || !dependencies.replies) return { granted: false };
-        return dependencies.replies.claim(runId, deliveryId, epoch);
+      cancelBrainAsk: (_context, runId) => operator.cancel(runId),
+      brainRequestSnapshots: () => operator.runs(),
+      claimBrainReply(context, runId, deliveryId, epoch): Promise<BrainReplyClaimResult> {
+        if (!submitters.voice(context.sender)) return Promise.resolve({ granted: false });
+        return operator.claim(runId, deliveryId, epoch);
       },
       ackBrainReply(context, runId, deliveryId, epoch) {
         if (!submitters.voice(context.sender)) return;
-        dependencies.replies?.acknowledge(runId, deliveryId, epoch);
+        void operator.acknowledge(runId, deliveryId, epoch);
       },
     },
     { ipcMain, trustedSender },

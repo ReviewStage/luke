@@ -10,7 +10,7 @@ import {
   accountGateOpen,
   HostedVaultClient,
 } from "@sidecar/account";
-import { rememberedFactsText } from "@sidecar/acts";
+import { APP_TOOL_KIND, rememberedFactsText } from "@sidecar/acts";
 import {
   PRODUCT_CREDENTIAL_SOURCE,
   PRODUCT_DIAGNOSTIC_KIND,
@@ -23,7 +23,7 @@ import {
   productSignInAge,
   type RecordProductEvent,
 } from "@sidecar/analytics";
-import type { BrainDelivery, BrainRequestRecord } from "@sidecar/brain";
+import type { BrainDelivery } from "@sidecar/brain";
 import {
   activeMeetingEnd,
   GoogleCalendarReader,
@@ -59,13 +59,25 @@ import {
   ARRIVAL_SPEECH_KIND,
   BRIEFING_SPEECH_KIND,
   CALENDAR_ONBOARDING_SPEECH_KIND,
+  type ConversationEntry,
   conversationHistoryText,
   recentConversationEntries,
   sessionContextText,
   workspaceProjectContextText,
 } from "@sidecar/realtime";
-import { CREDENTIAL_REFERENCE_KIND, CronScheduler, heartbeatJob, LANE } from "@sidecar/runtime";
-import { CONVERSATION_KIND, MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
+import {
+  CREDENTIAL_REFERENCE_KIND,
+  CronScheduler,
+  heartbeatJob,
+  InProcessTransport,
+  LANE,
+} from "@sidecar/runtime";
+import {
+  CONVERSATION_KIND,
+  GATEWAY_CLIENT_ROLE,
+  MAIN_SESSION_KEY,
+  NODE_CAPABILITY_STATUS,
+} from "@sidecar/runtime-contracts";
 import {
   CONDUCTOR_LOCAL_WORKSPACE_PROVIDER_ID,
   CreatedWorkspaceOpenTracker,
@@ -100,6 +112,7 @@ import { IntroductionRealtimeCredentialMinter, VoiceCapabilityAssembler } from "
 import {
   ACT_RESULT_STATUS,
   isRecord,
+  isWireString,
   text,
   type UnparsedWireValue,
   type WireRecord,
@@ -119,6 +132,7 @@ import {
   shell,
   systemPreferences,
   type WebContents,
+  webContents,
 } from "electron";
 import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "#shared/apple-calendar";
 import { BRIDGE, channels } from "#shared/bridge";
@@ -140,7 +154,6 @@ import {
   WINDOW_ROLE,
 } from "#shared/contracts";
 import { VOICE_SOURCE_COUNTED_AS } from "#shared/product-vocabulary";
-import type { BrainRequestSnapshot } from "#shared/wire/brain";
 import { SPEECH_OUTCOME, type SpeechOutcome } from "#shared/wire/speech";
 import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/wire/voice-view";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
@@ -155,8 +168,8 @@ import {
   shouldBackfillArrivalSettled,
 } from "./arrival-flow";
 import type { WorkspaceCreationDefaults } from "./brain/act-performer";
-import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion";
 import { wakeEventsFromHooks } from "./brain/flow";
+import { registerBrainIpc } from "./brain/ipc";
 import { BrainReplyDeliveries } from "./brain/reply-delivery";
 import { wireBrain } from "./brain/wiring";
 import {
@@ -168,6 +181,13 @@ import {
   shouldBackfillCalendarOnboardingSettled,
 } from "./calendar-onboarding-flow";
 import { conversationOperations, startHistoryMaintenance } from "./conversation-operations";
+import {
+  DESKTOP_NATIVE_NODE_ID,
+  DESKTOP_OPERATOR_CLIENT_ID,
+  NODE_CAPABILITY,
+} from "./gateway/desktop-node";
+import { conversationEntryFromWire, createGatewayOperator } from "./gateway/operator";
+import { createGatewayService } from "./gateway/service";
 import {
   INTRODUCTION_FADE_MS,
   INTRODUCTION_HANDOFF_READY_MS,
@@ -495,13 +515,10 @@ const runtimeStoreWiring = wireRuntimeStore({
   ensureDirectory: (directory) => fs.mkdirSync(directory, { recursive: true, mode: 0o700 }),
   now: Date.now,
   createEventId: () => randomUUID(),
-  onHistoryChanged: (sessionKey, entries, except) => {
-    // The panel draws main alone; another conversation's thread is held here
-    // for its brain and its tests and reaches no window.
-    if (sessionKey !== MAIN_SESSION_KEY) return;
-    const payload: ConversationHistoryPayload = { entries, cleared: entries.length === 0 };
-    broadcast(channels.onConversationHistoryChanged, payload, except);
-  },
+  // Every change to a thread becomes a host event; the operator client below
+  // relays main's to the windows, skipping the one whose report produced it.
+  onHistoryChanged: (sessionKey, entries, except) =>
+    gatewayService.historyChanged(sessionKey, entries, except?.id),
   onDirectoryChanged: () => undefined,
   report: (message) => process.stderr.write(`${message}\n`),
 });
@@ -1596,7 +1613,7 @@ async function deliverBriefing(delivery: BrainDelivery): Promise<void> {
  */
 const sessionActPerformer = createSessionActPerformer({
   sessionRegistry,
-  openExternal: (url) => shell.openExternal(url),
+  openExternal: (url) => openExternalThroughNode(url),
   adapterFor,
   sendsNetwork: runMode.sendsNetwork,
   settingsStore,
@@ -1687,32 +1704,12 @@ const brainWiring = wireBrain({
   ...(agentTrace ? { traceTurn: (record) => agentTrace.recordBrainTurn(record) } : undefined),
   recordConversationEntry: (entry, recordedAt, sessionKey) =>
     runtimeStoreWiring.recordConversationEntry(entry, recordedAt, sessionKey),
-  broadcastRequests: broadcastBrainRequests,
-  onEndPublished: offerBrainReply,
+  broadcastRequests: (snapshots) => gatewayService.runsReported(snapshots),
+  onEndPublished: (record, sessionKey) => gatewayService.endPublished(record, sessionKey),
   onGenerationReplaced: (sessionKey) => {
     // Briefings are main's alone; replies are owed for any conversation's run.
     if (sessionKey === MAIN_SESSION_KEY) withdrawBriefings();
-    withdrawBrainReplies();
-  },
-  replies: {
-    claim: (runId, deliveryId, epoch) =>
-      brainReplyDeliveries.claim(runId, deliveryId, epoch, brainReplyClaimContext()),
-    acknowledge: (runId, deliveryId, epoch) => {
-      if (brainReplyDeliveries.acknowledge(runId, deliveryId, epoch)) offerBrainReplies();
-    },
-    grantOnCall: (record, epoch) => {
-      const granted = brainReplyDeliveries.grantOnCall(
-        record,
-        brainWiring.store(brainWiring.conversationForRun(record.runId)).generationId() ?? "",
-        epoch,
-        brainReplyClaimContext(),
-      );
-      // The grant took the run's offer out of the receiver's hand, and no
-      // acknowledgement will come for a reply said on the call: the next owed
-      // reply is offered now, for the receiver to take at its next quiet moment.
-      if (granted) offerBrainReplies();
-      return granted;
-    },
+    gatewayService.generationReplaced(sessionKey);
   },
   acts: {
     sessionActs: sessionActPerformer,
@@ -1730,7 +1727,7 @@ const brainWiring = wireBrain({
       remember: runtimeStoreWiring.rememberNotebookEntry,
       forget: runtimeStoreWiring.forgetNotebookEntry,
     },
-    performAppAct: performBrainAppAct,
+    performAppAct: (action) => invokeNodeAppAct(action),
     recordConversationEntry: runtimeStoreWiring.recordConversationEntry,
   },
   roster: brainRoster,
@@ -1762,6 +1759,155 @@ const conversationControls = conversationOperations({
   report: (message) => process.stderr.write(`${message}\n`),
 });
 let stopHistoryMaintenance: (() => void) | undefined;
+
+/**
+ * The Gateway boundary. The service is the host's side: every capability the
+ * protocol names, answered over the wirings above, and every change numbered
+ * as an event. The operator is the desktop's own client over the in-process
+ * transport, the one way the windows' IPC and this process's surfaces reach
+ * the host. The two stand in one process today; the seam is what the process
+ * split that follows moves across.
+ */
+const gatewayService = createGatewayService({
+  brain: {
+    current: (sessionKey) => brainWiring.current(sessionKey),
+    agentForRun: (runId) => brainWiring.agentForRun(runId),
+    conversationForRun: (runId) => brainWiring.conversationForRun(runId),
+    allRequests: () => brainWiring.allRequests(),
+    generationId: (sessionKey) => brainWiring.store(sessionKey).generationId(),
+    holdsGeneration: (generationId) => brainWiring.holdsGeneration(generationId),
+    publicationSettled: () => brainWiring.publicationSettled(),
+    children: brainWiring.children,
+    configuration: () => brainWiring.configuration(),
+    updateConfiguration: (patch) => brainWiring.updateConfiguration(patch),
+    pendingNotices: () => brainWiring.pendingNotices(),
+  },
+  conversations: conversationControls,
+  memory: {
+    search: async (query, maxResults, signal) => {
+      const access = memoryWiring.accessFor(MAIN_SESSION_KEY);
+      if (!access)
+        return { status: ACT_RESULT_STATUS.REJECTED, reason: "no notebook index stands" };
+      return access.search({
+        query,
+        ...(maxResults !== undefined ? { maxResults } : undefined),
+        signal,
+      });
+    },
+    get: async (filePath, from, lines) => {
+      const access = memoryWiring.accessFor(MAIN_SESSION_KEY);
+      if (!access)
+        return { status: ACT_RESULT_STATUS.REJECTED, reason: "no notebook index stands" };
+      return access.get({
+        path: filePath,
+        ...(from !== undefined ? { from } : undefined),
+        ...(lines !== undefined ? { lines } : undefined),
+      });
+    },
+    forget: (ask) => memoryMaintenance.forget(ask),
+    status: () => ({
+      mode: memoryWiring.mode(),
+      entries: runtimeStoreWiring.rememberedFacts().length,
+    }),
+  },
+  observedSessions: () =>
+    sessionRegistry.list().filter((session) => session.realtimeVoice !== true),
+  deliveries: brainReplyDeliveries,
+  receiver: voiceReceiver,
+  recordConversationEntry: (entry, recordedAt, sessionKey) =>
+    runtimeStoreWiring.recordConversationEntry(entry, recordedAt, sessionKey),
+  now: Date.now,
+  createId: () => randomUUID(),
+  report: (message) => process.stderr.write(`${message}\n`),
+});
+const gatewayOperator = createGatewayOperator({
+  transport: new InProcessTransport(gatewayService.server, {
+    clientId: DESKTOP_OPERATOR_CLIENT_ID,
+    role: GATEWAY_CLIENT_ROLE.OPERATOR,
+  }),
+  createId: () => randomUUID(),
+  report: (message) => process.stderr.write(`${message}\n`),
+});
+// What the host tells its clients, relayed to the windows by the one client
+// that owns them. The runs list reaches every window; a reply offer and a
+// withdrawal reach the voice window, the one receiver; main's history reaches
+// every window but the one whose report produced it.
+gatewayOperator.onRunsChanged((runs) => broadcast(channels.onBrainRequestsChanged, runs));
+gatewayOperator.onDeliveryOffered((offer) => {
+  voiceWindow.current()?.webContents.send(channels.onBrainReplyOffered, offer);
+});
+gatewayOperator.onDeliveriesWithdrawn((epoch) => {
+  voiceWindow.current()?.webContents.send(channels.onBrainRepliesWithdrawn, epoch);
+});
+gatewayOperator.onHistoryChanged((change) => {
+  // The panel draws main alone; another conversation's thread is held by the
+  // host for its brain and its tests and reaches no window.
+  if (change.sessionKey !== MAIN_SESSION_KEY) return;
+  const entries = change.entries
+    .map((entry) => conversationEntryFromWire(entry))
+    .filter((entry): entry is ConversationEntry => entry !== undefined);
+  const payload: ConversationHistoryPayload = { entries, cleared: change.cleared };
+  broadcast(channels.onConversationHistoryChanged, payload, webContentsById(change.reporter));
+});
+/**
+ * This process's native capabilities, offered to the host as one node:
+ * opening an address with the operating system and carrying an app act to
+ * the panel. The host asks for each by name and never reaches Electron
+ * itself; while the node is disconnected — never, in one process, but the
+ * seam is the point — an ask answers a typed unavailable, and the act it
+ * was for is left undone rather than recorded as carried.
+ */
+gatewayService.nodes.register({
+  nodeId: DESKTOP_NATIVE_NODE_ID,
+  capabilities: {
+    [NODE_CAPABILITY.OPEN_EXTERNAL]: async (params) => {
+      if (!isWireString(params.url)) throw new Error("open needs a url");
+      await shell.openExternal(params.url);
+      return undefined;
+    },
+    [NODE_CAPABILITY.PANEL_APP_ACT]: (params) => {
+      const action = params.action;
+      if (
+        !isRecord(action) ||
+        !isWireString(action.kind) ||
+        action.kind === APP_TOOL_KIND.REMEMBER ||
+        action.kind === APP_TOOL_KIND.FORGET
+      ) {
+        throw new Error("the app act is not one the panel carries");
+      }
+      // SAFETY: the act performer validated this action against the guide
+      // before handing it to the node; the guard above re-checks its kind.
+      return performBrainAppAct(action as unknown as BrainAppActRequest["action"]);
+    },
+  },
+});
+
+/** An app act the brain asked for, carried to the panel through the node capability it registered. */
+async function invokeNodeAppAct(action: BrainAppActRequest["action"]): Promise<WireRecord> {
+  const result = await gatewayService.nodes.invoke(NODE_CAPABILITY.PANEL_APP_ACT, {
+    // SAFETY: a carried app action is a record of the vocabulary's own strings and booleans.
+    action: action as unknown as WireRecord,
+  });
+  if (result.status === NODE_CAPABILITY_STATUS.OK && isRecord(result.value)) return result.value;
+  return {
+    status: ACT_RESULT_STATUS.REJECTED,
+    reason:
+      result.status === NODE_CAPABILITY_STATUS.OK
+        ? "The panel answered in a shape this build cannot read."
+        : result.reason,
+  };
+}
+
+/** An address the brain or a validated act asked to open, through the node capability; unavailable means not opened. */
+async function openExternalThroughNode(url: string): Promise<void> {
+  const result = await gatewayService.nodes.invoke(NODE_CAPABILITY.OPEN_EXTERNAL, { url });
+  if (result.status !== NODE_CAPABILITY_STATUS.OK) throw new Error(result.reason);
+}
+
+function webContentsById(id: number | undefined): WebContents | undefined {
+  if (id === undefined) return undefined;
+  return webContents.fromId(id) ?? undefined;
+}
 
 /**
  * The durable scheduler: its jobs stand in the runtime store, its ticks run
@@ -2191,9 +2337,7 @@ function registerIpc(): void {
     },
     // The History Clear is Delete history on main: the recoverable deletion,
     // reported to the panel as refused only when the store took nothing.
-    clearConversation: async () =>
-      (await conversationControls.deleteHistory(MAIN_SESSION_KEY)) !==
-      CONVERSATION_DELETE_OUTCOME.REFUSED,
+    clearConversation: () => gatewayOperator.deleteHistory(MAIN_SESSION_KEY),
     setShortcutCapturing: (capturing) => hotkeys.setShortcutCapturing(capturing),
     openExternal: (url) => shell.openExternal(url),
     // While the takeover stands and no account credential exists yet, the
@@ -2223,13 +2367,14 @@ function registerIpc(): void {
   });
 
   registerSessionActsIpc({ ipcMain, trustedSender, performer: sessionActPerformer });
-  brainWiring.registerIpc({
+  registerBrainIpc({
     ipcMain,
     trustedSender,
     submitters: {
       panel: (sender) => panels.owns(sender),
       voice: (sender) => voiceWindow.owns(sender),
     },
+    operator: gatewayOperator,
   });
   // The renderer's description of the app, pushed whenever it changes: what an
   // app act the brain asks for is validated against here, and what the brain
@@ -2701,63 +2846,6 @@ function offerNextSpeech(): void {
   if (offer) host.webContents.send(channels.onSpeechOffered, offer);
 }
 
-/**
- * The brain's whole list of records, to every window and to the delivery
- * owner, which reads it for the runs it watched go by while they were still
- * going — the only ones whose ends it may ever offer to the ear.
- */
-function broadcastBrainRequests(snapshots: readonly BrainRequestSnapshot[]): void {
-  brainReplyDeliveries.observe(snapshots);
-  broadcast(channels.onBrainRequestsChanged, snapshots);
-}
-
-/**
- * A run's end has reached the thread, written and marked. Only now may it be
- * owed to the ear, under the generation that stands at this moment — the one
- * the live record was read from — and it goes out at once if a receiver is
- * ready, or waits for the next one that reports.
- */
-function offerBrainReply(record: BrainRequestRecord, sessionKey: SessionKey): void {
-  const generationId = brainWiring.store(sessionKey).generationId();
-  if (generationId === undefined) return;
-  brainReplyDeliveries.published(record, generationId);
-  offerBrainReplies();
-}
-
-/** What every grant is checked against at the moment it lands, read live rather than captured. */
-function brainReplyClaimContext() {
-  return {
-    receiverCurrent: (epoch: number) => voiceReceiver.isReady() && voiceReceiver.epoch() === epoch,
-    generationStands: (generationId: string) => brainWiring.holdsGeneration(generationId),
-    liveRecord: (runId: string) => brainWiring.agentForRun(runId)?.request(runId),
-  };
-}
-
-/**
- * The generation ended under the receiver: nothing owed of it may be spoken,
- * and a renderer holding an offer or a grant from it is told so, in the same
- * breath as the fence, so words already granted are not played into a thread
- * that no longer exists.
- */
-function withdrawBrainReplies(): void {
-  brainReplyDeliveries.reset();
-  voiceWindow.current()?.webContents.send(channels.onBrainRepliesWithdrawn, voiceReceiver.epoch());
-}
-
-/**
- * Hands the ready receiver the one delivery it may hold now, under the epoch
- * it is sent to; the next follows its acknowledgement. Nothing is sent to a
- * window whose renderer has not reported, and nothing here is held by the
- * announcement quiet: a reply to the developer's own ask is conversation,
- * not news, and speaks under a meeting the way a reply on their call would.
- */
-function offerBrainReplies(): void {
-  const host = voiceWindow.current();
-  if (!host || !voiceReceiver.isReady()) return;
-  const offer = brainReplyDeliveries.nextOffer(voiceReceiver.epoch());
-  if (offer) host.webContents.send(channels.onBrainReplyOffered, offer);
-}
-
 // The receiver reporting ready is the flush: whatever the arbiter holds and
 // every reply still owed goes to it now. Its epoch ending takes the arbiter's
 // outstanding offer back to the head, so the next renderer is offered it at
@@ -2765,7 +2853,7 @@ function offerBrainReplies(): void {
 // never claimed is simply still unclaimed, and a claimed one stays claimed.
 voiceReceiver.onReady(() => {
   offerNextSpeech();
-  offerBrainReplies();
+  gatewayService.receiverReady();
 });
 voiceReceiver.onReset(() => speechArbiter.reclaimOffer());
 

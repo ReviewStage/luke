@@ -65,14 +65,17 @@ import {
   type WorkspaceSeeding,
   writeWorkspaceFile,
 } from "@sidecar/runtime";
-import type { AgentRuntime, ModelAdapter } from "@sidecar/runtime-contracts";
 import {
+  type AgentRuntime,
   CONVERSATION_KIND,
   childIdOf,
   conversationKindOf,
+  isReasoningEffort,
   MAIN_SESSION_KEY,
+  type ModelAdapter,
   observedSessionKey,
   observedSessionRefOf,
+  type ReasoningEffort,
   RUN_ORIGIN,
   type SessionKey,
 } from "@sidecar/runtime-contracts";
@@ -85,16 +88,10 @@ import {
   type SessionIdentity,
 } from "@sidecar/session";
 import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
 import { type BrainRequestSnapshot, brainRequestPending } from "#shared/wire/brain";
 import { type BrainActPerformerDependencies, createBrainActPerformer } from "./act-performer";
 import { BrainHost } from "./host";
-import {
-  type BrainIpcDependencies,
-  type BrainSubmitters,
-  followBrainRequests,
-  registerBrainIpc,
-} from "./ipc";
+import { type BrainIpcDependencies, followBrainRequests } from "./ipc";
 import {
   type ChildWiringDependencies,
   childName,
@@ -127,8 +124,6 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
   broadcastRequests: (snapshots: readonly BrainRequestSnapshot[]) => void;
   /** A run's end stands in History, written and marked: the moment its reply may be owed to the ear. */
   onEndPublished?: BrainIpcDependencies["onEndPublished"];
-  /** The voice window's grants: claims and acknowledgements of offered replies, and the on-call grant. */
-  replies?: BrainIpcDependencies["replies"];
   /** A conversation's generation ended — reset, expired, or replaced — and its unspoken briefings and replies go with it. */
   onGenerationReplaced: (sessionKey: SessionKey) => void;
   acts: BrainActPerformerDependencies;
@@ -179,12 +174,6 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
     sessionKey: SessionKey,
     items: readonly WireRecord[],
   ) => Promise<MemoryHousekeepingResult>;
-}
-
-export interface BrainIpcRegistration {
-  ipcMain: Pick<IpcMain, "handle" | "on">;
-  trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
-  submitters: BrainSubmitters;
 }
 
 export interface BrainWiring {
@@ -258,11 +247,22 @@ export interface BrainWiring {
   resetConversation: (sessionKey: SessionKey) => Promise<boolean>;
   /** Delegation: the child records, completions, and their lifecycle, for inspection and tests. */
   readonly children: ChildRunService;
-  registerIpc: (registration: BrainIpcRegistration) => void;
+  /** Settles once every standing follower has published every report taken so far. */
+  publicationSettled: () => Promise<void>;
   /** The registries every configuration resolves against, for the diagnostics view. */
   readonly registries: RuntimeRegistries;
   /** The standing configuration snapshot, republished whenever the credential policy chooses a source. */
   configuration: () => ResolvedConfiguration;
+  /**
+   * Republishes the configuration with the settable fields patched — the
+   * reasoning effort and the output budget — atomically, or not at all:
+   * answers the refusals, none when the snapshot now stands. A patch stands
+   * until the credential policy next republishes, which reads it again.
+   */
+  updateConfiguration: (patch: {
+    reasoningEffort?: string;
+    maximumOutputTokens?: number;
+  }) => readonly string[];
   /**
    * The prompt a turn of this kind would run under right now, built by the
    * same three stages a live turn uses — the standing configuration, the
@@ -464,8 +464,11 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
   // policy chooses a source. Every turn takes the snapshot standing when it
   // is prepared and reads nothing else.
   const registries = registerBrainBuiltIns(createRuntimeRegistries());
-  const configurationFor = (credential: CredentialReference) =>
-    defaultAgentConfiguration({
+  // The settable fields a client patched over the protocol, applied to every
+  // configuration published after, so a credential change keeps them.
+  let settable: { reasoningEffort?: ReasoningEffort; maximumOutputTokens?: number } = {};
+  const configurationFor = (credential: CredentialReference) => ({
+    ...defaultAgentConfiguration({
       agentRuntimeId: TOOL_LOOP_RUNTIME.ID,
       modelAdapterId:
         credential.kind === CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY
@@ -476,7 +479,9 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       credential,
       workspaceDirectory: dependencies.workspaceDirectory(),
       skillRoots: dependencies.skillRoots(),
-    });
+    }),
+    ...settable,
+  });
   const configurationStore = new ConfigurationStore(
     registries,
     configurationFor(dependencies.credential()),
@@ -900,19 +905,33 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     return work;
   };
 
-  const registerIpc = (registration: BrainIpcRegistration): void => {
-    registerBrainIpc({
-      ...registration,
-      brain: current,
-      brainForRun: agentForRun,
-      allRequests,
-      recordConversationEntry: dependencies.recordConversationEntry,
-      broadcastRequests: dependencies.broadcastRequests,
-      publicationSettled: async () => {
-        await Promise.all([...publications.values()].map((settled) => settled()));
-      },
-      ...(dependencies.replies ? { replies: dependencies.replies } : undefined),
-    });
+  const publicationSettled = async (): Promise<void> => {
+    await Promise.all([...publications.values()].map((settled) => settled()));
+  };
+
+  const updateConfiguration = (patch: {
+    reasoningEffort?: string;
+    maximumOutputTokens?: number;
+  }): readonly string[] => {
+    const next = { ...settable };
+    if (patch.reasoningEffort !== undefined) {
+      if (!isReasoningEffort(patch.reasoningEffort)) {
+        return [
+          `reasoning effort ${JSON.stringify(patch.reasoningEffort)} is not one this build knows`,
+        ];
+      }
+      next.reasoningEffort = patch.reasoningEffort;
+    }
+    if (patch.maximumOutputTokens !== undefined)
+      next.maximumOutputTokens = patch.maximumOutputTokens;
+    const previous = settable;
+    settable = next;
+    const published = configurationStore.publish(configurationFor(dependencies.credential()));
+    if (!published.ok) {
+      settable = previous;
+      return published.refusals;
+    }
+    return [];
   };
 
   return {
@@ -978,9 +997,10 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       return openConversation(sessionKey).store.reset();
     },
     children: children.service,
-    registerIpc,
+    publicationSettled,
     registries,
     configuration: () => configurationStore.snapshot(),
+    updateConfiguration,
     inspectPrompt: async (turn) => {
       const model = liveModel();
       if (!model) return undefined;

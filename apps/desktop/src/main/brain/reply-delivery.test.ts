@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { BrainRequestRecord } from "@sidecar/brain";
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
+import { DELIVERY_STATE } from "@sidecar/runtime-contracts";
 import { type BrainReplyClaimContext, BrainReplyDeliveries } from "./reply-delivery";
 
 const NOW = 1_800_000_000_000;
@@ -61,7 +62,7 @@ test("only a run watched while it was still going becomes deliverable when its e
     runId: "run-1",
     deliveryId: "delivery-1",
     generationId: "gen-1",
-    claimed: false,
+    state: DELIVERY_STATE.QUEUED,
   });
   // The same end published again — a later report — adds no second delivery.
   assert.equal(deliveries.published(ended(), "gen-1"), undefined);

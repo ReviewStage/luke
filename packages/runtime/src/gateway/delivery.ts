@@ -26,7 +26,9 @@ export interface DeliveryClaimContext<Words> {
   receiverCurrent: (epoch: number) => boolean;
   /** Whether the generation named still stands in the store. */
   generationStands: (generationId: string) => boolean;
-  /** The words the run's live record says now, or nothing for a run no longer deliverable. */
+  /** Whether the host still holds the run at all; one it has let go of is forgotten here too. */
+  runHeld: (runId: string) => boolean;
+  /** The words the run's live record says now, or nothing for a run not deliverable at this moment. */
   liveWords: (runId: string) => Words | undefined;
 }
 
@@ -198,7 +200,7 @@ export class DeliveryLedger<Words> {
     if (delivery.offeredEpoch !== epoch || !context.receiverCurrent(epoch)) {
       return { granted: false };
     }
-    if (!context.generationStands(delivery.generationId)) {
+    if (!context.generationStands(delivery.generationId) || !context.runHeld(runId)) {
       this.#forget(runId);
       return { granted: false };
     }

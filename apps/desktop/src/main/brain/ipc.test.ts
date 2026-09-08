@@ -9,6 +9,9 @@ import {
   type ConversationEntry,
   maximumTypedAskLength,
 } from "@sidecar/realtime";
+import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
+import { InProcessTransport } from "@sidecar/runtime";
+import { GATEWAY_CLIENT_ROLE, GATEWAY_EVENT, MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import { BRIDGE } from "#shared/bridge";
 import {
@@ -17,6 +20,9 @@ import {
   type BrainReplyClaimResult,
   brainReplyWords,
 } from "#shared/wire/brain";
+import type { ConversationOperations } from "../conversation-operations";
+import { createGatewayOperator } from "../gateway/operator";
+import { createGatewayService } from "../gateway/service";
 import { VoiceReceiver } from "../voice-receiver";
 import { followBrainRequests, publishRuns, registerBrainIpc, submitBrainAsk } from "./ipc";
 import { BrainReplyDeliveries } from "./reply-delivery";
@@ -483,9 +489,11 @@ test("a refused thread write publishes nothing downstream, and a retired followe
 
 /**
  * The grant boundary as the IPC registration actually wires it: a real
- * ledger and receiver behind the real `registerBrainIpc`, reached through
- * fake `ipcMain` invokes from two senders, so what is checked is what a
- * renderer's call can and cannot do — not the ledger's own arguments.
+ * ledger and receiver behind the real Gateway service, reached by the real
+ * `registerBrainIpc` through the operator client over the in-process
+ * transport, from fake `ipcMain` invokes of two senders — so what is checked
+ * is what a renderer's call can and cannot do across the whole boundary, not
+ * the ledger's own arguments.
  */
 function registered(live: () => BrainRequestRecord | undefined) {
   const invokes = new Map<string, (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown>();
@@ -497,17 +505,52 @@ function registered(live: () => BrainRequestRecord | undefined) {
   let ids = 0;
   const deliveries = new BrainReplyDeliveries({ nextDeliveryId: () => `delivery-${++ids}` });
   const receiver = new VoiceReceiver();
-  const context = () => ({
-    receiverCurrent: (epoch: number) => receiver.isReady() && receiver.epoch() === epoch,
-    generationStands: (generationId: string) => generationId === "gen-1",
-    liveRecord: () => live(),
-  });
   const acknowledged: string[] = [];
+  const offered: unknown[] = [];
   // SAFETY: the grant boundary reads only `request` and `waitAsk` off the agent; the fixture stands in for the rest.
   const agent = {
     request: () => live(),
     waitAsk: async () => live(),
   } as unknown as BrainAgent;
+  const service = createGatewayService({
+    brain: {
+      current: () => agent,
+      agentForRun: () => agent,
+      conversationForRun: () => MAIN_SESSION_KEY,
+      allRequests: () => [],
+      generationId: () => "gen-1",
+      holdsGeneration: (generationId) => generationId === "gen-1",
+      publicationSettled: () => Promise.resolve(),
+      // SAFETY: the grant boundary reaches no child; the fixture stands in for the service.
+      children: {} as ChildRunService,
+      // SAFETY: only the revision is read here; the fixture stands in for the snapshot.
+      configuration: () => ({ revision: 1 }) as unknown as ResolvedConfiguration,
+      updateConfiguration: () => [],
+      pendingNotices: () => [],
+    },
+    // SAFETY: the grant boundary reaches no conversation operation; the fixture stands in for them.
+    conversations: {} as ConversationOperations,
+    memory: {
+      search: async () => ({}),
+      get: async () => ({}),
+      forget: async () => undefined,
+      status: () => ({}),
+    },
+    observedSessions: () => [],
+    deliveries,
+    receiver,
+    recordConversationEntry: () => true,
+    now: () => NOW,
+    createId: () => `id-${++ids}`,
+    report: () => undefined,
+  });
+  const operator = createGatewayOperator({
+    transport: new InProcessTransport(service.server, {
+      clientId: "test-operator",
+      role: GATEWAY_CLIENT_ROLE.OPERATOR,
+    }),
+    createId: () => `request-${++ids}`,
+  });
   registerBrainIpc({
     ipcMain: {
       handle: (channel, listener) => {
@@ -520,23 +563,14 @@ function registered(live: () => BrainRequestRecord | undefined) {
       },
     },
     trustedSender: () => true,
-    brain: () => agent,
-    brainForRun: () => agent,
-    allRequests: () => [],
     submitters: {
       panel: (sender) => sender === panelSender,
       voice: (sender) => sender === voiceSender,
     },
-    recordConversationEntry: () => true,
-    broadcastRequests: () => undefined,
-    publicationSettled: () => Promise.resolve(),
-    replies: {
-      claim: (runId, deliveryId, epoch) => deliveries.claim(runId, deliveryId, epoch, context()),
-      acknowledge: (runId, deliveryId, epoch) => {
-        if (deliveries.acknowledge(runId, deliveryId, epoch)) acknowledged.push(runId);
-      },
-      grantOnCall: (record, epoch) => deliveries.grantOnCall(record, "gen-1", epoch, context()),
-    },
+    operator,
+  });
+  service.server.subscribe((event) => {
+    if (event.kind === GATEWAY_EVENT.DELIVERY_OFFERED) offered.push(event.payload);
   });
   // SAFETY: the bridge reads only the sender off the event, and an Electron invoke listener always answers a promise.
   const claim = (sender: WebContents, runId: string, deliveryId: string, epoch: number) =>
@@ -553,10 +587,30 @@ function registered(live: () => BrainRequestRecord | undefined) {
       runId,
       epoch,
     ) as Promise<BrainAskWait>;
-  const ack = (sender: WebContents, runId: string, deliveryId: string, epoch: number) =>
+  const ack = async (sender: WebContents, runId: string, deliveryId: string, epoch: number) => {
+    const before = deliveries.records().length;
     // SAFETY: the bridge reads only the sender off the event.
     sends.get(BRIDGE.ackBrainReply.channel)?.({ sender } as IpcMainEvent, runId, deliveryId, epoch);
-  return { deliveries, receiver, voiceSender, panelSender, claim, wait, ack, acknowledged };
+    await new Promise((resolve) => setImmediate(resolve));
+    if (deliveries.records().length < before) acknowledged.push(runId);
+  };
+  return {
+    deliveries,
+    receiver,
+    voiceSender,
+    panelSender,
+    claim,
+    wait,
+    ack,
+    acknowledged,
+    offered,
+  };
+}
+
+/** A record as it reads after the protocol carried it: every explicitly undefined field gone. */
+function crossedWire(record: BrainRequestRecord): BrainRequestRecord {
+  // SAFETY: the text is this test's own serialization of the record; parsing it back yields the same shape.
+  return JSON.parse(JSON.stringify(record)) as BrainRequestRecord;
 }
 
 test("a claim is granted only to the voice window, for the epoch the offer went to, while that epoch stands", async () => {
@@ -593,10 +647,10 @@ test("a claim is granted only to the voice window, for the epoch the offer went 
     granted: false,
   });
   // A stale acknowledgement — the old epoch's, or a panel's — changes nothing; the current one empties the hand.
-  f.ack(f.voiceSender, reoffer.runId, reoffer.deliveryId, first);
-  f.ack(f.panelSender, reoffer.runId, reoffer.deliveryId, second);
+  await f.ack(f.voiceSender, reoffer.runId, reoffer.deliveryId, first);
+  await f.ack(f.panelSender, reoffer.runId, reoffer.deliveryId, second);
   assert.deepEqual(f.acknowledged, []);
-  f.ack(f.voiceSender, reoffer.runId, reoffer.deliveryId, second);
+  await f.ack(f.voiceSender, reoffer.runId, reoffer.deliveryId, second);
   assert.deepEqual(f.acknowledged, ["run-1"]);
 });
 
@@ -606,8 +660,12 @@ test("a wait grants the asking call the words only for the current voice rendere
   const epoch = f.receiver.begin();
   f.receiver.markReady(epoch);
   f.deliveries.observe([live]);
-  // Still running: the record, no grant.
-  assert.deepEqual(await f.wait(f.voiceSender, "run-1", epoch), { record: live, speak: false });
+  // Still running: the record, no grant. The record crossed the wire, so a
+  // field the fixture left explicitly undefined is simply absent.
+  assert.deepEqual(await f.wait(f.voiceSender, "run-1", epoch), {
+    record: crossedWire(live),
+    speak: false,
+  });
   // Ended but not yet in History — the write was refused — the call is not granted.
   live = record({ historyRecordedAt: undefined });
   assert.equal((await f.wait(f.voiceSender, "run-1", epoch)).speak, false);
@@ -619,7 +677,10 @@ test("a wait grants the asking call the words only for the current voice rendere
   f.deliveries.published(live, "gen-1");
   const offer = f.deliveries.nextOffer(epoch);
   assert.ok(offer);
-  assert.deepEqual(await f.wait(f.voiceSender, "run-1", epoch), { record: live, speak: true });
+  assert.deepEqual(await f.wait(f.voiceSender, "run-1", epoch), {
+    record: crossedWire(live),
+    speak: true,
+  });
   assert.deepEqual(await f.claim(f.voiceSender, offer.runId, offer.deliveryId, offer.epoch), {
     granted: false,
   });

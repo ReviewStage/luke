@@ -78,6 +78,14 @@ export class InProcessTransport implements GatewayTransport {
   setConnected(connected: boolean): void {
     this.#connected = connected;
   }
+
+  /** Ends the transport for good: no request answers and no event is delivered again. */
+  close(): void {
+    this.#connected = false;
+    this.#unsubscribe?.();
+    this.#unsubscribe = undefined;
+    this.#sinks.clear();
+  }
 }
 
 export interface LoopbackTransportOptions {
@@ -176,6 +184,13 @@ export class LoopbackTransport implements GatewayTransport {
 
   setConnected(connected: boolean): void {
     this.#connected = connected;
+  }
+
+  close(): void {
+    this.#connected = false;
+    this.#unsubscribe?.();
+    this.#unsubscribe = undefined;
+    this.#sinks.clear();
   }
 
   /** Loses the next `count` events on the wire, as a socket that closed mid-stream would. */
