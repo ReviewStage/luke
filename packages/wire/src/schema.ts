@@ -50,10 +50,11 @@ export type JsonSchemaNode =
   | {
       readonly type: "number" | "integer";
       readonly description?: string;
+      readonly enum?: readonly number[];
       readonly minimum?: number;
       readonly maximum?: number;
     }
-  | { readonly type: "boolean"; readonly description?: string }
+  | { readonly type: "boolean"; readonly description?: string; readonly enum?: readonly boolean[] }
   | { readonly type: "null"; readonly description?: string }
   | {
       readonly type: "array";
@@ -170,7 +171,17 @@ export const TEXT_ENDS = {
 
 export type TextEnds = (typeof TEXT_ENDS)[keyof typeof TEXT_ENDS];
 
-export interface TextOptions {
+/** What every combinator takes: the sentence its node carries, and nothing else. */
+export interface DescribedOptions {
+  description?: string;
+}
+
+/** A bounded text whose bound refuses rather than cuts. */
+export interface BoundedTextOptions extends DescribedOptions {
+  max?: number;
+}
+
+export interface TextOptions extends DescribedOptions {
   /**
    * The most characters the text may carry, counted as JavaScript counts
    * them, because every byte budget derived from a character bound in this
@@ -185,7 +196,6 @@ export interface TextOptions {
   ends?: TextEnds;
   /** Admit a text of nothing but whitespace. */
   allowEmpty?: boolean;
-  description?: string;
 }
 
 function stringNode(max: number | undefined): JsonSchemaNode {
@@ -198,16 +208,21 @@ function textSchema(options: TextOptions = {}): Schema<string> {
   const overflow = options.overflow ?? TEXT_OVERFLOW.REFUSE;
   const ends = options.ends ?? TEXT_ENDS.TRIM;
   const allowEmpty = options.allowEmpty === true;
-  if (overflow === TEXT_OVERFLOW.ELLIPSIS && (!collapse || max === undefined)) {
+  if (overflow === TEXT_OVERFLOW.ELLIPSIS && (!collapse || max === undefined || max < 1)) {
     throw new Error(
-      "A text may only be cut with an ellipsis when it is bounded and collapsed to one line: cutting a value that keeps its lines makes it say something its author did not.",
+      "A text may only be cut with an ellipsis when it is collapsed to one line under a bound of at least one character: cutting a value that keeps its lines makes it say something its author did not, and the ellipsis takes a character of the bound it has to fit inside.",
+    );
+  }
+  if (collapse && options.ends !== undefined) {
+    throw new Error(
+      "A one-line text settles both its ends by collapsing, so declaring `ends` beside `oneLine` states a rule that would never be read.",
     );
   }
   return schemaOver<string>(
     (value) => {
       if (!isWireString(value)) return refuse(SCHEMA_REFUSAL.MALFORMED);
-      const collapsed = collapse ? value.replace(/\s+/gu, " ").trim() : value;
-      const normalized = !collapse && ends === TEXT_ENDS.TRIM ? collapsed.trim() : collapsed;
+      const collapsed = collapse ? value.replace(/\s+/gu, " ") : value;
+      const normalized = collapse || ends === TEXT_ENDS.TRIM ? collapsed.trim() : collapsed;
       if (!allowEmpty && normalized.trim().length === 0) return refuse(SCHEMA_REFUSAL.MALFORMED);
       if (max === undefined || normalized.length <= max) return admit(normalized);
       if (overflow === TEXT_OVERFLOW.ELLIPSIS) {
@@ -223,7 +238,7 @@ function textSchema(options: TextOptions = {}): Schema<string> {
  * Multi-line text whose whole words are the point of reporting it, settled
  * the way `wholeText` settles it. `max` refuses, never cuts.
  */
-function wholeTextSchema(options: { max?: number; description?: string } = {}): Schema<string> {
+function wholeTextSchema(options: BoundedTextOptions = {}): Schema<string> {
   const { max, description } = options;
   return schemaOver<string>(
     (value) => {
@@ -237,7 +252,7 @@ function wholeTextSchema(options: { max?: number; description?: string } = {}): 
   );
 }
 
-export interface NumberOptions {
+export interface NumberOptions extends DescribedOptions {
   /**
    * The least the number may be. Below it is malformed rather than too large:
    * a count of minus three is not a count that overflowed, it is not a count.
@@ -245,7 +260,6 @@ export interface NumberOptions {
   minimum?: number;
   /** The most the number may be. Above it is the one bound that reads as too large. */
   maximum?: number;
-  description?: string;
 }
 
 function numberNode(whole: boolean, options: NumberOptions): JsonSchemaNode {
@@ -270,23 +284,30 @@ function boundedNumber(options: NumberOptions, whole: boolean): Schema<number> {
   );
 }
 
-function booleanSchema(options: { description?: string } = {}): Schema<boolean> {
+function booleanSchema(options: DescribedOptions = {}): Schema<boolean> {
   return schemaOver<boolean>(
     (value) => (isWireBoolean(value) ? admit(value) : refuse(SCHEMA_REFUSAL.MALFORMED)),
     () => describedNode({ type: "boolean" }, options.description),
   );
 }
 
+/**
+ * A literal's node names the one value it admits, not merely its type: a
+ * field that must be exactly `2` advertised as an integer would offer a model
+ * every other integer, which is the drift these declarations exist to close.
+ */
 function literalNode(literal: string | number | boolean | null): JsonSchemaNode {
   if (literal === null) return { type: "null" };
   if (isWireString(literal)) return { type: "string", enum: [literal] };
-  if (isWireNumber(literal)) return { type: Number.isSafeInteger(literal) ? "integer" : "number" };
-  return { type: "boolean" };
+  if (isWireNumber(literal)) {
+    return { type: Number.isSafeInteger(literal) ? "integer" : "number", enum: [literal] };
+  }
+  return { type: "boolean", enum: [literal] };
 }
 
 function literalSchema<const Literal extends string | number | boolean | null>(
   literal: Literal,
-  options: { description?: string } = {},
+  options: DescribedOptions = {},
 ): Schema<Literal> {
   return schemaOver<Literal>(
     (value) => (value === literal ? admit(literal) : refuse(SCHEMA_REFUSAL.MALFORMED)),
@@ -296,7 +317,7 @@ function literalSchema<const Literal extends string | number | boolean | null>(
 
 function enumSchema<const Member extends string>(
   members: readonly Member[],
-  options: { description?: string } = {},
+  options: DescribedOptions = {},
 ): Schema<Member> {
   const admitted = new Set<string>(members);
   return schemaOver<Member>(
@@ -309,14 +330,13 @@ function enumSchema<const Member extends string>(
   );
 }
 
-export interface ArrayOptions {
+export interface ArrayOptions extends DescribedOptions {
   /** The most entries the array may carry; past it is too large. */
   max?: number;
   /** The fewest entries it may carry; below it is malformed, as a number's minimum is. */
   minimum?: number;
   /** Drop a refused entry instead of refusing the array. */
   skipRefused?: boolean;
-  description?: string;
 }
 
 function arraySchema<Value>(item: Schema<Value>, options: ArrayOptions = {}): Schema<Value[]> {
@@ -357,10 +377,9 @@ export const RECORD_EXTRA_KEYS = {
 
 export type RecordExtraKeys = (typeof RECORD_EXTRA_KEYS)[keyof typeof RECORD_EXTRA_KEYS];
 
-export interface RecordOptions {
+export interface RecordOptions extends DescribedOptions {
   /** Requests refuse a key they did not name; an answer may ignore one a newer service added. */
   extraKeys?: RecordExtraKeys;
-  description?: string;
 }
 
 /** Any one of a field table's parsed values, which is what its record's own values are. */
@@ -414,7 +433,7 @@ function recordSchema<Fields extends SchemaFields>(
 
 function unionSchema<const Members extends readonly Schema<unknown>[]>(
   members: Members,
-  options: { description?: string } = {},
+  options: DescribedOptions = {},
 ): Schema<FieldValue<Members[number]>> {
   return schemaOver<FieldValue<Members[number]>>(
     (value) => {

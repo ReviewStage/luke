@@ -72,9 +72,15 @@ test("a one-line text cuts with an ellipsis only where it was declared to", () =
   );
 });
 
-test("an ellipsis declared without a one-line bound cannot be constructed", () => {
+test("a text whose own rules contradict each other cannot be constructed", () => {
   assert.throws(() => s.text({ max: 6, overflow: TEXT_OVERFLOW.ELLIPSIS }), /ellipsis/u);
   assert.throws(() => s.text({ oneLine: true, overflow: TEXT_OVERFLOW.ELLIPSIS }), /ellipsis/u);
+  assert.throws(
+    () => s.text({ max: 0, oneLine: true, overflow: TEXT_OVERFLOW.ELLIPSIS }),
+    /ellipsis/u,
+  );
+  assert.throws(() => s.text({ oneLine: true, ends: TEXT_ENDS.KEEP }), /ends/u);
+  assert.throws(() => s.text({ oneLine: true, ends: TEXT_ENDS.TRIM }), /ends/u);
 });
 
 test("whole text settles its line endings and keeps the lines Markdown is written across", () => {
@@ -309,11 +315,13 @@ test("a record's node is the strict object form, with exactly its required keys"
 
 test("a union's node is an anyOf of its members', and a literal's names what it admits", () => {
   assert.deepEqual(s.union([s.text(), s.literal(2)]).jsonSchema(), {
-    anyOf: [{ type: "string" }, { type: "integer" }],
+    anyOf: [{ type: "string" }, { type: "integer", enum: [2] }],
   });
   assert.deepEqual(s.literal("done").jsonSchema(), { type: "string", enum: ["done"] });
   assert.deepEqual(s.literal(null).jsonSchema(), { type: "null" });
-  assert.deepEqual(s.literal(true).jsonSchema(), { type: "boolean" });
+  assert.deepEqual(s.literal(true).jsonSchema(), { type: "boolean", enum: [true] });
+  assert.deepEqual(s.literal(2).jsonSchema(), { type: "integer", enum: [2] });
+  assert.deepEqual(s.literal(1.5).jsonSchema(), { type: "number", enum: [1.5] });
   assert.deepEqual(s.number({ maximum: 3 }).jsonSchema(), { type: "number", maximum: 3 });
 });
 

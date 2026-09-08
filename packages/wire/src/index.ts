@@ -34,7 +34,9 @@ export {
 } from "./json.js";
 export {
   type ArrayOptions,
+  type BoundedTextOptions,
   type Branded,
+  type DescribedOptions,
   type JsonSchemaNode,
   type NumberOptions,
   RECORD_EXTRA_KEYS,
