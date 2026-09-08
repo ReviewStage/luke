@@ -5,6 +5,7 @@ import {
 } from "@sidecar/acts";
 import { BRAIN_TURN_AUTHORITY, type BrainTurnAuthority } from "@sidecar/hosted";
 import {
+  type ChildPolicyContext,
   type EffectiveToolPolicy,
   resolveToolPolicy,
   TOOL_EFFECT,
@@ -34,7 +35,9 @@ import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
  * rule fixed by the turn's kind rather than by configuration is the
  * briefing's: `announce` is the voice's channel out of a turn nobody is
  * listening to, so a developer's ask, whose reply is the speech, is not
- * offered it.
+ * offered it, and neither is a child's task, whose final text is the result
+ * its requester reviews; a child reaches the developer only through the
+ * conversation that asked for it.
  */
 
 const BRAIN_TOOL_TYPE = "function";
@@ -53,6 +56,10 @@ export const BRAIN_TOOL = {
   READ_WORKSPACE_FILE: "read_workspace_file",
   WRITE_WORKSPACE_FILE: "write_workspace_file",
   LOAD_SKILL: "load_skill",
+  SESSIONS_SPAWN: "sessions_spawn",
+  SUBAGENTS: "subagents",
+  SESSIONS_LIST: "sessions_list",
+  SESSIONS_HISTORY: "sessions_history",
 } as const;
 
 export type BrainToolName = (typeof BRAIN_TOOL)[keyof typeof BRAIN_TOOL];
@@ -66,7 +73,15 @@ export const TOOL_GROUP = {
   SPEAK: "speak",
   WORKSPACE: "workspace",
   SKILLS: "skills",
+  /** Delegation and the inspection of Luke's own conversations, OpenClaw's session tools. */
+  SESSIONS: "sessions",
 } as const;
+
+/** The most of a child task's words a spawn carries; a task is a brief, not a transcript. */
+export const maximumChildTaskLength = 8_000;
+
+/** The most history lines one `sessions_history` read answers with. */
+export const maximumSessionsHistoryLines = 50;
 
 const BRAIN_ONLY_TOOLS: readonly RealtimeToolWireDefinition[] = [
   {
@@ -156,6 +171,93 @@ const BRAIN_ONLY_TOOLS: readonly RealtimeToolWireDefinition[] = [
       required: ["location"],
     },
   },
+  {
+    type: BRAIN_TOOL_TYPE,
+    name: BRAIN_TOOL.SESSIONS_SPAWN,
+    description:
+      "Delegate a task to a child agent that runs in a conversation of its own and reports back " +
+      "when it ends. The answer is a receipt that the child was accepted — its identifiers, the " +
+      "model it runs on, and the context it actually started with — never its result. Do not " +
+      "poll for the result: end your turn as usual and the completion arrives in this " +
+      'conversation as its own item. Children start isolated unless context is "fork", ' +
+      "which branches this conversation's current context into the child when it fits the cap.",
+    parameters: {
+      type: "object",
+      properties: {
+        task: {
+          type: "string",
+          description: `The task, briefed in full, under ${maximumChildTaskLength} characters.`,
+        },
+        label: { type: "string", description: "A short title for the work, for listings." },
+        context: {
+          type: "string",
+          enum: ["isolated", "fork"],
+          description: "How the child's context starts; isolated by default.",
+        },
+        cleanup: {
+          type: "string",
+          enum: ["keep", "delete"],
+          description:
+            "Whether the child's conversation is kept for an hour after it ends (default) or archived at once.",
+        },
+        run_timeout_seconds: {
+          type: "integer",
+          description:
+            "A deadline for this child alone; 0, the default, means none beyond the ordinary run deadline.",
+        },
+        expects_completion: {
+          type: "boolean",
+          description:
+            "False for a fire-and-forget child whose end is not reported back; true by default.",
+        },
+      },
+      required: ["task"],
+    },
+  },
+  {
+    type: BRAIN_TOOL_TYPE,
+    name: BRAIN_TOOL.SUBAGENTS,
+    description:
+      "List the children this conversation asked for — each with its id, label, status, and " +
+      "when it was accepted and settled — or cancel one by id. Cancelling reaches every child " +
+      "it spawned in turn. Check status only when debugging; completions arrive on their own.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: ["list", "cancel"],
+          description: "What to do; list by default.",
+        },
+        child_id: { type: "string", description: "The child to cancel, as the list gave it." },
+      },
+      required: [],
+    },
+  },
+  {
+    type: BRAIN_TOOL_TYPE,
+    name: BRAIN_TOOL.SESSIONS_LIST,
+    description:
+      "List Luke's own conversations — main, the developer's threads, the observed sessions' " +
+      "conversations, and child conversations — by key, kind, name, and last activity. These " +
+      "are your own conversations, not the coding agents the roster lists.",
+    parameters: { type: "object", properties: {}, required: [] },
+  },
+  {
+    type: BRAIN_TOOL_TYPE,
+    name: BRAIN_TOOL.SESSIONS_HISTORY,
+    description:
+      "Read the recent history of one child this conversation asked for, most recent last, " +
+      `bounded to ${maximumSessionsHistoryLines} lines. Only a child of this conversation answers.`,
+    parameters: {
+      type: "object",
+      properties: {
+        child_id: { type: "string", description: "The child, as the subagents list gave it." },
+        limit: { type: "integer", description: "How many lines at most." },
+      },
+      required: ["child_id"],
+    },
+  },
 ];
 
 const BRAIN_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(BRAIN_TOOL));
@@ -196,6 +298,26 @@ const BRAIN_ONLY_DESCRIPTORS = {
     effect: TOOL_EFFECT.READ,
     groups: [TOOL_GROUP.SKILLS, TOOL_GROUP.READ],
   },
+  [BRAIN_TOOL.SESSIONS_SPAWN]: {
+    execution: TOOL_EXECUTION.HOST,
+    effect: TOOL_EFFECT.WRITE,
+    groups: [TOOL_GROUP.SESSIONS],
+  },
+  [BRAIN_TOOL.SUBAGENTS]: {
+    execution: TOOL_EXECUTION.HOST,
+    effect: TOOL_EFFECT.WRITE,
+    groups: [TOOL_GROUP.SESSIONS],
+  },
+  [BRAIN_TOOL.SESSIONS_LIST]: {
+    execution: TOOL_EXECUTION.HOST,
+    effect: TOOL_EFFECT.READ,
+    groups: [TOOL_GROUP.SESSIONS, TOOL_GROUP.READ],
+  },
+  [BRAIN_TOOL.SESSIONS_HISTORY]: {
+    execution: TOOL_EXECUTION.HOST,
+    effect: TOOL_EFFECT.READ,
+    groups: [TOOL_GROUP.SESSIONS, TOOL_GROUP.READ],
+  },
 } as const satisfies Record<BrainToolName, Pick<ToolDescriptor, "execution" | "effect" | "groups">>;
 
 function actDescriptor(definition: RealtimeToolWireDefinition): ToolDescriptor {
@@ -234,23 +356,27 @@ export function brainToolCatalog(): readonly ToolDescriptor[] {
  * fact about the voice, not a permission decided from who opened the turn.
  */
 export function turnToolPolicy(trigger: BrainTurnTrigger): ToolPolicy {
-  return trigger === BRAIN_TURN_TRIGGER.ASK ? { deny: [BRAIN_TOOL.ANNOUNCE] } : {};
+  return trigger === BRAIN_TURN_TRIGGER.ASK || trigger === BRAIN_TURN_TRIGGER.CHILD_TASK
+    ? { deny: [BRAIN_TOOL.ANNOUNCE] }
+    : {};
 }
 
 /**
  * The one resolution a turn's tools get: the configured layers over the
- * catalog, then the turn's own layer. Maintenance names no trigger and adds
- * no layer of its own, because it runs no tools.
+ * catalog, the child restriction when the conversation is a child's, then
+ * the turn's own layer. Maintenance names no trigger and adds no layer of
+ * its own, because it runs no tools.
  */
 export function resolveTurnToolPolicy(
   catalog: readonly ToolDescriptor[],
   layers: ToolPolicyLayers,
   trigger?: BrainTurnTrigger,
+  child?: ChildPolicyContext,
 ): EffectiveToolPolicy {
   return resolveToolPolicy(
     catalog,
     layers,
-    undefined,
+    child,
     trigger === undefined ? undefined : turnToolPolicy(trigger),
   );
 }

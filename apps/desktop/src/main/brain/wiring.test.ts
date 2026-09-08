@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { BrainStateRepository } from "@sidecar/brain";
-import { CREDENTIAL_REFERENCE_KIND } from "@sidecar/runtime";
+import { CREDENTIAL_REFERENCE_KIND, memoryChildStore } from "@sidecar/runtime";
 import { MAIN_SESSION_KEY, threadSessionKey } from "@sidecar/runtime-contracts";
 import { type BrainWiringDependencies, wireBrain } from "./wiring";
 
@@ -20,8 +20,14 @@ function dependencies(overrides: Partial<BrainWiringDependencies> = {}) {
     },
     save: () => true,
   });
+  const childStore = memoryChildStore();
   const wiring: BrainWiringDependencies = {
     repositoryFor: (sessionKey) => repository(sessionKey),
+    ensureChildConversation: async () => undefined,
+    archiveConversation: async () => true,
+    conversationDirectory: () => [],
+    historyLines: () => [],
+    childStore: () => childStore,
     createId: () => "id",
     report: () => undefined,
     recordConversationEntry: () => true,

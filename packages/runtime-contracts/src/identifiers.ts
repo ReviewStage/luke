@@ -80,6 +80,8 @@ export const CONVERSATION_KIND = {
   MAIN: "main",
   THREAD: "thread",
   OBSERVED: "observed",
+  /** A child's conversation: delegated work of the same agent, archived on the child service's clock. */
+  CHILD: "child",
   UNKNOWN: "unknown",
 } as const;
 
@@ -94,6 +96,7 @@ export function isConversationKind(value: UnparsedWireValue): value is Conversat
 
 const THREAD_SEGMENT = "thread";
 const OBSERVED_SEGMENT = "observed";
+const SUBAGENT_SEGMENT = "subagent";
 
 /**
  * A private thread's stable address: `agent:<agentId>:thread:<threadId>`.
@@ -108,6 +111,29 @@ export function threadSessionKey(threadId: string, agent: AgentId = DEFAULT_AGEN
   return sessionKey(
     [SESSION_KEY_PREFIX, agent, THREAD_SEGMENT, threadId].join(SESSION_KEY_SEPARATOR),
   );
+}
+
+/** A child's conversation: `agent:<agentId>:subagent:<childId>`, the id minted by the host. */
+export function childSessionKey(childId: string, agent: AgentId = DEFAULT_AGENT_ID): SessionKey {
+  if (!isIdentifier(childId) || childId.includes(SESSION_KEY_SEPARATOR)) {
+    throw new TypeError("child identifier must be a non-empty string without separators");
+  }
+  return sessionKey(
+    [SESSION_KEY_PREFIX, agent, SUBAGENT_SEGMENT, childId].join(SESSION_KEY_SEPARATOR),
+  );
+}
+
+/** The child id a key addresses, or nothing for a key of any other shape. */
+export function childIdOf(key: SessionKey | string): string | undefined {
+  const parsed = parsedSessionKey(key);
+  const [segment, childId] = parsed?.rest ?? [];
+  return parsed?.rest.length === 2 && segment === SUBAGENT_SEGMENT ? childId : undefined;
+}
+
+/** The agent a child key belongs to. */
+export function childAgentOf(key: SessionKey | string): AgentId | undefined {
+  const parsed = parsedSessionKey(key);
+  return parsed && parsed.rest[0] === SUBAGENT_SEGMENT ? agentId(parsed.agent) : undefined;
 }
 
 /**
@@ -194,6 +220,7 @@ export function conversationKindOf(key: SessionKey | string): ConversationKind {
   if (head === OBSERVED_SEGMENT) {
     return observedSessionRefOf(key) ? CONVERSATION_KIND.OBSERVED : CONVERSATION_KIND.UNKNOWN;
   }
+  if (head === SUBAGENT_SEGMENT && parsed.rest.length === 2) return CONVERSATION_KIND.CHILD;
   return CONVERSATION_KIND.UNKNOWN;
 }
 
@@ -207,6 +234,8 @@ export const RUN_ORIGIN = {
   OBSERVATION: "observation",
   HEARTBEAT: "heartbeat",
   CRON: "cron",
+  /** A child's own run, opened by its requester's spawn. */
+  CHILD: "child",
   CHILD_COMPLETION: "child_completion",
   MAINTENANCE: "maintenance",
 } as const;

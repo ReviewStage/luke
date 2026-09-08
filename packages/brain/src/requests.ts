@@ -50,6 +50,8 @@ export const BRAIN_REQUEST_ORIGIN = {
   TYPED: "typed",
   /** Spoken; the voice service's own transcript is the record, and the question here is the mouth's relay. */
   SPOKEN: "spoken",
+  /** A child's delegated task, handed to the child's own conversation by its requester's spawn. */
+  CHILD: "child",
 } as const;
 
 export type BrainRequestOrigin = (typeof BRAIN_REQUEST_ORIGIN)[keyof typeof BRAIN_REQUEST_ORIGIN];

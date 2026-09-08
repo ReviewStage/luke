@@ -1,7 +1,12 @@
 import type { RememberedFact } from "@sidecar/acts";
 import { type BrainStateRepository, brainStateRepositoryFromStorage } from "@sidecar/brain";
 import type { ConversationEntry } from "@sidecar/realtime";
-import { memoryScheduledJobStore, type ScheduledJobStore } from "@sidecar/runtime";
+import {
+  type ChildStore,
+  memoryChildStore,
+  memoryScheduledJobStore,
+  type ScheduledJobStore,
+} from "@sidecar/runtime";
 import {
   ARCHIVE_REASON,
   CONVERSATION_KIND,
@@ -122,6 +127,8 @@ export interface RuntimeStoreWiring {
   ) => Promise<ConversationRecord>;
   /** The scheduler's jobs; a run with nothing on disk keeps them in memory alone. */
   scheduledJobStore: () => ScheduledJobStore;
+  /** The child service's records and completions; a run with nothing on disk keeps them in memory alone. */
+  childStore: () => ChildStore;
   archive: (sessionKey: SessionKey) => Promise<boolean>;
   unarchive: (sessionKey: SessionKey) => Promise<boolean>;
   /**
@@ -302,6 +309,8 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
 
   const memoryJobs = memoryScheduledJobStore();
 
+  const childStore = memoryChildStore();
+
   return {
     client,
     thread,
@@ -389,6 +398,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
       return created;
     },
     scheduledJobStore: () => (dependencies.persistent ? client().scheduledJobStore() : memoryJobs),
+    childStore: () => (dependencies.persistent ? client().childStore() : childStore),
     archive: async (sessionKey) => {
       // Archiving preserves history, and a temporary thread has nowhere to
       // preserve it: the ask is refused and the thread left exactly as it was.

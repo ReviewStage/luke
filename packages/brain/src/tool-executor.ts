@@ -1,5 +1,6 @@
 import {
   type EffectiveToolPolicy,
+  type ForkSnapshot,
   type SkillLoad,
   TOOL_EFFECT,
   TOOL_EXECUTION,
@@ -8,18 +9,38 @@ import {
   type WorkspaceReadResult,
   type WorkspaceWriteResult,
 } from "@sidecar/runtime";
-import type {
-  ToolExecutionContext,
-  ToolExecutor,
-  ToolInvocation,
-  ToolResult,
+import {
+  type ChildCleanup,
+  type ChildContextMode,
+  type ChildPolicyMetadata,
+  type ContextEngine,
+  isChildCleanup,
+  isChildContextMode,
+  type ToolExecutionContext,
+  type ToolExecutor,
+  type ToolInvocation,
+  type ToolResult,
 } from "@sidecar/runtime-contracts";
 import type { SessionIdentity } from "@sidecar/session";
-import { ACT_RESULT_STATUS, isWireString, text, type WireRecord } from "@sidecar/wire";
+import {
+  ACT_RESULT_STATUS,
+  isWireBoolean,
+  isWireNumber,
+  isWireString,
+  text,
+  type WireRecord,
+} from "@sidecar/wire";
+import { estimateTokens } from "./compaction.js";
 import { identityFromRecord, parsedRecord, rejection, sameIdentity } from "./generation.js";
 import { UNCONFIRMED_ACT_RESULT, UNKNOWN_ACT_RESULT } from "./journal.js";
 import type { BrainActExecution, BrainActPerformer, BrainRoster } from "./performer.js";
-import { BRAIN_TOOL, isBrainOnlyTool, maximumBriefingLength } from "./tools.js";
+import {
+  BRAIN_TOOL,
+  isBrainOnlyTool,
+  maximumBriefingLength,
+  maximumChildTaskLength,
+  maximumSessionsHistoryLines,
+} from "./tools.js";
 import { REFUSAL_REASON, type RunControl, type TurnContext } from "./turn.js";
 import type { BrainDelivery } from "./wake-events.js";
 
@@ -41,11 +62,51 @@ export interface BrainWorkspaceAccess {
   loadSkill(location: string): Promise<SkillLoad>;
 }
 
+/** One spawn as the agent asks it of the host, already bounded and validated from the model's call. */
+export interface BrainChildSpawnAsk {
+  readonly task: string;
+  readonly label?: string;
+  readonly context?: ChildContextMode;
+  readonly cleanup?: ChildCleanup;
+  readonly timeoutMs?: number;
+  readonly expectsCompletion?: boolean;
+  /** The run the spawn was called in, for the child's record. */
+  readonly requesterRunId: string;
+  /** The effective policy of the turn that spawned, as names, for the child's record. */
+  readonly policy: ChildPolicyMetadata;
+  /** This conversation's active context, taken only if the host decides on a fork. */
+  readonly fork: () => ForkSnapshot | undefined;
+}
+
+/**
+ * How the session tools reach delegation: the host owns the conversations,
+ * the child service, and the directory, and answers each in the record the
+ * model reads. The agent validates the call's arguments and its own standing;
+ * the host validates ownership — a child named here must be this
+ * conversation's — and everything after.
+ */
+export interface BrainChildAccess {
+  spawn(ask: BrainChildSpawnAsk): Promise<WireRecord>;
+  list(): Promise<WireRecord>;
+  cancel(childId: string): Promise<WireRecord>;
+  conversations(): Promise<WireRecord>;
+  history(childId: string, limit: number): Promise<WireRecord>;
+}
+
+/** A context as a fork would take it: its items and their estimated size, or nothing when it holds none. */
+function forkSnapshotOf(context: ContextEngine): ForkSnapshot | undefined {
+  const items = context.checkpoint().items;
+  if (items.length === 0) return undefined;
+  return { items, estimatedTokens: estimateTokens(items) };
+}
+
 /** What the agent lends the executor: its reads, its performer, its journal's checkpoint, and its clock. */
 export interface ToolExecutorDependencies {
   readonly roster: () => BrainRoster;
   readonly acts: BrainActPerformer;
   readonly workspace: BrainWorkspaceAccess | undefined;
+  /** Delegation, when the host wired it; absent, the session tools refuse. */
+  readonly children: BrainChildAccess | undefined;
   readonly readWhole: (identity: SessionIdentity, context: TurnContext) => Promise<WireRecord>;
   /** Checkpoints the turn's context and journal; false when the store refused, after which no act may run. */
   readonly checkpoint: (context: TurnContext) => Promise<boolean>;
@@ -210,6 +271,74 @@ export function createTurnToolExecutor(
     }
   };
 
+  /**
+   * The session tools, through the host's delegation. A spawn and a cancel
+   * are effects and run through the journal — recorded before the child
+   * service hears them, so a crash mid-spawn is found as an act of unknown
+   * result and the same call id answers the same receipt — while the list
+   * and the history are reads. Arguments are bounded and validated here;
+   * whose child a name is, the host decides.
+   */
+  const childTool = async (
+    call: ToolInvocation,
+    args: WireRecord,
+    execution: BrainActExecution,
+  ): Promise<WireRecord> => {
+    const children = dependencies.children;
+    if (!children) return rejection(REFUSAL_REASON.NO_CHILDREN);
+    if (execution.isRevoked()) return rejection(REFUSAL_REASON.RUN_REVOKED);
+    switch (call.name) {
+      case BRAIN_TOOL.SESSIONS_SPAWN: {
+        const task = text(args.task)?.trim().slice(0, maximumChildTaskLength);
+        if (!task) return rejection(REFUSAL_REASON.EMPTY_TASK);
+        const label = text(args.label)?.trim();
+        const seconds = args.run_timeout_seconds;
+        const timeoutMs =
+          isWireNumber(seconds) && Number.isInteger(seconds) && seconds >= 0
+            ? seconds * 1000
+            : undefined;
+        const ask: BrainChildSpawnAsk = {
+          task,
+          ...(label ? { label } : undefined),
+          ...(isChildContextMode(args.context) ? { context: args.context } : undefined),
+          ...(isChildCleanup(args.cleanup) ? { cleanup: args.cleanup } : undefined),
+          ...(timeoutMs !== undefined ? { timeoutMs } : undefined),
+          ...(isWireBoolean(args.expects_completion)
+            ? { expectsCompletion: args.expects_completion }
+            : undefined),
+          requesterRunId: context.run.runId,
+          policy: {
+            allowed: policy.allowed.map((tool) => tool.id),
+            denied: policy.denied.map((denial) => denial.tool),
+          },
+          fork: () => forkSnapshotOf(context.context),
+        };
+        return performJournaled(call, execution, () => children.spawn(ask));
+      }
+      case BRAIN_TOOL.SUBAGENTS: {
+        if (args.action === "cancel") {
+          const childId = text(args.child_id);
+          if (!childId) return rejection(REFUSAL_REASON.NOT_OWN_CHILD);
+          return performJournaled(call, execution, () => children.cancel(childId));
+        }
+        return children.list();
+      }
+      case BRAIN_TOOL.SESSIONS_LIST:
+        return children.conversations();
+      case BRAIN_TOOL.SESSIONS_HISTORY: {
+        const childId = text(args.child_id);
+        if (!childId) return rejection(REFUSAL_REASON.NOT_OWN_CHILD);
+        const limit =
+          isWireNumber(args.limit) && args.limit > 0
+            ? Math.min(Math.floor(args.limit), maximumSessionsHistoryLines)
+            : maximumSessionsHistoryLines;
+        return children.history(childId, limit);
+      }
+      default:
+        return rejection(REFUSAL_REASON.NOT_OFFERED);
+    }
+  };
+
   return {
     execute: async (call: ToolInvocation, runtimeContext: ToolExecutionContext) => {
       const refused = refusalForPolicy(policy, call.name);
@@ -253,6 +382,11 @@ export function createTurnToolExecutor(
           turn.onBriefing({ briefing, decidedAt: dependencies.now() });
           return answer({ status: ACT_RESULT_STATUS.ACCEPTED });
         }
+        case BRAIN_TOOL.SESSIONS_SPAWN:
+        case BRAIN_TOOL.SUBAGENTS:
+        case BRAIN_TOOL.SESSIONS_LIST:
+        case BRAIN_TOOL.SESSIONS_HISTORY:
+          return answer(await childTool(call, args, execution));
         default:
           return answer(rejection(REFUSAL_REASON.NOT_OFFERED));
       }

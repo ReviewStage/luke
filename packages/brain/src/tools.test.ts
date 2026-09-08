@@ -13,6 +13,7 @@ import {
   isBrainOnlyTool,
   resolveTurnToolPolicy,
   TOOL_GROUP,
+  turnToolPolicy,
 } from "./tools.js";
 import { BRAIN_TURN_TRIGGER } from "./turn.js";
 
@@ -96,4 +97,28 @@ test("the first hosted contract's toolsets stand as installed clients expect the
     [...observation].sort(),
     [BRAIN_TOOL.LIST_SESSIONS, BRAIN_TOOL.READ_TRANSCRIPT, BRAIN_TOOL.ANNOUNCE].sort(),
   );
+});
+
+test("a child's task turn loses announce like an ask, and the session tools stand in the catalog under their group", () => {
+  const childTask = turnToolPolicy(BRAIN_TURN_TRIGGER.CHILD_TASK);
+  assert.deepEqual(childTask.deny, [BRAIN_TOOL.ANNOUNCE]);
+  assert.deepEqual(turnToolPolicy(BRAIN_TURN_TRIGGER.CHILD_COMPLETION), {});
+  const catalog = brainToolCatalog();
+  for (const name of [
+    BRAIN_TOOL.SESSIONS_SPAWN,
+    BRAIN_TOOL.SUBAGENTS,
+    BRAIN_TOOL.SESSIONS_LIST,
+    BRAIN_TOOL.SESSIONS_HISTORY,
+  ]) {
+    const tool = catalog.find((held) => held.id === name);
+    assert.ok(tool, name);
+    assert.ok(tool.groups.includes(TOOL_GROUP.SESSIONS));
+  }
+  // At the depth cap the child restriction removes every session tool; below it, delegation stays.
+  const capped = resolveToolPolicy(catalog, {}, { depth: 5 });
+  const below = resolveToolPolicy(catalog, {}, { depth: 1 });
+  assert.equal(capped.allows(BRAIN_TOOL.SESSIONS_SPAWN), false);
+  assert.equal(capped.allows(BRAIN_TOOL.SESSIONS_HISTORY), false);
+  assert.equal(below.allows(BRAIN_TOOL.SESSIONS_SPAWN), true);
+  assert.equal(below.allows(BRAIN_TOOL.SUBAGENTS), true);
 });

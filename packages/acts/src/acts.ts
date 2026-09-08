@@ -335,10 +335,16 @@ type JsonSchemaArrayProperty = {
   items: JsonSchemaStringProperty;
 };
 
+type JsonSchemaScalarProperty = {
+  type: "integer" | "boolean";
+  description?: string;
+};
+
 type JsonSchemaProperty =
   | JsonSchemaStringProperty
   | JsonSchemaObjectProperty
-  | JsonSchemaArrayProperty;
+  | JsonSchemaArrayProperty
+  | JsonSchemaScalarProperty;
 
 type JsonSchemaPropertyMap = {
   readonly [key: string]: JsonSchemaProperty;

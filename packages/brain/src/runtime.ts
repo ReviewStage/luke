@@ -235,10 +235,14 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
     }
     for (;;) {
       if (signal.aborted) return cancelled();
-      for (const input of steered.splice(0)) {
+      const taken = steered.splice(0);
+      for (const input of taken) {
         await ingest(input);
         if (signal.aborted) return cancelled();
       }
+      // The host hears that the steered words are now in the context, so it
+      // can tell which checkpoint first carries them; nothing else changes.
+      if (taken.length > 0) await emit({ kind: RUNTIME_EVENT.STEERED, inputs: taken.length });
       const assembled = await engine(
         context.assemble({ ephemeral: request.ephemeral() }, lifecycle),
       );

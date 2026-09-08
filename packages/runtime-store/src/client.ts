@@ -1,7 +1,7 @@
 import type { RememberedFact } from "@sidecar/acts";
 import type { BrainPersistedState, BrainStateLoad, BrainStateRepository } from "@sidecar/brain";
 import type { ConversationEntry } from "@sidecar/realtime";
-import type { ScheduledJob, ScheduledJobStore } from "@sidecar/runtime";
+import type { ChildStore, ScheduledJob, ScheduledJobStore } from "@sidecar/runtime";
 import type {
   AgentId,
   ArchiveReason,
@@ -195,6 +195,20 @@ export class RuntimeStoreClient {
       list: () => this.request(RUNTIME_STORE_METHOD.JOBS_LIST, {}),
       put: (job: ScheduledJob) => this.request(RUNTIME_STORE_METHOD.JOB_PUT, { job }),
       delete: (id: string) => this.request(RUNTIME_STORE_METHOD.JOB_DELETE, { id }),
+    };
+  }
+
+  /** The child service's records and completions as a store, each written whole through the worker. */
+  childStore(): ChildStore {
+    return {
+      listChildren: () => this.request(RUNTIME_STORE_METHOD.CHILDREN_LIST, {}),
+      putChild: (record) => this.request(RUNTIME_STORE_METHOD.CHILD_PUT, { record }),
+      deleteChild: (childId) => this.request(RUNTIME_STORE_METHOD.CHILD_DELETE, { childId }),
+      listCompletions: () => this.request(RUNTIME_STORE_METHOD.COMPLETIONS_LIST, {}),
+      putCompletion: (completion) =>
+        this.request(RUNTIME_STORE_METHOD.COMPLETION_PUT, { completion }),
+      deleteCompletion: (completionId) =>
+        this.request(RUNTIME_STORE_METHOD.COMPLETION_DELETE, { completionId }),
     };
   }
 

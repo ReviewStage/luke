@@ -90,6 +90,19 @@ export class RecordingContextEngine implements ContextEngine {
     return result;
   }
 
+  /**
+   * A forked child's first context: the requester's items adopted whole
+   * before the child's first turn, recorded as a boundary of its own so the
+   * transcript says where the inherited history ends and the child's begins.
+   */
+  adoptFork(items: readonly WireRecord[], lifecycle?: ContextLifecycle): MaybePromise<void> {
+    const result = this.#engine.adoptCompaction(items, lifecycle);
+    const record = () => this.#boundary(COMPACTION_SOURCE.FORK, 0);
+    if (result instanceof Promise) return result.then(record);
+    record();
+    return result;
+  }
+
   /** The local fold, delegated to the engine beneath and recorded as a boundary when it folded anything. */
   async foldBehindSummary(
     summarize: (older: readonly WireRecord[]) => Promise<string | undefined>,

@@ -244,7 +244,31 @@ Trust constraints:
   a developer's ask is offered; a cloud session, and a provider whose
   transcript this build does not read, are read from roster fields alone.
   An observed conversation's `announce` reaches the voice directly; main
-  neither approves nor rewords it. Every conversation runs one execution at
+  neither approves nor rewords it. Any conversation may delegate: the brain's
+  `sessions_spawn` tool records a child (`agent:main:subagent:<uuid>`, kind
+  automation) in the runtime store before its receipt is answered, and the
+  child runs in a conversation of its own on the child lane, under the
+  minimal prompt profile and OpenClaw `b7528507`'s child tool exclusions at
+  its depth (delegation and session inspection go too at depth five), its
+  provider acts still governed by the configured policy and `announce`
+  denied as in an ask. The receipt says accepted, never done. A child starts
+  isolated unless the spawn asked to fork, in which case the requester's
+  active context is adopted whole as the child's opening history and
+  recorded as a fork boundary, or starts isolated with the receipt saying so
+  when that context exceeds 100,000 estimated tokens. Five children may be
+  active per requester, eight overall; a parent's turn ends as usual after a
+  spawn and its completion never ends a child; an explicit cancel cascades
+  through descendants; and Start fresh cancels a conversation's descendants
+  first and refuses while one cannot be. A child's end is persisted as a
+  completion before delivery is tried and is delivered to the conversation
+  that asked, whichever kind, by steering its run under way or opening a
+  child-completion turn there; the same completion id is taken once; blocked
+  delivery retries from fifteen seconds to five minutes inside a thirty-minute
+  window, is retained blocked seven days, warns the host at 25 and refuses
+  spawns at 50. A relaunch adopts an unfinished child through its own record,
+  marked interrupted and never replayed, under a budget of three
+  backend-start failures reset only when a backend starts; completed children
+  are archived after an hour. Every conversation runs one execution at
   a time and all of them share the execution lanes ported from OpenClaw
   `b7528507` (`packages/runtime/src/lanes.ts`: an agent lane of
   `min(16, max(8, availableParallelism()))`, a hook-dispatch lane sharing

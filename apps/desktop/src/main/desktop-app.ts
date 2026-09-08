@@ -1623,6 +1623,13 @@ const brainWiring = wireBrain({
   ensureObservedConversation: async (sessionKey, name) => {
     await runtimeStoreWiring.ensureConversation(sessionKey, CONVERSATION_KIND.OBSERVED, name);
   },
+  ensureChildConversation: async (sessionKey, name) => {
+    await runtimeStoreWiring.ensureConversation(sessionKey, CONVERSATION_KIND.CHILD, name);
+  },
+  archiveConversation: (sessionKey) => runtimeStoreWiring.archive(sessionKey),
+  conversationDirectory: () => runtimeStoreWiring.directory().entries,
+  historyLines: (sessionKey) => runtimeStoreWiring.thread(sessionKey).entries(),
+  childStore: () => runtimeStoreWiring.childStore(),
   createId: () => randomUUID(),
   report: (message) => process.stderr.write(`${message}\n`),
   ...(agentTrace ? { traceTurn: (record) => agentTrace.recordBrainTurn(record) } : undefined),

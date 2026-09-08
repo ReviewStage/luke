@@ -13,6 +13,10 @@ export const BRAIN_TURN_TRIGGER = {
   HOLD_RELEASED: "hold-released",
   /** The scheduled review: the workspace's HEARTBEAT.md instructions, under the full prompt, normally saying nothing. */
   HEARTBEAT: "heartbeat",
+  /** A child's own run: the delegated task, whose final text is the result its requester is handed. */
+  CHILD_TASK: "child-task",
+  /** A requester's turn opened by a child's completion, when no run of its own was there to steer. */
+  CHILD_COMPLETION: "child-completion",
 } as const;
 
 export type BrainTurnTrigger = (typeof BRAIN_TURN_TRIGGER)[keyof typeof BRAIN_TURN_TRIGGER];
@@ -24,6 +28,10 @@ export function runOriginOf(trigger: BrainTurnTrigger): RunOrigin {
       return RUN_ORIGIN.USER;
     case BRAIN_TURN_TRIGGER.HEARTBEAT:
       return RUN_ORIGIN.HEARTBEAT;
+    case BRAIN_TURN_TRIGGER.CHILD_TASK:
+      return RUN_ORIGIN.CHILD;
+    case BRAIN_TURN_TRIGGER.CHILD_COMPLETION:
+      return RUN_ORIGIN.CHILD_COMPLETION;
     default:
       return RUN_ORIGIN.OBSERVATION;
   }
@@ -42,6 +50,9 @@ export const REFUSAL_REASON = {
   CALL_ID_REUSED: "not run: this call id was already used with different arguments",
   NO_WORKSPACE: "not run: this agent has no workspace",
   MALFORMED_ARGUMENTS: "not run: the call's arguments are not the strings the tool takes",
+  NO_CHILDREN: "not run: this conversation cannot delegate",
+  NOT_OWN_CHILD: "not run: no child of this conversation has that id",
+  EMPTY_TASK: "a task needs words",
 } as const;
 
 export const TURN_OUTCOME = {
@@ -101,6 +112,13 @@ export interface TurnPlan {
   events: readonly BrainWakeEvent[];
   /** The words the turn opens with, each ingested as the developer's or the host's, in order. */
   open: (events: readonly BrainWakeEvent[], now: number) => readonly string[];
+  /**
+   * Hears every checkpoint of this turn that landed with its opening words
+   * in it, so a host that owes someone an answer about those words — a
+   * child's completion — answers from what is on disk, not from how the
+   * turn ended.
+   */
+  onPersisted?: () => void;
   run?: RunControl;
   /**
    * The generation the work was queued in. A turn that reaches the front of

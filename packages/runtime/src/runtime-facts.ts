@@ -38,6 +38,7 @@ export function promptProfileFor(run: RunDescription): PromptProfile {
     case RUN_ORIGIN.OBSERVATION:
     case RUN_ORIGIN.HEARTBEAT:
     case RUN_ORIGIN.CRON:
+    case RUN_ORIGIN.CHILD:
     case RUN_ORIGIN.CHILD_COMPLETION:
     case RUN_ORIGIN.MAINTENANCE:
       return PROMPT_PROFILE.FULL;

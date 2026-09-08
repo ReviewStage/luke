@@ -17,7 +17,7 @@ import {
   responsesModelAnswer,
 } from "@sidecar/brain";
 import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
-import { CREDENTIAL_REFERENCE_KIND } from "@sidecar/runtime";
+import { CREDENTIAL_REFERENCE_KIND, memoryChildStore } from "@sidecar/runtime";
 import {
   CONVERSATION_KIND,
   conversationKindOf,
@@ -178,6 +178,13 @@ function composed(gate?: Gate): Composed {
     ensureObservedConversation: async (sessionKey, name) => {
       ensured.push({ sessionKey, name });
     },
+    ensureChildConversation: async (sessionKey, name) => {
+      ensured.push({ sessionKey, name });
+    },
+    archiveConversation: async () => true,
+    conversationDirectory: () => [],
+    historyLines: () => [],
+    childStore: () => memoryChildStore(),
     parallelism: () => 8,
     createId: () => `id-${++ids}`,
     report: () => undefined,

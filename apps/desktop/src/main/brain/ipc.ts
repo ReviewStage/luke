@@ -270,10 +270,18 @@ export function followBrainRequests(
 export function registerBrainIpc(dependencies: BrainIpcDependencies): void {
   const { ipcMain, trustedSender, brain, submitters } = dependencies;
   const askWaitMs = dependencies.askWaitMs ?? BRAIN_DEFAULTS.ASK_WAIT_MS;
-  const originAllowed = (sender: WebContents, submission: BrainAskSubmission) =>
-    submission.origin === BRAIN_REQUEST_ORIGIN.TYPED
-      ? submitters.panel(sender)
-      : submitters.voice(sender);
+  // A child's origin is the runtime's own and never a window's: a submission
+  // claiming it is refused whichever window sent it.
+  const originAllowed = (sender: WebContents, submission: BrainAskSubmission) => {
+    switch (submission.origin) {
+      case BRAIN_REQUEST_ORIGIN.TYPED:
+        return submitters.panel(sender);
+      case BRAIN_REQUEST_ORIGIN.SPOKEN:
+        return submitters.voice(sender);
+      default:
+        return false;
+    }
+  };
   registerBridge(
     BRIDGE,
     {
