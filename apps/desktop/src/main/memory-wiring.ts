@@ -73,11 +73,5 @@ export function wireMemory(dependencies: MemoryWiringDependencies): MemoryWiring
   dependencies.onEmbeddingAdapterChanged?.(() => {
     void memory.sync();
   });
-  return {
-    start: () => memory.start(),
-    stop: () => memory.stop(),
-    sync: () => memory.sync(),
-    accessFor: (sessionKey) => memory.accessFor(sessionKey),
-    mode: () => memory.mode(),
-  };
+  return memory;
 }

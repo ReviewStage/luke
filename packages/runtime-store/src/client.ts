@@ -24,9 +24,9 @@ import type {
   MemorySearchQuery,
 } from "./memory-index-table.js";
 import type {
-  MemoryForgetAsk,
-  MemoryForgetReport,
   NotebookEntry,
+  NotebookForgetAsk,
+  NotebookForgetReport,
   NotebookMutation,
 } from "./notebook-table.js";
 import {
@@ -217,7 +217,7 @@ export class RuntimeStoreClient {
     return this.request(RUNTIME_STORE_METHOD.MEMORY_FLUSH_STATE_PUT, { sessionKey, state });
   }
 
-  forgetMemorySources(ask: MemoryForgetAsk, now: number): Promise<MemoryForgetReport> {
+  forgetNotebookEntries(ask: NotebookForgetAsk, now: number): Promise<NotebookForgetReport> {
     return this.request(RUNTIME_STORE_METHOD.MEMORY_FORGET, { ask, now });
   }
 

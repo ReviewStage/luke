@@ -196,7 +196,6 @@ test("forgetting a notebook entry removes its line, and an id the notebook does 
   const report = await h.maintenance.forget({ entryIds: ["fact-1", "never-there"] });
   assert.ok(report);
   assert.equal(report.forgottenEntries, 1);
-  assert.deepEqual(report.entries, []);
   assert.equal(fs.readFileSync(path.join(h.workspace, "USER.md"), "utf8").includes(FACT), false);
   assert.equal(report.limitations.length, 1);
   assert.ok(h.reports.some((line) => /Memory forget limitation/u.test(line)));

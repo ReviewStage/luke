@@ -82,6 +82,7 @@ import {
   type GatewayShutdownSteps,
   gatewayError,
   gatewayOk,
+  HEARTBEAT_DEFAULTS,
   heartbeatJob,
   LANE,
   NodeRegistry,
@@ -291,8 +292,6 @@ const CALENDAR_PRIVACY_PANE_URL =
   "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars";
 
 /** The agent's identity workspace and the skills beside it, under the agent's own directory. */
-/** The cron id a build before this one gave the nightly consolidation sweep. */
-const RETIRED_CONSOLIDATION_JOB_ID = "memory-consolidation";
 const AGENT_WORKSPACE_DIRECTORY = "workspace";
 const AGENT_SKILLS_DIRECTORY = "skills";
 
@@ -1209,7 +1208,18 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
   const cronScheduler = new CronScheduler({
     store: runtimeStoreWiring.scheduledJobStore(),
     coordinate: (work) => brainWiring.lanes.run(LANE.CRON, work),
-    run: (job) => brainWiring.heartbeat(job.sessionKey),
+    // The heartbeat is the only job this build schedules. A row of any other
+    // id is one a build before this one left behind — the nightly memory
+    // consolidation, until now — and running it as a heartbeat would be a
+    // turn nothing asked for, so it is removed instead.
+    run: async (job) => {
+      if (job.id !== HEARTBEAT_DEFAULTS.JOB_ID) {
+        report(`A scheduled job this build does not run was removed: ${job.id}`);
+        await cronScheduler.remove(job.id);
+        return;
+      }
+      await brainWiring.heartbeat(job.sessionKey);
+    },
     report,
   });
 
@@ -2464,9 +2474,6 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
       });
       await cronScheduler.start();
       await cronScheduler.ensure(heartbeatJob(now()));
-      // A build before this one scheduled a nightly consolidation sweep. The
-      // job is gone; its row would otherwise fall through to the heartbeat.
-      await cronScheduler.remove(RETIRED_CONSOLIDATION_JOB_ID);
     }
     calendarOnboardingState = calendarOnboardingStateFromDisk();
     void settleCalendarOnboardingIfConnected();

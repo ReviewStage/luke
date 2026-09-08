@@ -31,7 +31,7 @@ import {
   searchMemoryIndex,
 } from "./memory-index-table.js";
 import {
-  forgetMemorySources,
+  forgetNotebookEntries,
   forgetNotebookEntry,
   listNotebookEntries,
   migrateFactsIntoNotebook,
@@ -137,7 +137,7 @@ const HANDLERS: RuntimeStoreHandlers = {
     return true;
   },
   [RUNTIME_STORE_METHOD.MEMORY_FORGET]: (host, params) =>
-    forgetMemorySources(host.opened(), host.workspace(), params.ask, params.now),
+    forgetNotebookEntries(host.opened(), host.workspace(), params.ask, params.now),
   [RUNTIME_STORE_METHOD.CONVERSATIONS_LIST]: (host) => listConversations(host.opened()),
   [RUNTIME_STORE_METHOD.CONVERSATION_CREATE]: (host, params) =>
     createConversation(host.opened(), params),

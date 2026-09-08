@@ -298,11 +298,7 @@ test("search eligibility: main and private threads of the same agent, never the 
       false,
       key,
     );
-    assert.equal(
-      isMaintenanceEligibleConversation(ineligibleKey, { temporary: false }),
-      false,
-      key,
-    );
+    assert.equal(isMaintenanceEligibleConversation(ineligibleKey, false), false, key);
   }
-  assert.equal(isMaintenanceEligibleConversation(MAIN_SESSION_KEY, { temporary: false }), true);
+  assert.equal(isMaintenanceEligibleConversation(MAIN_SESSION_KEY, false), true);
 });

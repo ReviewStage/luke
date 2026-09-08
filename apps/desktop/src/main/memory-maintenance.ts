@@ -14,8 +14,8 @@ import {
 import { readWorkspaceFile, writeWorkspaceFile } from "@sidecar/runtime";
 import type { AgentRuntime, SessionKey } from "@sidecar/runtime-contracts";
 import type {
-  MemoryForgetAsk,
-  MemoryForgetReport,
+  NotebookForgetAsk,
+  NotebookForgetReport,
   RuntimeStoreClient,
 } from "@sidecar/runtime-store";
 import type { WireRecord } from "@sidecar/wire";
@@ -63,7 +63,7 @@ export interface MemoryMaintenance {
     items: readonly WireRecord[],
   ) => Promise<MemoryHousekeepingResult>;
   /** Forgets the notebook entries an ask names; nothing on a run with no store. */
-  forget: (ask: MemoryForgetAsk) => Promise<MemoryForgetReport | undefined>;
+  forget: (ask: NotebookForgetAsk) => Promise<NotebookForgetReport | undefined>;
 }
 
 export function wireMemoryMaintenance(
@@ -75,13 +75,9 @@ export function wireMemoryMaintenance(
       writeWorkspaceFile(dependencies.workspaceDirectory(), name, content),
   });
 
-  const maintained = (sessionKey: SessionKey): boolean =>
-    isMaintenanceEligibleConversation(sessionKey, {
-      temporary: dependencies.isTemporary(sessionKey),
-    });
-
   const eligible = (sessionKey: SessionKey): boolean =>
-    dependencies.persistent && maintained(sessionKey);
+    dependencies.persistent &&
+    isMaintenanceEligibleConversation(sessionKey, dependencies.isTemporary(sessionKey));
 
   const housekeeping = async (
     items: readonly WireRecord[],
@@ -163,7 +159,7 @@ export function wireMemoryMaintenance(
 
   const forget: MemoryMaintenance["forget"] = async (ask) => {
     if (!dependencies.persistent) return undefined;
-    const report = await dependencies.client().forgetMemorySources(ask, dependencies.now());
+    const report = await dependencies.client().forgetNotebookEntries(ask, dependencies.now());
     dependencies.onNotebookChanged?.();
     for (const limitation of report.limitations) {
       dependencies.report(`Memory forget limitation: ${limitation}`);

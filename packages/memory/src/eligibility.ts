@@ -36,7 +36,7 @@ export function isRecallEligibleConversation(
 /** Whether a conversation's memory is maintained at all: flushed before a compaction, captured before a reset. */
 export function isMaintenanceEligibleConversation(
   sessionKey: SessionKey,
-  input: { readonly temporary: boolean },
+  temporary: boolean,
 ): boolean {
-  return !input.temporary && ELIGIBLE_KINDS.has(conversationKindOf(sessionKey));
+  return !temporary && ELIGIBLE_KINDS.has(conversationKindOf(sessionKey));
 }

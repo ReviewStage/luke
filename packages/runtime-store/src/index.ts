@@ -12,9 +12,9 @@ export type {
   MemorySearchQuery,
 } from "./memory-index-table.js";
 export type {
-  MemoryForgetAsk,
-  MemoryForgetReport,
   NotebookEntry,
+  NotebookForgetAsk,
+  NotebookForgetReport,
   NotebookMutation,
 } from "./notebook-table.js";
 export type { RuntimeStorePort } from "./protocol.js";

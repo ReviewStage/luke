@@ -27,9 +27,9 @@ import type {
   MemorySearchQuery,
 } from "./memory-index-table.js";
 import type {
-  MemoryForgetAsk,
-  MemoryForgetReport,
   NotebookEntry,
+  NotebookForgetAsk,
+  NotebookForgetReport,
   NotebookMutation,
 } from "./notebook-table.js";
 
@@ -167,8 +167,8 @@ export interface RuntimeStoreMethods {
     result: boolean;
   };
   [RUNTIME_STORE_METHOD.MEMORY_FORGET]: {
-    params: { ask: MemoryForgetAsk; now: number };
-    result: MemoryForgetReport;
+    params: { ask: NotebookForgetAsk; now: number };
+    result: NotebookForgetReport;
   };
   [RUNTIME_STORE_METHOD.CONVERSATIONS_LIST]: {
     params: Record<string, never>;

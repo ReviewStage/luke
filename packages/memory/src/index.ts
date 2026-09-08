@@ -34,11 +34,7 @@ export {
   RETRIEVAL_MODE,
   type RetrievalMode,
 } from "./defaults.js";
-export {
-  isMaintenanceEligibleConversation,
-  isRecallEligibleConversation,
-  type RecallEligibilityInput,
-} from "./eligibility.js";
+export { isMaintenanceEligibleConversation } from "./eligibility.js";
 export {
   alreadyFlushedForCompaction,
   dailyNotePathFor,
@@ -77,17 +73,11 @@ export {
   removeNotebookEntry,
 } from "./notebook-markdown.js";
 export {
-  CONVERSATION_RESULT_PATH_PREFIX,
-  conversationResultPath,
   type MemorySyncReport,
-  type MemoryWatcher,
-  type MemoryWatchOptions,
   NotebookMemory,
   type NotebookMemoryAccess,
   type NotebookMemoryOptions,
   type NotebookMemoryStore,
-  type RetrievalStanding,
-  watchMemoryFiles,
 } from "./notebook-memory.js";
 export {
   bm25RankToScore,

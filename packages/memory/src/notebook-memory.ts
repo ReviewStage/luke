@@ -467,6 +467,17 @@ async function identityOf(adapter: EmbeddingAdapter): Promise<EmbeddingModelIden
   return { provider: identity.provider, model: identity.model };
 }
 
+interface MemoryWatcher {
+  close(): void;
+}
+
+interface MemoryWatchOptions {
+  readonly directory: string;
+  readonly onChange: () => void;
+  readonly debounceMs?: number;
+  readonly report?: (message: string) => void;
+}
+
 /**
  * Watches the notebook's directory and asks for one reconcile per burst of
  * changes, debounced at the pinned 1,500 ms. The watcher decides nothing
@@ -474,18 +485,7 @@ async function identityOf(adapter: EmbeddingAdapter): Promise<EmbeddingModelIden
  * compares hashes, so a missed event costs a later pass and never a wrong
  * index, and an index can always be rebuilt from the files alone.
  */
-export interface MemoryWatcher {
-  close(): void;
-}
-
-export interface MemoryWatchOptions {
-  readonly directory: string;
-  readonly onChange: () => void;
-  readonly debounceMs?: number;
-  readonly report?: (message: string) => void;
-}
-
-export function watchMemoryFiles(options: MemoryWatchOptions): MemoryWatcher | undefined {
+function watchMemoryFiles(options: MemoryWatchOptions): MemoryWatcher | undefined {
   const debounceMs = options.debounceMs ?? MEMORY_SEARCH_DEFAULTS.WATCH_DEBOUNCE_MS;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let watcher: FSWatcher;
