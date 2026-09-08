@@ -411,6 +411,7 @@ test("a directory sync that fails is a publication that failed: the rows are gon
   };
   assert.deepEqual(publishPendingArchives(database, root, counting), []);
   assert.equal(synced, 1);
+  // SAFETY: the payload column is the BLOB the deletion wrote, or NULL once published, beside its publication instant.
   const cleared = database
     .prepare("SELECT payload, published_at FROM history_archives WHERE archive_id = ?")
     .get("archive-4") as { payload: Uint8Array | null; published_at: number | null };
