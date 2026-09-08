@@ -99,6 +99,7 @@ export {
 export {
   alreadyFlushedForCompaction,
   dailyNotePathFor,
+  failedHousekeeping,
   type HousekeepingPrompt,
   housekeepingCompleted,
   housekeepingFellShort,
@@ -118,6 +119,21 @@ export {
   SILENT_REPLY_TOKEN,
   shouldRunMemoryFlush,
 } from "./flush.js";
+export {
+  boundNoteLine,
+  type DedupedSeeds,
+  dedupe,
+  historyLineHash,
+  INGESTION_SCORE,
+  type IngestibleHistoryLine,
+  type IngestibleLine,
+  ingestibleLines,
+  NOTE_LINE_MAX_CHARS,
+  type NoteFile,
+  noteSeeds,
+  recentDailyNoteDay,
+  recentHistoryLines,
+} from "./ingestion.js";
 export {
   appendNotebookEntry,
   isNotebookRootFile,
@@ -164,6 +180,7 @@ export {
   conversationRunsRecall,
   decideRecall,
   hasRecallIntent,
+  isMaintenanceEligibleConversation,
   isRecallEligibleConversation,
   RECALL_DECISION,
   RECALL_ELIGIBLE_KINDS,
@@ -190,6 +207,18 @@ export {
   redactSensitiveText,
   stripRecalledContext,
 } from "./redaction.js";
-export { jaccardSimilarity, textSimilarity, tokenize } from "./tokenize.js";
+export {
+  type ConsolidationSweepDependencies,
+  type ConsolidationSweepReport,
+  type ConsolidationSweepStore,
+  DEEP_PATH,
+  type DeepPath,
+  type DeepRewriteDecision,
+  decideDeepRewrite,
+  NOTE_BUDGET_SHARE,
+  runConsolidationSweep,
+  type ToolFreeAsk,
+} from "./sweep.js";
+export { jaccardSimilarity, stripBullet, textSimilarity, tokenize } from "./tokenize.js";
 export { cosineSimilarity, parseEmbedding, serializeEmbedding } from "./vectors.js";
 export { type MemoryWatcher, type MemoryWatchOptions, watchMemoryFiles } from "./watch.js";

@@ -1,3 +1,4 @@
+import { DAY_MS } from "@sidecar/runtime-contracts";
 import type { KeywordHit, MemorySearchResult, MemorySource, VectorHit } from "./contracts.js";
 import { MEMORY_SEARCH_DEFAULTS } from "./defaults.js";
 import { isNotebookRootFile } from "./notebook-markdown.js";
@@ -53,7 +54,6 @@ export function bm25RankToScore(rank: number): number {
   return 1 / (1 + rank);
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const DATED_MEMORY_PATH_RE = /(?:^|\/)memory\/(?:[^/]+\/)*(\d{4})-(\d{2})-(\d{2})(?:-[^/]+)?\.md$/;
 
 /** The day a dated note is about, read from its name; nothing for any other path. */

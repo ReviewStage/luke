@@ -34,8 +34,8 @@ import {
   TOOL_LOOP_RUNTIME,
 } from "@sidecar/brain";
 import {
+  failedHousekeeping,
   housekeepingFellShort,
-  MEMORY_HOUSEKEEPING_OUTCOME,
   type MemoryHousekeepingResult,
 } from "@sidecar/memory";
 import type { ConversationEntry } from "@sidecar/realtime";
@@ -991,12 +991,8 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       if (capture && agent) {
         const items = await agent.contextSnapshot().catch(() => undefined);
         if (items && items.length > 0) {
-          const result = await capture(sessionKey, items).catch(
-            (error: Error): MemoryHousekeepingResult => ({
-              outcome: MEMORY_HOUSEKEEPING_OUTCOME.FAILED,
-              writes: 0,
-              reason: error.message,
-            }),
+          const result = await capture(sessionKey, items).catch((error: Error) =>
+            failedHousekeeping(error.message),
           );
           if (housekeepingFellShort(result.outcome)) {
             dependencies.report(

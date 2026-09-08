@@ -277,6 +277,7 @@ export {
   type DailyNote,
   dailyNoteName,
   isWorkspaceFile,
+  parseDailyNoteName,
   readBootstrapFiles,
   readWorkspaceFile,
   recentDailyNotes,

@@ -1,8 +1,8 @@
 import { HOSTED_BRAIN_OPTION_BOUNDS } from "@sidecar/hosted";
 import {
+  failedHousekeeping,
   housekeepingCompleted,
   MEMORY_FLUSH_DEFAULTS,
-  MEMORY_HOUSEKEEPING_OUTCOME,
   type MemoryHousekeepingResult,
   shouldRunMemoryFlush,
 } from "@sidecar/memory";
@@ -1730,13 +1730,7 @@ export class BrainAgent {
         transcriptBytes: assessment.bytes,
         compactionCount: cycle,
         signal,
-      }).catch(
-        (error: Error): MemoryHousekeepingResult => ({
-          outcome: MEMORY_HOUSEKEEPING_OUTCOME.FAILED,
-          writes: 0,
-          reason: error.message,
-        }),
-      ),
+      }).catch((error: Error) => failedHousekeeping(error.message)),
       signal,
     );
     if (settled.aborted || this.#revoked(turnContext)) return;

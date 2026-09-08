@@ -90,7 +90,7 @@ export function lineageEntries(content: string, lineageKey: string): string[] {
  * the promotion marker, when the line is an entry and one stands before it,
  * and the lineage marker before that. Answers where the removal began.
  */
-export function removeEntryWithMarkers(lines: string[], index: number): { start: number } {
+export function removeEntryWithMarkers(lines: string[], index: number): number {
   let start = index;
   const line = lines[index] ?? "";
   if (
@@ -101,7 +101,7 @@ export function removeEntryWithMarkers(lines: string[], index: number): { start:
   }
   if (isLineageMarkerLine(lines[start - 1] ?? "")) start -= 1;
   lines.splice(start, index - start + 1);
-  return { start };
+  return start;
 }
 
 /** Which candidate keys the file's promotion markers name, so a forget can find what a source produced. */
@@ -138,9 +138,9 @@ export function removePromotedEntries(
       continue;
     }
     const entryFollows = isMemoryEntryLine((lines[index + 1] ?? "").trim());
-    const cut = removeEntryWithMarkers(lines, entryFollows ? index + 1 : index);
+    const start = removeEntryWithMarkers(lines, entryFollows ? index + 1 : index);
     if (entryFollows) removed += 1;
-    index = cut.start;
+    index = start;
   }
   const unattributed = lines.filter((line, index) => {
     const trimmed = line.trim();

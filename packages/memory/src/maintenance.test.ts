@@ -125,7 +125,11 @@ test("a housekeeping write is bounded to today's note and to appending", () => {
   const prompt = memoryFlushPrompt("2026-09-08");
   assert.equal(prompt.notePath, "memory/2026-09-08.md");
   assert.match(prompt.ask, /memory\/2026-09-08\.md/u);
-  assert.match(prompt.system, /read-only/u);
+  assert.ok(
+    prompt.system.includes(
+      "Treat workspace bootstrap and reference files such as MEMORY.md, DREAMS.md, SOUL.md, USER.md, and AGENTS.md as read-only during this turn; never overwrite, replace, or edit them.",
+    ),
+  );
 });
 
 test("recalled-context blocks are stripped and sensitive material is redacted before ingestion", () => {

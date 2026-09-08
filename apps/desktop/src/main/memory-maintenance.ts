@@ -1,59 +1,25 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import type { BrainFlushInput, BrainFlushMarkerStore } from "@sidecar/brain";
 import { completeToolFree, runMemoryHousekeeping } from "@sidecar/brain";
 import {
-  appendOnlyPromotion,
-  applyConsolidationPlan,
-  boundCandidateText,
   CANDIDATE_ORIGIN,
-  CANDIDATE_SESSION_KIND,
-  CANDIDATE_STATUS,
   type CandidateOrigin,
-  type CandidateSeed,
   CONSOLIDATION_DEFAULTS,
-  CONSOLIDATION_PHASE,
-  CONSOLIDATION_SYSTEM_PROMPT,
-  type ConsolidationResult,
-  candidatesDuplicate,
-  consolidationPrompt,
-  conversationCandidatePath,
-  DREAM_DIARY_SYSTEM_PROMPT,
-  DREAMS_FILE,
-  dreamDiaryEntry,
+  type ConsolidationSweepReport,
+  DEEP_PATH,
   type HousekeepingPrompt,
-  hashText,
   housekeepingCompleted,
-  ingestionQuery,
-  isConversationCandidate,
+  type IngestibleHistoryLine,
+  isMaintenanceEligibleConversation,
   localDayStamp,
   MEMORY_HOUSEKEEPING_OUTCOME,
-  type MemoryCandidate,
   type MemoryHousekeepingResult,
   memoryFlushPrompt,
-  parseConsolidationPlan,
-  prepareForIngestion,
-  privateKeyLines,
-  type RankedCandidate,
-  remReflections,
   resetCapturePrompt,
-  selectDeepPromotions,
-  validateConsolidationPlan,
+  runConsolidationSweep,
 } from "@sidecar/memory";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
-import {
-  DAILY_NOTES_DIRECTORY,
-  readWorkspaceFile,
-  WORKSPACE_FILE,
-  writeWorkspaceFile,
-} from "@sidecar/runtime";
-import {
-  type AgentRuntime,
-  CONVERSATION_KIND,
-  type ConversationRecord,
-  conversationKindOf,
-  type SessionKey,
-} from "@sidecar/runtime-contracts";
+import { readWorkspaceFile, writeWorkspaceFile } from "@sidecar/runtime";
+import type { AgentRuntime, ConversationRecord, SessionKey } from "@sidecar/runtime-contracts";
 import type {
   MemoryForgetAsk,
   MemoryForgetReport,
@@ -62,18 +28,18 @@ import type {
 import type { WireRecord } from "@sidecar/wire";
 
 /**
- * Memory maintenance as the desktop composes it: the pre-compaction flush
- * hook each eligible conversation's brain is handed, the capture run before
- * an eligible private conversation starts fresh, the daily consolidation
- * sweep (light, REM, deep), and source-aware forgetting. The notebook's
- * files stay the source of truth; the store's worker keeps the candidates,
- * cursors, tombstones, preimages, and flush state, and writes MEMORY.md and
- * DREAMS.md behind its own conflict check. Every model call here is a
- * tool-free or workspace-only run over a private context that is dropped at
- * its end, on the developer's own key or through Luke's service, and nothing
- * a model wrote reaches durable memory except through the validation below
- * or the deterministic fallback.
+ * Memory maintenance as the desktop wires it: the pre-compaction flush hook
+ * and flush marker each eligible conversation's brain is handed, the capture
+ * run before an eligible private conversation starts fresh, the daily
+ * consolidation sweep the memory package runs over the store, the History
+ * lines, and one tool-free completion, and source-aware forgetting. Every
+ * model call is a tool-free or workspace-only run over a private context
+ * that is dropped at its end, on the developer's own key or through Luke's
+ * service.
  */
+
+export type { ConsolidationSweepReport };
+export { DEEP_PATH };
 
 export interface MemoryMaintenanceDependencies {
   persistent: boolean;
@@ -92,18 +58,6 @@ export interface MemoryMaintenanceDependencies {
   report: (message: string) => void;
   /** Hears every committed notebook change, so the index syncs and recall caches clear. */
   onNotebookChanged?: () => void;
-}
-
-export interface ConsolidationSweepReport {
-  readonly day: string;
-  readonly staged: number;
-  readonly reinforced: number;
-  readonly deduped: number;
-  readonly reflections: number;
-  readonly promoted: number;
-  readonly deepPath: string;
-  readonly diaryWritten: boolean;
-  readonly notes: readonly string[];
 }
 
 export interface MemoryMaintenance {
@@ -131,43 +85,6 @@ export interface MemoryMaintenance {
   forget: (ask: MemoryForgetAsk) => Promise<MemoryForgetReport | undefined>;
 }
 
-/** One History line as the light phase reads it: its hash, when it was said, and the seed it yields, if any. */
-interface IngestibleLine {
-  readonly hash: string;
-  readonly recordedAt: number;
-  readonly seed?: CandidateSeed;
-}
-
-interface DedupedSeeds {
-  readonly seeds: CandidateSeed[];
-  readonly deduped: number;
-}
-
-export const DEEP_PATH = {
-  MODEL_PLAN: "validated model plan",
-  APPEND_ONLY: "append-only fallback",
-  NONE: "nothing promoted",
-} as const;
-
-/** How much a day's ingestion counts for; three recurring days pass the score gate, one does not. */
-const INGESTION_SCORE = 0.8;
-/**
- * The most of one raw note line the light phase reads before scrubbing it;
- * a candidate is cut to its own text bound afterwards anyway, and the
- * redaction treats a key armor the cut removed as an unterminated key.
- */
-const NOTE_LINE_MAX_CHARS = 4_000;
-/**
- * The share of the light limit the dated notes may take ahead of the
- * conversations, so a full History budget cannot keep a completed note from
- * being staged until it ages out of the lookback; whatever either side
- * leaves goes to the other.
- */
-const NOTE_BUDGET_SHARE = 0.5;
-const DAY_MS = 24 * 60 * 60 * 1000;
-const DIARY_OUTPUT_TOKENS = 400;
-const CONSOLIDATION_OUTPUT_TOKENS = 4_000;
-
 function originOf(kind: ConversationEntry["kind"]): CandidateOrigin {
   switch (kind) {
     case CONVERSATION_ENTRY_KIND.TYPED_ASK:
@@ -183,9 +100,15 @@ function originOf(kind: ConversationEntry["kind"]): CandidateOrigin {
   }
 }
 
-function interactive(sessionKey: SessionKey): boolean {
-  const kind = conversationKindOf(sessionKey);
-  return kind === CONVERSATION_KIND.MAIN || kind === CONVERSATION_KIND.THREAD;
+/** A History line as the sweep is handed it: the same kind and words the hash reads, and who said it. */
+function ingestibleLine(entry: ConversationEntry): IngestibleHistoryLine {
+  return {
+    kind: entry.kind,
+    words: entry.words,
+    origin: originOf(entry.kind),
+    ...(entry.eventId ? { eventId: entry.eventId } : undefined),
+    ...(entry.recordedAt !== undefined ? { recordedAt: entry.recordedAt } : undefined),
+  };
 }
 
 export function wireMemoryMaintenance(
@@ -197,8 +120,13 @@ export function wireMemoryMaintenance(
       writeWorkspaceFile(dependencies.workspaceDirectory(), name, content),
   });
 
+  const maintained = (sessionKey: SessionKey): boolean =>
+    isMaintenanceEligibleConversation(sessionKey, {
+      temporary: dependencies.isTemporary(sessionKey),
+    });
+
   const eligible = (sessionKey: SessionKey): boolean =>
-    dependencies.persistent && interactive(sessionKey) && !dependencies.isTemporary(sessionKey);
+    dependencies.persistent && maintained(sessionKey);
 
   const housekeeping = async (
     items: readonly WireRecord[],
@@ -278,436 +206,33 @@ export function wireMemoryMaintenance(
     }
   };
 
-  const eligibleConversations = (): SessionKey[] =>
-    dependencies
-      .conversationDirectory()
-      .filter(
-        (record) =>
-          interactive(record.sessionKey) &&
-          record.archivedAt === undefined &&
-          !dependencies.isTemporary(record.sessionKey),
-      )
-      .map((record) => record.sessionKey);
-
-  /** Near-duplicate seeds fold onto the first of their kind so the store reinforces one candidate. */
-  const dedupe = (seeds: CandidateSeed[], held: readonly MemoryCandidate[]): DedupedSeeds => {
-    const kept: CandidateSeed[] = [];
-    let deduped = 0;
-    for (const seed of seeds) {
-      const existing = held.find((candidate) => candidatesDuplicate(candidate.text, seed.text));
-      if (existing?.queries.includes(seed.query)) {
-        // The same day's signal for a candidate already holding it adds no evidence.
-        deduped += 1;
-        continue;
-      }
-      if (existing) {
-        kept.push({
-          ...seed,
-          text: existing.text,
-          path: existing.path,
-          startLine: existing.startLine,
-          endLine: existing.endLine,
-        });
-        deduped += 1;
-        continue;
-      }
-      const earlier = kept.find((other) => candidatesDuplicate(other.text, seed.text));
-      if (earlier) {
-        kept.push({
-          ...seed,
-          text: earlier.text,
-          path: earlier.path,
-          startLine: earlier.startLine,
-          endLine: earlier.endLine,
-        });
-        deduped += 1;
-        continue;
-      }
-      kept.push(seed);
-    }
-    return { seeds: kept, deduped };
-  };
-
-  /**
-   * The light phase's conversation lines since the cursor, oldest first, each
-   * with its hash and the seed it yields (none when redaction empties it or
-   * the line was seen before). The sweep consumes them under its budget and
-   * advances the cursor only over the lines it consumed, so a line the
-   * budget left behind is read again by the next sweep rather than lost.
-   */
-  const conversationLines = async (
-    client: RuntimeStoreClient,
-    sessionKey: SessionKey,
-    now: number,
-  ): Promise<IngestibleLine[]> => {
-    const cursor = await client.memoryIngestionCursor(sessionKey);
-    const since = Math.max(cursor, now - CONSOLIDATION_DEFAULTS.LIGHT_LOOKBACK_DAYS * DAY_MS);
-    const lines = dependencies
-      .historyLines(sessionKey)
-      .filter((entry) => (entry.recordedAt ?? 0) > since)
-      .sort((a, b) => (a.recordedAt ?? 0) - (b.recordedAt ?? 0));
-    const hashed = lines.map((entry) => ({
-      entry,
-      hash: hashText(`${entry.kind}\n${entry.words}`),
-    }));
-    const seen = new Set(
-      await client.memoryIngestionSeen(
-        sessionKey,
-        hashed.map((line) => line.hash),
-      ),
-    );
-    const result: IngestibleLine[] = [];
-    for (const { entry, hash } of hashed) {
-      const recordedAt = entry.recordedAt ?? now;
-      if (seen.has(hash)) {
-        result.push({ hash, recordedAt });
-        continue;
-      }
-      const prepared = prepareForIngestion(entry.words);
-      if (!prepared) {
-        result.push({ hash, recordedAt });
-        continue;
-      }
-      result.push({
-        hash,
-        recordedAt,
-        seed: {
-          text: prepared.text,
-          path: conversationCandidatePath(sessionKey),
-          startLine: 0,
-          endLine: 0,
-          origin: originOf(entry.kind),
-          sessionKind: CANDIDATE_SESSION_KIND.INTERACTIVE,
-          sourceSessionKey: sessionKey,
-          ...(entry.eventId ? { sourceEventId: entry.eventId } : undefined),
-          query: ingestionQuery(localDayStamp(recordedAt)),
-          score: INGESTION_SCORE,
-          day: localDayStamp(recordedAt),
-        },
-      });
-    }
-    return result;
-  };
-
-  /** The light phase's note seeds: each bullet or line of the recent dated notes, the diary excluded. */
-  const noteSeeds = async (now: number): Promise<CandidateSeed[]> => {
-    const directory = path.join(dependencies.workspaceDirectory(), DAILY_NOTES_DIRECTORY);
-    let names: string[];
-    try {
-      names = await fs.readdir(directory);
-    } catch {
-      return [];
-    }
-    const seeds: CandidateSeed[] = [];
-    for (const name of names.sort()) {
-      const match = /^(\d{4}-\d{2}-\d{2})(?:-[a-z0-9-]+)?\.md$/u.exec(name);
-      if (!match?.[1]) continue;
-      const day = match[1];
-      const dayMs = Date.parse(`${day}T00:00:00`);
-      if (
-        !Number.isFinite(dayMs) ||
-        now - dayMs > CONSOLIDATION_DEFAULTS.LIGHT_LOOKBACK_DAYS * DAY_MS
-      ) {
-        continue;
-      }
-      let content: string;
-      try {
-        content = await fs.readFile(path.join(directory, name), "utf8");
-      } catch {
-        continue;
-      }
-      const lines = content.split("\n");
-      // A key block is excluded whole before any line becomes a candidate:
-      // split first, a body line carries no armor for the redaction to see.
-      const insideKey = privateKeyLines(lines);
-      lines.forEach((line, index) => {
-        if (insideKey[index]) return;
-        const trimmed = line.trim();
-        if (trimmed.length === 0 || trimmed.startsWith("#") || trimmed.startsWith("<!--")) return;
-        const prepared = prepareForIngestion(
-          trimmed.replace(/^[-*+]\s+/u, "").slice(0, NOTE_LINE_MAX_CHARS),
-        );
-        if (!prepared || prepared.text.length < 12) return;
-        seeds.push({
-          text: prepared.text,
-          path: `${DAILY_NOTES_DIRECTORY}/${name}`,
-          startLine: index + 1,
-          endLine: index + 1,
-          origin: CANDIDATE_ORIGIN.AGENT,
-          sessionKind: CANDIDATE_SESSION_KIND.INTERACTIVE,
-          query: ingestionQuery(day),
-          score: INGESTION_SCORE,
-          day,
-        });
-      });
-    }
-    return seeds;
-  };
-
-  /** Re-reads a promotion's source right before publishing; a source gone or changed is skipped. */
-  const rehydrated = async (ranked: RankedCandidate): Promise<boolean> => {
-    const candidate = ranked.candidate;
-    if (isConversationCandidate(candidate) && candidate.sourceSessionKey) {
-      // SAFETY: the source key was a session key when the candidate was staged.
-      const lines = dependencies.historyLines(candidate.sourceSessionKey as SessionKey);
-      return lines.some((entry) =>
-        candidate.sourceEventId
-          ? entry.eventId === candidate.sourceEventId
-          : candidatesDuplicate(entry.words, candidate.text),
-      );
-    }
-    const read = await readWorkspaceFile(dependencies.workspaceDirectory(), candidate.path);
-    if (!read.ok) return false;
-    const lines = read.content.split("\n");
-    const insideKey = privateKeyLines(lines);
-    const from = Math.max(0, candidate.startLine - 1);
-    const to = Math.max(candidate.startLine, candidate.endLine);
-    // The re-read excludes what the staging read excludes, so a candidate an
-    // earlier build staged from inside a key block is never confirmed present.
-    if (insideKey.slice(from, to).some(Boolean)) return false;
-    const slice = lines.slice(from, to).join(" ");
-    const prepared = prepareForIngestion(
-      slice.replace(/^[-*+]\s+/u, "").slice(0, NOTE_LINE_MAX_CHARS),
-    );
-    return (
-      prepared !== undefined &&
-      candidatesDuplicate(boundCandidateText(prepared.text), candidate.text)
-    );
-  };
-
   const runConsolidation: MemoryMaintenance["runConsolidation"] = () => {
     if (!dependencies.persistent) return Promise.resolve(undefined);
     return dependencies.background(async () => {
-      const client = dependencies.client();
-      const now = dependencies.now();
-      const day = localDayStamp(now);
-      const notes: string[] = [];
-      const controller = new AbortController();
-      const timer = setTimeout(
-        () => controller.abort(),
-        CONSOLIDATION_DEFAULTS.CONSOLIDATION_TIMEOUT_MS * 3,
-      );
+      const runtime = dependencies.createRuntime();
       try {
-        // Light: stage and dedupe recent short-term material; nothing durable is written.
-        const held = await client.listMemoryCandidates();
-        // The light limit bounds what one sweep stages; the cursor and the
-        // seen hashes advance only over the lines actually consumed, so what
-        // the budget left behind is read by the next sweep, never lost. The
-        // notes have no cursor — a note line already held costs no budget,
-        // and one not yet held is read again next sweep — so they take their
-        // share first, and the conversations the rest.
-        const noteCandidates = (await noteSeeds(now)).filter(
-          (seed) => !held.some((candidate) => candidatesDuplicate(candidate.text, seed.text)),
-        );
-        const noteShare = Math.min(
-          noteCandidates.length,
-          Math.floor(CONSOLIDATION_DEFAULTS.LIGHT_LIMIT * NOTE_BUDGET_SHARE),
-        );
-        let budget: number = CONSOLIDATION_DEFAULTS.LIGHT_LIMIT - noteShare;
-        const advances: { sessionKey: SessionKey; latest: number; hashes: string[] }[] = [];
-        let gathered: CandidateSeed[] = noteCandidates.slice(0, noteShare);
-        for (const sessionKey of eligibleConversations()) {
-          const lines = await conversationLines(client, sessionKey, now);
-          const hashes: string[] = [];
-          let latest = 0;
-          for (const line of lines) {
-            if (line.seed && budget <= 0) break;
-            hashes.push(line.hash);
-            latest = Math.max(latest, line.recordedAt);
-            if (line.seed) {
-              gathered.push(line.seed);
-              budget -= 1;
-            }
-          }
-          if (hashes.length > 0) advances.push({ sessionKey, latest, hashes });
-        }
-        gathered = gathered.concat(
-          noteCandidates.slice(noteShare, noteShare + Math.max(0, budget)),
-        );
-        const { seeds, deduped } = dedupe(gathered, held);
-        const staging = await client.stageMemoryCandidates(seeds, now);
-        for (const advance of advances) {
-          await client.advanceMemoryIngestion({
-            sessionKey: advance.sessionKey,
-            lastRecordedAt: advance.latest,
-            hashes: advance.hashes,
-            now,
-          });
-        }
-        await client.reconcileMemoryPromotions(now);
-        const staged = await client.listMemoryCandidates(CANDIDATE_STATUS.STAGED);
-        await client.recordMemoryPhaseHits(
-          CONSOLIDATION_PHASE.LIGHT,
-          staged
-            .filter(
-              (candidate) =>
-                now - candidate.lastSeenAt <= CONSOLIDATION_DEFAULTS.LIGHT_LOOKBACK_DAYS * DAY_MS,
-            )
-            .map((candidate) => candidate.key),
-          now,
-        );
-
-        // REM: reflections over the recent week's candidates; a hit for each candidate a theme names.
-        const recent = staged.filter(
-          (candidate) =>
-            now - candidate.lastSeenAt <= CONSOLIDATION_DEFAULTS.REM_LOOKBACK_DAYS * DAY_MS,
-        );
-        const reflections = remReflections(recent);
-        const themes = new Set(reflections.map((reflection) => reflection.theme));
-        await client.recordMemoryPhaseHits(
-          CONSOLIDATION_PHASE.REM,
-          recent
-            .filter((candidate) => candidate.tags.some((tag) => themes.has(tag)))
-            .map((candidate) => candidate.key),
-          now,
-        );
-
-        // Deep: rank, gate, rehydrate, plan, validate, publish.
-        const ranked = selectDeepPromotions(
-          await client.listMemoryCandidates(CANDIDATE_STATUS.STAGED),
-          now,
-        );
-        const promotions: RankedCandidate[] = [];
-        for (const candidate of ranked) {
-          if (await rehydrated(candidate)) promotions.push(candidate);
-          else notes.push(`skipped ${candidate.candidate.key}: its source is gone or changed`);
-        }
-        let deepPath: string = DEEP_PATH.NONE;
-        let result: ConsolidationResult | undefined;
-        let promoted = 0;
-        const runtime = dependencies.createRuntime();
-        if (promotions.length > 0) {
-          const memory = await client.readDurableMemoryFile(WORKSPACE_FILE.MEMORY);
-          const existing = memory?.content ?? "";
-          if (runtime) {
-            const raw = await completeToolFree({
-              runtime,
-              prompt: CONSOLIDATION_SYSTEM_PROMPT,
-              input: consolidationPrompt(existing, promotions),
-              maximumOutputTokens: CONSOLIDATION_OUTPUT_TOKENS,
-              signal: controller.signal,
-              runId: dependencies.createId(),
-            }).catch((error: Error) => {
-              notes.push(`consolidation call failed: ${error.message}`);
-              return undefined;
-            });
-            const plan = raw ? parseConsolidationPlan(raw, promotions) : undefined;
-            const rejection = plan
-              ? validateConsolidationPlan({ previous: existing, plan, promotions })
-              : raw
-                ? "output was not a structured plan"
-                : "the model did not answer";
-            if (plan && !rejection) {
-              result = applyConsolidationPlan({ existingMemory: existing, plan, day });
-              if (result) deepPath = DEEP_PATH.MODEL_PLAN;
-              else
-                notes.push(
-                  "rewrite rejected: it would lose too many prior entries or exceed the budget",
-                );
-            } else if (rejection) {
-              notes.push(`rewrite rejected: ${rejection}`);
-            }
-          } else {
-            notes.push("no model stands; using the append-only path");
-          }
-          if (!result) {
-            result = appendOnlyPromotion({ existingMemory: existing, promotions, day });
-            if (result) deepPath = DEEP_PATH.APPEND_ONLY;
-          }
-          if (result && memory) {
-            const published = await client.publishMemoryRewrite(
-              {
-                path: WORKSPACE_FILE.MEMORY,
-                phase: CONSOLIDATION_PHASE.DEEP,
-                expectedHash: memory.hash,
-                next: result.content,
-                candidateKeys: promotions.map((ranked) => ranked.candidate.key),
-              },
-              now,
-            );
-            if (published.ok) {
-              promoted = promotions.length;
-              dependencies.onNotebookChanged?.();
-            } else {
-              notes.push(`MEMORY.md not rewritten: ${published.reason}`);
-              deepPath = DEEP_PATH.NONE;
-              result = undefined;
-            }
-          }
-        }
-
-        // The Dream Diary: reviewable, never a promotion source.
-        let narrative: string | undefined;
-        let degraded: string | undefined;
-        if (runtime && (staging.staged > 0 || promoted > 0 || reflections.length > 0)) {
-          narrative = await completeToolFree({
-            runtime,
-            prompt: DREAM_DIARY_SYSTEM_PROMPT,
-            input: JSON.stringify({
-              day,
-              staged: staging.staged,
-              reinforced: staging.reinforced,
-              reflections: reflections.map((reflection) => reflection.theme),
-              promoted,
-              highlights: result?.highlights ?? [],
-            }),
-            maximumOutputTokens: DIARY_OUTPUT_TOKENS,
-            signal: controller.signal,
-            runId: dependencies.createId(),
-          }).catch(() => undefined);
-          if (!narrative)
-            degraded = "the diary narrative could not be generated; counts stand alone";
-        }
-        const diary = dreamDiaryEntry({
-          day,
-          staged: staging.staged + staging.reinforced,
-          deduped,
-          reflections,
-          promoted,
-          added: result?.added ?? 0,
-          merged: result?.merged ?? 0,
-          superseded: result?.superseded ?? 0,
-          highlights: result?.highlights ?? [],
-          deepPath,
-          ...(narrative ? { narrative } : undefined),
-          ...(degraded ? { degraded } : undefined),
+        return await runConsolidationSweep({
+          store: dependencies.client(),
+          workspaceDirectory: dependencies.workspaceDirectory,
+          eligibleConversations: () =>
+            dependencies
+              .conversationDirectory()
+              .filter((record) => record.archivedAt === undefined && maintained(record.sessionKey))
+              .map((record) => record.sessionKey),
+          historyLines: (sessionKey) => dependencies.historyLines(sessionKey).map(ingestibleLine),
+          completeToolFree: runtime
+            ? (ask) => completeToolFree({ ...ask, runtime, runId: dependencies.createId() })
+            : undefined,
+          now: dependencies.now,
+          ...(dependencies.onNotebookChanged
+            ? { onNotebookChanged: dependencies.onNotebookChanged }
+            : undefined),
         });
-        const dreams = await client.readDurableMemoryFile(DREAMS_FILE);
-        let diaryWritten = false;
-        if (dreams) {
-          const base =
-            dreams.content.length === 0 ? "# DREAMS.md\n\n" : `${dreams.content.trimEnd()}\n\n`;
-          const written = await client.publishMemoryRewrite(
-            {
-              path: DREAMS_FILE,
-              phase: CONSOLIDATION_PHASE.DEEP,
-              expectedHash: dreams.hash,
-              next: `${base}${diary}`,
-              candidateKeys: [],
-            },
-            now,
-          );
-          diaryWritten = written.ok;
-          if (!written.ok) notes.push(`DREAMS.md not written: ${written.reason}`);
-        }
-        return {
-          day,
-          staged: staging.staged,
-          reinforced: staging.reinforced,
-          deduped,
-          reflections: reflections.length,
-          promoted,
-          deepPath,
-          diaryWritten,
-          notes,
-        };
       } catch (error) {
         dependencies.report(
           `Memory consolidation failed: ${error instanceof Error ? error.message : String(error)}`,
         );
         return undefined;
-      } finally {
-        clearTimeout(timer);
       }
     });
   };

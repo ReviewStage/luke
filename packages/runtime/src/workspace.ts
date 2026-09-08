@@ -170,6 +170,12 @@ export function dailyNoteName(atMs: number, slug?: string): string {
   return `${dayStamp(atMs)}${slug ? `-${slug}` : ""}.md`;
 }
 
+/** The day a daily note's file name is about, `YYYY-MM-DD`, or nothing for a name that is not a daily note's. */
+export function parseDailyNoteName(name: string): { readonly day: string } | undefined {
+  const match = DAILY_NOTE_PATTERN.exec(name);
+  return match ? { day: `${match[1]}-${match[2]}-${match[3]}` } : undefined;
+}
+
 export interface DailyNote {
   readonly name: string;
   readonly path: string;
