@@ -398,13 +398,10 @@ public enum VoiceAsks {
             case .success(let resolved): selection = resolved
             case .failure(let refusal): return .failure(refusal)
             }
-        } else if let agent, let option = options.first(where: { $0.agent == agent }),
-            let first = option.models.first
-        {
-            // The creation endpoint takes an agent only beside a model, so an
-            // agent named alone runs the first model its table lists — the
-            // same one the New Workspace sheet preselects for it.
-            selection = AgentSelection(agent: agent, model: first.id, effort: nil)
+        } else if let agent, let option = options.first(where: { $0.agent == agent }) {
+            // Model-backed agents use the first model the New Workspace sheet
+            // preselects; kind-only agents carry only the provider's agent id.
+            selection = AgentSelection(agent: agent, model: option.models.first?.id, effort: nil)
         } else if agent == nil,
             let stored = WorkspaceProjectsContext.validAgentDefault(
                 defaultAgentDefaults[project.providerId], in: options
@@ -429,7 +426,7 @@ public enum VoiceAsks {
 
     struct AgentSelection: Equatable {
         let agent: String
-        let model: String
+        let model: String?
         let effort: String?
     }
 

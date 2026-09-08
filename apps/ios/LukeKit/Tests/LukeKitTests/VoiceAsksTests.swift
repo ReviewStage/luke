@@ -327,6 +327,40 @@ final class VoiceAsksWorkspaceCreationTests: XCTestCase {
         XCTAssertNil(staleEffort.effort)
     }
 
+    func testAnUnnamedAgentRestoresKindOnlyDeviceDefaultWhileItIsListed() throws {
+        let answer = ProjectsAnswer(
+            projects: [
+                RosterProject(
+                    providerId: "superset", providerProjectId: "p1", repository: "acme/web",
+                    taskSupport: .optional)
+            ],
+            agentModels: [
+                WorkspaceAgentOption(providerId: "superset", agent: "composer", models: [], efforts: [])
+            ]
+        )
+        let restored = try VoiceAsks.workspaceCreation(
+            ["project_id": "p1"],
+            projects: answer,
+            defaultProviderId: nil,
+            defaultProjectIds: [:],
+            defaultAgentDefaults: ["superset": WorkspaceAgentDefault(agent: "composer")]
+        ).get()
+        XCTAssertEqual(restored.agent, "composer")
+        XCTAssertNil(restored.model)
+        XCTAssertNil(restored.effort)
+
+        let stale = try VoiceAsks.workspaceCreation(
+            ["project_id": "p1"],
+            projects: answer,
+            defaultProviderId: nil,
+            defaultProjectIds: [:],
+            defaultAgentDefaults: ["superset": WorkspaceAgentDefault(agent: "claude")]
+        ).get()
+        XCTAssertNil(stale.agent)
+        XCTAssertNil(stale.model)
+        XCTAssertNil(stale.effort)
+    }
+
     func testAModelNamedAloneDecidesTheAgentThatRunsIt() throws {
         let ask = try creation(["project_id": "p1", "model": "gpt-5"]).get()
         XCTAssertEqual(ask.agent, "codex")

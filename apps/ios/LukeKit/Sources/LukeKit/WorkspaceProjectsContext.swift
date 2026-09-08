@@ -65,11 +65,13 @@ public enum WorkspaceProjectsContext {
             let options = answer.agentModels.filter { $0.providerId == providerId }
             guard !options.isEmpty else { continue }
             let agents = options.map { option in
-                let models = option.models.map { "\($0.label) (\($0.id))" }.joined(separator: ", ")
+                let models = option.models.isEmpty
+                    ? "no model choice"
+                    : "models \(option.models.map { "\($0.label) (\($0.id))" }.joined(separator: ", "))"
                 let efforts =
                     option.efforts.isEmpty
                     ? "" : "; efforts \(option.efforts.joined(separator: ", "))"
-                return "\(option.agent) — models \(models)\(efforts)"
+                return "\(option.agent) — \(models)\(efforts)"
             }
             let stored = validAgentDefault(defaultAgentDefaults[providerId], in: options).map {
                 defaultAgentText($0, in: options)
@@ -79,7 +81,7 @@ public enum WorkspaceProjectsContext {
                 ?? "Omitted, the provider's own default agent starts."
             lines.append(
                 "\(VaultProviderID.displayLabel(forWireId: providerId)) agents a new workspace can start, "
-                    + "each with the models it runs: \(agents.joined(separator: " | ")). \(omitted)"
+                    + "each with its model choices: \(agents.joined(separator: " | ")). \(omitted)"
             )
         }
         if let chosenDefault {
@@ -133,10 +135,14 @@ public enum WorkspaceProjectsContext {
         in options: [WorkspaceAgentOption]
     ) -> WorkspaceAgentDefault? {
         guard let stored,
-            let option = options.first(where: { $0.agent == stored.agent }),
-            option.models.contains(where: { $0.id == stored.model }),
-            stored.effort == nil || option.efforts.contains(stored.effort ?? "")
+            let option = options.first(where: { $0.agent == stored.agent })
         else { return nil }
+        if let model = stored.model {
+            guard option.models.contains(where: { $0.id == model }) else { return nil }
+        } else {
+            guard option.models.isEmpty, stored.effort == nil else { return nil }
+        }
+        if let effort = stored.effort, !option.efforts.contains(effort) { return nil }
         return stored
     }
 
@@ -144,9 +150,10 @@ public enum WorkspaceProjectsContext {
         _ stored: WorkspaceAgentDefault,
         in options: [WorkspaceAgentOption]
     ) -> String {
+        guard let storedModel = stored.model else { return stored.agent }
         let option = options.first { $0.agent == stored.agent }
-        let model = option?.models.first { $0.id == stored.model }
-        let modelText = model.map { "\($0.label) (\($0.id))" } ?? stored.model
+        let model = option?.models.first { $0.id == storedModel }
+        let modelText = model.map { "\($0.label) (\($0.id))" } ?? storedModel
         let effortText = stored.effort.map { ", effort \($0)" } ?? ""
         return "\(stored.agent) with \(modelText)\(effortText)"
     }
