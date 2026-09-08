@@ -408,10 +408,37 @@ Trust constraints:
   to speak per run, never that the words were heard. Meeting and pause holds
   stay in the host's speech arbiter, and a held observation briefing is
   re-decided in the conversation that decided it, never through main. The
-  transport this build ships is in-process, and the same suite runs over a
-  loopback transport that carries every envelope through text; widening the
-  method vocabulary, the event set, or what a node may be asked is a product
-  decision, not an implementation detail.
+  boundary now has a process on each side of it, in stages. The one signed
+  executable runs in two modes decided by its arguments: the desktop, which
+  draws, and the Gateway (`--gateway`), which draws nothing, keeps a distinct
+  Electron profile and single-instance lock under `gateway-profile/`, and is
+  handed Luke's existing state root explicitly so what it owns is the state
+  the desktop always kept. A live desktop launch finds a healthy Gateway of
+  its own build through an owner-only discovery record (`gateway/`
+  `discovery.json`: loopback port, per-process token, pid) and reattaches, or
+  starts one, detached, so a client that crashes or reloads leaves the
+  Gateway standing and the next client finds it; a Gateway of another build
+  is asked to shut down and drained before this build starts its own, never
+  run beside; and at most three automatic restarts a minute are made while a
+  client is attached, after which the typed disconnected error stands on the
+  existing path and nothing new is drawn. The transport between them is a
+  WebSocket on `127.0.0.1` at an ephemeral port, the token compared in
+  constant time on the handshake's authorization header and never in an
+  address, the protocol version refused when it differs, and a build that
+  differs admitted drain-only (hello, reconnect, shutdown). The Gateway
+  leaves only at the explicit Quit, which asks it to shut down and waits:
+  admissions closed, work cancelled, ten seconds for it to settle, and
+  whatever did not settle persisted unresolved for recovery rather than
+  finished on paper. Nothing installs it at login and nothing restarts it
+  after an intentional quit. What the Gateway process hosts today is the
+  protocol's door and its own shutdown; the runtime composition (databases,
+  notebook, credentials, observation, scheduling) still stands in the desktop
+  process over the in-process transport, and relocating it into the Gateway
+  is the follow-up this split makes possible, not something this build
+  claims. The same protocol suite runs over the in-process transport, the
+  loopback text transport, and the socket; widening the method vocabulary,
+  the event set, or what a node may be asked is a product decision, not an
+  implementation detail.
 - The hosted tier speaks two brain contracts. The first, kept for installed
   clients, carries the input array and a turn authority and lets the service
   derive everything else. The second (`/api/brain/capabilities`,

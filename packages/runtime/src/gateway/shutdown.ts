@@ -6,6 +6,8 @@
  * shutdown never fabricates a completion for work it cut off, and an effect
  * whose outcome the cut left unknown stays unknown.
  */
+import type { ScheduledTimer } from "../timers.js";
+
 export const GATEWAY_SHUTDOWN_DEFAULTS = {
   DEADLINE_MS: 10_000,
 } as const;
@@ -23,8 +25,8 @@ export interface GatewayShutdownSteps {
 export interface GatewayShutdownOptions {
   deadlineMs?: number;
   now?: () => number;
-  setTimeout?: (work: () => void, delayMs: number) => unknown;
-  clearTimeout?: (handle: unknown) => void;
+  setTimeout?: (work: () => void, delayMs: number) => ScheduledTimer;
+  clearTimeout?: (handle: ScheduledTimer) => void;
 }
 
 export interface GatewayShutdownReport {
@@ -42,13 +44,18 @@ export async function shutdownGateway(
 ): Promise<GatewayShutdownReport> {
   const now = options.now ?? Date.now;
   const schedule = options.setTimeout ?? ((work, ms) => setTimeout(work, ms));
-  const cancel = options.clearTimeout ?? ((handle) => clearTimeout(handle as NodeJS.Timeout));
+  const cancel =
+    options.clearTimeout ??
+    ((handle) => {
+      // SAFETY: a handle this default cancels is one the default scheduler above made, a Node timeout.
+      clearTimeout(handle as NodeJS.Timeout);
+    });
   const deadlineMs = options.deadlineMs ?? GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS;
   const startedAt = now();
   steps.closeAdmissions();
   const cancelled = await steps.cancelActive();
   const controller = new AbortController();
-  let timer: unknown;
+  let timer: ScheduledTimer | undefined;
   const deadline = new Promise<false>((resolve) => {
     timer = schedule(() => {
       controller.abort();
@@ -62,7 +69,7 @@ export async function shutdownGateway(
     ),
     deadline,
   ]);
-  cancel(timer);
+  if (timer !== undefined) cancel(timer);
   const unresolved = await steps.persistUnresolved();
   return { settled, cancelled, unresolved, elapsedMs: now() - startedAt };
 }

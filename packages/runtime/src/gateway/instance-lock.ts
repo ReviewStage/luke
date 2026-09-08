@@ -49,6 +49,7 @@ export function processIsAlive(pid: number): boolean {
     process.kill(pid, 0);
     return true;
   } catch (error) {
+    // SAFETY: process.kill throws an ErrnoException; EPERM means the process exists under another user.
     return (error as NodeJS.ErrnoException).code === "EPERM";
   }
 }
@@ -76,6 +77,7 @@ export async function acquireGatewayInstanceLock(
         },
       };
     } catch (error) {
+      // SAFETY: fs throws an ErrnoException; only its code is read, and any other error is rethrown.
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     }
     const standing = await readGatewayLockHolder(options.filePath);

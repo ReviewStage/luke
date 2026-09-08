@@ -151,7 +151,7 @@ function supervisor(w: World, options: { restartLimit?: number } = {}): GatewayS
     setTimeout: (work, delay) => {
       w.clock.now += delay;
       queueMicrotask(work);
-      return undefined;
+      return 0;
     },
     report: (message) => w.reports.push(message),
     ...options,

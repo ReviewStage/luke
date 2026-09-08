@@ -201,7 +201,7 @@ export function connectLocalGateway(
       const buildVersion = response.headers[GATEWAY_HANDSHAKE_HEADER.BUILD_VERSION];
       hostBuild = {
         protocolVersion: Number.isInteger(protocol) ? protocol : 0,
-        buildVersion: typeof buildVersion === "string" ? buildVersion : "",
+        buildVersion: (Array.isArray(buildVersion) ? buildVersion[0] : buildVersion) ?? "",
       };
     });
     socket.once("unexpected-response", (_request, response: IncomingMessage) => {

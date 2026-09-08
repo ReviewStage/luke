@@ -186,6 +186,8 @@ import {
   DESKTOP_OPERATOR_CLIENT_ID,
   NODE_CAPABILITY,
 } from "./gateway/desktop-node";
+import { currentBuildIdentity } from "./gateway/gateway-process";
+import { createGatewayLauncher, type GatewayLauncher } from "./gateway/launcher";
 import { conversationEntryFromWire, createGatewayOperator } from "./gateway/operator";
 import { createGatewayService } from "./gateway/service";
 import {
@@ -1828,6 +1830,22 @@ const gatewayOperator = createGatewayOperator({
   createId: () => randomUUID(),
   report: (message) => process.stderr.write(`${message}\n`),
 });
+/**
+ * The Gateway process. A live run starts it (or finds the one a previous
+ * client left standing) and attaches; a fixture or capture run starts no
+ * process at all. Today the process hosts the protocol's door and its own
+ * shutdown, while every other method still answers over the in-process
+ * transport above; what it already decides is the lifecycle: it outlives a
+ * client that crashes, is found again by the next, and leaves only at the
+ * explicit Quit below, which asks it to shut down and waits for it.
+ */
+const gatewayLauncher: GatewayLauncher | undefined = runMode.observesProviders
+  ? createGatewayLauncher({
+      stateRoot: app.getPath("userData"),
+      build: currentBuildIdentity(appName),
+      report: (message) => process.stderr.write(`${message}\n`),
+    })
+  : undefined;
 // What the host tells its clients, relayed to the windows by the one client
 // that owns them. The runs list reaches every window; a reply offer and a
 // withdrawal reach the voice window, the one receiver; main's history reaches
@@ -3193,6 +3211,15 @@ export function startDesktopApp(): void {
         ? await settingsStore.accountSnapshot()
         : { status: ACCOUNT_STATUS.SIGNED_OUT };
       accountSession.initialize(account);
+      if (gatewayLauncher) {
+        void gatewayLauncher.attach().then((attached) => {
+          process.stderr.write(
+            attached.outcome === "failed"
+              ? `Gateway not attached: ${attached.failure}\n`
+              : `Gateway ${attached.outcome} (pid ${attached.pid})\n`,
+          );
+        });
+      }
       // Decided once, from what this launch already knows: whether this is
       // the first interactive launch, before any account exists, that the
       // spoken introduction plays on. Everything below reads the takeover's
@@ -3466,7 +3493,17 @@ export function startDesktopApp(): void {
     supersetSignIn.shutdown();
   });
 
-  app.on("before-quit", () => {
+  let gatewayStopped = gatewayLauncher === undefined;
+  app.on("before-quit", (event) => {
+    // The explicit Quit is the one thing that stops the Gateway: it is asked
+    // to shut down and waited for, bounded, before this process leaves, so
+    // no runtime work of Luke's continues after an intentional quit.
+    if (!gatewayStopped && gatewayLauncher) {
+      event.preventDefault();
+      gatewayStopped = true;
+      void gatewayLauncher.stop().finally(() => app.quit());
+      return;
+    }
     // Closed by the main process, never waited on: the panels closing is what
     // decides the app is done, and this window was never one of them.
     voiceWindow.closeForGood();

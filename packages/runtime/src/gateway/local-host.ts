@@ -17,7 +17,7 @@ import {
   gatewayRequestFromWire,
   isIdentifier,
 } from "@sidecar/runtime-contracts";
-import { isRecord, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import { type WebSocket, WebSocketServer } from "ws";
 import { GATEWAY_LOOPBACK_HOST } from "./discovery.js";
 import { eventToWire, type GatewayServer } from "./server.js";
@@ -61,22 +61,23 @@ const DRAIN_ONLY_METHODS: ReadonlySet<string> = new Set([
   GATEWAY_METHOD.SHUTDOWN,
 ]);
 
-const REFUSAL_STATUS: Record<GatewayHandshakeRefusal, number> = {
+const REFUSAL_STATUS = {
   [GATEWAY_HANDSHAKE_REFUSAL.UNAUTHORIZED]: 401,
   [GATEWAY_HANDSHAKE_REFUSAL.UNSUPPORTED_VERSION]: 426,
   [GATEWAY_HANDSHAKE_REFUSAL.INCOMPATIBLE_BUILD]: 409,
   [GATEWAY_HANDSHAKE_REFUSAL.SHUTTING_DOWN]: 503,
   [GATEWAY_HANDSHAKE_REFUSAL.MALFORMED]: 400,
-};
+} as const satisfies Record<GatewayHandshakeRefusal, number>;
 
 interface AdmittedClient {
   identity: GatewayClientIdentity;
   drainOnly: boolean;
 }
 
+type HandshakeDecision = { admitted: AdmittedClient } | { refusal: GatewayHandshakeRefusal };
+
 function headerValue(value: string | string[] | undefined): string | undefined {
-  if (Array.isArray(value)) return value.length === 1 ? value[0] : undefined;
-  return value;
+  return Array.isArray(value) ? (value.length === 1 ? value[0] : undefined) : value;
 }
 
 function tokenMatches(presented: string | undefined, expected: string): boolean {
@@ -119,6 +120,7 @@ export class LocalGatewayHost {
       this.#http.once("error", reject);
       this.#http.listen(0, GATEWAY_LOOPBACK_HOST, () => {
         this.#http.off("error", reject);
+        // SAFETY: a TCP server that is listening answers an AddressInfo, never a pipe path.
         const address = this.#http.address() as AddressInfo;
         this.#port = address.port;
         this.#unsubscribe = this.#options.server.subscribe((event) => {
@@ -164,48 +166,51 @@ export class LocalGatewayHost {
   }
 
   #upgrade(request: http.IncomingMessage, socket: Duplex, head: Buffer): void {
-    const admitted = this.#admission(request.headers);
-    if (typeof admitted === "string") {
+    const decision = this.#admission(request.headers);
+    if ("refusal" in decision) {
+      const { refusal } = decision;
       socket.write(
-        `HTTP/1.1 ${REFUSAL_STATUS[admitted]} Refused\r\n${GATEWAY_REFUSAL_HEADER}: ${admitted}\r\nConnection: close\r\n\r\n`,
+        `HTTP/1.1 ${REFUSAL_STATUS[refusal]} Refused\r\n${GATEWAY_REFUSAL_HEADER}: ${refusal}\r\nConnection: close\r\n\r\n`,
       );
       socket.destroy();
       return;
     }
     this.#sockets.handleUpgrade(request, socket, head, (webSocket) => {
-      this.#admit(webSocket, admitted);
+      this.#admit(webSocket, decision.admitted);
     });
   }
 
   /** Decides the handshake from its headers alone: the client admitted, or the one refusal it earns. */
-  #admission(headers: http.IncomingHttpHeaders): AdmittedClient | GatewayHandshakeRefusal {
-    if (!this.#admitting) return GATEWAY_HANDSHAKE_REFUSAL.SHUTTING_DOWN;
+  #admission(headers: http.IncomingHttpHeaders): HandshakeDecision {
+    if (!this.#admitting) return { refusal: GATEWAY_HANDSHAKE_REFUSAL.SHUTTING_DOWN };
     if (
       !tokenMatches(
         headerValue(headers[GATEWAY_HANDSHAKE_HEADER.AUTHORIZATION]),
         this.#options.token,
       )
     ) {
-      return GATEWAY_HANDSHAKE_REFUSAL.UNAUTHORIZED;
+      return { refusal: GATEWAY_HANDSHAKE_REFUSAL.UNAUTHORIZED };
     }
     const protocolVersion = Number(headerValue(headers[GATEWAY_HANDSHAKE_HEADER.PROTOCOL_VERSION]));
     if (protocolVersion !== GATEWAY_PROTOCOL_VERSION) {
-      return GATEWAY_HANDSHAKE_REFUSAL.UNSUPPORTED_VERSION;
+      return { refusal: GATEWAY_HANDSHAKE_REFUSAL.UNSUPPORTED_VERSION };
     }
     const buildVersion = headerValue(headers[GATEWAY_HANDSHAKE_HEADER.BUILD_VERSION]);
     const clientId = headerValue(headers[GATEWAY_HANDSHAKE_HEADER.CLIENT_ID]);
     const role = headerValue(headers[GATEWAY_HANDSHAKE_HEADER.CLIENT_ROLE]);
     if (buildVersion === undefined || !isIdentifier(clientId) || !isClientRole(role)) {
-      return GATEWAY_HANDSHAKE_REFUSAL.MALFORMED;
+      return { refusal: GATEWAY_HANDSHAKE_REFUSAL.MALFORMED };
     }
     return {
-      identity: { clientId, role },
-      drainOnly: buildVersion !== this.#options.build.buildVersion,
+      admitted: {
+        identity: { clientId, role },
+        drainOnly: buildVersion !== this.#options.build.buildVersion,
+      },
     };
   }
 
   /** The headers a 101 answer carries, so the client learns the host's build on the same handshake. */
-  handshakeHeaders(): Record<string, string> {
+  handshakeHeaders() {
     return {
       [GATEWAY_HANDSHAKE_HEADER.PROTOCOL_VERSION]: String(this.#options.build.protocolVersion),
       [GATEWAY_HANDSHAKE_HEADER.BUILD_VERSION]: this.#options.build.buildVersion,
@@ -243,7 +248,7 @@ export class LocalGatewayHost {
     const request = gatewayRequestFromWire(envelope);
     let response: GatewayResponse;
     if (!request) {
-      const id = typeof envelope.id === "string" ? envelope.id : "";
+      const id = isWireString(envelope.id) ? envelope.id : "";
       response = {
         id,
         ok: false,

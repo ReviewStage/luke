@@ -8,6 +8,7 @@ import {
   type GatewayRequest,
   type GatewayResponse,
 } from "@sidecar/runtime-contracts";
+import type { ScheduledTimer } from "../timers.js";
 import { discoveryMatchesBuild, type GatewayDiscoveryRecord } from "./discovery.js";
 import type { GatewayEventSink, GatewayTransport } from "./transport.js";
 
@@ -109,8 +110,8 @@ export interface GatewaySupervisorPorts {
   build: GatewayBuildIdentity;
   createId: () => string;
   now?: () => number;
-  setTimeout?: (work: () => void, delayMs: number) => unknown;
-  clearTimeout?: (handle: unknown) => void;
+  setTimeout?: (work: () => void, delayMs: number) => ScheduledTimer;
+  clearTimeout?: (handle: ScheduledTimer) => void;
   report?: (message: string) => void;
   restartLimit?: number;
   restartWindowMs?: number;

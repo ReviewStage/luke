@@ -152,6 +152,19 @@ longer read or written, so that conversation, that memory, and those
 remembered things start over; the files stay where they were until you remove
 them.
 
+Luke's runtime is on its way to running as a process of its own, the Gateway,
+so that closing or reloading the panel does not stop his work; this version
+starts that process when Luke launches and stops it when you quit Luke, and
+nothing else: it is not installed to run at login and does not run on after
+you quit. The two processes speak over a connection that never leaves your Mac
+(the loopback address, on a port chosen at each start), authenticated by a
+random token made fresh each time the Gateway starts. The token is written to
+one file under Luke's application data (`gateway/discovery.json`) that only
+your user account can read, is never put in an address or a log, and is gone
+when the Gateway stops. In this version the Gateway process holds no
+conversation, memory, or credential of yours; those stay where the sections
+above describe.
+
 **Things Luke remembers about you.** During a conversation you start, Luke may
 silently save a concise preference, personal fact, goal, or recurring constraint
 that looks useful later. He skips temporary details and uncertain guesses, never
