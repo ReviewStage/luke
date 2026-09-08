@@ -52,13 +52,18 @@ import type { StoredAccount } from "@sidecar/account";
 import type { CalendarAccountCredential } from "@sidecar/calendar";
 import { googleCalendarSignInConfig } from "@sidecar/calendar";
 import {
+  ACCOUNT_PREFERENCE_FIELDS,
+  type AccountPreferenceField,
+  type AccountPreferences,
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
   type AppSettingField,
   type AppSettingValue,
+  accountPreferencesFromStored,
   type KeyedAppSettingField,
   type SettingEntryValue,
   type StoredAppSettings,
+  sameAccountPreferenceValue,
   sameSettingEntry,
 } from "@sidecar/settings";
 // The same ownership the calendar reader has over its credential shape: what
@@ -556,6 +561,38 @@ export class SettingsStore {
       else delete next[field];
       return next;
     });
+  }
+
+  async accountPreferences(): Promise<AccountPreferences> {
+    return accountPreferencesFromStored(storedSettingsFromPersisted(await this.#load()));
+  }
+
+  async applyAccountPreferences(
+    settings: AccountPreferences,
+  ): Promise<SettingsUpdateResult & { changed: readonly AccountPreferenceField[] }> {
+    const changed: AccountPreferenceField[] = [];
+    await this.#serialize(async () => {
+      const persisted = await this.#load();
+      const next: PersistedSettings = { ...persisted };
+      for (const field of ACCOUNT_PREFERENCE_FIELDS) {
+        // SAFETY: AccountPreferences is the parsed subset of JSON-compatible stored app settings.
+        const value = settings[field] as UnparsedWireValue;
+        // SAFETY: AccountPreferenceField selects the same persisted JSON-compatible setting value.
+        if (!sameAccountPreferenceValue(persisted[field] as UnparsedWireValue, value)) {
+          changed.push(field);
+        }
+        if (value === undefined) delete next[field];
+        else Object.assign(next, { [field]: value });
+      }
+      if (changed.length === 0) return;
+      await this.#write({ ...next, version: SETTINGS_FILE_VERSION });
+      this.#loading = Promise.resolve({ ...next, version: SETTINGS_FILE_VERSION });
+    });
+    return {
+      status: ACT_RESULT_STATUS.ACCEPTED,
+      settings: await this.snapshot(),
+      changed,
+    };
   }
 
   /** Clears one map entry only if it still holds the value the caller read. */

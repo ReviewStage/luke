@@ -6,6 +6,7 @@ import { Worker } from "node:worker_threads";
 import * as Sentry from "@sentry/electron/main";
 import {
   AccountClient,
+  AccountPreferencesClient,
   AccountSessionManager,
   accountGateOpen,
   HostedVaultClient,
@@ -85,7 +86,7 @@ import {
   type WorkspaceAgentSelection,
   workspaceProjectSelectionId,
 } from "@sidecar/session";
-import { APP_SETTING_SCHEMA, VOICE_SOURCE } from "@sidecar/settings";
+import { type AccountPreferenceField, APP_SETTING_SCHEMA, VOICE_SOURCE } from "@sidecar/settings";
 import {
   SupersetCli,
   SupersetSignIn,
@@ -126,6 +127,7 @@ import {
   ACCOUNT_STATUS,
   type AccountSnapshot,
   type AppBootstrap,
+  type AppSettings,
   type BrainAppActRequest,
   type ConversationHistoryPayload,
   type MicrophoneRoute,
@@ -143,6 +145,10 @@ import { VOICE_SOURCE_COUNTED_AS } from "#shared/product-vocabulary";
 import type { BrainRequestSnapshot } from "#shared/wire/brain";
 import { SPEECH_OUTCOME, type SpeechOutcome } from "#shared/wire/speech";
 import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/wire/voice-view";
+import {
+  AccountPreferencesSync,
+  type AccountPreferencesSyncAccount,
+} from "./account-preferences-sync";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { AppleCalendarReader } from "./apple-calendar";
 import {
@@ -646,6 +652,24 @@ const hostedVault = new HostedVaultClient({
   // may first gain its id, and the retry guard needs the one name that holds
   // still across that refresh. Compared in this process only, never sent.
   readAccountKey: async () => (await settingsStore.readAccount())?.email,
+});
+const accountPreferencesClient = new AccountPreferencesClient({
+  serviceBaseUrl: HOSTED_SERVICE_BASE_URL,
+  readAccessToken: async () =>
+    runMode.sendsNetwork ? (await settingsStore.readAccount())?.accessToken : undefined,
+  refreshAccount: accountSession.refreshOnce,
+  readAccountKey: async () => (await settingsStore.readAccount())?.email,
+});
+const accountPreferencesSync = new AccountPreferencesSync({
+  client: accountPreferencesClient,
+  settings: settingsStore,
+  account: async () => {
+    const held = await settingsStore.readAccount();
+    if (!held) return undefined;
+    const account: AccountPreferencesSyncAccount = { email: held.email };
+    return account;
+  },
+  applied: applyRemoteAccountPreferences,
 });
 // The mirror between the local key store and the vault. It lives here, beside
 // the client it drives, so the keys it reads for a sweep never leave the main
@@ -1380,6 +1404,32 @@ async function broadcastVoiceAvailability(): Promise<void> {
   broadcast(channels.onSettingsChanged, await settingsStore.snapshot());
 }
 
+async function applyRemoteAccountPreferences(
+  result: { settings: AppSettings },
+  changed: readonly AccountPreferenceField[],
+): Promise<void> {
+  if (changed.includes(APP_SETTING_SCHEMA.voice.field)) {
+    voiceCapabilities.realtimeCredentials?.setVoice(result.settings.stored.voice);
+  }
+  if (changed.includes(APP_SETTING_SCHEMA.voiceSpeed.field)) {
+    voiceCapabilities.realtimeCredentials?.setSpeed(result.settings.stored.voiceSpeed);
+  }
+  const workspaceAgentDefaultsChanged = changed.includes(
+    APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
+  );
+  if (workspaceAgentDefaultsChanged) {
+    await readSupersetWorkspaceHost();
+  }
+  if (
+    changed.includes(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field) ||
+    changed.includes(APP_SETTING_SCHEMA.workspaceProjectDefaults.field) ||
+    workspaceAgentDefaultsChanged
+  ) {
+    await broadcastWorkspaceProjects();
+  }
+  broadcast(channels.onSettingsChanged, result.settings);
+}
+
 /**
  * Tells every panel what an account transition just did to recording, for the
  * reason directly above and one more.
@@ -1422,6 +1472,8 @@ async function broadcastCodexCloudConnection(): Promise<void> {
 }
 
 async function startAccountCapabilities(): Promise<void> {
+  if (!accountCapabilitiesActive()) return;
+  await accountPreferencesSync.reconcile();
   if (!accountCapabilitiesActive()) return;
   await applyVoiceCredential();
   await broadcastVoiceAvailability();
@@ -1832,6 +1884,7 @@ async function rememberWorkspaceDefaults(
         providerId,
       );
       broadcast(channels.onSettingsChanged, saved.settings);
+      void accountPreferencesSync.preferencesChanged();
     }
     if (
       providerId === SUPERSET_WORKSPACE_PROVIDER_ID &&
@@ -1846,6 +1899,7 @@ async function rememberWorkspaceDefaults(
         { agent },
       );
       broadcast(channels.onSettingsChanged, saved.settings);
+      void accountPreferencesSync.preferencesChanged();
     }
     // The project the workspace landed in becomes that provider's default on
     // the same first-choice terms, read again for the same overlap reason as
@@ -1864,6 +1918,7 @@ async function rememberWorkspaceDefaults(
         ),
       );
       broadcast(channels.onSettingsChanged, saved.settings);
+      void accountPreferencesSync.preferencesChanged();
     }
     // A model named for this creation becomes the default on the same
     // first-choice terms as the provider: only while nothing is chosen.
@@ -1884,6 +1939,7 @@ async function rememberWorkspaceDefaults(
         namedSelection,
       );
       broadcast(channels.onSettingsChanged, saved.settings);
+      void accountPreferencesSync.preferencesChanged();
     }
   } catch {
     // The reply is the creation's; a failed remember has no line in it.
@@ -2115,6 +2171,7 @@ function registerIpc(): void {
     workspaceProjectOffered,
     reconcileSpeech: () => void reconcileSpeech(),
     recordProductEvent,
+    accountPreferencesSync,
     vaultSync: providerKeyVaultSync,
   });
 
@@ -3303,7 +3360,10 @@ export function startDesktopApp(): void {
       // this path never enters startAccountCapabilities, so the reconcile
       // that makes "on" true for keys stored before the switch existed has
       // to run here as well.
-      if (account.status === ACCOUNT_STATUS.SIGNED_IN) reconcileProviderKeyVault();
+      if (account.status === ACCOUNT_STATUS.SIGNED_IN) {
+        void accountPreferencesSync.reconcile();
+        reconcileProviderKeyVault();
+      }
       // A beat a previous launch could not speak — signed in, but voiceless
       // or quieted at the moment — is still owed, and this launch may be the
       // one that can say it.

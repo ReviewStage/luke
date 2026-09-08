@@ -202,7 +202,8 @@ public final class DeviceSettingsSync {
             Field.speed: snapshot.speed.rawValue,
             Field.workspaceProjects: snapshot.workspaceProjectIds,
             Field.workspaceAgents: snapshot.workspaceAgentDefaults.mapValues { selection in
-                var fields = [Field.agent: selection.agent, Field.model: selection.model]
+                var fields = [Field.agent: selection.agent]
+                if let model = selection.model { fields[Field.model] = model }
                 if let effort = selection.effort { fields[Field.effort] = effort }
                 return fields
             },
@@ -221,10 +222,12 @@ public final class DeviceSettingsSync {
         else { return nil }
         let agents = (payload[Field.workspaceAgents] as? [String: [String: String]] ?? [:])
             .compactMapValues { fields -> WorkspaceAgentDefault? in
-                guard let agent = fields[Field.agent], let model = fields[Field.model] else {
-                    return nil
-                }
-                return WorkspaceAgentDefault(agent: agent, model: model, effort: fields[Field.effort])
+                guard let agent = fields[Field.agent] else { return nil }
+                return WorkspaceAgentDefault(
+                    agent: agent,
+                    model: fields[Field.model],
+                    effort: fields[Field.effort]
+                )
             }
         return DeviceSettingsSnapshot(
             voice: RealtimeVoice(rawValue: voice) ?? .default,

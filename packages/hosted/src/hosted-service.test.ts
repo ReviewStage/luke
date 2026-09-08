@@ -14,6 +14,7 @@ import {
   hostedBrainRequestFromWire,
   hostedConversationAnswerFromWire,
   hostedMintAnswerFromWire,
+  hostedProjectsAnswerFromWire,
   isDevicePlatform,
   isPushEnvironment,
   isVaultProviderId,
@@ -52,6 +53,35 @@ function mintedWire(overrides: MintedWireOverrides = {}) {
 test("the introduction mint has its own path beside the ordinary one", () => {
   assert.equal(HOSTED_SERVICE_PATH.INTRODUCTION_MINT, "/api/voice/introduction-mint");
   assert.notEqual(HOSTED_SERVICE_PATH.INTRODUCTION_MINT, HOSTED_SERVICE_PATH.VOICE_MINT);
+});
+
+test("account preferences have a stable endpoint path", () => {
+  assert.equal(HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES, "/api/account/preferences");
+});
+
+test("project agent options may carry no model choices", () => {
+  const answer = hostedProjectsAnswerFromWire({
+    projects: [
+      {
+        providerId: "superset",
+        providerProjectId: "project-1",
+        repository: "owner/repo",
+        taskSupport: "optional",
+      },
+    ],
+    agentModels: [
+      {
+        providerId: "superset",
+        agent: "composer",
+        models: [],
+        efforts: [],
+      },
+    ],
+  });
+
+  assert.deepEqual(answer?.agentModels, [
+    { providerId: "superset", agent: "composer", models: [], efforts: [] },
+  ]);
 });
 
 test("a mint answer round-trips through the wire reader, with or without a quota", () => {

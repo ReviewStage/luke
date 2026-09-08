@@ -6,9 +6,11 @@ import {
 } from "@sidecar/credentials";
 import type { SessionProviderAdapter } from "@sidecar/session";
 import {
+  ACCOUNT_PREFERENCE_FIELDS,
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
   type AppSettingField,
+  isAccountPreferenceField,
   SETTING_SIDE_EFFECT,
   settingAnalytics,
   settingEntryGuard,
@@ -18,6 +20,7 @@ import { ACT_RESULT_STATUS, isWireString, type UnparsedWireValue } from "@sideca
 import { BRIDGE, type BridgeArgumentsFor } from "#shared/bridge";
 import type { AppSettings } from "#shared/contracts";
 import { CONNECTION_COUNTED_AS } from "#shared/product-vocabulary";
+import type { AccountPreferencesSync } from "../account-preferences-sync";
 import type { MediaDuckController } from "../native/media-duck";
 import type { ProviderKeyVaultSync } from "../provider-key-vault-sync";
 import type { BridgeContext } from "../register-bridge";
@@ -44,6 +47,8 @@ export interface SettingsRowsIpcDependencies {
   /** Re-reads the announcement hold and lets the speech arbiter offer what it may. */
   reconcileSpeech: () => void;
   recordProductEvent: RecordProductEvent;
+  /** Mirrors account preferences into the signed-in account. */
+  accountPreferencesSync: Pick<AccountPreferencesSync, "preferencesChanged">;
   /** Mirrors local provider keys into the account vault, main-process only. */
   vaultSync: ProviderKeyVaultSync;
 }
@@ -65,6 +70,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     workspaceProjectOffered,
     reconcileSpeech,
     recordProductEvent,
+    accountPreferencesSync,
     vaultSync,
   } = dependencies;
   // The renderer can replace or clear a provider's credential but never reads
@@ -217,6 +223,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
       if (result.reason) return;
       recordSettingUpdate(field, result.settings);
       await applySettingSideEffect(field, result.settings, event);
+      if (isAccountPreferenceField(field)) void accountPreferencesSync.preferencesChanged();
     },
     refusal: "Could not save that setting on this system.",
   });
@@ -253,6 +260,7 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
       if (result.reason) return;
       recordSettingUpdate(field, result.settings);
       await applySettingSideEffect(field, result.settings, event);
+      if (isAccountPreferenceField(field)) void accountPreferencesSync.preferencesChanged();
     },
     refusal: "Could not save that setting on this system.",
   });
@@ -281,6 +289,14 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
         const definition = APP_SETTING_SCHEMA[field];
         if (!("resetScope" in definition) || definition.resetScope !== scope) continue;
         await applySettingSideEffect(field, result.settings, event, true);
+      }
+      if (
+        ACCOUNT_PREFERENCE_FIELDS.some((field) => {
+          const definition = APP_SETTING_SCHEMA[field];
+          return "resetScope" in definition && definition.resetScope === scope;
+        })
+      ) {
+        void accountPreferencesSync.preferencesChanged();
       }
     },
     refusal: "Could not reset those settings on this system.",

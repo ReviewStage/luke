@@ -53,6 +53,12 @@ final class WorkspaceCreationDefaultsTests: XCTestCase {
             defaults.agentDefault(for: "conductor"),
             WorkspaceAgentDefault(agent: "cursor", model: "auto", effort: nil)
         )
+
+        defaults.setAgentDefault(WorkspaceAgentDefault(agent: "composer"), for: "superset")
+        XCTAssertEqual(
+            defaults.agentDefault(for: "superset"),
+            WorkspaceAgentDefault(agent: "composer")
+        )
     }
 
     func testChoosingTheProviderDefaultForgetsTheStoredChoice() {

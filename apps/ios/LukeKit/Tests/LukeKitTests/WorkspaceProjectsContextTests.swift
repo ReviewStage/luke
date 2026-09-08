@@ -121,6 +121,41 @@ final class WorkspaceProjectsContextTests: XCTestCase {
         )
     }
 
+    func testKindOnlyAgentSelectionIsSaidOnlyWhileItIsListed() {
+        let answer = ProjectsAnswer(
+            projects: [
+                RosterProject(
+                    providerId: "superset", providerProjectId: "p1", repository: "acme/web",
+                    taskSupport: .optional)
+            ],
+            agentModels: [
+                WorkspaceAgentOption(providerId: "superset", agent: "composer", models: [], efforts: [])
+            ]
+        )
+
+        let text = WorkspaceProjectsContext.text(
+            answer: answer,
+            defaultProviderId: "superset",
+            defaultProjectIds: [:],
+            defaultAgentDefaults: ["superset": WorkspaceAgentDefault(agent: "composer")]
+        )
+        XCTAssertTrue(text.contains("composer — no model choice"))
+        XCTAssertTrue(
+            text.contains("Omitted, the saved default agent selection starts: composer.")
+        )
+        XCTAssertFalse(
+            WorkspaceProjectsContext.text(
+                answer: answer,
+                defaultProviderId: "superset",
+                defaultProjectIds: [:],
+                defaultAgentDefaults: [
+                    "superset": WorkspaceAgentDefault(agent: "composer", model: "unexpected")
+                ]
+            )
+            .contains("saved default agent selection")
+        )
+    }
+
     func testTheCapKeepsTheDefaultProjectPastTheCut() {
         let projects = (0 ..< 12).map { project("p\($0)", repository: "repo-\($0)") }
         let listed = WorkspaceProjectsContext.listedProjects(projects, defaultProjectIds: ["conductor": "p11"])

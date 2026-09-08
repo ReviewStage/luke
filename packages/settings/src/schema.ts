@@ -43,7 +43,13 @@ import {
   PANEL_FORM_FACTOR_LIST,
   type PanelFormFactor,
 } from "@sidecar/surface";
-import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import {
+  isRecord,
+  isWireString,
+  type UnparsedWireValue,
+  type WireRecord,
+  wholeNumber,
+} from "@sidecar/wire";
 import { parseVoiceHotkey, VOICE_HOTKEY_NONE } from "./voice-hotkey.js";
 
 // The ids themselves live in core, because the product-event vocabulary names
@@ -919,6 +925,150 @@ export const APP_SETTING_FIELDS = Object.keys(APP_SETTING_SCHEMA).filter(
 
 export function isAppSettingField(value: UnparsedWireValue): value is AppSettingField {
   return isWireString(value) && value in APP_SETTING_SCHEMA;
+}
+
+/**
+ * Account preferences are the settings shared by desktop, phone, and watch.
+ * Machine-local controls — launch at login, Dock, display layout, hotkeys,
+ * microphone routing, local list filters, credentials, and calendar grants —
+ * stay in each device's own store.
+ */
+export const ACCOUNT_PREFERENCE_FIELDS = [
+  APP_SETTING_SCHEMA.voice.field,
+  APP_SETTING_SCHEMA.voiceSpeed.field,
+  APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
+  APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+  APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
+] as const satisfies readonly AppSettingField[];
+
+export type AccountPreferenceField = (typeof ACCOUNT_PREFERENCE_FIELDS)[number];
+export type AccountPreferences = Partial<Pick<StoredAppSettings, AccountPreferenceField>>;
+
+const ACCOUNT_PREFERENCE_FIELD_SET: ReadonlySet<string> = new Set(ACCOUNT_PREFERENCE_FIELDS);
+
+export function isAccountPreferenceField(
+  value: UnparsedWireValue,
+): value is AccountPreferenceField {
+  return isWireString(value) && ACCOUNT_PREFERENCE_FIELD_SET.has(value);
+}
+
+interface AccountPreferencesParseOptions {
+  unknownFields?: "ignore" | "reject";
+  invalidFields?: "ignore" | "reject";
+}
+
+export function accountPreferencesFromWire(
+  value: UnparsedWireValue,
+  options: AccountPreferencesParseOptions = {},
+): AccountPreferences | undefined {
+  if (!isRecord(value)) return undefined;
+  const unknownFields = options.unknownFields ?? "reject";
+  const invalidFields = options.invalidFields ?? "reject";
+  const preferences: Record<string, UnparsedWireValue> = {};
+  for (const [field, rawValue] of Object.entries(value)) {
+    if (!isAccountPreferenceField(field)) {
+      if (unknownFields === "reject") return undefined;
+      continue;
+    }
+    const parsed = APP_SETTING_SCHEMA[field].guard(rawValue === null ? undefined : rawValue);
+    if (!parsed.valid) {
+      if (invalidFields === "reject") return undefined;
+      continue;
+    }
+    if (parsed.value !== undefined) {
+      // SAFETY: The account-preference guard accepted this value as that setting's stored JSON shape.
+      preferences[field] = parsed.value as UnparsedWireValue;
+    }
+  }
+  // SAFETY: Every key came from ACCOUNT_PREFERENCE_FIELDS and every value passed that field's guard.
+  return preferences as AccountPreferences;
+}
+
+export function accountPreferencesFromStored(
+  settings: Pick<StoredAppSettings, AppSettingField>,
+): AccountPreferences {
+  const preferences: Record<string, UnparsedWireValue> = {};
+  for (const field of ACCOUNT_PREFERENCE_FIELDS) {
+    const value = settings[field];
+    if (value !== undefined) {
+      // SAFETY: Stored app setting values are the JSON-compatible shapes accepted by their guards.
+      preferences[field] = value as UnparsedWireValue;
+    }
+  }
+  // SAFETY: Every key came from ACCOUNT_PREFERENCE_FIELDS.
+  return preferences as AccountPreferences;
+}
+
+export function accountPreferencesToWire(preferences: AccountPreferences): WireRecord {
+  const wire: Record<string, UnparsedWireValue> = {};
+  for (const field of ACCOUNT_PREFERENCE_FIELDS) {
+    // SAFETY: Account preferences are parsed stored setting values, which are JSON-compatible.
+    const value = preferences[field] as UnparsedWireValue;
+    if (value !== undefined) wire[field] = value;
+  }
+  // SAFETY: Every assigned key is a string and every assigned value is a wire value.
+  return wire as WireRecord;
+}
+
+export function accountPreferencesEmpty(preferences: AccountPreferences): boolean {
+  return ACCOUNT_PREFERENCE_FIELDS.every((field) => preferences[field] === undefined);
+}
+
+function stableJson(value: UnparsedWireValue): string {
+  if (Array.isArray(value)) return `[${value.map((entry) => stableJson(entry)).join(",")}]`;
+  if (isRecord(value)) {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export function sameAccountPreferenceValue(
+  current: UnparsedWireValue,
+  next: UnparsedWireValue,
+): boolean {
+  return stableJson(current) === stableJson(next);
+}
+
+export function sameAccountPreferences(
+  current: AccountPreferences,
+  next: AccountPreferences,
+): boolean {
+  return ACCOUNT_PREFERENCE_FIELDS.every((field) => {
+    const currentValue = current[field];
+    const nextValue = next[field];
+    if (currentValue === undefined || nextValue === undefined) {
+      return currentValue === nextValue;
+    }
+    // SAFETY: Account preferences are parsed stored setting values, which are JSON-compatible.
+    return sameAccountPreferenceValue(
+      currentValue as UnparsedWireValue,
+      nextValue as UnparsedWireValue,
+    );
+  });
+}
+
+export interface AccountPreferencesAnswer {
+  preferences: AccountPreferences;
+  updatedAt?: number;
+}
+
+export function accountPreferencesAnswerFromWire(
+  value: UnparsedWireValue,
+): AccountPreferencesAnswer | undefined {
+  if (!isRecord(value)) return undefined;
+  const preferences = accountPreferencesFromWire(value.preferences, {
+    unknownFields: "ignore",
+    invalidFields: "ignore",
+  });
+  if (preferences === undefined) return undefined;
+  const updatedAt = wholeNumber(value.updatedAt);
+  if (value.updatedAt !== undefined && (updatedAt === undefined || updatedAt < 0)) {
+    return undefined;
+  }
+  return updatedAt === undefined ? { preferences } : { preferences, updatedAt };
 }
 
 /** The settings whose value is a map, and so can be written one entry at a time. */

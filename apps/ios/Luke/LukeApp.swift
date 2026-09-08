@@ -10,6 +10,8 @@ struct LukeApp: App {
     @Environment(\.scenePhase) private var scenePhase
     // Held for its lifetime — the WCSessionDelegate must not be deallocated.
     private let phoneRelay: PhoneSessionRelay
+    private let accountPreferences: AccountPreferencesSync
+    private let accountPreferencesEnabled: Bool
 
     init() {
         let session = AccountSession(
@@ -20,6 +22,10 @@ struct LukeApp: App {
         )
         _session = State(initialValue: session)
         phoneRelay = PhoneSessionRelay(accountSession: session)
+        accountPreferences = AccountPreferencesSync(
+            client: AccountPreferencesClient(baseURL: AccountConstants.serviceURL),
+            session: session
+        )
         _vault = State(initialValue: VaultStore(
             client: VaultClient(baseURL: AccountConstants.serviceURL),
             session: session
@@ -28,6 +34,7 @@ struct LukeApp: App {
         // counts and recording would be a test's, not a developer's — the
         // desktop's fixture and evidence gate, at this app's one seam.
         let testing = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        accountPreferencesEnabled = !testing
         let events = ProductEventSender(
             serviceURL: AccountConstants.serviceURL,
             appVersion: Self.appVersion,
@@ -40,7 +47,9 @@ struct LukeApp: App {
         events.record(.appLaunch)
         events.markDayActive()
         events.start()
-        if !testing {
+        if accountPreferencesEnabled {
+            accountPreferences.start()
+            accountPreferences.reconcile()
             SessionReplay.start()
             // A launch restored from the keychain is already the account's;
             // a signed-out launch records anonymously until the sign-in edge.
@@ -60,7 +69,9 @@ struct LukeApp: App {
                 .onChange(of: session.state) { previous, current in
                     accountEdge(from: previous, to: current)
                     switch current {
-                    case .signedIn: phoneRelay.push()
+                    case .signedIn:
+                        if accountPreferencesEnabled { accountPreferences.reconcile() }
+                        phoneRelay.push()
                     case .signedOut: phoneRelay.pushSignOut()
                     }
                 }
@@ -69,6 +80,7 @@ struct LukeApp: App {
             // iOS suspends rather than quits, so backgrounding is the moment
             // the desktop's timed flush cannot be counted on to arrive.
             if phase == .background { events.flush() }
+            if phase == .active && accountPreferencesEnabled { accountPreferences.reconcile() }
         }
     }
 

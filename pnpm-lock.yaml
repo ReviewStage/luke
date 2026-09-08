@@ -207,9 +207,15 @@ importers:
       '@sidecar/session':
         specifier: workspace:*
         version: link:../../packages/session
+      '@sidecar/settings':
+        specifier: workspace:*
+        version: link:../../packages/settings
       '@sidecar/surface':
         specifier: workspace:*
         version: link:../../packages/surface
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../../packages/wire
       '@tailwindcss/vite':
         specifier: 4.3.3
         version: 4.3.3(vite@7.3.1(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -277,6 +283,9 @@ importers:
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../hosted
+      '@sidecar/settings':
+        specifier: workspace:*
+        version: link:../settings
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire

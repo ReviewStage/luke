@@ -93,12 +93,26 @@ final class WorkspaceAgentOptionTests: XCTestCase {
         XCTAssertEqual(option?.efforts, ["low", "high"])
     }
 
-    func testNoUsableModelsIsNoOption() {
+    func testExplicitlyEmptyModelsDecodeAsKindOnlyOption() {
+        let option = WorkspaceAgentOption(json: [
+            "providerId": "superset",
+            "agent": "composer",
+            "models": [],
+            "efforts": [],
+        ])
+
+        XCTAssertEqual(
+            option,
+            WorkspaceAgentOption(providerId: "superset", agent: "composer", models: [], efforts: [])
+        )
+    }
+
+    func testOnlyMalformedModelsIsNoOption() {
         XCTAssertNil(
             WorkspaceAgentOption(json: [
                 "providerId": "conductor",
                 "agent": "claude",
-                "models": [],
+                "models": [["id": "", "label": "nameless"]],
                 "efforts": [],
             ])
         )
@@ -141,6 +155,12 @@ final class ProjectsClientTests: XCTestCase {
                         "models": [["id": "fable-5-1", "label": "Fable 5.1"]],
                         "efforts": ["low"],
                     ],
+                    [
+                        "providerId": "superset",
+                        "agent": "composer",
+                        "models": [],
+                        "efforts": [],
+                    ],
                     ["providerId": "conductor"],  // malformed: skipped
                 ],
             ])
@@ -150,8 +170,10 @@ final class ProjectsClientTests: XCTestCase {
         XCTAssertEqual(answer.projects.count, 1)
         XCTAssertEqual(answer.projects.first?.providerProjectId, "proj-1")
         XCTAssertEqual(answer.projects.first?.taskSupport, .optional)
-        XCTAssertEqual(answer.agentModels.count, 1)
+        XCTAssertEqual(answer.agentModels.count, 2)
         XCTAssertEqual(answer.agentModels.first?.agent, "claude")
+        XCTAssertEqual(answer.agentModels.last?.agent, "composer")
+        XCTAssertEqual(answer.agentModels.last?.models, [])
     }
 
     func testServerErrorThrows() async {

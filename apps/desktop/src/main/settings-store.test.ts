@@ -1316,6 +1316,24 @@ test("ignores a stored or environment pace this build does not offer", async (t)
   assert.equal(appSettingsView(await store.snapshot()).voiceSpeed, REALTIME_DEFAULTS.SPEED);
 });
 
+test("account preferences extraction excludes resolved defaults and local-only preferences", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory, {
+    environment: {
+      LUKE_REALTIME_VOICE: REALTIME_VOICE.SAGE,
+      LUKE_REALTIME_SPEED: String(REALTIME_VOICE_SPEED.SLOW),
+    },
+  });
+
+  await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
+  await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, VOICE_HOTKEY_NONE);
+  await store.set(APP_SETTING_SCHEMA.voiceSpeed.field, REALTIME_VOICE_SPEED.FAST);
+
+  assert.deepEqual(await store.accountPreferences(), {
+    voiceSpeed: REALTIME_VOICE_SPEED.FAST,
+  });
+});
+
 test("reports no talk-key chord until one is chosen", async (t) => {
   const directory = await temporaryDirectory(t);
   const store = storeIn(directory);
@@ -1842,6 +1860,55 @@ test("keeps one provider's default project apart from another's", async (t) => {
   assert.deepEqual(appSettingsView(cleared.settings).workspaceProjectDefaults, {
     [PROVIDER_ID.CODEX]: "proj-2",
   });
+});
+
+test("applies account preferences to disk and restores them from a new store", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
+  await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, VOICE_HOTKEY_NONE);
+  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.SAGE);
+  await store.set(APP_SETTING_SCHEMA.voiceSpeed.field, REALTIME_VOICE_SPEED.FAST);
+  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "project-local");
+
+  const result = await store.applyAccountPreferences({
+    voice: REALTIME_VOICE.MARIN,
+    workspaceAgentDefaults: { conductor: { agent: "codex", model: "gpt-5.6-sol" } },
+  });
+
+  assert.deepEqual(result.changed, [
+    APP_SETTING_SCHEMA.voice.field,
+    APP_SETTING_SCHEMA.voiceSpeed.field,
+    APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+    APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
+  ]);
+  const reopened = storeIn(directory);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.showInDock.field), true);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voiceHotkey.field), VOICE_HOTKEY_NONE);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voice.field), REALTIME_VOICE.MARIN);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voiceSpeed.field), undefined);
+  assert.equal(await readWorkspaceProjectDefault(reopened, PROVIDER_ID.CONDUCTOR), undefined);
+  assert.deepEqual(await readWorkspaceAgentDefault(reopened, PROVIDER_ID.CONDUCTOR), {
+    agent: "codex",
+    model: "gpt-5.6-sol",
+  });
+});
+
+test("an empty account preferences snapshot clears only account preferences", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const store = storeIn(directory);
+  await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
+  await store.set(APP_SETTING_SCHEMA.voice.field, REALTIME_VOICE.SAGE);
+  await store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, PROVIDER_ID.CONDUCTOR);
+  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "project-local");
+
+  await store.applyAccountPreferences({});
+
+  const reopened = storeIn(directory);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.showInDock.field), true);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voice.field), undefined);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field), undefined);
+  assert.equal(await readWorkspaceProjectDefault(reopened, PROVIDER_ID.CONDUCTOR), undefined);
 });
 
 test("forgetting a default no provider offers survives the reload it was written for", async (t) => {

@@ -103,7 +103,7 @@ public struct WorkspaceAgentOption: Identifiable, Equatable, Sendable {
             else { return nil }
             return WorkspaceAgentModelChoice(id: id, label: label)
         }
-        guard !models.isEmpty else { return nil }
+        guard modelsJSON.isEmpty || !models.isEmpty else { return nil }
         self.providerId = providerId
         self.agent = agent
         self.models = models

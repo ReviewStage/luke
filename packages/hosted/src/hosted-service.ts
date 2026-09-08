@@ -92,6 +92,11 @@ export const HOSTED_SERVICE_PATH = {
   ACCOUNT_DELETE: "/api/account/delete",
   USAGE: "/api/usage",
   EVENTS: "/api/events",
+  /**
+   * Store and read account preferences (GET, PUT). Only settings named by
+   * `@sidecar/settings` as cross-device preferences belong here.
+   */
+  ACCOUNT_PREFERENCES: "/api/account/preferences",
   /** Store or replace a provider key (POST) or delete one (DELETE). */
   VAULT_KEY: "/api/vault/key",
   /** List stored provider keys — ids and timestamps, never keys. */
@@ -891,7 +896,6 @@ function hostedWorkspaceAgentModelsFromWire(
     if (!id || !label) return undefined;
     models.push({ id, label });
   }
-  if (models.length === 0) return undefined;
   const efforts = wireStringList(value.efforts) ?? [];
   return { providerId, agent, models, efforts };
 }
