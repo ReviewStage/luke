@@ -86,7 +86,6 @@ export {
   brainResponsesOutput,
   brainResponsesRequest,
   embeddingsVectors,
-  RESPONSES_ITEM_TYPE,
   type ResponsesFunctionTool,
   type ResponsesInputItem,
   responsesCompactedWindow,

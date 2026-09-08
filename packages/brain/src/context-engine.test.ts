@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { CONTEXT_INPUT_KIND, checkpointFormatTag } from "@sidecar/runtime-contracts";
 import type { WireRecord } from "@sidecar/wire";
 import { pairedDanglingCalls, ResponsesContextEngine } from "./context-engine.js";
-import { functionCallOutputItem, RESPONSES_ITEM_TYPE, userMessageItem } from "./responses-api.js";
+import { functionCallOutputItem, userMessageItem } from "./responses-api.js";
 
 const RUNTIME = { id: "tool-loop", version: 1 };
 const LOST = JSON.stringify({ status: "unknown" });
@@ -25,13 +26,13 @@ test("the stamp joins the runtime and the item format, and an empty checkpoint l
 test("a compatible checkpoint loads whole and pairs a dangling call with the lost result", () => {
   const context = engine();
   const items: WireRecord[] = [
-    { type: RESPONSES_ITEM_TYPE.MESSAGE, role: "user", content: "hi" },
-    { type: RESPONSES_ITEM_TYPE.FUNCTION_CALL, call_id: "c1", name: "act", arguments: "{}" },
+    { type: RESPONSES_INPUT_ITEM_TYPE.MESSAGE, role: "user", content: "hi" },
+    { type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL, call_id: "c1", name: "act", arguments: "{}" },
   ];
   const result = context.bootstrap({ format: context.checkpointFormat, items }, LOST);
   assert.deepEqual(result, { loaded: true, repaired: 1 });
   assert.deepEqual(context.checkpoint().items.at(-1), {
-    type: RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
+    type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
     call_id: "c1",
     output: LOST,
   });
@@ -39,7 +40,7 @@ test("a compatible checkpoint loads whole and pairs a dangling call with the los
 
 test("a valid checkpoint of another stamp is refused, named, and left alone rather than repaired", () => {
   const context = engine();
-  const items = [{ type: RESPONSES_ITEM_TYPE.MESSAGE, role: "user", content: "hi" }];
+  const items = [{ type: RESPONSES_INPUT_ITEM_TYPE.MESSAGE, role: "user", content: "hi" }];
   for (const format of [
     { ...context.checkpointFormat, runtime: "other-runtime" },
     { ...context.checkpointFormat, runtimeVersion: 2 },
@@ -59,7 +60,7 @@ test("words, model output, and tool results become their Responses items; epheme
   context.bootstrap(undefined, LOST);
   context.ingest({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: "[developer ask] hello" });
   const call = {
-    type: RESPONSES_ITEM_TYPE.FUNCTION_CALL,
+    type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
     call_id: "c1",
     name: "act",
     arguments: "{}",
@@ -68,10 +69,10 @@ test("words, model output, and tool results become their Responses items; epheme
   context.ingest({ kind: CONTEXT_INPUT_KIND.TOOL_RESULT, callId: "c1", outputJson: '{"ok":true}' });
   const assembled = context.assemble({ ephemeral: ["[standing context] roster"] });
   assert.equal(assembled.length, 4);
-  assert.equal(assembled[0]?.type, RESPONSES_ITEM_TYPE.MESSAGE);
+  assert.equal(assembled[0]?.type, RESPONSES_INPUT_ITEM_TYPE.MESSAGE);
   assert.deepEqual(assembled[1], call);
   assert.deepEqual(assembled[2], {
-    type: RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
+    type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
     call_id: "c1",
     output: '{"ok":true}',
   });
@@ -85,13 +86,13 @@ test("compact drops everything before the latest compaction item; adopting a win
   context.ingest({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: "one" });
   context.ingest({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: "two" });
   assert.equal(context.compact(), 0);
-  const folded = { type: RESPONSES_ITEM_TYPE.COMPACTION, id: "cmp", encrypted_content: "x" };
+  const folded = { type: RESPONSES_INPUT_ITEM_TYPE.COMPACTION, id: "cmp", encrypted_content: "x" };
   context.ingest({ kind: CONTEXT_INPUT_KIND.MODEL_OUTPUT, items: [folded] });
   assert.equal(context.compact(), 2);
   assert.deepEqual(context.checkpoint().items, [folded]);
   const window: WireRecord[] = [
-    { type: RESPONSES_ITEM_TYPE.COMPACTION, id: "cmp2", encrypted_content: "y" },
-    { type: RESPONSES_ITEM_TYPE.MESSAGE, role: "assistant", content: [] },
+    { type: RESPONSES_INPUT_ITEM_TYPE.COMPACTION, id: "cmp2", encrypted_content: "y" },
+    { type: RESPONSES_INPUT_ITEM_TYPE.MESSAGE, role: "assistant", content: [] },
   ];
   context.adoptCompaction(window);
   assert.deepEqual(context.checkpoint().items, window);

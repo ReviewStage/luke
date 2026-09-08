@@ -1,5 +1,5 @@
 import { ISSUE_TRACKER_ID } from "@sidecar/issues";
-import { PROVIDER_ID, PROVIDER_IDENTITY_BY_ID } from "@sidecar/session";
+import { isCloudAgentProviderId, PROVIDER_ID, PROVIDER_IDENTITY_BY_ID } from "@sidecar/session";
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 
 /**
@@ -200,11 +200,15 @@ export const VOICE_CREDENTIAL_PROVIDER_ID = CREDENTIAL_PROVIDER_ID.OPENAI;
 export const VOICE_CREDENTIAL_PROVIDER: CredentialProvider =
   CREDENTIAL_PROVIDERS[VOICE_CREDENTIAL_PROVIDER_ID];
 
-/** The coding-agent providers, in the order the Providers section lists them. */
+/**
+ * The coding-agent providers, in the order the Providers section lists them.
+ * Membership is `CLOUD_AGENT_PROVIDER_ID` in `@sidecar/session` — the one
+ * place that says whose sessions Luke observes in the cloud, which is also
+ * what the hosted vault accepts a key for — so a row here and a key there can
+ * never name different sets.
+ */
 export const CLOUD_AGENT_PROVIDER_LIST: readonly CredentialProvider[] =
-  CREDENTIAL_PROVIDER_LIST.filter(
-    (provider) => !INTEGRATION_IDS.has(provider.id) && provider.id !== VOICE_CREDENTIAL_PROVIDER_ID,
-  );
+  CREDENTIAL_PROVIDER_LIST.filter((provider) => isCloudAgentProviderId(provider.id));
 
 /**
  * The services beyond the agents. The Integrations section draws each as its
@@ -222,7 +226,7 @@ export const INTEGRATION_PROVIDER_LIST: readonly CredentialProvider[] =
  * badge — a badge there would claim sessions neither service has.
  */
 export function providerRunsSessionsInCloud(id: CredentialProviderId): boolean {
-  return !INTEGRATION_IDS.has(id) && id !== VOICE_CREDENTIAL_PROVIDER_ID;
+  return isCloudAgentProviderId(id);
 }
 
 /**

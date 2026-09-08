@@ -1,10 +1,13 @@
-import { type HostedQuota, hostedMintAnswerFromWire } from "@sidecar/hosted";
+import {
+  type HostedQuota,
+  hostedMintAnswerFromWire,
+  type RealtimeConnection,
+} from "@sidecar/hosted";
 import {
   isRealtimeVoice,
   isRealtimeVoiceSpeed,
   REALTIME_DEFAULTS,
   REALTIME_MINT_OUTCOME,
-  type RealtimeConnection,
   type RealtimeDiagnostics,
   type RealtimeMintOutcome,
 } from "@sidecar/realtime";

@@ -1,4 +1,8 @@
-import { type HostedConversationAnswer, isVaultProviderId, type VaultProviderId } from "../core.js";
+import {
+  type CloudAgentProviderId,
+  type HostedConversationAnswer,
+  isCloudAgentProviderId,
+} from "../core.js";
 import type { ConversationReadRefusal } from "./act-execute.js";
 import { providerReadsConversation } from "./act-execute.js";
 import { parseProviderSessionId } from "./act-session.js";
@@ -36,7 +40,7 @@ export interface ConversationReadOptions {
    * handler enforces bounds and auth before calling it.
    */
   execute: (options: {
-    providerId: VaultProviderId;
+    providerId: CloudAgentProviderId;
     providerSessionId: string;
     afterMessageId?: string;
     beforeOffset?: number;
@@ -95,7 +99,7 @@ export async function handleConversationRead(options: ConversationReadOptions): 
 
   const query = new URL(request.url).searchParams;
   const providerId = query.get("providerId") ?? undefined;
-  if (!isVaultProviderId(providerId) || !providerReadsConversation(providerId)) {
+  if (!isCloudAgentProviderId(providerId) || !providerReadsConversation(providerId)) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
   const providerSessionId = parseProviderSessionId(query.get("providerSessionId") ?? undefined);

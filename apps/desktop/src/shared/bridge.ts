@@ -23,9 +23,9 @@ import {
   isFeedbackKind,
 } from "@sidecar/feedback";
 import { type AppGuideSnapshot, isAppGuideSnapshot } from "@sidecar/guide";
+import type { RealtimeConnection } from "@sidecar/hosted";
 import {
   type ConversationEntry,
-  type RealtimeConnection,
   type RealtimeDiagnostics,
   storedConversationEntry,
 } from "@sidecar/realtime";

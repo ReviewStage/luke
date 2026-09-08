@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { remoteRealtimeToolDefinitions } from "@sidecar/acts";
+import { realtimeCredentialIsUsable } from "@sidecar/hosted";
 import {
   ASK_BRAIN_TOOL,
   BRIEFING_SPEECH_KIND,
@@ -27,7 +28,6 @@ import {
   REALTIME_VOICE_SPEED_LIST,
   realtimeClientSecretRequest,
   realtimeCredentialFromResponse,
-  realtimeCredentialIsUsable,
   realtimeInstructions,
   remoteRealtimeClientSecretRequest,
   remoteRealtimeInstructions,

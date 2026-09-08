@@ -280,6 +280,9 @@ importers:
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../hosted
+      '@sidecar/session':
+        specifier: workspace:*
+        version: link:../session
       '@sidecar/settings':
         specifier: workspace:*
         version: link:../settings

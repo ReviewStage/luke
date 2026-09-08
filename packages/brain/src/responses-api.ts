@@ -1,5 +1,10 @@
 import type { RealtimeToolWireDefinition } from "@sidecar/acts";
 import {
+  RESPONSES_CONTENT_PART_TYPE,
+  RESPONSES_INPUT_ITEM_TYPE,
+  RESPONSES_MESSAGE_ROLE,
+} from "@sidecar/hosted";
+import {
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
   type ModelResponse,
@@ -43,24 +48,6 @@ export const BRAIN_RESPONSES_PATH = "/responses";
  * and nothing narrower.
  */
 export type ResponsesInputItem = WireRecord;
-
-export const RESPONSES_ITEM_TYPE = {
-  MESSAGE: "message",
-  FUNCTION_CALL: "function_call",
-  FUNCTION_CALL_OUTPUT: "function_call_output",
-  REASONING: "reasoning",
-  COMPACTION: "compaction",
-} as const;
-
-const RESPONSES_MESSAGE_ROLE = {
-  USER: "user",
-  ASSISTANT: "assistant",
-} as const;
-
-const RESPONSES_CONTENT_TYPE = {
-  INPUT_TEXT: "input_text",
-  OUTPUT_TEXT: "output_text",
-} as const;
 
 const RESPONSES_TOOL_CHOICE_AUTO = "auto";
 const RESPONSES_INCLUDE_ENCRYPTED_REASONING = "reasoning.encrypted_content";
@@ -117,16 +104,16 @@ export type BrainResponsesRequest = ReturnType<typeof brainResponsesRequest>;
 /** A message the brain is handed, as the input array carries it. */
 export function userMessageItem(text: string): ResponsesInputItem {
   return {
-    type: RESPONSES_ITEM_TYPE.MESSAGE,
+    type: RESPONSES_INPUT_ITEM_TYPE.MESSAGE,
     role: RESPONSES_MESSAGE_ROLE.USER,
-    content: [{ type: RESPONSES_CONTENT_TYPE.INPUT_TEXT, text }],
+    content: [{ type: RESPONSES_CONTENT_PART_TYPE.INPUT_TEXT, text }],
   };
 }
 
 /** The answer to one function call, keyed by the call the model made. */
 export function functionCallOutputItem(callId: string, output: string): ResponsesInputItem {
   return {
-    type: RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
+    type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
     call_id: callId,
     output,
   };
@@ -134,12 +121,14 @@ export function functionCallOutputItem(callId: string, output: string): Response
 
 /** Whether an input item is a compaction item, one of the two kinds the memory reads the type of. */
 export function isCompactionItem(item: ResponsesInputItem): boolean {
-  return item.type === RESPONSES_ITEM_TYPE.COMPACTION;
+  return item.type === RESPONSES_INPUT_ITEM_TYPE.COMPACTION;
 }
 
 /** Whether an input item is a user message, the boundary a local fold may cut at. */
 export function isUserMessageItem(item: ResponsesInputItem): boolean {
-  return item.type === RESPONSES_ITEM_TYPE.MESSAGE && item.role === RESPONSES_MESSAGE_ROLE.USER;
+  return (
+    item.type === RESPONSES_INPUT_ITEM_TYPE.MESSAGE && item.role === RESPONSES_MESSAGE_ROLE.USER
+  );
 }
 
 export interface BrainFunctionCall {
@@ -169,7 +158,7 @@ function outputTextFromContent(content: UnparsedWireValue): string {
   return content
     .map((entry) =>
       isRecord(entry) &&
-      entry.type === RESPONSES_CONTENT_TYPE.OUTPUT_TEXT &&
+      entry.type === RESPONSES_CONTENT_PART_TYPE.OUTPUT_TEXT &&
       isWireString(entry.text)
         ? entry.text
         : "",
@@ -178,7 +167,7 @@ function outputTextFromContent(content: UnparsedWireValue): string {
 }
 
 function functionCallFromItem(item: WireRecord): BrainFunctionCall | undefined {
-  if (item.type !== RESPONSES_ITEM_TYPE.FUNCTION_CALL) return undefined;
+  if (item.type !== RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL) return undefined;
   const callId = text(item.call_id);
   const name = text(item.name);
   if (!callId || !name) return undefined;
@@ -203,7 +192,7 @@ export function brainResponsesOutput(payload: UnparsedWireValue): BrainResponses
     const call = functionCallFromItem(item);
     if (call) functionCalls.push(call);
     if (
-      item.type === RESPONSES_ITEM_TYPE.MESSAGE &&
+      item.type === RESPONSES_INPUT_ITEM_TYPE.MESSAGE &&
       item.role === RESPONSES_MESSAGE_ROLE.ASSISTANT
     ) {
       texts.push(outputTextFromContent(item.content));

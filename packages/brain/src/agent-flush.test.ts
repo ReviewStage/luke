@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import {
   MEMORY_FLUSH_DEFAULTS,
   MEMORY_HOUSEKEEPING_OUTCOME,
@@ -22,7 +23,6 @@ import {
 } from "./requests.js";
 import {
   RESPONSES_ITEM_FORMAT,
-  RESPONSES_ITEM_TYPE,
   type ResponsesInputItem,
   responsesModelAnswer,
 } from "./responses-api.js";
@@ -43,7 +43,7 @@ const WINDOW_TOKENS = 2_000;
 
 function message(text: string): WireRecord {
   return {
-    type: RESPONSES_ITEM_TYPE.MESSAGE,
+    type: RESPONSES_INPUT_ITEM_TYPE.MESSAGE,
     role: "assistant",
     content: [{ type: "output_text", text }],
   };

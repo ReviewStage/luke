@@ -1,10 +1,4 @@
 export {
-  REALTIME_CALLS_PATH,
-  type RealtimeConnection,
-  type RealtimeCredential,
-  realtimeCredentialIsUsable,
-} from "@sidecar/hosted";
-export {
   adoptConversationThread,
   announcementConversationEntry,
   appendConversationThreadEntry,
@@ -89,13 +83,13 @@ export {
   maximumTypedAskLength,
   mouthToolDefinitions,
   outputSpeedUpdateEvents,
+  type ParsedRealtimeFunctionCall,
   type ProactiveSpeechTurn,
   parseRealtimeServerEvent,
   pushToTalkCommitEvents,
   REALTIME_CLIENT_EVENT,
   REALTIME_SERVER_EVENT,
   REALTIME_STATUS,
-  type RealtimeFunctionCall,
   type RealtimeStatus,
   realtimeInstructions,
   remoteRealtimeInstructions,

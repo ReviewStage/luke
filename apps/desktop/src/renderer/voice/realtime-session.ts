@@ -1,4 +1,5 @@
 import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabulary";
+import type { RealtimeConnection } from "@sidecar/hosted";
 import {
   ASK_BRAIN_TOOL,
   arrivalSpeechEvents,
@@ -18,6 +19,7 @@ import {
   isCalendarOnboardingSpeech,
   maximumTypedAskLength,
   outputSpeedUpdateEvents,
+  type ParsedRealtimeFunctionCall,
   PressAudioBuffer,
   type ProactiveSpeechTurn,
   parseRealtimeServerEvent,
@@ -25,8 +27,6 @@ import {
   REALTIME_CLIENT_EVENT,
   REALTIME_SERVER_EVENT,
   REALTIME_STATUS,
-  type RealtimeConnection,
-  type RealtimeFunctionCall,
   type RealtimeStatus,
   realtimeSessionConfig,
   truncateResponseEvents,
@@ -2103,7 +2103,7 @@ export class RealtimeVoiceSession {
    * the tool's output, for the follow-up to say. The brain acts on its own
    * side behind its own validators; nothing here performs anything.
    */
-  async #toolCallOutput(call: RealtimeFunctionCall, current: boolean): Promise<WireRecord> {
+  async #toolCallOutput(call: ParsedRealtimeFunctionCall, current: boolean): Promise<WireRecord> {
     if (!current) {
       return {
         status: ACT_RESULT_STATUS.REJECTED,

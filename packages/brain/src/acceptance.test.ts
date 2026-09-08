@@ -9,6 +9,7 @@ import {
   HOSTED_BRAIN_OPERATION,
   HOSTED_SERVICE_PATH,
   hostedBrainBounds,
+  RESPONSES_INPUT_ITEM_TYPE,
 } from "@sidecar/hosted";
 import type { ScheduledTimer } from "@sidecar/realtime";
 import {
@@ -62,7 +63,7 @@ import {
   BRAIN_SUBMISSION_REJECTION,
   type BrainRequestRecord,
 } from "./requests.js";
-import { RESPONSES_ITEM_FORMAT, RESPONSES_ITEM_TYPE } from "./responses-api.js";
+import { RESPONSES_ITEM_FORMAT } from "./responses-api.js";
 import { TOOL_LOOP_RUNTIME, ToolLoopAgentRuntime } from "./runtime.js";
 import {
   type BrainPersistedState,
@@ -93,7 +94,7 @@ const ENCRYPTED = "opaque-reasoning-bytes";
 
 function message(text: string): WireRecord {
   return {
-    type: RESPONSES_ITEM_TYPE.MESSAGE,
+    type: RESPONSES_INPUT_ITEM_TYPE.MESSAGE,
     id: "msg_1",
     role: "assistant",
     status: "completed",
@@ -102,12 +103,17 @@ function message(text: string): WireRecord {
 }
 
 function reasoning(id: string): WireRecord {
-  return { type: RESPONSES_ITEM_TYPE.REASONING, id, summary: [], encrypted_content: ENCRYPTED };
+  return {
+    type: RESPONSES_INPUT_ITEM_TYPE.REASONING,
+    id,
+    summary: [],
+    encrypted_content: ENCRYPTED,
+  };
 }
 
 function actCall(callId: string): WireRecord {
   return {
-    type: RESPONSES_ITEM_TYPE.FUNCTION_CALL,
+    type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
     call_id: callId,
     name: REALTIME_TOOL.SEND_SESSION_MESSAGE,
     arguments: JSON.stringify({
@@ -359,18 +365,22 @@ for (const transport of [KEYED, HOSTED]) {
     const third = upstream.calls[2]?.body.input;
     assert.ok(Array.isArray(third));
     const kinds = third.filter(isRecord).map((item) => item.type);
-    assert.deepEqual(kinds.filter((kind) => kind === RESPONSES_ITEM_TYPE.REASONING).length, 2);
+    assert.deepEqual(
+      kinds.filter((kind) => kind === RESPONSES_INPUT_ITEM_TYPE.REASONING).length,
+      2,
+    );
     assert.ok(
       third
         .filter(isRecord)
         .every(
           (item) =>
-            item.type !== RESPONSES_ITEM_TYPE.REASONING || item.encrypted_content === ENCRYPTED,
+            item.type !== RESPONSES_INPUT_ITEM_TYPE.REASONING ||
+            item.encrypted_content === ENCRYPTED,
         ),
     );
-    const calls = kinds.filter((kind) => kind === RESPONSES_ITEM_TYPE.FUNCTION_CALL).length;
+    const calls = kinds.filter((kind) => kind === RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL).length;
     const outputs = kinds.filter(
-      (kind) => kind === RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
+      (kind) => kind === RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
     ).length;
     assert.equal(calls, 2);
     assert.equal(outputs, 2);
@@ -408,10 +418,12 @@ for (const transport of [KEYED, HOSTED]) {
     assert.equal(h.performed.length, 1);
     // Every call in the stored memory is paired, the refused one included.
     const items = h.storage.stored()?.items ?? [];
-    const outputs = items.filter((item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT);
+    const outputs = items.filter(
+      (item) => item.type === RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
+    );
     assert.equal(
       outputs.length,
-      items.filter((item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL).length,
+      items.filter((item) => item.type === RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL).length,
     );
     await h.agent.stop();
   });
@@ -789,12 +801,13 @@ test("a model failure after a recorded act restores the context to the act's com
   const kept = stored?.items ?? [];
   assert.ok(
     kept.some(
-      (item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL && item.call_id === "call_1",
+      (item) => item.type === RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL && item.call_id === "call_1",
     ),
   );
   assert.ok(
     kept.some(
-      (item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT && item.call_id === "call_1",
+      (item) =>
+        item.type === RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT && item.call_id === "call_1",
     ),
   );
   // The next turn's context carries the paired act, on the restored engine.
@@ -804,7 +817,8 @@ test("a model failure after a recorded act restores the context to the act's com
   const items = shown.filter(isRecord);
   assert.ok(
     items.some(
-      (item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT && item.call_id === "call_1",
+      (item) =>
+        item.type === RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT && item.call_id === "call_1",
     ),
   );
   await h.agent.stop();

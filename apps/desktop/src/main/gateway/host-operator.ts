@@ -4,7 +4,8 @@ import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { CredentialProviderId } from "@sidecar/credentials";
 import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import type { AppGuideSnapshot } from "@sidecar/guide";
-import type { ConversationEntry, RealtimeConnection, RealtimeDiagnostics } from "@sidecar/realtime";
+import type { RealtimeConnection } from "@sidecar/hosted";
+import type { ConversationEntry, RealtimeDiagnostics } from "@sidecar/realtime";
 import type { GatewayCallResult, GatewayClient } from "@sidecar/runtime";
 import { GATEWAY_EVENT, GATEWAY_METHOD, type GatewayEventKind } from "@sidecar/runtime-contracts";
 import type {

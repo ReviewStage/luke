@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabulary";
+import type { RealtimeConnection } from "@sidecar/hosted";
 import {
   ARRIVAL_SPEECH_KIND,
   ASK_BRAIN_TOOL,
@@ -12,7 +13,6 @@ import {
   REALTIME_CLIENT_EVENT,
   REALTIME_SERVER_EVENT,
   REALTIME_STATUS,
-  type RealtimeConnection,
   type RealtimeStatus,
 } from "@sidecar/realtime";
 import { ACT_RESULT_STATUS, isRecord, text, type WireRecord } from "@sidecar/wire";

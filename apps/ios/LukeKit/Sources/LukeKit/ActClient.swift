@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Wire models
 
 /// The three outcomes a hosted act endpoint can return.
-/// Mirrors `HOSTED_ACT_RESULT` in `@sidecar/hosted`.
+/// Mirrors `ACT_RESULT_STATUS` in `@sidecar/wire`.
 public enum ActResult: String, Codable, Equatable, Sendable {
     case accepted
     case rejected

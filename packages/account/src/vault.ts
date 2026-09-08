@@ -3,12 +3,12 @@ import {
   type VaultKeyDeleteAnswer,
   type VaultKeyListEntry,
   type VaultKeyStoreAnswer,
-  type VaultProviderId,
   vaultKeyDeleteAnswerFromWire,
   vaultKeyIsStorable,
   vaultKeyStoreAnswerFromWire,
   vaultKeysListAnswerFromWire,
 } from "@sidecar/hosted";
+import type { CloudAgentProviderId } from "@sidecar/session";
 import { positiveInteger, text, type UnparsedWireValue, unparsedWire } from "@sidecar/wire";
 
 const VAULT_DEFAULTS = {
@@ -81,7 +81,7 @@ export class HostedVaultClient {
    * shape is refused here without traveling at all.
    */
   async storeKey(
-    providerId: VaultProviderId,
+    providerId: CloudAgentProviderId,
     key: string,
   ): Promise<VaultKeyStoreAnswer | undefined> {
     if (!vaultKeyIsStorable(key)) return undefined;
@@ -101,7 +101,7 @@ export class HostedVaultClient {
   }
 
   /** Deletes one provider's key; `deleted: false` means none was stored. */
-  async deleteKey(providerId: VaultProviderId): Promise<VaultKeyDeleteAnswer | undefined> {
+  async deleteKey(providerId: CloudAgentProviderId): Promise<VaultKeyDeleteAnswer | undefined> {
     return this.#ask(
       { method: "DELETE", path: HOSTED_SERVICE_PATH.VAULT_KEY, body: { providerId } },
       vaultKeyDeleteAnswerFromWire,

@@ -1,11 +1,11 @@
 import {
-  HOSTED_ACT_RESULT,
+  ACT_RESULT_STATUS,
+  type CloudAgentProviderId,
   type HostedActWorkspaceAnswer,
+  isCloudAgentProviderId,
   isRecord,
   text,
   type UnparsedWireValue,
-  VAULT_PROVIDER_ID,
-  type VaultProviderId,
   type WireRecord,
 } from "../core.js";
 import type { ActExecutionAnswer } from "./act-execute.js";
@@ -27,12 +27,6 @@ export function parseProviderSessionId(value: UnparsedWireValue): string | undef
   if (!s || s.length > SESSION_ID_MAX_LENGTH) return undefined;
   if (s.includes("/") || s.includes("\\") || s.includes("\0")) return undefined;
   return s;
-}
-
-const VAULT_PROVIDER_ID_SET: ReadonlySet<string> = new Set(Object.values(VAULT_PROVIDER_ID));
-
-function isVaultProviderId(value: string | undefined): value is VaultProviderId {
-  return value !== undefined && VAULT_PROVIDER_ID_SET.has(value);
 }
 
 function trimmedSecretOrUnavailable(secret: string | undefined): { secret: string } | Response {
@@ -68,14 +62,18 @@ export interface SessionActOptions<Fields extends Record<string, string | undefi
    * answers "unsupported" whether or not a key is stored — storing a key
    * would not enable the act.
    */
-  unsupportedReason: (providerId: VaultProviderId) => string | undefined;
+  unsupportedReason: (providerId: CloudAgentProviderId) => string | undefined;
   /**
    * Validates (via a fresh observation pass) and delivers the act. The
    * implementation is provider-specific and injected by the route; the
    * handler enforces bounds and auth before calling it.
    */
   execute: (
-    options: { providerId: VaultProviderId; providerSessionId: string; apiKey: string } & Fields,
+    options: {
+      providerId: CloudAgentProviderId;
+      providerSessionId: string;
+      apiKey: string;
+    } & Fields,
   ) => Promise<ActExecutionAnswer>;
 }
 
@@ -114,7 +112,7 @@ export async function handleSessionAct<Fields extends Record<string, string | un
   }
 
   const providerId = text(body.providerId);
-  if (!isVaultProviderId(providerId)) {
+  if (!isCloudAgentProviderId(providerId)) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
 
@@ -132,7 +130,7 @@ export async function handleSessionAct<Fields extends Record<string, string | un
   const unsupported = unsupportedReason(providerId);
   if (unsupported) {
     const answer: HostedActWorkspaceAnswer = {
-      result: HOSTED_ACT_RESULT.UNSUPPORTED,
+      result: ACT_RESULT_STATUS.UNSUPPORTED,
       reason: unsupported,
     };
     return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
@@ -141,7 +139,7 @@ export async function handleSessionAct<Fields extends Record<string, string | un
   const keyRow = await readKey(userId, providerId);
   if (!keyRow) {
     const answer: HostedActWorkspaceAnswer = {
-      result: HOSTED_ACT_RESULT.REJECTED,
+      result: ACT_RESULT_STATUS.REJECTED,
       reason: "No provider key stored. Add a key for this provider in settings.",
     };
     return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);

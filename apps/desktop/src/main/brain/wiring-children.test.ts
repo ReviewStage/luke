@@ -10,11 +10,11 @@ import {
   BRAIN_TOOL,
   type BrainStateStorage,
   brainStateRepositoryFromStorage,
-  RESPONSES_ITEM_TYPE,
   type ResponsesInputItem,
   responsesModelAnswer,
 } from "@sidecar/brain";
 import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
+import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { MEMORY_HOUSEKEEPING_OUTCOME } from "@sidecar/memory";
 import type { ConversationEntry } from "@sidecar/realtime";
 import { type ChildStore, CREDENTIAL_REFERENCE_KIND, type ScheduledTimer } from "@sidecar/runtime";
@@ -48,7 +48,7 @@ const MAIN_SECRET = "MAIN_CONTEXT_SECRET";
 
 function itemTexts(input: readonly ResponsesInputItem[]): string[] {
   return input.flatMap((item) => {
-    if (item.type !== RESPONSES_ITEM_TYPE.MESSAGE || !Array.isArray(item.content)) return [];
+    if (item.type !== RESPONSES_INPUT_ITEM_TYPE.MESSAGE || !Array.isArray(item.content)) return [];
     return item.content.flatMap((part) =>
       isRecord(part) && isWireString(part.text) ? [part.text] : [],
     );
@@ -95,7 +95,7 @@ function textAnswer(text: string) {
   const answered = responsesModelAnswer({
     output: [
       {
-        type: RESPONSES_ITEM_TYPE.MESSAGE,
+        type: RESPONSES_INPUT_ITEM_TYPE.MESSAGE,
         role: "assistant",
         content: [{ type: "output_text", text }],
       },
@@ -110,7 +110,7 @@ function callAnswer(callId: string, name: string, args: WireRecord) {
   const answered = responsesModelAnswer({
     output: [
       {
-        type: RESPONSES_ITEM_TYPE.FUNCTION_CALL,
+        type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
         call_id: callId,
         name,
         arguments: JSON.stringify(args),
@@ -160,7 +160,7 @@ function composed(
   const client: BareResponsesModel = {
     respond: async (input, options) => {
       const outputs = input.flatMap((item) =>
-        item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT && isWireString(item.output)
+        item.type === RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT && isWireString(item.output)
           ? [item.output]
           : [],
       );
@@ -173,7 +173,7 @@ function composed(
         lastAsk: askAt >= 0 ? texts.slice(askAt) : texts,
         tools: offeredTools(options),
         outputs,
-        answeringTool: before?.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
+        answeringTool: before?.type === RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
         lastInput: before ? itemTexts([before]).join("\n") : "",
       };
       seen.push(current);

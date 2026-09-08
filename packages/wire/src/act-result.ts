@@ -8,6 +8,13 @@ export const ACT_RESULT_STATUS = {
 
 export type ActResultStatus = (typeof ACT_RESULT_STATUS)[keyof typeof ACT_RESULT_STATUS];
 
+const ACT_RESULT_STATUSES: ReadonlySet<string> = new Set(Object.values(ACT_RESULT_STATUS));
+
+/** Whether an untrusted value names one of the three statuses an act can end in. */
+export function isActResultStatus(value: UnparsedWireValue): value is ActResultStatus {
+  return isWireString(value) && ACT_RESULT_STATUSES.has(value);
+}
+
 /**
  * The one status outside the three above an act can end in: dispatched, and
  * its answer lost before it was recorded. It is neither a refusal nor a
@@ -28,7 +35,7 @@ export type ActResult =
   | { status: typeof ACT_RESULT_STATUS.UNSUPPORTED; reason: string };
 
 export function isActResult(value: UnparsedWireValue): value is ActResult {
-  if (!isRecord(value) || !isWireString(value.status)) return false;
+  if (!isRecord(value) || !isActResultStatus(value.status)) return false;
   const fieldCount = Object.keys(value).length;
   if (value.status === ACT_RESULT_STATUS.ACCEPTED) return fieldCount === 1;
   return (

@@ -1,11 +1,12 @@
 import {
   ACT_KIND,
   ACT_RESULT_STATUS,
+  type ActResultStatus,
   advertisedActFor,
   advertisedControl,
+  CLOUD_AGENT_PROVIDER_ID,
+  type CloudAgentProviderId,
   type CloudFetch,
-  HOSTED_ACT_RESULT,
-  type HostedActResult,
   type HostedConversationAnswer,
   type HostedConversationMessage,
   PROVIDER_IDENTITY_BY_ID,
@@ -13,8 +14,6 @@ import {
   type ProviderSessionObservation,
   type ProviderWorkspaceResult,
   type SessionProviderAdapter,
-  VAULT_PROVIDER_ID,
-  type VaultProviderId,
   type WorkspaceAgentSelection,
 } from "../core.js";
 import { cloudSessionAdapterFor } from "./cloud-adapters.js";
@@ -42,7 +41,7 @@ export type RemoteSessionAct = (typeof REMOTE_SESSION_ACT)[keyof typeof REMOTE_S
  * carry under the provider's documented endpoint.
  */
 const SUPPORTED_ACTS = {
-  [VAULT_PROVIDER_ID.CONDUCTOR]: new Set<RemoteSessionAct>([
+  [CLOUD_AGENT_PROVIDER_ID.CONDUCTOR]: new Set<RemoteSessionAct>([
     REMOTE_SESSION_ACT.MESSAGE,
     REMOTE_SESSION_ACT.CONTROL,
     REMOTE_SESSION_ACT.AGENT,
@@ -50,7 +49,7 @@ const SUPPORTED_ACTS = {
     REMOTE_SESSION_ACT.RENAME_WORKSPACE,
     REMOTE_SESSION_ACT.CREATE_WORKSPACE,
   ]),
-} satisfies Readonly<Record<VaultProviderId, ReadonlySet<RemoteSessionAct>>>;
+} satisfies Readonly<Record<CloudAgentProviderId, ReadonlySet<RemoteSessionAct>>>;
 
 const ACT_ABSENCE_PHRASE = {
   [REMOTE_SESSION_ACT.MESSAGE]: "taking a message",
@@ -70,7 +69,7 @@ const ACT_ABSENCE_PHRASE = {
  */
 export function actUnsupportedReason(
   act: RemoteSessionAct,
-  providerId: VaultProviderId,
+  providerId: CloudAgentProviderId,
 ): string | undefined {
   if (SUPPORTED_ACTS[providerId].has(act)) return undefined;
   const displayName = PROVIDER_IDENTITY_BY_ID[providerId].displayName;
@@ -79,7 +78,7 @@ export function actUnsupportedReason(
 
 /** What an executed act answers with, in the hosted wire's own vocabulary. */
 export interface ActExecutionAnswer {
-  result: HostedActResult;
+  result: ActResultStatus;
   reason?: string;
   /** For creation-shaped acts: the session id the provider's response named. */
   providerSessionId?: string;
@@ -107,7 +106,7 @@ interface ObservedActPass {
 }
 
 async function observeForAct(
-  providerId: VaultProviderId,
+  providerId: CloudAgentProviderId,
   apiKey: string,
   seams: ActExecuteSeams,
 ): Promise<ObservedActPass> {
@@ -134,7 +133,7 @@ async function observeForAct(
 
 /** Why an act's target was not in the fresh pass, as the user should hear it. */
 function missingTargetReason(
-  providerId: VaultProviderId,
+  providerId: CloudAgentProviderId,
   pass: Pick<ObservedActPass, "unauthorized" | "unreachable">,
   missing: string,
 ): string {
@@ -153,31 +152,31 @@ function missingTargetReason(
  */
 function fromProviderActResult(result: ProviderActResult): ActExecutionAnswer {
   if (result.status === ACT_RESULT_STATUS.ACCEPTED) {
-    return { result: HOSTED_ACT_RESULT.ACCEPTED };
+    return { result: ACT_RESULT_STATUS.ACCEPTED };
   }
-  return { result: HOSTED_ACT_RESULT.REJECTED, reason: result.reason };
+  return { result: ACT_RESULT_STATUS.REJECTED, reason: result.reason };
 }
 
 function fromProviderWorkspaceResult(result: ProviderWorkspaceResult): ActExecutionAnswer {
   if (result.status === ACT_RESULT_STATUS.ACCEPTED) {
     return {
-      result: HOSTED_ACT_RESULT.ACCEPTED,
+      result: ACT_RESULT_STATUS.ACCEPTED,
       ...(result.providerSessionId ? { providerSessionId: result.providerSessionId } : undefined),
     };
   }
-  return { result: HOSTED_ACT_RESULT.REJECTED, reason: result.reason };
+  return { result: ACT_RESULT_STATUS.REJECTED, reason: result.reason };
 }
 
 function capabilityGuard(
   act: RemoteSessionAct,
-  providerId: VaultProviderId,
+  providerId: CloudAgentProviderId,
 ): ActExecutionAnswer | undefined {
   const reason = actUnsupportedReason(act, providerId);
-  return reason ? { result: HOSTED_ACT_RESULT.UNSUPPORTED, reason } : undefined;
+  return reason ? { result: ACT_RESULT_STATUS.UNSUPPORTED, reason } : undefined;
 }
 
 export async function executeMessageAct(options: {
-  providerId: VaultProviderId;
+  providerId: CloudAgentProviderId;
   providerSessionId: string;
   text: string;
   apiKey: string;
@@ -193,13 +192,13 @@ export async function executeMessageAct(options: {
   );
   if (!observation) {
     return {
-      result: HOSTED_ACT_RESULT.REJECTED,
+      result: ACT_RESULT_STATUS.REJECTED,
       reason: missingTargetReason(providerId, pass, "Session not found."),
     };
   }
   if (!advertisedActFor(observation, ACT_KIND.MESSAGE)) {
     return {
-      result: HOSTED_ACT_RESULT.REJECTED,
+      result: ACT_RESULT_STATUS.REJECTED,
       reason: "Session is not currently accepting messages.",
     };
   }
@@ -207,7 +206,7 @@ export async function executeMessageAct(options: {
 }
 
 export async function executeControlAct(options: {
-  providerId: VaultProviderId;
+  providerId: CloudAgentProviderId;
   providerSessionId: string;
   controlId: string;
   apiKey: string;
@@ -223,7 +222,7 @@ export async function executeControlAct(options: {
   );
   if (!observation) {
     return {
-      result: HOSTED_ACT_RESULT.REJECTED,
+      result: ACT_RESULT_STATUS.REJECTED,
       reason: missingTargetReason(providerId, pass, "Session not found."),
     };
   }
@@ -232,7 +231,7 @@ export async function executeControlAct(options: {
   const advertised = advertisedControl(observation, controlId);
   if (!advertised) {
     return {
-      result: HOSTED_ACT_RESULT.REJECTED,
+      result: ACT_RESULT_STATUS.REJECTED,
       reason: "That control is not currently offered for this session.",
     };
   }
@@ -242,7 +241,7 @@ export async function executeControlAct(options: {
 }
 
 export async function executeAgentAct(options: {
-  providerId: VaultProviderId;
+  providerId: CloudAgentProviderId;
   providerSessionId: string;
   agent: string;
   name: string | undefined;
@@ -260,13 +259,13 @@ export async function executeAgentAct(options: {
   );
   if (!observation) {
     return {
-      result: HOSTED_ACT_RESULT.REJECTED,
+      result: ACT_RESULT_STATUS.REJECTED,
       reason: missingTargetReason(providerId, pass, "Session not found."),
     };
   }
   if (!advertisedActFor(observation, ACT_KIND.ADD_AGENT)?.agents.includes(agent)) {
     return {
-      result: HOSTED_ACT_RESULT.REJECTED,
+      result: ACT_RESULT_STATUS.REJECTED,
       reason: "That agent kind is not currently offered for this session's workspace.",
     };
   }
@@ -276,7 +275,7 @@ export async function executeAgentAct(options: {
 }
 
 export async function executeRenameSessionAct(options: {
-  providerId: VaultProviderId;
+  providerId: CloudAgentProviderId;
   providerSessionId: string;
   name: string;
   apiKey: string;
@@ -292,13 +291,13 @@ export async function executeRenameSessionAct(options: {
   );
   if (!observation) {
     return {
-      result: HOSTED_ACT_RESULT.REJECTED,
+      result: ACT_RESULT_STATUS.REJECTED,
       reason: missingTargetReason(providerId, pass, "Session not found."),
     };
   }
   if (!advertisedActFor(observation, ACT_KIND.RENAME_SESSION)) {
     return {
-      result: HOSTED_ACT_RESULT.REJECTED,
+      result: ACT_RESULT_STATUS.REJECTED,
       reason: "Renaming this session is not currently offered.",
     };
   }
@@ -306,7 +305,7 @@ export async function executeRenameSessionAct(options: {
 }
 
 export async function executeRenameWorkspaceAct(options: {
-  providerId: VaultProviderId;
+  providerId: CloudAgentProviderId;
   providerSessionId: string;
   name: string;
   apiKey: string;
@@ -322,13 +321,13 @@ export async function executeRenameWorkspaceAct(options: {
   );
   if (!observation) {
     return {
-      result: HOSTED_ACT_RESULT.REJECTED,
+      result: ACT_RESULT_STATUS.REJECTED,
       reason: missingTargetReason(providerId, pass, "Session not found."),
     };
   }
   if (!advertisedActFor(observation, ACT_KIND.RENAME_WORKSPACE)) {
     return {
-      result: HOSTED_ACT_RESULT.REJECTED,
+      result: ACT_RESULT_STATUS.REJECTED,
       reason: "Renaming this session's workspace is not currently offered.",
     };
   }
@@ -336,7 +335,7 @@ export async function executeRenameWorkspaceAct(options: {
 }
 
 export async function executeCreateWorkspaceAct(options: {
-  providerId: VaultProviderId;
+  providerId: CloudAgentProviderId;
   providerProjectId: string;
   name: string | undefined;
   task: string | undefined;
@@ -356,7 +355,7 @@ export async function executeCreateWorkspaceAct(options: {
     .find((candidate) => candidate.providerProjectId === providerProjectId);
   if (!project) {
     return {
-      result: HOSTED_ACT_RESULT.REJECTED,
+      result: ACT_RESULT_STATUS.REJECTED,
       reason: missingTargetReason(providerId, pass, "Project not found."),
     };
   }
@@ -374,12 +373,12 @@ export async function executeCreateWorkspaceAct(options: {
  * `GET /v0/sessions/{id}/messages`; no other vaulted provider documents a
  * transcript read this build carries.
  */
-const CONVERSATION_READ_PROVIDERS: ReadonlySet<VaultProviderId> = new Set([
-  VAULT_PROVIDER_ID.CONDUCTOR,
+const CONVERSATION_READ_PROVIDERS: ReadonlySet<CloudAgentProviderId> = new Set([
+  CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
 ]);
 
 /** Whether the messages endpoint can read this provider's conversations. */
-export function providerReadsConversation(providerId: VaultProviderId): boolean {
+export function providerReadsConversation(providerId: CloudAgentProviderId): boolean {
   return CONVERSATION_READ_PROVIDERS.has(providerId);
 }
 
@@ -396,7 +395,7 @@ export interface ConversationReadRefusal {
  * endpoint. The answer is assembled and returned; nothing is stored.
  */
 export async function executeConversationRead(options: {
-  providerId: VaultProviderId;
+  providerId: CloudAgentProviderId;
   providerSessionId: string;
   afterMessageId?: string;
   beforeOffset?: number;

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import {
   CONTEXT_INPUT_KIND,
   type ContextEngine,
@@ -19,7 +20,7 @@ import {
 } from "@sidecar/runtime-contracts";
 import { isWireString, type WireRecord } from "@sidecar/wire";
 import { ResponsesContextEngine } from "./context-engine.js";
-import { RESPONSES_ITEM_FORMAT, RESPONSES_ITEM_TYPE } from "./responses-api.js";
+import { RESPONSES_ITEM_FORMAT } from "./responses-api.js";
 import { TOOL_LOOP_RUNTIME, ToolLoopAgentRuntime } from "./runtime.js";
 
 const TOOL_LOOP_IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };
@@ -180,13 +181,13 @@ test("tool calls run one at a time in order, each result is ingested and awaited
       answered({
         items: [
           {
-            type: RESPONSES_ITEM_TYPE.FUNCTION_CALL,
+            type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
             call_id: `c${index}a`,
             name: "act",
             arguments: "{}",
           },
           {
-            type: RESPONSES_ITEM_TYPE.FUNCTION_CALL,
+            type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
             call_id: `c${index}b`,
             name: "act",
             arguments: '{"x":1}',
@@ -215,8 +216,10 @@ test("tool calls run one at a time in order, each result is ingested and awaited
   assert.equal(h.model.requests.length, rounds + 1);
   // Every call in the context has its output, paired in order.
   const items = h.context.checkpoint().items;
-  const calls = items.filter((item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL);
-  const outputs = items.filter((item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT);
+  const calls = items.filter((item) => item.type === RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL);
+  const outputs = items.filter(
+    (item) => item.type === RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
+  );
   assert.equal(calls.length, rounds * 2);
   assert.equal(outputs.length, rounds * 2);
   assert.equal(
@@ -266,7 +269,7 @@ test("a throttle, a provider failure, and an answer that stopped short each end 
 
 test("a compaction item in the answer folds the context and is reported", async () => {
   const h = harness();
-  const folded = { type: RESPONSES_ITEM_TYPE.COMPACTION, id: "cmp", encrypted_content: "x" };
+  const folded = { type: RESPONSES_INPUT_ITEM_TYPE.COMPACTION, id: "cmp", encrypted_content: "x" };
   h.model.answers.push(answered({ items: [folded], text: "ok", compacted: true }));
   await runtime(h.model).start(h.request()).done;
   assert.deepEqual(h.events[0], { kind: RUNTIME_EVENT.ANSWERED, toolCalls: 0 });
@@ -313,8 +316,18 @@ test("a cancel between two calls still reaches the executor for the second, whic
   h.model.answers.push(
     answered({
       items: [
-        { type: RESPONSES_ITEM_TYPE.FUNCTION_CALL, call_id: "c1", name: "act", arguments: "{}" },
-        { type: RESPONSES_ITEM_TYPE.FUNCTION_CALL, call_id: "c2", name: "act", arguments: "{}" },
+        {
+          type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
+          call_id: "c1",
+          name: "act",
+          arguments: "{}",
+        },
+        {
+          type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
+          call_id: "c2",
+          name: "act",
+          arguments: "{}",
+        },
       ],
       toolCalls: [toolCall("c1", "act"), toolCall("c2", "act")],
     }),
@@ -345,7 +358,12 @@ test("steered words are read at the next safe boundary: after the tool that was 
   h.model.answers.push(
     answered({
       items: [
-        { type: RESPONSES_ITEM_TYPE.FUNCTION_CALL, call_id: "c1", name: "act", arguments: "{}" },
+        {
+          type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
+          call_id: "c1",
+          name: "act",
+          arguments: "{}",
+        },
       ],
       toolCalls: [toolCall("c1", "act")],
     }),
@@ -358,7 +376,7 @@ test("steered words are read at the next safe boundary: after the tool that was 
   const second = h.model.requests[1]?.items ?? [];
   const steeredIndex = second.findIndex((item) => JSON.stringify(item).includes("also this"));
   const outputIndex = second.findIndex(
-    (item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
+    (item) => item.type === RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
   );
   assert.ok(steeredIndex > outputIndex);
   assert.equal(steeredIndex, second.length - 2);
@@ -373,7 +391,12 @@ test("an executor that throws leaves an unknown answer paired to the call rather
   h.model.answers.push(
     answered({
       items: [
-        { type: RESPONSES_ITEM_TYPE.FUNCTION_CALL, call_id: "c1", name: "act", arguments: "{}" },
+        {
+          type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
+          call_id: "c1",
+          name: "act",
+          arguments: "{}",
+        },
       ],
       toolCalls: [toolCall("c1", "act")],
     }),
@@ -381,7 +404,7 @@ test("an executor that throws leaves an unknown answer paired to the call rather
   await runtime(h.model).start(h.request()).done;
   const output = h.context
     .checkpoint()
-    .items.find((item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT);
+    .items.find((item) => item.type === RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT);
   assert.ok(output && isWireString(output.output) && output.output.includes('"unknown"'));
 });
 
@@ -390,7 +413,12 @@ test("with the guard enabled, a critical verdict pairs every remaining call and 
   const repeated = () =>
     answered({
       items: [
-        { type: RESPONSES_ITEM_TYPE.FUNCTION_CALL, call_id: "c", name: "act", arguments: "{}" },
+        {
+          type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
+          call_id: "c",
+          name: "act",
+          arguments: "{}",
+        },
       ],
       toolCalls: [toolCall("c", "act")],
     });
@@ -402,9 +430,11 @@ test("with the guard enabled, a critical verdict pairs every remaining call and 
   assert.equal(end.reason, RUN_END_REASON.LOOP_GUARD);
   assert.ok(h.events.some((event) => event.kind === RUNTIME_EVENT.LOOP_GUARD));
   const items = h.context.checkpoint().items;
-  const calls = items.filter((item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL).length;
+  const calls = items.filter(
+    (item) => item.type === RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
+  ).length;
   const outputs = items.filter(
-    (item) => item.type === RESPONSES_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
+    (item) => item.type === RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT,
   ).length;
   assert.equal(calls, outputs);
   assert.ok(h.model.requests.length < 40);
@@ -412,7 +442,7 @@ test("with the guard enabled, a critical verdict pairs every remaining call and 
 
 test("resume loads a compatible checkpoint and refuses a foreign one without touching it", async () => {
   const h = harness();
-  const items = [{ type: RESPONSES_ITEM_TYPE.MESSAGE, role: "user", content: "earlier" }];
+  const items = [{ type: RESPONSES_INPUT_ITEM_TYPE.MESSAGE, role: "user", content: "earlier" }];
   const r = runtime(h.model);
   const refused = await r.resume(
     { format: { ...r.descriptor.checkpoint, runtime: "other" }, items },
@@ -441,7 +471,12 @@ test("every context handed to an executor is revoked once the run ends, on compl
   const oneCall = () =>
     answered({
       items: [
-        { type: RESPONSES_ITEM_TYPE.FUNCTION_CALL, call_id: "c1", name: "act", arguments: "{}" },
+        {
+          type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
+          call_id: "c1",
+          name: "act",
+          arguments: "{}",
+        },
       ],
       toolCalls: [toolCall("c1", "act")],
     });
@@ -505,12 +540,17 @@ test("an engine whose lifecycle hooks are asynchronous is awaited at every step"
     checkpoint: () => inner.checkpoint(),
     dispose: async () => later(inner.dispose()),
   };
-  const folded = { type: RESPONSES_ITEM_TYPE.COMPACTION, id: "cmp", encrypted_content: "x" };
+  const folded = { type: RESPONSES_INPUT_ITEM_TYPE.COMPACTION, id: "cmp", encrypted_content: "x" };
   h.model.answers.push(
     answered({
       items: [
         folded,
-        { type: RESPONSES_ITEM_TYPE.FUNCTION_CALL, call_id: "c1", name: "act", arguments: "{}" },
+        {
+          type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
+          call_id: "c1",
+          name: "act",
+          arguments: "{}",
+        },
       ],
       toolCalls: [toolCall("c1", "act")],
       compacted: true,
@@ -531,7 +571,7 @@ test("an engine whose lifecycle hooks are asynchronous is awaited at every step"
     "assemble",
     "ingest:model_output",
   ]);
-  const window = [{ type: RESPONSES_ITEM_TYPE.COMPACTION, id: "w", encrypted_content: "y" }];
+  const window = [{ type: RESPONSES_INPUT_ITEM_TYPE.COMPACTION, id: "w", encrypted_content: "y" }];
   await asyncEngine.adoptCompaction(window);
   assert.deepEqual(asyncEngine.checkpoint().items, window);
 });
@@ -562,7 +602,12 @@ test("an answer that stopped short while still carrying words ends completed wit
     answered({
       text: "Let me check.",
       items: [
-        { type: RESPONSES_ITEM_TYPE.FUNCTION_CALL, call_id: "c1", name: "act", arguments: "{}" },
+        {
+          type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
+          call_id: "c1",
+          name: "act",
+          arguments: "{}",
+        },
       ],
       toolCalls: [toolCall("c1", "act")],
     }),

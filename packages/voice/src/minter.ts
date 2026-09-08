@@ -1,4 +1,5 @@
-import type { RealtimeConnection, RealtimeDiagnostics } from "@sidecar/realtime";
+import type { RealtimeConnection } from "@sidecar/hosted";
+import type { RealtimeDiagnostics } from "@sidecar/realtime";
 
 /**
  * What the main process asks of whichever credential source voice runs on —

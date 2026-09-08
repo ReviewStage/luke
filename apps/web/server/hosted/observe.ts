@@ -4,11 +4,11 @@ import {
   ACT_KIND,
   advertisedActFor,
   advertisedControls,
+  CLOUD_AGENT_PROVIDER_ID,
+  type CloudAgentProviderId,
   normalizeSessionDetail,
   type ObservedSession,
   type ObservedSessionControl,
-  VAULT_PROVIDER_ID,
-  type VaultProviderId,
 } from "../core.js";
 import { providerReadsConversation } from "./act-execute.js";
 import { cloudSessionAdapterFor } from "./cloud-adapters.js";
@@ -94,9 +94,9 @@ export async function handleObserve(options: ObserveOptions): Promise<Response> 
   }
 
   const providers: Array<{
-    providerId: VaultProviderId;
+    providerId: CloudAgentProviderId;
     observe: () => Promise<readonly ProviderSessionObservation[]>;
-  }> = Object.values(VAULT_PROVIDER_ID).map((providerId) => ({
+  }> = Object.values(CLOUD_AGENT_PROVIDER_ID).map((providerId) => ({
     providerId,
     observe: () =>
       cloudSessionAdapterFor(providerId, {
@@ -151,7 +151,7 @@ export function writeAdvertisedActs(
 }
 
 export function observedSessionForResponse(
-  providerId: VaultProviderId,
+  providerId: CloudAgentProviderId,
   obs: ProviderSessionObservation,
 ): ObservedSession {
   const session: ObservedSession = {

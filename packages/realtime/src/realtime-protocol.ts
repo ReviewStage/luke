@@ -1,3 +1,4 @@
+import type { RealtimeFunctionCall } from "@sidecar/acts";
 import { LUKE_PERSONA } from "@sidecar/guide";
 import { maximumSessionMessageLength } from "@sidecar/session";
 import {
@@ -705,11 +706,14 @@ export function calendarOnboardingSpeechEvents(): readonly WireRecord[] {
   ];
 }
 
-/** One tool call the model made, as it arrives inside a finished response. */
-export interface RealtimeFunctionCall {
-  name: string;
+/**
+ * One tool call the model made, as it arrives inside a finished response: the
+ * act's own name and arguments, and the id its answer has to carry back. The
+ * id stops here — a validator is handed the call itself, which is why
+ * `RealtimeFunctionCall` in `@sidecar/acts` has no room for one.
+ */
+export interface ParsedRealtimeFunctionCall extends RealtimeFunctionCall {
   callId: string;
-  argumentsJson: string;
 }
 
 /**
@@ -746,7 +750,7 @@ export type ParsedRealtimeServerEvent =
   | {
       type: typeof REALTIME_SERVER_EVENT.RESPONSE_DONE;
       responseId?: string;
-      calls: readonly RealtimeFunctionCall[];
+      calls: readonly ParsedRealtimeFunctionCall[];
       /**
        * Whether the finished response made any sound, absent when the payload
        * carried no output to read it from. A reply of pure silence — a
@@ -782,7 +786,7 @@ function recordField(record: WireRecord, key: string): WireRecord | undefined {
  * finished response rather than streamed deltas: a call is acted on whole or
  * not at all, and the finished response is the only place it is whole.
  */
-function functionCallsFromDone(event: WireRecord): readonly RealtimeFunctionCall[] {
+function functionCallsFromDone(event: WireRecord): readonly ParsedRealtimeFunctionCall[] {
   const response = recordField(event, "response");
   const output = Array.isArray(response?.output) ? response.output : [];
   return output.filter(isRecord).flatMap((item) => {

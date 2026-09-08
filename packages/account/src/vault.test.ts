@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { VAULT_PROVIDER_ID } from "@sidecar/hosted";
+import { CLOUD_AGENT_PROVIDER_ID } from "@sidecar/session";
 import { HostedVaultClient } from "./vault.js";
 
 const LIST_ANSWER = {
-  keys: [{ providerId: VAULT_PROVIDER_ID.CONDUCTOR, updatedAt: 1_800_000_000_000 }],
+  keys: [{ providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, updatedAt: 1_800_000_000_000 }],
 };
 
 interface RecordedRequest {
@@ -40,7 +40,7 @@ test("stores a key as a bearer-authenticated POST and reads the confirmation", a
   ]);
 
   const answer = await client({ fetch: fetchLike }).storeKey(
-    VAULT_PROVIDER_ID.CONDUCTOR,
+    CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
     "key_1234abcd",
   );
   assert.deepEqual(answer, { stored: true });
@@ -52,7 +52,7 @@ test("stores a key as a bearer-authenticated POST and reads the confirmation", a
   assert.equal(headers.get("authorization"), "Bearer token-1");
   assert.equal(headers.get("content-type"), "application/json");
   assert.deepEqual(JSON.parse(String(request?.init.body)), {
-    providerId: VAULT_PROVIDER_ID.CONDUCTOR,
+    providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
     key: "key_1234abcd",
   });
 });
@@ -61,9 +61,12 @@ test("a key the service would refuse by shape never travels", async () => {
   const { requests, fetchLike } = service([]);
   const vault = client({ fetch: fetchLike });
 
-  assert.equal(await vault.storeKey(VAULT_PROVIDER_ID.CONDUCTOR, ""), undefined);
-  assert.equal(await vault.storeKey(VAULT_PROVIDER_ID.CONDUCTOR, "key with spaces"), undefined);
-  assert.equal(await vault.storeKey(VAULT_PROVIDER_ID.CONDUCTOR, "k".repeat(513)), undefined);
+  assert.equal(await vault.storeKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, ""), undefined);
+  assert.equal(
+    await vault.storeKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, "key with spaces"),
+    undefined,
+  );
+  assert.equal(await vault.storeKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, "k".repeat(513)), undefined);
   assert.equal(requests.length, 0);
 });
 
@@ -87,14 +90,14 @@ test("deletes one provider's key and reads whether one was removed", async () =>
     () => new Response(JSON.stringify({ deleted: true }), { status: 200 }),
   ]);
 
-  const answer = await client({ fetch: fetchLike }).deleteKey(VAULT_PROVIDER_ID.CONDUCTOR);
+  const answer = await client({ fetch: fetchLike }).deleteKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR);
   assert.deepEqual(answer, { deleted: true });
 
   const [request] = requests;
   assert.equal(request?.url, "https://tryluke.dev/api/vault/key");
   assert.equal(request?.init.method, "DELETE");
   assert.deepEqual(JSON.parse(String(request?.init.body)), {
-    providerId: VAULT_PROVIDER_ID.CONDUCTOR,
+    providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
   });
 });
 
@@ -125,7 +128,7 @@ test("a 401 whose refresh yields the same token is not retried", async () => {
     () => new Response(JSON.stringify({ error: "invalid-token" }), { status: 401 }),
   ]);
 
-  const answer = await client({ fetch: fetchLike }).deleteKey(VAULT_PROVIDER_ID.CONDUCTOR);
+  const answer = await client({ fetch: fetchLike }).deleteKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR);
   assert.equal(answer, undefined);
   assert.equal(requests.length, 1);
 });
@@ -137,12 +140,12 @@ test("failures, malformed answers, and a missing account all read as no answer",
     },
   });
   assert.equal(await failing.listKeys(), undefined);
-  assert.equal(await failing.storeKey(VAULT_PROVIDER_ID.CONDUCTOR, "key_1234"), undefined);
+  assert.equal(await failing.storeKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, "key_1234"), undefined);
 
   const refused = client({
     fetch: async () => new Response(JSON.stringify({ error: "unavailable" }), { status: 503 }),
   });
-  assert.equal(await refused.storeKey(VAULT_PROVIDER_ID.CONDUCTOR, "key_1234"), undefined);
+  assert.equal(await refused.storeKey(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, "key_1234"), undefined);
 
   const malformed = client({
     fetch: async () =>

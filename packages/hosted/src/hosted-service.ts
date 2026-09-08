@@ -1,17 +1,22 @@
 import {
+  type CloudAgentProviderId,
   CONVERSATION_MESSAGE_AUTHOR,
   type ConversationMessageAuthor,
+  isCloudAgentProviderId,
   normalizeSessionDetail,
-  type ProviderId,
   SESSION_CONTROL_KIND,
+  SESSION_STATUS,
+  type SessionDetail,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentModels,
+  type WorkspaceProject,
   type WorkspaceTaskSupport,
 } from "@sidecar/session";
 import {
+  type ActResultStatus,
+  isActResultStatus,
   isRecord,
   isWireBoolean,
-  isWireNumber,
   isWireString,
   text,
   type UnparsedWireValue,
@@ -122,34 +127,6 @@ export const HOSTED_SERVICE_PATH = {
    */
   SESSION_MESSAGES: "/api/sessions/messages",
 } as const;
-
-/**
- * The cloud providers whose API keys the vault accepts. Only providers that
- * Luke's service can observe on the user's behalf belong here; local-only
- * providers supply their credentials directly on the user's machine.
- *
- * The values are a subset of `PROVIDER_ID` from `@sidecar/session`; the
- * `satisfies` constraint enforces that membership. A new entry must be a
- * known provider id and requires a matching server-side observation strategy,
- * which ships in a separate PR.
- *
- * This set must stay in sync with `CLOUD_AGENT_PROVIDER_LIST` in
- * `@sidecar/credentials`. That package is not importable here (it sits above
- * `@sidecar/hosted` in the dependency graph), so drift is caught by a
- * parity test in `apps/web/tests/hosted-vault.test.ts` instead.
- */
-export const VAULT_PROVIDER_ID = {
-  CONDUCTOR: "conductor",
-} as const satisfies Record<string, ProviderId>;
-
-export type VaultProviderId = (typeof VAULT_PROVIDER_ID)[keyof typeof VAULT_PROVIDER_ID];
-
-const VAULT_PROVIDER_ID_SET: ReadonlySet<string> = new Set(Object.values(VAULT_PROVIDER_ID));
-
-/** Whether an untrusted value names a provider the vault accepts keys for. */
-export function isVaultProviderId(value: UnparsedWireValue): value is VaultProviderId {
-  return isWireString(value) && VAULT_PROVIDER_ID_SET.has(value);
-}
 
 /** Maximum length the vault accepts for a provider API key. */
 export const VAULT_KEY_MAX_LENGTH = 512;
@@ -484,7 +461,7 @@ export function vaultKeyStoreAnswerFromWire(
 
 /** One key entry as returned by the list endpoint — never contains the key. */
 export interface VaultKeyListEntry {
-  providerId: VaultProviderId;
+  providerId: CloudAgentProviderId;
   updatedAt: number;
 }
 
@@ -502,9 +479,9 @@ export function vaultKeysListAnswerFromWire(
   for (const item of value.keys) {
     if (!isRecord(item)) return undefined;
     const providerId = text(item.providerId);
-    if (!isVaultProviderId(providerId)) return undefined;
+    if (!isCloudAgentProviderId(providerId)) return undefined;
     const updatedAt = wholeNumber(item.updatedAt);
-    if (updatedAt === undefined || !isWireNumber(updatedAt) || updatedAt < 0) return undefined;
+    if (updatedAt === undefined || updatedAt < 0) return undefined;
     keys.push({ providerId, updatedAt });
   }
   return { keys };
@@ -572,9 +549,16 @@ export interface ObservedSessionControl {
  * adapter's observation onto this shape and stores nothing — a new request is
  * a new observation pass, and every act endpoint re-observes for itself
  * rather than trusting these advertisements.
+ *
+ * The detail fields are the session vocabulary's own, and the reader holds
+ * them to that vocabulary's own bounds: `change` to an HTTPS address, `link`
+ * to the openable session-link schemes. `link` is the one observed field a
+ * surface acts on rather than draws, so an address outside the set never
+ * crosses the wire at all.
  */
-export interface ObservedSession {
-  /** The vault provider id for this session (conductor today). */
+export interface ObservedSession
+  extends Pick<SessionDetail, "branch" | "change" | "error" | "link"> {
+  /** The cloud-agent provider id for this session (conductor today). */
   providerId: string;
   /** The provider's own id for this session. */
   sessionId: string;
@@ -584,19 +568,6 @@ export interface ObservedSession {
   status: string;
   /** Repository label or workspace name, when the provider reported one. */
   workspace?: string;
-  /** Current branch, when the provider reported one. */
-  branch?: string;
-  /** HTTPS address of the work the session published, when it reported one. */
-  change?: string;
-  /**
-   * Provider-owned address that opens this session where it lives, when the
-   * provider reported one. Bounded to the openable session-link schemes —
-   * this is the one observed field a surface acts on rather than draws, so
-   * an address outside the set never crosses the wire at all.
-   */
-  link?: string;
-  /** Error description, when the session stopped on something it cannot pass. */
-  error?: string;
   /** Unix milliseconds of the provider's last write about the session, when it reported one. */
   lastActivityAt?: number;
   /**
@@ -631,7 +602,7 @@ export interface ObserveAnswer {
   sessions: ObservedSession[];
 }
 
-const OBSERVED_SESSION_STATUS_SET = new Set(["working", "waiting", "error", "complete", "unknown"]);
+const OBSERVED_SESSION_STATUS_SET: ReadonlySet<string> = new Set(Object.values(SESSION_STATUS));
 
 const OBSERVED_CONTROL_KIND_SET: ReadonlySet<string> = new Set(Object.values(SESSION_CONTROL_KIND));
 
@@ -714,10 +685,6 @@ export function observeAnswerFromWire(value: UnparsedWireValue): ObserveAnswer |
 
 // --- Conversation wire contract ---
 
-// Who wrote one message of a conversation reading is `@sidecar/session`'s own
-// vocabulary, imported rather than mirrored the way `HOSTED_ACT_RESULT`
-// mirrors `@sidecar/acts`: that package sits above this one, where session
-// sits below, so nothing stops the wire from sharing the adapters' set.
 const CONVERSATION_AUTHOR_SET: ReadonlySet<string> = new Set(
   Object.values(CONVERSATION_MESSAGE_AUTHOR),
 );
@@ -806,19 +773,13 @@ export function hostedConversationAnswerFromWire(
  * the id against the provider's own list again, so this entry can offer a
  * project but can never conjure one.
  */
-export interface HostedWorkspaceProject {
-  /** The vault provider id that reported this project. */
+export interface HostedWorkspaceProject
+  extends Pick<
+    WorkspaceProject,
+    "namesItself" | "providerProjectId" | "repository" | "targetName" | "taskSupport"
+  > {
+  /** The cloud-agent provider id that reported this project. */
   providerId: string;
-  /** The provider-owned identifier a creation request names the project by. */
-  providerProjectId: string;
-  /** The repository label the project is named by on screen. */
-  repository: string;
-  /** Whether a new workspace here takes — or needs — an opening task. */
-  taskSupport: WorkspaceTaskSupport;
-  /** The bounded label of the execution target owning this project, when it has one. */
-  targetName?: string;
-  /** The provider names a workspace here itself and refuses a name from the ask. */
-  namesItself?: boolean;
 }
 
 /**
@@ -914,26 +875,14 @@ export function hostedProjectsAnswerFromWire(
 // --- Act wire contract ---
 
 /**
- * The three outcomes a hosted act endpoint can return. Values match
- * `ACT_RESULT_STATUS` in `@sidecar/acts` so the mobile client and the desktop
- * can share the same vocabulary without a direct dependency on that package.
+ * What the message and workspace-creation act endpoints return. The outcome
+ * is `ACT_RESULT_STATUS`, the vocabulary every adapter already answers an act
+ * in, under the field name the phone reads. It is the status alone and never
+ * the adapter's whole `ActResult`: the reason is optional here, and the
+ * workspace form carries a field of its own.
  */
-export const HOSTED_ACT_RESULT = {
-  /** The provider accepted the act. */
-  ACCEPTED: "accepted",
-  /** The provider or server refused the act; `reason` says why. */
-  REJECTED: "rejected",
-  /** The act is not available for this provider via mobile yet. */
-  UNSUPPORTED: "unsupported",
-} as const;
-
-export type HostedActResult = (typeof HOSTED_ACT_RESULT)[keyof typeof HOSTED_ACT_RESULT];
-
-const HOSTED_ACT_RESULT_SET: ReadonlySet<string> = new Set(Object.values(HOSTED_ACT_RESULT));
-
-/** What the message and workspace-creation act endpoints return. */
 export interface HostedActAnswer {
-  result: HostedActResult;
+  result: ActResultStatus;
   /** Human-readable reason; present on rejected and unsupported results. */
   reason?: string;
 }
@@ -948,10 +897,9 @@ export interface HostedActWorkspaceAnswer extends HostedActAnswer {
 export function hostedActAnswerFromWire(value: UnparsedWireValue): HostedActAnswer | undefined {
   if (!isRecord(value)) return undefined;
   const result = text(value.result);
-  if (!result || !HOSTED_ACT_RESULT_SET.has(result)) return undefined;
+  if (!isActResultStatus(result)) return undefined;
   const reason = isWireString(value.reason) ? value.reason : undefined;
-  // SAFETY: result is a string and a member of HOSTED_ACT_RESULT_SET.
-  return { result: result as HostedActResult, ...(reason ? { reason } : undefined) };
+  return { result, ...(reason ? { reason } : undefined) };
 }
 
 /** Reads a workspace-creation act answer from an untrusted hosted response. */
