@@ -48,7 +48,7 @@ final class WatchAccountSession {
             let email = payload["email"] as? String
         else { return }
 
-        let stored = WatchTokenStore.Tokens(
+        let stored = StoredTokens(
             accessToken: accessToken,
             refreshToken: refreshToken,
             expiry: Date(timeIntervalSinceReferenceDate: expiryInterval),
@@ -57,7 +57,7 @@ final class WatchAccountSession {
             accountID: nonEmpty(payload["account_id"] as? String),
             pictureURL: nonEmpty(payload["picture_url"] as? String)
         )
-        WatchTokenStore.save(stored)
+        KeychainStore.watch.save(stored)
         self.accessToken = accessToken
         self.tokenExpiry = stored.expiry
         accountScope = Self.scope(email: stored.email)
@@ -68,7 +68,7 @@ final class WatchAccountSession {
         accessToken = nil
         tokenExpiry = nil
         accountScope = nil
-        WatchTokenStore.clear()
+        KeychainStore.watch.clearAll()
         state = .signedOut
     }
 
@@ -104,7 +104,7 @@ final class WatchAccountSession {
     }
 
     private func restoreFromKeychain() {
-        guard let stored = WatchTokenStore.load() else { return }
+        guard let stored = KeychainStore.watch.load() else { return }
         accessToken = stored.accessToken
         tokenExpiry = stored.expiry
         accountScope = Self.scope(email: stored.email)

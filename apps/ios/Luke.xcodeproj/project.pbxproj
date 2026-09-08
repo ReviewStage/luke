@@ -29,7 +29,6 @@
 		AABBCC0000000000000000B6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000B2 /* Assets.xcassets */; };
 		AABBCC000000000000000103 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000105 /* PrivacyInfo.xcprivacy */; };
 		AABBCC0000000000000000B7 /* LukeKit in Frameworks */ = {isa = PBXBuildFile; productRef = AABBCC0000000000000000C0 /* LukeKit */; };
-		AABBCC0000000000000000C7 /* WatchTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000C1 /* WatchTokenStore.swift */; };
 		AABBCC0000000000000000FB /* WatchNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000FA /* WatchNetwork.swift */; };
 		AABBCC0000000000000000FD /* WatchVoiceAudioSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000FC /* WatchVoiceAudioSession.swift */; };
 		AABBCC0000000000000000F7 /* WatchWebSocketChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000FF /* WatchWebSocketChannel.swift */; };
@@ -112,7 +111,6 @@
 		AABBCC0000000000000000B1 /* LukeWatchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LukeWatchView.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000B2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AABBCC0000000000000000B3 /* LukeWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LukeWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		AABBCC0000000000000000C1 /* WatchTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchTokenStore.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000FA /* WatchNetwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchNetwork.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000FC /* WatchVoiceAudioSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchVoiceAudioSession.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000FF /* WatchWebSocketChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchWebSocketChannel.swift; sourceTree = "<group>"; };
@@ -236,7 +234,6 @@
 			children = (
 				AABBCC0000000000000000B0 /* LukeWatchApp.swift */,
 				AABBCC0000000000000000B1 /* LukeWatchView.swift */,
-				AABBCC0000000000000000C1 /* WatchTokenStore.swift */,
 				AABBCC0000000000000000FA /* WatchNetwork.swift */,
 				AABBCC0000000000000000FC /* WatchVoiceAudioSession.swift */,
 				AABBCC0000000000000000FF /* WatchWebSocketChannel.swift */,
@@ -449,7 +446,6 @@
 			files = (
 				AABBCC0000000000000000B4 /* LukeWatchApp.swift in Sources */,
 				AABBCC0000000000000000B5 /* LukeWatchView.swift in Sources */,
-				AABBCC0000000000000000C7 /* WatchTokenStore.swift in Sources */,
 				AABBCC0000000000000000FB /* WatchNetwork.swift in Sources */,
 				AABBCC0000000000000000FD /* WatchVoiceAudioSession.swift in Sources */,
 				AABBCC0000000000000000F7 /* WatchWebSocketChannel.swift in Sources */,
