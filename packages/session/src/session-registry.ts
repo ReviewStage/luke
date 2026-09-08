@@ -1,12 +1,7 @@
-import type { SessionProviderAdapter } from "./providers.js";
-import {
-  normalizeSession,
-  normalizeSessionIdentity,
-  type ProviderSessionObservation,
-  type Session,
-  type SessionIdentity,
-  type SessionProvider,
-} from "./session.js";
+import { normalizeSession, normalizeSessionIdentity } from "./normalize.js";
+import type { SessionProviderAdapter } from "./provider-contract.js";
+import type { SessionIdentity, SessionProvider } from "./session-identity.js";
+import type { ProviderSessionObservation, Session } from "./session-shape.js";
 
 export type SessionRosterListener = (sessions: readonly Session[]) => void;
 

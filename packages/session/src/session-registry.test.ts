@@ -11,7 +11,8 @@ import {
   type SessionProvider,
   SessionRoster,
 } from "@sidecar/session";
-import { maximumSessionLinkLength, supportsSessionControl } from "./session.js";
+import { supportsSessionControl } from "./advertised-acts.js";
+import { maximumSessionLinkLength } from "./bounds.js";
 
 const codex: SessionProvider = { id: "codex", displayName: "Codex" };
 const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
