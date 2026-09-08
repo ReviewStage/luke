@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SESSION_STATUS, type SessionControl } from "@sidecar/session";
+import {
+  advertisedActDisagreements,
+  normalizeSession,
+  SESSION_STATUS,
+  type SessionControl,
+} from "@sidecar/session";
 import type { JsonObject, JsonValue } from "@sidecar/wire/testing";
 import { HTTP_STATUS, jsonResponse, recordingFetch } from "@sidecar/wire/testing";
 import { CLOUD_ADAPTER_DEFAULTS, type CloudFetch } from "../shared/cloud-session-adapter.js";
@@ -2743,4 +2748,49 @@ test("a conversation read names what refused it without echoing the provider", a
     status: "rejected",
     reason: "Conductor did not answer, so the conversation could not be read.",
   });
+});
+
+test("every act a Conductor observation advertises is the field it replaces", async () => {
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [
+      ownedWorkspace("workspace-working", TEST_TIME - 1_000),
+      ownedWorkspace("workspace-settled", TEST_TIME - 2_000),
+    ],
+    sessions: [
+      {
+        id: "session-working",
+        workspaceId: "workspace-working",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.WORKING,
+        statusUpdatedAt: TEST_TIME - 1_000,
+      },
+      {
+        id: "session-idle",
+        workspaceId: "workspace-settled",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.IDLE,
+        statusUpdatedAt: TEST_TIME - 2_000,
+      },
+      {
+        id: "session-errored",
+        workspaceId: "workspace-settled",
+        name: TEST_SESSION_NAME,
+        status: TEST_CONDUCTOR_STATUS.ERROR,
+        statusUpdatedAt: TEST_TIME - 2_000,
+      },
+    ],
+  });
+
+  const observations = await adapterFor(api.fetch).observe();
+
+  assert.equal(observations.length, 3);
+  for (const observation of observations) {
+    assert.deepEqual(
+      advertisedActDisagreements(normalizeSession(CONDUCTOR_PROVIDER, observation)),
+      [],
+      observation.providerSessionId,
+    );
+  }
 });

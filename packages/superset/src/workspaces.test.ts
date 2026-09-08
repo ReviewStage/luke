@@ -5,7 +5,9 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import {
+  advertisedActDisagreements,
   HOSTED_AGENT_ID,
+  normalizeSession,
   PROVIDER_ID,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
@@ -773,4 +775,62 @@ test("a press mints a focus request only onto a bound terminal address", () => {
     supersetPressedLink("https://github.com/example/luke/pull/42", "focus-1"),
     "https://github.com/example/luke/pull/42",
   );
+});
+
+test("every act a Superset row advertises is the field it replaces", async (t) => {
+  const home = await temporarySupersetHome(t);
+  const database = await writeHostDatabase(home, "host-local");
+  createSchema(database);
+  database.exec(`
+    INSERT INTO projects VALUES ('project-1', 'Luke');
+    INSERT INTO workspaces (id, project_id, pull_request_id, name, branch, updated_at) VALUES
+      ('workspace-1', 'project-1', NULL, 'parallel-hippopotamus', 'feat/grok-bot', 200),
+      ('workspace-idle', 'project-1', NULL, 'idle-ibis', 'feat/idle', 100);
+    INSERT INTO host_agent_configs VALUES ('claude', 1), ('opencode', 1);
+    INSERT INTO terminal_agent_bindings VALUES (
+      'terminal-1', 'workspace-1', 'claude', 'ses_claude', 'Start'
+    );
+  `);
+  database.close();
+
+  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
+  const provider = { id: PROVIDER_ID.CLAUDE_CODE, displayName: "Claude Code" };
+  // Both rows that carry acts: a chat mid-turn, a settled chat, and the idle
+  // workspace that earns a standing row of its own.
+  const observations = [
+    ...snapshot.enrich(
+      PROVIDER_ID.CLAUDE_CODE,
+      [
+        {
+          providerSessionId: "ses_claude",
+          title: "Add Grok Bot support",
+          status: SESSION_STATUS.WORKING,
+          lastActivityAt: 100,
+        },
+      ],
+      "host-local",
+    ),
+    ...snapshot.enrich(
+      PROVIDER_ID.CLAUDE_CODE,
+      [
+        {
+          providerSessionId: "ses_claude",
+          title: "Add Grok Bot support",
+          status: SESSION_STATUS.WAITING,
+          lastActivityAt: 100,
+        },
+      ],
+      "host-local",
+    ),
+    ...snapshot.workspaceRowObservations("host-local"),
+  ];
+
+  assert.equal(observations.length, 3);
+  for (const observation of observations) {
+    assert.deepEqual(
+      advertisedActDisagreements(normalizeSession(provider, observation)),
+      [],
+      observation.providerSessionId,
+    );
+  }
 });

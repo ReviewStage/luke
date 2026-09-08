@@ -1,6 +1,9 @@
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "@sidecar/credentials/vocabulary";
 import {
+  ACT_KIND,
   ACT_RESULT_STATUS,
+  type AdvertisedAct,
+  type AdvertisedControl,
   agedStatus,
   agentIdentityFor,
   CONVERSATION_MESSAGE_AUTHOR,
@@ -154,6 +157,13 @@ const CONDUCTOR_CANCEL_CONTROL = {
   kind: SESSION_CONTROL_KIND.STOP,
 } as const;
 
+const CONDUCTOR_CANCEL_ADVERTISEMENT = {
+  kind: ACT_KIND.CONTROL,
+  id: CONDUCTOR_CANCEL_CONTROL.id,
+  label: CONDUCTOR_CANCEL_CONTROL.label,
+  controlKind: CONDUCTOR_CANCEL_CONTROL.kind,
+} as const satisfies AdvertisedControl;
+
 const CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID = "archive-workspace";
 
 /**
@@ -172,6 +182,16 @@ function conductorArchiveWorkspaceControl(workspaceId: string): SessionControl {
     id: CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID,
     label: "Archive",
     kind: SESSION_CONTROL_KIND.ARCHIVE,
+    target: workspaceId,
+  };
+}
+
+function conductorArchiveWorkspaceAdvertisement(workspaceId: string): AdvertisedControl {
+  return {
+    kind: ACT_KIND.CONTROL,
+    id: CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID,
+    label: "Archive",
+    controlKind: SESSION_CONTROL_KIND.ARCHIVE,
     target: workspaceId,
   };
 }
@@ -1223,6 +1243,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     ];
     return {
       providerSessionId: session.id,
+      advertises: this.#advertisementsFor(session, reported, settledWorkspaceIds),
       // The chat's own name titles the row, because the row is the chat; the
       // workspace's name — the name the user knows the work by — rides the
       // grouping below and names all of its chats at once. A chat Conductor
@@ -1287,6 +1308,55 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
         ...(session.deepLink ? { link: session.deepLink } : undefined),
       },
     };
+  }
+
+  /**
+   * The acts Conductor documents for this chat right now. Every workspace id
+   * riding one is the workspace this pass observed, so a target can never
+   * outlive the snapshot that promised it.
+   */
+  #advertisementsFor(
+    session: ConductorSession,
+    reported: ConductorReportedStatus | undefined,
+    settledWorkspaceIds: ReadonlySet<string>,
+  ): readonly AdvertisedAct[] {
+    const advertises: AdvertisedAct[] = [];
+    // Conductor documents both halves of a send — queued while a session is
+    // idle, steered into the turn while it works — so any open chat takes a
+    // message. An errored one is documented for no writer.
+    if (
+      reported?.status === CONDUCTOR_SESSION_STATUS.IDLE ||
+      reported?.status === CONDUCTOR_SESSION_STATUS.WORKING
+    ) {
+      advertises.push({ kind: ACT_KIND.MESSAGE });
+    }
+    // The stop belongs to the turn and the archive to the workspace: a chat
+    // mid-turn offers the stop alone — its own workspace is by definition
+    // unsettled — and any chat of a positively settled workspace offers to
+    // file the whole workspace away. Every workspace and every chat here is
+    // still open: the filed-away workspaces never made it past the lifecycle
+    // read, and the filed-away chats never made it past the listing.
+    if (reported?.status === CONDUCTOR_SESSION_STATUS.WORKING) {
+      advertises.push(CONDUCTOR_CANCEL_ADVERTISEMENT);
+    }
+    if (settledWorkspaceIds.has(session.workspace.id)) {
+      advertises.push(conductorArchiveWorkspaceAdvertisement(session.workspace.id));
+    }
+    // Renaming is documented for any open chat, whatever its turn is doing,
+    // so it is not gated on the reported status the way a message is.
+    advertises.push({ kind: ACT_KIND.RENAME_SESSION });
+    // Another agent lands in the workspace around this row, whatever state
+    // the row's own chat is in: the workspace was observed this pass, and
+    // that is the thing the creation endpoint takes.
+    advertises.push({
+      kind: ACT_KIND.ADD_AGENT,
+      agents: CONDUCTOR_SPAWNABLE_AGENTS,
+      target: session.workspace.id,
+    });
+    // A rename is documented for any open workspace, and every workspace here
+    // is open — the filed-away ones never made it past the lifecycle read.
+    advertises.push({ kind: ACT_KIND.RENAME_WORKSPACE, target: session.workspace.id });
+    return advertises;
   }
 
   #statusFor(

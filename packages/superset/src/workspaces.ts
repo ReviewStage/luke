@@ -10,6 +10,8 @@ import {
   textFromRow,
 } from "@sidecar/providers";
 import {
+  ACT_KIND,
+  type AdvertisedAct,
   AGENT_IDENTITY,
   agentIdentityFor,
   type ProviderSessionObservation,
@@ -231,6 +233,46 @@ export interface SupersetSessionContext {
    * such matches so a fresh snapshot can re-anchor them against its own read.
    */
   worktreePath?: string;
+}
+
+/**
+ * The acts Superset documents for one workspace it manages, given whether the
+ * row is settled and whether anything is bound to take a message. Both rows
+ * that carry acts — a chat's and an idle workspace's — read them from here, so
+ * a press means the same thing on either. The workspace id rides every entry
+ * as its target, which is what the press acts on and what seats a control once
+ * on a tray's own header when several chats share the workspace.
+ */
+function supersetAdvertisements(
+  context: SupersetSessionContext,
+  settled: boolean,
+  messageable: boolean,
+): readonly AdvertisedAct[] {
+  const advertises: AdvertisedAct[] = [];
+  // Only a bound terminal gives a message somewhere to land; a chatless
+  // workspace row stays unmessageable rather than improvising a way in.
+  if (messageable) advertises.push({ kind: ACT_KIND.MESSAGE });
+  // Deleting the workspace is unrecoverable and takes every sibling chat's
+  // terminal with it, so it is offered only on a row positively seen settled —
+  // never one still working, or one whose state could not be read.
+  if (settled) {
+    advertises.push({
+      kind: ACT_KIND.CONTROL,
+      id: SUPERSET_CONTROL_ID.DELETE_WORKSPACE,
+      label: "Delete workspace",
+      target: context.workspaceId,
+    });
+  }
+  // Superset documents renaming any workspace it manages.
+  advertises.push({ kind: ACT_KIND.RENAME_WORKSPACE, target: context.workspaceId });
+  if (context.spawnableAgents.length > 0) {
+    advertises.push({
+      kind: ACT_KIND.ADD_AGENT,
+      agents: context.spawnableAgents,
+      target: context.workspaceId,
+    });
+  }
+  return advertises;
 }
 
 /**
@@ -558,6 +600,10 @@ export class SupersetWorkspaceSnapshot {
         detail,
         applications,
         workspace,
+        advertises: [
+          ...(observation.advertises ?? []),
+          ...supersetAdvertisements(context, settled, context.terminalId !== undefined),
+        ],
         // Superset documents renaming any workspace it manages, so the
         // target rides the advertisement the way the spawn target does.
         renameTarget: context.workspaceId,
@@ -621,6 +667,9 @@ export class SupersetWorkspaceSnapshot {
         },
       };
       if (!actableInOrganization(context, activeOrganizationId)) return observation;
+      // A workspace with no agent terminal is settled by construction: there
+      // is no turn a delete could cut, and nothing bound to take a message.
+      observation.advertises = supersetAdvertisements(context, true, false);
       observation.controls = [
         {
           id: SUPERSET_CONTROL_ID.DELETE_WORKSPACE,
