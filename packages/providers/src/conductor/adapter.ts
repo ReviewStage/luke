@@ -1216,7 +1216,6 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     const error = reported?.errorMessage ?? lifecycle?.errorMessage;
     return {
       providerSessionId: session.id,
-      advertises: this.#advertisementsFor(session, reported, settledWorkspaceIds),
       // The chat's own name titles the row, because the row is the chat; the
       // workspace's name — the name the user knows the work by — rides the
       // grouping below and names all of its chats at once. A chat Conductor
@@ -1251,6 +1250,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
         },
       ],
       ...(agent ? { agent } : undefined),
+      advertises: this.#advertisementsFor(session, reported, settledWorkspaceIds),
       detail: {
         repository: session.workspace.repositoryLabel,
         ...(model ? { model } : undefined),

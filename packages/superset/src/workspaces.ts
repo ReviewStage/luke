@@ -245,17 +245,16 @@ export interface SupersetSessionContext {
  */
 function supersetAdvertisements(
   context: SupersetSessionContext,
-  settled: boolean,
-  messageable: boolean,
+  row: { settled: boolean; messageable: boolean },
 ): readonly AdvertisedAct[] {
   const advertises: AdvertisedAct[] = [];
   // Only a bound terminal gives a message somewhere to land; a chatless
   // workspace row stays unmessageable rather than improvising a way in.
-  if (messageable) advertises.push({ kind: ACT_KIND.MESSAGE });
+  if (row.messageable) advertises.push({ kind: ACT_KIND.MESSAGE });
   // Deleting the workspace is unrecoverable and takes every sibling chat's
   // terminal with it, so it is offered only on a row positively seen settled —
   // never one still working, or one whose state could not be read.
-  if (settled) {
+  if (row.settled) {
     advertises.push({
       kind: ACT_KIND.CONTROL,
       id: SUPERSET_CONTROL_ID.DELETE_WORKSPACE,
@@ -584,7 +583,10 @@ export class SupersetWorkspaceSnapshot {
         workspace,
         advertises: [
           ...(observation.advertises ?? []),
-          ...supersetAdvertisements(context, settled, context.terminalId !== undefined),
+          ...supersetAdvertisements(context, {
+            settled,
+            messageable: context.terminalId !== undefined,
+          }),
         ],
       };
     });
@@ -639,7 +641,10 @@ export class SupersetWorkspaceSnapshot {
       if (!actableInOrganization(context, activeOrganizationId)) return observation;
       // A workspace with no agent terminal is settled by construction: there
       // is no turn a delete could cut, and nothing bound to take a message.
-      observation.advertises = supersetAdvertisements(context, true, false);
+      observation.advertises = supersetAdvertisements(context, {
+        settled: true,
+        messageable: false,
+      });
       return observation;
     });
   }

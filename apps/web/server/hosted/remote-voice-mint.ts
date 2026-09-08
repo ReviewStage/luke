@@ -1,11 +1,7 @@
 import {
-  ACT_KIND,
-  advertisedActFor,
-  advertisedControls,
   CONTEXT_ITEM_KIND,
   contextItemId,
   type ObservedSession,
-  type ObservedSessionControl,
   remoteRealtimeClientSecretRequest,
   VAULT_PROVIDER_ID,
   type VaultProviderId,
@@ -13,7 +9,7 @@ import {
 import { cloudSessionAdapterFor } from "./cloud-adapters.js";
 import { decryptProviderKey } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
-import type { VaultKeyRow } from "./observe.js";
+import { type VaultKeyRow, writeAdvertisedActs } from "./observe.js";
 import type { FetchLike } from "./openai.js";
 import type { HostedSpend } from "./quota.js";
 import { remoteSessionContextText } from "./remote-context.js";
@@ -180,26 +176,7 @@ async function observeCloudSessions(
         session.lastActivityAt = obs.lastActivityAt;
         session.observedAt = obs.lastActivityAt;
       }
-      if (advertisedActFor(obs, ACT_KIND.MESSAGE)) session.canReceiveMessage = true;
-      const controls = advertisedControls(obs)
-        .map((advertised): ObservedSessionControl => {
-          const control: ObservedSessionControl = {
-            id: advertised.id,
-            label: advertised.label,
-          };
-          if (advertised.controlKind) control.kind = advertised.controlKind;
-          return control;
-        })
-        .filter((control) => control.id && control.label);
-      if (controls.length > 0) session.controls = controls;
-      const spawnableAgents = advertisedActFor(obs, ACT_KIND.ADD_AGENT)?.agents.filter(
-        (agent) => agent.length > 0,
-      );
-      if (spawnableAgents && spawnableAgents.length > 0) {
-        session.spawnableAgents = [...spawnableAgents];
-      }
-      if (advertisedActFor(obs, ACT_KIND.RENAME_SESSION)) session.canRename = true;
-      if (advertisedActFor(obs, ACT_KIND.RENAME_WORKSPACE)) session.canRenameWorkspace = true;
+      writeAdvertisedActs(session, obs);
       sessions.push(session);
     }
   }

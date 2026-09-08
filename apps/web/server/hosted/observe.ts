@@ -120,6 +120,36 @@ export async function handleObserve(options: ObserveOptions): Promise<Response> 
   return jsonResponse(HOSTED_HTTP_STATUS.OK, { sessions });
 }
 
+/**
+ * The acts an observation advertised, written onto its wire row. Each is
+ * presence-only where it can be: what a control targets, or which workspace a
+ * rename lands on, never travels — the act endpoints re-observe and rebuild
+ * every write from their own fresh advertisement. One function, because the
+ * roster a voice mint is sent carries exactly the same fields.
+ */
+export function writeAdvertisedActs(
+  session: ObservedSession,
+  observation: Pick<ProviderSessionObservation, "advertises">,
+): void {
+  if (advertisedActFor(observation, ACT_KIND.MESSAGE)) session.canReceiveMessage = true;
+  const controls = advertisedControls(observation)
+    .map((control): ObservedSessionControl => {
+      const wireControl: ObservedSessionControl = { id: control.id, label: control.label };
+      if (control.controlKind) wireControl.kind = control.controlKind;
+      return wireControl;
+    })
+    .filter((control) => control.id && control.label);
+  if (controls.length > 0) session.controls = controls;
+  const spawnableAgents = advertisedActFor(observation, ACT_KIND.ADD_AGENT)?.agents.filter(
+    (agent) => agent.length > 0,
+  );
+  if (spawnableAgents && spawnableAgents.length > 0) {
+    session.spawnableAgents = [...spawnableAgents];
+  }
+  if (advertisedActFor(observation, ACT_KIND.RENAME_SESSION)) session.canRename = true;
+  if (advertisedActFor(observation, ACT_KIND.RENAME_WORKSPACE)) session.canRenameWorkspace = true;
+}
+
 export function observedSessionForResponse(
   providerId: VaultProviderId,
   obs: ProviderSessionObservation,
@@ -143,27 +173,7 @@ export function observedSessionForResponse(
   if (error) session.error = error;
   session.lastActivityAt = obs.lastActivityAt;
   session.observedAt = obs.lastActivityAt;
-  // The act advertisements, so a row can offer only what the observation
-  // promised. Each is presence-only where it can be: what a control targets,
-  // or which workspace a rename lands on, never travels — the act endpoints
-  // re-observe and rebuild every write from their own fresh advertisement.
-  if (advertisedActFor(obs, ACT_KIND.MESSAGE)) session.canReceiveMessage = true;
-  const controls = advertisedControls(obs)
-    .map((control): ObservedSessionControl => {
-      const wireControl: ObservedSessionControl = { id: control.id, label: control.label };
-      if (control.controlKind) wireControl.kind = control.controlKind;
-      return wireControl;
-    })
-    .filter((control) => control.id && control.label);
-  if (controls.length > 0) session.controls = controls;
-  const spawnableAgents = advertisedActFor(obs, ACT_KIND.ADD_AGENT)?.agents.filter(
-    (agent) => agent.length > 0,
-  );
-  if (spawnableAgents && spawnableAgents.length > 0) {
-    session.spawnableAgents = [...spawnableAgents];
-  }
-  if (advertisedActFor(obs, ACT_KIND.RENAME_SESSION)) session.canRename = true;
-  if (advertisedActFor(obs, ACT_KIND.RENAME_WORKSPACE)) session.canRenameWorkspace = true;
+  writeAdvertisedActs(session, obs);
   // A capability of the provider's documented transcript read, advertised so
   // a screen offers the fetch only where the messages endpoint could answer.
   if (providerReadsConversation(providerId)) session.canReadConversation = true;

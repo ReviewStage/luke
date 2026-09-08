@@ -50,11 +50,6 @@ export const SESSION_CONTROL_KIND = {
 
 export type SessionControlKind = (typeof SESSION_CONTROL_KIND)[keyof typeof SESSION_CONTROL_KIND];
 
-/** The provider takes a message for this session in its current state. */
-export interface AdvertisedMessage {
-  kind: typeof ACT_KIND.MESSAGE;
-}
-
 /** One provider-defined action the provider exposed for this session. */
 export interface AdvertisedControl {
   kind: typeof ACT_KIND.CONTROL;
@@ -81,31 +76,23 @@ export interface AdvertisedAddAgent {
   target?: string;
 }
 
-/** The provider documents renaming this session itself — the chat's own name. */
-export interface AdvertisedRenameSession {
-  kind: typeof ACT_KIND.RENAME_SESSION;
-}
-
-/**
- * The provider documents renaming the workspace around this session, whose
- * own identifier is what the rename lands on.
- */
-export interface AdvertisedRenameWorkspace {
-  kind: typeof ACT_KIND.RENAME_WORKSPACE;
-  target: string;
-}
-
 /**
  * One act a session's provider documents for it now. Each entry carries what
  * that act needs and nothing else, so a target no act uses cannot ride along
  * unread, and every entry is replaced whole by the next observation.
  */
 export type AdvertisedAct =
-  | AdvertisedMessage
+  /** The provider takes a message for this session in its current state. */
+  | { kind: typeof ACT_KIND.MESSAGE }
   | AdvertisedControl
   | AdvertisedAddAgent
-  | AdvertisedRenameSession
-  | AdvertisedRenameWorkspace;
+  /** The provider documents renaming this session itself — the chat's own name. */
+  | { kind: typeof ACT_KIND.RENAME_SESSION }
+  /**
+   * The provider documents renaming the workspace around this session, whose
+   * own identifier is what the rename lands on.
+   */
+  | { kind: typeof ACT_KIND.RENAME_WORKSPACE; target: string };
 
 export type AdvertisedActOf<Kind extends AdvertisedActKind> = Extract<
   AdvertisedAct,
