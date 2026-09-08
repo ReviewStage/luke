@@ -158,6 +158,13 @@ const INGESTION_SCORE = 0.8;
  * redaction treats a key armor the cut removed as an unterminated key.
  */
 const NOTE_LINE_MAX_CHARS = 4_000;
+/**
+ * The share of the light limit the dated notes may take ahead of the
+ * conversations, so a full History budget cannot keep a completed note from
+ * being staged until it ages out of the lookback; whatever either side
+ * leaves goes to the other.
+ */
+const NOTE_BUDGET_SHARE = 0.5;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DIARY_OUTPUT_TOKENS = 400;
 const CONSOLIDATION_OUTPUT_TOKENS = 4_000;
@@ -516,10 +523,20 @@ export function wireMemoryMaintenance(
         const held = await client.listMemoryCandidates();
         // The light limit bounds what one sweep stages; the cursor and the
         // seen hashes advance only over the lines actually consumed, so what
-        // the budget left behind is read by the next sweep, never lost.
-        let budget: number = CONSOLIDATION_DEFAULTS.LIGHT_LIMIT;
+        // the budget left behind is read by the next sweep, never lost. The
+        // notes have no cursor — a note line already held costs no budget,
+        // and one not yet held is read again next sweep — so they take their
+        // share first, and the conversations the rest.
+        const noteCandidates = (await noteSeeds(now)).filter(
+          (seed) => !held.some((candidate) => candidatesDuplicate(candidate.text, seed.text)),
+        );
+        const noteShare = Math.min(
+          noteCandidates.length,
+          Math.floor(CONSOLIDATION_DEFAULTS.LIGHT_LIMIT * NOTE_BUDGET_SHARE),
+        );
+        let budget: number = CONSOLIDATION_DEFAULTS.LIGHT_LIMIT - noteShare;
         const advances: { sessionKey: SessionKey; latest: number; hashes: string[] }[] = [];
-        let gathered: CandidateSeed[] = [];
+        let gathered: CandidateSeed[] = noteCandidates.slice(0, noteShare);
         for (const sessionKey of eligibleConversations()) {
           const lines = await conversationLines(client, sessionKey, now);
           const hashes: string[] = [];
@@ -535,7 +552,9 @@ export function wireMemoryMaintenance(
           }
           if (hashes.length > 0) advances.push({ sessionKey, latest, hashes });
         }
-        gathered = gathered.concat((await noteSeeds(now)).slice(0, Math.max(0, budget)));
+        gathered = gathered.concat(
+          noteCandidates.slice(noteShare, noteShare + Math.max(0, budget)),
+        );
         const { seeds, deduped } = dedupe(gathered, held);
         const staging = await client.stageMemoryCandidates(seeds, now);
         for (const advance of advances) {
