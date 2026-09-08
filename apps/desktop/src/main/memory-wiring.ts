@@ -159,7 +159,6 @@ export function wireMemory(dependencies: MemoryWiringDependencies): MemoryWiring
     const identity = await identityOf();
     const plan = await client.planMemorySync(identity, dependencies.now());
     let embeddings: EmbeddingWrite[] = [];
-    let applyIdentity = identity;
     if (identity && plan.missingEmbeddings.length > 0) {
       const adapter = dependencies.embeddingAdapter();
       const embedded = adapter
@@ -167,9 +166,9 @@ export function wireMemory(dependencies: MemoryWiringDependencies): MemoryWiring
         : { failed: "no embedding credential stands" };
       if ("failed" in embedded) {
         embeddingUnavailable(embedded.failed);
-        // Keyword rows still land so the notebook stays searchable; the
-        // vectors are asked for again on the next sync.
-        applyIdentity = undefined;
+        // Keyword rows still land so the notebook stays searchable, under the
+        // same identity so every vector already cached is kept on its chunk;
+        // only the chunks still without one are asked for again next sync.
       } else {
         embeddings = embedded;
         mode = RETRIEVAL_MODE.HYBRID;
@@ -183,7 +182,7 @@ export function wireMemory(dependencies: MemoryWiringDependencies): MemoryWiring
       changed: plan.changed,
       removed: plan.removed,
       embeddings,
-      ...(applyIdentity ? { identity: applyIdentity } : undefined),
+      ...(identity ? { identity } : undefined),
       now: dependencies.now(),
     });
     return { mode, ...report, ...(modeNote ? { note: modeNote } : undefined) };
@@ -240,12 +239,15 @@ export function wireMemory(dependencies: MemoryWiringDependencies): MemoryWiring
     const keys = eligibleKeys(current);
     if (keys.length === 0 || limit <= 0) return [];
     const hits = await dependencies.client().searchHistory(keys, query, limit, dependencies.now());
-    return hits.map((hit) => {
+    return hits.map((hit, ordinal) => {
       const textScore = lexicalScore(query, hit.entry.words);
+      // A line has no line number; its moment stands in, so two hits from one
+      // conversation are two results and never one.
+      const moment = hit.entry.recordedAt ?? ordinal;
       return {
         path: `conversation:${hit.sessionKey}`,
-        startLine: 0,
-        endLine: 0,
+        startLine: moment,
+        endLine: moment,
         score: MEMORY_SEARCH_DEFAULTS.TEXT_WEIGHT * textScore,
         vectorScore: 0,
         textScore,

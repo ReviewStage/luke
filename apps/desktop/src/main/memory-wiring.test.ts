@@ -266,8 +266,14 @@ test("past-conversation results come from eligible conversations' History alone,
         recordedAt: NOW + 1,
         eventId: "b",
       },
+      {
+        kind: CONVERSATION_ENTRY_KIND.REPLY,
+        words: "tuesday again, said the thread",
+        recordedAt: NOW + 3,
+        eventId: "d",
+      },
     ],
-    NOW + 1,
+    NOW + 3,
   );
   await h.store.appendHistory(
     h.temporary,
@@ -288,7 +294,8 @@ test("past-conversation results come from eligible conversations' History alone,
   ).filter((hit) => hit.source === MEMORY_SOURCE.CONVERSATIONS);
   assert.deepEqual(
     mainHits.map((hit) => hit.path),
-    [`conversation:${h.thread}`],
+    [`conversation:${h.thread}`, `conversation:${h.thread}`],
+    "two lines of one conversation are two results",
   );
   const fromThread = h.wiring.accessFor(h.thread);
   assert.ok(fromThread);
@@ -379,6 +386,22 @@ test("a transient embedding failure leaves keyword rows searchable and the next 
       .length,
     1,
     "the notebook stays searchable by keyword meanwhile",
+  );
+  // A pass that fails after another pass stored vectors keeps every one of them.
+  embedding.fail = false;
+  await h.wiring.sync();
+  const before = (await h.store.memoryIndexStatus()).embeddedChunks;
+  assert.ok(before > 0);
+  fs.writeFileSync(
+    path.join(h.root, "workspace", "memory", "note.md"),
+    "# note\n\nEspresso thrice.\n",
+  );
+  embedding.fail = true;
+  await h.wiring.sync();
+  assert.equal(
+    (await h.store.memoryIndexStatus()).embeddedChunks,
+    before,
+    "a failed pass wipes no vector an earlier pass stored",
   );
   embedding.fail = false;
   const retried = await h.wiring.sync();

@@ -243,7 +243,7 @@ function lacksVectors(
   const row = database
     .prepare(
       `SELECT COUNT(*) AS count FROM memory_index_chunks
-       WHERE path = ? AND (embedding = '' OR model <> ?)`,
+       WHERE path = ? AND trim(text) <> '' AND (embedding = '' OR model <> ?)`,
     )
     .get(filePath, identity.model) as { count: number };
   return row.count > 0;
