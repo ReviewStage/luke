@@ -8,6 +8,11 @@ components. Each app owns the styling that presents those components. Other
 modules belong in an app when they import `electron`, `react`, or a DOM API.
 Everything else is logic and can be tested with `node --test` and no harness.
 
+A wire value's rules are declared once, as a `Schema` in `@sidecar/wire`,
+which both parses the untrusted value and emits the JSON Schema a model is
+shown for it. A hand-written parser beside a hand-written schema is two
+statements of the same rule that can drift.
+
 ## The graph is acyclic, and stays that way
 
 Every package declares exactly the packages its own sources reach, and the
