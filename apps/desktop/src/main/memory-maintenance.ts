@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { BrainFlushInput, BrainFlushMarkerStore } from "@sidecar/brain";
-import { REFUSAL_REASON, runMemoryHousekeeping } from "@sidecar/brain";
+import { completeToolFree, runMemoryHousekeeping } from "@sidecar/brain";
 import {
   appendOnlyPromotion,
   applyConsolidationPlan,
@@ -49,11 +49,9 @@ import {
 } from "@sidecar/runtime";
 import {
   type AgentRuntime,
-  CONTEXT_INPUT_KIND,
   CONVERSATION_KIND,
   type ConversationRecord,
   conversationKindOf,
-  RUN_END_REASON,
   type SessionKey,
 } from "@sidecar/runtime-contracts";
 import type {
@@ -61,7 +59,7 @@ import type {
   MemoryForgetReport,
   RuntimeStoreClient,
 } from "@sidecar/runtime-store";
-import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import type { WireRecord } from "@sidecar/wire";
 
 /**
  * Memory maintenance as the desktop composes it: the pre-compaction flush
@@ -277,45 +275,6 @@ export function wireMemoryMaintenance(
       return await housekeeping(items, resetCapturePrompt(day), day, controller.signal);
     } finally {
       clearTimeout(timer);
-    }
-  };
-
-  /** One tool-free completion over a fresh, dropped context; nothing when the model did not answer. */
-  const toolFreeCompletion = async (
-    runtime: AgentRuntime,
-    prompt: string,
-    input: string,
-    maximumOutputTokens: number,
-    signal: AbortSignal,
-  ): Promise<string | undefined> => {
-    const opened = await runtime.openContext(undefined, JSON.stringify({}));
-    try {
-      const run = runtime.start({
-        runId: dependencies.createId(),
-        context: opened.context,
-        tools: {
-          execute: async () => ({
-            outputJson: JSON.stringify({
-              status: ACT_RESULT_STATUS.REJECTED,
-              reason: REFUSAL_REASON.NOT_OFFERED,
-            }),
-            status: ACT_RESULT_STATUS.REJECTED,
-          }),
-        },
-        toolSchemas: [],
-        prompt,
-        input: [{ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: input }],
-        ephemeral: () => [],
-        maximumOutputTokens,
-        signal,
-        onEvent: () => undefined,
-      });
-      const end = await run.done;
-      return end.reason === RUN_END_REASON.COMPLETED && end.text.trim().length > 0
-        ? end.text
-        : undefined;
-    } finally {
-      await Promise.resolve(opened.context.dispose()).catch(() => undefined);
     }
   };
 
@@ -621,13 +580,14 @@ export function wireMemoryMaintenance(
           const memory = await client.readDurableMemoryFile(WORKSPACE_FILE.MEMORY);
           const existing = memory?.content ?? "";
           if (runtime) {
-            const raw = await toolFreeCompletion(
+            const raw = await completeToolFree({
               runtime,
-              CONSOLIDATION_SYSTEM_PROMPT,
-              consolidationPrompt(existing, promotions),
-              CONSOLIDATION_OUTPUT_TOKENS,
-              controller.signal,
-            ).catch((error: Error) => {
+              prompt: CONSOLIDATION_SYSTEM_PROMPT,
+              input: consolidationPrompt(existing, promotions),
+              maximumOutputTokens: CONSOLIDATION_OUTPUT_TOKENS,
+              signal: controller.signal,
+              runId: dependencies.createId(),
+            }).catch((error: Error) => {
               notes.push(`consolidation call failed: ${error.message}`);
               return undefined;
             });
@@ -680,10 +640,10 @@ export function wireMemoryMaintenance(
         let narrative: string | undefined;
         let degraded: string | undefined;
         if (runtime && (staging.staged > 0 || promoted > 0 || reflections.length > 0)) {
-          narrative = await toolFreeCompletion(
+          narrative = await completeToolFree({
             runtime,
-            DREAM_DIARY_SYSTEM_PROMPT,
-            JSON.stringify({
+            prompt: DREAM_DIARY_SYSTEM_PROMPT,
+            input: JSON.stringify({
               day,
               staged: staging.staged,
               reinforced: staging.reinforced,
@@ -691,9 +651,10 @@ export function wireMemoryMaintenance(
               promoted,
               highlights: result?.highlights ?? [],
             }),
-            DIARY_OUTPUT_TOKENS,
-            controller.signal,
-          ).catch(() => undefined);
+            maximumOutputTokens: DIARY_OUTPUT_TOKENS,
+            signal: controller.signal,
+            runId: dependencies.createId(),
+          }).catch(() => undefined);
           if (!narrative)
             degraded = "the diary narrative could not be generated; counts stand alone";
         }
