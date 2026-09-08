@@ -8,6 +8,7 @@ import {
 import { RUN_ORIGIN, type RunOrigin } from "@sidecar/runtime-contracts";
 import type { WireRecord } from "@sidecar/wire";
 import type { Generation } from "./generation.js";
+import type { SteeredDeliveries } from "./steered-deliveries.js";
 import type { RecordingContextEngine } from "./transcript-recorder.js";
 import type { BrainWakeEvent } from "./wake-events.js";
 
@@ -139,12 +140,12 @@ export interface TurnPlan {
   /** The developer's own words when the turn is their ask, for the recall that precedes the inference. */
   question?: string;
   /**
-   * Hears every checkpoint of this turn that landed with its opening words
-   * in it, so a host that owes someone an answer about those words — a
-   * child's completion — answers from what is on disk, not from how the
-   * turn ended.
+   * What the turn owes about the words in it: its opening words, and the
+   * words steered into its run. Answered by the checkpoints that land and by
+   * nothing else, so a host owed an answer about those words — a child's
+   * completion — reads what is on disk, not how the turn ended.
    */
-  onPersisted?: () => void;
+  deliveries: SteeredDeliveries;
   run?: RunControl;
   /**
    * The generation the work was queued in. A turn that reaches the front of

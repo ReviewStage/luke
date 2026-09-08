@@ -1,17 +1,15 @@
 import type { BrainAgent, BrainChildAccess } from "@sidecar/brain";
 import type { ConversationEntry } from "@sidecar/realtime";
 import { ChildRunService, type ChildStore, type ScheduledTimer } from "@sidecar/runtime";
+import type { ModelAdapter } from "@sidecar/runtime-contracts";
 import {
   CHILD_RUN_STATUS,
   type ChildRunRecord,
   type ConversationRecord,
   childIdOf,
   DEFAULT_AGENT_ID,
-  type ModelAdapter,
-  observedSessionRefOf,
   type SessionKey,
 } from "@sidecar/runtime-contracts";
-import type { SessionIdentity } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 
 /**
@@ -50,16 +48,12 @@ export interface ChildWiringDependencies {
 export interface ChildWiringHost {
   /** The brain standing for a conversation now, if any. */
   current: (sessionKey: SessionKey) => BrainAgent | undefined;
-  /** The model the policy chose, or nothing when no brain may stand. */
-  liveModel: () => ModelAdapter | undefined;
-  /** Opens a conversation's store and, on the model given, its brain; a fork is the child's opening history. */
-  open: (
-    sessionKey: SessionKey,
-    model: ModelAdapter,
-    fork?: readonly WireRecord[],
-  ) => Promise<BrainAgent | undefined>;
-  /** Opens an observed session's conversation, serialized with any closing of the same key. */
-  openObserved: (identity: SessionIdentity) => Promise<BrainAgent | undefined>;
+  /**
+   * Opens a conversation of any kind for a brain, or answers the one
+   * standing: its directory row, its store, and its brain, with a child's
+   * inherited fork as its opening history; nothing while no model stands.
+   */
+  open: (sessionKey: SessionKey, fork?: readonly WireRecord[]) => Promise<BrainAgent | undefined>;
   /** Retires a conversation's brain and lets its store go. */
   closeConversation: (sessionKey: SessionKey) => Promise<void>;
 }
@@ -80,7 +74,8 @@ export function childRecordOf(
   return childId === undefined ? undefined : service.child(childId);
 }
 
-function childName(record: ChildRunRecord): string {
+/** The name a child's conversation is listed under: its label, or its id. */
+export function childName(record: ChildRunRecord): string {
   return record.label ?? `Child ${record.childId}`;
 }
 
@@ -88,34 +83,8 @@ export function wireChildren(
   dependencies: ChildWiringDependencies,
   host: ChildWiringHost,
 ): ChildWiring {
-  const openChild = async (
-    record: ChildRunRecord,
-    fork?: readonly WireRecord[],
-  ): Promise<BrainAgent | undefined> => {
-    const model = host.liveModel();
-    if (!model) return undefined;
-    await dependencies.ensureChildConversation(record.childSessionKey, childName(record));
-    return host.open(record.childSessionKey, model, fork);
-  };
-
-  /**
-   * The conversation a completion is for, opened again if it was stood down:
-   * an observed session's conversation whose session left the roster, a
-   * child requester already archived, or a thread with no brain yet. The
-   * completion is owed to that conversation and no other, so main is never
-   * handed a sibling's result.
-   */
-  const openDestination = async (destination: SessionKey): Promise<BrainAgent | undefined> => {
-    const standing = host.current(destination);
-    if (standing) return standing;
-    const model = host.liveModel();
-    if (!model) return undefined;
-    const observed = observedSessionRefOf(destination);
-    if (observed) return host.openObserved(observed);
-    const child = childRecordOf(service, destination);
-    if (child) return openChild(child);
-    return host.open(destination, model);
-  };
+  const openChild = (record: ChildRunRecord, fork?: readonly WireRecord[]) =>
+    host.open(record.childSessionKey, fork);
 
   const service = new ChildRunService({
     store: dependencies.childStore(),
@@ -165,7 +134,12 @@ export function wireChildren(
     },
     deliverer: {
       deliver: async (completion, record) => {
-        const agent = await openDestination(completion.destination);
+        // The conversation the completion is for, opened again if it was
+        // stood down — an observed session's whose session left the roster,
+        // a child requester already archived, a thread with no brain yet.
+        // The completion is owed to that conversation and no other, so main
+        // is never handed a sibling's result.
+        const agent = await host.open(completion.destination);
         if (!agent) return { delivered: false, reason: "no brain stands for the requester" };
         return agent.deliverChildCompletion(completion, record);
       },

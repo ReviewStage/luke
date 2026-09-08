@@ -67,6 +67,9 @@ import {
 } from "@sidecar/runtime";
 import type { AgentRuntime, ModelAdapter } from "@sidecar/runtime-contracts";
 import {
+  CONVERSATION_KIND,
+  childIdOf,
+  conversationKindOf,
   MAIN_SESSION_KEY,
   observedSessionKey,
   observedSessionRefOf,
@@ -92,7 +95,12 @@ import {
   followBrainRequests,
   registerBrainIpc,
 } from "./ipc";
-import { type ChildWiringDependencies, childRecordOf, wireChildren } from "./wiring-children";
+import {
+  type ChildWiringDependencies,
+  childName,
+  childRecordOf,
+  wireChildren,
+} from "./wiring-children";
 
 /** What a provider adapter answers a transcript read with, by the session's own id. */
 interface TranscriptReader {
@@ -664,13 +672,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
   // a completion delivered sees the wiring as it then stands.
   const children = wireChildren(dependencies, {
     current,
-    liveModel: () => liveModel(),
-    open: async (sessionKey, model, fork) => {
-      const opened = openConversation(sessionKey);
-      if (!opened.host.current()) await rebuildOne(sessionKey, opened, model, fork);
-      return opened.host.current();
-    },
-    openObserved: (identity) => openObserved(identity),
+    open: (sessionKey, fork) => openAny(sessionKey, fork),
     closeConversation: (sessionKey) => closeConversation(sessionKey),
   });
 
@@ -728,43 +730,78 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
   };
 
   /**
-   * The conversation of one observed session, opened on first use: its row
-   * in the directory, its store, and — when a model stands — its brain.
-   * Openings of one key are serialized so two hooks landing together build
-   * one conversation, not two.
+   * The directory row a conversation is listed under before its brain is
+   * built, by the kind its key says it is: an observed session's, named for
+   * the session; a child's, named for its label; main and a thread are
+   * listed by whoever created them and need nothing here.
    */
-  const observedOpenings = new Map<SessionKey, Promise<BrainAgent | undefined>>();
-  const openObserved = (identity: SessionIdentity): Promise<BrainAgent | undefined> => {
-    const sessionKey = observedSessionKey(identity);
-    const standing = conversations.get(sessionKey)?.host.current();
-    if (standing && !closings.has(sessionKey)) return Promise.resolve(standing);
-    const pending = observedOpenings.get(sessionKey);
-    if (pending) return pending;
-    const opening = (async () => {
-      try {
-        // A conversation still standing down finishes first: its store is
-        // let go of before another is built on the same envelope, so two
-        // writers never hold one repository.
-        await closings.get(sessionKey);
+  const ensureListed = async (sessionKey: SessionKey): Promise<void> => {
+    switch (conversationKindOf(sessionKey)) {
+      case CONVERSATION_KIND.OBSERVED: {
+        const identity = observedSessionRefOf(sessionKey);
+        if (!identity) return;
         await dependencies.ensureObservedConversation?.(
           sessionKey,
           observedName(dependencies.session(identity), identity),
         );
+        return;
+      }
+      case CONVERSATION_KIND.CHILD: {
+        const record = childRecordOf(children.service, sessionKey);
+        await dependencies.ensureChildConversation(
+          sessionKey,
+          record ? childName(record) : `Child ${childIdOf(sessionKey)}`,
+        );
+        return;
+      }
+      default:
+        return;
+    }
+  };
+
+  /**
+   * The one way a conversation of any kind is opened for a brain: its row in
+   * the directory, its store, and — when a model stands — its brain, with a
+   * child's inherited fork as its opening history. Openings of one key are
+   * serialized so two hooks, two completions, or a hook and a completion
+   * landing together build one conversation, not two; a conversation still
+   * standing down finishes first, so its store is let go of before another is
+   * built on the same envelope and two writers never hold one repository.
+   * With no model nothing is opened: there is no brain to hand back, and a
+   * store opened for nobody would only be a load spent.
+   */
+  const openings = new Map<SessionKey, Promise<BrainAgent | undefined>>();
+  const openAny = (
+    sessionKey: SessionKey,
+    fork?: readonly WireRecord[],
+  ): Promise<BrainAgent | undefined> => {
+    const standing = conversations.get(sessionKey)?.host.current();
+    if (standing && !closings.has(sessionKey)) return Promise.resolve(standing);
+    const pending = openings.get(sessionKey);
+    if (pending) return pending;
+    const opening = (async () => {
+      try {
+        await closings.get(sessionKey);
+        const model = liveModel();
+        if (!model) return undefined;
+        await ensureListed(sessionKey);
         const opened = openConversation(sessionKey);
-        if (!opened.host.current()) await rebuildOne(sessionKey, opened, liveModel());
+        if (!opened.host.current()) await rebuildOne(sessionKey, opened, model, fork);
         return opened.host.current();
       } catch (error) {
         dependencies.report(
-          `Observed conversation could not be opened: ${error instanceof Error ? error.message : String(error)}`,
+          `Conversation ${sessionKey} could not be opened: ${error instanceof Error ? error.message : String(error)}`,
         );
         return undefined;
       } finally {
-        observedOpenings.delete(sessionKey);
+        openings.delete(sessionKey);
       }
     })();
-    observedOpenings.set(sessionKey, opening);
+    openings.set(sessionKey, opening);
     return opening;
   };
+  const openObserved = (identity: SessionIdentity): Promise<BrainAgent | undefined> =>
+    openAny(observedSessionKey(identity));
 
   const wake = (events: readonly BrainWakeEvent[]): void => {
     if (!liveModel()) return;

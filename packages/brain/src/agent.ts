@@ -107,6 +107,7 @@ import {
   type BrainStoreLease,
   brainGenerationExpired,
 } from "./state-store.js";
+import { SteeredDeliveries } from "./steered-deliveries.js";
 import {
   type BrainChildAccess,
   type BrainMemoryAccess,
@@ -403,24 +404,13 @@ export interface BrainCompletionDelivery {
   readonly reason?: string;
 }
 
-/**
- * Words steered into the run under way whose fate someone awaits: ingested
- * once the runtime says so, and settled delivered by the first checkpoint
- * that lands after that, or not delivered when the run ends first.
- */
-interface SteeredDelivery {
-  ingested: boolean;
-  settle: (delivered: boolean) => void;
-}
-
-/** The execution under way: for an ask to steer into or interrupt, and for a steered delivery to be answered. */
+/** The execution under way: for an ask to steer into or interrupt, and for a steered delivery to be answered through its plan's deliveries. */
 interface ActiveExecution {
   run: RunControl;
   started: RuntimeRun;
   plan: TurnPlan;
   /** The asks riding inside the run, settled with its end. */
   riders: RunControl[];
-  steered: SteeredDelivery[];
 }
 
 /** What one turn gathers as it runs, for its trace and its deliveries. */
@@ -1180,6 +1170,7 @@ export class BrainAgent {
       const result = await this.#turn({
         generation,
         trigger: BRAIN_TURN_TRIGGER.HEARTBEAT,
+        deliveries: new SteeredDeliveries(),
         events: this.#inboxEvents(generation),
         open: (attached, now) => [
           ...(attached.length > 0 ? [wakeInputText(attached, now)] : []),
@@ -1230,6 +1221,7 @@ export class BrainAgent {
       this.#turn({
         generation,
         trigger: BRAIN_TURN_TRIGGER.HOLD_RELEASED,
+        deliveries: new SteeredDeliveries(),
         events: this.#inboxEvents(generation),
         open: (attached, now) => [
           ...(attached.length > 0 ? [wakeInputText(attached, now)] : []),
@@ -1359,9 +1351,7 @@ export class BrainAgent {
       // Steered words are delivered when a checkpoint carries them, not when
       // the run took them: a run that ends before that has rolled them back,
       // and the asker retries against a context that never held them.
-      const delivered = await new Promise<boolean>((settle) => {
-        active.steered.push({ ingested: false, settle });
-      });
+      const delivered = await active.plan.deliveries.steered();
       if (delivered) this.#deliveredCompletions.add(completion.completionId);
       return delivered
         ? { delivered: true }
@@ -1370,7 +1360,7 @@ export class BrainAgent {
             reason: "the run under way ended before its checkpoint carried the completion",
           };
     }
-    let persisted = false;
+    const deliveries = new SteeredDeliveries();
     const result = await this.#queueTurn(BRAIN_TURN_TRIGGER.CHILD_COMPLETION, () =>
       this.#turn({
         generation,
@@ -1380,15 +1370,13 @@ export class BrainAgent {
           ...(attached.length > 0 ? [wakeInputText(attached, now)] : []),
           text,
         ],
-        onPersisted: () => {
-          persisted = true;
-        },
+        deliveries,
       }),
     );
     // Delivered is what the store holds, not how the turn ended: a turn that
     // failed after an act's checkpoint carried the completion has delivered
     // it, and a turn that answered but whose checkpoint the store refused has not.
-    if (persisted) {
+    if (deliveries.openingPersisted) {
       this.#deliveredCompletions.add(completion.completionId);
       return { delivered: true };
     }
@@ -1484,6 +1472,7 @@ export class BrainAgent {
         this.#turn({
           generation,
           trigger: BRAIN_TURN_TRIGGER.ROSTER,
+          deliveries: new SteeredDeliveries(),
           events: this.#inboxEvents(generation),
           open: (attached, openedAt) => [wakeInputText(attached, openedAt, roster.text)],
         }),
@@ -1548,6 +1537,7 @@ export class BrainAgent {
       const result = await this.#turn({
         generation,
         trigger: BRAIN_TURN_TRIGGER.WAKE,
+        deliveries: new SteeredDeliveries(),
         events: inbox,
         open: (attached, now) => [wakeInputText(attached, now)],
       });
@@ -1885,20 +1875,6 @@ export class BrainAgent {
     this.#options.store.expireIfDue(this.#now());
   }
 
-  /**
-   * A checkpoint of the turn landed: its opening words are on disk, and so
-   * are any steered words the runtime had ingested by then. Whoever awaits
-   * those words is answered delivered here and nowhere else.
-   */
-  #persisted(plan: TurnPlan): void {
-    plan.onPersisted?.();
-    const active = this.#active;
-    if (!active || active.plan !== plan) return;
-    const carried = active.steered.filter((steered) => steered.ingested);
-    active.steered = active.steered.filter((steered) => !steered.ingested);
-    for (const steered of carried) steered.settle(true);
-  }
-
   #runRevoked(run: RunControl): boolean {
     return run.cancelled || run.timedOut || this.#stopped || run.generation.abort.signal.aborted;
   }
@@ -1977,6 +1953,7 @@ export class BrainAgent {
           {
             generation,
             trigger: childTask ? BRAIN_TURN_TRIGGER.CHILD_TASK : BRAIN_TURN_TRIGGER.ASK,
+            deliveries: new SteeredDeliveries(),
             events: this.#inboxEvents(generation),
             open: (attached, now) =>
               childTask
@@ -2167,7 +2144,7 @@ export class BrainAgent {
       if (!plan.run && run.deadline !== undefined) this.#cancel(run.deadline);
       this.#turnInFlight = false;
       // Steered words no checkpoint of the turn carried are owed still.
-      for (const steered of this.#active?.steered.splice(0) ?? []) steered.settle(false);
+      plan.deliveries.turnEnded();
       this.#active = undefined;
     }
   }
@@ -2237,7 +2214,7 @@ export class BrainAgent {
       // already happened. A turn that fails before its first effect still
       // rolls back whole, and the deltas it read are read again.
       const advanceMark = async () => {
-        if (await this.#ledger.checkpoint(turnContext)) this.#persisted(plan);
+        if (await this.#ledger.checkpoint(turnContext)) plan.deliveries.persisted();
         else run.checkpointFailed = true;
         contextMark = context.mark();
         cursorMark = generation.cursors.persisted();
@@ -2312,7 +2289,7 @@ export class BrainAgent {
       const written = await this.#ledger.checkpoint(turnContext);
       if (!written) run.checkpointFailed = true;
       if (written) {
-        this.#persisted(plan);
+        plan.deliveries.persisted();
         await context.afterTurn({ signal: turnContext.signal });
       }
       // A briefing leaves only from a turn that still stands: the stop or the
@@ -2532,7 +2509,7 @@ export class BrainAgent {
           this.#compactionCount += 1;
           return;
         case RUNTIME_EVENT.STEERED:
-          for (const steered of this.#active?.steered ?? []) steered.ingested = true;
+          turn.plan.deliveries.ingested();
           return;
         case RUNTIME_EVENT.TOOL_RESULT:
           gathering.toolCalls.push({
@@ -2575,23 +2552,10 @@ export class BrainAgent {
       signal: turnContext.signal,
       onEvent,
     });
-    const active: ActiveExecution = {
-      run,
-      started,
-      plan: turn.plan,
-      riders: turn.riders,
-      steered: [],
-    };
-    this.#active = active;
-    return started.done.finally(() => {
-      // Steered words the runtime never ingested are not delivered; words it
-      // did ingest wait for the turn's final checkpoint, which decides them.
-      const waiting = active.steered.filter((steered) => steered.ingested);
-      for (const steered of active.steered.filter((steered) => !steered.ingested)) {
-        steered.settle(false);
-      }
-      active.steered = waiting;
-    });
+    this.#active = { run, started, plan: turn.plan, riders: turn.riders };
+    // Steered words the runtime never ingested are not delivered; words it
+    // did ingest wait for the turn's final checkpoint, which decides them.
+    return started.done.finally(() => turn.plan.deliveries.runEnded());
   }
 
   /** How a run's end reads as a turn's: an observation turn keeps what it read wherever a run would fall short. */
