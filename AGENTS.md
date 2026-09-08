@@ -373,6 +373,41 @@ Trust constraints:
   workspace: a host prepares every turn from the resolved configuration and
   the workspace files, and the runtime package that composes it knows the
   files' names and bounds but none of their words, which the brain supplies.
+- The desktop reaches the judgment through one boundary, the Gateway
+  protocol in `runtime-contracts` (`protocol.ts`): versioned request,
+  response, and event envelopes, a fixed method vocabulary, and typed error
+  codes. The host side (`GatewayServer` in `packages/runtime`, composed as the
+  desktop's `GatewayService`) owns the idempotency ledger (every mutating
+  method carries an idempotency key; the same key finds the first answer, the
+  same key with other parameters is a conflict, never a second effect), the
+  revision checks (a request built over a replaced conversation lifetime or
+  configuration is refused before its handler runs), and the event log,
+  numbered from one, whose bounded replay window a reconnecting client is
+  replayed from or, past it, handed a fresh snapshot rather than a silent
+  skip. The client side (`GatewayClient`, the desktop's operator) mints
+  request ids, keys mutations, follows the sequence, and fills a gap from the
+  host's log before delivering anything later. Desktop main is the one
+  operator client; the renderer and voice windows keep the narrow preload
+  bridge and never speak the protocol. This machine's native capabilities
+  (opening an address with the operating system, carrying an app act to the
+  panel) are registered as one node's capabilities and asked for by name; a
+  capability no connected node offers answers a typed unavailable, and the
+  act that needed it is left undone and recorded as such, never as carried.
+  Microphone, playback, window control, and OS opening stay the client's;
+  scheduling, tool decisions, history, provider operations, and delivery
+  policy stay the host's. Replies to the ear keep the reply-grant ledger's
+  guarantee with its states named (queued, offered, claimed, acknowledged,
+  granted on call, withdrawn): the History write precedes any offer, the
+  generation and the one current receiver epoch are checked at the grant, an
+  offer a vanished renderer never claimed is offered again to the next epoch,
+  a claimed one never is, and what is guaranteed is at most one authorization
+  to speak per run, never that the words were heard. Meeting and pause holds
+  stay in the host's speech arbiter, and a held observation briefing is
+  re-decided in the conversation that decided it, never through main. The
+  transport this build ships is in-process, and the same suite runs over a
+  loopback transport that carries every envelope through text; widening the
+  method vocabulary, the event set, or what a node may be asked is a product
+  decision, not an implementation detail.
 - The hosted tier speaks two brain contracts. The first, kept for installed
   clients, carries the input array and a turn authority and lets the service
   derive everything else. The second (`/api/brain/capabilities`,
