@@ -146,7 +146,6 @@ function composition() {
       builds.push(model.model ?? "hosted");
       return new BrainAgent({
         runtime: responsesToolLoopRuntime(model),
-        model,
         acts: { perform: async () => ({ status: "accepted" }) },
         roster: () => ({ text: "none", identities: [] }),
         standingContext: () => "",

@@ -523,6 +523,8 @@ export interface ContextOpening {
 export interface AgentRuntimeDescriptor {
   readonly id: string;
   readonly checkpoint: CheckpointFormat;
+  /** The model the runtime's inferences run on, when its adapter knows it. */
+  readonly model?: string;
 }
 
 /**
@@ -533,6 +535,8 @@ export interface AgentRuntimeDescriptor {
  */
 export interface AgentRuntime {
   readonly descriptor: AgentRuntimeDescriptor;
+  /** The moment held-back inferences may resume, for a host to ask before opening a turn. */
+  quietUntil(): number | undefined;
   /** A context engine of this runtime's format, bootstrapped from the checkpoint when one is compatible. */
   openContext(
     checkpoint: RuntimeCheckpoint | undefined,

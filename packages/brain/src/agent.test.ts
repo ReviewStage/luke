@@ -298,7 +298,7 @@ interface Harness {
 
 let runIds = 0;
 
-type HarnessOverrides = Partial<Omit<BrainAgentOptions, "runtime" | "model">> & {
+type HarnessOverrides = Partial<Omit<BrainAgentOptions, "runtime">> & {
   client?: BrainClient;
 };
 
@@ -330,7 +330,6 @@ function harness(overrides: HarnessOverrides = {}, storage = new FakeStorage()):
   const wholeReads: SessionIdentity[] = [];
   const agent = new BrainAgent({
     runtime,
-    model,
     acts: {
       perform: async (functionCall, execution) => {
         performed.push(functionCall);
@@ -1896,7 +1895,6 @@ test("stop settles only after a held acceptance, which the successor then finds 
   const successorModel = adapterOf(new FakeClient());
   const successor = new BrainAgent({
     runtime: runtimeOver(successorModel),
-    model: successorModel,
     acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
     roster: () => ({ text: "", identities: [] }),
     standingContext: () => "",
@@ -3025,10 +3023,9 @@ function heldOpenRuntime(model: ModelAdapter, disposeHangs = false) {
   return { runtime, release: () => release?.(), disposed: () => disposed };
 }
 
-function agentOn(runtime: ToolLoopAgentRuntime, model: ModelAdapter, h: Harness) {
+function agentOn(runtime: ToolLoopAgentRuntime, h: Harness) {
   return new BrainAgent({
     runtime,
-    model,
     acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
     roster: () => ({ text: "", identities: [] }),
     standingContext: () => "",
@@ -3049,7 +3046,7 @@ test("a stop during a held initial bootstrap settles at once; the open finishing
     const model = adapterOf(new FakeClient());
     const held = heldOpenRuntime(model, disposeHangs);
     const h = harness();
-    const agent = agentOn(held.runtime, model, h);
+    const agent = agentOn(held.runtime, h);
     const ready = agent.ready();
     const pending = agent.submitAsk({
       submissionId: "held-boot",

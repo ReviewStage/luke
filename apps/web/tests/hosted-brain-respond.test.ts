@@ -479,7 +479,6 @@ function desktopOnHostedService(
   let runs = 0;
   const agent = new BrainAgent({
     runtime: responsesToolLoopRuntime(model),
-    model,
     acts: {
       perform: async (functionCall) => {
         performed.push(functionCall);

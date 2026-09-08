@@ -161,7 +161,6 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
   const build = (model: ModelAdapter): BrainAgent =>
     new BrainAgent({
       runtime: responsesToolLoopRuntime(model),
-      model,
       acts,
       roster: dependencies.roster,
       standingContext: dependencies.standingContext,

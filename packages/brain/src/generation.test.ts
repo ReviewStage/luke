@@ -24,6 +24,7 @@ function heldRuntime() {
   });
   const runtime: AgentRuntime = {
     descriptor: { id: "held", checkpoint: context.checkpointFormat },
+    quietUntil: () => undefined,
     openContext: () => opening,
     start: () => {
       throw new Error("not started here");

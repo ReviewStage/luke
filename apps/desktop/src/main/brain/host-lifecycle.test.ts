@@ -150,7 +150,6 @@ function composed() {
     const model = bareModelAdapter(client);
     return new BrainAgent({
       runtime: responsesToolLoopRuntime(model),
-      model,
       acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
       roster: () => ({ text: "", identities: [] }),
       standingContext: () => "",

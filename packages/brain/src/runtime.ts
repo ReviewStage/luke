@@ -92,20 +92,31 @@ function resultStatus(outputJson: string): string | undefined {
 }
 
 export class ToolLoopAgentRuntime implements AgentRuntime {
-  readonly descriptor: AgentRuntimeDescriptor;
   readonly #options: ToolLoopRuntimeOptions;
+  readonly #checkpoint: CheckpointFormat;
 
   constructor(options: ToolLoopRuntimeOptions) {
     this.#options = options;
-    this.descriptor = {
-      id: TOOL_LOOP_RUNTIME.ID,
-      checkpoint: {
-        runtime: TOOL_LOOP_RUNTIME.ID,
-        runtimeVersion: TOOL_LOOP_RUNTIME.VERSION,
-        format: options.itemFormat.format,
-        formatVersion: options.itemFormat.version,
-      },
+    this.#checkpoint = {
+      runtime: TOOL_LOOP_RUNTIME.ID,
+      runtimeVersion: TOOL_LOOP_RUNTIME.VERSION,
+      format: options.itemFormat.format,
+      formatVersion: options.itemFormat.version,
     };
+  }
+
+  /** Read on each ask, because a hosted adapter learns its model only from the service's capabilities. */
+  get descriptor(): AgentRuntimeDescriptor {
+    const model = this.#options.model.model;
+    return {
+      id: TOOL_LOOP_RUNTIME.ID,
+      checkpoint: this.#checkpoint,
+      ...(model ? { model } : undefined),
+    };
+  }
+
+  quietUntil(): number | undefined {
+    return this.#options.model.quietUntil();
   }
 
   async openContext(
@@ -113,7 +124,7 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
     lostResultJson: string,
     lifecycle?: ContextLifecycle,
   ): Promise<ContextOpening> {
-    const context = this.#options.createContext(this.descriptor.checkpoint);
+    const context = this.#options.createContext(this.#checkpoint);
     return { context, bootstrap: await context.bootstrap(checkpoint, lostResultJson, lifecycle) };
   }
 

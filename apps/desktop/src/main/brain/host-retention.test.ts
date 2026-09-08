@@ -156,7 +156,6 @@ test("a generation whose agent was retired before its expiry still dies on the h
     () =>
       new BrainAgent({
         runtime: responsesToolLoopRuntime(retiredModel),
-        model: retiredModel,
         acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
         roster: () => ({ text: "", identities: [] }),
         standingContext: () => "",

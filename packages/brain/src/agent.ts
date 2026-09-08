@@ -6,7 +6,6 @@ import {
   type ContextEngine,
   type ContextMark,
   checkpointFormatTag,
-  type ModelAdapter,
   type ReasoningEffort,
   RUN_END_REASON,
   RUNTIME_EVENT,
@@ -148,10 +147,8 @@ export const BRAIN_DEFAULTS = {
 } as const;
 
 export interface BrainAgentOptions {
-  /** The execution the host runs turns on; it decides how a model and its tools loop. */
+  /** The execution the host runs turns on; it decides how a model and its tools loop, and it alone reaches the model. */
   runtime: AgentRuntime;
-  /** The transport the runtime infers on; the host reads only its quiet and its model name. */
-  model: ModelAdapter;
   acts: BrainActPerformer;
   roster: () => BrainRoster;
   /** Everything the host renders beside the roster: projects, facts, recent conversation, guide. */
@@ -719,7 +716,7 @@ export class BrainAgent {
       void this.ready().then(() => this.rosterLook());
       return;
     }
-    if (this.#options.model.quietUntil() !== undefined) return;
+    if (this.#options.runtime.quietUntil() !== undefined) return;
     const roster = this.#options.roster();
     const now = this.#now();
     const cursors = generation.cursors;
@@ -764,7 +761,7 @@ export class BrainAgent {
 
   #flush(): void {
     if (this.#stopped) return;
-    const quietUntil = this.#options.model.quietUntil();
+    const quietUntil = this.#options.runtime.quietUntil();
     if (quietUntil !== undefined) {
       this.#scheduleFlush(Math.max(quietUntil - this.#now(), this.#wakeCoalesceMs));
       return;
@@ -1333,11 +1330,11 @@ export class BrainAgent {
       }
     }
 
-    const model = this.#options.model.model;
+    const { id: runtime, model } = this.#options.runtime.descriptor;
     this.#options.trace?.({
       trigger: plan.trigger,
       authority: plan.authority,
-      runtime: this.#options.runtime.descriptor.id,
+      runtime,
       ...(gathering.inputTokens !== undefined ? { inputTokens: gathering.inputTokens } : undefined),
       transcriptBytes,
       toolCalls: gathering.toolCalls,

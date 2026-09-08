@@ -212,7 +212,6 @@ function composed(brainDisk = new MemoryStorage()) {
     const model = bareModelAdapter(client);
     return new BrainAgent({
       runtime: responsesToolLoopRuntime(model),
-      model,
       acts: acts ?? { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
       roster: () => ({
         text: "- abc",

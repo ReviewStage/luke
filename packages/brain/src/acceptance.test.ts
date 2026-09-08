@@ -270,7 +270,6 @@ function host(
   });
   const agent = new BrainAgent({
     runtime: runtimeOver(model),
-    model,
     acts: {
       perform: async (call) => {
         performed.push(call.name);
@@ -517,6 +516,9 @@ class ScriptedContext implements ContextEngine {
 
 class ScriptedRuntime implements AgentRuntime {
   readonly descriptor = { id: FAKE_FORMAT.runtime, checkpoint: FAKE_FORMAT };
+  quietUntil(): number | undefined {
+    return undefined;
+  }
   readonly contexts: ToolExecutionContext[] = [];
   /** The tool each run calls before answering; the host's executor decides what it means. */
   constructor(private readonly script: readonly string[]) {}
