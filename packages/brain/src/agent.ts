@@ -3,9 +3,7 @@ import type { ScheduledTimer } from "@sidecar/realtime";
 import {
   type AgentRuntime,
   CONTEXT_INPUT_KIND,
-  type ContextEngine,
   type ContextMark,
-  checkpointFormatTag,
   type ReasoningEffort,
   RUN_END_REASON,
   RUNTIME_EVENT,
@@ -44,13 +42,19 @@ import {
 } from "./input-items.js";
 import { brainInstructions } from "./instructions.js";
 import { journalActCounts, UNCONFIRMED_ACT_RESULT, UNKNOWN_ACT_RESULT } from "./journal.js";
+import {
+  BrainRequestLedger,
+  PENDING_MARK_FIELD,
+  type PendingMarkField,
+  type RunEnd,
+  SAVE_SCOPE,
+} from "./ledger.js";
 import type { BrainActExecution, BrainActPerformer, BrainRoster } from "./performer.js";
 import {
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_STATUS,
   BRAIN_SUBMISSION_OUTCOME,
   BRAIN_SUBMISSION_REJECTION,
-  type BrainRequestFailure,
   type BrainRequestRecord,
   type BrainSubmission,
   type BrainSubmissionResult,
@@ -177,61 +181,6 @@ export interface BrainAgentOptions {
   fullTranscriptChars?: number;
 }
 
-type RecordChanges = Partial<Omit<BrainRequestRecord, "runId" | "revision">>;
-
-/** The two markers the host's thread writes onto a run, each once. */
-const PENDING_MARK_FIELD = {
-  ASK_RECORDED_AT: "askRecordedAt",
-  HISTORY_RECORDED_AT: "historyRecordedAt",
-} as const;
-
-type PendingMarkField = (typeof PENDING_MARK_FIELD)[keyof typeof PENDING_MARK_FIELD];
-
-/** One record's fields over the committed record — or the record itself, for its own acceptance. */
-interface RecordChange {
-  runId: string;
-  changes: RecordChanges;
-  insert?: BrainRequestRecord;
-}
-
-const SAVE_SCOPE = {
-  WORKING: "working",
-  WHOLE: "whole",
-  RECORD: "record",
-} as const;
-
-/**
- * What one save owns. A working scope commits the turn's context, cursors,
- * and journal, and the owning run's accounting beside them. A record scope
- * changes one record alone. The whole scope is the restore's alone, and
- * carries the context only when the runtime loaded one.
- */
-type SaveScope =
-  | { kind: typeof SAVE_SCOPE.WORKING; context: ContextEngine; record?: RecordChange }
-  | { kind: typeof SAVE_SCOPE.WHOLE; context: ContextEngine | undefined }
-  | ({ kind: typeof SAVE_SCOPE.RECORD } & RecordChange);
-
-/** What composing the requests of one save decided, read once the store has answered. */
-interface SaveOutcome {
-  requests: readonly BrainRequestRecord[];
-  /** The record as written, when the scope owned one. */
-  owned?: BrainRequestRecord;
-  /** The scope named a record the committed state does not hold, and inserted none. */
-  missing: boolean;
-}
-
-function recordChangeOf(
-  scope: Exclude<SaveScope, { kind: typeof SAVE_SCOPE.WHOLE }>,
-): RecordChange | undefined {
-  return scope.kind === SAVE_SCOPE.RECORD ? scope : scope.record;
-}
-
-/** What a run's end carries into its record beyond the status. */
-interface RunEnd {
-  text?: string;
-  failure?: BrainRequestFailure;
-}
-
 /** What one turn gathers as it runs, for its trace and its deliveries. */
 interface TurnGathering {
   toolCalls: BrainToolCallTrace[];
@@ -268,9 +217,9 @@ export class BrainAgent {
   readonly #fullTranscriptChars: number;
   #generation: Generation | undefined;
   readonly #lease: BrainStoreLease;
+  readonly #ledger: BrainRequestLedger;
   readonly #runs = new Map<string, RunControl>();
   readonly #pendingSubmissions = new Map<string, PendingSubmission>();
-  readonly #pendingMarks = new Map<string, Map<PendingMarkField, Promise<boolean>>>();
   readonly #listeners = new Set<BrainRequestsListener>();
   #turnInFlight = false;
   #restored: Promise<void> | undefined;
@@ -302,6 +251,13 @@ export class BrainAgent {
       options.deltaPerSessionChars ?? BRAIN_DEFAULTS.DELTA_PER_SESSION_CHARS;
     this.#fullTranscriptChars = options.fullTranscriptChars ?? BRAIN_DEFAULTS.FULL_TRANSCRIPT_CHARS;
     this.#lease = options.store.lease();
+    this.#ledger = new BrainRequestLedger({
+      store: options.store,
+      lease: this.#lease,
+      now: this.#now,
+      report: this.#report,
+      notify: () => this.#notify(),
+    });
     this.#unsubscribeStore = options.store.onReplaced((state) => this.#adoptGeneration(state));
   }
 
@@ -469,7 +425,7 @@ export class BrainAgent {
     };
     generation.provisional.add(record.runId);
     generation.requests.set(record.runId, record);
-    const written = await this.#save(generation, {
+    const written = await this.#ledger.save(generation, {
       kind: SAVE_SCOPE.RECORD,
       runId: record.runId,
       changes: {},
@@ -493,7 +449,7 @@ export class BrainAgent {
       // Accepted durably, but into an agent that stopped while the write was
       // out: the run is the developer's to see, and it ends here rather than
       // being scheduled on an agent the host has already replaced.
-      await this.#settleRun(generation, record.runId, BRAIN_REQUEST_STATUS.INTERRUPTED, {});
+      await this.#ledger.settleRun(generation, record.runId, BRAIN_REQUEST_STATUS.INTERRUPTED, {});
       return accepted;
     }
     const run: RunControl = {
@@ -556,7 +512,7 @@ export class BrainAgent {
       run.abort.abort();
     }
     if (record.status === BRAIN_REQUEST_STATUS.QUEUED && this.#generation) {
-      await this.#settleRun(this.#generation, runId, BRAIN_REQUEST_STATUS.CANCELLED, {});
+      await this.#ledger.settleRun(this.#generation, runId, BRAIN_REQUEST_STATUS.CANCELLED, {});
     }
     return this.request(runId);
   }
@@ -577,47 +533,10 @@ export class BrainAgent {
     return this.#mark(runId, PENDING_MARK_FIELD.ASK_RECORDED_AT, recordedAt);
   }
 
-  /**
-   * Writes one marker onto a run without the marker ever standing in memory
-   * before it stands on disk: the write carries the record as it would read
-   * with the marker, and only a write that landed puts the marker on the live
-   * record — merged onto whatever else has advanced meanwhile, never a
-   * captured copy rolled over it. Callers marking the same field of the same
-   * run while a write is out share that write's answer, the way retried
-   * submissions share one acceptance.
-   */
   async #mark(runId: string, field: PendingMarkField, recordedAt: number): Promise<boolean> {
-    const pending = this.#pendingMarks.get(runId)?.get(field);
-    if (pending) return pending;
-    const marking = (async () => {
-      await this.ready();
-      const generation = this.#generation;
-      const record = generation?.requests.get(runId);
-      if (!generation || !record) return false;
-      if (record[field] !== undefined) return true;
-      return this.#commit(generation, runId, { [field]: recordedAt });
-    })();
-    const marks = this.#pendingMarks.get(runId) ?? new Map<PendingMarkField, Promise<boolean>>();
-    marks.set(field, marking);
-    this.#pendingMarks.set(runId, marks);
-    try {
-      return await marking;
-    } finally {
-      marks.delete(field);
-      if (marks.size === 0) this.#pendingMarks.delete(runId);
-    }
-  }
-
-  /**
-   * A staged write of some fields of one record, owning nothing else: the
-   * envelope is the store's committed state with the fields applied to that
-   * record alone, and the live record takes them in the same queue step once
-   * the store has — so no save assembled from older state can follow and undo
-   * them, nothing reads the fields before they are kept, and nothing of any
-   * other record or of a turn still in flight rides along.
-   */
-  #commit(generation: Generation, runId: string, changes: RecordChanges): Promise<boolean> {
-    return this.#save(generation, { kind: SAVE_SCOPE.RECORD, runId, changes });
+    await this.ready();
+    const generation = this.#generation;
+    return generation ? this.#ledger.mark(generation, runId, field, recordedAt) : false;
   }
 
   /**
@@ -692,7 +611,12 @@ export class BrainAgent {
     if (generation) {
       for (const record of this.requests()) {
         if (record.status === BRAIN_REQUEST_STATUS.QUEUED) {
-          await this.#settleRun(generation, record.runId, BRAIN_REQUEST_STATUS.INTERRUPTED, {});
+          await this.#ledger.settleRun(
+            generation,
+            record.runId,
+            BRAIN_REQUEST_STATUS.INTERRUPTED,
+            {},
+          );
         }
       }
     }
@@ -863,7 +787,7 @@ export class BrainAgent {
           : record,
       ]),
     );
-    await this.#save(generation, {
+    await this.#ledger.save(generation, {
       kind: SAVE_SCOPE.WHOLE,
       context: opened.kind === CONTEXT_OPENING.LOADED ? opened.context : undefined,
     });
@@ -917,132 +841,6 @@ export class BrainAgent {
     this.#options.store.expireIfDue(this.#now());
   }
 
-  /**
-   * A turn's or an act's checkpoint: the working context, cursors, and journal
-   * this turn owns become the committed ones, together with the run's own
-   * accounting when a run owns the turn. Nothing else changes: every other
-   * record stays as committed, so a request accepted or marked meanwhile is
-   * untouched and a request still provisional is not published.
-   */
-  #checkpoint(turnContext: TurnContext): Promise<boolean> {
-    const { generation, context, run } = turnContext;
-    return this.#save(generation, {
-      kind: SAVE_SCOPE.WORKING,
-      context,
-      ...(run
-        ? {
-            record: {
-              runId: run.runId,
-              changes: { performedActs: run.performedActs, unknownActs: run.unknownActs },
-            },
-          }
-        : undefined),
-    });
-  }
-
-  /**
-   * The one way a generation reaches the store, and the one place the scope
-   * of a save is decided. Every envelope is composed inside the store's
-   * serialized queue from the store's committed state — never from a copy
-   * taken before entering the queue, and never from live state the save does
-   * not own — so a save can only add what it owns to what the saves before it
-   * kept. What a save may own: the working context, cursors, and journal,
-   * when it is the checkpoint of the turn holding them; one record's fields,
-   * when it is that record's acceptance, transition, accounting, end, or
-   * mark; or the whole generation, when it is the restore that just loaded
-   * it. Owned record fields land on the live record in the queue step that
-   * keeps them. A generation whose checkpoint this runtime could not load
-   * never has a working scope, and its whole scope carries the stored items
-   * and stamp exactly as committed: the memory is kept, never rewritten by a
-   * runtime that cannot read it.
-   */
-  async #save(generation: Generation, scope: SaveScope): Promise<boolean> {
-    let outcome: SaveOutcome | undefined;
-    let pruned = false;
-    const written = await this.#options.store.write(
-      this.#lease,
-      generation.id,
-      (state) => {
-        const context = scope.kind === SAVE_SCOPE.RECORD ? undefined : scope.context;
-        const checkpoint = context?.checkpoint();
-        outcome = this.#requestsOf(generation, scope, state.requests);
-        const checkpointFormat = checkpoint
-          ? checkpointFormatTag(checkpoint.format)
-          : state.checkpointFormat;
-        return {
-          ...(checkpointFormat !== undefined ? { checkpointFormat } : undefined),
-          items: checkpoint ? checkpoint.items : state.items,
-          cursors: context ? generation.cursors.persisted() : state.cursors,
-          journal: context ? generation.journal.entries() : state.journal,
-          requests: outcome.requests,
-        };
-      },
-      (commit) => {
-        // Retention decided inside the same queue step: the runs the store
-        // let go of leave the working copy too, or the next checkpoint of
-        // the journal would write them straight back.
-        if (commit.prunedRunIds.length > 0) {
-          for (const runId of commit.prunedRunIds) generation.requests.delete(runId);
-          generation.journal.dropRuns(commit.prunedRunIds);
-          pruned = true;
-        }
-        const owned = outcome?.owned;
-        const change = scope.kind === SAVE_SCOPE.WHOLE ? undefined : recordChangeOf(scope);
-        if (!owned || !change) return;
-        const live = generation.requests.get(owned.runId);
-        if (live) {
-          generation.requests.set(owned.runId, {
-            ...live,
-            ...change.changes,
-            revision: owned.revision,
-          });
-        }
-      },
-    );
-    if (!written || outcome?.missing) {
-      this.#report("Brain memory could not be checkpointed");
-      return false;
-    }
-    // Runs retention let go of are gone from the list every window draws,
-    // and the windows hear it now rather than on the next unrelated change.
-    if (pruned) this.#notify();
-    return true;
-  }
-
-  /** The requests a save writes: the working copy whole, or the committed list with the scope's one record changed or inserted. */
-  #requestsOf(
-    generation: Generation,
-    scope: SaveScope,
-    committed: readonly BrainRequestRecord[],
-  ): SaveOutcome {
-    if (scope.kind === SAVE_SCOPE.WHOLE) {
-      return {
-        requests: [...generation.requests.values()].map((record) => ({ ...record })),
-        missing: false,
-      };
-    }
-    const change = recordChangeOf(scope);
-    if (!change) return { requests: committed, missing: false };
-    const existing = committed.find((record) => record.runId === change.runId);
-    if (existing) {
-      const changed: BrainRequestRecord = {
-        ...existing,
-        ...change.changes,
-        revision: existing.revision + 1,
-      };
-      return {
-        requests: committed.map((record) => (record.runId === change.runId ? changed : record)),
-        owned: changed,
-        missing: false,
-      };
-    }
-    if (change.insert) {
-      const owned = { ...change.insert };
-      return { requests: [...committed, owned], owned, missing: false };
-    }
-    return { requests: committed, missing: true };
-  }
-
   #runRevoked(run: RunControl): boolean {
     return run.cancelled || run.timedOut || this.#stopped || run.generation.abort.signal.aborted;
   }
@@ -1056,7 +854,7 @@ export class BrainAgent {
     const record = generation.requests.get(run.runId);
     if (!record || record.status !== BRAIN_REQUEST_STATUS.QUEUED || this.#runRevoked(run)) {
       if (record?.status === BRAIN_REQUEST_STATUS.QUEUED) {
-        await this.#settleRun(
+        await this.#ledger.settleRun(
           generation,
           run.runId,
           run.cancelled ? BRAIN_REQUEST_STATUS.CANCELLED : BRAIN_REQUEST_STATUS.INTERRUPTED,
@@ -1072,7 +870,7 @@ export class BrainAgent {
     // effect. A start the store refuses ends the run as the persistence
     // failure it is, with nothing called; a revocation that landed while the
     // start was being written ends it on its own terms, likewise unopened.
-    const started = await this.#commit(generation, run.runId, {
+    const started = await this.#ledger.commit(generation, run.runId, {
       status: BRAIN_REQUEST_STATUS.RUNNING,
       startedAt: this.#now(),
     });
@@ -1080,7 +878,7 @@ export class BrainAgent {
     if (!started || this.#runRevoked(run)) {
       this.#runs.delete(run.runId);
       if (this.#runRevoked(run)) {
-        await this.#settleRun(
+        await this.#ledger.settleRun(
           generation,
           run.runId,
           run.cancelled ? BRAIN_REQUEST_STATUS.CANCELLED : BRAIN_REQUEST_STATUS.INTERRUPTED,
@@ -1088,7 +886,7 @@ export class BrainAgent {
         );
         return;
       }
-      await this.#settleRun(
+      await this.#ledger.settleRun(
         generation,
         run.runId,
         BRAIN_REQUEST_STATUS.FAILED,
@@ -1141,56 +939,7 @@ export class BrainAgent {
       status = BRAIN_REQUEST_STATUS.SUCCEEDED;
       if (result.text) end.text = result.text;
     }
-    await this.#settleRun(generation, run.runId, status, end, run);
-  }
-
-  #update(generation: Generation, runId: string, changes: RecordChanges): void {
-    const record = generation.requests.get(runId);
-    if (!record) return;
-    generation.requests.set(runId, { ...record, ...changes, revision: record.revision + 1 });
-  }
-
-  /**
-   * Ends a run in its record, staged behind the write that keeps it: until
-   * the store has answered, every reader — a wait, a snapshot, the follower —
-   * still sees the run under way, so no success is spoken or written that the
-   * file may yet refuse. A success the store refuses is downgraded to a
-   * persistence failure, the reply kept, and written once more; an end the
-   * store will not take at all stands in memory alone, as the failure it is,
-   * so the run still finishes for everyone watching it.
-   */
-  async #settleRun(
-    generation: Generation,
-    runId: string,
-    status: BrainRequestRecord["status"],
-    end: RunEnd,
-    run?: RunControl,
-  ): Promise<void> {
-    const record = generation.requests.get(runId);
-    if (!record || isTerminalBrainRequestStatus(record.status)) return;
-    const settled: RecordChanges = {
-      status,
-      settledAt: this.#now(),
-      ...(end.text !== undefined ? { text: end.text } : undefined),
-      ...(end.failure !== undefined ? { failure: end.failure } : undefined),
-      ...(run ? { performedActs: run.performedActs, unknownActs: run.unknownActs } : undefined),
-    };
-    if (await this.#commit(generation, runId, settled)) {
-      this.#notify();
-      return;
-    }
-    const fallback =
-      status === BRAIN_REQUEST_STATUS.SUCCEEDED
-        ? {
-            ...settled,
-            status: BRAIN_REQUEST_STATUS.FAILED,
-            failure: BRAIN_REQUEST_FAILURE.PERSISTENCE,
-          }
-        : settled;
-    if (!(await this.#commit(generation, runId, fallback))) {
-      this.#update(generation, runId, fallback);
-    }
-    this.#notify();
+    await this.#ledger.settleRun(generation, run.runId, status, end, run);
   }
 
   async #turn(plan: TurnPlan): Promise<TurnResult> {
@@ -1284,7 +1033,7 @@ export class BrainAgent {
       // an observation turn rolls back whole and reads its deltas again.
       const advanceMark = async () => {
         if (!run) return;
-        if (!(await this.#checkpoint(turnContext))) run.checkpointFailed = true;
+        if (!(await this.#ledger.checkpoint(turnContext))) run.checkpointFailed = true;
         contextMark = context.mark();
         cursorMark = generation.cursors.persisted();
       };
@@ -1308,7 +1057,7 @@ export class BrainAgent {
       this.#report(`Brain ${plan.trigger} turn did not complete: ${gathering.error}`);
     } else {
       generation.cursors.retain(this.#options.roster().identities);
-      const written = await this.#checkpoint(turnContext);
+      const written = await this.#ledger.checkpoint(turnContext);
       if (!written && run) run.checkpointFailed = true;
       if (written) await context.afterTurn({ signal: turnContext.signal });
       // A briefing leaves only from a turn that still stands: the stop or the
@@ -1622,7 +1371,7 @@ export class BrainAgent {
       argumentsJson: call.argumentsJson,
       startedAt: this.#now(),
     });
-    if (!(await this.#checkpoint(turnContext))) {
+    if (!(await this.#ledger.checkpoint(turnContext))) {
       generation.journal.forget(run.runId, call.callId);
       run.checkpointFailed = true;
       return rejection(REFUSAL_REASON.NOT_CHECKPOINTED);
