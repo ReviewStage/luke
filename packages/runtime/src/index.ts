@@ -46,6 +46,51 @@ export {
   scheduledJobFromWire,
   validCronExpression,
 } from "./cron.js";
+export {
+  type GatewayCallOptions,
+  type GatewayCallResult,
+  GatewayClient,
+  type GatewayClientEventListener,
+  type GatewayClientOptions,
+  helloSequence,
+  unwrapResponse,
+} from "./gateway/client.js";
+export {
+  type DeliveryClaim,
+  type DeliveryClaimContext,
+  DeliveryLedger,
+  type DeliveryLedgerOptions,
+  type DeliveryOffer,
+  type DeliveryRecord,
+} from "./gateway/delivery.js";
+export {
+  type NodeCapabilityHandler,
+  type NodeRegistration,
+  NodeRegistry,
+  type NodeRegistryListener,
+  type NodeSnapshot,
+  nodeSnapshotToWire,
+} from "./gateway/nodes.js";
+export {
+  eventToWire,
+  GATEWAY_SERVER_DEFAULTS,
+  type GatewayEventListener,
+  type GatewayMethodContext,
+  type GatewayMethodHandler,
+  type GatewayMethodOutcome,
+  type GatewayMethodTable,
+  GatewayServer,
+  type GatewayServerOptions,
+  gatewayError,
+  gatewayOk,
+} from "./gateway/server.js";
+export {
+  type GatewayEventSink,
+  type GatewayTransport,
+  InProcessTransport,
+  LoopbackTransport,
+  type LoopbackTransportOptions,
+} from "./gateway/transport.js";
 export { HEARTBEAT_DEFAULTS, heartbeatJob } from "./heartbeat.js";
 export {
   agentLaneWidth,
