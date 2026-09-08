@@ -78,7 +78,7 @@ test("observes a Claude Code session file and labels it by its workspace", async
   assert.equal(observations[0]?.title, "luke");
   assert.equal(observations[0]?.status, SESSION_STATUS.WAITING);
   assert.equal(observations[0]?.holdingForDeveloper, undefined);
-  assert.equal(observations[0]?.controls, undefined);
+  assert.equal(observations[0]?.advertises, undefined);
   assert.equal(observations[0]?.detail?.repository, "luke");
 });
 

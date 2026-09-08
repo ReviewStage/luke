@@ -523,8 +523,9 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
 
   /**
    * Where this provider's documented start-another-agent endpoint lives and
-   * what it takes. The target handed in is the observation's own `spawnTarget`
-   * — the session id itself when none was reported — and the request is the
+   * what it takes. The target handed in is the target of the observation's
+   * own `add-agent` advertisement — the session id itself when it named none —
+   * and the request is the
    * validated ask, so the route is built from what the provider itself
    * promised. The default is that a provider starts nothing, the same way a
    * read-only adapter stays read-only by writing nothing.
@@ -585,8 +586,8 @@ export abstract class CloudSessionAdapter extends SessionProviderAdapterBase {
 
   /**
    * Where this provider's documented workspace-rename endpoint lives and what
-   * it takes. The target handed in is the observation's own `renameTarget`,
-   * so the route is built from what the provider itself promised. The default
+   * it takes. The target handed in is the target of the observation's own
+   * `rename-workspace` advertisement, so the route is built from what the provider itself promised. The default
    * is that a provider renames nothing, the same way a read-only adapter
    * stays read-only by writing nothing.
    */

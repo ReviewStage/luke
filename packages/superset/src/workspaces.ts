@@ -574,28 +574,10 @@ export class SupersetWorkspaceSnapshot {
       if (!actableInOrganization(context, activeOrganizationId)) {
         return { ...observation, detail, applications, workspace };
       }
-      // Deleting the workspace is unrecoverable and takes every sibling
-      // chat's terminal with it, so it is offered only on a row positively
-      // seen settled — never one still working, or one whose state could not
-      // be read. The workspace id rides as the control's target, which is
-      // both what the press deletes and what seats the control once on a
-      // tray's own header when several chats share the workspace.
       const settled =
         observation.status !== SESSION_STATUS.WORKING &&
         observation.status !== SESSION_STATUS.UNKNOWN;
-      const controls = [
-        ...(observation.controls ?? []),
-        ...(settled
-          ? [
-              {
-                id: SUPERSET_CONTROL_ID.DELETE_WORKSPACE,
-                label: "Delete workspace",
-                target: context.workspaceId,
-              },
-            ]
-          : []),
-      ];
-      const enriched: ProviderSessionObservation = {
+      return {
         ...observation,
         detail,
         applications,
@@ -604,19 +586,7 @@ export class SupersetWorkspaceSnapshot {
           ...(observation.advertises ?? []),
           ...supersetAdvertisements(context, settled, context.terminalId !== undefined),
         ],
-        // Superset documents renaming any workspace it manages, so the
-        // target rides the advertisement the way the spawn target does.
-        renameTarget: context.workspaceId,
-        controls,
       };
-      // Only a bound terminal gives a message somewhere to land; a chatless
-      // workspace row stays unmessageable rather than improvising a way in.
-      if (context.terminalId) enriched.canReceiveMessage = true;
-      if (context.spawnableAgents.length > 0) {
-        enriched.spawnableAgents = context.spawnableAgents;
-        enriched.spawnTarget = context.workspaceId;
-      }
-      return enriched;
     });
   }
 
@@ -670,18 +640,6 @@ export class SupersetWorkspaceSnapshot {
       // A workspace with no agent terminal is settled by construction: there
       // is no turn a delete could cut, and nothing bound to take a message.
       observation.advertises = supersetAdvertisements(context, true, false);
-      observation.controls = [
-        {
-          id: SUPERSET_CONTROL_ID.DELETE_WORKSPACE,
-          label: "Delete workspace",
-          target: context.workspaceId,
-        },
-      ];
-      observation.renameTarget = context.workspaceId;
-      if (context.spawnableAgents.length > 0) {
-        observation.spawnableAgents = context.spawnableAgents;
-        observation.spawnTarget = context.workspaceId;
-      }
       return observation;
     });
   }

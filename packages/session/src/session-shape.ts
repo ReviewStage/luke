@@ -1,4 +1,4 @@
-import type { AdvertisedAct, SessionControl } from "./advertised-acts.js";
+import type { AdvertisedAct } from "./advertised-acts.js";
 import type {
   SessionApplication,
   SessionIdentity,
@@ -154,60 +154,13 @@ export interface SessionFields {
    * the snapshot that promised it.
    */
   advertises?: readonly AdvertisedAct[];
-  controls?: readonly SessionControl[];
-  /**
-   * Set only by an adapter whose provider documents taking a message for this
-   * session in its current state, through the provider's own API. Absent means
-   * no: a session that cannot be messaged is reported as such rather than
-   * offered a control that would have to be improvised.
-   */
-  canReceiveMessage?: boolean;
-  /**
-   * Set only by an adapter whose provider documents renaming this session
-   * itself, through the provider's own API, under the same absent-means-no
-   * rule. The chat's own name is what this renames; the workspace around it
-   * advertises its rename separately, as `renameTarget`.
-   */
-  canRename?: boolean;
-  /**
-   * The kinds of agent this session's provider documents starting alongside it
-   * — in the same workspace — named exactly as the provider's creation
-   * endpoint takes them. Absent means none: only an adapter whose provider
-   * documents such an endpoint lists anything, and an ask can only name an
-   * agent from this list.
-   */
-  spawnableAgents?: readonly string[];
-  /**
-   * The provider-owned identifier of the place a new agent lands — the
-   * workspace around this session — when that is narrower than the session
-   * itself. Like a control's `target`, it rides the advertisement so it is
-   * replaced with every observation and can never outlive the snapshot that
-   * promised it, the way state an adapter kept on the side could.
-   */
-  spawnTarget?: string;
-  /**
-   * The provider-owned identifier of the workspace a rename lands on, present
-   * only when the provider documents renaming the workspace around this
-   * session. Like `spawnTarget`, it rides the advertisement so it is replaced
-   * with every observation and can never outlive the snapshot that promised
-   * it, the way state an adapter kept on the side could.
-   */
-  renameTarget?: string;
 }
 
 /**
  * The fields normalization always answers, so a reader never has to ask
  * whether a normalized session merely left one out.
  */
-type NormalizedSessionField =
-  | "location"
-  | "detail"
-  | "applications"
-  | "advertises"
-  | "controls"
-  | "canReceiveMessage"
-  | "canRename"
-  | "spawnableAgents";
+type NormalizedSessionField = "location" | "detail" | "applications" | "advertises";
 
 /**
  * Provider-owned data observed for a session. Provider adapters are responsible

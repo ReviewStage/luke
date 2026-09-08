@@ -1,4 +1,3 @@
-import type { SessionControl } from "./advertised-acts.js";
 import {
   ACT_KIND,
   type AdvertisedAct,
@@ -69,32 +68,6 @@ function normalizeLocation(location: SessionLocation | undefined): SessionLocati
     throw new Error(`Unknown session location: ${location}`);
   }
   return location;
-}
-
-function normalizeControls(
-  controls: readonly SessionControl[] | undefined,
-): readonly SessionControl[] {
-  if (!controls) return [];
-
-  const ids = new Set<string>();
-  return controls.map((control) => {
-    const id = requiredText(control.id, "control id");
-    if (ids.has(id)) throw new Error(`Duplicate session control: ${id}`);
-    ids.add(id);
-    // A kind this build does not know is dropped rather than passed through:
-    // the control still works, drawn as a plain action by its label.
-    const kind = Object.values(SESSION_CONTROL_KIND).find(
-      (candidate) => candidate === control.kind,
-    );
-    const target = boundedText(control.target, maximumSessionDetailLength);
-    const normalized: SessionControl = {
-      id,
-      label: boundedText(control.label, maximumSessionTitleLength) ?? id,
-    };
-    if (kind) normalized.kind = kind;
-    if (target) normalized.target = target;
-    return normalized;
-  });
 }
 
 function normalizeApplications(
@@ -289,8 +262,6 @@ export function normalizeSession(
     observation.parentProviderSessionId,
     maximumSessionDetailLength,
   );
-  const spawnTarget = boundedText(observation.spawnTarget, maximumSessionDetailLength);
-  const renameTarget = boundedText(observation.renameTarget, maximumSessionDetailLength);
   const workspace = normalizeWorkspace(observation.workspace);
   const agent = normalizeAgent(observation.agent, providerId);
   const applications = applicationsLedByManager(
@@ -320,12 +291,6 @@ export function normalizeSession(
     detail,
     applications,
     advertises: normalizeAdvertisedActs(observation.advertises),
-    controls: normalizeControls(observation.controls),
-    // Anything but an explicit yes is a no, so an adapter that has not thought
-    // about messaging reports a session that cannot be messaged.
-    canReceiveMessage: observation.canReceiveMessage === true,
-    canRename: observation.canRename === true,
-    spawnableAgents: boundedAgentKinds(observation.spawnableAgents),
   } satisfies Session;
   if (observation.realtimeVoice === true) session.realtimeVoice = true;
   if (observation.realtimeVoiceLive === true) session.realtimeVoiceLive = true;
@@ -338,8 +303,6 @@ export function normalizeSession(
   }
   if (completionCause) session.completionCause = completionCause;
   if (agent) session.agent = agent;
-  if (spawnTarget) session.spawnTarget = spawnTarget;
-  if (renameTarget) session.renameTarget = renameTarget;
   if (workspace) session.workspace = workspace;
   return session;
 }

@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ACT_KIND, CLI_CONNECTION, SESSION_LOCATION, SESSION_STATUS } from "@sidecar/session";
+import {
+  ACT_KIND,
+  advertisedActFor,
+  CLI_CONNECTION,
+  SESSION_LOCATION,
+  SESSION_STATUS,
+} from "@sidecar/session";
 import type { JsonObject } from "@sidecar/wire/testing";
 import {
   ADAPTER_DIAGNOSTIC_KIND,
@@ -184,7 +190,7 @@ test("observes cloud tasks as cloud sessions labelled by their environment's rep
   assert.equal(newest.lastActivityAt, TEST_TIME - 5_000);
   assert.equal(newest.detail?.repository, "luke");
   assert.equal(newest.detail?.link, "https://chatgpt.com/codex/tasks/task-new");
-  assert.equal(newest.canReceiveMessage, undefined);
+  assert.equal(advertisedActFor(newest, ACT_KIND.MESSAGE), undefined);
   assert.equal(oldest.providerSessionId, "task-old");
   assert.equal(oldest.status, SESSION_STATUS.COMPLETE);
   // The pass is exactly the two build-fixed invocations, in order.

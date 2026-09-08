@@ -3,8 +3,8 @@ import test from "node:test";
 import {
   ACT_KIND,
   type AdvertisedControl,
-  advertisedActDisagreements,
-  normalizeSession,
+  advertisedActFor,
+  advertisedControls,
   SESSION_STATUS,
 } from "@sidecar/session";
 import type { JsonObject, JsonValue } from "@sidecar/wire/testing";
@@ -414,10 +414,10 @@ test("observes cloud sessions the signed-in user created, under their own names"
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
   assert.equal(observations[0]?.lastActivityAt, TEST_TIME - 5_000);
   // A working session can be stopped and can take a message, both documented.
-  assert.deepEqual(observations[0]?.controls, [
-    { id: "cancel-turn", label: "Stop this turn", kind: "stop" },
+  assert.deepEqual(advertisedControls(observations[0] ?? {}), [
+    { kind: ACT_KIND.CONTROL, id: "cancel-turn", label: "Stop this turn", controlKind: "stop" },
   ]);
-  assert.equal(observations[0]?.canReceiveMessage, true);
+  assert.notEqual(advertisedActFor(observations[0] ?? {}, ACT_KIND.MESSAGE), undefined);
   assert.deepEqual(observations[0]?.detail, {
     repository: "luke",
     model: "claude-opus-5",
@@ -980,8 +980,14 @@ test("leaves a filed-away chat off the roster while its workspace stays", async 
   );
   // The filed-away chat neither settles the workspace nor holds it open: the
   // open sibling's own settled turn is what offers the archive.
-  assert.deepEqual(observations[0]?.controls, [
-    { id: "archive-workspace", label: "Archive", kind: "archive", target: "workspace-quieted" },
+  assert.deepEqual(advertisedControls(observations[0] ?? {}), [
+    {
+      kind: ACT_KIND.CONTROL,
+      id: "archive-workspace",
+      label: "Archive",
+      controlKind: "archive",
+      target: "workspace-quieted",
+    },
   ]);
   // Dropped before it is ever asked for: the filed-away chat costs no status
   // request, not just no row.
@@ -1466,23 +1472,30 @@ test("advertises a message for any open chat, a stop mid-turn, and an archive on
   const observations = await adapterFor(api.fetch).observe();
   const byId = new Map(observations.map((entry) => [entry.providerSessionId, entry]));
 
-  assert.equal(byId.get("session-idle")?.canReceiveMessage, true);
-  assert.equal(byId.get("session-working")?.canReceiveMessage, true);
+  const takesMessage = (sessionId: string): boolean =>
+    advertisedActFor(byId.get(sessionId) ?? {}, ACT_KIND.MESSAGE) !== undefined;
+  assert.equal(takesMessage("session-idle"), true);
+  assert.equal(takesMessage("session-working"), true);
   // A failed chat is documented for no writer.
-  assert.equal(byId.get("session-failed")?.canReceiveMessage, false);
+  assert.equal(takesMessage("session-failed"), false);
   // A chat mid-turn offers its stop and nothing else; every chat of a settled,
   // still-open workspace — idle or failed — offers to file that workspace
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // away, each naming its own workspace as the target.
-  assert.deepEqual(byId.get("session-working")?.controls, [
-    { id: "cancel-turn", label: "Stop this turn", kind: "stop" },
+  assert.deepEqual(advertisedControls(byId.get("session-working") ?? {}), [
+    { kind: ACT_KIND.CONTROL, id: "cancel-turn", label: "Stop this turn", controlKind: "stop" },
   ]);
   for (const [sessionId, workspaceId] of [
     ["session-idle", "workspace-idle"],
     ["session-failed", "workspace-failed"],
   ] as const) {
-    assert.deepEqual(byId.get(sessionId)?.controls, [
-      { id: "archive-workspace", label: "Archive", kind: "archive", target: workspaceId },
+    assert.deepEqual(advertisedControls(byId.get(sessionId) ?? {}), [
+      {
+        kind: ACT_KIND.CONTROL,
+        id: "archive-workspace",
+        label: "Archive",
+        controlKind: "archive",
+        target: workspaceId,
+      },
     ]);
   }
 });
@@ -1516,10 +1529,10 @@ test("keeps the archive off every chat of a workspace while a sibling works", as
   // The idle chat's own turn is settled, but the workspace an archive acts on
   // is not: filing it away would take the sibling's running turn with it, so
   // no row of this workspace offers the archive.
-  assert.deepEqual(byId.get("session-working")?.controls, [
-    { id: "cancel-turn", label: "Stop this turn", kind: "stop" },
+  assert.deepEqual(advertisedControls(byId.get("session-working") ?? {}), [
+    { kind: ACT_KIND.CONTROL, id: "cancel-turn", label: "Stop this turn", controlKind: "stop" },
   ]);
-  assert.equal(byId.get("session-idle")?.controls, undefined);
+  assert.deepEqual(advertisedControls(byId.get("session-idle") ?? {}), []);
 });
 
 test("keeps the archive off a workspace whose chat's state could not be read", async () => {
@@ -1539,13 +1552,12 @@ test("keeps the archive off a workspace whose chat's state could not be read", a
 
   const observations = await adapterFor(api.fetch).observe();
 
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // An unread status is not a settled one: the chat stands as unknown rather
   // than being dropped, and a workspace not positively seen settled offers no
   // filing away — the turn Luke could not read may still be running.
   assert.equal(observations.length, 1);
   assert.equal(observations[0]?.status, SESSION_STATUS.UNKNOWN);
-  assert.equal(observations[0]?.controls, undefined);
+  assert.deepEqual(advertisedControls(observations[0] ?? {}), []);
 });
 
 test("leaves a filed-away workspace and its chats off the roster entirely", async () => {
@@ -1853,7 +1865,10 @@ test("renames the workspace behind an observed row through Conductor's rename en
 
   // Every open workspace is renameable, so the target rides every chat's
   // advertisement the way the spawn target does.
-  assert.equal(observations[0]?.renameTarget, "workspace-active");
+  assert.equal(
+    advertisedActFor(observations[0] ?? {}, ACT_KIND.RENAME_WORKSPACE)?.target,
+    "workspace-active",
+  );
 
   const result = await adapter.renameWorkspace({
     providerSessionId: "session-idle",
@@ -1887,7 +1902,7 @@ test("renames an observed chat itself through Conductor's session rename endpoin
   const observations = await adapter.observe();
 
   // Any open chat is renameable, whatever its turn is doing.
-  assert.equal(observations[0]?.canRename, true);
+  assert.notEqual(advertisedActFor(observations[0] ?? {}, ACT_KIND.RENAME_SESSION), undefined);
 
   const result = await adapter.renameSession({
     providerSessionId: "session-idle",
@@ -2239,10 +2254,13 @@ test("starts another agent in the workspace behind an observed row", async () =>
   const adapter = adapterFor(api.fetch);
   const observations = await adapter.observe();
 
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
   // The roster row says which agents its workspace can take, exactly as the
   // endpoint takes them.
-  assert.deepEqual(observations[0]?.spawnableAgents, ["claude", "codex", "cursor"]);
+  assert.deepEqual(advertisedActFor(observations[0] ?? {}, ACT_KIND.ADD_AGENT)?.agents, [
+    "claude",
+    "codex",
+    "cursor",
+  ]);
 
   const result = await adapter.spawnWorkspaceAgent({
     providerSessionId: "session-idle",
@@ -2763,49 +2781,4 @@ test("a conversation read names what refused it without echoing the provider", a
     status: "rejected",
     reason: "Conductor did not answer, so the conversation could not be read.",
   });
-});
-
-test("every act a Conductor observation advertises is the field it replaces", async () => {
-  const api = fakeConductorApi({
-    userId: TEST_USER_ID,
-    projects: [LUKE_PROJECT],
-    workspaces: [
-      ownedWorkspace("workspace-working", TEST_TIME - 1_000),
-      ownedWorkspace("workspace-settled", TEST_TIME - 2_000),
-    ],
-    sessions: [
-      {
-        id: "session-working",
-        workspaceId: "workspace-working",
-        name: TEST_SESSION_NAME,
-        status: TEST_CONDUCTOR_STATUS.WORKING,
-        statusUpdatedAt: TEST_TIME - 1_000,
-      },
-      {
-        id: "session-idle",
-        workspaceId: "workspace-settled",
-        name: TEST_SESSION_NAME,
-        status: TEST_CONDUCTOR_STATUS.IDLE,
-        statusUpdatedAt: TEST_TIME - 2_000,
-      },
-      {
-        id: "session-errored",
-        workspaceId: "workspace-settled",
-        name: TEST_SESSION_NAME,
-        status: TEST_CONDUCTOR_STATUS.ERROR,
-        statusUpdatedAt: TEST_TIME - 2_000,
-      },
-    ],
-  });
-
-  const observations = await adapterFor(api.fetch).observe();
-
-  assert.equal(observations.length, 3);
-  for (const observation of observations) {
-    assert.deepEqual(
-      advertisedActDisagreements(normalizeSession(CONDUCTOR_PROVIDER, observation)),
-      [],
-      observation.providerSessionId,
-    );
-  }
 });

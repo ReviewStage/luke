@@ -5,9 +5,10 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import {
-  advertisedActDisagreements,
+  ACT_KIND,
+  advertisedActFor,
+  advertisedControls,
   HOSTED_AGENT_ID,
-  normalizeSession,
   PROVIDER_ID,
   SESSION_APPLICATION_ID,
   SESSION_APPLICATION_SCOPE,
@@ -238,16 +239,15 @@ test("matches a chat Superset recorded no session id for by its worktree", async
   // No observed binding identifies the exact terminal this chat is behind, so
   // a message has nowhere it can be known to land — the workspace-scoped acts
   // still ride, because the workspace's identity is exactly known.
-  assert.equal(enriched?.canReceiveMessage, undefined);
-  assert.equal(enriched?.renameTarget, "workspace-1");
-  assert.deepEqual(enriched?.spawnableAgents, ["claude", "opencode"]);
-  assert.equal(enriched?.spawnTarget, "workspace-1");
-  assert.deepEqual(enriched?.controls, [
+  assert.deepEqual(enriched?.advertises, [
     {
+      kind: ACT_KIND.CONTROL,
       id: SUPERSET_CONTROL_ID.DELETE_WORKSPACE,
       label: "Delete workspace",
       target: "workspace-1",
     },
+    { kind: ACT_KIND.RENAME_WORKSPACE, target: "workspace-1" },
+    { kind: ACT_KIND.ADD_AGENT, agents: ["claude", "opencode"], target: "workspace-1" },
   ]);
 
   // The act router resolves the matched chat against the same snapshot the
@@ -437,41 +437,38 @@ test("advertises Superset actions only after the CLI is connected", async (t) =>
   };
 
   const observed = snapshot.enrich(PROVIDER_ID.CODEX, [observation])[0];
-  assert.equal(observed?.canReceiveMessage, undefined);
-  assert.equal(observed?.controls, undefined);
-  assert.equal(observed?.renameTarget, undefined);
+  assert.equal(observed?.advertises, undefined);
   // The workspace address is observation's, not the login's: the app that
   // wrote the host state is the scheme's handler, so a signed-out CLI still
   // leaves every managed chat somewhere to open.
   assert.equal(observed?.detail?.link, "superset://v2-workspace/workspace-1?terminalId=terminal-1");
   const connected = snapshot.enrich(PROVIDER_ID.CODEX, [observation], "host-local")[0];
-  assert.equal(connected?.canReceiveMessage, true);
-  assert.deepEqual(connected?.spawnableAgents, ["claude", "codex"]);
-  assert.equal(connected?.spawnTarget, "workspace-1");
-  assert.equal(connected?.renameTarget, "workspace-1");
   // The delete carries the workspace it acts on as its target — what the
   // press deletes, and what seats the control on a tray's header.
-  assert.deepEqual(connected?.controls, [
+  assert.deepEqual(connected?.advertises, [
+    { kind: ACT_KIND.MESSAGE },
     {
+      kind: ACT_KIND.CONTROL,
       id: SUPERSET_CONTROL_ID.DELETE_WORKSPACE,
       label: "Delete workspace",
       target: "workspace-1",
     },
+    { kind: ACT_KIND.RENAME_WORKSPACE, target: "workspace-1" },
+    { kind: ACT_KIND.ADD_AGENT, agents: ["claude", "codex"], target: "workspace-1" },
   ]);
 
   // Deleting is unrecoverable, so a row still working — or one whose state
   // could not be read — is never offered it.
   for (const status of [SESSION_STATUS.WORKING, SESSION_STATUS.UNKNOWN]) {
     const busy = snapshot.enrich(PROVIDER_ID.CODEX, [{ ...observation, status }], "host-local")[0];
-    assert.deepEqual(busy?.controls, []);
+    assert.deepEqual(advertisedControls(busy ?? {}), []);
   }
 
   // The CLI's login serves one organization at a time, so a workspace another
   // organization's host service recorded advertises nothing actable — and the
   // act router answers no context for it — while observation itself stays.
   const otherOrg = snapshot.enrich(PROVIDER_ID.CODEX, [observation], "org-other")[0];
-  assert.equal(otherOrg?.canReceiveMessage, undefined);
-  assert.equal(otherOrg?.controls, undefined);
+  assert.equal(otherOrg?.advertises, undefined);
   assert.equal(otherOrg?.detail?.link, "superset://v2-workspace/workspace-1?terminalId=terminal-1");
   assert.equal(snapshot.actableContext(PROVIDER_ID.CODEX, "session-1", "org-other"), undefined);
   assert.equal(snapshot.actableContext(PROVIDER_ID.CODEX, "session-1", undefined), undefined);
@@ -557,18 +554,17 @@ test("reports a chatless workspace as its own standing, settled row", async (t) 
   ]);
 
   const connected = snapshot.workspaceRowObservations("host-local")[0];
-  assert.deepEqual(connected?.controls, [
+  assert.deepEqual(connected?.advertises, [
     {
+      kind: ACT_KIND.CONTROL,
       id: SUPERSET_CONTROL_ID.DELETE_WORKSPACE,
       label: "Delete workspace",
       target: "workspace-idle",
     },
+    { kind: ACT_KIND.RENAME_WORKSPACE, target: "workspace-idle" },
+    { kind: ACT_KIND.ADD_AGENT, agents: ["claude", "codex"], target: "workspace-idle" },
   ]);
-  assert.equal(connected?.renameTarget, "workspace-idle");
-  assert.deepEqual(connected?.spawnableAgents, ["claude", "codex"]);
-  assert.equal(connected?.spawnTarget, "workspace-idle");
-  assert.equal(connected?.canReceiveMessage, undefined);
-  assert.equal(snapshot.workspaceRowObservations("org-other")[0]?.controls, undefined);
+  assert.equal(snapshot.workspaceRowObservations("org-other")[0]?.advertises, undefined);
 
   // The act router resolves the row like any managed session, terminal-less.
   const context = snapshot.actableContext(
@@ -750,7 +746,7 @@ test("a chat whose every binding ended keeps its workspace and loses the termina
   // The workspace identity and its acts stand; only the terminal is gone, so
   // nothing offers to land a message or a focus in a terminal Superset ended.
   assert.equal(enriched?.workspace?.providerWorkspaceId, "workspace-1");
-  assert.equal(enriched?.canReceiveMessage, undefined);
+  assert.equal(advertisedActFor(enriched ?? {}, ACT_KIND.MESSAGE), undefined);
   assert.equal(enriched?.detail?.link, "superset://v2-workspace/workspace-1");
 });
 
@@ -775,62 +771,4 @@ test("a press mints a focus request only onto a bound terminal address", () => {
     supersetPressedLink("https://github.com/example/luke/pull/42", "focus-1"),
     "https://github.com/example/luke/pull/42",
   );
-});
-
-test("every act a Superset row advertises is the field it replaces", async (t) => {
-  const home = await temporarySupersetHome(t);
-  const database = await writeHostDatabase(home, "host-local");
-  createSchema(database);
-  database.exec(`
-    INSERT INTO projects VALUES ('project-1', 'Luke');
-    INSERT INTO workspaces (id, project_id, pull_request_id, name, branch, updated_at) VALUES
-      ('workspace-1', 'project-1', NULL, 'parallel-hippopotamus', 'feat/grok-bot', 200),
-      ('workspace-idle', 'project-1', NULL, 'idle-ibis', 'feat/idle', 100);
-    INSERT INTO host_agent_configs VALUES ('claude', 1), ('opencode', 1);
-    INSERT INTO terminal_agent_bindings VALUES (
-      'terminal-1', 'workspace-1', 'claude', 'ses_claude', 'Start'
-    );
-  `);
-  database.close();
-
-  const snapshot = await new SupersetWorkspaceReader({ homeDirectory: home }).read();
-  const provider = { id: PROVIDER_ID.CLAUDE_CODE, displayName: "Claude Code" };
-  // Both rows that carry acts: a chat mid-turn, a settled chat, and the idle
-  // workspace that earns a standing row of its own.
-  const observations = [
-    ...snapshot.enrich(
-      PROVIDER_ID.CLAUDE_CODE,
-      [
-        {
-          providerSessionId: "ses_claude",
-          title: "Add Grok Bot support",
-          status: SESSION_STATUS.WORKING,
-          lastActivityAt: 100,
-        },
-      ],
-      "host-local",
-    ),
-    ...snapshot.enrich(
-      PROVIDER_ID.CLAUDE_CODE,
-      [
-        {
-          providerSessionId: "ses_claude",
-          title: "Add Grok Bot support",
-          status: SESSION_STATUS.WAITING,
-          lastActivityAt: 100,
-        },
-      ],
-      "host-local",
-    ),
-    ...snapshot.workspaceRowObservations("host-local"),
-  ];
-
-  assert.equal(observations.length, 3);
-  for (const observation of observations) {
-    assert.deepEqual(
-      advertisedActDisagreements(normalizeSession(provider, observation)),
-      [],
-      observation.providerSessionId,
-    );
-  }
 });

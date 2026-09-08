@@ -19,7 +19,6 @@ import {
   SESSION_APPLICATION_SCOPE,
   SESSION_CONTROL_KIND,
   SESSION_STATUS,
-  type SessionControl,
   type SessionProvider,
   type SessionStatus,
   WORKSPACE_TASK_SUPPORT,
@@ -151,17 +150,11 @@ const CONDUCTOR_SPAWNABLE_AGENTS: readonly string[] = workspaceAgentModels(
  * The turn-level control, advertised only while a session is actually working
  * a turn there is something to stop.
  */
-const CONDUCTOR_CANCEL_CONTROL = {
-  id: "cancel-turn",
-  label: "Stop this turn",
-  kind: SESSION_CONTROL_KIND.STOP,
-} as const;
-
 const CONDUCTOR_CANCEL_ADVERTISEMENT = {
   kind: ACT_KIND.CONTROL,
-  id: CONDUCTOR_CANCEL_CONTROL.id,
-  label: CONDUCTOR_CANCEL_CONTROL.label,
-  controlKind: CONDUCTOR_CANCEL_CONTROL.kind,
+  id: "cancel-turn",
+  label: "Stop this turn",
+  controlKind: SESSION_CONTROL_KIND.STOP,
 } as const satisfies AdvertisedControl;
 
 const CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID = "archive-workspace";
@@ -177,14 +170,6 @@ const CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID = "archive-workspace";
  * archives the workspace the user was shown and nothing an adapter kept on
  * the side.
  */
-function conductorArchiveWorkspaceControl(workspaceId: string): SessionControl {
-  return {
-    id: CONDUCTOR_ARCHIVE_WORKSPACE_CONTROL_ID,
-    label: "Archive",
-    kind: SESSION_CONTROL_KIND.ARCHIVE,
-    target: workspaceId,
-  };
-}
 
 function conductorArchiveWorkspaceAdvertisement(workspaceId: string): AdvertisedControl {
   return {
@@ -899,7 +884,7 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
     providerSessionId: string,
     control: AdvertisedControl,
   ): CloudWriteRoute | undefined {
-    if (control.id === CONDUCTOR_CANCEL_CONTROL.id) {
+    if (control.id === CONDUCTOR_CANCEL_ADVERTISEMENT.id) {
       return {
         segments: [
           CONDUCTOR_ROUTE_SEGMENT.V0,
@@ -1229,18 +1214,6 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
         ? CONDUCTOR_WORKSPACE_ACTIVITY[lifecycle.status]
         : undefined;
     const error = reported?.errorMessage ?? lifecycle?.errorMessage;
-    // The stop belongs to the turn and the archive to the workspace: a chat
-    // mid-turn offers the stop alone — its own workspace is by definition
-    // unsettled — and any chat of a positively settled workspace offers to
-    // file the whole workspace away. Every workspace and every chat here is
-    // still open: the filed-away workspaces never made it past the lifecycle
-    // read, and the filed-away chats never made it past the listing.
-    const controls = [
-      ...(reported?.status === CONDUCTOR_SESSION_STATUS.WORKING ? [CONDUCTOR_CANCEL_CONTROL] : []),
-      ...(settledWorkspaceIds.has(session.workspace.id)
-        ? [conductorArchiveWorkspaceControl(session.workspace.id)]
-        : []),
-    ];
     return {
       providerSessionId: session.id,
       advertises: this.#advertisementsFor(session, reported, settledWorkspaceIds),
@@ -1278,28 +1251,6 @@ export class ConductorSessionAdapter extends CloudSessionAdapter {
         },
       ],
       ...(agent ? { agent } : undefined),
-      // Conductor documents both halves of a send — queued while a session is
-      // idle, steered into the turn while it works — so any open chat takes a
-      // message. An errored one is documented for no writer.
-      canReceiveMessage:
-        reported?.status === CONDUCTOR_SESSION_STATUS.IDLE ||
-        reported?.status === CONDUCTOR_SESSION_STATUS.WORKING,
-      // Renaming is documented for any open chat, whatever its turn is doing,
-      // so it is not gated on the reported status the way a message is.
-      canRename: true,
-      // Another agent lands in the workspace around this row, whatever state
-      // the row's own chat is in: the workspace was observed this pass, and
-      // that is the thing the creation endpoint takes. Its id rides the
-      // advertisement — like a control's target — so it can never outlive the
-      // snapshot that promised it.
-      spawnableAgents: CONDUCTOR_SPAWNABLE_AGENTS,
-      spawnTarget: session.workspace.id,
-      // A rename is documented for any open workspace, and every workspace
-      // here is open — the filed-away ones never made it past the lifecycle
-      // read — so the target rides every chat's advertisement the way the
-      // spawn target does.
-      renameTarget: session.workspace.id,
-      ...(controls.length > 0 ? { controls } : undefined),
       detail: {
         repository: session.workspace.repositoryLabel,
         ...(model ? { model } : undefined),

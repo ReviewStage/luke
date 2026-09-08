@@ -3,12 +3,10 @@ import test from "node:test";
 import {
   ACT_KIND,
   type AdvertisedAct,
-  advertisedActDisagreements,
   advertisedActFor,
   advertisedControls,
   maximumSessionDetailLength,
   normalizeSession,
-  SESSION_CONTROL_KIND,
   SESSION_STATUS,
   type Session,
 } from "@sidecar/session";
@@ -343,40 +341,4 @@ test("an unadvertised session advertises nothing rather than nothing at all", ()
     ).advertises,
     [],
   );
-});
-
-test("an observation writing both says the same thing twice, or is reported", () => {
-  const both = normalizeSession(
-    { id: "conductor", displayName: "Conductor" },
-    {
-      providerSessionId: "chat-1",
-      title: "Both written",
-      status: SESSION_STATUS.WAITING,
-      lastActivityAt: TEST_NOW,
-      advertises: [
-        { kind: ACT_KIND.MESSAGE },
-        { kind: ACT_KIND.RENAME_SESSION },
-        { kind: ACT_KIND.RENAME_WORKSPACE, target: "ws-1" },
-        { kind: ACT_KIND.ADD_AGENT, agents: ["claude"], target: "ws-1" },
-        {
-          kind: ACT_KIND.CONTROL,
-          id: "stop",
-          label: "Stop",
-          controlKind: SESSION_CONTROL_KIND.STOP,
-        },
-      ],
-      canReceiveMessage: true,
-      canRename: true,
-      renameTarget: "ws-1",
-      spawnableAgents: ["claude"],
-      spawnTarget: "ws-1",
-      controls: [{ id: "stop", label: "Stop", kind: SESSION_CONTROL_KIND.STOP }],
-    },
-  );
-  assert.deepEqual(advertisedActDisagreements(both), []);
-
-  const advertisementOnly = advertising([{ kind: ACT_KIND.MESSAGE }]);
-  assert.deepEqual(advertisedActDisagreements(advertisementOnly), [
-    "canReceiveMessage: advertised true, kept false",
-  ]);
 });
