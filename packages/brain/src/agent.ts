@@ -100,7 +100,7 @@ import {
   isTerminalBrainRequestStatus,
 } from "./requests.js";
 import { incompleteDetail, TOOL_RESULT_STATUS } from "./runtime.js";
-import { type Settled, settledUnlessAborted } from "./settled.js";
+import { claimedUnlessAborted, type Settled, settledUnlessAborted } from "./settled.js";
 import {
   type BrainPersistedState,
   type BrainStateStore,
@@ -1768,6 +1768,14 @@ export class BrainAgent {
     turnContext: Pick<TurnContext, "generation" | "signal">,
   ): Promise<boolean> {
     const { generation, signal } = turnContext;
+    if (generation.flush.settling) {
+      // A write an earlier turn stopped waiting for may still be in flight;
+      // the gate is read only once it has landed or failed, so the store is
+      // never consulted ahead of a write already issued to it.
+      const settled = await settledUnlessAborted(generation.flush.settling, signal);
+      if (settled.aborted || this.#revoked(turnContext)) return false;
+      delete generation.flush.settling;
+    }
     if (generation.flush.read) return true;
     const store = this.#options.flushMarker;
     if (!store) {
@@ -1792,19 +1800,27 @@ export class BrainAgent {
     return true;
   }
 
-  /** Offers the completed flush's marker to the store, a bounded number of times; the turn itself is never rerun to retry. */
+  /**
+   * Offers the completed flush's marker to the store, a bounded number of
+   * times; the turn itself is never rerun to retry. A turn revoked while a
+   * write is out settles at once, but the write is not forgotten: the
+   * attempt still in flight is what the generation's flush state waits for
+   * before its gate is next read, and a write that lands late marks the
+   * cycle as a timely one would, so the housekeeping turn is not run twice.
+   */
   async #writeFlushMarker(
     turnContext: Pick<TurnContext, "generation" | "signal">,
     cycle: number,
   ): Promise<Settled<{ ok: true } | { ok: false; reason: string }>> {
     const store = this.#options.flushMarker;
     if (!store) return { aborted: false, value: { ok: true } };
+    const { generation, signal } = turnContext;
     const attempts = async (): Promise<{ ok: true } | { ok: false; reason: string }> => {
       let reason = "";
       for (let attempt = 0; attempt < MEMORY_FLUSH_DEFAULTS.MARKER_WRITE_ATTEMPTS; attempt += 1) {
-        if (turnContext.signal.aborted) return { ok: false, reason: "the turn was revoked" };
+        if (signal.aborted) return { ok: false, reason: "the turn was revoked" };
         try {
-          await store.write(turnContext.generation.id, cycle);
+          await store.write(generation.id, cycle);
           return { ok: true };
         } catch (error) {
           reason = error instanceof Error ? error.message : String(error);
@@ -1812,7 +1828,14 @@ export class BrainAgent {
       }
       return { ok: false, reason };
     };
-    return settledUnlessAborted(attempts(), turnContext.signal);
+    const outcome = attempts();
+    const settled = await claimedUnlessAborted(outcome, signal, (late) => {
+      if (late.ok) generation.flush.lastCompactionCount = cycle;
+    });
+    if (settled.aborted) {
+      generation.flush.settling = outcome.then(() => undefined);
+    }
+    return settled;
   }
 
   /** Where the standing generation is in its compaction cycles, and the cycle the last completed flush ran under, as read so far. */

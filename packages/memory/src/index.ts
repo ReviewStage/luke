@@ -183,6 +183,7 @@ export {
 } from "./recall.js";
 export {
   prepareForIngestion,
+  privateKeyLines,
   RECALLED_CONTEXT_MARKER,
   REDACTED_TOKEN,
   type RedactionResult,
