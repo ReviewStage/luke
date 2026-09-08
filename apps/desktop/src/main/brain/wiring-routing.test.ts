@@ -24,6 +24,7 @@ import {
   observedSessionKey,
   observedSessionRefOf,
   type SessionKey,
+  threadSessionKey,
 } from "@sidecar/runtime-contracts";
 import {
   normalizeSession,
@@ -127,6 +128,10 @@ interface Composed {
   recorded: { sessionKey: SessionKey; kind: string }[];
   /** How many stores were built per conversation. */
   repositories: Map<SessionKey, number>;
+  /** How many writes each conversation's envelope took. */
+  writes: Map<SessionKey, number>;
+  /** How many times the credential was resolved: once at construction, then once per brain built. */
+  builds: () => number;
 }
 
 interface Gate {
@@ -158,12 +163,14 @@ function composed(gate?: Gate): Composed {
   const model = bareModelAdapter(client);
   const storages = new Map<SessionKey, MemoryStorage>();
   const repositories = new Map<SessionKey, number>();
+  const writes = new Map<SessionKey, number>();
   const ensured: Composed["ensured"] = [];
   const deliveries: BrainDelivery[] = [];
   const reads: SessionIdentity[] = [];
   const recorded: Composed["recorded"] = [];
   const roster: Session[] = [session("abc"), session("def")];
   let ids = 0;
+  let builds = 0;
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "luke-wiring-"));
   const wiring = wireBrain({
     repositoryFor: (sessionKey) => {
@@ -173,7 +180,14 @@ function composed(gate?: Gate): Composed {
         storage = new MemoryStorage();
         storages.set(sessionKey, storage);
       }
-      return brainStateRepositoryFromStorage(storage);
+      const repository = brainStateRepositoryFromStorage(storage);
+      return {
+        load: () => repository.load(),
+        save: (state, transcript) => {
+          writes.set(sessionKey, (writes.get(sessionKey) ?? 0) + 1);
+          return repository.save(state, transcript);
+        },
+      };
     },
     ensureObservedConversation: async (sessionKey, name) => {
       ensured.push({ sessionKey, name });
@@ -233,13 +247,27 @@ function composed(gate?: Gate): Composed {
       deliveries.push(delivery);
     },
     model: () => model,
-    credential: () => ({ kind: CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY, providerId: "openai" }),
+    credential: () => {
+      builds += 1;
+      return { kind: CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY, providerId: "openai" };
+    },
     workspaceDirectory: () => workspace,
     skillRoots: () => [],
     runnable: () => true,
     dropBriefings: () => undefined,
   });
-  return { wiring, inputs, ensured, deliveries, reads, roster, recorded, repositories };
+  return {
+    wiring,
+    inputs,
+    ensured,
+    deliveries,
+    reads,
+    roster,
+    recorded,
+    repositories,
+    writes,
+    builds: () => builds,
+  };
 }
 
 test("a roster look opens one conversation per observed session, each reading only its own transcript, and main reads notices instead", async () => {
@@ -436,6 +464,65 @@ test("a hook for a session whose conversation is standing down waits for the clo
   // first was let go of before the second was opened.
   assert.ok(c.wiring.current(abcKey));
   assert.equal(c.repositories.get(abcKey), 2);
+  c.wiring.retire();
+  await c.wiring.rebuild();
+});
+
+test("a rebuild landing while a conversation stands down leaves the closing host to its close, and the reopen owns the sole store", async () => {
+  const c = composed();
+  await c.wiring.rebuild();
+  const abcKey = observedSessionKey(ABC);
+  c.wiring.rosterLook();
+  await until(() => c.wiring.pendingNotices().length === 2);
+  await until(() => !(c.wiring.current(abcKey)?.busy() ?? true));
+  assert.equal(c.repositories.get(abcKey), 1);
+  const writesBefore = c.writes.get(abcKey) ?? 0;
+  const buildsBefore = c.builds();
+  // The close has begun and is awaiting its drain when the rebuild lands in
+  // the same tick: the interleave is fixed by construction, not by timing.
+  const closing = c.wiring.closeConversation(abcKey);
+  await c.wiring.rebuild();
+  await closing;
+  assert.equal(c.wiring.current(abcKey), undefined);
+  // The rebuild built main's brain and def's, and nothing onto the host the
+  // close was about to discard, where no retire could ever reach it; the
+  // first envelope took no write after its conversation stood down.
+  await settle();
+  assert.equal(c.builds() - buildsBefore, 2);
+  assert.equal(c.writes.get(abcKey) ?? 0, writesBefore);
+  // Reopened for a hook, the session's conversation stands on a second store
+  // built after the first was let go, and it is the only one.
+  c.wiring.wake([
+    {
+      kind: BRAIN_WAKE_KIND.HOOK,
+      hookEvent: "Stop",
+      identity: ABC,
+      session: session("abc"),
+      atMs: 2,
+    },
+  ]);
+  await until(() => c.wiring.pendingNotices().length === 3);
+  assert.ok(c.wiring.current(abcKey));
+  assert.equal(c.repositories.get(abcKey), 2);
+  c.wiring.retire();
+  await c.wiring.rebuild();
+});
+
+test("a conversation reopened while it stands down waits for the close and stands on its own new store", async () => {
+  const c = composed();
+  await c.wiring.rebuild();
+  const threadKey = threadSessionKey("t-1");
+  await c.wiring.openConversation(threadKey);
+  assert.ok(c.wiring.current(threadKey));
+  assert.equal(c.repositories.get(threadKey), 1);
+  // Archive then unarchive before the close has drained.
+  const closing = c.wiring.closeConversation(threadKey);
+  const reopening = c.wiring.openConversation(threadKey);
+  await Promise.all([closing, reopening]);
+  // The reopen built on nothing the close discards: its brain stands in the
+  // directory, on the second store, and the first is gone.
+  assert.ok(c.wiring.current(threadKey));
+  assert.equal(c.repositories.get(threadKey), 2);
   c.wiring.retire();
   await c.wiring.rebuild();
 });
