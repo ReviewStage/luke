@@ -454,3 +454,40 @@ test("the socket client serves invocations only while a handler is served, answe
     await hosted.close();
   }
 });
+
+test("a fresh client with no baseline adopts the host as it stands rather than replaying the window before it arrived", async () => {
+  let ids = 0;
+  const server = new GatewayServer({
+    methods: {},
+    configurationRevision: () => 1,
+    sessionRevision: () => undefined,
+    snapshot: () => ({ runs: [] }),
+    now: () => 0,
+    createEventId: () => `event-${++ids}`,
+  });
+  // The host spoke before this client existed: an offer to a renderer that is gone.
+  server.emit(GATEWAY_EVENT.SPEECH_OFFERED, { id: "old-offer" });
+  server.emit(GATEWAY_EVENT.RUNS_CHANGED, "old-runs");
+  const transport = new InProcessTransport(server, OPERATOR);
+  const heard: string[] = [];
+  let snapshots = 0;
+  const client = new GatewayClient({
+    transport,
+    createId: () => `r-${++ids}`,
+    onSnapshot: () => {
+      snapshots += 1;
+    },
+  });
+  client.onEvery((event) => heard.push(event.kind));
+  // The first thing it hears is not the host's first event: no baseline, so
+  // the host is adopted, and the old offer is never delivered.
+  server.emit(GATEWAY_EVENT.RUNS_CHANGED, "current");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(snapshots, 1);
+  assert.deepEqual(heard, []);
+  assert.equal(client.lastSequence(), 3);
+  // From here the stream is followed, and a later gap is replayed as before.
+  server.emit(GATEWAY_EVENT.SPEECH_OFFERED, { id: "new-offer" });
+  assert.deepEqual(heard, [GATEWAY_EVENT.SPEECH_OFFERED]);
+});

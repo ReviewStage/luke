@@ -52,6 +52,14 @@ export class GatewayClient {
   readonly #listeners = new Map<GatewayEventKind, Set<GatewayClientEventListener>>();
   readonly #everyListener = new Set<GatewayClientEventListener>();
   #lastSequence = 0;
+  /**
+   * Whether this client has a baseline in the host's numbering: adopted from
+   * a hello, or established by hearing the host's very first event. Without
+   * one, a gap is not something to replay — the window before it is the
+   * host's past, offers and all, and a client that was not there for it must
+   * take the host as it stands now rather than hear it again.
+   */
+  #baselined = false;
   #reconnecting: Promise<void> | undefined;
   /** Events that arrived while a reconnection was in flight, taken again once it has settled. */
   #arrivedDuringReconnect: GatewayEvent[] = [];
@@ -146,6 +154,7 @@ export class GatewayClient {
       return;
     }
     this.#lastSequence = sequence;
+    this.#baselined = true;
     this.#options.onSnapshot?.(response.result.snapshot ?? {}, sequence);
   }
 
@@ -209,11 +218,14 @@ export class GatewayClient {
       return;
     }
     if (event.sequence !== this.#lastSequence + 1) {
-      // The gap is filled first, from the host's own log; the event that
-      // showed it arrives inside the replay, in its place.
-      void this.reconnect();
+      // With a baseline, the gap is filled from the host's own log and the
+      // event that showed it arrives inside the replay, in its place. Without
+      // one, the host is adopted as it stands: nothing before this client's
+      // arrival is replayed to it.
+      void (this.#baselined ? this.reconnect() : this.adoptHost());
       return;
     }
+    this.#baselined = true;
     this.#deliver(event);
   }
 
