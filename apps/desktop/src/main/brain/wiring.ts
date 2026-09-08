@@ -55,6 +55,7 @@ import {
   type RuntimeRegistries,
   readWorkspaceFile,
   recentDailyNotes,
+  type ScheduledTimer,
   type SkillDescriptor,
   seedWorkspace,
   type WorkspaceSeeding,
@@ -118,6 +119,11 @@ export interface BrainWiringDependencies {
   historyLines: (sessionKey: SessionKey) => readonly ConversationEntry[];
   /** Where child records and completions stand between launches. */
   childStore: () => ChildStore;
+  /** The clock the child service's delivery retries and archive delays run on; absent means the process's own timers. */
+  childTimers?: {
+    schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
+    cancel: (timer: ScheduledTimer) => void;
+  };
   /** The machine's parallelism, for the agent lane's width; absent means the host asks the OS. */
   parallelism?: () => number;
   createId: () => string;
@@ -665,6 +671,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     store: dependencies.childStore(),
     createId: dependencies.createId,
     report: dependencies.report,
+    ...(dependencies.childTimers ?? undefined),
     executor: {
       start: async (record, fork) => {
         if (fork) pendingForks.set(record.childSessionKey, fork);
@@ -830,7 +837,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         status: ACT_RESULT_STATUS.ACCEPTED,
         children: children.childrenOf(sessionKey).map((record) => ({
           ...childSummary(record),
-          ...(completionSummary(children.completion(record.childId)) ?? {}),
+          ...completionSummary(children.completion(record.childId)),
         })),
       }),
       cancel: async (childId): Promise<WireRecord> => {

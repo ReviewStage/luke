@@ -1170,13 +1170,21 @@ export class BrainAgent {
     return settled ? childRunEnd(settled) : undefined;
   }
 
-  /** The run named as a child's, for a requester's service to cancel by the child run id it minted. */
+  /**
+   * Cancels the run named as a child's, by the child run id its requester's
+   * service minted, and answers only once the run has actually ended: a
+   * cancellation is reported landed when the record says so, never on the
+   * strength of having asked, so a reset that waits on it waits on the truth.
+   */
   async cancelChildRun(childRunId: string): Promise<boolean> {
     await this.ready();
     const record = this.requests().find((held) => held.submissionId === childRunId);
     if (!record) return true;
     const cancelled = await this.cancelAsk(record.runId);
-    return cancelled === undefined || isTerminalBrainRequestStatus(cancelled.status);
+    if (cancelled === undefined) return true;
+    if (isTerminalBrainRequestStatus(cancelled.status)) return true;
+    const settled = await this.#awaitTerminal(record.runId);
+    return settled === undefined || isTerminalBrainRequestStatus(settled.status);
   }
 
   async #awaitTerminal(runId: string): Promise<BrainRequestRecord | undefined> {

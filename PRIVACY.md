@@ -102,6 +102,23 @@ generation holds at most 200 asks and stays under 8 MiB: the oldest finished
 asks go first once their endings are in the History, and when nothing can go
 Luke declines a new ask rather than growing the record.
 
+**Work Luke delegates to himself.** A conversation of Luke's may hand a task to
+a child: another conversation of the same Luke, kept in the same database
+under the same rules, that does the one task it was given and reports back.
+A child starts with an empty working memory unless the conversation that
+asked chose to fork its own into the child, in which case the child begins
+with a copy of that conversation's working memory as it then stood, and never
+with more than a bounded amount of it. A child reads the same sessions and
+runs the same tools as any conversation, under the same policy less the tools
+OpenClaw's design keeps from children, and its calls to OpenAI are the same
+calls described below. The record of each child — what it was asked, when it
+began and ended, and its final reply — and the record of that reply's
+delivery back to the conversation that asked are kept in the database beside
+everything else; a reply that could not be delivered is kept for seven days
+and then discarded. A child's conversation is archived an hour after it ends
+and lives under the same retention as every other conversation. Nothing a
+child does reaches you except through the conversation that asked for it.
+
 The History tab's one control, **Clear**, removes the conversation's
 History, transcript, and working memory from the database, and writes them
 first, in the same step, into a compressed recovery archive kept on your Mac

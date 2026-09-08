@@ -1,4 +1,10 @@
-import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import {
+  isRecord,
+  isWireBoolean,
+  isWireNumber,
+  isWireString,
+  type UnparsedWireValue,
+} from "@sidecar/wire";
 import {
   type AgentId,
   agentId,
@@ -205,7 +211,7 @@ export function childRunRecordFromWire(value: UnparsedWireValue): ChildRunRecord
   if (!allowed || !denied) return undefined;
   if (!instant(value.timeoutMs) || !isChildCleanup(value.cleanup)) return undefined;
   if (!isIdentifier(value.completionDestination)) return undefined;
-  if (typeof value.expectsCompletion !== "boolean") return undefined;
+  if (!isWireBoolean(value.expectsCompletion)) return undefined;
   if (!isChildRunStatus(value.status) || !instant(value.acceptedAt)) return undefined;
   if (!optionalInstant(value.startedAt) || !optionalInstant(value.settledAt)) return undefined;
   if (!optionalInstant(value.archivedAt)) return undefined;
@@ -215,10 +221,12 @@ export function childRunRecordFromWire(value: UnparsedWireValue): ChildRunRecord
   }
   return {
     childId: value.childId,
-    // SAFETY: each is a non-empty string, which is what the constructor admits.
+    // SAFETY: checked non-empty above, which is what the agent id constructor admits.
     agentId: value.agentId as AgentId,
+    // SAFETY: checked non-empty above, which is what the session key constructor admits.
     requesterSessionKey: value.requesterSessionKey as SessionKey,
     ...(value.requesterRunId !== undefined ? { requesterRunId: value.requesterRunId } : undefined),
+    // SAFETY: checked non-empty above, which is what the session key constructor admits.
     childSessionKey: value.childSessionKey as SessionKey,
     childRunId: value.childRunId,
     task: value.task,
@@ -231,6 +239,7 @@ export function childRunRecordFromWire(value: UnparsedWireValue): ChildRunRecord
     policy: { allowed, denied },
     timeoutMs: value.timeoutMs,
     cleanup: value.cleanup,
+    // SAFETY: checked non-empty above, which is what the session key constructor admits.
     completionDestination: value.completionDestination as SessionKey,
     expectsCompletion: value.expectsCompletion,
     status: value.status,
