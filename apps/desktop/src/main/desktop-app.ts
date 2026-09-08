@@ -1659,7 +1659,6 @@ const brainWiring = wireBrain({
     trackedIssues: () => trackedIssues,
     appGuide: () => appGuide,
     rememberedFacts: runtimeStoreWiring.rememberedFacts,
-    writeRememberedFacts: runtimeStoreWiring.writeRememberedFacts,
     mutateRememberedFacts: runtimeStoreWiring.mutateRememberedFacts,
     performAppAct: performBrainAppAct,
     recordConversationEntry: runtimeStoreWiring.recordConversationEntry,

@@ -22,7 +22,7 @@ import {
 } from "./responses-api.js";
 
 /** OpenClaw's own approximation where no count is at hand. */
-const LOCAL_FOLD_CHARS_PER_TOKEN = 4;
+export const ESTIMATED_CHARS_PER_TOKEN = 4;
 
 /**
  * The context engine for the OpenAI Responses input array. It is the one
@@ -141,7 +141,7 @@ export class ResponsesContextEngine implements ContextEngine {
       const item = items[index];
       if (!item) continue;
       if (isUserMessageItem(item)) cut = index;
-      accumulated += Math.ceil(JSON.stringify(item).length / LOCAL_FOLD_CHARS_PER_TOKEN);
+      accumulated += Math.ceil(JSON.stringify(item).length / ESTIMATED_CHARS_PER_TOKEN);
       if (accumulated >= keepRecentTokens && cut !== undefined) break;
     }
     return cut ?? 0;

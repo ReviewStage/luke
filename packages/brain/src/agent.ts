@@ -765,7 +765,35 @@ export class BrainAgent {
     }
     const standing = await generation.opened;
     if (standing.kind !== CONTEXT_OPENING.LOADED || standing.context !== context) return;
+    const signal = AbortSignal.any([abort.signal, generation.abort.signal]);
+    if (signal.aborted) return;
+    // Maintenance is not a turn, but it holds the context the way one does,
+    // so the roster look waits for it the way it waits for a turn.
+    this.#turnInFlight = true;
+    try {
+      const compacted = await this.#compactIfNeeded({ generation, context, signal }, countedTokens);
+      if (!compacted.ok) this.#report(`Brain compaction did not complete: ${compacted.reason}`);
+    } finally {
+      this.#turnInFlight = false;
+    }
+  }
+
+  /**
+   * The one compaction path, for the admission every turn passes before its
+   * first inference and for the maintenance a settled turn leaves behind: a
+   * context that would cross the transport's byte bound, or the window less
+   * its reserve, is compacted and checkpointed so the request that follows
+   * fits. A compaction that fails answers why; the context stands exactly as
+   * it was, and nothing is deleted or cut to make the request fit. A turn
+   * revoked meanwhile answers ok, having nothing left to prepare for.
+   */
+  async #compactIfNeeded(
+    turnContext: TurnContext,
+    countedTokens?: number,
+  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const { context, signal } = turnContext;
     const capabilities = await this.#options.runtime.capabilities();
+    if (this.#revoked(turnContext)) return { ok: true };
     const prompt = this.#instructions();
     const assessment = assessCompaction(
       context.checkpoint().items,
@@ -773,45 +801,8 @@ export class BrainAgent {
       capabilities,
       countedTokens,
     );
-    if (assessment.need === COMPACTION_NEED.NONE) return;
-    const signal = AbortSignal.any([abort.signal, generation.abort.signal]);
-    if (signal.aborted) return;
-    this.#turnInFlight = true;
-    try {
-      const outcome = await this.#options.runtime.compact(context, { prompt, signal });
-      if (signal.aborted || generation !== this.#generation) return;
-      if (!outcome.compacted) {
-        this.#report(`Brain compaction did not complete: ${outcome.reason}`);
-        return;
-      }
-      if (!(await this.#ledger.checkpoint({ generation, context, signal }))) {
-        this.#report("Brain compaction could not be checkpointed");
-      }
-    } finally {
-      this.#turnInFlight = false;
-    }
-  }
-
-  /**
-   * The admission every turn passes before its first inference: a context
-   * that would cross the transport's byte bound, or the window less its
-   * reserve, is compacted first, and checkpointed, so the request that
-   * follows fits. A compaction that fails answers why; the context stands
-   * exactly as it was, and nothing is deleted or cut to make the request fit.
-   */
-  async #prepareContext(
-    turnContext: TurnContext,
-  ): Promise<{ ok: true } | { ok: false; reason: string }> {
-    const { context } = turnContext;
-    const capabilities = await this.#options.runtime.capabilities();
-    if (this.#revoked(turnContext)) return { ok: true };
-    const prompt = this.#instructions();
-    const assessment = assessCompaction(context.checkpoint().items, prompt, capabilities);
     if (assessment.need === COMPACTION_NEED.NONE) return { ok: true };
-    const outcome = await this.#options.runtime.compact(context, {
-      prompt,
-      signal: turnContext.signal,
-    });
+    const outcome = await this.#options.runtime.compact(context, { prompt, signal });
     if (this.#revoked(turnContext)) return { ok: true };
     if (!outcome.compacted) return { ok: false, reason: outcome.reason };
     if (!(await this.#ledger.checkpoint(turnContext))) {
@@ -1121,7 +1112,7 @@ export class BrainAgent {
         cursorMark = generation.cursors.persisted();
       };
       try {
-        const prepared = await this.#prepareContext(turnContext);
+        const prepared = await this.#compactIfNeeded(turnContext);
         if (this.#revoked(turnContext)) {
           failure = revocation();
         } else if (!prepared.ok) {

@@ -87,7 +87,7 @@ export class WakeQueue {
   #flush(): void {
     const quietUntil = this.#options.quietUntil();
     if (quietUntil !== undefined) {
-      this.#arm(Math.max(quietUntil - this.#options.now(), this.#options.coalesceMs));
+      this.#arm(this.quietDelay(quietUntil));
       return;
     }
     const events = this.take();

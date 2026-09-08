@@ -41,7 +41,7 @@ function dependencies(overrides: Partial<BrainWiringDependencies> = {}) {
       trackedIssues: () => undefined,
       appGuide: () => ({ facts: [], settings: [] }),
       rememberedFacts: () => [],
-      writeRememberedFacts: () => true,
+      mutateRememberedFacts: (work) => work([], () => true),
       performAppAct: async () => ({ status: "accepted" }),
       recordConversationEntry: () => undefined,
     },

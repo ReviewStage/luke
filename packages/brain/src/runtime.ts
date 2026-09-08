@@ -3,6 +3,7 @@ import {
   type AgentRuntimeDescriptor,
   type CheckpointFormat,
   CONTEXT_INPUT_KIND,
+  type CompactionOptions,
   type ContextEngine,
   type ContextInput,
   type ContextLifecycle,
@@ -13,7 +14,6 @@ import {
   type ModelAnswer,
   type ModelCapabilities,
   type ModelIncomplete,
-  type ModelRequestOptions,
   RUN_END_REASON,
   RUNTIME_EVENT,
   type RuntimeCheckpoint,
@@ -135,18 +135,11 @@ export class ToolLoopAgentRuntime implements AgentRuntime {
   }
 
   /** The runtime's own compaction: the model's explicit one where it compacts, the engine's fold behind a summary otherwise. */
-  async compact(
-    context: ContextEngine,
-    options: Pick<ModelRequestOptions, "prompt" | "signal">,
-  ): Promise<RuntimeCompaction> {
-    const outcome = await compactContext(context, this.#options.model, {
-      prompt: options.prompt,
-      signal: options.signal ?? new AbortController().signal,
+  async compact(context: ContextEngine, options: CompactionOptions): Promise<RuntimeCompaction> {
+    return compactContext(context, this.#options.model, {
+      ...options,
       capabilities: await this.capabilities(),
     });
-    return outcome.compacted
-      ? { compacted: true, dropped: outcome.dropped }
-      : { compacted: false, reason: outcome.reason };
   }
 
   async openContext(

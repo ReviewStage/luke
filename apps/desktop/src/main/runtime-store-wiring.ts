@@ -77,17 +77,19 @@ export interface RuntimeStoreWiring {
   /** Restores every stored conversation's thread, its cutoff, and the remembered facts, once opened. */
   restore: () => Promise<void>;
   rememberedFacts: () => readonly RememberedFact[];
-  /** The remembered entries' write back through the store; answers whether the list persisted. */
-  writeRememberedFacts: (facts: readonly RememberedFact[]) => Promise<boolean>;
   /**
    * One mutation of the remembered facts, read and replaced under one queue.
    * Two conversations may run turns at once, so a remember in one and a
    * forget in another must not each read the list, compute, and replace it
    * past the other; `work` is handed the list as it stands when its turn in
-   * the queue comes, and what it answers is the list that then stands.
+   * the queue comes and the store's own writer, and what it answers is the
+   * list that then stands.
    */
   mutateRememberedFacts: (
-    work: (current: readonly RememberedFact[]) => Promise<readonly RememberedFact[]>,
+    work: (
+      current: readonly RememberedFact[],
+      write: (facts: readonly RememberedFact[]) => Promise<boolean>,
+    ) => Promise<readonly RememberedFact[]>,
   ) => Promise<readonly RememberedFact[]>;
   /**
    * Records a line in one conversation from the main process — the ask a
@@ -244,11 +246,10 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
       announce();
     },
     rememberedFacts: () => rememberedFacts,
-    writeRememberedFacts,
     mutateRememberedFacts: (work) => {
       const mutation = factMutations.then(
-        () => work(rememberedFacts),
-        () => work(rememberedFacts),
+        () => work(rememberedFacts, writeRememberedFacts),
+        () => work(rememberedFacts, writeRememberedFacts),
       );
       factMutations = mutation.catch(() => undefined);
       return mutation;

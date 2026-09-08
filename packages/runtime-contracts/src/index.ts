@@ -3,6 +3,7 @@ export {
   type AgentRuntimeDescriptor,
   type CheckpointFormat,
   CONTEXT_INPUT_KIND,
+  type CompactionOptions,
   type ContextAssembly,
   type ContextBootstrap,
   type ContextEngine,

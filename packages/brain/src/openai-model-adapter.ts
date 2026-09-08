@@ -6,6 +6,7 @@ import {
   type ReasoningEffort,
 } from "@sidecar/runtime-contracts";
 import { positiveInteger, text, type WireRecord } from "@sidecar/wire";
+import { COMPACTION_POLICY } from "./compaction.js";
 import {
   BRAIN_MAXIMUM_OUTPUT_TOKENS,
   BRAIN_REQUEST_TIMEOUT_MS,
@@ -56,8 +57,6 @@ export const BRAIN_OPENAI_DEFAULTS = {
   REASONING_EFFORT: REASONING_EFFORT.MEDIUM,
   REQUEST_TIMEOUT_MS: BRAIN_REQUEST_TIMEOUT_MS,
   MAXIMUM_OUTPUT_TOKENS: BRAIN_MAXIMUM_OUTPUT_TOKENS,
-  /** The default model's window, the number the compaction reserve is read against. */
-  CONTEXT_WINDOW_TOKENS: 400_000,
 } as const;
 
 export const OPENAI_MODEL_ADAPTER_ID = "openai-responses";
@@ -127,7 +126,7 @@ class OpenAiTransport implements ResponsesTransport<undefined> {
       countsInputTokens: true,
       compacts: true,
       maximumOutputTokens: BRAIN_OPENAI_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
-      contextWindowTokens: BRAIN_OPENAI_DEFAULTS.CONTEXT_WINDOW_TOKENS,
+      contextWindowTokens: COMPACTION_POLICY.DEFAULT_CONTEXT_WINDOW_TOKENS,
     };
   }
 

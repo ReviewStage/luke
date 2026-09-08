@@ -30,6 +30,7 @@ import { ACT_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import type { BrainAppActRequest } from "#shared/contracts";
 import {
   forgetRememberedFact,
+  type RememberedFactsWriter,
   type SessionActPerformer,
   saveRememberedFact,
 } from "../ipc/session-acts";
@@ -55,15 +56,17 @@ export interface BrainActPerformerDependencies {
   /** The guide as the renderer last reported it; empty before it has. */
   appGuide: () => AppGuideSnapshot;
   rememberedFacts: () => readonly RememberedFact[];
-  writeRememberedFacts: (facts: readonly RememberedFact[]) => boolean | Promise<boolean>;
   /**
    * Runs one read-compute-replace of the remembered facts under the host's
    * queue, so two conversations remembering at once cannot drop each other's
-   * fact; absent, the mutation runs unqueued, which only a single-conversation
-   * test may accept.
+   * fact. The work is handed the list as it stands and the writer that
+   * persists its replacement, and what it answers is the list that then stands.
    */
-  mutateRememberedFacts?: (
-    work: (current: readonly RememberedFact[]) => Promise<readonly RememberedFact[]>,
+  mutateRememberedFacts: (
+    work: (
+      current: readonly RememberedFact[],
+      write: RememberedFactsWriter,
+    ) => Promise<readonly RememberedFact[]>,
   ) => Promise<readonly RememberedFact[]>;
   /** Carries an app act only a renderer can perform, and answers what became of it. */
   performAppAct: (action: BrainAppActRequest["action"]) => Promise<WireRecord>;
@@ -165,34 +168,21 @@ export function createBrainActPerformer(
     return carryAppAction(action);
   };
 
-  const mutateFacts = (
-    work: (current: readonly RememberedFact[]) => Promise<readonly RememberedFact[]>,
-  ): Promise<readonly RememberedFact[]> =>
-    dependencies.mutateRememberedFacts
-      ? dependencies.mutateRememberedFacts(work)
-      : work(dependencies.rememberedFacts());
-
   const carryAppAction = (action: CarriedAppAction): Promise<WireRecord> =>
     dispatchByKind(action, {
       // The two memory writes are the main process's own: the list lives
       // here, and the store's answer is the whole report.
       [APP_TOOL_KIND.REMEMBER]: async (act) => {
-        const facts = await mutateFacts((current) =>
-          saveRememberedFact(
-            current,
-            act.words,
-            act.replaces,
-            randomUUID(),
-            dependencies.writeRememberedFacts,
-          ),
+        const facts = await dependencies.mutateRememberedFacts((current, write) =>
+          saveRememberedFact(current, act.words, act.replaces, randomUUID(), write),
         );
         return facts.some((fact) => fact.words === act.words)
           ? { status: ACT_RESULT_STATUS.ACCEPTED }
           : rejection(REFUSAL.MEMORY_NOT_SAVED);
       },
       [APP_TOOL_KIND.FORGET]: async (act) => {
-        const facts = await mutateFacts((current) =>
-          forgetRememberedFact(current, act.id, dependencies.writeRememberedFacts),
+        const facts = await dependencies.mutateRememberedFacts((current, write) =>
+          forgetRememberedFact(current, act.id, write),
         );
         return facts.some((fact) => fact.id === act.id)
           ? rejection(REFUSAL.MEMORY_NOT_REMOVED)

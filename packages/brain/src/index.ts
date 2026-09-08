@@ -15,7 +15,6 @@ export {
   COMPACTION_POLICY,
   type CompactionAssessment,
   type CompactionNeed,
-  type CompactionOutcome,
   compactContext,
   estimateTokens,
   LOCAL_SUMMARY_INSTRUCTIONS,

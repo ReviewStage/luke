@@ -1,12 +1,14 @@
 import {
   COMPACTION_SOURCE,
-  type CompactionSource,
+  type CompactionOptions,
   type ContextEngine,
   MODEL_RESPONSE_OUTCOME,
   type ModelAdapter,
   type ModelCapabilities,
+  type RuntimeCompaction,
 } from "@sidecar/runtime-contracts";
 import type { WireRecord } from "@sidecar/wire";
+import { ESTIMATED_CHARS_PER_TOKEN } from "./context-engine.js";
 
 /**
  * The one component that decides when the context folds and how. The
@@ -38,8 +40,6 @@ export const COMPACTION_POLICY = {
   DEFAULT_CONTEXT_WINDOW_TOKENS: 400_000,
   /** The share of a transport's byte bound past which the context is prepared before the next request. */
   TRANSPORT_PREPARE_RATIO: 0.75,
-  /** The estimate used where no count is available; OpenClaw's own approximation. */
-  CHARS_PER_TOKEN: 4,
   /** The most output tokens a local summary may run to. */
   SUMMARY_OUTPUT_TOKENS: 4_000,
 } as const;
@@ -57,7 +57,7 @@ export function shouldCompact(contextTokens: number, contextWindowTokens: number
 }
 
 export function estimateTokens(items: readonly WireRecord[]): number {
-  return Math.ceil(JSON.stringify(items).length / COMPACTION_POLICY.CHARS_PER_TOKEN);
+  return Math.ceil(JSON.stringify(items).length / ESTIMATED_CHARS_PER_TOKEN);
 }
 
 /** How many bytes a request of these items under this prompt weighs, as the transport measures it. */
@@ -110,13 +110,7 @@ export function assessCompaction(
   return { need, contextTokens, contextWindowTokens, bytes };
 }
 
-export type CompactionOutcome =
-  | { compacted: true; source: CompactionSource; dropped: number }
-  | { compacted: false; reason: string };
-
-export interface CompactionRequest {
-  prompt: string;
-  signal: AbortSignal;
+export interface CompactionRequest extends CompactionOptions {
   capabilities: ModelCapabilities | undefined;
 }
 
@@ -145,7 +139,7 @@ export async function compactContext(
   context: ContextEngine,
   model: ModelAdapter,
   request: CompactionRequest,
-): Promise<CompactionOutcome> {
+): Promise<RuntimeCompaction> {
   const retained = context.checkpoint().items;
   if (retained.length === 0) return { compacted: false, reason: "nothing to compact" };
   if (request.capabilities?.compacts) {

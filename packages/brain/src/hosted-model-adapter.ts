@@ -31,6 +31,7 @@ import {
   type WireRecord,
   wireRecord,
 } from "@sidecar/wire";
+import { COMPACTION_POLICY } from "./compaction.js";
 import {
   BRAIN_REQUEST_TIMEOUT_MS,
   type Failure,
@@ -44,7 +45,6 @@ import {
   requestSignal,
   withoutTrailingSlash,
 } from "./model-adapter-shared.js";
-import { BRAIN_OPENAI_DEFAULTS } from "./openai-model-adapter.js";
 import { responsesCompactedWindow, responsesModelAnswer } from "./responses-api.js";
 import {
   type Admission,
@@ -135,7 +135,7 @@ class HostedTransport implements ResponsesTransport<HostedBrainCapabilities> {
       compacts: capabilities.operations.includes(RESPONSES_OPERATION.COMPACT),
       maximumOutputTokens: capabilities.bounds.maximumOutputTokens,
       tools: capabilities.tools,
-      contextWindowTokens: BRAIN_OPENAI_DEFAULTS.CONTEXT_WINDOW_TOKENS,
+      contextWindowTokens: COMPACTION_POLICY.DEFAULT_CONTEXT_WINDOW_TOKENS,
       maximumRequestBytes: capabilities.bounds.requestBytes,
     };
   }

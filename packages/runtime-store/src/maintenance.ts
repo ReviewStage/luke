@@ -58,7 +58,8 @@ export interface HistoryMaintenanceConfig {
   readonly archiveExpiryMs: number | null;
 }
 
-const DISK_BUDGET_HIGH_WATER_RATIO = 0.8;
+/** Where cleanup stops once the budget is crossed, as a share of the budget, when no high-water mark is named. */
+export const DISK_BUDGET_HIGH_WATER_RATIO = 0.8;
 
 export const HISTORY_MAINTENANCE_DEFAULTS: HistoryMaintenanceConfig = {
   mode: MAINTENANCE_MODE.ENFORCE,

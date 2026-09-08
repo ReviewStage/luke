@@ -88,10 +88,11 @@ function performer(overrides: Partial<BrainActPerformerDependencies> = {}) {
     trackedIssues: () => undefined,
     appGuide: () => EMPTY_APP_GUIDE,
     rememberedFacts: () => facts,
-    writeRememberedFacts: (next) => {
-      facts = next;
-      return true;
-    },
+    mutateRememberedFacts: (work) =>
+      work(facts, (next) => {
+        facts = next;
+        return true;
+      }),
     performAppAct: async (action) => {
       appActs.push(action);
       return { status: ACT_RESULT_STATUS.ACCEPTED };
@@ -194,11 +195,10 @@ test("two conversations remembering at once both land when the host serializes t
   };
   const { acts } = performer({
     rememberedFacts: () => facts,
-    writeRememberedFacts: slowWrite,
     mutateRememberedFacts: (work) => {
       const mutation = mutations.then(
-        () => work(facts),
-        () => work(facts),
+        () => work(facts, slowWrite),
+        () => work(facts, slowWrite),
       );
       mutations = mutation.catch(() => undefined);
       return mutation;

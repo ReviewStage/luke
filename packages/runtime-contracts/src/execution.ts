@@ -1,4 +1,5 @@
 import { isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import type { CompactionSource } from "./storage.js";
 
 /**
  * The seams along which Luke's reasoning is replaceable. A host owns the
@@ -555,10 +556,16 @@ export interface AgentRuntimeDescriptor {
  * tools and nothing outside it: no scheduling, no persistence, no policy
  * about what a tool may do.
  */
-/** Why a compaction did not happen, or that it did and what it folded. */
+/** That a compaction happened, by which way and folding how much, or why it did not. */
 export type RuntimeCompaction =
-  | { readonly compacted: true; readonly dropped: number }
+  | { readonly compacted: true; readonly source: CompactionSource; readonly dropped: number }
   | { readonly compacted: false; readonly reason: string };
+
+/** What a compaction runs under: the prompt the next request will carry, and the signal that ends the wait. */
+export interface CompactionOptions {
+  readonly prompt: string;
+  readonly signal: AbortSignal;
+}
 
 export interface AgentRuntime {
   readonly descriptor: AgentRuntimeDescriptor;
@@ -571,10 +578,7 @@ export interface AgentRuntime {
    * so the next request fits. A failure changes nothing about the context;
    * the host decides what a failure means for the turn that needed it.
    */
-  compact(
-    context: ContextEngine,
-    options: Pick<ModelRequestOptions, "prompt" | "signal">,
-  ): Promise<RuntimeCompaction>;
+  compact(context: ContextEngine, options: CompactionOptions): Promise<RuntimeCompaction>;
   /** A context engine of this runtime's format, bootstrapped from the checkpoint when one is compatible. */
   openContext(
     checkpoint: RuntimeCheckpoint | undefined,

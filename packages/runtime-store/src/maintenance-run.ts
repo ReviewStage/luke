@@ -25,6 +25,7 @@ import { AGENT_DATABASE_FILE, type RuntimeDatabase } from "./database.js";
 import {
   capVictims,
   countUnarchived,
+  DISK_BUDGET_HIGH_WATER_RATIO,
   diskBudgetVictims,
   HISTORY_MAINTENANCE_DEFAULTS,
   type HistoryMaintenanceConfig,
@@ -94,7 +95,10 @@ function resolvedConfig(
     merged.highWaterBytes = null;
   }
   if (merged.maximumDiskBytes !== null) {
-    const fallback = Math.max(1, Math.floor(merged.maximumDiskBytes * 0.8));
+    const fallback = Math.max(
+      1,
+      Math.floor(merged.maximumDiskBytes * DISK_BUDGET_HIGH_WATER_RATIO),
+    );
     merged.highWaterBytes =
       merged.highWaterBytes === null || merged.highWaterBytes <= 0
         ? fallback
