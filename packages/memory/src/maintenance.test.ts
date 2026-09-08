@@ -239,6 +239,28 @@ test("a model plan is parsed against the candidates, validated against the prior
   );
   assert.ok(plan);
   assert.equal(plan.operations[0]?.resultEntry, promotedEntry(first));
+  const operations = JSON.stringify({
+    operations: [{ candidateKey: durable.key, action: "added", priorEntries: [] }],
+  });
+  for (const shape of [
+    operations,
+    `\`\`\`\n${operations}\n\`\`\``,
+    `  \`\`\`json ${operations} \`\`\`  `,
+  ]) {
+    assert.equal(
+      parseConsolidationPlan(shape, promotions)?.operations.length,
+      1,
+      shape.slice(0, 12),
+    );
+  }
+  // An unterminated fence over a long whitespace run is answered as unreadable at once, never by backtracking over it.
+  const startedAt = performance.now();
+  assert.equal(parseConsolidationPlan(`\`\`\`json${" ".repeat(20_000)}x`, promotions), undefined);
+  assert.equal(
+    parseConsolidationPlan(`\`\`\`${"\n".repeat(10_000)}${"a".repeat(10_000)}`, promotions),
+    undefined,
+  );
+  assert.ok(performance.now() - startedAt < 500, "a malformed fence is refused in linear time");
   assert.equal(validateConsolidationPlan({ previous: existing, plan, promotions }), undefined);
   const applied = applyConsolidationPlan({ existingMemory: existing, plan, day: "2026-09-08" });
   assert.ok(applied);

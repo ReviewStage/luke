@@ -600,10 +600,21 @@ export function consolidationPrompt(
   });
 }
 
+const FENCE = "```";
+const JSON_FENCE = "```json";
+
+/**
+ * The text inside a Markdown code fence, or the text itself when it is not
+ * fenced. Sliced by prefix and suffix rather than matched, because a regex
+ * over an unterminated fence backtracks across every whitespace run and a
+ * few thousand characters of malformed model output stalls the main thread.
+ */
 function stripFences(raw: string): string {
   const trimmed = raw.trim();
-  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/u.exec(trimmed);
-  return fenced?.[1] ?? trimmed;
+  if (trimmed.length < FENCE.length * 2) return trimmed;
+  if (!trimmed.startsWith(FENCE) || !trimmed.endsWith(FENCE)) return trimmed;
+  const opening = trimmed.startsWith(JSON_FENCE) ? JSON_FENCE.length : FENCE.length;
+  return trimmed.slice(opening, trimmed.length - FENCE.length).trim();
 }
 
 /** The model's operations, read against the candidates; anything unreadable, unknown, or missing answers nothing. */
