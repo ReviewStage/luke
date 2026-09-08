@@ -426,6 +426,51 @@ test("recall: trusted hit answers without a subrun, intent escalates, cache hold
   assert.equal(recovered.status, RECALL_STATUS.OK);
 });
 
+test("recall: a run outlived by an invalidation settles only its own registration, so its successor stays shared", async () => {
+  const pending: Array<{ started: Promise<void>; finish: (reply: string) => void }> = [];
+  const recall = new ConversationRecall({
+    trustedMemory: async () => ({ strongHit: false }),
+    subrun: () =>
+      new Promise<string | undefined>((resolve) => {
+        pending.push({ started: Promise.resolve(), finish: resolve });
+      }),
+  });
+  const ask = {
+    sessionKey: MAIN_SESSION_KEY,
+    agentId: "main",
+    query: "what did we decide about deploys?",
+    recentTurns: [],
+  };
+  // Every step between a recall's entry and its subrun call is a microtask,
+  // so a few macrotask turns settle whatever a recall was going to start.
+  const settle = async () => {
+    for (let i = 0; i < 4; i += 1) await new Promise<void>((resolve) => setImmediate(resolve));
+  };
+  const subrunStarted = async (count: number) => {
+    await settle();
+    assert.equal(pending.length, count);
+  };
+
+  const a = recall.recall(ask);
+  await subrunStarted(1);
+  recall.invalidate();
+  const b = recall.recall(ask);
+  await subrunStarted(2);
+  pending[0]?.finish("A's answer.");
+  assert.equal((await a).summary, "A's answer.");
+
+  const c = recall.recall(ask);
+  await settle();
+  assert.equal(pending.length, 2, "C shares B's run rather than opening a third");
+  pending[1]?.finish("B's answer.");
+  assert.equal((await b).summary, "B's answer.");
+  assert.equal((await c).summary, "B's answer.");
+  const cached = await recall.recall(ask);
+  assert.equal(cached.cached, true, "B ran under the current epoch, so its answer is cached");
+  assert.equal(cached.summary, "B's answer.");
+  assert.equal(pending.length, 2);
+});
+
 test("a subrun that returns nothing because the timeout cut it counts as a timeout, not as nothing found", async () => {
   let lookups = 0;
   const recall = new ConversationRecall({
