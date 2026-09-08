@@ -109,6 +109,33 @@ final class VoiceConversationThreadTests: XCTestCase {
         XCTAssertEqual(thread.messages.map(\.words), ["After"])
     }
 
+    func testEveryLineIsStampedWhenFirstRecorded() {
+        var clock = Date(timeIntervalSince1970: 1_000)
+        let thread = VoiceConversationThread(now: { clock })
+        thread.beginTurn()
+        thread.recordCaption("Working")
+        clock = Date(timeIntervalSince1970: 1_005)
+        thread.recordCaption("Working on it")
+        clock = Date(timeIntervalSince1970: 1_010)
+        thread.recordSpokenAsk("How are the tests?")
+        clock = Date(timeIntervalSince1970: 1_020)
+        thread.recordTypedAsk("Open the Codex session")
+        XCTAssertEqual(
+            thread.messages.map(\.recordedAt.timeIntervalSince1970),
+            [1_010, 1_000, 1_020]
+        )
+    }
+
+    func testAFullerTranscriptionKeepsTheAsksFirstStamp() {
+        var clock = Date(timeIntervalSince1970: 1_000)
+        let thread = VoiceConversationThread(now: { clock })
+        thread.beginTurn()
+        thread.recordSpokenAsk("How are")
+        clock = Date(timeIntervalSince1970: 1_003)
+        thread.recordSpokenAsk("How are the tests?")
+        XCTAssertEqual(thread.messages.map(\.recordedAt.timeIntervalSince1970), [1_000])
+    }
+
     func testRetentionDropsTheOldestLines() {
         let thread = VoiceConversationThread()
         for index in 0 ..< (VoiceConversationThread.maximumRetainedMessages + 5) {

@@ -273,6 +273,10 @@ struct VoiceView: View {
     // Guards the double-send window while an ask is reopening the call; the
     // send button alone cannot, because a disabled state lands a render late.
     @State private var typedAskInFlight = false
+    // The sideways pull that uncovers the thread's stamps, and whether the
+    // drag under way is the pull's or the scroll's, decided at its first move.
+    @State private var timePull: CGFloat = 0
+    @State private var pullClaimed: Bool?
     @FocusState private var composing: Bool
     // The keyboard button and composer are the two shapes of one control.
     @Namespace private var glassNamespace
@@ -429,15 +433,8 @@ struct VoiceView: View {
             ScrollView {
                 VStack(spacing: 14) {
                     ForEach(conversation.messages) { message in
-                        Group {
-                            switch message.speaker {
-                            case .developer:
-                                DeveloperMessageBubble(words: message.words)
-                            case .luke:
-                                AgentMessageBubble(words: message.words)
-                            }
-                        }
-                        .id(message.id)
+                        StampedMessageRow(message: message, pull: timePull)
+                            .id(message.id)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .top)
@@ -449,6 +446,7 @@ struct VoiceView: View {
                 .padding(.bottom, 200)
             }
             .scrollDismissesKeyboard(.interactively)
+            .simultaneousGesture(timePullGesture)
             .onChange(of: conversation.messages) {
                 guard let last = conversation.messages.last else { return }
                 withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
@@ -472,6 +470,32 @@ struct VoiceView: View {
         }
         .frame(maxHeight: .infinity)
         .animation(.easeInOut(duration: 0.15), value: conversation.messages.isEmpty)
+    }
+
+    /// The pull rides beside the scroll rather than replacing it. A drag that
+    /// starts mostly sideways is the pull's for its whole length, and one that
+    /// starts mostly upright is the scroll's, decided once at the first
+    /// movement so a finger drifting mid-pull never hands the column back.
+    /// The lift is what puts the column away, on a spring, the way iMessage's
+    /// snaps back the moment the fingers leave.
+    private var timePullGesture: some Gesture {
+        DragGesture(minimumDistance: 8)
+            .onChanged { value in
+                let claimed =
+                    pullClaimed
+                    ?? ConversationTimePull.claimsDrag(
+                        width: value.translation.width, height: value.translation.height
+                    )
+                pullClaimed = claimed
+                guard claimed else { return }
+                timePull = ConversationTimePull.distance(
+                    dragged: value.translation.width, reveal: StampedMessageRow.reveal
+                )
+            }
+            .onEnded { _ in
+                pullClaimed = nil
+                withAnimation(.spring(duration: 0.35)) { timePull = 0 }
+            }
     }
 
     private var bottomControls: some View {
@@ -774,6 +798,50 @@ struct VoiceView: View {
         case .listening: return "Listening…"
         case .thinking: return "Thinking…"
         case .speaking: return "Speaking…"
+        }
+    }
+}
+
+// MARK: - Timestamps
+
+/// One line of the thread with its stamp in the column past the screen's
+/// trailing edge, which the pull brings in the way iMessage uncovers a
+/// message's time. The stamp is the row's, not the bubble's, so sent and
+/// received stand in one column. A sent bubble rides the pull, moving left
+/// to make the room the way a sent bubble does in iMessage; Luke's words
+/// stand still, because the room the column takes on their side is room the
+/// row already had spare, and nothing of his is ever pushed off the screen.
+private struct StampedMessageRow: View {
+    let message: VoiceConversationMessage
+    let pull: CGFloat
+
+    /// Room for the widest stamp a twelve-hour clock draws.
+    static let timeColumn: CGFloat = 56
+    /// How far the column travels to stand fully in view: its own width and
+    /// the thread's trailing inset it rests behind.
+    static let reveal: CGFloat = timeColumn + 16
+    /// What Luke's bubble leaves free beyond its own margin, so a long reply
+    /// and the stamp uncovered beside it never share a pixel.
+    private static let receivedRoom: CGFloat = 12
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            switch message.speaker {
+            case .developer:
+                DeveloperMessageBubble(words: message.words)
+                    .offset(x: -pull)
+            case .luke:
+                AgentMessageBubble(words: message.words)
+                    .padding(.trailing, Self.receivedRoom)
+            }
+            Text(message.recordedAt, format: .dateTime.hour().minute())
+                .font(.caption2)
+                .monospacedDigit()
+                .foregroundStyle(Color.inkTertiary)
+                .lineLimit(1)
+                .frame(width: Self.timeColumn, alignment: .trailing)
+                .padding(.trailing, 4)
+                .offset(x: Self.reveal - pull)
         }
     }
 }
