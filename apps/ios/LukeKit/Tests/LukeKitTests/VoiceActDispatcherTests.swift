@@ -26,6 +26,7 @@ final class VoiceActDispatcherTests: XCTestCase {
         mintedTools: [String]?,
         sessions: [RosterSession] = [],
         projects: ProjectsAnswer? = nil,
+        defaults: WorkspaceCreationDefaults? = nil,
         http: StubHTTPClient = StubHTTPClient { _ in throw URLError(.notConnectedToInternet) },
         accessToken: @escaping () async throws -> String = { "token" },
         count: @escaping (ProductSessionAct, String) -> Void = { _, _ in },
@@ -37,9 +38,10 @@ final class VoiceActDispatcherTests: XCTestCase {
             mintedTools: mintedTools,
             sessions: sessions,
             projects: projects,
-            defaults: WorkspaceCreationDefaults(
-                store: UserDefaults(suiteName: "VoiceActDispatcherTests.\(UUID().uuidString)")!
-            ),
+            defaults: defaults
+                ?? WorkspaceCreationDefaults(
+                    store: UserDefaults(suiteName: "VoiceActDispatcherTests.\(UUID().uuidString)")!
+                ),
             actClient: ActClient(baseURL: base, http: http),
             accessToken: accessToken,
             count: count,
@@ -227,6 +229,63 @@ final class VoiceActDispatcherTests: XCTestCase {
         XCTAssertEqual(
             output,
             #"{"reason":"The projects a workspace can be created in have not loaded yet.","result":"rejected"}"#
+        )
+    }
+
+    func testAcceptedCreationPersistsTheChosenAgentModelAndEffort() async {
+        let suite = "VoiceActDispatcherTests.\(UUID().uuidString)"
+        let store = UserDefaults(suiteName: suite)!
+        defer { store.removePersistentDomain(forName: suite) }
+        let defaults = WorkspaceCreationDefaults(store: store)
+        let projects = ProjectsAnswer(
+            projects: [
+                RosterProject(
+                    providerId: "conductor",
+                    providerProjectId: "p1",
+                    repository: "owner/repo",
+                    taskSupport: .optional
+                )
+            ],
+            agentModels: [
+                WorkspaceAgentOption(
+                    providerId: "conductor",
+                    agent: "claude",
+                    models: [WorkspaceAgentModelChoice(id: "fable-5", label: "Fable 5")],
+                    efforts: ["low", "high"]
+                )
+            ]
+        )
+        let http = StubHTTPClient { request in
+            XCTAssertEqual(request.url?.path, "/api/acts/workspace")
+            let body = try JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: String]
+            XCTAssertEqual(
+                body,
+                [
+                    "providerId": "conductor",
+                    "providerProjectId": "p1",
+                    "agent": "claude",
+                    "model": "fable-5",
+                    "effort": "high",
+                ]
+            )
+            return (
+                jsonData(["result": "accepted", "providerSessionId": "created-1"]),
+                makeResponse(url: request.url!, status: 200)
+            )
+        }
+
+        let output = await dispatchVoiceToolCall(
+            name: VoiceToolName.createWorkspace.rawValue,
+            arguments: ["project_id": "p1", "agent": "claude", "model": "fable-5", "effort": "high"],
+            context: context(mintedTools: everyTool, projects: projects, defaults: defaults, http: http)
+        )
+
+        XCTAssertEqual(output, #"{"result":"accepted"}"#)
+        XCTAssertEqual(defaults.lastProviderId, "conductor")
+        XCTAssertEqual(defaults.lastProjectId(for: "conductor"), "p1")
+        XCTAssertEqual(
+            defaults.agentDefault(for: "conductor"),
+            WorkspaceAgentDefault(agent: "claude", model: "fable-5", effort: "high")
         )
     }
 }
