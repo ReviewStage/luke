@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { nonNegativeNumber, positiveInteger, resolveOptions, wholeText } from "./json.js";
+import {
+  isRecord,
+  isWireBoolean,
+  isWireNumber,
+  isWireString,
+  nonNegativeNumber,
+  positiveInteger,
+  resolveOptions,
+  text,
+  type UnparsedWireValue,
+  wholeText,
+} from "./json.js";
 
 test("positiveInteger keeps the default for missing, infinite, or non-positive values", () => {
   assert.equal(positiveInteger(undefined, 4), 4);
@@ -52,4 +63,19 @@ test("wholeText keeps a first line's indent and drops blank lines at either end"
 test("wholeText drops a value with no words at all", () => {
   assert.equal(wholeText(undefined), undefined);
   assert.equal(wholeText("  \n\n \t"), undefined);
+});
+
+/** A wrapper object, as structured clone can deliver one where a primitive is expected. */
+function boxed(value: string | number | boolean): UnparsedWireValue {
+  // SAFETY: the wrapper object is the value under test, and an assertion is the only way to
+  // put one where the boundary declares a primitive.
+  return Object(value) as UnparsedWireValue;
+}
+
+test("a boxed primitive is not the primitive it prints as", () => {
+  assert.equal(isWireString(boxed("x")), false);
+  assert.equal(isWireNumber(boxed(1)), false);
+  assert.equal(isWireBoolean(boxed(true)), false);
+  assert.equal(isRecord(boxed("x")), false);
+  assert.equal(text(boxed("x")), undefined);
 });
