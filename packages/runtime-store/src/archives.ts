@@ -29,6 +29,7 @@ import {
   raiseHistoryCutoff,
   removeConversationRow,
   removeConversationRows,
+  removeConversationRowsAtOrBefore,
   touchConversation,
 } from "./conversations-table.js";
 import { nullable, type RuntimeDatabase } from "./database.js";
@@ -205,6 +206,19 @@ export interface DeletionOptions {
   archiveId?: string;
   /** Whether the conversation row itself goes with its history; the directory keeps it otherwise. */
   removeConversation?: boolean;
+  /**
+   * The lifetime that stands at the deletion's instant and is not the
+   * deletion's to remove: the empty successor the brain's fence began at the
+   * same instant. Unnamed, every lifetime goes.
+   */
+  keepSessionId?: string;
+  /**
+   * The conversation's cutoff as it stood before the press, when the caller
+   * fenced the brain first: that fence raised the durable cutoff to the
+   * deletion's own instant, so reading it here would make a restore hide the
+   * very lines it brings back. Unnamed, the cutoff as it stands is the one.
+   */
+  cutoffBefore?: { value: number | undefined };
   durability?: PublicationDurability;
 }
 
@@ -230,6 +244,8 @@ export function deleteConversationHistory(
   {
     archiveId = randomUUID(),
     removeConversation = false,
+    keepSessionId,
+    cutoffBefore,
     durability = FILE_SYSTEM_DURABILITY,
   }: DeletionOptions = {},
 ): DeletionOutcome | undefined {
@@ -237,7 +253,7 @@ export function deleteConversationHistory(
     const record = conversationRecord(database, sessionKey);
     if (!record) return undefined;
     const standing = standingGeneration(database, sessionKey);
-    const previousCutoff = historyCutoff(database, sessionKey);
+    const previousCutoff = cutoffBefore ? cutoffBefore.value : historyCutoff(database, sessionKey);
     const header: ArchiveHeader = {
       sessionKey,
       kind: record.kind,
@@ -250,13 +266,19 @@ export function deleteConversationHistory(
         : undefined),
       ...(previousCutoff !== undefined ? { previousCutoff } : undefined),
     };
+    // Only what stood at or before the instant is archived and removed: a
+    // line accepted after the press, while the deletion waited on the disk,
+    // is the conversation's next line and stays.
     // SAFETY: the columns selected are the ones the row type names.
     const historyRows = database
       .prepare(
-        "SELECT payload, session_id FROM history_events WHERE session_key = ? ORDER BY sequence",
+        `SELECT payload, session_id FROM history_events
+         WHERE session_key = ? AND recorded_at <= ? ORDER BY sequence`,
       )
-      .all(sessionKey) as { payload: string; session_id: string | null }[];
-    const transcript = listTranscript(database, sessionKey, { limit: Number.MAX_SAFE_INTEGER });
+      .all(sessionKey, now) as { payload: string; session_id: string | null }[];
+    const transcript = listTranscript(database, sessionKey, {
+      limit: Number.MAX_SAFE_INTEGER,
+    }).filter((stored) => stored.event.recordedAt <= now);
     const lines: string[] = [JSON.stringify({ type: ARCHIVE_LINE.HEADER, ...header })];
     for (const row of historyRows) {
       lines.push(
@@ -303,9 +325,11 @@ export function deleteConversationHistory(
         encoded.bytes,
       );
     raiseHistoryCutoff(database, sessionKey, now);
-    removeConversationRows(database, sessionKey);
     if (removeConversation && record.kind !== CONVERSATION_KIND.MAIN) {
+      removeConversationRows(database, sessionKey);
       removeConversationRow(database, sessionKey);
+    } else {
+      removeConversationRowsAtOrBefore(database, sessionKey, now, keepSessionId);
     }
     return archiveId;
   });

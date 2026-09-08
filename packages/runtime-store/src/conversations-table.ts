@@ -222,6 +222,33 @@ export function removeConversationRows(database: RuntimeDatabase, sessionKey: Se
   database.prepare("DELETE FROM conversation_sessions WHERE session_key = ?").run(sessionKey);
 }
 
+/**
+ * Removes what stood at or before `instant`: the lines and transcript
+ * recorded by then, the boundaries at or before it, and every lifetime but
+ * the one named, which is the successor the fence began at the same instant.
+ * A line accepted after the instant — a voice line landing while the
+ * deletion waited on the disk — is not the deletion's to take.
+ */
+export function removeConversationRowsAtOrBefore(
+  database: RuntimeDatabase,
+  sessionKey: SessionKey,
+  instant: number,
+  keepSessionId: string | undefined,
+): void {
+  database
+    .prepare("DELETE FROM history_events WHERE session_key = ? AND recorded_at <= ?")
+    .run(sessionKey, instant);
+  database
+    .prepare("DELETE FROM compaction_boundaries WHERE session_key = ? AND created_at <= ?")
+    .run(sessionKey, instant);
+  database
+    .prepare("DELETE FROM transcript_events WHERE session_key = ? AND recorded_at <= ?")
+    .run(sessionKey, instant);
+  database
+    .prepare("DELETE FROM conversation_sessions WHERE session_key = ? AND session_id IS NOT ?")
+    .run(sessionKey, keepSessionId ?? null);
+}
+
 /** Removes the conversation row itself, after the rows under it are gone. */
 export function removeConversationRow(database: RuntimeDatabase, sessionKey: SessionKey): void {
   database.prepare("DELETE FROM conversations WHERE session_key = ?").run(sessionKey);

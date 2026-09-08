@@ -140,7 +140,7 @@ import {
 import { VOICE_SOURCE_COUNTED_AS } from "#shared/product-vocabulary";
 import type { BrainRequestSnapshot } from "#shared/wire/brain";
 import { SPEECH_OUTCOME, type SpeechOutcome } from "#shared/wire/speech";
-import { IDLE_VOICE_VIEW, VOICE_COMMAND, type VoiceView } from "#shared/wire/voice-view";
+import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/wire/voice-view";
 import { buildCarriesDeveloperIdSigning, resolveAppName } from "./app-identity";
 import { AppleCalendarReader } from "./apple-calendar";
 import {
@@ -1674,10 +1674,6 @@ const brainWiring = wireBrain({
 const conversationControls = conversationOperations({
   store: runtimeStoreWiring,
   brain: brainWiring,
-  retireVoiceTurns: () =>
-    voiceWindow
-      .current()
-      ?.webContents.send(channels.onVoiceCommand, { command: VOICE_COMMAND.CLEAR_CONVERSATION }),
   now: Date.now,
   report: (message) => process.stderr.write(`${message}\n`),
 });
