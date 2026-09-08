@@ -192,3 +192,21 @@ test("the embedding cache is pruned at the pinned bound", () => {
   assert.equal(memoryIndexStatus(database).cachedEmbeddings, 6);
   assert.ok(MEMORY_SEARCH_DEFAULTS.EMBEDDING_CACHE_MAXIMUM_ENTRIES > 6);
 });
+
+test("two agents are two databases over two workspaces: neither sees the other's notebook or index", () => {
+  const first = openTestDatabase();
+  const second = openTestDatabase();
+  const firstRoot = workspace();
+  const secondRoot = workspace();
+  rememberNotebookEntry(first, firstRoot, { id: "a", words: "agent one drinks espresso" }, NOW);
+  sync(first, firstRoot);
+  sync(second, secondRoot);
+  assert.equal(searchMemoryIndex(first, { query: "espresso", now: NOW }).results.length, 1);
+  assert.equal(searchMemoryIndex(second, { query: "espresso", now: NOW }).results.length, 0);
+  assert.equal(
+    readMemoryLines(secondRoot, "USER.md"),
+    undefined,
+    "the second workspace holds no USER.md",
+  );
+  assert.equal(memoryIndexStatus(second).sources, 2, "only its own MEMORY.md and note");
+});
