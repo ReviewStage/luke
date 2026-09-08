@@ -24,6 +24,7 @@
 import "../../../packages/credentials/src/credential-providers.js";
 import "../../../packages/guide/src/index.js";
 import "../../../packages/issues/src/index.js";
+import "../../../packages/runtime/src/index.js";
 
 export * from "../../../packages/acts/src/index.js";
 export * from "../../../packages/analytics/src/index.js";

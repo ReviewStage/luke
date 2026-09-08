@@ -5,8 +5,6 @@ import {
   BRAIN_RATE_LIMIT_COOLDOWN_MS,
   BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS,
   BRAIN_TOOL,
-  BRAIN_TURN_AUTHORITY,
-  brainToolDefinitions,
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_OPERATION,
   HOSTED_BRAIN_OPTION_BOUNDS,
@@ -14,6 +12,7 @@ import {
   HOSTED_SERVICE_PATH,
   hostedBrainBounds,
   hostedBrainCapabilitiesFromWire,
+  hostedBrainToolCatalog,
   isRecord,
   isWireString,
   maximumHostedBrainRequestBytes,
@@ -121,7 +120,7 @@ test("capabilities name the contract, the model, the operations, the registered 
   assert.equal(capabilities.model, BRAIN_OPENAI_DEFAULTS.MODEL);
   assert.deepEqual(capabilities.operations, Object.values(HOSTED_BRAIN_OPERATION));
   assert.deepEqual(capabilities.bounds, hostedBrainBounds());
-  for (const tool of brainToolDefinitions(BRAIN_TURN_AUTHORITY.DEVELOPER)) {
+  for (const tool of hostedBrainToolCatalog().values()) {
     assert.ok(capabilities.tools.includes(tool.name), tool.name);
   }
   assert.ok(capabilities.tools.includes(BRAIN_TOOL.ANNOUNCE));
@@ -188,7 +187,7 @@ test("a respond request runs the prepared prompt over the schemas its names sele
     sent.tools.map((tool) => (isRecord(tool) ? tool.name : undefined)),
     [REALTIME_TOOL.SEND_SESSION_MESSAGE, BRAIN_TOOL.READ_TRANSCRIPT],
   );
-  const selected = brainToolDefinitions(BRAIN_TURN_AUTHORITY.DEVELOPER).find(
+  const selected = [...hostedBrainToolCatalog().values()].find(
     (tool) => tool.name === REALTIME_TOOL.SEND_SESSION_MESSAGE,
   );
   assert.deepEqual(sent.tools[0], selected);

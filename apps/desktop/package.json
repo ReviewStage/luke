@@ -54,6 +54,7 @@
     "@sidecar/panel": "workspace:*",
     "@sidecar/providers": "workspace:*",
     "@sidecar/realtime": "workspace:*",
+    "@sidecar/runtime": "workspace:*",
     "@sidecar/runtime-contracts": "workspace:*",
     "@sidecar/runtime-store": "workspace:*",
     "@sidecar/session": "workspace:*",

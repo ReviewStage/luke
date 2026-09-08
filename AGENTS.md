@@ -127,14 +127,27 @@ Trust constraints:
   like Linear's GraphQL), observation sends a read document fixed by the
   build, and nothing enters that document's text but identifiers the same
   pass reported, each validated against the shape its provider documents.
-  Nothing that decides on the user's behalf may reach a write path: the
-  attention evaluator above all, and every turn Luke opens himself (a
-  proactive readout, the reply that voices a tool's outcome) which carries no
-  tools, at the API and again at a runtime gate, so a session summary or a tool
-  output that reads like an instruction can never become an act. A tool call
-  in that conversation runs only in a turn the developer opened themselves, by
-  speaking or by typing; a write is the direct product of a turn the developer
-  opened, never of anything Luke read or was told. The one act not aimed at an
+  Nothing deterministic that decides on the user's behalf may reach a write
+  path: the attention evaluator above all, and the speak-only calls that voice
+  a briefing or a reply, which carry no tools at the API and again at a
+  runtime gate, so a session summary or a tool output that reads like an
+  instruction can never become an act there. What the brain itself may call
+  in any of its turns is decided by the effective tool policy, resolved from
+  the configuration's layers (global, agent, provider, session, and the
+  child restriction where a run is a child's, in OpenClaw's order, deny
+  winning at every layer) over the registered catalog, before the model reads
+  a word: the same policy fixes the schemas the model is offered and the gate
+  every emitted call meets at dispatch, so nothing the model reads can widen
+  either. Who opened a turn — the developer's ask, a provider's hook, the
+  roster look, a hold's release, a heartbeat — is its origin, recorded on the
+  run and in History, and never by itself a permission: a turn Luke opened
+  himself may carry the acts the policy allows, and an act it takes is
+  journaled before its effect exactly as an ask's and narrated as Luke's own
+  judgment, never as something the developer asked. Every act still runs the
+  same validation whoever opened the turn: a cancellation or a revoked run
+  refuses it, a fresh roster read precedes it, its target has to be one the
+  roster holds, and the provider's documented adapter requirements stand. The
+  one act not aimed at an
   existing session keeps the same shape: a new workspace, asked of Luke in
   conversation, lands only in a project its provider reported on the latest
   observation pass and documents a creation endpoint for; the ask names a
@@ -166,8 +179,8 @@ Trust constraints:
   is not a write
   and needs no endpoint: the address its provider reported is handed to the
   operating system, and nothing reaches the provider; an open asked of Luke
-  still runs only in a developer-opened turn, and a session that reported no
-  address is offered nowhere to open. A History line records the acts Luke
+  still runs only under the effective tool policy, and a session that reported
+  no address is offered nowhere to open. A History line records the acts Luke
   carried and the sessions they named, but draws no press of its own: a
   session's address is reached by its row's press or by a validated ask in a
   developer-opened turn, and by nothing else. A workspace Luke just
@@ -223,7 +236,17 @@ Trust constraints:
   next inference, the transcript cursors, the checkpoint — and reaches a
   model only through an `AgentRuntime` over a `ModelAdapter`, a
   `ContextEngine`, and the `ToolExecutor` the host itself supplies. Nothing in
-  the host reads inside a provider's item. The runtime this build ships is
+  the host reads inside a provider's item. Which parts stand is a
+  configuration, not a construction: `packages/runtime` holds registries for
+  agent runtimes, model adapters, context engines, memory providers, tools,
+  skills, and lifecycle services, each refusing a duplicate id and the
+  capability pairings it rules out; the build registers its own parts as
+  built-ins and loads nothing dynamically; an agent's configuration names
+  entries by id and its credential by reference alone (the value stays in the
+  encrypted credential store), resolves against the registries into a frozen
+  snapshot each turn reads whole, and is republished atomically or not at all.
+  One agent is configured today; two isolated agents are two stores over the
+  same registries. The runtime this build ships is
   the tool loop over the OpenAI Responses context engine, on the keyed
   adapter or the hosted one; it ends a run only through completion,
   cancellation, its deadline, a throttle, a provider failure, an answer that
@@ -255,6 +278,36 @@ Trust constraints:
   that fails ends the run as a recoverable failure with the context exactly
   as it was; the optional one runs after a reply is persisted and its
   deliveries have settled, and a new ask cancels it.
+- The prompt a turn runs under is composed, not fixed, and composed in three
+  stages the diagnostics view shares with the live run: the configuration
+  resolved, the runtime facts gathered under it, and a pure builder that turns
+  facts into ordered sections, a stable prefix, a dynamic suffix, and
+  diagnostics. The facts come from the agent's identity workspace under its
+  own directory (`agents/main/workspace`): `AGENTS.md` for operating
+  instructions and tool notes, `SOUL.md` for the persona, `IDENTITY.md`,
+  `USER.md` for stable facts about the developer, `MEMORY.md` for curated
+  memory, `BOOTSTRAP.md` for first-time setup, and `HEARTBEAT.md` for the
+  scheduled review, following OpenClaw `b7528507`'s prompt composition. A
+  missing file is seeded once at launch; an existing one, edited or not, is
+  never rewritten by an upgrade. Each file is cut to 20,000 characters and
+  the set to 60,000, and a cut is named in the prompt and the diagnostics
+  rather than hidden. Ordinary conversation, observation, and heartbeat runs
+  use the full profile; a child run gets the minimal one, `AGENTS.md` alone
+  and none of the parent's persona or notebook files; the none profile is an
+  identity line. Daily notes under `memory/` are never in an ordinary prompt:
+  they are read on demand and primed when a conversation starts fresh.
+  Skills are listed by name, description, and location, and a skill's
+  instructions are loaded on demand from a listed location and no other.
+  Notes found where a run executes are a section of their own, apart from the
+  identity workspace. The brain's workspace tools read and write these files
+  and nothing outside the workspace directory, and are the one place the
+  brain writes a file at all: a provider's transcript or session state is
+  still never written. A workspace call whose arguments are not the strings
+  the tool takes is refused before anything is journaled, never filled in,
+  so a malformed write can empty no file. There is no prompt without the
+  workspace: a host prepares every turn from the resolved configuration and
+  the workspace files, and the runtime package that composes it knows the
+  files' names and bounds but none of their words, which the brain supplies.
 - The hosted tier speaks two brain contracts. The first, kept for installed
   clients, carries the input array and a turn authority and lets the service
   derive everything else. The second (`/api/brain/capabilities`,
@@ -526,8 +579,8 @@ Trust constraints:
   recurring constraint. He skips transient details and uncertain inferences,
   never stores credentials, and stores a sensitive fact only when explicitly
   asked. The write runs the same act gauntlet as every other write — validated
-  in the renderer, validated again in the main process, and armed only by a
-  developer-opened turn — and every mutation of the list is serialized in the
+  in the renderer, validated again in the main process, and admitted by the
+  effective tool policy — and every mutation of the list is serialized in the
   main process, read and replaced under one queue, because two conversations
   may now run turns at once and a read-then-replace across them would drop a
   fact. A changed fact names the entry it replaces so

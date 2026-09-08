@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BRAIN_TURN_AUTHORITY } from "@sidecar/hosted";
 import { MODEL_FAILURE, MODEL_RESPONSE_OUTCOME } from "@sidecar/runtime-contracts";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { BRAIN_RATE_LIMIT_COOLDOWN_MS } from "./model-adapter-shared.js";
 import { OpenAiModelAdapter, openAiModelAdapter } from "./openai-model-adapter.js";
 import { userMessageItem } from "./responses-api.js";
-import { brainToolSchemas } from "./tools.js";
+import { brainToolCatalog, brainToolSchemas, resolveTurnToolPolicy } from "./tools.js";
+import { BRAIN_TURN_TRIGGER } from "./turn.js";
 
 const NOW = 1_800_000_000_000;
 const INPUT = [userMessageItem("[observed events] ...")];
 const OPTIONS = {
   prompt: "instructions",
-  tools: brainToolSchemas(BRAIN_TURN_AUTHORITY.OBSERVATION),
+  tools: brainToolSchemas(resolveTurnToolPolicy(brainToolCatalog(), {}, BRAIN_TURN_TRIGGER.WAKE)),
   maximumOutputTokens: 500,
 };
 

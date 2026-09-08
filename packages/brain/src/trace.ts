@@ -1,4 +1,4 @@
-import type { BrainTurnAuthority } from "@sidecar/hosted";
+import type { RunOrigin } from "@sidecar/runtime-contracts";
 import type { BrainTurnTrigger } from "./turn.js";
 
 export interface BrainToolCallTrace {
@@ -8,16 +8,22 @@ export interface BrainToolCallTrace {
 }
 
 /**
- * One turn as the development trace records it: what woke it, the kinds of
- * item it appended, the input size the API counted, how many transcript
- * characters it read, each tool call by name and outcome, the text and
- * briefings it produced, and how it ran — never a transcript's text.
+ * One turn as the development trace records it: what woke it, who opened
+ * it, the tools the policy offered it by name, the kinds of item it
+ * appended, the input size the API counted, how many transcript characters
+ * it read, each tool call by name and outcome, the text and briefings it
+ * produced, and how it ran — never a transcript's text, and never the
+ * prompt's.
  */
 export interface BrainTurnTraceRecord {
   trigger: BrainTurnTrigger;
-  authority: BrainTurnAuthority;
+  origin: RunOrigin;
   /** Which agent runtime ran the turn, by its id. */
   runtime: string;
+  /** The tools the effective policy offered, by name. */
+  tools: readonly string[];
+  /** How long the prepared prompt was, in characters. */
+  promptChars: number;
   inputTokens?: number;
   transcriptBytes: number;
   toolCalls: readonly BrainToolCallTrace[];

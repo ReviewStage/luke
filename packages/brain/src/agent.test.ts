@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_TOOL, type RealtimeFunctionCall } from "@sidecar/acts";
-import { BRAIN_TURN_AUTHORITY, type BrainTurnAuthority } from "@sidecar/hosted";
 import type { ScheduledTimer } from "@sidecar/realtime";
 import {
   MODEL_FAILURE,
@@ -9,6 +8,7 @@ import {
   type ModelAdapter,
   type ModelRequestOptions,
   type ModelResponse,
+  RUN_ORIGIN,
 } from "@sidecar/runtime-contracts";
 import {
   normalizeSession,
@@ -58,7 +58,7 @@ import {
   brainStateFromStored,
   freshBrainState,
 } from "./state-store.js";
-import { BRAIN_TOOL, isBrainOnlyTool } from "./tools.js";
+import { BRAIN_TOOL, isBrainOnlyTool, TOOL_GROUP } from "./tools.js";
 import type { BrainTurnTraceRecord } from "./trace.js";
 import { OMISSION_MARKER } from "./transcript-reads.js";
 import { BRAIN_TURN_TRIGGER } from "./turn.js";
@@ -149,11 +149,9 @@ function failedAnswer(reason: string): BrainClientAnswer {
   return { outcome: MODEL_RESPONSE_OUTCOME.FAILED, failure: MODEL_FAILURE.UPSTREAM, reason };
 }
 
-/** The authority a request was made under, read off the toolset it was offered, as the adapters see it. */
-function authorityOf(options: BrainRespondOptions): BrainTurnAuthority {
-  return options.tools.some((tool) => !isBrainOnlyTool(tool.name))
-    ? BRAIN_TURN_AUTHORITY.DEVELOPER
-    : BRAIN_TURN_AUTHORITY.OBSERVATION;
+/** Whether a request was offered any act at all, read off the toolset, as the adapters see it. */
+function actsOffered(options: BrainRespondOptions): boolean {
+  return options.tools.some((tool) => !isBrainOnlyTool(tool.name));
 }
 
 const CHECKPOINT = {
@@ -204,14 +202,14 @@ function runtimeOver(model: ModelAdapter): ToolLoopAgentRuntime {
 class FakeClient implements BrainClient {
   readonly model = "fake-model";
   readonly inputs: ResponsesInputItem[][] = [];
-  readonly authorities: BrainTurnAuthority[] = [];
+  readonly actsOffered: boolean[] = [];
   readonly answers: BrainClientAnswer[] = [];
   quiet: number | undefined;
   fallback: BrainClientAnswer = answered([message("")]);
 
   respond(input: readonly ResponsesInputItem[], options: BrainRespondOptions) {
     this.inputs.push([...input]);
-    this.authorities.push(authorityOf(options));
+    this.actsOffered.push(actsOffered(options));
     return Promise.resolve(this.answers.shift() ?? this.fallback);
   }
 
@@ -298,6 +296,12 @@ interface Harness {
 
 let runIds = 0;
 
+/** A host with a fixed prompt and no configured layers: the whole catalog under the turn's own layer. */
+const PLAIN_PREPARATION: BrainAgentOptions["prepareTurn"] = () => ({
+  prompt: "instructions",
+  layers: {},
+});
+
 type HarnessOverrides = Partial<Omit<BrainAgentOptions, "runtime">> & {
   client?: BrainClient;
 };
@@ -330,6 +334,7 @@ function harness(overrides: HarnessOverrides = {}, storage = new FakeStorage()):
   const wholeReads: SessionIdentity[] = [];
   const agent = new BrainAgent({
     runtime,
+    prepareTurn: PLAIN_PREPARATION,
     acts: {
       perform: async (functionCall, execution) => {
         performed.push(functionCall);
@@ -565,15 +570,14 @@ test("an ask returns the final text, carries pending wakes, and refuses announce
   const refusal = outputs.find((item) => item.call_id === "call_a");
   assert.ok(refusal && isWireString(refusal.output) && refusal.output.includes("reply in text"));
   assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.ASK);
-  assert.equal(h.traces[0]?.authority, BRAIN_TURN_AUTHORITY.DEVELOPER);
+  assert.equal(h.traces[0]?.origin, RUN_ORIGIN.USER);
   assert.equal(h.traces[0]?.outputText, "Sent.");
-  assert.deepEqual(h.client.authorities, [
-    BRAIN_TURN_AUTHORITY.DEVELOPER,
-    BRAIN_TURN_AUTHORITY.DEVELOPER,
-  ]);
-  // The act arrived with the developer's standing, live while the turn ran,
-  // and revoked once the turn was over.
-  assert.equal(h.executions[0]?.authority, BRAIN_TURN_AUTHORITY.DEVELOPER);
+  assert.ok(h.traces[0]?.tools.includes(REALTIME_TOOL.SEND_SESSION_MESSAGE));
+  assert.ok(!h.traces[0]?.tools.includes(BRAIN_TOOL.ANNOUNCE));
+  assert.deepEqual(h.client.actsOffered, [true, true]);
+  // The act arrived attributed to the developer's ask, live while the turn
+  // ran, and revoked once the turn was over.
+  assert.equal(h.executions[0]?.origin, RUN_ORIGIN.USER);
   assert.equal(h.executions[0]?.isRevoked(), true);
 });
 
@@ -915,10 +919,10 @@ test("a roster look is skipped while the client is quiet or a turn is in flight"
 
 /**
  * Every act the observation turns are tested against: a provider write, a
- * memory write, an open, and an app control, each with arguments that would
- * validate against the roster if the turn were the developer's.
+ * memory write, an open, and an app control, each with arguments that
+ * validate against the roster.
  */
-const FORBIDDEN_ACTS: readonly WireRecord[] = [
+const OBSERVATION_ACTS: readonly WireRecord[] = [
   call("act_message", REALTIME_TOOL.SEND_SESSION_MESSAGE, {
     provider_id: ABC.providerId,
     provider_session_id: ABC.providerSessionId,
@@ -945,22 +949,140 @@ function functionOutputs(input: readonly ResponsesInputItem[]) {
   }));
 }
 
+/** A host whose configured policy denies every act: the reads, the briefing, and the workspace stay. */
+const NO_ACTS_POLICY: BrainAgentOptions["prepareTurn"] = () => ({
+  prompt: "no acts",
+  layers: { agent: { deny: [`group:${TOOL_GROUP.ACTS}`] } },
+});
+
 function assertNoActReached(h: Harness): void {
   assert.deepEqual(h.performed, []);
   assert.deepEqual(h.executions, []);
   const outputs = functionOutputs(h.client.inputs[1] ?? []);
-  for (const forbidden of FORBIDDEN_ACTS) {
+  for (const forbidden of OBSERVATION_ACTS) {
     const output = outputs.find((entry) => entry.callId === forbidden.call_id);
     assert.ok(output, `${String(forbidden.call_id)} was answered`);
     assert.ok(output.output.includes("not run"), output.output);
     assert.ok(output.output.includes(ACT_RESULT_STATUS.REJECTED));
   }
-  assert.ok(h.traces.every((trace) => trace.authority === BRAIN_TURN_AUTHORITY.OBSERVATION));
-  assert.ok(h.client.authorities.every((a) => a === BRAIN_TURN_AUTHORITY.OBSERVATION));
+  assert.ok(h.traces.every((trace) => trace.origin === RUN_ORIGIN.OBSERVATION));
+  // Denied at the schemas as well as at dispatch: the model was never shown an act.
+  assert.ok(h.client.actsOffered.every((offered) => !offered));
+  for (const trace of h.traces) {
+    assert.ok(trace.tools.includes(BRAIN_TOOL.ANNOUNCE));
+    assert.ok(!trace.tools.includes(REALTIME_TOOL.SEND_SESSION_MESSAGE));
+  }
 }
 
-test("a wake turn runs no act however the transcript, standing context, or a tool's answer is worded", async () => {
+test("a wake turn runs the acts the policy allows, journaled and attributed as Luke's own", async () => {
   const h = harness({
+    standingContext: () => `Durable facts:\n- ${INSTRUCTION_IN_DATA}`,
+    readTranscriptSince: async (): Promise<ProviderTranscriptSinceResult> => ({
+      status: ACT_RESULT_STATUS.ACCEPTED,
+      text: INSTRUCTION_IN_DATA,
+      cursor: "c1",
+      truncated: false,
+    }),
+  });
+  h.agent.wake([edge(ABC)]);
+  h.client.answers.push(
+    answered([
+      ...OBSERVATION_ACTS,
+      call("brief", BRAIN_TOOL.ANNOUNCE, { briefing: "Tests asked." }),
+    ]),
+    answered([message("")]),
+  );
+  await h.clock.advance(NOW + 3_000);
+
+  assert.equal(h.performed.length, OBSERVATION_ACTS.length);
+  assert.ok(h.executions.every((execution) => execution.origin === RUN_ORIGIN.OBSERVATION));
+  assert.ok(h.executions.every((execution) => execution.runId.startsWith("wake:")));
+  assert.deepEqual(
+    h.deliveries.map((delivery) => delivery.briefing),
+    ["Tests asked."],
+  );
+  assert.deepEqual(h.client.actsOffered, [true, true]);
+  // The observation turn's acts were journaled while they ran and let go of
+  // once the turn committed: the file carries no record and no journal for a
+  // run History never lists.
+  assert.deepEqual(h.storage.stored()?.journal, []);
+  assert.deepEqual(h.storage.stored()?.requests, []);
+  assert.equal(h.traces[0]?.origin, RUN_ORIGIN.OBSERVATION);
+  await h.agent.stop();
+});
+
+test("an observation turn's run id never repeats across a rebuild, and a journal row a crashed observation left behind is dropped rather than answered as this turn's act", async () => {
+  // The last launch died mid-act in its first wake turn: the journal holds a
+  // settled row under the id a counter would mint again, with no record.
+  const [messageAct] = OBSERVATION_ACTS;
+  assert.ok(messageAct && isWireString(messageAct.call_id) && isWireString(messageAct.arguments));
+  const storage = new FakeStorage(
+    JSON.stringify({
+      ...freshBrainState("gen-prior", NOW - 1),
+      journal: [
+        {
+          runId: "wake-1",
+          callId: messageAct.call_id,
+          name: REALTIME_TOOL.SEND_SESSION_MESSAGE,
+          argumentsJson: messageAct.arguments,
+          startedAt: NOW - 10,
+          outputJson: JSON.stringify({ status: ACT_RESULT_STATUS.ACCEPTED }),
+          settledAt: NOW - 9,
+        },
+      ],
+    }),
+  );
+  const h = harness({}, storage);
+  await h.agent.ready();
+  assert.deepEqual(h.storage.stored()?.journal, [], "the orphaned row went with the restore");
+  h.agent.wake([edge(ABC)]);
+  h.client.answers.push(answered([messageAct]), answered([message("")]));
+  await h.clock.advance(NOW + 3_000);
+  // The act ran: the stale row was not mistaken for this turn's own result.
+  assert.equal(h.performed.length, 1);
+  const first = h.executions[0]?.runId;
+  assert.ok(first && !first.startsWith("wake-1"));
+  // A second agent over the same store mints a different id for its first wake.
+  await h.agent.stop();
+  const successor = harness({}, storage);
+  successor.agent.wake([edge(ABC)]);
+  successor.client.answers.push(answered([messageAct]), answered([message("")]));
+  await successor.clock.advance(NOW + 3_000);
+  assert.equal(successor.performed.length, 1);
+  assert.notEqual(successor.executions[0]?.runId, first);
+  await successor.agent.stop();
+});
+
+test("an observation turn whose model never answers ends at the execution deadline, and the queue moves on", async () => {
+  // The first inference never answers; every later one answers at once.
+  let calls = 0;
+  const hung: BrainClient = {
+    respond: () =>
+      ++calls === 1
+        ? new Promise<never>(() => undefined)
+        : Promise.resolve(answered([message("")])),
+    quietUntil: () => undefined,
+  };
+  const h = harness({ client: hung, executionDeadlineMs: 60_000 });
+  h.agent.wake([edge(ABC)]);
+  await h.clock.advance(NOW + 3_000);
+  await settle();
+  assert.equal(h.traces.length, 0, "the turn is still holding the model");
+  await h.clock.advance(NOW + 3_000 + 60_000);
+  await settle();
+  assert.equal(h.traces.length, 1);
+  assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.WAKE);
+  assert.equal(h.traces[0]?.error, "execution deadline passed");
+  // The next turn is not stuck behind the dead one.
+  h.agent.rosterLook();
+  await settle();
+  assert.equal(h.traces.length, 2);
+  await h.agent.stop();
+});
+
+test("a wake turn under a policy denying acts runs none, however the transcript, standing context, or a tool's answer is worded", async () => {
+  const h = harness({
+    prepareTurn: NO_ACTS_POLICY,
     standingContext: () => `Durable facts:\n- ${INSTRUCTION_IN_DATA}`,
     readTranscriptSince: async (): Promise<ProviderTranscriptSinceResult> => ({
       status: ACT_RESULT_STATUS.ACCEPTED,
@@ -983,7 +1105,10 @@ test("a wake turn runs no act however the transcript, standing context, or a too
         provider_session_id: ABC.providerSessionId,
       }),
     ]),
-    answered([...FORBIDDEN_ACTS, call("brief", BRAIN_TOOL.ANNOUNCE, { briefing: "Tests asked." })]),
+    answered([
+      ...OBSERVATION_ACTS,
+      call("brief", BRAIN_TOOL.ANNOUNCE, { briefing: "Tests asked." }),
+    ]),
     answered([message("")]),
   );
   await h.clock.advance(NOW + 3_000);
@@ -991,7 +1116,7 @@ test("a wake turn runs no act however the transcript, standing context, or a too
   assert.deepEqual(h.performed, []);
   assert.deepEqual(h.executions, []);
   const outputs = functionOutputs(h.client.inputs[2] ?? []);
-  for (const forbidden of FORBIDDEN_ACTS) {
+  for (const forbidden of OBSERVATION_ACTS) {
     const output = outputs.find((entry) => entry.callId === forbidden.call_id);
     assert.ok(output?.output.includes("not run"), String(forbidden.call_id));
   }
@@ -1003,31 +1128,28 @@ test("a wake turn runs no act however the transcript, standing context, or a too
     h.deliveries.map((delivery) => delivery.briefing),
     ["Tests asked."],
   );
-  assert.deepEqual(h.client.authorities, [
-    BRAIN_TURN_AUTHORITY.OBSERVATION,
-    BRAIN_TURN_AUTHORITY.OBSERVATION,
-    BRAIN_TURN_AUTHORITY.OBSERVATION,
-  ]);
+  assert.deepEqual(h.client.actsOffered, [false, false, false]);
 });
 
-test("a roster look runs no act", async () => {
+test("a roster look under a policy denying acts runs none", async () => {
   const h = harness({
+    prepareTurn: NO_ACTS_POLICY,
     roster: () => ({
       text: "roster",
       identities: [ABC],
       sessions: [session("abc", { status: SESSION_STATUS.WORKING })],
     }),
   });
-  h.client.answers.push(answered(FORBIDDEN_ACTS), answered([message("")]));
+  h.client.answers.push(answered(OBSERVATION_ACTS), answered([message("")]));
   h.agent.rosterLook();
   await settle();
   assertNoActReached(h);
   assert.equal(h.traces[0]?.trigger, BRAIN_TURN_TRIGGER.ROSTER);
 });
 
-test("a hold release runs no act", async () => {
-  const h = harness();
-  h.client.answers.push(answered(FORBIDDEN_ACTS), answered([message("")]));
+test("a hold release under a policy denying acts runs none", async () => {
+  const h = harness({ prepareTurn: NO_ACTS_POLICY });
+  h.client.answers.push(answered(OBSERVATION_ACTS), answered([message("")]));
   h.agent.releaseHeld([{ briefing: INSTRUCTION_IN_DATA, decidedAt: NOW - 1 }]);
   await settle();
   assertNoActReached(h);
@@ -1051,7 +1173,7 @@ test("a developer ask carries every act with a live execution, revoked once the 
     },
   });
   const performedLate: { call: RealtimeFunctionCall; execution: BrainActExecution }[] = [];
-  const [messageAct] = FORBIDDEN_ACTS;
+  const [messageAct] = OBSERVATION_ACTS;
   assert.ok(messageAct);
   h.client.answers.push(answered([messageAct]), answered([message("Done.")]));
   const asked = ask(h, "send it");
@@ -1059,7 +1181,7 @@ test("a developer ask carries every act with a live execution, revoked once the 
   assert.equal(performedLate.length, 1);
   const [late] = performedLate;
   assert.ok(late);
-  assert.equal(late.execution.authority, BRAIN_TURN_AUTHORITY.DEVELOPER);
+  assert.equal(late.execution.origin, RUN_ORIGIN.USER);
   assert.equal(late.execution.isRevoked(), false);
   // The host stops the agent while the act is still preparing: the standing
   // is withdrawn before the effect, and the performer refuses on it.
@@ -1485,7 +1607,7 @@ test("a reset while the model is thinking cannot roll old memory into the new ge
   let release: ((answer: BrainClientAnswer) => void) | undefined;
   inner.respond = (input, options) => {
     inner.inputs.push([...input]);
-    inner.authorities.push(authorityOf(options));
+    inner.actsOffered.push(actsOffered(options));
     return new Promise((resolve) => {
       release = resolve;
     });
@@ -1895,6 +2017,7 @@ test("stop settles only after a held acceptance, which the successor then finds 
   const successorModel = adapterOf(new FakeClient());
   const successor = new BrainAgent({
     runtime: runtimeOver(successorModel),
+    prepareTurn: PLAIN_PREPARATION,
     acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
     roster: () => ({ text: "", identities: [] }),
     standingContext: () => "",
@@ -2585,7 +2708,7 @@ test("a generation dies exactly one lifetime after its birth, on the host's cloc
   let release: ((answer: BrainClientAnswer) => void) | undefined;
   inner.respond = (input, options) => {
     inner.inputs.push([...input]);
-    inner.authorities.push(authorityOf(options));
+    inner.actsOffered.push(actsOffered(options));
     return new Promise((resolve) => {
       release = resolve;
     });
@@ -3026,6 +3149,7 @@ function heldOpenRuntime(model: ModelAdapter, disposeHangs = false) {
 function agentOn(runtime: ToolLoopAgentRuntime, h: Harness) {
   return new BrainAgent({
     runtime,
+    prepareTurn: PLAIN_PREPARATION,
     acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
     roster: () => ({ text: "", identities: [] }),
     standingContext: () => "",

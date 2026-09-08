@@ -53,6 +53,20 @@ when Luke next opens; nothing said in it is remembered automatically. Nothing
 about a conversation is written on our servers, and a fixture or evidence run
 keeps no conversation at all.
 
+**Luke's workspace.** Luke keeps a small set of Markdown files of his own on
+your Mac, under his application data (`agents/main/workspace`): his operating
+instructions, his personality, his identity, stable facts about you, curated
+notes, first-run setup notes, and the instructions for his scheduled review,
+plus dated notes under `memory/`. He seeds any file that is missing and never
+overwrites one that exists, so you may edit them freely. The files are read
+into the standing instructions of every call he makes (each cut to 20,000
+characters and the set to 60,000), so their contents travel to OpenAI with his
+working memory as described below; dated notes travel only when he reads one
+or when a conversation starts fresh. Luke may edit these files himself through
+his own tools, in any of his turns, and nothing else on your machine: a
+coding agent's transcript or session state is never written, and a write whose
+arguments are malformed is refused rather than filled in.
+
 **Luke's working memory.** For each conversation Luke keeps a working memory
 of his own turns in the same database, in its own tables: the model's record
 of what he read, said, and did — the transcript excerpts described above, the
@@ -225,7 +239,8 @@ and email you signed it with, and any screenshots you attached.
   kept only on your Mac, under the lifetime above. Each call counts against
   your daily review allowance. When Luke runs through your account, the Mac
   app also sends our service the standing instructions it prepared for the
-  call and the names of the tools it means to offer; the service holds the
+  call — composed on your Mac from Luke's workspace files described above —
+  and the names of the tools it means to offer; the service holds the
   tools' own definitions and chooses the model, and a request naming a tool
   it does not know, or carrying instructions longer than its fixed bound, is
   refused rather than trimmed. The same allowance meters a request to count
@@ -284,9 +299,9 @@ your network address, as it does for the app's recordings.
 
 ## Storage
 
-Your settings, your conversation with Luke, his working memory, the things he
-remembers about you, local provider API keys, and calendar access stay on your
-Mac.
+Your settings, your conversation with Luke, his working memory, his workspace
+files, the things he remembers about you, local provider API keys, and
+calendar access stay on your Mac.
 Local keys and calendar access are encrypted in the macOS Keychain. Provider
 API keys you sync to the hosted service are stored encrypted in our own
 database, as described above. Your account information is held by our own
@@ -302,6 +317,11 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
   memory of it behind a recovery archive on your Mac; the working memory also
   discards itself 14 days after it began, whatever you do.
 - Ask Luke what he remembers, correct a memory, or tell him to forget one.
+- Edit or delete any of Luke's workspace files yourself; Luke never overwrites
+  your edit, and clearing the History tab does not touch them.
+- Luke may act on his own judgment in a turn you did not open — answering a
+  coding agent, keeping his notes — within the tool policy his configuration
+  sets; the History tab records such an act as his own, never as your request.
 - Luke does not use your microphone until you start a turn.
 - Delete your account from the Account section in Settings. This erases your
   account, your sign-in records, your usage counts, and any provider API keys
