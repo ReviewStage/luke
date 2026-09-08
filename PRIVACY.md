@@ -40,9 +40,10 @@ him — what you typed or said, what he spoke or announced, the actions he took
 at your request, and the asks he is still working on — in a database on your
 Mac, so they are still there the next time you open him. The History tab
 shows the main conversation, the one the talk key and every observation
-reach. Each conversation's History holds its 200 most recent
-entries and nothing older than 14 days, whichever runs out first, each kept in
-full so the tab shows every word. Beside the History, Luke keeps a transcript
+reach. The tab draws a conversation's 200 most recent entries and nothing
+older than 14 days, each in full; that is what is shown, not what is kept.
+Every entry stays in the database until you clear the conversation or the
+housekeeping described below removes it. Beside the History, Luke keeps a transcript
 of each conversation's turns in the same database: every input the model was
 shown and every point at which his working context was folded. The transcript
 is a record, not a limit: folding the context changes what the model sees
@@ -79,11 +80,10 @@ written summary and keeps that instead. Either is still derived from your
 sessions and your conversation and lives under the same rule as the rest. The
 folding is Luke's own decision, made when the record nears the model's
 window or the size a request may be; OpenAI is not asked to compact on its
-own. The whole record is one generation, and a generation lives exactly 14
-days from the moment it began: writing into it never extends it, and when its
-time is up everything in it, the encrypted compaction included, is discarded
-and an empty generation begins, which may observe your sessions afresh; a
-generation found expired when Luke starts is discarded then and there. A
+own. The whole record is one generation, and a generation does not reset
+on its own, on the terms OpenClaw's sessions keep: it stands, the encrypted
+compaction included, until you clear the conversation, and an old one is
+loaded whole however long ago it began. A
 generation holds at most 200 asks and stays under 8 MiB: the oldest finished
 asks go first once their endings are in the History, and when nothing can go
 Luke declines a new ask rather than growing the record.
@@ -314,8 +314,8 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 - Delete any synced provider API key from that provider's row in Settings. Keys
   are also deleted when you delete your account.
 - Clear the History tab to remove the stored conversation and Luke's working
-  memory of it behind a recovery archive on your Mac; the working memory also
-  discards itself 14 days after it began, whatever you do.
+  memory of it behind a recovery archive on your Mac. Nothing discards them
+  on a schedule: a conversation stands until you clear it.
 - Ask Luke what he remembers, correct a memory, or tell him to forget one.
 - Edit or delete any of Luke's workspace files yourself; Luke never overwrites
   your edit, and clearing the History tab does not touch them.

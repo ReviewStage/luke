@@ -250,9 +250,10 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     // they were said. The agent hears the same announcement and stands its
     // runs down itself.
     const unsubscribe = store.onReplaced(() => dependencies.onGenerationReplaced(sessionKey));
-    // The generation's clock stands with the store, not with an agent: a
-    // launch with no key or account, and an app left open after its agent was
-    // retired, still see the generation die on time and the file replaced.
+    // The generation's clock stands with the store, not with an agent, so a
+    // store whose automatic reset is enabled sees the generation die on time
+    // through a launch with no key or account, and after its agent was
+    // retired. Under the default policy of no automatic reset it arms nothing.
     const clock = new BrainGenerationClock({ store });
     void clock.start();
     const opened: OpenConversation = { host, store, clock, unsubscribe };

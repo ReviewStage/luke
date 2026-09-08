@@ -13,7 +13,8 @@ export interface BrainGenerationClockOptions {
 }
 
 /**
- * The generation's clock: one timer per store, armed at the standing
+ * The generation's clock, for a store whose automatic reset is enabled; under
+ * the default policy it arms nothing. Otherwise one timer per store is armed at the standing
  * generation's expiry instant and re-armed whenever the store begins another,
  * so a generation dies on time whether or not an agent stands to check its
  * door — a key removed, an account signed out, or an app left open past the
@@ -62,7 +63,7 @@ export class BrainGenerationClock {
 
   #arm(state: BrainPersistedState): void {
     this.#disarm();
-    if (this.#stopped) return;
+    if (this.#stopped || !this.#store.automaticReset) return;
     if (brainGenerationExpired(state, this.#now())) {
       this.#store.expireIfDue(this.#now());
       return;

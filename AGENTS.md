@@ -351,23 +351,32 @@ Trust constraints:
   folded, written in the same transaction as the checkpoint that carries
   them, attributed to the lifetime that wrote them and cascading with none:
   a compaction changes the projection and erases nothing on record, and the
-  record stays searchable. A generation lives exactly fourteen days from its
-  creation: no write, checkpoint, or compaction moves its expiry, a file
-  claiming any other span reads as nothing, and it is judged at load, at the
-  door of every turn and submission, and by a timer armed at the instant
-  itself. The fence is synchronous: the store forgets the dead generation
+  record stays searchable. A generation does not reset on its own: the
+  default reset policy is none, as the pinned OpenClaw has it, so a
+  generation stands until Clear or Start fresh replaces it, however old its
+  checkpoint. Every generation is still stamped with a deadline fourteen
+  days from its creation, kept as the stored envelope's shape: no write,
+  checkpoint, or compaction moves it, a file claiming any other span reads
+  as nothing, and a checkpoint loaded past it keeps its identity and its
+  context whole. Only a store whose automatic reset was explicitly enabled
+  enforces that deadline, at load, at the door of every turn and
+  submission, and by a timer armed at the instant itself; the store this
+  build wires enables none, so the clock arms nothing. Where a generation
+  does end, by that opt-in expiry or by an explicit replacement, the fence
+  is synchronous: the store forgets the dead generation
   and announces the successor before any disk is waited on, so a turn
   holding a model answer, a transcript read, or an act's preparation is
   revoked at once, a write landing afterwards installs nothing, and the late
   result lands nowhere. The conversation's lines answer to their own
   retention, not the generation's: each line is stamped with the generation
   that stood when it was written, for attribution alone, and a generation's
-  expiry erases no line. Expiry revokes the generation's runs and, through
+  end erases no line. A generation's end revokes its runs and, through
   the host's own listener, withdraws every briefing it had queued or offered
   but not yet spoken; a version-1 file, of unknown age, reads as nothing
-  rather than as a fresh lifetime; a generation found expired, unreadable,
-  or past its bounds at load is replaced on disk in the same load rather
-  than left for a later write; and the empty generation that follows may
+  rather than as a fresh lifetime; a generation found unreadable or past its
+  bounds at load (or expired, under the opt-in policy) is replaced on disk
+  in the same load rather than left for a later write; and the empty
+  generation that follows may
   observe the same provider files again, because the rule bounds how long a
   reading stands, not whether the source can be read. Within its life a
   generation holds at most 200 records and its serialized file stays under 8
@@ -563,8 +572,11 @@ Trust constraints:
   ask — each of which reached the voice service once on the call that said it,
   so storing it changes only how long it stands, not what it is. It lives in
   Luke's own application data, never a provider's file, under a real retention
-  policy replacing the old "dies with the app": the 200 most recent lines,
-  nothing older than a fortnight, in the runtime store's own table. Each line
+  policy replacing the old "dies with the app": every admitted line stands
+  in the runtime store's own table until Delete history or the conversation
+  maintenance below removes it, and what the panel draws and the model is
+  handed is a projection over that record, the 200 most recent lines and
+  nothing older than a fortnight. Each line
   carries an id its writer minted, and the store's append is idempotent on
   it: a window reports only the lines it added, never the whole thread, so a
   report can add to the thread and never replace it, a line delivered twice

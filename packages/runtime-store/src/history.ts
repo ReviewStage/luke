@@ -3,26 +3,24 @@ import {
   conversationEntryIdentity,
   recordedAfterClear,
   storedConversationEntry,
-  storedConversationMaximumAgeMs,
 } from "@sidecar/realtime";
 import type { UnparsedWireValue } from "@sidecar/wire";
 
 /**
  * The conversation history's rules as the store applies them, shared by the
- * live append path. Retention is the thread's own: the
- * 200 most recent lines and nothing older than a fortnight, judged against
- * the store's clock. A line at or before the last Clear's cutoff is refused
- * whatever else is true of it.
+ * live append path. Canonical rows follow conversation maintenance, independently
+ * of the bounded History projection. A line at or before the last Clear cutoff
+ * is refused, and a future-dated line is never admitted.
  */
 
-/** Whether a line may stand now: recorded no later than now, within the age bound, and after any Clear. */
+/** Whether a canonical line may stand now: recorded no later than now and after any Clear. */
 export function historyEntryAdmitted(
   entry: ConversationEntry,
   now: number,
   clearedAt: number | undefined,
 ): entry is ConversationEntry & { recordedAt: number } {
   if (!recordedAfterClear(entry, clearedAt)) return false;
-  return entry.recordedAt <= now && now - entry.recordedAt <= storedConversationMaximumAgeMs;
+  return entry.recordedAt <= now;
 }
 
 const EXPLICIT_EVENT_KEY_PREFIX = "event:";

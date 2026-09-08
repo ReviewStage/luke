@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
+import { BrainGenerationClock } from "./generation-clock.js";
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "./requests.js";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
@@ -127,6 +128,7 @@ test("the store loads once, serializes writes, and fences a write against a repl
   const storage = new MemoryStorage();
   let generations = 0;
   const store = new BrainStateStore({
+    automaticReset: true,
     storage,
     createGenerationId: () => `gen-${++generations}`,
     now: () => NOW,
@@ -243,7 +245,12 @@ test("the store discards an expired file at load rather than giving old memory a
   storage.file = brainStateRecord(stale);
   let clock = stale.expiresAt - 1;
   const fresh = () =>
-    new BrainStateStore({ storage, createGenerationId: () => "gen-new", now: () => clock });
+    new BrainStateStore({
+      automaticReset: true,
+      storage,
+      createGenerationId: () => "gen-new",
+      now: () => clock,
+    });
   assert.equal((await fresh().load()).generationId, "gen-1");
   clock = stale.expiresAt;
   const loaded = await fresh().load();
@@ -261,6 +268,7 @@ test("writes and a compaction never move the expiry, and expireIfDue ends the ge
   let generations = 0;
   let clock = NOW;
   const store = new BrainStateStore({
+    automaticReset: true,
     storage,
     createGenerationId: () => `gen-${++generations}`,
     now: () => clock,
@@ -338,6 +346,7 @@ test("the byte cap prunes eligible ended runs first, and refuses a write that wo
   const bounds = { MAXIMUM_TERMINAL_REQUESTS: 200, MAXIMUM_SERIALIZED_BYTES: 4_000 } as const;
   const storage = new MemoryStorage();
   const store = new BrainStateStore({
+    automaticReset: true,
     storage,
     createGenerationId: () => "gen-1",
     now: () => NOW,
@@ -392,6 +401,7 @@ test("the byte cap prunes eligible ended runs first, and refuses a write that wo
 
   // A write that does not grow an already-oversized envelope still lands.
   const oversizedStore = new BrainStateStore({
+    automaticReset: true,
     storage: new MemoryStorage(),
     createGenerationId: () => "gen-1",
     now: () => NOW,
@@ -423,6 +433,7 @@ test("a Clear whose marker the storage refuses still fences the old generation a
   const storage = new MemoryStorage();
   let generations = 0;
   const store = new BrainStateStore({
+    automaticReset: true,
     storage,
     createGenerationId: () => `gen-${++generations}`,
     now: () => NOW,
@@ -493,6 +504,7 @@ test("a Clear and an expiry fence synchronously, before any disk is waited on, a
   const storage = new HeldStorage();
   let generations = 0;
   const store = new BrainStateStore({
+    automaticReset: true,
     storage,
     createGenerationId: () => `gen-${++generations}`,
     now: () => NOW,
@@ -557,6 +569,7 @@ test("a Clear on a store that never loaded still leaves the marker, learning the
   };
   storage.file = brainStateRecord(old);
   const store = new BrainStateStore({
+    automaticReset: true,
     storage,
     createGenerationId: () => "gen-cold",
     now: () => NOW,
@@ -579,6 +592,7 @@ test("a Clear on a store that never loaded still leaves the marker, learning the
   // With no brain file at all the marker still carries the instant.
   const empty = new MemoryStorage();
   const bare = new BrainStateStore({
+    automaticReset: true,
     storage: empty,
     createGenerationId: () => "gen-bare",
     now: () => NOW,
@@ -592,6 +606,7 @@ test("load admits a file only within its bounds and rewrites the disk to match w
   const bounds = { MAXIMUM_TERMINAL_REQUESTS: 3, MAXIMUM_SERIALIZED_BYTES: 100_000 };
   const make = (storage: MemoryStorage, now = NOW) =>
     new BrainStateStore({
+      automaticReset: true,
       storage,
       createGenerationId: () => "gen-fresh",
       now: () => now,
@@ -654,6 +669,7 @@ test("load admits a file only within its bounds and rewrites the disk to match w
 test("the record count is a hard bound: admission closes at capacity and a write that would add past it is refused", async () => {
   const storage = new MemoryStorage();
   const store = new BrainStateStore({
+    automaticReset: true,
     storage,
     createGenerationId: () => "gen-1",
     now: () => NOW,
@@ -728,6 +744,7 @@ test("a load whose read was out when a Clear landed adopts the successor, never 
     });
     let generations = 0;
     const store = new BrainStateStore({
+      automaticReset: true,
       storage,
       createGenerationId: () => `fresh-${++generations}`,
       now: () => NOW,
@@ -774,6 +791,7 @@ test("a load's own cleanup write and a replacement both yield to a Clear or expi
   storage.file = brainStateRecord(stale);
   let generations = 0;
   const store = new BrainStateStore({
+    automaticReset: true,
     storage,
     createGenerationId: () => `fresh-${++generations}`,
     now: () => stale.expiresAt,
@@ -855,3 +873,36 @@ function settleTicks(): Promise<void> {
     tick();
   });
 }
+
+test("default policy keeps an existing checkpoint beyond its legacy deadline and arms no reset timer", async () => {
+  const storage = new MemoryStorage();
+  const previous = complete();
+  storage.file = brainStateRecord(previous);
+  let now = previous.expiresAt + BRAIN_GENERATION_LIFETIME_MS;
+  const store = new BrainStateStore({
+    storage,
+    createGenerationId: () => "explicit-reset",
+    now: () => now,
+  });
+  assert.deepEqual(await store.load(), previous);
+  assert.equal(store.automaticReset, false);
+  assert.equal(store.expireIfDue(now), false);
+  let scheduled = false;
+  const clock = new BrainGenerationClock({
+    store,
+    now: () => now,
+    schedule: () => {
+      scheduled = true;
+      throw new Error("default policy must not schedule expiry");
+    },
+  });
+  await clock.start();
+  now += BRAIN_GENERATION_LIFETIME_MS;
+  assert.equal((await store.load()).generationId, previous.generationId);
+  assert.deepEqual(store.current()?.items, previous.items);
+  assert.equal(scheduled, false);
+  assert.equal(await store.reset(now), true);
+  assert.equal(store.current()?.generationId, "explicit-reset");
+  assert.deepEqual(store.current()?.items, []);
+  clock.stop();
+});

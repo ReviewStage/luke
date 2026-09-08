@@ -932,12 +932,14 @@ export class BrainAgent {
 
   /**
    * Asks the store to end the generation if its time has come: the door
-   * check, for a generation that outlived its fortnight while nothing kept
-   * its clock. The clock itself — a timer at the expiry instant — is the
-   * host's, one per store, standing whether or not an agent does. The store's
-   * fence is synchronous and its announcement adopts the successor here in
-   * the same call, so by the time this returns the dead generation's signal
-   * has fired and nothing of it can open, dispatch, or deliver.
+   * check, for a store whose automatic reset is enabled and whose generation
+   * outlived its deadline while nothing kept its clock. Under the default
+   * policy of no automatic reset the store declines and the generation
+   * stands. The clock itself — a timer at the expiry instant — is the host's,
+   * one per store, standing whether or not an agent does. The store's fence
+   * is synchronous and its announcement adopts the successor here in the
+   * same call, so by the time this returns the dead generation's signal has
+   * fired and nothing of it can open, dispatch, or deliver.
    */
   #expireIfDue(): void {
     const generation = this.#generation;

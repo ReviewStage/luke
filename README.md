@@ -40,12 +40,13 @@ status of your agents, kick fresh ones off for you, or message them on your
 behalf.
 
 The **History** tab keeps your conversations with Luke on your Mac, across
-launches, holding its 200 most recent entries and nothing older than a
-fortnight, beside a transcript of Luke's own turns that a compaction never
-erases. Its one control, Clear, removes the conversation behind a compressed
-recovery archive kept on your Mac. The 20 most recent entries ride into Luke's next call beside
-his working memory of what he read, said, and did, which lives in the same
-database for exactly 14 days from when it began. Luke also silently keeps a
+launches, drawing its 200 most recent entries and nothing older than a
+fortnight while keeping every entry stored, beside a transcript of Luke's own
+turns that a compaction never erases. Its one control, Clear, removes the
+conversation behind a compressed recovery archive kept on your Mac. The 20
+most recent entries ride into Luke's next call beside his working memory of
+what he read, said, and did, which lives in the same database and never
+resets on its own: it stands until you clear it. Luke also silently keeps a
 small local memory of useful preferences, personal context, goals, and
 recurring constraints; ask him what he remembers, correct something, or tell
 him to forget it.
