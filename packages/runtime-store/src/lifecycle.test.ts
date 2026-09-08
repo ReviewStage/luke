@@ -23,7 +23,9 @@ import {
 import {
   archiveDirectory,
   deleteConversationHistory,
+  FILE_SYSTEM_DURABILITY,
   listArchives,
+  type PublicationDurability,
   publishPendingArchives,
   restoreArchive,
 } from "./archives.js";
@@ -364,6 +366,61 @@ test("a publication a crash interrupted keeps its payload in the registry and is
     RESTORE_OUTCOME.RESTORED,
   );
   relaunched.close();
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("a directory sync that fails is a publication that failed: the rows are gone, the payload stays for the retry, and the retry syncs the name that already exists before it lets the payload go", () => {
+  const root = agentRoot();
+  const database = openAt(root);
+  appendHistory(database, MAIN_SESSION_KEY, [line("words", NOW, { eventId: "h1" })], NOW);
+  let syncs = 0;
+  const failing: PublicationDurability = {
+    syncDirectory: () => {
+      syncs += 1;
+      throw Object.assign(new Error("EIO: directory sync failed"), { code: "EIO" });
+    },
+  };
+  const deleted = deleteConversationHistory(database, root, MAIN_SESSION_KEY, NOW, {
+    archiveId: "archive-4",
+    durability: failing,
+  });
+  assert.ok(deleted);
+  assert.equal(deleted.published, false);
+  assert.equal(syncs, 1);
+  assert.deepEqual(listHistory(database, MAIN_SESSION_KEY, NOW), []);
+  // The name was linked before the sync failed, and the payload was not let go of.
+  const target = path.join(archiveDirectory(root), deleted.archive.fileName);
+  assert.equal(fs.existsSync(target), true);
+  // SAFETY: the payload column is the BLOB the deletion wrote, or NULL once published.
+  const held = database
+    .prepare("SELECT payload, published_at FROM history_archives WHERE archive_id = ?")
+    .get("archive-4") as { payload: Uint8Array | null; published_at: number | null };
+  assert.ok(held.payload);
+  assert.equal(held.published_at, null);
+  // A retry over the existing name still runs the directory sync, and a
+  // second failure there still keeps the payload.
+  assert.deepEqual(publishPendingArchives(database, root, failing), ["archive-4"]);
+  assert.equal(syncs, 2);
+  // Once the sync succeeds, and only then, the publication counts and the payload goes.
+  let synced = 0;
+  const counting: PublicationDurability = {
+    syncDirectory: (directory) => {
+      synced += 1;
+      FILE_SYSTEM_DURABILITY.syncDirectory(directory);
+    },
+  };
+  assert.deepEqual(publishPendingArchives(database, root, counting), []);
+  assert.equal(synced, 1);
+  const cleared = database
+    .prepare("SELECT payload, published_at FROM history_archives WHERE archive_id = ?")
+    .get("archive-4") as { payload: Uint8Array | null; published_at: number | null };
+  assert.equal(cleared.payload, null);
+  assert.ok(cleared.published_at !== null);
+  assert.equal(
+    restoreArchive(database, root, "archive-4", DEFAULT_AGENT_ID, NOW + 1).outcome,
+    RESTORE_OUTCOME.RESTORED,
+  );
+  database.close();
   fs.rmSync(root, { recursive: true, force: true });
 });
 

@@ -176,11 +176,36 @@ function archiveRow(database: RuntimeDatabase, archiveId: string): ArchiveRow | 
     .get(archiveId) as ArchiveRow | undefined;
 }
 
+/**
+ * The durability operations a publication requires beyond writing bytes: the
+ * directory entry that names the file must reach the disk too, or a crash
+ * after the rows were removed could leave a name that resolves to nothing.
+ * Injected so a test can make one fail; the default is the file system's own
+ * fsync, and a failure there is a failure of the publication, never a case
+ * assumed durable.
+ */
+export interface PublicationDurability {
+  /** Makes the directory's entries durable; throws when the platform could not. */
+  syncDirectory(directory: string): void;
+}
+
+export const FILE_SYSTEM_DURABILITY: PublicationDurability = {
+  syncDirectory: (directory) => {
+    const fd = fs.openSync(directory, "r");
+    try {
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+  },
+};
+
 export interface DeletionOptions {
   /** The archive's own id, minted here unless the caller names one. */
   archiveId?: string;
   /** Whether the conversation row itself goes with its history; the directory keeps it otherwise. */
   removeConversation?: boolean;
+  durability?: PublicationDurability;
 }
 
 export interface DeletionOutcome {
@@ -202,7 +227,11 @@ export function deleteConversationHistory(
   agentRoot: string,
   sessionKey: SessionKey,
   now: number,
-  { archiveId = randomUUID(), removeConversation = false }: DeletionOptions = {},
+  {
+    archiveId = randomUUID(),
+    removeConversation = false,
+    durability = FILE_SYSTEM_DURABILITY,
+  }: DeletionOptions = {},
 ): DeletionOutcome | undefined {
   const committed = database.transaction(() => {
     const record = conversationRecord(database, sessionKey);
@@ -281,7 +310,7 @@ export function deleteConversationHistory(
     return archiveId;
   });
   if (!committed) return undefined;
-  const published = publishArchive(database, agentRoot, committed);
+  const published = publishArchive(database, agentRoot, committed, durability);
   const row = archiveRow(database, committed);
   const archive = row ? recordFromRow(row) : undefined;
   if (!archive) throw new Error(`archive ${committed} was not registered`);
@@ -290,16 +319,22 @@ export function deleteConversationHistory(
 
 /**
  * Writes one registered archive to its file and verifies it: exclusive
- * staging write, fsync, link into place, read back against the hash. A file
- * already there with the same hash is the same publication landing twice;
- * one with another hash is a collision this build refuses to paper over.
- * Answers whether the archive is now published; a failure leaves the payload
- * in the registry for the next attempt.
+ * staging write, fsync, link into place, the directory synced, the file read
+ * back against the hash. A file already there with the same hash is the same
+ * publication landing twice — an earlier attempt that linked the name and
+ * then failed — and it is taken through the same file sync, directory sync,
+ * and readback before it counts, so the durability step that failed last
+ * time is never skipped this time; one with another hash is a collision
+ * this build refuses to paper over. Only a publication whose every
+ * durability operation succeeded lets the payload go from the registry; any
+ * failure, the directory sync's included, leaves it there for the next
+ * attempt, because a name the disk may not hold is not a recovery copy.
  */
 export function publishArchive(
   database: RuntimeDatabase,
   agentRoot: string,
   archiveId: string,
+  durability: PublicationDurability = FILE_SYSTEM_DURABILITY,
 ): boolean {
   const row = archiveRow(database, archiveId);
   if (!row) return false;
@@ -332,8 +367,9 @@ export function publishArchive(
       } finally {
         fs.rmSync(staging, { force: true });
       }
-      syncDirectory(directory);
     }
+    syncFile(target);
+    durability.syncDirectory(directory);
     if (hashBytes(fs.readFileSync(target)) !== row.sha256) return false;
   } catch {
     return false;
@@ -344,21 +380,22 @@ export function publishArchive(
   return true;
 }
 
-function syncDirectory(directory: string): void {
+/** Makes the file's own bytes durable, on the retry path where they were written by an earlier attempt. */
+function syncFile(target: string): void {
+  const fd = fs.openSync(target, "r");
   try {
-    const fd = fs.openSync(directory, "r");
-    try {
-      fs.fsyncSync(fd);
-    } finally {
-      fs.closeSync(fd);
-    }
-  } catch {
-    // A file system that refuses to sync a directory has already made the file durable in its own way.
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
   }
 }
 
 /** Retries every publication a crash interrupted; answers the ids still unpublished. */
-export function publishPendingArchives(database: RuntimeDatabase, agentRoot: string): string[] {
+export function publishPendingArchives(
+  database: RuntimeDatabase,
+  agentRoot: string,
+  durability: PublicationDurability = FILE_SYSTEM_DURABILITY,
+): string[] {
   // SAFETY: one text column selected.
   const rows = database
     .prepare(
@@ -367,7 +404,7 @@ export function publishPendingArchives(database: RuntimeDatabase, agentRoot: str
     .all() as { archive_id: string }[];
   return rows
     .map((row) => row.archive_id)
-    .filter((archiveId) => !publishArchive(database, agentRoot, archiveId));
+    .filter((archiveId) => !publishArchive(database, agentRoot, archiveId, durability));
 }
 
 export interface RestoreResult {
