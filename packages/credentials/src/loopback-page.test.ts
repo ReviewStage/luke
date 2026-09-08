@@ -36,3 +36,53 @@ test("loopback pages stay self-contained", () => {
   assert.doesNotMatch(page, /\b(?:src|href)=["']https?:\/\//i);
   assert.match(page, /provider-mark-linear/);
 });
+
+test("the pill wears the tone the flow ended on, and its words", () => {
+  const settled = accountLoopbackPage({
+    tone: LOOPBACK_PAGE_TONE.SETTLED,
+    badge: "Signed in",
+    title: "Signed in to Luke",
+    body: "You can close this tab.",
+  });
+  assert.match(settled, /<span class="pill" data-tone="settled">Signed in<\/span>/);
+
+  const attention = accountLoopbackPage({
+    tone: LOOPBACK_PAGE_TONE.ATTENTION,
+    badge: "Not completed",
+    title: "Sign-in did not complete",
+    body: "You can close this tab and try again from Luke.",
+  });
+  // The attention tone is the one the stylesheet repaints; the settled tone is
+  // the pill's own colour and carries no override.
+  assert.match(attention, /<span class="pill" data-tone="attention">Not completed<\/span>/);
+  assert.match(attention, /\.pill\[data-tone="attention"\]/);
+});
+
+test("with no source named, the page stands on Luke's own mark alone", () => {
+  const page = accountLoopbackPage({
+    tone: LOOPBACK_PAGE_TONE.SETTLED,
+    badge: "Signed in",
+    title: "Signed in to Luke",
+    body: "You can close this tab.",
+  });
+
+  assert.match(page, /class="solo-mark"/);
+  assert.doesNotMatch(page, /class="connection"/);
+  assert.doesNotMatch(page, /<svg class="provider-mark/);
+});
+
+test("every source this build can end a sign-in on draws its own mark", () => {
+  for (const source of Object.values(LOOPBACK_CONNECTION_SOURCE)) {
+    const page = accountLoopbackPage({
+      tone: LOOPBACK_PAGE_TONE.SETTLED,
+      badge: "Connected",
+      title: "Connected",
+      body: "You can close this tab and return to Luke.",
+      source,
+    });
+
+    assert.match(page, new RegExp(`<svg class="provider-mark provider-mark-${source}"`), source);
+    assert.match(page, /class="connection"/, source);
+    assert.doesNotMatch(page, /class="solo-mark"/, source);
+  }
+});

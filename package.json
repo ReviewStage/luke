@@ -20,7 +20,7 @@
     "release:macos": "./scripts/release-macos.sh",
     "start": "pnpm --filter @luke/desktop start",
     "test": "pnpm test:harness && pnpm --recursive --if-present run test",
-    "test:harness": "node --test scripts/*.test.mjs apps/ios/*.test.mjs",
+    "test:harness": "node --test scripts/*.test.mjs apps/ios/*.test.mjs tools/oxlint/anti-slop/*.test.mjs",
     "trace:export": "tsx packages/devtrace/src/cli.ts",
     "typecheck": "pnpm --recursive --if-present run typecheck"
   },
