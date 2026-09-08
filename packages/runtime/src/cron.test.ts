@@ -5,6 +5,7 @@ import {
   CRON_SCHEDULE_KIND,
   CronScheduler,
   jobDue,
+  memoryScheduledJobStore,
   nextRunAt,
   type ScheduledJob,
   type ScheduledJobStore,
@@ -29,6 +30,15 @@ function memoryStore(initial: readonly ScheduledJob[] = [], refuse = () => false
   };
   return { store, jobs };
 }
+
+test("the in-memory job store round-trips a job and forgets a deleted one", async () => {
+  const store = memoryScheduledJobStore();
+  const job = heartbeatJob(T0);
+  assert.equal(await store.put(job), true);
+  assert.deepEqual(await store.list(), [job]);
+  assert.equal(await store.delete(job.id), true);
+  assert.deepEqual(await store.list(), []);
+});
 
 test("the heartbeat is main's every-thirty-minutes job", () => {
   const job = heartbeatJob(T0);

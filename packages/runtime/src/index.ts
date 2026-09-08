@@ -20,6 +20,7 @@ export {
   type CronSchedulerOptions,
   cronScheduleFromWire,
   jobDue,
+  memoryScheduledJobStore,
   nextRunAt,
   type ScheduledJob,
   type ScheduledJobStore,

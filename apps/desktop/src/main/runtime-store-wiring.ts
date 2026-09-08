@@ -1,7 +1,7 @@
 import type { RememberedFact } from "@sidecar/acts";
 import { type BrainStateRepository, brainStateRepositoryFromStorage } from "@sidecar/brain";
 import type { ConversationEntry } from "@sidecar/realtime";
-import type { ScheduledJobStore } from "@sidecar/runtime";
+import { memoryScheduledJobStore, type ScheduledJobStore } from "@sidecar/runtime";
 import {
   ARCHIVE_REASON,
   CONVERSATION_KIND,
@@ -248,6 +248,39 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     });
   };
 
+  /**
+   * A conversation this process holds alone: a temporary thread, and every
+   * conversation of a run that keeps nothing on disk. Its history lives in
+   * memory with it and is gone at the next launch.
+   */
+  const temporaryRecord = (
+    sessionKey: SessionKey,
+    kind: ConversationKind,
+    name: string,
+    now: number,
+  ): ConversationRecord => {
+    const record: ConversationRecord = {
+      sessionKey,
+      kind,
+      name,
+      createdAt: now,
+      lastActivityAt: now,
+      temporary: true,
+    };
+    temporary.set(sessionKey, record);
+    threads.set(sessionKey, memoryThread(sessionKey));
+    announce();
+    return record;
+  };
+
+  const unarchive = async (sessionKey: SessionKey): Promise<boolean> => {
+    if (temporary.has(sessionKey) || !dependencies.persistent) return false;
+    const restored = await client().unarchiveConversation(sessionKey);
+    if (restored) await restoreThread(sessionKey);
+    await refreshDirectory();
+    return restored;
+  };
+
   const holds = (sessionKey: SessionKey) =>
     temporary.has(sessionKey) || stored.some((record) => record.sessionKey === sessionKey);
 
@@ -267,15 +300,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
     return true;
   };
 
-  const memoryJobs = new Map<string, import("@sidecar/runtime").ScheduledJob>();
-  const memoryJobStore: ScheduledJobStore = {
-    list: async () => [...memoryJobs.values()],
-    put: async (job) => {
-      memoryJobs.set(job.id, job);
-      return true;
-    },
-    delete: async (id) => memoryJobs.delete(id),
-  };
+  const memoryJobs = memoryScheduledJobStore();
 
   return {
     client,
@@ -331,18 +356,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
       const name = `${THREAD_NAME_PREFIX} ${ordinal}`;
       const sessionKey = threadSessionKey(dependencies.createEventId());
       if (isTemporary || !dependencies.persistent) {
-        const record: ConversationRecord = {
-          sessionKey,
-          kind: CONVERSATION_KIND.THREAD,
-          name,
-          createdAt: now,
-          lastActivityAt: now,
-          temporary: true,
-        };
-        temporary.set(sessionKey, record);
-        threads.set(sessionKey, memoryThread(sessionKey));
-        announce();
-        return record;
+        return temporaryRecord(sessionKey, CONVERSATION_KIND.THREAD, name, now);
       }
       const created = await client().createConversation({
         agentId: DEFAULT_AGENT_ID,
@@ -359,24 +373,9 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
       const held =
         temporary.get(sessionKey) ?? stored.find((record) => record.sessionKey === sessionKey);
       if (held && held.archivedAt === undefined) return held;
-      if (!dependencies.persistent) {
-        const record: ConversationRecord = {
-          sessionKey,
-          kind,
-          name,
-          createdAt: now,
-          lastActivityAt: now,
-          temporary: true,
-        };
-        temporary.set(sessionKey, record);
-        threads.set(sessionKey, memoryThread(sessionKey));
-        announce();
-        return record;
-      }
+      if (!dependencies.persistent) return temporaryRecord(sessionKey, kind, name, now);
       if (held) {
-        await client().unarchiveConversation(sessionKey);
-        await restoreThread(sessionKey);
-        await refreshDirectory();
+        await unarchive(sessionKey);
         return stored.find((record) => record.sessionKey === sessionKey) ?? held;
       }
       const created = await client().createConversation({
@@ -389,8 +388,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
       await refreshDirectory();
       return created;
     },
-    scheduledJobStore: () =>
-      dependencies.persistent ? client().scheduledJobStore() : memoryJobStore,
+    scheduledJobStore: () => (dependencies.persistent ? client().scheduledJobStore() : memoryJobs),
     archive: async (sessionKey) => {
       // Archiving preserves history, and a temporary thread has nowhere to
       // preserve it: the ask is refused and the thread left exactly as it was.
@@ -403,13 +401,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
       await refreshDirectory();
       return archived;
     },
-    unarchive: async (sessionKey) => {
-      if (temporary.has(sessionKey) || !dependencies.persistent) return false;
-      const restored = await client().unarchiveConversation(sessionKey);
-      if (restored) await restoreThread(sessionKey);
-      await refreshDirectory();
-      return restored;
-    },
+    unarchive,
     historyCutoff: async (sessionKey) => {
       if (temporary.has(sessionKey) || !dependencies.persistent) return { value: undefined };
       try {

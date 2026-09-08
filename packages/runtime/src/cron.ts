@@ -56,6 +56,22 @@ export interface ScheduledJobStore {
   delete(id: string): Promise<boolean>;
 }
 
+/**
+ * Jobs held in this process alone, for a run that keeps nothing on disk: a
+ * fixture or capture run schedules the same way and remembers none of it.
+ */
+export function memoryScheduledJobStore(): ScheduledJobStore {
+  const jobs = new Map<string, ScheduledJob>();
+  return {
+    list: async () => [...jobs.values()],
+    put: async (job) => {
+      jobs.set(job.id, job);
+      return true;
+    },
+    delete: async (id) => jobs.delete(id),
+  };
+}
+
 export const CRON_DEFAULTS = {
   /** The least a cron-expressed job may be asked to run apart, OpenClaw's trigger floor. */
   MINIMUM_INTERVAL_MS: 30_000,
