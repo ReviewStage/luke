@@ -24,21 +24,24 @@ public enum WorkspaceProjectsContext {
     public static func item(
         answer: ProjectsAnswer,
         defaultProviderId: String?,
-        defaultProjectIds: [String: String]
+        defaultProjectIds: [String: String],
+        defaultAgentDefaults: [String: WorkspaceAgentDefault] = [:]
     ) -> VoiceContextItem {
         VoiceContextItem(
             itemId: contextItemId,
             text: "[\(contextLabel)]\n"
                 + text(
                     answer: answer, defaultProviderId: defaultProviderId,
-                    defaultProjectIds: defaultProjectIds)
+                    defaultProjectIds: defaultProjectIds,
+                    defaultAgentDefaults: defaultAgentDefaults)
         )
     }
 
     public static func text(
         answer: ProjectsAnswer,
         defaultProviderId: String?,
-        defaultProjectIds: [String: String]
+        defaultProjectIds: [String: String],
+        defaultAgentDefaults: [String: WorkspaceAgentDefault] = [:]
     ) -> String {
         let projects = answer.projects
         if projects.isEmpty { return "No provider currently offers workspace creation." }
@@ -68,10 +71,15 @@ public enum WorkspaceProjectsContext {
                     ? "" : "; efforts \(option.efforts.joined(separator: ", "))"
                 return "\(option.agent) — models \(models)\(efforts)"
             }
+            let stored = validAgentDefault(defaultAgentDefaults[providerId], in: options).map {
+                defaultAgentText($0, in: options)
+            }
+            let omitted =
+                stored.map { "Omitted, the saved default agent selection starts: \($0)." }
+                ?? "Omitted, the provider's own default agent starts."
             lines.append(
                 "\(VaultProviderID.displayLabel(forWireId: providerId)) agents a new workspace can start, "
-                    + "each with the models it runs: \(agents.joined(separator: " | ")). Omitted, the "
-                    + "provider's own default agent starts."
+                    + "each with the models it runs: \(agents.joined(separator: " | ")). \(omitted)"
             )
         }
         if let chosenDefault {
@@ -118,5 +126,28 @@ public enum WorkspaceProjectsContext {
         case .optional: "takes an opening task"
         case .required: "needs an opening task"
         }
+    }
+
+    static func validAgentDefault(
+        _ stored: WorkspaceAgentDefault?,
+        in options: [WorkspaceAgentOption]
+    ) -> WorkspaceAgentDefault? {
+        guard let stored,
+            let option = options.first(where: { $0.agent == stored.agent }),
+            option.models.contains(where: { $0.id == stored.model }),
+            stored.effort == nil || option.efforts.contains(stored.effort ?? "")
+        else { return nil }
+        return stored
+    }
+
+    private static func defaultAgentText(
+        _ stored: WorkspaceAgentDefault,
+        in options: [WorkspaceAgentOption]
+    ) -> String {
+        let option = options.first { $0.agent == stored.agent }
+        let model = option?.models.first { $0.id == stored.model }
+        let modelText = model.map { "\($0.label) (\($0.id))" } ?? stored.model
+        let effortText = stored.effort.map { ", effort \($0)" } ?? ""
+        return "\(stored.agent) with \(modelText)\(effortText)"
     }
 }

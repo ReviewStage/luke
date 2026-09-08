@@ -143,7 +143,8 @@ public func dispatchVoiceToolCall(
             arguments,
             projects: projects,
             defaultProviderId: context.defaults.lastProviderId,
-            defaultProjectIds: context.defaults.lastProjectIds
+            defaultProjectIds: context.defaults.lastProjectIds,
+            defaultAgentDefaults: context.defaults.agentDefaults
         )
         return await carry(ask, context, .workspaceCreate) { ask, token in
             let answer = try await context.actClient.createWorkspace(
@@ -157,11 +158,19 @@ public func dispatchVoiceToolCall(
                 effort: ask.effort
             )
             if answer.result == .accepted {
-                // The first creation saves its provider as the default, the
-                // same tie-break the New Workspace sheet remembers.
+                // A successful creation saves the same choices the New
+                // Workspace sheet remembers.
                 context.defaults.lastProviderId = ask.project.providerId
                 context.defaults.setLastProjectId(
                     ask.project.providerProjectId, for: ask.project.providerId
+                )
+                context.defaults.setAgentDefault(
+                    ask.agent.flatMap { agent in
+                        ask.model.map { model in
+                            WorkspaceAgentDefault(agent: agent, model: model, effort: ask.effort)
+                        }
+                    },
+                    for: ask.project.providerId
                 )
             }
             return answer

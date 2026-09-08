@@ -239,11 +239,12 @@ final class VoiceAsksWorkspaceCreationTests: XCTestCase {
     private func creation(
         _ arguments: [String: Any],
         defaultProviderId: String? = nil,
-        defaultProjectIds: [String: String] = [:]
+        defaultProjectIds: [String: String] = [:],
+        defaultAgentDefaults: [String: WorkspaceAgentDefault] = [:]
     ) -> Result<VoiceAsks.WorkspaceCreationAsk, VoiceAskRefusal> {
         VoiceAsks.workspaceCreation(
             arguments, projects: answer, defaultProviderId: defaultProviderId,
-            defaultProjectIds: defaultProjectIds)
+            defaultProjectIds: defaultProjectIds, defaultAgentDefaults: defaultAgentDefaults)
     }
 
     func testAnAskNamesAListedProjectOrIsSettledByTheDeviceDefaults() throws {
@@ -292,6 +293,38 @@ final class VoiceAsksWorkspaceCreationTests: XCTestCase {
             reason(creation(["project_id": "p1", "agent": "gemini"])),
             "That project lists no such agent to start."
         )
+    }
+
+    func testAnUnnamedAgentRestoresTheDeviceDefaultWhileItIsListed() throws {
+        let restored = try creation(
+            ["project_id": "p1"],
+            defaultAgentDefaults: [
+                "conductor": WorkspaceAgentDefault(agent: "claude", model: "sonnet-4", effort: "high")
+            ]
+        ).get()
+        XCTAssertEqual(restored.agent, "claude")
+        XCTAssertEqual(restored.model, "sonnet-4")
+        XCTAssertEqual(restored.effort, "high")
+
+        let staleModel = try creation(
+            ["project_id": "p1"],
+            defaultAgentDefaults: [
+                "conductor": WorkspaceAgentDefault(agent: "claude", model: "missing", effort: "high")
+            ]
+        ).get()
+        XCTAssertNil(staleModel.agent)
+        XCTAssertNil(staleModel.model)
+        XCTAssertNil(staleModel.effort)
+
+        let staleEffort = try creation(
+            ["project_id": "p1"],
+            defaultAgentDefaults: [
+                "conductor": WorkspaceAgentDefault(agent: "claude", model: "sonnet-4", effort: "max")
+            ]
+        ).get()
+        XCTAssertNil(staleEffort.agent)
+        XCTAssertNil(staleEffort.model)
+        XCTAssertNil(staleEffort.effort)
     }
 
     func testAModelNamedAloneDecidesTheAgentThatRunsIt() throws {
