@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   AccountClient,
+  AccountPreferencesClient,
   AccountSessionManager,
   accountGateOpen,
   HostedVaultClient,
@@ -122,6 +123,9 @@ import {
   workspaceProjectSelectionId,
 } from "@sidecar/session";
 import {
+  ACCOUNT_PREFERENCE_FIELDS,
+  type AccountPreferenceField,
+  type AccountPreferences,
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
   type AppSettingField,
@@ -404,6 +408,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     clientId: ACCOUNT_CLIENT_ID,
   });
   let account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
+  let accountPreferencesHydratedAccount: string | undefined;
   const accountSession = new AccountSessionManager({
     client: accountClient,
     store: settingsStore,
@@ -415,7 +420,13 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     onChange: (next) => {
       const signedIn = next.status === ACCOUNT_STATUS.SIGNED_IN;
       const wasSignedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
+      const previousAccountKey =
+        account.status === ACCOUNT_STATUS.SIGNED_IN ? account.email : undefined;
+      const nextAccountKey = signedIn ? next.email : undefined;
       account = next;
+      if (previousAccountKey !== nextAccountKey) {
+        accountPreferencesHydratedAccount = undefined;
+      }
       // The first sign-in ever observed is also where the calendar step of
       // onboarding goes up: recorded on disk rather than derived, so quitting
       // at the gate and relaunching finds it standing. Written before the
@@ -577,6 +588,13 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     refreshAccount: accountSession.refreshOnce,
     readAccountKey: async () => (await settingsStore.readAccount())?.email,
   });
+  const accountPreferencesClient = new AccountPreferencesClient({
+    serviceBaseUrl: HOSTED_SERVICE_BASE_URL,
+    readAccessToken: async () =>
+      runMode.sendsNetwork ? (await settingsStore.readAccount())?.accessToken : undefined,
+    refreshAccount: accountSession.refreshOnce,
+    readAccountKey: readAccountPreferenceAccountKey,
+  });
   const providerKeyVaultSync = new ProviderKeyVaultSync({
     vault: hostedVault,
     readStoredApiKey: (providerId) => settingsStore.readStoredApiKey(providerId),
@@ -592,6 +610,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
       write: (accountKey) => settingsStore.setVaultSyncAccount(accountKey),
     },
   });
+  let accountPreferencesSync: Promise<void> = Promise.resolve();
   function reconcileProviderKeyVault(): void {
     void settingsStore
       .snapshot()
@@ -601,6 +620,123 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
           : undefined,
       );
   }
+
+  async function readAccountPreferenceAccountKey(): Promise<string | undefined> {
+    return (await settingsStore.readAccount())?.email;
+  }
+
+  function queueAccountPreferencesSync(label: string, work: () => Promise<void>): Promise<void> {
+    const queued = accountPreferencesSync.then(work, work).catch((error) => {
+      report(
+        `Account preferences ${label} failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
+    accountPreferencesSync = queued.then(
+      () => undefined,
+      () => undefined,
+    );
+    return queued;
+  }
+
+  function accountPreferencesEmpty(preferences: AccountPreferences): boolean {
+    return Object.keys(preferences).length === 0;
+  }
+
+  function accountPreferencesSame(left: AccountPreferences, right: AccountPreferences): boolean {
+    return JSON.stringify(left) === JSON.stringify(right);
+  }
+
+  async function accountPreferenceHydrationBaseline(
+    accountEmail: string,
+  ): Promise<AccountPreferences> {
+    const baseline = await settingsStore.accountPreferencesSyncBaseline(accountEmail);
+    if (baseline !== undefined) return baseline;
+    const preferences = await settingsStore.accountPreferences();
+    await settingsStore.setAccountPreferencesSyncBaseline(accountEmail, preferences);
+    return preferences;
+  }
+
+  function isAccountPreferenceField(field: AppSettingField): field is AccountPreferenceField {
+    return ACCOUNT_PREFERENCE_FIELDS.some((candidate) => candidate === field);
+  }
+
+  function resetTouchesAccountPreferences(scope: UnparsedWireValue): boolean {
+    return ACCOUNT_PREFERENCE_FIELDS.some((field) => {
+      const definition = APP_SETTING_SCHEMA[field];
+      return "resetScope" in definition && definition.resetScope === scope;
+    });
+  }
+
+  async function reconcileAccountPreferences(): Promise<void> {
+    return queueAccountPreferencesSync("reconcile", async () => {
+      const accountKey = await readAccountPreferenceAccountKey();
+      if (!accountKey) return;
+      await hydrateAccountPreferences(accountKey);
+    });
+  }
+
+  async function hydrateAccountPreferences(accountKey: string): Promise<boolean> {
+    const baseline = await accountPreferenceHydrationBaseline(accountKey);
+    if ((await readAccountPreferenceAccountKey()) !== accountKey) return false;
+    const remote = await accountPreferencesClient.readPreferences();
+    if (!remote || (await readAccountPreferenceAccountKey()) !== accountKey) return false;
+
+    if (!remote.hasStoredSnapshot) {
+      const preferences = await settingsStore.accountPreferences();
+      if ((await readAccountPreferenceAccountKey()) !== accountKey) return false;
+      if (!accountPreferencesEmpty(preferences)) {
+        const written = await accountPreferencesClient.writePreferences(preferences);
+        if (!written || (await readAccountPreferenceAccountKey()) !== accountKey) return false;
+      }
+      if (!(await settingsStore.setAccountPreferencesSyncBaseline(accountKey, preferences))) {
+        return false;
+      }
+      accountPreferencesHydratedAccount = accountKey;
+      return true;
+    }
+
+    const saved = await settingsStore.applyAccountPreferences(remote.preferences, {
+      accountEmail: accountKey,
+      preferences: baseline,
+    });
+    if ((await readAccountPreferenceAccountKey()) !== accountKey) return false;
+    accountPreferencesHydratedAccount = accountKey;
+    const preferences = await settingsStore.accountPreferences();
+    if ((await readAccountPreferenceAccountKey()) !== accountKey) return false;
+    if (saved.changed.length > 0) {
+      await applyAccountPreferenceSideEffects(saved, saved.changed);
+    }
+    if (!accountPreferencesSame(preferences, remote.preferences)) {
+      const written = await accountPreferencesClient.writePreferences(preferences);
+      if (!written || (await readAccountPreferenceAccountKey()) !== accountKey) return true;
+    }
+    await settingsStore.setAccountPreferencesSyncBaseline(accountKey, preferences);
+    return true;
+  }
+
+  function pushAccountPreferences(): void {
+    void queueAccountPreferencesSync("write", async () => {
+      const accountKey = await readAccountPreferenceAccountKey();
+      if (!accountKey) return;
+      if (
+        accountPreferencesHydratedAccount !== accountKey &&
+        !(await hydrateAccountPreferences(accountKey))
+      ) {
+        return;
+      }
+      const preferences = await settingsStore.accountPreferences();
+      if (
+        (await readAccountPreferenceAccountKey()) !== accountKey ||
+        accountPreferencesHydratedAccount !== accountKey
+      ) {
+        return;
+      }
+      const written = await accountPreferencesClient.writePreferences(preferences);
+      if (!written || (await readAccountPreferenceAccountKey()) !== accountKey) return;
+      await settingsStore.setAccountPreferencesSyncBaseline(accountKey, preferences);
+    });
+  }
+
   const recordProductEvent: RecordProductEvent = (name, properties) =>
     productEvents.record(name, properties);
 
@@ -800,6 +936,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     defaults: Readonly<Partial<Record<string, string>>> | undefined,
     isCurrent: () => boolean,
   ): Promise<void> {
+    if (account.status === ACCOUNT_STATUS.SIGNED_IN) return;
     try {
       for (const providerId of staleWorkspaceProjectDefaults(projects, defaults)) {
         if (!isCurrent()) return;
@@ -825,6 +962,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
 
   async function startAccountCapabilities(): Promise<void> {
     if (!accountCapabilitiesActive()) return;
+    void reconcileAccountPreferences();
     await applyVoiceCredential();
     await emitSettings();
     if (!accountCapabilitiesActive()) return;
@@ -1127,6 +1265,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     const providerId = adapter.provider.id;
     if (!isWorkspaceProviderId(providerId)) return;
     try {
+      let accountPreferencesTouched = false;
       if (
         (await settingsStore.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field)) === undefined
       ) {
@@ -1135,6 +1274,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
           providerId,
         );
         emitSettingsSnapshot(saved.settings);
+        accountPreferencesTouched = true;
       }
       if (
         providerId === SUPERSET_WORKSPACE_PROVIDER_ID &&
@@ -1149,6 +1289,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
           { agent },
         );
         emitSettingsSnapshot(saved.settings);
+        accountPreferencesTouched = true;
       }
       if (
         (await settingsStore.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field))?.[
@@ -1163,6 +1304,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
           ),
         );
         emitSettingsSnapshot(saved.settings);
+        accountPreferencesTouched = true;
       }
       if (
         isProviderId(providerId) &&
@@ -1176,7 +1318,9 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
           namedSelection,
         );
         emitSettingsSnapshot(saved.settings);
+        accountPreferencesTouched = true;
       }
+      if (accountPreferencesTouched) pushAccountPreferences();
     } catch {
       // The reply is the creation's; a failed remember has no line in it.
     }
@@ -1651,6 +1795,29 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     }
   }
 
+  async function applyAccountPreferenceSideEffects(
+    result: SettingsUpdateResult,
+    changed: readonly AccountPreferenceField[],
+  ): Promise<void> {
+    for (const field of changed) {
+      await applyHostSettingSideEffect(field, result.settings);
+    }
+    const workspaceAgentDefaultsChanged = changed.includes(
+      APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
+    );
+    if (workspaceAgentDefaultsChanged) {
+      await readSupersetWorkspaceHost();
+    }
+    if (
+      workspaceAgentDefaultsChanged ||
+      changed.includes(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field) ||
+      changed.includes(APP_SETTING_SCHEMA.workspaceProjectDefaults.field)
+    ) {
+      await broadcastWorkspaceProjects();
+    }
+    emitSettingsSnapshot(result.settings);
+  }
+
   const refusedSettings = async (reason: string): Promise<SettingsUpdateResult> => ({
     status: ACT_RESULT_STATUS.REJECTED,
     settings: await settingsStore.snapshot(),
@@ -1739,6 +1906,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         "Could not save that setting on this system.",
         reporterOf(params),
       );
+      if (!result.reason && isAccountPreferenceField(field)) pushAccountPreferences();
       return gatewayOk(wire(result));
     },
     [GATEWAY_METHOD.SETTINGS_UPDATE_ENTRY]: async (params) => {
@@ -1769,6 +1937,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         "Could not save that setting on this system.",
         reporterOf(params),
       );
+      if (!result.reason && isAccountPreferenceField(field)) pushAccountPreferences();
       return gatewayOk(wire(result));
     },
     [GATEWAY_METHOD.SETTINGS_RESET]: async (params) => {
@@ -1788,6 +1957,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         "Could not reset those settings on this system.",
         reporterOf(params),
       );
+      if (!result.reason && resetTouchesAccountPreferences(scope)) pushAccountPreferences();
       return gatewayOk(wire(result));
     },
     [GATEWAY_METHOD.CREDENTIAL_SET_API_KEY]: async (params) => {
@@ -2373,6 +2543,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
         `Local session hook registration failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     });
+    if (account.status === ACCOUNT_STATUS.SIGNED_IN) void reconcileAccountPreferences();
     await applyVoiceCredential();
     startSessionObservation();
     startCalendarObservation();

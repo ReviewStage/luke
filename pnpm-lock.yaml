@@ -283,6 +283,9 @@ importers:
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../hosted
+      '@sidecar/settings':
+        specifier: workspace:*
+        version: link:../settings
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
