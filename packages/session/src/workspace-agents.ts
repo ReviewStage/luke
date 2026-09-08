@@ -63,6 +63,7 @@ export const WORKSPACE_AGENT_MODELS = {
         { id: "gpt-5.3-codex-spark", label: "GPT-5.3 Codex Spark" },
         { id: "gpt-5.3-codex", label: "GPT-5.3 Codex" },
         { id: "gpt-5.2-codex", label: "GPT-5.2 Codex" },
+        { id: "gpt-6-astra", label: "GPT-6 Astra" },
       ],
       efforts: ["none", "low", "medium", "high", "xhigh", "max", "ultra"],
     },

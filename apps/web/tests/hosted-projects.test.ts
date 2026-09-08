@@ -158,4 +158,8 @@ test("a provider that offered a project carries its agent table on the answer", 
   const answer = hostedProjectsAnswerFromWire(body);
   assert.ok(answer);
   assert.equal(answer.agentModels.length, 3);
+  const codex = answer.agentModels.find((entry) => entry.agent === "codex");
+  assert.ok(
+    codex?.models.some((model) => model.id === "gpt-6-astra" && model.label === "GPT-6 Astra"),
+  );
 });
