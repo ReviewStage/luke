@@ -307,21 +307,18 @@ test("recall eligibility: main and private threads of the same agent, never the 
     "agent:main:heartbeat:1",
     "something:else",
   ]) {
+    // SAFETY: test keys are shaped by hand to exercise the classifier.
+    const ineligibleKey = key as typeof MAIN_SESSION_KEY;
     assert.equal(
-      // SAFETY: test keys are shaped by hand to exercise the classifier.
       isRecallEligibleConversation(
-        { sessionKey: key as typeof MAIN_SESSION_KEY, agentId: "main", temporary: false },
+        { sessionKey: ineligibleKey, agentId: "main", temporary: false },
         current,
       ),
       false,
       key,
     );
     assert.equal(
-      conversationRunsRecall({
-        sessionKey: key as typeof MAIN_SESSION_KEY,
-        agentId: "main",
-        temporary: false,
-      }),
+      conversationRunsRecall({ sessionKey: ineligibleKey, agentId: "main", temporary: false }),
       false,
       key,
     );

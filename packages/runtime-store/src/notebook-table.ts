@@ -30,6 +30,12 @@ import type { RuntimeDatabase } from "./database.js";
  * whole through a rename.
  */
 
+/** What a reconcile answers: the entries as they then stand, and the file content it read. */
+export interface NotebookReconciliation {
+  readonly entries: readonly NotebookEntry[];
+  readonly content: string;
+}
+
 export interface NotebookEntry {
   readonly id: string;
   readonly words: string;
@@ -144,7 +150,7 @@ export function reconcileNotebook(
   database: RuntimeDatabase,
   root: string,
   now: number,
-): { entries: readonly NotebookEntry[]; content: string } {
+): NotebookReconciliation {
   const content = readUserFile(root);
   const hash = hashText(content);
   if (recordedHash(database) === hash) return { entries: selectEntries(database), content };

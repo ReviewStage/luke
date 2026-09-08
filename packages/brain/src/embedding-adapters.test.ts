@@ -29,7 +29,7 @@ function fetchAnswering(answer: (call: Call) => Response) {
     const headers = new Headers(init.headers);
     const call: Call = {
       url: input,
-      body: typeof init.body === "string" ? JSON.parse(init.body) : undefined,
+      body: init.body === undefined ? undefined : JSON.parse(String(init.body)),
       authorization: headers.get("authorization") ?? undefined,
     };
     calls.push(call);

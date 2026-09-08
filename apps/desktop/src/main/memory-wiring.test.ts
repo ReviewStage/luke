@@ -83,6 +83,7 @@ function adapter(behaviour: { fail?: boolean } = {}): EmbeddingAdapter & { calls
 
 /** A runtime with no model: the subrun searches once and summarizes the first result's snippet. */
 function recallRuntime(): AgentRuntime {
+  // SAFETY: the subrun calls openContext and start alone; the fake supplies exactly those.
   return {
     openContext: async () => ({ context: { dispose: () => undefined }, bootstrap: {} }),
     start: (request: RuntimeRunRequest) => ({

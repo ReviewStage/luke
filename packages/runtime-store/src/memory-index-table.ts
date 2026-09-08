@@ -26,6 +26,7 @@ import {
   type VectorHit,
 } from "@sidecar/memory";
 import { DAILY_NOTES_DIRECTORY, WORKSPACE_FILE } from "@sidecar/runtime";
+import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import type { RuntimeDatabase } from "./database.js";
 import { listNotebookEntries } from "./notebook-table.js";
 
@@ -411,8 +412,15 @@ type ChunkRow = {
   origin: string;
 };
 
+function entryIdsOf(serialized: string | null): string[] | undefined {
+  if (!serialized) return undefined;
+  // SAFETY: JSON.parse returns a runtime value; only its string members are kept below.
+  const parsed = JSON.parse(serialized) as UnparsedWireValue;
+  return Array.isArray(parsed) ? parsed.filter(isWireString) : undefined;
+}
+
 function provenanceOf(row: ChunkRow): MemoryProvenance {
-  const ids = row.entry_ids ? (JSON.parse(row.entry_ids) as string[]) : undefined;
+  const ids = entryIdsOf(row.entry_ids);
   const origins: readonly string[] = Object.values(MEMORY_ORIGIN);
   return {
     // SAFETY: the origin column holds one of the vocabulary's values, written by applyMemorySync.

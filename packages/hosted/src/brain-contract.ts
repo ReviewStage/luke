@@ -5,6 +5,7 @@ import {
 } from "@sidecar/runtime-contracts";
 import {
   isRecord,
+  isWireNumber,
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
@@ -388,7 +389,7 @@ export function hostedBrainEmbedAnswerFromWire(
     if (!Array.isArray(entry) || entry.length !== dimensions) return undefined;
     const vector: number[] = [];
     for (const component of entry) {
-      if (typeof component !== "number" || !Number.isFinite(component)) return undefined;
+      if (!isWireNumber(component)) return undefined;
       vector.push(component);
     }
     vectors.push(vector);

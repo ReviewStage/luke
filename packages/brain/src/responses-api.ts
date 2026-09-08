@@ -307,7 +307,7 @@ export function embeddingsVectors(
     }
     const vector: number[] = [];
     for (const component of entry.embedding) {
-      if (typeof component !== "number" || !Number.isFinite(component)) return undefined;
+      if (!isWireNumber(component)) return undefined;
       vector.push(component);
     }
     if (vector.length === 0 || (width !== undefined && width !== vector.length)) return undefined;

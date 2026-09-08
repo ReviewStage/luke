@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { UnparsedWireValue } from "@sidecar/wire";
 import {
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_BRAIN_EMBED_BOUNDS,
@@ -22,14 +23,15 @@ test("an embed request carries the contract and non-empty texts within the bound
       texts: ["prefers tabs", "ships on tuesdays"],
     },
   });
-  for (const malformed of [
+  const malformedRequests: UnparsedWireValue[] = [
     { texts: ["x"] },
     { contract: 1, texts: ["x"] },
     { contract: HOSTED_BRAIN_CONTRACT_VERSION, texts: [] },
     { contract: HOSTED_BRAIN_CONTRACT_VERSION, texts: ["   "] },
     { contract: HOSTED_BRAIN_CONTRACT_VERSION, texts: [1] },
     { contract: HOSTED_BRAIN_CONTRACT_VERSION, texts: ["x"], model: "anything" },
-  ]) {
+  ];
+  for (const malformed of malformedRequests) {
     const refused = hostedBrainEmbedRequestFromWire(malformed);
     assert.equal(refused.ok, false);
     if (!refused.ok) assert.equal(refused.refusal, HOSTED_BRAIN_REQUEST_REFUSAL.MALFORMED);

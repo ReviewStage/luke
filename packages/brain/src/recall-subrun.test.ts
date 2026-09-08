@@ -17,11 +17,13 @@ import { REFUSAL_REASON } from "./turn.js";
 function fakeRuntime(script: (request: RuntimeRunRequest) => Promise<string>) {
   const disposed: number[] = [];
   const requests: RuntimeRunRequest[] = [];
+  // SAFETY: the subrun disposes the context and reads nothing else of it.
   const context = {
     dispose: () => {
       disposed.push(1);
     },
   } as unknown as ContextEngine;
+  // SAFETY: the subrun calls openContext and start alone; the test supplies exactly those.
   const runtime = {
     openContext: async () => ({ context, bootstrap: { kind: "fresh" } }),
     start: (request: RuntimeRunRequest) => {
@@ -37,7 +39,13 @@ function fakeRuntime(script: (request: RuntimeRunRequest) => Promise<string>) {
   return { runtime, disposed, requests };
 }
 
-function memory(): { access: BrainMemoryAccess; searches: string[]; reads: string[] } {
+interface MemoryFake {
+  readonly access: BrainMemoryAccess;
+  readonly searches: string[];
+  readonly reads: string[];
+}
+
+function memory(): MemoryFake {
   const searches: string[] = [];
   const reads: string[] = [];
   return {
@@ -116,6 +124,7 @@ test("the subrun is offered the two memory tools alone, runs them, and its conte
 
 test("a subrun that does not complete answers nothing", async () => {
   const notebook = memory();
+  // SAFETY: the subrun calls openContext and start alone; the test supplies exactly those.
   const runtime = {
     openContext: async () => ({ context: { dispose: () => undefined }, bootstrap: {} }),
     start: (request: RuntimeRunRequest) => ({
