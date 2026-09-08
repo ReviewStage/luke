@@ -677,12 +677,41 @@ function counts(values: readonly string[]): Map<string, number> {
   return result;
 }
 
+/** The most of an entry line the comparison reads; a MEMORY.md line is bounded by the file's own budget and a candidate by its text bound. */
+const COMPARABLE_FACT_MAX_CHARS = 4_000;
+const COMMENT_OPEN = "<!--";
+const COMMENT_CLOSE = "-->";
+
+/** Removes every `<!-- -->` comment by scanning, so a run of them costs one pass whatever it holds. */
+function withoutComments(value: string): string {
+  let result = "";
+  let from = 0;
+  for (;;) {
+    const open = value.indexOf(COMMENT_OPEN, from);
+    if (open === -1) return result + value.slice(from);
+    const close = value.indexOf(COMMENT_CLOSE, open + COMMENT_OPEN.length);
+    if (close === -1) return result + value.slice(from, open);
+    result += value.slice(from, open);
+    from = close + COMMENT_CLOSE.length;
+  }
+}
+
+/**
+ * Two entries are the same fact when they read the same once the bullet,
+ * the comments, the trailing source reference, whitespace, and case are set
+ * aside. This is a comparison normalizer and nothing renders its answer.
+ * Whitespace is collapsed first and the text bounded before any pattern
+ * runs, so a line of whitespace costs one pass rather than a backtrack.
+ */
 function comparableFact(value: string): string {
-  return value
+  const collapsed = value
     .replace(/^[-*+]\s+/u, "")
-    .replace(/\s*<!--[\s\S]*?-->/gu, "")
-    .replace(/\s+Source:\s+\S+#L\d+-L\d+\s*$/iu, "")
     .replace(/\s+/gu, " ")
+    .trim()
+    .slice(0, COMPARABLE_FACT_MAX_CHARS);
+  return withoutComments(collapsed)
+    .replace(/ ?Source: \S+#L\d+-L\d+ ?$/iu, "")
+    .replace(/ {2,}/gu, " ")
     .trim()
     .toLowerCase();
 }

@@ -15,6 +15,7 @@ import {
   responsesModelAnswer,
 } from "@sidecar/brain";
 import { type BareResponsesModel, bareModelAdapter } from "@sidecar/brain/testing";
+import { MEMORY_HOUSEKEEPING_OUTCOME } from "@sidecar/memory";
 import type { ConversationEntry } from "@sidecar/realtime";
 import { type ChildStore, CREDENTIAL_REFERENCE_KIND, type ScheduledTimer } from "@sidecar/runtime";
 import {
@@ -150,7 +151,10 @@ interface Composed {
   timers: Map<ScheduledTimer, { callback: () => void; delayMs: number }>;
 }
 
-function composed(script: Script): Composed {
+function composed(
+  script: Script,
+  overrides: Partial<Parameters<typeof wireBrain>[0]> = {},
+): Composed {
   const seen: Seen[] = [];
   let calls = 0;
   const client: BareResponsesModel = {
@@ -282,6 +286,7 @@ function composed(script: Script): Composed {
     skillRoots: () => [],
     runnable: () => true,
     dropBriefings: () => undefined,
+    ...overrides,
   });
   return {
     wiring,
@@ -513,4 +518,36 @@ test("Start fresh cancels a conversation's descendants first, and their cancella
   releaseChild?.();
   c.wiring.retire();
   await c.wiring.rebuild();
+});
+
+test("a reset capture that was skipped reports nothing, while one that failed is said so; the reset proceeds either way", async () => {
+  for (const [outcome, reported] of [
+    [MEMORY_HOUSEKEEPING_OUTCOME.SKIPPED, false],
+    [MEMORY_HOUSEKEEPING_OUTCOME.FAILED, true],
+  ] as const) {
+    const reports: string[] = [];
+    let captures = 0;
+    const c = composed(() => textAnswer("ok"), {
+      report: (message) => {
+        reports.push(message);
+      },
+      beforeReset: async () => {
+        captures += 1;
+        return { outcome, writes: 0, reason: "not an eligible private conversation" };
+      },
+    });
+    await c.wiring.rebuild();
+    const main = c.wiring.current();
+    assert.ok(main);
+    const runId = await ask(c, "remember this");
+    await main.waitAsk(runId, 60_000);
+    assert.equal(await c.wiring.resetConversation(MAIN_SESSION_KEY), true);
+    assert.equal(captures, 1, "the capture ran over the context the reset let go of");
+    assert.equal(
+      reports.some((line) => line.startsWith("Reset capture did not complete")),
+      reported,
+      outcome,
+    );
+    c.wiring.retire();
+  }
 });

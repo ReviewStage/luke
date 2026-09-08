@@ -152,6 +152,12 @@ export const DEEP_PATH = {
 
 /** How much a day's ingestion counts for; three recurring days pass the score gate, one does not. */
 const INGESTION_SCORE = 0.8;
+/**
+ * The most of one raw note line the light phase reads before scrubbing it;
+ * a candidate is cut to its own text bound afterwards anyway, and the
+ * redaction treats a key armor the cut removed as an unterminated key.
+ */
+const NOTE_LINE_MAX_CHARS = 4_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DIARY_OUTPUT_TOKENS = 400;
 const CONSOLIDATION_OUTPUT_TOKENS = 4_000;
@@ -446,7 +452,9 @@ export function wireMemoryMaintenance(
       content.split("\n").forEach((line, index) => {
         const trimmed = line.trim();
         if (trimmed.length === 0 || trimmed.startsWith("#") || trimmed.startsWith("<!--")) return;
-        const prepared = prepareForIngestion(trimmed.replace(/^[-*+]\s+/u, ""));
+        const prepared = prepareForIngestion(
+          trimmed.replace(/^[-*+]\s+/u, "").slice(0, NOTE_LINE_MAX_CHARS),
+        );
         if (!prepared || prepared.text.length < 12) return;
         seeds.push({
           text: prepared.text,
@@ -482,7 +490,9 @@ export function wireMemoryMaintenance(
     const slice = lines
       .slice(Math.max(0, candidate.startLine - 1), Math.max(candidate.startLine, candidate.endLine))
       .join(" ");
-    const prepared = prepareForIngestion(slice.replace(/^[-*+]\s+/u, ""));
+    const prepared = prepareForIngestion(
+      slice.replace(/^[-*+]\s+/u, "").slice(0, NOTE_LINE_MAX_CHARS),
+    );
     return (
       prepared !== undefined &&
       candidatesDuplicate(boundCandidateText(prepared.text), candidate.text)
