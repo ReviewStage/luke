@@ -315,6 +315,7 @@ function harness(overrides: HarnessOverrides = {}, storage = new FakeStorage()):
   const deliveries: BrainDelivery[] = [];
   const persisted: BrainPersistedState[] = [];
   const store = new BrainStateStore({
+    automaticReset: true,
     storage: {
       read: () => storage.read(),
       write: (contents) => {
@@ -2809,6 +2810,7 @@ test("runs retention lets go of leave the live records and journal too, so the n
   const bounds = { MAXIMUM_TERMINAL_REQUESTS: 2, MAXIMUM_SERIALIZED_BYTES: 8 * 1024 * 1024 };
   const storage = new FakeStorage();
   const store = new BrainStateStore({
+    automaticReset: true,
     storage,
     createGenerationId: () => "gen-bounded",
     now: () => NOW,
@@ -2855,6 +2857,7 @@ test("runs retention lets go of leave the live records and journal too, so the n
 test("a generation at its record bound refuses a new ask at the door, and admits one again once an end reaches the thread", async () => {
   const storage = new FakeStorage();
   const store = new BrainStateStore({
+    automaticReset: true,
     storage,
     createGenerationId: () => "gen-bounded",
     now: () => NOW,

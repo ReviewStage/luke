@@ -59,7 +59,8 @@ export function appendHistory(
       if (!historyEntryAdmitted(entry, now, clearedAt)) continue;
       if (appendOne(database, sessionKey, standing?.sessionId, entry)) changed = true;
     }
-    if (changed) retainHistory(database, sessionKey, now);
+    // Nothing is removed here: stored lines answer to Delete history and
+    // conversation maintenance, and the bound is the projection's alone.
     return { changed, entries: listRetained(database, sessionKey, now, clearedAt) };
   });
 }
@@ -172,21 +173,6 @@ function published(
       .prepare("SELECT 1 FROM history_events WHERE session_key = ? AND request_id = ? AND kind = ?")
       .get(sessionKey, requestId, kind) !== undefined
   );
-}
-
-/** Lets go of lines past the age bound and beyond the count, oldest first. */
-function retainHistory(database: RuntimeDatabase, sessionKey: SessionKey, now: number): void {
-  database
-    .prepare("DELETE FROM history_events WHERE session_key = ? AND recorded_at < ?")
-    .run(sessionKey, now - storedConversationMaximumAgeMs);
-  database
-    .prepare(
-      `DELETE FROM history_events WHERE session_key = ? AND sequence IN (
-         SELECT sequence FROM history_events WHERE session_key = ?
-         ORDER BY recorded_at DESC, sequence DESC LIMIT -1 OFFSET ?
-       )`,
-    )
-    .run(sessionKey, sessionKey, maximumStoredConversationEntries);
 }
 
 /** The thread as the panel draws it: retained lines in the order they happened, oldest first. */

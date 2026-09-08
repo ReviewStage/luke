@@ -216,7 +216,7 @@ test("the sequence counts up and is never reused after retention or a deletion",
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test("retention keeps the 200 most recent lines and nothing older than a fortnight, judged at the append", () => {
+test("the panel projection keeps 200 recent lines while canonical history keeps every admitted line", () => {
   const database = openTestDatabase();
   const old = line("old", NOW - storedConversationMaximumAgeMs - 1, { eventId: "old" });
   const many = Array.from({ length: maximumStoredConversationEntries + 10 }, (_, index) =>
@@ -225,7 +225,7 @@ test("retention keeps the 200 most recent lines and nothing older than a fortnig
   const outcome = appendHistory(database, MAIN_SESSION_KEY, [old, ...many], NOW);
   assert.equal(outcome.entries.length, maximumStoredConversationEntries);
   assert.equal(outcome.entries[0]?.words, "line 10");
-  assert.equal(inspectHistory(database, MAIN_SESSION_KEY).count, maximumStoredConversationEntries);
+  assert.equal(inspectHistory(database, MAIN_SESSION_KEY).count, many.length + 1);
   // A line stamped in the future is not admitted: the thread's clock is the store's.
   assert.equal(
     appendHistory(database, MAIN_SESSION_KEY, [line("soon", NOW + 1, { eventId: "f" })], NOW)
@@ -391,6 +391,7 @@ test("the reproduced boundary: marker written, erase failed, store load at exact
     cutoff,
   );
   const store = new BrainStateStore({
+    automaticReset: true,
     repository: repository(first),
     createGenerationId: () => `gen-${++ids}`,
     now: () => clock,

@@ -19,8 +19,11 @@ import { BrainHost } from "./host";
 /**
  * Retention as the main process owns it: the store and its clock stand from
  * launch in a live run, whether or not any capability builds an agent, so an
- * expired, unreadable, or oversized file is replaced at launch and a
- * generation whose agent was retired still dies on time.
+ * unreadable or oversized file is replaced at launch. Under the default
+ * policy of no automatic reset an old checkpoint is loaded whole and the
+ * clock arms nothing; the tests that opt into the legacy expiry show an
+ * expired file replaced at launch and a generation whose agent was retired
+ * still dying on time.
  */
 
 const NOW = 1_800_000_000_000;
@@ -78,10 +81,11 @@ function settle(): Promise<void> {
   });
 }
 
-function launch(storage: MemoryStorage, clock: FakeClock) {
+function launch(storage: MemoryStorage, clock: FakeClock, automaticReset = false) {
   const reports: string[] = [];
   let generations = 0;
   const store = new BrainStateStore({
+    automaticReset,
     storage,
     createGenerationId: () => `gen-${++generations}`,
     now: () => clock.now,
@@ -96,7 +100,7 @@ function launch(storage: MemoryStorage, clock: FakeClock) {
   return { store, generationClock, reports };
 }
 
-test("a launch with no key or account replaces an expired file at once, without an agent or an inference", async () => {
+test("a launch under the default policy keeps a checkpoint past its stamped deadline and arms no clock", async () => {
   const storage = new MemoryStorage();
   const stale = {
     ...freshBrainState("gen-old", NOW - BRAIN_GENERATION_LIFETIME_MS - 1),
@@ -105,6 +109,26 @@ test("a launch with no key or account replaces an expired file at once, without 
   storage.file = brainStateRecord(stale);
   const clock = new FakeClock();
   const { store, generationClock, reports } = launch(storage, clock);
+  await generationClock.start();
+  assert.equal(store.generationId(), "gen-old");
+  assert.deepEqual(store.current()?.items, stale.items);
+  assert.ok(String(storage.file).includes(EXPIRED_SECRET));
+  assert.equal(reports.length, 0);
+  assert.equal(clock.timers.size, 0);
+  await clock.advance(NOW + BRAIN_GENERATION_LIFETIME_MS);
+  assert.equal(store.generationId(), "gen-old");
+  generationClock.stop();
+});
+
+test("with the legacy expiry enabled, a launch with no key or account replaces an expired file at once, without an agent or an inference", async () => {
+  const storage = new MemoryStorage();
+  const stale = {
+    ...freshBrainState("gen-old", NOW - BRAIN_GENERATION_LIFETIME_MS - 1),
+    items: [{ type: "message", role: "user", content: EXPIRED_SECRET }],
+  };
+  storage.file = brainStateRecord(stale);
+  const clock = new FakeClock();
+  const { store, generationClock, reports } = launch(storage, clock, true);
   await generationClock.start();
   assert.notEqual(store.generationId(), "gen-old");
   assert.ok(!String(storage.file).includes(EXPIRED_SECRET));
@@ -119,17 +143,17 @@ test("a launch with no key or account replaces an expired file at once, without 
   const refusing = new MemoryStorage();
   refusing.file = brainStateRecord(stale);
   refusing.refuse = true;
-  const held = launch(refusing, clock);
+  const held = launch(refusing, clock, true);
   await held.generationClock.start();
   assert.notEqual(held.store.generationId(), "gen-old");
   assert.ok(held.reports.some((message) => message.includes("could not replace")));
   held.generationClock.stop();
 });
 
-test("a generation whose agent was retired before its expiry still dies on the host's clock, and the file is replaced", async () => {
+test("with the legacy expiry enabled, a generation whose agent was retired before its expiry still dies on the host's clock, and the file is replaced", async () => {
   const storage = new MemoryStorage();
   const clock = new FakeClock();
-  const { store, generationClock } = launch(storage, clock);
+  const { store, generationClock } = launch(storage, clock, true);
   await generationClock.start();
   const host = new BrainHost({
     follow: () => async () => undefined,

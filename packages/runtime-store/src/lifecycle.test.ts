@@ -654,3 +654,62 @@ test("a maintenance pass archives idle and stale threads in place, keeps a key i
   database.close();
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("SQLite checkpoints survive their former fortnight deadline until explicitly reset", async () => {
+  const root = agentRoot();
+  const database = openAt(root);
+  try {
+    const prior = {
+      ...freshBrainState("existing-lifetime", NOW),
+      items: [{ type: "message", role: "user", content: "existing context" }],
+    };
+    assert.equal(repository(database).save(prior), true);
+    const store = new BrainStateStore({
+      repository: repository(database),
+      createGenerationId: () => "manual-successor",
+      now: () => NOW + 60 * DAY,
+    });
+    assert.equal((await store.load()).generationId, prior.generationId);
+    assert.deepEqual(store.current()?.items, prior.items);
+    assert.equal(store.expireIfDue(NOW + 90 * DAY), false);
+    assert.equal(
+      loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.generationId,
+      prior.generationId,
+    );
+    assert.equal(await store.reset(NOW + 90 * DAY), true);
+    assert.equal(
+      loadBrainEnvelope(database, MAIN_SESSION_KEY).state?.generationId,
+      "manual-successor",
+    );
+  } finally {
+    database.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("canonical history retains old and overflow lines while the existing panel projection stays bounded", () => {
+  const root = agentRoot();
+  const database = openAt(root);
+  try {
+    const now = NOW + 30 * DAY;
+    const old = line("old voice-only history", NOW, { eventId: "old-voice" });
+    appendHistory(database, MAIN_SESSION_KEY, [old], NOW);
+    const recent = Array.from({ length: 205 }, (_, i) =>
+      line(`recent ${i}`, now - 205 + i, { eventId: `recent-${i}` }),
+    );
+    appendHistory(database, MAIN_SESSION_KEY, recent, now);
+    assert.equal(listHistory(database, MAIN_SESSION_KEY, now).length, 200);
+    const archived = deleteConversationHistory(database, root, MAIN_SESSION_KEY, now);
+    assert.ok(archived?.published);
+    assert.equal(archived.archive.historyLines, 206);
+    const content = decodeArchiveContent(
+      fs.readFileSync(path.join(archiveDirectory(root), archived.archive.fileName)),
+      archived.archive.encoding,
+    );
+    assert.ok(content.includes("old voice-only history"));
+    assert.ok(content.includes('"words":"recent 0"'));
+  } finally {
+    database.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

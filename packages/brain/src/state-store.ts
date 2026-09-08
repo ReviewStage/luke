@@ -25,7 +25,7 @@ import { TOOL_LOOP_RUNTIME } from "./runtime.js";
 
 export const BRAIN_STATE_VERSION = 2;
 
-/** How long a generation lives from its creation, whatever is written into it. */
+/** The span every generation is stamped with at birth; enforced only by a store whose automatic reset is enabled. */
 export const BRAIN_GENERATION_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
 
 /**
@@ -82,6 +82,7 @@ export interface BrainPersistedState {
   version: typeof BRAIN_STATE_VERSION;
   generationId: string;
   createdAt: number;
+  /** Always stamped and validated as part of the envelope's shape; a deadline only when automatic reset is enabled. */
   expiresAt: number;
   /**
    * Whose shape the items are, as `checkpointFormatTag` writes it, carried on
@@ -367,6 +368,8 @@ export type BrainStateStoreOptions = (
 ) & {
   createGenerationId: () => string;
   now?: () => number;
+  /** Enforce the stamped deadline. Off by default, as OpenClaw's session reset policy is `none`. */
+  automaticReset?: boolean;
   bounds?: BrainStateBounds;
   /** Hears the store's own housekeeping failures: a discard or expiry the disk would not take. */
   report?: (message: string) => void;
@@ -408,9 +411,12 @@ export type BrainStateMutation = Omit<
  * each write reached storage, because the caller decides what a failed
  * checkpoint means for the act it guards.
  *
- * The store also owns the generation's two ends. Its lifetime is fixed at
- * birth and checked at load, on demand, and never moved by a write, so an
- * envelope written into for a fortnight still dies on the day it was born to.
+ * The store also owns the generation's two ends. Every generation is stamped
+ * with a deadline at birth that no write moves, but by default nothing
+ * enforces it: a generation stands until an explicit replacement, however old
+ * its checkpoint, matching OpenClaw's default of no automatic reset. Only a
+ * store constructed with `automaticReset` checks the deadline at load and on
+ * demand.
  * A Clear replaces the generation with an empty one carrying a content-free
  * marker of the erasure, in one write, so the moment the marker is durable the
  * old content is gone from the same file; a marker the storage refused still
@@ -418,6 +424,7 @@ export type BrainStateMutation = Omit<
  * not complete.
  */
 export class BrainStateStore {
+  readonly automaticReset: boolean;
   readonly #repository: BrainStateRepository;
   readonly #createGenerationId: () => string;
   readonly #now: () => number;
@@ -429,6 +436,7 @@ export class BrainStateStore {
   readonly #replacedListeners = new Set<(state: BrainPersistedState) => void>();
 
   constructor(options: BrainStateStoreOptions) {
+    this.automaticReset = options.automaticReset ?? false;
     this.#repository = options.repository ?? brainStateRepositoryFromStorage(options.storage);
     this.#createGenerationId = options.createGenerationId;
     this.#now = options.now ?? Date.now;
@@ -453,7 +461,7 @@ export class BrainStateStore {
     return this.#serialized(async () => {
       const held = this.#state;
       if (held) {
-        if (!brainGenerationExpired(held, this.#now())) return held;
+        if (!this.automaticReset || !brainGenerationExpired(held, this.#now())) return held;
         const fresh = this.#begin(this.#now());
         await this.#persistHousekeeping(fresh, "the expired generation");
         return this.#state ?? fresh;
@@ -492,7 +500,7 @@ export class BrainStateStore {
         ...(loaded.unreadable ? { rewrite: "an unreadable state file" } : undefined),
       };
     }
-    if (brainGenerationExpired(read, now)) {
+    if (this.automaticReset && brainGenerationExpired(read, now)) {
       return {
         state: freshBrainState(this.#createGenerationId(), now),
         rewrite: "the expired generation",
@@ -577,7 +585,7 @@ export class BrainStateStore {
    */
   expireIfDue(now: number = this.#now()): boolean {
     const held = this.#state;
-    if (!held || !brainGenerationExpired(held, now)) return false;
+    if (!this.automaticReset || !held || !brainGenerationExpired(held, now)) return false;
     const fresh = this.#begin(now);
     void this.#serialized(() => this.#persistHousekeeping(fresh, "the expired generation"));
     return true;
