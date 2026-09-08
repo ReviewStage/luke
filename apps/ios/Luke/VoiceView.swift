@@ -815,20 +815,31 @@ private struct StampedMessageRow: View {
     let message: VoiceConversationMessage
     let pull: CGFloat
 
-    /// Room for the widest stamp a twelve-hour clock draws.
+    /// Room for the widest stamp a twelve-hour clock draws, and the inset it
+    /// keeps from the screen's edge once uncovered.
     static let timeColumn: CGFloat = 56
+    private static let stampInset: CGFloat = 4
+    /// The thread's horizontal inset, which the column rests behind.
+    private static let threadInset: CGFloat = 16
+    /// The margin the shared bubbles keep on their far side.
+    private static let bubbleMargin: CGFloat = 48
     /// How far the column travels to stand fully in view: its own width and
-    /// the thread's trailing inset it rests behind.
-    static let reveal: CGFloat = timeColumn + 16
+    /// the inset it rests behind.
+    static let reveal: CGFloat = timeColumn + threadInset
+    /// What a sent bubble leaves free beyond its own margin, so a long ask
+    /// riding the full pull stops at the screen's leading edge rather than
+    /// through it; only the resistance past the reveal carries it further.
+    private static let sentRoom: CGFloat = reveal - bubbleMargin - threadInset
     /// What Luke's bubble leaves free beyond its own margin, so a long reply
     /// and the stamp uncovered beside it never share a pixel.
-    private static let receivedRoom: CGFloat = 12
+    private static let receivedRoom: CGFloat = timeColumn + stampInset - bubbleMargin
 
     var body: some View {
         ZStack(alignment: .trailing) {
             switch message.speaker {
             case .developer:
                 DeveloperMessageBubble(words: message.words)
+                    .padding(.leading, Self.sentRoom)
                     .offset(x: -pull)
             case .luke:
                 AgentMessageBubble(words: message.words)
@@ -840,7 +851,7 @@ private struct StampedMessageRow: View {
                 .foregroundStyle(Color.inkTertiary)
                 .lineLimit(1)
                 .frame(width: Self.timeColumn, alignment: .trailing)
-                .padding(.trailing, 4)
+                .padding(.trailing, Self.stampInset)
                 .offset(x: Self.reveal - pull)
         }
     }
