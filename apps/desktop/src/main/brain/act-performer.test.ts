@@ -183,6 +183,45 @@ test("memory acts are the main process's own, and the store's answer is the repo
   assert.equal(appActs.length, 0);
 });
 
+test("two conversations remembering at once both land when the host serializes the mutations", async () => {
+  let facts: readonly RememberedFact[] = [];
+  let mutations: Promise<unknown> = Promise.resolve();
+  const slowWrite = async (next: readonly RememberedFact[]) => {
+    // A store that answers a beat later, so an unserialized second read would still see the old list.
+    await new Promise((resolve) => setImmediate(resolve));
+    facts = next;
+    return true;
+  };
+  const { acts } = performer({
+    rememberedFacts: () => facts,
+    writeRememberedFacts: slowWrite,
+    mutateRememberedFacts: (work) => {
+      const mutation = mutations.then(
+        () => work(facts),
+        () => work(facts),
+      );
+      mutations = mutation.catch(() => undefined);
+      return mutation;
+    },
+  });
+  const [first, second] = await Promise.all([
+    acts.perform(
+      { name: REALTIME_TOOL.REMEMBER_FACT, argumentsJson: '{"words":"from thread one"}' },
+      LIVE,
+    ),
+    acts.perform(
+      { name: REALTIME_TOOL.REMEMBER_FACT, argumentsJson: '{"words":"from thread two"}' },
+      LIVE,
+    ),
+  ]);
+  assert.equal(first.status, ACT_RESULT_STATUS.ACCEPTED);
+  assert.equal(second.status, ACT_RESULT_STATUS.ACCEPTED);
+  assert.deepEqual(facts.map((fact) => fact.words).toSorted(), [
+    "from thread one",
+    "from thread two",
+  ]);
+});
+
 test("an app act is validated against the reported guide before a renderer carries it", async () => {
   const guide = {
     facts: [],

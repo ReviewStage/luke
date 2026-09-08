@@ -39,14 +39,19 @@ Hold <kbd>⌥</kbd><kbd>Space</kbd> to talk to Luke from any app, or press
 status of your agents, kick fresh ones off for you, or message them on your
 behalf.
 
-The **History** tab keeps your conversation with Luke on your Mac, across
-launches: the 200 most recent entries and nothing older than a fortnight, until
-you clear it. Clearing deletes the file too. The 20 most recent entries ride
-into Luke's next call beside his working memory of what he read, said, and did,
-which lives in its own file on your Mac for exactly 14 days from when it began
-and goes with the History when you clear it. Luke also silently keeps a small local memory of
-useful preferences, personal context, goals, and recurring constraints; ask him
-what he remembers, correct something, or tell him to forget it.
+The **History** tab keeps your conversations with Luke on your Mac, across
+launches: a main conversation and any threads you open, each holding its 200
+most recent entries and nothing older than a fortnight, beside a transcript
+of Luke's own turns that a compaction never erases. Its controls say what
+they keep: Start fresh restarts Luke's working context and keeps the history
+and his memory; Archive shelves a thread; Delete history removes a
+conversation behind a compressed recovery archive on your Mac that Restore
+can bring back. The 20 most recent entries ride into Luke's next call beside
+his working memory of what he read, said, and did, which lives in the same
+database for exactly 14 days from when it began. Luke also silently keeps a
+small local memory of useful preferences, personal context, goals, and
+recurring constraints; ask him what he remembers, correct something, or tell
+him to forget it.
 
 ![Luke's capsule under the notch, captioning a briefing about which sessions finished, which is still packaging, and which are waiting on you.](docs/media/luke-talking.png)
 

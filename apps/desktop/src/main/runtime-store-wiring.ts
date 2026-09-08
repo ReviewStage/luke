@@ -77,6 +77,16 @@ export interface RuntimeStoreWiring {
   /** The remembered entries' write back through the store; answers whether the list persisted. */
   writeRememberedFacts: (facts: readonly RememberedFact[]) => Promise<boolean>;
   /**
+   * One mutation of the remembered facts, read and replaced under one queue.
+   * Two conversations may run turns at once, so a remember in one and a
+   * forget in another must not each read the list, compute, and replace it
+   * past the other; `work` is handed the list as it stands when its turn in
+   * the queue comes, and what it answers is the list that then stands.
+   */
+  mutateRememberedFacts: (
+    work: (current: readonly RememberedFact[]) => Promise<readonly RememberedFact[]>,
+  ) => Promise<readonly RememberedFact[]>;
+  /**
    * Records a line in one conversation from the main process — the ask a
    * carried act was, a typed ask the brain accepted, a run's end — minting
    * the line's id here, since this process is its writer.
@@ -172,6 +182,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
   };
 
   let rememberedFacts: readonly RememberedFact[] = [];
+  let factMutations: Promise<unknown> = Promise.resolve();
 
   const mainRecord = (): ConversationRecord => ({
     sessionKey: MAIN_SESSION_KEY,
@@ -185,6 +196,22 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
 
   const holds = (sessionKey: SessionKey) =>
     temporary.has(sessionKey) || stored.some((record) => record.sessionKey === sessionKey);
+
+  const writeRememberedFacts = async (facts: readonly RememberedFact[]): Promise<boolean> => {
+    if (!dependencies.persistent) return false;
+    let persisted: boolean;
+    try {
+      persisted = await client().replacePersonalFacts(facts);
+    } catch (error) {
+      dependencies.report(
+        `Could not persist Luke's memory: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return false;
+    }
+    if (!persisted) return false;
+    rememberedFacts = facts;
+    return true;
+  };
 
   return {
     client,
@@ -214,20 +241,14 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
       announce();
     },
     rememberedFacts: () => rememberedFacts,
-    writeRememberedFacts: async (facts) => {
-      if (!dependencies.persistent) return false;
-      let persisted: boolean;
-      try {
-        persisted = await client().replacePersonalFacts(facts);
-      } catch (error) {
-        dependencies.report(
-          `Could not persist Luke's memory: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        return false;
-      }
-      if (!persisted) return false;
-      rememberedFacts = facts;
-      return true;
+    writeRememberedFacts,
+    mutateRememberedFacts: (work) => {
+      const mutation = factMutations.then(
+        () => work(rememberedFacts),
+        () => work(rememberedFacts),
+      );
+      factMutations = mutation.catch(() => undefined);
+      return mutation;
     },
     recordConversationEntry: (
       entry,

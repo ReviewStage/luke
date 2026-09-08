@@ -236,10 +236,25 @@ Trust constraints:
   runtime loads only its own stamp, and a valid checkpoint of another stamp
   is not corruption: it is kept whole, beside the requests and the journal,
   every turn over it is refused as incompatible, and the way forward is a
-  runtime that reads it or the developer's Clear. Corrupt rows are replaced
-  by the store that observed them. Every hook of an engine may be
+  runtime that reads it or the developer's Start fresh. Corrupt rows are
+  replaced by the store that observed them. Every hook of an engine may be
   asynchronous and is
   awaited only until the run's signal fires, like every wait on the model.
+  Compaction has exactly one owner, the host's `compaction.ts`, reached
+  through the runtime's own `compact` and `capabilities` seams so the host
+  still touches no model directly: the request asks the provider for no
+  automatic compaction, and the host folds the context under OpenClaw's
+  reserve policy — 20,000 tokens, capped at a
+  quarter of the model's window — by asking the provider for an explicit
+  compaction and adopting the answered window whole, or, on a transport that
+  cannot compact, by folding the older items behind a summary the model
+  writes tool-free, cut at a user message so no tool call is parted from its
+  result. Transport size is a separate admission constraint: a hosted request
+  is prepared before it would cross the 2 MiB envelope, and never by deleting
+  stored history or cutting an opaque item. A compaction the next turn needs
+  that fails ends the run as a recoverable failure with the context exactly
+  as it was; the optional one runs after a reply is persisted and its
+  deliveries have settled, and a new ask cancels it.
 - The hosted tier speaks two brain contracts. The first, kept for installed
   clients, carries the input array and a turn authority and lets the service
   derive everything else. The second (`/api/brain/capabilities`,
@@ -258,69 +273,117 @@ Trust constraints:
   the first. The service therefore deploys before such a desktop ships, and
   widening either contract is a product decision, not an implementation
   detail.
-- What the brain keeps is one generation, in one database under one writer,
-  and the generation's shape is the retention rule. The database is the
-  runtime store: one SQLite file per agent under Luke's own application data
-  (`agents/main/agent.sqlite`), written only from its own worker thread, with
-  a table for each kind of thing the envelope holds — the model's checkpoint
-  items, the transcript cursors, the requests, the action receipts — beside
-  the conversation's own lines and the facts Luke remembers, so the main
-  thread never waits on the disk and no second writer exists. The files an
-  earlier build kept beside `settings.json` are left in place and never
-  read: nothing draws or writes them any more. Every save is a
-  compare-and-set against the generation the writer last observed standing,
-  so a stale writer can neither refill nor replace a newer generation, and a
-  generation whose rows this build cannot read is replaced by the store that
-  observed it and by nothing else. The envelope holds the
-  Responses input from the latest compaction onward — the API's encrypted
-  compaction item included, which is user-derived data however opaque — the
-  transcript cursors, the record of every developer ask and how it ended, and
-  the action journal that pairs each act with its outcome. A generation lives
-  exactly fourteen days from its creation: no write, checkpoint, or
-  compaction moves its expiry, a file claiming any other span reads as
-  nothing, and it is judged at load, at the door of every turn and
-  submission, and by a timer armed at the instant itself. The fence is
-  synchronous: the store forgets the dead generation and announces the
-  successor before any disk is waited on, so a turn holding a model answer,
-  a transcript read, or an act's preparation is revoked at once, a write
-  landing afterwards installs nothing, and the late result lands nowhere.
-  The conversation's lines answer to their own retention, not the
-  generation's: each line is stamped with the generation that stood when it
-  was written, for attribution alone, and a generation's expiry erases no
-  line; only the Clear reaches both.
-  Expiry revokes the generation's runs and, through the host's own listener,
-  withdraws every briefing it had queued or offered but not yet spoken; a
-  version-1 file, of unknown age, reads as nothing rather than as a fresh
-  lifetime; a generation found expired, unreadable, or past its bounds at
-  load is replaced on disk in the same load rather than left for a later
-  write; and the empty generation that follows may observe the same
-  provider files again, because the rule bounds how long a reading stands,
-  not whether the source can be read. Within its life a generation holds at
-  most 200 records and its serialized file stays under 8 MiB: ended runs
-  whose ends History has taken go first, each with its journal, a new ask is
-  refused at the door when nothing can go, and a write that would still grow
-  an envelope past a bound is refused rather than dropping a run still going
-  or its journal. The History Clear reaches this file as well as the
-  conversation's, in a fixed order: the cutoff is raised, the relayed thread
-  emptied, and every window told, so no later history write, window report,
-  model context, or publication can carry a line from before the press; the
-  store fences the generation the same synchronous way and then writes an
-  empty successor carrying a content-free marker — the Clear's instant, and
-  the erased generation's id when one is known, learned from the database
-  when the store had not yet loaded — over the old content; the thread's
-  lines at or before the instant are deleted. The cutoff is also kept on the conversation's own
-  row, written in the marker's transaction and only ever raised, so a line
-  from before a Clear stays refused after the generation that carried the
-  marker has itself expired, whatever the disk did about the erasure. The main process's own thread carries an epoch
-  the fence moves, so a store answer still out when the Clear landed installs
-  nothing and broadcasts nothing. A launch that finds the marker refuses
-  every stored line at or before its instant, so a crash between the two
-  steps cannot stand the thread back up, and a step that fails leaves the
-  fence standing and reports the erasure incomplete, never done, with the
-  next landed write replacing what the disk kept. A Clear does not reach the facts Luke
-  separately remembers about the developer, nor any provider's file. Widening what the brain reads, where it travels, how long a
-  generation stands, or what a Clear leaves is a product decision, not an
-  implementation detail, and `PRIVACY.md` says each in as many words.
+- What the brain keeps is one generation per conversation, in one database
+  under one writer, and the generation's shape is the retention rule for the
+  model's context alone. The database is the runtime store: one SQLite file
+  per agent under Luke's own application data (`agents/main/agent.sqlite`),
+  written only from its own worker thread, with a table for each kind of
+  thing the envelope holds — the model's checkpoint items, the transcript
+  cursors, the requests, the action receipts — beside each conversation's
+  own lines, its retained transcript, the recovery archives of deleted
+  history, and the facts Luke remembers, so the main thread never waits on
+  the disk and no second writer exists. The files an earlier build kept
+  beside `settings.json` are left in place and never read: nothing draws or
+  writes them any more. Every save is a compare-and-set against the
+  generation the writer last observed standing, so a stale writer can
+  neither refill nor replace a newer generation, and a generation whose rows
+  this build cannot read is replaced by the store that observed it and by
+  nothing else. The envelope holds the Responses input from the latest
+  compaction onward — the API's encrypted compaction item included, which is
+  user-derived data however opaque — the transcript cursors, the record of
+  every developer ask and how it ended, and the action journal that pairs
+  each act with its outcome. What is stored, what the model is shown, and
+  starting fresh are three different things. The transcript table keeps
+  every input the context engine ingested and every point the projection
+  folded, written in the same transaction as the checkpoint that carries
+  them, attributed to the lifetime that wrote them and cascading with none:
+  a compaction changes the projection and erases nothing on record, and the
+  record stays searchable. A generation lives exactly fourteen days from its
+  creation: no write, checkpoint, or compaction moves its expiry, a file
+  claiming any other span reads as nothing, and it is judged at load, at the
+  door of every turn and submission, and by a timer armed at the instant
+  itself. The fence is synchronous: the store forgets the dead generation
+  and announces the successor before any disk is waited on, so a turn
+  holding a model answer, a transcript read, or an act's preparation is
+  revoked at once, a write landing afterwards installs nothing, and the late
+  result lands nowhere. The conversation's lines answer to their own
+  retention, not the generation's: each line is stamped with the generation
+  that stood when it was written, for attribution alone, and a generation's
+  expiry erases no line. Expiry revokes the generation's runs and, through
+  the host's own listener, withdraws every briefing it had queued or offered
+  but not yet spoken; a version-1 file, of unknown age, reads as nothing
+  rather than as a fresh lifetime; a generation found expired, unreadable,
+  or past its bounds at load is replaced on disk in the same load rather
+  than left for a later write; and the empty generation that follows may
+  observe the same provider files again, because the rule bounds how long a
+  reading stands, not whether the source can be read. Within its life a
+  generation holds at most 200 records and its serialized file stays under 8
+  MiB: ended runs whose ends History has taken go first, each with its
+  journal, a new ask is refused at the door when nothing can go, and a write
+  that would still grow an envelope past a bound is refused rather than
+  dropping a run still going or its journal.
+- The conversations are a directory, and History's controls are five
+  distinct acts in place of the one Clear. Main is the agent's ordinary
+  conversation, the one the talk key and every observation reach; a private
+  thread (`agent:<agentId>:thread:<uuid>`) is another logical conversation
+  of the same agent with its own generation, history, and transcript, opened
+  by the developer and asked in from the History tab, where the ask captures
+  the conversation at the send and a switch afterwards retargets nothing. A
+  temporary thread is held in memory alone — its history and its envelope
+  both — and is gone at the next launch; nothing said in it is remembered
+  automatically, and its explicit `remember` writes are the same act as
+  anywhere. **Start fresh** replaces a conversation's generation with an
+  empty one under the same synchronous fence, with no marker, because
+  nothing is erased: the history and transcript stand, attributed to the
+  lifetime that wrote them, and the facts Luke remembers are untouched;
+  resetting never means forgetting the notebook, and the control says so.
+  **Archive** takes a thread off the active list, retires its brain, and
+  keeps everything; main cannot be archived. **Delete history** is the
+  recoverable deletion, in a fixed order: the relayed thread is fenced and
+  every window told, the conversation's brain retired and its publication
+  drained, and then the store removes the conversation's lines, transcript,
+  boundaries, and standing lifetime in one transaction with a compressed
+  recovery archive of them all — zstd through `node:zlib` where the runtime
+  has it, plain JSONL otherwise — committed into the archive registry and the
+  conversation's cutoff raised to the deletion's instant; only then is the
+  archive published under `archives/` as
+  `<conversation>.jsonl.deleted.<timestamp>.<id>[.zst]`, written exclusively,
+  synced, linked into place, and read back against its hash, and only a
+  verified publication reports the deletion complete; a payload not yet
+  published stays in the registry and every launch retries it. The cutoff on
+  the conversation's row outlives any generation and is only ever raised by
+  a deletion, so a late line from before it is refused whatever the disk did;
+  the main process's thread carries an epoch the fence moves, so a store
+  answer still out installs nothing. **Restore** brings an archive back
+  into its own conversation with the same key, creation instant, and line
+  ids, releasing the cutoff the deletion raised to what stood before it, and
+  refuses when the conversation already holds newer lines: a live
+  conversation is never overwritten by an older copy of itself. A deletion
+  reaches neither the facts Luke separately remembers nor any provider's
+  file.
+- History maintenance is OpenClaw's, ported from `store-maintenance.ts` at
+  the pinned `b7528507` (MIT; `THIRD_PARTY_NOTICES.md`) and run at every
+  live launch and hourly after, with interrupted archive publications retried
+  first. Its defaults are the pinned ones — enforce mode, a 30-day stale
+  threshold, a 7-day idle threshold for private threads, 5,000 unarchived
+  conversations, a 10 GiB physical budget cleaned to 8 GiB, automatic reset
+  off, archive age expiry off — and its rules are the source's: ordinary age
+  and count maintenance never touches an archived conversation; a durable
+  conversation is archived in place and only runtime-owned automation state
+  is removed; main, a pinned conversation, one with a run under way, and any
+  key this build cannot classify are never victims; the cap counts only
+  unarchived rows, takes the longest untouched first with later insertion
+  winning a tie, and leaves the directory above the cap when protected rows
+  alone exceed it. The disk budget measures the database, its WAL, and the
+  published archives, never a serialized estimate and never a staging file
+  still being written; over budget it removes stale staging, then the oldest
+  archive files, then permanently deletes conversations the cap itself
+  archived, oldest first and each through the recoverable archive, and
+  never one still protected; what protected data leaves above the target is
+  reported, not deleted. Widening what the brain reads, where it travels,
+  how long a generation stands, what a deletion leaves, or what maintenance
+  may remove is a product decision, not an implementation detail, and
+  `PRIVACY.md` says each in as many words.
 - Counting is three streams with three different guarantees, and the
   difference is the thing to keep straight. Only the first carries the
   guarantee, and the other two must never be described as though they
@@ -449,17 +512,20 @@ Trust constraints:
   report can add to the thread and never replace it, a line delivered twice
   is one line, and two deliberate identical utterances are two. What the
   thread hands a model is the same bounded recent slice, riding beside the
-  brain's own working memory, and the panel's Clear reaches the stored lines
-  as well as the screen, because a Clear that emptied only the view would
-  leave the words on the machine with nothing left to draw them; it reaches
-  the brain's generation too, under the rule above. The narrower thing is a durable
+  brain's own working memory, and History's Delete history reaches the
+  stored lines as well as the screen, behind the recovery archive the rule
+  above describes, because a deletion that emptied only the view would leave
+  the words on the machine with nothing left to draw them. The narrower thing is a durable
   fact about the developer themselves. During a turn the developer opened,
   Luke may silently keep a concise stable preference, personal fact, goal, or
   recurring constraint. He skips transient details and uncertain inferences,
   never stores credentials, and stores a sensitive fact only when explicitly
   asked. The write runs the same act gauntlet as every other write — validated
   in the renderer, validated again in the main process, and armed only by a
-  developer-opened turn. A changed fact names the entry it replaces so
+  developer-opened turn — and every mutation of the list is serialized in the
+  main process, read and replaced under one queue, because two conversations
+  may now run turns at once and a read-then-replace across them would drop a
+  fact. A changed fact names the entry it replaces so
   contradictions do not stand together; duplicates add nothing; and a request
   to forget names one of the ids the conversation received. At most 32 bounded
   facts stand in the runtime store's own table, written whole by the same

@@ -56,6 +56,15 @@ export interface BrainActPerformerDependencies {
   appGuide: () => AppGuideSnapshot;
   rememberedFacts: () => readonly RememberedFact[];
   writeRememberedFacts: (facts: readonly RememberedFact[]) => boolean | Promise<boolean>;
+  /**
+   * Runs one read-compute-replace of the remembered facts under the host's
+   * queue, so two conversations remembering at once cannot drop each other's
+   * fact; absent, the mutation runs unqueued, which only a single-conversation
+   * test may accept.
+   */
+  mutateRememberedFacts?: (
+    work: (current: readonly RememberedFact[]) => Promise<readonly RememberedFact[]>,
+  ) => Promise<readonly RememberedFact[]>;
   /** Carries an app act only a renderer can perform, and answers what became of it. */
   performAppAct: (action: BrainAppActRequest["action"]) => Promise<WireRecord>;
   /** Records the ask a carried session act was, so the thread holds it. */
@@ -156,27 +165,34 @@ export function createBrainActPerformer(
     return carryAppAction(action);
   };
 
+  const mutateFacts = (
+    work: (current: readonly RememberedFact[]) => Promise<readonly RememberedFact[]>,
+  ): Promise<readonly RememberedFact[]> =>
+    dependencies.mutateRememberedFacts
+      ? dependencies.mutateRememberedFacts(work)
+      : work(dependencies.rememberedFacts());
+
   const carryAppAction = (action: CarriedAppAction): Promise<WireRecord> =>
     dispatchByKind(action, {
       // The two memory writes are the main process's own: the list lives
       // here, and the store's answer is the whole report.
       [APP_TOOL_KIND.REMEMBER]: async (act) => {
-        const facts = await saveRememberedFact(
-          dependencies.rememberedFacts(),
-          act.words,
-          act.replaces,
-          randomUUID(),
-          dependencies.writeRememberedFacts,
+        const facts = await mutateFacts((current) =>
+          saveRememberedFact(
+            current,
+            act.words,
+            act.replaces,
+            randomUUID(),
+            dependencies.writeRememberedFacts,
+          ),
         );
         return facts.some((fact) => fact.words === act.words)
           ? { status: ACT_RESULT_STATUS.ACCEPTED }
           : rejection(REFUSAL.MEMORY_NOT_SAVED);
       },
       [APP_TOOL_KIND.FORGET]: async (act) => {
-        const facts = await forgetRememberedFact(
-          dependencies.rememberedFacts(),
-          act.id,
-          dependencies.writeRememberedFacts,
+        const facts = await mutateFacts((current) =>
+          forgetRememberedFact(current, act.id, dependencies.writeRememberedFacts),
         );
         return facts.some((fact) => fact.id === act.id)
           ? rejection(REFUSAL.MEMORY_NOT_REMOVED)
