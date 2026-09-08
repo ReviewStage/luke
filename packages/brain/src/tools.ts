@@ -1,5 +1,4 @@
 import {
-  REALTIME_TOOL_FAMILY,
   type RealtimeToolWireDefinition,
   realtimeToolDefinitions,
   realtimeToolFamily,
@@ -12,9 +11,14 @@ import {
   TOOL_EXECUTION,
   type ToolDescriptor,
   type ToolPolicy,
+  type ToolPolicyLayers,
 } from "@sidecar/runtime";
 import type { ToolSchema } from "@sidecar/runtime-contracts";
-import { toolSchemaFromDefinition } from "./responses-api.js";
+import {
+  type ResponsesFunctionTool,
+  responsesToolDefinition,
+  toolSchemaFromDefinition,
+} from "./responses-api.js";
 import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
 
 /**
@@ -195,7 +199,8 @@ const BRAIN_ONLY_DESCRIPTORS = {
 } as const satisfies Record<BrainToolName, Pick<ToolDescriptor, "execution" | "effect" | "groups">>;
 
 function actDescriptor(definition: RealtimeToolWireDefinition): ToolDescriptor {
-  const family = realtimeToolFamily(definition.name) ?? REALTIME_TOOL_FAMILY.APP;
+  const family = realtimeToolFamily(definition.name);
+  if (family === undefined) throw new TypeError(`${definition.name} is not an act`);
   return {
     id: definition.name,
     schema: toolSchemaFromDefinition(definition),
@@ -228,13 +233,26 @@ export function brainToolCatalog(): readonly ToolDescriptor[] {
  * channel is offered only where the reply is not itself the speech. It is a
  * fact about the voice, not a permission decided from who opened the turn.
  */
-export function turnToolPolicy(trigger: BrainTurnTrigger | undefined): ToolPolicy {
+export function turnToolPolicy(trigger: BrainTurnTrigger): ToolPolicy {
   return trigger === BRAIN_TURN_TRIGGER.ASK ? { deny: [BRAIN_TOOL.ANNOUNCE] } : {};
 }
 
-/** The catalog under the turn's own layer alone: what a host with no configuration offers. */
-export function defaultTurnToolPolicy(trigger: BrainTurnTrigger | undefined): EffectiveToolPolicy {
-  return resolveToolPolicy(brainToolCatalog(), { session: turnToolPolicy(trigger) });
+/**
+ * The one resolution a turn's tools get: the configured layers over the
+ * catalog, then the turn's own layer. Maintenance names no trigger and adds
+ * no layer of its own, because it runs no tools.
+ */
+export function resolveTurnToolPolicy(
+  catalog: readonly ToolDescriptor[],
+  layers: ToolPolicyLayers,
+  trigger?: BrainTurnTrigger,
+): EffectiveToolPolicy {
+  return resolveToolPolicy(
+    catalog,
+    layers,
+    undefined,
+    trigger === undefined ? undefined : turnToolPolicy(trigger),
+  );
 }
 
 /** The schemas an effective policy leaves, in catalog order. */
@@ -243,23 +261,14 @@ export function brainToolSchemas(policy: EffectiveToolPolicy): readonly ToolSche
 }
 
 /**
- * The brain's own tool definitions in the Responses function-tool form the
- * hosted catalog and the trace viewer read.
+ * Every tool a hosted request may select by name, in the Responses
+ * function-tool form: the catalog's own schemas, act and brain tool alike.
+ * The service selects schemas from this catalog and nothing a caller sends;
+ * a desktop checks the names it means to send against the catalog the
+ * service advertised; the trace viewer renders a turn's tools from it.
  */
-export function brainOnlyToolDefinitions(): readonly RealtimeToolWireDefinition[] {
-  return BRAIN_ONLY_TOOLS;
-}
-
-/**
- * Every tool a hosted request may select by name: the acts table's rows and
- * the brain's own. The service selects schemas from this catalog and nothing
- * a caller sends; a desktop checks the names it means to send against the
- * catalog the service advertised.
- */
-export function hostedBrainToolCatalog(): ReadonlyMap<string, RealtimeToolWireDefinition> {
-  return new Map(
-    [...realtimeToolDefinitions(), ...BRAIN_ONLY_TOOLS].map((tool) => [tool.name, tool]),
-  );
+export function hostedBrainToolCatalog(): ReadonlyMap<string, ResponsesFunctionTool> {
+  return new Map(brainToolCatalog().map((tool) => [tool.id, responsesToolDefinition(tool.schema)]));
 }
 
 /**

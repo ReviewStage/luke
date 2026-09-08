@@ -310,6 +310,7 @@ function agentOver(model: ModelAdapter, repository: RecordingRepository) {
   const reports: string[] = [];
   const agent = new BrainAgent({
     runtime,
+    prepareTurn: () => ({ prompt: "instructions", layers: {} }),
     acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
     roster: () => ({ text: "none", identities: [] }),
     standingContext: () => "",

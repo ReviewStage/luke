@@ -64,7 +64,8 @@ characters and the set to 60,000), so their contents travel to OpenAI with his
 working memory as described below; dated notes travel only when he reads one
 or when a conversation starts fresh. Luke may edit these files himself through
 his own tools, in any of his turns, and nothing else on your machine: a
-coding agent's transcript or session state is never written.
+coding agent's transcript or session state is never written, and a write whose
+arguments are malformed is refused rather than filled in.
 
 **Luke's working memory.** For each conversation Luke keeps a working memory
 of his own turns in the same database, in its own tables: the model's record

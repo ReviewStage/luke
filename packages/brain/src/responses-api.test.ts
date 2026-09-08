@@ -10,13 +10,13 @@ import {
   responsesModelAnswer,
   userMessageItem,
 } from "./responses-api.js";
-import { BRAIN_TOOL, brainOnlyToolDefinitions } from "./tools.js";
+import { BRAIN_TOOL, hostedBrainToolCatalog } from "./tools.js";
 
 test("the request asks the API for no compaction of its own, stores nothing, and replays reasoning", () => {
   const request = brainResponsesRequest([userMessageItem("hello")], {
     model: "gpt-test",
     instructions: "be Luke",
-    tools: brainOnlyToolDefinitions(),
+    tools: [...hostedBrainToolCatalog().values()],
     maximumOutputTokens: 1234,
     reasoningEffort: BRAIN_REASONING_EFFORT.MEDIUM,
   });

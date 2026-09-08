@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_TOOL, type RealtimeFunctionCall } from "@sidecar/acts";
 import type { ScheduledTimer } from "@sidecar/realtime";
-import { resolveToolPolicy } from "@sidecar/runtime";
 import {
   MODEL_FAILURE,
   MODEL_RESPONSE_OUTCOME,
@@ -59,13 +58,7 @@ import {
   brainStateFromStored,
   freshBrainState,
 } from "./state-store.js";
-import {
-  BRAIN_TOOL,
-  brainToolCatalog,
-  isBrainOnlyTool,
-  TOOL_GROUP,
-  turnToolPolicy,
-} from "./tools.js";
+import { BRAIN_TOOL, isBrainOnlyTool, TOOL_GROUP } from "./tools.js";
 import type { BrainTurnTraceRecord } from "./trace.js";
 import { OMISSION_MARKER } from "./transcript-reads.js";
 import { BRAIN_TURN_TRIGGER } from "./turn.js";
@@ -303,6 +296,12 @@ interface Harness {
 
 let runIds = 0;
 
+/** A host with a fixed prompt and no configured layers: the whole catalog under the turn's own layer. */
+const PLAIN_PREPARATION: BrainAgentOptions["prepareTurn"] = () => ({
+  prompt: "instructions",
+  layers: {},
+});
+
 type HarnessOverrides = Partial<Omit<BrainAgentOptions, "runtime">> & {
   client?: BrainClient;
 };
@@ -335,6 +334,7 @@ function harness(overrides: HarnessOverrides = {}, storage = new FakeStorage()):
   const wholeReads: SessionIdentity[] = [];
   const agent = new BrainAgent({
     runtime,
+    prepareTurn: PLAIN_PREPARATION,
     acts: {
       perform: async (functionCall, execution) => {
         performed.push(functionCall);
@@ -950,12 +950,9 @@ function functionOutputs(input: readonly ResponsesInputItem[]) {
 }
 
 /** A host whose configured policy denies every act: the reads, the briefing, and the workspace stay. */
-const NO_ACTS_POLICY: BrainAgentOptions["prepareTurn"] = (turn) => ({
+const NO_ACTS_POLICY: BrainAgentOptions["prepareTurn"] = () => ({
   prompt: "no acts",
-  policy: resolveToolPolicy(brainToolCatalog(), {
-    agent: { deny: [`group:${TOOL_GROUP.ACTS}`] },
-    session: turnToolPolicy(turn.trigger),
-  }),
+  layers: { agent: { deny: [`group:${TOOL_GROUP.ACTS}`] } },
 });
 
 function assertNoActReached(h: Harness): void {
@@ -1951,6 +1948,7 @@ test("stop settles only after a held acceptance, which the successor then finds 
   const successorModel = adapterOf(new FakeClient());
   const successor = new BrainAgent({
     runtime: runtimeOver(successorModel),
+    prepareTurn: PLAIN_PREPARATION,
     acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
     roster: () => ({ text: "", identities: [] }),
     standingContext: () => "",
@@ -3082,6 +3080,7 @@ function heldOpenRuntime(model: ModelAdapter, disposeHangs = false) {
 function agentOn(runtime: ToolLoopAgentRuntime, h: Harness) {
   return new BrainAgent({
     runtime,
+    prepareTurn: PLAIN_PREPARATION,
     acts: { perform: async () => ({ status: ACT_RESULT_STATUS.ACCEPTED }) },
     roster: () => ({ text: "", identities: [] }),
     standingContext: () => "",

@@ -302,7 +302,12 @@ Trust constraints:
   identity workspace. The brain's workspace tools read and write these files
   and nothing outside the workspace directory, and are the one place the
   brain writes a file at all: a provider's transcript or session state is
-  still never written.
+  still never written. A workspace call whose arguments are not the strings
+  the tool takes is refused before anything is journaled, never filled in,
+  so a malformed write can empty no file. There is no prompt without the
+  workspace: a host prepares every turn from the resolved configuration and
+  the workspace files, and the runtime package that composes it knows the
+  files' names and bounds but none of their words, which the brain supplies.
 - The hosted tier speaks two brain contracts. The first, kept for installed
   clients, carries the input array and a turn authority and lets the service
   derive everything else. The second (`/api/brain/capabilities`,

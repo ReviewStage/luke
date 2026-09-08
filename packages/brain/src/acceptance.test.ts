@@ -19,7 +19,6 @@ import {
   defaultAgentConfiguration,
   gatherPromptFacts,
   recentDailyNotes,
-  resolveToolPolicy,
   seedWorkspace,
 } from "@sidecar/runtime";
 import {
@@ -33,6 +32,7 @@ import {
   type ModelAdapter,
   REASONING_EFFORT,
   RUN_END_REASON,
+  RUN_ORIGIN,
   RUNTIME_EVENT,
   type RuntimeCheckpoint,
   type RuntimeRun,
@@ -63,7 +63,6 @@ import {
   type BrainRequestRecord,
 } from "./requests.js";
 import { RESPONSES_ITEM_FORMAT, RESPONSES_ITEM_TYPE } from "./responses-api.js";
-import { responsesToolLoopRuntime } from "./responses-runtime.js";
 import { TOOL_LOOP_RUNTIME, ToolLoopAgentRuntime } from "./runtime.js";
 import {
   type BrainPersistedState,
@@ -71,8 +70,11 @@ import {
   BrainStateStore,
   brainStateFromStored,
 } from "./state-store.js";
-import { brainToolCatalog, hostedBrainToolCatalog, turnToolPolicy } from "./tools.js";
+import { toolLoopRuntimeOver } from "./testing.js";
+import { hostedBrainToolCatalog, resolveTurnToolPolicy } from "./tools.js";
+import { BRAIN_TURN_KIND, runOriginOf } from "./turn.js";
 import { BRAIN_WAKE_KIND } from "./wake-events.js";
+import { BRAIN_IDENTITY_LINE, BRAIN_WORKSPACE_SEEDS } from "./workspace-seeds.js";
 
 /**
  * The same execution contract, run through the real host against each
@@ -288,6 +290,7 @@ function host(
   });
   const agent = new BrainAgent({
     runtime: runtimeOver(model),
+    prepareTurn: () => ({ prompt: "instructions", layers: {} }),
     acts: {
       perform: async (call) => {
         performed.push(call.name);
@@ -342,7 +345,7 @@ for (const transport of [KEYED, HOSTED]) {
       () => payload([reasoning("rs_2"), actCall("call_2")]),
       () => payload([message("Sent twice.")]),
     ]);
-    const h = host(responsesToolLoopRuntime, transport.model(upstream));
+    const h = host(toolLoopRuntimeOver, transport.model(upstream));
     const record = await h.ask("send the tests twice");
     assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
     assert.equal(record?.text, "Sent twice.");
@@ -381,7 +384,7 @@ for (const transport of [KEYED, HOSTED]) {
     let releaseSecond: (() => void) | undefined;
     const upstream = fakeUpstream([() => payload([actCall("call_1"), actCall("call_2")])]);
     let performedCount = 0;
-    const h = host(responsesToolLoopRuntime, transport.model(upstream), new Storage(), async () => {
+    const h = host(toolLoopRuntimeOver, transport.model(upstream), new Storage(), async () => {
       performedCount += 1;
       if (performedCount === 1) {
         await new Promise<void>((resolve) => {
@@ -419,7 +422,7 @@ for (const transport of [KEYED, HOSTED]) {
       () => Response.json({ status: "failed", error: { code: "server_error" }, output: [] }),
       () => new Response("", { status: 429, headers: { "retry-after": "30" } }),
     ]);
-    const h = host(responsesToolLoopRuntime, transport.model(upstream));
+    const h = host(toolLoopRuntimeOver, transport.model(upstream));
     const malformed = await h.ask("first");
     assert.equal(malformed?.status, BRAIN_REQUEST_STATUS.FAILED);
     assert.equal(malformed?.failure, BRAIN_REQUEST_FAILURE.MODEL);
@@ -442,7 +445,7 @@ for (const transport of [KEYED, HOSTED]) {
       () => payload([actCall("call_1")]),
       () => payload([message("done")]),
     ]);
-    const h = host(responsesToolLoopRuntime, transport.model(upstream), storage);
+    const h = host(toolLoopRuntimeOver, transport.model(upstream), storage);
     await h.agent.ready();
     // Acceptance and start land; the checkpoint before the act is refused.
     let writes = 0;
@@ -471,7 +474,7 @@ test("hosted: a spent allowance ends the run as a failure, holds later wakes unt
     now: () => NOW,
     report: () => undefined,
   });
-  const h = host(responsesToolLoopRuntime, model);
+  const h = host(toolLoopRuntimeOver, model);
   const record = await h.ask("anything?");
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(model.quietUntil(), NOW + 3_600_000);
@@ -652,7 +655,7 @@ test("the Responses runtime refuses a valid checkpoint of the scripted runtime: 
   assert.ok(before);
 
   const upstream = fakeUpstream([() => payload([message("never asked")])]);
-  const responses = host(responsesToolLoopRuntime, KEYED.model(upstream), storage);
+  const responses = host(toolLoopRuntimeOver, KEYED.model(upstream), storage);
   await responses.agent.ready();
   assert.match(
     (await responses.agent.incompatibility()) ?? "",
@@ -772,7 +775,7 @@ test("a model failure after a recorded act restores the context to the act's com
     () => new Response("", { status: 500 }),
     () => payload([message("after")]),
   ]);
-  const h = host(responsesToolLoopRuntime, KEYED.model(upstream), storage);
+  const h = host(toolLoopRuntimeOver, KEYED.model(upstream), storage);
   const failed = await h.ask("send then fail");
   assert.equal(failed?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(failed?.failure, BRAIN_REQUEST_FAILURE.MODEL);
@@ -819,7 +822,7 @@ async function workspacePreparation(
 ) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "luke-acceptance-"));
   const workspace = path.join(root, "workspace");
-  await seedWorkspace(workspace);
+  await seedWorkspace(workspace, BRAIN_WORKSPACE_SEEDS);
   const registries = registerBrainBuiltIns(createRuntimeRegistries());
   const store = new ConfigurationStore(
     registries,
@@ -832,16 +835,18 @@ async function workspacePreparation(
     }),
   );
   const prepareTurn: BrainAgentOptions["prepareTurn"] = async (turn) => {
-    const policy = resolveToolPolicy(brainToolCatalog(), { session: turnToolPolicy(turn.trigger) });
+    const trigger = turn.kind === BRAIN_TURN_KIND.TURN ? turn.trigger : undefined;
+    const policy = resolveTurnToolPolicy(registries.tools.entries(), {}, trigger);
     const facts = await gatherPromptFacts({
       configuration: store.snapshot(),
-      run: { origin: turn.origin },
+      run: { origin: trigger === undefined ? RUN_ORIGIN.MAINTENANCE : runOriginOf(trigger) },
+      identity: BRAIN_IDENTITY_LINE,
       tools: policy.allowed.map((tool) => tool.schema),
       toolNotes: brainToolNotes(),
       runtimeContextMarker: BRAIN_INPUT_MARKER.STANDING_CONTEXT,
       runtimeId: TOOL_LOOP_RUNTIME.ID,
     });
-    return { prompt: buildSystemPrompt(facts).text, policy };
+    return { prompt: buildSystemPrompt(facts).text, layers: {} };
   };
   return { workspace, prepareTurn };
 }
@@ -860,7 +865,7 @@ test("a keyed turn and a hosted turn send the same prompt upstream, built from t
     [HOSTED, hostedPreparation],
   ] as const) {
     const upstream = fakeUpstream([() => payload([message("Hello.")])]);
-    const h = host(responsesToolLoopRuntime, transport.model(upstream), new Storage(), undefined, {
+    const h = host(toolLoopRuntimeOver, transport.model(upstream), new Storage(), undefined, {
       prepareTurn: preparation.prepareTurn,
     });
     const record = await h.ask("hello");
@@ -887,7 +892,7 @@ test("a keyed turn and a hosted turn send the same prompt upstream, built from t
 
 test("a conversation that starts fresh is primed once with the recent daily notes, and an ordinary turn reads none", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "luke-notes-"));
-  await seedWorkspace(root);
+  await seedWorkspace(root, BRAIN_WORKSPACE_SEEDS);
   await fs.writeFile(path.join(root, "memory", "2027-01-15.md"), "Shipped the release.");
   const now = Date.UTC(2027, 0, 15, 12);
   const primeFreshContext = async () => {
@@ -900,7 +905,7 @@ test("a conversation that starts fresh is primed once with the recent daily note
     () => payload([message("Noted.")]),
     () => payload([message("Again.")]),
   ]);
-  const h = host(responsesToolLoopRuntime, KEYED.model(upstream), new Storage(), undefined, {
+  const h = host(toolLoopRuntimeOver, KEYED.model(upstream), new Storage(), undefined, {
     primeFreshContext,
   });
   assert.equal((await h.ask("first"))?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);

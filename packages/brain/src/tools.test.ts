@@ -2,15 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { REALTIME_TOOL, realtimeToolDefinitions } from "@sidecar/acts";
 import { BRAIN_TURN_AUTHORITY } from "@sidecar/hosted";
-import { resolveToolPolicy, TOOL_EXECUTION } from "@sidecar/runtime";
+import { resolveToolPolicy, TOOL_EXECUTION, TOOL_POLICY_LAYER } from "@sidecar/runtime";
+import { wireRecord } from "@sidecar/wire";
 import {
   BRAIN_TOOL,
   brainToolCatalog,
   brainToolSchemas,
-  defaultTurnToolPolicy,
   hostedBrainToolCatalog,
   hostedBrainV1ToolDefinitions,
   isBrainOnlyTool,
+  resolveTurnToolPolicy,
   TOOL_GROUP,
 } from "./tools.js";
 import { BRAIN_TURN_TRIGGER } from "./turn.js";
@@ -34,9 +35,11 @@ test("the catalog holds every act and every brain tool once, each under its exec
   assert.equal(names.length, realtimeToolDefinitions().length + Object.values(BRAIN_TOOL).length);
 });
 
-test("with no configuration every turn is offered the whole catalog, and only an ask loses announce", () => {
-  const ask = defaultTurnToolPolicy(BRAIN_TURN_TRIGGER.ASK);
-  const wake = defaultTurnToolPolicy(BRAIN_TURN_TRIGGER.WAKE);
+test("with no configured layers every turn is offered the whole catalog, and only an ask loses announce, to the turn layer", () => {
+  const catalog = brainToolCatalog();
+  const ask = resolveTurnToolPolicy(catalog, {}, BRAIN_TURN_TRIGGER.ASK);
+  const wake = resolveTurnToolPolicy(catalog, {}, BRAIN_TURN_TRIGGER.WAKE);
+  const maintenance = resolveTurnToolPolicy(catalog, {});
   assert.ok(ask.allows(REALTIME_TOOL.SEND_SESSION_MESSAGE));
   assert.ok(wake.allows(REALTIME_TOOL.SEND_SESSION_MESSAGE));
   assert.ok(wake.allows(BRAIN_TOOL.WRITE_WORKSPACE_FILE));
@@ -44,7 +47,16 @@ test("with no configuration every turn is offered the whole catalog, and only an
   assert.ok(wake.allows(BRAIN_TOOL.ANNOUNCE));
   assert.ok(!ask.allows("delete_everything"));
   assert.ok(!wake.allows("read_session_transcript"));
-  assert.deepEqual(ask.denied, [{ tool: BRAIN_TOOL.ANNOUNCE, layer: "session" }]);
+  assert.deepEqual(ask.denied, [{ tool: BRAIN_TOOL.ANNOUNCE, layer: TOOL_POLICY_LAYER.TURN }]);
+  assert.deepEqual(maintenance.denied, []);
+  // A configured deny still wins over the turn layer, and is the layer named.
+  const configured = resolveTurnToolPolicy(
+    catalog,
+    { session: { deny: [BRAIN_TOOL.ANNOUNCE] } },
+    BRAIN_TURN_TRIGGER.WAKE,
+  );
+  assert.ok(!configured.allows(BRAIN_TOOL.ANNOUNCE));
+  assert.equal(configured.deniedBy(BRAIN_TOOL.ANNOUNCE), TOOL_POLICY_LAYER.SESSION);
   assert.equal(brainToolSchemas(wake).length, brainToolCatalog().length);
   assert.equal(brainToolSchemas(ask).length, brainToolCatalog().length - 1);
   for (const schema of brainToolSchemas(wake)) assert.ok(schema.name.length > 0);
@@ -64,7 +76,7 @@ test("announce takes the briefing alone and the hosted catalog carries every def
   const announce = hostedBrainToolCatalog().get(BRAIN_TOOL.ANNOUNCE);
   assert.ok(announce);
   assert.deepEqual(announce.parameters.required, ["briefing"]);
-  assert.deepEqual(Object.keys(announce.parameters.properties), ["briefing"]);
+  assert.deepEqual(Object.keys(wireRecord(announce.parameters.properties) ?? {}), ["briefing"]);
   for (const tool of hostedBrainToolCatalog().values()) assert.equal(tool.type, "function");
   assert.equal(hostedBrainToolCatalog().size, brainToolCatalog().length);
   assert.ok(isBrainOnlyTool(BRAIN_TOOL.READ_TRANSCRIPT));
