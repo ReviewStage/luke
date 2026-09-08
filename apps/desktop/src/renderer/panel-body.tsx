@@ -15,7 +15,7 @@ import type { BrainRequestSnapshot } from "#shared/wire/brain";
 import type { SessionOpenResult } from "#shared/wire/session";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { CalendarGate, type CalendarGateControl } from "./calendar-gate";
-import { ConversationHistoryPanel } from "./conversation-history-panel";
+import { ConversationHistoryPanel, HistoryClearButton } from "./conversation-history-panel";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import {
   type ArrangedSessions,
@@ -659,6 +659,8 @@ export function PanelBody({
   const settingsNote = updateAvailable(settings.updates.update)
     ? updateRow(settings.updates.update).detail
     : undefined;
+  // Clear retires recorded lines, so only a thread holding some offers it.
+  const offerHistoryClear = tab === PANEL_TAB.HISTORY && conversationHistory.length > 0;
   return (
     <div className="body">
       {/* The tab bar says what you are looking at; the buttons beside it say
@@ -670,7 +672,7 @@ export function PanelBody({
           onTabChange={onTabChange}
           {...(settingsNote ? { settingsNote } : undefined)}
         />
-        {offerSearch || offerOptions || tab === PANEL_TAB.SETTINGS ? (
+        {offerSearch || offerOptions || tab === PANEL_TAB.SETTINGS || offerHistoryClear ? (
           <span className="header-controls">
             {offerSearch ? (
               <SessionSearchButton open={searchOpen} onToggle={onSearchToggle} />
@@ -681,6 +683,10 @@ export function PanelBody({
             {tab === PANEL_TAB.SETTINGS ? (
               <SettingsSearchButton open={settingsSearchOpen} onToggle={onSettingsSearchToggle} />
             ) : null}
+            {/* History's clear, in the same spot again: its words are the
+                build's own, so it may stand outside the blocked subtree the
+                thread's words never leave. */}
+            {offerHistoryClear ? <HistoryClearButton onClear={onClearConversationHistory} /> : null}
             {offerOptions ? (
               <SessionOptionsButton
                 list={list}
@@ -701,7 +707,6 @@ export function PanelBody({
           requests={brainRequests}
           now={now}
           onCancelRequest={onCancelBrainRequest}
-          onClear={onClearConversationHistory}
           ask={ask}
           onAskEngaged={onAskEngaged}
           {...(askShortcut ? { askShortcut } : undefined)}
