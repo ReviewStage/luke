@@ -98,6 +98,8 @@ export const GATEWAY_METHOD = {
   RECEIVER_REPORT: "receiver.report",
   VOICE_MINT_REALTIME_CREDENTIAL: "voice.mintRealtimeCredential",
   VOICE_DIAGNOSTICS: "voice.diagnostics",
+  /** One tapped realtime event for the host's development trace; a no-op where no writer stands. */
+  VOICE_RECORD_TRACE: "voice.recordTrace",
   GUIDE_REPORT: "guide.report",
   ANALYTICS_RECORD: "analytics.record",
   CONVERSATION_APPEND: "conversation.append",
@@ -174,6 +176,7 @@ export const MUTATING_GATEWAY_METHODS: ReadonlySet<GatewayMethod> = new Set<Gate
   GATEWAY_METHOD.SPEECH_SETTLE,
   GATEWAY_METHOD.RECEIVER_REPORT,
   GATEWAY_METHOD.VOICE_MINT_REALTIME_CREDENTIAL,
+  GATEWAY_METHOD.VOICE_RECORD_TRACE,
   GATEWAY_METHOD.GUIDE_REPORT,
   GATEWAY_METHOD.ANALYTICS_RECORD,
   GATEWAY_METHOD.CONVERSATION_APPEND,

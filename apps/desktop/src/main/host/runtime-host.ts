@@ -38,6 +38,7 @@ import {
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials";
 import { AgentTraceWriter, tracedModelAdapter } from "@sidecar/devtrace";
+import { isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import {
   APP_SETTING_ID,
   type AppGuideSnapshot,
@@ -207,6 +208,7 @@ import { type SecretCipher, SettingsStore } from "../settings-store";
 import { transitionVoiceCredential } from "../voice/credential-transition";
 import { type OnboardingBeatKind, SpeechArbiter } from "../voice/speech-arbiter";
 import { VoiceReceiver } from "../voice-receiver";
+import { seedWorkspaceThenStartMemory, shutdownStepsFlushingEvents } from "./lifecycle";
 
 /**
  * Luke's runtime as one host: everything that executes, persists, schedules,
@@ -2175,6 +2177,15 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
             voiceCapabilities.unavailableDiagnostics,
         ),
       }),
+    // One realtime event the renderer's tap saw cross the data channel, into
+    // the development trace. Read again here for the shape the tap sends; on
+    // a run without a writer — packaged, fixture, or simply untraced — it
+    // lands here and stops.
+    [GATEWAY_METHOD.VOICE_RECORD_TRACE]: (params) => {
+      if (!isAgentWireTrace(params.trace)) return invalid("trace is not one tapped wire event");
+      agentTrace?.recordWire(params.trace);
+      return gatewayOk({});
+    },
     [GATEWAY_METHOD.GUIDE_REPORT]: (params) => {
       if (!isAppGuideSnapshot(params.guide))
         return invalid("guide is not the shape a panel reports");
@@ -2305,14 +2316,13 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     arrivalState = arrivalStateFromDisk();
     if (runMode.observesProviders) {
       await runtimeStoreWiring.open();
-      try {
-        await brainWiring.seedWorkspace();
-        void memoryWiring.start();
-      } catch (error) {
-        report(
-          `Brain workspace could not be seeded: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
+      await seedWorkspaceThenStartMemory({
+        seedWorkspace: async () => {
+          await brainWiring.seedWorkspace();
+        },
+        startMemory: () => memoryWiring.start(),
+        report,
+      });
       await brainWiring.store().load();
       await runtimeStoreWiring.restore();
       stopHistoryMaintenance = startHistoryMaintenance({
@@ -2370,57 +2380,60 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
    * counted rather than finished: the store's load at the next start marks
    * an unsettled run interrupted and replays nothing.
    */
-  const shutdownSteps: GatewayShutdownSteps = {
-    closeAdmissions: () => service.server.closeAdmissions(),
-    cancelActive: async () => {
-      observationSupervisor.setEnabled(false);
-      cronScheduler.stop();
-      const cancelled: string[] = [];
-      for (const record of brainWiring.allRequests()) {
-        if (
-          record.status !== BRAIN_REQUEST_STATUS.QUEUED &&
-          record.status !== BRAIN_REQUEST_STATUS.RUNNING
-        ) {
-          continue;
+  const shutdownSteps: GatewayShutdownSteps = shutdownStepsFlushingEvents(
+    {
+      closeAdmissions: () => service.server.closeAdmissions(),
+      cancelActive: async () => {
+        observationSupervisor.setEnabled(false);
+        cronScheduler.stop();
+        const cancelled: string[] = [];
+        for (const record of brainWiring.allRequests()) {
+          if (
+            record.status !== BRAIN_REQUEST_STATUS.QUEUED &&
+            record.status !== BRAIN_REQUEST_STATUS.RUNNING
+          ) {
+            continue;
+          }
+          const agent = brainWiring.agentForRun(record.runId);
+          if (!agent) continue;
+          cancelled.push(record.runId);
+          await agent.cancelAsk(record.runId).catch(() => undefined);
         }
-        const agent = brainWiring.agentForRun(record.runId);
-        if (!agent) continue;
-        cancelled.push(record.runId);
-        await agent.cancelAsk(record.runId).catch(() => undefined);
-      }
-      for (const child of brainWiring.children.children()) {
-        if (isTerminalChildRunStatus(child.status)) continue;
-        await brainWiring.children.cancel(child.childId).catch(() => undefined);
-      }
-      return cancelled;
+        for (const child of brainWiring.children.children()) {
+          if (isTerminalChildRunStatus(child.status)) continue;
+          await brainWiring.children.cancel(child.childId).catch(() => undefined);
+        }
+        return cancelled;
+      },
+      awaitSettled: async (signal) => {
+        if (signal.aborted) return;
+        await brainWiring.publicationSettled();
+      },
+      persistUnresolved: async () => {
+        // What the next launch will find: the records as the stores last
+        // persisted them, read from the envelopes rather than from memory. A
+        // cancellation whose write did not land leaves its run queued or
+        // running on disk, and that is what the load marks interrupted and
+        // never replays, so it is counted here as unresolved.
+        const keys = new Set<SessionKey>([
+          MAIN_SESSION_KEY,
+          ...runtimeStoreWiring.directory().entries.map((entry) => entry.sessionKey),
+        ]);
+        let unresolved = 0;
+        for (const key of keys) {
+          const persisted = brainWiring.store(key).current();
+          if (!persisted) continue;
+          unresolved += persisted.requests.filter(
+            (record) =>
+              record.status === BRAIN_REQUEST_STATUS.QUEUED ||
+              record.status === BRAIN_REQUEST_STATUS.RUNNING,
+          ).length;
+        }
+        return unresolved;
+      },
     },
-    awaitSettled: async (signal) => {
-      if (signal.aborted) return;
-      await brainWiring.publicationSettled();
-    },
-    persistUnresolved: async () => {
-      // What the next launch will find: the records as the stores last
-      // persisted them, read from the envelopes rather than from memory. A
-      // cancellation whose write did not land leaves its run queued or
-      // running on disk, and that is what the load marks interrupted and
-      // never replays, so it is counted here as unresolved.
-      const keys = new Set<SessionKey>([
-        MAIN_SESSION_KEY,
-        ...runtimeStoreWiring.directory().entries.map((entry) => entry.sessionKey),
-      ]);
-      let unresolved = 0;
-      for (const key of keys) {
-        const persisted = brainWiring.store(key).current();
-        if (!persisted) continue;
-        unresolved += persisted.requests.filter(
-          (record) =>
-            record.status === BRAIN_REQUEST_STATUS.QUEUED ||
-            record.status === BRAIN_REQUEST_STATUS.RUNNING,
-        ).length;
-      }
-      return unresolved;
-    },
-  };
+    () => productEvents.flush(),
+  );
 
   const close = async (): Promise<void> => {
     observationSupervisor.setEnabled(false);

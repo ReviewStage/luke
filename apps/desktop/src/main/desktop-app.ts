@@ -820,9 +820,9 @@ function registerIpc(): void {
       return (await gateway.host.realtimeDiagnostics()) ?? introductionMinter.diagnostics();
     },
     recordProductEvent,
-    // The development trace is the host's; the renderer's tapped wire events
-    // travel nowhere from this process.
-    recordAgentTrace: () => undefined,
+    // The development trace is the host's: a tapped wire event crosses to its
+    // writer, which alone knows whether this run records anything.
+    recordAgentTrace: (trace) => gateway.host.recordAgentTrace(trace),
   });
 
   registerSessionActsIpc({
