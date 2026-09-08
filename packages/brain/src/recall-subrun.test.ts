@@ -8,8 +8,8 @@ import {
   type RuntimeRunRequest,
 } from "@sidecar/runtime-contracts";
 import type { WireRecord } from "@sidecar/wire";
-import type { BrainMemoryAccess } from "./agent.js";
 import { RECALL_SUBRUN_TOOLS, runRecallSubrun } from "./recall-subrun.js";
+import type { BrainMemoryAccess } from "./tool-executor.js";
 import { BRAIN_TOOL } from "./tools.js";
 import { REFUSAL_REASON } from "./turn.js";
 
