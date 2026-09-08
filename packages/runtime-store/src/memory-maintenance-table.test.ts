@@ -17,6 +17,7 @@ import {
 } from "@sidecar/memory";
 import { WORKSPACE_FILE } from "@sidecar/runtime";
 import { MAIN_SESSION_KEY, threadSessionKey } from "@sidecar/runtime-contracts";
+import { RuntimeDatabase } from "./database.js";
 import {
   advanceIngestion,
   FORGOTTEN_SOURCE_KIND,
@@ -35,6 +36,7 @@ import {
   stageMemoryCandidates,
 } from "./memory-maintenance-table.js";
 import { listNotebookEntries, rememberNotebookEntry } from "./notebook-table.js";
+import { RUNTIME_SCHEMA_VERSION } from "./schema.js";
 import { NOW, openTestDatabase } from "./testing.js";
 
 function workspace(): string {
@@ -248,4 +250,40 @@ test("forgetting a source removes its candidates and the MEMORY.md entries they 
   const again = stageMemoryCandidates(database, [seed()], NOW + 1);
   assert.deepEqual(again, { staged: 0, reinforced: 0, refused: 1 });
   assert.equal(listMemoryRewrites(database).length, 1, "the scrub kept its preimage");
+});
+
+test("a schema 7 database gains the maintenance tables at open and reads as schema 8", () => {
+  const file = path.join(workspace(), "agent.sqlite");
+  const seven = RuntimeDatabase.open(file);
+  seven.exec("DROP TABLE memory_candidates");
+  seven.exec("DROP TABLE memory_ingestion_cursors");
+  seven.exec("DROP TABLE memory_ingested_messages");
+  seven.exec("DROP TABLE memory_forgotten_sources");
+  seven.exec("DROP TABLE memory_rewrites");
+  seven.exec("DROP TABLE memory_flush_state");
+  seven.exec("UPDATE schema_version SET version = 7");
+  seven.close();
+  const eight = RuntimeDatabase.open(file);
+  // SAFETY: the schema_version table has one integer column.
+  const version = eight.prepare("SELECT version FROM schema_version").get() as { version: number };
+  assert.equal(version.version, RUNTIME_SCHEMA_VERSION);
+  assert.equal(RUNTIME_SCHEMA_VERSION, 8);
+  // SAFETY: sqlite_master's name column is text.
+  const tables = (
+    eight
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'memory_%'")
+      .all() as { name: string }[]
+  ).map((row) => row.name);
+  for (const table of [
+    "memory_candidates",
+    "memory_ingestion_cursors",
+    "memory_ingested_messages",
+    "memory_forgotten_sources",
+    "memory_rewrites",
+    "memory_flush_state",
+  ]) {
+    assert.ok(tables.includes(table), table);
+  }
+  assert.deepEqual(listMemoryCandidates(eight), []);
+  eight.close();
 });
