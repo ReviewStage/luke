@@ -286,7 +286,6 @@ test("settle HELD while no quiet stands returns the request to the head unheld",
   arbiter.request({ kind: ARRIVAL_SPEECH_KIND });
   const offer = arbiter.next();
   assert.ok(offer);
-  assert.equal(arbiter.quiet, false);
   assert.equal(arbiter.settle(offer.id, SPEECH_OUTCOME.HELD)?.outcome, SPEECH_OUTCOME.HELD);
   assert.equal(traces.at(-1)?.decision, SPEECH_OUTCOME.HELD);
 

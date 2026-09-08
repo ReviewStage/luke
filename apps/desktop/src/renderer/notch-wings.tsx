@@ -69,14 +69,6 @@ interface NotchWingsProps {
 }
 
 /**
- * How many marks fit beside the face in a wing of this width. The peek's side
- * is 124px beside the housing it was measured against, which is where its
- * limit of four comes from; the panel's side is what is left of
- * `--panel-width` after the housing, so it holds roughly twice as many.
- */
-export { wingMarkCapacity, wingPileOffset } from "@sidecar/panel";
-
-/**
  * The peek's side beside this housing: what is left of the floored peek after
  * the housing splits it. Beside the 14-inch housing and anything wider this is
  * the 124px the wing was drawn at; a narrower housing — or the bubble's none —

@@ -4,7 +4,7 @@ import {
   isTerminalBrainRequestStatus,
 } from "@sidecar/brain/requests";
 import { DeliveryLedger, type DeliveryOffer, type DeliveryRecord } from "@sidecar/runtime";
-import { DELIVERY_STATE, type DeliveryState } from "@sidecar/runtime-contracts";
+import { DELIVERY_STATE } from "@sidecar/runtime-contracts";
 import { type BrainReplyClaimResult, brainReplyWords } from "#shared/wire/brain";
 
 export interface BrainReplyDeliveriesOptions {
@@ -90,10 +90,6 @@ export class BrainReplyDeliveries {
   /** Every delivery the ledger holds, with its state, for inspection through the protocol. */
   records(): readonly DeliveryRecord[] {
     return this.#ledger.records();
-  }
-
-  state(runId: string): DeliveryState | undefined {
-    return this.#ledger.state(runId);
   }
 
   /** The one offer the receiver epoch given may hold now, or nothing. */

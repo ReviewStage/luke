@@ -74,8 +74,6 @@ export const REALTIME_CLIENT_EVENT = {
 
 export const REALTIME_SERVER_EVENT = {
   RESPONSE_CREATED: "response.created",
-  /** The server confirming a superseded context item is gone. */
-  CONVERSATION_ITEM_DELETED: "conversation.item.deleted",
   /** The server confirming it dropped the audio it had queued for us. */
   OUTPUT_AUDIO_BUFFER_CLEARED: "output_audio_buffer.cleared",
   /** Names the message a reply is being spoken into, which is what a truncate cuts. */
@@ -757,7 +755,6 @@ export type ParsedRealtimeServerEvent =
        */
       hasAudio?: boolean;
     }
-  | { type: typeof REALTIME_SERVER_EVENT.CONVERSATION_ITEM_DELETED; itemId?: string }
   /**
    * `eventId` names the client event the service is complaining about, when it
    * says. It is what lets a caller tell an error meant for the developer from
@@ -950,14 +947,6 @@ export function parseRealtimeServerEvent(
       };
       if (responseId) parsed.responseId = responseId;
       if (hasAudio !== undefined) parsed.hasAudio = hasAudio;
-      return parsed;
-    }
-    case REALTIME_SERVER_EVENT.CONVERSATION_ITEM_DELETED: {
-      const itemId = optionalString(event.item_id);
-      const parsed: ParsedRealtimeServerEvent = {
-        type: REALTIME_SERVER_EVENT.CONVERSATION_ITEM_DELETED,
-      };
-      if (itemId) parsed.itemId = itemId;
       return parsed;
     }
     case REALTIME_SERVER_EVENT.ERROR: {

@@ -6,7 +6,7 @@ import {
   type AppSettingField,
   SETTING_SIDE_EFFECT,
 } from "@sidecar/settings";
-import { ACT_RESULT_STATUS, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, isWireString } from "@sidecar/wire";
 import { BRIDGE, type BridgeArgumentsFor } from "#shared/bridge";
 import type { AppSettings } from "#shared/contracts";
 import type { HostOperator } from "../gateway/host-operator";
@@ -185,5 +185,3 @@ export function registerSettingsRowsIpc(dependencies: SettingsRowsIpcDependencie
     refusal: "Could not reset those settings on this system.",
   });
 }
-
-export type { UnparsedWireValue };

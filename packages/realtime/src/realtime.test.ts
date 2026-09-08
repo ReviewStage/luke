@@ -170,13 +170,6 @@ test("a refused delete is read back with the event it names", () => {
   assert.equal(parsed?.errorType, "invalid_request_error");
   assert.equal(parsed?.errorCode, "item_not_found");
   assert.match(parsed?.message ?? "", /not found/);
-
-  const deleted = parseRealtimeServerEvent({
-    type: REALTIME_SERVER_EVENT.CONVERSATION_ITEM_DELETED,
-    item_id: "luke_ctx_sessions_1",
-  });
-  assert.equal(deleted?.type, REALTIME_SERVER_EVENT.CONVERSATION_ITEM_DELETED);
-  assert.equal(deleted?.itemId, "luke_ctx_sessions_1");
 });
 
 test("a mint response yields a credential with a millisecond expiry", () => {

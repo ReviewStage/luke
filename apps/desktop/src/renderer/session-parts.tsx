@@ -17,13 +17,6 @@ import {
 import { CloseIcon, CloudIcon, LaptopIcon, VoiceIcon } from "./settings-icons";
 
 /**
- * Rides beside a branch name to say which kind of identifier it is: a branch
- * name alone reads as any string of slashes. Ours rather than a brand, so it is
- * drawn in whatever text colour the line already has.
- */
-export { BranchGlyph } from "@sidecar/panel";
-
-/**
  * Rides beside a workspace's name to say what kind of thing the tray is. The
  * shape is the tray itself in miniature — one box with its name line across
  * the top — drawn in whatever text colour the line already has, like the
@@ -39,9 +32,6 @@ export function WorkspaceGlyph(): React.JSX.Element {
     </svg>
   );
 }
-
-/** Leads a finished session's sentence, the way a spinner leads a working one. */
-export { CheckGlyph } from "@sidecar/panel";
 
 export function EmptyState(): React.JSX.Element {
   return (
