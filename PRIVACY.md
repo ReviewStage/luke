@@ -155,17 +155,41 @@ them.
 **Things Luke remembers about you.** During a conversation you start, Luke may
 silently save a concise preference, personal fact, goal, or recurring constraint
 that looks useful later. He skips temporary details and uncertain guesses, never
-saves credentials, and saves sensitive facts only when you explicitly ask. At
-most 32 are stored on your Mac, in the same database, and they do not expire.
-The iOS app keeps no such memory and does not read the Mac's. You can ask Luke
-what he remembers, correct something, or tell him to forget it.
-They travel with the rest of Luke's working memory when he thinks, so he can
-personalize replies: directly to OpenAI on your own key if you entered one, or
-through our own service on our key when you use Luke through your account, on
-the same terms as the rest of that call — one model call per request, and
-nothing of it stored or logged by our service. They are never sent to a
-coding-agent provider or a tracker, and they are never used to decide anything
-on your behalf.
+saves credentials, and saves sensitive facts only when you explicitly ask. Each
+one is a line of `USER.md` in his workspace on your Mac, under a "Remembered"
+heading, so the file you can read and edit is the record itself: at most 32 such
+lines stand, they do not expire, and a line you edit or add by hand is taken up
+the next time Luke reads the file. Beside the file, the same database keeps only
+bookkeeping about each line — an id Luke can name to correct or forget it, when
+it was written, and whether it came from you, from Luke, or from the list an
+earlier version kept in the database — and that list, if one was found, was
+moved into `USER.md` once under the same ids and is not written any more. The
+iOS app keeps no such memory and does not read the Mac's. You can ask Luke what
+he remembers, correct something, or tell him to forget it. They travel with the
+rest of Luke's working memory when he thinks, so he can personalize replies:
+directly to OpenAI on your own key if you entered one, or through our own
+service on our key when you use Luke through your account, on the same terms as
+the rest of that call — one model call per request, and nothing of it stored or
+logged by our service. They are never sent to a coding-agent provider or a
+tracker, and they are never used to decide anything on your behalf.
+
+**Luke's notebook index.** So that Luke can find what his workspace files say
+without reading them all into every call, the same database keeps a search
+index over them: `MEMORY.md`, `USER.md`, and the notes under `memory/`, cut
+into passages, each passage's text and a numeric embedding of it. The index is
+derived and disposable — it is rebuilt from the files whenever one changes, and
+holds nothing the files do not. The embeddings are made by OpenAI's embeddings
+model: on your own key if you entered one, or through our own service on our
+key when you use Luke through your account, where one request carries only the
+passages that changed and our service keeps and logs none of them. Without a
+key or an account the index still works by keywords alone, and Luke's answers
+say when a search ran that way. Luke's own conversations are never embedded or
+indexed: when he looks for something you said in an earlier conversation, he
+reads the lines History already keeps, only from main and the private threads
+you opened and never from the conversation he is answering in, a temporary
+thread, an observed coding session's conversation, or a child's. What such a
+look finds is context for that one reply and is written nowhere, so a recall
+can never become a memory of itself.
 
 **Your account.** Signing in with Google or GitHub gives us your name, email
 address, and which of the two you used. We also keep the records that keep you

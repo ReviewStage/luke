@@ -655,21 +655,60 @@ Trust constraints:
   Luke may silently keep a concise stable preference, personal fact, goal, or
   recurring constraint. He skips transient details and uncertain inferences,
   never stores credentials, and stores a sensitive fact only when explicitly
-  asked. The write runs the same act gauntlet as every other write — validated
-  in the renderer, validated again in the main process, and admitted by the
-  effective tool policy — and every mutation of the list is serialized in the
-  main process, read and replaced under one queue, because two conversations
-  may now run turns at once and a read-then-replace across them would drop a
-  fact. A changed fact names the entry it replaces so
-  contradictions do not stand together; duplicates add nothing; and a request
-  to forget names one of the ids the conversation received. At most 32 bounded
-  facts stand in the runtime store's own table, written whole by the same
-  worker and by nothing else, and the complete list enters each conversation
-  as reply context. It is never drawn, never reaches a provider
-  file, never reaches a write path, and never reaches the attention evaluator,
-  whose input stays what a provider wrote about a session. Widening either —
-  what may be stored, how long it stands, or where it may travel — is a
-  product decision, not an implementation detail.
+  asked. The canonical record is the notebook: one bullet line of `USER.md`
+  under its remembered heading, human-readable and editable, and the runtime
+  store keeps only provenance beside it (the entry's id, when it was written,
+  whether it came from the developer's hand, Luke's tool, or the fact table an
+  earlier build kept, and the file hash last reconciled). The write runs the
+  same act gauntlet as every other write — validated in the renderer,
+  validated again in the main process, and admitted by the effective tool
+  policy — and every mutation of the notebook is one request to the store's
+  worker, which answers one at a time per workspace and reads the file again
+  before writing it, so two conversations or a child remembering at once
+  cannot drop each other's entry and a line edited by hand is folded in rather
+  than overwritten. A changed fact names the entry it replaces so
+  contradictions do not stand together; duplicates add nothing; a request to
+  forget names one of the ids the conversation received; and at most 32 lines
+  stand. The `personal_facts` table is migrated into `USER.md` under the same
+  ids at the first open that finds rows and has no writer after that. The
+  complete list enters each conversation as reply context. It is never drawn,
+  never reaches a provider file, never reaches a write path, and never
+  reaches the attention evaluator, whose input stays what a provider wrote
+  about a session. Widening either — what may be stored, how long it stands,
+  or where it may travel — is a product decision, not an implementation
+  detail.
+- The notebook is searchable, and the index is derived. The runtime store
+  keeps a disposable search index over `MEMORY.md`, `USER.md`, and the
+  Markdown notes under `memory/` — sources, chunks of 400 tokens with 80 of
+  overlap, an FTS5 shadow, and an embedding cache of at most 50,000 entries —
+  following OpenClaw `b7528507`'s memory-search defaults (six results, 0.35
+  minimum score, 0.7/0.3 vector and keyword weights, four candidates per
+  result, MMR at λ 0.7, a 30-day half-life on dated notes and none on the
+  evergreen files). A sync is planned and applied on the database worker,
+  which also runs the cosine similarity; only the chunks with no cached vector
+  travel to the embedding adapter, OpenAI's embeddings on the developer's own
+  key or the hosted contract's `embed` operation on the account, and a sync
+  or search that cannot have embeddings degrades to keyword-only under the
+  automatic provider selection and says so, while an explicitly selected
+  provider's failure reads as unavailable. The files are watched and
+  reconciled 1,500 ms after a change, and a rebuild drops every derived row.
+  The brain reads the index through `memory_search` and `memory_get`, reads
+  answering only for paths inside the notebook root, each result carrying
+  its path, line range, score, and provenance. A developer's ask in main or a
+  private thread first consults trusted memory deterministically and, when it
+  reads like a question about the past, runs one bounded recall subrun — the
+  two memory tools and nothing else, 15 seconds, a summary cut to 220
+  characters, two recent asks and one reply as input, cached 15 seconds, and
+  stood down for a minute after three consecutive timeouts — whose summary is
+  ephemeral context for that one turn and is written nowhere, so recall never
+  promotes its own output into memory. Past-conversation recall reads the
+  retained History lines of eligible conversations (main and the developer's
+  private threads of the same agent, never the asking conversation, a
+  temporary thread, an observed session's conversation, a child, a cron or
+  heartbeat conversation, or another agent's) and indexes no transcript.
+  Widening what is indexed, what recall may read, or where an embedding
+  travels is a product decision, not an implementation detail, and
+  `PRIVACY.md` says each in as many words.
 - The development trace is the one place Luke's own agent traffic may reach a
   file, and it cannot exist for a user: only an unpackaged, live run whose
   shell set `LUKE_TRACE_DIR` constructs a writer at all, so a packaged build

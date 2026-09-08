@@ -2145,7 +2145,12 @@ export class BrainAgent {
           contextMark = context.mark();
           const primed = await this.#primeIfFresh(turnContext);
           notes = this.#options.openingNotes?.take() ?? [];
-          const recalled = await this.#recallFor(plan, turnContext);
+          // Awaited only where a recall stands: an extra tick before every
+          // turn would reorder the inferences the routing tests count.
+          const recalled =
+            this.#options.recall && plan.trigger === BRAIN_TURN_TRIGGER.ASK
+              ? await this.#recallFor(plan, turnContext)
+              : undefined;
           const end = await this.#execute(turnContext, execution, gathering, {
             prompt: preparation.prompt,
             policy,
