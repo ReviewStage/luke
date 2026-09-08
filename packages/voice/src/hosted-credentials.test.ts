@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { HOSTED_CALLS_URL } from "@sidecar/hosted";
+import { HOSTED_CALLS_URL, HOSTED_WS_BASE_URL } from "@sidecar/hosted";
 import { REALTIME_MINT_OUTCOME, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "@sidecar/realtime";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import { HostedRealtimeCredentialMinter } from "./hosted-credentials.js";
 
 const NOW = 1_800_000_000_000;
+const MODEL = "gpt-realtime-2.1";
+const WS_URL = `${HOSTED_WS_BASE_URL}?model=${MODEL}`;
 const SERVICE = "https://tryluke.dev";
 const QUOTA = { used: 3, limit: 50, remaining: 47, resetsAt: NOW + 3_600_000 };
 
@@ -14,8 +16,9 @@ function mintedBody(overrides: ParsedJsonObject = {}) {
     connection: {
       value: "eph-secret",
       expiresAt: NOW + 60_000,
-      model: "gpt-realtime-2.1",
+      model: MODEL,
       callsUrl: HOSTED_CALLS_URL,
+      wsUrl: WS_URL,
       ...overrides,
     },
     quota: QUOTA,
@@ -64,8 +67,9 @@ test("mints through the hosted service on the account's bearer token", async () 
   assert.deepEqual(connection, {
     value: "eph-secret",
     expiresAt: NOW + 60_000,
-    model: "gpt-realtime-2.1",
+    model: MODEL,
     callsUrl: HOSTED_CALLS_URL,
+    wsUrl: WS_URL,
   });
 
   const [request] = requests;

@@ -77,7 +77,6 @@ import {
   INTRODUCTION_STATE_FILE,
   introductionCompleted,
   introductionRecord,
-  shouldBackfillIntroductionCompletion,
   shouldRunIntroduction,
 } from "./introduction-flow";
 import { registerAccountSessionIpc } from "./ipc/account-session";
@@ -1060,13 +1059,11 @@ export function startDesktopApp(): void {
         await localRuntime.start();
         await onAttached();
       }
-      const introductionInput = {
+      const giveIntroduction = shouldRunIntroduction({
         requiresAccount: runMode.requiresAccount,
         signedIn: account.status === ACCOUNT_STATUS.SIGNED_IN,
         completed: introductionCompletedOnDisk(),
-      };
-      const giveIntroduction = shouldRunIntroduction(introductionInput);
-      if (shouldBackfillIntroductionCompletion(introductionInput)) markIntroductionComplete();
+      });
       await panels.refreshGeometry();
       registerIpc();
       dock.applyIcon();

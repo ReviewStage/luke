@@ -5,7 +5,6 @@ import {
   type BrainPersistedState,
   type BrainRequestRecord,
   freshBrainState,
-  LEGACY_CHECKPOINT_FORMAT_TAG,
 } from "@sidecar/brain";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/realtime";
 import type { SessionKey } from "@sidecar/runtime-contracts";
@@ -68,7 +67,8 @@ export function receipt(
 export function populatedState(generationId: string, createdAt = NOW): BrainPersistedState {
   return {
     ...freshBrainState(generationId, createdAt),
-    checkpointFormat: LEGACY_CHECKPOINT_FORMAT_TAG,
+    // A well-formed stamp, as `checkpointFormatTag` writes this build's own.
+    checkpointFormat: "tool-loop@1:openai-responses-input/1",
     items: [
       { type: "message", role: "user", content: "first" },
       { type: "function_call", call_id: "call-1", name: "send_message", arguments: "{}" },

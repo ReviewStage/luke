@@ -17,26 +17,13 @@ import { isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
  * not the one moment this plays.
  */
 
-/**
- * The arrival record, beside `introduction.json` in the app's own state
- * directory. Unlike the introduction's, a missing file does not simply mean
- * "not yet": an install that was already signed in before this file existed
- * has been living with Luke for some time, so the launch backfills a settled
- * record rather than greeting a veteran as an arrival.
- */
+/** The arrival record, beside `introduction.json` in the app's own state directory. */
 export const ARRIVAL_STATE_FILE = "arrival.json";
 
 export interface ArrivalState {
-  /**
-   * When the account's first sign-in landed. Absent on a backfilled record,
-   * which is what keeps the first-announcement count honest: an install whose
-   * sign-in was never observed has no elapsed time worth reporting.
-   */
+  /** When the account's first sign-in landed, as this install observed it. */
   signedInAt?: string;
-  /**
-   * When the beat stopped being owed: its reply actually began, or — on a
-   * backfilled record — the install was recognized as predating it.
-   */
+  /** When the beat stopped being owed: its reply actually began. */
   settledAt?: string;
   /** When the first announcement after that sign-in was spoken. */
   firstAnnouncementAt?: string;
@@ -44,9 +31,8 @@ export interface ArrivalState {
 
 /**
  * Reads a stored record, or nothing for a file that is missing or does not
- * parse. "Nothing" means "no record", which the launch turns into a backfill —
- * the safe direction, since a backfill can only ever withhold the beat and the
- * count, never replay one already given.
+ * parse. "Nothing" means "no sign-in was ever observed", which owes no beat:
+ * the safe direction, since it can only withhold the beat, never replay one.
  */
 export function arrivalStateFromStored(stored: string | undefined): ArrivalState | undefined {
   if (stored === undefined) return undefined;
@@ -89,19 +75,4 @@ export function arrivalBeatOwed(state: ArrivalState | undefined): boolean {
  */
 export function countsFirstAnnouncement(state: ArrivalState | undefined): boolean {
   return state?.signedInAt !== undefined && state.firstAnnouncementAt === undefined;
-}
-
-/**
- * Whether this launch should write a settled record without speaking anything.
- * A signed-in launch with no record predates the arrival beat — its sign-in
- * was never observed — and without the record on file, a later sign-out and
- * sign-in would greet someone months in as an arrival. Only an interactive
- * launch may write it: a fixture or capture run observes no accounts at all.
- */
-export function shouldBackfillArrivalSettled(input: {
-  requiresAccount: boolean;
-  signedIn: boolean;
-  hasRecord: boolean;
-}): boolean {
-  return input.requiresAccount && input.signedIn && !input.hasRecord;
 }

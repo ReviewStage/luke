@@ -35,23 +35,23 @@
  * transaction that removed the rows and cleared only once the file it names
  * is published and verified.
  *
- * Version 4 adds the scheduler's jobs: one row per job, its payload the job
- * as the scheduler wrote it, so a launch finds what was scheduled and when it
- * last ran without a second store beside the database.
+ * The scheduler's jobs are one row per job, its payload the job as the
+ * scheduler wrote it, so a launch finds what was scheduled and when it last
+ * ran without a second store beside the database.
  *
- * Version 5 adds the durable observation inbox: the observations captured
- * for a conversation and not yet consumed by a turn, and the capture cursors
- * that say how far each transcript has been written down — kept apart from
- * the consumed cursors, which say how far a model has read.
+ * The durable observation inbox holds the observations captured for a
+ * conversation and not yet consumed by a turn, and the capture cursors that
+ * say how far each transcript has been written down — kept apart from the
+ * consumed cursors, which say how far a model has read.
  *
- * Version 6 adds delegation: one row per child run and one per completion,
- * each its record as the child service wrote it. A completion is written
- * before its delivery is tried and stands apart from the child's row, so a
- * child's result survives a delivery that could not land, and a launch finds
- * both what was still running and what was still owed.
+ * Delegation is one row per child run and one per completion, each its
+ * record as the child service wrote it. A completion is written before its
+ * delivery is tried and stands apart from the child's row, so a child's
+ * result survives a delivery that could not land, and a launch finds both
+ * what was still running and what was still owed.
  *
- * Version 7 makes the notebook's Markdown files the source of truth for what
- * Luke remembers and keeps only derived and provenance rows here: the search
+ * The notebook's Markdown files are the source of truth for what Luke
+ * remembers, so only derived and provenance rows stand here: the search
  * index over the notebook (sources, chunks, their FTS5 shadow, the embedding
  * cache), and the notebook entries' provenance (each USER.md line's id and
  * origin, and the file hash last reconciled). The `personal_facts` table is
@@ -59,20 +59,29 @@
  * into USER.md under the same id and empties the table; nothing writes it
  * any more.
  *
- * Version 8 adds memory maintenance: the short-term candidates consolidation
- * ranks, one row per candidate holding the record as the sweep wrote it; the
- * ingestion cursors and seen-message hashes that keep a History line from
- * being learned twice; the tombstones of forgotten sources, which a scan
- * refuses to relearn; the preimage of every MEMORY.md rewrite, so a
- * consolidation is reversible; and each conversation's last flush, so a
- * flush runs once per compaction cycle.
+ * Memory maintenance keeps the short-term candidates consolidation ranks, one
+ * row per candidate holding the record as the sweep wrote it; the ingestion
+ * cursors and seen-message hashes that keep a History line from being learned
+ * twice; the tombstones of forgotten sources, which a scan refuses to
+ * relearn; the preimage of every MEMORY.md rewrite, so a consolidation is
+ * reversible; and each conversation's last flush, so a flush runs once per
+ * compaction cycle.
  *
  * The schema is versioned by the `schema_version` table. A database at a
  * version this build does not know is refused rather than migrated by guess.
  */
 
 import type { SQLInputValue } from "node:sqlite";
-import { LEGACY_CHECKPOINT_FORMAT_TAG } from "@sidecar/brain";
+
+/**
+ * The stamp version 2 writes onto a checkpoint stored before stamps existed:
+ * every such checkpoint was the tool-loop runtime's first version over the
+ * Responses input array, because nothing else ever wrote one. Pinned history,
+ * so it is a literal rather than composed from this build's own ids — a
+ * runtime or item format renamed later must not change what a decade-old row
+ * is said to be.
+ */
+const LEGACY_CHECKPOINT_FORMAT_TAG = "tool-loop@1:openai-responses-input/1";
 
 /**
  * One flush marker per conversation: the generation and compaction count the
@@ -142,6 +151,10 @@ export const RUNTIME_SCHEMA_MIGRATIONS: ReadonlyMap<number, readonly SchemaMigra
         },
       ],
     ],
+    // Versions 4 through 8 alter no table that already stands: each adds one
+    // the current statements create where none is. The entries are still
+    // needed, because a version with none is refused rather than assumed
+    // empty.
     [4, []],
     [5, []],
     [6, []],

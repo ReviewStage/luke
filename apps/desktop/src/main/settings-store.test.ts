@@ -1076,34 +1076,6 @@ test("ignores a stored key that can no longer be decrypted", async (t) => {
   );
 });
 
-test("keeps a Conductor key stored by an earlier version working", async (t) => {
-  const directory = await temporaryDirectory(t);
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 1, conductorApiKey: sealed(TEST_API_KEY) }),
-  );
-  const store = storeIn(directory);
-
-  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
-  assert.equal(
-    appSettingsView(await store.snapshot()).credentialSources[CONDUCTOR],
-    CREDENTIAL_SOURCE.ENCRYPTED_FILE,
-  );
-
-  // The migrated key moves under its provider id the next time settings are
-  // written, and the version 1 field does not survive that write.
-  await store.setApiKey(CONDUCTOR, "conductor-replacement-key");
-  const persisted: unknown = JSON.parse(await readSettingsFile(directory));
-
-  assert.deepEqual(
-    persisted,
-    expectedPersistedSettings({
-      apiKeys: { [CONDUCTOR]: sealed("conductor-replacement-key") },
-    }),
-  );
-  assert.equal(await storeIn(directory).readApiKey(CONDUCTOR), "conductor-replacement-key");
-});
-
 test("carries a key belonging to a provider this build does not know", async (t) => {
   // A file written by a newer build must not lose credentials to an older one.
   const directory = await temporaryDirectory(t);
@@ -1121,21 +1093,6 @@ test("carries a key belonging to a provider this build does not know", async (t)
       apiKeys: { "later-cloud": sealed("later-cloud-key"), [CONDUCTOR]: sealed(TEST_API_KEY) },
     }),
   );
-});
-
-test("drops the retired menu bar preference on the next settings write", async (t) => {
-  const directory = await temporaryDirectory(t);
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, showInMenuBar: false }),
-  );
-  const store = storeIn(directory);
-
-  await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
-
-  const persisted = JSON.parse(await readSettingsFile(directory));
-  assert.equal(persisted.showInMenuBar, undefined);
-  assert.equal(persisted.showInDock, true);
 });
 
 test("keeps Luke out of the Dock until asked, and remembers the answer", async (t) => {
@@ -1823,55 +1780,6 @@ test("stores Superset workspace and agent defaults without touching credentials"
   assert.deepEqual(
     appSettingsView(await storeIn(directory).snapshot()).workspaceAgentDefaults?.superset,
     { agent: "codex" },
-  );
-});
-
-test("folds a Superset agent default stored apart by an earlier build into the record", async (t) => {
-  const directory = await temporaryDirectory(t);
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, supersetAgentDefault: "codex" }),
-  );
-
-  const store = storeIn(directory);
-  assert.deepEqual(appSettingsView(await store.snapshot()).workspaceAgentDefaults?.superset, {
-    agent: "codex",
-  });
-
-  await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
-  const written = JSON.parse(await fs.readFile(path.join(directory, SETTINGS_FILE_NAME), "utf8"));
-  assert.equal(written.supersetAgentDefault, undefined);
-  assert.deepEqual(written.workspaceAgentDefaults, { superset: { agent: "codex" } });
-});
-
-test("a folded Superset entry outranks the legacy field it replaced", async (t) => {
-  const directory = await temporaryDirectory(t);
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({
-      version: 2,
-      apiKeys: {},
-      supersetAgentDefault: "codex",
-      workspaceAgentDefaults: { superset: { agent: "claude-code" } },
-    }),
-  );
-
-  assert.deepEqual(
-    appSettingsView(await storeIn(directory).snapshot()).workspaceAgentDefaults?.superset,
-    { agent: "claude-code" },
-  );
-});
-
-test("ignores a legacy Superset agent default that is not an agent kind", async (t) => {
-  const directory = await temporaryDirectory(t);
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, supersetAgentDefault: "Not An Agent!" }),
-  );
-
-  assert.equal(
-    appSettingsView(await storeIn(directory).snapshot()).workspaceAgentDefaults,
-    undefined,
   );
 });
 

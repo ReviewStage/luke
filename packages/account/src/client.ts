@@ -200,18 +200,8 @@ export class AccountClient {
   }
 }
 
-export interface StoredAccount {
+/** The signed-in identity with the tokens it was issued, as the store keeps it. */
+export interface StoredAccount extends AccountIdentity {
   accessToken: string;
   refreshToken: string;
-  /**
-   * The identity's opaque id; see `AccountIdentity`. Optional here alone,
-   * because an account signed in by a build that predates it was stored
-   * without one: dropping such an account would sign the user out on upgrade
-   * for a field nothing they do depends on. The next identity read fills it.
-   */
-  id?: string;
-  email: string;
-  name?: string;
-  pictureUrl?: string;
-  provider: AccountProvider;
 }

@@ -184,7 +184,6 @@ import {
   arrivalRecord,
   arrivalStateFromStored,
   countsFirstAnnouncement,
-  shouldBackfillArrivalSettled,
 } from "../arrival-flow";
 import type { WorkspaceCreationDefaults } from "../brain/act-performer";
 import { wakeEventsFromHooks } from "../brain/flow";
@@ -196,7 +195,6 @@ import {
   calendarOnboardingOwed,
   calendarOnboardingRecord,
   calendarOnboardingStateFromStored,
-  shouldBackfillCalendarOnboardingSettled,
 } from "../calendar-onboarding-flow";
 import { conversationOperations, startHistoryMaintenance } from "../conversation-operations";
 import { NODE_CAPABILITY } from "../gateway/desktop-node";
@@ -2512,26 +2510,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
       await cronScheduler.ensure(heartbeatJob(now()));
       await cronScheduler.ensure(consolidationJob(now()));
     }
-    const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
-    if (
-      shouldBackfillArrivalSettled({
-        requiresAccount: runMode.requiresAccount,
-        signedIn,
-        hasRecord: arrivalState !== undefined,
-      })
-    ) {
-      writeArrivalState({ settledAt: new Date(now()).toISOString() });
-    }
     calendarOnboardingState = calendarOnboardingStateFromDisk();
-    if (
-      shouldBackfillCalendarOnboardingSettled({
-        requiresAccount: runMode.requiresAccount,
-        signedIn,
-        hasRecord: calendarOnboardingState !== undefined,
-      })
-    ) {
-      writeCalendarOnboardingState({ settledAt: new Date(now()).toISOString() });
-    }
     void settleCalendarOnboardingIfConnected();
     void settingsStore.snapshot();
     productEvents.arm();

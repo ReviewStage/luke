@@ -2,7 +2,6 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import {
   CREDENTIAL_CONNECTION,
-  CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDER_LIST,
   type CredentialFormat,
   type CredentialProvider,
@@ -10,7 +9,6 @@ import {
   VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials";
 import { REALTIME_DEFAULTS } from "@sidecar/realtime";
-import { parseWorkspaceAgentKindSelection, SUPERSET_WORKSPACE_PROVIDER_ID } from "@sidecar/session";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import {
   ACT_RESULT_STATUS,
@@ -77,7 +75,6 @@ import {
 
 const SETTINGS_FILE_NAME = "settings.json";
 const SETTINGS_TEMPORARY_FILE_NAME = "settings.json.tmp";
-/** Version 2 keys credentials by provider id; version 1 held one Conductor key. */
 const SETTINGS_FILE_VERSION = 2;
 const SETTINGS_FILE_MODE = 0o600;
 
@@ -87,8 +84,6 @@ const SETTINGS_FIELD = {
   APPLE_CALENDAR: "appleCalendar",
   CALENDAR_ACCOUNTS: "calendarAccounts",
   GRANTS: "grants",
-  LEGACY_CONDUCTOR_API_KEY: "conductorApiKey",
-  LEGACY_SUPERSET_AGENT_DEFAULT: "supersetAgentDefault",
   ACCOUNT_PREFERENCES_SYNC: "accountPreferencesSync",
   VAULT_SYNC_ACCOUNT: "vaultSyncAccount",
   VERSION: "version",
@@ -164,7 +159,7 @@ interface PersistedSettings extends StoredAppSettings {
   /** Account tokens encrypted together; only display identity stays plaintext. */
   account?: {
     tokenCipher: string;
-    /** Absent for an account stored before the id was kept; see `StoredAccount`. */
+    /** Absent where the sign-in's identity carried none; see `AccountIdentity`. */
     id?: string;
     email: string;
     name?: string;
@@ -196,10 +191,10 @@ interface PersistedSettings extends StoredAppSettings {
   appleCalendar?: { calendars: readonly string[] };
   /**
    * Which account this Mac's provider keys were last synced for — the
-   * account's opaque id, or its address for an account stored before ids
-   * were kept. It outlives a sign-out on purpose: it is what keeps an
-   * automatic sweep from handing one person's keys to whoever signs in
-   * next, so it must remember the person after they have gone.
+   * account's opaque id, or its address where the identity carried no id. It
+   * outlives a sign-out on purpose: it is what keeps an automatic sweep from
+   * handing one person's keys to whoever signs in next, so it must remember
+   * the person after they have gone.
    */
   vaultSyncAccount?: string;
 }
@@ -404,12 +399,6 @@ function storedApiKeys(record: WireRecord, providers: readonly CredentialProvide
       apiKeys[providerId] = ciphertext;
     }
   }
-  // An installation upgraded from version 1 keeps its Conductor key: the
-  // ciphertext is unchanged, so it decrypts exactly as it did before.
-  const legacy = record[SETTINGS_FIELD.LEGACY_CONDUCTOR_API_KEY];
-  if (isWireString(legacy) && legacy && !apiKeys[CREDENTIAL_PROVIDER_ID.CONDUCTOR]) {
-    apiKeys[CREDENTIAL_PROVIDER_ID.CONDUCTOR] = legacy;
-  }
   return apiKeys;
 }
 
@@ -427,24 +416,6 @@ function readStoredSettings(record: WireRecord): StoredAppSettings {
       APP_SETTING_SCHEMA[field].guard(record[field]).value,
     ]),
   ) as StoredAppSettings;
-}
-
-function withLegacySupersetAgentDefault(
-  settings: StoredAppSettings,
-  record: WireRecord,
-): StoredAppSettings {
-  if (settings.workspaceAgentDefaults?.[SUPERSET_WORKSPACE_PROVIDER_ID]) return settings;
-  const legacy = parseWorkspaceAgentKindSelection(
-    unparsedWire({ agent: record[SETTINGS_FIELD.LEGACY_SUPERSET_AGENT_DEFAULT] }),
-  );
-  if (!legacy) return settings;
-  return {
-    ...settings,
-    workspaceAgentDefaults: {
-      ...settings.workspaceAgentDefaults,
-      [SUPERSET_WORKSPACE_PROVIDER_ID]: legacy,
-    },
-  };
 }
 
 function storedSettingsFromPersisted(persisted: PersistedSettings): StoredAppSettings {
@@ -552,7 +523,7 @@ function parsePersistedSettings(
   const calendarAccounts = storedCalendarAccounts(record);
   const appleCalendar = storedAppleCalendar(record);
   const grants = storedGrants(record);
-  const settings = withLegacySupersetAgentDefault(readStoredSettings(record), record);
+  const settings = readStoredSettings(record);
   const vaultSyncAccount = record[SETTINGS_FIELD.VAULT_SYNC_ACCOUNT];
   const account = storedAccount(record);
   const accountPreferencesSync = storedAccountPreferencesSync(record);

@@ -1,8 +1,4 @@
-import {
-  checkpointFormatFromTag,
-  checkpointFormatTag,
-  type TranscriptEvent,
-} from "@sidecar/runtime-contracts";
+import { checkpointFormatFromTag, type TranscriptEvent } from "@sidecar/runtime-contracts";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { type BrainJournalEntry, brainJournalEntryFromWire } from "./journal.js";
 import { type BrainObservationEntry, brainObservationEntryFromWire } from "./observation-inbox.js";
@@ -11,8 +7,7 @@ import {
   brainRequestRecordFromWire,
   isTerminalBrainRequestStatus,
 } from "./requests.js";
-import { RESPONSES_ITEM_FORMAT, type ResponsesInputItem } from "./responses-api.js";
-import { TOOL_LOOP_RUNTIME } from "./runtime.js";
+import type { ResponsesInputItem } from "./responses-api.js";
 
 /**
  * Everything the brain keeps across launches, in one envelope with one
@@ -60,24 +55,6 @@ export interface BrainResetMarker {
 }
 
 export type BrainTranscriptCursors = Readonly<Record<string, Readonly<Record<string, string>>>>;
-
-/**
- * The stamp a checkpoint written before stamps existed carries: every such
- * checkpoint was the tool-loop runtime's first version over the Responses
- * input array, because nothing else ever wrote one. The versions are pinned
- * history, not the current ones, and stay `1` when either moves on.
- */
-export const LEGACY_CHECKPOINT_FORMAT_TAG = checkpointFormatTag({
-  runtime: TOOL_LOOP_RUNTIME.ID,
-  runtimeVersion: 1,
-  format: RESPONSES_ITEM_FORMAT.FORMAT,
-  formatVersion: 1,
-});
-
-/** The stamp an unstamped envelope carries: the legacy stamp when it holds items, nothing when it holds none. */
-export function legacyStampOf(items: readonly unknown[]): string | undefined {
-  return items.length > 0 ? LEGACY_CHECKPOINT_FORMAT_TAG : undefined;
-}
 
 export interface BrainPersistedState {
   version: typeof BRAIN_STATE_VERSION;
@@ -146,7 +123,7 @@ export function brainPersistedStateFromWire(
   if (value.expiresAt - value.createdAt !== BRAIN_GENERATION_LIFETIME_MS) return undefined;
   if (!Array.isArray(value.items) || !isRecord(value.cursors)) return undefined;
   if (!Array.isArray(value.requests) || !Array.isArray(value.journal)) return undefined;
-  const checkpointFormat = checkpointFormatTagFromWire(value.checkpointFormat, value.items);
+  const checkpointFormat = checkpointFormatTagFromWire(value.checkpointFormat);
   if (checkpointFormat === null) return undefined;
   const reset = resetMarkerFromWire(value.reset);
   if (reset === null || (reset && reset.clearedAt > value.createdAt)) return undefined;
@@ -224,15 +201,11 @@ function cursorsFromWire(
 }
 
 /**
- * The stamp as stored: nothing for a generation never checkpointed, the
- * legacy stamp for items written before stamps existed, the tag itself when
- * it reads as one, and null for a tag not written by the rule.
+ * The stamp as stored: nothing for a generation never checkpointed, the tag
+ * itself when it reads as one, and null for a tag not written by the rule.
  */
-function checkpointFormatTagFromWire(
-  value: UnparsedWireValue,
-  items: readonly unknown[],
-): string | undefined | null {
-  if (value === undefined) return legacyStampOf(items);
+function checkpointFormatTagFromWire(value: UnparsedWireValue): string | undefined | null {
+  if (value === undefined) return undefined;
   if (!isWireString(value) || !checkpointFormatFromTag(value)) return null;
   return value;
 }

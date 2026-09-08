@@ -18,25 +18,15 @@ import { isRecord, text, type UnparsedWireValue } from "@sidecar/wire";
  * rows run; the gate changes when the ask is made, never what it may do.
  */
 
-/**
- * The calendar onboarding record, beside `arrival.json` in the app's own
- * state directory. Like the arrival's, a missing file does not simply mean
- * "not yet": an install that was already signed in before this file existed
- * finished its onboarding under the old terms, so the launch backfills a
- * settled record rather than gating a veteran.
- */
+/** The calendar onboarding record, beside `arrival.json` in the app's own state directory. */
 export const CALENDAR_ONBOARDING_STATE_FILE = "calendar-onboarding.json";
 
 export interface CalendarOnboardingState {
-  /**
-   * When the install's first observed sign-in put the gate up. Absent on a
-   * backfilled record, whose sign-in predates the gate existing at all.
-   */
+  /** When the install's first observed sign-in put the gate up. */
   requiredAt?: string;
   /**
    * When the gate stopped standing: Done confirmed the connected calendars,
-   * a calendar already standing was recognized at a launch or a sign-in, or —
-   * on a backfilled record — the install was recognized as predating the step.
+   * or a calendar already standing was recognized at a launch or a sign-in.
    */
   settledAt?: string;
   /**
@@ -50,9 +40,9 @@ export interface CalendarOnboardingState {
 
 /**
  * Reads a stored record, or nothing for a file that is missing or does not
- * parse. "Nothing" means "no record", which the launch turns into a backfill —
- * the safe direction, since a backfill can only ever stand the gate down,
- * never raise it over someone who already passed it.
+ * parse. "Nothing" means "no sign-in was ever observed", which raises no
+ * gate: the safe direction, since it can only stand the gate down, never
+ * raise it over someone who already passed it.
  */
 export function calendarOnboardingStateFromStored(
   stored: string | undefined,
@@ -93,19 +83,4 @@ export function calendarOnboardingOwed(state: CalendarOnboardingState | undefine
     state.settledAt === undefined &&
     state.skippedAt === undefined
   );
-}
-
-/**
- * Whether this launch should write a settled record without gating anything.
- * A signed-in launch with no record predates the calendar step — its sign-in
- * was never observed by it — and without the record on file, an update would
- * raise an onboarding gate over someone months in. Only an interactive launch
- * may write it: a fixture or capture run observes no accounts at all.
- */
-export function shouldBackfillCalendarOnboardingSettled(input: {
-  requiresAccount: boolean;
-  signedIn: boolean;
-  hasRecord: boolean;
-}): boolean {
-  return input.requiresAccount && input.signedIn && !input.hasRecord;
 }

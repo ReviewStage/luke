@@ -109,8 +109,6 @@ export {
   brainStateRecord,
   brainStateRepositoryFromStorage,
   freshBrainState,
-  LEGACY_CHECKPOINT_FORMAT_TAG,
-  legacyStampOf,
 } from "./state-store.js";
 export type {
   BrainChildAccess,

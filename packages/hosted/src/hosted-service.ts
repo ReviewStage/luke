@@ -316,17 +316,15 @@ export function hostedMintAnswerFromWire(
   if (!secret || !model) return undefined;
   if (expiresAt === undefined) return undefined;
   if (connection.callsUrl !== HOSTED_CALLS_URL) return undefined;
-  const wsUrlFromWire = text(connection.wsUrl);
-  if (wsUrlFromWire !== undefined && wsUrlFromWire !== `${HOSTED_WS_BASE_URL}?model=${model}`) {
-    return undefined;
-  }
+  const wsUrl = text(connection.wsUrl);
+  if (wsUrl !== `${HOSTED_WS_BASE_URL}?model=${model}`) return undefined;
   const credential: RealtimeConnection = {
     value: secret,
     expiresAt,
     model,
     callsUrl: HOSTED_CALLS_URL,
+    wsUrl,
   };
-  if (wsUrlFromWire !== undefined) credential.wsUrl = wsUrlFromWire;
   if (!realtimeCredentialIsUsable(credential, now)) return undefined;
   const quota = hostedQuotaFromWire(value.quota);
   const answer: HostedMintAnswer = { connection: credential };

@@ -14,7 +14,6 @@ import {
   brainStateFromStored,
   brainStateRecord,
   freshBrainState,
-  LEGACY_CHECKPOINT_FORMAT_TAG,
   retainedBrainState,
 } from "./state-store.js";
 
@@ -29,7 +28,8 @@ function raw(value: BrainPersistedState | BrainPersistedState["requests"][number
 function complete(): BrainPersistedState {
   return {
     ...freshBrainState("gen-1", NOW),
-    checkpointFormat: LEGACY_CHECKPOINT_FORMAT_TAG,
+    // A well-formed stamp, as `checkpointFormatTag` writes this build's own.
+    checkpointFormat: "tool-loop@1:openai-responses-input/1",
     items: [{ type: "message", role: "user", content: [] }],
     cursors: { "claude-code": { abc: "7" } },
     requests: [
@@ -91,10 +91,11 @@ test("the envelope round-trips, and anything from another shape reads as nothing
   assert.equal(read({ ...raw(state), journal: [{ runId: "x" }] }), undefined);
 });
 
-test("the checkpoint stamp is kept as written, defaulted for unstamped items, and absent for an empty unstamped generation", () => {
+test("the checkpoint stamp is kept as written, and absent wherever none was written", () => {
   const read = (value: WireBoundaryInput) => brainPersistedStateFromWire(unparsedWire(value));
   const { checkpointFormat: _stamp, ...unstamped } = raw(complete());
-  assert.equal(read(unstamped)?.checkpointFormat, LEGACY_CHECKPOINT_FORMAT_TAG);
+  const held = read(unstamped);
+  assert.ok(held && !("checkpointFormat" in held));
   const empty = read({ ...unstamped, items: [] });
   assert.ok(empty && !("checkpointFormat" in empty));
   // An empty checkpoint of another runtime keeps saying whose it is.
