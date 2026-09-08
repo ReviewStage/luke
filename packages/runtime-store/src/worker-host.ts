@@ -18,10 +18,23 @@ import {
   unarchiveConversation,
 } from "./conversations-table.js";
 import { AGENT_DATABASE_FILE, RuntimeDatabase } from "./database.js";
-import { personalFacts, replacePersonalFacts } from "./facts-table.js";
-import { appendHistory, historyClearedAt, listHistory } from "./history-table.js";
+import { appendHistory, historyClearedAt, listHistory, searchHistory } from "./history-table.js";
 import { deleteScheduledJob, listScheduledJobs, putScheduledJob } from "./jobs-table.js";
 import { runHistoryMaintenance } from "./maintenance-run.js";
+import {
+  applyMemorySync,
+  memoryIndexStatus,
+  planMemorySync,
+  readMemoryLines,
+  rebuildMemoryIndex,
+  searchMemoryIndex,
+} from "./memory-index-table.js";
+import {
+  forgetNotebookEntry,
+  listNotebookEntries,
+  migrateFactsIntoNotebook,
+  rememberNotebookEntry,
+} from "./notebook-table.js";
 import {
   RUNTIME_STORE_METHOD,
   type RuntimeStoreMethod,
@@ -43,9 +56,13 @@ import {
 interface RuntimeStoreHost {
   opened(): RuntimeDatabase;
   agentRoot(): string;
-  open(agentRoot: string): void;
+  /** The notebook's root: the agent's identity workspace. */
+  workspace(): string;
+  open(agentRoot: string, workspaceDirectory: string | undefined): void;
   close(): void;
 }
+
+const WORKSPACE_DIRECTORY = "workspace";
 
 /**
  * One handler per method, keyed by the protocol's own table, so a method
@@ -61,13 +78,16 @@ type RuntimeStoreHandlers = {
 
 const HANDLERS: RuntimeStoreHandlers = {
   [RUNTIME_STORE_METHOD.OPEN]: (host, params) => {
-    host.open(params.agentRoot);
+    host.open(params.agentRoot, params.workspaceDirectory);
     createConversation(host.opened(), {
       agentId: params.agentId,
       sessionKey: params.sessionKey,
       name: params.conversationName,
       now: params.now,
     });
+    // The stable facts an earlier build kept move into the notebook at the
+    // first open that finds them, under their own ids, and never again.
+    migrateFactsIntoNotebook(host.opened(), host.workspace(), params.now);
     return true;
   },
   [RUNTIME_STORE_METHOD.BRAIN_LOAD]: (host, params) =>
@@ -80,9 +100,38 @@ const HANDLERS: RuntimeStoreHandlers = {
     listHistory(host.opened(), params.sessionKey, params.now),
   [RUNTIME_STORE_METHOD.HISTORY_CUTOFF]: (host, params) =>
     historyClearedAt(host.opened(), params.sessionKey),
-  [RUNTIME_STORE_METHOD.FACTS_LIST]: (host) => personalFacts(host.opened()),
-  [RUNTIME_STORE_METHOD.FACTS_REPLACE]: (host, params) =>
-    replacePersonalFacts(host.opened(), params.facts),
+  [RUNTIME_STORE_METHOD.HISTORY_SEARCH]: (host, params) =>
+    searchHistory(host.opened(), params.sessionKeys, params.query, params.limit, params.now),
+  [RUNTIME_STORE_METHOD.NOTEBOOK_LIST]: (host, params) =>
+    listNotebookEntries(host.opened(), host.workspace(), params.now),
+  [RUNTIME_STORE_METHOD.NOTEBOOK_REMEMBER]: (host, params) =>
+    rememberNotebookEntry(
+      host.opened(),
+      host.workspace(),
+      {
+        id: params.id,
+        words: params.words,
+        ...(params.replaces !== undefined ? { replaces: params.replaces } : undefined),
+      },
+      params.now,
+    ),
+  [RUNTIME_STORE_METHOD.NOTEBOOK_FORGET]: (host, params) =>
+    forgetNotebookEntry(host.opened(), host.workspace(), params.id, params.now),
+  [RUNTIME_STORE_METHOD.MEMORY_PLAN_SYNC]: (host, params) =>
+    planMemorySync(host.opened(), host.workspace(), params.identity, params.now),
+  [RUNTIME_STORE_METHOD.MEMORY_APPLY_SYNC]: (host, params) =>
+    applyMemorySync(
+      host.opened(),
+      { changed: params.changed, removed: params.removed },
+      params.embeddings,
+      params.identity,
+      params.now,
+    ),
+  [RUNTIME_STORE_METHOD.MEMORY_SEARCH]: (host, params) => searchMemoryIndex(host.opened(), params),
+  [RUNTIME_STORE_METHOD.MEMORY_GET]: (host, params) =>
+    readMemoryLines(host.workspace(), params.path, params.from, params.lines),
+  [RUNTIME_STORE_METHOD.MEMORY_REBUILD]: (host) => rebuildMemoryIndex(host.opened()),
+  [RUNTIME_STORE_METHOD.MEMORY_STATUS]: (host) => memoryIndexStatus(host.opened()),
   [RUNTIME_STORE_METHOD.CONVERSATIONS_LIST]: (host) => listConversations(host.opened()),
   [RUNTIME_STORE_METHOD.CONVERSATION_CREATE]: (host, params) =>
     createConversation(host.opened(), params),
@@ -140,6 +189,7 @@ function dispatch<Method extends RuntimeStoreMethod>(
 export function serveRuntimeStore(port: RuntimeStorePort): void {
   let database: RuntimeDatabase | undefined;
   let root: string | undefined;
+  let workspace: string | undefined;
   const host: RuntimeStoreHost = {
     opened: () => {
       if (!database) throw new Error("runtime store is not open");
@@ -149,15 +199,21 @@ export function serveRuntimeStore(port: RuntimeStorePort): void {
       if (root === undefined) throw new Error("runtime store is not open");
       return root;
     },
-    open: (agentRoot) => {
+    workspace: () => {
+      if (workspace === undefined) throw new Error("runtime store is not open");
+      return workspace;
+    },
+    open: (agentRoot, workspaceDirectory) => {
       database?.close();
       root = agentRoot;
+      workspace = workspaceDirectory ?? path.join(agentRoot, WORKSPACE_DIRECTORY);
       database = RuntimeDatabase.open(path.join(agentRoot, AGENT_DATABASE_FILE));
     },
     close: () => {
       database?.close();
       database = undefined;
       root = undefined;
+      workspace = undefined;
     },
   };
 

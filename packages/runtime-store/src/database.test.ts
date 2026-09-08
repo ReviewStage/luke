@@ -16,14 +16,13 @@ import {
   maximumStoredConversationEntries,
   storedConversationMaximumAgeMs,
 } from "@sidecar/realtime";
-import { MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
+import { DEFAULT_AGENT_ID, MAIN_SESSION_KEY } from "@sidecar/runtime-contracts";
 import { deleteConversationHistory } from "./archives.js";
 import { loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
-import { raiseHistoryCutoff } from "./conversations-table.js";
+import { createConversation, raiseHistoryCutoff } from "./conversations-table.js";
 import { RuntimeDatabase } from "./database.js";
 import { EnvelopeTracker, SAVE_KIND } from "./envelope.js";
-import { personalFacts, replacePersonalFacts } from "./facts-table.js";
-import { appendHistory, historyClearedAt, listHistory } from "./history-table.js";
+import { appendHistory, historyClearedAt, listHistory, searchHistory } from "./history-table.js";
 import { RUNTIME_SCHEMA_VERSION } from "./schema.js";
 import { inspectHistory, line, NOW, openTestDatabase, populatedState, request } from "./testing.js";
 
@@ -272,25 +271,45 @@ test("a brain generation's expiry erases no visible history; only the Clear reac
   );
 });
 
-test("the remembered facts have one writer here: the whole list, within its cap, or nothing", () => {
+test("history search reads only the conversations named, under each one's cutoff", () => {
   const database = openTestDatabase();
-  assert.deepEqual(personalFacts(database), []);
-  assert.equal(
-    replacePersonalFacts(database, [{ id: "f1", words: "prefers short replies" }]),
-    true,
+  // SAFETY: a thread key of the documented shape, built by hand for the test.
+  const thread =
+    "agent:main:thread:11111111-1111-1111-1111-111111111111" as typeof MAIN_SESSION_KEY;
+  createConversation(database, {
+    agentId: DEFAULT_AGENT_ID,
+    sessionKey: thread,
+    name: "Thread",
+    now: NOW,
+  });
+  appendHistory(
+    database,
+    MAIN_SESSION_KEY,
+    [line("we chose Tuesday deploys", NOW, { eventId: "a" })],
+    NOW,
   );
-  assert.equal(
-    replacePersonalFacts(database, [
-      { id: "f1", words: "a" },
-      { id: "f2", words: "a" },
-    ]),
-    false,
+  appendHistory(
+    database,
+    thread,
+    [line("tuesday is the deploy day", NOW + 1, { eventId: "b" })],
+    NOW + 1,
   );
-  assert.deepEqual(personalFacts(database), [{ id: "f1", words: "prefers short replies" }]);
-  const tooMany = Array.from({ length: 33 }, (_, i) => ({ id: `id-${i}`, words: `fact ${i}` }));
-  assert.equal(replacePersonalFacts(database, tooMany), false);
-  assert.equal(replacePersonalFacts(database, []), true);
-  assert.deepEqual(personalFacts(database), []);
+  appendHistory(database, thread, [line("unrelated words", NOW + 2, { eventId: "c" })], NOW + 2);
+  const both = searchHistory(database, [MAIN_SESSION_KEY, thread], "TUESDAY", 10, NOW + 3);
+  assert.deepEqual(
+    both.map((hit) => [hit.sessionKey, hit.entry.words]),
+    [
+      [thread, "tuesday is the deploy day"],
+      [MAIN_SESSION_KEY, "we chose Tuesday deploys"],
+    ],
+  );
+  assert.equal(searchHistory(database, [thread], "tuesday", 10, NOW + 3).length, 1);
+  assert.equal(searchHistory(database, [], "tuesday", 10, NOW + 3).length, 0);
+  raiseHistoryCutoff(database, MAIN_SESSION_KEY, NOW);
+  assert.equal(
+    searchHistory(database, [MAIN_SESSION_KEY, thread], "tuesday", 10, NOW + 3).length,
+    1,
+  );
 });
 
 test("a generation whose rows this build cannot read is repaired by the store that observed it, and by no stale writer", async () => {

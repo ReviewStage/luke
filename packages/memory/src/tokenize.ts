@@ -1,0 +1,46 @@
+/**
+ * The CJK-aware tokenizer and Jaccard similarity the MMR re-ranking reads,
+ * ported from OpenClaw `b7528507` (`extensions/memory-core/src/memory/tokenize.ts`).
+ */
+
+const CJK_RE = /[぀-ゟ゠-ヿ㐀-䶿一-鿿가-힯ᄀ-ᇿ]/u;
+
+export function tokenize(text: string): Set<string> {
+  const lower = text.toLowerCase();
+  const ascii = lower.match(/[a-z0-9_]+/g) ?? [];
+  const chars = Array.from(lower);
+  const cjk: { char: string; index: number }[] = [];
+  chars.forEach((char, index) => {
+    if (CJK_RE.test(char)) cjk.push({ char, index });
+  });
+  const bigrams: string[] = [];
+  for (let i = 1; i < cjk.length; i += 1) {
+    const previous = cjk[i - 1];
+    const next = cjk[i];
+    if (previous && next && next.index === previous.index + 1) {
+      bigrams.push(previous.char + next.char);
+    }
+  }
+  return new Set([...ascii, ...bigrams, ...cjk.map((entry) => entry.char)]);
+}
+
+export function jaccardSimilarity(left: Set<string>, right: Set<string>): number {
+  if (left.size === 0 && right.size === 0) return 1;
+  if (left.size === 0 || right.size === 0) return 0;
+  const smaller = left.size <= right.size ? left : right;
+  const larger = left.size <= right.size ? right : left;
+  let intersection = 0;
+  for (const token of smaller) if (larger.has(token)) intersection += 1;
+  const union = left.size + right.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}
+
+/** Jaccard over tokens, falling back to exact equality when neither side tokenizes at all. */
+export function textSimilarity(left: string, right: string): number {
+  const leftTokens = tokenize(left);
+  const rightTokens = tokenize(right);
+  if (leftTokens.size === 0 && rightTokens.size === 0) {
+    return left.toLowerCase() === right.toLowerCase() ? 1 : 0;
+  }
+  return jaccardSimilarity(leftTokens, rightTokens);
+}

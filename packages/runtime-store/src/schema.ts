@@ -50,14 +50,22 @@
  * child's result survives a delivery that could not land, and a launch finds
  * both what was still running and what was still owed.
  *
+ * Version 7 makes the notebook's Markdown files the source of truth for what
+ * Luke remembers and keeps only derived and provenance rows here: the search
+ * index over the notebook (sources, chunks, their FTS5 shadow, the embedding
+ * cache), and the notebook entries' provenance (each USER.md line's id and
+ * origin, and the file hash last reconciled). The `personal_facts` table is
+ * kept only for the migration the worker runs at open, which moves each fact
+ * into USER.md under the same id and empties the table; nothing writes it
+ * any more.
+ *
  * The schema is versioned by the `schema_version` table. A database at a
  * version this build does not know is refused rather than migrated by guess.
  */
 
 import type { SQLInputValue } from "node:sqlite";
 import { LEGACY_CHECKPOINT_FORMAT_TAG } from "@sidecar/brain";
-
-export const RUNTIME_SCHEMA_VERSION = 6;
+export const RUNTIME_SCHEMA_VERSION = 7;
 
 /**
  * How a database at an earlier version is brought to this one, in order. Each
@@ -115,6 +123,7 @@ export const RUNTIME_SCHEMA_MIGRATIONS: ReadonlyMap<number, readonly SchemaMigra
     [4, []],
     [5, []],
     [6, []],
+    [7, []],
   ]);
 
 export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
@@ -298,5 +307,53 @@ export const RUNTIME_SCHEMA_STATEMENTS: readonly string[] = [
     id TEXT PRIMARY KEY,
     ordinal INTEGER NOT NULL,
     words TEXT NOT NULL UNIQUE
+  )`,
+  `CREATE TABLE IF NOT EXISTS notebook_entries (
+    id TEXT PRIMARY KEY,
+    words TEXT NOT NULL,
+    path TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    origin TEXT NOT NULL,
+    migrated_fact_id TEXT,
+    UNIQUE (path, words)
+  )`,
+  `CREATE TABLE IF NOT EXISTS notebook_files (
+    path TEXT PRIMARY KEY,
+    hash TEXT NOT NULL,
+    reconciled_at INTEGER NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS memory_index_sources (
+    path TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    hash TEXT NOT NULL,
+    mtime REAL NOT NULL,
+    size INTEGER NOT NULL,
+    origin TEXT NOT NULL,
+    indexed_at INTEGER NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS memory_index_chunks (
+    id TEXT PRIMARY KEY,
+    path TEXT NOT NULL,
+    source TEXT NOT NULL,
+    start_line INTEGER NOT NULL,
+    end_line INTEGER NOT NULL,
+    hash TEXT NOT NULL,
+    model TEXT NOT NULL,
+    text TEXT NOT NULL,
+    embedding TEXT NOT NULL,
+    entry_ids TEXT,
+    updated_at INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS memory_index_chunks_by_path ON memory_index_chunks(path)`,
+  `CREATE VIRTUAL TABLE IF NOT EXISTS memory_index_chunks_fts
+    USING fts5(text, id UNINDEXED, path UNINDEXED, tokenize = 'unicode61')`,
+  `CREATE TABLE IF NOT EXISTS memory_embedding_cache (
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    hash TEXT NOT NULL,
+    embedding TEXT NOT NULL,
+    dims INTEGER,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (provider, model, hash)
   )`,
 ];
