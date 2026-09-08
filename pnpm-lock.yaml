@@ -87,6 +87,9 @@ importers:
       '@sidecar/realtime':
         specifier: workspace:*
         version: link:../../packages/realtime
+      '@sidecar/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
       '@sidecar/runtime-contracts':
         specifier: workspace:*
         version: link:../../packages/runtime-contracts
@@ -371,6 +374,9 @@ importers:
       '@sidecar/realtime':
         specifier: workspace:*
         version: link:../realtime
+      '@sidecar/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       '@sidecar/runtime-contracts':
         specifier: workspace:*
         version: link:../runtime-contracts
@@ -631,6 +637,28 @@ importers:
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
+      '@sidecar/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/runtime:
+    dependencies:
+      '@sidecar/guide':
+        specifier: workspace:*
+        version: link:../guide
+      '@sidecar/runtime-contracts':
+        specifier: workspace:*
+        version: link:../runtime-contracts
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
