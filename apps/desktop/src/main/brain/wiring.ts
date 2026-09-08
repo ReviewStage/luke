@@ -228,7 +228,9 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     return opened;
   };
 
-  openConversation(MAIN_SESSION_KEY);
+  // Nothing is opened here: a store is built the first time a conversation is
+  // asked for, so a run with nothing on disk — a fixture, a capture, a launch
+  // before the database is open — never reaches the worker for a load.
   const current = (sessionKey: SessionKey = MAIN_SESSION_KEY) =>
     conversations.get(sessionKey)?.host.current();
   const conversationForRun = (runId: string): SessionKey | undefined => {
@@ -295,10 +297,19 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       report: dependencies.report,
     });
 
-  const rebuildOne = (sessionKey: SessionKey, opened: OpenConversation): Promise<void> =>
+  /** The model the policy chose, or nothing when no brain may stand: no key, no account, a run off the network. */
+  const liveModel = (): ModelAdapter | undefined => {
+    const model = dependencies.model();
+    return model && dependencies.runnable() ? model : undefined;
+  };
+
+  const rebuildOne = (
+    sessionKey: SessionKey,
+    opened: OpenConversation,
+    model: ModelAdapter | undefined,
+  ): Promise<void> =>
     opened.host.replace(() => {
-      const model = dependencies.model();
-      if (!model || !dependencies.runnable()) {
+      if (!model) {
         if (sessionKey === MAIN_SESSION_KEY) dependencies.dropBriefings();
         return undefined;
       }
@@ -306,8 +317,14 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     });
 
   const rebuild = async (): Promise<void> => {
+    const model = liveModel();
+    // Main's conversation is opened the moment a brain may stand on it, and
+    // not before: a launch with nothing to run leaves the store untouched.
+    if (model) openConversation(MAIN_SESSION_KEY);
     await Promise.all(
-      [...conversations.entries()].map(([sessionKey, opened]) => rebuildOne(sessionKey, opened)),
+      [...conversations.entries()].map(([sessionKey, opened]) =>
+        rebuildOne(sessionKey, opened, model),
+      ),
     );
   };
 
@@ -351,7 +368,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     retire,
     openConversation: async (sessionKey) => {
       const opened = openConversation(sessionKey);
-      if (!opened.host.current()) await rebuildOne(sessionKey, opened);
+      if (!opened.host.current()) await rebuildOne(sessionKey, opened, liveModel());
     },
     closeConversation: async (sessionKey) => {
       const opened = conversations.get(sessionKey);
