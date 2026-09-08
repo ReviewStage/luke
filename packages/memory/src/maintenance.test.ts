@@ -217,7 +217,8 @@ function ranked(candidate: MemoryCandidate): RankedCandidate {
 
 test("a model plan is parsed against the candidates, validated against the prior entries, and applied within the loss limit", () => {
   const durable = recurring();
-  const promotions = [ranked(durable)];
+  const first = ranked(durable);
+  const promotions = [first];
   const existing = "# MEMORY.md\n\n- The developer likes tabs\n- The developer uses zsh\n";
   assert.equal(parseConsolidationPlan("not json", promotions), undefined);
   assert.equal(
@@ -236,7 +237,7 @@ test("a model plan is parsed against the candidates, validated against the prior
     promotions,
   );
   assert.ok(plan);
-  assert.equal(plan.operations[0]?.resultEntry, promotedEntry(promotions[0] as RankedCandidate));
+  assert.equal(plan.operations[0]?.resultEntry, promotedEntry(first));
   assert.equal(validateConsolidationPlan({ previous: existing, plan, promotions }), undefined);
   const applied = applyConsolidationPlan({ existingMemory: existing, plan, day: "2026-09-08" });
   assert.ok(applied);
@@ -301,14 +302,15 @@ test("a model plan is parsed against the candidates, validated against the prior
 
 test("a rewrite that would lose too many prior entries, or exceed the budget, is refused and the append-only path stands in", () => {
   const durable = recurring();
-  const promotions = [ranked(durable)];
+  const first = ranked(durable);
+  const promotions = [first];
   const existing = "# MEMORY.md\n\n- The developer likes tabs\n- The developer uses zsh\n";
   const lossy = {
     operations: [
       {
         candidateKey: durable.key,
         action: CONSOLIDATION_ACTION.MERGED,
-        resultEntry: promotedEntry(promotions[0] as RankedCandidate),
+        resultEntry: promotedEntry(first),
         priorEntries: ["- The developer likes tabs", "- The developer uses zsh"],
       },
     ],

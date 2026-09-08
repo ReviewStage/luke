@@ -75,6 +75,7 @@ function client() {
 /** A runtime whose one answer per system prompt the test decides; it executes no tool. */
 function fakeRuntime(answer: (prompt: string, input: string) => string | undefined) {
   const prompts: string[] = [];
+  // SAFETY: the sweep reaches only openContext and start, both present; the rest of the runtime is never called.
   const runtime = {
     openContext: async () => ({
       context: { dispose: () => undefined, adoptCompaction: () => undefined },

@@ -121,6 +121,11 @@ export interface MemoryMaintenance {
   forget: (ask: MemoryForgetAsk) => Promise<MemoryForgetReport | undefined>;
 }
 
+interface DedupedSeeds {
+  readonly seeds: CandidateSeed[];
+  readonly deduped: number;
+}
+
 export const DEEP_PATH = {
   MODEL_PLAN: "validated model plan",
   APPEND_ONLY: "append-only fallback",
@@ -299,10 +304,7 @@ export function wireMemoryMaintenance(
       .map((record) => record.sessionKey);
 
   /** Near-duplicate seeds fold onto the first of their kind so the store reinforces one candidate. */
-  const dedupe = (
-    seeds: CandidateSeed[],
-    held: readonly MemoryCandidate[],
-  ): { seeds: CandidateSeed[]; deduped: number } => {
+  const dedupe = (seeds: CandidateSeed[], held: readonly MemoryCandidate[]): DedupedSeeds => {
     const kept: CandidateSeed[] = [];
     let deduped = 0;
     for (const seed of seeds) {
@@ -544,10 +546,8 @@ export function wireMemoryMaintenance(
               consolidationPrompt(existing, promotions),
               CONSOLIDATION_OUTPUT_TOKENS,
               controller.signal,
-            ).catch((error: unknown) => {
-              notes.push(
-                `consolidation call failed: ${error instanceof Error ? error.message : String(error)}`,
-              );
+            ).catch((error: Error) => {
+              notes.push(`consolidation call failed: ${error.message}`);
               return undefined;
             });
             const plan = raw ? parseConsolidationPlan(raw, promotions) : undefined;

@@ -1195,10 +1195,10 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         const items = await agent.contextSnapshot().catch(() => undefined);
         if (items && items.length > 0) {
           const result = await capture(sessionKey, items).catch(
-            (error: unknown): MemoryHousekeepingResult => ({
+            (error: Error): MemoryHousekeepingResult => ({
               outcome: MEMORY_HOUSEKEEPING_OUTCOME.FAILED,
               writes: 0,
-              reason: error instanceof Error ? error.message : String(error),
+              reason: error.message,
             }),
           );
           if (!housekeepingCompleted(result.outcome)) {

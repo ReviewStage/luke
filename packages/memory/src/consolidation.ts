@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { CRON_SCHEDULE_KIND, type ScheduledJob } from "@sidecar/runtime";
 import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime-contracts";
-import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
+import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { textSimilarity, tokenize } from "./tokenize.js";
 
 /**
@@ -68,7 +68,7 @@ export const CANDIDATE_ORIGIN = {
 
 export type CandidateOrigin = (typeof CANDIDATE_ORIGIN)[keyof typeof CANDIDATE_ORIGIN];
 
-const CANDIDATE_ORIGIN_LIST: readonly string[] = Object.values(CANDIDATE_ORIGIN);
+const CANDIDATE_ORIGIN_LIST: readonly CandidateOrigin[] = Object.values(CANDIDATE_ORIGIN);
 
 /** What kind of conversation the evidence came from; only interactive ones feed durable memory. */
 export const CANDIDATE_SESSION_KIND = {
@@ -80,7 +80,8 @@ export const CANDIDATE_SESSION_KIND = {
 export type CandidateSessionKind =
   (typeof CANDIDATE_SESSION_KIND)[keyof typeof CANDIDATE_SESSION_KIND];
 
-const CANDIDATE_SESSION_KIND_LIST: readonly string[] = Object.values(CANDIDATE_SESSION_KIND);
+const CANDIDATE_SESSION_KIND_LIST: readonly CandidateSessionKind[] =
+  Object.values(CANDIDATE_SESSION_KIND);
 
 export const CANDIDATE_STATUS = {
   STAGED: "staged",
@@ -90,7 +91,7 @@ export const CANDIDATE_STATUS = {
 
 export type CandidateStatus = (typeof CANDIDATE_STATUS)[keyof typeof CANDIDATE_STATUS];
 
-const CANDIDATE_STATUS_LIST: readonly string[] = Object.values(CANDIDATE_STATUS);
+const CANDIDATE_STATUS_LIST: readonly CandidateStatus[] = Object.values(CANDIDATE_STATUS);
 
 export const CONSOLIDATION_PHASE = {
   LIGHT: "light",
@@ -481,7 +482,23 @@ export const CONSOLIDATION_ACTION = {
 
 export type ConsolidationAction = (typeof CONSOLIDATION_ACTION)[keyof typeof CONSOLIDATION_ACTION];
 
-const CONSOLIDATION_ACTION_LIST: readonly string[] = Object.values(CONSOLIDATION_ACTION);
+const CONSOLIDATION_ACTION_LIST: readonly ConsolidationAction[] =
+  Object.values(CONSOLIDATION_ACTION);
+
+function consolidationActionFromWire(value: UnparsedWireValue): ConsolidationAction | undefined {
+  return CONSOLIDATION_ACTION_LIST.find((action) => action === value);
+}
+
+/** An array of strings as a wire value, or nothing when it is anything else. */
+function wireStrings(value: UnparsedWireValue): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const strings: string[] = [];
+  for (const entry of value) {
+    if (!isWireString(entry)) return undefined;
+    strings.push(entry);
+  }
+  return strings;
+}
 
 export interface ConsolidationOperation {
   readonly candidateKey: string;
@@ -542,6 +559,7 @@ export function parseConsolidationPlan(
 ): ConsolidationPlan | undefined {
   let parsed: UnparsedWireValue;
   try {
+    // SAFETY: JSON.parse returns a wire value; the record and field checks below are the validation.
     parsed = JSON.parse(stripFences(raw)) as UnparsedWireValue;
   } catch {
     return undefined;
@@ -551,25 +569,19 @@ export function parseConsolidationPlan(
   const operations: ConsolidationOperation[] = [];
   for (const value of parsed.operations) {
     if (!isRecord(value)) return undefined;
-    if (typeof value.candidateKey !== "string") return undefined;
-    if (typeof value.action !== "string" || !CONSOLIDATION_ACTION_LIST.includes(value.action)) {
-      return undefined;
-    }
-    if (
-      !Array.isArray(value.priorEntries) ||
-      !value.priorEntries.every((entry): entry is string => typeof entry === "string")
-    ) {
-      return undefined;
-    }
+    if (!isWireString(value.candidateKey)) return undefined;
+    const action = consolidationActionFromWire(value.action);
+    if (!action) return undefined;
+    const priorEntries = wireStrings(value.priorEntries);
+    if (!priorEntries) return undefined;
     const ranked = byKey.get(value.candidateKey);
     if (!ranked) return undefined;
     const lineageKey = ranked.candidate.supersedesKey;
     operations.push({
       candidateKey: value.candidateKey,
-      // SAFETY: membership in the action list was checked above.
-      action: value.action as ConsolidationAction,
+      action,
       resultEntry: promotedEntry(ranked),
-      priorEntries: value.priorEntries.map((entry) => entry.trim()),
+      priorEntries: priorEntries.map((entry) => entry.trim()),
       ...(lineageKey ? { lineageKey } : undefined),
     });
   }
@@ -810,10 +822,17 @@ export function promotedCandidateKeys(content: string): string[] {
  * marker: a hand-edited promotion whose attribution is gone and which a
  * forget can only report, never claim to have erased.
  */
+export interface PromotedEntryRemoval {
+  readonly content: string;
+  readonly removed: number;
+  /** Entries carrying a source reference but no promotion marker: attribution a hand edit destroyed. */
+  readonly unattributed: number;
+}
+
 export function removePromotedEntries(
   content: string,
   keys: ReadonlySet<string>,
-): { content: string; removed: number; unattributed: number } {
+): PromotedEntryRemoval {
   const lines = content.replace(/\r\n/gu, "\n").split("\n");
   const kept: string[] = [];
   let removed = 0;
@@ -947,43 +966,33 @@ export function consolidationJob(
 /** A candidate as the store wrote it, read back; anything unreadable answers nothing. */
 export function memoryCandidateFromWire(value: UnparsedWireValue): MemoryCandidate | undefined {
   if (!isRecord(value)) return undefined;
-  const text = (key: string): string | undefined =>
-    typeof value[key] === "string" ? (value[key] as string) : undefined;
-  const number = (key: string): number | undefined =>
-    typeof value[key] === "number" && Number.isFinite(value[key] as number)
-      ? (value[key] as number)
-      : undefined;
-  const strings = (key: string): string[] | undefined =>
-    Array.isArray(value[key]) &&
-    (value[key] as unknown[]).every((entry) => typeof entry === "string")
-      ? (value[key] as string[])
-      : undefined;
-  const key = text("key");
-  const words = text("text");
-  const filePath = text("path");
-  const origin = text("origin");
-  const sessionKind = text("sessionKind");
-  const status = text("status");
-  const startLine = number("startLine");
-  const endLine = number("endLine");
-  const firstSeenAt = number("firstSeenAt");
-  const lastSeenAt = number("lastSeenAt");
-  const signalCount = number("signalCount");
-  const totalScore = number("totalScore");
-  const recallCount = number("recallCount");
-  const queries = strings("queries");
-  const days = strings("days");
-  const tags = strings("tags");
+  const text = (field: UnparsedWireValue): string | undefined =>
+    isWireString(field) ? field : undefined;
+  const number = (field: UnparsedWireValue): number | undefined =>
+    isWireNumber(field) && Number.isFinite(field) ? field : undefined;
+  const key = text(value.key);
+  const words = text(value.text);
+  const filePath = text(value.path);
+  const origin = CANDIDATE_ORIGIN_LIST.find((candidate) => candidate === value.origin);
+  const sessionKind = CANDIDATE_SESSION_KIND_LIST.find((kind) => kind === value.sessionKind);
+  const status = CANDIDATE_STATUS_LIST.find((candidate) => candidate === value.status);
+  const startLine = number(value.startLine);
+  const endLine = number(value.endLine);
+  const firstSeenAt = number(value.firstSeenAt);
+  const lastSeenAt = number(value.lastSeenAt);
+  const signalCount = number(value.signalCount);
+  const totalScore = number(value.totalScore);
+  const recallCount = number(value.recallCount);
+  const queries = wireStrings(value.queries);
+  const days = wireStrings(value.days);
+  const tags = wireStrings(value.tags);
   if (
     !key ||
     !words ||
     !filePath ||
     !origin ||
-    !CANDIDATE_ORIGIN_LIST.includes(origin) ||
     !sessionKind ||
-    !CANDIDATE_SESSION_KIND_LIST.includes(sessionKind) ||
     !status ||
-    !CANDIDATE_STATUS_LIST.includes(status) ||
     startLine === undefined ||
     endLine === undefined ||
     firstSeenAt === undefined ||
@@ -997,20 +1006,19 @@ export function memoryCandidateFromWire(value: UnparsedWireValue): MemoryCandida
   ) {
     return undefined;
   }
-  const sourceSessionKey = text("sourceSessionKey");
-  const sourceEventId = text("sourceEventId");
-  const supersedesKey = text("supersedesKey");
-  const lastPhaseHitAt = number("lastPhaseHitAt");
-  const promotedAt = number("promotedAt");
+  const sourceSessionKey = text(value.sourceSessionKey);
+  const sourceEventId = text(value.sourceEventId);
+  const supersedesKey = text(value.supersedesKey);
+  const lastPhaseHitAt = number(value.lastPhaseHitAt);
+  const promotedAt = number(value.promotedAt);
   return {
     key,
     text: words,
     path: filePath,
     startLine,
     endLine,
-    // SAFETY: membership in each list was checked above.
-    origin: origin as CandidateOrigin,
-    sessionKind: sessionKind as CandidateSessionKind,
+    origin,
+    sessionKind,
     ...(sourceSessionKey ? { sourceSessionKey } : undefined),
     ...(sourceEventId ? { sourceEventId } : undefined),
     firstSeenAt,
@@ -1021,11 +1029,11 @@ export function memoryCandidateFromWire(value: UnparsedWireValue): MemoryCandida
     queries,
     days,
     tags,
-    lightHits: number("lightHits") ?? 0,
-    remHits: number("remHits") ?? 0,
+    lightHits: number(value.lightHits) ?? 0,
+    remHits: number(value.remHits) ?? 0,
     ...(lastPhaseHitAt !== undefined ? { lastPhaseHitAt } : undefined),
     ...(supersedesKey ? { supersedesKey } : undefined),
-    status: status as CandidateStatus,
+    status,
     ...(promotedAt !== undefined ? { promotedAt } : undefined),
   };
 }

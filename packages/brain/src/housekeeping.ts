@@ -14,7 +14,7 @@ import {
   type ToolExecutor,
   type ToolResult,
 } from "@sidecar/runtime-contracts";
-import { ACT_RESULT_STATUS, type WireRecord, wireRecord } from "@sidecar/wire";
+import { ACT_RESULT_STATUS, isWireString, type WireRecord, wireRecord } from "@sidecar/wire";
 import type { BrainWorkspaceAccess } from "./tool-executor.js";
 import { BRAIN_TOOL, brainToolCatalog } from "./tools.js";
 import { REFUSAL_REASON } from "./turn.js";
@@ -59,7 +59,7 @@ export interface MemoryHousekeepingOptions {
 function answer(output: WireRecord): ToolResult {
   return {
     outputJson: JSON.stringify(output),
-    ...(typeof output.status === "string" ? { status: output.status } : undefined),
+    ...(isWireString(output.status) ? { status: output.status } : undefined),
   };
 }
 
@@ -85,7 +85,7 @@ export async function runMemoryHousekeeping(
       } catch {
         args = {};
       }
-      const name = typeof args.name === "string" ? args.name : "";
+      const name = isWireString(args.name) ? args.name : "";
       if (call.name === BRAIN_TOOL.READ_WORKSPACE_FILE) {
         const read = await options.workspace.read(name);
         return read.ok
@@ -95,7 +95,7 @@ export async function runMemoryHousekeeping(
       if (!isDailyNotePathForDay(name, options.dateStamp)) {
         return rejection(HOUSEKEEPING_REFUSAL.NOT_TODAYS_NOTE);
       }
-      const content = typeof args.content === "string" ? args.content : "";
+      const content = isWireString(args.content) ? args.content : "";
       const existing = await options.workspace.read(name);
       if (!existing.ok && existing.reason !== WORKSPACE_FILE_REFUSAL.NOT_FOUND) {
         return rejection(existing.reason);

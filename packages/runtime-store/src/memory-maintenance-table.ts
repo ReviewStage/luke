@@ -6,11 +6,13 @@ import {
   type CandidateSeed,
   type CandidateStatus,
   CONSOLIDATION_DEFAULTS,
+  CONSOLIDATION_PHASE,
   type ConsolidationPhase,
   candidateFromSeed,
   candidateKeyFor,
   DREAMS_FILE,
   hashText,
+  MEMORY_HOUSEKEEPING_OUTCOME,
   type MemoryCandidate,
   type MemoryHousekeepingOutcome,
   memoryCandidateFromWire,
@@ -20,7 +22,7 @@ import {
 } from "@sidecar/memory";
 import { WORKSPACE_FILE } from "@sidecar/runtime";
 import type { SessionKey } from "@sidecar/runtime-contracts";
-import type { UnparsedWireValue } from "@sidecar/wire";
+import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import type { RuntimeDatabase } from "./database.js";
 import { removeIndexedPath } from "./memory-index-table.js";
 import { forgetNotebookEntry, type NotebookEntry } from "./notebook-table.js";
@@ -38,6 +40,9 @@ import { forgetNotebookEntry, type NotebookEntry } from "./notebook-table.js";
  */
 
 type CandidateRow = { payload: string };
+
+const PHASES: readonly ConsolidationPhase[] = Object.values(CONSOLIDATION_PHASE);
+const OUTCOMES: readonly MemoryHousekeepingOutcome[] = Object.values(MEMORY_HOUSEKEEPING_OUTCOME);
 
 function readCandidates(rows: readonly CandidateRow[]): MemoryCandidate[] {
   const candidates: MemoryCandidate[] = [];
@@ -353,6 +358,18 @@ export interface MemoryRewriteRecord {
   readonly createdAt: number;
 }
 
+/** The candidate keys a rewrite row recorded, read back as strings and nothing else. */
+function candidateKeysOf(stored: string): readonly string[] {
+  let parsed: UnparsedWireValue;
+  try {
+    // SAFETY: JSON.parse returns a wire value; the array and string checks below are the validation.
+    parsed = JSON.parse(stored) as UnparsedWireValue;
+  } catch {
+    return [];
+  }
+  return Array.isArray(parsed) ? parsed.filter(isWireString) : [];
+}
+
 export function listMemoryRewrites(database: RuntimeDatabase): readonly MemoryRewriteRecord[] {
   // SAFETY: the columns selected are the ones the row type names.
   const rows = database
@@ -372,11 +389,10 @@ export function listMemoryRewrites(database: RuntimeDatabase): readonly MemoryRe
   return rows.map((row) => ({
     id: row.id,
     path: row.path,
-    // SAFETY: the phase column holds one of the vocabulary's values, written by publishMemoryRewrite.
-    phase: row.phase as ConsolidationPhase,
+    phase: PHASES.find((phase) => phase === row.phase) ?? CONSOLIDATION_PHASE.DEEP,
     previous: row.previous,
     nextHash: row.next_hash,
-    candidateKeys: JSON.parse(row.candidate_keys) as string[],
+    candidateKeys: candidateKeysOf(row.candidate_keys),
     createdAt: row.created_at,
   }));
 }
@@ -499,8 +515,8 @@ export function flushState(
   if (!row) return undefined;
   return {
     compactionCount: row.compaction_count,
-    // SAFETY: the outcome column holds one of the vocabulary's values, written by recordFlush.
-    outcome: row.outcome as MemoryHousekeepingOutcome,
+    outcome:
+      OUTCOMES.find((outcome) => outcome === row.outcome) ?? MEMORY_HOUSEKEEPING_OUTCOME.FAILED,
     flushedAt: row.flushed_at,
   };
 }

@@ -4,6 +4,7 @@ export {
   type BrainAgentOptions,
   type BrainChildRunEnd,
   type BrainCompletionDelivery,
+  type BrainFlushCycle,
   type BrainFlushInput,
   type BrainLane,
   type BrainOpeningNotes,

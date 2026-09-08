@@ -43,7 +43,7 @@ function workspace(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "luke-memory-maintenance-"));
 }
 
-const THREAD = threadSessionKey("main", "11111111-1111-4111-8111-111111111111");
+const THREAD = threadSessionKey("11111111-1111-4111-8111-111111111111");
 
 function seed(overrides: Partial<CandidateSeed> = {}): CandidateSeed {
   return {
@@ -194,7 +194,7 @@ test("forgetting a source removes its candidates and the MEMORY.md entries they 
     sourceEventId: undefined,
   });
   stageMemoryCandidates(database, [other], NOW);
-  const [fromThread, fromNote] = listMemoryCandidates(database).sort((a, b) =>
+  const [fromThread, fromNote] = [...listMemoryCandidates(database)].sort((a, b) =>
     a.path.localeCompare(b.path),
   );
   assert.ok(fromThread && fromNote);

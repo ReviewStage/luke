@@ -1,6 +1,7 @@
 import { HOSTED_BRAIN_OPTION_BOUNDS } from "@sidecar/hosted";
 import {
   housekeepingCompleted,
+  MEMORY_HOUSEKEEPING_OUTCOME,
   type MemoryHousekeepingResult,
   shouldRunMemoryFlush,
 } from "@sidecar/memory";
@@ -1718,10 +1719,10 @@ export class BrainAgent {
         compactionCount: cycle,
         signal,
       }).catch(
-        (error: unknown): MemoryHousekeepingResult => ({
-          outcome: "failed",
+        (error: Error): MemoryHousekeepingResult => ({
+          outcome: MEMORY_HOUSEKEEPING_OUTCOME.FAILED,
           writes: 0,
-          reason: error instanceof Error ? error.message : String(error),
+          reason: error.message,
         }),
       ),
       signal,
@@ -1737,7 +1738,7 @@ export class BrainAgent {
   }
 
   /** How many times the context has folded since this agent stood up, and the cycle the last completed flush ran under. */
-  flushCycle(): { compactionCount: number; lastFlushCompactionCount?: number } {
+  flushCycle(): BrainFlushCycle {
     return {
       compactionCount: this.#compactionCount,
       ...(this.#lastFlushCompactionCount !== undefined
