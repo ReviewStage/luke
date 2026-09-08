@@ -1,5 +1,7 @@
-import type { ESTree } from "@oxlint/plugins";
+import type { ESTree, SourceCode } from "@oxlint/plugins";
 import { defineRule } from "@oxlint/plugins";
+
+import { lexicalTypeParameterNames } from "../shared/lexical-type-parameters.ts";
 
 type Parameter = ESTree.ParamPattern;
 type ParameterOwner =
@@ -24,50 +26,109 @@ function parameterAnnotation(parameter: Parameter): ESTree.TSTypeAnnotation | nu
   return parameter.typeAnnotation;
 }
 
-function parameterName(parameter: Parameter, sourceText: string): string {
+function parameterName(parameter: Parameter, sourceCode: SourceCode): string {
   if (parameter.type === "TSParameterProperty") {
-    return parameterName(parameter.parameter, sourceText);
+    return parameterName(parameter.parameter, sourceCode);
   }
   if (parameter.type === "AssignmentPattern") {
-    return parameterName(parameter.left, sourceText);
+    return parameterName(parameter.left, sourceCode);
   }
   if (parameter.type === "RestElement") {
-    return parameterName(parameter.argument, sourceText);
+    return parameterName(parameter.argument, sourceCode);
   }
   return parameter.type === "Identifier"
     ? parameter.name
-    : sourceText.replace(/\s*:\s*unknown\s*$/u, "");
+    : sourceCode.getText(parameter).replace(/\s*:\s*(?:object|unknown)\s*$/u, "");
 }
 
-/** Disallow unknown inputs except explicitly named error-cause enrichment. */
+/**
+ * Disallow the two unparsed function inputs, `unknown` and the broad `object`,
+ * the former except for explicitly named error-cause enrichment.
+ */
 export const noUnknownParametersRule = defineRule({
   meta: {
     type: "problem",
     docs: {
       description:
-        "Disallow explicitly unknown function parameters except `cause`; decode unknown input at its I/O boundary instead.",
+        "Disallow explicitly unknown function parameters except `cause`, and the broad object type including local aliases to it; decode input at its I/O boundary instead.",
     },
     messages: {
       unknownParameter:
         "Parameter `{{parameter}}` leaves input unparsed. Accept a named domain type; run the expected schema or parser at the I/O boundary before calling this function.",
+      objectParameter:
+        "Parameter `{{parameter}}` uses the broad `object` type. Accept a named owner type; parse external input at its boundary before calling this function.",
     },
   },
   createOnce(context) {
+    const aliases = new Map<string, ESTree.TSType>();
+
+    const resolvesToObject = (
+      type: ESTree.TSType,
+      shadowedAliases: ReadonlySet<string>,
+      visited = new Set<string>(),
+    ): boolean => {
+      if (type.type === "TSObjectKeyword") return true;
+      if (type.type === "TSParenthesizedType")
+        return resolvesToObject(type.typeAnnotation, shadowedAliases, visited);
+      if (type.type === "TSUnionType") {
+        return type.types.some((member) => resolvesToObject(member, shadowedAliases, visited));
+      }
+      if (
+        type.type !== "TSTypeReference" ||
+        type.typeName.type !== "Identifier" ||
+        (type.typeArguments !== null &&
+          type.typeArguments !== undefined &&
+          type.typeArguments.params.length > 0) ||
+        visited.has(type.typeName.name) ||
+        shadowedAliases.has(type.typeName.name)
+      ) {
+        return false;
+      }
+      const alias = aliases.get(type.typeName.name);
+      if (alias === undefined) return false;
+      const nextVisited = new Set(visited);
+      nextVisited.add(type.typeName.name);
+      return resolvesToObject(alias, shadowedAliases, nextVisited);
+    };
+
     const checkParameters = (node: ParameterOwner) => {
+      const shadowedAliases = lexicalTypeParameterNames(node, context.sourceCode.visitorKeys);
       for (const parameter of node.params) {
         const annotation = parameterAnnotation(parameter);
-        if (annotation?.typeAnnotation.type !== "TSUnknownKeyword") continue;
-        const name = parameterName(parameter, context.sourceCode.getText(parameter));
-        if (name === "cause") continue;
+        if (annotation === null || annotation === undefined) continue;
+        if (annotation.typeAnnotation.type === "TSUnknownKeyword") {
+          const name = parameterName(parameter, context.sourceCode);
+          if (name === "cause") continue;
+          context.report({
+            node: annotation.typeAnnotation,
+            messageId: "unknownParameter",
+            data: { parameter: name },
+          });
+          continue;
+        }
+        if (!resolvesToObject(annotation.typeAnnotation, shadowedAliases)) continue;
         context.report({
           node: annotation.typeAnnotation,
-          messageId: "unknownParameter",
-          data: { parameter: name },
+          messageId: "objectParameter",
+          data: { parameter: parameterName(parameter, context.sourceCode) },
         });
       }
     };
 
     return {
+      Program(node) {
+        aliases.clear();
+        for (const statement of node.body) {
+          const declaration =
+            statement.type === "ExportNamedDeclaration" ? statement.declaration : statement;
+          if (
+            declaration?.type === "TSTypeAliasDeclaration" &&
+            (declaration.typeParameters === null || declaration.typeParameters === undefined)
+          ) {
+            aliases.set(declaration.id.name, declaration.typeAnnotation);
+          }
+        }
+      },
       ArrowFunctionExpression: checkParameters,
       FunctionDeclaration: checkParameters,
       FunctionExpression: checkParameters,
