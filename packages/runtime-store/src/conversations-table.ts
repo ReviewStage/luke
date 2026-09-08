@@ -89,28 +89,59 @@ export interface ConversationCreation {
   kind?: ConversationKind;
 }
 
-/** Creates the conversation, or answers the one that already stands at the key. */
+/** Creates the conversation, or answers the one that already stands at the key; idempotent. */
 export function createConversation(
   database: RuntimeDatabase,
   creation: ConversationCreation,
 ): ConversationRecord {
   return database.transaction(() => {
-    const standing = conversationRecord(database, creation.sessionKey);
-    if (standing) return standing;
-    const kind = creation.kind ?? conversationKindOf(creation.sessionKey);
     database
       .prepare("INSERT OR IGNORE INTO agents (agent_id, created_at) VALUES (?, ?)")
       .run(creation.agentId, creation.now);
     database
       .prepare(
-        `INSERT INTO conversations (session_key, agent_id, name, created_at, kind, last_activity_at)
+        `INSERT OR IGNORE INTO conversations
+           (session_key, agent_id, name, created_at, kind, last_activity_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
       )
-      .run(creation.sessionKey, creation.agentId, creation.name, creation.now, kind, creation.now);
+      .run(
+        creation.sessionKey,
+        creation.agentId,
+        creation.name,
+        creation.now,
+        creation.kind ?? conversationKindOf(creation.sessionKey),
+        creation.now,
+      );
     const created = conversationRecord(database, creation.sessionKey);
     if (!created) throw new Error(`conversation ${creation.sessionKey} was not created`);
     return created;
   });
+}
+
+/** The conversation's durable Clear cutoff, which outlives the generation whose marker raised it. */
+export function historyCutoff(
+  database: RuntimeDatabase,
+  sessionKey: SessionKey,
+): number | undefined {
+  // SAFETY: the query selects the one nullable integer column the row type names.
+  const row = database
+    .prepare("SELECT history_cleared_at FROM conversations WHERE session_key = ?")
+    .get(sessionKey) as { history_cleared_at: number | null } | undefined;
+  return row?.history_cleared_at ?? undefined;
+}
+
+/** Raises the conversation's durable cutoff to `clearedAt`; never lowers it. */
+export function raiseHistoryCutoff(
+  database: RuntimeDatabase,
+  sessionKey: SessionKey,
+  clearedAt: number,
+): void {
+  database
+    .prepare(
+      `UPDATE conversations SET history_cleared_at = MAX(COALESCE(history_cleared_at, ?), ?)
+       WHERE session_key = ?`,
+    )
+    .run(clearedAt, clearedAt, sessionKey);
 }
 
 /** Moves the conversation's latest activity forward to `now`; never back. */

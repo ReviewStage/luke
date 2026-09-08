@@ -5,6 +5,7 @@ import {
 } from "@sidecar/realtime";
 import type { HistoryAppendOutcome, SessionKey } from "@sidecar/runtime-contracts";
 import { standingGeneration } from "./brain-envelope.js";
+import { historyCutoff } from "./conversations-table.js";
 import { nullable, type RuntimeDatabase } from "./database.js";
 import {
   historyEntryAdmitted,
@@ -29,7 +30,7 @@ export function historyClearedAt(
   database: RuntimeDatabase,
   sessionKey: SessionKey,
 ): number | undefined {
-  const durable = database.historyCutoff(sessionKey);
+  const durable = historyCutoff(database, sessionKey);
   const marker = standingGeneration(database, sessionKey)?.resetClearedAt;
   if (durable === undefined) return marker;
   return marker === undefined ? durable : Math.max(durable, marker);
@@ -223,18 +224,4 @@ function listRetained(
     if (entry) entries.push(entry);
   }
   return entries;
-}
-
-/** The Clear's erasure of the thread: every line at or before the cutoff goes. */
-export function clearHistoryAtOrBefore(
-  database: RuntimeDatabase,
-  sessionKey: SessionKey,
-  clearedAt: number,
-): void {
-  database.transaction(() => {
-    database.raiseHistoryCutoff(sessionKey, clearedAt);
-    database
-      .prepare("DELETE FROM history_events WHERE session_key = ? AND recorded_at <= ?")
-      .run(sessionKey, clearedAt);
-  });
 }

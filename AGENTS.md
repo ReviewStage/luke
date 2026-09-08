@@ -368,9 +368,10 @@ Trust constraints:
   threshold, a 7-day idle threshold for private threads, 5,000 unarchived
   conversations, a 10 GiB physical budget cleaned to 8 GiB, automatic reset
   off, archive age expiry off — and its rules are the source's: ordinary age
-  and count maintenance never touches an archived conversation; a durable
-  conversation is archived in place and only runtime-owned automation state
-  is removed; main, a pinned conversation, one with a run under way, and any
+  and count maintenance never touches an archived conversation; a
+  conversation is archived in place and never removed outright, since every
+  kind this build makes is durable; main, a pinned conversation, one with a
+  run under way, and any
   key this build cannot classify are never victims; the cap counts only
   unarchived rows, takes the longest untouched first with later insertion
   winning a tie, and leaves the directory above the cap when protected rows

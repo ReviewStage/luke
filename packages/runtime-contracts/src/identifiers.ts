@@ -71,19 +71,13 @@ export const MAIN_SESSION_KEY: SessionKey = mainSessionKey();
 
 /**
  * What kind of conversation a session key addresses. Main is the agent's
- * ordinary conversation; a thread is one the developer opened beside it;
- * an observed conversation follows one coding session and arrives in a later
- * build; an automation conversation is runtime-owned and disposable, the
- * distinction OpenClaw's maintenance draws between a human's conversation
- * and a scheduled or delegated one. A key this build cannot classify is kept
- * by maintenance and never a victim, because losing history is the worse
- * failure.
+ * ordinary conversation, and a thread is one the developer opened beside it.
+ * A key this build cannot classify is kept by maintenance and never a
+ * victim, because losing history is the worse failure.
  */
 export const CONVERSATION_KIND = {
   MAIN: "main",
   THREAD: "thread",
-  OBSERVED: "observed",
-  AUTOMATION: "automation",
   UNKNOWN: "unknown",
 } as const;
 
@@ -97,16 +91,6 @@ export function isConversationKind(value: UnparsedWireValue): value is Conversat
 }
 
 const THREAD_SEGMENT = "thread";
-const OBSERVED_SEGMENT = "observed";
-/** The segments OpenClaw's store treats as disposable automation state rather than a conversation. */
-const AUTOMATION_SEGMENTS: ReadonlySet<string> = new Set([
-  "cron",
-  "subagent",
-  "heartbeat",
-  "hook",
-  "node",
-  "explicit",
-]);
 
 /**
  * A private thread's stable address: `agent:<agentId>:thread:<threadId>`.
@@ -137,8 +121,6 @@ export function conversationKindOf(key: SessionKey | string): ConversationKind {
   const [head] = parsed.rest;
   if (parsed.rest.length === 1 && head === MAIN_CONVERSATION_NAME) return CONVERSATION_KIND.MAIN;
   if (head === THREAD_SEGMENT && parsed.rest.length === 2) return CONVERSATION_KIND.THREAD;
-  if (head === OBSERVED_SEGMENT) return CONVERSATION_KIND.OBSERVED;
-  if (head !== undefined && AUTOMATION_SEGMENTS.has(head)) return CONVERSATION_KIND.AUTOMATION;
   return CONVERSATION_KIND.UNKNOWN;
 }
 

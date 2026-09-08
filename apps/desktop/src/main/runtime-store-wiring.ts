@@ -9,14 +9,14 @@ import {
   type HistoryArchiveRecord,
   MAIN_CONVERSATION_NAME,
   MAIN_SESSION_KEY,
+  RESTORE_OUTCOME,
+  type RestoreOutcome,
   type SessionKey,
   threadSessionKey,
 } from "@sidecar/runtime-contracts";
 import {
   type DeletionOutcome,
   type MaintenanceReport,
-  RESTORE_OUTCOME,
-  type RestoreOutcome,
   RuntimeStoreClient,
   type RuntimeStorePort,
 } from "@sidecar/runtime-store";
@@ -329,12 +329,7 @@ export function wireRuntimeStore(dependencies: RuntimeStoreWiringDependencies): 
         return { published: true };
       }
       try {
-        return await client().deleteConversationHistory(
-          sessionKey,
-          now,
-          dependencies.createEventId(),
-          false,
-        );
+        return await client().deleteConversationHistory(sessionKey, now);
       } catch (error) {
         dependencies.report(
           `Could not delete the conversation's history: ${error instanceof Error ? error.message : String(error)}`,

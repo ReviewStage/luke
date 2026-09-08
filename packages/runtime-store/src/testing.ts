@@ -14,6 +14,7 @@ import {
   MAIN_CONVERSATION_NAME,
   MAIN_SESSION_KEY,
 } from "@sidecar/runtime-contracts";
+import { createConversation } from "./conversations-table.js";
 import { RuntimeDatabase } from "./database.js";
 
 /** Synthetic fixtures for the store's own tests: no real title, branch, or transcript anywhere. */
@@ -22,7 +23,12 @@ export const NOW = 1_800_000_000_000;
 
 export function openTestDatabase(location = ":memory:"): RuntimeDatabase {
   const database = RuntimeDatabase.open(location);
-  database.ensureConversation(DEFAULT_AGENT_ID, MAIN_SESSION_KEY, MAIN_CONVERSATION_NAME, NOW);
+  createConversation(database, {
+    agentId: DEFAULT_AGENT_ID,
+    sessionKey: MAIN_SESSION_KEY,
+    name: MAIN_CONVERSATION_NAME,
+    now: NOW,
+  });
   return database;
 }
 
@@ -122,10 +128,7 @@ export function inspectHistory(
 }
 
 /** How many rows each table beneath a conversation still holds; what a removal must bring to zero. */
-export function countConversationRows(
-  database: RuntimeDatabase,
-  sessionKey: SessionKey,
-): { history: number; transcript: number; boundaries: number; sessions: number } {
+export function countConversationRows(database: RuntimeDatabase, sessionKey: SessionKey) {
   const count = (table: string) => {
     // SAFETY: COUNT(*) is one integer column named `count`; the table name is one of the four fixed below.
     const row = database

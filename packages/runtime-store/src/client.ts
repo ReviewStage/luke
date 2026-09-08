@@ -4,18 +4,16 @@ import type { ConversationEntry } from "@sidecar/realtime";
 import type {
   AgentId,
   ArchiveReason,
-  ConversationKind,
   ConversationRecord,
   HistoryAppendOutcome,
   HistoryArchiveRecord,
   SessionKey,
-  StoredTranscriptEvent,
   TranscriptEvent,
 } from "@sidecar/runtime-contracts";
 import type { UnparsedWireValue } from "@sidecar/wire";
-import type { DeletionOutcome, RestoreResult } from "./archives.js";
+import type { DeletionOptions, DeletionOutcome, RestoreResult } from "./archives.js";
+import type { ConversationCreation } from "./conversations-table.js";
 import { EnvelopeTracker } from "./envelope.js";
-import type { HistoryMaintenanceConfig } from "./maintenance.js";
 import type { MaintenanceReport } from "./maintenance-run.js";
 import {
   RUNTIME_STORE_METHOD,
@@ -133,10 +131,6 @@ export class RuntimeStoreClient {
     return this.request(RUNTIME_STORE_METHOD.HISTORY_CUTOFF, { sessionKey });
   }
 
-  clearHistoryAtOrBefore(sessionKey: SessionKey, clearedAt: number): Promise<boolean> {
-    return this.request(RUNTIME_STORE_METHOD.HISTORY_CLEAR, { sessionKey, clearedAt });
-  }
-
   personalFacts(): Promise<readonly RememberedFact[]> {
     return this.request(RUNTIME_STORE_METHOD.FACTS_LIST, {});
   }
@@ -145,13 +139,7 @@ export class RuntimeStoreClient {
     return this.request(RUNTIME_STORE_METHOD.CONVERSATIONS_LIST, {});
   }
 
-  createConversation(creation: {
-    agentId: AgentId;
-    sessionKey: SessionKey;
-    name: string;
-    kind?: ConversationKind;
-    now: number;
-  }): Promise<ConversationRecord> {
+  createConversation(creation: ConversationCreation): Promise<ConversationRecord> {
     return this.request(RUNTIME_STORE_METHOD.CONVERSATION_CREATE, creation);
   }
 
@@ -167,10 +155,6 @@ export class RuntimeStoreClient {
     return this.request(RUNTIME_STORE_METHOD.CONVERSATION_UNARCHIVE, { sessionKey });
   }
 
-  renameConversation(sessionKey: SessionKey, name: string): Promise<boolean> {
-    return this.request(RUNTIME_STORE_METHOD.CONVERSATION_RENAME, { sessionKey, name });
-  }
-
   pinConversation(sessionKey: SessionKey, pinnedAt: number | undefined): Promise<boolean> {
     return this.request(RUNTIME_STORE_METHOD.CONVERSATION_PIN, { sessionKey, pinnedAt });
   }
@@ -179,38 +163,9 @@ export class RuntimeStoreClient {
   deleteConversationHistory(
     sessionKey: SessionKey,
     now: number,
-    archiveId: string,
-    removeConversation = false,
+    options: DeletionOptions = {},
   ): Promise<DeletionOutcome | undefined> {
-    return this.request(RUNTIME_STORE_METHOD.CONVERSATION_DELETE, {
-      sessionKey,
-      now,
-      archiveId,
-      removeConversation,
-    });
-  }
-
-  listTranscript(
-    sessionKey: SessionKey,
-    options: { afterSequence?: number; limit?: number } = {},
-  ): Promise<readonly StoredTranscriptEvent[]> {
-    return this.request(RUNTIME_STORE_METHOD.TRANSCRIPT_LIST, { sessionKey, ...options });
-  }
-
-  searchTranscript(
-    sessionKey: SessionKey,
-    query: string,
-    limit?: number,
-  ): Promise<readonly StoredTranscriptEvent[]> {
-    return this.request(RUNTIME_STORE_METHOD.TRANSCRIPT_SEARCH, {
-      sessionKey,
-      query,
-      ...(limit !== undefined ? { limit } : undefined),
-    });
-  }
-
-  listCompactionBoundaries(sessionKey: SessionKey) {
-    return this.request(RUNTIME_STORE_METHOD.COMPACTIONS_LIST, { sessionKey });
+    return this.request(RUNTIME_STORE_METHOD.CONVERSATION_DELETE, { sessionKey, now, ...options });
   }
 
   listArchives(): Promise<readonly HistoryArchiveRecord[]> {
@@ -221,16 +176,10 @@ export class RuntimeStoreClient {
     return this.request(RUNTIME_STORE_METHOD.ARCHIVE_RESTORE, { archiveId, agentId, now });
   }
 
-  /** Retries every archive publication a crash interrupted; answers the ids still unpublished. */
-  publishPendingArchives(): Promise<readonly string[]> {
-    return this.request(RUNTIME_STORE_METHOD.ARCHIVES_PUBLISH_PENDING, {});
-  }
-
+  /** One maintenance pass under the pinned defaults, keeping the conversations named whatever their age. */
   runMaintenance(options: {
     now: number;
     preserve: readonly SessionKey[];
-    config?: Partial<HistoryMaintenanceConfig>;
-    force?: boolean;
   }): Promise<MaintenanceReport> {
     return this.request(RUNTIME_STORE_METHOD.MAINTENANCE_RUN, options);
   }

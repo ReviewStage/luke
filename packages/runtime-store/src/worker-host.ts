@@ -1,29 +1,17 @@
-import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { UnparsedWireValue } from "@sidecar/wire";
-import {
-  deleteConversationHistory,
-  listArchives,
-  publishPendingArchives,
-  restoreArchive,
-} from "./archives.js";
+import { deleteConversationHistory, listArchives, restoreArchive } from "./archives.js";
 import { loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
 import {
   archiveConversation,
   createConversation,
   listConversations,
   pinConversation,
-  renameConversation,
   unarchiveConversation,
 } from "./conversations-table.js";
 import { AGENT_DATABASE_FILE, RuntimeDatabase } from "./database.js";
 import { personalFacts, replacePersonalFacts } from "./facts-table.js";
-import {
-  appendHistory,
-  clearHistoryAtOrBefore,
-  historyClearedAt,
-  listHistory,
-} from "./history-table.js";
+import { appendHistory, historyClearedAt, listHistory } from "./history-table.js";
 import { runHistoryMaintenance } from "./maintenance-run.js";
 import {
   RUNTIME_STORE_METHOD,
@@ -34,7 +22,6 @@ import {
   type RuntimeStoreResponse,
   runtimeStoreRequestFromWire,
 } from "./protocol.js";
-import { listCompactionBoundaries, listTranscript, searchTranscript } from "./transcript-table.js";
 
 /**
  * The database's side of the channel. It answers requests one at a time in
@@ -66,9 +53,12 @@ type RuntimeStoreHandlers = {
 const HANDLERS: RuntimeStoreHandlers = {
   [RUNTIME_STORE_METHOD.OPEN]: (host, params) => {
     host.open(params.agentRoot);
-    host
-      .opened()
-      .ensureConversation(params.agentId, params.sessionKey, params.conversationName, params.now);
+    createConversation(host.opened(), {
+      agentId: params.agentId,
+      sessionKey: params.sessionKey,
+      name: params.conversationName,
+      now: params.now,
+    });
     return true;
   },
   [RUNTIME_STORE_METHOD.BRAIN_LOAD]: (host, params) =>
@@ -79,10 +69,6 @@ const HANDLERS: RuntimeStoreHandlers = {
     appendHistory(host.opened(), params.sessionKey, params.entries, params.now),
   [RUNTIME_STORE_METHOD.HISTORY_LIST]: (host, params) =>
     listHistory(host.opened(), params.sessionKey, params.now),
-  [RUNTIME_STORE_METHOD.HISTORY_CLEAR]: (host, params) => {
-    clearHistoryAtOrBefore(host.opened(), params.sessionKey, params.clearedAt);
-    return true;
-  },
   [RUNTIME_STORE_METHOD.HISTORY_CUTOFF]: (host, params) =>
     historyClearedAt(host.opened(), params.sessionKey),
   [RUNTIME_STORE_METHOD.FACTS_LIST]: (host) => personalFacts(host.opened()),
@@ -95,8 +81,6 @@ const HANDLERS: RuntimeStoreHandlers = {
     archiveConversation(host.opened(), params.sessionKey, params.now, params.reason),
   [RUNTIME_STORE_METHOD.CONVERSATION_UNARCHIVE]: (host, params) =>
     unarchiveConversation(host.opened(), params.sessionKey),
-  [RUNTIME_STORE_METHOD.CONVERSATION_RENAME]: (host, params) =>
-    renameConversation(host.opened(), params.sessionKey, params.name),
   [RUNTIME_STORE_METHOD.CONVERSATION_PIN]: (host, params) =>
     pinConversation(host.opened(), params.sessionKey, params.pinnedAt),
   [RUNTIME_STORE_METHOD.CONVERSATION_DELETE]: (host, params) =>
@@ -105,31 +89,13 @@ const HANDLERS: RuntimeStoreHandlers = {
       host.agentRoot(),
       params.sessionKey,
       params.now,
-      params.archiveId,
-      { removeConversation: params.removeConversation },
+      params,
     ),
-  [RUNTIME_STORE_METHOD.TRANSCRIPT_LIST]: (host, params) =>
-    listTranscript(host.opened(), params.sessionKey, {
-      ...(params.afterSequence !== undefined ? { afterSequence: params.afterSequence } : undefined),
-      ...(params.limit !== undefined ? { limit: params.limit } : undefined),
-    }),
-  [RUNTIME_STORE_METHOD.TRANSCRIPT_SEARCH]: (host, params) =>
-    searchTranscript(host.opened(), params.sessionKey, params.query, params.limit),
-  [RUNTIME_STORE_METHOD.COMPACTIONS_LIST]: (host, params) =>
-    listCompactionBoundaries(host.opened(), params.sessionKey),
   [RUNTIME_STORE_METHOD.ARCHIVES_LIST]: (host) => listArchives(host.opened()),
   [RUNTIME_STORE_METHOD.ARCHIVE_RESTORE]: (host, params) =>
     restoreArchive(host.opened(), host.agentRoot(), params.archiveId, params.agentId, params.now),
-  [RUNTIME_STORE_METHOD.ARCHIVES_PUBLISH_PENDING]: (host) =>
-    publishPendingArchives(host.opened(), host.agentRoot()),
   [RUNTIME_STORE_METHOD.MAINTENANCE_RUN]: (host, params) =>
-    runHistoryMaintenance(host.opened(), host.agentRoot(), {
-      now: params.now,
-      preserve: params.preserve,
-      ...(params.config ? { config: params.config } : undefined),
-      ...(params.force !== undefined ? { force: params.force } : undefined),
-      createArchiveId: () => randomUUID(),
-    }),
+    runHistoryMaintenance(host.opened(), host.agentRoot(), params),
   [RUNTIME_STORE_METHOD.CLOSE]: (host) => {
     host.close();
     return true;

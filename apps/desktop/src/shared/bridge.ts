@@ -29,6 +29,7 @@ import {
   type RealtimeDiagnostics,
   storedConversationEntry,
 } from "@sidecar/realtime";
+import { isIdentifier, isRestoreOutcome, type RestoreOutcome } from "@sidecar/runtime-contracts";
 import {
   isProviderId,
   isSessionApplicationId,
@@ -90,13 +91,10 @@ import {
   type ConversationDeleteOutcome,
   type ConversationDirectory,
   type ConversationHistoryPayload,
-  type ConversationRestoreOutcome,
   type ConversationThreadRequest,
   isConversationDeleteOutcome,
   isConversationDirectory,
-  isConversationRestoreOutcome,
   isConversationThreadRequest,
-  isSessionKeyValue,
 } from "./wire/conversation";
 import {
   type AppBootstrap,
@@ -1089,7 +1087,7 @@ export const BRIDGE = {
   conversationHistory: entry({
     kind: "invoke",
     channel: "app:conversation-history",
-    args: args<[string]>((v) => v.length === 1 && isSessionKeyValue(v[0])),
+    args: args<[string]>((v) => v.length === 1 && isIdentifier(v[0])),
     result: result<readonly ConversationEntry[]>(
       (v) => Array.isArray(v) && v.every((entry) => storedConversationEntry(entry) !== undefined),
     ),
@@ -1105,7 +1103,7 @@ export const BRIDGE = {
     args: args<[ConversationThreadRequest]>(
       (v) => v.length === 1 && isConversationThreadRequest(v[0]),
     ),
-    result: result<string | undefined>((v) => v === undefined || isSessionKeyValue(v)),
+    result: result<string | undefined>((v) => v === undefined || isIdentifier(v)),
   }),
   /**
    * Start fresh: the conversation keeps its key and its history, and Luke's
@@ -1115,19 +1113,19 @@ export const BRIDGE = {
   startFreshConversation: entry({
     kind: "invoke",
     channel: "app:start-fresh-conversation",
-    args: args<[string]>((v) => v.length === 1 && isSessionKeyValue(v[0])),
+    args: args<[string]>((v) => v.length === 1 && isIdentifier(v[0])),
     result: result<boolean>(isWireBoolean),
   }),
   archiveConversation: entry({
     kind: "invoke",
     channel: "app:archive-conversation",
-    args: args<[string]>((v) => v.length === 1 && isSessionKeyValue(v[0])),
+    args: args<[string]>((v) => v.length === 1 && isIdentifier(v[0])),
     result: result<boolean>(isWireBoolean),
   }),
   unarchiveConversation: entry({
     kind: "invoke",
     channel: "app:unarchive-conversation",
-    args: args<[string]>((v) => v.length === 1 && isSessionKeyValue(v[0])),
+    args: args<[string]>((v) => v.length === 1 && isIdentifier(v[0])),
     result: result<boolean>(isWireBoolean),
   }),
   /**
@@ -1139,7 +1137,7 @@ export const BRIDGE = {
   deleteConversationHistory: entry({
     kind: "invoke",
     channel: "app:delete-conversation-history",
-    args: args<[string]>((v) => v.length === 1 && isSessionKeyValue(v[0])),
+    args: args<[string]>((v) => v.length === 1 && isIdentifier(v[0])),
     result: result<ConversationDeleteOutcome>(isConversationDeleteOutcome),
   }),
   /** Restore: one archive back into its conversation, refused when that conversation holds newer lines. */
@@ -1147,7 +1145,7 @@ export const BRIDGE = {
     kind: "invoke",
     channel: "app:restore-conversation-archive",
     args: oneString,
-    result: result<ConversationRestoreOutcome>(isConversationRestoreOutcome),
+    result: result<RestoreOutcome>(isRestoreOutcome),
   }),
 } as const;
 

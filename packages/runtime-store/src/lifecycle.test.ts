@@ -13,6 +13,7 @@ import {
   type ConversationRecord,
   DEFAULT_AGENT_ID,
   MAIN_SESSION_KEY,
+  RESTORE_OUTCOME,
   type SessionKey,
   sessionKey,
   TRANSCRIPT_EVENT_KIND,
@@ -23,9 +24,7 @@ import {
   archiveDirectory,
   deleteConversationHistory,
   listArchives,
-  measurePhysicalUsage,
   publishPendingArchives,
-  RESTORE_OUTCOME,
   restoreArchive,
 } from "./archives.js";
 import { loadBrainEnvelope, saveBrainEnvelope } from "./brain-envelope.js";
@@ -47,7 +46,7 @@ import {
   shouldRunEntryMaintenance,
   staleVictims,
 } from "./maintenance.js";
-import { runHistoryMaintenance } from "./maintenance-run.js";
+import { measurePhysicalUsage, runHistoryMaintenance } from "./maintenance-run.js";
 import { countConversationRows, inspectHistory, line, NOW } from "./testing.js";
 import { listCompactionBoundaries, listTranscript, searchTranscript } from "./transcript-table.js";
 
@@ -67,7 +66,12 @@ function agentRoot(): string {
 
 function openAt(root: string): RuntimeDatabase {
   const database = RuntimeDatabase.open(path.join(root, AGENT_DATABASE_FILE));
-  database.ensureConversation(DEFAULT_AGENT_ID, MAIN_SESSION_KEY, "main", NOW);
+  createConversation(database, {
+    agentId: DEFAULT_AGENT_ID,
+    sessionKey: MAIN_SESSION_KEY,
+    name: "main",
+    now: NOW,
+  });
   return database;
 }
 
@@ -239,7 +243,9 @@ test("Delete history commits the archive with the removal, publishes and verifie
     ],
     NOW,
   );
-  const deleted = deleteConversationHistory(database, root, MAIN_SESSION_KEY, NOW, "archive-1");
+  const deleted = deleteConversationHistory(database, root, MAIN_SESSION_KEY, NOW, {
+    archiveId: "archive-1",
+  });
   assert.ok(deleted);
   assert.equal(deleted.published, true);
   assert.equal(deleted.archive.historyLines, 2);
@@ -301,7 +307,9 @@ test("a restored line carries the event key the live append writes, so a late re
         .all(MAIN_SESSION_KEY) as { event_key: string }[]
     ).map((row) => row.event_key);
   const liveKeys = keyOf();
-  assert.ok(deleteConversationHistory(database, root, MAIN_SESSION_KEY, NOW, "archive-3"));
+  assert.ok(
+    deleteConversationHistory(database, root, MAIN_SESSION_KEY, NOW, { archiveId: "archive-3" }),
+  );
   assert.deepEqual(countConversationRows(database, MAIN_SESSION_KEY), {
     history: 0,
     transcript: 0,
@@ -325,7 +333,9 @@ test("a publication a crash interrupted keeps its payload in the registry and is
   appendHistory(database, MAIN_SESSION_KEY, [line("words", NOW, { eventId: "h1" })], NOW);
   // The archive directory is a file, so the publication cannot land.
   fs.writeFileSync(archiveDirectory(root), "not a directory");
-  const deleted = deleteConversationHistory(database, root, MAIN_SESSION_KEY, NOW, "archive-2");
+  const deleted = deleteConversationHistory(database, root, MAIN_SESSION_KEY, NOW, {
+    archiveId: "archive-2",
+  });
   assert.ok(deleted);
   assert.equal(deleted.published, false);
   assert.equal(deleted.archive.publishedAt, undefined);
@@ -370,9 +380,11 @@ test("the maintenance policy: protections, the idle-thread and stale rules, the 
     lastActivityAt: NOW - DAY,
     createdAt: NOW - DAY,
   });
-  const cron = record("agent:main:cron:nightly", { kind: CONVERSATION_KIND.AUTOMATION });
-  const observed = record("agent:main:observed:codex:abc", { kind: CONVERSATION_KIND.OBSERVED });
-  const unknown = record("global", { kind: CONVERSATION_KIND.UNKNOWN });
+  const forgotten = record("agent:main:thread:forgotten", {
+    lastActivityAt: NOW - 40 * DAY,
+    createdAt: NOW - 40 * DAY,
+  });
+  const unknown = record("agent:main:cron:nightly", { kind: CONVERSATION_KIND.UNKNOWN });
   const archivedByCap = record("agent:main:thread:capped", {
     archivedAt: NOW - DAY,
     archiveReason: ARCHIVE_REASON.ACTIVE_SESSION_CAP,
@@ -381,18 +393,7 @@ test("the maintenance policy: protections, the idle-thread and stale rules, the 
     archivedAt: NOW - 2 * DAY,
     archiveReason: ARCHIVE_REASON.USER,
   });
-  const all = [
-    main,
-    pinned,
-    busy,
-    idle,
-    recent,
-    cron,
-    observed,
-    unknown,
-    archivedByCap,
-    archivedByUser,
-  ];
+  const all = [main, pinned, busy, idle, recent, forgotten, unknown, archivedByCap, archivedByUser];
 
   // Idle threads: only private threads, judged by their latest activity; protected ones never.
   assert.deepEqual(
@@ -402,17 +403,14 @@ test("the maintenance policy: protections, the idle-thread and stale rules, the 
       HISTORY_MAINTENANCE_DEFAULTS.idleThreadArchiveAfterMs,
       protections,
     ).map((r) => r.sessionKey),
-    [idle.sessionKey],
+    [idle.sessionKey, forgotten.sessionKey],
   );
-  // Stale: durable conversations archived, synthetic removed, protected and archived left alone.
-  const stale = staleVictims(all, NOW, HISTORY_MAINTENANCE_DEFAULTS.staleAfterMs, protections);
+  // Stale: archived in place; protected rows, archived rows, and a key this build cannot classify are left alone.
   assert.deepEqual(
-    stale.archive.map((r) => r.sessionKey),
-    [observed.sessionKey],
-  );
-  assert.deepEqual(
-    stale.remove.map((r) => r.sessionKey),
-    [cron.sessionKey],
+    staleVictims(all, NOW, HISTORY_MAINTENANCE_DEFAULTS.staleAfterMs, protections).map(
+      (r) => r.sessionKey,
+    ),
+    [forgotten.sessionKey],
   );
   // The cap counts unarchived rows only, never protected ones as victims, longest untouched first, later insertion winning ties.
   const tieA = record("agent:main:thread:tie-a", {
@@ -423,20 +421,13 @@ test("the maintenance policy: protections, the idle-thread and stale rules, the 
     lastActivityAt: NOW - 3 * DAY,
     createdAt: NOW - 3 * DAY,
   });
-  const capped = capVictims([main, pinned, busy, tieA, tieB, recent, cron], 2, protections);
+  const capped = capVictims([main, pinned, busy, tieA, tieB, recent, unknown], 2, protections);
   assert.deepEqual(
-    capped.remove.map((r) => r.sessionKey),
-    [cron.sessionKey],
-  );
-  assert.deepEqual(
-    capped.archive.map((r) => r.sessionKey),
+    capped.map((r) => r.sessionKey),
     [tieB.sessionKey, tieA.sessionKey, recent.sessionKey],
   );
   // Protected rows alone past the cap leave the directory above it.
-  assert.deepEqual(capVictims([main, pinned, busy, unknown], 1, protections), {
-    archive: [],
-    remove: [],
-  });
+  assert.deepEqual(capVictims([main, pinned, busy, unknown], 1, protections), []);
   // The disk budget may delete only the cap's own archives, oldest archived first.
   assert.deepEqual(
     diskBudgetVictims(all, protections).map((r) => r.sessionKey),
@@ -450,7 +441,6 @@ test("the maintenance policy: protections, the idle-thread and stale rules, the 
   assert.equal(shouldRunEntryMaintenance(0, 5_000, true), true);
   assert.deepEqual(
     [
-      HISTORY_MAINTENANCE_DEFAULTS.mode,
       HISTORY_MAINTENANCE_DEFAULTS.staleAfterMs,
       HISTORY_MAINTENANCE_DEFAULTS.idleThreadArchiveAfterMs,
       HISTORY_MAINTENANCE_DEFAULTS.maximumUnarchived,
@@ -459,11 +449,11 @@ test("the maintenance policy: protections, the idle-thread and stale rules, the 
       HISTORY_MAINTENANCE_DEFAULTS.automaticReset,
       HISTORY_MAINTENANCE_DEFAULTS.archiveExpiryMs,
     ],
-    ["enforce", 30 * DAY, 7 * DAY, 5_000, 10 * 1024 ** 3, 8 * 1024 ** 3, false, null],
+    [30 * DAY, 7 * DAY, 5_000, 10 * 1024 ** 3, 8 * 1024 ** 3, false, null],
   );
 });
 
-test("a maintenance pass archives idle and stale threads in place, removes automation rows, caps by activity, and its disk budget deletes only cap-archived rows and reports what protection left standing", () => {
+test("a maintenance pass archives idle and stale threads in place, keeps a key it cannot classify, caps by activity, and its disk budget deletes only cap-archived rows and reports what protection left standing", () => {
   const root = agentRoot();
   const database = openAt(root);
   const thread = (name: string, ageMs: number) => {
@@ -487,11 +477,11 @@ test("a maintenance pass archives idle and stale threads in place, removes autom
   const fresh = thread("fresh", DAY);
   const pinned = thread("pinned", 50 * DAY);
   pinConversation(database, pinned, NOW);
-  const cron = sessionKey("agent:main:cron:nightly");
+  const unknown = sessionKey("agent:main:cron:nightly");
   createConversation(database, {
     agentId: DEFAULT_AGENT_ID,
-    sessionKey: cron,
-    name: "cron",
+    sessionKey: unknown,
+    name: "unclassified",
     now: NOW - 40 * DAY,
   });
   appendHistory(
@@ -506,20 +496,13 @@ test("a maintenance pass archives idle and stale threads in place, removes autom
   // orders its boundaries, so a thread past both is archived as idle.
   assert.equal(report.archivedIdleThreads, 2);
   assert.equal(report.archivedStale, 0);
-  assert.equal(report.removedStale, 1);
   const byKey = new Map(listConversations(database).map((r) => [r.sessionKey, r]));
   assert.equal(byKey.get(idle)?.archiveReason, ARCHIVE_REASON.IDLE_THREAD);
   assert.equal(byKey.get(stale)?.archiveReason, ARCHIVE_REASON.IDLE_THREAD);
   assert.equal(byKey.get(fresh)?.archivedAt, undefined);
   assert.equal(byKey.get(pinned)?.archivedAt, undefined);
   assert.equal(byKey.get(MAIN_SESSION_KEY)?.archivedAt, undefined);
-  assert.equal(byKey.has(cron), false);
-  assert.deepEqual(countConversationRows(database, cron), {
-    history: 0,
-    transcript: 0,
-    boundaries: 0,
-    sessions: 0,
-  });
+  assert.equal(byKey.get(unknown)?.archivedAt, undefined);
   // Archived in place: the history rows are still there, whatever the thread's own age retention shows.
   assert.equal(inspectHistory(database, stale).count, 1);
 
@@ -552,7 +535,7 @@ test("a maintenance pass archives idle and stale threads in place, removes autom
   assert.equal(pressured.disk.deletedConversations, 1);
   assert.ok(pressured.disk.remainingPressureBytes > 0);
   const survivors = listConversations(database).map((r) => r.sessionKey);
-  assert.deepEqual(new Set(survivors), new Set([MAIN_SESSION_KEY, idle, stale, pinned]));
+  assert.deepEqual(new Set(survivors), new Set([MAIN_SESSION_KEY, idle, stale, pinned, unknown]));
   assert.equal(inspectHistory(database, stale).count, 1);
   assert.equal(inspectHistory(database, MAIN_SESSION_KEY).count, 1);
   assert.equal(listArchives(database).length, 1);

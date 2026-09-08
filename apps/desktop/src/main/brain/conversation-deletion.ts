@@ -1,3 +1,7 @@
+import {
+  CONVERSATION_DELETE_OUTCOME,
+  type ConversationDeleteOutcome,
+} from "#shared/wire/conversation";
 import type { HistoryErasure } from "../runtime-store-wiring";
 
 /**
@@ -32,18 +36,9 @@ export interface ConversationDeletionDependencies {
   report: (message: string) => void;
 }
 
-export const CONVERSATION_DELETION_OUTCOME = {
-  COMPLETE: "complete",
-  INCOMPLETE: "incomplete",
-  REFUSED: "refused",
-} as const;
-
-export type ConversationDeletionOutcome =
-  (typeof CONVERSATION_DELETION_OUTCOME)[keyof typeof CONVERSATION_DELETION_OUTCOME];
-
 export async function deleteConversationHistoryFlow(
   dependencies: ConversationDeletionDependencies,
-): Promise<ConversationDeletionOutcome> {
+): Promise<ConversationDeleteOutcome> {
   const deletedAt = dependencies.now();
   dependencies.fence(deletedAt);
   await dependencies.retireBrain();
@@ -55,13 +50,13 @@ export async function deleteConversationHistoryFlow(
   }
   if (!outcome) {
     dependencies.report("Delete history refused: the store did not remove the conversation");
-    return CONVERSATION_DELETION_OUTCOME.REFUSED;
+    return CONVERSATION_DELETE_OUTCOME.REFUSED;
   }
   if (!outcome.published) {
     dependencies.report(
       "Delete history incomplete: the recovery archive is committed but not yet published; the next launch retries",
     );
-    return CONVERSATION_DELETION_OUTCOME.INCOMPLETE;
+    return CONVERSATION_DELETE_OUTCOME.INCOMPLETE;
   }
-  return CONVERSATION_DELETION_OUTCOME.COMPLETE;
+  return CONVERSATION_DELETE_OUTCOME.COMPLETE;
 }

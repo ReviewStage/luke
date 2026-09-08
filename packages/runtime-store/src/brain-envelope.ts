@@ -8,7 +8,7 @@ import {
 } from "@sidecar/brain";
 import type { SessionKey } from "@sidecar/runtime-contracts";
 import { isWireNumber, isWireString, type WireRecord, type WireValue } from "@sidecar/wire";
-import { touchConversation } from "./conversations-table.js";
+import { raiseHistoryCutoff, touchConversation } from "./conversations-table.js";
 import { column, nullable, type RuntimeDatabase } from "./database.js";
 import { type BrainStateSave, SAVE_KIND } from "./envelope.js";
 import { appendTranscript } from "./transcript-table.js";
@@ -226,7 +226,7 @@ function replaceGeneration(
       nullable(state.reset?.generationId),
       nullable(stampOf(state)),
     );
-  if (state.reset) database.raiseHistoryCutoff(sessionKey, state.reset.clearedAt);
+  if (state.reset) raiseHistoryCutoff(database, sessionKey, state.reset.clearedAt);
   insertItems(database, state.generationId, state.items, 0);
   insertCursors(database, state.generationId, state.cursors);
   state.requests.forEach((record, ordinal) => {

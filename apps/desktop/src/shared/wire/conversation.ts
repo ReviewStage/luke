@@ -23,10 +23,6 @@ export interface ConversationDirectory {
   archives: readonly HistoryArchiveRecord[];
 }
 
-export function isSessionKeyValue(value: UnparsedWireValue): value is SessionKey {
-  return isWireString(value) && value.length > 0;
-}
-
 export function isConversationDirectory(value: UnparsedWireValue): boolean {
   if (!isRecord(value) || !Array.isArray(value.entries) || !Array.isArray(value.archives)) {
     return false;
@@ -68,25 +64,6 @@ export function isConversationDeleteOutcome(
   value: UnparsedWireValue,
 ): value is ConversationDeleteOutcome {
   return isWireString(value) && DELETE_OUTCOMES.has(value);
-}
-
-/** How a Restore ended, in the store's own words. */
-export const CONVERSATION_RESTORE_OUTCOME = {
-  RESTORED: "restored",
-  NEWER_LIVE: "newer-live",
-  MISSING: "missing",
-  UNREADABLE: "unreadable",
-} as const;
-
-export type ConversationRestoreOutcome =
-  (typeof CONVERSATION_RESTORE_OUTCOME)[keyof typeof CONVERSATION_RESTORE_OUTCOME];
-
-const RESTORE_OUTCOMES: ReadonlySet<string> = new Set(Object.values(CONVERSATION_RESTORE_OUTCOME));
-
-export function isConversationRestoreOutcome(
-  value: UnparsedWireValue,
-): value is ConversationRestoreOutcome {
-  return isWireString(value) && RESTORE_OUTCOMES.has(value);
 }
 
 /**

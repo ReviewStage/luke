@@ -1,26 +1,21 @@
 import fs from "node:fs";
+import path from "node:path";
 import {
   ARCHIVE_REASON,
+  type ArchiveReason,
   type ConversationRecord,
-  type HistoryArchiveRecord,
   type SessionKey,
 } from "@sidecar/runtime-contracts";
 import {
+  ARCHIVE_STAGING_STALE_MS,
+  archiveDirectory,
   deleteConversationHistory,
-  listArchiveFiles,
+  isArchiveStagingName,
   listArchives,
-  measurePhysicalUsage,
-  type PhysicalUsage,
   publishPendingArchives,
   removeArchive,
-  removeStaleStaging,
 } from "./archives.js";
-import {
-  archiveConversation,
-  listConversations,
-  removeConversationRow,
-  removeConversationRows,
-} from "./conversations-table.js";
+import { archiveConversation, listConversations } from "./conversations-table.js";
 import { AGENT_DATABASE_FILE, type RuntimeDatabase } from "./database.js";
 import {
   capVictims,
@@ -30,7 +25,6 @@ import {
   HISTORY_MAINTENANCE_DEFAULTS,
   type HistoryMaintenanceConfig,
   idleThreadVictims,
-  MAINTENANCE_MODE,
   type MaintenanceProtections,
   shouldRunEntryMaintenance,
   staleVictims,
@@ -39,16 +33,16 @@ import {
 /**
  * One maintenance pass over the agent's history, in the order the pinned
  * source runs its named boundaries: interrupted publications retried first,
- * then idle threads archived, then stale conversations archived or removed,
- * then the cap, then the disk budget. Each boundary commits on its own, so a
- * failure in a later one leaves the earlier ones standing. Warn mode
- * measures and reports and changes nothing.
+ * then idle threads archived, then stale conversations archived, then the
+ * cap, then the disk budget. Each boundary commits on its own, so a failure
+ * in a later one leaves the earlier ones standing.
  */
 
 export interface MaintenanceRunOptions {
   now: number;
   /** Conversations with a run under way, and any the host wants kept whatever their age. */
   preserve: readonly SessionKey[];
+  /** Overrides for a test; the app runs the pinned defaults. */
   config?: Partial<HistoryMaintenanceConfig>;
   /** Runs the cap without waiting for the batched trigger, as a forced cleanup does. */
   force?: boolean;
@@ -68,21 +62,16 @@ export interface DiskBudgetReport {
 }
 
 export interface MaintenanceReport {
-  mode: HistoryMaintenanceConfig["mode"];
   before: number;
   after: number;
   unarchivedBefore: number;
   unarchivedAfter: number;
   archivedIdleThreads: number;
   archivedStale: number;
-  removedStale: number;
   archivedByCap: number;
-  removedByCap: number;
   /** Archives whose publication a crash interrupted and this pass could still not publish. */
   unpublishedArchives: readonly string[];
   disk: DiskBudgetReport | null;
-  /** The archives this pass produced by deleting cap-archived conversations under disk pressure. */
-  archives: readonly HistoryArchiveRecord[];
   usage: PhysicalUsage;
 }
 
@@ -119,106 +108,59 @@ export function runHistoryMaintenance(
   let records = listConversations(database);
   const before = records.length;
   const unarchivedBefore = countUnarchived(records);
-  const report: MaintenanceReport = {
-    mode: config.mode,
-    before,
-    after: before,
-    unarchivedBefore,
-    unarchivedAfter: unarchivedBefore,
-    archivedIdleThreads: 0,
-    archivedStale: 0,
-    removedStale: 0,
-    archivedByCap: 0,
-    removedByCap: 0,
-    unpublishedArchives,
-    disk: null,
-    archives: [],
-    usage: measurePhysicalUsage(agentRoot, AGENT_DATABASE_FILE),
-  };
-  if (config.mode === MAINTENANCE_MODE.WARN) {
-    report.disk = diskReport(config, report.usage, report.usage, 0, 0);
-    return report;
-  }
 
-  const archiveAll = (
-    victims: readonly ConversationRecord[],
-    reason: ConversationRecord["archiveReason"],
-  ) => {
-    if (!reason) return 0;
-    return database.transaction(() => {
+  const archiveAll = (victims: readonly ConversationRecord[], reason: ArchiveReason) =>
+    database.transaction(() => {
       let archived = 0;
       for (const victim of victims) {
         if (archiveConversation(database, victim.sessionKey, now, reason)) archived += 1;
       }
       return archived;
     });
-  };
-  const removeAll = (victims: readonly ConversationRecord[]) =>
-    database.transaction(() => {
-      for (const victim of victims) {
-        removeConversationRows(database, victim.sessionKey);
-        removeConversationRow(database, victim.sessionKey);
-      }
-      return victims.length;
-    });
 
-  report.archivedIdleThreads = archiveAll(
+  const archivedIdleThreads = archiveAll(
     idleThreadVictims(records, now, config.idleThreadArchiveAfterMs, protections),
     ARCHIVE_REASON.IDLE_THREAD,
   );
   records = listConversations(database);
-  const stale = staleVictims(records, now, config.staleAfterMs, protections);
-  report.archivedStale = archiveAll(stale.archive, ARCHIVE_REASON.AGE_RETENTION);
-  report.removedStale = removeAll(stale.remove);
+  const archivedStale = archiveAll(
+    staleVictims(records, now, config.staleAfterMs, protections),
+    ARCHIVE_REASON.AGE_RETENTION,
+  );
   records = listConversations(database);
+  let archivedByCap = 0;
   if (
     shouldRunEntryMaintenance(countUnarchived(records), config.maximumUnarchived, options.force)
   ) {
-    const cap = capVictims(records, config.maximumUnarchived, protections);
-    report.archivedByCap = archiveAll(cap.archive, ARCHIVE_REASON.ACTIVE_SESSION_CAP);
-    report.removedByCap = removeAll(cap.remove);
+    archivedByCap = archiveAll(
+      capVictims(records, config.maximumUnarchived, protections),
+      ARCHIVE_REASON.ACTIVE_SESSION_CAP,
+    );
     records = listConversations(database);
   }
 
+  let disk: DiskBudgetReport | null = null;
   if (config.maximumDiskBytes !== null && config.highWaterBytes !== null) {
-    report.disk = enforceDiskBudget(database, agentRoot, {
+    disk = enforceDiskBudget(database, agentRoot, {
       now,
       protections,
       maximumBytes: config.maximumDiskBytes,
       highWaterBytes: config.highWaterBytes,
       ...(options.createArchiveId ? { createArchiveId: options.createArchiveId } : undefined),
-      onArchived: (archive) => {
-        report.archives = [...report.archives, archive];
-      },
     });
     records = listConversations(database);
   }
-  report.after = records.length;
-  report.unarchivedAfter = countUnarchived(records);
-  report.usage = measurePhysicalUsage(agentRoot, AGENT_DATABASE_FILE);
-  return report;
-}
-
-function diskReport(
-  config: HistoryMaintenanceConfig,
-  before: PhysicalUsage,
-  after: PhysicalUsage,
-  removedArchives: number,
-  deletedConversations: number,
-): DiskBudgetReport | null {
-  if (config.maximumDiskBytes === null || config.highWaterBytes === null) return null;
   return {
-    before: before.totalBytes,
-    after: after.totalBytes,
-    maximumBytes: config.maximumDiskBytes,
-    highWaterBytes: config.highWaterBytes,
-    overBudget: before.totalBytes > config.maximumDiskBytes,
-    removedArchives,
-    deletedConversations,
-    remainingPressureBytes:
-      before.totalBytes > config.maximumDiskBytes
-        ? Math.max(0, after.totalBytes - config.highWaterBytes)
-        : 0,
+    before,
+    after: records.length,
+    unarchivedBefore,
+    unarchivedAfter: countUnarchived(records),
+    archivedIdleThreads,
+    archivedStale,
+    archivedByCap,
+    unpublishedArchives,
+    disk,
+    usage: measurePhysicalUsage(agentRoot, AGENT_DATABASE_FILE),
   };
 }
 
@@ -228,7 +170,6 @@ interface DiskBudgetOptions {
   maximumBytes: number;
   highWaterBytes: number;
   createArchiveId?: () => string;
-  onArchived: (archive: HistoryArchiveRecord) => void;
 }
 
 /**
@@ -248,7 +189,7 @@ export function enforceDiskBudget(
   let usage = before;
   let removedArchives = 0;
   let deletedConversations = 0;
-  const finish = (): DiskBudgetReport => ({
+  const report = (): DiskBudgetReport => ({
     before: before.totalBytes,
     after: usage.totalBytes,
     maximumBytes: options.maximumBytes,
@@ -261,7 +202,7 @@ export function enforceDiskBudget(
         ? Math.max(0, usage.totalBytes - options.highWaterBytes)
         : 0,
   });
-  if (before.totalBytes <= options.maximumBytes) return finish();
+  if (before.totalBytes <= options.maximumBytes) return report();
   removeStaleStaging(agentRoot, options.now);
   usage = measurePhysicalUsage(agentRoot, AGENT_DATABASE_FILE);
 
@@ -272,7 +213,7 @@ export function enforceDiskBudget(
     const archive = registered.get(file.name);
     const removed = archive
       ? removeArchive(database, agentRoot, archive.archiveId)
-      : removeUnregisteredFile(file.path);
+      : removeFile(file.path);
     if (!removed) continue;
     removedArchives += 1;
     usage = measurePhysicalUsage(agentRoot, AGENT_DATABASE_FILE);
@@ -287,24 +228,113 @@ export function enforceDiskBudget(
         agentRoot,
         victim.sessionKey,
         options.now,
-        options.createArchiveId?.(),
-        { removeConversation: true },
+        {
+          ...(options.createArchiveId ? { archiveId: options.createArchiveId() } : undefined),
+          removeConversation: true,
+        },
       );
       if (!deleted) continue;
       deletedConversations += 1;
-      options.onArchived(deleted.archive);
       database.reclaimFreedPages();
       usage = measurePhysicalUsage(agentRoot, AGENT_DATABASE_FILE);
     }
   }
-  return finish();
+  return report();
 }
 
-function removeUnregisteredFile(filePath: string): boolean {
+function removeFile(filePath: string): boolean {
   try {
     fs.rmSync(filePath, { force: true });
     return true;
   } catch {
     return false;
   }
+}
+
+export interface PhysicalUsage {
+  databaseBytes: number;
+  walBytes: number;
+  archiveBytes: number;
+  totalBytes: number;
+}
+
+function sizeOf(file: string): number {
+  try {
+    const stat = fs.statSync(file);
+    return stat.isFile() ? stat.size : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * What the agent's history weighs on disk: the database's main file, its
+ * WAL, and every published archive. Staging files still being written are
+ * left out, as OpenClaw leaves its rollback staging out, so an archive
+ * half-published cannot evict a live conversation; a sweep removes stale
+ * staging on its own terms.
+ */
+export function measurePhysicalUsage(agentRoot: string, databaseFile: string): PhysicalUsage {
+  const databasePath = path.join(agentRoot, databaseFile);
+  const databaseBytes = sizeOf(databasePath);
+  const walBytes = sizeOf(`${databasePath}-wal`);
+  let archiveBytes = 0;
+  for (const file of listArchiveFiles(agentRoot)) archiveBytes += file.size;
+  return {
+    databaseBytes,
+    walBytes,
+    archiveBytes,
+    totalBytes: databaseBytes + walBytes + archiveBytes,
+  };
+}
+
+interface ArchiveEntry {
+  name: string;
+  path: string;
+  size: number;
+  mtimeMs: number;
+  staging: boolean;
+}
+
+/** Every regular file in the archive directory, published archives and staging alike; nothing for a directory not yet made. */
+function archiveEntries(agentRoot: string): ArchiveEntry[] {
+  const directory = archiveDirectory(agentRoot);
+  let names: string[];
+  try {
+    names = fs.readdirSync(directory);
+  } catch {
+    return [];
+  }
+  const entries: ArchiveEntry[] = [];
+  for (const name of names) {
+    const filePath = path.join(directory, name);
+    try {
+      const stat = fs.statSync(filePath);
+      if (!stat.isFile()) continue;
+      entries.push({
+        name,
+        path: filePath,
+        size: stat.size,
+        mtimeMs: stat.mtimeMs,
+        staging: isArchiveStagingName(name),
+      });
+    } catch {
+      // Removed between the listing and the stat: not on disk, not counted.
+    }
+  }
+  return entries;
+}
+
+export function listArchiveFiles(agentRoot: string): ArchiveEntry[] {
+  return archiveEntries(agentRoot).filter((entry) => !entry.staging);
+}
+
+/** Removes staging files older than the stale window; a fresh one may be another publication in flight. */
+export function removeStaleStaging(agentRoot: string, now: number): number {
+  let removed = 0;
+  for (const entry of archiveEntries(agentRoot)) {
+    if (!entry.staging || now - entry.mtimeMs <= ARCHIVE_STAGING_STALE_MS) continue;
+    if (removeFile(entry.path)) removed += 1;
+  }
+  return removed;
 }

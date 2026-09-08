@@ -11,6 +11,8 @@ import {
   historyArchiveRecordFromWire,
   isArchiveEncoding,
   isConversationKind,
+  RESTORE_OUTCOME,
+  type RestoreOutcome,
   type SessionKey,
 } from "@sidecar/runtime-contracts";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
@@ -23,6 +25,8 @@ import {
 import {
   conversationRecord,
   createConversation,
+  historyCutoff,
+  raiseHistoryCutoff,
   removeConversationRow,
   removeConversationRows,
   touchConversation,
@@ -173,6 +177,8 @@ function archiveRow(database: RuntimeDatabase, archiveId: string): ArchiveRow | 
 }
 
 export interface DeletionOptions {
+  /** The archive's own id, minted here unless the caller names one. */
+  archiveId?: string;
   /** Whether the conversation row itself goes with its history; the directory keeps it otherwise. */
   removeConversation?: boolean;
 }
@@ -196,13 +202,13 @@ export function deleteConversationHistory(
   agentRoot: string,
   sessionKey: SessionKey,
   now: number,
-  archiveId: string = randomUUID(),
-  options: DeletionOptions = {},
+  { archiveId = randomUUID(), removeConversation = false }: DeletionOptions = {},
 ): DeletionOutcome | undefined {
   const committed = database.transaction(() => {
     const record = conversationRecord(database, sessionKey);
     if (!record) return undefined;
     const standing = standingGeneration(database, sessionKey);
+    const previousCutoff = historyCutoff(database, sessionKey);
     const header: ArchiveHeader = {
       sessionKey,
       kind: record.kind,
@@ -213,9 +219,7 @@ export function deleteConversationHistory(
       ...(standing?.checkpointFormat !== undefined
         ? { checkpointFormat: standing.checkpointFormat }
         : undefined),
-      ...(database.historyCutoff(sessionKey) !== undefined
-        ? { previousCutoff: database.historyCutoff(sessionKey) }
-        : undefined),
+      ...(previousCutoff !== undefined ? { previousCutoff } : undefined),
     };
     // SAFETY: the columns selected are the ones the row type names.
     const historyRows = database
@@ -269,9 +273,9 @@ export function deleteConversationHistory(
         nullable(header.previousCutoff),
         encoded.bytes,
       );
-    database.raiseHistoryCutoff(sessionKey, now);
+    raiseHistoryCutoff(database, sessionKey, now);
     removeConversationRows(database, sessionKey);
-    if (options.removeConversation && record.kind !== CONVERSATION_KIND.MAIN) {
+    if (removeConversation && record.kind !== CONVERSATION_KIND.MAIN) {
       removeConversationRow(database, sessionKey);
     }
     return archiveId;
@@ -365,17 +369,6 @@ export function publishPendingArchives(database: RuntimeDatabase, agentRoot: str
     .map((row) => row.archive_id)
     .filter((archiveId) => !publishArchive(database, agentRoot, archiveId));
 }
-
-export const RESTORE_OUTCOME = {
-  RESTORED: "restored",
-  /** The conversation already holds lines newer than the archive; nothing was changed. */
-  NEWER_LIVE: "newer-live",
-  MISSING: "missing",
-  /** The file is gone or does not match its hash and the registry no longer holds the payload. */
-  UNREADABLE: "unreadable",
-} as const;
-
-export type RestoreOutcome = (typeof RESTORE_OUTCOME)[keyof typeof RESTORE_OUTCOME];
 
 export interface RestoreResult {
   outcome: RestoreOutcome;
@@ -534,95 +527,4 @@ export function removeArchive(
   }
   database.prepare("DELETE FROM history_archives WHERE archive_id = ?").run(archiveId);
   return true;
-}
-
-export interface PhysicalUsage {
-  databaseBytes: number;
-  walBytes: number;
-  archiveBytes: number;
-  totalBytes: number;
-}
-
-function sizeOf(file: string): number {
-  try {
-    const stat = fs.statSync(file);
-    return stat.isFile() ? stat.size : 0;
-  } catch {
-    return 0;
-  }
-}
-
-/**
- * What the agent's history weighs on disk: the database's main file, its
- * WAL, and every published archive. Staging files still being written are
- * left out, as OpenClaw leaves its rollback staging out, so an archive
- * half-published cannot evict a live conversation; a sweep removes stale
- * staging on its own terms.
- */
-export function measurePhysicalUsage(agentRoot: string, databaseFile: string): PhysicalUsage {
-  const databasePath = path.join(agentRoot, databaseFile);
-  const databaseBytes = sizeOf(databasePath);
-  const walBytes = sizeOf(`${databasePath}-wal`);
-  let archiveBytes = 0;
-  for (const file of listArchiveFiles(agentRoot)) archiveBytes += file.size;
-  return {
-    databaseBytes,
-    walBytes,
-    archiveBytes,
-    totalBytes: databaseBytes + walBytes + archiveBytes,
-  };
-}
-
-export interface ArchiveFileStat {
-  name: string;
-  path: string;
-  size: number;
-  mtimeMs: number;
-}
-
-export function listArchiveFiles(agentRoot: string): ArchiveFileStat[] {
-  const directory = archiveDirectory(agentRoot);
-  let names: string[];
-  try {
-    names = fs.readdirSync(directory);
-  } catch {
-    return [];
-  }
-  const files: ArchiveFileStat[] = [];
-  for (const name of names) {
-    if (isArchiveStagingName(name)) continue;
-    const filePath = path.join(directory, name);
-    try {
-      const stat = fs.statSync(filePath);
-      if (stat.isFile())
-        files.push({ name, path: filePath, size: stat.size, mtimeMs: stat.mtimeMs });
-    } catch {
-      // Removed between the listing and the stat: not on disk, not counted.
-    }
-  }
-  return files;
-}
-
-/** Removes staging files older than the stale window; a fresh one may be another publication in flight. */
-export function removeStaleStaging(agentRoot: string, now: number): number {
-  const directory = archiveDirectory(agentRoot);
-  let names: string[];
-  try {
-    names = fs.readdirSync(directory);
-  } catch {
-    return 0;
-  }
-  let removed = 0;
-  for (const name of names) {
-    if (!isArchiveStagingName(name)) continue;
-    const filePath = path.join(directory, name);
-    try {
-      if (now - fs.statSync(filePath).mtimeMs <= ARCHIVE_STAGING_STALE_MS) continue;
-      fs.rmSync(filePath, { force: true });
-      removed += 1;
-    } catch {
-      // Gone already, or unreadable: either way not this sweep's to count.
-    }
-  }
-  return removed;
 }

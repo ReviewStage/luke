@@ -91,8 +91,8 @@ described next, and never touches your agents' own files.
 
 Luke also tidies this storage on his own, on the terms OpenClaw's session
 store uses: a conversation untouched for 30 days, and a thread idle for 7, is
-archived in place and keeps everything; only runtime-owned automation state,
-of which this version keeps none, would be removed. He keeps at most 5,000
+archived in place and keeps everything, and nothing is removed outright. He
+keeps at most 5,000
 conversations on the active list, archiving the longest untouched first, and
 holds the database, its log, and the recovery archives together under 10 GiB
 on your Mac: past that he removes the oldest recovery archives and then

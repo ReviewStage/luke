@@ -99,9 +99,11 @@ export {
   isArchiveEncoding,
   isArchiveReason,
   isCompactionSource,
+  isRestoreOutcome,
+  RESTORE_OUTCOME,
+  type RestoreOutcome,
   type StoredHistoryEvent,
   type StoredTranscriptEvent,
   TRANSCRIPT_EVENT_KIND,
   type TranscriptEvent,
-  type TranscriptEventKind,
 } from "./storage.js";

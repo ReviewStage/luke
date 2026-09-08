@@ -3,16 +3,16 @@ import {
   type ConversationRecord,
   type HistoryArchiveRecord,
   MAIN_SESSION_KEY,
+  RESTORE_OUTCOME,
+  type RestoreOutcome,
   type SessionKey,
   sessionKey,
 } from "@sidecar/runtime-contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CONVERSATION_DELETE_OUTCOME,
-  CONVERSATION_RESTORE_OUTCOME,
   type ConversationDeleteOutcome,
   type ConversationDirectory,
-  type ConversationRestoreOutcome,
 } from "#shared/wire/conversation";
 import type { AppBootstrap } from "#shared/wire/session";
 
@@ -38,7 +38,7 @@ export interface ConversationsState {
   archive: (sessionKey: SessionKey) => Promise<boolean>;
   unarchive: (sessionKey: SessionKey) => Promise<boolean>;
   deleteHistory: (sessionKey: SessionKey) => Promise<ConversationDeleteOutcome>;
-  restoreArchive: (archive: HistoryArchiveRecord) => Promise<ConversationRestoreOutcome>;
+  restoreArchive: (archive: HistoryArchiveRecord) => Promise<RestoreOutcome>;
   /** The bootstrap's snapshot of main's thread, applied only where no push has spoken yet. */
   acceptBootstrap: (bootstrap: Pick<AppBootstrap, "conversationHistory">) => void;
 }
@@ -133,7 +133,7 @@ export function useConversations(): ConversationsState {
     restoreArchive: (archive) =>
       window.sidecar
         .restoreConversationArchive(archive.archiveId)
-        .catch((): ConversationRestoreOutcome => CONVERSATION_RESTORE_OUTCOME.UNREADABLE),
+        .catch((): RestoreOutcome => RESTORE_OUTCOME.UNREADABLE),
     acceptBootstrap,
   };
 }

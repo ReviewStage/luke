@@ -12,15 +12,14 @@ import {
  * the pinned source's, read for their behavior rather than their numbers:
  *
  * - Ordinary age and count maintenance never touches an archived conversation.
- * - Durable conversations are archived in place; disposable automation state
- *   is removed. The main conversation, a pinned one, one with a run under
- *   way, and any key this build cannot classify are never victims at all.
+ * - A conversation is archived in place, never removed: every kind this build
+ *   makes is durable. The main conversation, a pinned one, one with a run
+ *   under way, and any key this build cannot classify are never victims at all.
  * - A private thread idle past its own shorter threshold is archived as
  *   OpenClaw archives an idle dashboard session, judged by its latest
  *   activity signal.
- * - The cap counts only unarchived conversations, archives durable victims,
- *   removes synthetic ones, and orders victims by latest activity ascending
- *   with later insertion winning a tie. Protected rows count toward the cap
+ * - The cap counts only unarchived conversations and orders victims by
+ *   latest activity ascending with later insertion winning a tie. Protected rows count toward the cap
  *   and are never changed, so a directory whose protected rows alone exceed
  *   it stays above it.
  * - The disk budget's permanent deletion is positively limited to rows the
@@ -31,18 +30,10 @@ import {
  * worker that owns the database and the disk applies them.
  */
 
-export const MAINTENANCE_MODE = {
-  ENFORCE: "enforce",
-  WARN: "warn",
-} as const;
-
-export type MaintenanceMode = (typeof MAINTENANCE_MODE)[keyof typeof MAINTENANCE_MODE];
-
 const DAY_MS = 24 * 60 * 60 * 1000;
 const GIB = 1024 * 1024 * 1024;
 
 export interface HistoryMaintenanceConfig {
-  readonly mode: MaintenanceMode;
   /** A conversation untouched this long is archived (durable) or removed (synthetic). */
   readonly staleAfterMs: number;
   /** A private thread idle this long is archived; null disables the rule. */
@@ -52,9 +43,17 @@ export interface HistoryMaintenanceConfig {
   readonly maximumDiskBytes: number | null;
   /** Where cleanup stops once the budget is crossed. */
   readonly highWaterBytes: number | null;
-  /** Whether a stale conversation is reset rather than archived; OpenClaw ships it off. */
+  /**
+   * Whether a stale conversation is reset rather than archived. OpenClaw ships
+   * it off, and this build honors the default by having no reset path at all;
+   * the field stands so the pinned defaults read whole.
+   */
   readonly automaticReset: boolean;
-  /** How long an extracted archive file is kept by age; null keeps it until disk pressure alone. */
+  /**
+   * How long an extracted archive file is kept by age; null keeps it until
+   * disk pressure alone. OpenClaw ships it null, and this build honors that
+   * by having no age sweep over archives; the field stands for the same reason.
+   */
   readonly archiveExpiryMs: number | null;
 }
 
@@ -62,7 +61,6 @@ export interface HistoryMaintenanceConfig {
 export const DISK_BUDGET_HIGH_WATER_RATIO = 0.8;
 
 export const HISTORY_MAINTENANCE_DEFAULTS: HistoryMaintenanceConfig = {
-  mode: MAINTENANCE_MODE.ENFORCE,
   staleAfterMs: 30 * DAY_MS,
   idleThreadArchiveAfterMs: 7 * DAY_MS,
   maximumUnarchived: 5_000,
@@ -104,22 +102,16 @@ export function activityAt(record: ConversationRecord): number {
   return Math.max(record.lastActivityAt, record.createdAt);
 }
 
-/** Runtime-owned, disposable state: removed rather than archived, and never protected as a conversation. */
-export function isSyntheticConversation(record: ConversationRecord): boolean {
-  return record.kind === CONVERSATION_KIND.AUTOMATION;
-}
-
-function isProtectedConversation(record: ConversationRecord): boolean {
-  if (isSyntheticConversation(record)) return false;
-  return record.kind === CONVERSATION_KIND.MAIN || record.kind === CONVERSATION_KIND.UNKNOWN;
-}
-
 function preservedUnarchived(
   record: ConversationRecord,
   protections: MaintenanceProtections,
 ): boolean {
-  if (record.pinnedAt !== undefined && !isSyntheticConversation(record)) return true;
-  return protections.preserve.has(record.sessionKey) || isProtectedConversation(record);
+  return (
+    record.pinnedAt !== undefined ||
+    protections.preserve.has(record.sessionKey) ||
+    record.kind === CONVERSATION_KIND.MAIN ||
+    record.kind === CONVERSATION_KIND.UNKNOWN
+  );
 }
 
 /** Whether ordinary age and count maintenance leaves the record alone. */
@@ -142,31 +134,18 @@ export function evictableForDiskBudget(
   );
 }
 
-export interface MaintenanceVictims {
-  /** Durable conversations to archive, with the reason. */
-  archive: readonly ConversationRecord[];
-  /** Synthetic conversations to remove outright. */
-  remove: readonly ConversationRecord[];
-}
-
-/** Conversations untouched for longer than the stale threshold. */
+/** Conversations untouched for longer than the stale threshold, to be archived. */
 export function staleVictims(
   records: readonly ConversationRecord[],
   now: number,
   staleAfterMs: number,
   protections: MaintenanceProtections,
-): MaintenanceVictims {
-  if (staleAfterMs <= 0) return { archive: [], remove: [] };
+): readonly ConversationRecord[] {
+  if (staleAfterMs <= 0) return [];
   const cutoff = now - staleAfterMs;
-  const archive: ConversationRecord[] = [];
-  const remove: ConversationRecord[] = [];
-  for (const record of records) {
-    if (preservedFromMaintenance(record, protections)) continue;
-    if (activityAt(record) >= cutoff) continue;
-    if (isSyntheticConversation(record)) remove.push(record);
-    else archive.push(record);
-  }
-  return { archive, remove };
+  return records.filter(
+    (record) => !preservedFromMaintenance(record, protections) && activityAt(record) < cutoff,
+  );
 }
 
 /** Private threads idle past their own threshold, the port of OpenClaw's idle-dashboard archive. */
@@ -196,19 +175,15 @@ export function capVictims(
   records: readonly ConversationRecord[],
   maximumUnarchived: number,
   protections: MaintenanceProtections,
-): MaintenanceVictims {
+): readonly ConversationRecord[] {
   const unarchived = records.filter((record) => record.archivedAt === undefined);
   const overflow = unarchived.length - Math.max(0, maximumUnarchived);
-  if (overflow <= 0) return { archive: [], remove: [] };
+  if (overflow <= 0) return [];
   const eligible = unarchived.filter((record) => !preservedFromMaintenance(record, protections));
-  const victims = eligible
+  return eligible
     .toReversed()
     .toSorted((left, right) => activityAt(left) - activityAt(right))
     .slice(0, Math.min(overflow, eligible.length));
-  return {
-    archive: victims.filter((record) => !isSyntheticConversation(record)),
-    remove: victims.filter(isSyntheticConversation),
-  };
 }
 
 /** The disk budget's last resort, oldest archived first, keys breaking ties. */

@@ -1,5 +1,4 @@
 import { DatabaseSync, type SQLInputValue, type StatementSync } from "node:sqlite";
-import { type AgentId, conversationKindOf, type SessionKey } from "@sidecar/runtime-contracts";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import {
   RUNTIME_SCHEMA_MIGRATIONS,
@@ -148,40 +147,6 @@ export class RuntimeDatabase {
 
   close(): void {
     this.#db.close();
-  }
-
-  /** Makes sure the agent and its main conversation exist; idempotent. */
-  ensureConversation(agentId: AgentId, sessionKey: SessionKey, name: string, now: number): void {
-    this.transaction(() => {
-      this.#db
-        .prepare("INSERT OR IGNORE INTO agents (agent_id, created_at) VALUES (?, ?)")
-        .run(agentId, now);
-      this.#db
-        .prepare(
-          `INSERT OR IGNORE INTO conversations (session_key, agent_id, name, created_at, kind, last_activity_at)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-        )
-        .run(sessionKey, agentId, name, now, conversationKindOf(sessionKey), now);
-    });
-  }
-
-  /** The conversation's durable Clear cutoff, which outlives the generation whose marker raised it. */
-  historyCutoff(sessionKey: SessionKey): number | undefined {
-    // SAFETY: the query selects the one nullable integer column the row type names.
-    const row = this.#db
-      .prepare("SELECT history_cleared_at FROM conversations WHERE session_key = ?")
-      .get(sessionKey) as { history_cleared_at: number | null } | undefined;
-    return row?.history_cleared_at ?? undefined;
-  }
-
-  /** Raises the conversation's durable cutoff to `clearedAt`; never lowers it. */
-  raiseHistoryCutoff(sessionKey: SessionKey, clearedAt: number): void {
-    this.#db
-      .prepare(
-        `UPDATE conversations SET history_cleared_at = MAX(COALESCE(history_cleared_at, ?), ?)
-         WHERE session_key = ?`,
-      )
-      .run(clearedAt, clearedAt, sessionKey);
   }
 }
 

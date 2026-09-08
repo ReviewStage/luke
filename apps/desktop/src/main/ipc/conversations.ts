@@ -1,13 +1,16 @@
 import type { ConversationEntry } from "@sidecar/realtime";
-import type { SessionKey } from "@sidecar/runtime-contracts";
+import {
+  RESTORE_OUTCOME,
+  type RestoreOutcome,
+  type SessionKey,
+  sessionKey,
+} from "@sidecar/runtime-contracts";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 import { BRIDGE } from "#shared/bridge";
 import {
   CONVERSATION_DELETE_OUTCOME,
-  CONVERSATION_RESTORE_OUTCOME,
   type ConversationDeleteOutcome,
   type ConversationDirectory,
-  type ConversationRestoreOutcome,
 } from "#shared/wire/conversation";
 import { registerBridge } from "../register-bridge";
 
@@ -26,7 +29,7 @@ export interface ConversationOperations {
   archive: (sessionKey: SessionKey) => Promise<boolean>;
   unarchive: (sessionKey: SessionKey) => Promise<boolean>;
   deleteHistory: (sessionKey: SessionKey) => Promise<ConversationDeleteOutcome>;
-  restoreArchive: (archiveId: string) => Promise<ConversationRestoreOutcome>;
+  restoreArchive: (archiveId: string) => Promise<RestoreOutcome>;
 }
 
 export interface ConversationsIpcDependencies {
@@ -39,10 +42,10 @@ export interface ConversationsIpcDependencies {
 
 export function registerConversationsIpc(dependencies: ConversationsIpcDependencies): void {
   const { operations, panel } = dependencies;
-  // SAFETY: the bridge guard admitted a non-empty string, which is what the session key constructor admits.
-  const key = (value: string) => value as SessionKey;
-  const listed = (sender: WebContents, value: string): SessionKey | undefined =>
-    panel(sender) && operations.holds(key(value)) ? key(value) : undefined;
+  const listed = (sender: WebContents, value: string): SessionKey | undefined => {
+    const key = sessionKey(value);
+    return panel(sender) && operations.holds(key) ? key : undefined;
+  };
   registerBridge(
     BRIDGE,
     {
@@ -70,9 +73,7 @@ export function registerConversationsIpc(dependencies: ConversationsIpcDependenc
         return target ? operations.deleteHistory(target) : CONVERSATION_DELETE_OUTCOME.REFUSED;
       },
       restoreConversationArchive: (context, archiveId) =>
-        panel(context.sender)
-          ? operations.restoreArchive(archiveId)
-          : CONVERSATION_RESTORE_OUTCOME.MISSING,
+        panel(context.sender) ? operations.restoreArchive(archiveId) : RESTORE_OUTCOME.MISSING,
     },
     { ipcMain: dependencies.ipcMain, trustedSender: dependencies.trustedSender },
   );

@@ -9,17 +9,18 @@ import {
   type ConversationRecord,
   type HistoryArchiveRecord,
   MAIN_SESSION_KEY,
+  RESTORE_OUTCOME,
+  type RestoreOutcome,
   type SessionKey,
+  sessionKey,
 } from "@sidecar/runtime-contracts";
 import { useEffect, useRef, useState } from "react";
 import { type BrainRequestSnapshot, brainRequestPending } from "#shared/wire/brain";
 import {
   CONVERSATION_CONTROL_WORDS,
   CONVERSATION_DELETE_OUTCOME,
-  CONVERSATION_RESTORE_OUTCOME,
   type ConversationDeleteOutcome,
   type ConversationDirectory,
-  type ConversationRestoreOutcome,
 } from "#shared/wire/conversation";
 import { type AskHandler, AskLuke } from "./ask-luke";
 import { MarkdownMessage } from "./markdown-message";
@@ -203,7 +204,7 @@ export interface ConversationControls {
   onArchive: (sessionKey: SessionKey) => Promise<boolean>;
   onUnarchive: (sessionKey: SessionKey) => Promise<boolean>;
   onDeleteHistory: (sessionKey: SessionKey) => Promise<ConversationDeleteOutcome>;
-  onRestore: (archive: HistoryArchiveRecord) => Promise<ConversationRestoreOutcome>;
+  onRestore: (archive: HistoryArchiveRecord) => Promise<RestoreOutcome>;
 }
 
 const CONFIRMING = {
@@ -218,15 +219,15 @@ export function conversationLabel(record: ConversationRecord): string {
   return record.temporary ? `${record.name} (temporary)` : record.name;
 }
 
-function restoreNotice(outcome: ConversationRestoreOutcome): string {
+function restoreNotice(outcome: RestoreOutcome): string {
   switch (outcome) {
-    case CONVERSATION_RESTORE_OUTCOME.RESTORED:
+    case RESTORE_OUTCOME.RESTORED:
       return HISTORY_CONTROL_NOTICE.RESTORED;
-    case CONVERSATION_RESTORE_OUTCOME.NEWER_LIVE:
+    case RESTORE_OUTCOME.NEWER_LIVE:
       return HISTORY_CONTROL_NOTICE.RESTORE_NEWER_LIVE;
-    case CONVERSATION_RESTORE_OUTCOME.MISSING:
+    case RESTORE_OUTCOME.MISSING:
       return HISTORY_CONTROL_NOTICE.RESTORE_MISSING;
-    case CONVERSATION_RESTORE_OUTCOME.UNREADABLE:
+    case RESTORE_OUTCOME.UNREADABLE:
       return HISTORY_CONTROL_NOTICE.RESTORE_UNREADABLE;
   }
 }
@@ -281,8 +282,7 @@ function ConversationHeader({
           className="history-select"
           value={selected}
           onChange={(event) => {
-            // SAFETY: the option values are the directory's own session keys.
-            controls.onSelect(event.target.value as SessionKey);
+            controls.onSelect(sessionKey(event.target.value));
           }}
         >
           <optgroup label="Conversations">

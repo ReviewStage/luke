@@ -13,23 +13,11 @@ import { ARCHIVE_ENCODING, type ArchiveEncoding } from "@sidecar/runtime-contrac
 
 export const ARCHIVE_ZSTD_SUFFIX = ".zst";
 
-interface ZstdCodec {
-  compress: (data: Buffer) => Buffer;
-  decompress: (data: Buffer) => Buffer;
-}
-
-function resolveZstdCodec(): ZstdCodec | undefined {
-  // node:zlib ships zstd since Node 22.15; the build's runtime has it, and the
-  // check keeps a runtime that does not on the plain path instead of throwing.
-  const { zstdCompressSync, zstdDecompressSync } = zlib;
-  if (!zstdCompressSync || !zstdDecompressSync) return undefined;
-  return {
-    compress: (data) => zstdCompressSync(data),
-    decompress: (data) => zstdDecompressSync(data),
-  };
-}
-
-const zstd = resolveZstdCodec();
+/** The runtime's zstd pair, or nothing on a runtime whose zlib lacks it, which keeps the plain path instead of throwing. */
+const zstd =
+  "zstdCompressSync" in zlib && "zstdDecompressSync" in zlib
+    ? { compress: zlib.zstdCompressSync, decompress: zlib.zstdDecompressSync }
+    : undefined;
 
 export function zstdSupported(): boolean {
   return zstd !== undefined;

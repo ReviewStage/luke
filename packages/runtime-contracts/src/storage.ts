@@ -79,9 +79,6 @@ export const TRANSCRIPT_EVENT_KIND = {
   COMPACTION: "compaction",
 } as const;
 
-export type TranscriptEventKind =
-  (typeof TRANSCRIPT_EVENT_KIND)[keyof typeof TRANSCRIPT_EVENT_KIND];
-
 export interface CompactionBoundary {
   readonly source: CompactionSource;
   /** How many retained items the fold let go of from the projection. */
@@ -248,4 +245,23 @@ export function historyArchiveRecordFromWire(
     historyLines: value.historyLines,
     transcriptEvents: value.transcriptEvents,
   };
+}
+
+/** How a restore of a deleted conversation's archive ended. */
+export const RESTORE_OUTCOME = {
+  RESTORED: "restored",
+  /** The conversation already holds lines newer than the archive; nothing was changed. */
+  NEWER_LIVE: "newer-live",
+  MISSING: "missing",
+  /** The file is gone or does not match its hash and the registry no longer holds the payload. */
+  UNREADABLE: "unreadable",
+} as const;
+
+export type RestoreOutcome = (typeof RESTORE_OUTCOME)[keyof typeof RESTORE_OUTCOME];
+
+const RESTORE_OUTCOME_LIST: readonly RestoreOutcome[] = Object.values(RESTORE_OUTCOME);
+
+export function isRestoreOutcome(value: UnparsedWireValue): value is RestoreOutcome {
+  // SAFETY: value is a string; list membership is the vocabulary check.
+  return isWireString(value) && RESTORE_OUTCOME_LIST.includes(value as RestoreOutcome);
 }
