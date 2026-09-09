@@ -173,6 +173,9 @@ test("the meter is pointed at whoever holds the turn, and the element at Luke", 
   const conversation = calls.conversation;
   assert.ok(conversation);
   conversation.hooks.onLocalStream?.("mic");
+  // The press's device is metered while the call is still opening, so the
+  // bars draw the same listening before and after the channel comes up.
+  assert.equal(seen.at(-1)?.[0], "mic");
   conversation.hooks.onRemoteStream("luke");
   conversation.settle(REALTIME_STATUS.LISTENING);
   assert.deepEqual(seen.at(-1), ["mic", "luke"]);

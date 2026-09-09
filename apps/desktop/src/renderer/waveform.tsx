@@ -38,7 +38,6 @@ export function Waveform({
   speaking = false,
   voice,
   voiceActive = false,
-  connecting = false,
   onVoiceActivity,
 }: {
   /** A stream to measure here, where the panel has none: the takeover's own. */
@@ -49,13 +48,6 @@ export function Waveform({
   /** Whose turn the bars are drawing, which is what colours them. */
   voice?: WaveformVoice;
   voiceActive?: boolean;
-  /**
-   * The press has landed but the call is still opening, so there is nothing to
-   * hear yet. The bars pulse on their own clock rather than sit at the floor —
-   * a press that changes nothing on screen reads as a press that did nothing —
-   * and stop pretending the moment a level takes over.
-   */
-  connecting?: boolean;
   /** The measured voice's edges, reported only where an analyser is measured. */
   onVoiceActivity?: (active: boolean) => void;
 }): React.JSX.Element {
@@ -128,16 +120,9 @@ export function Waveform({
     <span
       className="waveform"
       role="img"
-      aria-label={
-        connecting
-          ? "Voice is connecting"
-          : voice === WAVEFORM_VOICE.LUKE
-            ? "Luke is speaking"
-            : "Live speech activity"
-      }
-      aria-hidden={!isSpeaking && !connecting}
+      aria-label={voice === WAVEFORM_VOICE.LUKE ? "Luke is speaking" : "Live speech activity"}
+      aria-hidden={!isSpeaking}
       data-speaking={String(isSpeaking)}
-      data-connecting={String(connecting)}
       data-voice={voice}
     >
       {BAR_INDEXES.map((index) => (

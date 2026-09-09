@@ -81,6 +81,21 @@ test("the meter listens to the stream of whoever holds the turn", () => {
   );
 });
 
+test("a connecting call meters the press's device, and nothing where no press opened one", () => {
+  assert.equal(
+    activeVoiceStream({ status: REALTIME_STATUS.CONNECTING, local: "mic", remote: undefined }),
+    "mic",
+  );
+  assert.equal(
+    activeVoiceStream({ status: REALTIME_STATUS.CONNECTING, local: undefined, remote: "luke" }),
+    undefined,
+  );
+  assert.equal(
+    activeVoiceStream({ status: REALTIME_STATUS.IDLE, local: "mic", remote: "luke" }),
+    undefined,
+  );
+});
+
 test("Luke's captions are offered only on his turn, and only with a reason to read them", () => {
   const shown = {
     captionsEnabled: true,
