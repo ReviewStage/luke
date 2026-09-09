@@ -45,8 +45,8 @@ import {
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { applySessionReplay } from "./session-replay";
 import { focusSearchField } from "./session-search";
+import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
 import { KeySlot } from "./settings/key-slot";
-import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings-panel";
 import { SETTINGS_SEARCH_INPUT_ID } from "./settings-search";
 import {
   credentialSettingsPage,

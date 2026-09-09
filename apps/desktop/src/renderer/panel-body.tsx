@@ -49,12 +49,9 @@ import {
   SessionSearchButton,
   widenedView,
 } from "./session-search";
-import {
-  CalendarIntegrations,
-  SETTINGS_WRITES,
-  SettingsPanel,
-  type SettingsPanelProps,
-} from "./settings-panel";
+import { CalendarIntegrations } from "./settings/connections-page";
+import { SettingsPanel, type SettingsPanelProps } from "./settings/settings-panel";
+import { SETTINGS_WRITES } from "./settings/writes";
 import { SettingsSearchButton } from "./settings-search";
 import { SignInGate } from "./sign-in-gate";
 import { updateAvailable, updateRow } from "./update-row";

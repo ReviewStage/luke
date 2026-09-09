@@ -19,7 +19,7 @@ import type {
   CalendarControl,
   LinearControl,
   SupersetControl,
-} from "./settings-panel";
+} from "./settings/controls";
 import {
   PANEL_STAND_DOWN,
   type SettingsView,
