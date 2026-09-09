@@ -7,7 +7,7 @@ import type { AppGuideSnapshot } from "@sidecar/guide";
 import type { RealtimeConnection } from "@sidecar/hosted";
 import type { ConversationEntry, RealtimeDiagnostics } from "@sidecar/realtime";
 import type { GatewayCallResult, GatewayClient } from "@sidecar/runtime";
-import { GATEWAY_EVENT, GATEWAY_METHOD, type GatewayEventKind } from "@sidecar/runtime-contracts";
+import { GATEWAY_EVENT, GATEWAY_METHOD } from "@sidecar/runtime-contracts";
 import type {
   ObservedWorkspaceProject,
   Session,
@@ -31,14 +31,13 @@ import {
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
-  type WireValue,
 } from "@sidecar/wire";
 import type { AppleCalendarAccess } from "#shared/apple-calendar";
 import type { AppSettings, SettingsUpdateResult } from "#shared/messages/settings";
 import type { SpeechOffer, SpeechOutcome } from "#shared/messages/speech";
 import { isSpeechOffer } from "#shared/messages/speech";
 import { RECEIVER_REPORT_KIND } from "../host/runtime-host";
-import { carried, onGatewayEvent } from "./wire";
+import { carried, gatewayEventReader } from "./wire";
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,
@@ -240,11 +239,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     await result;
   };
 
-  const on = <Payload>(
-    kind: GatewayEventKind,
-    read: (payload: WireValue) => Payload | undefined,
-    listener: (payload: Payload) => void,
-  ) => onGatewayEvent(client, kind, read, listener);
+  const on = gatewayEventReader(client);
 
   const wireReporter = (reporter: string) => ({ reporter });
 

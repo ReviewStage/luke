@@ -33,8 +33,12 @@ export class NestedMap<Value> {
     this.#outer.delete(outer);
   }
 
-  /** Outer keys in insertion order, each with its own inner map. */
-  groups(): IterableIterator<[string, Map<string, Value>]> {
+  /**
+   * Outer keys in insertion order, each with its inner map to read. Deleting
+   * through {@link delete} while walking a group is safe: a Map's iteration
+   * order is defined under removal of the entry being visited.
+   */
+  groups(): IterableIterator<[string, ReadonlyMap<string, Value>]> {
     return this.#outer.entries();
   }
 }

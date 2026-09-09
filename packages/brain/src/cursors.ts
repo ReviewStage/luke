@@ -35,15 +35,13 @@ export class TranscriptCursors {
       }
       provider.add(identity.providerSessionId);
     }
-    const dropped: [string, string][] = [];
     for (const [providerId, sessions] of this.#cursors.groups()) {
       const keptSessions = kept.get(providerId);
       for (const providerSessionId of sessions.keys()) {
-        if (!keptSessions?.has(providerSessionId)) dropped.push([providerId, providerSessionId]);
+        if (!keptSessions?.has(providerSessionId)) {
+          this.#cursors.delete(providerId, providerSessionId);
+        }
       }
-    }
-    for (const [providerId, providerSessionId] of dropped) {
-      this.#cursors.delete(providerId, providerSessionId);
     }
   }
 

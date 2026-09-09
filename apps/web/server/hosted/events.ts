@@ -35,13 +35,7 @@ import { createRateBrake } from "./rate-brake.js";
 /** Bigger than a full batch of allowlisted events can be, and refused before parsing. */
 const MAXIMUM_BODY_BYTES = 16_384;
 
-/**
- * A best-effort brake, keyed on the resolved account rather than the address:
- * the token already names who is asking, so an account cannot rotate past it
- * by changing networks. The counter lives in the function instance, which
- * makes it a per-instance brake rather than a guarantee — platform-level rules
- * are the real backstop — but it turns a looping desktop bug into a trickle.
- */
+/** What the shared brake holds this endpoint to; a batch spends its own event count. */
 const RATE_LIMIT = {
   WINDOW_MS: 60_000,
   MAX_EVENTS_PER_WINDOW: 120,
