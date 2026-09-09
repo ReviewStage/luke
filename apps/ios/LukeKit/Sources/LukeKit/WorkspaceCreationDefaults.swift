@@ -1,15 +1,14 @@
 import Foundation
 
-/// The agent kind, model, and optionally effort last chosen for new
-/// workspaces on one provider — one value on purpose, the way the desktop
-/// stores it: a model id or an effort level only means anything beside the
-/// agent that runs it.
+/// The agent kind, optional model, and optional effort last chosen for new
+/// workspaces on one provider. Most providers require a model beside the
+/// agent, while kind-only providers carry only the agent name.
 public struct WorkspaceAgentDefault: Equatable, Sendable {
     public let agent: String
-    public let model: String
+    public let model: String?
     public let effort: String?
 
-    public init(agent: String, model: String, effort: String? = nil) {
+    public init(agent: String, model: String? = nil, effort: String? = nil) {
         self.agent = agent
         self.model = model
         self.effort = effort
@@ -111,12 +110,13 @@ public final class WorkspaceCreationDefaults {
     }
 
     private static func agentDefault(fields: [String: String]) -> WorkspaceAgentDefault? {
-        guard let agent = fields["agent"], let model = fields["model"] else { return nil }
-        return WorkspaceAgentDefault(agent: agent, model: model, effort: fields["effort"])
+        guard let agent = fields["agent"] else { return nil }
+        return WorkspaceAgentDefault(agent: agent, model: fields["model"], effort: fields["effort"])
     }
 
     private static func fields(of selection: WorkspaceAgentDefault) -> [String: String] {
-        var fields = ["agent": selection.agent, "model": selection.model]
+        var fields = ["agent": selection.agent]
+        if let model = selection.model { fields["model"] = model }
         if let effort = selection.effort { fields["effort"] = effort }
         return fields
     }

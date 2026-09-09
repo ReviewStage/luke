@@ -193,8 +193,8 @@ public final class ActClient: Sendable {
     ///
     /// `name` and `task` are optional; the server bounds them before passing
     /// them to the provider. `agent`, `model`, and `effort` name a choice from
-    /// the projects answer's own agent table — the server validates the
-    /// pairing against the same table and refuses anything it does not list.
+    /// the projects answer's own agent table, with `model` and `effort` sent
+    /// only for providers that document them.
     public func createWorkspace(
         accessToken: String,
         providerId: String,

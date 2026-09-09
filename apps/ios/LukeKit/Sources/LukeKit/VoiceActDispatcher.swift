@@ -165,10 +165,8 @@ public func dispatchVoiceToolCall(
                     ask.project.providerProjectId, for: ask.project.providerId
                 )
                 context.defaults.setAgentDefault(
-                    ask.agent.flatMap { agent in
-                        ask.model.map { model in
-                            WorkspaceAgentDefault(agent: agent, model: model, effort: ask.effort)
-                        }
+                    ask.agent.map { agent in
+                        WorkspaceAgentDefault(agent: agent, model: ask.model, effort: ask.effort)
                     },
                     for: ask.project.providerId
                 )

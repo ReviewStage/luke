@@ -32,6 +32,7 @@ final class DeviceSettingsSyncTests: XCTestCase {
         workspaceAgentDefaults: [
             "conductor": WorkspaceAgentDefault(agent: "claude", model: "fable-5", effort: "high"),
             "codex": WorkspaceAgentDefault(agent: "codex", model: "gpt"),
+            "superset": WorkspaceAgentDefault(agent: "composer"),
         ]
     )
 
