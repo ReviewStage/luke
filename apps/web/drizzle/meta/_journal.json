@@ -71,6 +71,13 @@
       "when": 1788916794040,
       "tag": "0009_pretty_wendell_rand",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788967420794,
+      "tag": "0010_same_scarecrow",
+      "breakpoints": true
     }
   ]
 }

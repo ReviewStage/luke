@@ -23,6 +23,36 @@ jobs:
       - uses: ./.github/actions/setup
       - run: ./scripts/check.sh
 
+  # The store tests run on PGlite inside the portable job above; this job is
+  # the one place the generated migrations and the same tests meet a real
+  # Postgres, so a statement PGlite accepts and Postgres refuses is caught
+  # before a deployment's `db:migrate` finds it.
+  postgres:
+    name: Postgres migrations and store
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: luke
+          POSTGRES_PASSWORD: luke
+          POSTGRES_DB: luke
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U luke"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL_UNPOOLED: postgresql://luke:luke@localhost:5432/luke
+      LUKE_STORE_TEST_DATABASE_URL: postgresql://luke:luke@localhost:5432/luke
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
+      - run: pnpm --filter @luke/web db:migrate
+      - run: pnpm --filter @luke/web test:store
+
   # Packages the app and captures the fixture frames. The portable job above is
   # the one place the full check runs: repeating it on a macOS runner costs
   # minutes and reports nothing the Linux run did not.

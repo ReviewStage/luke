@@ -62,3 +62,73 @@ export function secretOrUnavailable(secret: string | undefined): { secret: strin
   }
   return { secret: trimmed };
 }
+
+/**
+ * A key the payload envelope may be sealed under or opened with, named by a
+ * small positive integer so a rotation can add the next key beside the last
+ * and every stored envelope still says which one opens it.
+ */
+export type PayloadKeyId = number;
+
+export const CURRENT_PAYLOAD_KEY_ID: PayloadKeyId = 1;
+
+export interface PayloadKeyRing {
+  /** The key new envelopes are sealed under. */
+  readonly current: PayloadKeyId;
+  /** Every key an envelope on record may name, the current one included; each a 64-character hex secret. */
+  readonly keys: ReadonlyMap<PayloadKeyId, string>;
+}
+
+/** The ring this build runs on: the vault's secret as key 1, and nothing older. */
+export function payloadKeyRing(secret: string): PayloadKeyRing {
+  return { current: CURRENT_PAYLOAD_KEY_ID, keys: new Map([[CURRENT_PAYLOAD_KEY_ID, secret]]) };
+}
+
+const PAYLOAD_ENVELOPE_SEPARATOR = ":";
+
+/**
+ * Seals a stored payload: `<keyId>:base64(nonce || ciphertext || authTag)`
+ * under AES-256-GCM, the key id in the clear so a later rotation can open
+ * what an earlier key sealed. `boundTo` is authenticated but not stored — the
+ * row's own user id — so an envelope lifted onto another user's row does not
+ * open there. The vault's key format is left exactly as it was: this is the
+ * variant beside it, for the conversation tables.
+ */
+export function sealPayload(plaintext: string, ring: PayloadKeyRing, boundTo: string): string {
+  const secret = ring.keys.get(ring.current);
+  if (secret === undefined) {
+    throw new Error(`the payload key ring names no key ${ring.current} to seal under`);
+  }
+  const key = secretBuffer(secret);
+  const nonce = randomBytes(NONCE_BYTES);
+  const cipher = createCipheriv(ALGORITHM, key, nonce);
+  cipher.setAAD(Buffer.from(boundTo, "utf8"));
+  const body = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `${ring.current}${PAYLOAD_ENVELOPE_SEPARATOR}${Buffer.concat([nonce, body, tag]).toString("base64")}`;
+}
+
+/**
+ * Opens an envelope `sealPayload` produced. Throws for a key id the ring does
+ * not hold, an envelope that is not one, and a tag that does not verify —
+ * tampering, another key, or another `boundTo` — so a caller never reads a
+ * payload the ring cannot vouch for.
+ */
+export function openPayload(sealed: string, ring: PayloadKeyRing, boundTo: string): string {
+  const separator = sealed.indexOf(PAYLOAD_ENVELOPE_SEPARATOR);
+  if (separator <= 0) throw new Error("the sealed payload names no key");
+  const keyId = Number(sealed.slice(0, separator));
+  if (!Number.isInteger(keyId) || keyId <= 0) throw new Error("the sealed payload names no key");
+  const secret = ring.keys.get(keyId);
+  if (secret === undefined) throw new Error(`the payload key ring holds no key ${keyId}`);
+  const key = secretBuffer(secret);
+  const buf = Buffer.from(sealed.slice(separator + 1), "base64");
+  if (buf.length < NONCE_BYTES + TAG_BYTES) throw new Error("the sealed payload is too short");
+  const nonce = buf.subarray(0, NONCE_BYTES);
+  const tag = buf.subarray(buf.length - TAG_BYTES);
+  const body = buf.subarray(NONCE_BYTES, buf.length - TAG_BYTES);
+  const decipher = createDecipheriv(ALGORITHM, key, nonce);
+  decipher.setAAD(Buffer.from(boundTo, "utf8"));
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(body), decipher.final()]).toString("utf8");
+}

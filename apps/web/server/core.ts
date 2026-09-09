@@ -34,6 +34,7 @@ export * from "../../../packages/actions/src/index.js";
 export { ACTION_KIND, type ActionKind } from "../../../packages/actions/src/index.js";
 export * from "../../../packages/analytics/src/index.js";
 export * from "../../../packages/brain/src/index.js";
+export * from "../../../packages/brain/src/store/shapes.js";
 export * from "../../../packages/hosted/src/index.js";
 export * from "../../../packages/realtime/src/index.js";
 export * from "../../../packages/runtime/src/vocabulary.js";
