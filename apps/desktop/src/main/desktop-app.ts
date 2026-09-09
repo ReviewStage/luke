@@ -73,10 +73,8 @@ import {
   shouldRunIntroduction,
 } from "./introduction-flow";
 import { registerAccountSessionIpc } from "./ipc/account-session";
-import { registerCalendarConnectionIpc } from "./ipc/calendar-connection";
 import { registerSessionActsIpc } from "./ipc/session-acts";
 import { registerSettingsRowsIpc } from "./ipc/settings-rows";
-import { registerTrackerConnectionIpc } from "./ipc/tracker-connection";
 import { registerVoiceRuntimeIpc } from "./ipc/voice-runtime";
 import { registerWindowSurfaceIpc } from "./ipc/window-surface";
 import { jsonStateFile } from "./json-state-file";
@@ -719,6 +717,8 @@ function registerIpc(): void {
   });
 
   registerSettingsRowsIpc({
+    ipcMain,
+    trustedSender,
     registerSettingHandler,
     host: gateway.host,
     reporterOf,
@@ -729,23 +729,7 @@ function registerIpc(): void {
     panels,
     mediaDuck,
     recordProductEvent,
-  });
-
-  registerCalendarConnectionIpc({
-    ipcMain,
-    trustedSender,
-    registerSetting: registerSettingHandler,
-    host: gateway.host,
-    reporterOf,
     openExternal: (url) => void shell.openExternal(url),
-  });
-
-  registerTrackerConnectionIpc({
-    ipcMain,
-    trustedSender,
-    registerSetting: registerSettingHandler,
-    host: gateway.host,
-    reporterOf,
   });
 
   registerHandler(BRIDGE.checkForUpdates, () => {
@@ -1094,19 +1078,14 @@ export function startDesktopApp(): void {
       screen.on("display-added", handleDisplayChange);
       screen.on("display-removed", handleDisplayChange);
       screen.on("display-metrics-changed", handleDisplayChange);
-      for (const eventName of ["resume", "unlock-screen", "user-did-become-active"] as const) {
-        const handlePowerEvent = () => {
-          handleDisplayChange();
-          broadcast(channels.onLifecycle, eventName);
-        };
-        if (eventName === "resume") powerMonitor.on("resume", handlePowerEvent);
-        if (eventName === "unlock-screen") {
-          powerMonitor.on("unlock-screen", handlePowerEvent);
-        }
-        if (eventName === "user-did-become-active") {
-          powerMonitor.on("user-did-become-active", handlePowerEvent);
-        }
-      }
+      // Named one at a time because Electron's `on` is typed per event name.
+      const wake = (eventName: string) => () => {
+        handleDisplayChange();
+        broadcast(channels.onLifecycle, eventName);
+      };
+      powerMonitor.on("resume", wake("resume"));
+      powerMonitor.on("unlock-screen", wake("unlock-screen"));
+      powerMonitor.on("user-did-become-active", wake("user-did-become-active"));
     });
   }
 

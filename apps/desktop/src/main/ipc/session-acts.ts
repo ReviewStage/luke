@@ -51,11 +51,12 @@ import {
   type UnknownActResult,
   type UnparsedWireValue,
   type WireRecord,
+  type WireValue,
 } from "@sidecar/wire";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from "electron";
-import { BRIDGE } from "#shared/bridge";
+import { BRIDGE, type Bridge, type BridgeMethod } from "#shared/bridge";
 import type { SessionOpenResult } from "#shared/messages/session";
-import { createActionHandler } from "../action-handler";
+import { type BridgeContext, registerBridgeEntry } from "../register-bridge";
 import type { SettingsStore } from "../settings-store";
 
 /**
@@ -812,7 +813,25 @@ export function createSessionActPerformer(
  */
 export function registerSessionActsIpc(dependencies: SessionActsIpcDependencies): void {
   const { ipcMain, trustedSender, performer } = dependencies;
-  const registerAction = createActionHandler({ ipcMain, trustedSender });
+  /** One invoked bridge entry, whose refusal is an answer of the act's own kind rather than a rejected promise. */
+  const registerAction = <TArguments extends unknown[], TResult extends WireValue>(
+    definition: Bridge[BridgeMethod] & { kind: "invoke" },
+    action: { act: (...args: TArguments) => Promise<TResult>; failure: (error: Error) => TResult },
+  ): void => {
+    registerBridgeEntry(
+      BRIDGE,
+      definition,
+      async (_context: BridgeContext, ...received: unknown[]): Promise<TResult> => {
+        try {
+          // SAFETY: registerBridge applied this definition's argument guard before calling the handler.
+          return await action.act(...(received as TArguments));
+        } catch (error) {
+          return action.failure(error instanceof Error ? error : new Error(String(error)));
+        }
+      },
+      { ipcMain, trustedSender },
+    );
+  };
   const failure = (reason: string) => (): SessionOpenResult => ({
     status: ACT_RESULT_STATUS.REJECTED,
     reason,
