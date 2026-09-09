@@ -383,8 +383,9 @@ test("a setting states a default a spoken change could name, and answers to ever
 
       // "Back to the default" is an ask the guide can always ground: a
       // toggle's default is one of its two words, a choice's one it offers.
+      assert.ok(guideEntry.defaultValue, `${guideEntry.id} states its default`);
       assert.ok(
-        offered.includes(guideEntry.defaultValue ?? ""),
+        offered.includes(guideEntry.defaultValue),
         `${guideEntry.id}'s default is a value a spoken change can set`,
       );
 
