@@ -1,7 +1,7 @@
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { CLOUD_AGENT_PROVIDER_ID } from "../../server/core.js";
 import { getDatabase } from "../../server/db/index.js";
-import { oauthAccessToken, observationPass, providerKey } from "../../server/db/schema.js";
+import { devices, observationPass, providerKey } from "../../server/db/schema.js";
 import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "../../server/hosted/encryption.js";
 import { observeAndSnapshot } from "../../server/hosted/observation-pass.js";
 import {
@@ -19,10 +19,8 @@ const CLOUD_PROVIDER_IDS = Object.values(CLOUD_AGENT_PROVIDER_ID);
  * cadence `vercel.json` fixes. The logic lives in
  * `server/hosted/observation-tick.ts`; this file hands it the deployment's
  * real seams and the database queries behind them. An account was seen when
- * a hosted bearer was minted for it: every desktop and phone token is a row
- * of the OAuth access tokens, and a refresh mints another, so the latest
- * one's creation is the most recent sign of the account in use this schema
- * records.
+ * one of its devices last registered or sent a heartbeat: the `devices` row's
+ * `last_seen_at`, which every platform moves along while the app is open.
  */
 const route: Route = {
   async fetch(request) {
@@ -40,12 +38,12 @@ const route: Route = {
         const rows = await database
           .select({ userId: providerKey.userId })
           .from(providerKey)
-          .innerJoin(oauthAccessToken, eq(oauthAccessToken.userId, providerKey.userId))
+          .innerJoin(devices, eq(devices.userId, providerKey.userId))
           .leftJoin(observationPass, eq(observationPass.userId, providerKey.userId))
           .where(
             and(
               inArray(providerKey.providerId, CLOUD_PROVIDER_IDS),
-              gte(oauthAccessToken.createdAt, new Date(seenAfter)),
+              gte(devices.lastSeenAt, new Date(seenAfter)),
             ),
           )
           .groupBy(providerKey.userId, observationPass.attemptedAt)

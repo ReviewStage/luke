@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, notInArray, or } from "drizzle-orm";
 import {
-  oauthAccessToken,
+  devices,
   observationPass,
   providerKey,
   rosterDiff,
@@ -231,17 +231,16 @@ export async function recordObservationPass(
 /** Who the scheduled observation still runs for: a key to one of the providers, and an account seen since the instant. */
 export interface ObservationEligibility {
   readonly providerIds: readonly string[];
-  /** The earliest hosted bearer mint that still counts as the account being in use. */
+  /** The earliest device last-seen instant that still counts as the account being in use. */
   readonly seenAfter: number;
 }
 
 /**
  * Drops everything the scheduled observation keeps for every user it no
- * longer runs for — no key to one of the named providers, or no hosted
- * bearer minted since the instant: the snapshot, the waiting diffs, and the
- * pass record go together, so a user whose key or account went, or who has
- * not been seen within the window, stops being observed and keeps no roster
- * on record.
+ * longer runs for — no key to one of the named providers, or no device seen
+ * since the instant: the snapshot, the waiting diffs, and the pass record go
+ * together, so a user whose key or account went, or who has not been seen
+ * within the window, stops being observed and keeps no roster on record.
  */
 export async function forgetObservationIneligible(
   db: HostedStoreDatabase,
@@ -251,17 +250,10 @@ export async function forgetObservationIneligible(
     .select({ userId: providerKey.userId })
     .from(providerKey)
     .where(inArray(providerKey.providerId, eligibility.providerIds));
-  // A token with no user is left out of the set, because a `NOT IN` over a
-  // set holding a null is unknown for every id, and would delete nothing.
   const seen = db
-    .select({ userId: oauthAccessToken.userId })
-    .from(oauthAccessToken)
-    .where(
-      and(
-        isNotNull(oauthAccessToken.userId),
-        gte(oauthAccessToken.createdAt, new Date(eligibility.seenAfter)),
-      ),
-    );
+    .select({ userId: devices.userId })
+    .from(devices)
+    .where(gte(devices.lastSeenAt, new Date(eligibility.seenAfter)));
   await db.transaction(async (tx) => {
     await tx
       .delete(rosterSnapshot)

@@ -310,10 +310,10 @@ account with nothing.
 Each tick first drops the snapshot, diffs, and pass record of every account
 that no longer holds a cloud provider key or has not been seen within the
 last 7 days, then lists up to 200 accounts that hold one and were seen —
-seen meaning a hosted bearer was minted for them, read as the latest
-`oauth_access_token` row's `created_at`, since every desktop and phone token
-is one and a refresh mints another; the devices table's `last_seen_at`
-replaces this once it lands — in order of their last attempted pass, never
+seen meaning one of the account's `devices` rows has a `last_seen_at` inside
+the window, which every registration and heartbeat moves along; the Mac
+registers no device yet, so until it does the schedule runs for accounts a
+phone or watch has signed into — in order of their last attempted pass, never
 attempted first, so a provider that keeps refusing one account cannot starve
 the rest. It observes four accounts at a time inside a 50-second budget,
 starting a batch only while a whole 25-second pass deadline still fits, and

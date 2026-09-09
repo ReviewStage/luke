@@ -38,8 +38,7 @@ import {
   conversationLine,
   conversationRun,
   conversationSession,
-  oauthAccessToken,
-  oauthClient,
+  devices,
   observationCaptureCursor,
   observationCursor,
   observationInboxEntry,
@@ -736,30 +735,25 @@ test("a pass record moves the attempt every time, the whole read only on success
 
   const keyed = await database.createUser();
   const unseen = await database.createUser();
-  const [client] = await database.db
-    .insert(oauthClient)
-    .values({ id: `client-${keyed}`, clientId: `client-${keyed}`, redirectUris: [] })
-    .returning({ clientId: oauthClient.clientId });
-  assert.ok(client);
   for (const id of [keyed, unseen]) {
     await database.db
       .insert(providerKey)
       .values({ userId: id, providerId: "conductor", ciphertext: "sealed" });
   }
-  await database.db.insert(oauthAccessToken).values([
+  await database.db.insert(devices).values([
     {
-      id: `token-${keyed}`,
-      clientId: client.clientId,
+      id: `device-${keyed}`,
       userId: keyed,
-      scopes: [],
-      createdAt: new Date(NOW),
+      installationId: `install-${keyed}`,
+      platform: "ios",
+      lastSeenAt: new Date(NOW),
     },
     {
-      id: `token-${unseen}`,
-      clientId: client.clientId,
+      id: `device-${unseen}`,
       userId: unseen,
-      scopes: [],
-      createdAt: new Date(NOW - 1),
+      installationId: `install-${unseen}`,
+      platform: "ios",
+      lastSeenAt: new Date(NOW - 1),
     },
   ]);
   for (const id of [userId, keyed, unseen]) {
