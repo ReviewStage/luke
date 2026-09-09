@@ -121,6 +121,7 @@ import {
   PROVIDER_ID,
   PROVIDER_ID_LIST,
   type ProviderId,
+  pluginAsAdapter,
   type Session,
   type SessionIdentity,
   type SessionProviderAdapter,
@@ -150,11 +151,8 @@ import {
 } from "@sidecar/settings";
 import {
   SUPERSET_SIGN_IN_STAGE,
-  SupersetCli,
   SupersetSignIn,
-  SupersetWorkspaceAdapter,
-  SupersetWorkspaceReader,
-  SupersetWorkspaceSnapshot,
+  supersetPlugin,
   supersetPressedLink,
 } from "@sidecar/superset";
 import { LinearCredentials, LinearIssueTracker, LinearSignIn } from "@sidecar/trackers";
@@ -439,11 +437,9 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
   });
   const supersetHomeDirectory =
     options.environment.SUPERSET_HOME_DIR ?? path.join(options.homeDirectory, ".superset");
-  const supersetWorkspaces = new SupersetWorkspaceReader({ homeDirectory: supersetHomeDirectory });
-  const supersetCli = new SupersetCli({ homeDirectory: supersetHomeDirectory });
-  const supersetWorkspaceAdapter = new SupersetWorkspaceAdapter(supersetCli);
-  let observedSupersetWorkspaces = new SupersetWorkspaceSnapshot([]);
-  let observedSupersetOrganization: string | undefined;
+  const superset = supersetPlugin({ homeDirectory: supersetHomeDirectory });
+  const supersetCli = superset.cli;
+  const supersetWorkspaceAdapter = pluginAsAdapter(superset);
   const supersetWorkspaceHost: WorkspaceHostRegistration = {
     observationFailureLabel: "Superset observation",
     read: readSupersetWorkspaceHost,
@@ -1131,11 +1127,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
     issueTrackers,
     refreshIssues: () => void issueObservationLoop.refresh(),
     supersetContext: (identity) =>
-      observedSupersetWorkspaces.actableContext(
-        identity.providerId,
-        identity.providerSessionId,
-        observedSupersetOrganization,
-      ),
+      superset.actableContext(identity.providerId, identity.providerSessionId),
     supersetCli,
     recordProductEvent,
   });
@@ -1399,42 +1391,21 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
   }
 
   async function readSupersetWorkspaceHost(): Promise<WorkspaceHostEnrichment> {
-    let supersetSnapshot = new SupersetWorkspaceSnapshot([]);
-    let supersetOrganization: string | undefined;
-    let supersetAgentDefault: string | undefined;
     try {
-      supersetAgentDefault = (
+      const agentDefault = (
         await settingsStore.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field)
       )?.[SUPERSET_WORKSPACE_PROVIDER_ID]?.agent;
-      [supersetSnapshot, supersetOrganization] = await Promise.all([
-        supersetWorkspaces.read(),
-        supersetCli.activeOrganization(),
-      ]);
+      return await superset.refresh(agentDefault);
     } catch (error) {
       report(
         `Superset observation failed: ${error instanceof Error ? error.message : String(error)}`,
       );
+      return superset.emptyEnrichment;
     }
-    supersetSnapshot.adoptDirectoryMatches(observedSupersetWorkspaces);
-    observedSupersetWorkspaces = supersetSnapshot;
-    observedSupersetOrganization = supersetOrganization;
-    try {
-      await supersetWorkspaceAdapter.refresh(
-        supersetAgentDefault,
-        supersetOrganization !== undefined,
-        supersetSnapshot.workspaceRowObservations(supersetOrganization),
-      );
-    } catch (error) {
-      report(
-        `Superset observation failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-    return (providerId, observations) =>
-      supersetSnapshot.enrich(providerId, observations, supersetOrganization);
   }
 
   async function refreshProviderSessions(generation: number): Promise<void> {
-    const actionsWereEnabled = observedSupersetOrganization !== undefined;
+    const actionsWereEnabled = superset.activeOrganization() !== undefined;
     const conductorRepositoriesPromise = conductorLocalWorkspaceAdapter.refresh().catch((error) => {
       report(
         `Conductor repository observation failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -1451,7 +1422,7 @@ export function composeRuntimeHost(options: RuntimeHostOptions): RuntimeHost {
       ),
     );
     await conductorRepositoriesPromise;
-    const supersetActionsEnabled = observedSupersetOrganization !== undefined;
+    const supersetActionsEnabled = superset.activeOrganization() !== undefined;
     if (actionsWereEnabled !== supersetActionsEnabled) {
       if (supersetActionsEnabled) {
         emit(GATEWAY_EVENT.SUPERSET_SIGN_IN_CHANGED, {
