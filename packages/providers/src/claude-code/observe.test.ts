@@ -27,7 +27,7 @@ const PAST_TAIL_TEXT = "x".repeat(96 * 1024);
 /** One filler record's words: forty of them outweigh that same tail. */
 const PAST_TAIL_FILLER = SECRET_TRANSCRIPT_TEXT.repeat(200);
 
-function temporaryClaudeHome(t: TestContext): Promise<string> {
+async function temporaryClaudeHome(t: TestContext): Promise<string> {
   return temporaryDirectory(t, "luke-claude-code-");
 }
 

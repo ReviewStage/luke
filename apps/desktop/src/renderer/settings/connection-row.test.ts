@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
+import { settingsView } from "@sidecar/settings/testing";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { connectionInput, connectionVisibility } from "#testing/connection-fixtures";
-import { settingsView } from "#testing/settings-fixtures";
 import { SETTINGS_VIEW } from "../settings-views";
 import { CONFIRM_STAGE } from "./confirm-state";
 import { ConfirmSwap } from "./confirm-swap";

@@ -8,8 +8,8 @@ import {
   type AppGuideSetting,
   SESSION_LIST_SORT,
 } from "@sidecar/guide";
+import { settingsView } from "@sidecar/settings/testing";
 import { UPDATE_STATUS } from "#shared/messages/update";
-import { settingsView } from "#testing/settings-fixtures";
 import {
   ERRAND_TARGET,
   ERRAND_WAIT,

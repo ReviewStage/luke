@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { settingsView } from "#testing/settings-fixtures";
+import { settingsView } from "@sidecar/settings/testing";
 import {
   armErrand,
   EMPTY_ERRAND_RUN,

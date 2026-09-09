@@ -13,11 +13,11 @@ import {
   type AppGuideSetting,
 } from "@sidecar/guide";
 import { PROVIDER_ID, type WorkspaceAgentSelection } from "@sidecar/session";
+import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettingsView, SettingsUpdateResult } from "@sidecar/settings/wire";
 import { appSettingsView } from "@sidecar/settings/wire";
 import type { UpdateSnapshot } from "#shared/messages/update";
 import { UPDATE_STATUS } from "#shared/messages/update";
-import { settingsView } from "#testing/settings-fixtures";
 import { appSettingsWire, spokenSettingBridge } from "#testing/spoken-setting-bridge";
 import {
   APP_SETTING_ID,

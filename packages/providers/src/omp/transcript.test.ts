@@ -26,7 +26,7 @@ async function readOmpSessionTranscript(request: {
   return result.status === "accepted" ? result.transcript : undefined;
 }
 
-function temporaryOmpHome(t: TestContext): Promise<string> {
+async function temporaryOmpHome(t: TestContext): Promise<string> {
   return temporaryDirectory(t, "luke-omp-transcript-");
 }
 

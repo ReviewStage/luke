@@ -10,8 +10,6 @@ The shared ones, and the rule each carries:
 - `native-helper.ts` — a `NativeHelperProcess` that never was, for the
   watchers over the macOS helpers: the test says what came back on stdout and
   reads what was written to stdin.
-- `settings-fixtures.ts` — an `AppSettingsView` with every member at a stated
-  value, so a test is told apart from the next only by what it moves.
 - `connection-fixtures.ts` — what a connection row is judged from and acted
   through, at a stated resting state and at every connection offered, with
   every action wired to nothing: the table's own tests and the row's read the
