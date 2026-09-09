@@ -64,6 +64,15 @@ import {
   type SettingGuardResult,
   type SettingsVisibility,
 } from "./schema-types.js";
+import {
+  APPEARANCE_PAGE,
+  ASK_EACH_TIME_CHOICE,
+  CONDUCTOR_DEFAULT_CHOICE,
+  CONDUCTOR_ROW_PATH,
+  CONNECTIONS_PAGE,
+  VOICE_PAGE,
+  VOICE_SOURCE_SECTION,
+} from "./settings-paths.js";
 
 export {
   SETTING_ROWS,
@@ -96,15 +105,6 @@ export type VoiceSource = (typeof VOICE_SOURCE)[keyof typeof VOICE_SOURCE];
 export function isVoiceSource(value: UnparsedWireValue): value is VoiceSource {
   return value === VOICE_SOURCE.ACCOUNT || value === VOICE_SOURCE.KEY;
 }
-
-const SETTINGS_TAB = "the panel's Settings tab";
-const VOICE_PAGE = `${SETTINGS_TAB}, on its Voice page`;
-const VOICE_SOURCE_SECTION = `${VOICE_PAGE}, in the Provider section after Permissions`;
-const APPEARANCE_PAGE = `${SETTINGS_TAB}, on its Appearance page`;
-const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
-const CONDUCTOR_ROW_PATH = `the Conductor row under Providers, in ${CONNECTIONS_PAGE} — drawn once Conductor is connected`;
-const CONDUCTOR_DEFAULT_CHOICE = "Conductor's default";
-const ASK_EACH_TIME_CHOICE = "ask each time";
 
 /* The default-workspace row's word for no default at all. An empty value
    rather than a member of the provider set, so no provider id can collide

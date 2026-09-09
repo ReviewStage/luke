@@ -51,6 +51,15 @@ export {
   spokenSettingValue,
 } from "./schema-access.js";
 export {
+  ACCOUNT_SECTION,
+  CONDUCTOR_DEFAULT_CHOICE,
+  CONNECTIONS_PAGE,
+  FRONT_PAGE,
+  SETTINGS_TAB,
+  SHORTCUTS_PAGE,
+  VOICE_SOURCE_SECTION,
+} from "./settings-paths.js";
+export {
   askHotkeyCandidates,
   capturedVoiceHotkey,
   DEFAULT_ASK_HOTKEYS,

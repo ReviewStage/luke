@@ -117,6 +117,32 @@ test("every field's own declaration answers for everything read of it", () => {
       // sentence and the page cannot say different things.
       const page = SETTINGS_PAGE_WORD[entry.page];
       assert.ok(guideEntry.manual.includes(page), `${guideEntry.id} points at ${page}`);
+
+      // "Back to the default" is an ask the guide can always ground: a
+      // toggle's default is one of its two words, a choice's one it offers.
+      const offered =
+        guideEntry.kind === APP_SETTING_KIND.TOGGLE ? ["on", "off"] : (guideEntry.choices ?? []);
+      assert.ok(guideEntry.defaultValue, `${guideEntry.id} states its default`);
+      assert.ok(
+        offered.includes(guideEntry.defaultValue),
+        `${guideEntry.id}'s default is a value a spoken change can set`,
+      );
+
+      // An entry a hand alone changes carries its by-hand path instead of a
+      // parse, because the refusal Luke voices is itself the guidance.
+      if (!guideEntry.adjustable || !entry.spokenValue) continue;
+      for (const word of offered) {
+        const parsed = spokenSettingValue(field, word);
+        if (parsed === undefined) {
+          // The one word that may mean nothing is the word for nothing, so a
+          // pace asked for by its multiple can never fall through as cleared.
+          assert.equal(entry.default, undefined, `${guideEntry.id} clears on "${word}"`);
+          assert.equal(word, guideEntry.defaultValue, `${guideEntry.id} answers for "${word}"`);
+          continue;
+        }
+        // SAFETY: A parsed spoken value is a stored value, which the guard reads.
+        assert.equal(entry.guard(parsed as never).valid, true, `${guideEntry.id}: "${word}"`);
+      }
     }
 
     // `SchemaSettingRows` draws a switch or a pop-up and nothing else, and

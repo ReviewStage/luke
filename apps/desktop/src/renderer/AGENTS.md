@@ -233,10 +233,15 @@ both `Record`s over every id, so a new effect does not build until both sides
 say what it does — and its guide entry feeds Luke's guide and the settings
 search. There is no separate renderer record, and no `switch`, whose
 completeness the compiler does not check. A setting that deliberately builds no
-row says so as `rows: SETTING_ROWS.NONE` rather than as a comment. The facts
-half has no compile lever either, so the rule is stated here: a
-capability or action the guide does not describe is one Luke will deny having,
-and a stale entry is one he will misdescribe.
+row says so as `rows: SETTING_ROWS.NONE` rather than as a comment. The settings
+half of the guide is generated from those entries and has no hand-written copy
+anywhere, so it cannot go stale; the facts half is written by hand, in full, and
+always will be — the rule below is the only lever it can have. That lever is a
+weak one: a test asserts that a fact exists for every label the guide's own list
+names, which fails when a fact is deleted and says nothing about whether one is
+true. So the rule is stated here: a capability or action the guide does not
+describe is one Luke will deny having, and a stale entry is one he will
+misdescribe.
 The facts deliberately cover only what Luke needs to hold a conversation and
 what a spoken ask may do — capabilities, actions, refusals, and their bounds. A
 detail the developer should know but Luke never acts on (the surface's own

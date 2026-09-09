@@ -12,10 +12,12 @@
  * surface and the settings entries can say for themselves, which the closing
  * fact has Luke redirect rather than deny.
  *
- * The settings half is built from the exhaustive schema in
- * `shared/settings-schema.ts`, so a new stored setting does not build until its
- * guide entry is declared there. The facts have no such lever, which is why
- * the agent guide states the rule in words.
+ * The settings half is generated from `@sidecar/settings`'s exhaustive
+ * `APP_SETTING_SCHEMA` and has no hand-written copy here, so a new stored
+ * setting does not build until its guide entry is declared there and cannot go
+ * stale once it is. The facts are not generated, and a fact deleted here is a
+ * capability Luke will deny having, which is why the agent guide states the
+ * rule in words.
  *
  * Nothing here may carry a credential, a key's shape, or any part of one:
  * the guide says whether a provider is connected, and no more.
@@ -43,12 +45,19 @@ import {
 } from "@sidecar/guide";
 import { PROVIDER_ID, type WorkspaceAgentSelection, workspaceAgentModels } from "@sidecar/session";
 import {
+  ACCOUNT_SECTION,
   APP_SETTING_ID,
   APP_SETTING_SCHEMA,
+  CONDUCTOR_DEFAULT_CHOICE,
+  CONNECTIONS_PAGE,
+  FRONT_PAGE,
   isAppSettingId,
+  SETTINGS_TAB,
+  SHORTCUTS_PAGE,
   settingFieldForGuideId,
   settingGuideEntries,
   spokenSettingValue,
+  VOICE_SOURCE_SECTION,
 } from "@sidecar/settings";
 import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "@sidecar/settings/wire";
 import { CLI_CONNECTION } from "@sidecar/settings/wire";
@@ -62,25 +71,6 @@ import { UPDATE_ROW_ACTION, type UpdateRowAction, updateRow } from "./update-row
 export type { AppSettingId } from "@sidecar/settings";
 /** The ids a spoken change names Luke's settings by. */
 export { APP_SETTING_ID, isAppSettingId } from "@sidecar/settings";
-
-/** Where the switches live, said once so every entry words it the same way. */
-const SETTINGS_TAB = "the panel's Settings tab";
-
-/** Where the hosted account and OpenAI key choices both live. */
-const VOICE_SOURCE_SECTION = `${SETTINGS_TAB}, on its Voice page, in the Provider section after Permissions`;
-/** Where the signed-in identity and the two ways out of it live. */
-const ACCOUNT_SECTION = `the Account section, at the foot of ${SETTINGS_TAB}'s front page`;
-const SHORTCUTS_PAGE = `${SETTINGS_TAB}, on its Keyboard shortcuts page`;
-const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
-/* Where the Updates section stands, for the fact about it. */
-const FRONT_PAGE = `${SETTINGS_TAB}, on its front page`;
-
-/**
- * The word both Conductor agent entries use for no choice at all. It is a
- * member of their choices on purpose: saying it is how a spoken ask returns a
- * half to Conductor's own default.
- */
-const CONDUCTOR_DEFAULT_CHOICE = "Conductor's default";
 
 /** What the guide needs from the app to describe the current state of it. */
 export interface LukeGuideInput {
