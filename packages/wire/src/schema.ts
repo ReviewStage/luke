@@ -378,7 +378,6 @@ function arraySchema<Value>(item: Schema<Value>, options: ArrayOptions = {}): Sc
   return schemaOver<Value[]>(
     (value) => {
       if (!Array.isArray(value)) return refuse(SCHEMA_REFUSAL.MALFORMED);
-      if (minimum !== undefined && value.length < minimum) return refuse(SCHEMA_REFUSAL.MALFORMED);
       if (max !== undefined && value.length > max) return refuse(SCHEMA_REFUSAL.TOO_LARGE);
       const admitted: Value[] = [];
       for (let index = 0; index < value.length; index += 1) {
@@ -389,6 +388,12 @@ function arraySchema<Value>(item: Schema<Value>, options: ArrayOptions = {}): Sc
         }
         if (skipRefused) continue;
         return { ok: false, refusal: read.refusal, path: [index, ...read.path] };
+      }
+      // The count that has to clear `minimum` is the one admitted, not the one that arrived:
+      // `skipRefused` drops entries, and `minItems` is a bound on the value this read answers
+      // with. `max` is read before the loop instead, since nothing admitted can exceed it.
+      if (minimum !== undefined && admitted.length < minimum) {
+        return refuse(SCHEMA_REFUSAL.MALFORMED);
       }
       return admit(admitted);
     },

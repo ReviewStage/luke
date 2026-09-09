@@ -147,6 +147,18 @@ test("an array told to skip a refused entry keeps the rest", () => {
   assert.deepEqual(skipping.parse([5, null]), []);
 });
 
+test("the count that clears an array's minimum is the one admitted, not the one that arrived", () => {
+  const atLeastOne = s.array(s.text(), { skipRefused: true, minimum: 1 });
+  assert.deepEqual(atLeastOne.parse(["a", 5]), ["a"]);
+  assert.equal(refusalOf(atLeastOne, [5, null]), SCHEMA_REFUSAL.MALFORMED);
+  assert.equal(refusalOf(atLeastOne, []), SCHEMA_REFUSAL.MALFORMED);
+  assert.deepEqual(atLeastOne.jsonSchema(), {
+    type: "array",
+    items: { type: "string", minLength: 1 },
+    minItems: 1,
+  });
+});
+
 test("a record admits exactly the keys it names", () => {
   const point = s.record({ x: s.wholeNumber(), y: s.wholeNumber() });
   assert.deepEqual(point.parse({ x: 1, y: 2 }), { x: 1, y: 2 });
